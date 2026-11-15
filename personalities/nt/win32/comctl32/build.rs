@@ -3,6 +3,7 @@
 //! SDK's import library imports it by that ordinal (7-Zip File Manager does).
 
 fn main() {
+    println!("cargo:rustc-link-arg=/EXPORT:InitCommonControls,@17");
     // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
     // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
     if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
@@ -11,7 +12,6 @@ fn main() {
         }
     }
     // END generated
-    println!("cargo:rustc-link-arg=/EXPORT:InitCommonControls,@17");
     println!("cargo:rustc-link-arg=/ENTRY:comctl32_main");
 }
 

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_cnd",
+      "exe_sha256": "bae938b58fe99a080a64ecf1237ccf079a79f2df7e77f579ec25036a7832c51c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2l6ZW9mKF9DbmRfaW50ZXJuYWxfaW1wX3QpCm9rIF9NdHhfaW5pdApvayBfQ25kX2luaXQKb2sgdGhlIGNvbmRpdGlvbiB2YXJpYWJsZSBvYmplY3QKb2sgdGhlIHdhaXRlcnMgcmVsZWFzZWQgdGhlIG11dGV4OiB3ZSBjYW4gbG9jayBpdApvayBub2JvZHkgd29rZSB3aXRob3V0IGEgc2lnbmFsCm9rIF9DbmRfc2lnbmFsIHN1Y2NlZWRzCm9rIGEgc2lnbmFsIHdha2VzIGF0IGxlYXN0IG9uZSB3YWl0ZXIKb2sgX0NuZF9icm9hZGNhc3Qgc3VjY2VlZHMKb2sgd2FpdGVyIGVuZHMKb2sgd2FpdGVyIGVuZHMKb2sgd2FpdGVyIGVuZHMKb2sgYWxsIHRocmVlIHdva2UKb2sgZWFjaCBoZWxkIHRoZSBtdXRleCB3aGVuIF9DbmRfd2FpdCByZXR1cm5lZApzdW1tYXJ5IDE0IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok sizeof(_Cnd_internal_imp_t)\nok _Mtx_init\nok _Cnd_init\nok the condition variable object\nok the waiters released the mutex: we can lock it\nok nobody woke without a signal\nok _Cnd_signal succeeds\nok a signal wakes at least one waiter\nok _Cnd_broadcast succeeds\nok waiter ends\nok waiter ends\nok waiter ends\nok all three woke\nok each held the mutex when _Cnd_wait returned\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 210
+    }
+  ]
+}

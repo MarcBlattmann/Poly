@@ -29,15 +29,22 @@ pub const FADF_UNKNOWN: u16 = 0x0200;
 pub const FADF_DISPATCH: u16 = 0x0400;
 pub const FADF_VARIANT: u16 = 0x0800;
 
-/// Offsets in a `SAFEARRAY` on x64 (`oaidl.h`): `cDims` (u16), `fFeatures` (u16), `cbElements`
-/// (u32), `cLocks` (u32), `pvData` (pointer, aligned to 8), `rgsabound` (`cElements` u32,
-/// `lLbound` i32 per dimension).
+/// `pvData`'s and `rgsabound`'s offsets in a `SAFEARRAY` whose pointers are `pointer` bytes
+/// (`oaidl.h`): `cDims` (u16), `fFeatures` (u16), `cbElements` (u32), `cLocks` (u32), then
+/// `pvData` aligned to a pointer (8 in 64 bits, 12 in 32: the header is 12 bytes), then
+/// `rgsabound` (`cElements` u32, `lLbound` i32 per dimension).
+pub const fn data_and_bounds(pointer: usize) -> (usize, usize) {
+    let data = 12usize.next_multiple_of(pointer);
+    (data, data + pointer)
+}
+
+/// Offsets in a `SAFEARRAY` of this process's pointer width (ADR 0186: x64 and x86).
 pub const SA_DIMS: usize = 0;
 pub const SA_FEATURES: usize = 2;
 pub const SA_ELEMENT_SIZE: usize = 4;
 pub const SA_LOCKS: usize = 8;
-pub const SA_DATA: usize = 16;
-pub const SA_BOUNDS: usize = 24;
+pub const SA_DATA: usize = data_and_bounds(core::mem::size_of::<usize>()).0;
+pub const SA_BOUNDS: usize = data_and_bounds(core::mem::size_of::<usize>()).1;
 /// The size of a descriptor with one dimension.
 pub const SA_VECTOR_SIZE: usize = SA_BOUNDS + 8;
 /// The bytes Poly keeps in front of a descriptor it made: the array's `VARTYPE` in the first
@@ -243,5 +250,19 @@ mod tests {
         assert_eq!(data_size(24, u32::MAX), None);
         assert_eq!((varcmp(1), varcmp(2), varcmp(3)), (VARCMP_LT, VARCMP_EQ, VARCMP_GT));
         assert_eq!(varcmp(0), E_INVALIDARG);
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    /// `SAFEARRAY` (`oaidl.h`): x64 `pvData` at 16 and `rgsabound` at 24 (a descriptor of one
+    /// dimension is 32 bytes); x86 at 12 and 16 (24 bytes).
+    #[test]
+    fn the_descriptor_follows_the_pointer_width() {
+        assert_eq!(data_and_bounds(8), (16, 24));
+        assert_eq!(data_and_bounds(4), (12, 16));
+        assert_eq!(SA_BOUNDS + 8, data_and_bounds(core::mem::size_of::<usize>()).1 + 8);
     }
 }

@@ -1283,13 +1283,13 @@
 <rect x="874.0" y="408.7" width="11.0" height="5.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
-<text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.9%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">567 / 62,721 entries · 69,296 app-provided not counted</text>
+<text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">1.0%</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">607 / 62,721 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 20,419 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="183.6" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2da44e"/>
 <rect x="16.0" y="469.0" width="0.6" height="218.0" fill="#d4a72c"/>
-<rect x="16.6" y="469.0" width="8.4" height="218.0" fill="#218bff"/>
+<rect x="16.6" y="469.0" width="8.8" height="218.0" fill="#218bff"/>
 <rect x="15.0" y="468.0" width="185.6" height="220.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="21.0" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">MSVC runtimes</text>
 <text x="21.0" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
@@ -1361,11 +1361,11 @@
 <rect x="321.3" y="531.9" width="45.3" height="46.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="327.3" y="546.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 144 / 993 done (14.5%)</title>
+<g><title>user32: 174 / 993 done (17.5%)</title>
 <rect x="322.3" y="579.7" width="43.3" height="41.9" fill="#e6eaef"/>
-<rect x="322.3" y="579.7" width="6.3" height="41.9" fill="#2da44e"/>
-<rect x="328.6" y="579.7" width="9.4" height="41.9" fill="#d4a72c"/>
-<rect x="337.9" y="579.7" width="5.1" height="41.9" fill="#218bff"/>
+<rect x="322.3" y="579.7" width="7.6" height="41.9" fill="#2da44e"/>
+<rect x="329.9" y="579.7" width="9.4" height="41.9" fill="#d4a72c"/>
+<rect x="339.3" y="579.7" width="3.7" height="41.9" fill="#218bff"/>
 <rect x="321.3" y="578.7" width="45.3" height="43.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="327.3" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
@@ -1396,11 +1396,11 @@
 <rect x="413.5" y="469.0" width="2.4" height="33.4" fill="#218bff"/>
 <rect x="401.4" y="468.0" width="33.3" height="35.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>gdi32: 34 / 545 done (6.2%)</title>
+<g><title>gdi32: 37 / 545 done (6.8%)</title>
 <rect x="435.7" y="469.0" width="28.8" height="33.4" fill="#e6eaef"/>
-<rect x="435.7" y="469.0" width="1.8" height="33.4" fill="#2da44e"/>
-<rect x="437.4" y="469.0" width="5.1" height="33.4" fill="#d4a72c"/>
-<rect x="442.5" y="469.0" width="0.5" height="33.4" fill="#218bff"/>
+<rect x="435.7" y="469.0" width="2.0" height="33.4" fill="#2da44e"/>
+<rect x="437.6" y="469.0" width="5.1" height="33.4" fill="#d4a72c"/>
+<rect x="442.7" y="469.0" width="0.4" height="33.4" fill="#218bff"/>
 <rect x="434.7" y="468.0" width="30.8" height="35.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>
@@ -1604,11 +1604,11 @@
 <rect x="440.5" y="566.4" width="17.4" height="16.7" fill="#e6eaef"/>
 <rect x="439.5" y="565.4" width="19.4" height="18.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>comctl32: 1 / 180 done (0.6%)</title>
+<g><title>comctl32: 3 / 180 done (1.7%)</title>
 <rect x="440.5" y="585.1" width="17.4" height="16.6" fill="#e6eaef"/>
-<rect x="440.5" y="585.1" width="0.1" height="16.6" fill="#2da44e"/>
-<rect x="440.6" y="585.1" width="3.4" height="16.6" fill="#d4a72c"/>
-<rect x="444.0" y="585.1" width="0.9" height="16.6" fill="#218bff"/>
+<rect x="440.5" y="585.1" width="0.3" height="16.6" fill="#2da44e"/>
+<rect x="440.8" y="585.1" width="3.4" height="16.6" fill="#d4a72c"/>
+<rect x="444.2" y="585.1" width="0.7" height="16.6" fill="#218bff"/>
 <rect x="439.5" y="584.1" width="19.4" height="18.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>odbc32: 0 / 174 done (0.0%)</title>
@@ -2206,10 +2206,10 @@
 <rect x="557.8" y="682.5" width="5.7" height="4.5" fill="#d4a72c"/>
 <rect x="556.8" y="681.5" width="8.6" height="6.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>comdlg32: 0 / 28 done (0.0%)</title>
+<g><title>comdlg32: 5 / 28 done (17.9%)</title>
 <rect x="566.4" y="669.0" width="4.5" height="6.6" fill="#e6eaef"/>
-<rect x="566.4" y="669.0" width="3.2" height="6.6" fill="#d4a72c"/>
-<rect x="569.6" y="669.0" width="0.8" height="6.6" fill="#218bff"/>
+<rect x="566.4" y="669.0" width="0.8" height="6.6" fill="#2da44e"/>
+<rect x="567.2" y="669.0" width="3.2" height="6.6" fill="#d4a72c"/>
 <rect x="565.4" y="668.0" width="6.5" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ddraw: 0 / 28 done (0.0%)</title>

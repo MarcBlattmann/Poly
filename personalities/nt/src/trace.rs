@@ -197,6 +197,87 @@ pub fn begin<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Call {
             }
         }
     });
+    // `PolyUserCall` (`win32k#0x0`): the request it carries, so a trail
+    // shows which user32 call it was.
+    let object = object.or_else(|| {
+        if service.is_some() || name != "win32k#0x0" || args[1] == 0 || args[1] > 4096 {
+            return None;
+        }
+        let mut bytes = alloc::vec![0u8; args[1] as usize];
+        abi::read(k, args[0], &mut bytes).ok()?;
+        let req: poly_win32k::proto::Request = poly_win32k::wire::decode(&bytes)?;
+        let mut text = format!("{req:?}");
+        if text.len() > 200 {
+            let mut end = 200;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            text.truncate(end);
+            text.push_str("...");
+        }
+        Some(text)
+    });
+    Call { name, service, args, object }
+}
+
+/// The fields of a 32-bit `UNICODE_STRING` header (`Length`, `MaximumLength`, a 4-byte buffer
+/// pointer; 8 bytes): the length in bytes and the buffer's address.
+pub fn unicode_string32(header: &[u8; 8]) -> (u16, u32) {
+    (u16::from_le_bytes([header[0], header[1]]), u32::from_le_bytes([header[4], header[5], header[6], header[7]]))
+}
+
+/// The `ObjectName` pointer of a 32-bit `OBJECT_ATTRIBUTES` (24 bytes: `Length`,
+/// `RootDirectory`, `ObjectName`, `Attributes`, `SecurityDescriptor`, `SecurityQualityOfService`).
+pub fn object_name32(attributes: &[u8; 24]) -> u32 {
+    u32::from_le_bytes([attributes[8], attributes[9], attributes[10], attributes[11]])
+}
+
+/// Read the 32-bit string whose `UNICODE_STRING32` is at `at`.
+fn read_string32<K: NtKernel>(k: &mut K, at: u64) -> Option<String> {
+    let mut header = [0u8; 8];
+    abi::read(k, at, &mut header).ok()?;
+    let (length, buffer) = unicode_string32(&header);
+    if length == 0 || length % 2 != 0 || length > 2048 {
+        return None;
+    }
+    let mut bytes = alloc::vec![0u8; length as usize];
+    abi::read(k, u64::from(buffer), &mut bytes).ok()?;
+    let units: alloc::vec::Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    Some(String::from_utf16_lossy(&units))
+}
+
+/// Read a call made by a 32-bit thread (ADR 0186): the arguments are 4-byte words at `EDX`
+/// (`int 0xF4`, EAX = the number), and names are in the 32-bit layouts.
+pub fn begin32<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Call {
+    let number = regs.rax as u32;
+    let service = Service::from_number(number);
+    let name = match service {
+        Some(s) => s.name().into(),
+        None => {
+            let (table, index) = crate::decode(number);
+            format!("{}#{index:#x}", table.name())
+        }
+    };
+    let mut raw = [0u8; 24];
+    let _ = abi::read(k, regs.rdx, &mut raw);
+    let mut args = [0u64; 6];
+    for (i, slot) in args.iter_mut().enumerate() {
+        *slot = u64::from(u32::from_le_bytes([raw[4 * i], raw[4 * i + 1], raw[4 * i + 2], raw[4 * i + 3]]));
+    }
+    let object = service.and_then(name_site).and_then(|(i, kind)| {
+        if args[i] == 0 {
+            return None;
+        }
+        match kind {
+            NameKind::ObjectAttributes => {
+                let mut attributes = [0u8; 24];
+                abi::read(k, args[i], &mut attributes).ok()?;
+                let at = object_name32(&attributes);
+                if at == 0 { None } else { read_string32(k, u64::from(at)) }
+            }
+            NameKind::UnicodeString => read_string32(k, args[i]),
+        }
+    });
     Call { name, service, args, object }
 }
 
@@ -245,6 +326,15 @@ mod tests {
 
     fn call(service: Option<Service>, name: &str, object: Option<&str>) -> Call {
         Call { name: name.into(), service, args: [0x1f0, 0x20019, 0x8f1e0, 0, 7, 8], object: object.map(Into::into) }
+    }
+
+    #[test]
+    fn a_32_bit_name_is_read_from_the_4_byte_layouts() {
+        assert_eq!(unicode_string32(&[8, 0, 10, 0, 0x78, 0x56, 0x34, 0x12]), (8, 0x1234_5678));
+        let mut oa = [0u8; 24];
+        oa[0] = 24;
+        oa[8..12].copy_from_slice(&0x0012_F000u32.to_le_bytes());
+        assert_eq!(object_name32(&oa), 0x0012_F000);
     }
 
     #[test]

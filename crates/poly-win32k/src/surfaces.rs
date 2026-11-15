@@ -85,6 +85,17 @@ impl Buffer {
         true
     }
 
+    /// Row `y` from column `x` on: as much of `src` (4 bytes a pixel) as fits.
+    fn write_span(&mut self, x: u32, y: u32, src: &[u8]) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let n = (src.len() / 4).min((self.width - x) as usize) * 4;
+        let band = &mut self.bands[(y / self.rows_per_band) as usize];
+        let at = ((y % self.rows_per_band) as usize * self.width as usize + x as usize) * 4;
+        band[at..at + n].copy_from_slice(&src[..n]);
+    }
+
     /// The pixel (`B, G, R, x`) at (`x`, `y`), inside the buffer.
     fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
@@ -106,6 +117,18 @@ impl Buffer {
         }
         out
     }
+}
+
+/// Where a child window's picture goes ([`Surfaces::child_area`]): the top-level window, the
+/// child's client area in its surface, and the surface's size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChildArea {
+    pub top: u32,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub surface: (u32, u32),
 }
 
 /// The largest content `UpdateLayeredWindow` may leave here (bytes).
@@ -375,6 +398,73 @@ impl Surfaces {
         self.buffers.contains_key(&b.id).then_some((b.width, b.height))
     }
 
+    /// Where child window `hwnd`'s picture goes: its top-level window's surface (Windows: a child
+    /// draws into its top-level window), at the child's client area, which may lie partly outside
+    /// it. `None` for a window that is not a child of a window with a surface. Its DCs draw into a
+    /// bitmap of the child's client size (`size` of a child), which its process commits here, also
+    /// when the top-level window is another process's (Chrome's GPU process draws into a child of
+    /// the browser's window).
+    pub fn child_area(&self, wm: &Wm, desktop: &Desktop, hwnd: u32) -> Option<ChildArea> {
+        let i = wm.info(hwnd)?;
+        if i.style & crate::metrics::WS_CHILD == 0 {
+            return None;
+        }
+        let mut top = i.parent;
+        let mut t = wm.info(top)?;
+        while t.style & crate::metrics::WS_CHILD != 0 {
+            top = t.parent;
+            t = wm.info(top)?;
+        }
+        let (sw, sh) = self.size(desktop, top)?;
+        Some(ChildArea {
+            top,
+            x: i.client.left - t.client.left,
+            y: i.client.top - t.client.top,
+            width: i.client.width().max(0) as u32,
+            height: i.client.height().max(0) as u32,
+            surface: (sw, sh),
+        })
+    }
+
+    /// Rows `row ..` of a child's picture (`area.width` pixels of 4 bytes each, row after row)
+    /// into its top-level window's surface, clipped to it. False when the surface is gone or
+    /// changed size.
+    pub fn write_child_rows(&mut self, desktop: &Desktop, area: &ChildArea, row: u32, pixels: &[u8]) -> bool {
+        let Some(s) = self.surface(area.top) else { return false };
+        let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
+        let Some(b) = self.buffers.get_mut(&info.id) else { return false };
+        if (b.width, b.height) != area.surface || area.width == 0 {
+            return false;
+        }
+        let stride = area.width as usize * 4;
+        for (i, src) in pixels.chunks(stride).enumerate() {
+            let y = area.y + row as i32 + i as i32;
+            if y < 0 {
+                continue;
+            }
+            let (x, src) = if area.x < 0 {
+                let skip = (area.x.unsigned_abs() as usize * 4).min(src.len());
+                (0, &src[skip..])
+            } else {
+                (area.x as u32, src)
+            };
+            b.write_span(x, y as u32, src);
+        }
+        true
+    }
+
+    /// The child's rows are written: its area of the top-level surface is damaged.
+    pub fn child_committed(&mut self, desktop: &mut Desktop, area: &ChildArea) -> bool {
+        let Some(s) = self.surface(area.top) else { return false };
+        let (sw, sh) = (area.surface.0 as i32, area.surface.1 as i32);
+        let (l, t) = (area.x.clamp(0, sw), area.y.clamp(0, sh));
+        let (r, b) = ((area.x + area.width as i32).clamp(0, sw), (area.y + area.height as i32).clamp(0, sh));
+        if r > l && b > t {
+            desktop.damage(s, l as u32, t as u32, (r - l) as u32, (b - t) as u32);
+        }
+        true
+    }
+
     /// The app drew window `hwnd`'s surface: `pixels` are `width` x
     /// `height`, 4 bytes each, row after row. False when the size is not
     /// the buffer's (the window was resized since; the app asks again).
@@ -521,6 +611,47 @@ mod tests {
     const BLUE: u32 = 0x00FF_0000;
     const RED: u32 = 0x0000_00FF;
     const GREEN: u32 = 0x0000_FF00;
+
+    /// A child draws into its top-level window's surface where it is, clipped to it (Chrome's
+    /// GPU process presents into a child of the browser's window).
+    #[test]
+    fn a_child_window_draws_into_its_top_level_surface() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let top = popup(&mut wm, &mut d, &mut s, 100, 100, 0, BLUE);
+        let child = |wm: &mut Wm, x: i32, y: i32, w: i32, h: i32| {
+            let spec = CreateSpec {
+                class: ClassRef::Name { name: "Pop".encode_utf16().collect() },
+                style: 0x5000_0000,
+                parent: u64::from(top),
+                ..CreateSpec::default()
+            };
+            let Reply::Created { created } = call(wm, Request::CreateWindow { spec }) else { panic!() };
+            let r = Some(Rect::new(x, y, x + w, y + h));
+            call(wm, Request::SetRects { hwnd: created.hwnd, window_rel: r, client_rel: r });
+            created.hwnd
+        };
+        let c = child(&mut wm, 10, 5, 20, 10);
+        let area = s.child_area(&wm, &d, c).expect("a child of a window with a surface");
+        assert_eq!((area.top, area.x, area.y, area.width, area.height), (top, 10, 5, 20, 10));
+        let red: Vec<u8> = (0..20 * 10).flat_map(|_| [0, 0, 0xFF, 0xFF]).collect();
+        assert!(s.write_child_rows(&d, &area, 0, &red));
+        assert!(s.child_committed(&mut d, &area));
+        assert_eq!(s.screen_pixel(&wm, &d, 110, 105), RED);
+        assert_eq!(s.screen_pixel(&wm, &d, 129, 114), RED);
+        assert_eq!(s.screen_pixel(&wm, &d, 109, 105), BLUE);
+        assert_eq!(s.screen_pixel(&wm, &d, 130, 105), BLUE);
+        // Partly outside: only what is inside the 40x30 surface is written.
+        let c2 = child(&mut wm, 30, 25, 20, 10);
+        let a2 = s.child_area(&wm, &d, c2).unwrap();
+        let green: Vec<u8> = (0..20 * 10).flat_map(|_| [0, 0xFF, 0, 0xFF]).collect();
+        assert!(s.write_child_rows(&d, &a2, 0, &green));
+        assert_eq!(s.screen_pixel(&wm, &d, 139, 129), GREEN);
+        // A top-level window is no child.
+        assert_eq!(s.child_area(&wm, &d, top), None);
+    }
 
     /// SetWindowRgn.yaml `shape_hit_test`, `window_coordinates`, `shapes`,
     /// `removal`: only the part of a window inside its region is on the

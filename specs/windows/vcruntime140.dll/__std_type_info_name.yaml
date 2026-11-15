@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/vcruntime140.dll/__std_type_info_name # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\\\BuildTools) with /EHsc /GS- /Zl /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def and from the DLL's own export table, run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes,
+  offsets and constants read from Microsoft's STL and vcruntime headers that ship with the Build Tools
+  (Apache-2.0 with LLVM exception; owner decision 2026-11-15: spec agents may read them for layouts, sizes,
+  offsets, vtable order and member meaning; nothing of them is copied here); the compiler's own output for our
+  own probe programs (cl /FAs listings: the arguments of the calls the compiler writes, the RTTI records it
+  emits). No Microsoft binary was disassembled or debugged, no vcruntime or CRT source was read.
+summary: >
+  __std_type_info_name(__std_type_info_data* data, __type_info_node* root) is what type_info::name() calls (the
+  header's inline code): the data is the type descriptor's {const char* _UndecoratedName; const char
+  _DecoratedName[]} (offset 8 of the descriptor: the 'spare' pointer, then the decorated name from offset 16),
+  root is the program's own list head `__type_info_root_node` (a __type_info_node {void* _MemPtr;
+  __type_info_node* _Next}). The first call undecorates the name (without the leading '.': '.?AUS@@' -> "struct
+  S") into memory it allocates (malloc), stores the pointer in data->_UndecoratedName and links the allocation
+  into the root list (the program's __std_type_info_destroy_list frees them at exit); later calls return the
+  same pointer. The undecorated forms are recorded for ~60 types.
+interface:
+  signature: "const char* __std_type_info_name(__std_type_info_data* data, __type_info_node* root); the header's name() calls it with &_Data and &__type_info_root_node"
+  root_alignment: "the root node MUST be 16-byte aligned: with an 8-byte aligned `__type_info_root_node` the first name() call faults (general protection, reported as an access violation at address -1 inside ntdll) in some builds (the lock-free insert uses a 16-byte compare-exchange). The tests define `alignas(16) __type_info_node __type_info_root_node` (the C runtime's own definition is aligned)"
+  raw_name: "type_info::raw_name() is the decorated name, `_DecoratedName` (starts with '.': '.H', '.?AUS@@'); no call"
+rules:
+  fundamental: "int \"int\", unsigned \"unsigned int\", long \"long\", unsigned long \"unsigned long\", long long \"__int64\", unsigned long long \"unsigned __int64\", short \"short\", char/signed char/unsigned char \"char\"/\"signed char\"/\"unsigned char\", wchar_t \"wchar_t\", char16_t \"char16_t\", char32_t \"char32_t\", bool \"bool\", float \"float\", double \"double\", long double \"long double\", void \"void\", decltype(nullptr) \"std::nullptr_t\""
+  pointers: "x64 pointers carry `__ptr64`: int* \"int * __ptr64\", const int* \"int const * __ptr64\", int* const \"int * __ptr64\" (top-level const is dropped), int** \"int * __ptr64 * __ptr64\", void* \"void * __ptr64\", char* \"char * __ptr64\", const char* \"char const * __ptr64\"; arrays \"int [4]\", pointer to array \"int (* __ptr64)[4]\", function pointers \"int (__cdecl*)(int,char)\", \"void (__cdecl*)(void)\"; pointer to member \"int S::* __ptr64\", \"void (__cdecl S::*)(int) __ptr64\"; references and rvalue references are stripped by typeid (const S& -> \"struct S\")"
+  classes: "\"struct S\", \"class K\", \"union U\", \"enum En\", \"enum EC\" (also enum class), namespaces \"struct ns::N\", \"class ns::inner::M\", templates \"struct Tpl<int>\", \"struct Tpl<struct S * __ptr64>\", \"struct Tpl<struct ns::N>\"; the exact strings are in rtti_names_*'s recorded output"
+  caching: "the second name() call for the same type returns the same pointer; raw_name() starts with '.'"
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  The tests are C++ with the line `// poly-cxx: compiler=msvc`: their executables were built on the oracle
+  machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, ucrtbase.dll and kernel32.dll only.

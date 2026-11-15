@@ -661,6 +661,9 @@ pub unsafe extern "system" fn CreateWindowExW(
             menu = menu::class_menu(info.instance as usize, info.menu_name);
         }
     }
+    if style & poly_win32k::metrics::WS_CHILD != 0 && ex_style & poly_win32k::guic::WS_EX_LAYERED != 0 {
+        layered_children();
+    }
     let spec = CreateSpec {
         ex_style,
         class,
@@ -701,6 +704,23 @@ pub(crate) fn load_menu_ordinal(_inst: usize, _ord: u16) -> usize {
 /// The menu resource `name` of `inst`.
 pub(crate) fn load_menu_name(_inst: usize, _name: *const u16) -> usize {
     0
+}
+
+/// Tell win32k once whether the executable's manifest declares Windows 8
+/// or later, which layered child windows need (Learn, "Layered Windows").
+fn layered_children() {
+    use core::sync::atomic::{AtomicBool, Ordering};
+    static TOLD: AtomicBool = AtomicBool::new(false);
+    if TOLD.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    // SAFETY: NULL names the executable, mapped in this process.
+    let base = unsafe { GetModuleHandleW(core::ptr::null()) } as u64;
+    // SAFETY: the executable's base.
+    let manifest = unsafe { poly_kernelbase::version::image_manifest(base) };
+    if manifest.is_some_and(|m| poly_kernelbase::version::declares_win8(&m)) {
+        call(Request::LayeredChildren {});
+    }
 }
 
 /// The class of a thread's default IME window.

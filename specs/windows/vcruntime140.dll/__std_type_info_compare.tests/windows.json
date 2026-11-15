@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_compare_direct",
+      "exe_sha256": "00f0f71cad60e683080fd33c673a7cdd5eac6b71e1881b27147202b98f731198",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgLkgKdmFsdWUgY29tcGFyZSAuSCAuSCAwCm9rIC5ICnZhbHVlIGNvbXBhcmUgLkggLkkgLTEKb2sgLkkKdmFsdWUgY29tcGFyZSAuSSAuSCAxCm9rIC4/QVVTQEAKdmFsdWUgY29tcGFyZSAuP0FVU0BAIC4/QVVLQEAgMQpvayAuP0FVS0BACnZhbHVlIGNvbXBhcmUgLj9BVUtAQCAuP0FVU0BAIC0xCm9rIC5QRUFICnZhbHVlIGNvbXBhcmUgLlBFQUggLlBFQUQgMQpvayAuSAp2YWx1ZSBjb21wYXJlIC5IIC5IMSAtMQpvayAuSDEKdmFsdWUgY29tcGFyZSAuSDEgLkggMQpvayAuCnZhbHVlIGNvbXBhcmUgLiAuSCAtMQpvayAuP0FVU0BACnZhbHVlIGNvbXBhcmUgLj9BVVNAQCAuP0FVU0BAIDAKb2sgYSB0eXBlX2luZm8gY29tcGFyZWQgd2l0aCBpdHNlbGYKb2sgdGhlIHVuZGVjb3JhdGVkIHBvaW50ZXIgaXMgbm90IGNvbXBhcmVkCnN1bW1hcnkgMTIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok .H\nvalue compare .H .H 0\nok .H\nvalue compare .H .I -1\nok .I\nvalue compare .I .H 1\nok .?AUS@@\nvalue compare .?AUS@@ .?AUK@@ 1\nok .?AUK@@\nvalue compare .?AUK@@ .?AUS@@ -1\nok .PEAH\nvalue compare .PEAH .PEAD 1\nok .H\nvalue compare .H .H1 -1\nok .H1\nvalue compare .H1 .H 1\nok .\nvalue compare . .H -1\nok .?AUS@@\nvalue compare .?AUS@@ .?AUS@@ 0\nok a type_info compared with itself\nok the undecorated pointer is not compared\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

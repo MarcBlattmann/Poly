@@ -12,6 +12,8 @@
 pub const APP_DIR: &str = "Program Files (x86)\\PolyHello32";
 pub const APP_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\hello32.exe";
 pub const GUI_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\gui32.exe";
+pub const SYS_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\sys32.exe";
+pub const SAFESEH_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\safeseh32.exe";
 
 mod tests {
     use super::*;
@@ -127,6 +129,101 @@ mod tests {
             }
             if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
                 return Err("the 32-bit GUI process kept its memory after it exited");
+            }
+            Ok(())
+        }
+    }
+
+    kernel_test! {
+        /// SafeSEH (ADR 0186 stage 4): `safeseh32.exe` (`tests/windows/wow64/safeseh32.rs`) has a
+        /// handler table in its load configuration. A frame whose handler the table lists gets
+        /// its exception and continues (exit 0); one whose handler it does not list is never
+        /// called: the exception is `STATUS_INVALID_EXCEPTION_HANDLER` and ends the process.
+        fn nt_wow64_safe_exception_handlers_are_checked() -> TestResult {
+            if crate::fs::vfs().root_context().is_err() {
+                return Err("no VFS for the WOW64 test");
+            }
+            let prog = super::super::SAFESEH32;
+            if super::super::NTDLL32.is_empty() || prog.is_empty() {
+                return Err("this kernel was built without the 32-bit modules (cargo xtask wow64)");
+            }
+            super::super::with(|_| ());
+            let vfs = crate::fs::vfs();
+            let ctx = vfs.root_context().map_err(|_| "no VFS")?;
+            let root = vfs.lookup(&ctx, &Cred::root(), At::Cwd, b"/nt/c", true).map_err(|_| "no C:")?;
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
+            create::install_file(&vr, &root, APP_DIR, "safeseh32.exe", prog).map_err(|_| "cannot write safeseh32.exe")?;
+            let run = |args: Vec<String>| -> Result<u32, &'static str> {
+                let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
+                let pid = crate::process::alloc_pid();
+                let process = Arc::new(Process::new_nt(pid, FORMAT, false));
+                let launch = super::super::Launch { image_path: String::from(SAFESEH_EXE), args };
+                let start = super::super::start_with(&process, &memory, prog, pid, &launch)
+                    .map_err(|_| "the kernel rejected safeseh32.exe")?;
+                let tid =
+                    super::super::spawn_thread(&process, &memory, start.entry, start.teb, user::DEFAULT_HOOK, None)
+                        .map_err(|_| "could not start the 32-bit thread")?;
+                let code = thread::join(tid).map_err(|_| "join failed")?;
+                if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
+                    return Err("the 32-bit process kept its memory after it exited");
+                }
+                Ok(code as u32)
+            };
+            let good = run(Vec::new())?;
+            if good != 0 {
+                crate::kprintln!("nt: safeseh32.exe ended with {good:#x}, not 0 (2: the listed handler did not run)");
+                return Err("a handler in the table did not get its exception");
+            }
+            let bad = run(alloc::vec![String::from("bad")])?;
+            if bad != 0xC000_01A5 {
+                crate::kprintln!("nt: safeseh32.exe bad ended with {bad:#x}, not 0xC00001A5 (3: returned, 4: bad ran)");
+                return Err("a handler the table does not list was not refused");
+            }
+            Ok(())
+        }
+    }
+
+    kernel_test! {
+        /// A 32-bit program that uses the other i686 system DLLs (ADR 0186 stage 3): `sys32.exe`
+        /// (`tests/windows/wow64/sys32.rs`) runs registry, token, COM, oleaut, shell, version,
+        /// winsock (a loopback connection), bcrypt and secur32 calls through `advapi32`, `ole32`,
+        /// ... in `SysWOW64` and ends with 0 when every check passed, else with 2 + the number
+        /// of the first that failed.
+        fn nt_wow64_32_bit_program_uses_the_system_dlls() -> TestResult {
+            if crate::fs::vfs().root_context().is_err() {
+                return Err("no VFS for the WOW64 test");
+            }
+            let sys = super::super::SYS32;
+            if super::super::NTDLL32.is_empty() || sys.is_empty() {
+                return Err("this kernel was built without the 32-bit modules (cargo xtask wow64)");
+            }
+            super::super::with(|_| ());
+            let vfs = crate::fs::vfs();
+            let ctx = vfs.root_context().map_err(|_| "no VFS")?;
+            let root = vfs.lookup(&ctx, &Cred::root(), At::Cwd, b"/nt/c", true).map_err(|_| "no C:")?;
+            for name in ["advapi32.dll", "ole32.dll", "oleaut32.dll", "shell32.dll", "ws2_32.dll", "bcrypt.dll"] {
+                let path = alloc::format!("Windows/SysWOW64/{name}");
+                if vfs.lookup(&ctx, &Cred::root(), At::Node(&root), path.as_bytes(), true).is_err() {
+                    return Err("SysWOW64 lacks a 32-bit system DLL");
+                }
+            }
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
+            create::install_file(&vr, &root, APP_DIR, "sys32.exe", sys).map_err(|_| "cannot write sys32.exe")?;
+            let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
+            let pid = crate::process::alloc_pid();
+            let process = Arc::new(Process::new_nt(pid, FORMAT, false));
+            let launch = super::super::Launch { image_path: String::from(SYS_EXE), args: Vec::new() };
+            let start = super::super::start_with(&process, &memory, sys, pid, &launch)
+                .map_err(|_| "the kernel rejected sys32.exe")?;
+            let tid = super::super::spawn_thread(&process, &memory, start.entry, start.teb, user::DEFAULT_HOOK, None)
+                .map_err(|_| "could not start the 32-bit thread")?;
+            let code = thread::join(tid).map_err(|_| "join failed")?;
+            if code != 0 {
+                crate::kprintln!("nt: sys32.exe ended with {code:#x}, not 0 (2 + n: check n failed)");
+                return Err("sys32.exe did not pass every check");
+            }
+            if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
+                return Err("the 32-bit process kept its memory after it exited");
             }
             Ok(())
         }
