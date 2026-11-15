@@ -2049,3 +2049,6 @@ pub extern "system" fn gdi32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

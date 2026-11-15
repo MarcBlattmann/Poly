@@ -1330,7 +1330,7 @@ unsafe fn step9() {
         let name = w::<48>("\\StringFileInfo\\040904B0\\ProductVersion");
         let (mut text, mut chars) = (core::ptr::null(), 0u32);
         check_eq(query(block.as_ptr(), name.as_ptr(), &mut text, &mut chars) as usize, 1);
-        check_got(chars == 16 && wide_is(text.cast(), "10.0.19045.2006"), chars);
+        check_got(chars == 16 && wide_is(text.cast(), "10.0.26200.9974"), chars);
     }
 
     // userenv: the profile is a local one.

@@ -130,6 +130,9 @@ pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"
 pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
 pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
 pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
+// The system DLLs Poly generates as fail-only stubs for the Windows applications (ADR 0155, step 10),
+// `(file name, image)`; installed in `C:\Windows\System32` by `layout`.
+include!(concat!(env!("OUT_DIR"), "/stub_dlls.rs"));
 /// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
 pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
 /// The DLLs Chrome's browser delay-loads once a page loads (ADR 0155, step 12): `setupapi`,
@@ -1225,6 +1228,7 @@ fn start_params(
         let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);
         let creator = console::FromCreator {
             given: params.given_std_handles(),
+            inherited: if handles.is_some() { params.inherited_std_handles() } else { [0; 3] },
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());

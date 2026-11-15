@@ -251,6 +251,20 @@ unsafe extern "system" {
         length: usize,
         returned: *mut usize,
     ) -> NtStatus;
+    pub fn NtReadVirtualMemory(
+        process: Handle,
+        base: *const u8,
+        buf: *mut u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
+    pub fn NtWriteVirtualMemory(
+        process: Handle,
+        base: *mut u8,
+        buf: *const u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
 
     pub fn NtCreateSection(
         handle: *mut Handle,
@@ -337,6 +351,8 @@ unsafe extern "system" {
     pub fn NtQueryPerformanceCounter(counter: *mut i64, frequency: *mut i64) -> NtStatus;
     pub fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8;
     pub fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32;
+    pub fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8;
+    pub fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32;
     pub fn NtQuerySystemInformation(class: u32, info: *mut u8, length: u32, returned: *mut u32) -> NtStatus;
 
     pub fn RtlNtStatusToDosError(status: NtStatus) -> u32;

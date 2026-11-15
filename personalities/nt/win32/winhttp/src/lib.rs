@@ -389,3 +389,6 @@ pub unsafe extern "system" fn WinHttpGetIEProxyConfigForCurrentUser(config: *mut
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
