@@ -16,10 +16,17 @@
 //! - **Forwarders** (`build.rs`) to the DLLs that already have the function: the C library's
 //!   memory and string functions, `setjmp`/`longjmp`, `_purecall` and `__std_terminate` to
 //!   `ucrtbase`, `__C_specific_handler` to `ntdll`, the `__vcrt_` wrappers to `kernel32`.
-//! - **Not yet** (fail-only, logged as `stub: vcruntime140!name`): RTTI (`__RTDynamicCast`,
-//!   `__RTtypeid`, `__RTCastToVoid`), the name undecorator (`__unDName`, `__unDNameEx`), and
-//!   the exception internals no compiler output calls directly (`__BuildCatchObject`,
-//!   `__TypeMatch`, `_CreateFrameInfo`, ...): they wait for spec sheets (ADR 0199).
+//! - **`__CxxFrameHandler4`** (the spec `vcruntime140_1.dll/__CxxFrameHandler4.yaml`):
+//!   `poly-win32-cxxrt`'s FH4 handler; `vcruntime140_1.dll` forwards its export here so that
+//!   the per-thread exception state stays in one DLL.
+//! - **RTTI** (`rtti`): `__RTDynamicCast`, `__RTtypeid`, `__RTCastToVoid`, the readable names
+//!   of `type_info::name()` (`__std_type_info_name`, `poly_cxxeh::undname`) and
+//!   `__std_type_info_hash`; `std::bad_cast` and `std::bad_typeid` are thrown with records
+//!   this DLL writes into its own image.
+//! - **Not yet** (fail-only, logged as `stub: vcruntime140!name`): the full name undecorator
+//!   (`__unDName`, `__unDNameEx`), and the exception internals no compiler output calls
+//!   directly (`__BuildCatchObject`, `__TypeMatch`, `_CreateFrameInfo`, ...): they wait for
+//!   spec sheets (ADR 0199).
 //!
 //! The 32-bit (WOW64) `vcruntime140.dll` is a later step: x86 C++ exceptions are frame-based
 //! (`fs:[0]`) and need the i686 `ucrtbase` first (ADR 0186, ADR 0199).
@@ -34,6 +41,8 @@ poly_win32_rt::process_heap_allocator!();
 use core::sync::atomic::{AtomicUsize, Ordering};
 use poly_cxxeh::typeinfo::{self, TextCopy};
 use poly_win32_cxxrt as cxxrt;
+
+mod rtti;
 
 #[link(name = "ucrtbase", kind = "raw-dylib")]
 unsafe extern "C" {
@@ -72,6 +81,7 @@ pub extern "system" fn vcruntime140_main(_module: *mut u8, reason: u32, _reserve
     core::hint::black_box(OWN_COPY_MARKER.as_ptr());
     if reason == DLL_PROCESS_ATTACH {
         cxxrt::set_terminate_hook(terminate);
+        rtti::attach(_module as u64);
     }
     1
 }
@@ -208,29 +218,6 @@ pub unsafe extern "C" fn __std_type_info_compare(a: *const u8, b: *const u8) -> 
     // SAFETY: two type descriptors' data.
     unsafe { typeinfo::compare_names(decorated(a), decorated(b)) }
 }
-
-/// `size_t __std_type_info_hash(const __std_type_info_data*)`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __std_type_info_hash(data: *const u8) -> usize {
-    // SAFETY: a type descriptor's data.
-    typeinfo::hash_name(unsafe { decorated(data) }) as usize
-}
-
-/// `const char* __std_type_info_name(__std_type_info_data*, __type_info_node*)`: the readable
-/// name needs the undecorator, which is not there yet; this gives the decorated name (without
-/// its leading `.`) rather than nothing, and logs that it did.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn __std_type_info_name(data: *mut u8, _root: *mut u8) -> *const u8 {
-    let text = "stub: vcruntime140!__std_type_info_name";
-    poly_win32_rt::unimplemented_export(text, false, 0);
-    // SAFETY: a type descriptor's data; its name starts with `.`.
-    unsafe { data.add(9) }
-}
-
-/// `void __std_type_info_destroy_list(__type_info_node*)`: `__std_type_info_name` keeps no
-/// names, so there is nothing to free.
-#[unsafe(no_mangle)]
-pub extern "C" fn __std_type_info_destroy_list(_root: *mut u8) {}
 
 // ----- std::exception ------------------------------------------------------------------------
 
@@ -370,9 +357,6 @@ poly_win32_rt::fail_exports!(
     "vcruntime140",
     value(0),
     [
-        __RTDynamicCast,
-        __RTtypeid,
-        __RTCastToVoid,
         __unDName,
         __unDNameEx,
         __BuildCatchObject,
