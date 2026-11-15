@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/IsWindowArranged
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Tells whether a window is arranged (snapped to an edge or corner by the user or a layout). Chrome's browser
+  calls it once in a run (S3) for its top-level window and gets FALSE.
+interface:
+  signature: "BOOL IsWindowArranged(HWND hwnd)"
+rules:
+  windows_of_the_test: "FALSE, without touching the last error, for a top-level window hidden, shown, maximized, minimized, restored and moved or resized to half the screen, to a quarter or to the whole work area with the same size as a snap (size alone does not arrange a window); FALSE for popup, topmost, tool, layered, child and owned windows and for the desktop window"
+  bad_handles: "NULL, an invalid handle and a destroyed window return FALSE with the last error 87 (ERROR_INVALID_PARAMETER, not 1400)"
+  snapping: "not tested here: on the oracle Win+Left with the window in the foreground makes it half the screen wide, IsWindowArranged TRUE and the placement stays SW_SHOWNORMAL; the flag stays TRUE after a program moves the window; a system without snapping answers FALSE always, which is all the tests need"
+errors:
+  invalid_parameter: "87: NULL, invalid or destroyed window"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Real snapping (keyboard or mouse): it needs the shell's snap assist and a user.

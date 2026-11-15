@@ -14,7 +14,6 @@ poly_win32_rt::fail_exports!(
         WSAAsyncSelect,
         WSAEnumProtocolsA,
         WSAEnumProtocolsW,
-        WSASendMsg,
         WSASetServiceW,
         WSCEnumProtocols,
         WSCGetProviderInfo,

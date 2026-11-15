@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlRunOnceBeginInitialize.yaml
+id: windows/api/ntdll.dll/RtlRunOnceBeginInitialize
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Starts or checks one-time initialisation without a callback: STATUS_PENDING means the caller must initialise and then call RtlRunOnceComplete; STATUS_SUCCESS means it is done (with the context); the flags select check-only (1), asynchronous (2) and, for RtlRunOnceComplete, failed (4). kernel32's InitOnceBeginInitialize and InitOnceComplete are the BOOL forms.
+interface:
+  signature: "NTSTATUS RtlRunOnceBeginInitialize(PRTL_RUN_ONCE once, ULONG flags, PVOID *context); NTSTATUS RtlRunOnceComplete(PRTL_RUN_ONCE once, ULONG flags, PVOID context)"
+rules:
+  begin: "the first Begin returns STATUS_PENDING (0x103) and sets bit 0 of the word; the context slot is not written; check-only on a fresh object, and while the initialisation is running, returns STATUS_UNSUCCESSFUL (slot untouched)."
+  complete: "RtlRunOnceComplete(once, 0, 0x800) returns 0; the word becomes 0x802 (context | 2); Begin afterwards returns STATUS_SUCCESS with the context 0x800, also for check-only and for the async flag, and also with a NULL context slot (success, no fault)."
+  complete_again: "completing an already completed object, or one nobody began, returns STATUS_UNSUCCESSFUL (0xC0000001) and leaves the word as it was (0 for the object nobody began)."
+  failed: "Complete with RTL_RUN_ONCE_INIT_FAILED (4) and no context returns 0 and the word is 0 again (check-only: UNSUCCESSFUL; a new Begin: PENDING); with a context value as well: STATUS_INVALID_PARAMETER_3 (0xC00000F1)."
+  bad_arguments: "Begin with flags 0x10 or 0x8: STATUS_INVALID_PARAMETER_2 (0xC00000F0); Complete with flags 0x8 or 0x10: 0xC00000F0; Complete with a context with a low bit set (1, 3): 0xC00000F1 (a status here, not an exception); 0x404 is accepted (word & 3 == 2 afterwards), and the object is then complete."
+  second_thread: "a second thread's synchronous Begin while the first initialises does not return after 300 ms; after the first's Complete it returns STATUS_SUCCESS with the context 0xC00; when the first fails (INIT_FAILED) the second thread's Begin returns STATUS_PENDING (it becomes the initialiser) and can complete."
+  async_flag: "with RTL_RUN_ONCE_ASYNC (2) a second Begin returns STATUS_PENDING at once instead of waiting; the first Complete(async) returns 0, the second Complete(async) STATUS_UNSUCCESSFUL; a Begin afterwards gives the first context."
+  kernel32_forms: "InitOnceBeginInitialize(once, flags, &pending, &ctx) gives TRUE with pending TRUE (initialise) or FALSE (done, ctx set); check-only on a fresh object FALSE with ERROR_GEN_FAILURE (31); flags 0x10 FALSE with 87; InitOnceComplete: TRUE, FALSE with 31 when already complete or never begun, FALSE with 87 for flags 0x10 or a context with the low bits set; INIT_ONCE_INIT_FAILED completes as failed (a new begin is pending again)."
+errors:
+  pending: "STATUS_PENDING 0x103 (kernel32: TRUE with fPending TRUE)"
+  unsuccessful: "STATUS_UNSUCCESSFUL 0xC0000001 (kernel32: ERROR_GEN_FAILURE 31)"
+  bad_flags: "0xC00000F0 (kernel32: 87)"
+  bad_context: "0xC00000F1 (kernel32: 87)"
+side_effects: "changes the object"
+threading: "any thread; Begin blocks while another thread initialises (unless async)"
+ordering: []
+timing:
+  typical: "well under a microsecond unless waiting"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Waiting threads with many initialisers, the async flag with several competing completers.

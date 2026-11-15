@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CallbackMayRunLong.yaml
+id: windows/api/kernel32.dll/CallbackMayRunLong
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  What a callback may ask of its instance: CallbackMayRunLong (is a long run acceptable); the 'when the callback returns' requests SetEventWhenCallbackReturns, ReleaseSemaphoreWhenCallbackReturns, ReleaseMutexWhenCallbackReturns, LeaveCriticalSectionWhenCallbackReturns (carried out after the callback has returned, in order, not at the call); DisassociateCurrentThreadFromCallback (waiting calls stop covering the running callback); TrySubmitThreadpoolCallback (a simple callback with no object).
+interface:
+  signature: "BOOL CallbackMayRunLong(PTP_CALLBACK_INSTANCE); void SetEventWhenCallbackReturns(PTP_CALLBACK_INSTANCE, HANDLE); void ReleaseSemaphoreWhenCallbackReturns(PTP_CALLBACK_INSTANCE, HANDLE, DWORD); void ReleaseMutexWhenCallbackReturns(PTP_CALLBACK_INSTANCE, HANDLE); void LeaveCriticalSectionWhenCallbackReturns(PTP_CALLBACK_INSTANCE, PCRITICAL_SECTION); void DisassociateCurrentThreadFromCallback(PTP_CALLBACK_INSTANCE); BOOL TrySubmitThreadpoolCallback(PTP_SIMPLE_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON)"
+rules:
+  may_run_long: "CallbackMayRunLong(instance) in a callback of the default pool returned TRUE."
+  event: "SetEventWhenCallbackReturns: the event was not signalled while the callback still ran (200 ms later, from inside and outside), and signalled after it had returned."
+  semaphore: "ReleaseSemaphoreWhenCallbackReturns(instance, sem, 2): the semaphore count was zero inside the callback; afterwards two zero-timeout waits succeeded and the third timed out."
+  mutex: "ReleaseMutexWhenCallbackReturns: a mutex the callback acquired on the pool thread was free for another thread after the callback returned (a wait returned WAIT_OBJECT_0)."
+  critical_section: "LeaveCriticalSectionWhenCallbackReturns: a section the callback entered was still owned while the callback slept (another thread's try-enter failed) and free after it returned."
+  disassociate: "after DisassociateCurrentThreadFromCallback the work object's waiting call returned while the callback was still running (the callback finished later)."
+  try_submit: "TrySubmitThreadpoolCallback returned TRUE; the callback ran with the given context on a pool thread."
+errors:
+  none: "none provoked"
+side_effects: "as described"
+threading: "callable from the callback only"
+ordering: ["the 'when the callback returns' actions happen after the callback's own code and before the waiting calls are released"]
+timing:
+  typical: "milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  FreeLibraryWhenCallbackReturns, several actions at once, a callback that never returns.

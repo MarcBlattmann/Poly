@@ -15,9 +15,17 @@
 /// `ExceptionContinueSearch` (`excpt.h`).
 const CONTINUE_SEARCH: u32 = 1;
 
-/// The entry point: nothing to set up.
+/// Marks this file as Poly's own copy (ADR 0199): at boot Poly refreshes a
+/// `System32` copy that holds these bytes and keeps any other (Microsoft's
+/// runtime a user installed). The same text as the kernel's
+/// `OWN_COPY_MARKER` (`personalities/nt/src/layout/create.rs`); the kernel's
+/// `build.rs` checks it is in the file.
+static OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";
+
+/// The entry point: nothing to set up (it keeps the marker in the file).
 #[unsafe(no_mangle)]
 pub extern "system" fn vcruntime140_1_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
+    core::hint::black_box(OWN_COPY_MARKER.as_ptr());
     1
 }
 

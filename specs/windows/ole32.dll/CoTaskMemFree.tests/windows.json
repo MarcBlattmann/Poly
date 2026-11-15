@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "ctmf_threads",
+      "exe_sha256": "d7c0ea79553b8e9e54bb3c5ca6251e3ed5592398a27d9dde86933b7d70f467c5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2l0aG91dCBDT006IDEyOCBibG9ja3MgYW5kIHN0cmluZ3MgZnJlZWQgYnkgZm91ciBjb25zdW1lciB0aHJlYWRzLCBlYWNoIGJsb2NrIHNlZW4gaW50YWN0OiB0cnVlLCB0YWJsZSBlbXB0aWVkIHRydWUKd2l0aCBDT00gb24gZXZlcnkgY29uc3VtZXI6IDEyOCBibG9ja3MgYW5kIHN0cmluZ3MgZnJlZWQgYnkgZm91ciBjb25zdW1lciB0aHJlYWRzLCBlYWNoIGJsb2NrIHNlZW4gaW50YWN0OiB0cnVlLCB0YWJsZSBlbXB0aWVkIHRydWUKYSBQUk9QVkFSSUFOVCBzdHJpbmcgY2xlYXJlZCBieSBhbm90aGVyIHRocmVhZDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "without COM: 128 blocks and strings freed by four consumer threads, each block seen intact: true, table emptied true\nwith COM on every consumer: 128 blocks and strings freed by four consumer threads, each block seen intact: true, table emptied true\na PROPVARIANT string cleared by another thread: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    }
+  ]
+}

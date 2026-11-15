@@ -221,26 +221,35 @@ pub fn zone_id(tz: &Tzi, utc: u64) -> u32 {
 
 /// `SystemTimeToTzSpecificLocalTime`: the local `FILETIME` of `utc`.
 pub fn utc_to_local(tz: &Tzi, utc: u64) -> Option<u64> {
-    let bias = i64::from(tz.bias)
-        + if is_daylight(tz, utc) { i64::from(tz.daylight_bias) } else { i64::from(tz.standard_bias) };
+    // The sheet (`no_daylight_time`): a zone without both transition dates has its bias only,
+    // the standard bias is not applied.
+    let bias = if !tz.has_dst() {
+        i64::from(tz.bias)
+    } else if is_daylight(tz, utc) {
+        i64::from(tz.bias) + i64::from(tz.daylight_bias)
+    } else {
+        i64::from(tz.bias) + i64::from(tz.standard_bias)
+    };
     u64::try_from(utc as i64 - bias * FILETIME_PER_MINUTE).ok()
 }
 
-/// `TzSpecificLocalTimeToSystemTime`: the UTC `FILETIME` of `local`. A
-/// local time that happens twice (the hour daylight time ends) is taken as
-/// standard time; one that does not happen (the hour it begins) as standard
-/// time too (Learn does not say; this keeps the result inside the hour
-/// after the change).
+/// `TzSpecificLocalTimeToSystemTime`: the UTC `FILETIME` of `local`. A local time can be read as
+/// standard time (UTC = local + bias + standard bias) and as daylight time (+ daylight bias); the
+/// reading that is itself in that kind of time is the answer. A local time that happens twice (the
+/// hour daylight time ends) is read as daylight time, the first occurrence; one that does not
+/// happen (the hour it begins) is read as daylight time too, which puts the whole skipped hour in
+/// the hour before the change in UTC (the sheet's `spring_2020`, `autumn_2020`, `last_sunday_zone`).
 pub fn local_to_utc(tz: &Tzi, local: u64) -> Option<u64> {
-    let std = local as i64 + (i64::from(tz.bias) + i64::from(tz.standard_bias)) * FILETIME_PER_MINUTE;
-    let utc = if tz.has_dst() && is_daylight(tz, u64::try_from(std).ok()?) {
-        let dst = local as i64 + (i64::from(tz.bias) + i64::from(tz.daylight_bias)) * FILETIME_PER_MINUTE;
-        // Daylight only if that reading is itself daylight time (a time in
-        // the fold is standard).
-        if is_daylight(tz, u64::try_from(dst).ok()?) { dst } else { std }
-    } else {
-        std
-    };
+    let bias = i64::from(tz.bias);
+    let std = local as i64 + (bias + i64::from(tz.standard_bias)) * FILETIME_PER_MINUTE;
+    if !tz.has_dst() {
+        return u64::try_from(local as i64 + bias * FILETIME_PER_MINUTE).ok();
+    }
+    let dst = local as i64 + (bias + i64::from(tz.daylight_bias)) * FILETIME_PER_MINUTE;
+    let dst_fits = u64::try_from(dst).is_ok_and(|d| is_daylight(tz, d));
+    let std_fits = u64::try_from(std).is_ok_and(|s| !is_daylight(tz, s));
+    // Both fit: the fold, daylight first. Neither: the gap, daylight.
+    let utc = if dst_fits || !std_fits { dst } else { std };
     u64::try_from(utc).ok()
 }
 
@@ -356,12 +365,62 @@ mod tests {
             let back = convert(&tz, &convert(&tz, &t, false).unwrap(), true).unwrap();
             assert_eq!(SystemTime { day_of_week: 0, ..back }, t, "{t:?}");
         }
-        // 02:30 on March 10 does not exist: read as standard time (10:30 UTC, 03:30 PDT).
+        // 02:30 on March 10 does not exist: read as daylight time (09:30 UTC), in the hour before
+        // the change (the sheet's `spring_2020`).
         let gap = convert(&tz, &st(2024, 3, 10, 2, 30, 0), false).unwrap();
-        assert_eq!(SystemTime { day_of_week: 0, ..gap }, st(2024, 3, 10, 10, 30, 0));
-        // 01:30 on November 3 happens twice: the standard one.
+        assert_eq!(SystemTime { day_of_week: 0, ..gap }, st(2024, 3, 10, 9, 30, 0));
+        // 01:30 on November 3 happens twice: the first one, daylight time (08:30 UTC).
         let fold = convert(&tz, &st(2024, 11, 3, 1, 30, 0), false).unwrap();
-        assert_eq!(SystemTime { day_of_week: 0, ..fold }, st(2024, 11, 3, 9, 30, 0));
+        assert_eq!(SystemTime { day_of_week: 0, ..fold }, st(2024, 11, 3, 8, 30, 0));
+        // The ends of those hours (the sheet's `autumn_2020`: 02:00 is standard time).
+        for (local, utc) in [
+            (st(2024, 3, 10, 1, 59, 59), st(2024, 3, 10, 9, 59, 59)),
+            (st(2024, 3, 10, 2, 0, 0), st(2024, 3, 10, 9, 0, 0)),
+            (st(2024, 3, 10, 2, 59, 59), st(2024, 3, 10, 9, 59, 59)),
+            (st(2024, 3, 10, 3, 0, 0), st(2024, 3, 10, 10, 0, 0)),
+            (st(2024, 11, 3, 0, 59, 59), st(2024, 11, 3, 7, 59, 59)),
+            (st(2024, 11, 3, 1, 0, 0), st(2024, 11, 3, 8, 0, 0)),
+            (st(2024, 11, 3, 1, 59, 59), st(2024, 11, 3, 8, 59, 59)),
+            (st(2024, 11, 3, 2, 0, 0), st(2024, 11, 3, 10, 0, 0)),
+        ] {
+            let got = convert(&tz, &local, false).unwrap();
+            assert_eq!(SystemTime { day_of_week: 0, ..got }, utc, "{local:?}");
+        }
+    }
+
+    #[test]
+    fn a_zone_without_dates_has_its_bias_only() {
+        // The sheet's `no_daylight_time`: bias 0 with a standard bias 7 and no dates is UTC.
+        let z = Tzi { bias: 0, standard_bias: 7, ..utc() };
+        let t = to_file_time(&st(2020, 7, 15, 12, 0, 0)).unwrap();
+        assert_eq!(utc_to_local(&z, t), Some(t));
+        assert_eq!(local_to_utc(&z, t), Some(t));
+        // UTC+5:30.
+        let ist = Tzi { bias: -330, ..utc() };
+        assert_eq!(utc_to_local(&ist, t), Some(t + 330 * 600_000_000));
+        assert_eq!(local_to_utc(&ist, t + 330 * 600_000_000), Some(t));
+    }
+
+    #[test]
+    fn last_sunday_zone_gap_and_fold_are_daylight() {
+        // UTC+1, daylight (+2) from the last Sunday of March 02:00, standard from the last
+        // Sunday of October 03:00 (the sheet's `last_sunday_zone`).
+        let tz = Tzi {
+            bias: -60,
+            standard_date: rule(10, 0, 5, 3),
+            standard_bias: 0,
+            daylight_date: rule(3, 0, 5, 2),
+            daylight_bias: -60,
+            ..utc()
+        };
+        for (local, utc) in [
+            (st(2020, 3, 29, 1, 59, 59), st(2020, 3, 29, 0, 59, 59)),
+            (st(2020, 3, 29, 2, 30, 0), st(2020, 3, 29, 0, 30, 0)),
+            (st(2020, 10, 25, 2, 30, 0), st(2020, 10, 25, 0, 30, 0)),
+        ] {
+            let got = convert(&tz, &local, false).unwrap();
+            assert_eq!(SystemTime { day_of_week: 0, ..got }, utc, "{local:?}");
+        }
     }
 
     #[test]

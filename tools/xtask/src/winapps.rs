@@ -272,6 +272,11 @@ fn disk(o: &Opts) -> Result<PathBuf> {
     // A 32-bit program's loader searches SysWOW64, its System32 (ADR 0186).
     let system = if x86 { "poly/nt/c/Windows/SysWOW64" } else { crate::chromewin::SYSTEM32_ON_DISK };
     tree.file(&format!("{system}/{}", poly_stubs::STUB_DLL), 0o755, &stubs);
+    // Poly's fonts in `C:\Windows\Fonts` (ADR 0181), as `chrome-win`'s disk has them: without a
+    // face, Chrome's UI font set-up starts over until the browser's stack is full (ADR 0155
+    // addenda "step 9" and "S3 hunt").
+    crate::fonts::fetch_dejavu()?;
+    crate::fonts::add_to_root(&mut tree)?;
     let started = Instant::now();
     crate::rootdisk::write_image_poly_ext2(&tree, &image)?;
     eprintln!("==> disk {} ({} entries, {:.0?})", image.display(), tree.entries.len(), started.elapsed());
@@ -511,6 +516,17 @@ fn run_console(
     Ok(std::fs::read(log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default())
 }
 
+/// The desktop file that starts the program. `%` begins a field code in `Exec` (the Desktop
+/// Entry Specification, "The Exec key"); a literal one is written `%%`, so a URL's `%20`
+/// reaches the program as it was given.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn desktop_file(name: &str, exe: &str, args: &str) -> String {
+    let a = args.replace('%', "%%");
+    format!(
+        "[Desktop Entry]\nType=Application\nName=Winapp {name}\nComment=Windows program under test\nExec={exe} {a}\nKeywords=winapp;{name};\n"
+    )
+}
+
 /// A desktop run: the compositor is init, a desktop file starts the program, QMP drives it.
 #[cfg(unix)]
 fn run_desktop(
@@ -522,11 +538,7 @@ fn run_desktop(
     more: &str,
 ) -> Result<String> {
     let dos = format!("/mnt/root/{APPS_ON_DISK}/{}/{}", o.name, o.exe);
-    let file = format!(
-        "[Desktop Entry]\nType=Application\nName=Winapp {n}\nComment=Windows program under test\nExec={dos} {a}\nKeywords=winapp;{n};\n",
-        n = o.name,
-        a = o.args
-    );
+    let file = desktop_file(&o.name, &dos, &o.args);
     let extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
     let initrd = crate::desktop::image_with("poly-win-app-initramfs.cpio", false, extra)?;
     let socket = std::env::temp_dir().join(format!("poly-win-app-qmp-{}.sock", std::process::id()));
@@ -575,6 +587,8 @@ enum Step {
     Click(i32, i32),
     DClick(i32, i32),
     RClick(i32, i32),
+    /// Press the left button at the first point, move to the second in steps, release.
+    Drag(i32, i32, i32, i32),
 }
 
 impl Step {
@@ -606,6 +620,15 @@ impl Step {
             "rclick" => {
                 let (x, y) = xy()?;
                 Step::RClick(x, y)
+            }
+            "drag" => {
+                let v: Vec<i32> = arg
+                    .split('|')
+                    .map(|p| p.trim().parse())
+                    .collect::<core::result::Result<_, _>>()
+                    .map_err(|_| format!("step {s:?}: X1|Y1|X2|Y2"))?;
+                let [x1, y1, x2, y2] = v[..] else { return Err(format!("step {s:?}: X1|Y1|X2|Y2")) };
+                Step::Drag(x1, y1, x2, y2)
             }
             _ => return Err(format!("step {s:?}: no such step (click takes X|Y because steps are comma separated)")),
         })
@@ -745,6 +768,16 @@ impl Driver {
             Step::Click(x, y) => self.click(*x, *y, "left", 1)?,
             Step::DClick(x, y) => self.click(*x, *y, "left", 2)?,
             Step::RClick(x, y) => self.click(*x, *y, "right", 1)?,
+            Step::Drag(x1, y1, x2, y2) => {
+                self.at(*x1, *y1)?;
+                self.events(&[Self::btn(true, "left")])?;
+                std::thread::sleep(Duration::from_millis(400));
+                for i in 1..=8 {
+                    self.at(x1 + (x2 - x1) * i / 8, y1 + (y2 - y1) * i / 8)?;
+                }
+                self.events(&[Self::btn(false, "left")])?;
+                std::thread::sleep(Duration::from_millis(200));
+            }
         }
         Ok(())
     }
@@ -776,10 +809,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_percent_in_the_arguments_is_not_a_field_code() {
+        let f = desktop_file("chrome", "/mnt/root/c.exe", "data:text/html,<b>a%20b</b>");
+        assert!(f.contains("\nExec=/mnt/root/c.exe data:text/html,<b>a%%20b</b>\n"), "{f}");
+    }
+
+    #[test]
     fn steps_parse() {
         assert_eq!(Step::parse("launch"), Ok(Step::Launch));
         assert_eq!(Step::parse("sleep:5"), Ok(Step::Sleep(5)));
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
+        assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
+        assert!(Step::parse("drag:1|2|3").is_err());
         assert_eq!(Step::parse("chord:ctrl+s"), Ok(Step::Chord(vec!["ctrl".into(), "s".into()])));
         assert!(Step::parse("fly").is_err());
     }

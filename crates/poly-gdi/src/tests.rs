@@ -216,6 +216,7 @@ fn region_handles_create_combine_and_fail_as_observed() {
     g.set_rect_rgn(d, Rect::new(5, 5, 6, 6));
     let gone = u64::from(g.create_rect_rgn(Rect::new(1, 1, 2, 2)).unwrap());
     assert!(g.delete_object(gone));
+    let _next = g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap();
     assert!(!g.delete_object(gone));
     assert_eq!(g.combine_rgn(d, a, gone, 5), (2, 0));
     assert_eq!(rgn_rects(&g, d), [Rect::new(0, 0, 20, 20)]);
@@ -294,10 +295,16 @@ fn rectangular_regions_are_normalised_and_empty_ones_are_empty() {
     for i in 0..1000 {
         let h = u64::from(g.create_rect_rgn(Rect::new(i, i, i + 5, i + 5)).unwrap());
         assert!(g.delete_object(h));
-        assert!(!g.delete_object(h));
+        // The region deleted last still answers until the next region is made
+        // (CreateRectRgnIndirect.yaml, crri_basic): a second delete, GetRgnBox.
+        assert!(g.delete_object(h));
+        assert_eq!(g.rgn_box(h), Some((2, Rect::new(i, i, i + 5, i + 5))));
         // type_after_delete: a deleted region keeps reporting OBJ_REGION.
         assert_eq!(g.object_type(h), OBJ_REGION);
+        let next = u64::from(g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap());
+        assert!(!g.delete_object(h));
         assert_eq!(g.rgn_box(h), None);
+        assert!(g.delete_object(next));
     }
 }
 
@@ -456,7 +463,9 @@ fn delete_object_follows_the_sheet_for_every_kind_of_object() {
     for (h, t) in [(pen, OBJ_PEN), (bmp, OBJ_BITMAP), (rgn, OBJ_REGION)] {
         assert_eq!(g.object_type(h), t, "{h:#x}");
     }
-    for h in [brush, pen, bmp, rgn] {
+    // The region deleted last still answers once more (ghost); the others do not.
+    assert!(g.delete_object(rgn));
+    for h in [brush, pen, bmp] {
         assert!(!g.delete_object(h), "second delete {h:#x}");
     }
     // NULL and made-up handles: false.
@@ -546,6 +555,7 @@ fn a_deleted_region_is_not_a_source_and_a_region_may_be_deleted_while_clipping()
     assert!(g.delete_object(a));
     assert_eq!(g.clip_box(dc), (2, Rect::new(0, 0, 10, 10)), "the DC keeps its copy");
     assert_eq!(g.combine_rgn(dst, a, 0, 5), (0, 6), "ERROR_INVALID_HANDLE");
+    let _next = g.create_rect_rgn(Rect::new(0, 0, 1, 1)).unwrap();
     assert_eq!(g.rgn_box(a), None);
     // 1000 regions made and deleted in turn.
     for i in 0..1000 {
@@ -1231,7 +1241,7 @@ fn palettes_and_styled_brushes_follow_the_delete_rules() {
     assert!(g.delete_object(rgn));
     assert!(!g.is_region(rgn));
     assert!(g.set_rect_rgn(rgn, Rect::new(0, 0, 1, 1)));
-    assert_eq!(g.rgn_box(rgn), None);
+    assert_eq!(g.rgn_box(rgn), Some((2, Rect::new(0, 0, 4, 4))), "the ghost keeps the old rectangle");
 }
 
 // ----- private fonts (`specs/windows/gdi32.dll`: the PolyTest fonts, which
@@ -1886,3 +1896,4 @@ fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
 
 mod sheets_last_line;
 mod sheets_text;
+mod world;

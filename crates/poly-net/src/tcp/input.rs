@@ -354,6 +354,13 @@ impl Tcb {
     pub(super) fn accept_data(&mut self, now: Instant, seq: Seq, data: &[u8]) -> bool {
         self.rcv_mss = self.rcv_mss.max(data.len());
         let off = seq.since(self.rcv_nxt);
+        if self.rd_shut && self.rd_shut_aborts && !data.is_empty() {
+            // Winsock: data for a connection whose receiving side is shut down resets it, and the
+            // next call fails with `ECONNABORTED`.
+            self.abort();
+            self.error = Some(Errno::ECONNABORTED);
+            return false;
+        }
         if self.rd_shut {
             // Acknowledge and drop in-order data.
             if off == 0 {

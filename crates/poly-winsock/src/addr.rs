@@ -78,6 +78,24 @@ pub fn encode(a: &SocketAddr) -> ([u8; MAX_SIZE], usize) {
     }
 }
 
+/// The IPv4 address an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`, RFC 4291 section 2.5.5.2) stands
+/// for, with the port; `None` for every other address.
+pub fn unmap_v4(a: &SocketAddr) -> Option<SocketAddr> {
+    match a {
+        SocketAddr::V6(v) => v.ip().to_ipv4_mapped().map(|ip| SocketAddr::V4(SocketAddrV4::new(ip, v.port()))),
+        SocketAddr::V4(_) => None,
+    }
+}
+
+/// The IPv4-mapped IPv6 form of an IPv4 address (an `AF_INET6` socket that carries IPv4 reports its
+/// peers so, Learn: "Dual-Stack Sockets"); an IPv6 address is returned as it is.
+pub fn map_v4(a: &SocketAddr) -> SocketAddr {
+    match a {
+        SocketAddr::V4(v) => SocketAddr::V6(SocketAddrV6::new(v.ip().to_ipv6_mapped(), v.port(), 0, 0)),
+        SocketAddr::V6(_) => *a,
+    }
+}
+
 /// The family of an address as `AF_*`.
 pub fn af_of(a: &SocketAddr) -> i32 {
     if a.is_ipv4() { AF_INET } else { AF_INET6 }
@@ -119,6 +137,18 @@ mod tests {
         assert_eq!(b[8], 0xfe);
         assert_eq!(&b[24..28], &[3, 0, 0, 0]);
         assert_eq!(decode(&b[..n]), Ok(a));
+    }
+
+    #[test]
+    fn v4_mapped_addresses_map_both_ways() {
+        let v4: SocketAddr = "127.0.0.1:80".parse().unwrap();
+        let m = map_v4(&v4);
+        assert_eq!(m.to_string(), "[::ffff:127.0.0.1]:80");
+        assert_eq!(unmap_v4(&m), Some(v4));
+        assert_eq!(unmap_v4(&v4), None);
+        let v6: SocketAddr = "[::1]:80".parse().unwrap();
+        assert_eq!(unmap_v4(&v6), None);
+        assert_eq!(map_v4(&v6), v6);
     }
 
     #[test]

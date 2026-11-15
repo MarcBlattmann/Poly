@@ -447,6 +447,29 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
     ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome stage 2 (impl-chrome-s2; contracts from Learn's "API set" rows).
+    ("SetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("SetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetCurrentProcessorNumber", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentProcessorNumberEx", "api-ms-win-core-processthreads-l1-1-1"),
+    ("GetProcessHandleCount", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome S3 hunt: scheduling settings and thread times (the browser, its GPU process and
+    // crash handler call them all the time; Learn's "API set" rows).
+    ("SetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("GetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("SetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadInformation", "api-ms-win-core-processthreads-l1-1-3"),
+    ("GetThreadTimes", "api-ms-win-core-processthreads-l1-1-0"),
+    ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
+    ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
+    ("K32GetModuleInformation", "api-ms-win-core-psapi-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -505,6 +528,11 @@ pub const USER32_EXPORTS: &[&str] = &["CharUpperW", "CharPrevExA"];
 /// functions and (second slice) the `lstr*` string functions, whose Learn
 /// pages name no API set.
 pub const KERNEL32_OWN: &[&str] = &[
+    // The global atom table (Learn names no API set for these pages).
+    "GlobalAddAtomW",
+    "GlobalFindAtomW",
+    "GlobalDeleteAtom",
+    "GlobalGetAtomNameW",
     "GlobalAlloc",
     "GlobalFree",
     "GlobalSize",

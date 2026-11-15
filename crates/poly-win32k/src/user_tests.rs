@@ -24,6 +24,8 @@ struct TestEnv {
     /// Give each thread its default IME window with its first window, as
     /// `user32` does (`replay`).
     ime: Cell<bool>,
+    /// The interactive moves and resizes asked of the compositor: (window, edges).
+    moves: RefCell<Vec<(u32, u8)>>,
 }
 
 thread_local! {
@@ -47,6 +49,9 @@ fn take_log() -> Vec<String> {
 impl Env for TestEnv {
     fn call(&self, req: Request) -> Reply {
         let ctx = Ctx { pid: 7, tid: self.tid.get(), now: 0 };
+        if let Request::MoveSize { hwnd, edges } = req {
+            self.moves.borrow_mut().push((hwnd, edges));
+        }
         self.wm.borrow_mut().handle(ctx, req, &mut Effects::default())
     }
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
@@ -111,6 +116,7 @@ fn with_env(f: impl FnOnce(&TestEnv)) {
         cursor: Cell::new(0),
         regions: RefCell::new(Vec::new()),
         ime: Cell::new(false),
+        moves: RefCell::new(Vec::new()),
     };
     ENV.with(|p| p.set(&e));
     take_log();
@@ -216,6 +222,7 @@ extern "system" fn logging_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
         0x00A0 => log(format!("{t} WM_NCMOUSEMOVE hit={w}")),
         0x02A3 => log(format!("{t} WM_MOUSELEAVE")),
         0x02A2 => log(format!("{t} WM_NCMOUSELEAVE")),
+        WM_SYSCOMMAND => log(format!("{t} WM_SYSCOMMAND w={w:#x}")),
         WM_DESTROY => log(format!("{t} WM_DESTROY")),
         WM_NCDESTROY => log(format!("{t} WM_NCDESTROY")),
         _ => {}
@@ -926,6 +933,58 @@ fn def_window_proc_sets_the_class_cursor_for_a_client_hit_only_for_itself() {
     });
 }
 
+#[test]
+fn a_press_on_the_caption_or_a_border_moves_or_sizes_through_the_compositor() {
+    // Learn: WM_NCLBUTTONDOWN, WM_NCLBUTTONDBLCLK, WM_SYSCOMMAND (SC_MOVE, SC_SIZE).
+    with_env(|e| {
+        register(e, "Own");
+        let h = create(
+            e,
+            'A',
+            0,
+            "Own",
+            WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000 | WS_VISIBLE,
+            100,
+            100,
+            300,
+            200,
+            0,
+            0,
+        );
+        let screen = makelparam(150, 105);
+        take_log();
+        let sys = |hit: i32| {
+            def_window_proc(e, h, WM_NCLBUTTONDOWN, hit as u64, screen);
+            take_log().into_iter().filter(|l| l.contains("SYSCOMMAND")).collect::<Vec<_>>()
+        };
+        assert_eq!(sys(frame::HTCAPTION), ["A WM_SYSCOMMAND w=0xf012"]);
+        assert_eq!(e.moves.borrow().as_slice(), [(h as u32, 0)]);
+        assert_eq!(sys(frame::HTBOTTOMRIGHT), ["A WM_SYSCOMMAND w=0xf008"]);
+        assert_eq!(sys(frame::HTLEFT), ["A WM_SYSCOMMAND w=0xf001"]);
+        let edges = |v: &[(u32, u8)]| v.iter().map(|m| m.1).collect::<Vec<_>>();
+        assert_eq!(edges(&e.moves.borrow()), [0, 8 | 4, 1]);
+        // A caption button acts when released over it, not when pressed.
+        assert!(sys(frame::HTMAXBUTTON).is_empty());
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTCAPTION as u64, screen);
+        assert!(take_log().iter().all(|l| !l.contains("SYSCOMMAND")), "released elsewhere: nothing");
+        // A double click on the caption maximizes; a maximized window is not dragged.
+        def_window_proc(e, h, WM_NCLBUTTONDBLCLK, frame::HTCAPTION as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf030")));
+        e.moves.borrow_mut().clear();
+        assert_eq!(sys(frame::HTCAPTION), ["A WM_SYSCOMMAND w=0xf012"]);
+        assert!(e.moves.borrow().is_empty());
+        // The maximize button of a maximized window restores it.
+        sys(frame::HTMAXBUTTON);
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTMAXBUTTON as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf120")));
+        sys(frame::HTMINBUTTON);
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTMINBUTTON as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf020")));
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        assert_ne!(info.style & WS_MINIMIZE, 0);
+    });
+}
+
 extern "system" fn truthy_proc(_h: u64, _msg: u32, _w: u64, _l: u64) -> u64 {
     1
 }
@@ -1319,3 +1378,23 @@ mod input_hunt;
 mod paint_hunt;
 #[path = "user_tests/replay.rs"]
 mod replay;
+
+#[test]
+fn a_layered_child_needs_a_windows_8_manifest() {
+    // SetLayeredWindowAttributes.yaml `children` (no manifest: refused, no
+    // last error); Learn, "Layered Windows": with Windows 8 declared, child
+    // windows may be layered (Chrome's GPU process makes one).
+    with_env(|e| {
+        register(e, "L");
+        let p = create(e, 'P', 0, "L", WS_POPUP, 0, 0, 100, 100, 0, 0);
+        let layered = 0x0008_0000 | 0x20;
+        e.err.set(1234);
+        assert_eq!(create(e, 'C', layered, "L", WS_CHILD, 0, 0, 1, 1, p, 0), 0);
+        assert_eq!(e.err.get(), 1234, "no last error");
+        assert_eq!(e.call(Request::LayeredChildren {}), Reply::Ok {});
+        let c = create(e, 'C', layered, "L", WS_CHILD, 0, 0, 1, 1, p, 0);
+        assert_ne!(c, 0);
+        let Reply::Window { info } = e.call(Request::Window { hwnd: c }) else { panic!() };
+        assert_ne!(info.ex_style & 0x0008_0000, 0);
+    });
+}

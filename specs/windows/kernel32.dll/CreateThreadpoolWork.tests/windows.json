@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_work_b",
+      "exe_sha256": "be1b029258290eda50c071b462e81c57e9be249e9f7501dfc05805e49d424a8b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgb25lIHN1Ym1pdCBhbmQgYSB3YWl0OiBjYWxsYmFja3MgMSBjb250ZXh0IG9rIDEgb3duIHdvcmsgb2JqZWN0IG9rIDEgaW5zdGFuY2UgZ2l2ZW4gMSBvZmYgdGhlIG1haW4gdGhyZWFkIDEKd2FpdCB3aXRoIG5vdGhpbmcgcGVuZGluZyByZXR1cm5lZCBxdWlja2x5OiAxCm9uZS10aHJlYWQgcG9vbCwgZml2ZSBzdWJtaXR0ZWQsIGNhbmNlbGxpbmcgd2FpdDogY2FsbGJhY2tzIHRoYXQgcmFuIDEgYXQgbW9zdCBhdCBvbmNlIDEKY2xvc2VkIHdpdGggdGhyZWUgcGVuZGluZyAob25lIHJ1bm5pbmcpOiBjYWxsYmFja3MgdGhhdCByYW4gYnkgdGhlIGVuZCAzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after one submit and a wait: callbacks 1 context ok 1 own work object ok 1 instance given 1 off the main thread 1\nwait with nothing pending returned quickly: 1\none-thread pool, five submitted, cancelling wait: callbacks that ran 1 at most at once 1\nclosed with three pending (one running): callbacks that ran by the end 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1951
+    },
+    {
+      "name": "tp_work_c",
+      "exe_sha256": "e91e4066f69d8682be5f006382c3c415665a114c29ce30667167791e1d83dc01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGVuIG1vcmUgc3VibWl0cyBhbmQgYSB3YWl0OiBjYWxsYmFja3MgMTEKdHdvIGNhbGxiYWNrcyBvZiB0aGUgZGVmYXVsdCBwb29sIHRoYXQgd2FpdCBmb3IgZWFjaCBvdGhlcjogYm90aCByYW4gYXQgb25jZTogMgogIDMwMCBtcyBsYXRlcjogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ten more submits and a wait: callbacks 11\ntwo callbacks of the default pool that wait for each other: both ran at once: 2\n  300 ms later: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1932
+    }
+  ]
+}

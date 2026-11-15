@@ -81,6 +81,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -389,7 +390,7 @@ pub fn build_runtime(
             exe_sha256: sha256::hex(&bytes),
             size: bytes.len() as u64,
             imports,
-            session: session_of(&src.path),
+            session: session_of(&src.path, &src.name),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -398,12 +399,26 @@ pub fn build_runtime(
     Ok(m)
 }
 
-/// The session a test's reference was recorded in: `system.session` of
-/// the `windows.json` in the source's directory, if there is one.
-fn session_of(source: &Path) -> Option<String> {
+/// The session a test's reference was recorded in: the test's own `session` in the
+/// `windows.json` in the source's directory (a directory can hold tests recorded in both
+/// kinds of session), else that file's `system.session`, if there is one.
+fn session_of(source: &Path, name: &str) -> Option<String> {
     let reference = source.parent()?.join("windows.json");
     let bytes = std::fs::read(reference).ok()?;
-    RunFile::parse(&bytes).ok()?.system.session
+    let own = serde_json::from_slice::<serde_json::Value>(&bytes).ok().and_then(|v| {
+        let t = v.get("tests")?.as_array()?.iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some(name))?;
+        Some(t.get("session")?.as_str()?.to_string())
+    });
+    let session = own.or_else(|| RunFile::parse(&bytes).ok()?.system.session);
+    // From build 26200.9974 the oracle's taskbar is at the bottom (48 pixels): work area 0,0,1920,1032.
+    let bottom = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|v| v.get("system")?.get("build")?.as_str()?.rsplit('.').next()?.parse::<u32>().ok())
+        .is_some_and(|minor| minor >= 9974);
+    match session.as_deref() {
+        Some("interactive") if bottom => Some("interactive-bottom".to_string()),
+        _ => session,
+    }
 }
 
 /// The kernel arguments for a test recorded in `session` (ADR 0131):
@@ -412,6 +427,7 @@ fn session_of(source: &Path) -> Option<String> {
 pub fn session_kernel_args(session: Option<&str>) -> &'static str {
     match session {
         Some("interactive") => " poly.win32k.session=interactive",
+        Some("interactive-bottom") => " poly.win32k.session=interactive-bottom",
         _ => "",
     }
 }
@@ -924,12 +940,15 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     } else {
         Vec::new()
     };
+    /// The processors a Windows test boots with: `GetCurrentProcessorNumber`'s recorded test pins a
+    /// thread to each of the first four.
+    const WINDOWS_TEST_CPUS: u32 = 4;
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
-        let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
+        let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
@@ -1382,6 +1401,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
+        let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
+        assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);

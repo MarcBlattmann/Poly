@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "smia_fields",
+      "exe_sha256": "6b201268954814d41d045640cd76a223d2ee8d40690c17dc74eedab9b1beeda3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdGUsIGlkIGFuZCBkYXRhIG9mIGl0ZW0gMDogMQogIHJlYWQ6IHN0YXRlIDB4YiBpZCAxMTEgZGF0YSAweGZlZWQgdGV4dCAnb25lJwpyZXBsYWNlIHRoZSBwb3B1cCBvZiBpdGVtIDEgYnkgYW5vdGhlcjogMQogIEdldFN1Yk1lbnUoMSkgaXMgdGhlIG5ldyBtZW51IDEgOyB0aGUgb2xkIHBvcHVwIHN0aWxsIGEgbWVudTogMApNRlRfUkFESU9DSEVDSyBvbiBpdGVtIDI6IDEKICB0eXBlIDB4MjAwCk1JSU1fVFlQRSB8IE1JSU1fU1RSSU5HOiAwIGVycj04NwpyZXN1bHQ6IGNvdW50IDMKICBbMF0gaWQ9MHg2ZiBzdGF0ZT0weGIgVygzKSAnb25lJyBBKDMpICdvbmUnCiAgWzFdIGlkPTB4ZmZmZmZmZmYgc3RhdGU9MHgxMCBXKDMpICdwb3AnIEEoMykgJ3BvcCcKICBbMl0gaWQ9MHgzIHN0YXRlPTB4MjAwIFcoNSkgJ3RocmVlJyBBKDUpICd0aHJlZScKb3duZXIgZHJhdyB3aXRoIGRhdGEgMHg5OTogMQogIHR5cGUgMHgxMDAgZGF0YSAweDk5CkdldE1lbnVJdGVtSW5mb0EgTUlJTV9TVFJJTkcgb2YgdGhlIG93bmVyLWRyYXcgaXRlbTogMQogIGNjaCAzIGJ5dGVzICdvbmUnCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "state, id and data of item 0: 1\n  read: state 0xb id 111 data 0xfeed text 'one'\nreplace the popup of item 1 by another: 1\n  GetSubMenu(1) is the new menu 1 ; the old popup still a menu: 0\nMFT_RADIOCHECK on item 2: 1\n  type 0x200\nMIIM_TYPE | MIIM_STRING: 0 err=87\nresult: count 3\n  [0] id=0x6f state=0xb W(3) 'one' A(3) 'one'\n  [1] id=0xffffffff state=0x10 W(3) 'pop' A(3) 'pop'\n  [2] id=0x3 state=0x200 W(5) 'three' A(5) 'three'\nowner draw with data 0x99: 1\n  type 0x100 data 0x99\nGetMenuItemInfoA MIIM_STRING of the owner-draw item: 1\n  cch 3 bytes 'one'\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/InsertMenuItemA.yaml
+id: windows/api/user32.dll/InsertMenuItemA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Inserts an item described by a MENUITEMINFOA (size 80 bytes in a 64-bit process): the string (MIIM_STRING, or the old MIIM_TYPE form) is converted with the ANSI code page; the other fields are those of InsertMenuItemW.
+interface:
+  signature: "BOOL InsertMenuItemA(HMENU hmenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOA lpmi)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  text: "MIIM_STRING with the test string gives the item text 'caf<U+00E9> <U+20AC> <U+0081> <U+00FF>' (read through GetMenuStringW and GetMenuStringA 'caf<E9> <80> <81> <FF>'); MIIM_TYPE with MFT_STRING and 'old type<E9>' gives that text; cch in the structure is ignored on input; a NULL text with MIIM_STRING gives a separator-like item (state 0x803), an empty text gives an item with an empty text"
+  fields: "id (MIIM_ID), state (MFS_CHECKED 8), type MFT_SEPARATOR (state 0x803), item data (MIIM_DATA 0xABCD read back), check mark bitmaps (MIIM_CHECKMARKS, handles read back), radio check type (MFT_RADIOCHECK read back as type 0x200 with state 0x1000 for MFS_DEFAULT), a bitmap item (MIIM_BITMAP) and MIIM_TYPE with MFT_BITMAP / MFT_OWNERDRAW all give the same item as InsertMenuItemW does (compared field by field through GetMenuItemInfoW)"
+  position: "fByPosition TRUE inserts at the position; FALSE inserts before the item with that id (before 12 'before 12' sits before 'old type<U+00E9>'); an id that is not found appends at the end"
+  popup: "MIIM_SUBMENU with MIIM_STRING inserts a popup (GetSubMenu is it)"
+errors:
+  bad_structure: "cbSize 4, a cbSize larger than the structure (88) and a NULL pointer: FALSE with ERROR_INVALID_PARAMETER (87)"
+  bad_menu: "a made-up menu handle: FALSE with 1401"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

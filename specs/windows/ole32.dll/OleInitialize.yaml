@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ole32.dll/OleInitialize
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Initializes the OLE libraries (and COM, as a single-threaded apartment) for the calling thread; needed
+  before RegisterDragDrop. Chrome's UI thread calls it once in a run (S3) and OleUninitialize at the end.
+interface:
+  signature: "HRESULT OleInitialize(LPVOID pvReserved)"
+rules:
+  counts: "the first call on a thread returns S_OK and every nested call S_FALSE; one OleUninitialize per call; CoGetApartmentType then gives CO_E_NOTINITIALIZED until the first call and S_OK with type 3 (APTTYPE_MAINSTA) for the first apartment thread of the process, 0 (STA) for later ones while the first lives; two OleInitialize and two OleUninitialize leave no apartment, with one left it stays"
+  reserved: "a non-NULL reserved parameter returns E_INVALIDARG and does not initialize anything"
+  after_com: "a thread that did CoInitializeEx(MTA) gets RPC_E_CHANGED_MODE and stays an MTA thread; a thread that did CoInitializeEx(STA) gets S_OK (OLE is a state of its own on top of the apartment), the apartment type stays 3, and OleUninitialize leaves the CoInitializeEx apartment (CoGetApartmentType S_OK) until CoUninitialize ends it"
+  drag_drop: "RegisterDragDrop works on a thread after OleInitialize and fails (E_OUTOFMEMORY on the oracle: a failure either way) before it, after the last OleUninitialize (CO_E_NOTINITIALIZED) and on a thread that did not initialize OLE; two OleInitialize and one OleUninitialize keep drag and drop working"
+  machine_independent: "the tests print the HRESULTs of these sequences; the first-thread MAINSTA rule needs that no other thread is an STA at that moment"
+errors:
+  invalid_arg: "E_INVALIDARG: reserved not NULL"
+  changed_mode: "RPC_E_CHANGED_MODE: the thread is an MTA thread"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  OLE1 DDE (COINIT_DISABLE_OLE1DDE), the clipboard and DoDragDrop, apartment shutdown with live objects.

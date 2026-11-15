@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "ima_insert",
+      "exe_sha256": "c80cae3063f43ce2e0edaf398b532a28e6006be255f9ec0f1fbd30f461e6e64e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QU5TSSBjb2RlIHBhZ2UgMTI1MgpJbnNlcnRNZW51QSBwb3NpdGlvbiAwIG9uIGFuIGVtcHR5IG1lbnU6IDEKSW5zZXJ0TWVudUEgcG9zaXRpb24gMCBhZ2FpbjogMQpJbnNlcnRNZW51QSBwb3NpdGlvbiAxOiAxCkluc2VydE1lbnVBIHBvc2l0aW9uIC0xICh0aGUgZW5kKTogMQpJbnNlcnRNZW51QSBwb3NpdGlvbiA5OSAocGFzdCB0aGUgZW5kKTogMQpieSBwb3NpdGlvbjogY291bnQgNQogIFswXSBpZD0weGIgc3RhdGU9MHgwIFcoMTApICdjYWY8MDBlOT4gPDIwYWM+IDwwMDgxPiA8MDBmZj4nIEEoMTApICdjYWY8ZTk+IDw4MD4gPDgxPiA8ZmY+JwogIFsxXSBpZD0weGMgc3RhdGU9MHgwIFcoNikgJ3R3ZWx2ZScgQSg2KSAndHdlbHZlJwogIFsyXSBpZD0weGEgc3RhdGU9MHgwIFcoMykgJ3RlbicgQSgzKSAndGVuJwogIFszXSBpZD0weGQgc3RhdGU9MHgwIFcoOCkgJ3RoaXJ0ZWVuJyBBKDgpICd0aGlydGVlbicKICBbNF0gaWQ9MHhlIHN0YXRlPTB4MCBXKDgpICdmb3VydGVlbicgQSg4KSAnZm91cnRlZW4nCkluc2VydE1lbnVBIGJlZm9yZSBjb21tYW5kIDEwOiAxCkluc2VydE1lbnVBIGJlZm9yZSBjb21tYW5kIDk5OSAoYWJzZW50OiBhdCB0aGUgZW5kKTogMQpJbnNlcnRNZW51QSBzZXBhcmF0b3IgYmVmb3JlIGNvbW1hbmQgMTI6IDEKYnkgY29tbWFuZDogY291bnQgOAogIFswXSBpZD0weGIgc3RhdGU9MHgwIFcoMTApICdjYWY8MDBlOT4gPDIwYWM+IDwwMDgxPiA8MDBmZj4nIEEoMTApICdjYWY8ZTk+IDw4MD4gPDgxPiA8ZmY+JwogIFsxXSBpZD0weDAgc3RhdGU9MHg4MDMgVygwKSAnJyBBKDApICcnCiAgWzJdIGlkPTB4YyBzdGF0ZT0weDAgVyg2KSAndHdlbHZlJyBBKDYpICd0d2VsdmUnCiAgWzNdIGlkPTB4MTQgc3RhdGU9MHgwIFcoMTApICdiZWZvcmUgdGVuJyBBKDEwKSAnYmVmb3JlIHRlbicKICBbNF0gaWQ9MHhhIHN0YXRlPTB4MCBXKDMpICd0ZW4nIEEoMykgJ3RlbicKICBbNV0gaWQ9MHhkIHN0YXRlPTB4MCBXKDgpICd0aGlydGVlbicgQSg4KSAndGhpcnRlZW4nCiAgWzZdIGlkPTB4ZSBzdGF0ZT0weDAgVyg4KSAnZm91cnRlZW4nIEEoOCkgJ2ZvdXJ0ZWVuJwogIFs3XSBpZD0weDE1IHN0YXRlPTB4MCBXKDYpICdhYnNlbnQnIEEoNikgJ2Fic2VudCcKSW5zZXJ0TWVudUEgcG9wdXAgYXQgMjogMQogIEdldFN1Yk1lbnUoMikgaXMgdGhhdCBtZW51OiAxCkluc2VydE1lbnVBIGJlZm9yZSB0aGUgcG9wdXAgKGNvbW1hbmQgaWQgPSBtZW51IGhhbmRsZSk6IDEKd2l0aCB0aGUgcG9wdXA6IGNvdW50IDEwCiAgWzBdIGlkPTB4YiBzdGF0ZT0weDAgVygxMCkgJ2NhZjwwMGU5PiA8MjBhYz4gPDAwODE+IDwwMGZmPicgQSgxMCkgJ2NhZjxlOT4gPDgwPiA8ODE+IDxmZj4nCiAgWzFdIGlkPTB4MCBzdGF0ZT0weDgwMyBXKDApICcnIEEoMCkgJycKICBbMl0gaWQ9MHgxNiBzdGF0ZT0weDAgVygxMikgJ2JlZm9yZSBwb3B1cCcgQSgxMikgJ2JlZm9yZSBwb3B1cCcKICBbM10gaWQ9MHhmZmZmZmZmZiBzdGF0ZT0weDExMCBXKDYpICdQb3B1cDwwMGZmPicgQSg2KSAnUG9wdXA8ZmY+JwogIFs0XSBpZD0weGMgc3RhdGU9MHgwIFcoNikgJ3R3ZWx2ZScgQSg2KSAndHdlbHZlJwogIFs1XSBpZD0weDE0IHN0YXRlPTB4MCBXKDEwKSAnYmVmb3JlIHRlbicgQSgxMCkgJ2JlZm9yZSB0ZW4nCiAgWzZdIGlkPTB4YSBzdGF0ZT0weDAgVygzKSAndGVuJyBBKDMpICd0ZW4nCiAgWzddIGlkPTB4ZCBzdGF0ZT0weDAgVyg4KSAndGhpcnRlZW4nIEEoOCkgJ3RoaXJ0ZWVuJwogIFs4XSBpZD0weGUgc3RhdGU9MHgwIFcoOCkgJ2ZvdXJ0ZWVuJyBBKDgpICdmb3VydGVlbicKICBbOV0gaWQ9MHgxNSBzdGF0ZT0weDAgVyg2KSAnYWJzZW50JyBBKDYpICdhYnNlbnQnCkluc2VydE1lbnVBIGJhZCBtZW51OiAwIGVycj0xNDAxCkluc2VydE1lbnVBIE5VTEwgbWVudTogMCBlcnI9MTQwMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ANSI code page 1252\nInsertMenuA position 0 on an empty menu: 1\nInsertMenuA position 0 again: 1\nInsertMenuA position 1: 1\nInsertMenuA position -1 (the end): 1\nInsertMenuA position 99 (past the end): 1\nby position: count 5\n  [0] id=0xb state=0x0 W(10) 'caf<00e9> <20ac> <0081> <00ff>' A(10) 'caf<e9> <80> <81> <ff>'\n  [1] id=0xc state=0x0 W(6) 'twelve' A(6) 'twelve'\n  [2] id=0xa state=0x0 W(3) 'ten' A(3) 'ten'\n  [3] id=0xd state=0x0 W(8) 'thirteen' A(8) 'thirteen'\n  [4] id=0xe state=0x0 W(8) 'fourteen' A(8) 'fourteen'\nInsertMenuA before command 10: 1\nInsertMenuA before command 999 (absent: at the end): 1\nInsertMenuA separator before command 12: 1\nby command: count 8\n  [0] id=0xb state=0x0 W(10) 'caf<00e9> <20ac> <0081> <00ff>' A(10) 'caf<e9> <80> <81> <ff>'\n  [1] id=0x0 state=0x803 W(0) '' A(0) ''\n  [2] id=0xc state=0x0 W(6) 'twelve' A(6) 'twelve'\n  [3] id=0x14 state=0x0 W(10) 'before ten' A(10) 'before ten'\n  [4] id=0xa state=0x0 W(3) 'ten' A(3) 'ten'\n  [5] id=0xd state=0x0 W(8) 'thirteen' A(8) 'thirteen'\n  [6] id=0xe state=0x0 W(8) 'fourteen' A(8) 'fourteen'\n  [7] id=0x15 state=0x0 W(6) 'absent' A(6) 'absent'\nInsertMenuA popup at 2: 1\n  GetSubMenu(2) is that menu: 1\nInsertMenuA before the popup (command id = menu handle): 1\nwith the popup: count 10\n  [0] id=0xb state=0x0 W(10) 'caf<00e9> <20ac> <0081> <00ff>' A(10) 'caf<e9> <80> <81> <ff>'\n  [1] id=0x0 state=0x803 W(0) '' A(0) ''\n  [2] id=0x16 state=0x0 W(12) 'before popup' A(12) 'before popup'\n  [3] id=0xffffffff state=0x110 W(6) 'Popup<00ff>' A(6) 'Popup<ff>'\n  [4] id=0xc state=0x0 W(6) 'twelve' A(6) 'twelve'\n  [5] id=0x14 state=0x0 W(10) 'before ten' A(10) 'before ten'\n  [6] id=0xa state=0x0 W(3) 'ten' A(3) 'ten'\n  [7] id=0xd state=0x0 W(8) 'thirteen' A(8) 'thirteen'\n  [8] id=0xe state=0x0 W(8) 'fourteen' A(8) 'fourteen'\n  [9] id=0x15 state=0x0 W(6) 'absent' A(6) 'absent'\nInsertMenuA bad menu: 0 err=1401\nInsertMenuA NULL menu: 0 err=1401\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

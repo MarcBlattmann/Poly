@@ -1,0 +1,17 @@
+[package]
+name = "dxgi"
+description = "Our dxgi.dll (ADR 0155): a DXGI factory with one software adapter and the screen as its output, for Chrome's software compositing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "dxgi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

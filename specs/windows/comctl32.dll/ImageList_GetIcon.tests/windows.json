@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "ilg_roundtrip",
+      "exe_sha256": "6b4eee7d5d07d0452c8bad68f2f879b43cabc857c5d8987d7cacdb98e6a9f75e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW1hZ2VMaXN0X1JlcGxhY2VJY29uKC0xKSBvZiB0aGUgbW9kdWxlIGljb246IDAKY291bnQgMQpJbWFnZUxpc3RfR2V0SWNvbjogd2luZG93CkltYWdlTGlzdF9SZXBsYWNlSWNvbigtMSkgb2YgdGhhdCBpY29uOiAwCkRyYXdJY29uRXggb2YgdGhlIGljb24gZXF1YWxzIEltYWdlTGlzdF9EcmF3IG9mIHRoZSBsaXN0OiAxCnRoZSBjb3B5IGluIHRoZSBvdGhlciBsaXN0IGRyYXdzIHRoZSBzYW1lOiAxCmljb246IGluayBib3ggKDAsMCktKDE2LDE2KSAyNTYgcGl4ZWxzOyBhdCAoMSwxKSAjMWVjODFlICg2LDEpICMxZWM4MWUgKDEsNikgIzFlYzgxZSAoNiw2KSAjMWVjODFlCmxpc3Q6IGluayBib3ggKDAsMCktKDE2LDE2KSAyNTYgcGl4ZWxzOyBhdCAoMSwxKSAjMWVjODFlICg2LDEpICMxZWM4MWUgKDEsNikgIzFlYzgxZSAoNiw2KSAjMWVjODFlCnRoZSBtb2R1bGUgaWNvbiBzdGlsbCB3b3JrczogR2V0SWNvbkluZm8gMQpEZXN0cm95SWNvbihvdXQpIDEKdGhlIGxpc3QgaW1hZ2UgaXMgc3RpbGwgZHJhd246IDEKSW1hZ2VMaXN0X1JlcGxhY2VJY29uKC0xKSBvZiBhIDMyeDMyIGljb24gaW4gYSAxNngxNiBsaXN0OiAxCmNvdW50IDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ImageList_ReplaceIcon(-1) of the module icon: 0\ncount 1\nImageList_GetIcon: window\nImageList_ReplaceIcon(-1) of that icon: 0\nDrawIconEx of the icon equals ImageList_Draw of the list: 1\nthe copy in the other list draws the same: 1\nicon: ink box (0,0)-(16,16) 256 pixels; at (1,1) #1ec81e (6,1) #1ec81e (1,6) #1ec81e (6,6) #1ec81e\nlist: ink box (0,0)-(16,16) 256 pixels; at (1,1) #1ec81e (6,1) #1ec81e (1,6) #1ec81e (6,6) #1ec81e\nthe module icon still works: GetIconInfo 1\nDestroyIcon(out) 1\nthe list image is still drawn: 1\nImageList_ReplaceIcon(-1) of a 32x32 icon in a 16x16 list: 1\ncount 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

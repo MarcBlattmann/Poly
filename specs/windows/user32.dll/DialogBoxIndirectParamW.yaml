@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DialogBoxIndirectParamW.yaml
+id: windows/api/user32.dll/DialogBoxIndirectParamW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Runs a modal dialog from a DLGTEMPLATE (or DLGTEMPLATEEX) held in memory: the same as DialogBoxParamW with the template given as a pointer instead of a resource. The instance is not used.
+interface:
+  signature: "INT_PTR DialogBoxIndirectParamW(HINSTANCE hInstance, LPCDLGTEMPLATEW hDialogTemplate, HWND hWndParent, DLGPROC lpDialogFunc, LPARAM dwInitParam)"
+rules:
+  init: "the dialog procedure gets WM_SETFONT (with DS_SETFONT), then WM_INITDIALOG with the lParam (0x1234, -5, 1, 2, 3) and wParam = the first control with a tab stop (1002 for the old format template, 7 for the extended one, the only static for a template without tab stops, 0 for no controls); the window has the styles of the template plus WS_CLIPSIBLINGS and DS_3DLOOK (0x84C800C4 for WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT) and the extended style 0x10101; class \"#32770\"; IsWindowUnicode 1; not visible in session 0 even with WS_VISIBLE"
+  controls: "children in template order with ids (1001, 1002, 1, 2; 74565 = 0x12345 and 7 for the extended template), classes Static / Edit / Button, styles (0x50010080 for a tab-stop bordered edit with ES_AUTOHSCROLL, the border is dropped), and the template's UTF-16 text (the first unit of '&Name:' is 0x26)"
+  text: "a title and a control text with non-ASCII characters keep them as UTF-16 (the title 'T<U+00E9><U+4E2D>' has the units 0x54, 0xE9, 0x4E2D)"
+  instance: "the instance is not used: NULL and a made-up instance give the same dialog"
+  result: "the value passed to EndDialog (42) is returned; 0, 1, -1, 0x7FFFFFFF, 0x100000000, isize::MAX and isize::MIN all come back unchanged; with an owner window the owner is disabled while the dialog runs and enabled again"
+errors:
+  template: "an unknown control class: -1 with ERROR_CANNOT_FIND_WND_CLASS (1407); WS_CHILD in the template style: -1 with ERROR_TLW_WITH_WSCHILD (1406), with and without a parent; a bad parent: 0 with 1400"
+  extended_version: "an extended template whose dlgVer is 2 (not 1) is not rejected: the dialog is shown (the header is read as an old format header)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  A template that is not DWORD aligned, truncated or with a wrong control count (reads beyond the buffer), templates with menus, class names and fonts of other kinds (the resource versions of those are in the DialogBoxParamW sheet), WS_VISIBLE dialogs on a visible desktop.
