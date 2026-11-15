@@ -25,7 +25,8 @@ unsafe fn prop_key(raw: *const u16) -> Option<Key> {
     Key::from_raw_atoms(raw as usize, || unsafe { wide(raw, -1) }, atom_name)
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, size: i32) -> u32;
 }
