@@ -12,6 +12,7 @@
   "tests": [
     {
       "name": "cw_chrome_widget",
+      "session": "interactive-bottom",
       "exe_sha256": "d86a7043cfb2548ae0dc2cdf9c35035e307d0af10a579ff9bbaf4a82e27546d3",
       "status": "ran",
       "exit_code": 0,

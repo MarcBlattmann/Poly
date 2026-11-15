@@ -197,6 +197,26 @@ pub fn begin<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Call {
             }
         }
     });
+    // `PolyUserCall` (`win32k#0x0`): the request it carries, so a trail
+    // shows which user32 call it was.
+    let object = object.or_else(|| {
+        if service.is_some() || name != "win32k#0x0" || args[1] == 0 || args[1] > 4096 {
+            return None;
+        }
+        let mut bytes = alloc::vec![0u8; args[1] as usize];
+        abi::read(k, args[0], &mut bytes).ok()?;
+        let req: poly_win32k::proto::Request = poly_win32k::wire::decode(&bytes)?;
+        let mut text = format!("{req:?}");
+        if text.len() > 200 {
+            let mut end = 200;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            text.truncate(end);
+            text.push_str("...");
+        }
+        Some(text)
+    });
     Call { name, service, args, object }
 }
 
