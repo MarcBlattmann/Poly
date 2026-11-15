@@ -411,7 +411,8 @@ pub fn map_section(
         let mut status = STATUS_SUCCESS;
         if req.base == 0 {
             let preferred = img.image_base();
-            let free_at = |at: u64| at % ALLOCATION_GRANULARITY == 0 && proc.vm.place(at, img.size, false, 0).is_ok();
+            let free_at =
+                |at: u64| at.is_multiple_of(ALLOCATION_GRANULARITY) && proc.vm.place(at, img.size, false, 0).is_ok();
             match section.chosen_base {
                 // Every view of the section goes where its first one went, where that is free
                 // (relocated for it): an image is at one address in every process.
