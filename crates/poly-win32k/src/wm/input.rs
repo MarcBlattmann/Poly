@@ -134,7 +134,9 @@ impl Wm {
     pub(super) fn is_ime_ui(&self, h: u32) -> bool {
         let Some(w) = self.get(u64::from(h)) else { return false };
         w.owner != 0
-            && self.classes[w.class].as_ref().is_some_and(|c| upcase(&c.name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>()))
+            && self.classes[w.class]
+                .as_ref()
+                .is_some_and(|c| upcase(&c.name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>()))
     }
 
     /// `order` (a list without the text services' windows) with them put back directly above their owners.

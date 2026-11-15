@@ -1274,17 +1274,6 @@ pub fn set_window_pos<E: Env + ?Sized>(
     swp(env, i.hwnd, after, x, y, cx, cy, flags, Opts::default())
 }
 
-/// The work of `SetWindowPos` and of every `ShowWindow` command.
-///
-/// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
-/// `SWP_NOZORDER` asks for the window's place in the z order (the top,
-/// unless `after` says otherwise). `WM_WINDOWPOSCHANGED` has the same flags,
-/// less `SWP_SHOWWINDOW` for a window that was visible, plus `SWP_NOZORDER`
-/// when the window was already where the call puts it, `SWP_NOMOVE` /
-/// `SWP_NOSIZE` likewise, and 0x800 / 0x1000 while the client area keeps
-/// its size / position; `WM_NCCALCSIZE`'s `WINDOWPOS` has those flags with
-/// both of the last two (ShowWindow.yaml `z_order`, `state_changes`).
-#[allow(clippy::too_many_arguments)]
 /// The windows `hwnd` owns, the newest first, those of the thread's default IME window (its UI
 /// window) before it: the order the windows that come along with an owner are asked in.
 pub(crate) fn owned_chain<E: Env + ?Sized>(env: &E, hwnd: u32) -> Vec<u32> {
@@ -1307,6 +1296,17 @@ fn report_after<E: Env + ?Sized>(env: &E, hwnd: u32, after: u64) -> u64 {
     }
 }
 
+/// The work of `SetWindowPos` and of every `ShowWindow` command.
+///
+/// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
+/// `SWP_NOZORDER` asks for the window's place in the z order (the top,
+/// unless `after` says otherwise). `WM_WINDOWPOSCHANGED` has the same flags,
+/// less `SWP_SHOWWINDOW` for a window that was visible, plus `SWP_NOZORDER`
+/// when the window was already where the call puts it, `SWP_NOMOVE` /
+/// `SWP_NOSIZE` likewise, and 0x800 / 0x1000 while the client area keeps
+/// its size / position; `WM_NCCALCSIZE`'s `WINDOWPOS` has those flags with
+/// both of the last two (ShowWindow.yaml `z_order`, `state_changes`).
+#[allow(clippy::too_many_arguments)]
 fn swp<E: Env + ?Sized>(
     env: &E,
     hwnd: u32,

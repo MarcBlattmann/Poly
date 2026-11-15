@@ -259,8 +259,6 @@ pub extern "system" fn SetWindowDisplayAffinity(hwnd: H, affinity: u32) -> i32 {
     }
 }
 
-
-
 // ----- notification registrations (device, power, suspend and resume)
 
 static NEXT_REGISTRATION: AtomicUsize = AtomicUsize::new(0x000A_0000);

@@ -906,7 +906,7 @@ impl Gdi {
         // deletion waited go now.
         for st in core::iter::once(&d.state).chain(d.saved.iter()) {
             for o in [st.brush, st.pen, st.font] {
-                self.finish_pending(u64::from(o));
+                self.finish_pending_ex(u64::from(o), true);
             }
         }
         if let Some(Obj::Bitmap { selected_in, .. }) = self.obj_mut(u64::from(d.bitmap)) {
@@ -925,11 +925,17 @@ impl Gdi {
     /// bitmap keep answering their type (DeleteObject.yaml `after_deselect`,
     /// `selected_bitmap`).
     fn finish_pending(&mut self, h: u64) {
+        self.finish_pending_ex(h, false);
+    }
+
+    /// As [`Gdi::finish_pending`]; `dc_gone`: a DC was deleted with the object selected, which makes a
+    /// pen read as no object at all (ddc_basic: types 0 0), where deselecting it leaves OBJ_PEN.
+    fn finish_pending_ex(&mut self, h: u64, dc_gone: bool) {
         let held = self.held(h);
         let Some(i) = self.index_of(h) else { return };
         let (pending, ty) = match &self.objs[i] {
             Some(Obj::Brush { delete_pending, dead, .. }) => (*delete_pending || *dead, 0),
-            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, OBJ_PEN),
+            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, if dc_gone { 0 } else { OBJ_PEN }),
             Some(Obj::Font { delete_pending, .. }) => (*delete_pending, OBJ_FONT),
             Some(Obj::Bitmap { delete_pending, selected_in, .. }) => (*delete_pending && *selected_in == 0, OBJ_BITMAP),
             _ => (false, 0),

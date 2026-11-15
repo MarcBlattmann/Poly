@@ -548,7 +548,12 @@ pub fn popup_window_edge(style: u32, ex: u32) -> bool {
 /// (SM_CXFRAME + SM_CXPADDEDBORDER - SM_CXDLGFRAME) with WS_THICKFRAME or a
 /// full caption. WS_EX_CLIENTEDGE and WS_EX_TOOLWINDOW do not change it.
 pub fn hidden_frame(style: u32, ex: u32) -> i32 {
-    let (style, ex) = had_styles(style, ex);
+    // (A sizing border says the style was chosen: no implicit caption, see `client_insets`.)
+    let (style, ex) = if style & WS_THICKFRAME != 0 && style & (WS_POPUP | WS_CHILD) == 0 {
+        (style, ex | WS_EX_WINDOWEDGE)
+    } else {
+        had_styles(style, ex)
+    };
     let edge = if ex & WS_EX_WINDOWEDGE != 0 {
         2
     } else if ex & WS_EX_STATICEDGE != 0 {

@@ -211,13 +211,23 @@ unsafe fn create_device_dc(driver: *const u16, device: *const u16) -> H {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateDCW(driver: *const u16, device: *const u16, _port: *const u16, _mode: *const u8) -> H {
+pub unsafe extern "system" fn CreateDCW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
     // SAFETY: as `create_device_dc`.
     unsafe { create_device_dc(driver, device) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateICW(driver: *const u16, device: *const u16, _port: *const u16, _mode: *const u8) -> H {
+pub unsafe extern "system" fn CreateICW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
     // SAFETY: as `create_device_dc`.
     unsafe { create_device_dc(driver, device) }
 }

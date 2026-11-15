@@ -1206,14 +1206,10 @@ impl Wm {
             }
             a => {
                 let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
-                match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
-                    Some(i) => {
-                        let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
-                        new.insert(i + 1, hwnd);
-                        (new, below)
-                    }
-                    None => return None,
-                }
+                let i = new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF)?;
+                let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
+                new.insert(i + 1, hwnd);
+                (new, below)
             }
         };
         Some(ZPlan { parent, was_below, old, new, below, raised })

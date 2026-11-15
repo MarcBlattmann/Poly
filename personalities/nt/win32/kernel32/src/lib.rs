@@ -267,8 +267,10 @@ struct AtomTable {
 // SAFETY: the table is reached only with `locked` held.
 unsafe impl Sync for AtomTable {}
 
-static ATOMS: AtomTable =
-    AtomTable { locked: core::sync::atomic::AtomicBool::new(false), table: core::cell::UnsafeCell::new(poly_kernelbase::atoms::Atoms::new()) };
+static ATOMS: AtomTable = AtomTable {
+    locked: core::sync::atomic::AtomicBool::new(false),
+    table: core::cell::UnsafeCell::new(poly_kernelbase::atoms::Atoms::new()),
+};
 
 fn with_atoms<R>(f: impl FnOnce(&mut poly_kernelbase::atoms::Atoms) -> R) -> R {
     use core::sync::atomic::Ordering;

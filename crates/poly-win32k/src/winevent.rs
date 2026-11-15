@@ -133,6 +133,7 @@ impl Table {
 
     /// An event is raised for the thread `event_thread` of process `event_pid`: it is queued for
     /// every hook that wants it, the newest hook first.
+    #[allow(clippy::too_many_arguments)]
     pub fn raise(
         &mut self,
         event: u32,

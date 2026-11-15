@@ -667,8 +667,7 @@ fn make_ime_window(hwnd: H) {
     unsafe {
         RegisterClassExW(wc.as_ptr());
         let style = metrics::WS_POPUP | metrics::WS_DISABLED;
-        let ime =
-            CreateWindowExW(0, IME_CLASS.as_ptr(), IME_CLASS.as_ptr(), style, 0, 0, 0, 0, hwnd, 0, 0, 0);
+        let ime = CreateWindowExW(0, IME_CLASS.as_ptr(), IME_CLASS.as_ptr(), style, 0, 0, 0, 0, hwnd, 0, 0, 0);
         // The window's own style has WS_CLIPSIBLINGS, though the procedure's `CREATESTRUCT` has
         // not (cw_chrome_widget): added after its creation messages.
         if ime != 0 {
@@ -743,7 +742,11 @@ pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
 /// ADR 0155, step 9. Doc-derived.)
 #[unsafe(no_mangle)]
 pub extern "system" fn GetShellWindow() -> H {
-    0
+    // The interactive session has windows of another process (the shell's): the lowest of them is
+    // the shell window (GetKeyboardLayout.yaml `other_threads`). None in session 0.
+    let desktop = u::desktop(&SYS);
+    let Reply::Relatives { children, .. } = call(Request::Relatives { hwnd: desktop }) else { return 0 };
+    children.into_iter().rev().find(|&c| info(c as H).is_some_and(|i| i.pid >= 0xFFFF_FFF0)).map_or(0, |c| c as H)
 }
 
 #[unsafe(no_mangle)]
