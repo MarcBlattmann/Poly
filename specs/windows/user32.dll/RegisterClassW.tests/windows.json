@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "rcw_crashpad",
+      "exe_sha256": "6ffa0117086511f44fbea48ea2bfd8d210eae5bac2644af89932d3508ec9de85",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W3RvcC1sZXZlbF0gUmVnaXN0ZXJDbGFzc1c6IGF0b20gaW4gcmFuZ2UgdHJ1ZQpbdG9wLWxldmVsXSBoaWRkZW4gd2luZG93IGNyZWF0ZWQgdHJ1ZSwgdmlzaWJsZSAwClt0b3AtbGV2ZWxdIFNlbmRNZXNzYWdlVyByZXR1cm5zIHRoZSBwcm9jZWR1cmUncyB2YWx1ZSAweDc3OiB0cnVlClt0b3AtbGV2ZWxdIGJlZm9yZSB0aGUgbG9vcCAoV01fQ1JFQVRFIGFuZCB0aGUgc2VudCBtZXNzYWdlIG9ubHkpOiAweDEgMHg0MDUKW3RvcC1sZXZlbF0gYWZ0ZXIgdGhlIGxvb3A6IDIgbWVzc2FnZXMgZGlzcGF0Y2hlZCwgc2VlbiBpbiBvcmRlciAweDQwMSAweDQwMgpbdG9wLWxldmVsXSBhIHJlZ2lzdGVyZWQgbWVzc2FnZSBpcyBpbiAweEMwMDAuLj0weEZGRkY6IHRydWUKW3RvcC1sZXZlbF0gY2xhc3MgbmFtZSBvZiB0aGUgd2luZG93OiBDcmFzaHBhZExpa2VXaW5kb3cKW3RvcC1sZXZlbF0gYWZ0ZXIgRGVzdHJveVdpbmRvdzogMHgyClt0b3AtbGV2ZWxdIFVucmVnaXN0ZXJDbGFzc1cgcmV0dXJucyAxClthZ2Fpbl0gUmVnaXN0ZXJDbGFzc1c6IGF0b20gaW4gcmFuZ2UgdHJ1ZQpbYWdhaW5dIGhpZGRlbiB3aW5kb3cgY3JlYXRlZCB0cnVlLCB2aXNpYmxlIDAKW2FnYWluXSBTZW5kTWVzc2FnZVcgcmV0dXJucyB0aGUgcHJvY2VkdXJlJ3MgdmFsdWUgMHg3NzogdHJ1ZQpbYWdhaW5dIGJlZm9yZSB0aGUgbG9vcCAoV01fQ1JFQVRFIGFuZCB0aGUgc2VudCBtZXNzYWdlIG9ubHkpOiAweDEgMHg0MDUKW2FnYWluXSBhZnRlciB0aGUgbG9vcDogMiBtZXNzYWdlcyBkaXNwYXRjaGVkLCBzZWVuIGluIG9yZGVyIDB4NDAxIDB4NDAyClthZ2Fpbl0gYSByZWdpc3RlcmVkIG1lc3NhZ2UgaXMgaW4gMHhDMDAwLi49MHhGRkZGOiB0cnVlClthZ2Fpbl0gY2xhc3MgbmFtZSBvZiB0aGUgd2luZG93OiBDcmFzaHBhZExpa2VXaW5kb3cKW2FnYWluXSBhZnRlciBEZXN0cm95V2luZG93OiAweDIKW2FnYWluXSBVbnJlZ2lzdGVyQ2xhc3NXIHJldHVybnMgMQpbbWVzc2FnZS1vbmx5XSBSZWdpc3RlckNsYXNzVzogYXRvbSBpbiByYW5nZSB0cnVlClttZXNzYWdlLW9ubHldIGhpZGRlbiB3aW5kb3cgY3JlYXRlZCB0cnVlLCB2aXNpYmxlIDAKW21lc3NhZ2Utb25seV0gU2VuZE1lc3NhZ2VXIHJldHVybnMgdGhlIHByb2NlZHVyZSdzIHZhbHVlIDB4Nzc6IHRydWUKW21lc3NhZ2Utb25seV0gYmVmb3JlIHRoZSBsb29wIChXTV9DUkVBVEUgYW5kIHRoZSBzZW50IG1lc3NhZ2Ugb25seSk6IDB4MSAweDQwNQpbbWVzc2FnZS1vbmx5XSBhZnRlciB0aGUgbG9vcDogMiBtZXNzYWdlcyBkaXNwYXRjaGVkLCBzZWVuIGluIG9yZGVyIDB4NDAxIDB4NDAyClttZXNzYWdlLW9ubHldIGEgcmVnaXN0ZXJlZCBtZXNzYWdlIGlzIGluIDB4QzAwMC4uPTB4RkZGRjogdHJ1ZQpbbWVzc2FnZS1vbmx5XSBjbGFzcyBuYW1lIG9mIHRoZSB3aW5kb3c6IENyYXNocGFkTGlrZVdpbmRvdwpbbWVzc2FnZS1vbmx5XSBhZnRlciBEZXN0cm95V2luZG93OiAweDIKW21lc3NhZ2Utb25seV0gVW5yZWdpc3RlckNsYXNzVyByZXR1cm5zIDEKdHdvIG5hbWVzLCB0d28gYXRvbXM6IHRydWUKdGhlIHJlbW92ZWQgbmFtZSByZWdpc3RlcnMgYWdhaW46IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[top-level] RegisterClassW: atom in range true\n[top-level] hidden window created true, visible 0\n[top-level] SendMessageW returns the procedure's value 0x77: true\n[top-level] before the loop (WM_CREATE and the sent message only): 0x1 0x405\n[top-level] after the loop: 2 messages dispatched, seen in order 0x401 0x402\n[top-level] a registered message is in 0xC000..=0xFFFF: true\n[top-level] class name of the window: CrashpadLikeWindow\n[top-level] after DestroyWindow: 0x2\n[top-level] UnregisterClassW returns 1\n[again] RegisterClassW: atom in range true\n[again] hidden window created true, visible 0\n[again] SendMessageW returns the procedure's value 0x77: true\n[again] before the loop (WM_CREATE and the sent message only): 0x1 0x405\n[again] after the loop: 2 messages dispatched, seen in order 0x401 0x402\n[again] a registered message is in 0xC000..=0xFFFF: true\n[again] class name of the window: CrashpadLikeWindow\n[again] after DestroyWindow: 0x2\n[again] UnregisterClassW returns 1\n[message-only] RegisterClassW: atom in range true\n[message-only] hidden window created true, visible 0\n[message-only] SendMessageW returns the procedure's value 0x77: true\n[message-only] before the loop (WM_CREATE and the sent message only): 0x1 0x405\n[message-only] after the loop: 2 messages dispatched, seen in order 0x401 0x402\n[message-only] a registered message is in 0xC000..=0xFFFF: true\n[message-only] class name of the window: CrashpadLikeWindow\n[message-only] after DestroyWindow: 0x2\n[message-only] UnregisterClassW returns 1\ntwo names, two atoms: true\nthe removed name registers again: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 75
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "ursn_errors",
+      "exe_sha256": "b74b9862554ce190929f069cad03378ccfa743aecc3baf8a62bf99659761584b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBzdXNwZW5kL3Jlc3VtZSBoYW5kbGUgZ2l2ZW4gdG8gVW5yZWdpc3RlckRldmljZU5vdGlmaWNhdGlvbjogcmV0dXJucyAwLCBlcnJvciA2CnRoZW4gcmVsZWFzZWQgd2l0aCBpdHMgb3duIGZ1bmN0aW9uOiAxCmEgc3VzcGVuZC9yZXN1bWUgaGFuZGxlIGdpdmVuIHRvIFVucmVnaXN0ZXJQb3dlclNldHRpbmdOb3RpZmljYXRpb246IHJldHVybnMgMCwgZXJyb3IgODcKdGhlbiByZWxlYXNlZCB3aXRoIGl0cyBvd24gZnVuY3Rpb246IDEKYSBwb3dlci1zZXR0aW5nIGhhbmRsZSBnaXZlbiB0byBVbnJlZ2lzdGVyU3VzcGVuZFJlc3VtZU5vdGlmaWNhdGlvbjogcmV0dXJucyAwLCBlcnJvciA4NwpOVUxMOiByZXR1cm5zIDAsIGxhc3QgZXJyb3IgODcKcmVsZWFzZWQgZnJvbSBhbm90aGVyIHRocmVhZDogcmV0dXJucyAxLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgMQphbmQgYWdhaW4gZnJvbSB0aGlzIHRocmVhZDogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a suspend/resume handle given to UnregisterDeviceNotification: returns 0, error 6\nthen released with its own function: 1\na suspend/resume handle given to UnregisterPowerSettingNotification: returns 0, error 87\nthen released with its own function: 1\na power-setting handle given to UnregisterSuspendResumeNotification: returns 0, error 87\nNULL: returns 0, last error 87\nreleased from another thread: returns 1, last error left alone 1\nand again from this thread: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}

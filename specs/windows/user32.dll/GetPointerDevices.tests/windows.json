@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "gpd_count",
+      "exe_sha256": "c9c89f7cd135875921c7b40e0538cf714893154966a9642db8b0f4e4ee969f3c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvZiBvbmUgUE9JTlRFUl9ERVZJQ0VfSU5GTzogMTA4MApjb3VudCBxdWVyeTogcmV0dXJucyAxLCBjb3VudCAwICh0aGUgb3JhY2xlIGhhcyBub25lKSwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKdHdlbnR5IG1vcmUgY291bnQgcXVlcmllcyBhZ3JlZTogdHJ1ZQphIGNvdW50IG9mIDcgcGFzc2VkIGluIHdpdGggYSBOVUxMIGJ1ZmZlcjogcmV0dXJucyAxLCB0aGUgY291bnQgaXMgcmVwbGFjZWQgdHJ1ZQp3aXRoIGEgYnVmZmVyIGZvciA0IGFuZCBubyBkZXZpY2VzOiByZXR1cm5zIDAsIGNvdW50IGxlZnQgYXMgcGFzc2VkIHRydWUsIGJ1ZmZlciB1bnRvdWNoZWQgdHJ1ZQphIGNvdW50IG9mIDAgd2l0aCBhIGJ1ZmZlcjogcmV0dXJucyAwLCBjb3VudCB0cnVlCk5VTEwgY291bnQgcG9pbnRlcjogcmV0dXJucyAwLCBsYXN0IGVycm9yIDg3CmJvdGggTlVMTDogcmV0dXJucyAwLCBsYXN0IGVycm9yIDg3CkdldFBvaW50ZXJEZXZpY2Ugd2l0aCBhIGdhcmJhZ2UgaGFuZGxlOiByZXR1cm5zIDAsIGxhc3QgZXJyb3IgNgpHZXRQb2ludGVyRGV2aWNlIHdpdGggTlVMTDogcmV0dXJucyAwLCBsYXN0IGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size of one POINTER_DEVICE_INFO: 1080\ncount query: returns 1, count 0 (the oracle has none), last error left alone true\ntwenty more count queries agree: true\na count of 7 passed in with a NULL buffer: returns 1, the count is replaced true\nwith a buffer for 4 and no devices: returns 0, count left as passed true, buffer untouched true\na count of 0 with a buffer: returns 0, count true\nNULL count pointer: returns 0, last error 87\nboth NULL: returns 0, last error 87\nGetPointerDevice with a garbage handle: returns 0, last error 6\nGetPointerDevice with NULL: returns 0, last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}
