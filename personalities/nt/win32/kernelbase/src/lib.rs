@@ -45,6 +45,7 @@ mod process;
 mod procinfo;
 mod registry;
 mod resource;
+mod sched;
 mod secdata;
 mod security;
 mod spawn;

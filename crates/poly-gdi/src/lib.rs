@@ -33,6 +33,7 @@ extern crate std;
 mod bitfont;
 pub mod bitmap;
 pub mod builtin;
+pub mod device;
 pub mod font;
 pub mod fontmap;
 pub mod fonttab;
