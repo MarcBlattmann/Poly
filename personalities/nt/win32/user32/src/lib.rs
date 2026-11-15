@@ -10,11 +10,24 @@
 
 extern crate alloc;
 
+mod acc;
+mod ansi;
+mod ansiapi;
+mod ansires;
+mod caret;
+mod caretdraw;
 mod clipboard;
 mod cstructs;
+mod ctl;
 mod display;
+mod dlg;
 mod icons;
 mod layered;
+mod menu;
+mod menuansi;
+mod menutrack;
+mod msgbox;
+mod paintctl;
 mod s3;
 mod strings;
 mod winsta;
@@ -30,7 +43,6 @@ use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInf
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
 use poly_win32k::wire;
 
-mod caret;
 mod headless;
 mod hooks;
 mod winevent;
@@ -80,6 +92,10 @@ unsafe extern "system" {
         drawn: *mut u32,
     ) -> i32;
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
+    fn PolyGdiSetDisplayBase(hdc: usize, x: i32, y: i32) -> i32;
+    fn PolyGdiAttachSurfaceRows(hdc: usize, width: u32, total: u32, skip: u32, rows: u32) -> i32;
+    fn PolyGdiAttachSurfaceRowsTo(hdc: usize, surface_hwnd: usize, width: u32, total: u32, skip: u32, rows: u32)
+    -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
@@ -164,11 +180,38 @@ impl Env for Sys {
     }
 
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
+        if proc_ != 0 && proc_ <= poly_win32k::dlg::sysproc::MAX {
+            // A dialog window takes either form itself (an ANSI dialog hands its procedure bytes).
+            if proc_ == poly_win32k::dlg::sysproc::DIALOG {
+                let form = if ansi::is_text_message(msg) { ansi::take_form() } else { ansi::Form::Wide };
+                return dlg::dialog_entry(hwnd as H, msg, w as usize, l as isize, form) as u64;
+            }
+            // A system class's procedure (`Button`, `Edit`, ...): UTF-16.
+            if ansi::is_text_message(msg) && ansi::take_form() == ansi::Form::Ansi {
+                let c = ansi::enter(hwnd as H, ansi::Form::Ansi, ansi::Form::Wide, msg, w as usize, l as isize);
+                let r = ctl::builtin(proc_, hwnd as H, msg, c.w, c.l) as u64;
+                return c.finish(r as isize) as u64;
+            }
+            return ctl::builtin(proc_, hwnd as H, msg, w as usize, l as isize) as u64;
+        }
         if proc_ == 0 {
+            if ansi::is_text_message(msg) && ansi::take_form() == ansi::Form::Ansi {
+                return ansiapi::def_form(hwnd as H, msg, w as usize, l as isize, ansi::Form::Ansi) as u64;
+            }
             return u::def_window_proc(self, u64::from(hwnd), msg, w, l);
         }
         // SAFETY: a window procedure the app registered.
         let f: WndProc = unsafe { core::mem::transmute(proc_ as usize) };
+        if ansi::is_text_message(msg) {
+            // A message with text in it arrives in the form of the window procedure.
+            let (from, to) = (ansi::take_form(), ansi::proc_form(hwnd as H));
+            if from != to {
+                let c = ansi::enter(hwnd as H, from, to, msg, w as usize, l as isize);
+                // SAFETY: the documented call.
+                let r = unsafe { f(hwnd as H, msg, c.w, c.l) };
+                return c.finish(r) as u64;
+            }
+        }
         // SAFETY: the documented call.
         unsafe { f(hwnd as H, msg, w as usize, l as isize) as u64 }
     }
@@ -248,6 +291,30 @@ impl Env for Sys {
 
     fn window_created(&self, hwnd: u32) {
         ime_hook(hwnd as H);
+    }
+
+    fn menu_bar_shown(&self, menu: u64) -> bool {
+        menu::bar_shown(menu)
+    }
+
+    fn window_freed(&self, hwnd: u32, menu: u64) {
+        menu::window_freed(hwnd, menu);
+    }
+
+    fn menu_hit(&self, hwnd: u32, x: i32, y: i32) -> bool {
+        menutrack::hit_menu(hwnd as H, x, y)
+    }
+
+    fn menu_click(&self, hwnd: u32, x: i32, y: i32) {
+        menutrack::nc_click(hwnd as H, x, y);
+    }
+
+    fn menu_sys_key(&self, hwnd: u32, msg: u32, w: u64, l: u64) -> bool {
+        menutrack::sys_key(hwnd as H, msg, w, l)
+    }
+
+    fn menu_paint(&self, hwnd: u32) {
+        menutrack::draw_bar(hwnd as H);
     }
 
     fn set_cursor(&self, cursor: u64) {
@@ -371,6 +438,10 @@ pub extern "system" fn CharPrevExA(_code_page: u16, start: *const u8, current: *
 }
 
 // ----- classes
+
+pub(crate) fn register_class(spec: ClassSpec) -> u16 {
+    register(spec)
+}
 
 fn register(spec: ClassSpec) -> u16 {
     if spec.cls_extra < 0 || spec.wnd_extra < 0 || spec.name.len() > 255 {
@@ -583,6 +654,21 @@ pub unsafe extern "system" fn CreateWindowExW(
     }
     // SAFETY: a class name or atom.
     let class = unsafe { class_ref(class) };
+    let mut menu = menu;
+    if style & 0x4000_0000 == 0 {
+        // A top-level window's menu: the handle given, else a copy of the class's menu.
+        if menu != 0 {
+            if !menu::is_menu(menu) {
+                set_last_error(menu::ERROR_INVALID_MENU_HANDLE);
+                return 0;
+            }
+        } else if let Reply::Class { info } =
+            call(Request::ClassInfo { class: class.clone(), instance: instance as u64 })
+            && info.menu_name != 0
+        {
+            menu = menu::class_menu(info.instance as usize, info.menu_name);
+        }
+    }
     if style & poly_win32k::metrics::WS_CHILD != 0 && ex_style & poly_win32k::guic::WS_EX_LAYERED != 0 {
         layered_children();
     }
@@ -597,14 +683,35 @@ pub unsafe extern "system" fn CreateWindowExW(
         parent: parent as u64,
         menu: menu as u64,
         instance: instance as u64,
+        ansi: ansiapi::ansi_next_window(),
     };
-    u::create_window(&SYS, spec, name as u64, param as u64) as H
+    let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
+    if h != 0 && menu != 0 && style & 0x4000_0000 == 0 {
+        menu::after_create(h);
+    }
+    h
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
+}
+
+/// The bitmap resource `ord` of `inst` (a static control's `SS_BITMAP`).
+pub(crate) fn load_bitmap_ordinal(inst: usize, ord: u16) -> usize {
+    // SAFETY: a resource id as the name.
+    unsafe { icons::LoadBitmapW(inst, ord as usize as *const u16) }
+}
+
+/// The menu resource `ord` of `inst` (0 until menus are loaded here).
+pub(crate) fn load_menu_ordinal(_inst: usize, _ord: u16) -> usize {
+    0
+}
+
+/// The menu resource `name` of `inst`.
+pub(crate) fn load_menu_name(_inst: usize, _name: *const u16) -> usize {
+    0
 }
 
 /// Tell win32k once whether the executable's manifest declares Windows 8
@@ -944,6 +1051,11 @@ pub unsafe extern "system" fn MapWindowPoints(from: H, to: H, pts: *mut i32, n: 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetWindowLongPtrW(hwnd: H, index: i32) -> isize {
     match call(Request::GetLong { hwnd: hwnd as u64, index, size: 8 }) {
+        // The dialog procedure of an ANSI dialog reads as a thunk through the wide function
+        // (DialogBoxParamA.yaml: `GetWindowLongPtrW(DWLP_DLGPROC)` is not the procedure given).
+        Reply::Value { value } if index == 8 && value != 0 && ansiapi::is_ansi_dialog(hwnd) => {
+            (value ^ ansiapi::THUNK_TAG) as isize
+        }
         Reply::Value { value } => value as isize,
         Reply::Error { code } => {
             set_last_error(code);
@@ -989,6 +1101,9 @@ fn set_long(hwnd: H, index: i32, size: u8, value: u64) -> u64 {
             u::style_frame_changed(&SYS, h);
         }
         return u64::from(old);
+    }
+    if index == -12 && !menu::check_top_level_id(hwnd, value) {
+        return 0;
     }
     match call(Request::SetLong { hwnd: hwnd as u64, index, size, value }) {
         Reply::Value { value } => value,
@@ -1662,12 +1777,51 @@ fn dc_geometry(i: &WinInfo, dc: H, whole: bool) -> H {
     let flat = |rs: &[Rect]| -> Vec<i32> { rs.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect() };
     let (inc, exc) = (flat(&[include]), flat(&exclude));
     if dc != 0 {
+        // A child window's DC draws into its top-level window's surface, at the child's place in it.
+        let (ox, oy, bx, by) = match root_surface(i) {
+            Some((root, w, total)) => {
+                // The surface holds the root's menu bar above its client area.
+                let bar = (root.menu_bar.max(0) as u32).min(total.saturating_sub(1));
+                // SAFETY: our gdi32 checks the DC.
+                unsafe { PolyGdiAttachSurfaceRowsTo(dc, root.hwnd as H, w, total, bar, total - bar) };
+                (root.client.left, root.client.top, area.left - root.client.left, area.top - root.client.top)
+            }
+            None => (area.left, area.top, 0, 0),
+        };
         // SAFETY: our gdi32 reads 1 and `exclude.len()` RECTs.
         unsafe {
-            PolyGdiSetDisplayGeometry(dc, area.left, area.top, inc.as_ptr(), 1, exc.as_ptr(), exclude.len() as u32)
+            PolyGdiSetDisplayGeometry(dc, ox, oy, inc.as_ptr(), 1, exc.as_ptr(), exclude.len() as u32);
+            PolyGdiSetDisplayBase(dc, bx, by);
         };
     }
     dc
+}
+
+/// The top-level window a child window's surface is, with the surface's size, when it has one.
+fn root_surface(i: &WinInfo) -> Option<(WinInfo, u32, u32)> {
+    if i.style & metrics::WS_CHILD == 0 {
+        return None;
+    }
+    let mut cur = i.clone();
+    while cur.style & metrics::WS_CHILD != 0 {
+        cur = info(cur.parent as H)?;
+    }
+    match call(Request::Surface { hwnd: cur.hwnd }) {
+        Reply::Value { value } if value != 0 => Some((cur, value as u32, (value >> 32) as u32)),
+        _ => None,
+    }
+}
+
+/// The top-level window of `hwnd` (itself when it is one).
+fn top_level_of(hwnd: H) -> H {
+    let mut cur = hwnd;
+    for _ in 0..64 {
+        match info(cur) {
+            Some(i) if i.style & metrics::WS_CHILD != 0 => cur = i.parent as H,
+            _ => break,
+        }
+    }
+    cur
 }
 
 /// The desktop link (ADR 0131): a window DC draws into the window's
@@ -1679,14 +1833,19 @@ fn attach_surface(hwnd: u32, dc: H) -> H {
         _ => 0,
     };
     if dc != 0 {
+        // The surface holds the menu bar above the client area: a client DC draws
+        // on the rows below it.
+        let (w, total) = (size as u32, (size >> 32) as u32);
+        let bar = if total > 0 { info(hwnd as H).map_or(0, |i| i.menu_bar.max(0) as u32).min(total - 1) } else { 0 };
         // SAFETY: our gdi32 checks the DC.
-        unsafe { PolyGdiAttachSurface(dc, size as u32, (size >> 32) as u32) };
+        unsafe { PolyGdiAttachSurfaceRows(dc, w, total, bar, total - bar) };
     }
     dc
 }
 
 /// What the window's DCs drew goes to its surface (`ReleaseDC`).
 fn commit_surface(hwnd: H) {
+    let hwnd = if hwnd == 0 { 0 } else { top_level_of(hwnd) };
     let mut s = [0u64; 3];
     // SAFETY: our gdi32 writes three u64s.
     if hwnd == 0 || unsafe { PolyGdiSurface(hwnd, s.as_mut_ptr()) } == 0 {
@@ -1999,64 +2158,6 @@ pub extern "system" fn CloseWindow(hwnd: H) -> i32 {
     1
 }
 
-/// `GetWindowTextA`: the text converted to code page 1252 (characters it
-/// lacks become `?`).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetWindowTextA(hwnd: H, buf: *mut u8, max: i32) -> i32 {
-    if max <= 0 || buf.is_null() {
-        return 0;
-    }
-    let mut w = vec![0u16; max as usize];
-    // SAFETY: our buffer of `max` characters.
-    let n = unsafe { GetWindowTextW(hwnd, w.as_mut_ptr(), max) }.max(0) as usize;
-    for (i, &c) in w.iter().take(n).enumerate() {
-        // SAFETY: the caller's buffer of `max` bytes.
-        unsafe { *buf.add(i) = if c < 0x100 { c as u8 } else { b'?' } };
-    }
-    // SAFETY: as above; n < max.
-    unsafe { *buf.add(n) = 0 };
-    n as i32
-}
-
-/// `SetWindowTextA`.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetWindowTextA(hwnd: H, text: *const u8) -> i32 {
-    if text.is_null() {
-        return SetWindowTextW(hwnd, core::ptr::null());
-    }
-    let mut w: Vec<u16> = Vec::new();
-    let mut p = text;
-    // SAFETY: a NUL-terminated string.
-    unsafe {
-        while *p != 0 {
-            w.push(u16::from(*p));
-            p = p.add(1);
-        }
-    }
-    w.push(0);
-    SetWindowTextW(hwnd, w.as_ptr())
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn GetWindowTextLengthA(hwnd: H) -> i32 {
-    GetWindowTextLengthW(hwnd)
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn SendMessageA(hwnd: H, msg: u32, w: usize, l: isize) -> isize {
-    SendMessageW(hwnd, msg, w, l)
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn PostMessageA(hwnd: H, msg: u32, w: usize, l: isize) -> i32 {
-    PostMessageW(hwnd, msg, w, l)
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn DefWindowProcA(hwnd: H, msg: u32, w: usize, l: isize) -> isize {
-    DefWindowProcW(hwnd, msg, w, l)
-}
-
 /// `SendMessageTimeoutW`: the send, its result through the pointer.
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
@@ -2212,18 +2313,23 @@ pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
         return 0;
     }
     let s = if tid == 0 || tid != SYS.tid() { u::focus::thread_input(&SYS, tid) } else { u::focus::input(&SYS) };
+    let caret = match call(Request::Caret { op: poly_win32k::caret::OP_QUERY, hwnd: 0, a: 0, b: 0, tid }) {
+        Reply::Caret { hwnd, width, height, x, y, shown, .. } => {
+            poly_win32k::caret::Snapshot { hwnd, width, height, x, y, shown }
+        }
+        _ => poly_win32k::caret::Snapshot::default(),
+    };
     // SAFETY: the caller's GUITHREADINFO (cbSize first).
     unsafe {
-        let (caret, rc, blinking) = caret::of_thread(if tid == 0 { SYS.tid() } else { tid });
         let size = (gti as *const u32).read_unaligned();
         let info = cstructs::GuiThreadInfo {
             size,
-            flags: blinking,
             active: s.active as usize,
             focus: s.focus as usize,
             capture: s.capture as usize,
-            caret: caret as usize,
-            caret_rect: rc,
+            flags: u32::from(caret.shown),
+            caret: caret.hwnd as usize,
+            caret_rect: caret.rect(),
             ..Default::default()
         };
         (gti as *mut cstructs::GuiThreadInfo).write_unaligned(info);
@@ -2572,9 +2678,7 @@ fn with_cursor<R>(f: impl FnOnce(&mut usize) -> R) -> R {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadCursorW(instance: H, name: *const u16) -> H {
     if instance != 0 {
-        // Our executables carry no cursor resources.
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        return icons::load_module_icon(instance, name, 2, 0, 0, 0x40 | 0x8000);
     }
     let id = if (name as usize) >> 16 == 0 {
         Some(name as usize as u16)
@@ -2776,7 +2880,10 @@ pub unsafe extern "system" fn BeginPaint(hwnd: H, ps: *mut u::PaintStruct) -> H 
 pub unsafe extern "system" fn EndPaint(hwnd: H, ps: *const u::PaintStruct) -> i32 {
     // SAFETY: the caller's PAINTSTRUCT, if any.
     let p = if ps.is_null() { u::PaintStruct::default() } else { unsafe { *ps } };
-    i32::from(u::end_paint(&SYS, hwnd as u64, &p))
+    let r = i32::from(u::end_paint(&SYS, hwnd as u64, &p));
+    // What the window painted may have covered the caret.
+    caretdraw::painted(hwnd);
+    r
 }
 
 #[unsafe(no_mangle)]

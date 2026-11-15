@@ -549,3 +549,84 @@ impl Wm {
         hwnd
     }
 }
+
+// ----- carets (`crate::caret`)
+
+impl Wm {
+    fn caret_reply(snap: crate::caret::Snapshot) -> Reply {
+        Reply::Caret {
+            ok: true,
+            code: 0,
+            hwnd: snap.hwnd,
+            width: snap.width,
+            height: snap.height,
+            x: snap.x,
+            y: snap.y,
+            shown: snap.shown,
+        }
+    }
+
+    fn caret_fail(code: u32) -> Reply {
+        Reply::Caret { ok: false, code, hwnd: 0, width: 0, height: 0, x: 0, y: 0, shown: false }
+    }
+
+    /// One caret call of the calling thread's queue (`Request::Caret`). The window checks follow
+    /// the sheets: a missing window is 1400, no caret is 5 (`ERROR_ACCESS_DENIED`), a window that
+    /// is not the caret's owner (another window of the thread, the desktop window) or a window of
+    /// another thread for `CreateCaret` fails without touching the last error.
+    pub(super) fn caret_op(&mut self, ctx: Ctx, op: u8, hwnd: u32, a: i32, b: i32, tid: u32) -> Reply {
+        use crate::caret::{self as c, UNCHANGED};
+        let k = self.input_key(ctx.key());
+        match op {
+            c::OP_CREATE => {
+                if hwnd == 0 || !self.is_window(u64::from(hwnd)) {
+                    return Self::caret_fail(ERROR_INVALID_WINDOW_HANDLE);
+                }
+                let mine = self.thread_of(hwnd).is_some_and(|t| self.input_key(t) == k);
+                if hwnd == self.desktop || !mine {
+                    return Self::caret_fail(UNCHANGED);
+                }
+                let q = self.queue(k);
+                q.caret.create(hwnd, a, b);
+                Self::caret_reply(q.caret.snapshot())
+            }
+            c::OP_DESTROY | c::OP_SHOW | c::OP_HIDE | c::OP_SET_POS => {
+                if hwnd != 0 && !self.is_window(u64::from(hwnd)) && op != c::OP_DESTROY && op != c::OP_SET_POS {
+                    return Self::caret_fail(ERROR_INVALID_WINDOW_HANDLE);
+                }
+                let q = self.queue(k);
+                let Some(caret) = q.caret.caret else { return Self::caret_fail(ERROR_ACCESS_DENIED) };
+                if hwnd != 0 && caret.hwnd != hwnd && (op == c::OP_SHOW || op == c::OP_HIDE) {
+                    return Self::caret_fail(UNCHANGED);
+                }
+                match op {
+                    c::OP_DESTROY => {
+                        q.caret.destroy();
+                    }
+                    c::OP_SHOW => {
+                        q.caret.show();
+                    }
+                    c::OP_HIDE => {
+                        q.caret.hide();
+                    }
+                    _ => {
+                        q.caret.set_pos(a, b);
+                    }
+                }
+                Self::caret_reply(q.caret.snapshot())
+            }
+            c::OP_GET => Self::caret_reply(self.queue(k).caret.snapshot()),
+            c::OP_QUERY => {
+                let key = if tid == 0 || tid == ctx.tid {
+                    k
+                } else {
+                    let key = self.queues.keys().find(|q| q.1 == tid).copied().unwrap_or((ctx.pid, tid));
+                    self.input_key(key)
+                };
+                let snap = self.queues.get(&key).map(|q| q.caret.snapshot()).unwrap_or_default();
+                Self::caret_reply(snap)
+            }
+            _ => Self::caret_fail(ERROR_INVALID_PARAMETER),
+        }
+    }
+}

@@ -100,24 +100,26 @@ pub fn command_line_to_argv(cmd: &[u16]) -> Vec<Vec<u16>> {
 }
 
 /// The size in bytes of the block `CommandLineToArgvW` returns for these arguments: the
-/// pointers (one per argument and a null one after them), then the NUL-terminated strings.
-pub fn argv_block_size(args: &[Vec<u16>]) -> usize {
-    (args.len() + 1) * 8 + args.iter().map(|a| (a.len() + 1) * 2).sum::<usize>()
+/// pointers (`pointer` bytes each: 8 in a 64-bit process, 4 in a 32-bit one; one per argument
+/// and a null one after them), then the NUL-terminated strings.
+pub fn argv_block_size(args: &[Vec<u16>], pointer: usize) -> usize {
+    (args.len() + 1) * pointer + args.iter().map(|a| (a.len() + 1) * 2).sum::<usize>()
 }
 
 /// Fill the block (of [`argv_block_size`] bytes, at address `base` in the caller's memory):
 /// "a contiguous block of memory for pointers to the argument strings, and for the argument
 /// strings themselves" (Learn), so one `LocalFree` releases everything.
-pub fn write_argv_block(args: &[Vec<u16>], base: u64, block: &mut [u8]) {
-    let mut at = (args.len() + 1) * 8;
+pub fn write_argv_block(args: &[Vec<u16>], base: u64, pointer: usize, block: &mut [u8]) {
+    let mut at = (args.len() + 1) * pointer;
     for (n, a) in args.iter().enumerate() {
-        block[n * 8..n * 8 + 8].copy_from_slice(&(base + at as u64).to_le_bytes());
+        let address = (base + at as u64).to_le_bytes();
+        block[n * pointer..(n + 1) * pointer].copy_from_slice(&address[..pointer]);
         for c in a.iter().chain(core::iter::once(&0)) {
             block[at..at + 2].copy_from_slice(&c.to_le_bytes());
             at += 2;
         }
     }
-    block[args.len() * 8..args.len() * 8 + 8].copy_from_slice(&0u64.to_le_bytes());
+    block[args.len() * pointer..(args.len() + 1) * pointer].fill(0);
 }
 
 /// `CSIDL_FLAG_MASK` (`shlobj_core.h`): the bits of `nFolder` that are flags.
@@ -231,10 +233,10 @@ mod tests {
     #[test]
     fn the_block_is_the_pointers_then_the_strings() {
         let args = command_line_to_argv(&"p.exe ab c".encode_utf16().collect::<Vec<u16>>());
-        let size = argv_block_size(&args);
+        let size = argv_block_size(&args, 8);
         assert_eq!(size, 4 * 8 + (6 + 3 + 2) * 2);
         let mut block = std::vec![0xAAu8; size];
-        write_argv_block(&args, 0x1000, &mut block);
+        write_argv_block(&args, 0x1000, 8, &mut block);
         let ptr = |n: usize| u64::from_le_bytes(block[n * 8..n * 8 + 8].try_into().unwrap());
         assert_eq!((ptr(0), ptr(1), ptr(2), ptr(3)), (0x1020, 0x102C, 0x1032, 0));
         let text = |at: u64| {
@@ -251,7 +253,20 @@ mod tests {
         };
         assert_eq!((text(ptr(0)), text(ptr(1)), text(ptr(2))), ("p.exe".into(), "ab".into(), "c".into()));
         // No arguments: just the null pointer.
-        assert_eq!(argv_block_size(&[]), 8);
+        assert_eq!(argv_block_size(&[], 8), 8);
+    }
+
+    /// A 32-bit process gets 4-byte pointers (ADR 0186).
+    #[test]
+    fn the_block_of_a_32_bit_process_has_4_byte_pointers() {
+        let args = command_line_to_argv(&"p.exe ab c".encode_utf16().collect::<Vec<u16>>());
+        let size = argv_block_size(&args, 4);
+        assert_eq!(size, 4 * 4 + (6 + 3 + 2) * 2);
+        let mut block = std::vec![0xAAu8; size];
+        write_argv_block(&args, 0x1000, 4, &mut block);
+        let ptr = |n: usize| u32::from_le_bytes(block[n * 4..n * 4 + 4].try_into().unwrap());
+        assert_eq!((ptr(0), ptr(1), ptr(2), ptr(3)), (0x1010, 0x101C, 0x1022, 0));
+        assert_eq!(argv_block_size(&[], 4), 4);
     }
 
     #[test]

@@ -170,6 +170,8 @@ struct Window {
     /// Its thread's default IME window in the interactive session: in the
     /// z order it follows the thread's active window (`input`, ADR 0176).
     helper: bool,
+    /// The menu bar's height above the client area, inside the surface.
+    menu_bar: i32,
 }
 
 #[derive(Debug, Default)]
@@ -191,6 +193,8 @@ struct Queue {
     raw: VecDeque<Msg>,
     /// The thread's own key state after SetKeyboardState (`raw`).
     keys: Option<Vec<u8>>,
+    /// The queue's caret and caret position (`caret`).
+    caret: crate::caret::CaretQueue,
 }
 
 #[derive(Debug)]
@@ -391,7 +395,21 @@ impl Wm {
         // The system classes: found by every process (Learn: "About Window
         // Classes", system classes; `RegisterClassExW.yaml`: "Button" style
         // 0x8b, 8 extra bytes).
-        for (name, style, extra) in [("Button", 0x8b, 8), ("Static", 0x88, 0), ("Edit", 0x88, 6), ("#32769", 0x08, 0)] {
+        // The procedures are `dlg::sysproc` numbers `user32` runs; the desktop's (last) has none.
+        // Styles and extra bytes of the classes `Button` and the desktop are observed
+        // (`RegisterClassExW.yaml`); the others are `CS_DBLCLKS | CS_PARENTDC`-like guesses
+        // that no sheet contradicts.
+        for (name, style, extra, wndproc) in [
+            ("Button", 0x8b, 8, crate::dlg::sysproc::BUTTON),
+            ("Static", 0x88, 0, crate::dlg::sysproc::STATIC),
+            ("Edit", 0x88, 6, crate::dlg::sysproc::EDIT),
+            ("ListBox", 0x88, 8, crate::dlg::sysproc::LISTBOX),
+            ("ComboBox", 0x88, 8, crate::dlg::sysproc::COMBOBOX),
+            ("ScrollBar", 0x08, 8, crate::dlg::sysproc::SCROLLBAR),
+            ("ComboLBox", 0x808, 8, crate::dlg::sysproc::COMBOLBOX),
+            ("#32770", 0x808, 30, crate::dlg::sysproc::DIALOG),
+            ("#32769", 0x08, 0, 0),
+        ] {
             let name: Vec<u16> = name.encode_utf16().collect();
             let atom = wm.atom_for(&name);
             wm.classes.push(Some(Class {
@@ -399,7 +417,7 @@ impl Wm {
                 atom,
                 name,
                 style,
-                wndproc: 0,
+                wndproc,
                 cls_extra: 0,
                 wnd_extra: extra,
                 instance: 0,
@@ -625,6 +643,7 @@ impl Wm {
             creating: w.state == State::Creating,
             ime: w.ime,
             lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
+            menu_bar: w.menu_bar,
         })
     }
 
@@ -765,10 +784,6 @@ impl Wm {
             }
             (self.desktop, self.root(s.parent as u32))
         };
-        if !child && s.menu != 0 {
-            // No menus exist yet, so no value is a menu handle.
-            return err(ERROR_INVALID_MENU_HANDLE);
-        }
         // A layered child window needs a manifest that declares Windows 8
         // support: without one it is not created, and no last error is set
         // (SetLayeredWindowAttributes.yaml `children`; Learn, "Layered
@@ -832,7 +847,9 @@ impl Wm {
         let (wndproc, unicode, extra, class_name) = {
             let c = self.classes[class].as_mut().expect("found");
             c.windows += 1;
-            (c.wndproc, c.unicode, c.wnd_extra.max(0) as usize, c.name.clone())
+            // A window of a system class made through an `A` function is an ANSI window.
+            let unicode = c.unicode && !(s.ansi && c.pid == SYSTEM_DESKTOP_PID);
+            (c.wndproc, unicode, c.wnd_extra.max(0) as usize, c.name.clone())
         };
         // WM_GETMINMAXINFO at creation only for a window that is not
         // WS_POPUP or has a sizing frame (ShowWindow.yaml
@@ -849,7 +866,8 @@ impl Wm {
         win.wndproc = wndproc;
         win.unicode = unicode;
         win.instance = s.instance;
-        win.id = if child { s.menu } else { 0 };
+        // A top-level window's `id` is its menu handle (user32 checks it is one).
+        win.id = s.menu;
         win.extra = vec![0; extra];
         win.state = State::Creating;
         win.dpi =
@@ -988,6 +1006,9 @@ impl Wm {
         self.forget_input(hwnd);
         self.clip.window_gone(hwnd);
         for q in self.queues.values_mut() {
+            q.caret.window_gone(hwnd);
+        }
+        for q in self.queues.values_mut() {
             q.posted.retain(|m| m.hwnd != hwnd);
         }
         self.timers.retain(|t| t.hwnd != hwnd);
@@ -1064,12 +1085,7 @@ impl Wm {
                     u64::from(w.parent)
                 }
             }
-            -12 => {
-                if w.style & WS_CHILD == 0 && value != 0 {
-                    return err(ERROR_INVALID_MENU_HANDLE);
-                }
-                core::mem::replace(&mut w.id, value)
-            }
+            -12 => core::mem::replace(&mut w.id, value),
             -16 => u64::from(core::mem::replace(&mut w.style, value as u32)),
             -20 => {
                 let new = guic::filter_ex_style(w.style, w.ex_style, value as u32, &mut w.lay);
@@ -1539,12 +1555,16 @@ impl Wm {
 
     /// Apply a compositor-moved or resized client rectangle to a top-level
     /// window's Win32 geometry. `client` is in screen coordinates, as the
-    /// desktop link's `Configure` record is. A window that draws its own
+    /// desktop link's `Configure` record is. `surface` holds the menu bar (if
+    /// any) above the client area. A window that draws its own
     /// caption (ADR 0183 addendum: `WS_CAPTION` and a client area its
     /// `WM_NCCALCSIZE` answer put at the top) keeps the borders that answer
     /// left around its client area; Poly's frame is around the others.
-    pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
+    pub fn configure_from_desktop(&mut self, hwnd: u32, surface: Rect, frame: FrameMetrics) -> bool {
         let Some(w) = self.get(u64::from(hwnd)) else { return false };
+        let bar = w.menu_bar;
+        // The surface holds the menu bar above the client area.
+        let client = Rect::new(surface.left, (surface.top + bar).min(surface.bottom), surface.right, surface.bottom);
         let own_caption = w.style & crate::metrics::WS_CAPTION == crate::metrics::WS_CAPTION
             && !crate::surfaces::poly_frames(w.style, w.window_rel, w.client_rel);
         let (old_w, old_c) = (w.window_rel, w.client_rel);
@@ -1557,7 +1577,7 @@ impl Wm {
                 client.bottom + (old_w.bottom - old_c.bottom),
             )
         } else {
-            frame.window_from_surface(client)
+            frame.window_from_surface(surface)
         };
         let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
         let client_rel = Rect::new(client.left - ox, client.top - oy, client.right - ox, client.bottom - oy);
@@ -2114,6 +2134,7 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::InputState {} => self.input_reply(ctx.key()),
+            Request::Caret { op, hwnd, a, b, tid } => self.caret_op(ctx, op, hwnd, a, b, tid),
             Request::MayTakeForeground {} => Reply::Bool { value: self.may_take_foreground(ctx.key()) },
             Request::ActivationHistory {} => {
                 let k = self.input_key(ctx.key());
@@ -2145,6 +2166,13 @@ impl Wm {
             Request::SetMinPos { hwnd, x, y } => match self.get_mut(u64::from(hwnd)) {
                 Some(w) => {
                     w.min_pos = (x, y);
+                    Reply::Ok {}
+                }
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
+            Request::MenuBar { hwnd, height } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => {
+                    w.menu_bar = height.clamp(0, 256);
                     Reply::Ok {}
                 }
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
@@ -2275,6 +2303,7 @@ impl Window {
             restore_max: false,
             min_pos: (-1, -1),
             helper: false,
+            menu_bar: 0,
         }
     }
 }
@@ -2472,6 +2501,26 @@ mod tests {
         assert!(matches!(
             wm.handle(at(50), Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut Effects::default()),
             Reply::Empty { next_timer_ms: Some(10) }
+        ));
+    }
+
+    #[test]
+    fn the_surface_holds_the_menu_bar_above_the_client_area() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        assert!(matches!(wm.handle(A, Request::MenuBar { hwnd, height: 20 }, &mut Effects::default()), Reply::Ok {}));
+        assert_eq!(wm.info(hwnd).unwrap().menu_bar, 20);
+        // The compositor sizes the surface; the client area is what is below the bar.
+        let surface = Rect::new(200, 300, 584, 581);
+        assert!(wm.configure_from_desktop(hwnd, surface, FrameMetrics::POLY));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, Rect::new(200, 320, 584, 581));
+        assert_eq!(info.window, Rect::new(199, 275, 585, 582));
+        // A window that is gone has no bar to set.
+        assert!(matches!(
+            wm.handle(A, Request::MenuBar { hwnd: 0x7777, height: 20 }, &mut Effects::default()),
+            Reply::Error { .. }
         ));
     }
 

@@ -427,7 +427,7 @@ pub fn load_ours() -> Result<Ours> {
 pub fn load_ours_x86() -> Result<Ours> {
     let mut ours = Ours::default();
     let dir = crate::wow64::ensure()?;
-    for f in crate::wow64::MODULES {
+    for f in crate::wow64::modules() {
         let path = dir.join(f);
         let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         ours.dlls.insert(f.to_string(), exports_of(&bytes)?);

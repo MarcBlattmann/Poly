@@ -48,10 +48,12 @@
 
 extern crate alloc;
 
+pub mod caret;
 pub mod clip;
 pub mod desktop;
 pub mod dib;
 pub mod dispcfg;
+pub mod dlg;
 pub mod exports;
 pub mod frame;
 pub mod guic;
@@ -60,6 +62,7 @@ pub mod icofile;
 pub mod ime;
 pub mod kbd;
 pub mod link;
+pub mod menu;
 pub mod metrics;
 pub mod notify;
 pub mod props;
