@@ -13,6 +13,6 @@
 {"symbol":"VerInstallFileW","src":["wine-spec"]},
 {"symbol":"VerLanguageNameA","forward":"kernel32.VerLanguageNameA","src":["wine-spec"]},
 {"symbol":"VerLanguageNameW","forward":"kernel32.VerLanguageNameW","src":["wine-spec"]},
-{"symbol":"VerQueryValueA","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValueA","wine:version/tests/info.c:test_info","wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_extra_block","wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_32bit_win"]},
+{"symbol":"VerQueryValueA","status":"stub","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValueA","wine:version/tests/info.c:test_info","wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_extra_block","wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_32bit_win"]},
 {"symbol":"VerQueryValueW","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValue_EmptyData","wine:version/tests/info.c:test_32bit_win"]}
 ]

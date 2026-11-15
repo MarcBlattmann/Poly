@@ -1,4 +1,4 @@
 [
-{"symbol":"CreateFontPackage","src":["wine-spec"]},
-{"symbol":"MergeFontPackage","src":["wine-spec"]}
+{"symbol":"CreateFontPackage","status":"stub","src":["wine-spec"]},
+{"symbol":"MergeFontPackage","status":"stub","src":["wine-spec"]}
 ]
