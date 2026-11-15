@@ -189,6 +189,17 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }
     }
+    // The generated stub DLLs of the Windows applications (ADR 0155, step 10).
+    for &(name, bytes) in super::STUB_DLLS {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
     // And advapi32.dll (ADR 0083).
     if !super::ADVAPI32.is_empty() {
         match create::install_file(&vr, &root, "Windows\\System32", "advapi32.dll", super::ADVAPI32) {
