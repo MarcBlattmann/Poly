@@ -1107,10 +1107,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 passes in most runs
-/// but not yet every time ([`S1_REQUIRED`]): until it does the group reports
-/// how far Chrome got and succeeds; `POLY_CHROME_REQUIRED=1` makes the
-/// outcome the group's result.
+/// downloads the 210 MB package; CI has none). Stage 1 must pass
+/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
+/// unless `POLY_CHROME_REQUIRED=1`.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
@@ -1154,9 +1153,9 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
 }
 
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
-/// pass. Stage 1 passes in about 8 of 10 runs (ADR 0155 step 12: the others end on a failed
-/// check in the browser, `chrome.dll+0xc62f809`, not found yet); `true` once it passes every time.
-pub const S1_REQUIRED: bool = false;
+/// pass. It passes every time since ADR 0155 step 13 (the failed check at
+/// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
+pub const S1_REQUIRED: bool = true;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
