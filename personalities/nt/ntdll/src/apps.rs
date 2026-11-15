@@ -93,7 +93,6 @@ fail_exports!(
         RtlDestroyQueryDebugBuffer,
         RtlEnumerateGenericTableWithoutSplaying,
         RtlGetCurrentTransaction,
-        RtlGetDeviceFamilyInfoEnum,
         RtlGetNtVersionNumbers,
         RtlInitializeBitMap,
         RtlInitializeGenericTable,

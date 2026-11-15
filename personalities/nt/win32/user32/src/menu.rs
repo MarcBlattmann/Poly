@@ -39,7 +39,7 @@ const WS_CHILD: u32 = 0x4000_0000;
 
 /// The 32-bit handle of an `HMENU` (0 when the upper half is not 0).
 pub(crate) fn h32(menu: H) -> u32 {
-    if menu >> 32 != 0 { 0 } else { menu as u32 }
+    if (menu as u64) >> 32 != 0 { 0 } else { menu as u32 }
 }
 
 pub(crate) fn with<R>(f: impl FnOnce(&mut Menus) -> R) -> R {
