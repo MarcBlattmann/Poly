@@ -150,10 +150,45 @@ pub fn system_info(cpus: u32) -> [u8; 48] {
     b
 }
 
+/// `SYSTEM_INFO` as a 32-bit process gets it (ADR 0186; `sysinfoapi.h` with 4-byte pointers:
+/// 36 bytes). `GetSystemInfo` describes the process's view (Learn: "To retrieve accurate
+/// information for an application running on WOW64, call the GetNativeSystemInfo function"):
+/// an x86 processor (`PROCESSOR_ARCHITECTURE_INTEL`, `PROCESSOR_INTEL_PENTIUM`) and its own
+/// address range; `GetNativeSystemInfo` (`native`) the machine's architecture (x64), with the
+/// same 32-bit range (what the 4-byte fields hold there is to be confirmed by the spec agent).
+pub fn system_info_32(cpus: u32, native: bool, max_address: u32) -> [u8; 36] {
+    let mut b = [0u8; 36];
+    let (arch, ty) = if native { (9u16, 8664u32) } else { (0u16, 586u32) };
+    b[0..2].copy_from_slice(&arch.to_le_bytes());
+    b[4..8].copy_from_slice(&4096u32.to_le_bytes());
+    b[8..12].copy_from_slice(&0x1_0000u32.to_le_bytes());
+    b[12..16].copy_from_slice(&max_address.to_le_bytes());
+    let cpus = cpus.clamp(1, 32);
+    let mask = if cpus == 32 { u32::MAX } else { (1u32 << cpus) - 1 };
+    b[16..20].copy_from_slice(&mask.to_le_bytes());
+    b[20..24].copy_from_slice(&cpus.to_le_bytes());
+    b[24..28].copy_from_slice(&ty.to_le_bytes());
+    b[28..32].copy_from_slice(&0x1_0000u32.to_le_bytes());
+    b[32..34].copy_from_slice(&6u16.to_le_bytes());
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     extern crate std;
+
+    #[test]
+    fn the_32_bit_system_info_is_an_x86_view_and_the_native_one_x64() {
+        let b = system_info_32(4, false, 0x7FFE_FFFF);
+        assert_eq!(u16::from_le_bytes([b[0], b[1]]), 0);
+        assert_eq!(u32::from_le_bytes(b[12..16].try_into().unwrap()), 0x7FFE_FFFF);
+        assert_eq!(u32::from_le_bytes(b[16..20].try_into().unwrap()), 0xF);
+        assert_eq!(u32::from_le_bytes(b[20..24].try_into().unwrap()), 4);
+        assert_eq!(u32::from_le_bytes(b[24..28].try_into().unwrap()), 586);
+        let n = system_info_32(4, true, 0x7FFE_FFFF);
+        assert_eq!((u16::from_le_bytes([n[0], n[1]]), u32::from_le_bytes(n[24..28].try_into().unwrap())), (9, 8664));
+    }
     use std::vec::Vec;
 
     #[test]
