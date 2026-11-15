@@ -308,7 +308,7 @@ pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &Exceptio
     use poly_personality_nt::diag;
     let read = |at: u64, buf: &mut [u8]| user::copy_from_user(buf, at).is_ok();
     let teb = with(|s| s.processes.get(&pid)?.thread(tid).map(|t| t.teb)).unwrap_or(0);
-    let modules = diag::modules(&read, teb);
+    let modules = if crate::arch::user::compat() { diag::modules32(&read, teb) } else { diag::modules(&read, teb) };
     let rsp = ctx.rsp();
     // Whole pages may be missing above the stack's top: read a quadword at a time.
     let mut stack: Vec<u64> = Vec::with_capacity(words);
@@ -320,7 +320,12 @@ pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &Exceptio
         stack.push(u64::from_le_bytes(b));
     }
     let at = diag::Raised { pid: pid.0, tid: tid.0, code: record.code, address: record.address };
-    for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
+    // A 32-bit thread's stack is read as 32-bit words, and its registers are the low halves.
+    let compat = crate::arch::user::compat();
+    let stack: Vec<u64> = if compat { stack.iter().flat_map(|&w| [w & 0xffff_ffff, w >> 32]).collect() } else { stack };
+    for line in
+        diag::exception_report_words(&at, record.parameters(), &ctx.gpr, &stack, &modules, if compat { 4 } else { 8 })
+    {
         crate::kprintln!("{line}");
     }
     drop(stack);

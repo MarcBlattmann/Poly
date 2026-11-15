@@ -248,16 +248,20 @@ pub fn step(frame: &mut TrapFrame) -> bool {
             };
             let lower = name.to_ascii_lowercase();
             let looked_up = if lower.ends_with("!getprocaddress") {
-                text_at(w(2), false)
+                text_at(w(2), false).map(|t| alloc::format!("{t:?}"))
             } else if lower.ends_with("!loadlibrarya") || lower.ends_with("!loadlibraryexa") {
-                text_at(w(1), false)
+                text_at(w(1), false).map(|t| alloc::format!("{t:?}"))
             } else if lower.ends_with("!loadlibraryw") || lower.ends_with("!loadlibraryexw") {
-                text_at(w(1), true)
+                text_at(w(1), true).map(|t| alloc::format!("{t:?}"))
+            } else if lower.ends_with("!findresourceexw") {
+                text_at(w(3), true).map(|t| alloc::format!("resource {t:?} of type {:#x}", w(2)))
+            } else if lower.ends_with("!findresourcew") {
+                text_at(w(2), true).map(|t| alloc::format!("resource {t:?} of type {:#x}", w(3)))
             } else {
                 None
             };
             if let Some(t) = looked_up {
-                crate::kprintln!("nt-api:   looks up {t:?}");
+                crate::kprintln!("nt-api:   looks up {t}");
             }
             if name.contains("InitializeCriticalSection") {
                 // The object around a critical section: what the constructor wrote before it.

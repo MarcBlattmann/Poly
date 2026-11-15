@@ -21,6 +21,9 @@ unsafe extern "system" {
     fn ExitProcess(code: u32) -> !;
     fn GetLastError() -> u32;
     fn GetModuleHandleW(name: *const u16) -> usize;
+    fn FindResourceW(module: usize, name: usize, kind: usize) -> usize;
+    fn LoadResource(module: usize, resource: usize) -> usize;
+    fn SizeofResource(module: usize, resource: usize) -> u32;
     fn VirtualQuery(address: usize, info: *mut u32, length: usize) -> usize;
     fn GetLocaleInfoA(lcid: u32, kind: u32, buffer: *mut u8, size: i32) -> i32;
     fn GetStringTypeA(lcid: u32, kind: u32, text: *const u8, count: i32, types: *mut u16) -> i32;
@@ -401,6 +404,34 @@ fn winsock_data() -> bool {
     }
 }
 
+/// The resources of a loaded module are found in a 32-bit process (`VirtualQuery` answers a 28-byte
+/// `MEMORY_BASIC_INFORMATION` there, and the resource functions read it): the version resource of
+/// `kernel32.dll` (`RT_VERSION` 16, id 1) has data, and a resource that does not exist is not found.
+fn resources() -> bool {
+    let mut name = [0u16; 16];
+    utf16(&mut name, "kernel32.dll");
+    // SAFETY: documented calls.
+    unsafe {
+        at(1);
+        let module = GetModuleHandleW(name.as_ptr());
+        if module == 0 {
+            return false;
+        }
+        at(2);
+        let found = FindResourceW(module, 1, 16);
+        if found == 0 {
+            return false;
+        }
+        at(3);
+        if LoadResource(module, found) == 0 || SizeofResource(module, found) < 52 {
+            return false;
+        }
+        at(4);
+        // 1814: ERROR_RESOURCE_NAME_NOT_FOUND.
+        FindResourceW(module, 7777, 16) == 0 && GetLastError() == 1814
+    }
+}
+
 /// A memory manager reserves a region, commits it page by page, and may commit pages it has
 /// committed already (an overlapping range): the contents stay (Learn, `VirtualAlloc`: "an attempt
 /// to commit a page that is already committed does not cause the function to fail").
@@ -495,7 +526,7 @@ fn image_regions() -> bool {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 12] = [
+    let checks: [(&[u8], fn() -> bool); 13] = [
         (b"locale\n", locale_a),
         (b"string types\n", string_types),
         (b"mapping\n", mapping),
@@ -508,6 +539,7 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         (b"recommit\n", recommit),
         (b"critical section\n", critical_section),
         (b"winsock data\n", winsock_data),
+        (b"resources\n", resources),
     ];
     if !out(b"ansi32\n") {
         // SAFETY: ends the process.

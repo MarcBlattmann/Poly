@@ -217,6 +217,37 @@ pub fn modules(r: Read<'_>, teb: u64) -> Vec<ModuleSpan> {
     out
 }
 
+/// [`modules`] for a 32-bit process (ADR 0186): its `PEB` is at `TEB + 0x30`, `Ldr` at `PEB + 0xC`, the load-order
+/// list at `Ldr + 0xC`; an entry has `DllBase` at +0x18, `SizeOfImage` at +0x20 and `BaseDllName`
+/// (a 32-bit `UNICODE_STRING`: length, size, a 4-byte pointer) at +0x2C.
+pub fn modules32(r: Read<'_>, teb: u64) -> Vec<ModuleSpan> {
+    let mut out = Vec::new();
+    let peb = u64::from(u32_at(r, teb + 0x30).unwrap_or(0));
+    let ldr = u64::from(u32_at(r, peb + 0xC).unwrap_or(0));
+    if ldr == 0 {
+        return out;
+    }
+    let head = ldr + 0xC;
+    let mut at = u64::from(u32_at(r, head).unwrap_or(0));
+    while at != head && at != 0 && out.len() < 256 {
+        if let Some(base) = u32_at(r, at + 0x18).filter(|&b| b != 0) {
+            let size = u64::from(u32_at(r, at + 0x20).unwrap_or(0));
+            let length = usize::from(u16_at(r, at + 0x2C).unwrap_or(0) / 2).min(120);
+            let buffer = u64::from(u32_at(r, at + 0x30).unwrap_or(0));
+            let mut bytes = alloc::vec![0u8; length * 2];
+            let name = if length != 0 && r(buffer, &mut bytes) {
+                let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                String::from_utf16_lossy(&units)
+            } else {
+                String::new()
+            };
+            out.push(ModuleSpan { base: u64::from(base), size, name });
+        }
+        at = u64::from(u32_at(r, at).unwrap_or(0));
+    }
+    out
+}
+
 /// `address` as `module+0xoffset` if a module holds it.
 pub fn locate(modules: &[ModuleSpan], address: u64) -> Option<String> {
     modules
@@ -308,6 +339,19 @@ pub fn exception_report(
     stack: &[u64],
     modules: &[ModuleSpan],
 ) -> Vec<String> {
+    exception_report_words(at, parameters, registers, stack, modules, 8)
+}
+
+/// [`exception_report`] for a stack of words of `word_bytes` (4 for a 32-bit thread: `stack` then
+/// holds one 32-bit word per element and the registers are the 32-bit ones in the low halves).
+pub fn exception_report_words(
+    at: &Raised,
+    parameters: &[u64],
+    registers: &[u64; 16],
+    stack: &[u64],
+    modules: &[ModuleSpan],
+    word_bytes: usize,
+) -> Vec<String> {
     const NAMES: [&str; 16] =
         ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"];
     let head = format!("nt-exc: pid {} tid {}", at.pid, at.tid);
@@ -330,8 +374,8 @@ pub fn exception_report(
             out.push(format!("{head} stack ... {zeros} lines of zeros"));
             zeros = 0;
         }
-        let words: Vec<String> = line.iter().map(|w| format!("{w:016x}")).collect();
-        out.push(format!("{head} stack +{:#06x}: {}", i * 32, words.join(" ")));
+        let words: Vec<String> = line.iter().map(|w| format!("{w:0width$x}", width = 2 * word_bytes)).collect();
+        out.push(format!("{head} stack +{:#06x}: {}", i * 4 * word_bytes, words.join(" ")));
     }
     if zeros != 0 {
         out.push(format!("{head} stack ... {zeros} lines of zeros"));
@@ -339,13 +383,13 @@ pub fn exception_report(
     let code: Vec<String> = stack
         .iter()
         .enumerate()
-        .filter_map(|(i, &w)| locate(modules, w).map(|m| format!("+{:#x} {m}", i * 8)))
+        .filter_map(|(i, &w)| locate(modules, w).map(|m| format!("+{:#x} {m}", i * word_bytes)))
         .take(REPORT_ITEMS)
         .collect();
     if !code.is_empty() {
         out.push(format!("{head} code addresses on the stack: {}", code.join(", ")));
     }
-    let bytes: Vec<u8> = stack.iter().flat_map(|w| w.to_le_bytes()).collect();
+    let bytes: Vec<u8> = stack.iter().flat_map(|w| w.to_le_bytes()[..word_bytes].to_vec()).collect();
     let text: Vec<String> = stack_text(&bytes).into_iter().map(|(o, t)| format!("+{o:#x} {t}")).collect();
     if !text.is_empty() {
         out.push(format!("{head} text on the stack: {}", text.join(", ")));
