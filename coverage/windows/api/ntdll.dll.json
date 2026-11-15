@@ -651,7 +651,7 @@
 {"symbol":"RtlGetNativeSystemInformation","src":["wine-spec"],"seeds":["wine:ntdll/tests/info.c:test_query_data_alignment","wine:ntdll/tests/info.c:test_query_basic","wine:ntdll/tests/info.c:test_query_cpu","wine:ntdll/tests/virtual.c:test_NtAllocateVirtualMemoryEx","wine:ntdll/tests/exception.c:START_TEST"]},
 {"symbol":"RtlGetNtGlobalFlags","src":["wine-spec"],"seeds":["wine:kernel32/tests/heap.c:test_child_heap"]},
 {"symbol":"RtlGetNtProductType","src":["wine-spec"]},
-{"symbol":"RtlGetNtVersionNumbers","status":"claimed","claimed_by":"spec-win-apps-1","src":["wine-spec"]},
+{"symbol":"RtlGetNtVersionNumbers","status":"claimed","claimed_by":"impl-win-apps","src":["wine-spec"]},
 {"symbol":"RtlGetOwnerSecurityDescriptor","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:ntoskrnl.exe/tests/driver.c:test_default_security"]},
 {"symbol":"RtlGetProcessHeaps","status":"claimed","claimed_by":"ntdll","src":["wine-spec"]},
 {"symbol":"RtlGetProcessPreferredUILanguages","src":["wine-spec"]},

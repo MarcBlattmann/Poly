@@ -202,7 +202,7 @@ pub fn parameters(
     env: &[u16],
     current: &[u16],
 ) -> Result<Vec<u8>, u32> {
-    child_parameters(base, &Child { image, command_line, env, current, startup: None })
+    child_parameters(base, &Child { image, command_line, env, current, startup: None, inherited_std: None })
 }
 
 // ----- STARTUPINFO, the standard handles, inheritance (ADR 0089) -----------------------
@@ -400,6 +400,24 @@ pub struct Child<'a> {
     pub current: &'a [u16],
     /// The `STARTUPINFO` passed on (`None`: none was given).
     pub startup: Option<&'a Startup>,
+    /// The creator's own standard handles, which a child inherits when the
+    /// `STARTUPINFO` does not choose them (see [`inherited_std_handles`]).
+    pub inherited_std: Option<[u64; 3]>,
+}
+
+/// Whether a child inherits its creator's standard handles: Learn ("Console
+/// Handles": "the parent's standard handles are inherited by any child
+/// process"; `GetStdHandle`: a console program's handles are filled "if the
+/// parent didn't already fill the standard handle table by inheritance").
+/// Poly passes them when the `STARTUPINFO` does not choose its own
+/// (`STARTF_USESTDHANDLES`), handles are inherited (`bInheritHandles`), and
+/// the child shares the creator's console (none of `CREATE_NEW_CONSOLE`,
+/// `DETACHED_PROCESS`, `CREATE_NO_WINDOW`). The other cases are not specified
+/// yet: the child keeps getting its console's handles there (ADR 0194).
+pub fn inherits_std_handles(startup_flags: u32, inherit_handles: bool, creation_flags: u32) -> bool {
+    startup_flags & STARTF_USESTDHANDLES == 0
+        && inherit_handles
+        && creation_flags & (CREATE_NEW_CONSOLE | DETACHED_PROCESS | CREATE_NO_WINDOW) == 0
 }
 
 /// [`parameters`] with everything a child gets: with a `STARTUPINFO`, its
@@ -446,6 +464,14 @@ pub fn child_parameters_in(l: &Layout, base: u64, c: &Child<'_>) -> Result<Vec<u
             for (i, h) in s.std.iter().enumerate() {
                 buf[at(l.pp_standard_input) + ptr * i..][..ptr].copy_from_slice(&h.to_le_bytes()[..ptr]);
             }
+        }
+    }
+    // The creator's own handles, in the same place; the kernel tells them
+    // apart by the flag (`STARTF_USESTDHANDLES` is not set then).
+    let chosen = c.startup.is_some_and(|s| s.flags() & STARTF_USESTDHANDLES != 0);
+    if let (Some(std), false) = (c.inherited_std, chosen) {
+        for (i, h) in std.iter().enumerate() {
+            buf[at(l.pp_standard_input) + ptr * i..][..ptr].copy_from_slice(&h.to_le_bytes()[..ptr]);
         }
     }
     buf.resize(buf.len().next_multiple_of(16), 0);
@@ -654,8 +680,14 @@ mod tests {
         let s = Startup::from_raw(&raw, None, Some(wide("Title")), Some(wide("")), alloc::vec![7, 8, 9, 10]);
         assert_eq!((s.flags(), s.cb_reserved2(), s.std), (0x101, 3, [0x10, 0x14, 0x18]));
         let env = wide("A=1\0\0");
-        let c =
-            Child { image: &wide("C:\\x.exe"), command_line: &wide("x"), env: &env, current: &[], startup: Some(&s) };
+        let c = Child {
+            image: &wide("C:\\x.exe"),
+            command_line: &wide("x"),
+            env: &env,
+            current: &[],
+            startup: Some(&s),
+            inherited_std: Some([0x40, 0x44, 0x48]),
+        };
         let p = child_parameters(base, &c).unwrap();
         let u64_at = |o: usize| u64::from_le_bytes(p[o..o + 8].try_into().unwrap());
         // The standard handles where ADR 0080 keeps them.
@@ -688,9 +720,15 @@ mod tests {
         raw[0..4].fill(0);
         let s = Startup::from_raw(&raw, None, None, None, Vec::new());
         assert_eq!(s.cb, 104);
-        let c = Child { startup: Some(&s), ..c };
+        let c = Child { startup: Some(&s), inherited_std: None, ..c };
         let p = child_parameters(base, &c).unwrap();
         assert!(p[0x20..0x38].iter().all(|&b| b == 0));
+        // The creator's own handles go where the chosen ones would, but
+        // GetStartupInfoW does not report them.
+        let inherited = child_parameters(base, &Child { inherited_std: Some([0x40, 0x44, 0x48]), ..c }).unwrap();
+        let u64_at = |o: usize| u64::from_le_bytes(inherited[o..o + 8].try_into().unwrap());
+        assert_eq!([u64_at(0x20), u64_at(0x28), u64_at(0x30)], [0x40, 0x44, 0x48]);
+        assert!(startup_info(&inherited)[80..104].iter().all(|&b| b == 0));
         assert_eq!(u64::from_le_bytes(p[PP_RESERVED2..][..8].try_into().unwrap()), 0);
         let si = startup_info(&p);
         assert!(si[80..104].iter().all(|&b| b == 0));
@@ -725,7 +763,14 @@ mod tests {
         assert_eq!(s.flags(), STARTF_USESTDHANDLES | 1);
         let image: Vec<u16> = "C:\\a.exe".encode_utf16().collect();
         let env: Vec<u16> = "A=1\0\0".encode_utf16().collect();
-        let c = Child { image: &image, command_line: &image, env: &env, current: &[], startup: Some(&s) };
+        let c = Child {
+            image: &image,
+            command_line: &image,
+            env: &env,
+            current: &[],
+            startup: Some(&s),
+            inherited_std: None,
+        };
         let base = 0x0040_0000u64;
         let pp = child_parameters_in(&X86, base, &c).unwrap();
         let u16_at = |o: u64| u16::from_le_bytes(pp[o as usize..o as usize + 2].try_into().unwrap());

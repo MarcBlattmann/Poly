@@ -213,13 +213,13 @@ pub fn query_value(block: &[u8], sub_block: &[u16]) -> Result<(usize, u32), u32>
 // ----- building a version resource (ADR 0155, step 9) -----------------------------------------
 
 /// The version Poly's system DLLs carry in their version resources: the Windows version Poly
-/// reports to programs (`poly_registry::defaults`: Windows 10, build 19045, update 2006). Learn,
+/// reports to programs (`poly_registry::defaults`: Windows 11, build 26200, update 9974). Learn,
 /// "Getting the System Version": "To obtain the full version number for the operating system,
 /// call the GetFileVersionInfo function on one of the system DLLs, such as Kernel32.dll, then
 /// call VerQueryValue to obtain the \\StringFileInfo\\<lang><codepage>\\ProductVersion
 /// subblock". Chrome's browser does that with `kernelbase.dll` and `kernel32.dll` when it
 /// starts and ends itself when neither has a version.
-pub const SYSTEM_VERSION: [u16; 4] = [10, 0, 19045, 2006];
+pub const SYSTEM_VERSION: [u16; 4] = [10, 0, 26200, 9974];
 
 /// `VS_FFI_SIGNATURE`, `VS_FFI_STRUCVERSION`, `VS_FFI_FILEFLAGSMASK`, `VOS_NT_WINDOWS32`,
 /// `VFT_DLL` (`verrsrc.h`).
@@ -450,14 +450,14 @@ mod tests {
         assert_eq!(len, 52);
         let q = |o: usize| u32::from_le_bytes(block[at + o..at + o + 4].try_into().unwrap());
         assert_eq!(q(0), 0xFEEF_04BD);
-        // dwFileVersionMS/LS and dwProductVersionMS/LS: 10.0.19045.2006.
-        assert_eq!((q(8), q(12), q(16), q(20)), (0x000A_0000, 0x4A65_07D6, 0x000A_0000, 0x4A65_07D6));
+        // dwFileVersionMS/LS and dwProductVersionMS/LS: 10.0.26200.9974.
+        assert_eq!((q(8), q(12), q(16), q(20)), (0x000A_0000, 0x6658_26F6, 0x000A_0000, 0x6658_26F6));
         assert_eq!((q(32), q(36)), (0x0004_0004, 2));
         let (at, len) = query_value(&block, &wide("\\VarFileInfo\\Translation")).unwrap();
         assert_eq!((len, &block[at..at + 4]), (4, &[0x09, 0x04, 0xB0, 0x04][..]));
         for (name, want) in [
-            ("ProductVersion", "10.0.19045.2006"),
-            ("FileVersion", "10.0.19045.2006"),
+            ("ProductVersion", "10.0.26200.9974"),
+            ("FileVersion", "10.0.26200.9974"),
             ("OriginalFilename", "kernel32.dll"),
             ("InternalName", "kernel32"),
             ("CompanyName", "Poly"),
