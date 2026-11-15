@@ -12,8 +12,8 @@ extern crate alloc;
 
 mod acc;
 mod clipboard;
-mod ctl;
 mod cstructs;
+mod ctl;
 mod display;
 mod dlg;
 mod icons;

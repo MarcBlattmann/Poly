@@ -4,16 +4,7 @@
 //! implementation replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 //! Generated from the programs' import tables (names only) and our export table.
 
-poly_win32_rt::fail_exports!(
-    "user32",
-    invalid_handle,
-    [
-        DialogBoxParamA,
-        GetMessageA,
-        VkKeyScanExW,
-        VkKeyScanW,
-    ]
-);
+poly_win32_rt::fail_exports!("user32", invalid_handle, [DialogBoxParamA, GetMessageA, VkKeyScanExW, VkKeyScanW,]);
 
 poly_win32_rt::fail_exports!(
     "user32",
@@ -212,6 +203,4 @@ poly_win32_rt::fail_exports!(
 
 // The real versions are written by the implementer track `impl-win-apps` (branch `impl-win-apps`, spec-win-apps-1): when it
 // merges, delete these names (and the group when it is empty).
-poly_win32_rt::fail_exports!("user32", win32, [
-        LoadStringA,
-    ]);
+poly_win32_rt::fail_exports!("user32", win32, [LoadStringA,]);

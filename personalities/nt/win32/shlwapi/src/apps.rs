@@ -7,13 +7,7 @@
 poly_win32_rt::fail_exports!(
     "shlwapi",
     hresult,
-    [
-        SHAutoComplete,
-        SHCreateStreamOnFileA,
-        SHCreateStreamOnFileEx,
-        SHCreateStreamOnFileW,
-        SHStrDupW,
-    ]
+    [SHAutoComplete, SHCreateStreamOnFileA, SHCreateStreamOnFileEx, SHCreateStreamOnFileW, SHStrDupW,]
 );
 
 poly_win32_rt::fail_exports!(
