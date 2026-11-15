@@ -239,5 +239,12 @@ over the same matching rules), installed in `SysWOW64`.
 - `msvcp140` and its siblings count as Poly's work in the coverage percentages from now on;
   the Windows denominator grows by 3,889 entries (and 91 for the two `vcruntime` DLLs).
 - KeePassXC, LibreOffice's flat extraction and Qt apps without app-local runtimes move from
-  "missing DLL" to "missing `msvcp140` names", which the ranked list orders.
+  "missing DLL" to "missing `msvcp140` names", which the ranked list orders. KeePassXC 2.8.0
+  on this step (`win-app run --mode console`): `KeePassXC.exe` loads everything and ends in
+  Qt6Core with an integer division by zero right after `msvcp140!_Query_perf_frequency`
+  (fail-only, 0); `keepassxc-cli.exe --version` gets into `botan-3.dll`'s start-up, whose
+  C++ `throw` goes through Poly's `_CxxThrowException` and then through FH4 frames that
+  catch nothing, and ends in `abort()` (exit code 3). The first `msvcp140` names it needs
+  are `_Query_perf_frequency`/`_Query_perf_counter` and the `char` stream members, and
+  `__CxxFrameHandler4`.
 - `win polycheck` boots one more time (the `vcruntime140` pass).
