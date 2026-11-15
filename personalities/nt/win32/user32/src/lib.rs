@@ -2430,9 +2430,7 @@ fn with_cursor<R>(f: impl FnOnce(&mut usize) -> R) -> R {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadCursorW(instance: H, name: *const u16) -> H {
     if instance != 0 {
-        // Our executables carry no cursor resources.
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        return icons::load_module_icon(instance, name, 2, 0, 0, 0x40);
     }
     let id = if (name as usize) >> 16 == 0 {
         Some(name as usize as u16)

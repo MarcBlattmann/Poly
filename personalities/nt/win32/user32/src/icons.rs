@@ -511,8 +511,7 @@ fn resource_id(name: *const u16) -> Option<u16> {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadIconW(instance: H, name: *const u16) -> usize {
     if instance != 0 {
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        return load_module_icon(instance, name, 1, 0, 0, LR_DEFAULTSIZE);
     }
     match resource_id(name) {
         Some(id @ 32512..=32518) => ICON_BASE + usize::from(id - 32512),
@@ -612,8 +611,11 @@ pub unsafe extern "system" fn LoadImageW(
         if kind == 0 {
             return load_module_bitmap(instance, name, cx, cy, flags);
         }
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        let h = load_module_icon(instance, name, kind, cx, cy, flags);
+        if h == 0 && poly_win32_gui::last_error() == 0 {
+            set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
+        }
+        return h;
     }
     if name.is_null() {
         set_last_error(ERROR_RESOURCE_TYPE_NOT_FOUND);
@@ -660,9 +662,14 @@ const LR_CREATEDIBSECTION: u32 = 0x2000;
 
 /// The bytes of the `RT_BITMAP` resource `name` of `module` (a DIB without a file header).
 fn bitmap_resource(module: usize, name: *const u16) -> Option<Vec<u8>> {
-    // SAFETY: arguments of the kernel32 resource functions; RT_BITMAP is 2.
+    resource_bytes(module, name, 2)
+}
+
+/// The bytes of resource `name` of type `ty` (`RT_*` number) of `module`.
+fn resource_bytes(module: usize, name: *const u16, ty: usize) -> Option<Vec<u8>> {
+    // SAFETY: arguments of the kernel32 resource functions.
     unsafe {
-        let r = FindResourceW(module, name, 2usize as *const u16);
+        let r = FindResourceW(module, name, ty as *const u16);
         if r == 0 {
             return None;
         }
@@ -700,6 +707,84 @@ fn load_module_bitmap(module: usize, name: *const u16, cx: i32, cy: i32, flags: 
     let src = Image { w, h, bgra: px, and: alloc::vec![0; (w * h) as usize], alpha: false, hot: (0, 0) };
     let img = if cx > 0 && cy > 0 && (cx != w || cy != h) { icofile::scale(&src, cx, cy) } else { src };
     bitmap_from_bgra(img.w, img.h, &img.bgra, flags & LR_MONOCHROME != 0)
+}
+
+
+/// The icon or cursor a group resource (`RT_GROUP_ICON` 14, `RT_GROUP_CURSOR` 12) names, as the bytes
+/// of an `.ico` / `.cur` file (each image is its own `RT_ICON` 3 / `RT_CURSOR` 1 resource; a
+/// cursor's starts with its hotspot).
+fn group_to_ico(module: usize, group: &[u8], cursor: bool) -> Option<Vec<u8>> {
+    let count = usize::from(u16::from_le_bytes([*group.get(4)?, *group.get(5)?]));
+    let mut images: Vec<(Vec<u8>, [u8; 8])> = Vec::new();
+    for k in 0..count {
+        let e = group.get(6 + 14 * k..6 + 14 * k + 14)?;
+        let id = u16::from_le_bytes([e[12], e[13]]);
+        let data = resource_bytes(module, id as usize as *const u16, if cursor { 1 } else { 3 })?;
+        // The fields of the directory entry from byte 0 to 7: width, height, colours, reserved,
+        // planes (hotspot x for a cursor), bit count (hotspot y).
+        let mut head = [0u8; 8];
+        let (img, hot) = if cursor {
+            if data.len() < 4 {
+                return None;
+            }
+            (data[4..].to_vec(), Some((data[0], data[1], data[2], data[3])))
+        } else {
+            (data, None)
+        };
+        if cursor {
+            // width and height are u16 in the group; the height counts the AND mask too.
+            head[0] = e[0];
+            head[1] = (u16::from_le_bytes([e[2], e[3]]) / 2).min(255) as u8;
+            let h = hot?;
+            head[4] = h.0;
+            head[5] = h.1;
+            head[6] = h.2;
+            head[7] = h.3;
+        } else {
+            head.copy_from_slice(&[e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]]);
+        }
+        images.push((img, head));
+    }
+    let mut out = alloc::vec![0, 0, if cursor { 2 } else { 1 }, 0];
+    out.extend_from_slice(&(count as u16).to_le_bytes());
+    let mut off = 6 + 16 * count;
+    for (img, head) in &images {
+        out.extend_from_slice(head);
+        out.extend_from_slice(&(img.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(off as u32).to_le_bytes());
+        off += img.len();
+    }
+    for (img, _) in &images {
+        out.extend_from_slice(img);
+    }
+    Some(out)
+}
+
+/// `LoadImageW` / `LoadIconW` / `LoadCursorW` of an icon (`kind` 1) or a cursor (2) of a module.
+pub fn load_module_icon(module: usize, name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize {
+    let cursor = kind == 2;
+    let Some(group) = resource_bytes(module, name, if cursor { 12 } else { 14 }) else { return 0 };
+    let Some(bytes) = group_to_ico(module, &group, cursor) else { return 0 };
+    let (w, h) = if flags & LR_DEFAULTSIZE != 0 && cx == 0 { (32, 32) } else { (cx, cy) };
+    icon_from_ico(&bytes, kind, w, h)
+}
+
+fn icon_from_ico(bytes: &[u8], kind: u32, w: i32, h: i32) -> usize {
+    let Some((_ftype, images)) = icofile::parse(bytes) else { return 0 };
+    let pick = icofile::pick(&images, (if w > 0 { w } else { 0 }, if h > 0 { h } else { 0 }));
+    let want = if w > 0 && h > 0 { (w, h) } else { (pick.w, pick.h) };
+    let img = icofile::scale(pick, want.0, want.1);
+    if kind == 2 {
+        let mut c = img;
+        let src_hot = pick.hot;
+        c.hot = (
+            (i64::from(src_hot.0) * i64::from(c.w) / i64::from(pick.w.max(1))) as i32,
+            (i64::from(src_hot.1) * i64::from(c.h) / i64::from(pick.h.max(1))) as i32,
+        );
+        obj_from_image(c, true, false)
+    } else {
+        obj_from_image(img, false, true)
+    }
 }
 
 /// `LoadBitmapW(hInstance, name)`: `LoadImageW` of a bitmap with no flags.
