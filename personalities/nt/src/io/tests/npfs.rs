@@ -249,6 +249,31 @@ fn message_pipes_keep_boundaries_and_peek() {
 }
 
 #[test]
+fn peek_answers_by_state_and_disconnect_twice_is_refused() {
+    let mut t = setup();
+    let s = t.np_server("peekstates", true, SYNC);
+    // A listening instance: invalid pipe state, nothing written.
+    let (st, out, n) = t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16);
+    assert_eq!((st, n), (STATUS_INVALID_PIPE_STATE, 0));
+    assert!(out.is_empty());
+    let c = t.np_client("peekstates", SYNC);
+    t.write(c, b"hello", None);
+    let (st, out, _) = t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16 + 5);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 3);
+    // The client closes: the instance is closing, a peek still answers (state 4).
+    t.close(c);
+    let (st, out, _) = t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16 + 5);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 4);
+    // Disconnect: the instance is disconnected, a peek says invalid state, a
+    // second disconnect says disconnected; a listen makes it listen again.
+    assert_eq!(t.fsctl(s, FSCTL_PIPE_DISCONNECT, &[], 0).0, STATUS_SUCCESS);
+    assert_eq!(t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16).0, STATUS_INVALID_PIPE_STATE);
+    assert_eq!(t.fsctl(s, FSCTL_PIPE_DISCONNECT, &[], 0).0, STATUS_PIPE_DISCONNECTED);
+}
+
+#[test]
 fn asynchronous_requests_listen_read_write_and_cancel() {
     let mut t = setup();
     let s = t.np_server("async", false, 0);
@@ -577,6 +602,12 @@ fn a_pipe_handle_reports_the_name_its_creator_spelled() {
         t.create("\\Device\\NamedPipe", FILE_READ_ATTRIBUTES | SYNCHRONIZE, SHARE_ALL, FILE_OPEN, SYNC, 0);
     assert_eq!(st, STATUS_SUCCESS);
     assert_eq!(t.query(device, FILE_NAME_INFORMATION, 528).0, STATUS_INVALID_PARAMETER);
+    // The length check comes before the type check: a buffer below
+    // sizeof(FILE_NAME_INFORMATION) is a length mismatch on the device too.
+    for len in 0..8 {
+        assert_eq!(t.query(device, FILE_NAME_INFORMATION, len).0, STATUS_INFO_LENGTH_MISMATCH, "{len}");
+    }
+    assert_eq!(t.query(device, FILE_NAME_INFORMATION, 8).0, STATUS_INVALID_PARAMETER);
     // The full object name (`NtQueryObject`, ObjectNameInformation = 1).
     let object_name = |t: &mut T, h: u64| {
         let buf = t.f.alloc(528);

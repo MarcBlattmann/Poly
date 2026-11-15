@@ -27,7 +27,7 @@ use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::*;
 use poly_ntobj::status::*;
-use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, OBJ_OPENIF, ObjectId, ObjectManager, ObjectType, ProcessId};
+use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, ObjectType, ProcessId};
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
@@ -36,8 +36,6 @@ pub const LIMIT_ACTIVE_PROCESS: u32 = 0x8;
 pub const LIMIT_BREAKAWAY_OK: u32 = 0x800;
 pub const LIMIT_SILENT_BREAKAWAY_OK: u32 = 0x1000;
 pub const LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x2000;
-/// Every limit flag Windows defines for the basic and extended structures.
-const VALID_LIMITS: u32 = 0x7FFF | 0x8000 | 0x10000 | 0x20000;
 /// `JOB_OBJECT_MSG_*` (`winnt.h`).
 pub const MSG_ACTIVE_PROCESS_LIMIT: u64 = 3;
 pub const MSG_ACTIVE_PROCESS_ZERO: u64 = 4;
@@ -54,10 +52,17 @@ const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
 /// One job.
 #[derive(Debug)]
 pub struct Job {
-    pub object: ObjectId,
-    /// The members still running.
+    /// The job object (`None` only for the stand-in a `NULL` handle gets in a
+    /// process that is in no job).
+    pub object: Option<ObjectId>,
+    /// The job this one was put below when a process that was in it was
+    /// assigned to this one.
+    pub parent: Option<u64>,
+    /// The members still running (and those of the jobs below this one).
     pub active: BTreeSet<ProcessId>,
     pub total: u32,
+    /// `TotalTerminatedProcesses`: stays 0, also after a terminate (the
+    /// sheets: an ended member is not counted there).
     pub terminated: u32,
     /// `JOBOBJECT_BASIC_LIMIT_INFORMATION` as set (64 bytes).
     pub basic: [u8; 64],
@@ -69,7 +74,83 @@ pub struct Job {
     pub port: Option<PortAssoc>,
 }
 
+/// What a successful query answers.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Reply {
+    /// What is written to the caller's buffer.
+    pub bytes: Vec<u8>,
+    /// `STATUS_SUCCESS`, or `STATUS_BUFFER_OVERFLOW` for a list that did not fit.
+    pub status: NtStatus,
+    /// What `*ReturnLength` gets.
+    pub returned: u32,
+}
+
+/// A refused query: the status, and the `*ReturnLength` it still sets.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Refused {
+    pub status: NtStatus,
+    pub returned: Option<u32>,
+}
+
+/// `JOB_OBJECT_LIMIT_*` flags the basic structure accepts (`winnt.h`), and those of the
+/// extended one.
+const BASIC_FLAGS: u32 = 0xFF;
+const EXTENDED_FLAGS: u32 = 0x3FFF;
+const LIMIT_WORKINGSET: u32 = 0x1;
+const LIMIT_PROCESS_TIME: u32 = 0x2;
+const LIMIT_JOB_TIME: u32 = 0x4;
+const LIMIT_AFFINITY: u32 = 0x10;
+const LIMIT_PRIORITY_CLASS: u32 = 0x20;
+const LIMIT_PRESERVE_JOB_TIME: u32 = 0x40;
+const LIMIT_SCHEDULING_CLASS: u32 = 0x80;
+const LIMIT_PROCESS_MEMORY: u32 = 0x100;
+const LIMIT_JOB_MEMORY: u32 = 0x200;
+const LIMIT_SUBSET_AFFINITY: u32 = 0x4000;
+/// A job that has no scheduling class reads 5 (the sheets: `defaults`).
+const DEFAULT_SCHEDULING_CLASS: u32 = 5;
+/// `JOB_OBJECT_UILIMIT_*`: the bits `HANDLES` to `IME` (`winnt.h`).
+const UI_LIMITS: u32 = 0x1FF;
+
+/// The lengths of the query classes that answer all zero bytes for a fresh job.
+const ZERO_CLASSES: &[(u32, &[usize])] = &[
+    (10, &[4]),
+    (12, &[48, 56]),
+    (13, &[80, 88]),
+    (15, &[8]),
+    (16, &[4]),
+    (17, &[8]),
+    (18, &[16]),
+    (20, &[40, 64]),
+    (21, &[1]),
+    (26, &[8]),
+    (28, &[16, 40]),
+    (29, &[8]),
+    (30, &[16, 36]),
+    (32, &[16]),
+    (33, &[72]),
+    (34, &[104]),
+    (43, &[1]),
+    (44, &[16]),
+];
+
 impl Job {
+    pub fn new(object: Option<ObjectId>) -> Job {
+        let mut basic = [0u8; 64];
+        basic[60..64].copy_from_slice(&DEFAULT_SCHEDULING_CLASS.to_le_bytes());
+        Job {
+            object,
+            parent: None,
+            active: BTreeSet::new(),
+            total: 0,
+            terminated: 0,
+            basic,
+            extended_tail: [0; 80],
+            ui: 0,
+            end_of_job: 0,
+            port: None,
+        }
+    }
+
     pub fn limit_flags(&self) -> u32 {
         u32::from_le_bytes(self.basic[16..20].try_into().expect("4 bytes"))
     }
@@ -77,6 +158,244 @@ impl Job {
     pub fn active_limit(&self) -> u32 {
         u32::from_le_bytes(self.basic[40..44].try_into().expect("4 bytes"))
     }
+
+    /// Answer `NtQueryInformationJobObject(class)` for a buffer of `len` bytes
+    /// (specs/windows/ntdll.dll/NtQueryInformationJobObject.yaml: `exact_lengths`,
+    /// `odd_lengths`, `process_list`, `defaults`).
+    pub fn query(&self, class: u32, len: usize) -> core::result::Result<Reply, Refused> {
+        let refuse = |status: NtStatus| Refused { status, returned: None };
+        let mismatch = || refuse(STATUS_INFO_LENGTH_MISMATCH);
+        let ok = |bytes: Vec<u8>| {
+            let returned = bytes.len() as u32;
+            Reply { bytes, status: STATUS_SUCCESS, returned }
+        };
+        let exact = |lens: &[usize]| if lens.contains(&len) { Ok(()) } else { Err(mismatch()) };
+        match class {
+            0 => Err(refuse(STATUS_INVALID_INFO_CLASS)),
+            BASIC_ACCOUNTING | BASIC_AND_IO => {
+                exact(&[if class == BASIC_ACCOUNTING { 48 } else { 96 }])?;
+                let mut b = alloc::vec![0u8; len];
+                b[36..40].copy_from_slice(&self.total.to_le_bytes());
+                b[40..44].copy_from_slice(&(self.active.len() as u32).to_le_bytes());
+                b[44..48].copy_from_slice(&self.terminated.to_le_bytes());
+                Ok(ok(b))
+            }
+            BASIC_LIMIT => {
+                exact(&[64])?;
+                let mut b = self.basic;
+                // The four bytes between ActiveProcessLimit and Affinity read zero.
+                b[44..48].fill(0);
+                Ok(ok(b.to_vec()))
+            }
+            EXTENDED_LIMIT => {
+                exact(&[144, 152])?;
+                let mut b = self.basic.to_vec();
+                b[44..48].fill(0);
+                b.extend_from_slice(&self.extended_tail);
+                b.resize(len, 0);
+                Ok(ok(b))
+            }
+            UI_RESTRICTIONS => {
+                exact(&[4])?;
+                Ok(ok(self.ui.to_le_bytes().to_vec()))
+            }
+            END_OF_JOB_TIME => {
+                exact(&[4])?;
+                Ok(ok(self.end_of_job.to_le_bytes().to_vec()))
+            }
+            PROCESS_ID_LIST => {
+                if len < 16 {
+                    return Err(mismatch());
+                }
+                let room = (len - 8) / 8;
+                let ids: Vec<u64> = self.active.iter().take(room).map(|p| u64::from(p.0)).collect();
+                let mut bytes = (self.active.len() as u32).to_le_bytes().to_vec();
+                bytes.extend_from_slice(&(ids.len() as u32).to_le_bytes());
+                for id in &ids {
+                    bytes.extend_from_slice(&id.to_le_bytes());
+                }
+                let full = 8 + 8 * self.active.len() as u32;
+                let status = if ids.len() < self.active.len() { STATUS_BUFFER_OVERFLOW } else { STATUS_SUCCESS };
+                Ok(Reply { bytes, status, returned: full })
+            }
+            SECURITY_LIMIT => {
+                if len < 40 {
+                    return Err(mismatch());
+                }
+                Ok(ok(alloc::vec![0u8; len]))
+            }
+            ASSOCIATE_PORT => Err(if len == 16 { refuse(STATUS_INVALID_INFO_CLASS) } else { mismatch() }),
+            GROUP_INFORMATION => {
+                if len < 2 {
+                    Err(mismatch())
+                } else if !len.is_multiple_of(2) {
+                    Err(refuse(STATUS_INVALID_PARAMETER))
+                } else {
+                    Ok(ok(Vec::new()))
+                }
+            }
+            GROUP_INFORMATION_EX => match len {
+                0 => Err(Refused { status: STATUS_BUFFER_TOO_SMALL, returned: Some(16) }),
+                33.. => Err(mismatch()),
+                16 | 32 => Ok(ok(alloc::vec![0u8; 16])),
+                _ => Err(refuse(STATUS_INVALID_PARAMETER)),
+            },
+            31 => Err(if len >= 144 { refuse(STATUS_NOT_IMPLEMENTED) } else { mismatch() }),
+            c => match ZERO_CLASSES.iter().find(|(z, _)| *z == c) {
+                Some((_, lens)) => {
+                    exact(lens)?;
+                    Ok(ok(alloc::vec![0u8; len]))
+                }
+                None if c <= MAX_CLASS => Err(mismatch()),
+                None => Err(refuse(STATUS_INVALID_INFO_CLASS)),
+            },
+        }
+    }
+}
+
+/// What a set operation changes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SetOp {
+    /// The basic (and, from the extended structure, the rest) limits.
+    Limits { basic: [u8; 64], tail: Option<[u8; 80]> },
+    Ui(u32),
+    EndOfJob(u32),
+    /// `JOBOBJECT_ASSOCIATE_COMPLETION_PORT`: key and port handle.
+    Port { key: u64, port: u64 },
+    /// A class that is accepted and has no effect here.
+    Accepted,
+}
+
+/// The number of bytes `NtSetInformationJobObject` reads for `class` and `len`
+/// (specs/windows/ntdll.dll/NtSetInformationJobObject.yaml: `lengths`, `class_lengths`), or
+/// the status of a class or length it refuses.
+pub fn set_length(class: u32, len: usize) -> Result<usize> {
+    let fits = |lens: &[usize]| if lens.contains(&len) { Ok(len) } else { Err(STATUS_INFO_LENGTH_MISMATCH) };
+    match class {
+        0 => Err(STATUS_INVALID_INFO_CLASS),
+        BASIC_LIMIT => fits(&[64]),
+        UI_RESTRICTIONS | END_OF_JOB_TIME | 16 => fits(&[4]),
+        ASSOCIATE_PORT => fits(&[16]),
+        EXTENDED_LIMIT => fits(&[144, 152]),
+        12 => fits(&[48, 56]),
+        31 => fits(&[48, 96, 144]),
+        33 => fits(&[72]),
+        15 => fits(&[8]),
+        18 => fits(&[16]),
+        14 if len.is_multiple_of(16) => Ok(len),
+        14 => Err(STATUS_INFO_LENGTH_MISMATCH),
+        // The query-only classes: the length of their structure, then no set.
+        BASIC_ACCOUNTING | PROCESS_ID_LIST | BASIC_AND_IO | 10 | 34 => {
+            let own = match class {
+                BASIC_ACCOUNTING => 48,
+                PROCESS_ID_LIST => 16,
+                BASIC_AND_IO => 96,
+                10 => 4,
+                _ => 104,
+            };
+            Err(if len == own { STATUS_INVALID_INFO_CLASS } else { STATUS_INFO_LENGTH_MISMATCH })
+        }
+        SECURITY_LIMIT => Err(if len == 40 { STATUS_NOT_SUPPORTED } else { STATUS_INFO_LENGTH_MISMATCH }),
+        _ => Err(STATUS_INFO_LENGTH_MISMATCH),
+    }
+}
+
+/// Check `data` (the bytes [`set_length`] asked for) and say what it changes.
+pub fn parse_set(class: u32, data: &[u8]) -> Result<SetOp> {
+    let u32_at = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().expect("4 bytes"));
+    let u64_at = |o: usize| u64::from_le_bytes(data[o..o + 8].try_into().expect("8 bytes"));
+    match class {
+        BASIC_LIMIT | EXTENDED_LIMIT => parse_limits(class == EXTENDED_LIMIT, data),
+        UI_RESTRICTIONS => {
+            let v = u32_at(0);
+            if v & !UI_LIMITS != 0 { Err(STATUS_INVALID_PARAMETER) } else { Ok(SetOp::Ui(v)) }
+        }
+        END_OF_JOB_TIME => {
+            let v = u32_at(0);
+            if v > 1 { Err(STATUS_INVALID_PARAMETER) } else { Ok(SetOp::EndOfJob(v)) }
+        }
+        ASSOCIATE_PORT => Ok(SetOp::Port { key: u64_at(0), port: u64_at(8) }),
+        // CPU and network rate control: the zero structure is refused.
+        15 | 18 if data.iter().all(|&b| b == 0) => Err(STATUS_INVALID_PARAMETER),
+        _ => Ok(SetOp::Accepted),
+    }
+}
+
+/// `JOBOBJECT_BASIC_LIMIT_INFORMATION` and `..._EXTENDED_...` checked and reduced to what
+/// is stored: only the fields their flags select (the others read back 0; a fresh job's
+/// scheduling class 5 stays when `SCHEDULING_CLASS` is not set).
+fn parse_limits(extended: bool, data: &[u8]) -> Result<SetOp> {
+    let u32_at = |o: usize| u32::from_le_bytes(data[o..o + 4].try_into().expect("4 bytes"));
+    let u64_at = |o: usize| u64::from_le_bytes(data[o..o + 8].try_into().expect("8 bytes"));
+    let flags = u32_at(16);
+    let valid = if extended {
+        EXTENDED_FLAGS | if flags & LIMIT_AFFINITY != 0 { LIMIT_SUBSET_AFFINITY } else { 0 }
+    } else {
+        BASIC_FLAGS
+    };
+    if flags & !valid != 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let (per_process, per_job) = (u64_at(0), u64_at(8));
+    let (min_ws, max_ws, active, affinity) = (u64_at(24), u64_at(32), u32_at(40), u64_at(48));
+    let (priority, scheduling) = (u32_at(56), u32_at(60));
+    if flags & LIMIT_PROCESS_TIME != 0 && per_process == 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    if flags & LIMIT_WORKINGSET != 0 {
+        let page = |v: u64| v.is_multiple_of(4096);
+        if max_ws == 0 || min_ws > max_ws || !page(min_ws) || !page(max_ws) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+    }
+    if flags & LIMIT_AFFINITY != 0 && (affinity == 0 || affinity >> 32 != 0) {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    if flags & LIMIT_PRIORITY_CLASS != 0 && priority > 6 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    if flags & LIMIT_SCHEDULING_CLASS != 0 && scheduling > 9 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let (process_memory, job_memory) = if extended { (u64_at(112), u64_at(120)) } else { (0, 0) };
+    if flags & LIMIT_PROCESS_MEMORY != 0 && process_memory == 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let mut basic = [0u8; 64];
+    let put64 = |b: &mut [u8], o: usize, v: u64| b[o..o + 8].copy_from_slice(&v.to_le_bytes());
+    let put32 = |b: &mut [u8], o: usize, v: u32| b[o..o + 4].copy_from_slice(&v.to_le_bytes());
+    if flags & LIMIT_PROCESS_TIME != 0 {
+        put64(&mut basic, 0, per_process);
+    }
+    if flags & LIMIT_JOB_TIME != 0 {
+        put64(&mut basic, 8, per_job);
+    }
+    put32(&mut basic, 16, flags & !LIMIT_PRESERVE_JOB_TIME);
+    if flags & LIMIT_WORKINGSET != 0 {
+        put64(&mut basic, 24, min_ws);
+        put64(&mut basic, 32, max_ws);
+    }
+    if flags & LIMIT_ACTIVE_PROCESS != 0 {
+        put32(&mut basic, 40, active);
+    }
+    if flags & LIMIT_AFFINITY != 0 {
+        put64(&mut basic, 48, affinity);
+    }
+    if flags & LIMIT_PRIORITY_CLASS != 0 {
+        put32(&mut basic, 56, priority);
+    }
+    put32(&mut basic, 60, if flags & LIMIT_SCHEDULING_CLASS != 0 { scheduling } else { DEFAULT_SCHEDULING_CLASS });
+    let tail = extended.then(|| {
+        let mut t = [0u8; 80];
+        if flags & LIMIT_PROCESS_MEMORY != 0 {
+            put64(&mut t, 48, process_memory);
+        }
+        if flags & LIMIT_JOB_MEMORY != 0 {
+            put64(&mut t, 56, job_memory);
+        }
+        t
+    });
+    Ok(SetOp::Limits { basic, tail })
 }
 
 /// The machine's jobs (in [`crate::NtSystem`]).
@@ -91,28 +410,29 @@ pub struct Jobs {
     pub kills: Vec<(ProcessId, NtStatus)>,
     /// Port objects whose reference a deleted job held.
     released: Vec<ObjectId>,
+    /// Processes whose first thread has not run yet (created suspended and
+    /// not resumed): their end posts no exit message
+    /// (specs/windows/ntdll.dll/NtSetInformationJobObject.yaml: `completion_port`).
+    unstarted: BTreeSet<ProcessId>,
 }
 
 impl Jobs {
     pub fn create(&mut self, cookie: u64, object: ObjectId) {
-        self.jobs.insert(
-            cookie,
-            Job {
-                object,
-                active: BTreeSet::new(),
-                total: 0,
-                terminated: 0,
-                basic: [0; 64],
-                extended_tail: [0; 80],
-                ui: 0,
-                end_of_job: 0,
-                port: None,
-            },
-        );
+        self.jobs.insert(cookie, Job::new(Some(object)));
     }
 
     pub fn job(&self, cookie: u64) -> Option<&Job> {
         self.jobs.get(&cookie)
+    }
+
+    /// Process `pid` was just made and its first thread has not run.
+    pub fn mark_unstarted(&mut self, pid: ProcessId) {
+        self.unstarted.insert(pid);
+    }
+
+    /// The first thread of `pid` started.
+    pub fn started(&mut self, pid: ProcessId) {
+        self.unstarted.remove(&pid);
     }
 
     /// The jobs `pid` is in (empty if none).
@@ -135,6 +455,14 @@ impl Jobs {
 
     /// Put `pid` into `job` (`NtAssignProcessToJobObject`, and the join of a
     /// new process). A job that is full refuses and says so on its port.
+    ///
+    /// Jobs nest: a process that is in no job joins `job` and the jobs above
+    /// it; one that is in jobs joins `job` and the jobs between its
+    /// innermost one and `job` when `job` is below that one, or puts `job`
+    /// below its innermost one when `job` is empty and has no parent; any
+    /// other job refuses it with `STATUS_ACCESS_DENIED`. A job the process is
+    /// already in (or an outer one) changes nothing
+    /// (specs/windows/ntdll.dll/NtAssignProcessToJobObject.yaml: `hierarchy`, `conflicts`).
     pub fn assign(
         &mut self,
         io: &mut crate::io::IoState,
@@ -142,22 +470,80 @@ impl Jobs {
         job: u64,
         pid: ProcessId,
     ) -> Result<()> {
-        let j = self.jobs.get_mut(&job).ok_or(STATUS_INVALID_HANDLE)?;
-        if j.active.contains(&pid) {
+        if !self.jobs.contains_key(&job) {
+            return Err(STATUS_INVALID_HANDLE);
+        }
+        let chain = self.jobs_of(pid).to_vec();
+        if chain.contains(&job) {
             return Ok(());
         }
-        if j.limit_flags() & LIMIT_ACTIVE_PROCESS != 0 && j.active.len() as u32 >= j.active_limit() {
-            self.post(io, om, job, MSG_ACTIVE_PROCESS_LIMIT, 0);
-            return Err(STATUS_QUOTA_EXCEEDED);
+        // The jobs the process joins, outermost first, and the parent `job` gets.
+        let mut nest = None;
+        let join = match chain.last() {
+            None => {
+                let mut up = self.ancestors(job);
+                up.reverse();
+                up.push(job);
+                up
+            }
+            Some(&inner) => match self.path_below(job, inner) {
+                Some(path) => path,
+                None => {
+                    let j = &self.jobs[&job];
+                    if j.parent.is_some() || j.total != 0 {
+                        return Err(STATUS_ACCESS_DENIED);
+                    }
+                    nest = Some(inner);
+                    alloc::vec![job]
+                }
+            },
+        };
+        // A full job on the way refuses and says so on its port.
+        for &c in &join {
+            let j = &self.jobs[&c];
+            if j.limit_flags() & LIMIT_ACTIVE_PROCESS != 0 && j.active.len() as u32 >= j.active_limit() {
+                self.post(io, om, c, MSG_ACTIVE_PROCESS_LIMIT, 0);
+                return Err(STATUS_QUOTA_EXCEEDED);
+            }
         }
-        j.active.insert(pid);
-        j.total += 1;
-        let list = self.member_of.entry(pid).or_default();
-        if !list.contains(&job) {
-            list.push(job);
+        if let Some(inner) = nest {
+            self.jobs.get_mut(&job).expect("checked").parent = Some(inner);
         }
-        self.post(io, om, job, MSG_NEW_PROCESS, u64::from(pid.0));
+        for &c in &join {
+            let j = self.jobs.get_mut(&c).expect("checked");
+            j.active.insert(pid);
+            j.total += 1;
+            self.member_of.entry(pid).or_default().push(c);
+        }
+        for &c in &join {
+            self.post(io, om, c, MSG_NEW_PROCESS, u64::from(pid.0));
+        }
         Ok(())
+    }
+
+    /// The jobs above `job`, nearest first.
+    fn ancestors(&self, job: u64) -> Vec<u64> {
+        let mut out = Vec::new();
+        let mut at = self.jobs.get(&job).and_then(|j| j.parent);
+        while let Some(p) = at {
+            if !self.jobs.contains_key(&p) || out.contains(&p) {
+                break;
+            }
+            out.push(p);
+            at = self.jobs[&p].parent;
+        }
+        out
+    }
+
+    /// The jobs from just below `above` down to `job` (outermost first), or
+    /// `None` when `job` is not below `above`.
+    fn path_below(&self, job: u64, above: u64) -> Option<Vec<u64>> {
+        let mut path = alloc::vec![job];
+        path.extend(self.ancestors(job));
+        let at = path.iter().position(|&j| j == above)?;
+        path.truncate(at);
+        path.reverse();
+        Some(path)
     }
 
     /// A process was created by `parent`: it joins the jobs of its creator,
@@ -207,6 +593,8 @@ impl Jobs {
         pid: ProcessId,
         status: NtStatus,
     ) {
+        // A process whose first thread never ran leaves without an exit message.
+        let ran = !self.unstarted.remove(&pid);
         for job in self.jobs_of(pid).to_vec() {
             let Some(j) = self.jobs.get_mut(&job) else { continue };
             if !j.active.remove(&pid) {
@@ -215,7 +603,9 @@ impl Jobs {
             let empty = j.active.is_empty();
             let abnormal = status.0 & 0xF000_0000 == 0xC000_0000;
             let message = if abnormal { MSG_ABNORMAL_EXIT_PROCESS } else { MSG_EXIT_PROCESS };
-            self.post(io, om, job, message, u64::from(pid.0));
+            if ran {
+                self.post(io, om, job, message, u64::from(pid.0));
+            }
             if empty {
                 self.post(io, om, job, MSG_ACTIVE_PROCESS_ZERO, 0);
             }
@@ -227,12 +617,16 @@ impl Jobs {
         self.member_of.remove(&pid);
     }
 
-    /// `NtTerminateJobObject`: every member still running is to end.
-    pub fn terminate(&mut self, job: u64, status: NtStatus) {
-        if let Some(j) = self.jobs.get_mut(&job) {
+    /// `NtTerminateJobObject`: every member still running is to end, and the
+    /// job becomes signalled (a wait on it ends; the sheet of `OpenJobObjectW`).
+    /// `TotalTerminatedProcesses` stays 0.
+    pub fn terminate(&mut self, om: &mut ObjectManager, job: u64, status: NtStatus) {
+        if let Some(j) = self.jobs.get(&job) {
             let members: Vec<ProcessId> = j.active.iter().copied().collect();
-            j.terminated += members.len() as u32;
             self.kills.extend(members.into_iter().map(|p| (p, status)));
+            if let Some(object) = j.object {
+                let _ = om.set_signaled(object, true);
+            }
         }
     }
 
@@ -259,6 +653,9 @@ impl Jobs {
 
 // ----- the services
 
+/// The specific access rights of a job object (`winnt.h`: `JOB_OBJECT_ALL_ACCESS`'s low bits).
+const JOB_SPECIFIC_RIGHTS: u32 = 0x3F;
+
 /// The job behind handle `h`, which must have `access`.
 fn job_of(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, h: u64, access: u32) -> Result<u64> {
     let obj = sys.objects.object_by_handle(caller, Handle(h), access, Some(ObjectType::Job))?;
@@ -266,17 +663,19 @@ fn job_of(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, h: u64, access
 }
 
 /// `NtCreateJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`: a name
-/// that is taken by a job opens it (`STATUS_OBJECT_NAME_EXISTS`).
+/// that is taken is `STATUS_OBJECT_NAME_COLLISION`, or with `OBJ_OPENIF` opens the
+/// job (`STATUS_OBJECT_NAME_EXISTS`). Specific rights a job does not have are
+/// dropped from the access asked for (granted 0 for 0x8000; the sheet's `access_masks`).
 pub fn create_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [out, access, attrs] = abi::args::<K, 3>(k, regs)?;
     let attrs = abi::read_attributes(k, attrs)?;
     let caller = k.caller();
     let created = k.with_state(|sys, _, b| {
         let cookie = sys.io.cookie();
-        let new = NewObject::Opaque { kind: ObjectType::Job, cookie, signaled: None, parse: false };
-        let mut oa = attrs.as_object_attributes();
-        oa.attributes |= OBJ_OPENIF;
-        let r = sys.objects.create_object(&caller, &oa, access as u32, new, &mut NoParse);
+        let new = NewObject::Opaque { kind: ObjectType::Job, cookie, signaled: Some(false), parse: false };
+        let oa = attrs.as_object_attributes();
+        let access = access as u32 & !(0xFFFF & !JOB_SPECIFIC_RIGHTS);
+        let r = sys.objects.create_object(&caller, &oa, access, new, &mut NoParse);
         if let Ok(c) = &r
             && sys.objects.cookie(c.object) == Some(cookie)
         {
@@ -292,6 +691,10 @@ pub fn create_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
 /// `NtOpenJobObject(JobHandle*, DesiredAccess, ObjectAttributes*)`.
 pub fn open_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [out, access, attrs] = abi::args::<K, 3>(k, regs)?;
+    // No `ObjectAttributes` at all: `STATUS_INVALID_PARAMETER`.
+    if attrs == 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
     let attrs = abi::read_attributes(k, attrs)?;
     let caller = k.caller();
     let h = k.with_state(|sys, _, _| {
@@ -333,7 +736,7 @@ pub fn terminate_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resul
     let caller = k.caller();
     k.with_state(|sys, _, _| -> Result<()> {
         let cookie = job_of(sys, &caller, job, JOB_OBJECT_TERMINATE)?;
-        sys.jobs.terminate(cookie, NtStatus(status as u32));
+        sys.jobs.terminate(&mut sys.objects, cookie, NtStatus(status as u32));
         Ok(())
     })?;
     Ok(STATUS_SUCCESS)
@@ -352,12 +755,9 @@ pub fn is_process_in_job<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
     Ok(NtStatus(if inside { 0x124 } else { 0x123 }))
 }
 
-/// The structure a query class returns, by class number: its exact size
-/// (`None`: variable). Classes in this table that are not answered fail
-/// with `STATUS_INFO_LENGTH_MISMATCH` as the spec sheet observed.
 /// The last class of `JOBOBJECTINFOCLASS` the query answers with a length
 /// error rather than a bad class.
-const MAX_CLASS: u32 = 36;
+const MAX_CLASS: u32 = 45;
 const BASIC_ACCOUNTING: u32 = 1;
 const BASIC_LIMIT: u32 = 2;
 const PROCESS_ID_LIST: u32 = 3;
@@ -371,129 +771,89 @@ const GROUP_INFORMATION: u32 = 11;
 const GROUP_INFORMATION_EX: u32 = 14;
 
 /// `NtQueryInformationJobObject(JobHandle, JobInformationClass,
-/// JobInformation, JobInformationLength, ReturnLength*)`.
+/// JobInformation, JobInformationLength, ReturnLength*)`. A `NULL` handle
+/// asks for the calling process's own job; a process that is in none gets
+/// the answers of a job nothing was set on.
 pub fn query_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, len, ret] = abi::args::<K, 5>(k, regs)?;
     let (class, len) = (class as u32, len as u32 as usize);
     let caller = k.caller();
-    let bytes = k.with_state(|sys, _, _| -> Result<Vec<u8>> {
-        let cookie = job_of(sys, &caller, h, JOB_OBJECT_QUERY)?;
-        if class == 0 || class > MAX_CLASS {
-            return Err(STATUS_INVALID_INFO_CLASS);
+    let answer = k.with_state(|sys, _, _| -> Result<core::result::Result<Reply, Refused>> {
+        if h == 0 {
+            return Ok(match sys.jobs.jobs_of(caller.process).last().and_then(|c| sys.jobs.job(*c)) {
+                Some(j) => j.query(class, len),
+                None => Job::new(None).query(class, len),
+            });
         }
+        let cookie = job_of(sys, &caller, h, JOB_OBJECT_QUERY)?;
         let j = sys.jobs.job(cookie).ok_or(STATUS_INVALID_HANDLE)?;
-        let exact = |n: usize| if len == n { Ok(()) } else { Err(STATUS_INFO_LENGTH_MISMATCH) };
-        Ok(match class {
-            BASIC_ACCOUNTING | BASIC_AND_IO => {
-                exact(if class == BASIC_ACCOUNTING { 48 } else { 96 })?;
-                let mut b = alloc::vec![0u8; len];
-                b[36..40].copy_from_slice(&j.total.to_le_bytes());
-                b[40..44].copy_from_slice(&(j.active.len() as u32).to_le_bytes());
-                b[44..48].copy_from_slice(&j.terminated.to_le_bytes());
-                b
-            }
-            BASIC_LIMIT => {
-                exact(64)?;
-                j.basic.to_vec()
-            }
-            EXTENDED_LIMIT => {
-                exact(144)?;
-                let mut b = j.basic.to_vec();
-                b.extend_from_slice(&j.extended_tail);
-                b
-            }
-            UI_RESTRICTIONS => {
-                exact(4)?;
-                j.ui.to_le_bytes().to_vec()
-            }
-            END_OF_JOB_TIME => {
-                exact(4)?;
-                j.end_of_job.to_le_bytes().to_vec()
-            }
-            PROCESS_ID_LIST => {
-                if len < 16 {
-                    return Err(STATUS_INFO_LENGTH_MISMATCH);
-                }
-                let room = (len - 8) / 8;
-                let ids: Vec<u64> = j.active.iter().take(room).map(|p| u64::from(p.0)).collect();
-                let mut b = (j.active.len() as u32).to_le_bytes().to_vec();
-                b.extend_from_slice(&(ids.len() as u32).to_le_bytes());
-                for id in ids {
-                    b.extend_from_slice(&id.to_le_bytes());
-                }
-                b
-            }
-            SECURITY_LIMIT => alloc::vec![0u8; len],
-            GROUP_INFORMATION => Vec::new(),
-            GROUP_INFORMATION_EX => alloc::vec![0u8; 16],
-            _ => return Err(STATUS_INFO_LENGTH_MISMATCH),
-        })
+        Ok(j.query(class, len))
     })?;
-    if !bytes.is_empty() {
-        abi::write(k, buf, &bytes)?;
+    match answer {
+        Err(refused) => {
+            if let Some(n) = refused.returned
+                && ret != 0
+            {
+                abi::write_u32(k, ret, n)?;
+            }
+            Err(refused.status)
+        }
+        Ok(reply) => {
+            if !reply.bytes.is_empty() {
+                abi::write(k, buf, &reply.bytes)?;
+            }
+            if ret != 0 {
+                abi::write_u32(k, ret, reply.returned)?;
+            }
+            Ok(reply.status)
+        }
     }
-    if ret != 0 {
-        abi::write_u32(k, ret, bytes.len() as u32)?;
-    }
-    Ok(STATUS_SUCCESS)
 }
 
 /// `NtSetInformationJobObject(JobHandle, JobInformationClass,
 /// JobInformation, JobInformationLength)`: the basic (2) and extended (9)
 /// limits, the UI restrictions (4), the end-of-job action (6) and the
-/// completion port (7, once).
+/// completion port (7, once); other classes are checked as the sheet
+/// observed and change nothing ([`set_length`], [`parse_set`]).
 pub fn set_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, len] = abi::args::<K, 4>(k, regs)?;
     let (class, len) = (class as u32, len as u32 as usize);
-    let size = match class {
-        BASIC_LIMIT => 64,
-        EXTENDED_LIMIT => 144,
-        UI_RESTRICTIONS | END_OF_JOB_TIME => 4,
-        ASSOCIATE_PORT => 16,
-        _ => 0,
-    };
     let caller = k.caller();
     // The rights come before the class (an unusable handle first).
     k.with_state(|sys, _, _| job_of(sys, &caller, h, JOB_OBJECT_SET_ATTRIBUTES).map(|_| ()))?;
-    if size == 0 {
-        return Err(STATUS_INVALID_PARAMETER);
-    }
-    if len != size {
-        return Err(STATUS_INFO_LENGTH_MISMATCH);
-    }
+    let size = set_length(class, len)?;
     let mut data = alloc::vec![0u8; size];
-    abi::read(k, buf, &mut data)?;
+    // A `NULL` buffer with a length is an access violation.
+    if size > 0 {
+        abi::read(k, buf, &mut data)?;
+    }
+    let op = parse_set(class, &data)?;
     k.with_state(|sys, _, b| -> Result<()> {
         let cookie = job_of(sys, &caller, h, JOB_OBJECT_SET_ATTRIBUTES)?;
-        let r = match class {
-            BASIC_LIMIT | EXTENDED_LIMIT => {
-                let flags = u32::from_le_bytes(data[16..20].try_into().expect("4 bytes"));
-                if flags & !VALID_LIMITS != 0 {
-                    return Err(STATUS_INVALID_PARAMETER);
-                }
+        let r = match op {
+            SetOp::Limits { basic, tail } => {
                 let j = sys.jobs.jobs.get_mut(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
-                j.basic.copy_from_slice(&data[..64]);
-                if class == EXTENDED_LIMIT {
-                    j.extended_tail.copy_from_slice(&data[64..]);
+                j.basic = basic;
+                if let Some(t) = tail {
+                    j.extended_tail = t;
                 }
                 Ok(())
             }
-            UI_RESTRICTIONS => {
-                sys.jobs.jobs.get_mut(&cookie).ok_or(STATUS_INVALID_HANDLE)?.ui =
-                    u32::from_le_bytes(data[0..4].try_into().expect("4 bytes"));
+            SetOp::Ui(v) => {
+                sys.jobs.jobs.get_mut(&cookie).ok_or(STATUS_INVALID_HANDLE)?.ui = v;
                 Ok(())
             }
-            END_OF_JOB_TIME => {
-                sys.jobs.jobs.get_mut(&cookie).ok_or(STATUS_INVALID_HANDLE)?.end_of_job =
-                    u32::from_le_bytes(data[0..4].try_into().expect("4 bytes"));
+            SetOp::EndOfJob(v) => {
+                sys.jobs.jobs.get_mut(&cookie).ok_or(STATUS_INVALID_HANDLE)?.end_of_job = v;
                 Ok(())
             }
-            _ => {
-                // JOBOBJECT_ASSOCIATE_COMPLETION_PORT: key, then port.
-                let key = u64::from_le_bytes(data[0..8].try_into().expect("8 bytes"));
-                let port = u64::from_le_bytes(data[8..16].try_into().expect("8 bytes"));
+            SetOp::Port { key, port } => {
+                // A second association is refused; a `NULL` port associates nothing.
                 if sys.jobs.job(cookie).is_some_and(|j| j.port.is_some()) {
                     return Err(STATUS_INVALID_PARAMETER);
+                }
+                if port == 0 {
+                    return Ok(());
                 }
                 let object = sys.objects.reference_by_handle(
                     &caller,
@@ -506,6 +866,7 @@ pub fn set_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) ->
                     Some(PortAssoc { object, cookie: pcookie, key });
                 Ok(())
             }
+            SetOp::Accepted => Ok(()),
         };
         sys.reap(b);
         r
@@ -518,4 +879,294 @@ pub fn set_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) ->
 /// `JOB_OBJECT_ASSIGN_PROCESS`.
 pub fn resolve_jobs(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, handles: &[u64]) -> Result<Vec<u64>> {
     handles.iter().map(|&h| job_of(sys, caller, h, JOB_OBJECT_ASSIGN_PROCESS)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use poly_ntobj::ThreadRef;
+
+    fn world() -> (Jobs, crate::io::IoState, ObjectManager) {
+        (Jobs::default(), crate::io::IoState::new(), ObjectManager::new())
+    }
+
+    fn new_job(jobs: &mut Jobs, om: &mut ObjectManager, cookie: u64) {
+        let new = NewObject::Opaque { kind: ObjectType::Job, cookie, signaled: Some(false), parse: false };
+        let object = om.new_object(new, ThreadRef(1)).expect("object");
+        jobs.create(cookie, object);
+    }
+
+    fn chain(jobs: &Jobs, pid: u32) -> Vec<u64> {
+        jobs.jobs_of(ProcessId(pid)).to_vec()
+    }
+
+    #[test]
+    fn a_process_assigned_to_empty_jobs_nests_them_below_its_innermost() {
+        let (mut jobs, mut io, mut om) = world();
+        for c in 1..=4 {
+            new_job(&mut jobs, &mut om, c);
+        }
+        let p = ProcessId(10);
+        assert_eq!(jobs.assign(&mut io, &mut om, 1, p), Ok(()));
+        // Again: nothing changes.
+        assert_eq!(jobs.assign(&mut io, &mut om, 1, p), Ok(()));
+        assert_eq!(jobs.job(1).unwrap().total, 1);
+        // The empty j2, then the empty and unrelated j3, go below the innermost job.
+        assert_eq!(jobs.assign(&mut io, &mut om, 2, p), Ok(()));
+        assert_eq!(jobs.assign(&mut io, &mut om, 3, p), Ok(()));
+        assert_eq!(chain(&jobs, 10), [1, 2, 3]);
+        // An outer job again: no change.
+        assert_eq!(jobs.assign(&mut io, &mut om, 1, p), Ok(()));
+        assert_eq!(chain(&jobs, 10), [1, 2, 3]);
+        // A new process assigned straight to the innermost job joins all of them.
+        let q = ProcessId(11);
+        assert_eq!(jobs.assign(&mut io, &mut om, 3, q), Ok(()));
+        assert_eq!(chain(&jobs, 11), [1, 2, 3]);
+        assert_eq!((jobs.job(1).unwrap().active.len(), jobs.job(3).unwrap().active.len()), (2, 2));
+        // A job with a member of its own refuses a process that is in other jobs, and the
+        // other way round.
+        let r = ProcessId(12);
+        assert_eq!(jobs.assign(&mut io, &mut om, 4, r), Ok(()));
+        assert_eq!(jobs.assign(&mut io, &mut om, 4, p), Err(STATUS_ACCESS_DENIED));
+        assert_eq!(chain(&jobs, 10), [1, 2, 3]);
+        assert_eq!(jobs.job(4).unwrap().active.len(), 1);
+        assert_eq!(jobs.assign(&mut io, &mut om, 1, r), Err(STATUS_ACCESS_DENIED));
+    }
+
+    #[test]
+    fn nested_accounting_counts_a_process_in_every_job_and_terminated_stays_zero() {
+        let (mut jobs, mut io, mut om) = world();
+        new_job(&mut jobs, &mut om, 1);
+        new_job(&mut jobs, &mut om, 2);
+        let (p_out, p_both, p_in) = (ProcessId(1), ProcessId(2), ProcessId(3));
+        jobs.assign(&mut io, &mut om, 1, p_out).unwrap();
+        jobs.assign(&mut io, &mut om, 1, p_both).unwrap();
+        jobs.assign(&mut io, &mut om, 2, p_both).unwrap();
+        jobs.assign(&mut io, &mut om, 2, p_in).unwrap();
+        assert_eq!((jobs.job(1).unwrap().total, jobs.job(1).unwrap().active.len()), (3, 3));
+        assert_eq!((jobs.job(2).unwrap().total, jobs.job(2).unwrap().active.len()), (2, 2));
+        jobs.terminate(&mut om, 2, NtStatus(0x31));
+        let killed: Vec<u32> = jobs.kills.iter().map(|(p, _)| p.0).collect();
+        assert_eq!(killed, [2, 3]);
+        for (pid, status) in core::mem::take(&mut jobs.kills) {
+            jobs.process_exited(&mut io, &mut om, pid, status);
+        }
+        assert_eq!((jobs.job(1).unwrap().total, jobs.job(1).unwrap().active.len()), (3, 1));
+        assert_eq!((jobs.job(2).unwrap().total, jobs.job(2).unwrap().active.len()), (2, 0));
+        assert_eq!((jobs.job(1).unwrap().terminated, jobs.job(2).unwrap().terminated), (0, 0));
+        // The job is signalled: a wait on it ends.
+        assert!(om.is_ready_for(jobs.job(2).unwrap().object.unwrap(), ThreadRef(1)));
+    }
+
+    #[test]
+    fn query_defaults_and_lengths() {
+        let j = Job::new(None);
+        // The basic and extended limits are zero except SchedulingClass 5 at offset 60.
+        let b = j.query(BASIC_LIMIT, 64).unwrap();
+        assert_eq!(b.returned, 64);
+        assert!(b.bytes[..60].iter().all(|&x| x == 0));
+        assert_eq!(&b.bytes[60..], 5u32.to_le_bytes());
+        assert_eq!(j.query(BASIC_LIMIT, 63).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(EXTENDED_LIMIT, 152).unwrap().bytes.len(), 152);
+        assert_eq!(j.query(EXTENDED_LIMIT, 145).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        // Lengths of the other classes, from the sheet.
+        for (class, len) in [(10, 4), (12, 48), (12, 56), (13, 80), (15, 8), (16, 4), (17, 8), (18, 16), (33, 72)] {
+            assert_eq!(j.query(class, len).unwrap().bytes, alloc::vec![0u8; len], "{class}");
+            assert_eq!(j.query(class, len + 1).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH, "{class}");
+        }
+        assert_eq!(j.query(SECURITY_LIMIT, 39).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(SECURITY_LIMIT, 300).unwrap().returned, 300);
+        // Class 7 and class 0 and the unknown classes.
+        assert_eq!(j.query(ASSOCIATE_PORT, 16).unwrap_err().status, STATUS_INVALID_INFO_CLASS);
+        assert_eq!(j.query(ASSOCIATE_PORT, 8).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(0, 64).unwrap_err().status, STATUS_INVALID_INFO_CLASS);
+        assert_eq!(j.query(4096, 4).unwrap_err().status, STATUS_INVALID_INFO_CLASS);
+        assert_eq!(j.query(19, 8).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(31, 144).unwrap_err().status, STATUS_NOT_IMPLEMENTED);
+    }
+
+    #[test]
+    fn query_group_information_odd_and_even_lengths() {
+        let j = Job::new(None);
+        // Class 11: even lengths from 2 give no bytes, odd ones are invalid, 0 and 1 mismatch.
+        assert_eq!(j.query(GROUP_INFORMATION, 0).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(GROUP_INFORMATION, 1).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        assert_eq!(j.query(GROUP_INFORMATION, 2).unwrap().returned, 0);
+        assert_eq!(j.query(GROUP_INFORMATION, 3).unwrap_err().status, STATUS_INVALID_PARAMETER);
+        assert_eq!(j.query(GROUP_INFORMATION, 1024).unwrap().returned, 0);
+        // Class 14: too small at 0 (16 returned), invalid between, 16 and 32 succeed, more mismatch.
+        let r = j.query(GROUP_INFORMATION_EX, 0).unwrap_err();
+        assert_eq!((r.status, r.returned), (STATUS_BUFFER_TOO_SMALL, Some(16)));
+        for len in (1..16).chain(17..32) {
+            assert_eq!(j.query(GROUP_INFORMATION_EX, len).unwrap_err().status, STATUS_INVALID_PARAMETER, "{len}");
+        }
+        assert_eq!(j.query(GROUP_INFORMATION_EX, 16).unwrap().returned, 16);
+        assert_eq!(j.query(GROUP_INFORMATION_EX, 32).unwrap().returned, 16);
+        assert_eq!(j.query(GROUP_INFORMATION_EX, 33).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+    }
+
+    #[test]
+    fn query_process_list_overflows_with_the_full_size() {
+        let mut j = Job::new(None);
+        j.active.insert(ProcessId(4));
+        j.active.insert(ProcessId(8));
+        for len in 0..16 {
+            assert_eq!(j.query(PROCESS_ID_LIST, len).unwrap_err().status, STATUS_INFO_LENGTH_MISMATCH);
+        }
+        for len in [16, 17] {
+            let r = j.query(PROCESS_ID_LIST, len).unwrap();
+            assert_eq!((r.status, r.returned, r.bytes.len()), (STATUS_BUFFER_OVERFLOW, 24, 16), "{len}");
+            assert_eq!(&r.bytes[..8], [2, 0, 0, 0, 1, 0, 0, 0]);
+        }
+        let r = j.query(PROCESS_ID_LIST, 24).unwrap();
+        assert_eq!((r.status, r.returned, r.bytes.len()), (STATUS_SUCCESS, 24, 24));
+        // An empty job returns the header.
+        let r = Job::new(None).query(PROCESS_ID_LIST, 64).unwrap();
+        assert_eq!((r.status, r.returned), (STATUS_SUCCESS, 8));
+    }
+
+    type Structure = [u8; 152];
+
+    fn structure(flags: u32, fill: &dyn Fn(&mut Structure)) -> Structure {
+        let mut d = [0u8; 152];
+        d[16..20].copy_from_slice(&flags.to_le_bytes());
+        fill(&mut d);
+        d
+    }
+
+    fn put32(d: &mut Structure, o: usize, v: u32) {
+        d[o..o + 4].copy_from_slice(&v.to_le_bytes());
+    }
+
+    fn put64(d: &mut Structure, o: usize, v: u64) {
+        d[o..o + 8].copy_from_slice(&v.to_le_bytes());
+    }
+
+    fn at32(b: &[u8], o: usize) -> u32 {
+        u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
+    }
+
+    fn basic_set(flags: u32, fill: &dyn Fn(&mut Structure)) -> Result<SetOp> {
+        parse_set(BASIC_LIMIT, &structure(flags, fill)[..64])
+    }
+
+    fn extended_set(flags: u32, fill: &dyn Fn(&mut Structure)) -> Result<SetOp> {
+        parse_set(EXTENDED_LIMIT, &structure(flags, fill)[..144])
+    }
+
+    #[test]
+    fn set_limits_store_only_what_the_flags_select() {
+        // Active limit 9 only: the priority and scheduling values of the structure are not kept.
+        let r = basic_set(0x8, &|d| {
+            put32(d, 40, 9);
+            put32(d, 56, 3);
+            put32(d, 60, 4);
+        });
+        let Ok(SetOp::Limits { basic: b, tail: None }) = r else { panic!("{r:?}") };
+        assert_eq!((at32(&b, 40), at32(&b, 56), at32(&b, 60)), (9, 0, 5));
+        // Flags 0xa8: active 3, priority 3, scheduling 4.
+        let r = basic_set(0xa8, &|d| {
+            put32(d, 40, 3);
+            put32(d, 56, 3);
+            put32(d, 60, 4);
+        });
+        let Ok(SetOp::Limits { basic: b, .. }) = r else { panic!("{r:?}") };
+        assert_eq!((at32(&b, 16), at32(&b, 40), at32(&b, 56), at32(&b, 60)), (0xa8, 3, 3, 4));
+        // The preserve bit is not stored.
+        let Ok(SetOp::Limits { basic: b, .. }) = basic_set(0x4 | 0x40, &|_| {}) else { panic!() };
+        assert_eq!(at32(&b, 16), 0x4);
+        // Memory values without their flags are accepted and not stored.
+        let Ok(SetOp::Limits { tail: Some(t), .. }) = extended_set(0, &|d| put64(d, 112, 5)) else { panic!() };
+        assert!(t.iter().all(|&x| x == 0));
+    }
+
+    #[test]
+    fn set_limits_refuse_values_the_kernel_refuses() {
+        let bad = Err(STATUS_INVALID_PARAMETER);
+        assert_eq!(basic_set(0x20, &|d| put32(d, 56, 7)), bad);
+        assert!(basic_set(0x20, &|d| put32(d, 56, 6)).is_ok());
+        assert_eq!(basic_set(0x80, &|d| put32(d, 60, 10)), bad);
+        assert!(basic_set(0x80, &|d| put32(d, 60, 9)).is_ok());
+        assert_eq!(basic_set(0x10, &|d| put64(d, 48, 0)), bad);
+        assert_eq!(basic_set(0x10, &|d| put64(d, 48, u64::MAX)), bad);
+        assert!(basic_set(0x10, &|d| put64(d, 48, 3)).is_ok());
+        assert_eq!(basic_set(0x2, &|_| {}), bad);
+        assert!(basic_set(0x2, &|d| put64(d, 0, u64::MAX)).is_ok());
+        let ws = |min: u64, max: u64| {
+            basic_set(0x1, &|d| {
+                put64(d, 24, min);
+                put64(d, 32, max);
+            })
+        };
+        assert_eq!(ws(1 << 21, 1 << 20), bad);
+        assert_eq!(ws(12345, 1 << 20), bad);
+        assert_eq!(ws(0, 0), bad);
+        assert!(ws(1 << 20, 1 << 20).is_ok());
+        assert!(ws(1 << 20, 2 << 20).is_ok());
+        // The basic structure refuses the extended flags and the unknown ones.
+        for flags in [0x800, 0x1000, 0x400, 0x2000, 0x100, 0x200, 0x4000, 0x8000, 0x10000, 0xFFFF_FFFF] {
+            assert_eq!(basic_set(flags, &|_| {}), bad, "{flags:#x}");
+        }
+        // The extended one takes them; memory limits need their value; 0x4000 needs 0x10.
+        for flags in [0x800, 0x1000, 0x400, 0x2000, 0x3c00] {
+            assert!(extended_set(flags, &|_| {}).is_ok(), "{flags:#x}");
+        }
+        assert_eq!(extended_set(0x100, &|_| {}), bad);
+        assert!(extended_set(0x100, &|d| put64(d, 112, 64 << 20)).is_ok());
+        assert_eq!(extended_set(0x8000, &|_| {}), bad);
+        assert_eq!(extended_set(0x4000, &|_| {}), bad);
+        assert!(extended_set(0x4000 | 0x10, &|d| put64(d, 48, 1)).is_ok());
+    }
+
+    #[test]
+    fn set_checks_class_lengths_and_small_values() {
+        // Lengths: only the structure's own, per class.
+        assert_eq!(set_length(BASIC_LIMIT, 64), Ok(64));
+        for len in [0, 4, 63, 65, 144] {
+            assert_eq!(set_length(BASIC_LIMIT, len), Err(STATUS_INFO_LENGTH_MISMATCH), "{len}");
+        }
+        assert_eq!(set_length(EXTENDED_LIMIT, 144), Ok(144));
+        assert_eq!(set_length(EXTENDED_LIMIT, 152), Ok(152));
+        assert_eq!(set_length(EXTENDED_LIMIT, 64), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(EXTENDED_LIMIT, 145), Err(STATUS_INFO_LENGTH_MISMATCH));
+        // Query-only classes, class 0, class 5.
+        assert_eq!(set_length(0, 4), Err(STATUS_INVALID_INFO_CLASS));
+        for (class, len) in [(1, 48), (3, 16), (8, 96), (10, 4), (34, 104)] {
+            assert_eq!(set_length(class, len), Err(STATUS_INVALID_INFO_CLASS), "{class}");
+            assert_eq!(set_length(class, len + 1), Err(STATUS_INFO_LENGTH_MISMATCH), "{class}");
+        }
+        assert_eq!(set_length(5, 40), Err(STATUS_NOT_SUPPORTED));
+        // Accepted ones.
+        assert_eq!(set_length(7, 16), Ok(16));
+        assert_eq!(set_length(7, 15), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(14, 0), Ok(0));
+        assert_eq!(set_length(14, 32), Ok(32));
+        assert_eq!(set_length(14, 8), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(parse_set(15, &[0; 8]), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(18, &[0; 16]), Err(STATUS_INVALID_PARAMETER));
+        // UI restrictions and the end-of-job action.
+        for v in [0u32, 1, 0x3f, 0xff, 0x100, 0x1ff] {
+            assert_eq!(parse_set(UI_RESTRICTIONS, &v.to_le_bytes()), Ok(SetOp::Ui(v)));
+        }
+        assert_eq!(parse_set(UI_RESTRICTIONS, &0x8000_0000u32.to_le_bytes()), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(END_OF_JOB_TIME, &1u32.to_le_bytes()), Ok(SetOp::EndOfJob(1)));
+        assert_eq!(parse_set(END_OF_JOB_TIME, &2u32.to_le_bytes()), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(END_OF_JOB_TIME, &3u32.to_le_bytes()), Err(STATUS_INVALID_PARAMETER));
+    }
+
+    #[test]
+    fn a_process_that_never_ran_leaves_no_exit_message() {
+        let (mut jobs, mut io, mut om) = world();
+        new_job(&mut jobs, &mut om, 1);
+        let p = ProcessId(9);
+        jobs.mark_unstarted(p);
+        jobs.assign(&mut io, &mut om, 1, p).unwrap();
+        jobs.process_exited(&mut io, &mut om, p, NtStatus(0x42));
+        assert!(jobs.job(1).unwrap().active.is_empty());
+        // `started` clears the mark.
+        let q = ProcessId(10);
+        jobs.mark_unstarted(q);
+        jobs.started(q);
+        assert!(!jobs.unstarted.contains(&q));
+    }
 }

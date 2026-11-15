@@ -628,10 +628,15 @@ impl IoState {
         let inst = self.np.instances.get(&end.instance).ok_or(STATUS_PIPE_BROKEN)?;
         let chan = if end.server { &inst.to_server } else { &inst.to_client };
         let has_data = !chan.entries.is_empty();
-        if end.server && inst.state == PipeState::Listening {
-            return Err(STATUS_INVALID_PIPE_STATE);
-        }
-        if let Some(s) = end_error(inst, &end, file, false, has_data) {
+        if end.server {
+            // The server end of an instance nobody is connected to (listening
+            // or disconnected) is an invalid state for a peek; one whose
+            // client has gone (closing) still answers, with state 4
+            // (specs/windows/ntdll.dll/NtFsControlFile.yaml, `peek_states`).
+            if matches!(inst.state, PipeState::Listening | PipeState::Disconnected) {
+                return Err(STATUS_INVALID_PIPE_STATE);
+            }
+        } else if let Some(s) = end_error(inst, &end, file, false, has_data) {
             return Err(s);
         }
         let available = chan.available();

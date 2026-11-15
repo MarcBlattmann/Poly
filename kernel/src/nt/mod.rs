@@ -1259,6 +1259,8 @@ fn start_params(
                 proc.object,
                 proc.threads.first().map(|t| t.object),
             );
+            // Its first thread has not run yet (job notifications, ADR 0169).
+            s.sys.jobs.mark_unstarted(pid);
             // Its creator's jobs and the ones it was made for (ADR 0169).
             if let Some(h) = handles {
                 s.sys.jobs.process_created(
@@ -1424,6 +1426,9 @@ pub(super) fn spawn_thread(
 /// Start a new NT process's first thread in ring 3 at `start`; if it
 /// cannot start, the process ends.
 pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, start: &Start) -> Result<(), NtStatus> {
+    // The job notifications count the first thread as run from here on (ADR 0169).
+    let pid = ProcessId(process.pid);
+    with(|s| s.sys.jobs.started(pid));
     match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, None) {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.

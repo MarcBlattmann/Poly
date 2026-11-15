@@ -125,16 +125,17 @@ impl Registration {
         }
     }
 
-    /// `WSAEventSelect` again on the same socket: a new mask and event. Only an event that is new
-    /// in the mask is evaluated afresh; what was consumed stays consumed.
+    /// `WSAEventSelect` again on the same socket: a new mask and event. Only `FD_READ` and
+    /// `FD_ACCEPT` that are new in the mask are evaluated afresh; what was consumed stays consumed
+    /// (`FD_WRITE` too, also when it was left out of the mask in between).
     pub fn reselect(&mut self, mask: u32, event: isize) {
         let new = mask & !self.mask;
         if new & FD_READ != 0 {
             self.armed_read = true;
         }
-        if new & FD_WRITE != 0 {
-            self.armed_write = true;
-        }
+        // FD_WRITE is not evaluated afresh: once it was reported it comes again only after a send
+        // hit WSAEWOULDBLOCK, whatever the masks in between (the sheet of WSAEventSelect, rule
+        // `reselect`). A socket that never reported it still does when it is first selected for it.
         if new & FD_ACCEPT != 0 {
             self.armed_accept = true;
         }
@@ -395,12 +396,25 @@ mod tests {
         r.reselect(FD_READ, 7);
         assert!(r.step(&data(2)));
         assert_eq!(r.take().0, FD_READ);
-        // FD_WRITE already reported: selecting it again does not report it again.
+        // FD_WRITE already reported: selecting it again does not report it again, also after masks
+        // without it; a send that blocked arms it.
         let mut r = Registration::new(FD_WRITE, 7, false, true);
         assert!(r.step(&poll(false, true)));
         r.take();
         r.reselect(FD_WRITE, 7);
         assert!(!r.step(&poll(false, true)));
+        r.reselect(FD_READ | FD_CLOSE, 7);
+        r.reselect(FD_CLOSE, 7);
+        r.reselect(FD_WRITE, 7);
+        assert!(!r.step(&poll(false, true)));
+        r.after_send_blocked();
+        assert!(r.step(&poll(false, true)));
+        // A socket that never reported FD_WRITE reports it when it is first selected for it.
+        let mut r = Registration::new(FD_READ, 7, false, true);
+        assert!(!r.step(&poll(false, true)));
+        r.reselect(FD_READ | FD_WRITE, 7);
+        assert!(r.step(&poll(false, true)));
+        assert_eq!(r.take().0, FD_WRITE);
     }
 
     #[test]
