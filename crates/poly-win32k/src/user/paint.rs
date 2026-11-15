@@ -234,7 +234,7 @@ pub fn invalidate<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>, e
         return true;
     };
     let rects: Option<Vec<Rect>> = rects.map(|r| r.iter().map(|&x| normalized(x)).collect());
-    redraw(env, i.hwnd, rects.as_deref(), RDW_INVALIDATE | if erase { RDW_ERASE } else { 0 });
+    redraw(env, i.hwnd, rects.as_deref(), RDW_USER | RDW_INVALIDATE | if erase { RDW_ERASE } else { 0 });
     true
 }
 
@@ -359,7 +359,7 @@ pub fn redraw_window<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>
     };
     let region_flags = flags & !(RDW_UPDATENOW | RDW_ERASENOW);
     if region_flags != 0 {
-        redraw(env, i.hwnd, rects, region_flags);
+        redraw(env, i.hwnd, rects, region_flags | RDW_USER);
     }
     // The children the immediate repaint reaches (RDW_UPDATENOW "paints the
     // parent, then its invalid children, unless RDW_NOCHILDREN").

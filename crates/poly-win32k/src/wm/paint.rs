@@ -26,6 +26,8 @@ pub const RDW_NOINTERNALPAINT: u32 = 0x0010;
 pub const RDW_NOERASE: u32 = 0x0020;
 pub const RDW_NOCHILDREN: u32 = 0x0040;
 pub const RDW_ALLCHILDREN: u32 = 0x0080;
+/// Poly's own bit: the call is the program's (`InvalidateRect`, `RedrawWindow`), not the system's.
+pub const RDW_USER: u32 = 0x4000_0000;
 pub const RDW_UPDATENOW: u32 = 0x0100;
 pub const RDW_ERASENOW: u32 = 0x0200;
 pub const RDW_FRAME: u32 = 0x0400;
@@ -120,7 +122,10 @@ impl Wm {
         let p = &mut w.paint;
         if flags & RDW_INVALIDATE != 0 {
             p.upd = p.upd.union(&area);
-            if flags & RDW_ERASE != 0 && (!area.is_empty() || minimized) && !(no_redirect && p.erased_once) {
+            if flags & RDW_ERASE != 0
+                && (!area.is_empty() || minimized)
+                && !(no_redirect && p.erased_once && flags & RDW_USER != 0)
+            {
                 p.erase = true;
             }
             if flags & RDW_FRAME != 0 {

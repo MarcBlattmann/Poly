@@ -111,6 +111,10 @@ pub fn thread_input<E: Env + ?Sized>(env: &E, tid: u32) -> Input {
 
 fn set<E: Env + ?Sized>(env: &E, active: u32, focus: u32, which: u8) {
     env.call(Request::SetInput { active, focus, capture: 0, which });
+    if which & SET_FOCUS != 0 {
+        // EVENT_OBJECT_FOCUS: the client object of the window that has the focus now (NULL: none).
+        env.win_event(crate::winevent::EVENT_OBJECT_FOCUS, focus, -4, 0);
+    }
 }
 
 /// The top-level window above `h` (itself if it is one).

@@ -17,9 +17,13 @@ pub const WINEVENT_INCONTEXT: u32 = 4;
 pub const EVENT_OBJECT_CREATE: u32 = 0x8000;
 pub const EVENT_OBJECT_DESTROY: u32 = 0x8001;
 pub const EVENT_OBJECT_SHOW: u32 = 0x8002;
+pub const EVENT_OBJECT_REORDER: u32 = 0x8004;
+pub const EVENT_OBJECT_FOCUS: u32 = 0x8005;
 pub const EVENT_OBJECT_HIDE: u32 = 0x8003;
 pub const EVENT_OBJECT_STATECHANGE: u32 = 0x800A;
+pub const EVENT_OBJECT_LOCATIONCHANGE: u32 = 0x800B;
 pub const EVENT_OBJECT_NAMECHANGE: u32 = 0x800C;
+pub const EVENT_OBJECT_PARENTCHANGE: u32 = 0x800F;
 
 // Errors (`winerror.h`).
 pub const ERROR_INVALID_HANDLE: u32 = 6;
@@ -129,7 +133,16 @@ impl Table {
 
     /// An event is raised for the thread `event_thread` of process `event_pid`: it is queued for
     /// every hook that wants it, the newest hook first.
-    pub fn raise(&mut self, event: u32, hwnd: u64, id_object: i32, id_child: i32, event_thread: u32, event_pid: u32, time: u32) {
+    pub fn raise(
+        &mut self,
+        event: u32,
+        hwnd: u64,
+        id_object: i32,
+        id_child: i32,
+        event_thread: u32,
+        event_pid: u32,
+        time: u32,
+    ) {
         let mut matched: Vec<Queued> = Vec::new();
         for h in self.hooks.iter().rev() {
             let wanted = event >= h.min

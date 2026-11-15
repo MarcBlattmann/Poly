@@ -740,6 +740,9 @@ struct Opts {
     destroying: bool,
     /// The call brings a minimized window back (a restore, a maximize).
     from_minimized: bool,
+    /// The thread's default IME window (and its UI window) the window owns are asked first and
+    /// told the z-order change before it (a minimize, a restore: swp_chrome_resize).
+    carry_ime: bool,
 }
 
 /// `SWP_NOCOPYBITS` (winuser.h).
@@ -1001,6 +1004,7 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     if interactive && was_active && st.focus != 0 {
         send(env, u64::from(st.focus), focus::WM_KILLFOCUS, 0, 0);
         env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: crate::wm::input::SET_FOCUS });
+        env.win_event(crate::winevent::EVENT_OBJECT_FOCUS, 0, -4, 0);
     }
     let extra = shown_bit(env, i);
     // The place it gets is what GetWindowPlacement reports as ptMinPosition
@@ -1059,7 +1063,17 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
             Reply::Bool { value: false }
         );
     let flags = if stays { flags | SWP_NOZORDER } else { flags };
-    swp(env, i.hwnd, after, x, y, w, h, flags, Opts { extra, activate, keep_z, ..Opts::default() });
+    swp(
+        env,
+        i.hwnd,
+        after,
+        x,
+        y,
+        w,
+        h,
+        flags,
+        Opts { extra, activate, keep_z, carry_ime: interactive, ..Opts::default() },
+    );
     if interactive && cmd == SW_MINIMIZE {
         // "Minimizes the specified window and activates the next top-level
         // window" (Learn), also when the minimized window was not the
@@ -1212,6 +1226,7 @@ fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
             activate: !no_activate && focus::input(env).active != i.hwnd,
             fit,
             from_minimized: i.minimized,
+            carry_ime: interactive,
             ..Opts::default()
         }
     };
@@ -1309,6 +1324,24 @@ fn swp<E: Env + ?Sized>(
         after
     };
     let mut wp = WindowPos { hwnd: h, insert_after: reported, x, y, cx: cx.max(0), cy: cy.max(0), flags };
+    let carried: Vec<u32> = if opts.carry_ime && i.style & WS_CHILD == 0 && flags & SWP_NOZORDER == 0 {
+        owned_chain(env, hwnd)
+            .into_iter()
+            .filter(|&o| is_class(env, u64::from(o), "IME") || is_class(env, u64::from(o), "MSCTFIME UI"))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for &o in &carried {
+        let after = report_after(env, o, HWND_TOP);
+        let mut ow = WindowPos {
+            hwnd: u64::from(o),
+            insert_after: after,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            ..WindowPos::default()
+        };
+        send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut ow));
+    }
     // Hiding a window that owns the thread's default IME window asks that one (and its UI window) too, first
     // (DestroyWindow.yaml `chrome_close`).
     if flags & SWP_HIDEWINDOW != 0 && i.style & WS_VISIBLE != 0 && i.style & WS_CHILD == 0 && !i.desktop {
@@ -1345,10 +1378,7 @@ fn swp<E: Env + ?Sized>(
     let apply_after = if wp.insert_after == reported { after } else { wp.insert_after };
     let zchanged = f & SWP_NOZORDER == 0
         && !opts.keep_z
-        && matches!(
-            env.call(Request::ZOrder { hwnd, after: apply_after, apply: false }),
-            Reply::Bool { value: true }
-        );
+        && matches!(env.call(Request::ZOrder { hwnd, after: apply_after, apply: false }), Reply::Bool { value: true });
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
     let was_active = top && focus::input(env).active == hwnd;
     if hide && f & SWP_NOACTIVATE == 0 && interactive && i.owner != 0 && was_active {
@@ -1490,6 +1520,9 @@ fn swp<E: Env + ?Sized>(
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
         env.call(Request::ZOrder { hwnd, after: apply_after, apply: true });
+        if zchanged && top {
+            env.win_event(crate::winevent::EVENT_OBJECT_REORDER, hwnd, 0, 0);
+        }
     }
     if show || hide {
         env.call(Request::SetState {
@@ -1537,8 +1570,21 @@ fn swp<E: Env + ?Sized>(
             paint::moved_paint(env, &now, cur, f & SWP_NOCOPYBITS != 0 && f & SWP_STATECHANGED == 0);
         }
     }
+    for &o in &carried {
+        let after = report_after(env, o, HWND_TOP);
+        let mut od = WindowPos {
+            hwnd: u64::from(o),
+            insert_after: after,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE,
+            ..WindowPos::default()
+        };
+        send(env, u64::from(o), WM_WINDOWPOSCHANGED, 0, ptr(&mut od));
+    }
     let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+    if (moved || sized) && vis_after {
+        env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, hwnd, 0, 0);
+    }
     if hide && vis_before && top {
         focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0, opts.destroying);
     } else if hide && vis_before && interactive {
@@ -1553,6 +1599,15 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
     };
+    // A visible window is hidden and shown again around the move (SetParent.yaml `messages`).
+    let visible_bit = i.style & WS_VISIBLE != 0 && screen(env).interactive;
+    if visible_bit {
+        if i.visible {
+            hide(env, &i);
+        } else {
+            send(env, hwnd, WM_SHOWWINDOW, 0, 0);
+        }
+    }
     let old = match env.call(Request::SetParent { hwnd: i.hwnd, parent }) {
         Reply::Handle { hwnd } => hwnd,
         Reply::Error { code } => {
@@ -1561,9 +1616,48 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
         }
         _ => return 0,
     };
-    let mut wp = WindowPos { hwnd, flags: SWP_NOSIZE | SWP_NOZORDER, ..WindowPos::default() };
+    let now = info(env, hwnd).unwrap_or(i.clone());
+    env.win_event(crate::winevent::EVENT_OBJECT_PARENTCHANGE, i.hwnd, 0, 0);
+    env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, i.hwnd, 0, 0);
+    let rel = now.window_rel;
+    let mut wp = WindowPos { hwnd, x: rel.left, y: rel.top, flags: SWP_NOSIZE | SWP_NOZORDER, ..WindowPos::default() };
     send(env, hwnd, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     send(env, hwnd, WM_CHILDACTIVATE, 0, 0);
+    if visible_bit {
+        let mut done = WindowPos {
+            hwnd,
+            x: rel.left,
+            y: rel.top,
+            cx: rel.width(),
+            cy: rel.height(),
+            flags: SWP_NOSIZE | SWP_NOZORDER | SWP_NOREDRAW | SWP_NOCLIENTSIZE,
+            ..WindowPos::default()
+        };
+        send(env, hwnd, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+        let parent_visible = info(env, u64::from(now.parent)).is_some_and(|p| p.visible || p.desktop);
+        if parent_visible {
+            // The bit may still be set (the window was invisible under its old parent): clear it so the show reports.
+            env.call(Request::SetState {
+                hwnd: i.hwnd,
+                visible: Some(false),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            });
+            show(env, &now, ShowKind::Command(SW_SHOW));
+        } else {
+            send(env, hwnd, WM_SHOWWINDOW, 1, 0);
+            env.call(Request::SetState {
+                hwnd: i.hwnd,
+                visible: Some(true),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            });
+        }
+    }
     u64::from(old)
 }
 
@@ -1649,6 +1743,8 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 // The window commands act as the matching ShowWindow command (IsZoomed.yaml `chrome`).
                 SC_MAXIMIZE => {
                     show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    // The window has no minimized position any more (GetWindowPlacement.yaml `chrome`).
+                    env.call(Request::SetMinPos { hwnd: hwnd as u32, x: -1, y: -1 });
                 }
                 SC_MINIMIZE => {
                     show_window(env, hwnd, SW_SHOWMINIMIZED);

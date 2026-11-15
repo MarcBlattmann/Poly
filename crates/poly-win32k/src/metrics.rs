@@ -431,7 +431,9 @@ pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
 /// child's is `AdjustWindowRectEx`'s.
 pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
     let mut i = if style & WS_CHILD == 0 {
-        let (style, ex) = had_styles(style, ex);
+        // A sizing border says the style was chosen: the implicit caption is not added to a window that
+        // had its caption taken away (SetWindowLongW.yaml `chrome`: WS_THICKFRAME alone is 7 pixels).
+        let (style, ex) = if style & WS_THICKFRAME != 0 { (style, ex) } else { had_styles(style, ex) };
         let s = hidden_frame(style, ex) + if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
         let mut top = s;
         if has_caption(style) {

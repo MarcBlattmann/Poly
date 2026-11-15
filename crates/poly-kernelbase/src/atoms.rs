@@ -18,6 +18,7 @@ pub const ERROR_FILE_NOT_FOUND: u32 = 2;
 pub const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 pub const ERROR_MORE_DATA: u32 = 234;
 
+#[derive(Debug)]
 struct Entry {
     atom: u16,
     name: Vec<u16>,
@@ -25,7 +26,7 @@ struct Entry {
 }
 
 /// One table.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Atoms {
     list: Vec<Entry>,
 }

@@ -207,9 +207,15 @@ pub fn new_slot(list: &[Top], new: &Top, barrier: Option<Barrier>) -> usize {
 /// [`TOPMOST`] bit already.
 pub fn helper_to_top(list: &[Top], helper: u32, barrier: Option<u32>) -> Vec<u32> {
     let Some(w) = find(list, helper) else { return handles(list) };
-    let mut order: Vec<u32> = list.iter().map(|t| t.hwnd).filter(|h| *h != helper).collect();
+    // What the helper owns (the text services' window) comes along above it.
+    let owned: Vec<u32> =
+        list.iter().filter(|t| t.hwnd != helper && owned_by(list, t, helper)).map(|t| t.hwnd).collect();
+    let mut order: Vec<u32> = list.iter().map(|t| t.hwnd).filter(|h| *h != helper && !owned.contains(h)).collect();
     let at = top_slot(list, &order, w.is(TOPMOST), barrier, None);
     order.insert(at, helper);
+    for (i, &o) in owned.iter().enumerate() {
+        order.insert(at + i, o);
+    }
     order
 }
 
@@ -228,9 +234,14 @@ pub fn helper_above_owner(list: &[Top], helper: u32, owner: u32) -> Vec<u32> {
     if hi < oi && hi >= start && hi < end {
         return order;
     }
-    let mut order: Vec<u32> = order.into_iter().filter(|&h| h != helper).collect();
+    let owned: Vec<u32> =
+        list.iter().filter(|t| t.hwnd != helper && owned_by(list, t, helper)).map(|t| t.hwnd).collect();
+    let mut order: Vec<u32> = order.into_iter().filter(|&h| h != helper && !owned.contains(&h)).collect();
     let oi = order.iter().position(|&h| h == owner).unwrap_or(0);
     order.insert(oi, helper);
+    for (i, &o) in owned.iter().enumerate() {
+        order.insert(oi + i, o);
+    }
     order
 }
 

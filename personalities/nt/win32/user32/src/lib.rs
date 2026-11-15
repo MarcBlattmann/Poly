@@ -729,12 +729,12 @@ pub extern "system" fn IsWindowUnicode(hwnd: H) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsIconic(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.minimized))
+    i32::from(info(hwnd).is_some_and(|i| i.style & metrics::WS_MINIMIZE != 0))
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.maximized))
+    i32::from(info(hwnd).is_some_and(|i| i.style & metrics::WS_MAXIMIZE != 0))
 }
 
 /// `GetShellWindow`: "the handle of the Shell's desktop window. If no Shell process is present,
@@ -940,7 +940,12 @@ fn set_long(hwnd: H, index: i32, size: u8, value: u64) -> u64 {
         };
         let mut done = u::StyleStruct { old, new: stored };
         u::send(&SYS, h, u::WM_STYLECHANGED, index as i64 as u64, &mut done as *mut _ as u64);
-        if index == GWL_STYLE && u::frame_style_changed(old, stored) {
+        // (A window without redirection bitmap, Chrome's, keeps its client rectangle until
+        // SetWindowPos(SWP_FRAMECHANGED): swl_chrome.)
+        if index == GWL_STYLE
+            && i.ex_style & metrics::WS_EX_NOREDIRECTIONBITMAP == 0
+            && u::frame_style_changed(old, stored)
+        {
             u::style_frame_changed(&SYS, h);
         }
         return u64::from(old);
