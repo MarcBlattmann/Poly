@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/LoadResource.yaml
+id: windows/api/kernel32.dll/LoadResource
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. The tests write a small generated PE32+ DLL image (no code, only a .rsrc section; lib/mkpe.py of the spec agent's kit builds the 2,048 bytes, and the test source carries them as a byte array) next to themselves and load it with LoadLibraryExW three ways: as a data file (0x2), as image resources (0x20) and as a normal image (0); every lookup gives the same lines in all three ways. Microsoft Learn: "LoadResource, LockResource, SizeofResource, FreeResource functions (libloaderapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives access to the bytes of a found resource: LoadResource returns a handle to its data, LockResource turns that handle into a pointer to the bytes, SizeofResource gives their size. 14 packages import all three (10 main executables). The data stays readable as long as the module is loaded.
+interface:
+  signature: "HGLOBAL LoadResource(HMODULE hModule, HRSRC hResInfo)"
+  returns: "a non-NULL handle for a handle of a resource found in this module; NULL with the last error otherwise. The handle is a pointer-sized value that LockResource accepts; it is not a real global memory handle"
+rules:
+  modes: "The three load modes give identical answers. A module handle is the one LoadLibraryExW returned: with LOAD_LIBRARY_AS_DATAFILE its low bit is\n        set (the handle is not an address of a mapped image), with LOAD_LIBRARY_AS_IMAGE_RESOURCE bit 1 is set and bit 0 clear, and a normal\n        image's handle is 64 KiB aligned. The resource functions must accept all three"
+  fixture: "The resources of the test image: RT_ICON #1 (8 bytes 01..08); RT_STRING blocks #1 (strings 1 \"Hello\", 2 empty, 3 \"World \" U+20AC U+00E9,\n        15 \"last\"), #2 (string 16 \"sixteen\") in the neutral language and block #7 (string 100 \"nur deutsch\") in de-DE (0x0407) only; RT_RCDATA\n        named \"ALPHA\" (1 byte), \"BETA\" (3), \"BLOB\" (20 bytes \"0123456789ABCDEFGHIJ\"), \"ZETA\" (2), numbered 100 (\"abc\"), 101 (0 bytes), and 7 in two\n        languages, en-US (0x0409, \"english text\") and de-DE (\"deutscher text!\"); RT_GROUP_ICON \"MAINICON\" and #2 (6 bytes each); RT_VERSION #1 in\n        en-US (16 bytes \"@ABCDEFGHIJKLMNO\"); a custom type \"TEXTFILE\" with the names #1 (14 bytes, two lines) and \"README\" (\"hello\"); a custom type\n        \"TEXTFILE2\" with the name #5 (70 bytes). All names and type names are stored in upper case, as resource compilers do"
+  load_lock_size: "after FindResourceW: LoadResource gives a handle, LockResource of it gives a pointer to the data (the 20 bytes of BLOB read back exactly, a sum over all bytes works, i.e. all of the data is mapped and readable), SizeofResource gives 20. Two LoadResource calls return the same handle and two LockResource calls the same pointer. The same for the other resources (3, 8, 16, 66 ... bytes)"
+  empty: "a resource of 0 bytes (RT_RCDATA #101): LoadResource gives a handle, LockResource a non-NULL pointer, SizeofResource 0, and the last error is not changed"
+  free: "FreeResource(handle) returns 0 (FALSE) with the last error unchanged and does nothing: the data can be locked and read again afterwards"
+  null_args: "LoadResource(module, NULL) and LoadResource(NULL, NULL): NULL with ERROR_INVALID_PARAMETER (87)"
+errors:
+  error_invalid_parameter: "87: a NULL resource handle given to LoadResource"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll (and user32.dll for LoadStringW). Each line is one call with its type and name written as #n for a number and "text" for a string, then -> found/NULL and the last error, or the size and the first bytes of the data (non-printable bytes as <xx>). The tests need a loader that can load a PE image that has no code and no imports with LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE and normally (a DLL without an entry point); a program of another kind (a console exe) is not needed for the lookups.
+not_covered: >
+  Writing to the data (it is read-only in the image modes), the data of a module after FreeLibrary (not touched), resource handles that are not from FindResource.

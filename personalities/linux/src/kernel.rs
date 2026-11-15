@@ -528,6 +528,16 @@ pub trait LinuxKernel {
         crate::sys::io::CHUNK
     }
 
+    /// The most bytes one read(2) of `fd` needs room for now:
+    /// [`io_piece`](Self::io_piece), or for a message device the message
+    /// that waits (`/dev/fuse`: a request; 0 when none does), so a server's
+    /// read does not take a buffer as large as the largest message while it
+    /// waits. A message that came while the read waited and does not fit
+    /// fails it with `EINVAL`; the read asks again.
+    fn read_piece(&mut self, fd: i32) -> usize {
+        self.io_piece(fd)
+    }
+
     /// Read up to `buf.len()` bytes from `fd`. Returns the bytes read; 0 at
     /// end of file. Errors: `EBADF`, `EISDIR`, `EAGAIN`, `EINVAL`, ...
     fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, Errno>;

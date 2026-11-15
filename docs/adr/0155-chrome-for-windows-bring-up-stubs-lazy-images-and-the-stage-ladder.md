@@ -432,7 +432,7 @@ builds `\\.\pipe` + that name for its next pipe instance, so it must be `\<pipe 
    (the root `\`, an anonymous pipe the empty name, the device itself `STATUS_INVALID_PARAMETER`),
    and `NtQueryObject(ObjectNameInformation)` of a file object is its device's name and its path
    there, with the sheet's rules for buffers that are too small (`objects::file_name_answer`).
-   A disk file's device is Poly's own (`\Device\PolyFs<N>`), not `\Device\HarddiskVolume<N>`.
+   A disk file's device was Poly's own (`\Device\PolyFs<N>`) then; since ADR 0185 it is `\Device\HarddiskVolume<N>`.
 2. **`BuildSecurityDescriptorW`** (`poly_security::buildsd`): its merge differs from
    `SetEntriesInAclW`'s (a new allowed entry goes behind the leading denied entries, or last when
    the old list is not in that order).
@@ -612,7 +612,7 @@ follow their sheets now). In particular, to be confirmed:
 * `SetProcessShutdownParameters`: `ERROR_INVALID_PARAMETER` for a level outside 0x100 to 0x3FF or
   a flag other than `SHUTDOWN_NORETRY`.
 * `K32GetMappedFileNameW`: `ERROR_FILE_INVALID` for an address in no image and for another
-  process; the device name is Poly's (`\Device\PolyFs<N>`); a name longer than the buffer is cut.
+  process; the device name is `\Device\HarddiskVolume<N>` (ADR 0185; `\Device\PolyFs<N>` before); a name longer than the buffer is cut.
 * `SHGetKnownFolderPath`: `E_INVALIDARG` for an unknown id, `E_FAIL` for a folder without a path,
   `HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)` when the folder's variable is not set; flags other
   than `KF_FLAG_CREATE` change nothing.
@@ -703,3 +703,153 @@ that `UnmapViewOfFile2(MEM_PRESERVE_PLACEHOLDER)` of a view that replaced no pla
 (`STATUS_NO_MEMORY`) and for a NULL handle pointer (`STATUS_INVALID_PARAMETER`); that
 `RtlGrowFunctionTable` ignores a count below the current one or above the maximum; which of two
 overlapping tables wins (Poly: the first registered).
+
+## Addendum: executables bigger than 4 MiB, and running out of memory (`nt-big-images`)
+
+The first survey of popular Windows programs (`windows-app-survey`) found that starting any
+executable over about 4 MiB panicked the kernel: `NtCreateUserProcess` read the whole file into
+one `Vec<u8>` (`IoState::read_all`), and the kernel heap hands out at most one 4 MiB buddy block.
+Notepad++, WinMerge, KeePassXC, WinSCP, Sumatra PDF, XnView MP, Audacity, Node.js and VS Code
+(8 to 238 MB) all died there, and a failed allocation is a panic, not a status.
+
+- **No executable is read whole.** `create_user_process` opens the image path, takes the file's
+  pages through `ImageSection::from_reader` (the lazy image of this ADR: the headers, then each
+  page when a view touches it, from the page cache) and hands the `ImageSection` to the kernel in
+  `ProcessCreate`. `exec::start_process_listed` and `start_child` take an `ImageSection`; the
+  byte-slice entry points (`start_process`, `start_process_from`) stay for small, kernel-made
+  images. The shell's `run` and the first program (`program::prepare`) build the image the same
+  way, instead of reading the file into a `Vec`. `IoState::read_all` is gone.
+- **Linux and Mach-O.** A Linux ELF was already loaded from its file's pages (`read_headers`
+  reads a page, then at most 64 KiB, with `try_reserve`); Mach-O is refused before any load.
+  Nothing changed there. The user-mode loader in `ntdll` reads a DLL into the process's own heap
+  (user memory, not the kernel's), so a DLL over 4 MiB loads (Chrome's 310 MB `chrome.dll` does);
+  it costs the file's size twice in that process and is not a kernel panic.
+- **Memory that runs out is a status.** Everything an image makes in proportion to its size now
+  goes through `try_filled` / `try_push` (`Vec::try_reserve_exact`): the page-protection table
+  and its scratch, the header read, the base-relocation block list (16 bytes per page of
+  relocations: a relocated image of about 1 GiB or more fails with `STATUS_NO_MEMORY` where it
+  used to panic), the eager copy of a small image, the section's page lists. The caller gets
+  `STATUS_NO_MEMORY` (`SpawnError::Image`); the process record is torn down as for any other
+  failed start.
+- **Tests.** Host: a counting file proves a 64 MiB image reads only its headers and one page per
+  page touched, `NtCreateUserProcess` starts a 24 MiB executable, a big non-image file is
+  `STATUS_INVALID_IMAGE_FORMAT`, `try_filled` reports `STATUS_NO_MEMORY`. Boot
+  (`nt::test_bigimage`): a generated 64 MiB executable (`poly_ldr::builder::append_section` pads
+  a small program with a data section that exists only as the file's length) starts and exits
+  with its status; an image whose relocation table needs more than one heap block fails with
+  `STATUS_NO_MEMORY` and the kernel goes on.
+
+## Addendum: stage 1 passes (`chrome-win-s12`, step 12)
+
+After step 11 every process of stage 1 lived, and about 12 s in the whole tree went quiet (the
+browser had just logged the start of its `--dump-dom` command). Found with Poly's own wait report,
+not with Chrome's code:
+
+1. **The wait report shows who holds what.** `poly.nt.waits` now lists, per blocked wait, the
+   processes and handle values that hold each object; per named-pipe instance the processes
+   holding each end, the unread bytes and messages and the reads waiting in each direction; the
+   completion ports that hold packets; the I/O requests waiting per process and the completions
+   not yet delivered; the win32k thread queues (posted messages, wake bits, the queue event's
+   state); and, with `poly.nt.trail`, each selected thread's last calls. The trail is kept per
+   thread (a busy thread no longer pushes a quiet one's calls out), `poly.nt.trail.skip=<names>`
+   leaves services out (`--trail-skip`), and `poly.nt.only` takes `a|b`. `ObjectManager::holders`
+   (diagnostics), `IoState::{np_debug_lines, port_debug_lines}`, `Wm::queue_debug_lines`.
+   A completion whose data or status block cannot be written into the requester is now logged.
+2. **`UnregisterWaitEx` signals its completion event** (Learn: "If the function succeeds, or if the
+   function fails with ERROR_IO_PENDING, the caller should always wait until the event is
+   signaled"). The browser's UI thread unregisters a wait it had registered on a child process
+   with an event it creates for the purpose, and waits for that event; Poly signalled the event
+   only when a callback was still running, so the UI thread waited forever (the report: thread 2
+   waits on an event only the browser holds; its trail: `NtCreateEvent`, `NtSetEvent` of the
+   wait's cancel event, `NtWaitForSingleObject` of the new event). Now the wait's thread signals
+   the event when it ends, and `UnregisterWaitEx` signals it itself when that thread had ended
+   already (a `WT_EXECUTEONLYONCE` wait that fired). `poly_kernelbase::waitreg::unregister`
+   (host test) and a `k32test` case.
+3. **Nine more delay-loaded DLLs** (the step 9 rule: the DLL must exist, its exports may fail).
+   With the UI thread free, the browser delay-loads `SETUPAPI.dll`, `pdh.dll` and `tbs.dll`, and
+   in some runs `ncrypt.dll` (`0xC06D007E` and a breakpoint without them). `setupapi`, `pdh`,
+   `tbs`, `cfgmgr32`, `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid` export every name
+   `chrome.dll` delay-loads from them and fail with the value each function's page or header
+   gives: `INVALID_HANDLE_VALUE`, `FALSE` or `NULL` with `ERROR_CALL_NOT_IMPLEMENTED` (`setupapi`,
+   the `wintrust` catalog functions, `wevtapi`, `HidD_*`), `PDH_NOT_IMPLEMENTED` (`pdh`),
+   `TBS_E_TPM_NOT_FOUND` (`tbs`: no TPM), `CR_CALL_NOT_IMPLEMENTED` (`cfgmgr32`),
+   `TRUST_E_PROVIDER_UNKNOWN` (`WinVerifyTrust`), `NTE_NOT_SUPPORTED` (`ncrypt`), `E_NOTIMPL`
+   (`propsys`), `HIDP_STATUS_NOT_IMPLEMENTED` (`HidP_*`). Coverage: `stub`. Still missing (none
+   reached): `bthprops.cpl`, `comdlg32`, `credui`, `cryptui`, `d3d11`, `d3d12`, `dcomp`, `dxgi`,
+   `esent`, `mf`, `mfreadwrite`, `mmdevapi`, `ndfapi`, `urlmon`, `winspool.drv`, `winusb`.
+4. **A satisfied wait is not a timeout.** The object manager retires a satisfied wait and queues
+   its wake; the waiting thread learns of it when the signaller drains the wakes after its call.
+   A waiter whose timeout (or APC) came in between cancelled a wait that no longer existed and
+   reported `STATUS_TIMEOUT` (or `STATUS_USER_APC`) although the object was taken (an auto-reset
+   event reset, a semaphore count, a mutant), and the late wake became the result of the thread's
+   next wait. Now the waiter takes a still-queued wake of its own wait first
+   (`ObjectManager::take_wake`, host test), and a recorded completion carries its wait's id so a
+   later wait never takes it.
+5. **Memory.** In the 4 GiB guest the kernel ran out of frames in about half of the stage 1 runs
+   once the browser got this far (about ten Chrome processes): "memory allocation of 1232 bytes
+   failed" (an exception's `CONTEXT`, the first allocation after the frames were gone; the kernel
+   heap takes its pages from the frame allocator). The stages now run with 8 GiB
+   (`chromewin::MEMORY`); why Poly needs that much more than Windows for the same processes is
+   open.
+6. **The summary reads the launcher's output whole.** The kernel's log lines land in the middle of
+   the launcher's console lines and the console wraps the SHA-256 line with a cursor move, so the
+   stage's digest was never found; `console_stream` cuts the kernel lines out first.
+
+**Stage 1 passes**: Chrome exits with 0 after about 50–70 s and prints the page's DOM, 440 bytes,
+SHA-256 `7b79f8b4…3807b`, the digest the spec recorded on Windows: 8 of the last 10 runs. The
+other two ended `0xffff7002`; with `poly.nt.exceptions` one of them showed a failed check (int3) on
+a browser thread at `chrome.dll+0xc62f809`, no text on the stack. `S1_REQUIRED` stays `false`
+until stage 1 passes every time.
+
+**Doc-derived, to be confirmed against Windows:** the failure values of the nine stub DLLs
+(`PDH_NOT_IMPLEMENTED`, `TBS_E_TPM_NOT_FOUND` with no TPM, `CR_CALL_NOT_IMPLEMENTED`,
+`TRUST_E_PROVIDER_UNKNOWN`, `NTE_NOT_SUPPORTED`, `HIDP_STATUS_NOT_IMPLEMENTED`), and that `UnregisterWaitEx` with an event signals it once the wait's
+thread is done even when it returns `TRUE`.
+
+## Addendum: stage 1 every time, in 4 GiB (`chrome-win-s13`, step 13)
+
+Step 12 left two problems: the kernel ran out of frames in the 4 GiB guest (so the stages ran
+with 8 GiB), and about one run in five failed: a browser thread broke with `int3` at
+`chrome.dll+0xc62f809` and Chrome ended with `0xffff7002`, or the launcher's 300 s ran out.
+
+1. **Memory: DLLs are image section views ([ADR 0188](0188-dlls-are-image-section-views-and-share-their-clean-pages.md)).**
+   A new report (`poly.nt.mem`, `chrome-win run --mem`) showed every Chrome process owning about
+   77,300 pages (302 MB, `chrome.dll`'s `SizeOfImage`) from its start: `ntdll`'s loader read each
+   DLL file whole and copied the image into private memory. DLLs are now mapped as `SEC_IMAGE`
+   views and relocated in place, and every view of the same image file shares the pages nobody
+   wrote. User pages went from 3.3 GiB (then the kernel panicked) to about 360 MiB; stage 1 takes
+   15-25 s instead of 50-70 s on a quiet machine. `chromewin::MEMORY` is 4 GiB again. A kernel
+   heap allocation that fails while an exception's `CONTEXT` is made now ends that process with
+   `STATUS_NO_MEMORY` instead of panicking the kernel.
+2. **The failures were one bug in Poly's `InterlockedPushEntrySList`.** With per-thread trails
+   carrying their time (and the counter values `NtQueryPerformanceCounter` returned), every
+   failing run showed a browser thread-pool worker that read `C:\poly-test\s1.html`
+   (`NtReadFile`) and then made no system call again. The wait report's new columns said why:
+   that thread used 100 % of a CPU in user mode, at `kernelbase.dll+0xdcfe` in every run (the
+   kernel records a thread's user RIP when an interrupt returns to it while the report is on).
+   That is Poly's own `InterlockedPushEntrySList`: it swapped the new low quadword into RBX by
+   hand around `LOCK CMPXCHG16B` but let the compiler choose the register for the `SETE` result;
+   the compiler chose BL, which the swap back overwrote, so the loop tested the caller's RBX. A
+   caller whose RBX ended in a zero byte looped for ever, and each pass linked its entry to itself.
+   Whether a call hung depended on what the caller had in RBX, hence one run in five. When the
+   worker spun long enough, another browser thread broke on a failed check (the `int3`, apparently
+   Chrome noticing the stuck work);
+   otherwise the launcher timed out. Now every operand is a fixed register other than RBX and the
+   flag is read after RBX is back; `k32test` calls push and pop with such an RBX (the old code
+   hangs it).
+3. **Diagnostics (off by default).** Trail lines end with ` @<µs>us` (and ` = <value>` for
+   `NtQueryPerformanceCounter`); at a breakpoint the other threads of the process show their calls
+   of the last 3 s; the wait report lists suspended threads (count, where they parked) and every
+   thread that used more than 100 ms of CPU with its user/system split and where it last was in
+   user mode (`module+offset`).
+
+With `poly.nt.waits` on, the kernel's lines can land inside the launcher's SHA-256 line and the
+summary misreads a correct digest; runs without that diagnostic are not affected.
+
+| Runs (4 GiB) | Tree | Passed | Failures |
+|---|---|---|---|
+| m1 | step 12 | 0/1 | kernel out of memory (3.3 GiB of user pages) |
+| m2, b1-b7 (71 runs) | + image views, diagnostics on | 53 | 11 failed checks (`int3`), 5 timeouts: each one examined (b2-b7) a browser thread spinning after reading the page, at `kernelbase.dll+0xdcfe` where sampled; 2 more printed the right DOM but `poly.nt.waits` garbled the digest line |
+| f1-f12 | + the `InterlockedPushEntrySList` fix, no diagnostics | **12/12** | none (11-39 s each) |
+
+**`S1_REQUIRED` is `true`**: the `chrome-win` boot test group now fails when stage 1 does not pass.

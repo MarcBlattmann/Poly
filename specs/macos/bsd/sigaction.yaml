@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sigaction.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sigaction.tests/macos.json.
+id: macos/syscall/bsd/sigaction
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 46,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 46, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. sigaction(signal,
+  new_action, old_action) sets and reads the action of a signal. The new
+  action is the kernel's struct __sigaction {handler (8), trampoline (8),
+  mask (4), flags (4)}, 24 bytes; the old action comes back as {handler
+  (8), mask (4), flags (4)}, 16 bytes; either pointer may be NULL. A
+  handler is called by the kernel through the trampoline: it receives
+  (handler, info style, signal, siginfo, ucontext) and must end with
+  sigreturn (BSD 184, ucontext, info style); the handler itself takes
+  (signal, siginfo, ucontext). A signal starts with the default action
+  (handler 0, mask 0, flags 0); SIG_IGN is 1; an action reads back with
+  the handler, mask and flags it was given (SA_SIGINFO 0x40 and SA_RESTART
+  2 read back as 0x42). Darwin signal numbers: SIGHUP 1, SIGINT 2, SIGQUIT
+  3, SIGKILL 9, SIGSEGV 11, SIGSYS 12, SIGPIPE 13, SIGALRM 14, SIGTERM 15,
+  SIGURG 16, SIGSTOP 17, SIGTSTP 18, SIGCONT 19, SIGCHLD 20, SIGWINCH 28,
+  SIGINFO 29, SIGUSR1 30, SIGUSR2 31. A signal that kill sends to the
+  process itself runs the handler before kill returns, once; the handler
+  gets the signal number and, with SA_SIGINFO, a siginfo with si_signo
+  (offset 0), si_code (offset 8, 0 for kill) and si_pid (offset 12, the
+  sender). The signal is blocked while its handler runs (the mask inside
+  is exactly that bit) and the mask is restored afterwards; SA_NODEFER
+  leaves it unblocked; the action's mask is blocked as well; SA_RESETHAND
+  (4) returns the action to SIG_DFL after one delivery. SIG_IGN discards
+  the signal. Default actions (a child sending itself the signal):
+  SIGTERM, SIGUSR1 and SIGHUP kill the process (wait status = the number);
+  SIGCHLD, SIGCONT, SIGURG and SIGWINCH are discarded.
+returns:
+  success: "0"
+errors:
+  uncatchable: "EINVAL (22): SIGKILL and SIGSTOP, for setting and for querying"
+  bad_signal: "EINVAL (22): signal 0, 32, -1"
+side_effects: "the action of the signal changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

@@ -71,6 +71,12 @@ use alloc::vec::Vec;
 /// `_NET_WM_MOVERESIZE` directions (EWMH).
 const MOVERESIZE_MOVE: u32 = 8;
 
+/// The user the desktop runs apps as (`poly-as-user`, ADR 0147): the window
+/// manager adds `localuser:poly` to the server's access list (ChangeHosts,
+/// Xsecurity(7)) so those apps may connect to the display, which the
+/// compositor's own (root) user owns.
+const APP_USER_ACCESS: &[u8] = b"localuser\0poly";
+
 /// How a window's `wl_surface` is named.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SurfaceRef {
@@ -370,6 +376,7 @@ impl Wm {
         };
         self.root = screen.root;
         self.screen = (screen.width, screen.height);
+        self.send(&Request::ChangeHosts { insert: true, family: 5, address: APP_USER_ACCESS });
         for (i, name) in Atoms::NAMES.iter().enumerate() {
             let seq = self.send(&Request::InternAtom { only_if_exists: false, name: name.as_bytes() });
             self.pending.insert(seq, Pending::Atom(i));

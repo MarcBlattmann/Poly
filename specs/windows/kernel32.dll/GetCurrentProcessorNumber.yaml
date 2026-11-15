@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetCurrentProcessorNumber.yaml
+id: windows/api/kernel32.dll/GetCurrentProcessorNumber
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "GetCurrentProcessorNumber function (processthreadsapi.h)", "GetCurrentProcessorNumberEx", "SetThreadAffinityMask", "GetProcessAffinityMask"; processthreadsapi.h and winbase.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the number of the processor the calling thread runs on at that moment. The confined renderers and the utility processes call it while they start. A thread pinned with SetThreadAffinityMask to one processor reads that processor's number every time, and GetCurrentProcessorNumberEx reports the same number (group 0). SetThreadAffinityMask with the mask 0 or with only processors the system does not have fails with error 87.
+interface:
+  signature: "DWORD GetCurrentProcessorNumber(void); void GetCurrentProcessorNumberEx(PPROCESSOR_NUMBER); DWORD_PTR SetThreadAffinityMask(HANDLE thread, DWORD_PTR mask)"
+chrome:
+  calls: "renderers and utility processes (8 calls in the confined run); SetThreadAffinityMask 16 calls in the same processes"
+rules:
+  range: "the number is one of the system's processors (bit set in the system affinity mask)"
+  pinned: "after SetThreadAffinityMask(current thread, 1 << n) for each of the first four processors of the process mask, 50 reads in a row give n and GetCurrentProcessorNumberEx gives group 0, number n"
+  affinity_errors: "SetThreadAffinityMask(thread, 0) returns 0 with error 87; so does a mask of only processors the system does not have; the whole process mask returns a nonzero previous mask"
+errors:
+  bad_mask: "ERROR_INVALID_PARAMETER (87) from SetThreadAffinityMask"
+side_effects: "SetThreadAffinityMask moves the thread"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Systems with more than one processor group, the processor number between context switches.

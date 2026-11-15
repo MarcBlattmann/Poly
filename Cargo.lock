@@ -429,6 +429,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-rtl",
  "poly-security",
  "poly-seh",
  "poly-vfs",
@@ -449,6 +450,7 @@ version = "0.0.1"
 dependencies = [
  "libc",
  "poly-elf",
+ "poly-macho",
  "poly-pe",
  "poly-personality-nt",
  "serde",
@@ -474,6 +476,7 @@ name = "poly-procfs"
 version = "0.0.1"
 dependencies = [
  "poly-vfs",
+ "poly-vm",
 ]
 
 [[package]]

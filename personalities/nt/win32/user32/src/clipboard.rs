@@ -11,7 +11,8 @@ use poly_win32k::clip::{self, CF_BITMAP, CF_DIB, CF_DIBV5, CF_OEMTEXT, CF_TEXT, 
 use poly_win32k::dib;
 use poly_win32k::proto::{Reply, Request};
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GlobalAlloc(flags: u32, bytes: usize) -> usize;
     fn GlobalFree(mem: usize) -> usize;
@@ -19,7 +20,8 @@ unsafe extern "system" {
     fn GlobalLock(mem: usize) -> *mut u8;
 }
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyGdiBitmapPixels(hbm: usize, out: *mut u8, cap: usize) -> u64;
     fn CreateDIBSection(

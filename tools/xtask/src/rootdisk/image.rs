@@ -12,12 +12,47 @@ fn have_mke2fs() -> bool {
     Command::new("mke2fs").arg("-V").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok()
 }
 
+/// Free room (MiB) the boot tests' images have: they write programs and
+/// Python's byte code.
+pub const DEFAULT_SPARE_MB: u64 = 160;
+
+/// The spare room a disk asked for (0: none asked, [`DEFAULT_SPARE_MB`]).
+static SPARE_MB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Make the images written from now on have `mb` MiB of free room, unless
+/// `POLY_ROOTDISK_SPARE_MB` says otherwise (`cargo xtask ... --disk-size=`,
+/// ADR 0184).
+pub fn set_spare_mb(mb: u64) {
+    SPARE_MB.store(mb, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A disk size as `--disk-size=` takes it: `small` ([`DEFAULT_SPARE_MB`]),
+/// or a number of megabytes with `M`, or gigabytes with `G` (`4G`).
+pub fn parse_spare(text: &str) -> Option<u64> {
+    if text == "small" {
+        return Some(DEFAULT_SPARE_MB);
+    }
+    let (digits, unit) = text.split_at(text.len().checked_sub(1)?);
+    let n: u64 = digits.parse().ok().filter(|n| *n > 0)?;
+    match unit {
+        "M" | "m" => Some(n),
+        "G" | "g" => n.checked_mul(1024),
+        _ => None,
+    }
+}
+
 /// The size of the image for `tree`: its contents with room to spare
 /// (the boot test writes programs and Python's byte code), whole MiB.
 pub(super) fn image_size(tree: &RootTree) -> (u64, u64) {
     let (bytes, entries) = tree.totals();
     let used = bytes + entries * 4096;
-    let size = (used + used / 4 + (160 << 20)).div_ceil(4 << 20) * (4 << 20);
+    // POLY_ROOTDISK_SPARE_MB: more room than the boot tests need (the app survey installs big apps).
+    let asked = SPARE_MB.load(std::sync::atomic::Ordering::Relaxed);
+    let spare = std::env::var("POLY_ROOTDISK_SPARE_MB")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(if asked > 0 { asked } else { DEFAULT_SPARE_MB });
+    let size = (used + used / 4 + (spare << 20)).div_ceil(4 << 20) * (4 << 20);
     let inodes = (entries * 2 + 16384).div_ceil(1024) * 1024;
     (size, inodes)
 }

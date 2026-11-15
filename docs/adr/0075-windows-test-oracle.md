@@ -180,7 +180,9 @@ catch any damage on the way. Considered and not chosen:
 
 `cargo xtask pipeline win poly` boots each executable as `/test-binary` of
 the test initramfs (ADR 0027) with `poly.qemu_exit poly.init=/test-binary
-poly.test.capture poly.test.stdout=/poly-test.out`. The kernel starts it
+poly.test.capture poly.test.stdout=/poly-test.out` (since ADR 0185 the
+program is `/nt/c/PolyTests/test-binary`, `C:\PolyTests\test-binary`, so it is on
+the system volume like the system DLLs). The kernel starts it
 through our `ntdll` (ADR 0071), which binds its imports; its image path is
 `Z:\test-binary` (ADR 0073), so its observation file is
 `\??\Z:\poly-test.out`, the initramfs's `/poly-test.out`, which the kernel

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gwp_chrome",
+      "exe_sha256": "ee336b0e4896b7a3a2a1fb972b820528535a59c5f700a8965a64489438ea0fe3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YnVpbHQ6IHNob3c9MSBmbGFncz0wIG1pbj11bnNldCBtYXg9dW5zZXQgbm9ybWFsPT13aW5kb3cgMSBzaXplIDY0MHg0MDAKc2hvd246IHNob3c9MSBmbGFncz0wIG1pbj11bnNldCBtYXg9dW5zZXQgbm9ybWFsPT13aW5kb3cgMSBzaXplIDY0MHg0MDAKbW92ZWQgYW5kIHJlc2l6ZWQ6IHNob3c9MSBmbGFncz0wIG1pbj11bnNldCBtYXg9dW5zZXQgbm9ybWFsPT13aW5kb3cgMSBzaXplIDUwMHgzNjAKbWluaW1pemVkOiBzaG93PTIgZmxhZ3M9MCBtaW49b2Zmc2NyZWVuIG1heD11bnNldCBub3JtYWw9PXdpbmRvdyAwIHNpemUgNTAweDM2MApyZXN0b3JlZDogc2hvdz0xIGZsYWdzPTAgbWluPW9mZnNjcmVlbiBtYXg9dW5zZXQgbm9ybWFsPT13aW5kb3cgMSBzaXplIDUwMHgzNjAKU2V0V2luZG93UGxhY2VtZW50KHRoZSBzYW1lIHBsYWNlbWVudCkgPSAxLCB0aGUgd2luZG93IHJlY3RhbmdsZSBpcyB1bmNoYW5nZWQ6IDEKbWF4aW1pemVkOiBzaG93PTMgZmxhZ3M9MiBtaW49dW5zZXQgbWF4PXVuc2V0IG5vcm1hbD09d2luZG93IDAgc2l6ZSA1MDB4MzYwCnJlc3RvcmVkIGZyb20gbWF4aW1pemVkOiBzaG93PTEgZmxhZ3M9MCBtaW49dW5zZXQgbWF4PXVuc2V0IG5vcm1hbD09d2luZG93IDEgc2l6ZSA1MDB4MzYwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: show=1 flags=0 min=unset max=unset normal==window 1 size 640x400\nshown: show=1 flags=0 min=unset max=unset normal==window 1 size 640x400\nmoved and resized: show=1 flags=0 min=unset max=unset normal==window 1 size 500x360\nminimized: show=2 flags=0 min=offscreen max=unset normal==window 0 size 500x360\nrestored: show=1 flags=0 min=offscreen max=unset normal==window 1 size 500x360\nSetWindowPlacement(the same placement) = 1, the window rectangle is unchanged: 1\nmaximized: show=3 flags=2 min=unset max=unset normal==window 0 size 500x360\nrestored from maximized: show=1 flags=0 min=unset max=unset normal==window 1 size 500x360\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1041
+    }
+  ]
+}

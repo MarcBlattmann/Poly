@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsasocketw_handle",
+      "exe_sha256": "a7570965c140d2d2c92fa66944040a2f0214f6c2fad9e11e28f54fe033b782d6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmxhZ3MgMDogaGFuZGxlIGluZm9ybWF0aW9uIGZsYWdzIDEgbXVsdGlwbGUgb2YgNCAxCk9WRVJMQVBQRUR8Tk9fSEFORExFX0lOSEVSSVQ6IGhhbmRsZSBpbmZvcm1hdGlvbiBmbGFncyAwIG11bHRpcGxlIG9mIDQgMQpDbG9zZUhhbmRsZShzb2NrZXQpIDEgZXJyb3IgMApjb3B5J3MgaGFuZGxlIGluZm9ybWF0aW9uIGZsYWdzIDAKdGhlIGNvcHkgc2VuZHMgYWZ0ZXIgdGhlIG9yaWdpbmFsIHdhcyBjbG9zZWQ6IDIKcGVlciByZWN2IGFnYWluIC0xL1dTQUVXT1VMREJMT0NLCnNlY29uZCBjbG9zZXNvY2tldCAtMS9XU0FFTk9UU09DSwpXU0FTb2NrZXRXKE9WRVJMQVBQRUQpOiBXU0FSZWN2IHdpdGggYW4gT1ZFUkxBUFBFRCBhbmQgbm8gZGF0YSAtMS9XU0FfSU9fUEVORElORwpzb2NrZXQoKTogV1NBUmVjdiB3aXRoIGFuIE9WRVJMQVBQRUQgYW5kIG5vIGRhdGEgLTEvV1NBX0lPX1BFTkRJTkcKV1NBU29ja2V0VyhmbGFncyAwKTogV1NBUmVjdiB3aXRoIGFuIE9WRVJMQVBQRUQgYW5kIGRhdGEgd2FpdGluZyAwIHJlY2VpdmVkIDMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "flags 0: handle information flags 1 multiple of 4 1\nOVERLAPPED|NO_HANDLE_INHERIT: handle information flags 0 multiple of 4 1\nCloseHandle(socket) 1 error 0\ncopy's handle information flags 0\nthe copy sends after the original was closed: 2\npeer recv again -1/WSAEWOULDBLOCK\nsecond closesocket -1/WSAENOTSOCK\nWSASocketW(OVERLAPPED): WSARecv with an OVERLAPPED and no data -1/WSA_IO_PENDING\nsocket(): WSARecv with an OVERLAPPED and no data -1/WSA_IO_PENDING\nWSASocketW(flags 0): WSARecv with an OVERLAPPED and data waiting 0 received 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 274
+    },
+    {
+      "name": "wsasocketw_matrix",
+      "exe_sha256": "4887bc5adc5420f517404dd45a6cbde0e5c5871d35b2650791fe807f97e24094",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWYgMiB0eXBlIDEgcHJvdG8gMDogbWFkZSwgU09fVFlQRSAxLCBnZXRzb2NrbmFtZSBvbiB0aGUgdW5ib3VuZCBzb2NrZXQgLTEvV1NBRUlOVkFMCmFmIDIgdHlwZSAyIHByb3RvIDA6IG1hZGUsIFNPX1RZUEUgMiwgZ2V0c29ja25hbWUgb24gdGhlIHVuYm91bmQgc29ja2V0IC0xL1dTQUVJTlZBTAphZiAyIHR5cGUgMCBwcm90byAwOiBtYWRlLCBTT19UWVBFIDEsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMiB0eXBlIDQgcHJvdG8gMDogcmVmdXNlZCBXU0FFU09DS1ROT1NVUFBPUlQKYWYgMiB0eXBlIDEgcHJvdG8gOTk6IHJlZnVzZWQgV1NBRVBST1RPTk9TVVBQT1JUCmFmIDIzIHR5cGUgMSBwcm90byA2OiBtYWRlLCBTT19UWVBFIDEsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMjMgdHlwZSAxIHByb3RvIDE3OiByZWZ1c2VkIFdTQUVQUk9UT05PU1VQUE9SVAphZiAwIHR5cGUgMSBwcm90byAwOiByZWZ1c2VkIFdTQUVJTlZBTAphZiAxIHR5cGUgMiBwcm90byAwOiByZWZ1c2VkIFdTQUVBRk5PU1VQUE9SVAphZiA2NTUzNSB0eXBlIDEgcHJvdG8gMDogcmVmdXNlZCBXU0FFQUZOT1NVUFBPUlQKdW5rbm93biBmbGFnIGJpdHM6IG1hZGUgMCBXU0FFUFJPVE9UWVBFCklQdjYgdWRwOiBkZWZhdWx0IElQVjZfVjZPTkxZIDAgdmFsdWUgMSBsZW4gMQpJUHY0IHNvY2tldCBjb25uZWN0IHRvIDo6MSAtMS9XU0FFQUZOT1NVUFBPUlQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "af 2 type 1 proto 0: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 2 proto 0: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 0 proto 0: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 4 proto 0: refused WSAESOCKTNOSUPPORT\naf 2 type 1 proto 99: refused WSAEPROTONOSUPPORT\naf 23 type 1 proto 6: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 23 type 1 proto 17: refused WSAEPROTONOSUPPORT\naf 0 type 1 proto 0: refused WSAEINVAL\naf 1 type 2 proto 0: refused WSAEAFNOSUPPORT\naf 65535 type 1 proto 0: refused WSAEAFNOSUPPORT\nunknown flag bits: made 0 WSAEPROTOTYPE\nIPv6 udp: default IPV6_V6ONLY 0 value 1 len 1\nIPv4 socket connect to ::1 -1/WSAEAFNOSUPPORT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "wsasocketw_matrix_b",
+      "exe_sha256": "ecfcc174aa2d1eb89fdba53056b69c82355ebcc89a68de48a83ae059e1412bae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWYgMiB0eXBlIDEgcHJvdG8gNjogbWFkZSwgU09fVFlQRSAxLCBnZXRzb2NrbmFtZSBvbiB0aGUgdW5ib3VuZCBzb2NrZXQgLTEvV1NBRUlOVkFMCmFmIDIgdHlwZSAyIHByb3RvIDE3OiBtYWRlLCBTT19UWVBFIDIsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMiB0eXBlIDAgcHJvdG8gNjogbWFkZSwgU09fVFlQRSAxLCBnZXRzb2NrbmFtZSBvbiB0aGUgdW5ib3VuZCBzb2NrZXQgLTEvV1NBRUlOVkFMCmFmIDIgdHlwZSA1IHByb3RvIDA6IHJlZnVzZWQgV1NBRVNPQ0tUTk9TVVBQT1JUCmFmIDIgdHlwZSAxIHByb3RvIDE6IHJlZnVzZWQgV1NBRVBST1RPTk9TVVBQT1JUCmFmIDIzIHR5cGUgMiBwcm90byAwOiBtYWRlLCBTT19UWVBFIDIsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMCB0eXBlIDEgcHJvdG8gNjogbWFkZSwgU09fVFlQRSAxLCBnZXRzb2NrbmFtZSBvbiB0aGUgdW5ib3VuZCBzb2NrZXQgLTEvV1NBRUlOVkFMCmFmIDAgdHlwZSAwIHByb3RvIDA6IHJlZnVzZWQgV1NBRUlOVkFMCmFmIDk5IHR5cGUgMSBwcm90byAwOiByZWZ1c2VkIFdTQUVBRk5PU1VQUE9SVApyYXcgc29ja2V0ICh0eXBlIDMsIHByb3RvIDI1NSk6IG1hZGUgb3IgcmVmdXNlZCB3aXRoIFdTQUVBQ0NFUyAxCmdyb3VwIDUgKG5vdCBhIGdyb3VwKTogbWFkZSAwIFdTQUVJTlZBTApkdWFsLXN0YWNrIGNvbm5lY3QgdG8gOjpmZmZmOjEyNy4wLjAuMSAwCklQdjQgc29ja2V0LCBJUHY2IGFkZHJlc3MsIGxlbmd0aCAxNiAtMS9XU0FFQUZOT1NVUFBPUlQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "af 2 type 1 proto 6: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 2 proto 17: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 0 proto 6: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 5 proto 0: refused WSAESOCKTNOSUPPORT\naf 2 type 1 proto 1: refused WSAEPROTONOSUPPORT\naf 23 type 2 proto 0: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 0 type 1 proto 6: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 0 type 0 proto 0: refused WSAEINVAL\naf 99 type 1 proto 0: refused WSAEAFNOSUPPORT\nraw socket (type 3, proto 255): made or refused with WSAEACCES 1\ngroup 5 (not a group): made 0 WSAEINVAL\ndual-stack connect to ::ffff:127.0.0.1 0\nIPv4 socket, IPv6 address, length 16 -1/WSAEAFNOSUPPORT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "wsasocketw_matrix_c",
+      "exe_sha256": "d1b425ec89b649345ecf543a6635b4132bb25917c2443c68195b732f1ca70390",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWYgMiB0eXBlIDEgcHJvdG8gMTc6IHJlZnVzZWQgV1NBRVBST1RPTk9TVVBQT1JUCmFmIDIgdHlwZSAyIHByb3RvIDY6IHJlZnVzZWQgV1NBRVBST1RPTk9TVVBQT1JUCmFmIDIgdHlwZSAwIHByb3RvIDE3OiBtYWRlLCBTT19UWVBFIDIsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMiB0eXBlIDk5IHByb3RvIDA6IHJlZnVzZWQgV1NBRVNPQ0tUTk9TVVBQT1JUCmFmIDIzIHR5cGUgMSBwcm90byAwOiBtYWRlLCBTT19UWVBFIDEsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMjMgdHlwZSAyIHByb3RvIDE3OiBtYWRlLCBTT19UWVBFIDIsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgMCB0eXBlIDIgcHJvdG8gMTc6IG1hZGUsIFNPX1RZUEUgMiwgZ2V0c29ja25hbWUgb24gdGhlIHVuYm91bmQgc29ja2V0IC0xL1dTQUVJTlZBTAphZiAxIHR5cGUgMSBwcm90byAwOiBtYWRlLCBTT19UWVBFIDEsIGdldHNvY2tuYW1lIG9uIHRoZSB1bmJvdW5kIHNvY2tldCAtMS9XU0FFSU5WQUwKYWYgLTEgdHlwZSAxIHByb3RvIDA6IHJlZnVzZWQgV1NBRUFGTk9TVVBQT1JUCmFmIC0xIHR5cGUgLTEgcHJvdG8gLTEgd2l0aCBhIE5VTEwgcHJvdG9jb2wgaW5mbzogcmVmdXNlZCBXU0FFU09DS1ROT1NVUFBPUlQKSVB2NiB0Y3A6IGRlZmF1bHQgSVBWNl9WNk9OTFkgMCB2YWx1ZSAxIGxlbiA0CnRoZSBJUHY0IGxpc3RlbmVyIGFjY2VwdGVkIGl0IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "af 2 type 1 proto 17: refused WSAEPROTONOSUPPORT\naf 2 type 2 proto 6: refused WSAEPROTONOSUPPORT\naf 2 type 0 proto 17: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 2 type 99 proto 0: refused WSAESOCKTNOSUPPORT\naf 23 type 1 proto 0: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf 23 type 2 proto 17: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 0 type 2 proto 17: made, SO_TYPE 2, getsockname on the unbound socket -1/WSAEINVAL\naf 1 type 1 proto 0: made, SO_TYPE 1, getsockname on the unbound socket -1/WSAEINVAL\naf -1 type 1 proto 0: refused WSAEAFNOSUPPORT\naf -1 type -1 proto -1 with a NULL protocol info: refused WSAESOCKTNOSUPPORT\nIPv6 tcp: default IPV6_V6ONLY 0 value 1 len 4\nthe IPv4 listener accepted it 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

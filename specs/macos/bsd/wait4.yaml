@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/wait4.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# wait4.tests/macos.json.
+id: macos/syscall/bsd/wait4
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 7,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 7, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. wait4(pid,
+  status_ptr, options, rusage_ptr) waits for a child (pid -1: any child)
+  and returns its pid, storing the wait status: for a normal exit the exit
+  code in bits 8..15 (exit 7 is 0x700, exit 255 0xff00); for a death by a
+  signal the signal number in the low 7 bits (SIGTERM 15, SIGKILL 9); for
+  a stopped child (only with WUNTRACED, 2) 0x7f in the low byte and the
+  stop signal in bits 8..15 (SIGSTOP: 0x117f). The status pointer may be
+  NULL. The child is reaped by the wait that reports its death, a second
+  wait for it is ECHILD. A stop is reported once; a child that was stopped
+  and is then continued is not reported again (WUNTRACED|WNOHANG: 0).
+  WNOHANG returns 0 while a child exists but has nothing to report. A
+  child stopped by SIGSTOP can still be killed. Option bits that the call
+  does not know are accepted (0x4000000 behaved as 0). An unwritable
+  status pointer (address 8) is EFAULT (14) and the child stays waitable
+  afterwards (the next wait4 succeeded).
+returns:
+  success: "the child's pid; *status filled"
+  nohang_nothing: "0 (WNOHANG, a child exists, nothing to report)"
+errors:
+  no_child: "ECHILD (10): no children, a pid that is not a child, WNOHANG with no children, a child already reaped"
+  bad_status: "EFAULT (14): status pointer at address 8"
+side_effects: "the reported child is removed (reaped)"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

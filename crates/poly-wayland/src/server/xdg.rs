@@ -70,9 +70,14 @@ pub(crate) struct Toplevel {
     pub decoration: Option<ObjectId>,
     /// A decoration configure is due with the next configure sequence.
     pub decoration_due: bool,
-    /// The client asked to draw its own frame (`set_mode(client_side)`,
-    /// ADR 0144): Poly draws none around it.
+    /// The client draws its own frame (ADR 0144, 0183): Poly draws none
+    /// around it. Decided from the signals below by
+    /// [`crate::frame_policy::decide`] ([`Server::refresh_frame`]).
     pub client_side: bool,
+    /// What the client asked through xdg-decoration.
+    pub ask: crate::frame_policy::Ask,
+    /// Its window geometry showed room for a shadow around it.
+    pub shadow: bool,
     /// `wm_capabilities` went out (once, before the first configure).
     pub capabilities_sent: bool,
 }
@@ -488,11 +493,12 @@ impl Server {
     }
 
     /// The area a maximized window's frame may fill, and its bounds inside
-    /// (all of it for a window that draws its own frame).
+    /// (all of it for a window that draws its own frame); never negative,
+    /// also on an output smaller than the frame ([`configure_size`]).
     fn work_area(&self, client_side: bool) -> (i32, i32) {
         let a = self.scene.work_area();
         let (x, y) = frame_insets(client_side);
-        (a.width - 2 * x, a.height - y - x)
+        configure_size((a.width - 2 * x, a.height - y - x))
     }
 
     /// `configure_bounds`, `wm_capabilities` (once), the decoration mode if
@@ -500,6 +506,7 @@ impl Server {
     pub(super) fn configure_toplevel(&mut self, c: ClientId, tl: ObjectId) {
         let active = self.active == Some((c, tl));
         let (ow, oh) = self.scene.logical_size();
+        self.refresh_frame(c, tl);
         let client_side = self.toplevel(c, tl).is_some_and(|t| t.client_side);
         let work = self.work_area(client_side);
         let Some(t) = self.toplevel(c, tl) else { return };
@@ -530,13 +537,14 @@ impl Server {
             // Tiled (ADR 0117): the bounds the frame leaves.
             tile = Some(outer);
             let (x, y) = frame_insets(client_side);
-            (outer.width - 2 * x, outer.height - y - x)
+            configure_size((outer.width - 2 * x, outer.height - y - x))
         } else if t.maximized || t.fullscreen || t.tile.is_some() {
             // Going back to floating: the size it had.
             t.floating.unwrap_or((0, 0))
         } else {
             t.resize_size.unwrap_or((0, 0))
         };
+        let size = configure_size(size);
         if t.resizing {
             states.push(xdg_toplevel::State::RESIZING.0);
         }
@@ -686,8 +694,16 @@ impl Server {
             self.scene.remove_window(w);
         }
         if let Some(t) = role.and_then(|r| self.toplevel(c, r)) {
-            let (decoration, xdg, surface) = (t.decoration, t.xdg, t.surface);
-            *t = Toplevel { xdg, surface, decoration, decoration_due: decoration.is_some(), ..Toplevel::default() };
+            let (decoration, xdg, surface, ask) = (t.decoration, t.xdg, t.surface, t.ask);
+            *t = Toplevel {
+                xdg,
+                surface,
+                decoration,
+                decoration_due: decoration.is_some(),
+                ask,
+                client_side: ask == crate::frame_policy::Ask::Client,
+                ..Toplevel::default()
+            };
         }
         if let Some(r) = role
             && self.active == Some((c, r))
@@ -719,6 +735,19 @@ impl Server {
         self.scene.set_geometry(win, geometry);
         let acked_all = self.xdg(c, xid).is_some_and(|x| x.sent.is_empty());
         let g = self.geometry(c, surface, xid);
+        // Content that came, or went, may have settled who draws the frame
+        // (ADR 0183).
+        self.frame_changed(c, role);
+        // A shadow around the window geometry is a client-drawn frame
+        // (ADR 0183); once seen it stays.
+        let buffer = self.surface(c, surface).and_then(|s| s.logical_size());
+        let shadow = buffer.is_some_and(|b| crate::frame_policy::draws_shadow(b, (g.x, g.y, g.width, g.height)));
+        if shadow
+            && let Some(t) = self.toplevel(c, role)
+            && !core::mem::replace(&mut t.shadow, true)
+        {
+            self.frame_changed(c, role);
+        }
         let pos = self.scene.window(win).map_or((0, 0), |w| w.position());
         let top = self.scene.reserved_top();
         // An interactive resize from the left or top keeps the opposite
@@ -985,6 +1014,14 @@ impl Server {
 /// 32-bit values in the host's byte order, as `array` arguments carry them.
 pub(super) fn u32_array(values: &[u32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_ne_bytes()).collect()
+}
+
+/// A size for `xdg_toplevel.configure` or `configure_bounds`: xdg-shell.xml
+/// gives 0 a meaning (the client decides; the bounds are unknown) and none to
+/// a negative value, so a size the frame or a small output would make
+/// negative is sent as 0.
+pub(super) fn configure_size((width, height): (i32, i32)) -> (i32, i32) {
+    (width.max(0), height.max(0))
 }
 
 /// How far a window's content sits inside its frame: left (and right and

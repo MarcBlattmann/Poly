@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gcbt_chrome",
+      "exe_sha256": "8a641e1553f43ffd1bb60da8a868dd1b29e7630cc8c880c1ba187c75105d8956",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zml2ZSBjYWxscyBlcXVhbCB0byB0aGUgZmlyc3Q6IDUKY2xhc3M6IGJsaW5rcwptYWluIGlzIHRoZSBmb3JlZ3JvdW5kIHdpbmRvdzogMQpmb2N1cyBpcyBvbiBtYWluCj09IG5vIGNhcmV0IHlldAogIG5vbmU6IHZhbHVlIGVxdWFsPTEgY2FyZXQgd2luZG93PW51bGwgcmVjdD0wLDAsMCwwCiAgICBHZXRDYXJldFBvcyA9IDEgYXQgMCwwICh3aW5kb3cgbWFpbikKPT0gQ3JlYXRlQ2FyZXQobWFpbiwgTlVMTCwgMiwgMTgpLCBTZXRDYXJldFBvcygzMCwgNDApLCBTaG93Q2FyZXQKICByZXN1bHRzIDEgMSAxCiAgc2hvd246IHZhbHVlIGVxdWFsPTEgY2FyZXQgd2luZG93PW1haW4gcmVjdD0zMCw0MCwzMiw1OAogICAgR2V0Q2FyZXRQb3MgPSAxIGF0IDMwLDQwICh3aW5kb3cgbWFpbikKPT0gSGlkZUNhcmV0CiAgcmVzdWx0IDEKICBoaWRkZW46IHZhbHVlIGVxdWFsPTEgY2FyZXQgd2luZG93PW1haW4gcmVjdD0zMCw0MCwzMiw1OAogICAgR2V0Q2FyZXRQb3MgPSAxIGF0IDMwLDQwICh3aW5kb3cgbWFpbikKPT0gU2hvd0NhcmV0LCBTZXRDYXJldFBvcygxMDAsIDYwKQogIG1vdmVkOiB2YWx1ZSBlcXVhbD0xIGNhcmV0IHdpbmRvdz1tYWluIHJlY3Q9MTAwLDYwLDEwMiw3OAogICAgR2V0Q2FyZXRQb3MgPSAxIGF0IDEwMCw2MCAod2luZG93IG1haW4pCj09IERlc3Ryb3lDYXJldAogIHJlc3VsdCAxCiAgZGVzdHJveWVkOiB2YWx1ZSBlcXVhbD0xIGNhcmV0IHdpbmRvdz1udWxsIHJlY3Q9MCwwLDAsMAogICAgR2V0Q2FyZXRQb3MgPSAxIGF0IDEwMCw2MCAod2luZG93IG1haW4pCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "five calls equal to the first: 5\nclass: blinks\nmain is the foreground window: 1\nfocus is on main\n== no caret yet\n  none: value equal=1 caret window=null rect=0,0,0,0\n    GetCaretPos = 1 at 0,0 (window main)\n== CreateCaret(main, NULL, 2, 18), SetCaretPos(30, 40), ShowCaret\n  results 1 1 1\n  shown: value equal=1 caret window=main rect=30,40,32,58\n    GetCaretPos = 1 at 30,40 (window main)\n== HideCaret\n  result 1\n  hidden: value equal=1 caret window=main rect=30,40,32,58\n    GetCaretPos = 1 at 30,40 (window main)\n== ShowCaret, SetCaretPos(100, 60)\n  moved: value equal=1 caret window=main rect=100,60,102,78\n    GetCaretPos = 1 at 100,60 (window main)\n== DestroyCaret\n  result 1\n  destroyed: value equal=1 caret window=null rect=0,0,0,0\n    GetCaretPos = 1 at 100,60 (window main)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 529
+    }
+  ]
+}

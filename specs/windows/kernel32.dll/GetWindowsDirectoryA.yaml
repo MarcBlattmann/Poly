@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetWindowsDirectoryA.yaml
+id: windows/api/kernel32.dll/GetWindowsDirectoryA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "GetWindowsDirectoryA function (sysinfoapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the path of the Windows directory (the one SystemRoot names).
+interface:
+  signature: "UINT GetWindowsDirectoryA(LPSTR lpBuffer, UINT uSize)"
+  returns: "the length of the path in bytes without the NUL when it fits; the size needed including the NUL when it does not; never 0 on Windows"
+rules:
+  fit: "the function copies the directory into the buffer and returns its length without the NUL when it fits (length < size); otherwise it\n        returns the length plus one (the size needed with the NUL), writes nothing, and leaves the last error alone. A size of 0 (with a\n        NULL buffer too) therefore asks for the size needed. The last error is not changed by any call. The path has a drive letter, a colon\n        and a backslash first, no trailing backslash, only ASCII characters, no forward slash."
+  value: "the path is the Windows directory: on the oracle `C:\\Windows` (10 bytes without the NUL). The tests check its shape (a drive letter, a colon and a backslash first; no trailing backslash; ends with '\\windows' in any letter case; only printable ASCII; length 10) because the drive and the exact letter case belong to the installation"
+  size_unit: "uSize and the result count bytes (bytes; the path is ASCII, so bytes and characters are the same)"
+  boundaries: "a size of 10 (bytes) is too small (the NUL does not fit): the result is 11 and nothing is written; a size of 11 fits and 11 bytes are written; sizes 0, 1 and 9 are too small as well; 260 fits"
+  twin: "the A and W functions give the same text and the same length"
+errors:
+  none: "the function does not fail for the buffer sizes tried; the last error is not changed"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll. Each line shows the result relative to the length of the path (`length`, `length+1`), the last error, and how many bytes/units were written to a buffer that was filled with 0xAA first.
+not_covered: >
+  Terminal-server per-user Windows directories, the Wow64 variants (GetSystemWow64Directory), a NULL buffer with a non-zero size (crashes).

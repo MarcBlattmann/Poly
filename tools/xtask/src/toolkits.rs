@@ -197,8 +197,14 @@ pub const INITTAB: &str = "\
 ";
 
 /// The launcher's desktop files: file name, name, command.
-const DESKTOP_FILES: [(&str, &str, &str); 6] = [
+const DESKTOP_FILES: [(&str, &str, &str); 7] = [
     ("poly-gtk3-hello.desktop", "GTK 3 Hello", "/usr/local/bin/gtk3-hello"),
+    // The same app with a header bar: GTK draws its own title bar (ADR 0183).
+    (
+        "poly-gtk3-header-bar.desktop",
+        "GTK 3 Header Bar",
+        "/usr/bin/env POLY_GTK_HEADER_BAR=1 /usr/local/bin/gtk3-hello",
+    ),
     ("poly-gtk4-hello.desktop", "GTK 4 Hello", "/usr/local/bin/gtk4-hello"),
     ("poly-qt-hello.desktop", "Qt Hello", "/usr/local/bin/qt-hello"),
     ("poly-gtk3-demo.desktop", "GTK 3 Demo", "/usr/bin/gtk3-demo"),
@@ -622,6 +628,18 @@ impl Machine {
         self.send_events(&[button_event(false)])
     }
 
+    /// Press at `from`, move to `to` in steps, release.
+    pub(crate) fn drag(&mut self, from: (i32, i32), to: (i32, i32)) -> Result {
+        self.send_events(&abs_events(from.0, from.1))?;
+        std::thread::sleep(Duration::from_millis(300));
+        self.send_events(&[button_event(true)])?;
+        for i in 1..=8 {
+            let (x, y) = (from.0 + (to.0 - from.0) * i / 8, from.1 + (to.1 - from.1) * i / 8);
+            self.send_events(&abs_events(x, y))?;
+        }
+        self.send_events(&[button_event(false)])
+    }
+
     /// A click of the right button at (`x`, `y`): the context menu.
     pub(crate) fn right_click(&mut self, x: i32, y: i32) -> Result {
         self.send_events(&abs_events(x, y))?;
@@ -644,9 +662,17 @@ impl Machine {
         Ok(())
     }
 
+    /// Press and release a key; `ctrl+o` style chords press the keys in
+    /// order and release them in reverse.
     pub(crate) fn key(&mut self, qcode: &str) -> Result {
-        self.send_events(&[key_event(qcode, true)])?;
-        self.send_events(&[key_event(qcode, false)])
+        let keys: Vec<&str> = qcode.split('+').collect();
+        for k in &keys {
+            self.send_events(&[key_event(k, true)])?;
+        }
+        for k in keys.iter().rev() {
+            self.send_events(&[key_event(k, false)])?;
+        }
+        Ok(())
     }
 
     pub(crate) fn type_text(&mut self, text: &str) -> Result {
@@ -792,7 +818,16 @@ pub fn command(args: &[String]) -> Result {
     let kernel = crate::build_kernel(release)?;
     let syms = Arc::new(Symbols::from_file(&kernel)?);
     let image = root().join("target").join(FILE_NAME);
-    if fresh || !image.exists() {
+    // GTK without any font computes a window about 1.4 million pixels tall
+    // and crashes ([`fonts_ready`]); with the server's frame at its very
+    // start (ADR 0183). A disk made before the fonts came has none: made
+    // again.
+    let fetched_now = crate::fonts::cached().is_none();
+    let fonts = fonts_ready();
+    if let Err(why) = &fonts {
+        eprintln!("==> note: the toolkits disk gets no fonts ({why}): GTK apps on it have none and crash");
+    }
+    if fresh || !image.exists() || (fetched_now && fonts.is_ok()) {
         make(FILE_NAME)?;
     }
     let initrd = write_initramfs()?.map_err(|why| format!("toolkits: {why}"))?;
@@ -846,7 +881,10 @@ pub fn command(args: &[String]) -> Result {
 /// GDK logged "Truncating shared memory file failed" and crashed (SIGSEGV;
 /// gtk4-hello: SIGTRAP). That was the `toolkits` failure on a PC whose
 /// checkout had never fetched the fonts, while CI, which fetches them,
-/// passed.
+/// passed. When the compositor offers its own frame (ADR 0183) GTK 3 takes
+/// that path at its start: on a disk without fonts 7 of 10 starts said
+/// "Native Windows taller than 65535 pixels" before their first configure
+/// and crashed; with the fonts none of 45 did.
 fn fonts_ready() -> std::result::Result<(), String> {
     if crate::fonts::cached().is_some() {
         return Ok(());
@@ -860,7 +898,7 @@ fn fonts_ready() -> std::result::Result<(), String> {
 fn runnable(app: &App, fonts: &std::result::Result<(), String>) -> bool {
     match fonts {
         Err(why) if app.needs_fonts => {
-            eprintln!("==> skipped: {}: GTK needs a font on the disk, and the fonts are not there: {why}", app.name);
+            eprintln!("==> skipped: {}: GTK needs a font on the disk, and the fonts are not there: {why}", app.id);
             false
         }
         _ => true,
@@ -869,6 +907,8 @@ fn runnable(app: &App, fonts: &std::result::Result<(), String>) -> bool {
 
 /// An app the boot test starts from the launcher.
 struct App {
+    /// What the test calls it (screenshots, messages).
+    id: &'static str,
     /// The program, and how its lines start.
     name: &'static str,
     /// What is typed into the launcher to find it.
@@ -884,11 +924,16 @@ struct App {
     key_line: &'static str,
     /// Whether it needs a font on the disk ([`fonts_ready`]).
     needs_fonts: bool,
+    /// Whether it draws its own title bar and Poly draws none (a GTK
+    /// window with a header bar does; plain GTK 3 and 4 windows and Qt ask
+    /// Poly for its frame): one title bar either way (ADR 0183).
+    own_frame: bool,
 }
 
 /// The apps (their colours are in their sources).
-const TEST_APPS: [App; 3] = [
+const TEST_APPS: [App; 4] = [
     App {
+        id: "gtk3-hello",
         name: "gtk3-hello",
         query: "3 hello",
         launcher_name: "GTK 3 Hello",
@@ -897,8 +942,22 @@ const TEST_APPS: [App; 3] = [
         after: [0xb0, 0x3a, 0x2a],
         key_line: "gtk3-hello: key a",
         needs_fonts: true,
+        own_frame: false,
     },
     App {
+        id: "gtk3-header-bar",
+        name: "gtk3-hello",
+        query: "header bar",
+        launcher_name: "GTK 3 Header Bar",
+        title: "Poly GTK 3",
+        before: [0x2a, 0x6f, 0xb0],
+        after: [0xb0, 0x3a, 0x2a],
+        key_line: "gtk3-hello: key a",
+        needs_fonts: true,
+        own_frame: true,
+    },
+    App {
+        id: "gtk4-hello",
         name: "gtk4-hello",
         query: "4 hello",
         launcher_name: "GTK 4 Hello",
@@ -907,8 +966,10 @@ const TEST_APPS: [App; 3] = [
         after: [0x8a, 0x2a, 0x7a],
         key_line: "gtk4-hello: key a",
         needs_fonts: true,
+        own_frame: false,
     },
     App {
+        id: "qt-hello",
         name: "qt-hello",
         query: "qt",
         launcher_name: "Qt Hello",
@@ -917,6 +978,7 @@ const TEST_APPS: [App; 3] = [
         after: [0x1a, 0x6a, 0x7a],
         key_line: "qt-hello: key 65 a",
         needs_fonts: false,
+        own_frame: false,
     },
 ];
 
@@ -966,6 +1028,14 @@ pub(crate) fn find_colour(
     (n > 0).then_some(((x0, y0, x1, y1), n))
 }
 
+/// The box `(x0, y0, x1, y1)` of the pixels of `colour` on the screen.
+fn colour_box(img: &screen::Image, colour: [u8; 3]) -> Result<(i32, i32, i32, i32)> {
+    let whole = (0, 0, SIZE.0 as i32, SIZE.1 as i32);
+    let ((x0, y0, x1, y1), _) =
+        find_colour(img, colour, 3, whole).ok_or_else(|| format!("no pixel of {colour:02x?} on the screen"))?;
+    Ok((x0 as i32, y0 as i32, x1 as i32, y1 as i32))
+}
+
 fn expect(what: &str, ok: bool) -> Result {
     if ok { Ok(()) } else { Err(what.to_string()) }
 }
@@ -986,25 +1056,29 @@ impl Machine {
         let place @ (x, y, w, h) = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
         self.seen(from, &format!("{}: drawn", app.name), wait)?;
         std::thread::sleep(Duration::from_secs(2));
-        let img = self.shot(app.name)?;
+        let img = self.shot(app.id)?;
         let ((x0, y0, x1, y1), n) = find_colour(&img, app.before, 3, place)
             .ok_or_else(|| format!("no pixel of the button's colour {:02x?} in the window at {place:?}", app.before))?;
         expect(
             &format!("the button fills most of the window ({n} pixels of {w}x{h})"),
             n as i64 * 3 >= i64::from(w) * i64::from(h),
         )?;
-        // Poly's title bar is above the window's content: right above the
-        // button, or above the title bar a GTK app draws itself (the
-        // reported place includes its shadows; Poly's frame goes around
-        // the window geometry).
-        let title = |p: [u8; 3]| near(p, TITLE_ACTIVE, 2) || near(p, TITLE_INACTIVE, 2);
-        let framed = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| title(img.pixel(x0 + 3, py)));
-        expect("Poly's title bar is above the window", framed && (x, y) <= (x0 as i32, y0 as i32))?;
+        // One title bar (ADR 0183): an app that draws its own gets none from
+        // Poly (the compositor says who draws the frame); the others have
+        // Poly's, right above the window's content.
+        let frame = self.seen(from, &format!("poly-compositor: window {:?} frame: ", app.title), wait)?;
+        let want = if app.own_frame { "own" } else { "poly" };
+        expect(&format!("{} draws the frame of its window ({frame:?}), not {want}", app.id), frame.trim() == want)?;
+        if !app.own_frame {
+            let title = |p: [u8; 3]| near(p, TITLE_ACTIVE, 2) || near(p, TITLE_INACTIVE, 2);
+            let framed = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| title(img.pixel(x0 + 3, py)));
+            expect("Poly's title bar is above the window", framed && (x, y) <= (x0 as i32, y0 as i32))?;
+        }
         let (cx, cy) = (((x0 + x1) / 2) as i32, ((y0 + y1) / 2) as i32);
         self.click(cx, cy)?;
         self.s.expect(&format!("{}: clicked", app.name))?;
         std::thread::sleep(Duration::from_millis(2500));
-        let img = self.shot(&format!("{}-clicked", app.name))?;
+        let img = self.shot(&format!("{}-clicked", app.id))?;
         // Most of the button has the other colour now (the label and the
         // cursor are in the middle of it).
         let button = (x0 as i32, y0 as i32, (x1 - x0 + 1) as i32, (y1 - y0 + 1) as i32);
@@ -1013,14 +1087,65 @@ impl Machine {
         expect(&format!("the click recoloured the button ({now} of {n} pixels; {corner:02x?})"), now * 4 >= n * 3)?;
         // Clicked into, the window is shown active (also one started after
         // another closed: ADR 0123).
-        let active = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| near(img.pixel(x0 + 3, py), TITLE_ACTIVE, 2));
-        expect("Poly's title bar shows the window active", active)?;
+        if !app.own_frame {
+            let active = (y0.saturating_sub(TITLE_SEARCH)..y0).any(|py| near(img.pixel(x0 + 3, py), TITLE_ACTIVE, 2));
+            expect("Poly's title bar shows the window active", active)?;
+        }
         self.key("a")?;
         self.s.expect(app.key_line)?;
-        self.key("q")?;
-        self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        if app.own_frame {
+            // Its own title bar does what Poly's does: move, maximize,
+            // restore, resize, close (ADR 0183).
+            let after = colour_box(&img, app.after)?;
+            self.check_own_frame(app, after)?;
+            self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        } else {
+            self.key("q")?;
+            self.s.expect(&format!("{}: closed, status 0", app.name))?;
+        }
         std::thread::sleep(Duration::from_millis(1500));
         Ok(())
+    }
+
+    /// An app that draws its own title bar, which sits 18 pixels above the
+    /// top of its content: dragging it moves the window, a double click
+    /// maximizes and restores, dragging the corner below the content resizes,
+    /// and its close button ends the app. `content` is the box of the
+    /// colour that fills its content, as it is now.
+    fn check_own_frame(&mut self, app: &App, content: (i32, i32, i32, i32)) -> Result<()> {
+        let name = app.id;
+        let (x0, y0, x1, _y1) = content;
+        let width = x1 - x0;
+        let close = |a: i32, b: i32, tolerance: i32| (a - b).abs() <= tolerance;
+        // Move.
+        let (cx, ty) = (x0 + width / 2, y0 - 18);
+        self.drag((cx, ty), (cx + 80, ty + 50))?;
+        std::thread::sleep(Duration::from_millis(1500));
+        let moved = colour_box(&self.shot(&format!("{name}-moved"))?, app.after)?;
+        expect(
+            &format!("{name}'s title bar moves the window by the drag ({x0},{y0} to {},{})", moved.0, moved.1),
+            // (The first step of a drag only starts it.)
+            close(moved.0, x0 + 80, 20) && close(moved.1, y0 + 50, 20),
+        )?;
+        // Maximize and restore by double clicks on the title bar.
+        self.double_click(moved.0 + width / 2, moved.1 - 18)?;
+        std::thread::sleep(Duration::from_secs(3));
+        let big = colour_box(&self.shot(&format!("{name}-maximized"))?, app.after)?;
+        expect(&format!("{name}'s double click maximizes it (content {big:?})"), big.2 - big.0 >= 1000)?;
+        self.double_click((big.0 + big.2) / 2, big.1 - 18)?;
+        std::thread::sleep(Duration::from_secs(3));
+        let back = colour_box(&self.shot(&format!("{name}-restored"))?, app.after)?;
+        expect(&format!("{name}'s second double click restores it (content {back:?})"), back.2 - back.0 <= width + 20)?;
+        // Resize from the corner below its content (its resize handle).
+        self.drag((back.2 + 3, back.3 + 3), (back.2 + 63, back.3 + 43))?;
+        std::thread::sleep(Duration::from_secs(3));
+        let grown = colour_box(&self.shot(&format!("{name}-resized"))?, app.after)?;
+        expect(
+            &format!("{name} grows by dragging its corner ({back:?} to {grown:?})"),
+            grown.2 - grown.0 >= back.2 - back.0 + 40 && grown.3 - grown.1 >= back.3 - back.1 + 25,
+        )?;
+        // Close with its button.
+        self.click(grown.2 - 17, grown.1 - 18)
     }
 
     /// VLC without its interface, as user `poly` (it will not run as
@@ -1198,8 +1323,10 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     // POLY_TOOLKITS_ONLY=<name>,...: only these apps (`vlc` for VLC).
     let only = std::env::var("POLY_TOOLKITS_ONLY").ok().filter(|s| !s.is_empty());
     let wanted = |name: &str| only.as_ref().is_none_or(|o| o.split(',').any(|w| w.trim() == name));
-    let apps: Vec<&App> =
-        TEST_APPS.iter().filter(|a| contents.have.contains(a.name) && wanted(a.name) && runnable(a, &fonts)).collect();
+    let apps: Vec<&App> = TEST_APPS
+        .iter()
+        .filter(|a| contents.have.contains(a.name) && (wanted(a.id) || wanted(a.name)) && runnable(a, &fonts))
+        .collect();
     let vlc = ["cvlc", "media", "poly-runas"].iter().all(|n| contents.have.contains(n)) && wanted("vlc");
     if apps.is_empty() && !vlc {
         eprintln!("==> skipped: the toolkits boot test: no GTK, Qt or VLC on this host (the poly-dev image has them)");
@@ -1207,7 +1334,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     eprintln!(
         "==> boot test: {} on the desktop from the toolkits' root disk{}",
-        apps.iter().map(|a| a.name).collect::<Vec<_>>().join(", "),
+        apps.iter().map(|a| a.id).collect::<Vec<_>>().join(", "),
         if vlc { ", and VLC playing a video with sound" } else { "" }
     );
     let mut m = Machine::boot(kernel, syms, &image, &initrd, "test")?;
@@ -1216,10 +1343,10 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     m.s.expect(READY)?;
     let mut failed = Vec::new();
     for app in &apps {
-        eprintln!("==> {}", app.name);
+        eprintln!("==> {}", app.id);
         if let Err(e) = m.check_app(app) {
-            eprintln!("==> FAILED: {}: {e}", app.name);
-            failed.push(format!("{}: {e}", app.name));
+            eprintln!("==> FAILED: {}: {e}", app.id);
+            failed.push(format!("{}: {e}", app.id));
             break;
         }
     }
@@ -1287,6 +1414,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn only_the_header_bar_window_draws_its_own_title_bar() {
+        let own: Vec<&str> = TEST_APPS.iter().filter(|a| a.own_frame).map(|a| a.id).collect();
+        assert_eq!(own, ["gtk3-header-bar"], "plain GTK windows and Qt ask Poly for its frame (ADR 0183)");
+    }
+
+    #[test]
     fn steps_parse() {
         assert_eq!(Step::parse("run:ls -l /").unwrap(), Step::Run("ls -l /".into()));
         assert_eq!(Step::parse("click: 10, 20").unwrap(), Step::Click(10, 20));
@@ -1303,10 +1436,10 @@ mod tests {
     #[test]
     fn gtk_apps_need_fonts() {
         let none: std::result::Result<(), String> = Err("offline".into());
-        let ran: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &none)).map(|a| a.name).collect();
+        let ran: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &none)).map(|a| a.id).collect();
         assert_eq!(ran, ["qt-hello"]);
-        let all: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &Ok(()))).map(|a| a.name).collect();
-        assert_eq!(all, ["gtk3-hello", "gtk4-hello", "qt-hello"]);
+        let all: Vec<&str> = TEST_APPS.iter().filter(|a| runnable(a, &Ok(()))).map(|a| a.id).collect();
+        assert_eq!(all, ["gtk3-hello", "gtk3-header-bar", "gtk4-hello", "qt-hello"]);
     }
 
     #[test]

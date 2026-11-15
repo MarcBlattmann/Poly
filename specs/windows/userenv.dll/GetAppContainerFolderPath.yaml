@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/GetAppContainerFolderPath.yaml
+id: windows/api/userenv.dll/GetAppContainerFolderPath
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Gives the folder of an AppContainer profile for the SID's text form (a CoTaskMem string, freed with CoTaskMemFree): <profile directory>\AppData\Local\Packages\<name>\AC. Errors for a profile that does not exist, a text that is no SID and a SID that is no package SID.
+interface:
+  signature: "HRESULT GetAppContainerFolderPath(PCWSTR sid_text, PWSTR *path)"
+  result: "S_OK, 0x80070002, 0x80070539, 0x8007109A"
+rules:
+  path: "for a profile made by CreateAppContainerProfile: S_OK and a path that ends with \\AppData\\Local\\Packages\\<profile name>\\AC; the directory exists, and so does a folder Temp inside it; the same text gives the same path again; after DeleteAppContainerProfile: 0x80070002 and the directory is gone"
+  errors: "S-1-15-2 with 8 sub-authorities and no profile: 0x80070002; text that is no SID (\"not a sid\") or an empty text: 0x80070539 (ERROR_INVALID_SID); a valid SID that is not a package SID (Administrators, S-1-15-2-1, a capability SID, S-1-15-2 with 9 sub-authorities): 0x8007109A (ERROR_NOT_APPCONTAINER); on every failure *path is not written"
+errors:
+  no_profile: "0x80070002"
+  invalid_sid: "0x80070539"
+  not_appcontainer: "0x8007109A"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. AppContainer profiles and registrations the tests create (names polys2b.*) are deleted again at the end of each test; where a test needs the registry mapping it reads HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Mappings\<SID text> (values Moniker and DisplayName). SIDs derived from the tests' own names are printed (they are the same on every machine); the user's, the logon and the machine's SIDs and the numbers the system hands out (AppContainerNumber) are never printed, only compared. The printed part of the path is its suffix from \AppData (the profile directory is the user's).
+not_covered: >
+  A NULL text (not tried), SID texts in lower case, a registered SID without a profile (see AppContainerRegisterSid: the call answers S_OK and gives a path), the ACLs of the folder, other users' profiles.

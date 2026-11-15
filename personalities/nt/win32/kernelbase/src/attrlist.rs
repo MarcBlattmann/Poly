@@ -18,7 +18,7 @@ pub const CHILD_PROCESS_POLICY: usize = 0x0002_000E;
 
 /// The header and one record.
 const HEADER: usize = 8;
-const RECORD: usize = 24;
+const RECORD: usize = 3 * core::mem::size_of::<usize>();
 
 fn needed(count: u32) -> usize {
     HEADER + RECORD * count as usize
@@ -67,11 +67,13 @@ pub unsafe extern "system" fn UpdateProcThreadAttribute(
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let size_ok = match attribute {
-        PARENT_PROCESS => Some(size == 8),
-        HANDLE_LIST | JOB_LIST => Some(size != 0 && size % 8 == 0),
+        // A HANDLE (8 bytes, 4 in a 32-bit process) or an array of them.
+        PARENT_PROCESS => Some(size == core::mem::size_of::<usize>()),
+        HANDLE_LIST | JOB_LIST => Some(size != 0 && size % core::mem::size_of::<usize>() == 0),
         MITIGATION_POLICY => Some(size == 4 || size == 8 || size == 16),
         CHILD_PROCESS_POLICY => Some(size == 4),
-        SECURITY_CAPABILITIES => Some(size == 24),
+        // SECURITY_CAPABILITIES (`winnt.h`): two pointers and two DWORDs (24 bytes, 16 in a 32-bit process).
+        SECURITY_CAPABILITIES => Some(size == 2 * core::mem::size_of::<usize>() + 8),
         _ => None,
     };
     let Some(size_ok) = size_ok else { return fail(ERROR_NOT_SUPPORTED, FALSE) };
@@ -133,8 +135,11 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
         for i in 0..count {
             let (attribute, size, value) =
                 (records.add(i * 3).read(), records.add(i * 3 + 1).read(), records.add(i * 3 + 2).read());
-            let words =
-                || -> Vec<usize> { (0..size / 8).map(|j| (value as *const usize).add(j).read_unaligned()).collect() };
+            let words = || -> Vec<usize> {
+                (0..size / core::mem::size_of::<usize>())
+                    .map(|j| (value as *const usize).add(j).read_unaligned())
+                    .collect()
+            };
             match attribute {
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),

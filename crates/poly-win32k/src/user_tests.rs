@@ -478,13 +478,17 @@ fn client_mouse_move_sends_nchittest_before_setcursor() {
         register(e, "MouseMove");
         let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_NCHITTEST screen=50,50", "A WM_SETCURSOR window=A hit=1 msg=512"]);
-        assert_eq!(message.l, makelparam(50, 50));
+        assert_eq!(message.l, (makelparam(50, 50)) as usize);
     });
 }
 
@@ -494,15 +498,19 @@ fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
         register(e, "MouseMoveNc");
         let h = create(e, 'A', 0, "MouseMoveNc", WS_POPUP | WS_VISIBLE | WS_CAPTION, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 5), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 5)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=2 msg=512"]);
         assert_eq!(message.message, 0x00A0);
         assert_eq!(message.w, 2);
-        assert_eq!(message.l, makelparam(50, 5));
+        assert_eq!(message.l, (makelparam(50, 5)) as usize);
     });
 }
 
@@ -860,13 +868,18 @@ fn a_disabled_popup_gets_wm_setcursor_with_a_hit_error_and_nothing_else() {
         let d = create(e, 'D', 0, "Dis", WS_POPUP | WS_VISIBLE | WS_DISABLED, 0, 0, 100, 100, 0, 0);
         take_log();
         for (msg, hit_msg) in [(crate::wm::raw::WM_LBUTTONDOWN, 513), (crate::wm::raw::WM_MOUSEMOVE, 512)] {
-            let mut m = CMsg { hwnd: d, message: msg, l: makelparam(50, 50), ..CMsg::default() };
+            let mut m = CMsg { hwnd: d as usize, message: msg, l: (makelparam(50, 50)) as usize, ..CMsg::default() };
             assert!(!input::mouse_retrieved(e, &mut m), "the message is dropped");
             assert_eq!(take_log(), [format!("D WM_SETCURSOR window=D hit=65534 msg={hit_msg}")]);
         }
         // Enabled again it is hit-tested and delivered as usual.
         e.call(Request::SetStyle { hwnd: d as u32, which: -16, value: WS_POPUP | WS_VISIBLE });
-        let mut m = CMsg { hwnd: d, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut m = CMsg {
+            hwnd: d as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
         assert!(input::mouse_retrieved(e, &mut m));
         assert_eq!(take_log().first().map(String::as_str), Some("D WM_NCHITTEST screen=50,50"));
     });
@@ -1252,6 +1265,52 @@ fn window_placements_follow_the_monitor_from_window_sheet() {
 }
 
 // The held-out hunt, one file per group (spec sheets re-read rule by rule).
+#[test]
+fn the_client_rectangle_follows_a_frame_style_change_without_frame_changed() {
+    // DwmGetWindowAttribute.yaml `ncrendering_enabled`: a style set with
+    // SetWindowLongPtr(GWL_STYLE) and no SWP_FRAMECHANGED moves the client
+    // rectangle at once (a popup: 260x170; thick frame alone 7 a side).
+    with_env(|e| {
+        register(e, "Frm");
+        let w = create(e, 'F', 0, "Frm", WS_POPUP | WS_VISIBLE, 120, 60, 260, 170, 0, 0);
+        let hidden = create(e, 'H', 0, "Frm", WS_POPUP, 120, 60, 260, 170, 0, 0);
+        let client = |e: &TestEnv| {
+            let i = info(e, w).expect("window");
+            (i.client.width(), i.client.height(), i.client.left - i.window.left, i.client.top - i.window.top)
+        };
+        let set = |e: &TestEnv, style: u32| {
+            let old = info(e, w).expect("window").style;
+            e.call(Request::SetStyle { hwnd: w as u32, which: -16, value: style });
+            let now = info(e, w).expect("window").style;
+            if frame_style_changed(old, now) {
+                style_frame_changed(e, w);
+            }
+        };
+        assert_eq!(client(e), (260, 170, 0, 0));
+        set(e, WS_POPUP | WS_VISIBLE | WS_THICKFRAME);
+        assert_eq!(client(e), (246, 156, 7, 7));
+        // Not a frame bit: nothing moves.
+        set(e, WS_POPUP | WS_THICKFRAME | WS_VISIBLE | WS_DISABLED);
+        assert_eq!(client(e), (246, 156, 7, 7));
+        set(e, WS_POPUP | WS_VISIBLE | WS_BORDER | WS_DLGFRAME);
+        let caption = client(e);
+        assert!(caption.0 < 260 && caption.3 > 7, "{caption:?}");
+        set(e, WS_POPUP | WS_VISIBLE | WS_DLGFRAME);
+        let dlg = client(e);
+        assert_eq!((dlg.0, dlg.1), (260 - 2 * dlg.2, 170 - 2 * dlg.2), "{dlg:?}");
+        assert!(dlg.2 > 0 && dlg.2 < 7);
+        set(e, WS_POPUP | WS_VISIBLE);
+        assert_eq!(client(e), (260, 170, 0, 0));
+        // A hidden window keeps its client rectangle (SetWindowLongPtrW.yaml `frame`).
+        let before = info(e, hidden).expect("window").client;
+        let old = info(e, hidden).expect("window").style;
+        e.call(Request::SetStyle { hwnd: hidden as u32, which: -16, value: WS_POPUP | WS_BORDER });
+        assert!(frame_style_changed(old, WS_POPUP | WS_BORDER));
+        style_frame_changed(e, hidden);
+        assert_eq!(info(e, hidden).expect("window").client, before);
+    });
+}
+
 #[path = "user_tests/focus.rs"]
 mod focus_hunt;
 #[path = "user_tests/input.rs"]

@@ -8,10 +8,20 @@
 use alloc::vec::Vec;
 use poly_ldr::path::{Dirs, dir_name, wide};
 
-const PEB_PROCESS_PARAMETERS: u64 = 0x20;
-const PP_IMAGE_PATH_NAME: u64 = 0x60;
-const PP_ENVIRONMENT: u64 = 0x80;
-const PP_ENVIRONMENT_SIZE: u64 = 0x88;
+use poly_rtl::layout::NATIVE;
+
+const PEB_PROCESS_PARAMETERS: u64 = NATIVE.peb_process_parameters;
+const PP_IMAGE_PATH_NAME: u64 = NATIVE.pp_image_path_name;
+const PP_ENVIRONMENT: u64 = NATIVE.pp_environment;
+const PP_ENVIRONMENT_SIZE: u64 = NATIVE.pp_environment_size;
+
+/// The system directory of this build: `System32`, or `SysWOW64` for the
+/// i686 `ntdll` of a 32-bit process (Learn: "File System Redirector",
+/// ADR 0186).
+#[cfg(target_arch = "x86")]
+pub const SYSTEM_DIR: &str = "C:\\Windows\\SysWOW64";
+#[cfg(not(target_arch = "x86"))]
+pub const SYSTEM_DIR: &str = "C:\\Windows\\System32";
 
 /// The name an executable gets when the kernel gave no parameters.
 const UNNAMED: &str = "C:\\Windows\\System32\\poly-image.exe";
@@ -22,11 +32,11 @@ fn parameters(peb: u64) -> u64 {
         return 0;
     }
     // SAFETY: the kernel made the PEB readable; the field is a pointer.
-    unsafe { ((peb + PEB_PROCESS_PARAMETERS) as *const u64).read() }
+    unsafe { ((peb + PEB_PROCESS_PARAMETERS) as *const usize).read() as u64 }
 }
 
-/// A `UNICODE_STRING` (`ntdef.h`: `Length` in bytes at + 0, `Buffer` at
-/// + 8) as a vector.
+/// A `UNICODE_STRING` (`ntdef.h`: `Length` in bytes at + 0, `Buffer` one
+/// pointer in) as a vector.
 ///
 /// # Safety
 /// `at` is a readable `UNICODE_STRING` whose buffer holds `Length` bytes.
@@ -34,7 +44,7 @@ unsafe fn unicode_string(at: u64) -> Vec<u16> {
     // SAFETY: the caller's contract.
     unsafe {
         let len = usize::from((at as *const u16).read()) / 2;
-        let buf = ((at + 8) as *const *const u16).read();
+        let buf = ((at + NATIVE.ptr) as *const *const u16).read();
         if buf.is_null() || len == 0 {
             return Vec::new();
         }
@@ -60,7 +70,7 @@ pub fn environment_variable(peb: u64, name: &str) -> Option<Vec<u16>> {
     // SAFETY: the kernel wrote the block's address and size.
     let block: &[u16] = unsafe {
         let at = ((pp + PP_ENVIRONMENT) as *const *const u16).read();
-        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const u64).read() as usize;
+        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const usize).read();
         if at.is_null() {
             return None;
         }
@@ -91,7 +101,7 @@ pub fn dirs(peb: u64) -> Dirs {
     Dirs {
         current: app.clone(),
         app,
-        system32: wide("C:\\Windows\\System32"),
+        system32: wide(SYSTEM_DIR),
         system16: wide("C:\\Windows\\System"),
         windows: wide("C:\\Windows"),
         path,

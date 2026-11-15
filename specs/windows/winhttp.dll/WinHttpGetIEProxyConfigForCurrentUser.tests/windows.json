@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "winhttpgetieproxyconfig_struct",
+      "exe_sha256": "865d0f3161d8c4c392c37815184863207edddfe436c9cbb3b15887cf3e817bce",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZW9mIHRoZSBzdHJ1Y3R1cmUgMzIKdGhlIDQgcGFkZGluZyBieXRlcyBhZnRlciBmQXV0b0RldGVjdCB3ZXJlIG92ZXJ3cml0dGVuOiAxCmxwc3pQcm94eUJ5cGFzcyB3cml0dGVuOiAxCnRoZSBzZWNvbmQgY2FsbCBhbGxvY2F0ZXMgbmV3IHN0cmluZ3MgKHBvaW50ZXJzIGRpZmZlciBmb3IgZXZlcnkgbm9uLU5VTEwgc3RyaW5nKTogMQpscHN6UHJveHlCeXBhc3M6IE5VTEwgKG5vdGhpbmcgdG8gZnJlZSkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sizeof the structure 32\nthe 4 padding bytes after fAutoDetect were overwritten: 1\nlpszProxyBypass written: 1\nthe second call allocates new strings (pointers differ for every non-NULL string): 1\nlpszProxyBypass: NULL (nothing to free)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    },
+    {
+      "name": "winhttpgetieproxyconfig_struct_b",
+      "exe_sha256": "50d67173871a1f4c813bfd621fc4e591405beb1590c21c2bb66081ba5868dd74",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgY2FsbDogMQpscHN6QXV0b0NvbmZpZ1VybCB3cml0dGVuOiAxCnNlY29uZCBjYWxsOiAxCmxwc3pBdXRvQ29uZmlnVXJsOiBOVUxMIChub3RoaW5nIHRvIGZyZWUpCmEgc3RydWN0dXJlIGhvbGRpbmcgb2xkIHZhbHVlczogcmVzdWx0IDEgdGhlIG9sZCBwb2ludGVycyBhcmUgZ29uZSAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first call: 1\nlpszAutoConfigUrl written: 1\nsecond call: 1\nlpszAutoConfigUrl: NULL (nothing to free)\na structure holding old values: result 1 the old pointers are gone 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlGetVersion.yaml
+id: windows/api/ntdll.dll/RtlGetVersion
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "RtlGetVersion function (wdm.h), RTL_OSVERSIONINFOW". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the real operating system version, without the compatibility lie of GetVersionEx: 10.0.<build> for every process. Programs and runtimes that need the truth (and the .NET and Electron hosts) call it.
+interface:
+  signature: "NTSTATUS RtlGetVersion(PRTL_OSVERSIONINFOW lpVersionInformation)"
+  layout: "RTL_OSVERSIONINFOW is OSVERSIONINFOW (276 bytes, size field first); RTL_OSVERSIONINFOEXW is OSVERSIONINFOEXW (284 bytes)"
+rules:
+  values: "major 10, minor 0, a build number of 22000 or more on the oracle (26200), platform 2, empty CSD string; with the extended structure: service pack 0.0, product type 1 (workstation), reserved 0, the suite mask of the edition (0x300 on the oracle, not specified here)"
+  size_276: "with the size field 276: the four DWORDs after the size and the first unit of the string (a NUL) are written; STATUS_SUCCESS"
+  size_284: "with 284: the structure after the size is written completely (279 bytes change, as the reserved byte is 0 and the CSD zero-filled); STATUS_SUCCESS"
+  other_sizes: "the function does NOT check the size like GetVersionEx does: the sizes 0, 148, 275, 285 give STATUS_SUCCESS and the basic layout is written (a 4-byte size field is not even checked for room); a size of 300 returns 0x8000001A after writing the extended layout. An implementation should do the same for 276 and 284 and may treat the others as the basic layout; they are listed only because the tests record them"
+  manifest: "the answer does not depend on the manifest of the process"
+errors:
+  status: "STATUS_SUCCESS (0) for the sizes above except 300 (0x8000001A)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075); they import ntdll.dll; the buffer is prefilled with 0xAA. The build number is shown only as 'at least 22000'.
+not_covered: >
+  Manifests (RtlGetVersion does not depend on them: observed through GetVersionExW being 6.2 in the same process), a NULL pointer, server editions.

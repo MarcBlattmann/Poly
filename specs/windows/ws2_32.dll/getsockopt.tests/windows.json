@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getsockopt_defaults_b",
+      "exe_sha256": "008a8d69bb9e2173bd45f692a6b1a1f9c651b7b580c5dc483fae9d70d8faaec4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U09fVFlQRTogdmFsdWUgMSBsZW4gNApTT19LRUVQQUxJVkU6IHZhbHVlIDAgbGVuIDEKU09fQlJPQURDQVNUOiAtMS9XU0FFTk9QUk9UT09QVApTT19ERUJVRzogdmFsdWUgMCBsZW4gNApTT19SQ1ZCVUY6IHBvc2l0aXZlIDEgbGVuIDQKU09fQ09OTkVDVF9USU1FIChub3QgY29ubmVjdGVkKTogdmFsdWUgLTEgbGVuIDQKSVBfVE9TOiB2YWx1ZSAwIGxlbiA0ClNPX1RZUEU6IHZhbHVlIDIgbGVuIDQKU09fQUNDRVBUQ09OTjogLTEvV1NBRU5PUFJPVE9PUFQKU09fU05EQlVGOiBwb3NpdGl2ZSAxIGxlbiA0CklQVjZfVU5JQ0FTVF9IT1BTOiB2YWx1ZSAxMjggbGVuIDQKbGlzdGVuZXIgU09fQUNDRVBUQ09OTjogdmFsdWUgMSBsZW4gNAogIHNtYWxsIGFuZCBub3QgLTEgMQphY2NlcHRlZCBTT19UWVBFOiB2YWx1ZSAxIGxlbiA0ClNPX0tFRVBBTElWRSBhZnRlcndhcmRzOiB2YWx1ZSAxIGxlbiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SO_TYPE: value 1 len 4\nSO_KEEPALIVE: value 0 len 1\nSO_BROADCAST: -1/WSAENOPROTOOPT\nSO_DEBUG: value 0 len 4\nSO_RCVBUF: positive 1 len 4\nSO_CONNECT_TIME (not connected): value -1 len 4\nIP_TOS: value 0 len 4\nSO_TYPE: value 2 len 4\nSO_ACCEPTCONN: -1/WSAENOPROTOOPT\nSO_SNDBUF: positive 1 len 4\nIPV6_UNICAST_HOPS: value 128 len 4\nlistener SO_ACCEPTCONN: value 1 len 4\n  small and not -1 1\naccepted SO_TYPE: value 1 len 4\nSO_KEEPALIVE afterwards: value 1 len 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "getsockopt_defaults_c",
+      "exe_sha256": "a5599eadb394972c9c56faa469b6a9eb5e3911d36247893fd2fa10f64197100d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U09fQUNDRVBUQ09OTjogdmFsdWUgMCBsZW4gNApTT19SRVVTRUFERFI6IHZhbHVlIDAgbGVuIDQKU09fRE9OVFJPVVRFOiB2YWx1ZSAwIGxlbiAxClNPX1JDVlRJTUVPOiB2YWx1ZSAwIGxlbiA0ClNPX1NOREJVRjogcG9zaXRpdmUgMSBsZW4gNApUQ1BfTk9ERUxBWTogdmFsdWUgMCBsZW4gMQpJUFY2X1Y2T05MWSAoYW4gSVB2NCBzb2NrZXQpOiB2YWx1ZSAxIGxlbiA0ClNPX01BWF9NU0dfU0laRSAoZGF0YWdyYW0pOiB2YWx1ZSA2NTUwNyBsZW4gNApUQ1BfTk9ERUxBWSBvbiBVRFA6IC0xL1dTQUVJTlZBTAotLSBhIGZyZXNoIElQdjYgVENQIHNvY2tldAotLSBhIGNvbm5lY3RlZCBsb29wYmFjayBwYWlyCmFjY2VwdGVkIFNPX0FDQ0VQVENPTk46IHZhbHVlIDAgbGVuIDQKYWNjZXB0ZWQgU09fQ09OTkVDVF9USU1FOiB2YWx1ZSAwIGxlbiA0ClNPX1BST1RPQ09MX0lORk9XIDAgbGVuZ3RoIDYyOCBmYW1pbHkgMiB0eXBlIDEgcHJvdG9jb2wgNgpUQ1BfS0VFUElETEUgYWZ0ZXJ3YXJkczogdmFsdWUgNDUgbGVuIDQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SO_ACCEPTCONN: value 0 len 4\nSO_REUSEADDR: value 0 len 4\nSO_DONTROUTE: value 0 len 1\nSO_RCVTIMEO: value 0 len 4\nSO_SNDBUF: positive 1 len 4\nTCP_NODELAY: value 0 len 1\nIPV6_V6ONLY (an IPv4 socket): value 1 len 4\nSO_MAX_MSG_SIZE (datagram): value 65507 len 4\nTCP_NODELAY on UDP: -1/WSAEINVAL\n-- a fresh IPv6 TCP socket\n-- a connected loopback pair\naccepted SO_ACCEPTCONN: value 0 len 4\naccepted SO_CONNECT_TIME: value 0 len 4\nSO_PROTOCOL_INFOW 0 length 628 family 2 type 1 protocol 6\nTCP_KEEPIDLE afterwards: value 45 len 4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

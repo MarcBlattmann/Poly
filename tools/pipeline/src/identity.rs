@@ -51,17 +51,7 @@ impl Identity {
     /// What a test program started by this process runs as: this
     /// process's ids and groups, with [`REFERENCE_UMASK`].
     pub fn current() -> Identity {
-        let (mut r, mut e, mut s) = (0, 0, 0);
-        // SAFETY: getresuid writes one uid_t through each pointer, which
-        // point at the locals above.
-        let uid_ok = unsafe { libc::getresuid(&mut r, &mut e, &mut s) } == 0;
-        // SAFETY: geteuid cannot fail and touches no memory.
-        let uid = if uid_ok { [r, e, s] } else { [unsafe { libc::geteuid() }; 3] };
-        let (mut r, mut e, mut s) = (0, 0, 0);
-        // SAFETY: as above, for gid_t.
-        let gid_ok = unsafe { libc::getresgid(&mut r, &mut e, &mut s) } == 0;
-        // SAFETY: getegid cannot fail and touches no memory.
-        let gid = if gid_ok { [r, e, s] } else { [unsafe { libc::getegid() }; 3] };
+        let (uid, gid) = current_ids();
         Identity { uid, gid, groups: current_groups(), umask: REFERENCE_UMASK }
     }
 
@@ -107,6 +97,7 @@ impl Identity {
 }
 
 /// This process's supplementary groups.
+#[cfg(unix)]
 fn current_groups() -> Vec<u32> {
     // SAFETY: getgroups(0, NULL) only returns the count.
     let n = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
@@ -120,11 +111,54 @@ fn current_groups() -> Vec<u32> {
     groups
 }
 
+/// Windows has no supplementary groups; the diff runner needs Linux anyway
+/// (ADR 0124), so an empty list keeps the recorded identity well-formed.
+#[cfg(not(unix))]
+fn current_groups() -> Vec<u32> {
+    Vec::new()
+}
+
 /// In a child about to exec a test program: the fixed umask. Only
 /// async-signal-safe calls. Never call it in the tool's own process.
+#[cfg(unix)]
 pub(crate) fn set_reference_umask() {
     // SAFETY: umask(2) only sets the process's mask; it cannot fail.
     unsafe { libc::umask(REFERENCE_UMASK as libc::mode_t) };
+}
+
+/// Real, effective and saved user and group ids of this process.
+#[cfg(target_os = "linux")]
+fn current_ids() -> ([u32; 3], [u32; 3]) {
+    let (mut r, mut e, mut s) = (0, 0, 0);
+    // SAFETY: getresuid writes one uid_t through each pointer, which
+    // point at the locals above.
+    let uid_ok = unsafe { libc::getresuid(&mut r, &mut e, &mut s) } == 0;
+    // SAFETY: geteuid cannot fail and touches no memory.
+    let uid = if uid_ok { [r, e, s] } else { [unsafe { libc::geteuid() }; 3] };
+    let (mut r, mut e, mut s) = (0, 0, 0);
+    // SAFETY: as above, for gid_t.
+    let gid_ok = unsafe { libc::getresgid(&mut r, &mut e, &mut s) } == 0;
+    // SAFETY: getegid cannot fail and touches no memory.
+    let gid = if gid_ok { [r, e, s] } else { [unsafe { libc::getegid() }; 3] };
+    (uid, gid)
+}
+
+/// Without getresuid(2) (macOS): the saved ids are taken to be the
+/// effective ones, as they are for a program that was not set-id.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn current_ids() -> ([u32; 3], [u32; 3]) {
+    // SAFETY: getuid, geteuid, getgid and getegid cannot fail and touch no memory.
+    let (r, e) = unsafe { (libc::getuid(), libc::geteuid()) };
+    // SAFETY: as above.
+    let (rg, eg) = unsafe { (libc::getgid(), libc::getegid()) };
+    ([r, e, e], [rg, eg, eg])
+}
+
+/// Windows has no user and group ids; a Windows host never runs a
+/// reference program (they need Linux, ADR 0124), so the ids are zero.
+#[cfg(not(unix))]
+fn current_ids() -> ([u32; 3], [u32; 3]) {
+    ([0; 3], [0; 3])
 }
 
 #[cfg(test)]
@@ -149,6 +183,7 @@ mod tests {
     }
 
     /// The current identity is this process's, with the fixed umask.
+    #[cfg(unix)]
     #[test]
     fn the_current_identity_is_this_process() {
         let id = Identity::current();

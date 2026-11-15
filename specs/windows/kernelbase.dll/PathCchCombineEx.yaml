@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/PathCchCombineEx.yaml
+id: windows/api/kernelbase.dll/PathCchCombineEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathCchCombineEx function (pathcch.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data). Flags tried: 0, 0x1 (PATHCCH_ALLOW_LONG_PATHS) and 0x20 (PATHCCH_ENSURE_TRAILING_SLASH) over the pair grids; the sheet states what the visible tests show.
+summary: >
+  Joins two path parts into a destination of a stated size. LibreOffice's start-up calls the pathcch family (PathCchCanonicalizeEx is the one that stopped it); this one has the same canonicalization as shlwapi's PathCombineW but with an HRESULT, a size, and a long-path flag.
+interface:
+  signature: "HRESULT PathCchCombineEx(PWSTR pszPathOut, size_t cchPathOut, PCWSTR pszPathIn, PCWSTR pszMore, ULONG dwFlags)"
+  returns: "S_OK, or an error HRESULT with the destination an empty string"
+rules:
+  same_as_shlwapi: "with flags 0 the joined text is that of PathCombineW (see its sheet) for the paths that fit: a second part that is absolute replaces the first, one leading backslash keeps the root, `..` stays under the root, and the result is canonicalized (the `\\\\?\\` drive prefix is dropped, trailing dots removed). The result is not limited to 259 units but to 'MAX_PATH unless a flag allows more' (below)"
+  buffer: "cchPathOut counts units with the NUL. The result `C:\\a\\b` (6 units) fits in 7 and 8, and fails in 1, 5 and 6 with HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) 0x8007007A and an empty destination; a size of 0 fails with E_INVALIDARG (0x80070057)"
+  length: "without flag 0x1 a result of 260 units or more fails with HRESULT_FROM_WIN32(ERROR_FILENAME_EXCED_RANGE) 0x800700CE and an empty destination (255 to 259 work); with 0x1 results of 260, 261 and 270 units work, and the result then carries the long prefix `\\\\?\\` (4 units more: a 260-unit result is 264 units long)"
+  trailing_slash: "flag 0x20 adds a trailing backslash to the result when it has none"
+errors:
+  0x80070057: "E_INVALIDARG: cchPathOut 0"
+  0x8007007a: "insufficient buffer"
+  0x800700ce: "file name too long (without PATHCCH_ALLOW_LONG_PATHS)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  Flags other than 0, 1 and 0x20 beyond the grids, NULL pointers, destination aliasing.

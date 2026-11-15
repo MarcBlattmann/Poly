@@ -61,3 +61,14 @@ fn image_sizes_leave_room() {
     assert!(size >= (170 << 20) && size % (4 << 20) == 0);
     assert!(inodes >= 16384 && inodes % 1024 == 0);
 }
+
+#[test]
+fn disk_sizes_are_megabytes_or_gigabytes() {
+    assert_eq!(parse_spare("small"), Some(DEFAULT_SPARE_MB));
+    assert_eq!(parse_spare("512M"), Some(512));
+    assert_eq!(parse_spare("4G"), Some(4096));
+    assert_eq!(parse_spare("16g"), Some(16 * 1024));
+    for bad in ["", "G", "0G", "4", "4T", "-1G", "1.5G", "four"] {
+        assert_eq!(parse_spare(bad), None, "{bad}");
+    }
+}

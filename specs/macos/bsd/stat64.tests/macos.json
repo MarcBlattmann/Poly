@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "stat_errors",
+      "source_sha256": "7605c943b62bb06490ac953e148e8a89ba2a2396e0af4f55be2be538fe3b0434",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e25850d0046995d94fdea29d83277f9b0e9243eb38fba66f521fc101da974f19",
+          "exit_code": 0,
+          "stdout": "ok a missing file: ENOENT\nok the empty path: ENOENT\nok a file as a directory: ENOTDIR\nok a file with a trailing slash: ENOTDIR\nok a 299-byte name: ENAMETOOLONG\nok the path at address 8: EFAULT\nok the buffer at address 8: EFAULT\nok stat64 of /dev/null\nok a character device 3,2, mode 0666\nok stat64 of /\nok a directory, owned by root\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "stat_file",
+      "source_sha256": "fd1231393c3c23c1954e7ee1a8255bce8c82e63c7d8187b772fd3a33ff743b11",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b35a39977a350baf01b110f6e5db95aae742fd69c9f96a210204361724242e2f",
+          "exit_code": 0,
+          "stdout": "ok stat64 returns 0\nok a regular file, mode 0644\nok one link, size 10\nok the caller owns it\nok the same inode and size as fstat64 of the open file\nok stat64 of \".\"\nok the working directory: a directory, 4 links (2 entries + 2)\nok and size 128 (4 x 32)\nok stat64 of \"dir/\" with a trailing slash\nok an empty directory: mode 0755, 2 links, size 64\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

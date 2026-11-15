@@ -118,7 +118,7 @@ pub fn handoff_files(repo: &Path, entry: &EntryId) -> Result<Vec<PathBuf>> {
     }
     let mut files = vec![spec];
     for rel in util::files_under(&repo.join(entry.tests_dir()))? {
-        files.push(entry.tests_dir().join(rel));
+        files.push(entry.test_file(&rel.to_string_lossy()));
     }
     for f in &files {
         let s = f.to_string_lossy();

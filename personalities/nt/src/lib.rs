@@ -39,6 +39,8 @@
 //!   process parameters (ADR 0073).
 //! - [`win32k`]: table 1, Poly's own win32k services for `user32`, `gdi32`
 //!   and `win32u` (on `poly-win32k`, ADR 0128).
+//! - [`wow64`]: 32-bit processes: their address space, layouts and the
+//!   conversion of their system calls (ADR 0186).
 
 #![no_std]
 
@@ -54,6 +56,7 @@ pub mod diag;
 pub mod exception;
 pub mod exec;
 pub mod image;
+pub mod imageshare;
 pub mod io;
 pub mod job;
 pub mod kernel;
@@ -75,6 +78,7 @@ pub mod threads;
 pub mod trace;
 pub mod vm;
 pub mod win32k;
+pub mod wow64;
 
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/IsWindowVisible
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Returns 1 when the window has WS_VISIBLE and so has every ancestor up its parent chain (a child is judged
+  with its parent, a top-level window with itself; the owner does not count), else 0. Minimized and covered
+  windows are visible. Chrome's browser calls it about 640 times a run (S3).
+interface:
+  signature: "BOOL IsWindowVisible(HWND hwnd)"
+rules:
+  own_bit: "a top-level window created hidden: 0; after ShowWindow(SW_SHOWNORMAL), SW_SHOWNA, SW_SHOWMINIMIZED, SW_SHOWMAXIMIZED, SW_SHOWMINNOACTIVE or SetWindowPos(SWP_SHOWWINDOW): 1; after SW_HIDE or SWP_HIDEWINDOW: 0; created with WS_VISIBLE: 1; the answer always equals the WS_VISIBLE bit of the window itself (and of its parents)"
+  minimized_visible: "a minimized window (IsIconic 1) is visible (1); so is a child of a minimized window"
+  style_bit: "setting WS_VISIBLE with SetWindowLongPtrW(GWL_STYLE) makes the call answer 1 at once, clearing it 0 (no WM_SHOWWINDOW); the call only reads the bits"
+  child_chain: "a child with WS_VISIBLE is 0 while its parent is hidden (also through three levels) and becomes 1 when the parent is shown; a child without WS_VISIBLE stays 0; hiding the middle window of a chain makes the lower ones 0 although their own bits are still set"
+  owner_ignored: "an owned popup with WS_VISIBLE is 1 whether its owner is visible or hidden"
+  set_parent: "a visible child moved with SetParent under a hidden window answers 0 at once and 1 when that window is shown; moved back under a visible one 1"
+  special_windows: "the desktop window 1; a message-only window with WS_VISIBLE 0; WS_EX_LAYERED and WS_EX_NOREDIRECTIONBITMAP popups with WS_VISIBLE 1"
+  destroyed: "a destroyed window and its children and owned windows: 0"
+errors:
+  null_or_bad: "NULL, a made-up handle and a destroyed window: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

@@ -1077,9 +1077,12 @@ the Linux personality, with its logic in a host-tested crate:
 - **Protocol types** are generated from the XML in `third_party/wayland*/`
   by `cargo xtask wayland` into `crates/poly-wayland/src/protocol/`
   (checked in; `ci lint` checks they are current).
-- **Frames:** every toplevel gets Poly's neutral frame (title bar with the
-  title and a close button, a one-pixel border), drawn by the compositor;
-  `zxdg_decoration_manager_v1` always answers `server_side`.
+- **Frames:** a toplevel gets Poly's neutral frame (title bar with the
+  title and the window buttons, a one-pixel border), drawn by the compositor,
+  unless its client draws its own title bar: `poly_wayland::frame_policy`
+  decides from xdg-decoration, KDE's server decoration protocol and the
+  window geometry's shadow margins, and a client-drawn window has one title
+  bar, not two (ADR 0144, 0183).
 - **Timing:** frames at most every 1/60 s when something changed or a
   client waits; frame callbacks and `wp_presentation` feedback are
   answered with them. Real vsync comes with the display driver.
@@ -1799,7 +1802,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   chance, a fail-fast) ends the process with the exception code, after a
   `.pdata`-walked backtrace in the log.
 - **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
-  each VFS mount is a device `\Device\PolyFs<N>` with a `ParseHook`, reached
+  each VFS mount is a device `\Device\HarddiskVolume<N>` (ADR 0185) with a `ParseHook`, reached
   through drive-letter links in `\??` (`\??\C:` → `/nt/c`, the NT system
   root; `\??\Z:` → `/`, the whole VFS). `NtCreateFile`/`NtOpenFile` walk the
   VFS case-insensitively but case-preservingly, apply the create

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "getentropy_fill",
+      "source_sha256": "de2852a34bcf422263695ea5e611853a6f61ee4c6c03c0a3f5b56d39733c547d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e04d4416a2c053d5bec956338f73472a43a09f94b53068c77531f1ad0cb8ae09",
+          "exit_code": 0,
+          "stdout": "ok 256 bytes: returns 0\nok two calls differ\nok almost all bytes are nonzero\nok only the first 16 bytes were written\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getentropy_sizes",
+      "source_sha256": "8af300f3c0591cba870b91bcefb39e2fb1e866f846d397b8c1c0ad4b31243306",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c217487c77866412365a812308f7e323b63a5cd7a5eec6629386871c7d63893d",
+          "exit_code": 0,
+          "stdout": "ok length 0\nok length 1\nok length 255\nok length 256\nok length 257: EINVAL\nok length 512: EINVAL\nok length -1: EINVAL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
