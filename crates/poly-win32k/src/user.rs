@@ -512,7 +512,11 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     }
     // The thread's default IME window is made between WM_NCCREATE and WM_NCCALCSIZE of its first
     // window (CreateWindowExW.yaml, cw_chrome_widget).
-    env.window_created(hwnd);
+    // (For a popup; the other windows make it once they are through, as the earlier sheets observed.)
+    let early_ime = style & WS_POPUP != 0;
+    if early_ime {
+        env.window_created(hwnd);
+    }
     let mut rect = CRect::from(i.window);
     send(env, h, WM_NCCALCSIZE, 0, ptr(&mut rect));
     let client_rel = Rect::new(rect.left - ox, rect.top - oy, rect.right - ox, rect.bottom - oy);
@@ -538,6 +542,9 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     }
     if notify {
         send(env, u64::from(i.parent), WM_PARENTNOTIFY, u64::from(WM_CREATE) | ((menu & 0xFFFF) << 16), h);
+    }
+    if !early_ime {
+        env.window_created(hwnd);
     }
     env.win_event(crate::winevent::EVENT_OBJECT_CREATE, hwnd, 0, 0);
     if style & (WS_MINIMIZE | WS_MAXIMIZE) != 0 {
@@ -633,10 +640,7 @@ pub fn destroy_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
 
 /// Whether a window is the "IME" window `imm32` made for its thread.
 fn is_ime_window<E: Env + ?Sized>(env: &E, hwnd: u32) -> bool {
-    match env.call(Request::ClassName { hwnd: u64::from(hwnd) }) {
-        Reply::Text { text } => text.len() == 3 && text.iter().zip([73u16, 77, 69]).all(|(a, b)| *a == b),
-        _ => false,
-    }
+    is_class(env, u64::from(hwnd), "IME") || is_class(env, u64::from(hwnd), "MSCTFIME UI")
 }
 
 fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {

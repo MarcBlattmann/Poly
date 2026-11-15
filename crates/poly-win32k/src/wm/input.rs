@@ -126,7 +126,26 @@ impl Wm {
     /// sees them.
     pub(super) fn tops(&self) -> Vec<zorder::Top> {
         let Some(d) = self.get(u64::from(self.desktop)) else { return Vec::new() };
-        d.children.iter().filter_map(|&h| self.top_of(h)).collect()
+        d.children.iter().filter(|&&h| !self.is_ime_ui(h)).filter_map(|&h| self.top_of(h)).collect()
+    }
+
+    /// Whether `h` is the text services' window (`MSCTFIME UI`, owned by the default IME window):
+    /// it lies directly above its owner and takes no part in the z-order rules of the others.
+    pub(super) fn is_ime_ui(&self, h: u32) -> bool {
+        let Some(w) = self.get(u64::from(h)) else { return false };
+        w.owner != 0
+            && self.classes[w.class].as_ref().is_some_and(|c| upcase(&c.name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>()))
+    }
+
+    /// `order` (a list without the text services' windows) with them put back directly above their owners.
+    pub(super) fn with_ui(&self, mut order: Vec<u32>) -> Vec<u32> {
+        let Some(d) = self.get(u64::from(self.desktop)) else { return order };
+        for &u in d.children.iter().filter(|&&h| self.is_ime_ui(h)) {
+            let owner = self.get(u64::from(u)).map_or(0, |w| w.owner);
+            let at = order.iter().position(|&h| h == owner).unwrap_or(0);
+            order.insert(at, u);
+        }
+        order
     }
 
     pub(super) fn top_of(&self, h: u32) -> Option<zorder::Top> {
@@ -171,6 +190,7 @@ impl Wm {
 
     /// Give the desktop's children a new order.
     pub(super) fn set_order(&mut self, order: Vec<u32>) {
+        let order = self.with_ui(order);
         let d = self.desktop;
         if let Some(dw) = self.get_mut(u64::from(d)) {
             dw.children = order;

@@ -875,7 +875,21 @@ impl Wm {
                 flags |= crate::zorder::HELPER;
             }
             let new = crate::zorder::Top { hwnd, queue: self.input_key(ctx.key()), flags, owner };
-            crate::zorder::new_slot(&self.tops(), &new, self.barrier(ctx.key()))
+            let list = self.tops();
+            // The text services' window lies directly above the default IME window that owns it.
+            let ime_ui = self.display.interactive
+                && owner != 0
+                && upcase(&class_name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>());
+            let slot = match list.iter().position(|t| t.hwnd == owner) {
+                Some(i) if ime_ui => i,
+                _ => crate::zorder::new_slot(&list, &new, self.barrier(ctx.key())),
+            };
+            // `slot` counts the windows the z rules see; the text services' windows lie among them.
+            let real = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            match list.get(slot).and_then(|t| real.iter().position(|&c| c == t.hwnd)) {
+                Some(i) => i,
+                None => real.len(),
+            }
         } else {
             0
         };
@@ -1114,6 +1128,12 @@ impl Wm {
         if w.parent != self.desktop || hwnd == self.desktop {
             return Reply::Handle { hwnd: after as u32 };
         }
+        if self.is_ime_ui(hwnd) {
+            // It lies directly above its owner: the window above it now.
+            let list = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            let at = list.iter().position(|&c| c == hwnd);
+            return Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| list[i]) };
+        }
         let Some(new) = self.z_plan(hwnd, after).map(|p| p.new) else { return Reply::Handle { hwnd: after as u32 } };
         let at = new.iter().position(|&c| c == hwnd);
         Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| new[i]) }
@@ -1132,6 +1152,7 @@ impl Wm {
         // the bottom (ShowWindow.yaml `z_order`).
         let changed = new != old || below != was_below;
         if apply && changed {
+            let new = if parent == self.desktop { self.with_ui(new) } else { new };
             self.get_mut(u64::from(parent)).expect("valid").children = new;
             if let Some(w) = self.get_mut(u64::from(hwnd)) {
                 w.below_others = below;
@@ -1152,8 +1173,12 @@ impl Wm {
         let thread = w.thread;
         let was_below = w.below_others;
         let p = self.get(u64::from(parent))?;
-        let old = p.children.clone();
         let top_level = parent == self.desktop;
+        let old: Vec<u32> = if top_level {
+            p.children.iter().copied().filter(|&c| !self.is_ime_ui(c)).collect()
+        } else {
+            p.children.clone()
+        };
         let mut raised: Vec<u32> = Vec::new();
         let (new, below) = match after {
             HWND_TOP | HWND_TOPMOST | HWND_NOTOPMOST => {
