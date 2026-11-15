@@ -184,12 +184,6 @@ pub unsafe extern "system" fn GetKeyboardLayoutNameW(buf: *mut u16) -> i32 {
 
 // ----- small queries
 
-/// `GetCaretBlinkTime`: Windows' default, 530 ms.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetCaretBlinkTime() -> u32 {
-    530
-}
-
 /// `GetLastInputInfo`: `LASTINPUTINFO` (8 bytes); the time is now (the
 /// session has no idle clock yet).
 #[unsafe(no_mangle)]
@@ -220,15 +214,6 @@ pub unsafe extern "system" fn GetPointerDevices(count: *mut u32, _devices: *mut 
 #[unsafe(no_mangle)]
 pub extern "system" fn RegisterPointerDeviceNotifications(_hwnd: H, _notify_range: i32) -> i32 {
     1
-}
-
-/// `GetSystemMenu`: a window of ours has no system menu object (NULL).
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSystemMenu(hwnd: H, _revert: i32) -> H {
-    if info(hwnd).is_none() {
-        return bad_window();
-    }
-    0
 }
 
 /// `GetWindowDisplayAffinity`: `WDA_NONE`.
