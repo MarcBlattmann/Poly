@@ -108,7 +108,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentThreadStackLimits", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("TerminateProcess", "api-ms-win-core-processthreads-l1-1-0"),
-    ("CreateThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetExitCodeThread", "api-ms-win-core-processthreads-l1-1-0"),
     // Synchronisation (synchapi.h).
@@ -552,6 +551,10 @@ pub const KERNEL32_OWN: &[&str] = &[
     // (winbase.h) name no API set.
     "GetActiveProcessorGroupCount",
     "GetActiveProcessorCount",
+    // Chrome S2c: Chrome's sandboxed children take `CreateThread`'s address from
+    // kernel32's export table and run the bytes there, so it is code in kernel32 (a forwarder's
+    // text is no instructions): the sheet `kernel32.dll/CreateThread`, rule `export_code`.
+    "CreateThread",
     // Chrome batch 2: the ANSI comparisons (winbase.h) name no API set.
     "lstrcmpA",
     "lstrcmpiA",

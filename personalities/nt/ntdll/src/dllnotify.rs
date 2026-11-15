@@ -136,6 +136,11 @@ pub fn notify(reason: u32, modules: &[ModuleInfo]) {
     let modules: Vec<ModuleInfo> =
         modules.iter().filter(|m| !quiet.iter().any(|q| q.base == m.base)).cloned().collect();
     let modules = &modules[..];
+    if reason == REASON_UNLOADED {
+        for m in modules {
+            crate::unloadtrace::record(m);
+        }
+    }
     let snapshot: Vec<(*mut Registration, usize, usize)> = with_list(|l| {
         // SAFETY: the list holds live registrations.
         l.iter().map(|&r| (r, unsafe { (*r).callback }, unsafe { (*r).context })).collect()

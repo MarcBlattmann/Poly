@@ -412,9 +412,14 @@ pub fn map_section(
             let free = preferred % ALLOCATION_GRANULARITY == 0 && proc.vm.place(preferred, img.size, false, 0).is_ok();
             if free {
                 view.base = preferred;
-            } else if !img.relocatable() {
+            } else if !img.relocatable() && relocate {
+                // The kernel starts an executable that cannot move: nowhere to put it.
                 return Err(STATUS_CONFLICTING_ADDRESSES);
             } else {
+                // A view of an image already mapped in the process (the sheet's `image_second_view`):
+                // `STATUS_IMAGE_NOT_AT_BASE`, made anyway at another base and not relocated, whether
+                // the image has relocations or not: the caller has to apply them (or not use it).
+                // The status is a success one (`NT_SUCCESS`).
                 status = STATUS_IMAGE_NOT_AT_BASE;
             }
         }

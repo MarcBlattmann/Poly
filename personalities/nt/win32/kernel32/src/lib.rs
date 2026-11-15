@@ -21,6 +21,33 @@ unsafe extern "system" {
     fn LocalFree(mem: *mut u8) -> *mut u8;
     fn LocalSize(mem: *mut u8) -> usize;
     fn SetLastError(error: u32);
+    #[link_name = "CreateThread"]
+    fn kernelbase_create_thread(
+        security: *const u8,
+        stack: usize,
+        start: *const u8,
+        parameter: *mut u8,
+        flags: u32,
+        thread_id: *mut u32,
+    ) -> isize;
+}
+
+/// `CreateThread`: `kernelbase`'s, as code of `kernel32`'s own. Windows' export is code, not a
+/// forwarder, and Chrome's sandboxed children take its address from the export table and run what
+/// is there (a forwarder's name text is no instructions: execute fault, specs/windows/apps/chrome/
+/// s2-interception.md). The call is not a tail call: the function keeps a frame of its own.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateThread(
+    security: *const u8,
+    stack: usize,
+    start: *const u8,
+    parameter: *mut u8,
+    flags: u32,
+    thread_id: *mut u32,
+) -> isize {
+    // SAFETY: the caller's arguments, passed on as they are.
+    let handle = unsafe { kernelbase_create_thread(security, stack, start, parameter, flags, thread_id) };
+    core::hint::black_box(handle)
 }
 
 /// `poly-kernelbase` links `alloc`, so the DLL needs an allocator (and

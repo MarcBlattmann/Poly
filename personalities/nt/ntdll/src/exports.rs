@@ -864,3 +864,40 @@ unsafe fn collect_wide(p: *const u16) -> alloc::vec::Vec<u16> {
     }
     v
 }
+
+// ----- the C run-time functions ntdll exports ------------------------------------------------------
+//
+// Chrome's sandbox broker copies the addresses of `_strnicmp`, `strlen` and `wcslen` as the broker's
+// own ntdll resolves them into a table in each target and the target's interceptor calls through it:
+// a name ntdll lacks is a null call (specs/windows/apps/chrome/s2-interception.md). They are code of
+// ntdll's own (not forwarders), which is what `GetProcAddress` must give.
+
+/// `_strnicmp(a, b, n)` (Learn: "_strnicmp, _wcsnicmp, ..."): see [`string::strnicmp`].
+///
+/// # Safety
+/// `a` and `b` are readable up to their NULs or `n` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _strnicmp(a: *const u8, b: *const u8, n: usize) -> i32 {
+    // SAFETY: the caller's contract (a null pointer with `n` > 0 faults, as in the C run time).
+    unsafe { string::strnicmp(a, b, n) }
+}
+
+/// `strlen(s)` (Learn: "strlen, wcslen, _mbslen, ..."): the length of a NUL-terminated byte string.
+///
+/// # Safety
+/// `s` is NUL-terminated.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn strlen(s: *const u8) -> usize {
+    // SAFETY: the caller's contract.
+    unsafe { string::strlen(s, usize::MAX) }
+}
+
+/// `wcslen(s)`: the length of a NUL-terminated wide string, in code units.
+///
+/// # Safety
+/// `s` is NUL-terminated.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wcslen(s: *const u16) -> usize {
+    // SAFETY: the caller's contract.
+    unsafe { string::wcslen(s, usize::MAX) }
+}

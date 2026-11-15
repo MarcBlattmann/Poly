@@ -129,6 +129,31 @@ pub unsafe fn strlen(s: *const u8, limit: usize) -> usize {
     n
 }
 
+/// `_strnicmp(a, b, n)` (Learn: "_strnicmp, _wcsnicmp, ..."; `ntdll` exports the same function as
+/// the C run time): compares at most `n` bytes without regard to ASCII case and stops at the
+/// first NUL; the result is the difference of the first differing bytes after the ASCII capitals
+/// are made lower case (bytes above 0x7F are compared as they are), 0 when the strings are equal
+/// for `n` bytes or up to a common NUL. `n` = 0 reads nothing.
+///
+/// # Safety
+/// `a` and `b` are readable up to their NULs or `n` bytes, whichever comes first.
+pub unsafe fn strnicmp(a: *const u8, b: *const u8, n: usize) -> i32 {
+    let fold = |c: u8| if c.is_ascii_uppercase() { c + 32 } else { c };
+    let mut i = 0;
+    while i < n {
+        // SAFETY: the caller's contract: both strings are readable up to a NUL, and we stop there.
+        let (x, y) = unsafe { (fold(*a.add(i)), fold(*b.add(i))) };
+        if x != y {
+            return i32::from(x) - i32::from(y);
+        }
+        if x == 0 {
+            return 0;
+        }
+        i += 1;
+    }
+    0
+}
+
 /// `RtlInitUnicodeString`: `dest` describes the NUL-terminated `source`
 /// (null: an empty string with a null buffer). A source longer than the
 /// longest counted string is cut to [`MAX_BYTES`] - 2 bytes (to be
@@ -711,6 +736,37 @@ mod tests {
             let i = v.iter().position(|(a, _)| *a == p as usize).expect("freed what was allocated");
             v.remove(i);
         }
+    }
+
+    #[test]
+    fn strnicmp_folds_ascii_case_and_returns_the_difference_of_the_lowered_bytes() {
+        let c = |a: &[u8], b: &[u8], n: usize| {
+            let (mut x, mut y) = (a.to_vec(), b.to_vec());
+            x.push(0);
+            y.push(0);
+            // SAFETY: both are NUL-terminated copies.
+            unsafe { strnicmp(x.as_ptr(), y.as_ptr(), n) }
+        };
+        assert_eq!(c(b"KERNEL32.DLL", b"kernel32.dll", 12), 0);
+        assert_eq!(c(b"kernel32.dll", b"KERNEL32.DLL", 13), 0);
+        assert_eq!(c(b"Kernel32.dll", b"kernel32.dllx", 12), 0);
+        assert_eq!(c(b"chrome_elf.dll", b"kernel32.dll", 12), -8);
+        assert_eq!(c(b"abc", b"abd", 3), -1);
+        assert_eq!(c(b"abd", b"abc", 3), 1);
+        assert_eq!(c(b"a", b"z", 1), -25);
+        assert_eq!(c(b"abc", b"ab", 5), 99);
+        assert_eq!(c(b"ab", b"abc", 5), -99);
+        assert_eq!(c(b"abc", b"abd", 2), 0);
+        assert_eq!(c(b"ab", b"ab", 100), 0);
+        // Between 'Z' and 'a' sort before the letters: the fold goes to lower case.
+        assert_eq!(c(b"_", b"A", 1), -2);
+        assert_eq!(c(b"[", b"a", 1), -6);
+        // Bytes above 0x7F are not folded.
+        assert_eq!(c(b"\xC9", b"\xE9", 1), -32);
+        assert_eq!(c(b"\xE9", b"E", 1), 132);
+        // n = 0 reads nothing, not even through null pointers.
+        // SAFETY: nothing is read.
+        assert_eq!(unsafe { strnicmp(core::ptr::null(), core::ptr::null(), 0) }, 0);
     }
 
     fn wide(s: &str) -> Vec<u16> {
