@@ -510,7 +510,8 @@ unsafe fn windows() {
     let m2 = RegisterWindowMessageW(w::<6>("Other").as_ptr());
     check_got(m2 != m1 && (0xC000..=0xFFFF).contains(&m2), m2);
     SetLastError(0);
-    check_fail(RegisterWindowMessageW(w::<1>("").as_ptr()) as usize, ERROR_INVALID_PARAMETER);
+    // The empty string gives 0 and no error (RegisterWindowMessageW.yaml `length`).
+    check_eq(RegisterWindowMessageW(w::<1>("").as_ptr()) as usize, 0);
 
     // A message-only window.
     let title = w::<7>("hidden");
