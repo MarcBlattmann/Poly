@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetFileInfoW.yaml
+id: windows/api/shell32.dll/SHGetFileInfoW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (paths are shown with the user profile, ProgramData, Public, Windows and Program Files directories replaced by %USERPROFILE%, %PUBLIC%, %ProgramData%, %SystemRoot% and %ProgramFiles%, so no machine or user name is in the tests; files the tests make live in the temp directory and are removed). Microsoft Learn: "SHGetFileInfoW function", "SHGetSpecialFolderLocation function", "SHGetSpecialFolderPathW function", "SHGetFolderPathW function", "SHGetFolderPathA function", "SHGetPathFromIDListW function", "ILCreateFromPathW function", "ILFree function", "CSIDL", "SFGAO"; shlobj.h, shlobj_core.h, shellapi.h and shtypes.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the icon, the system image list index, the display name, the type name, the attributes and the executable type of a file or folder, from the file itself or (SHGFI_USEFILEATTRIBUTES) from its name and the given attributes only. 7-Zip's file manager asks for the icon index of every file in the list by extension (SHGFI_SYSICONINDEX | SHGFI_USEFILEATTRIBUTES), the display names of drives and the type names; it stops here on Poly (a stub).
+interface:
+  signature: "DWORD_PTR SHGetFileInfoW(LPCWSTR pszPath, DWORD dwFileAttributes, SHFILEINFOW *psfi, UINT cbFileInfo, UINT uFlags)"
+rules:
+  flags_results: "with SHGFI_USEFILEATTRIBUTES the name is not looked up on disk: SHGFI_TYPENAME, SHGFI_DISPLAYNAME and SHGFI_ATTRIBUTES return non-zero (1), SHGFI_SYSICONINDEX returns the system image list handle (non-zero) and sets iIcon (not negative), SHGFI_USEFILEATTRIBUTES alone returns 1 and no flags at all returns 0; only the fields of the asked flags are written (with TYPENAME alone szDisplayName is written empty and the icon index untouched in the test)"
+  type_names: "by extension, without regard to case and for names that do not exist: .txt 'Text Document' (also FILE.TXT), .dll 'Application extension', .exe 'Application', .zip 'Compressed (zipped) Folder'; an unknown extension gives its upper case with ' File' ('.polytestxyz' 'POLYTESTXYZ File', '.hidden' 'HIDDEN File'); no extension 'File'; the attribute FILE_ATTRIBUTE_DIRECTORY makes it 'File folder' whatever the extension ('folder.txt'); the root of a drive with the directory attribute 'Local Disk'"
+  display_names: "the text after the last backslash: with the oracle's setting of hiding the extensions of known types a .txt, .exe and .zip file shows without its extension ('file'), .dll keeps it ('file.dll'), an unknown extension, a name that starts with a dot and a folder keep the full name ('file.polytestxyz', '.hidden', 'folder.txt'); a drive root gives 'Local Disk (C:)' (volume label and letter)"
+  attributes: "SHGFI_ATTRIBUTES with SHGFI_USEFILEATTRIBUTES gives dwAttributes 0 for files and folders (nothing was looked up) and 0xF080015D for a drive root in the oracle; for paths that exist: a file 0x40400177, a folder 0x7080017F (SFGAO_FILESYSTEM, FOLDER, FILESYSANCESTOR, BROWSABLE, HASSUBFOLDER plus the copy, move, link, rename, delete, property sheet and drop target bits), the temp directory 0xF080017F"
+  existing_paths: "for files and a directory the test makes: display name 'report.polytestxyz' (unknown extension), 'notes' (notes.txt), 'sub.polytestdir'; type names 'POLYTESTXYZ File', 'Text Document', 'File folder'; a trailing backslash on a directory changes nothing"
+  missing_without_attributes: "a path that does not exist without SHGFI_USEFILEATTRIBUTES: 0 for TYPENAME, DISPLAYNAME, ATTRIBUTES and SYSICONINDEX, the type and display names are empty strings; with SHGFI_USEFILEATTRIBUTES: 1 and the type name 'POLYTESTXYZ File' or the display name 'ghost.polytestxyz'"
+  icon_index: "files with the same registered icon share an index: *.txt (in either case), the generic file icon is shared by an unknown extension, no extension and a leading-dot name, all folders share one (also a directory named like a text file), .dll and .exe have their own, the drive root another; the small and the large image list use the same index for a file; the open-folder icon has no index of its own in the test (SHGFI_OPENICON gives the same index as the closed one)"
+  icons: "SHGFI_ICON gives an icon handle (DestroyIcon returns TRUE) of 32 x 32 pixels, with SHGFI_SMALLICON 16 x 16, with SHGFI_SHELLICONSIZE 32 x 32; the same with SHGFI_OPENICON, SHGFI_LINKOVERLAY, SHGFI_SELECTED and SHGFI_SYSICONINDEX added, for a file and a directory; the system image list from SHGFI_SYSICONINDEX has icons of 32 x 32 (default), 16 x 16 (SHGFI_SMALLICON) and 32 x 32 (SHGFI_SHELLICONSIZE) and the returned index lies inside it"
+  exe_type: "SHGFI_EXETYPE of the test program (a console executable) returns 0x4550 (the letters 'PE' in the low word, 0 in the high word); of a text file 0"
+  icon_location: "SHGFI_ICONLOCATION returns 1 and writes a location (the file with the icon) into szDisplayName and the resource index into iIcon (0 for an executable)"
+  cb: "cbFileInfo is not checked: 0, 4, one less and four more all work"
+  paths: "an empty path with SHGFI_TYPENAME returns 1 (the type name of an empty name); a NULL path returns 0"
+errors:
+  not_found: "a path that does not exist (without SHGFI_USEFILEATTRIBUTES): 0"
+  null_path: "NULL path: 0"
+side_effects: "may load shell extensions and icons; the returned icon handle must be destroyed by the caller"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Folders redirected to other drives or to OneDrive and domain roaming profiles (the oracle is a workgroup computer with a local profile), other languages (the type names are English), other users and tokens, network and removable drives, junctions and links, 32-bit processes (the %ProgramFiles% answers differ), the contents of virtual folders. SHGFI_PIDL, SHGFI_ATTR_SPECIFIED, SHGFI_ADDOVERLAYS and overlay icons, icon pixels, shortcut files, executables of other types (NE, MS-DOS) and the SFGAO bits of anything but the five paths above.

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/ShowScrollBar.yaml
+id: windows/api/user32.dll/ShowScrollBar
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Shows or hides a window's scroll bar (SB_HORZ, SB_VERT, SB_BOTH) or a scroll bar control (SB_CTL): sets or clears WS_HSCROLL / WS_VSCROLL, changes the client area and sends the size messages.
+interface:
+  signature: "BOOL ShowScrollBar(HWND hWnd, int wBar, BOOL bShow)"
+rules:
+  result: "TRUE for success, also when the bar was in that state"
+  hide_show: "ShowScrollBar(SB_VERT, FALSE) clears WS_VSCROLL and gives back the client width (WM_WINDOWPOSCHANGING, WM_NCCALCSIZE, WM_WINDOWPOSCHANGED, WM_SIZE with SIZE_RESTORED are sent); ShowScrollBar(SB_VERT, TRUE) sets it, takes SM_CXVSCROLL off the width and sends the same four; a call that finds the bar in the state asked for returns TRUE"
+  value: "any non-zero bShow (5, -1) shows"
+  no_style: "ShowScrollBar(SB_HORZ, TRUE) on a window made without WS_HSCROLL adds the bar (style bit, client height reduced); hide takes it away again; the range of such a bar is 0..0"
+  sb_both: "SB_BOTH hides or shows both bars together"
+  empty_bar: "showing a bar whose page covers its range works: the bar is shown (style bit set) although there is nothing to scroll"
+  range_kept: "the range, page and position of a hidden bar are kept and returned by GetScrollInfo after it is shown again"
+  controls: "SB_CTL on a scroll bar control hides and shows the control (the visibility check in the tests prints 0 throughout because child windows report IsWindowVisible 0 in session 0)"
+  invisible_window: "works the same for a window that is not visible"
+errors:
+  bad_bar: "bar 4, -1 and 0x7FFFFFFF: FALSE with ERROR_INVALID_PARAMETER (87)"
+  bad_window: "a NULL, made-up or destroyed window: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Dragging the thumb and clicking the arrows (WM_HSCROLL / WM_VSCROLL generation, SIF_TRACKPOS during a drag) and the drawn bar: they need real mouse input; GetScrollBarInfo; scroll bars of a window made right to left; DPI scaling of the bar sizes.
