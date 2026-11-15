@@ -201,41 +201,10 @@ fn compat() -> Compat {
     c
 }
 
-/// The manifest of the image mapped at `base` (its resource directory is
-/// data directory 2 of the optional header, PE format).
+/// The manifest of the image mapped at `base`.
 fn manifest_of(base: u64) -> Option<Vec<u8>> {
-    if base == 0 {
-        return None;
-    }
-    // SAFETY: a mapped image's headers and its resource section are
-    // readable; RVAs are bounded by the sizes the headers give.
-    unsafe {
-        let nt_off = ((base + 0x3C) as *const u32).read() as u64;
-        let opt = base + nt_off + 24;
-        // PE32+ (0x20B): the data directories start at optional header + 112, their count at 108;
-        // PE32 (0x10B, a 32-bit image): at 96 and 92. The resource table is entry 2.
-        let dirs: u64 = match (opt as *const u16).read() {
-            0x20B => 112,
-            0x10B => 96,
-            _ => return None,
-        };
-        let count = ((opt + dirs - 4) as *const u32).read();
-        if count < 3 {
-            return None;
-        }
-        let rva = ((opt + dirs + 16) as *const u32).read() as u64;
-        let size = ((opt + dirs + 20) as *const u32).read() as usize;
-        let image_size = ((opt + 56) as *const u32).read() as u64;
-        if rva == 0 || rva + size as u64 > image_size {
-            return None;
-        }
-        let rsrc = core::slice::from_raw_parts((base + rva) as *const u8, size);
-        let (data, len) = version::find_manifest(rsrc)?;
-        if u64::from(data) + u64::from(len) > image_size {
-            return None;
-        }
-        Some(core::slice::from_raw_parts((base + u64::from(data)) as *const u8, len as usize).to_vec())
-    }
+    // SAFETY: the executable's base, mapped in this process (or 0).
+    unsafe { version::image_manifest(base) }
 }
 
 /// `GetVersion`.

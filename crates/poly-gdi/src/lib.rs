@@ -43,6 +43,7 @@ pub mod region;
 mod rgnshape;
 mod sysfont;
 pub mod text;
+pub mod xform;
 
 #[cfg(test)]
 mod testfonts;
