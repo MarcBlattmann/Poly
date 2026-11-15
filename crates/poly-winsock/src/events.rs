@@ -84,6 +84,9 @@ pub struct Registration {
     failed: bool,
     /// The bytes that could be read at the last poll (a rise is data arriving).
     seen_bytes: u32,
+    /// The look at the socket that was folded in last (a number from a counter that is taken
+    /// before the look): an older look, finished later by another thread, is not folded in.
+    pub last_look: u64,
     /// Events recorded and not yet taken by `WSAEnumNetworkEvents`.
     pub pending: u32,
     pub errors: [u32; FD_MAX_EVENTS],
@@ -116,6 +119,7 @@ impl Registration {
             local_rd_shut: false,
             failed: false,
             seen_bytes: 0,
+            last_look: 0,
             pending: 0,
             errors: [0; FD_MAX_EVENTS],
         }

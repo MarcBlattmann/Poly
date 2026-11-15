@@ -170,9 +170,16 @@ fn so_error(s: Socket) -> u32 {
     }
 }
 
-/// Fold what the device says about `s` now (`revents`) into its registration; true when something
-/// is recorded that was not before.
-fn observe(s: Socket, r: u32) -> bool {
+/// Numbers the looks at the sockets (taken before the device is asked, see `Registration::last_look`).
+static LOOKS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+
+fn next_look() -> u64 {
+    LOOKS.fetch_add(1, Ordering::AcqRel)
+}
+
+/// Fold what the device says about `s` (`revents`, asked for at `look`) into its registration; true
+/// when something is recorded that was not before.
+fn observe(s: Socket, r: u32, look: u64) -> bool {
     let (readable, writable, error, hangup) = poll::flags(r);
     if !(readable || writable || error || hangup) {
         return false;
@@ -187,7 +194,10 @@ fn observe(s: Socket, r: u32) -> bool {
     };
     let mut moved = false;
     with_table(|t| {
-        if let Some(reg) = find(t, s) {
+        if let Some(reg) = find(t, s)
+            && look > reg.last_look
+        {
+            reg.last_look = look;
             let before = reg.pending;
             if reg.step(&inputs) {
                 moved = reg.pending != before;
@@ -211,11 +221,12 @@ fn refresh(s: Socket) {
         })
     });
     let Some(interest) = interest else { return };
+    let look = next_look();
     if let Ok(revents) = sock::poll_handles(&[(s as u64, interest)], 0)
         && let Some(&r) = revents.first()
         && r & poll::nval() == 0
     {
-        observe(s, r);
+        observe(s, r, look);
     }
 }
 
@@ -237,6 +248,7 @@ unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
             continue;
         }
         let entries: Vec<(u64, u32)> = snap.iter().map(|&(s, i)| (s as u64, i)).collect();
+        let look = next_look();
         let Ok(revents) = sock::poll_handles(&entries, POLL_MS) else {
             // SAFETY: plain kernel32 call.
             unsafe { Sleep(20) };
@@ -249,7 +261,7 @@ unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
                 with_table(|t| t.retain(|(k, _)| *k != s));
                 continue;
             }
-            moved |= observe(s, r);
+            moved |= observe(s, r, look);
         }
         if !moved {
             // Ready sockets nobody can record anything for (the program has not acted yet) would
