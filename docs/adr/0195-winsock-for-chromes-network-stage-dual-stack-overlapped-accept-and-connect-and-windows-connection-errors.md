@@ -99,3 +99,13 @@ handle of its own to the duplicated socket, blocking again.
 - Left: dual-stack datagram sockets receiving both families while unconnected, `TransmitFile`,
   `WSAAsyncSelect`, per-handle blocking state for a socket shared between processes (a duplicate is
   made blocking when it is taken up), out-of-band data.
+
+## Where stage 4 stands
+
+`cargo xtask chrome-win run --stage 4 --release` (a new rung of the ladder: the spec's `s4.html`
+with an `http://example.com/` and an `https://www.iana.org/` frame, headless, `--no-sandbox`, QEMU's
+user networking) boots Chrome, which resolves both names, connects with event-selected non-blocking
+sockets (`WSAEventSelect`, `WSAEnumNetworkEvents`, `SIO_KEEPALIVE_VALS`, `WSASend` with an
+`OVERLAPPED`), verifies the TLS certificate with its own store and prints the DOM the spec recorded
+on Windows (831 bytes, SHA-256 `568f0bdf…2330be`, `http=1 https=1`). Four of five runs passed; the
+fifth ended `0xffff7002` like the stage 1 runs that ended that way (ADR 0155's addendum).
