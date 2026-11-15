@@ -1,4 +1,4 @@
-//! Window stations and desktops as objects (ADR 0186).
+//! Window stations and desktops as objects (ADR 0192).
 //!
 //! `user32` asks for them through `PolyUserCall` (`Request::Winsta`, the records of
 //! [`poly_win32k::winsta`]); this module makes the objects, hands out the handles and keeps what

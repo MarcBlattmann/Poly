@@ -1,4 +1,4 @@
-//! Window stations and desktops through `PolyUserCall` (ADR 0186): the rules of the sheets
+//! Window stations and desktops through `PolyUserCall` (ADR 0192): the rules of the sheets
 //! `CreateWindowStationW`, `SetProcessWindowStation`, `CreateDesktopW`, `GetThreadDesktop` and
 //! `GetUserObjectInformationW`, one test per group of rules.
 

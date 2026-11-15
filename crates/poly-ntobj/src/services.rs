@@ -265,7 +265,7 @@ impl ObjectManager {
     /// (generic rights mapped, `MAXIMUM_ALLOWED` meaning every right the type has, rights the
     /// type does not have dropped), not checked against the object's descriptor: what a call
     /// that makes an object hands its maker (`CreateWindowStationW`: "every mask is accepted
-    /// and gives a handle that has exactly those rights", ADR 0186).
+    /// and gives a handle that has exactly those rights", ADR 0192).
     pub fn new_handle_exact(
         &mut self,
         caller: &Caller,

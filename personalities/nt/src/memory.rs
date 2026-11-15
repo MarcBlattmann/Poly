@@ -60,7 +60,7 @@ const STATUS_DYNAMIC_CODE_BLOCKED: NtStatus = NtStatus(0xC000_0604);
 /// Poly's own bit in the protection `ntdll`'s loader passes when it makes the sections of a module
 /// it maps executable. Windows maps modules as image sections, which the prohibit-dynamic-code
 /// mitigation lets be (Learn, "Process Mitigation Policies"); Poly's loader maps them with
-/// ordinary memory, so it asks for the exemption this way (ADR 0186). No `PAGE_*` value of Windows
+/// ordinary memory, so it asks for the exemption this way (ADR 0192). No `PAGE_*` value of Windows
 /// uses the bit.
 pub const PAGE_POLY_LOADER: u32 = 0x0100_0000;
 

@@ -296,7 +296,7 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
         match kind {
             1 => out.handle_list = Some(list(k)?.into_iter().map(Handle).collect()),
             2 => {
-                // `value` points at the caller's words (ADR 0186).
+                // `value` points at the caller's words (ADR 0192).
                 out.mitigation[0] = abi::read_u64(k, value)?;
                 if size >= 16 {
                     out.mitigation[1] = abi::read_u64(k, value + 8)?;

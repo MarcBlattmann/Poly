@@ -1,4 +1,4 @@
-//! `GetProcessMitigationPolicy` / `SetProcessMitigationPolicy` (ADR 0171, ADR 0186,
+//! `GetProcessMitigationPolicy` / `SetProcessMitigationPolicy` (ADR 0171, ADR 0192,
 //! `processthreadsapi.h`, `winnt.h` `PROCESS_MITIGATION_POLICY`): each policy is a 4-byte flags
 //! word (DEP: 8 bytes). The state is the kernel's, per process
 //! ([`poly_kernelbase::mitigation::State`]): the creation attributes of `CreateProcessW` put the
