@@ -6,7 +6,8 @@ for the Visual C++ 2015-and-later runtime; ADR 0055 stays in force for every oth
 redistributable. Builds on [ADR 0098](0098-cpp-windows-tests-and-the-cpp-exception-spec.md)
 (C++ test programs) and ADR 0099 (C++ exceptions in Poly's `msvcrt`), [ADR 0155](0155-chrome-for-windows-bring-up-stubs-lazy-images-and-the-stage-ladder.md)
 (fail-only exports, `polystub.dll`) and [ADR 0186](0186-32-bit-windows-programs-compatibility-mode-poly-s-own-i686-ntdll-and-converted-system-calls.md)
-(32-bit programs). Some parts need the owner's yes: see "Owner decisions needed".
+(32-bit programs). The five questions it put to the owner were decided on 2026-11-15, all as
+recommended: see "Decided (owner, 2026-11-15)".
 
 ## Context
 
@@ -72,7 +73,8 @@ Linux hosts (ADR 0124); compiling the STL needs a C++ compiler that targets the 
 (clang-cl or MSVC), its headers and the Universal CRT headers; `CLEAN_ROOM.md` forbids
 copying code from any project into the repository, whatever its licence; and code built
 from those sources would carry Apache-2.0 notices into Poly's images. It would give
-`msvcp140` exactly, quickly. It needs the owner (licence and clean-room rule).
+`msvcp140` exactly, quickly. It needed the owner (licence and clean-room rule), who said
+no (decision 1).
 
 **(c) Let the user run the official `vc_redist` installer on Poly.** Microsoft's licence lets
 an application's developer redistribute the runtime with the application and lets the user
@@ -97,8 +99,8 @@ program that brings Microsoft's DLLs keep using them.
 ### Where the DLLs live and who wins
 
 - `C:\Windows\System32\vcruntime140.dll`, `vcruntime140_1.dll` (and later `msvcp140*.dll`),
-  installed by the kernel's layout like every Poly DLL (`kernel/src/nt/layout.rs`), built in
-  the Win32 workspace (`personalities/nt/win32/{vcruntime140,vcruntime140_1}`). The 32-bit
+  installed by the kernel's layout (`kernel/src/nt/layout.rs`), which keeps a copy the user
+  installed from Microsoft (decision 5), built in the Win32 workspace (`personalities/nt/win32/{vcruntime140,vcruntime140_1}`). The 32-bit
   copies go to `C:\Windows\SysWOW64` with the i686 build (ADR 0186), below.
 - The loader's search order is Windows': the application's directory before `System32`.
   A program that ships Microsoft's DLLs (XnView MP, Paint.NET, Python) loads its own; one
@@ -156,7 +158,8 @@ layouts** (sizes, field offsets, virtual table order) and exported data come fro
 sheets: a spec agent compiles probe programs against Visual C++'s headers on the Windows
 oracle and records `sizeof`/`offsetof`/virtual table order and behaviour, and may read the
 Apache-2.0 STL headers for behaviour as `CLEAN_ROOM.md` allows for permissively licensed code
-(owner confirmation below). Implementers get the sheets, never the headers.
+(owner decision 2, now a rule in `CLEAN_ROOM.md`). Implementers get the sheets, never the
+headers.
 
 ### Coverage map
 
@@ -167,7 +170,7 @@ Apache-2.0 STL headers for behaviour as `CLEAN_ROOM.md` allows for permissively 
 - `msvcp140.dll`, `msvcp140_1.dll`, `msvcp140_2.dll`, `msvcp140_atomic_wait.dll`,
   `msvcp140_codecvt_ids.dll`: `missing` (ours to build, in the order above).
 - `concrt140.dll`, the older `msvcp*`/`msvcr*` versions, `vcomp*`, the D3DX and DirectX
-  end-user runtime: stay `app-provided` (ADR 0055); `concrt140` is an owner decision below.
+  end-user runtime: stay `app-provided` (ADR 0055); `concrt140` by owner decision 4.
 
 ### How behaviour is observed
 
@@ -194,10 +197,10 @@ Apache-2.0 STL headers for behaviour as `CLEAN_ROOM.md` allows for permissively 
 - **FH4** needs programs built by Microsoft's compiler (`cl.exe /EHsc`, FH4 is its x64
   default): a spec agent builds test programs with it on the oracle as a black box and
   specifies the tables from what the compiler emits for chosen inputs and how
-  `__CxxFrameHandler4` behaves on them. That needs Visual Studio or the Build Tools on the
-  oracle (owner decision below). The pipeline would then accept checked-in `.exe` test
-  artefacts for FH4 entries (built on Windows, recorded by hash), since the container has
-  no Microsoft compiler.
+  `__CxxFrameHandler4` behaves on them, with the Build Tools on the oracle `homeserver2`
+  (owner decision 3, spec test programs only). The container has no Microsoft compiler, so
+  the pipeline will take those executables as test artefacts built on Windows and recorded
+  by hash; settled with the FH4 spec.
 
 ### 32-bit (WOW64)
 
@@ -208,26 +211,35 @@ with the `FuncInfo` in `EAX`, `_EH_prolog`, `_except_handler4_common`, `_local_u
 `ucrtbase` + `msvcrt`, then the i686 `vcruntime140` (a frame-based `poly-cxxeh` front end
 over the same matching rules), installed in `SysWOW64`.
 
-## Owner decisions needed
+## Decided (owner, 2026-11-15)
 
-1. **Reusing Microsoft's STL sources (option b).** Not recommended: it needs a C++ compiler in
-   Poly's build (against ADR 0124's pure-Rust rule), changes `CLEAN_ROOM.md`'s "no copying
-   code from any project" rule, and puts Apache-2.0 code (with its notices) into Poly's
-   images. Only with the owner's yes, and then as its own ADR.
-2. **Spec agents reading the Apache-2.0 STL headers** for class layouts and the behaviour of
-   `msvcp140`'s members, as `CLEAN_ROOM.md` already allows for permissively licensed code
-   (implementers never see them). Recommended yes; this is the first Microsoft open-source
-   project used that way, so it is put to the owner.
-3. **Microsoft's compiler on the Windows oracle** (Visual Studio Community or Build Tools,
-   under Microsoft's licence to the owner) for FH4 and later `msvcp140` probes, used as a
-   black box to build test programs; and checked-in FH4 test executables. Recommended yes.
-4. **`concrt140.dll`**: keep `app-provided` (recommended: few apps import it, those seen
-   ship it) or build it.
-5. **A user-installed `vc_redist`** (when Windows Installer runs on Poly): Microsoft's
-   installer would replace Poly's copies in `System32` with Microsoft's, under Microsoft's
-   licence to the user. Recommended: allow it (Poly never ships, fetches or patches the
-   files; ADR 0055's rule stands), and give Poly's DLLs a lower file version than any
-   Microsoft release so the installer's version check replaces them rather than refusing.
+The owner answered the five questions this ADR put, each as recommended:
+
+1. **No reuse of Microsoft's STL code** (option b). Poly's `msvcp140` stays clean-room Rust;
+   no C++ compiler enters Poly's build and nothing of the STL is copied into the repository
+   or the images.
+2. **Spec agents only may read Microsoft's STL headers** (Apache-2.0 WITH LLVM-exception), to
+   learn class layouts: sizes, field offsets and types, virtual table order, exported data
+   and what members do. They write those into spec sheets as facts, never code.
+   Implementers never read the headers. Recorded as a rule in `CLEAN_ROOM.md` ("Microsoft's
+   STL headers").
+3. **Microsoft's C++ Build Tools on the Windows oracle** (`homeserver2`), under Microsoft's
+   licence to the owner, for building spec test programs only (FH4, `msvcp140` probes), used
+   as a black box like clang. How the FH4 test executables reach the pipeline (built there,
+   recorded by hash) is settled with the FH4 spec.
+4. **`concrt140.dll` stays `app-provided`** (ADR 0055).
+5. **A user-installed `vc_redist` replaces Poly's copies.** Poly never ships, fetches or
+   patches Microsoft's files (ADR 0055); a user who runs Microsoft's installer gets
+   Microsoft's DLLs in `System32`, under Microsoft's licence to the user. Poly's layout keeps
+   them: its own `vcruntime140.dll` and `vcruntime140_1.dll` carry a marker text
+   (`OWN_COPY_MARKER`, `personalities/nt/src/layout/create.rs`; the kernel's `build.rs`
+   refuses a DLL without it), and at boot the layout writes such a DLL only where the file is
+   missing or is an older Poly copy (`create::install_own_copy`): a file without the marker
+   is left alone and logged (`... is not Poly's (an installed runtime): kept`). Every other
+   system DLL is still restored at every boot. Poly's DLLs carry no version resource, so the
+   installer's version rules should replace them (Learn, "File Versioning Rules": a versioned
+   file replaces a nonversioned one); to be confirmed when Windows Installer runs on Poly.
+   `msvcp140*` gets the same marker and install path when it is built.
 
 ## Consequences
 
