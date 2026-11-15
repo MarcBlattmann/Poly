@@ -156,6 +156,8 @@ pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"))
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
+/// Poly's own `msvcp140.dll` (ADR 0199): its first names, the rest fail-only.
+pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.

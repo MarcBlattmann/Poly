@@ -196,7 +196,11 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     // Poly's own Visual C++ runtime (ADR 0199). A user who installs
     // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
     // is not rewritten (owner decision 5).
-    for (name, bytes) in [("vcruntime140.dll", super::VCRUNTIME140), ("vcruntime140_1.dll", super::VCRUNTIME140_1)] {
+    for (name, bytes) in [
+        ("vcruntime140.dll", super::VCRUNTIME140),
+        ("vcruntime140_1.dll", super::VCRUNTIME140_1),
+        ("msvcp140.dll", super::MSVCP140),
+    ] {
         if bytes.is_empty() {
             continue;
         }

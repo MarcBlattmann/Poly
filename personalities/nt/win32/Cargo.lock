@@ -248,6 +248,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "msvcp140"
+version = "0.0.1"
+dependencies = [
+ "poly-msvcp",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "msvcrt"
 version = "0.0.1"
 dependencies = [
@@ -399,6 +407,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-msvc32"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvcp"
 version = "0.0.1"
 
 [[package]]

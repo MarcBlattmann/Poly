@@ -138,8 +138,8 @@ pub enum Installed {
 }
 
 /// The bytes every Poly DLL that a user's installer may replace carries
-/// (ADR 0199): `vcruntime140.dll` and `vcruntime140_1.dll` today. The DLLs
-/// hold the same text (`personalities/nt/win32/vcruntime140*/src/lib.rs`)
+/// (ADR 0199): `vcruntime140.dll`, `vcruntime140_1.dll` and `msvcp140.dll`. The DLLs
+/// hold the same text (`personalities/nt/win32/{vcruntime140*,msvcp140}/src/lib.rs`)
 /// and the kernel's `build.rs` refuses to embed one without it.
 pub const OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";
 
