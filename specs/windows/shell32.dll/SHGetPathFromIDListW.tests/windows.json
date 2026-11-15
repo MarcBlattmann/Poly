@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "spf_ids",
+      "exe_sha256": "bedc8da87c9f84a836119334394ffdf1f4f9f660366acf4a214eae7c094bfc62",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SUxDcmVhdGVGcm9tUGF0aFcoZXhpc3RpbmcgZmlsZSk6IGxpc3Qgc2V0ClNIR2V0UGF0aEZyb21JRExpc3RXID0gMTsgdGhlIHNhbWUgdGV4dCBhcyB0aGUgcGF0aDogdHJ1ZTsgdGhlIHNhbWUgbGVuZ3RoOiB0cnVlCklMR2V0U2l6ZSA+IDI6IHRydWUKSUxDbG9uZTogYW5vdGhlciBsaXN0IHRydWUgd2l0aCB0aGUgc2FtZSBzaXplIHRydWUgYW5kIGJ5dGVzIHRydWUKYSBzZWNvbmQgbGlzdCBmb3IgdGhlIHNhbWUgcGF0aCBoYXMgdGhlIHNhbWUgYnl0ZXM6IGZhbHNlCklMQ3JlYXRlRnJvbVBhdGhXKHVwcGVyIGNhc2Ugc3BlbGxpbmcpOiBsaXN0IHNldCwgcGF0aCBiYWNrIDEgYW5kIHRoZSBjYXNlIG9mIHRoZSBmaWxlIHN5c3RlbSBpcyB1c2VkOiB0cnVlCmZvcndhcmQgc2xhc2hlczogbGlzdCBOVUxMLCBwYXRoIGJhY2sgLTEsIHdpdGggYmFja3NsYXNoZXMgZmFsc2UKSUxDcmVhdGVGcm9tUGF0aFcobWlzc2luZyBmaWxlKTogbGlzdCBOVUxMLCBwYXRoIGJhY2sgLTEKU0hHZXRQYXRoRnJvbUlETGlzdFcoTlVMTCkgPSAwLCBidWZmZXIgZW1wdHkgc3RyaW5nClNIR2V0UGF0aEZyb21JRExpc3RXKGVtcHR5IGxpc3QpID0gMSwgYnVmZmVyIHdyaXR0ZW4KdGhlIGxpc3Qgb2YgRFJJVkVTICh0aGlzIGNvbXB1dGVyKTogMCwgYnVmZmVyIGVtcHR5IHN0cmluZwpTSFBhcnNlRGlzcGxheU5hbWUoZXhpc3RpbmcgZmlsZSkgPSBTX09LICgweDApLCBsaXN0IHNldCwgcGF0aCBiYWNrIDEsIHNhbWUgdGV4dCB0cnVlClNIUGFyc2VEaXNwbGF5TmFtZShtaXNzaW5nIGZpbGUpID0gSFJFU1VMVF9GUk9NX1dJTjMyKEVSUk9SX0ZJTEVfTk9UX0ZPVU5EKSAoMHg4MDA3MDAwMiksIGxpc3QgTlVMTApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ILCreateFromPathW(existing file): list set\nSHGetPathFromIDListW = 1; the same text as the path: true; the same length: true\nILGetSize > 2: true\nILClone: another list true with the same size true and bytes true\na second list for the same path has the same bytes: false\nILCreateFromPathW(upper case spelling): list set, path back 1 and the case of the file system is used: true\nforward slashes: list NULL, path back -1, with backslashes false\nILCreateFromPathW(missing file): list NULL, path back -1\nSHGetPathFromIDListW(NULL) = 0, buffer empty string\nSHGetPathFromIDListW(empty list) = 1, buffer written\nthe list of DRIVES (this computer): 0, buffer empty string\nSHParseDisplayName(existing file) = S_OK (0x0), list set, path back 1, same text true\nSHParseDisplayName(missing file) = HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) (0x80070002), list NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 129
+    }
+  ]
+}

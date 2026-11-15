@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "sb_layout",
+      "exe_sha256": "bc9057c133627b6050ae4a9d2bcb7bb33634cbd4c647b32f9386a8ec1fa0a82b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFkZSBhdCAoMTAsIDIwKSA1MCB4IDMwLCBiZWZvcmUgYW55IFdNX1NJWkU6IGxlZnQgMCB3aWR0aCBlcXVhbHMgdGhlIHBhcmVudCdzIGNsaWVudCB3aWR0aCB0cnVlOyB0b3Agbm90IDA7IGJvdHRvbSBpcyB0aGUgcGFyZW50J3MgY2xpZW50IGJvdHRvbSB0cnVlOyBoZWlnaHQgPiAwIHRydWUKYWZ0ZXIgV01fU0laRTogbGVmdCAwIHdpZHRoIGVxdWFscyB0aGUgcGFyZW50J3MgY2xpZW50IHdpZHRoIHRydWU7IHRvcCBub3QgMDsgYm90dG9tIGlzIHRoZSBwYXJlbnQncyBjbGllbnQgYm90dG9tIHRydWU7IGhlaWdodCA+IDAgdHJ1ZQphIHNlY29uZCBiYXIgaGFzIHRoZSBzYW1lIGhlaWdodDogdHJ1ZQp0aGUgcGFyZW50IGdyZXcgdG8gNTg0IHggNDExOyB0aGUgYmFyIHN0aWxsIGVuZHMgYXQgdGhlIG9sZCBib3R0b20gdHJ1ZSBhbmQgdGhlIG9sZCB3aWR0aCB0cnVlCmFmdGVyIFdNX1NJWkUgZm9yIHRoZSBuZXcgc2l6ZTogbGVmdCAwIHdpZHRoIGVxdWFscyB0aGUgcGFyZW50J3MgY2xpZW50IHdpZHRoIHRydWU7IHRvcCBub3QgMDsgYm90dG9tIGlzIHRoZSBwYXJlbnQncyBjbGllbnQgYm90dG9tIHRydWU7IGhlaWdodCA+IDAgdHJ1ZQphZnRlciBXTV9TSVpFIHdpdGggU0laRV9NSU5JTUlaRUQgYW5kIDAgeCAwOiBsZWZ0IDAgd2lkdGggZXF1YWxzIHRoZSBwYXJlbnQncyBjbGllbnQgd2lkdGggdHJ1ZTsgdG9wIG5vdCAwOyBib3R0b20gaXMgdGhlIHBhcmVudCdzIGNsaWVudCBib3R0b20gdHJ1ZTsgaGVpZ2h0ID4gMCB0cnVlCkNDU19UT1AgYWZ0ZXIgV01fU0laRTogbGVmdCAwIHdpZHRoIGVxdWFscyB0aGUgcGFyZW50J3MgY2xpZW50IHdpZHRoIHRydWU7IHRvcCAwOyBib3R0b20gaXMgdGhlIHBhcmVudCdzIGNsaWVudCBib3R0b20gZmFsc2U7IGhlaWdodCA+IDAgdHJ1ZQpDQ1NfTk9SRVNJWkUgYWZ0ZXIgV01fU0laRTogc2l6ZSA1MCB4IDMwIChtYWRlIDUwIHggMzApCkNDU19OT1BBUkVOVEFMSUdOIGFmdGVyIFdNX1NJWkU6IHNpemUgNTAgeCAyMgpwYXJ0IDA6IGxlZnQgZWRnZSBDT0xPUl9CVE5TSEFET1cgdG9wIGVkZ2UgQ09MT1JfQlROU0hBRE9XIHJpZ2h0IGVkZ2UgQ09MT1JfQlROSElHSExJR0hUIGJvdHRvbSBlZGdlIENPTE9SX0JUTkhJR0hMSUdIVCBpbnNpZGUgQ09MT1JfQlRORkFDRQpwYXJ0IDE6IGxlZnQgZWRnZSBDT0xPUl9CVE5TSEFET1cgdG9wIGVkZ2UgQ09MT1JfQlROU0hBRE9XIHJpZ2h0IGVkZ2UgQ09MT1JfQlROSElHSExJR0hUIGJvdHRvbSBlZGdlIENPTE9SX0JUTkhJR0hMSUdIVCBpbnNpZGUgQ09MT1JfQlRORkFDRQpwYXJ0IDI6IGxlZnQgZWRnZSBDT0xPUl9CVE5TSEFET1cgdG9wIGVkZ2UgQ09MT1JfQlROU0hBRE9XIHJpZ2h0IGVkZ2UgQ09MT1JfQlROSElHSExJR0hUIGJvdHRvbSBlZGdlIENPTE9SX0JUTkhJR0hMSUdIVCBpbnNpZGUgQ09MT1JfQlRORkFDRQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "made at (10, 20) 50 x 30, before any WM_SIZE: left 0 width equals the parent's client width true; top not 0; bottom is the parent's client bottom true; height > 0 true\nafter WM_SIZE: left 0 width equals the parent's client width true; top not 0; bottom is the parent's client bottom true; height > 0 true\na second bar has the same height: true\nthe parent grew to 584 x 411; the bar still ends at the old bottom true and the old width true\nafter WM_SIZE for the new size: left 0 width equals the parent's client width true; top not 0; bottom is the parent's client bottom true; height > 0 true\nafter WM_SIZE with SIZE_MINIMIZED and 0 x 0: left 0 width equals the parent's client width true; top not 0; bottom is the parent's client bottom true; height > 0 true\nCCS_TOP after WM_SIZE: left 0 width equals the parent's client width true; top 0; bottom is the parent's client bottom false; height > 0 true\nCCS_NORESIZE after WM_SIZE: size 50 x 30 (made 50 x 30)\nCCS_NOPARENTALIGN after WM_SIZE: size 50 x 22\npart 0: left edge COLOR_BTNSHADOW top edge COLOR_BTNSHADOW right edge COLOR_BTNHIGHLIGHT bottom edge COLOR_BTNHIGHLIGHT inside COLOR_BTNFACE\npart 1: left edge COLOR_BTNSHADOW top edge COLOR_BTNSHADOW right edge COLOR_BTNHIGHLIGHT bottom edge COLOR_BTNHIGHLIGHT inside COLOR_BTNFACE\npart 2: left edge COLOR_BTNSHADOW top edge COLOR_BTNSHADOW right edge COLOR_BTNHIGHLIGHT bottom edge COLOR_BTNHIGHLIGHT inside COLOR_BTNFACE\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 81
+    }
+  ]
+}

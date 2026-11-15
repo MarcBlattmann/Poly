@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "gsr_defaults",
+      "exe_sha256": "367d9124a89fb7d04f2dfe2dea065bd3d6d4dd734d80fe17e915f04cd76f4cfe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IHdpdGhvdXQgYmFycywgdmVydGljYWw6IEdldFNjcm9sbFJhbmdlKFNCX1ZFUlQpID0gMSBlcnIgLTIgbWluIDAgbWF4IDAKaG9yaXpvbnRhbDogR2V0U2Nyb2xsUmFuZ2UoU0JfSE9SWikgPSAxIGVyciAtMiBtaW4gMCBtYXggMApTQl9DVEw6IEdldFNjcm9sbFJhbmdlKFNCX0NUTCkgPSAxIGVyciAtMiBtaW4gNDM2OSBtYXggODczOApiYXIgNDogR2V0U2Nyb2xsUmFuZ2UoYmFyPykgPSAwIGVyciA4NyBtaW4gNDM2OSBtYXggODczOApiYXIgLTE6IEdldFNjcm9sbFJhbmdlKGJhcj8pID0gMCBlcnIgODcgbWluIDQzNjkgbWF4IDg3MzgKbWFkZS11cCB3aW5kb3c6IEdldFNjcm9sbFJhbmdlKFNCX1ZFUlQpID0gMCBlcnIgMTQwMCBtaW4gNDM2OSBtYXggODczOApmcmVzaCBjb250cm9sOiBHZXRTY3JvbGxSYW5nZShTQl9DVEwpID0gMSBlcnIgLTIgbWluIDAgbWF4IDAKY29udHJvbCBhcyBTQl9WRVJUOiBHZXRTY3JvbGxSYW5nZShTQl9WRVJUKSA9IDEgZXJyIC0yIG1pbiAwIG1heCAwCmNvbnRyb2wgYXMgU0JfSE9SWjogR2V0U2Nyb2xsUmFuZ2UoU0JfSE9SWikgPSAxIGVyciAtMiBtaW4gMCBtYXggMApwb3NpdGlvbjogR2V0U2Nyb2xsUG9zKFNCX0NUTCkgPSAwIGVyciAtMQpmcmVzaCBjb250cm9sOiBHZXRTY3JvbGxSYW5nZShTQl9DVEwpID0gMSBlcnIgLTIgbWluIDAgbWF4IDAKY29udHJvbCBhcyBTQl9WRVJUOiBHZXRTY3JvbGxSYW5nZShTQl9WRVJUKSA9IDEgZXJyIC0yIG1pbiAwIG1heCAwCmNvbnRyb2wgYXMgU0JfSE9SWjogR2V0U2Nyb2xsUmFuZ2UoU0JfSE9SWikgPSAxIGVyciAtMiBtaW4gMCBtYXggMApwb3NpdGlvbjogR2V0U2Nyb2xsUG9zKFNCX0NUTCkgPSAwIGVyciAtMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window without bars, vertical: GetScrollRange(SB_VERT) = 1 err -2 min 0 max 0\nhorizontal: GetScrollRange(SB_HORZ) = 1 err -2 min 0 max 0\nSB_CTL: GetScrollRange(SB_CTL) = 1 err -2 min 4369 max 8738\nbar 4: GetScrollRange(bar?) = 0 err 87 min 4369 max 8738\nbar -1: GetScrollRange(bar?) = 0 err 87 min 4369 max 8738\nmade-up window: GetScrollRange(SB_VERT) = 0 err 1400 min 4369 max 8738\nfresh control: GetScrollRange(SB_CTL) = 1 err -2 min 0 max 0\ncontrol as SB_VERT: GetScrollRange(SB_VERT) = 1 err -2 min 0 max 0\ncontrol as SB_HORZ: GetScrollRange(SB_HORZ) = 1 err -2 min 0 max 0\nposition: GetScrollPos(SB_CTL) = 0 err -1\nfresh control: GetScrollRange(SB_CTL) = 1 err -2 min 0 max 0\ncontrol as SB_VERT: GetScrollRange(SB_VERT) = 1 err -2 min 0 max 0\ncontrol as SB_HORZ: GetScrollRange(SB_HORZ) = 1 err -2 min 0 max 0\nposition: GetScrollPos(SB_CTL) = 0 err -1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

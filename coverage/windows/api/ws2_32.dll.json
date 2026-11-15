@@ -21,7 +21,7 @@
 {"symbol":"WSAAsyncGetProtoByNumber","src":["wine-spec"]},
 {"symbol":"WSAAsyncGetServByName","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_WSAAsyncGetServByName"]},
 {"symbol":"WSAAsyncGetServByPort","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_WSAAsyncGetServByPort"]},
-{"symbol":"WSAAsyncSelect","status":"stub","src":["wine-spec"],"seeds":["wine:ws2_32/tests/sock.c:wsa_async_select_thread","wine:ws2_32/tests/sock.c:select_events","wine:ws2_32/tests/sock.c:iocp_async_closesocket","wine:ws2_32/tests/sock.c:iocp_async_read_closesocket"]},
+{"symbol":"WSAAsyncSelect","status":"claimed","claimed_by":"spec-win-apps-5","src":["wine-spec"],"seeds":["wine:ws2_32/tests/sock.c:wsa_async_select_thread","wine:ws2_32/tests/sock.c:select_events","wine:ws2_32/tests/sock.c:iocp_async_closesocket","wine:ws2_32/tests/sock.c:iocp_async_read_closesocket"]},
 {"symbol":"WSACancelAsyncRequest","src":["wine-spec"]},
 {"symbol":"WSACancelBlockingCall","src":["wine-spec"]},
 {"symbol":"WSACleanup","status":"claimed","claimed_by":"impl-winsock","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_startup","wine:ws2_32/tests/sock.c:test_extendedSocketOptions","wine:ws2_32/tests/sock.c:test_WithWSAStartup","wine:ws2_32/tests/sock.c:test_getsockname","wine:ws2_32/tests/sock.c:Exit","wine:ws2_32/tests/protocol.c:START_TEST"]},
