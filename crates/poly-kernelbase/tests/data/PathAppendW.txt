@@ -1,0 +1,759 @@
+PathAppendW "C:" + "" -> "C:\" ret 1
+PathAppendW "C:" + "b" -> "C:\b" ret 1
+PathAppendW "C:" + "\b" -> "C:\b" ret 1
+PathAppendW "C:" + "\\b" -> "\\b" ret 1
+PathAppendW "C:" + "b\" -> "C:\b\" ret 1
+PathAppendW "C:" + "b\c" -> "C:\b\c" ret 1
+PathAppendW "C:" + "." -> "C:\" ret 1
+PathAppendW "C:" + ".." -> "C:\" ret 1
+PathAppendW "C:" + "\.." -> "C:\" ret 1
+PathAppendW "C:" + ".\b" -> "C:\b" ret 1
+PathAppendW "C:" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:" + "b\.." -> "C:\" ret 1
+PathAppendW "C:" + "b\.\c" -> "C:\b\c" ret 1
+PathAppendW "C:" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:" + "C:b" -> "C:b" ret 1
+PathAppendW "C:" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:" + "a.txt" -> "C:\a.txt" ret 1
+PathAppendW "C:" + " b" -> "C:\ b" ret 1
+PathAppendW "C:" + "b " -> "C:\b " ret 1
+PathAppendW "C:" + "\" -> "C:\" ret 1
+PathAppendW "C:" + "/b" -> "C:\/b" ret 1
+PathAppendW "C:" + "b/c" -> "C:\b/c" ret 1
+PathAppendW "C:\" + "" -> "C:\" ret 1
+PathAppendW "C:\" + "b" -> "C:\b" ret 1
+PathAppendW "C:\" + "\b" -> "C:\b" ret 1
+PathAppendW "C:\" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\" + "b\" -> "C:\b\" ret 1
+PathAppendW "C:\" + "b\c" -> "C:\b\c" ret 1
+PathAppendW "C:\" + "." -> "C:\" ret 1
+PathAppendW "C:\" + ".." -> "C:\" ret 1
+PathAppendW "C:\" + "\.." -> "C:\" ret 1
+PathAppendW "C:\" + ".\b" -> "C:\b" ret 1
+PathAppendW "C:\" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:\" + "b\.." -> "C:\" ret 1
+PathAppendW "C:\" + "b\.\c" -> "C:\b\c" ret 1
+PathAppendW "C:\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\" + "a.txt" -> "C:\a.txt" ret 1
+PathAppendW "C:\" + " b" -> "C:\ b" ret 1
+PathAppendW "C:\" + "b " -> "C:\b " ret 1
+PathAppendW "C:\" + "\" -> "C:\" ret 1
+PathAppendW "C:\" + "/b" -> "C:\/b" ret 1
+PathAppendW "C:\" + "b/c" -> "C:\b/c" ret 1
+PathAppendW "C:\\" + "" -> "C:\\" ret 1
+PathAppendW "C:\\" + "b" -> "C:\\b" ret 1
+PathAppendW "C:\\" + "\b" -> "C:\\b" ret 1
+PathAppendW "C:\\" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\\" + "b\" -> "C:\\b\" ret 1
+PathAppendW "C:\\" + "b\c" -> "C:\\b\c" ret 1
+PathAppendW "C:\\" + "." -> "C:\" ret 1
+PathAppendW "C:\\" + ".." -> "C:\" ret 1
+PathAppendW "C:\\" + "\.." -> "C:\" ret 1
+PathAppendW "C:\\" + ".\b" -> "C:\\b" ret 1
+PathAppendW "C:\\" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:\\" + "b\.." -> "C:\" ret 1
+PathAppendW "C:\\" + "b\.\c" -> "C:\\b\c" ret 1
+PathAppendW "C:\\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\\" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\\" + "a.txt" -> "C:\\a.txt" ret 1
+PathAppendW "C:\\" + " b" -> "C:\\ b" ret 1
+PathAppendW "C:\\" + "b " -> "C:\\b " ret 1
+PathAppendW "C:\\" + "\" -> "C:\\" ret 1
+PathAppendW "C:\\" + "/b" -> "C:\\/b" ret 1
+PathAppendW "C:\\" + "b/c" -> "C:\\b/c" ret 1
+PathAppendW "C:\a" + "" -> "C:\a" ret 1
+PathAppendW "C:\a" + "b" -> "C:\a\b" ret 1
+PathAppendW "C:\a" + "\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\a" + "b\" -> "C:\a\b\" ret 1
+PathAppendW "C:\a" + "b\c" -> "C:\a\b\c" ret 1
+PathAppendW "C:\a" + "." -> "C:\a" ret 1
+PathAppendW "C:\a" + ".." -> "C:\" ret 1
+PathAppendW "C:\a" + "\.." -> "C:\" ret 1
+PathAppendW "C:\a" + ".\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:\a" + "b\.." -> "C:\a" ret 1
+PathAppendW "C:\a" + "b\.\c" -> "C:\a\b\c" ret 1
+PathAppendW "C:\a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\a" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\a" + "a.txt" -> "C:\a\a.txt" ret 1
+PathAppendW "C:\a" + " b" -> "C:\a\ b" ret 1
+PathAppendW "C:\a" + "b " -> "C:\a\b " ret 1
+PathAppendW "C:\a" + "\" -> "C:\a" ret 1
+PathAppendW "C:\a" + "/b" -> "C:\a\/b" ret 1
+PathAppendW "C:\a" + "b/c" -> "C:\a\b/c" ret 1
+PathAppendW "C:\a\" + "" -> "C:\a\" ret 1
+PathAppendW "C:\a\" + "b" -> "C:\a\b" ret 1
+PathAppendW "C:\a\" + "\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a\" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\a\" + "b\" -> "C:\a\b\" ret 1
+PathAppendW "C:\a\" + "b\c" -> "C:\a\b\c" ret 1
+PathAppendW "C:\a\" + "." -> "C:\a" ret 1
+PathAppendW "C:\a\" + ".." -> "C:\" ret 1
+PathAppendW "C:\a\" + "\.." -> "C:\" ret 1
+PathAppendW "C:\a\" + ".\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a\" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:\a\" + "b\.." -> "C:\a" ret 1
+PathAppendW "C:\a\" + "b\.\c" -> "C:\a\b\c" ret 1
+PathAppendW "C:\a\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\a\" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\a\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\a\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\a\" + "a.txt" -> "C:\a\a.txt" ret 1
+PathAppendW "C:\a\" + " b" -> "C:\a\ b" ret 1
+PathAppendW "C:\a\" + "b " -> "C:\a\b " ret 1
+PathAppendW "C:\a\" + "\" -> "C:\a\" ret 1
+PathAppendW "C:\a\" + "/b" -> "C:\a\/b" ret 1
+PathAppendW "C:\a\" + "b/c" -> "C:\a\b/c" ret 1
+PathAppendW "C:\a\\" + "" -> "C:\a\\" ret 1
+PathAppendW "C:\a\\" + "b" -> "C:\a\\b" ret 1
+PathAppendW "C:\a\\" + "\b" -> "C:\a\\b" ret 1
+PathAppendW "C:\a\\" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\a\\" + "b\" -> "C:\a\\b\" ret 1
+PathAppendW "C:\a\\" + "b\c" -> "C:\a\\b\c" ret 1
+PathAppendW "C:\a\\" + "." -> "C:\a\" ret 1
+PathAppendW "C:\a\\" + ".." -> "C:\a" ret 1
+PathAppendW "C:\a\\" + "\.." -> "C:\a" ret 1
+PathAppendW "C:\a\\" + ".\b" -> "C:\a\\b" ret 1
+PathAppendW "C:\a\\" + "..\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a\\" + "b\.." -> "C:\a\" ret 1
+PathAppendW "C:\a\\" + "b\.\c" -> "C:\a\\b\c" ret 1
+PathAppendW "C:\a\\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\a\\" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\a\\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\a\\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\a\\" + "a.txt" -> "C:\a\\a.txt" ret 1
+PathAppendW "C:\a\\" + " b" -> "C:\a\\ b" ret 1
+PathAppendW "C:\a\\" + "b " -> "C:\a\\b " ret 1
+PathAppendW "C:\a\\" + "\" -> "C:\a\\" ret 1
+PathAppendW "C:\a\\" + "/b" -> "C:\a\\/b" ret 1
+PathAppendW "C:\a\\" + "b/c" -> "C:\a\\b/c" ret 1
+PathAppendW "C:a" + "" -> "C:a" ret 1
+PathAppendW "C:a" + "b" -> "C:a\b" ret 1
+PathAppendW "C:a" + "\b" -> "C:a\b" ret 1
+PathAppendW "C:a" + "\\b" -> "\\b" ret 1
+PathAppendW "C:a" + "b\" -> "C:a\b\" ret 1
+PathAppendW "C:a" + "b\c" -> "C:a\b\c" ret 1
+PathAppendW "C:a" + "." -> "C:a" ret 1
+PathAppendW "C:a" + ".." -> "\" ret 1
+PathAppendW "C:a" + "\.." -> "\" ret 1
+PathAppendW "C:a" + ".\b" -> "C:a\b" ret 1
+PathAppendW "C:a" + "..\b" -> "\b" ret 1
+PathAppendW "C:a" + "b\.." -> "C:a" ret 1
+PathAppendW "C:a" + "b\.\c" -> "C:a\b\c" ret 1
+PathAppendW "C:a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:a" + "C:b" -> "C:b" ret 1
+PathAppendW "C:a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:a" + "a.txt" -> "C:a\a.txt" ret 1
+PathAppendW "C:a" + " b" -> "C:a\ b" ret 1
+PathAppendW "C:a" + "b " -> "C:a\b " ret 1
+PathAppendW "C:a" + "\" -> "C:a" ret 1
+PathAppendW "C:a" + "/b" -> "C:a\/b" ret 1
+PathAppendW "C:a" + "b/c" -> "C:a\b/c" ret 1
+PathAppendW "c:\A\B" + "" -> "c:\A\B" ret 1
+PathAppendW "c:\A\B" + "b" -> "c:\A\B\b" ret 1
+PathAppendW "c:\A\B" + "\b" -> "c:\A\B\b" ret 1
+PathAppendW "c:\A\B" + "\\b" -> "\\b" ret 1
+PathAppendW "c:\A\B" + "b\" -> "c:\A\B\b\" ret 1
+PathAppendW "c:\A\B" + "b\c" -> "c:\A\B\b\c" ret 1
+PathAppendW "c:\A\B" + "." -> "c:\A\B" ret 1
+PathAppendW "c:\A\B" + ".." -> "c:\A" ret 1
+PathAppendW "c:\A\B" + "\.." -> "c:\A" ret 1
+PathAppendW "c:\A\B" + ".\b" -> "c:\A\B\b" ret 1
+PathAppendW "c:\A\B" + "..\b" -> "c:\A\b" ret 1
+PathAppendW "c:\A\B" + "b\.." -> "c:\A\B" ret 1
+PathAppendW "c:\A\B" + "b\.\c" -> "c:\A\B\b\c" ret 1
+PathAppendW "c:\A\B" + "C:\b" -> "C:\b" ret 1
+PathAppendW "c:\A\B" + "C:b" -> "C:b" ret 1
+PathAppendW "c:\A\B" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "c:\A\B" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "c:\A\B" + "a.txt" -> "c:\A\B\a.txt" ret 1
+PathAppendW "c:\A\B" + " b" -> "c:\A\B\ b" ret 1
+PathAppendW "c:\A\B" + "b " -> "c:\A\B\b " ret 1
+PathAppendW "c:\A\B" + "\" -> "c:\A\B" ret 1
+PathAppendW "c:\A\B" + "/b" -> "c:\A\B\/b" ret 1
+PathAppendW "c:\A\B" + "b/c" -> "c:\A\B\b/c" ret 1
+PathAppendW "C:\a\b.txt" + "" -> "C:\a\b.txt" ret 1
+PathAppendW "C:\a\b.txt" + "b" -> "C:\a\b.txt\b" ret 1
+PathAppendW "C:\a\b.txt" + "\b" -> "C:\a\b.txt\b" ret 1
+PathAppendW "C:\a\b.txt" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\a\b.txt" + "b\" -> "C:\a\b.txt\b\" ret 1
+PathAppendW "C:\a\b.txt" + "b\c" -> "C:\a\b.txt\b\c" ret 1
+PathAppendW "C:\a\b.txt" + "." -> "C:\a\b.txt" ret 1
+PathAppendW "C:\a\b.txt" + ".." -> "C:\a" ret 1
+PathAppendW "C:\a\b.txt" + "\.." -> "C:\a" ret 1
+PathAppendW "C:\a\b.txt" + ".\b" -> "C:\a\b.txt\b" ret 1
+PathAppendW "C:\a\b.txt" + "..\b" -> "C:\a\b" ret 1
+PathAppendW "C:\a\b.txt" + "b\.." -> "C:\a\b.txt" ret 1
+PathAppendW "C:\a\b.txt" + "b\.\c" -> "C:\a\b.txt\b\c" ret 1
+PathAppendW "C:\a\b.txt" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\a\b.txt" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\a\b.txt" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\a\b.txt" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\a\b.txt" + "a.txt" -> "C:\a\b.txt\a.txt" ret 1
+PathAppendW "C:\a\b.txt" + " b" -> "C:\a\b.txt\ b" ret 1
+PathAppendW "C:\a\b.txt" + "b " -> "C:\a\b.txt\b " ret 1
+PathAppendW "C:\a\b.txt" + "\" -> "C:\a\b.txt" ret 1
+PathAppendW "C:\a\b.txt" + "/b" -> "C:\a\b.txt\/b" ret 1
+PathAppendW "C:\a\b.txt" + "b/c" -> "C:\a\b.txt\b/c" ret 1
+PathAppendW "C:/a" + "" -> "C:/a" ret 1
+PathAppendW "C:/a" + "b" -> "C:/a\b" ret 1
+PathAppendW "C:/a" + "\b" -> "C:/a\b" ret 1
+PathAppendW "C:/a" + "\\b" -> "\\b" ret 1
+PathAppendW "C:/a" + "b\" -> "C:/a\b\" ret 1
+PathAppendW "C:/a" + "b\c" -> "C:/a\b\c" ret 1
+PathAppendW "C:/a" + "." -> "C:/a" ret 1
+PathAppendW "C:/a" + ".." -> "\" ret 1
+PathAppendW "C:/a" + "\.." -> "\" ret 1
+PathAppendW "C:/a" + ".\b" -> "C:/a\b" ret 1
+PathAppendW "C:/a" + "..\b" -> "\b" ret 1
+PathAppendW "C:/a" + "b\.." -> "C:/a" ret 1
+PathAppendW "C:/a" + "b\.\c" -> "C:/a\b\c" ret 1
+PathAppendW "C:/a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:/a" + "C:b" -> "C:b" ret 1
+PathAppendW "C:/a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:/a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:/a" + "a.txt" -> "C:/a\a.txt" ret 1
+PathAppendW "C:/a" + " b" -> "C:/a\ b" ret 1
+PathAppendW "C:/a" + "b " -> "C:/a\b " ret 1
+PathAppendW "C:/a" + "\" -> "C:/a" ret 1
+PathAppendW "C:/a" + "/b" -> "C:/a\/b" ret 1
+PathAppendW "C:/a" + "b/c" -> "C:/a\b/c" ret 1
+PathAppendW "C:\a b" + "" -> "C:\a b" ret 1
+PathAppendW "C:\a b" + "b" -> "C:\a b\b" ret 1
+PathAppendW "C:\a b" + "\b" -> "C:\a b\b" ret 1
+PathAppendW "C:\a b" + "\\b" -> "\\b" ret 1
+PathAppendW "C:\a b" + "b\" -> "C:\a b\b\" ret 1
+PathAppendW "C:\a b" + "b\c" -> "C:\a b\b\c" ret 1
+PathAppendW "C:\a b" + "." -> "C:\a b" ret 1
+PathAppendW "C:\a b" + ".." -> "C:\" ret 1
+PathAppendW "C:\a b" + "\.." -> "C:\" ret 1
+PathAppendW "C:\a b" + ".\b" -> "C:\a b\b" ret 1
+PathAppendW "C:\a b" + "..\b" -> "C:\b" ret 1
+PathAppendW "C:\a b" + "b\.." -> "C:\a b" ret 1
+PathAppendW "C:\a b" + "b\.\c" -> "C:\a b\b\c" ret 1
+PathAppendW "C:\a b" + "C:\b" -> "C:\b" ret 1
+PathAppendW "C:\a b" + "C:b" -> "C:b" ret 1
+PathAppendW "C:\a b" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "C:\a b" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "C:\a b" + "a.txt" -> "C:\a b\a.txt" ret 1
+PathAppendW "C:\a b" + " b" -> "C:\a b\ b" ret 1
+PathAppendW "C:\a b" + "b " -> "C:\a b\b " ret 1
+PathAppendW "C:\a b" + "\" -> "C:\a b" ret 1
+PathAppendW "C:\a b" + "/b" -> "C:\a b\/b" ret 1
+PathAppendW "C:\a b" + "b/c" -> "C:\a b\b/c" ret 1
+PathAppendW "\\?\C:" + "" -> "C:\" ret 1
+PathAppendW "\\?\C:" + "b" -> "C:\b" ret 1
+PathAppendW "\\?\C:" + "\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\C:" + "b\" -> "C:\b\" ret 1
+PathAppendW "\\?\C:" + "b\c" -> "C:\b\c" ret 1
+PathAppendW "\\?\C:" + "." -> "C:\" ret 1
+PathAppendW "\\?\C:" + ".." -> "C:\" ret 1
+PathAppendW "\\?\C:" + "\.." -> "C:\" ret 1
+PathAppendW "\\?\C:" + ".\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:" + "..\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:" + "b\.." -> "C:\" ret 1
+PathAppendW "\\?\C:" + "b\.\c" -> "C:\b\c" ret 1
+PathAppendW "\\?\C:" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\C:" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\C:" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\C:" + "a.txt" -> "C:\a.txt" ret 1
+PathAppendW "\\?\C:" + " b" -> "C:\ b" ret 1
+PathAppendW "\\?\C:" + "b " -> "C:\b " ret 1
+PathAppendW "\\?\C:" + "\" -> "C:\" ret 1
+PathAppendW "\\?\C:" + "/b" -> "C:\/b" ret 1
+PathAppendW "\\?\C:" + "b/c" -> "C:\b/c" ret 1
+PathAppendW "\\?\C:\" + "" -> "C:\" ret 1
+PathAppendW "\\?\C:\" + "b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\" + "\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\C:\" + "b\" -> "C:\b\" ret 1
+PathAppendW "\\?\C:\" + "b\c" -> "C:\b\c" ret 1
+PathAppendW "\\?\C:\" + "." -> "C:\" ret 1
+PathAppendW "\\?\C:\" + ".." -> "C:\" ret 1
+PathAppendW "\\?\C:\" + "\.." -> "C:\" ret 1
+PathAppendW "\\?\C:\" + ".\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\" + "..\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\" + "b\.." -> "C:\" ret 1
+PathAppendW "\\?\C:\" + "b\.\c" -> "C:\b\c" ret 1
+PathAppendW "\\?\C:\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\C:\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\C:\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\C:\" + "a.txt" -> "C:\a.txt" ret 1
+PathAppendW "\\?\C:\" + " b" -> "C:\ b" ret 1
+PathAppendW "\\?\C:\" + "b " -> "C:\b " ret 1
+PathAppendW "\\?\C:\" + "\" -> "C:\" ret 1
+PathAppendW "\\?\C:\" + "/b" -> "C:\/b" ret 1
+PathAppendW "\\?\C:\" + "b/c" -> "C:\b/c" ret 1
+PathAppendW "\\?\C:\a" + "" -> "C:\a" ret 1
+PathAppendW "\\?\C:\a" + "b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a" + "\b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\C:\a" + "b\" -> "C:\a\b\" ret 1
+PathAppendW "\\?\C:\a" + "b\c" -> "C:\a\b\c" ret 1
+PathAppendW "\\?\C:\a" + "." -> "C:\a" ret 1
+PathAppendW "\\?\C:\a" + ".." -> "C:\" ret 1
+PathAppendW "\\?\C:\a" + "\.." -> "C:\" ret 1
+PathAppendW "\\?\C:\a" + ".\b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a" + "..\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\a" + "b\.." -> "C:\a" ret 1
+PathAppendW "\\?\C:\a" + "b\.\c" -> "C:\a\b\c" ret 1
+PathAppendW "\\?\C:\a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\a" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\C:\a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\C:\a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\C:\a" + "a.txt" -> "C:\a\a.txt" ret 1
+PathAppendW "\\?\C:\a" + " b" -> "C:\a\ b" ret 1
+PathAppendW "\\?\C:\a" + "b " -> "C:\a\b " ret 1
+PathAppendW "\\?\C:\a" + "\" -> "C:\a" ret 1
+PathAppendW "\\?\C:\a" + "/b" -> "C:\a\/b" ret 1
+PathAppendW "\\?\C:\a" + "b/c" -> "C:\a\b/c" ret 1
+PathAppendW "\\?\C:\a\" + "" -> "C:\a\" ret 1
+PathAppendW "\\?\C:\a\" + "b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a\" + "\b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a\" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\C:\a\" + "b\" -> "C:\a\b\" ret 1
+PathAppendW "\\?\C:\a\" + "b\c" -> "C:\a\b\c" ret 1
+PathAppendW "\\?\C:\a\" + "." -> "C:\a" ret 1
+PathAppendW "\\?\C:\a\" + ".." -> "C:\" ret 1
+PathAppendW "\\?\C:\a\" + "\.." -> "C:\" ret 1
+PathAppendW "\\?\C:\a\" + ".\b" -> "C:\a\b" ret 1
+PathAppendW "\\?\C:\a\" + "..\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\a\" + "b\.." -> "C:\a" ret 1
+PathAppendW "\\?\C:\a\" + "b\.\c" -> "C:\a\b\c" ret 1
+PathAppendW "\\?\C:\a\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\C:\a\" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\C:\a\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\C:\a\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\C:\a\" + "a.txt" -> "C:\a\a.txt" ret 1
+PathAppendW "\\?\C:\a\" + " b" -> "C:\a\ b" ret 1
+PathAppendW "\\?\C:\a\" + "b " -> "C:\a\b " ret 1
+PathAppendW "\\?\C:\a\" + "\" -> "C:\a\" ret 1
+PathAppendW "\\?\C:\a\" + "/b" -> "C:\a\/b" ret 1
+PathAppendW "\\?\C:\a\" + "b/c" -> "C:\a\b/c" ret 1
+PathAppendW "\\?\UNC\s\sh" + "" -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "\b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b\" -> "\\s\sh\b\" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b\c" -> "\\s\sh\b\c" ret 1
+PathAppendW "\\?\UNC\s\sh" + "." -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh" + ".." -> "\\s" ret 1
+PathAppendW "\\?\UNC\s\sh" + "\.." -> "\\s" ret 1
+PathAppendW "\\?\UNC\s\sh" + ".\b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "..\b" -> "\\s\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b\.." -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b\.\c" -> "\\s\sh\b\c" ret 1
+PathAppendW "\\?\UNC\s\sh" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\UNC\s\sh" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\UNC\s\sh" + "a.txt" -> "\\s\sh\a.txt" ret 1
+PathAppendW "\\?\UNC\s\sh" + " b" -> "\\s\sh\ b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b " -> "\\s\sh\b " ret 1
+PathAppendW "\\?\UNC\s\sh" + "\" -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh" + "/b" -> "\\s\sh\/b" ret 1
+PathAppendW "\\?\UNC\s\sh" + "b/c" -> "\\s\sh\b/c" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "" -> "\\s\sh\" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b\" -> "\\s\sh\b\" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b\c" -> "\\s\sh\b\c" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "." -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh\" + ".." -> "\\s" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\.." -> "\\s" ret 1
+PathAppendW "\\?\UNC\s\sh\" + ".\b" -> "\\s\sh\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "..\b" -> "\\s\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b\.." -> "\\s\sh" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b\.\c" -> "\\s\sh\b\c" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "a.txt" -> "\\s\sh\a.txt" ret 1
+PathAppendW "\\?\UNC\s\sh\" + " b" -> "\\s\sh\ b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b " -> "\\s\sh\b " ret 1
+PathAppendW "\\?\UNC\s\sh\" + "\" -> "\\s\sh\" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "/b" -> "\\s\sh\/b" ret 1
+PathAppendW "\\?\UNC\s\sh\" + "b/c" -> "\\s\sh\b/c" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b\" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b\" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b\c" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b\c" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "." -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + ".." -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\.." -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + ".\b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "..\b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b\.." -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b\.\c" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b\c" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "a.txt" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\a.txt" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + " b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\ b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b " -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b " ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "\" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "/b" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\/b" ret 1
+PathAppendW "\\?\Volume{12345678-1234-1234-1234-123456789abc}" + "b/c" -> "\\?\Volume{12345678-1234-1234-1234-123456789abc}\b/c" ret 1
+PathAppendW "\\?\" + "" -> "\\?\" ret 1
+PathAppendW "\\?\" + "b" -> "\\?\b" ret 1
+PathAppendW "\\?\" + "\b" -> "\\?\b" ret 1
+PathAppendW "\\?\" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?\" + "b\" -> "\\?\b\" ret 1
+PathAppendW "\\?\" + "b\c" -> "\\?\b\c" ret 1
+PathAppendW "\\?\" + "." -> "\\?" ret 1
+PathAppendW "\\?\" + ".." -> "\" ret 1
+PathAppendW "\\?\" + "\.." -> "\" ret 1
+PathAppendW "\\?\" + ".\b" -> "\\?\b" ret 1
+PathAppendW "\\?\" + "..\b" -> "\\b" ret 1
+PathAppendW "\\?\" + "b\.." -> "\\?" ret 1
+PathAppendW "\\?\" + "b\.\c" -> "\\?\b\c" ret 1
+PathAppendW "\\?\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?\" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?\" + "a.txt" -> "\\?\a.txt" ret 1
+PathAppendW "\\?\" + " b" -> "\\?\ b" ret 1
+PathAppendW "\\?\" + "b " -> "\\?\b " ret 1
+PathAppendW "\\?\" + "\" -> "\\?\" ret 1
+PathAppendW "\\?\" + "/b" -> "\\?\/b" ret 1
+PathAppendW "\\?\" + "b/c" -> "\\?\b/c" ret 1
+PathAppendW "\\?" + "" -> "\\?" ret 1
+PathAppendW "\\?" + "b" -> "\\?\b" ret 1
+PathAppendW "\\?" + "\b" -> "\\?\b" ret 1
+PathAppendW "\\?" + "\\b" -> "\\b" ret 1
+PathAppendW "\\?" + "b\" -> "\\?\b\" ret 1
+PathAppendW "\\?" + "b\c" -> "\\?\b\c" ret 1
+PathAppendW "\\?" + "." -> "\\?" ret 1
+PathAppendW "\\?" + ".." -> "\" ret 1
+PathAppendW "\\?" + "\.." -> "\" ret 1
+PathAppendW "\\?" + ".\b" -> "\\?\b" ret 1
+PathAppendW "\\?" + "..\b" -> "\\b" ret 1
+PathAppendW "\\?" + "b\.." -> "\\?" ret 1
+PathAppendW "\\?" + "b\.\c" -> "\\?\b\c" ret 1
+PathAppendW "\\?" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\?" + "C:b" -> "C:b" ret 1
+PathAppendW "\\?" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\?" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\?" + "a.txt" -> "\\?\a.txt" ret 1
+PathAppendW "\\?" + " b" -> "\\?\ b" ret 1
+PathAppendW "\\?" + "b " -> "\\?\b " ret 1
+PathAppendW "\\?" + "\" -> "\\?" ret 1
+PathAppendW "\\?" + "/b" -> "\\?\/b" ret 1
+PathAppendW "\\?" + "b/c" -> "\\?\b/c" ret 1
+PathAppendW "" + "" -> "\" ret 1
+PathAppendW "" + "b" -> "b" ret 1
+PathAppendW "" + "\b" -> "b" ret 1
+PathAppendW "" + "\\b" -> "\\b" ret 1
+PathAppendW "" + "b\" -> "b\" ret 1
+PathAppendW "" + "b\c" -> "b\c" ret 1
+PathAppendW "" + "." -> "\" ret 1
+PathAppendW "" + ".." -> "\" ret 1
+PathAppendW "" + "\.." -> "\" ret 1
+PathAppendW "" + ".\b" -> "b" ret 1
+PathAppendW "" + "..\b" -> "b" ret 1
+PathAppendW "" + "b\.." -> "\" ret 1
+PathAppendW "" + "b\.\c" -> "b\c" ret 1
+PathAppendW "" + "C:\b" -> "C:\b" ret 1
+PathAppendW "" + "C:b" -> "C:b" ret 1
+PathAppendW "" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "" + "a.txt" -> "a.txt" ret 1
+PathAppendW "" + " b" -> " b" ret 1
+PathAppendW "" + "b " -> "b " ret 1
+PathAppendW "" + "\" -> "\" ret 1
+PathAppendW "" + "/b" -> "/b" ret 1
+PathAppendW "" + "b/c" -> "b/c" ret 1
+PathAppendW "a" + "" -> "a" ret 1
+PathAppendW "a" + "b" -> "a\b" ret 1
+PathAppendW "a" + "\b" -> "a\b" ret 1
+PathAppendW "a" + "\\b" -> "\\b" ret 1
+PathAppendW "a" + "b\" -> "a\b\" ret 1
+PathAppendW "a" + "b\c" -> "a\b\c" ret 1
+PathAppendW "a" + "." -> "a" ret 1
+PathAppendW "a" + ".." -> "\" ret 1
+PathAppendW "a" + "\.." -> "\" ret 1
+PathAppendW "a" + ".\b" -> "a\b" ret 1
+PathAppendW "a" + "..\b" -> "\b" ret 1
+PathAppendW "a" + "b\.." -> "a" ret 1
+PathAppendW "a" + "b\.\c" -> "a\b\c" ret 1
+PathAppendW "a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a" + "C:b" -> "C:b" ret 1
+PathAppendW "a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a" + "a.txt" -> "a\a.txt" ret 1
+PathAppendW "a" + " b" -> "a\ b" ret 1
+PathAppendW "a" + "b " -> "a\b " ret 1
+PathAppendW "a" + "\" -> "a" ret 1
+PathAppendW "a" + "/b" -> "a\/b" ret 1
+PathAppendW "a" + "b/c" -> "a\b/c" ret 1
+PathAppendW "a\" + "" -> "a\" ret 1
+PathAppendW "a\" + "b" -> "a\b" ret 1
+PathAppendW "a\" + "\b" -> "a\b" ret 1
+PathAppendW "a\" + "\\b" -> "\\b" ret 1
+PathAppendW "a\" + "b\" -> "a\b\" ret 1
+PathAppendW "a\" + "b\c" -> "a\b\c" ret 1
+PathAppendW "a\" + "." -> "a" ret 1
+PathAppendW "a\" + ".." -> "\" ret 1
+PathAppendW "a\" + "\.." -> "\" ret 1
+PathAppendW "a\" + ".\b" -> "a\b" ret 1
+PathAppendW "a\" + "..\b" -> "\b" ret 1
+PathAppendW "a\" + "b\.." -> "a" ret 1
+PathAppendW "a\" + "b\.\c" -> "a\b\c" ret 1
+PathAppendW "a\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a\" + "C:b" -> "C:b" ret 1
+PathAppendW "a\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a\" + "a.txt" -> "a\a.txt" ret 1
+PathAppendW "a\" + " b" -> "a\ b" ret 1
+PathAppendW "a\" + "b " -> "a\b " ret 1
+PathAppendW "a\" + "\" -> "a\" ret 1
+PathAppendW "a\" + "/b" -> "a\/b" ret 1
+PathAppendW "a\" + "b/c" -> "a\b/c" ret 1
+PathAppendW "a\\" + "" -> "a\\" ret 1
+PathAppendW "a\\" + "b" -> "a\\b" ret 1
+PathAppendW "a\\" + "\b" -> "a\\b" ret 1
+PathAppendW "a\\" + "\\b" -> "\\b" ret 1
+PathAppendW "a\\" + "b\" -> "a\\b\" ret 1
+PathAppendW "a\\" + "b\c" -> "a\\b\c" ret 1
+PathAppendW "a\\" + "." -> "a\" ret 1
+PathAppendW "a\\" + ".." -> "a" ret 1
+PathAppendW "a\\" + "\.." -> "a" ret 1
+PathAppendW "a\\" + ".\b" -> "a\\b" ret 1
+PathAppendW "a\\" + "..\b" -> "a\b" ret 1
+PathAppendW "a\\" + "b\.." -> "a\" ret 1
+PathAppendW "a\\" + "b\.\c" -> "a\\b\c" ret 1
+PathAppendW "a\\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a\\" + "C:b" -> "C:b" ret 1
+PathAppendW "a\\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a\\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a\\" + "a.txt" -> "a\\a.txt" ret 1
+PathAppendW "a\\" + " b" -> "a\\ b" ret 1
+PathAppendW "a\\" + "b " -> "a\\b " ret 1
+PathAppendW "a\\" + "\" -> "a\\" ret 1
+PathAppendW "a\\" + "/b" -> "a\\/b" ret 1
+PathAppendW "a\\" + "b/c" -> "a\\b/c" ret 1
+PathAppendW "a\b" + "" -> "a\b" ret 1
+PathAppendW "a\b" + "b" -> "a\b\b" ret 1
+PathAppendW "a\b" + "\b" -> "a\b\b" ret 1
+PathAppendW "a\b" + "\\b" -> "\\b" ret 1
+PathAppendW "a\b" + "b\" -> "a\b\b\" ret 1
+PathAppendW "a\b" + "b\c" -> "a\b\b\c" ret 1
+PathAppendW "a\b" + "." -> "a\b" ret 1
+PathAppendW "a\b" + ".." -> "a" ret 1
+PathAppendW "a\b" + "\.." -> "a" ret 1
+PathAppendW "a\b" + ".\b" -> "a\b\b" ret 1
+PathAppendW "a\b" + "..\b" -> "a\b" ret 1
+PathAppendW "a\b" + "b\.." -> "a\b" ret 1
+PathAppendW "a\b" + "b\.\c" -> "a\b\b\c" ret 1
+PathAppendW "a\b" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a\b" + "C:b" -> "C:b" ret 1
+PathAppendW "a\b" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a\b" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a\b" + "a.txt" -> "a\b\a.txt" ret 1
+PathAppendW "a\b" + " b" -> "a\b\ b" ret 1
+PathAppendW "a\b" + "b " -> "a\b\b " ret 1
+PathAppendW "a\b" + "\" -> "a\b" ret 1
+PathAppendW "a\b" + "/b" -> "a\b\/b" ret 1
+PathAppendW "a\b" + "b/c" -> "a\b\b/c" ret 1
+PathAppendW "\" + "" -> "\" ret 1
+PathAppendW "\" + "b" -> "\b" ret 1
+PathAppendW "\" + "\b" -> "\b" ret 1
+PathAppendW "\" + "\\b" -> "\\b" ret 1
+PathAppendW "\" + "b\" -> "\b\" ret 1
+PathAppendW "\" + "b\c" -> "\b\c" ret 1
+PathAppendW "\" + "." -> "\" ret 1
+PathAppendW "\" + ".." -> "\" ret 1
+PathAppendW "\" + "\.." -> "\" ret 1
+PathAppendW "\" + ".\b" -> "\b" ret 1
+PathAppendW "\" + "..\b" -> "\b" ret 1
+PathAppendW "\" + "b\.." -> "\" ret 1
+PathAppendW "\" + "b\.\c" -> "\b\c" ret 1
+PathAppendW "\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\" + "C:b" -> "C:b" ret 1
+PathAppendW "\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\" + "a.txt" -> "\a.txt" ret 1
+PathAppendW "\" + " b" -> "\ b" ret 1
+PathAppendW "\" + "b " -> "\b " ret 1
+PathAppendW "\" + "\" -> "\" ret 1
+PathAppendW "\" + "/b" -> "\/b" ret 1
+PathAppendW "\" + "b/c" -> "\b/c" ret 1
+PathAppendW "\\" + "" -> "\\" ret 1
+PathAppendW "\\" + "b" -> "\\b" ret 1
+PathAppendW "\\" + "\b" -> "\\b" ret 1
+PathAppendW "\\" + "\\b" -> "\\b" ret 1
+PathAppendW "\\" + "b\" -> "\\b\" ret 1
+PathAppendW "\\" + "b\c" -> "\\b\c" ret 1
+PathAppendW "\\" + "." -> "\\" ret 1
+PathAppendW "\\" + ".." -> "\\" ret 1
+PathAppendW "\\" + "\.." -> "\\" ret 1
+PathAppendW "\\" + ".\b" -> "\\b" ret 1
+PathAppendW "\\" + "..\b" -> "\\b" ret 1
+PathAppendW "\\" + "b\.." -> "\" ret 1
+PathAppendW "\\" + "b\.\c" -> "\\b\c" ret 1
+PathAppendW "\\" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\\" + "C:b" -> "C:b" ret 1
+PathAppendW "\\" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\\" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\\" + "a.txt" -> "\\a.txt" ret 1
+PathAppendW "\\" + " b" -> "\\ b" ret 1
+PathAppendW "\\" + "b " -> "\\b " ret 1
+PathAppendW "\\" + "\" -> "\\" ret 1
+PathAppendW "\\" + "/b" -> "\\/b" ret 1
+PathAppendW "\\" + "b/c" -> "\\b/c" ret 1
+PathAppendW "\a" + "" -> "\a" ret 1
+PathAppendW "\a" + "b" -> "\a\b" ret 1
+PathAppendW "\a" + "\b" -> "\a\b" ret 1
+PathAppendW "\a" + "\\b" -> "\\b" ret 1
+PathAppendW "\a" + "b\" -> "\a\b\" ret 1
+PathAppendW "\a" + "b\c" -> "\a\b\c" ret 1
+PathAppendW "\a" + "." -> "\a" ret 1
+PathAppendW "\a" + ".." -> "\" ret 1
+PathAppendW "\a" + "\.." -> "\" ret 1
+PathAppendW "\a" + ".\b" -> "\a\b" ret 1
+PathAppendW "\a" + "..\b" -> "\b" ret 1
+PathAppendW "\a" + "b\.." -> "\a" ret 1
+PathAppendW "\a" + "b\.\c" -> "\a\b\c" ret 1
+PathAppendW "\a" + "C:\b" -> "C:\b" ret 1
+PathAppendW "\a" + "C:b" -> "C:b" ret 1
+PathAppendW "\a" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "\a" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "\a" + "a.txt" -> "\a\a.txt" ret 1
+PathAppendW "\a" + " b" -> "\a\ b" ret 1
+PathAppendW "\a" + "b " -> "\a\b " ret 1
+PathAppendW "\a" + "\" -> "\a" ret 1
+PathAppendW "\a" + "/b" -> "\a\/b" ret 1
+PathAppendW "\a" + "b/c" -> "\a\b/c" ret 1
+PathAppendW "." + "" -> "\" ret 1
+PathAppendW "." + "b" -> "b" ret 1
+PathAppendW "." + "\b" -> "b" ret 1
+PathAppendW "." + "\\b" -> "\\b" ret 1
+PathAppendW "." + "b\" -> "b\" ret 1
+PathAppendW "." + "b\c" -> "b\c" ret 1
+PathAppendW "." + "." -> "\" ret 1
+PathAppendW "." + ".." -> "\" ret 1
+PathAppendW "." + "\.." -> "\" ret 1
+PathAppendW "." + ".\b" -> "b" ret 1
+PathAppendW "." + "..\b" -> "b" ret 1
+PathAppendW "." + "b\.." -> "\" ret 1
+PathAppendW "." + "b\.\c" -> "b\c" ret 1
+PathAppendW "." + "C:\b" -> "C:\b" ret 1
+PathAppendW "." + "C:b" -> "C:b" ret 1
+PathAppendW "." + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "." + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "." + "a.txt" -> "a.txt" ret 1
+PathAppendW "." + " b" -> " b" ret 1
+PathAppendW "." + "b " -> "b " ret 1
+PathAppendW "." + "\" -> "\" ret 1
+PathAppendW "." + "/b" -> "/b" ret 1
+PathAppendW "." + "b/c" -> "b/c" ret 1
+PathAppendW ".." + "" -> "\" ret 1
+PathAppendW ".." + "b" -> "b" ret 1
+PathAppendW ".." + "\b" -> "b" ret 1
+PathAppendW ".." + "\\b" -> "\\b" ret 1
+PathAppendW ".." + "b\" -> "b\" ret 1
+PathAppendW ".." + "b\c" -> "b\c" ret 1
+PathAppendW ".." + "." -> "\" ret 1
+PathAppendW ".." + ".." -> "\" ret 1
+PathAppendW ".." + "\.." -> "\" ret 1
+PathAppendW ".." + ".\b" -> "b" ret 1
+PathAppendW ".." + "..\b" -> "b" ret 1
+PathAppendW ".." + "b\.." -> "\" ret 1
+PathAppendW ".." + "b\.\c" -> "b\c" ret 1
+PathAppendW ".." + "C:\b" -> "C:\b" ret 1
+PathAppendW ".." + "C:b" -> "C:b" ret 1
+PathAppendW ".." + "\\s\x" -> "\\s\x" ret 1
+PathAppendW ".." + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW ".." + "a.txt" -> "a.txt" ret 1
+PathAppendW ".." + " b" -> " b" ret 1
+PathAppendW ".." + "b " -> "b " ret 1
+PathAppendW ".." + "\" -> "\" ret 1
+PathAppendW ".." + "/b" -> "/b" ret 1
+PathAppendW ".." + "b/c" -> "b/c" ret 1
+PathAppendW "a b" + "" -> "a b" ret 1
+PathAppendW "a b" + "b" -> "a b\b" ret 1
+PathAppendW "a b" + "\b" -> "a b\b" ret 1
+PathAppendW "a b" + "\\b" -> "\\b" ret 1
+PathAppendW "a b" + "b\" -> "a b\b\" ret 1
+PathAppendW "a b" + "b\c" -> "a b\b\c" ret 1
+PathAppendW "a b" + "." -> "a b" ret 1
+PathAppendW "a b" + ".." -> "\" ret 1
+PathAppendW "a b" + "\.." -> "\" ret 1
+PathAppendW "a b" + ".\b" -> "a b\b" ret 1
+PathAppendW "a b" + "..\b" -> "\b" ret 1
+PathAppendW "a b" + "b\.." -> "a b" ret 1
+PathAppendW "a b" + "b\.\c" -> "a b\b\c" ret 1
+PathAppendW "a b" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a b" + "C:b" -> "C:b" ret 1
+PathAppendW "a b" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a b" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a b" + "a.txt" -> "a b\a.txt" ret 1
+PathAppendW "a b" + " b" -> "a b\ b" ret 1
+PathAppendW "a b" + "b " -> "a b\b " ret 1
+PathAppendW "a b" + "\" -> "a b" ret 1
+PathAppendW "a b" + "/b" -> "a b\/b" ret 1
+PathAppendW "a b" + "b/c" -> "a b\b/c" ret 1
+PathAppendW " a " + "" -> " a " ret 1
+PathAppendW " a " + "b" -> " a \b" ret 1
+PathAppendW " a " + "\b" -> " a \b" ret 1
+PathAppendW " a " + "\\b" -> "\\b" ret 1
+PathAppendW " a " + "b\" -> " a \b\" ret 1
+PathAppendW " a " + "b\c" -> " a \b\c" ret 1
+PathAppendW " a " + "." -> " a " ret 1
+PathAppendW " a " + ".." -> "\" ret 1
+PathAppendW " a " + "\.." -> "\" ret 1
+PathAppendW " a " + ".\b" -> " a \b" ret 1
+PathAppendW " a " + "..\b" -> "\b" ret 1
+PathAppendW " a " + "b\.." -> " a " ret 1
+PathAppendW " a " + "b\.\c" -> " a \b\c" ret 1
+PathAppendW " a " + "C:\b" -> "C:\b" ret 1
+PathAppendW " a " + "C:b" -> "C:b" ret 1
+PathAppendW " a " + "\\s\x" -> "\\s\x" ret 1
+PathAppendW " a " + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW " a " + "a.txt" -> " a \a.txt" ret 1
+PathAppendW " a " + " b" -> " a \ b" ret 1
+PathAppendW " a " + "b " -> " a \b " ret 1
+PathAppendW " a " + "\" -> " a " ret 1
+PathAppendW " a " + "/b" -> " a \/b" ret 1
+PathAppendW " a " + "b/c" -> " a \b/c" ret 1
+PathAppendW "a/b" + "" -> "a/b" ret 1
+PathAppendW "a/b" + "b" -> "a/b\b" ret 1
+PathAppendW "a/b" + "\b" -> "a/b\b" ret 1
+PathAppendW "a/b" + "\\b" -> "\\b" ret 1
+PathAppendW "a/b" + "b\" -> "a/b\b\" ret 1
+PathAppendW "a/b" + "b\c" -> "a/b\b\c" ret 1
+PathAppendW "a/b" + "." -> "a/b" ret 1
+PathAppendW "a/b" + ".." -> "\" ret 1
+PathAppendW "a/b" + "\.." -> "\" ret 1
+PathAppendW "a/b" + ".\b" -> "a/b\b" ret 1
+PathAppendW "a/b" + "..\b" -> "\b" ret 1
+PathAppendW "a/b" + "b\.." -> "a/b" ret 1
+PathAppendW "a/b" + "b\.\c" -> "a/b\b\c" ret 1
+PathAppendW "a/b" + "C:\b" -> "C:\b" ret 1
+PathAppendW "a/b" + "C:b" -> "C:b" ret 1
+PathAppendW "a/b" + "\\s\x" -> "\\s\x" ret 1
+PathAppendW "a/b" + "\\?\C:\x" -> "C:\x" ret 1
+PathAppendW "a/b" + "a.txt" -> "a/b\a.txt" ret 1
+PathAppendW "a/b" + " b" -> "a/b\ b" ret 1
+PathAppendW "a/b" + "b " -> "a/b\b " ret 1
+PathAppendW "a/b" + "\" -> "a/b" ret 1
+PathAppendW "a/b" + "/b" -> "a/b\/b" ret 1
+PathAppendW "a/b" + "b/c" -> "a/b\b/c" ret 1

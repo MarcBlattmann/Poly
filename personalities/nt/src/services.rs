@@ -326,6 +326,14 @@ pub enum Service {
     /// `NtQuerySystemInformation(SystemInformationClass, SystemInformation,
     /// SystemInformationLength, ReturnLength*)` (Learn, `winternl.h`).
     QuerySystemInformation,
+    /// `NtAllocateLocallyUniqueId(Luid*)` (Learn: `ZwAllocateLocallyUniqueId`).
+    AllocateLocallyUniqueId,
+    /// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
+    /// NumberOfBytesRead*)`: `ReadProcessMemory`.
+    ReadVirtualMemory,
+    /// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
+    /// NumberOfBytesWritten*)`: `WriteProcessMemory`.
+    WriteVirtualMemory,
     /// `NtDeviceIoControlFile(FileHandle, Event, ApcRoutine, ApcContext,
     /// IoStatusBlock*, IoControlCode, InputBuffer, InputBufferLength,
     /// OutputBuffer, OutputBufferLength)` (ADR 0080: console handles).
@@ -564,10 +572,11 @@ pub const EXCEPTION_SERVICES: [(Service, u32, &str); 2] =
     [(Service::RaiseException, 0x0A0, "NtRaiseException"), (Service::Continue, 0x0A1, "NtContinue")];
 
 /// Time and system information (ADR 0079).
-pub const SYSINFO_SERVICES: [(Service, u32, &str); 3] = [
+pub const SYSINFO_SERVICES: [(Service, u32, &str); 4] = [
     (Service::QuerySystemTime, 0x140, "NtQuerySystemTime"),
     (Service::QueryPerformanceCounter, 0x141, "NtQueryPerformanceCounter"),
     (Service::QuerySystemInformation, 0x142, "NtQuerySystemInformation"),
+    (Service::AllocateLocallyUniqueId, 0x143, "NtAllocateLocallyUniqueId"),
 ];
 
 /// Device control, in the file I/O group (ADR 0080).
@@ -630,6 +639,12 @@ pub const SECTION_SERVICES: [(Service, u32, &str); 2] = [
     (Service::UnmapViewOfSectionEx, 0x04A, "NtUnmapViewOfSectionEx"),
 ];
 
+/// Another process's memory (ADR 0194), in the memory group.
+pub const PROCESS_MEMORY_SERVICES: [(Service, u32, &str); 2] = [
+    (Service::ReadVirtualMemory, 0x04B, "NtReadVirtualMemory"),
+    (Service::WriteVirtualMemory, 0x04C, "NtWriteVirtualMemory"),
+];
+
 /// Suspending and resuming a whole process (ADR 0155, step 9), in the
 /// processes and threads group.
 pub const PROCESS_SUSPEND_SERVICES: [(Service, u32, &str); 2] =
@@ -653,6 +668,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(JOB_SERVICES.iter())
         .chain(PROCESS_POLICY_SERVICES.iter())
         .chain(SECTION_SERVICES.iter())
+        .chain(PROCESS_MEMORY_SERVICES.iter())
         .chain(PROCESS_SUSPEND_SERVICES.iter())
         .chain(PROCESSOR_SERVICES.iter())
 }

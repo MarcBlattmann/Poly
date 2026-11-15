@@ -45,11 +45,18 @@ pub fn valid_name(name: &[u16]) -> bool {
     !name.is_empty() && !name[1..].contains(&EQ)
 }
 
-/// The block with `name` set to `value`, or removed (`None`), sorted.
+/// The longest name and value `SetEnvironmentVariable[AW]` takes, in units
+/// (`specs/windows/kernel32.dll/SetEnvironmentVariableA.yaml`: 32,766 work, 32,767 fail).
+pub const MAX_ENV_STRING: usize = 32_766;
+
+/// The block with `name` set to `value`, or removed (`None`), sorted. A variable that exists
+/// keeps the spelling its name was first given.
 pub fn set(block: &[u16], name: &[u16], value: Option<&[u16]>) -> Result<Vec<u16>, u32> {
-    if !valid_name(name) {
+    if !valid_name(name) || name.len() > MAX_ENV_STRING || value.is_some_and(|v| v.len() > MAX_ENV_STRING) {
         return Err(ERROR_INVALID_PARAMETER);
     }
+    let old_name = entries(block).filter_map(split).find(|(n, _)| cmp_names(n, name).is_eq()).map(|(n, _)| n);
+    let name = old_name.unwrap_or(name);
     let mut list: Vec<&[u16]> =
         entries(block).filter(|e| split(e).is_none_or(|(n, _)| !cmp_names(n, name).is_eq())).collect();
     let mut new = Vec::new();
@@ -158,14 +165,15 @@ mod tests {
         let b = blk(&["A=1", "C=3"]);
         let b = set(&b, &w("b"), Some(&w("2"))).unwrap();
         assert_eq!(names(&b), vec!["A=1", "b=2", "C=3"]);
+        // A name that exists keeps the spelling it had first.
         let b = set(&b, &w("B"), Some(&w("two"))).unwrap();
-        assert_eq!(names(&b), vec!["A=1", "B=two", "C=3"]);
+        assert_eq!(names(&b), vec!["A=1", "b=two", "C=3"]);
         let b = set(&b, &w("a"), None).unwrap();
-        assert_eq!(names(&b), vec!["B=two", "C=3"]);
+        assert_eq!(names(&b), vec!["b=two", "C=3"]);
         let b = set(&b, &w("missing"), None).unwrap();
-        assert_eq!(names(&b), vec!["B=two", "C=3"]);
+        assert_eq!(names(&b), vec!["b=two", "C=3"]);
         let b = set(&b, &w("E"), Some(&w(""))).unwrap();
-        assert_eq!(names(&b), vec!["B=two", "C=3", "E="]);
+        assert_eq!(names(&b), vec!["b=two", "C=3", "E="]);
         assert_eq!(get(&b, &w("e")), Some(&[][..]));
         assert_eq!(*b.last().unwrap(), 0);
         assert_eq!(b[b.len() - 2], 0);
@@ -178,6 +186,12 @@ mod tests {
         assert_eq!(set(&b, &w(""), Some(&w("x"))), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(set(&b, &w("A=B"), Some(&w("x"))), Err(ERROR_INVALID_PARAMETER));
         assert!(set(&b, &w("=D:"), Some(&w("D:\\"))).is_ok());
+        // The longest name and value are 32,766 units.
+        let long = vec![b'x' as u16; MAX_ENV_STRING];
+        assert!(set(&b, &long, Some(&long)).is_ok());
+        let too_long = vec![b'x' as u16; MAX_ENV_STRING + 1];
+        assert_eq!(set(&b, &w("N"), Some(&too_long)), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(set(&b, &too_long, Some(&w("v"))), Err(ERROR_INVALID_PARAMETER));
         let empty = set(&blk(&["A=1"]), &w("A"), None).unwrap();
         assert_eq!(empty, vec![0, 0]);
     }

@@ -108,6 +108,11 @@ pub unsafe extern "system" fn SetEnvironmentVariableW(name: *const u16, value: *
     let (Some(name), value) = (unsafe { wide_arg(name) }, unsafe { wide_arg(value) }) else {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     };
+    set_env(name, value)
+}
+
+/// `SetEnvironmentVariable` on UTF-16 text: the block is rebuilt and put in the process parameters.
+fn set_env(name: &[u16], value: Option<&[u16]>) -> i32 {
     with_state(|s| {
         // SAFETY: under the lock.
         let new = match env::set(unsafe { block() }, name, value) {
@@ -116,6 +121,41 @@ pub unsafe extern "system" fn SetEnvironmentVariableW(name: *const u16, value: *
         };
         if set_block(s, &new) { TRUE } else { fail(ERROR_NOT_ENOUGH_MEMORY, FALSE) }
     })
+}
+
+/// `SetEnvironmentVariableA`: name and value are converted from the ANSI code page, then as the
+/// wide function (`specs/windows/kernel32.dll/SetEnvironmentVariableA.yaml`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetEnvironmentVariableA(name: *const u8, value: *const u8) -> i32 {
+    // SAFETY: the caller's strings.
+    let (Some(name), value) = (unsafe { ansi_arg(name) }, unsafe { ansi_arg(value) }) else {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    };
+    set_env(&name, value.as_deref())
+}
+
+/// `GetEnvironmentVariableA`: the value converted to the ANSI code page; sizes count bytes. A
+/// buffer that is too small is not written (the result is the size needed, with the NUL); a
+/// successful call leaves the last error alone, also for an empty value; a name that is NULL,
+/// empty or has an equal sign after its first character is not found
+/// (`specs/windows/kernel32.dll/GetEnvironmentVariableA.yaml`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetEnvironmentVariableA(name: *const u8, buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: the caller's string.
+    let Some(name) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_ENVVAR_NOT_FOUND, 0) };
+    let Some(value) = env_var(&name) else { return fail(ERROR_ENVVAR_NOT_FOUND, 0) };
+    let bytes = text::to_ansi(&value);
+    match text::sized(bytes.len(), size) {
+        text::Sized::Copy(n) => {
+            // SAFETY: the caller's buffer holds more than `bytes.len()` bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+                buf.add(bytes.len()).write(0);
+            }
+            n
+        }
+        text::Sized::Needed(n) => n,
+    }
 }
 
 /// `GetEnvironmentStringsW`: a copy of the block, freed with
@@ -329,6 +369,12 @@ pub extern "system" fn GetStdHandle(which: u32) -> Handle {
     }
 }
 
+/// The process's three standard handles (input, output, error), as
+/// `GetStdHandle` returns them.
+pub(crate) fn std_handles() -> [Handle; 3] {
+    with_state(|s| s.std)
+}
+
 /// `SetStdHandle`.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetStdHandle(which: u32, handle: Handle) -> i32 {
@@ -488,13 +534,20 @@ pub unsafe extern "system" fn GetModuleFileNameW(module: *mut u8, buf: *mut u16,
 
 /// `LoadLibraryExW`: `LdrLoadDll`. A name with a relative path is made
 /// absolute against the current directory first. The data-file and
-/// search-path flags are not supported yet (Poly loads the module as an
-/// image either way, ADR 0079).
+/// image-resource flags map only what the resource functions read
+/// (`resource.rs`); the search-path flags are not supported yet.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, flags: u32) -> *mut u8 {
-    let _ = (file, flags);
+    let _ = file;
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut()) };
+    // A data file or image resource: no image is loaded, only what the resource functions read.
+    let resource_only = crate::resource::LOAD_LIBRARY_AS_DATAFILE
+        | crate::resource::LOAD_LIBRARY_AS_IMAGE_RESOURCE
+        | crate::resource::LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE;
+    if flags & resource_only != 0 {
+        return crate::resource::load_library_datafile(name, flags);
+    }
     let has_path = name.iter().any(|&c| c == u16::from(b'\\') || c == u16::from(b'/'));
     let owned: Vec<u16> = if has_path {
         match full_path(name) {
@@ -578,6 +631,9 @@ pub unsafe extern "system" fn LoadLibraryW(name: *const u16) -> *mut u8 {
 /// `FreeLibrary`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FreeLibrary(module: *mut u8) -> i32 {
+    if let Some(r) = crate::resource::free_datafile(module) {
+        return r;
+    }
     // SAFETY: a module handle; ntdll checks it.
     let st = unsafe { nt::LdrUnloadDll(module) };
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }

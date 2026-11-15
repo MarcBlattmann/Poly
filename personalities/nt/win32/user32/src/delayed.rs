@@ -35,7 +35,6 @@ poly_win32_rt::fail_exports!(
         GetPointerType,
         InsertMenuItemW,
         InvertRect,
-        LoadStringW,
         OemToCharA,
         OemToCharBuffA,
         OpenInputDesktop,

@@ -1,11 +1,11 @@
 //! The memory, section and process services: arguments in, the model of
 //! [`crate::vm`] and [`crate::section`] asked, results out.
 //!
-//! Every memory service names a process. Only the calling process's own
-//! memory can be reached yet (`NtCurrentProcess()`, or a handle to its own
-//! process object with the right access); a handle to another process is
-//! `STATUS_NOT_IMPLEMENTED` until the process milestone. A null handle is
-//! `STATUS_INVALID_HANDLE`.
+//! Every memory service names a process: `NtCurrentProcess()`, or a handle
+//! to a process object with the right access, the caller's own or another
+//! one (ADR 0169 for views, ADR 0194 for allocation, protection, queries and
+//! `NtReadVirtualMemory` / `NtWriteVirtualMemory`, which `ReadProcessMemory`
+//! and `WriteProcessMemory` are). A null handle is `STATUS_INVALID_HANDLE`.
 
 use crate::abi;
 use crate::consts::*;
@@ -42,15 +42,21 @@ fn target_of(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, acces
     Ok(Target::Other(poly_ntobj::ProcessId(sys.objects.cookie(id).ok_or(STATUS_INVALID_HANDLE)? as u32)))
 }
 
-fn own_process(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, access: u32) -> Result<()> {
-    if h == Handle::CURRENT_PROCESS {
-        return Ok(());
+/// Run `f` on the state and address space of the process `h` names (with
+/// `access`): the caller's own, or another one's. A process that has gone
+/// is `STATUS_PROCESS_IS_TERMINATING`.
+fn on_process<K: NtKernel, R>(
+    k: &mut K,
+    h: u64,
+    access: u32,
+    f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn crate::backend::Backend) -> Result<R>,
+) -> Result<R> {
+    let caller = k.caller();
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(h), access))?;
+    match target {
+        Target::Own => k.with_state(f),
+        Target::Other(pid) => k.with_process(pid, f).ok_or(STATUS_PROCESS_IS_TERMINATING)?,
     }
-    if h == Handle::NULL {
-        return Err(STATUS_INVALID_HANDLE);
-    }
-    let id = sys.objects.object_by_handle(caller, h, access, Some(ObjectType::Process))?;
-    if proc.object == Some(id) { Ok(()) } else { Err(STATUS_NOT_IMPLEMENTED) }
 }
 
 /// `STATUS_DYNAMIC_CODE_BLOCKED` (`ntstatus.h`): a process with the
@@ -74,9 +80,7 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, size) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
         if proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
@@ -96,11 +100,8 @@ pub fn free<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, free_type] = abi::args::<K, 4>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, size) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
-        proc.vm.free(b, base, size, free_type as u32)
-    })?;
+    let (base, size) =
+        on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| proc.vm.free(b, base, size, free_type as u32))?;
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     Ok(STATUS_SUCCESS)
@@ -117,10 +118,8 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if old_ptr == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
     }
-    let caller = k.caller();
     let (loader, new) = (new as u32 & PAGE_POLY_LOADER != 0, new as u32 & !PAGE_POLY_LOADER);
-    let (base, size, old) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, size, old) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
         if proc.dynamic_code_blocked && executable(new) && !loader {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
@@ -147,16 +146,93 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if (length as usize) < MEMORY_BASIC_INFORMATION_SIZE {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
-    let caller = k.caller();
-    let info = k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_QUERY_INFORMATION)?;
-        proc.vm.query(addr)
-    })?;
+    let info = on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, _| proc.vm.query(addr))?;
     abi::write(k, buf, &info.to_bytes())?;
     if ret != 0 {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;
     }
     Ok(STATUS_SUCCESS)
+}
+
+/// `STATUS_PARTIAL_COPY` (`ntstatus.h`): `ReadProcessMemory` / `WriteProcessMemory`'s
+/// `ERROR_PARTIAL_COPY`.
+pub const STATUS_PARTIAL_COPY: NtStatus = NtStatus(0x8000_000D);
+/// How much one step of a cross-process copy holds in the kernel.
+const COPY_CHUNK: usize = 0x1_0000;
+
+/// Copy page by page with `step` (a read from or a write to the target process) until a page
+/// fails: the bytes done.
+fn page_steps(at: u64, n: usize, mut step: impl FnMut(u64, core::ops::Range<usize>) -> bool) -> usize {
+    let mut done = 0usize;
+    while done < n {
+        let here = at.wrapping_add(done as u64);
+        let page_end = (here | (crate::vm::PAGE_SIZE - 1)).wrapping_add(1);
+        let m = (page_end.wrapping_sub(here) as usize).min(n - done);
+        if !step(here, done..done + m) {
+            break;
+        }
+        done += m;
+    }
+    done
+}
+
+/// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
+/// NumberOfBytesRead*)`, `ReadProcessMemory` (Learn: the handle needs `PROCESS_VM_READ`; "the
+/// entire area to be read must be accessible": a part that is not ends the copy, which is
+/// `STATUS_PARTIAL_COPY` with the bytes done so far).
+pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buf, len, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    let mut done = 0usize;
+    let mut status = STATUS_SUCCESS;
+    let mut chunk = Vec::new();
+    while done < len as usize {
+        let n = (len as usize - done).min(COPY_CHUNK);
+        chunk.resize(n, 0);
+        let at = base.wrapping_add(done as u64);
+        let got = on_process(k, process, PROCESS_VM_READ, |_, _, b| {
+            Ok(page_steps(at, n, |addr, r| b.read(addr, &mut chunk[r]).is_ok()))
+        })?;
+        if got > 0 {
+            abi::write(k, buf + done as u64, &chunk[..got])?;
+        }
+        done += got;
+        if got < n {
+            status = STATUS_PARTIAL_COPY;
+            break;
+        }
+    }
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, done as u64)?;
+    }
+    Ok(status)
+}
+
+/// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
+/// NumberOfBytesWritten*)`, `WriteProcessMemory` (Learn: the handle needs `PROCESS_VM_WRITE` and
+/// `PROCESS_VM_OPERATION`; a part that cannot be written ends the copy, `STATUS_PARTIAL_COPY`).
+pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buf, len, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    let mut done = 0usize;
+    let mut status = STATUS_SUCCESS;
+    let mut chunk = Vec::new();
+    while done < len as usize {
+        let n = (len as usize - done).min(COPY_CHUNK);
+        chunk.resize(n, 0);
+        abi::read(k, buf + done as u64, &mut chunk)?;
+        let at = base.wrapping_add(done as u64);
+        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, _, b| {
+            Ok(page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok()))
+        })?;
+        done += put;
+        if put < n {
+            status = STATUS_PARTIAL_COPY;
+            break;
+        }
+    }
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, done as u64)?;
+    }
+    Ok(status)
 }
 
 /// `MemoryMappedFilenameInformation` (`MEMORY_INFORMATION_CLASS`, `ntddk.h`): the name of the file
@@ -397,9 +473,7 @@ pub fn flush<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, iosb] = abi::args::<K, 4>(k, regs)?;
     let addr = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, len) = k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, len) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, _| {
         let a = proc.vm.allocation(addr).filter(|a| a.view().is_some()).ok_or(STATUS_NOT_MAPPED_VIEW)?;
         let start = addr & !(crate::vm::PAGE_SIZE - 1);
         let end = if size == 0 {
