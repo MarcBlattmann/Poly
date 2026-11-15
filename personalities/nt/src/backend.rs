@@ -76,6 +76,13 @@ pub trait Backend {
     /// committed and writable): the TEB and PEB of a new process.
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus>;
 
+    /// Read the process's memory at `addr` (committed, readable pages: a
+    /// thread's TEB). A backend that cannot read answers
+    /// `STATUS_ACCESS_VIOLATION`.
+    fn read(&mut self, _addr: u64, _buf: &mut [u8]) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    }
+
     /// Make the pages of a new section; returns the kernel's id for them.
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus>;
 

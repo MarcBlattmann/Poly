@@ -165,7 +165,12 @@ pub enum Device {
     Afd,
     /// `\Device\NamedPipe`, reached as `\??\pipe` ([`npfs`], ADR 0169).
     NamedPipe,
+    /// `\Device\Null`, reached as `\??\NUL` (the reserved name `NUL`).
+    Null,
 }
+
+/// The null device's name in the object namespace.
+pub const NULL_DEVICE: &str = "\\Device\\Null";
 
 /// A file object's target on a volume.
 #[derive(Debug)]
@@ -203,6 +208,9 @@ pub enum Target {
     /// The named pipe device itself (`\Device\NamedPipe` without a final
     /// backslash): the same uses as the root, but it has no file name.
     PipeDevice,
+    /// The null device (`NUL`): what is written is dropped, a read is at the
+    /// end of the file.
+    Null,
 }
 
 /// The kernel's data for one file object.
@@ -515,6 +523,18 @@ impl IoState {
         )?;
         self.devices.insert(cookie, Device::NamedPipe);
         add_named(om, &kernel, &wide("\\??\\pipe"), NewObject::SymbolicLink { target: &np })?;
+        // The null device, which the reserved name `NUL` (Learn: "Naming Files, Paths, and
+        // Namespaces") reaches as `\\.\NUL`, i.e. `\??\NUL`.
+        let cookie = self.cookie();
+        let null = wide(NULL_DEVICE);
+        add_named(
+            om,
+            &kernel,
+            &null,
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
+        self.devices.insert(cookie, Device::Null);
+        add_named(om, &kernel, &wide("\\??\\NUL"), NewObject::SymbolicLink { target: &null })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
@@ -633,7 +653,7 @@ impl IoState {
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot | Target::PipeDevice => {}
+            Target::PipeRoot | Target::PipeDevice | Target::Null => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),

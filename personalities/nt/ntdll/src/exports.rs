@@ -321,6 +321,36 @@ pub unsafe extern "system" fn RtlGetVersion(info: *mut u8) -> NtStatus {
     unsafe { version::get_version(info) }
 }
 
+/// `RtlGetDeviceFamilyInfoEnum(pullUAPInfo, pulDeviceFamily, pulDeviceForm)` (`winnt.h`): the
+/// version Poly reports as the UAP version, a desktop of unknown form. Chrome asks on a
+/// Windows 11 build.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGetDeviceFamilyInfoEnum(uap: *mut u64, family: *mut u32, form: *mut u32) {
+    // SAFETY: the callers' out-pointers (null ones are skipped).
+    unsafe { version::get_device_family_info_enum(uap, family, form) }
+}
+
+/// `RtlConvertDeviceFamilyInfoToString(pulDeviceFamilyBufferSize, pulDeviceFormBufferSize,
+/// DeviceFamily, DeviceForm)`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlConvertDeviceFamilyInfoToString(
+    family_size: *mut u32,
+    form_size: *mut u32,
+    family: *mut u16,
+    form: *mut u16,
+) -> u32 {
+    // SAFETY: the callers' sizes and buffers.
+    unsafe { version::convert_device_family_info_to_string(family_size, form_size, family, form) }
+}
+
+/// `RtlGetNtVersionNumbers(major, minor, build)`: the real version; the build has its high
+/// nibble set (`specs/windows/ntdll.dll/RtlGetNtVersionNumbers.yaml`). Git's bash calls it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGetNtVersionNumbers(major: *mut u32, minor: *mut u32, build: *mut u32) {
+    // SAFETY: the callers' out-pointers (null ones are skipped).
+    unsafe { version::get_nt_version_numbers(major, minor, build) }
+}
+
 // ----- critical sections ----------------------------------------------------
 
 #[unsafe(no_mangle)]

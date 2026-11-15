@@ -418,6 +418,9 @@ enum Plan {
     Inline { open: Arc<OpenFile>, offset: u64, file: (ObjectId, u64), append: bool },
     /// A request that has completed (its completion is queued).
     Done(NtStatus),
+    /// Answered in the calling thread (its completion is queued): the status
+    /// block still has to be written.
+    Answered(NtStatus, u64),
     /// A request in flight: wait for it (synchronous) or return pending.
     Pending { irp: u64, file: ObjectId, sync: bool },
 }
@@ -468,6 +471,12 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             // Sockets are read before this (`afd::services::read_file`).
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // The null device: always at the end of the file.
+            Target::Null => {
+                let status = if len == 0 { STATUS_SUCCESS } else { STATUS_END_OF_FILE };
+                n.signal_done(sys, &caller, file, status, 0);
+                Ok(Plan::Answered(status, 0))
+            }
             // A named pipe end (ADR 0169). `ReadFileEx` is refused on a
             // handle with a completion port (Learn: "ReadFileEx").
             Target::NamedPipe(_) => {
@@ -548,6 +557,10 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             Ok(status)
         }
         Plan::Done(status) => Ok(status),
+        Plan::Answered(status, info) => {
+            write_iosb(k, iosb, status, info)?;
+            Ok(status)
+        }
         Plan::Pending { irp, file, sync: true } => Ok(wait_sync(k, file, irp).0),
         Plan::Pending { .. } => Ok(STATUS_PENDING),
     }
@@ -616,6 +629,11 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // The null device: everything is written, and dropped.
+            Target::Null => {
+                n.signal_done(sys, &caller, file, STATUS_SUCCESS, len as u64);
+                Ok(Plan::Answered(STATUS_SUCCESS, len as u64))
+            }
             Target::NamedPipe(_) => {
                 if n.apc_routine != 0 && rec.port.is_some() {
                     return Err(STATUS_INVALID_PARAMETER);
@@ -690,6 +708,10 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         }
         Plan::Done(status) => {
             write_iosb(k, iosb, status, len as u64)?;
+            Ok(status)
+        }
+        Plan::Answered(status, info) => {
+            write_iosb(k, iosb, status, info)?;
             Ok(status)
         }
         Plan::Pending { irp, file, sync: true } => Ok(wait_sync(k, file, irp).0),
