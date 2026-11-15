@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "was_events",
+      "exe_sha256": "f31b242bb416fe5db725607bcd35cbbfed6a86e7000d64a63d1e4d2aa9cd26c7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBU3RhcnR1cCA9IDAKV1NBQXN5bmNTZWxlY3QobGlzdGVuZXIsIDB4ODAwMSwgRkRfQUNDRVBUKSA9IDAKV1NBQXN5bmNTZWxlY3QoY2xpZW50LCAweDgwMDIsIEZEX0NPTk5FQ1R8RkRfUkVBRHxGRF9XUklURXxGRF9DTE9TRSkgPSAwCmNvbm5lY3QgPSAtMSBlcnJvciAxMDAzNQpsaXN0ZW5lciB3aW5kb3cgbWVzc2FnZXM6IEZEX0FDQ0VQVCBmb3IgbGlzdGVuZXIgZXJyb3IgMApjbGllbnQgd2luZG93IG1lc3NhZ2VzOiBGRF9DT05ORUNUIGZvciBjbGllbnQgZXJyb3IgMApjbGllbnQgd2luZG93IG1lc3NhZ2VzOiBGRF9XUklURSBmb3IgY2xpZW50IGVycm9yIDAKYWNjZXB0IGdhdmUgYSBzb2NrZXQ6IHRydWUKcmVjdiBvbiB0aGUgYWNjZXB0ZWQgc29ja2V0IHdpdGggbm90aGluZyB0byByZWFkOiAtMSBlcnJvciAxMDAzNQpsaXN0ZW5lciB3aW5kb3cgbWVzc2FnZXMgYWZ0ZXIgYWNjZXB0OiBub25lCldTQUFzeW5jU2VsZWN0KGFjY2VwdGVkLCAweDgwMDMsIEZEX1JFQUR8RkRfV1JJVEV8RkRfQ0xPU0UpID0gMAphY2NlcHRlZCBzb2NrZXQgbWVzc2FnZXMgYWZ0ZXIgcmVnaXN0ZXJpbmc6IEZEX1dSSVRFIGZvciBhY2NlcHRlZCBlcnJvciAwCmNsaWVudCBzZW5kcyA1IGJ5dGVzOiA1IGVycm9yIDAKYWNjZXB0ZWQgc29ja2V0IG1lc3NhZ2VzIGFmdGVyIHRoZSBkYXRhOiBGRF9SRUFEIGZvciBhY2NlcHRlZCBlcnJvciAwCmNsaWVudCBtZXNzYWdlcyBhZnRlciBzZW5kaW5nOiBub25lCmFjY2VwdGVkIHNvY2tldCByZWFkcyA1IGJ5dGVzCmFuZCB0aGVuIC0xIGVycm9yIDEwMDM1CmFjY2VwdGVkIHNvY2tldCBtZXNzYWdlcyBhZnRlciByZWFkaW5nIGV2ZXJ5dGhpbmc6IG5vbmUKY2xpZW50IG1lc3NhZ2VzIGFmdGVyIGRhdGEgZnJvbSB0aGUgYWNjZXB0ZWQgc29ja2V0OiBGRF9SRUFEIGZvciBjbGllbnQgZXJyb3IgMApjbG9zZXNvY2tldChhY2NlcHRlZCkgPSAwCmNsaWVudCBtZXNzYWdlcyBhZnRlciB0aGUgcGVlciBjbG9zZWQ6IEZEX0NMT1NFIGZvciBjbGllbnQgZXJyb3IgMApjbGllbnQgcmVjdiBhZnRlciB0aGUgY2xvc2U6IDAgZXJyb3IgMApjbG9zZXNvY2tldChjbGllbnQpID0gMApjb25uZWN0IHRvIGEgY2xvc2VkIHBvcnQgPSAtMSBlcnJvciAxMDAzNQpyZWZ1c2VkIGNvbm5lY3Rpb24gbWVzc2FnZXM6IEZEX0NPTk5FQ1QgZm9yIHJlZnVzZWQgZXJyb3IgMTAwNjEKV1NBQ2xlYW51cCA9IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSAStartup = 0\nWSAAsyncSelect(listener, 0x8001, FD_ACCEPT) = 0\nWSAAsyncSelect(client, 0x8002, FD_CONNECT|FD_READ|FD_WRITE|FD_CLOSE) = 0\nconnect = -1 error 10035\nlistener window messages: FD_ACCEPT for listener error 0\nclient window messages: FD_CONNECT for client error 0\nclient window messages: FD_WRITE for client error 0\naccept gave a socket: true\nrecv on the accepted socket with nothing to read: -1 error 10035\nlistener window messages after accept: none\nWSAAsyncSelect(accepted, 0x8003, FD_READ|FD_WRITE|FD_CLOSE) = 0\naccepted socket messages after registering: FD_WRITE for accepted error 0\nclient sends 5 bytes: 5 error 0\naccepted socket messages after the data: FD_READ for accepted error 0\nclient messages after sending: none\naccepted socket reads 5 bytes\nand then -1 error 10035\naccepted socket messages after reading everything: none\nclient messages after data from the accepted socket: FD_READ for client error 0\nclosesocket(accepted) = 0\nclient messages after the peer closed: FD_CLOSE for client error 0\nclient recv after the close: 0 error 0\nclosesocket(client) = 0\nconnect to a closed port = -1 error 10035\nrefused connection messages: FD_CONNECT for refused error 10061\nWSACleanup = 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5580
+    },
+    {
+      "name": "was_rules",
+      "exe_sha256": "862d1ce6b2e60b95a615d286ad26822d473e53b88f1309f4b9d909b07f741ef2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RkRfQUNDRVBUIG5vdGlmaWNhdGlvbnMgd2l0aCB0d28gd2FpdGluZyBjb25uZWN0aW9uczogMQpGRF9BQ0NFUFQgbm90aWZpY2F0aW9ucyBhZnRlciBvbmUgYWNjZXB0ICh0aGUgc2Vjb25kIGNvbm5lY3Rpb24gd2FpdHMpOiAxCkZEX0FDQ0VQVCBub3RpZmljYXRpb25zIGFmdGVyIHRoZSBzZWNvbmQgYWNjZXB0IChub25lIHdhaXRzKTogMApjbGllbnQgY29ubmVjdDogbm9uZQphY2NlcHRlZCBzb2NrZXQ6IEZEX1dSSVRFIGZvciBhY2NlcHRlZCBlcnJvciAwCkZEX1JFQUQgYWZ0ZXIgMTAgYnl0ZXM6IDEKRkRfUkVBRCBhZnRlciAxMCBtb3JlIGJ5dGVzIHdoaWxlIHRoZSBmaXJzdCB3ZXJlIHVucmVhZDogMApyZWN2KDQpID0gNApGRF9SRUFEIGFmdGVyIGEgcmVjdiB0aGF0IGxlYXZlcyBkYXRhOiAxCnJlY3YoMTAwKSA9IDE2CkZEX1JFQUQgYWZ0ZXIgcmVhZGluZyBldmVyeXRoaW5nOiAwCm1lc3NhZ2VzIHdoaWxlIGNhbmNlbGxlZDogMApXU0FBc3luY1NlbGVjdChhY2NlcHRlZCwgMHg4MDAzLCBGRF9SRUFEfEZEX1dSSVRFKSB3aXRoIDcgYnl0ZXMgd2FpdGluZyA9IDAKYWNjZXB0ZWQgc29ja2V0IGFmdGVyIHJlZ2lzdGVyaW5nIGFnYWluOiBGRF9SRUFEIGZvciBhY2NlcHRlZCBlcnJvciAwCmFjY2VwdGVkIHNvY2tldCBhZnRlciByZWdpc3RlcmluZyBhZ2FpbjogRkRfV1JJVEUgZm9yIGFjY2VwdGVkIGVycm9yIDAKc2VuZCBmaWxsZWQgdGhlIGJ1ZmZlciBhbmQgZ290IFdTQUVXT1VMREJMT0NLOiB0cnVlCkZEX1dSSVRFIHdoaWxlIHRoZSBidWZmZXIgaXMgZnVsbDogMAp0aGUgcGVlciByZWFkIHRoZSBkYXRhOiB0cnVlCkZEX1dSSVRFIGFmdGVyIHRoZSBidWZmZXIgZHJhaW5lZDogdHJ1ZQpjbGllbnQgYWZ0ZXIgdGhlIHBlZXIncyBhYm9ydGl2ZSBjbG9zZTogRkRfQ0xPU0UgZm9yIGNsaWVudCBlcnJvciAxMDA1MwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FD_ACCEPT notifications with two waiting connections: 1\nFD_ACCEPT notifications after one accept (the second connection waits): 1\nFD_ACCEPT notifications after the second accept (none waits): 0\nclient connect: none\naccepted socket: FD_WRITE for accepted error 0\nFD_READ after 10 bytes: 1\nFD_READ after 10 more bytes while the first were unread: 0\nrecv(4) = 4\nFD_READ after a recv that leaves data: 1\nrecv(100) = 16\nFD_READ after reading everything: 0\nmessages while cancelled: 0\nWSAAsyncSelect(accepted, 0x8003, FD_READ|FD_WRITE) with 7 bytes waiting = 0\naccepted socket after registering again: FD_READ for accepted error 0\naccepted socket after registering again: FD_WRITE for accepted error 0\nsend filled the buffer and got WSAEWOULDBLOCK: true\nFD_WRITE while the buffer is full: 0\nthe peer read the data: true\nFD_WRITE after the buffer drained: true\nclient after the peer's abortive close: FD_CLOSE for client error 10053\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3101
+    }
+  ]
+}
