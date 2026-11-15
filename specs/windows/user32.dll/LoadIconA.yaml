@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadIconA.yaml
+id: windows/api/user32.dll/LoadIconA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads an icon by number or by ANSI name: the system icons for a NULL module and the icon groups of the executable. The same handles and icons as LoadIconW give.
+interface:
+  signature: "HICON LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName)"
+rules:
+  system: "LoadIconA(NULL, IDI_*) (32512 .. 32518) gives the same handle as LoadIconW for each id; a string name is not a system id; ids 32519 and below 32512: NULL (1813)"
+  module: "icon group 500 (images 32x32 and 16x16) gives a 32x32 icon (colour 32 bits, mask 1 bit) with the left half (200,30,30) and the right half (30,30,200); 'APPICON' and 'appicon' (any case) find the group; a second call gives the same handle; LoadImageA(IMAGE_ICON) with 16x16 gives the 16 image, 24x24 a 24x24 icon scaled from the 32 image, 8x8 an 8x8 scaled from the 16 image, 64x64 a 64x64, 0x0 and LR_DEFAULTSIZE 32x32, 16x32 a 16x32 icon; without LR_SHARED two calls give two handles and DestroyIcon is TRUE once and FALSE the second time; with LR_SHARED the same size gives the same handle"
+  names: "a name with a character above 0x7F is converted before the lookup; 'APP<C9>' is not a resource (NULL)"
+errors:
+  not_found: "an icon group that does not exist, the number of a single RT_ICON image (1), the number of a bitmap, and a NULL module with 500: NULL with ERROR_RESOURCE_TYPE_NOT_FOUND (1813); a made-up module: NULL with ERROR_RESOURCE_DATA_NOT_FOUND (1812)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416). Icons of other modules, icons with colour depths other than 24 bits, LR_LOADFROMFILE.
