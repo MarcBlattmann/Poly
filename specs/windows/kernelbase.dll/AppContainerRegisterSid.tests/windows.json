@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "15bb70091a8b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T11:00:14Z",
+  "tests": [
+    {
+      "name": "acrs_args",
+      "exe_sha256": "63221cf9fc0f516f7f86223abe28cc6b0f4b1ecf90412639fefbd1ed615a3d03",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBtb25pa2VyOiAweDgwMDcwMDU3CmVtcHR5IGRpc3BsYXkgbmFtZTogMHg4MDA3MDA1Nwo2NC1jaGFyYWN0ZXIgbW9uaWtlcjogMHgwCmxvb2t1cDogMHg4MDA3MjAyMyBsZW5ndGggMApsb29rdXA6IDB4ODAwNzIwMjMKbG9va3VwIG9mIGFuIHVua25vd24gQXBwQ29udGFpbmVyIFNJRDogMHg4MDA3MDAwMiAnJwpsb29rdXAgb2YgYSBjYXBhYmlsaXR5IFNJRDogMHg4MDA3MTA5YSAnJwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL moniker: 0x80070057\nempty display name: 0x80070057\n64-character moniker: 0x0\nlookup: 0x80072023 length 0\nlookup: 0x80072023\nlookup of an unknown AppContainer SID: 0x80070002 ''\nlookup of a capability SID: 0x8007109a ''\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "acrs_args_c",
+      "exe_sha256": "ffd84908e426aa1f6273d38d66767ff9da0efd11320a635324b8a1f504d7f357",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBkaXNwbGF5IG5hbWU6IDB4ODAwNzAwNTcKbm90aGluZyB3YXMgcmVnaXN0ZXJlZCBieSB0aGUgcmVmdXNlZCBjYWxsczogbG9va3VwIDB4ODAwNzAwMDIgJycKNjUtY2hhcmFjdGVyIG1vbmlrZXI6IDB4MAozMDAtY2hhcmFjdGVyIG1vbmlrZXI6IDB4MApsb29rdXAga2VlcHMgdGhlIGNhc2U6IDB4MCAnUE9MWVMyQi5SRUcyTjUnCmxvb2t1cCBvZiBBTEwgQVBQTElDQVRJT04gUEFDS0FHRVM6IDB4ODAwNzEwOWEgJycKYW5kIHRoZSB1cHBlci1jYXNlIG9uZTogMHg4MDA3MDAwMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL display name: 0x80070057\nnothing was registered by the refused calls: lookup 0x80070002 ''\n65-character moniker: 0x0\n300-character moniker: 0x0\nlookup keeps the case: 0x0 'POLYS2B.REG2N5'\nlookup of ALL APPLICATION PACKAGES: 0x8007109a ''\nand the upper-case one: 0x80070002\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "acrs_mapping",
+      "exe_sha256": "6f8aaf7af2fee23d42a0b0d0d0f1b9734970f3555b85d3b7338d8941dc5e148f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhwb3J0IHByZXNlbnQ6IHRydWUKcmVnaXN0ZXI6IDB4MApyZWdpc3RyeSBEaXNwbGF5TmFtZTogJ1JlZ2lzdGVyZWQgYnkgYSB0ZXN0Jwpsb29rdXAga2VlcHMgdGhlIGZpcnN0IG1vbmlrZXI6IDB4MCAncG9seXMyYi5yZWcxJwpHZXRBcHBDb250YWluZXJGb2xkZXJQYXRoIG9mIHRoZSByZWdpc3RlcmVkIFNJRDogMHgwIHBhdGggcmV0dXJuZWQgdHJ1ZQpEZWxldGVBcHBDb250YWluZXJQcm9maWxlOiAweDAKYSBuZXcgcHJvY2VzcyBsb29rcyBpdCB1cCBhZnRlciB0aGUgZGVsZXRlOiBleGl0IDIyCkRlbGV0ZUFwcENvbnRhaW5lclByb2ZpbGUgb2YgdGhlIG5hbWUgdGhlIFNJRCBkZXJpdmVzIGZyb206IDB4MAp0b2tlbiBmb3IgdGhlIHJlZ2lzdGVyZWQgU0lEOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "export present: true\nregister: 0x0\nregistry DisplayName: 'Registered by a test'\nlookup keeps the first moniker: 0x0 'polys2b.reg1'\nGetAppContainerFolderPath of the registered SID: 0x0 path returned true\nDeleteAppContainerProfile: 0x0\na new process looks it up after the delete: exit 22\nDeleteAppContainerProfile of the name the SID derives from: 0x0\ntoken for the registered SID: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 100
+    },
+    {
+      "name": "acrs_mapping_c",
+      "exe_sha256": "80ad1b029eecd586eca7648eb7f768d666564e38f2f82226e6a166e35a7419b4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0cnkga2V5IGJlZm9yZTogJzxubyBrZXk+JwpyZWdpc3RyeSBNb25pa2VyOiAncG9seXMyYi5yZWcxJwpyZWdpc3RlciBhZ2FpbiB3aXRoIHRoZSBzYW1lIG1vbmlrZXI6IDB4ODAwNzAwYjcKYSBuZXcgcHJvY2VzcyBsb29rcyBpdCB1cDogZXhpdCAxMApHZXRBcHBDb250YWluZXJGb2xkZXJQYXRoIGFmdGVyIHRoYXQ6IDB4MCBwYXRoIHJldHVybmVkIHRydWUKcmVnaXN0cnkga2V5IGFmdGVyIHRoZSBkZWxldGU6ICc8bm8ga2V5PicKbG9va3VwOiAweDAgJ3BvbHlzMmIudG90YWxseS5kaWZmZXJlbnQnCnJlZ2lzdGVyIG9uY2UgbW9yZTogMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "registry key before: '<no key>'\nregistry Moniker: 'polys2b.reg1'\nregister again with the same moniker: 0x800700b7\na new process looks it up: exit 10\nGetAppContainerFolderPath after that: 0x0 path returned true\nregistry key after the delete: '<no key>'\nlookup: 0x0 'polys2b.totally.different'\nregister once more: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 110
+    }
+  ]
+}
