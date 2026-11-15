@@ -129,7 +129,7 @@ to change, only the sheets' rules should keep it so.
   service), before they run, right after `NtQueryInformationProcess(ProcessBasicInformation)`.
 * **What the child does with it:** nothing a test could see: a child whose parent wrote 0 there starts, loads a
   DLL, reads 0 there all its life and exits normally (test `pbi_peb`). Poly only needs a writable PEB at that offset
-  and must not depend on the value. Sheet: `ntdll.dll/NtQueryInformationProcess`.
+  and must not depend on the value. Sheet: `ntdll.dll/NtQueryInformationProcess` (rules `basic_child`, `peb_0x2d8_*`, test `pbi_peb`, added to spec-win-apps-4's sheet).
 
 ## 5. Question 3: `NtMapViewOfSection` of `chrome_elf.dll` in a target
 
