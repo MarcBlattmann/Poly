@@ -1,4 +1,4 @@
-# 0186: What Chrome's sandbox needs of the NT personality: window stations and desktops as objects, mitigation policies per process, known DLLs under a token
+# 0192: What Chrome's sandbox needs of the NT personality: window stations and desktops as objects, mitigation policies per process, known DLLs under a token
 
 **Status:** Accepted. Works toward stage S2 of the Chrome-for-Windows ladder
 ([0155](0155-chrome-for-windows-bring-up-stubs-lazy-images-and-the-stage-ladder.md)),

@@ -55,9 +55,9 @@ pub enum ObjectType {
     IoCompletion,
     /// A job object (ADR 0169).
     Job,
-    /// A window station (ADR 0186).
+    /// A window station (ADR 0192).
     WindowStation,
-    /// A desktop (ADR 0186).
+    /// A desktop (ADR 0192).
     Desktop,
 }
 

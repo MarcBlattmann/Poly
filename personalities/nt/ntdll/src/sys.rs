@@ -107,7 +107,7 @@ impl Process for Sys {
 
     fn known_dll_access(&mut self) -> Result<(), NtStatus> {
         // Opening the directory the known DLLs live in stands for opening `\KnownDlls\<name>`:
-        // the same descriptor, the same token (ADR 0186).
+        // the same descriptor, the same token (ADR 0192).
         // (`UnicodeName` keeps a pointer: the units have to outlive it.)
         let units: Vec<u16> = "\\??\\C:\\Windows\\System32".encode_utf16().collect();
         let name = UnicodeName::new(&units);
