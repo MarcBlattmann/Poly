@@ -165,6 +165,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("shlwapi.dll", super::SHLWAPI),
         ("wtsapi32.dll", super::WTSAPI32),
         ("comctl32.dll", super::COMCTL32),
+        ("comdlg32.dll", super::COMDLG32),
         ("oleacc.dll", super::OLEACC),
         ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
         ("mfplat.dll", super::MFPLAT),

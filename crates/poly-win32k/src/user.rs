@@ -278,6 +278,29 @@ pub trait Env {
     fn set_region_rects(&self, _rgn: u64, _rects: &[Rect]) -> i32 {
         0
     }
+    /// Whether menu `menu` (a top-level window's `GWLP_ID`) has a row of
+    /// items to show: the menu bar takes room from the client area only then
+    /// (`SetMenu.yaml` `client_area`).
+    fn menu_bar_shown(&self, _menu: u64) -> bool {
+        false
+    }
+    /// Whether screen point (`x`, `y`) is on the window's menu bar (`HTMENU`).
+    fn menu_hit(&self, _hwnd: u32, _x: i32, _y: i32) -> bool {
+        false
+    }
+    /// A click on the menu bar (`WM_NCLBUTTONDOWN` with `HTMENU`): runs the menu loop.
+    fn menu_click(&self, _hwnd: u32, _x: i32, _y: i32) {}
+    /// `DefWindowProc`'s `WM_SYSKEYDOWN`, `WM_SYSKEYUP` and `WM_SYSCHAR`: Alt, F10 and
+    /// mnemonics open the menu bar; true when used.
+    fn menu_sys_key(&self, _hwnd: u32, _msg: u32, _w: u64, _l: u64) -> bool {
+        false
+    }
+    /// `WM_NCPAINT`: draw the window's menu bar.
+    fn menu_paint(&self, _hwnd: u32) {}
+    /// A window is going (after its `WM_NCDESTROY`): `user32` destroys the
+    /// menu `menu` it owned (a top-level window's `GWLP_ID`, 0: none) and its
+    /// system menu.
+    fn window_freed(&self, _hwnd: u32, _menu: u64) {}
     /// A message is about to be sent to a window procedure of this process (`SendMessage` of
     /// this thread, `same_thread`, or one another thread sent, received while waiting): the
     /// `WH_CALLWNDPROC` hooks run now.
@@ -734,10 +757,11 @@ fn nc_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
         }
     }
     send(env, u64::from(hwnd), WM_NCDESTROY, 0, 0);
-    if let Some(i) = info(env, u64::from(hwnd))
-        && i.own_dc != 0
-    {
-        env.delete_dc(i.own_dc);
+    if let Some(i) = info(env, u64::from(hwnd)) {
+        if i.own_dc != 0 {
+            env.delete_dc(i.own_dc);
+        }
+        env.window_freed(hwnd, if i.style & WS_CHILD == 0 { i.id } else { 0 });
     }
     env.call(Request::Free { hwnd });
 }
@@ -1719,6 +1743,12 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             }
             1
         }
+        // A press on the menu bar (HTMENU) runs the menu loop.
+        0x00A1 if w == 5 => {
+            env.menu_click(hwnd as u32, l as u16 as i16 as i32, (l >> 16) as u16 as i16 as i32);
+            0
+        }
+        WM_SYSKEYDOWN | WM_SYSKEYUP | WM_SYSCHAR => u64::from(env.menu_sys_key(hwnd as u32, msg, w, l)),
         0x00A0 => {
             // WM_NCMOUSEMOVE: DefWindowProc tracks the non-client area
             // until the cursor leaves it (WM_NCMOUSELEAVE).
@@ -1730,7 +1760,8 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             if l != 0 {
                 // SAFETY: lParam starts with a RECT (NCCALCSIZE_PARAMS for TRUE).
                 let r = unsafe { &mut *(l as *mut CRect) };
-                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, false));
+                let bar = i.style & WS_CHILD == 0 && i.id != 0 && env.menu_bar_shown(i.id);
+                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, bar));
             }
             0
         }
@@ -1898,6 +1929,8 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             let (px, py) = (l as u16 as i16 as i32, (l >> 16) as u16 as i16 as i32);
             if i.client.contains(px, py) {
                 1
+            } else if env.menu_hit(i.hwnd, px, py) {
+                5
             } else if i.window.contains(px, py) {
                 if has_caption(i.style) && py < i.client.top { 2 } else { 18 }
             } else {
@@ -1911,8 +1944,11 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             end_paint(env, hwnd, &ps);
             0
         }
-        // Poly's frame is the compositor's: nothing to draw here.
-        paint::WM_NCPAINT => 0,
+        // Poly's frame is the compositor's; the menu bar is the app's own to draw.
+        paint::WM_NCPAINT => {
+            env.menu_paint(hwnd as u32);
+            0
+        }
         WM_ERASEBKGND => {
             let Some(i) = info(env, hwnd) else { return 0 };
             if i.class_brush == 0 || w == 0 {
