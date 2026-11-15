@@ -37,7 +37,10 @@ use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInf
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
 use poly_win32k::wire;
 
+mod caret;
 mod headless;
+mod hooks;
+mod winevent;
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
@@ -297,6 +300,30 @@ impl Env for Sys {
         // SAFETY: our gdi32 checks the handle.
         unsafe { DeleteObject(h as H) };
     }
+
+    fn sent_hook(&self, hwnd: u32, msg: u32, w: u64, l: u64, same_thread: bool) {
+        hooks::sent(hwnd, msg, w, l, same_thread);
+    }
+
+    fn message_hook(&self, msg: &mut CMsg, remove: bool) {
+        if remove {
+            // The message brings its own extra information (0: the ones posted with PostMessage).
+            extra_info(Some(0));
+        }
+        hooks::retrieved(msg, remove);
+    }
+
+    fn ime_ui_window(&self, ime: u32) -> u32 {
+        make_ime_ui(ime as H) as u32
+    }
+
+    fn win_event(&self, event: u32, hwnd: u32, id_object: i32, id_child: i32) {
+        winevent::raise(event, hwnd, id_object, id_child);
+    }
+
+    fn pump_events(&self) {
+        winevent::pump();
+    }
 }
 
 /// A new GDI region holding `rects`.
@@ -541,7 +568,14 @@ pub extern "system" fn GetClassLongW(hwnd: H, index: i32) -> u32 {
 pub unsafe extern "system" fn GetClassNameW(hwnd: H, buf: *mut u16, max: i32) -> i32 {
     match call(Request::ClassName { hwnd: hwnd as u64 }) {
         Reply::Text { text } => {
-            if max <= 0 || buf.is_null() {
+            if buf.is_null() || max < 0 {
+                // ERROR_NOACCESS: no buffer, or a size that is negative.
+                set_last_error(998);
+                return 0;
+            }
+            if max <= 1 {
+                // ERROR_INSUFFICIENT_BUFFER: no room for a character and the NUL; nothing is written.
+                set_last_error(122);
                 return 0;
             }
             let n = text.len().min(max as usize - 1);
@@ -657,6 +691,46 @@ fn ime_hook(hwnd: H) {
     set_last_error(error);
 }
 
+/// The class of the text services' helper window.
+static IME_UI_CLASS: [u16; 12] = [
+    b'M' as u16,
+    b'S' as u16,
+    b'C' as u16,
+    b'T' as u16,
+    b'F' as u16,
+    b'I' as u16,
+    b'M' as u16,
+    b'E' as u16,
+    b' ' as u16,
+    b'U' as u16,
+    b'I' as u16,
+    0,
+];
+
+/// `MSCTFIME UI`, the helper window of the default IME window `ime`: a hidden disabled popup it
+/// owns, of a class with `CS_IME`, made with the thread's first activation (sw_chrome_show).
+fn make_ime_ui(ime: H) -> H {
+    // The last error stays as it was, as for the IME window itself.
+    let error = poly_win32_gui::last_error();
+    let mut wc = [0u8; 80];
+    wc[0..4].copy_from_slice(&80u32.to_le_bytes());
+    wc[4..8].copy_from_slice(&0x0001_0000u32.to_le_bytes());
+    wc[8..16].copy_from_slice(&(DefWindowProcW as *const () as usize as u64).to_le_bytes());
+    wc[64..72].copy_from_slice(&(IME_UI_CLASS.as_ptr() as u64).to_le_bytes());
+    let style = metrics::WS_POPUP | metrics::WS_DISABLED;
+    // SAFETY: a valid class description (the class may exist already); a hidden popup owned by `ime`.
+    let ui = unsafe {
+        RegisterClassExW(wc.as_ptr());
+        let ui = CreateWindowExW(0, IME_UI_CLASS.as_ptr(), IME_UI_CLASS.as_ptr(), style, 0, 0, 0, 0, ime, 0, 0, 0);
+        if ui != 0 {
+            call(Request::SetStyle { hwnd: ui as u32, which: -16, value: style | metrics::WS_CLIPSIBLINGS });
+        }
+        ui
+    };
+    set_last_error(error);
+    ui
+}
+
 fn make_ime_window(hwnd: H) {
     if !u::screen(&SYS).interactive {
         let name: [u16; 10] = [105, 109, 109, 51, 50, 46, 100, 108, 108, 0];
@@ -675,20 +749,13 @@ fn make_ime_window(hwnd: H) {
     // a hidden popup owned by the thread's first window.
     unsafe {
         RegisterClassExW(wc.as_ptr());
-        CreateWindowExW(
-            0,
-            IME_CLASS.as_ptr(),
-            IME_CLASS.as_ptr(),
-            metrics::WS_POPUP | metrics::WS_DISABLED | metrics::WS_CLIPSIBLINGS,
-            0,
-            0,
-            0,
-            0,
-            hwnd,
-            0,
-            0,
-            0,
-        );
+        let style = metrics::WS_POPUP | metrics::WS_DISABLED;
+        let ime = CreateWindowExW(0, IME_CLASS.as_ptr(), IME_CLASS.as_ptr(), style, 0, 0, 0, 0, hwnd, 0, 0, 0);
+        // The window's own style has WS_CLIPSIBLINGS, though the procedure's `CREATESTRUCT` has
+        // not (cw_chrome_widget): added after its creation messages.
+        if ime != 0 {
+            call(Request::SetStyle { hwnd: ime as u32, which: -16, value: style | metrics::WS_CLIPSIBLINGS });
+        }
     }
 }
 
@@ -744,12 +811,12 @@ pub extern "system" fn IsWindowUnicode(hwnd: H) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsIconic(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.minimized))
+    i32::from(info(hwnd).is_some_and(|i| i.style & metrics::WS_MINIMIZE != 0))
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
-    i32::from(info(hwnd).is_some_and(|i| i.maximized))
+    i32::from(info(hwnd).is_some_and(|i| i.style & metrics::WS_MAXIMIZE != 0))
 }
 
 /// `GetShellWindow`: "the handle of the Shell's desktop window. If no Shell process is present,
@@ -758,7 +825,11 @@ pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
 /// ADR 0155, step 9. Doc-derived.)
 #[unsafe(no_mangle)]
 pub extern "system" fn GetShellWindow() -> H {
-    0
+    // The interactive session has windows of another process (the shell's): the lowest of them is
+    // the shell window (GetKeyboardLayout.yaml `other_threads`). None in session 0.
+    let desktop = u::desktop(&SYS);
+    let Reply::Relatives { children, .. } = call(Request::Relatives { hwnd: desktop }) else { return 0 };
+    children.into_iter().rev().find(|&c| info(c as H).is_some_and(|i| i.pid >= 0xFFFF_FFF0)).map_or(0, |c| c as H)
 }
 
 #[unsafe(no_mangle)]
@@ -792,6 +863,10 @@ pub extern "system" fn GetWindow(hwnd: H, cmd: u32) -> H {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn IsChild(parent: H, child: H) -> i32 {
+    // A NULL or made-up handle is no window: ERROR_INVALID_WINDOW_HANDLE (IsChild.yaml `chrome`).
+    if info(parent).is_none() || info(child).is_none() {
+        return bad_window();
+    }
     i32::from(matches!(
         call(Request::IsChild { parent: parent as u64, child: child as u64 }),
         Reply::Bool { value: true }
@@ -951,7 +1026,12 @@ fn set_long(hwnd: H, index: i32, size: u8, value: u64) -> u64 {
         };
         let mut done = u::StyleStruct { old, new: stored };
         u::send(&SYS, h, u::WM_STYLECHANGED, index as i64 as u64, &mut done as *mut _ as u64);
-        if index == GWL_STYLE && u::frame_style_changed(old, stored) {
+        // (A window without redirection bitmap, Chrome's, keeps its client rectangle until
+        // SetWindowPos(SWP_FRAMECHANGED): swl_chrome.)
+        if index == GWL_STYLE
+            && i.ex_style & metrics::WS_EX_NOREDIRECTIONBITMAP == 0
+            && u::frame_style_changed(old, stored)
+        {
             u::style_frame_changed(&SYS, h);
         }
         return u64::from(old);
@@ -1007,6 +1087,7 @@ pub extern "system" fn SetWindowTextW(hwnd: H, text: *const u16) -> i32 {
     // Observed: a made-up handle returns 1 without an error.
     if info(hwnd).is_some() {
         u::send(&SYS, hwnd as u64, u::WM_SETTEXT, 0, text as u64);
+        winevent::raise(poly_win32k::winevent::EVENT_OBJECT_NAMECHANGE, hwnd as u32, 0, 0);
     }
     1
 }
@@ -1285,8 +1366,16 @@ pub unsafe extern "system" fn ToUnicodeEx(
     buffer: *mut u16,
     buffer_len: i32,
     flags: u32,
-    _layout: usize,
+    layout: usize,
 ) -> i32 {
+    // A layout that is not installed gives no character (ToUnicodeEx.yaml `layouts`).
+    if layout != 0 && s3::PrivateLayoutInstalled(layout) == 0 {
+        if !buffer.is_null() && buffer_len > 0 {
+            // SAFETY: the caller's buffer of `buffer_len` characters.
+            unsafe { *buffer = 0 };
+        }
+        return 0;
+    }
     // SAFETY: the caller's promises, passed on.
     unsafe { ToUnicode(vk, scan, key_state, buffer, buffer_len, flags) }
 }
@@ -1294,8 +1383,16 @@ pub unsafe extern "system" fn ToUnicodeEx(
 /// `GetKeyboardLayout`: every thread has the oracle's layout
 /// (`MapVirtualKeyW.yaml`: HKL `0x04072000`).
 #[unsafe(no_mangle)]
-pub extern "system" fn GetKeyboardLayout(_thread: u32) -> usize {
-    kbd::HKL as usize
+pub extern "system" fn GetKeyboardLayout(thread: u32) -> usize {
+    // A thread that has no window (or does not exist) has no layout of its own to give: 0
+    // (GetKeyboardLayout.yaml `other_threads`).
+    if thread == 0 || thread == SYS.tid() {
+        return kbd::HKL as usize;
+    }
+    match call(Request::ThreadHasWindows { tid: thread }) {
+        Reply::Bool { value: true } => kbd::HKL as usize,
+        _ => 0,
+    }
 }
 
 // ----- metrics
@@ -1950,9 +2047,43 @@ pub extern "system" fn GetMessagePos() -> u32 {
     (message_info() >> 32) as u32
 }
 
+/// Each thread's `GetMessageExtraInfo` value (GetMessageExtraInfo.yaml): what `SetMessageExtraInfo`
+/// set, until a message the thread takes from its queue brings its own (0 for a posted one).
+static EXTRA_INFO: SpinLock<Vec<(u32, isize)>> = SpinLock::new(Vec::new());
+
+fn extra_info(set: Option<isize>) -> isize {
+    let tid = SYS.tid();
+    EXTRA_INFO.with(|v| {
+        let i = v.iter().position(|e| e.0 == tid);
+        let old = i.map_or(0, |i| v[i].1);
+        if let Some(x) = set {
+            match i {
+                Some(i) => v[i].1 = x,
+                None => v.push((tid, x)),
+            }
+        }
+        old
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetMessageExtraInfo() -> isize {
-    0
+    extra_info(None)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn SetMessageExtraInfo(value: isize) -> isize {
+    extra_info(Some(value))
+}
+
+/// `CloseWindow`: minimizes the window (Learn).
+#[unsafe(no_mangle)]
+pub extern "system" fn CloseWindow(hwnd: H) -> i32 {
+    if info(hwnd).is_none() {
+        return bad_window();
+    }
+    u::show_window(&SYS, hwnd as u64, u::SW_MINIMIZE);
+    1
 }
 
 /// `GetWindowTextA`: the text converted to code page 1252 (characters it
@@ -2058,12 +2189,19 @@ pub extern "system" fn GetWindowDC(hwnd: H) -> H {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetWindowThreadProcessId(hwnd: H, pid: *mut u32) -> u32 {
     let Some(i) = info(hwnd) else { return bad_window() };
+    // The desktop and message-only parent windows belong to the system: a thread and a process that
+    // are not ours (GetWindowThreadProcessId.yaml `other_process`).
+    let (p, t) = if i.desktop || i.tid == 0 { (SYSTEM_PID, SYSTEM_TID) } else { (i.pid, i.tid) };
     if !pid.is_null() {
         // SAFETY: the caller's out-pointer.
-        unsafe { *pid = i.pid };
+        unsafe { *pid = p };
     }
-    i.tid
+    t
 }
+
+/// The process and thread ids the desktop window answers.
+const SYSTEM_PID: u32 = 0x1C4;
+const SYSTEM_TID: u32 = 0x1CC;
 
 /// The window's own WS_DISABLED bit (IsWindowEnabled.yaml); 0 with
 /// ERROR_INVALID_WINDOW_HANDLE for NULL or a bad handle.
@@ -2163,12 +2301,16 @@ pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
     let s = if tid == 0 || tid != SYS.tid() { u::focus::thread_input(&SYS, tid) } else { u::focus::input(&SYS) };
     // SAFETY: the caller's GUITHREADINFO (cbSize first).
     unsafe {
+        let (caret, rc, blinking) = caret::of_thread(if tid == 0 { SYS.tid() } else { tid });
         let size = (gti as *const u32).read_unaligned();
         let info = cstructs::GuiThreadInfo {
             size,
+            flags: blinking,
             active: s.active as usize,
             focus: s.focus as usize,
             capture: s.capture as usize,
+            caret: caret as usize,
+            caret_rect: rc,
             ..Default::default()
         };
         (gti as *mut cstructs::GuiThreadInfo).write_unaligned(info);
@@ -2442,16 +2584,6 @@ pub unsafe extern "system" fn UnionRect(dst: *mut i32, a: *const i32, b: *const 
     // SAFETY: as above.
     unsafe { wr(dst, r) };
     i32::from(r != [0; 4])
-}
-
-// Hooks come with the input slice.
-poly_win32_gui::not_implemented_stubs! {
-    /// `SetWindowsHookExW(idHook, lpfn, hmod, dwThreadId)`: NULL on failure.
-    SetWindowsHookExW(id, f, module, thread) => 0;
-    /// `UnhookWindowsHookEx(hhk)`: zero on failure.
-    UnhookWindowsHookEx(hook) => 0;
-    /// `CallNextHookEx(hhk, nCode, wParam, lParam)`: zero.
-    CallNextHookEx(hook, code, w, l) => 0;
 }
 
 // ----- cursors, capture, the window under a point (slice B)

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "gdcbs_flags",
+      "exe_sha256": "9a5111f1271e5b741af9d38fbe4ec5b32288f8df961342672df9d2821439c67e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "T05MWV9BQ1RJVkVfUEFUSFM6IHJldHVybnMgMCwgcGF0aHM+PTEgdHJ1ZSwgbW9kZXMgcGVyIHBhdGggMiwgbGFzdCBlcnJvciA1NzAwNQpBTExfUEFUSFM6IHJldHVybnMgMCwgcGF0aHM+PTEgdHJ1ZSwgbW9kZXMgcGVyIHBhdGggMiwgbGFzdCBlcnJvciA1NzAwNQpEQVRBQkFTRV9DVVJSRU5UOiByZXR1cm5zIDAsIHBhdGhzPj0xIHRydWUsIG1vZGVzIHBlciBwYXRoIDIsIGxhc3QgZXJyb3IgNTcwMDUKT05MWV9BQ1RJVkVfUEFUSFN8VklSVFVBTF9NT0RFX0FXQVJFOiByZXR1cm5zIDAsIHBhdGhzPj0xIHRydWUsIG1vZGVzIHBlciBwYXRoIDMsIGxhc3QgZXJyb3IgNTcwMDUKQUxMX1BBVEhTfFZJUlRVQUxfTU9ERV9BV0FSRTogcmV0dXJucyAwLCBwYXRocz49MSB0cnVlLCBtb2RlcyBwZXIgcGF0aCAzLCBsYXN0IGVycm9yIDU3MDA1CkRBVEFCQVNFX0NVUlJFTlR8VklSVFVBTF9NT0RFX0FXQVJFOiByZXR1cm5zIDAsIHBhdGhzPj0xIHRydWUsIG1vZGVzIHBlciBwYXRoIDMsIGxhc3QgZXJyb3IgNTcwMDUKT05MWV9BQ1RJVkVfUEFUSFN8VklSVFVBTF9NT0RFX0FXQVJFfElOQ0xVREVfSE1EOiByZXR1cm5zIDAsIHBhdGhzPj0xIHRydWUsIG1vZGVzIHBlciBwYXRoIDMsIGxhc3QgZXJyb3IgNTcwMDUKT05MWV9BQ1RJVkVfUEFUSFN8VklSVFVBTF9NT0RFX0FXQVJFfFZJUlRVQUxfUkVGUkVTSF9SQVRFX0FXQVJFOiByZXR1cm5zIDAsIHBhdGhzPj0xIHRydWUsIG1vZGVzIHBlciBwYXRoIDMsIGxhc3QgZXJyb3IgNTcwMDUKT05MWV9BQ1RJVkVfUEFUSFN8SU5DTFVERV9ITUQ6IHJldHVybnMgMCwgcGF0aHM+PTEgdHJ1ZSwgbW9kZXMgcGVyIHBhdGggMiwgbGFzdCBlcnJvciA1NzAwNQpBTExfUEFUSFMgaGFzIGF0IGxlYXN0IHRoZSBhY3RpdmUgcGF0aHM6IHRydWUKREFUQUJBU0VfQ1VSUkVOVCBoYXMgdGhlIGNvdW50cyBvZiBPTkxZX0FDVElWRV9QQVRIUzogdHJ1ZQpPTkxZX0FDVElWRV9QQVRIUyBlcXVhbHMgdGhlIG1vbml0b3JzIG9mIHRoZSBkZXNrdG9wIChTTV9DTU9OSVRPUlMpOiB0cnVlCmEgc2Vjb25kIGNhbGwgZ2l2ZXMgdGhlIHNhbWUgY291bnRzOiB0cnVlCmZsYWdzIDA6IHJldHVybnMgODcsIHBhdGhzIHNldCB0byAwOiB0cnVlLCBtb2RlcyBsZWZ0IGFsb25lOiB0cnVlLCBsYXN0IGVycm9yIDU3MDA1CmZsYWdzIDg6IHJldHVybnMgODcsIHBhdGhzIHNldCB0byAwOiB0cnVlLCBtb2RlcyBsZWZ0IGFsb25lOiB0cnVlLCBsYXN0IGVycm9yIDU3MDA1CmZsYWdzIDB4ODA6IHJldHVybnMgODcsIHBhdGhzIHNldCB0byAwOiB0cnVlLCBtb2RlcyBsZWZ0IGFsb25lOiB0cnVlLCBsYXN0IGVycm9yIDU3MDA1CmZsYWdzIEFMTF9QQVRIU3xPTkxZX0FDVElWRV9QQVRIUzogcmV0dXJucyA4NywgcGF0aHMgc2V0IHRvIDA6IHRydWUsIG1vZGVzIGxlZnQgYWxvbmU6IHRydWUsIGxhc3QgZXJyb3IgNTcwMDUKZmxhZ3MgQUxMX1BBVEhTfERBVEFCQVNFX0NVUlJFTlQ6IHJldHVybnMgODcsIHBhdGhzIHNldCB0byAwOiB0cnVlLCBtb2RlcyBsZWZ0IGFsb25lOiB0cnVlLCBsYXN0IGVycm9yIDU3MDA1CmZsYWdzIE9OTFlfQUNUSVZFX1BBVEhTfERBVEFCQVNFX0NVUlJFTlQ6IHJldHVybnMgODcsIHBhdGhzIHNldCB0byAwOiB0cnVlLCBtb2RlcyBsZWZ0IGFsb25lOiB0cnVlLCBsYXN0IGVycm9yIDU3MDA1CmZsYWdzIGFsbCB0aHJlZTogcmV0dXJucyA4NywgcGF0aHMgc2V0IHRvIDA6IHRydWUsIG1vZGVzIGxlZnQgYWxvbmU6IHRydWUsIGxhc3QgZXJyb3IgNTcwMDUKZmxhZ3MgVklSVFVBTF9NT0RFX0FXQVJFIGFsb25lOiByZXR1cm5zIDg3LCBwYXRocyBzZXQgdG8gMDogdHJ1ZSwgbW9kZXMgbGVmdCBhbG9uZTogdHJ1ZSwgbGFzdCBlcnJvciA1NzAwNQpudWxsIHBhdGhzIHBvaW50ZXI6IHJldHVybnMgODcsIG1vZGVzIGxlZnQgYWxvbmU6IHRydWUKbnVsbCBtb2RlcyBwb2ludGVyOiByZXR1cm5zIDg3CmJvdGggbnVsbDogcmV0dXJucyA4NywgbGFzdCBlcnJvciA1NzAwNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ONLY_ACTIVE_PATHS: returns 0, paths>=1 true, modes per path 2, last error 57005\nALL_PATHS: returns 0, paths>=1 true, modes per path 2, last error 57005\nDATABASE_CURRENT: returns 0, paths>=1 true, modes per path 2, last error 57005\nONLY_ACTIVE_PATHS|VIRTUAL_MODE_AWARE: returns 0, paths>=1 true, modes per path 3, last error 57005\nALL_PATHS|VIRTUAL_MODE_AWARE: returns 0, paths>=1 true, modes per path 3, last error 57005\nDATABASE_CURRENT|VIRTUAL_MODE_AWARE: returns 0, paths>=1 true, modes per path 3, last error 57005\nONLY_ACTIVE_PATHS|VIRTUAL_MODE_AWARE|INCLUDE_HMD: returns 0, paths>=1 true, modes per path 3, last error 57005\nONLY_ACTIVE_PATHS|VIRTUAL_MODE_AWARE|VIRTUAL_REFRESH_RATE_AWARE: returns 0, paths>=1 true, modes per path 3, last error 57005\nONLY_ACTIVE_PATHS|INCLUDE_HMD: returns 0, paths>=1 true, modes per path 2, last error 57005\nALL_PATHS has at least the active paths: true\nDATABASE_CURRENT has the counts of ONLY_ACTIVE_PATHS: true\nONLY_ACTIVE_PATHS equals the monitors of the desktop (SM_CMONITORS): true\na second call gives the same counts: true\nflags 0: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags 8: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags 0x80: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags ALL_PATHS|ONLY_ACTIVE_PATHS: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags ALL_PATHS|DATABASE_CURRENT: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags ONLY_ACTIVE_PATHS|DATABASE_CURRENT: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags all three: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nflags VIRTUAL_MODE_AWARE alone: returns 87, paths set to 0: true, modes left alone: true, last error 57005\nnull paths pointer: returns 87, modes left alone: true\nnull modes pointer: returns 87\nboth null: returns 87, last error 57005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

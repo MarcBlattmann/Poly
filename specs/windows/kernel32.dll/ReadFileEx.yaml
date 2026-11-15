@@ -19,6 +19,7 @@ rules:
   order: "two reads completing at different times run their routines in completion order within one alertable wait."
   port: "a handle associated with a completion port is refused: FALSE, ERROR_INVALID_PARAMETER (87)."
   synchronous_handle: "a handle opened without FILE_FLAG_OVERLAPPED: observed TRUE with last error 0 (the read is accepted)."
+  message_mode_short_buffer: "a message-mode pipe holding an 8-byte message and a read buffer of 4 bytes: ReadFileEx returns TRUE (not FALSE with ERROR_MORE_DATA); the alertable wait returns WAIT_IO_COMPLETION, the routine runs with error code 0 (not ERROR_MORE_DATA) and the 4 bytes that fit"
 errors:
   port_handle: "ERROR_INVALID_PARAMETER (87)"
 side_effects: "starts a read; the routine runs later"
