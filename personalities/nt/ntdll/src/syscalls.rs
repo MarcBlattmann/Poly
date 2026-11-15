@@ -35,6 +35,7 @@ unsafe extern "system" {
     pub fn NtSetEvent(handle: isize, previous: *mut i32) -> NtStatus;
     pub fn NtWaitForSingleObject(handle: isize, alertable: u8, timeout: *const i64) -> NtStatus;
     pub fn NtYieldExecution() -> NtStatus;
+    pub fn NtTestAlert() -> NtStatus;
     #[cfg_attr(target_arch = "x86", allow(dead_code))]
     pub fn NtContinue(context: *mut u8, test_alert: u8) -> NtStatus;
     #[cfg_attr(target_arch = "x86", allow(dead_code))]

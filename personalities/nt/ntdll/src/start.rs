@@ -65,6 +65,13 @@ pub(crate) unsafe extern "C" fn ntdll_thread_init(routine: usize, argument: usiz
         // SAFETY: the process cannot start: end it with the status.
         unsafe { syscalls::NtTerminateProcess(syscalls::CURRENT_PROCESS, status) };
     }
+    // A user APC queued to this thread before it ran (a DLL's `DllMain` may queue one to its own
+    // thread) is delivered now: Windows starts every thread with `NtContinue(..., TestAlert = TRUE)`
+    // (Learn, `QueueUserAPC`: "If an application queues an APC before the thread begins running,
+    // the thread begins by calling the APC function"). The MSYS2 runtime starts its signal thread
+    // this way.
+    // SAFETY: a service without arguments; the routines are the program's own.
+    unsafe { syscalls::NtTestAlert() };
     // SAFETY: hand off to the thread's start routine; it never returns here.
     unsafe { RtlUserThreadStart(routine, argument) }
 }

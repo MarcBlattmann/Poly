@@ -135,27 +135,39 @@ pub unsafe extern "system" fn LsaQueryInformationPolicy(handle: *mut u8, class: 
     if access & needs != needs {
         return STATUS_ACCESS_DENIED;
     }
+    // The structure, then (after it) the machine name or the workgroup name and the SID, so one
+    // `LsaFreeMemory` frees all.
+    const MACHINE: &[u16] = &[0x50, 0x4F, 0x4C, 0x59, 0]; // "POLY"
+    const WORKGROUP: &[u16] = &[0x57, 0x4F, 0x52, 0x4B, 0x47, 0x52, 0x4F, 0x55, 0x50, 0]; // "WORKGROUP"
     // SAFETY: LocalAlloc returns a zeroed block.
-    let out = unsafe { LocalAlloc(0x40, size) };
+    let out = unsafe { LocalAlloc(0x40, size + 64) };
     if out.is_null() {
         return 0xC000_0017;
     }
     let sid = machine_sid();
-    // SAFETY: the block holds `size` bytes, enough for what each class writes below.
+    // SAFETY: the block holds `size` bytes and 64 more, enough for what each class writes below.
     unsafe {
+        let tail = out.add(size);
+        let put_name = |at: *mut u8, text: &[u16], area: *mut u8| {
+            core::ptr::copy_nonoverlapping(text.as_ptr().cast::<u8>(), area, text.len() * 2);
+            // LSA_UNICODE_STRING: Length, MaximumLength, Buffer.
+            at.cast::<u16>().write_unaligned(((text.len() - 1) * 2) as u16);
+            at.cast::<u16>().add(1).write_unaligned((text.len() * 2) as u16);
+            at.add(8).cast::<*mut u8>().write_unaligned(area);
+        };
         match class {
-            3 | 5 | 14 => {
-                // LSA_UNICODE_STRING name (empty), then the SID pointer, with the SID after the structure.
-                let at = out.add(24);
+            // Primary domain of a workgroup machine: the workgroup, no SID.
+            3 => put_name(out, WORKGROUP, tail),
+            // The account domain is the machine itself: its name and the machine SID.
+            5 | 14 => {
+                put_name(out, MACHINE, tail);
+                let at = tail.add(16);
                 core::ptr::copy_nonoverlapping(sid.as_ptr(), at, 24);
                 out.add(16).cast::<*mut u8>().write_unaligned(at);
             }
             6 => out.cast::<u32>().write_unaligned(3),
-            12 => {
-                let at = out.add(72);
-                core::ptr::copy_nonoverlapping(sid.as_ptr(), at, 24);
-                out.add(64).cast::<*mut u8>().write_unaligned(at);
-            }
+            // DNS domain information of a workgroup machine: the workgroup name, no DNS names, no SID.
+            12 => put_name(out, WORKGROUP, tail),
             _ => {}
         }
         buffer.write(out);
