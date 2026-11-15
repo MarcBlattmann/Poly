@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_xbad_function_call",
+      "exe_sha256": "7ee0cbbcef225da82b99156b0858645a1f8dba9af373ccc60eda790ad825e9af",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgd2hhdCgpCm9rIGV4YWN0bHkgYmFkX2Z1bmN0aW9uX2NhbGwKb2sgY2F1Z2h0Cm9rIGl0IGlzIGEgc3RkOjpleGNlcHRpb24Kc3VtbWFyeSA0IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok what()\nok exactly bad_function_call\nok caught\nok it is a std::exception\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}
