@@ -189,6 +189,17 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }
     }
+    // The generated stub DLLs of the Windows applications (ADR 0155, step 10).
+    for &(name, bytes) in super::STUB_DLLS {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
     // And advapi32.dll (ADR 0083).
     if !super::ADVAPI32.is_empty() {
         match create::install_file(&vr, &root, "Windows\\System32", "advapi32.dll", super::ADVAPI32) {
@@ -199,9 +210,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     }
     // The 32-bit modules go into SysWOW64, the System32 of a 32-bit program (ADR 0186; Learn:
     // "File System Redirector").
-    for (name, bytes) in
-        [("ntdll.dll", super::NTDLL32), ("kernelbase.dll", super::KERNELBASE32), ("kernel32.dll", super::KERNEL32_32)]
-    {
+    for (name, bytes) in [
+        ("ntdll.dll", super::NTDLL32),
+        ("kernelbase.dll", super::KERNELBASE32),
+        ("kernel32.dll", super::KERNEL32_32),
+        ("win32u.dll", super::WIN32U32),
+        ("gdi32.dll", super::GDI32_32),
+        ("user32.dll", super::USER32_32),
+    ] {
         if bytes.is_empty() {
             continue;
         }

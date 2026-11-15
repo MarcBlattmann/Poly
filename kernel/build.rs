@@ -110,6 +110,28 @@ fn embed_win32() {
             None => std::fs::write(out.join(name), []).expect("write an empty module"),
         }
     }
+    embed_stub_dlls(&out, dir.as_deref());
+}
+
+/// The generated system DLLs (ADR 0155, step 10: `poly-stubs`' `system` module): `xtask` writes them next to
+/// the Win32 modules and lists their file names in `stub-dlls.txt`. The kernel gets one table of
+/// `(file name, bytes)` (`nt::STUB_DLLS`), empty without `xtask`.
+fn embed_stub_dlls(out: &Path, dir: Option<&Path>) {
+    let mut table = String::from("pub static STUB_DLLS: &[(&str, &[u8])] = &[\n");
+    if let Some(d) = dir {
+        let list = d.join("stub-dlls.txt");
+        println!("cargo:rerun-if-changed={}", list.display());
+        for name in std::fs::read_to_string(&list).unwrap_or_default().lines().map(str::trim).filter(|l| !l.is_empty())
+        {
+            let path = d.join(name);
+            println!("cargo:rerun-if-changed={}", path.display());
+            let embedded = format!("stub-{name}");
+            std::fs::copy(&path, out.join(&embedded)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            table.push_str(&format!("    ({name:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/{embedded}\"))),\n"));
+        }
+    }
+    table.push_str("];\n");
+    std::fs::write(out.join("stub_dlls.rs"), table).expect("write stub_dlls.rs");
 }
 
 /// Where `cargo xtask` names the directory with the 32-bit modules (ADR 0186): the i686
@@ -129,7 +151,16 @@ fn embed_wow64() {
             "cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)"
         );
     }
-    for name in ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "hello32.exe"] {
+    for name in [
+        "ntdll.dll",
+        "kernelbase.dll",
+        "kernel32.dll",
+        "win32u.dll",
+        "gdi32.dll",
+        "user32.dll",
+        "hello32.exe",
+        "gui32.exe",
+    ] {
         let to = out.join(format!("wow64-{name}"));
         match &dir {
             Some(d) => {

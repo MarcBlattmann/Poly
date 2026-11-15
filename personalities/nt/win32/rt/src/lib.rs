@@ -124,11 +124,18 @@ pub const STATUS_NOT_IMPLEMENTED: u64 = 0xC000_0002;
 /// last error to `ERROR_CALL_NOT_IMPLEMENTED` if the function is one that reports failure
 /// through it, and return `value`.
 pub fn unimplemented_export(text: &str, last_error: bool, value: u64) -> u64 {
+    unimplemented_export_error(text, if last_error { ERROR_CALL_NOT_IMPLEMENTED } else { 0 }, value)
+}
+
+/// [`unimplemented_export`] with the last error given (0: leave it alone): the functions of a
+/// family that Learn documents with an error of its own (`APPMODEL_ERROR_NO_PACKAGE`,
+/// `WSAEOPNOTSUPP`).
+pub fn unimplemented_export_error(text: &str, last_error: u32, value: u64) -> u64 {
     // SAFETY: the service reads `text.len()` bytes; the second call takes no pointer.
     unsafe {
         PolyDebugPrint(text.as_ptr(), text.len());
-        if last_error {
-            RtlSetLastWin32Error(ERROR_CALL_NOT_IMPLEMENTED);
+        if last_error != 0 {
+            RtlSetLastWin32Error(last_error);
         }
     }
     value
@@ -143,7 +150,8 @@ pub fn unimplemented_export(text: &str, last_error: bool, value: u64) -> u64 {
 ///
 /// The kinds: `win32` (0 / FALSE / NULL and last error 120), `win32_minus_one` (`(DWORD)-1` and
 /// last error 120, for functions whose failure value that is), `hresult` (`E_NOTIMPL`), `status`
-/// (`STATUS_NOT_IMPLEMENTED`), `value(v)` (the function returns its error directly: `v`). The
+/// (`STATUS_NOT_IMPLEMENTED`), `value(v)` (the function returns its error directly: `v`), `invalid_handle`
+/// (`(HANDLE)-1` or `(INT_PTR)-1` and last error 120), `error(code, v)` (`v` with the last error `code`). The
 /// functions take no parameters: on x64 the caller owns the argument area, so that is safe for
 /// every signature.
 ///
@@ -164,6 +172,21 @@ macro_rules! fail_exports {
     };
     ($dll:literal, value($value:expr), [$($name:ident),* $(,)?]) => {
         $crate::fail_exports!(@make $dll, false, $value, [$($name),*]);
+    };
+    ($dll:literal, invalid_handle, [$($name:ident),* $(,)?]) => {
+        $crate::fail_exports!(@make $dll, true, u64::MAX, [$($name),*]);
+    };
+    ($dll:literal, error($code:expr, $value:expr), [$($name:ident),* $(,)?]) => {
+        $crate::fail_exports!(@make_error $dll, $code, $value, [$($name),*]);
+    };
+    (@make_error $dll:literal, $code:expr, $value:expr, [$($name:ident),*]) => {
+        $(
+            #[doc = concat!("`", stringify!($name), "`: not implemented yet; the export exists so that a program binds it, and it fails (ADR 0155, step 10).")]
+            #[unsafe(no_mangle)]
+            pub extern "system" fn $name() -> u64 {
+                $crate::unimplemented_export_error(concat!("stub: ", $dll, "!", stringify!($name)), $code, $value)
+            }
+        )*
     };
     (@make $dll:literal, $last_error:expr, $value:expr, [$($name:ident),*]) => {
         $(

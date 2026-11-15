@@ -13,7 +13,8 @@ use poly_win32k::icofile::{self, Image};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::user::Env;
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
     fn GetObjectType(h: usize) -> u32;
@@ -21,7 +22,8 @@ unsafe extern "system" {
     fn SetPixelV(hdc: usize, x: i32, y: i32, color: u32) -> i32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateFileW(
         name: *const u16,
@@ -161,7 +163,8 @@ fn bitmap_bgra(hbm: usize) -> Option<(i32, i32, Vec<u8>)> {
 
 // ----- creating
 
-/// `ICONINFO`: fIcon (u32 at 0), xHotspot (4), yHotspot (8), hbmMask (16), hbmColor (24).
+/// `ICONINFO`: fIcon (u32 at 0), xHotspot (4), yHotspot (8), hbmMask (16), hbmColor (24); in a
+/// 32-bit process the handles are at 12 and 16 (`cstructs::IconInfo`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateIconIndirect(ii: *const u8) -> usize {
     if ii.is_null() {
@@ -173,8 +176,8 @@ pub unsafe extern "system" fn CreateIconIndirect(ii: *const u8) -> usize {
             core::ptr::read_unaligned(ii as *const u32),
             core::ptr::read_unaligned(ii.add(4) as *const i32),
             core::ptr::read_unaligned(ii.add(8) as *const i32),
-            core::ptr::read_unaligned(ii.add(16) as *const usize),
-            core::ptr::read_unaligned(ii.add(24) as *const usize),
+            (ii as *const super::cstructs::IconInfo).read_unaligned().mask,
+            (ii as *const super::cstructs::IconInfo).read_unaligned().color,
         )
     };
     // SAFETY: gdi32 checks handles.
@@ -413,13 +416,16 @@ pub unsafe extern "system" fn GetIconInfo(icon: usize, ii: *mut u8) -> i32 {
         set_last_error(ERROR_NOACCESS);
         return 0;
     }
-    // SAFETY: the caller's ICONINFO (32 bytes on x64).
+    // SAFETY: the caller's ICONINFO (32 bytes on x64, 20 in a 32-bit process).
     unsafe {
-        core::ptr::write_unaligned(ii as *mut u32, u32::from(!cursor));
-        core::ptr::write_unaligned(ii.add(4) as *mut i32, hot.0);
-        core::ptr::write_unaligned(ii.add(8) as *mut i32, hot.1);
-        core::ptr::write_unaligned(ii.add(16) as *mut u64, mask as u64);
-        core::ptr::write_unaligned(ii.add(24) as *mut u64, color as u64);
+        let info = super::cstructs::IconInfo {
+            icon: u32::from(!cursor),
+            x: hot.0,
+            y: hot.1,
+            mask: mask as usize,
+            color: color as usize,
+        };
+        (ii as *mut super::cstructs::IconInfo).write_unaligned(info);
     }
     1
 }
@@ -471,13 +477,16 @@ pub unsafe extern "system" fn GetCursorInfo(ci: *mut u8) -> i32 {
     };
     let cur = with_cursor(|c| *c);
     let showing = mine && show_count(|c| *c) >= 0 && cur != 0;
-    // SAFETY: the caller's CURSORINFO (24 bytes).
+    // SAFETY: the caller's CURSORINFO (24 bytes, 20 in a 32-bit process).
     unsafe {
-        core::ptr::write_unaligned(ci as *mut u32, 0);
-        core::ptr::write_unaligned(ci.add(4) as *mut u32, u32::from(showing));
-        core::ptr::write_unaligned(ci.add(8) as *mut u64, if showing { cur as u64 } else { 0 });
-        core::ptr::write_unaligned(ci.add(16) as *mut i32, x);
-        core::ptr::write_unaligned(ci.add(20) as *mut i32, y);
+        let info = super::cstructs::CursorInfo {
+            size: 0,
+            flags: u32::from(showing),
+            cursor: if showing { cur as usize } else { 0 },
+            x,
+            y,
+        };
+        (ci as *mut super::cstructs::CursorInfo).write_unaligned(info);
     }
     1
 }

@@ -64,9 +64,9 @@ pub extern "system" fn CreateIoCompletionPort(file: Handle, port: Handle, key: u
     } else {
         (port, false)
     };
-    let mut info = [0u8; 16];
-    info[0..8].copy_from_slice(&(port as u64).to_le_bytes());
-    info[8..16].copy_from_slice(&(key as u64).to_le_bytes());
+    // FILE_COMPLETION_INFORMATION (`ntifs.h`): Port (HANDLE), Key (PVOID), pointer-sized each:
+    // 16 bytes, 8 in a 32-bit process (the kernel widens it, ADR 0186).
+    let info = poly_kernelbase::file::completion_information(core::mem::size_of::<usize>(), port as u64, key as u64);
     match set_info(file, FILE_COMPLETION_INFORMATION, &info) {
         Ok(()) => port,
         Err(st) => {
@@ -152,7 +152,10 @@ pub unsafe extern "system" fn GetQueuedCompletionStatusEx(
     }
     let timeout = np::nt_timeout(ms);
     let tp = timeout.as_ref().map_or(core::ptr::null(), |t| t as *const i64);
-    let mut raw = alloc::vec![0u8; count as usize * 32];
+    // FILE_IO_COMPLETION_INFORMATION: KeyContext, ApcContext, IoStatusBlock (Status, Information),
+    // four pointer-sized fields: 32 bytes, 16 in a 32-bit process.
+    const P: usize = core::mem::size_of::<usize>();
+    let mut raw = alloc::vec![0u8; count as usize * 4 * P];
     let mut n = 0u32;
     // SAFETY: valid pointers; `raw` holds `count` records.
     let st = unsafe { nt::NtRemoveIoCompletionEx(port, raw.as_mut_ptr(), count, &mut n, tp, alertable as u8) };
@@ -172,15 +175,19 @@ pub unsafe extern "system" fn GetQueuedCompletionStatusEx(
         };
     }
     for i in 0..n as usize {
-        let r = &raw[i * 32..i * 32 + 32];
-        let q = |o: usize| u64::from_le_bytes(r[o..o + 8].try_into().expect("8 bytes")) as usize;
+        let r = &raw[i * 4 * P..(i + 1) * 4 * P];
+        let q = |o: usize| {
+            let mut b = [0u8; 8];
+            b[..P].copy_from_slice(&r[o..o + P]);
+            u64::from_le_bytes(b) as usize
+        };
         // SAFETY: `i` < `count`: the caller's array.
         unsafe {
             entries.add(i).write(OverlappedEntry {
                 key: q(0),
-                overlapped: q(8) as *mut Overlapped,
-                internal: u32::from_le_bytes(r[16..20].try_into().expect("4 bytes")) as usize,
-                bytes: q(24) as u32,
+                overlapped: q(P) as *mut Overlapped,
+                internal: u32::from_le_bytes(r[2 * P..2 * P + 4].try_into().expect("4 bytes")) as usize,
+                bytes: q(3 * P) as u32,
             });
         }
     }

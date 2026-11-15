@@ -61,6 +61,10 @@ pub static NTDLL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ntdl
 pub static KERNELBASE32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-kernelbase.dll"));
 pub static KERNEL32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-kernel32.dll"));
 pub static HELLO32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-hello32.exe"));
+pub static WIN32U32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-win32u.dll"));
+pub static GDI32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gdi32.dll"));
+pub static USER32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-user32.dll"));
+pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.exe"));
 mod test_wow64;
 
 /// Our `kernelbase.dll` and `kernel32.dll` (ADR 0079), built by `cargo
@@ -126,6 +130,9 @@ pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"
 pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
 pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
 pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
+// The system DLLs Poly generates as fail-only stubs for the Windows applications (ADR 0155, step 10),
+// `(file name, image)`; installed in `C:\Windows\System32` by `layout`.
+include!(concat!(env!("OUT_DIR"), "/stub_dlls.rs"));
 /// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
 pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
 /// The DLLs Chrome's browser delay-loads once a page loads (ADR 0155, step 12): `setupapi`,

@@ -283,18 +283,28 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
 /// makes one of the Win32 name unless a `RootDirectory` is given (then the
 /// name is relative to it, as NT takes it).
 pub fn rename_info(buf: &[u8], extended: bool, convert: NtPathFn<'_>) -> Result<Vec<u8>, u32> {
-    let len = u32_at(buf, 16).ok_or(ERROR_BAD_LENGTH)? as usize;
-    let name = buf.get(20..20 + len).ok_or(ERROR_BAD_LENGTH)?;
+    rename_info_in(8, buf, extended, convert)
+}
+
+/// [`rename_info`] for a process whose pointers are `ptr_size` bytes (ADR 0186): the caller's
+/// structure and the NT one are both laid out with `RootDirectory` at `ptr_size`,
+/// `FileNameLength` at `2 * ptr_size` and `FileName` at `2 * ptr_size + 4` (offsets 8, 16, 20 in
+/// a 64-bit process, 4, 8, 12 in a 32-bit one).
+pub fn rename_info_in(ptr_size: usize, buf: &[u8], extended: bool, convert: NtPathFn<'_>) -> Result<Vec<u8>, u32> {
+    let length_at = 2 * ptr_size;
+    let name_at = length_at + 4;
+    let len = u32_at(buf, length_at).ok_or(ERROR_BAD_LENGTH)? as usize;
+    let name = buf.get(name_at..name_at + len).ok_or(ERROR_BAD_LENGTH)?;
     if len == 0 || !len.is_multiple_of(2) {
         return Err(ERROR_INVALID_PARAMETER);
     }
     let replace = if extended { buf[0] & 1 != 0 } else { buf[0] != 0 };
-    let root = buf.get(8..16).ok_or(ERROR_BAD_LENGTH)?;
+    let root = buf.get(ptr_size..length_at).ok_or(ERROR_BAD_LENGTH)?;
     let units: Vec<u16> = name.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     let has_root = root.iter().any(|&b| b != 0);
     let target = if has_root { units } else { convert(&units)? };
-    let mut out = crate::file::rename_information(replace, &target);
-    out[8..16].copy_from_slice(root);
+    let mut out = crate::file::rename_information_in(ptr_size, replace, &target);
+    out[ptr_size..length_at].copy_from_slice(root);
     Ok(out)
 }
 
@@ -302,6 +312,12 @@ pub fn rename_info(buf: &[u8], extended: bool, convert: NtPathFn<'_>) -> Result<
 /// than the class's structure is `ERROR_BAD_LENGTH`; a class that cannot be
 /// set (the query-only ones) `ERROR_INVALID_PARAMETER`.
 pub fn set_plan(class: u32, buf: &[u8], convert: NtPathFn<'_>) -> Result<SetPlan, u32> {
+    set_plan_in(8, class, buf, convert)
+}
+
+/// [`set_plan`] for a process whose pointers are `ptr_size` bytes (ADR 0186): only the rename
+/// structures differ.
+pub fn set_plan_in(ptr_size: usize, class: u32, buf: &[u8], convert: NtPathFn<'_>) -> Result<SetPlan, u32> {
     use class::*;
     let take = |n: usize| buf.get(..n).map(<[u8]>::to_vec).ok_or(ERROR_BAD_LENGTH);
     Ok(match class {
@@ -311,10 +327,10 @@ pub fn set_plan(class: u32, buf: &[u8], convert: NtPathFn<'_>) -> Result<SetPlan
         FILE_ALLOCATION_INFO => SetPlan::Nt { nt_class: nt::FILE_ALLOCATION_INFORMATION, bytes: take(8)? },
         FILE_END_OF_FILE_INFO => SetPlan::Nt { nt_class: nt::FILE_END_OF_FILE_INFORMATION, bytes: take(8)? },
         FILE_RENAME_INFO => {
-            SetPlan::Nt { nt_class: nt::FILE_RENAME_INFORMATION, bytes: rename_info(buf, false, convert)? }
+            SetPlan::Nt { nt_class: nt::FILE_RENAME_INFORMATION, bytes: rename_info_in(ptr_size, buf, false, convert)? }
         }
         FILE_RENAME_INFO_EX => {
-            SetPlan::Nt { nt_class: nt::FILE_RENAME_INFORMATION, bytes: rename_info(buf, true, convert)? }
+            SetPlan::Nt { nt_class: nt::FILE_RENAME_INFORMATION, bytes: rename_info_in(ptr_size, buf, true, convert)? }
         }
         FILE_IO_PRIORITY_HINT_INFO => {
             if u32_at(buf, 0).ok_or(ERROR_BAD_LENGTH)? >= 3 {
@@ -586,6 +602,37 @@ mod tests {
             b[20 + 2 * i..22 + 2 * i].copy_from_slice(&c.to_le_bytes());
         }
         b
+    }
+
+    #[test]
+    fn rename_info_32_bit() {
+        // FILE_RENAME_INFO of a 32-bit process: RootDirectory at 4, FileNameLength at 8, FileName at 12.
+        let n = wide("x.txt");
+        let mut b = alloc::vec![0u8; 12 + n.len() * 2];
+        b[0] = 1;
+        b[4..8].copy_from_slice(&0x44u32.to_le_bytes());
+        b[8..12].copy_from_slice(&((n.len() * 2) as u32).to_le_bytes());
+        for (i, c) in n.iter().enumerate() {
+            b[12 + 2 * i..14 + 2 * i].copy_from_slice(&c.to_le_bytes());
+        }
+        let nothing = |w: &[u16]| Ok(w.to_vec());
+        let SetPlan::Nt { nt_class, bytes } = set_plan_in(4, class::FILE_RENAME_INFO, &b, &nothing).unwrap() else {
+            panic!()
+        };
+        assert_eq!(nt_class, 10);
+        assert_eq!(bytes[0], 1);
+        assert_eq!(&bytes[4..8], &0x44u32.to_le_bytes());
+        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 10);
+        assert_eq!(bytes.len(), 12 + 10 + 2);
+        let units: Vec<u16> = bytes[12..22].chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        assert_eq!(units, wide("x.txt"));
+        // The Win32 name is converted when there is no root; short buffers fail.
+        b[4..8].fill(0);
+        let SetPlan::Nt { bytes, .. } = set_plan_in(4, class::FILE_RENAME_INFO, &b, &dos_to_nt).unwrap() else {
+            panic!()
+        };
+        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), (4 + 5) * 2);
+        assert_eq!(set_plan_in(4, class::FILE_RENAME_INFO, &[0u8; 10], &nothing), Err(ERROR_BAD_LENGTH));
     }
 
     #[test]

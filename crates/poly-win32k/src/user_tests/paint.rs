@@ -34,7 +34,7 @@ fn begin_paint_reports_what_is_pending_and_validates() {
         take_log();
         let dc = paint::begin_paint(e, w, &mut ps);
         assert_ne!(dc, 0);
-        assert_eq!(ps.hdc, dc, "returned DC equals ps->hdc");
+        assert_eq!(ps.hdc, dc as usize, "returned DC equals ps->hdc");
         // The class has no brush: WM_ERASEBKGND returned 0, so fErase is 1.
         assert_eq!(take_log(), Vec::<String>::new());
         assert_eq!((ps.erase, ps.paint), (1, CRect::from(Rect::new(0, 0, 100, 80))));

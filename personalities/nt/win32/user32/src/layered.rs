@@ -14,7 +14,8 @@ use poly_win32k::frame::Rect;
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::user::{self as u};
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetObjectType(h: usize) -> u32;
     fn GetObjectW(h: usize, size: i32, out: *mut u8) -> i32;
