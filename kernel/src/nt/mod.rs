@@ -111,6 +111,8 @@ pub static IMM32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/imm32.dll"))
 pub static SHLWAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shlwapi.dll"));
 pub static WTSAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wtsapi32.dll"));
 pub static COMCTL32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comctl32.dll"));
+/// Our `comdlg32.dll`: the common dialogs (open, save, colour, font).
+pub static COMDLG32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comdlg32.dll"));
 pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"));
 pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
 pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
