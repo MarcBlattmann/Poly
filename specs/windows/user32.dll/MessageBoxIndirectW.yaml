@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/MessageBoxIndirectW.yaml
+id: windows/api/user32.dll/MessageBoxIndirectW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Shows a message box described by a MSGBOXPARAMSW (80 bytes in a 64-bit process): text and caption as strings or as string table ids of the instance, a style, an icon of the instance (MB_USERICON), an owner. The box is the one MessageBoxW makes.
+interface:
+  signature: "int MessageBoxIndirectW(const MSGBOXPARAMSW *lpmbp)"
+rules:
+  strings: "lpszText and lpszCaption as strings give the same box as MessageBoxW for the same strings and style (MB_YESNO ended with EndDialog(4) returns 4)"
+  string_ids: "when the pointer is a number below 0x10000 it is a string table id of hInstance: ids 1 and 2 of the executable give the text 'Hello' and the caption 'World'; id 3 gives 'With &mnemonic and %s format' unchanged; ids with a NULL instance, with ids that are not in the table (999, 998) and with a made-up instance give an empty text and an empty caption (the box is still shown)"
+  icons: "MB_USERICON (0x80) with lpszIcon an icon group of the instance (500 or 'APPICON') adds an icon static (id 20); MB_USERICON without an icon name or with an id that is not there also adds the static; MB_ICONERROR adds it; no error is reported"
+  help: "a style of MB_HELP (0x4000) adds the id 9 'Help' button; the help id and callback fields are not used by the tests"
+  owner: "with an owner the owner is disabled while the box is up and enabled again"
+  cbsize_and_language: "cbSize 0, 8 or larger than the structure is not checked: the box is shown; a language id (0x0407, 0xFFFF) does not change the English buttons here"
+  result: "the result is that of the ending as for MessageBoxW (MB_OK always 1)"
+errors:
+  bad_owner: "a made-up owner: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  A NULL structure pointer (access violation in the test, not run), the callback (MB_HELP with lpfnMsgBoxCallback and WM_HELP), the language id for a localised resource, dwContextHelpId, MB_USERICON with a cursor or a bitmap name.

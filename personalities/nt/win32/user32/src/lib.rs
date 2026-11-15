@@ -25,6 +25,7 @@ mod msgbox;
 mod paintctl;
 mod s3;
 mod strings;
+mod winsta;
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -2908,9 +2909,32 @@ pub extern "system" fn GetUpdateRgn(hwnd: H, rgn: H, erase: i32) -> i32 {
     u::paint::get_update_rgn(&SYS, hwnd as u64, rgn as u64, erase != 0)
 }
 
-/// The entry point (`DllMain`): nothing to set up.
+/// The entry point (`DllMain`): `DLL_PROCESS_ATTACH` connects to the window manager once. In a
+/// process whose creation attributes disabled the win32k system calls (the storage service's and
+/// the renderers' mitigation words, the `UpdateProcThreadAttribute` sheet) the connection is
+/// refused and the DLL does not initialise: `LoadLibraryW("user32.dll")` fails with
+/// `ERROR_DLL_INIT_FAILED` (1114).
 #[unsafe(no_mangle)]
-pub extern "system" fn user32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
+pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
+    const DLL_PROCESS_ATTACH: u32 = 1;
+    if reason == DLL_PROCESS_ATTACH {
+        let bytes = wire::encode(&Request::Winsta { op: poly_win32k::winsta::WinstaOp::Connect {} });
+        let mut out = [0u8; 256];
+        let mut len = 0usize;
+        // SAFETY: the buffers are ours and sized as passed.
+        let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
+        // `STATUS_ACCESS_DENIED`: the lockdown. A named station and desktop the process may not
+        // use: the connection is refused too.
+        if s == 0xC000_0022 {
+            return 0;
+        }
+        if s == 0
+            && let Some(Reply::Winsta { res: poly_win32k::winsta::WinstaRes::Err { .. } }) =
+                wire::decode::<Reply>(&out[..(len as usize).min(out.len())])
+        {
+            return 0;
+        }
+    }
     1
 }
 

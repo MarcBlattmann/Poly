@@ -81,6 +81,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -323,6 +324,17 @@ fn rel(repo: &Path, path: &Path) -> String {
 /// compiles `core` for the target (about half a minute), later ones only
 /// the tests.
 pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Result<Manifest> {
+    build_runtime(repo, out, extra, only, None)
+}
+
+/// [`build`] with every C++ test taking its runtime from `runtime` (ADR 0199) when given.
+pub fn build_runtime(
+    repo: &Path,
+    out: &Path,
+    extra: &[PathBuf],
+    only: &[String],
+    runtime: Option<wincxx::Runtime>,
+) -> Result<Manifest> {
     let mut srcs = sources(repo, extra)?;
     if !only.is_empty() {
         for name in only {
@@ -363,7 +375,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     for src in &srcs {
         let exe = format!("{}.exe", src.name);
         let (built, allowed) = if src.is_cpp() {
-            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir)?, wincxx::ALLOWED_DLLS)
+            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir, runtime)?, wincxx::ALLOWED_DLLS)
         } else {
             (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
         };
@@ -928,12 +940,15 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     } else {
         Vec::new()
     };
+    /// The processors a Windows test boots with: `GetCurrentProcessorNumber`'s recorded test pins a
+    /// thread to each of the first four.
+    const WINDOWS_TEST_CPUS: u32 = 4;
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
-        let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
+        let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
@@ -1383,6 +1398,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
+        let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
+        assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);

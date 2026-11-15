@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-win32-netrt = { path = "../netrt" }
+poly-iphlp = { path = "../../../../crates/poly-iphlp" }
 
 [lints]
 workspace = true

@@ -1,9 +1,9 @@
 //! The small functions of the Windows applications' import lists that Learn documents fully
 //! (ADR 0155 addendum, step 10; logic and tests in `poly_kernelbase::apps`): `MulDiv`,
-//! `EncodePointer` / `DecodePointer`, `SetErrorMode` / `GetErrorMode`, `InterlockedIncrement` and
+//! `EncodePointer` / `DecodePointer`, `InterlockedIncrement` and
 //! `InterlockedDecrement`. `kernel32.dll` forwards its exports of these names here.
 
-use core::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use poly_kernelbase::apps;
 
 /// `MulDiv`.
@@ -40,20 +40,6 @@ pub extern "system" fn EncodePointer(ptr: usize) -> usize {
 #[unsafe(no_mangle)]
 pub extern "system" fn DecodePointer(ptr: usize) -> usize {
     apps::decode_pointer(ptr as u64, cookie()) as usize
-}
-
-static ERROR_MODE: AtomicU32 = AtomicU32::new(0);
-
-/// `SetErrorMode`.
-#[unsafe(no_mangle)]
-pub extern "system" fn SetErrorMode(mode: u32) -> u32 {
-    apps::set_error_mode(&ERROR_MODE, mode)
-}
-
-/// `GetErrorMode`.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetErrorMode() -> u32 {
-    ERROR_MODE.load(Ordering::SeqCst)
 }
 
 /// `InterlockedIncrement`.

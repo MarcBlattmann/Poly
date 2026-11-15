@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetDlgItemTextA.yaml
+id: windows/api/user32.dll/GetDlgItemTextA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gets the text of a child control as ANSI bytes: the control's WM_GETTEXT is sent in the form its procedure takes and the result is converted with the ANSI code page; the return value counts bytes without the NUL; the buffer size is in bytes.
+interface:
+  signature: "UINT GetDlgItemTextA(HWND hDlg, int nIDDlgItem, LPSTR lpString, int cchMax)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  value: "the text of the edit ('initial') comes back with 7; a static ('&Name:') with 6; a button with 6; a list box and a text of 0 bytes with 0; an edit with U+00E9 U+4E2D U+0416 U+20AC returns 7 and the bytes 'caf<E9>??<80>'; a text set with SetDlgItemTextA from the 10 bytes of the test string comes back with the same 10 bytes"
+  truncation: "the buffer size is counted in bytes: with a size of 5 the first 4 bytes and a NUL are written and 4 returned; size 4 gives 3, size 1 gives only the NUL and 0 (the last error is set to 0), a text of 300 characters with size 100 gives 99; size 0 writes nothing and returns 0 and does not change the last error; size -1 writes the NUL and returns 0 (last error 0)"
+  empty: "an empty text returns 0 and writes the NUL; the last error is set to 0"
+  window_forms: "for a child with an ANSI procedure WM_GETTEXT arrives with wParam = the size given (50 or 4) and the procedure's bytes are returned as they are; for a child with a Unicode procedure WM_GETTEXT arrives with the same wParam in UTF-16 units and the result is converted ('caf<E9>??<80>' for the mixed text, 7 bytes; size 6 gives 5 bytes 'caf<E9>?')"
+  buffer: "a NULL buffer with size 0 returns 0 and the last error is unchanged"
+errors:
+  not_a_child: "an id that is not a child of the dialog (3000, and 0 for the dialog itself): 0 with ERROR_CONTROL_ID_NOT_FOUND (1421)"
+  bad_dialog: "a bad dialog handle: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

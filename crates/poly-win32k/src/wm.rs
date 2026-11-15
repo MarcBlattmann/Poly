@@ -2028,6 +2028,8 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::Clip { op } => self.clip_op(ctx, op, fx),
+            // Window stations and desktops are objects of the NT personality's (ADR 0192).
+            Request::Winsta { .. } => Reply::Error { code: 87 },
             Request::Layered { hwnd, op, key, alpha, flags } => self.layered_op(hwnd, op, key, alpha, flags),
             Request::Ime { op } => Reply::Ime { res: self.ime.run(ctx.key(), op) },
             Request::ImeAssoc { hwnd, code } => match self.get_mut(u64::from(hwnd)) {

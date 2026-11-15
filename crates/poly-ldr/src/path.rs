@@ -117,6 +117,34 @@ pub fn same_name(a: &[u16], b: &[u16]) -> bool {
     eq_ignore_case(a, b)
 }
 
+/// The names Windows 11 lists as known DLLs (`HKLM\SYSTEM\CurrentControlSet\Control\Session
+/// Manager\KnownDLLs`) that Poly does not carry in [`KNOWN_DLLS`]; a process that may not use the
+/// system's known DLLs cannot load them whether or not Poly has the file.
+const WINDOWS_KNOWN_DLLS: &[&str] = &[
+    "clbcatq.dll",
+    "comdlg32.dll",
+    "coml2.dll",
+    "difxapi.dll",
+    "gdiplus.dll",
+    "imagehlp.dll",
+    "imm32.dll",
+    "msctf.dll",
+    "normaliz.dll",
+    "nsi.dll",
+    "psapi.dll",
+    "rpcrt4.dll",
+    "sechost.dll",
+    "setupapi.dll",
+    "shcore.dll",
+    "shlwapi.dll",
+    "wldap32.dll",
+];
+
+/// Whether a base name is a known DLL of the system, [`KNOWN_DLLS`] or Windows' own list.
+pub fn is_windows_known(base: &[u16]) -> bool {
+    is_known(base) || WINDOWS_KNOWN_DLLS.iter().any(|k| same_name(&wide(k), base))
+}
+
 /// Whether a base name is one of the [`KNOWN_DLLS`].
 pub fn is_known(base: &[u16]) -> bool {
     KNOWN_DLLS.iter().any(|k| same_name(&wide(k), base))

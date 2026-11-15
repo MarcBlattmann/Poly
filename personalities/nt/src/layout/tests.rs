@@ -3,7 +3,7 @@
 
 extern crate std;
 
-use super::create::{self, Installed, create, install_file};
+use super::create::{self, Installed, create, install_file, install_own_copy};
 use super::env::{self, Block, Machine};
 use super::sync::{self, sync};
 use super::*;
@@ -232,6 +232,30 @@ fn system_files_are_installed_and_restored() {
     // The folder is made when missing, in any case the caller names it.
     assert_eq!(install_file(&vr, &root, "windows\\SYSTEM32\\New", "a.dll", b"a"), Ok(Installed::Written));
     assert!(exists(&vr, "/nt/c/Windows/System32/New/a.dll"));
+}
+
+#[test]
+fn own_copies_yield_to_another_vendors_file() {
+    let (vr, root) = setup();
+    create(&vr, &root, &POLY_USER);
+    let dir = "Windows\\System32";
+    let mark: &[u8] = b"<poly>";
+    let ours_v1: &[u8] = b"MZ v1 <poly> code";
+    let ours_v2: &[u8] = b"MZ v2 <poly> code!";
+    // Missing: written; the same again: unchanged; a newer Poly copy: rewritten.
+    assert_eq!(install_own_copy(&vr, &root, dir, "vcruntime140.dll", ours_v1, mark), Ok(Installed::Written));
+    assert_eq!(install_own_copy(&vr, &root, dir, "VCRUNTIME140.DLL", ours_v1, mark), Ok(Installed::Unchanged));
+    assert_eq!(install_own_copy(&vr, &root, dir, "vcruntime140.dll", ours_v2, mark), Ok(Installed::Written));
+    // An installer put its own file there: it stays, at every later boot.
+    assert_eq!(install_file(&vr, &root, dir, "vcruntime140.dll", b"MZ vendor's runtime"), Ok(Installed::Written));
+    assert_eq!(install_own_copy(&vr, &root, dir, "vcruntime140.dll", ours_v2, mark), Ok(Installed::Yielded));
+    assert_eq!(node(&vr, "/nt/c/Windows/System32/vcruntime140.dll").stat().unwrap().size, 19);
+    // A marker across two reads of the file is still found (16 KiB reads).
+    let mut big = alloc::vec![b'x'; 16 * 1024 - 3];
+    big.extend_from_slice(mark);
+    big.extend_from_slice(b"tail");
+    assert_eq!(install_file(&vr, &root, dir, "vcruntime140_1.dll", &big), Ok(Installed::Written));
+    assert_eq!(install_own_copy(&vr, &root, dir, "vcruntime140_1.dll", ours_v1, mark), Ok(Installed::Written));
 }
 
 // ----- registry

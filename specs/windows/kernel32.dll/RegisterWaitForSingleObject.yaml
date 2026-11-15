@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/RegisterWaitForSingleObject.yaml
+id: windows/api/kernel32.dll/RegisterWaitForSingleObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  The older pool calls: RegisterWaitForSingleObject runs a callback on a pool thread when an object is signalled (TimerOrWaitFired FALSE) or the timeout passes (TRUE), once with WT_EXECUTEONLYONCE or again and again otherwise; UnregisterWait(Ex) cancels it; QueueUserWorkItem runs a function on a pool thread. Chromium uses these heavily.
+interface:
+  signature: "BOOL RegisterWaitForSingleObject(PHANDLE out, HANDLE obj, WAITORTIMERCALLBACK cb, PVOID ctx, ULONG ms, ULONG flags); void CALLBACK cb(PVOID ctx, BOOLEAN timedOut); BOOL UnregisterWait(HANDLE); BOOL UnregisterWaitEx(HANDLE, HANDLE completion); BOOL QueueUserWorkItem(LPTHREAD_START_ROUTINE, PVOID, ULONG flags)"
+rules:
+  timeout_once: "RegisterWaitForSingleObject(&h, event, cb, ctx, 100, WT_EXECUTEONLYONCE (8)): TRUE with a handle; one callback with the context and timedOut = TRUE; no second one."
+  signalled: "an infinite wait: no callback while unsignalled; after SetEvent one callback with timedOut = FALSE; once only although the manual-reset event stays signalled."
+  repeating: "flags 0: a 100 ms timeout repeats (between 4 and 8 callbacks in 700 ms, all timedOut); an auto-reset event signalled three times (150 ms apart) gives three callbacks, all timedOut = FALSE; none after UnregisterWaitEx."
+  unregister: "UnregisterWaitEx(h, INVALID_HANDLE_VALUE) after the callback ran: TRUE, last error untouched; while the callback is still running it blocks until the callback returns and returns TRUE; UnregisterWait(h) while the callback runs returns FALSE with ERROR_IO_PENDING (997) at once; UnregisterWaitEx(h, event) while it runs: FALSE with 997, the event is not signalled yet and is signalled (WAIT_OBJECT_0) after the callback returned."
+  bad_arguments: "a NULL object: FALSE with ERROR_INVALID_PARAMETER (87); UnregisterWait(NULL): FALSE with ERROR_INVALID_HANDLE (6)."
+  work_item: "QueueUserWorkItem(fn, ctx, 0): TRUE, fn ran on another thread with the context."
+errors:
+  bad_object: "ERROR_INVALID_PARAMETER (87)"
+  callback_running: "ERROR_IO_PENDING (997) from UnregisterWait / UnregisterWaitEx(event)"
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "callbacks run on pool threads"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  WT_EXECUTEINWAITTHREAD / WT_EXECUTELONGFUNCTION flags, thousands of registered waits, QueueUserWorkItem flags.

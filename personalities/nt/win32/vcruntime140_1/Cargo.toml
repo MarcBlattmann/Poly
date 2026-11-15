@@ -1,0 +1,17 @@
+[package]
+name = "vcruntime140_1"
+description = "Our vcruntime140_1.dll (ADR 0199): __CxxFrameHandler4, the frame handler of Visual C++'s compressed exception tables"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "vcruntime140_1"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

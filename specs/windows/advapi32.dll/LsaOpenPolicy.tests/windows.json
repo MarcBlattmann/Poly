@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "138f0876d79e",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:26:08Z",
+  "tests": [
+    {
+      "name": "lsa_policy",
+      "exe_sha256": "84d9edaedd4688af23a233566a9f33faefbe21fa864ca955561239fffb00b668",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "THNhT3BlblBvbGljeShOVUxMIHN5c3RlbSwgUE9MSUNZX1ZJRVdfTE9DQUxfSU5GT1JNQVRJT04pOiAweDAgaGFuZGxlIDEKICBMc2FDbG9zZTogMHgwCkxzYU9wZW5Qb2xpY3koTlVMTCBzeXN0ZW0sIE1BWElNVU1fQUxMT1dFRCk6IDB4MCBoYW5kbGUgMQogIExzYUNsb3NlOiAweDAKcXVlcnkgUG9saWN5QWNjb3VudERvbWFpbkluZm9ybWF0aW9uICg1KTogMHgwIGJ1ZmZlciAxCnF1ZXJ5IFBvbGljeUF1ZGl0RXZlbnRzSW5mb3JtYXRpb24gKDIpOiAweGMwMDAwMDIyIGJ1ZmZlciAwCnF1ZXJ5IFBvbGljeVJlcGxpY2FTb3VyY2VJbmZvcm1hdGlvbiAoNyk6IDB4MCBidWZmZXIgMQpxdWVyeSBQb2xpY3lBdWRpdEZ1bGxTZXRJbmZvcm1hdGlvbiAoMTApOiAweGMwMDAwMDBkIGJ1ZmZlciAwCnF1ZXJ5IFBvbGljeUxvY2FsQWNjb3VudERvbWFpbkluZm9ybWF0aW9uICgxNCk6IDB4MCBidWZmZXIgMQpxdWVyeSBjbGFzcyA5OSAoOTkpOiAweGMwMDAwMDBkIGJ1ZmZlciAwCkxzYUNsb3NlOiAweDAKTHNhT3BlblBvbGljeSB3aXRoIE5VTEwgb2JqZWN0IGF0dHJpYnV0ZXM6IDB4YzAwMDAwMGQKTHNhTnRTdGF0dXNUb1dpbkVycm9yKFNUQVRVU19BQ0NFU1NfREVOSUVEKTogNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LsaOpenPolicy(NULL system, POLICY_VIEW_LOCAL_INFORMATION): 0x0 handle 1\n  LsaClose: 0x0\nLsaOpenPolicy(NULL system, MAXIMUM_ALLOWED): 0x0 handle 1\n  LsaClose: 0x0\nquery PolicyAccountDomainInformation (5): 0x0 buffer 1\nquery PolicyAuditEventsInformation (2): 0xc0000022 buffer 0\nquery PolicyReplicaSourceInformation (7): 0x0 buffer 1\nquery PolicyAuditFullSetInformation (10): 0xc000000d buffer 0\nquery PolicyLocalAccountDomainInformation (14): 0x0 buffer 1\nquery class 99 (99): 0xc000000d buffer 0\nLsaClose: 0x0\nLsaOpenPolicy with NULL object attributes: 0xc000000d\nLsaNtStatusToWinError(STATUS_ACCESS_DENIED): 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "lsa_policy_c",
+      "exe_sha256": "d741059f14ad7c603c441c42f46d02617fd7c418bf8898c5f07ba64efd7f1a61",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "THNhT3BlblBvbGljeShOVUxMIHN5c3RlbSwgUE9MSUNZX0xPT0tVUF9OQU1FUyk6IDB4MCBoYW5kbGUgMQogIExzYUNsb3NlOiAweDAKTHNhT3BlblBvbGljeShOVUxMIHN5c3RlbSwgMCk6IDB4MCBoYW5kbGUgMQpxdWVyeSBQb2xpY3lEbnNEb21haW5JbmZvcm1hdGlvbiAoMTIpOiAweDAgYnVmZmVyIDEKcXVlcnkgUG9saWN5QXVkaXRMb2dJbmZvcm1hdGlvbiAoMSk6IDB4YzAwMDAwMjIgYnVmZmVyIDAKcXVlcnkgUG9saWN5UGRBY2NvdW50SW5mb3JtYXRpb24gKDQpOiAweGMwMDAwMDIyIGJ1ZmZlciAwCnF1ZXJ5IFBvbGljeU1vZGlmaWNhdGlvbkluZm9ybWF0aW9uICg5KTogMHhjMDAwMDAwZCBidWZmZXIgMApxdWVyeSBQb2xpY3lEbnNEb21haW5JbmZvcm1hdGlvbkludCAoMTMpOiAweGMwMDAwMDBkIGJ1ZmZlciAwCnF1ZXJ5IGNsYXNzIDE1ICgxNSk6IDB4MCBidWZmZXIgMQpETlMgZG9tYWluIGluZm9ybWF0aW9uOiBuYW1lIGxlbmd0aCBpcyBhIG11bHRpcGxlIG9mIDIgMQpMc2FDbG9zZShOVUxMKTogMHhjMDAwMDAwOApMc2FOdFN0YXR1c1RvV2luRXJyb3IoU1RBVFVTX1NVQ0NFU1MpOiAwCkxzYU50U3RhdHVzVG9XaW5FcnJvcihTVEFUVVNfSU5WQUxJRF9IQU5ETEUpOiA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LsaOpenPolicy(NULL system, POLICY_LOOKUP_NAMES): 0x0 handle 1\n  LsaClose: 0x0\nLsaOpenPolicy(NULL system, 0): 0x0 handle 1\nquery PolicyDnsDomainInformation (12): 0x0 buffer 1\nquery PolicyAuditLogInformation (1): 0xc0000022 buffer 0\nquery PolicyPdAccountInformation (4): 0xc0000022 buffer 0\nquery PolicyModificationInformation (9): 0xc000000d buffer 0\nquery PolicyDnsDomainInformationInt (13): 0xc000000d buffer 0\nquery class 15 (15): 0x0 buffer 1\nDNS domain information: name length is a multiple of 2 1\nLsaClose(NULL): 0xc0000008\nLsaNtStatusToWinError(STATUS_SUCCESS): 0\nLsaNtStatusToWinError(STATUS_INVALID_HANDLE): 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

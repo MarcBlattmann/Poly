@@ -447,6 +447,14 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
     ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome stage 2 (impl-chrome-s2; contracts from Learn's "API set" rows).
+    ("SetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("SetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetCurrentProcessorNumber", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentProcessorNumberEx", "api-ms-win-core-processthreads-l1-1-1"),
+    ("GetProcessHandleCount", "api-ms-win-core-processthreads-l1-1-0"),
     // Chrome S3 hunt: scheduling settings and thread times (the browser, its GPU process and
     // crash handler call them all the time; Learn's "API set" rows).
     ("SetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),

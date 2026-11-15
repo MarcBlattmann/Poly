@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateThreadpoolWork.yaml
+id: windows/api/kernel32.dll/CreateThreadpoolWork
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  Creates a thread pool work object for a callback; each SubmitThreadpoolWork queues one run of the callback on a pool thread; WaitForThreadpoolWorkCallbacks waits for the queued runs and can cancel those that have not started; CloseThreadpoolWork releases the object. Poly's version fails (Audacity and Chrome's loop need it).
+interface:
+  signature: "PTP_WORK CreateThreadpoolWork(PTP_WORK_CALLBACK cb, PVOID context, PTP_CALLBACK_ENVIRON env); void CALLBACK cb(PTP_CALLBACK_INSTANCE instance, PVOID context, PTP_WORK work)"
+rules:
+  callback_arguments: "the callback gets a non-NULL instance, the context given at creation and the work object that was submitted; it runs on a pool thread, not the caller's."
+  submit_and_wait: "one submit and WaitForThreadpoolWorkCallbacks(work, FALSE): when the wait returns the callback has run once; ten submits give ten more callbacks (11 in all) and the wait returns after the last; a wait with nothing pending returns at once."
+  parallel: "the default pool runs callbacks of one work object in parallel: two callbacks that each wait for the other to be running both ran (a second pool thread was created)."
+  private_pool_serial: "in a private pool with a maximum of one thread five submitted blocking callbacks ran one after another (at most one at once) and all five ran."
+  cancel: "WaitForThreadpoolWorkCallbacks(work, TRUE) with one callback running (blocked) and four queued behind it: the four were dropped, only the running one finished (1 callback in all, none later)."
+  close_pending: "CloseThreadpoolWork with callbacks pending or running does not drop them: of three submitted (one running, two queued) all three ran."
+errors:
+  none: "the work calls report errors only by returning NULL from the create call; none was provoked"
+side_effects: "starts pool threads"
+threading: "work objects may be submitted from any thread"
+ordering: ["callbacks of one object run in submission order on a one-thread pool"]
+timing:
+  typical: "a submitted callback starts within a few milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Create-call failures, priority and long-running hints in the environment, library pinning (SetThreadpoolCallbackLibrary), callback finalisation.
