@@ -23,6 +23,7 @@ implementation is **observed behaviour** written up as a spec.
 | **Held-out** tests | writes them | ❌ never |
 | Open-source code under permissive licences (XNU/APSL, BSD, MIT) for *behaviour* | ✅ read | ❌ |
 | Linux source (GPL), Wine source (LGPL), ReactOS (GPL) for *behaviour* | ✅ read | ❌ |
+| Microsoft's STL **headers** (`github.com/microsoft/STL`, `stl/inc`, Apache-2.0 WITH LLVM-exception) for the class layouts and member behaviour behind `msvcp140*.dll` (ADR 0199; see "Microsoft's STL headers") | ✅ read; only facts go into sheets | ❌ never |
 | Running third-party tools as black boxes: compilers, linkers and assemblers (clang, lld, gcc) to build test programs and fixtures; emulators (QEMU, qemu-user) to run them; comparing only their inputs and outputs | ✅ | ✅ (outputs only, never their source) |
 | Third-party apps under test (Chrome, 7-Zip, ...): running them, their logs, their import/export *names*; downloaded at build time, never committed or redistributed | ✅ | ✅ (running on Poly; not their source) |
 | Decompiling, disassembling or debugging Microsoft/Apple binaries' internals | ❌ | ❌ |
@@ -56,6 +57,33 @@ third-party source.
 - **XNU (APSL-2.0)**: syscall and trap *names and numbers* are ABI facts. Read
   for behaviour only.
 - **Licensed copies only** of Windows and macOS are used as test oracles.
+- **Microsoft's STL (Apache-2.0 WITH LLVM-exception)**: see the next section.
+  None of it is reused in Poly (owner decision, ADR 0199).
+
+## Microsoft's STL headers (owner decision, 2026-11-15, ADR 0199)
+
+Poly's `msvcp140*.dll` is clean-room Rust, but programs compiled against
+Visual C++'s headers read the fields of the library's classes and call
+through their virtual tables directly, so Poly has to match those layouts
+exactly. Therefore:
+
+1. **Spec agents only** may read the headers of Microsoft's STL
+   (`stl/inc` of `github.com/microsoft/STL`, or the same headers as Visual
+   Studio installs them) to learn the layout and behaviour of what
+   `msvcp140*.dll` exports.
+2. What goes into a spec sheet are **facts**: sizes and alignments, field
+   offsets and their types, the order of virtual functions, the values of
+   constants and flags, exported data and its initial value, and what a member
+   does, in the spec agent's own words, checked where possible by probe
+   programs compiled on the Windows oracle (`sizeof`, `offsetof`, observed
+   calls). **Never code**: no function bodies, no declarations or class
+   definitions copied, no comments, no identifiers beyond the exported names
+   and the member names a layout needs.
+3. **Implementers never read these headers**, nor any other part of
+   Microsoft's STL; they get the sheets, as for every other entry.
+4. The decision covers the headers only; nothing of the STL is compiled
+   into, copied into or shipped with Poly. Anything beyond the headers
+   (its sources, `stl/src`) goes to the owner first.
 
 ## Red flags: stop and escalate
 
