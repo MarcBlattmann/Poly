@@ -1,5 +1,5 @@
 [
-{"symbol":"AcceptEx","status":"claimed","claimed_by":"spec-chrome-win-s4","src":["wine-spec"]},
+{"symbol":"AcceptEx","status":"green","tests_visible":4,"tests_held_out":2,"src":["wine-spec"]},
 {"symbol":"EnumProtocolsA","forward":"ws2_32.WSAEnumProtocolsA","src":["wine-spec"]},
 {"symbol":"EnumProtocolsW","forward":"ws2_32.WSAEnumProtocolsW","src":["wine-spec"]},
 {"symbol":"GetAcceptExSockaddrs","status":"claimed","claimed_by":"spec-chrome-win-s4","src":["wine-spec"]},

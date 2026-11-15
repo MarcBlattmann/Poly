@@ -130,6 +130,14 @@ impl HandleTable {
         }
     }
 
+    /// Put `entry` at the free index `index` (it must be free).
+    fn insert_at(&mut self, index: u32, entry: HandleEntry) {
+        debug_assert!(self.free.contains(&index));
+        self.free.remove(&index);
+        self.entries[index as usize] = Some(entry);
+        self.count += 1;
+    }
+
     fn get(&self, index: u32) -> Option<&HandleEntry> {
         self.entries.get(index as usize)?.as_ref()
     }
@@ -484,8 +492,34 @@ impl ObjectManager {
             && !src.flags.protect_from_close
         {
             self.close_slot(table, index);
+            // Within one process the new handle takes the value the source
+            // had (specs/windows/ntdll.dll/NtDuplicateObject.yaml,
+            // `close_source`): the close comes first, then the new handle
+            // is made.
+            if let Ok(Some(new)) = result
+                && table.is_some()
+                && !new.is_kernel()
+                && table == target_process
+                && let Some(j) = new.index()
+                && j != index
+                && let Ok(t) = self.table_mut(table)
+                && let Some(entry) = t.remove(j)
+            {
+                t.insert_at(index, entry);
+                return Ok(Some(Handle::from_index(index, false)));
+            }
         }
         result
+    }
+
+    /// `NtDuplicateObject` within one process with no `TargetHandle`
+    /// pointer: the source handle must be valid and the call succeeds with
+    /// nothing done (`close_source` of the sheet: the source stays open).
+    pub fn nt_duplicate_object_discarded(&self, caller: &Caller, process: ProcessId, source: Handle) -> Result<()> {
+        if !self.processes.contains_key(&process) {
+            return Err(STATUS_INVALID_HANDLE);
+        }
+        self.resolve_in(caller.mode, process, caller.thread, source).map(|_| ())
     }
 
     fn duplicate_resolved(
