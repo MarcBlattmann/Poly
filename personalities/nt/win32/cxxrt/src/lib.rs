@@ -99,6 +99,12 @@ impl Memory for Proc {
     }
 }
 
+/// This process's memory, for the decisions of `poly_cxxeh` other DLLs call (RTTI in
+/// `vcruntime140.dll`).
+pub fn memory() -> &'static dyn Memory {
+    &Proc
+}
+
 fn read_u32(addr: u64) -> Result<u32, Bad> {
     let mut b = [0u8; 4];
     Proc.read(addr, &mut b).map_err(|e| Bad::Unreadable(e.0))?;

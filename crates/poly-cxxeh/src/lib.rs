@@ -47,9 +47,11 @@ pub mod catches;
 pub mod consts;
 pub mod fh4;
 pub mod frame;
+pub mod rtti;
 pub mod tables;
 pub mod throw;
 pub mod typeinfo;
+pub mod undname;
 
 #[cfg(test)]
 mod tests;
