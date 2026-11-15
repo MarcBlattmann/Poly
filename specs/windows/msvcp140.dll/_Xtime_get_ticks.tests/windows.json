@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_time_ticks",
+      "exe_sha256": "6e309137870f0a606dfca3cfc82182249b3a72287a2e5226eb9ebd568e5e517a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaXQgbGllcyBiZXR3ZWVuIHR3byByZWFkaW5ncyBvZiB0aGUgc3lzdGVtIGNsb2NrICgxMDAgbnMgdGlja3Mgc2luY2UgMTk3MCkKb2sgaXQgaXMgYSB0aW1lIG9mIHRoaXMgZGVjYWRlICgyMDIwIHRvIDIxMDApCm9rIDMwIG1zIG9mIHNsZWVwIG1vdmUgaXQgYnkgMjAgdG8gMjAwMCBtcwpvayB0aGUgdW5pdCBpcyAxMDAgbnM6IGEgc2Vjb25kIGlzIGFib3V0IDEwIG1pbGxpb24gdGlja3MKb2sgaXQgZG9lcyBub3QgZ28gYmFjayB3aXRoaW4gYSBzaG9ydCBsb29wCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok it lies between two readings of the system clock (100 ns ticks since 1970)\nok it is a time of this decade (2020 to 2100)\nok 30 ms of sleep move it by 20 to 2000 ms\nok the unit is 100 ns: a second is about 10 million ticks\nok it does not go back within a short loop\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    }
+  ]
+}

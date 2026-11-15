@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/vcruntime140.dll/__RTtypeid # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\\\BuildTools) with /EHsc /GS- /Zl /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def and from the DLL's own export table, run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes,
+  offsets and constants read from Microsoft's STL and vcruntime headers that ship with the Build Tools
+  (Apache-2.0 with LLVM exception; owner decision 2026-11-15: spec agents may read them for layouts, sizes,
+  offsets, vtable order and member meaning; nothing of them is copied here); the compiler's own output for our
+  own probe programs (cl /FAs listings: the arguments of the calls the compiler writes, the RTTI records it
+  emits). No Microsoft binary was disassembled or debugged, no vcruntime or CRT source was read.
+summary: >
+  __RTtypeid(void* inptr) is what Visual C++ calls (by a tail jump) for typeid applied to a polymorphic glvalue:
+  it returns the std::type_info of the dynamic type of *inptr, found through vptr[-1] (the Complete Object
+  Locator, pTypeDescriptor), and throws std::bad_typeid when inptr is null. typeid of a type, of a pointer, of a
+  non-polymorphic expression is resolved by the compiler without a call (a reference to the program's own type
+  descriptor).
+interface:
+  signature: "const type_info* __RTtypeid(void* inptr): RCX = the object's address (the address of the polymorphic subobject the compiler has: a base class pointer is fine), returns RAX = the TypeDescriptor of the most derived class (the address of a type_info object)"
+rules:
+  dynamic_type: "typeid(*pa) is B when pa points at a B (static type A), C for a class derived from B: the type of the complete object; through a reference to a base; through a virtual base (VA* -> VD); through the second branch of a diamond (V2& -> VD)"
+  static_types: "typeid of a pointer (typeid(pa) == typeid(A*)), of a non-polymorphic object, of a type with cv or reference qualifiers (ignored: typeid(const volatile B&) == typeid(B)) is static; pointers are not ignored: typeid(B*) != typeid(B), typeid(const B*) != typeid(B*)"
+  null: "typeid(*p) of a null polymorphic pointer, and of a null polymorphic reference, throws std::bad_typeid, what() \"Attempted a typeid of nullptr pointer!\", dynamic type exactly std::bad_typeid; typeid of a null non-polymorphic dereference does not throw"
+errors:
+  bad_typeid: "null: std::bad_typeid thrown from inside the function (type descriptor '.?AVbad_typeid@std@@')"
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  The tests are C++ with the line `// poly-cxx: compiler=msvc`: their executables were built on the oracle
+  machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, ucrtbase.dll and kernel32.dll only.

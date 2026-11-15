@@ -25,3 +25,30 @@ EXPORTS
     __std_exception_destroy
     __std_type_info_compare
     __std_type_info_hash
+    __std_terminate
+    __std_type_info_name
+    __std_type_info_destroy_list
+    __RTDynamicCast
+    __RTtypeid
+    __RTCastToVoid
+    _is_exception_typeof
+    __AdjustPointer
+    __CxxDetectRethrow
+    __BuildCatchObject
+    __TypeMatch
+    __unDName
+    __unDNameEx
+    set_unexpected
+    _get_unexpected
+    unexpected
+    _set_se_translator
+    _local_unwind
+    memchr
+    strchr
+    strrchr
+    strstr
+    wcschr
+    wcsrchr
+    wcsstr
+    __intrinsic_setjmp
+    longjmp

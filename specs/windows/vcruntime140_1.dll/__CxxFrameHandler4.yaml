@@ -1,0 +1,165 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/vcruntime140_1.dll/__CxxFrameHandler4 # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207 with the Windows SDK 10.0.22621.0, installed in C:\\BuildTools for this work) with /EHsc (and /EHa or /EHs where a test says so), /GS-, /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def; run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); the compiler's own
+  output for our own probe programs: cl's /FAs assembly listings (the `$cppxdata$`, `$stateUnwindMap$`,
+  `$tryMap$`, `$handlerMap$`, `$ip2state$` tables it writes for each function) and the bytes of the
+  executables' .pdata/.xdata, decoded by a script written for this (not in the repository) and checked on 88
+  functions of our test programs (every offset in range, every type descriptor name well formed, every
+  state-changing entry at or just after a call). Microsoft Learn, "x64 exception handling" (UNWIND_INFO, the
+  language-specific handler, DISPATCHER_CONTEXT). The behaviour of the handler is observed through the same
+  test programs that specify __CxxFrameHandler3 (specs/windows/msvcrt.dll/__CxxFrameHandler3.yaml), rebuilt by
+  Microsoft's compiler: they pass unchanged, so everything that sheet says about matching, copying, the order
+  of events, rethrow, SEH and terminate holds for FH4 too. No Microsoft binary was disassembled or debugged,
+  no vcruntime source was read, nothing was copied from Microsoft's STL or CRT.
+summary: >
+  __CxxFrameHandler4 is the language-specific handler that Microsoft's compiler (Visual C++ 2019 and later,
+  x64) names in the UNWIND_INFO of every function with C++ try/catch or objects to destroy, instead of
+  __CxxFrameHandler3 (`/d2FH4` is the default of /EHsc builds). Its contract with the dispatcher is the one
+  of __CxxFrameHandler3: handler(ExceptionRecord, EstablisherFrame, ContextRecord, DispatcherContext), called
+  twice per exception for each frame (search, then unwind), HandlerData = a 32-bit image-relative offset of
+  the function's FuncInfo; the exception record (0xE06D7363), the ThrowInfo/CatchableType tables behind
+  _CxxThrowException, and the way catch blocks and cleanups run (funclets) are unchanged. What changed is
+  only how the compiler writes the tables the handler reads: they are compressed (variable-length
+  integers, relative offsets, optional parts), and a catch block's continuation is usually listed in the
+  table instead of being returned by the funclet. The key part of this sheet is that format
+  (`data_layouts`), written from the compiler's output; the behaviour (`rules`) is the FH3 sheet's plus
+  the differences listed here. A frame handler that decodes these tables into the same logical structures as
+  FH3's (unwind map, try blocks with handlers, IP-to-state map) and runs the FH3 algorithm passes the tests.
+interface:
+  signature: "EXCEPTION_DISPOSITION __CxxFrameHandler4(EXCEPTION_RECORD* record, ULONG64 establisher_frame, CONTEXT* context, DISPATCHER_CONTEXT* dispatch); x64 calling convention; exported by vcruntime140_1.dll (the only function that matters; __NLG_Dispatch2 and __NLG_Return2 are debugger hooks that return)"
+  unwind_info: "the function's UNWIND_INFO has the flags UHANDLER only (2: byte 0x11 where the version/flags byte is 0x19 otherwise) when the function only has objects to destroy, EHANDLER|UHANDLER (3: 0x19) when it also has a try block or is noexcept; then after the unwind codes (padded to an even count): u32 handler RVA (the import thunk of __CxxFrameHandler4: a `jmp [__imp___CxxFrameHandler4]`), u32 RVA of the FuncInfo4 (the first byte of the header below). A function with nothing to unwind and no try has no handler at all (a plain UNWIND_INFO)"
+  funclets: "catch blocks, and cleanups that cannot be written as a destructor call, are separate functions (funclets) with their own RUNTIME_FUNCTION. A catch funclet that has objects or try blocks of its own has its own UNWIND_INFO naming __CxxFrameHandler4 and its own FuncInfo4 (header bit 0x1, see below); a catch funclet with neither has a plain UNWIND_INFO (no handler) and no table. Entry registers as in FH3: RDX = the establisher frame of the function the catch block belongs to (for a catch funclet in a catch funclet: the outermost function's frame). A catch funclet stores RDX at [RSP+16] on entry (its home slot) before it pushes anything"
+  funclet_return: "a catch funclet returns in RAX: when the table lists continuation addresses for that handler (header bits 0x10/0x20, see below) the INDEX of the one to resume at (0 or 1); when the table lists none, the ADDRESS to resume at (as with FH3). Observed: `mov rax, 0` / `mov rax, 1` in the listing of functions with one or two exits, a real address (lea) for three or more"
+data_layouts:
+  conventions: "little endian. 'u32' = 4 bytes. 'rva' = u32 offset from the image base (dispatch->ImageBase); 0 = absent. 'varint' = the variable-length unsigned integer below. Every table lives in .xdata (or .rdata) and is addressed by an rva from its parent, never by a pointer"
+  varint: "unsigned, 1 to 5 bytes, the length in the low bits of the FIRST byte: xxxxxxx0 = 1 byte (value = b0 >> 1, 0..127); xxxxxx01 = 2 bytes (value = (b0 | b1<<8) >> 2, 0..16383); xxxxx011 = 3 bytes (value = (b0 | b1<<8 | b2<<16) >> 3); xxxx0111 = 4 bytes (value = (b0..b3 little endian) >> 4); xxxx1111 = 5 bytes (b0 is only the marker; value = the u32 that follows). Observed: 0x25,0x11 = 1097; 0x0b,0xa2,0x03 = 29761; 0x5b,0x73,0x55 = 700011; 0x83,0x6b,0x18 = 200048 (a frame offset); 0x91,0x02 = 164 (a catch object offset). The 4- and 5-byte forms were not produced (too large for our probes) and follow the pattern. Signed values are not used: every offset the compiler wrote was positive"
+  FuncInfo4: >
+    The function's table (pointed to by the u32 after the handler rva in UNWIND_INFO). u8 header, then in this
+    order: [rva UnwindMap, if header & 0x08] [rva TryBlockMap, if header & 0x10] rva IPToState (always) [rva
+    SeparatedIPMap, if header & 0x02] [varint ParentFrameOffset, if header & 0x01]. Header bits: 0x01 isCatch
+    (this table belongs to a catch funclet; the varint ParentFrameOffset follows: the offset, from the
+    funclet's own establisher frame, of the 8-byte slot where the funclet saved RDX, i.e. the parent
+    function's establisher frame; observed 56 for a funclet with `push rbp; sub rsp,32` after the home-slot
+    store: 40 + 16 = 56, the FH3 sheet's ParentFrameOffset), 0x02 isSeparated (hot/cold split code: not
+    produced by our probes), 0x04 BBT (profile-guided layout: not produced), 0x08 an unwind map follows,
+    0x10 a try block map follows, 0x20 'EHs' (the function is compiled for synchronous exceptions only: /EHs
+    and /EHsc set it, /EHa does not; the FH3 sheet's EH flags bit 0x1), 0x40 noexcept (the function is
+    noexcept: see rules), 0x80 never seen. Observed headers: 0x38 = unwind + try + EHs (a try block, /EHsc),
+    0x28 = unwind + EHs (only objects to destroy), 0x18 and 0x08 the same under /EHa, 0x60 = EHs + noexcept
+    (a noexcept function with nothing to unwind), 0x68 = also an unwind map, 0x48 = noexcept + unwind map
+    under /EHa, 0x29/0x39 a catch funclet with an unwind map (and a try block).
+  UnwindMap4: >
+    varint Count, then Count entries, entry i being state i (states are indices, the first entry is state 0;
+    the 'state' of code outside every object's lifetime is -1 and has no entry). Each entry starts with a
+    varint V: type = V & 3, NextOffset = V >> 2. NextOffset is a distance in BYTES back to the start of the
+    entry that is the next state to unwind to (this entry's own offset from the start of the table's first
+    entry... measured from the table start, where offset 0 is the Count byte): next entry offset = (offset of
+    this entry) - NextOffset, and a result of 0 means -1 (no next state). Then by type: 0 = nothing to do (no
+    more bytes: a try block's own state, or a placeholder); 1 = destructor of an object in the frame: rva
+    Action (the destructor function), varint ObjectOffset: call Action(RCX = establisher frame + ObjectOffset);
+    2 = destructor of an object whose address is saved in the frame: rva Action, varint PointerOffset: call
+    Action(RCX = the 8-byte value stored at establisher frame + PointerOffset) (a class passed by value is
+    destroyed this way: the callee holds a pointer to the caller's copy); 3 = a cleanup funclet: rva Action
+    only: call Action(RDX = establisher frame) (RCX is not used) (named return values, over-aligned locals,
+    objects with virtual bases' special cases, conditional temporaries, `new` expressions). Example (three
+    objects in a row, f2 of probe p2): `04 0a <dtor rva> 70 32 <dtor rva> 60`: Count 2; entry 0 at offset 1:
+    V=5, type 1, NextOffset 1 (offset 1 - 1 = 0: none), object offset 56; entry 1 at offset 7: V=25, type 1,
+    NextOffset 6 (7 - 6 = 1: entry 0), object offset 48.
+  TryBlockMap4: >
+    varint Count, then Count entries: varint TryLow, varint TryHigh, varint CatchHigh, rva HandlerMap. The
+    meaning of the three states is the FH3 sheet's: the try block covers states TryLow..TryHigh; its catch
+    blocks' code runs in states TryHigh+1..CatchHigh. An inner try block comes before the ones that enclose
+    it (observed order for nested tries: inner (3,4,5), outer (1,5,6), then a later sibling (7,7,8)). Example
+    (one try block, state 0, catch state 1): `02 00 00 02 <handlermap rva>`.
+  HandlerMap4: >
+    varint Count, then Count handlers in clause order: u8 Header; [varint Adjectives, if Header & 0x01]; [rva
+    TypeDescriptor, if Header & 0x02: absent = catch(...)]; [varint CatchObjectOffset, if Header & 0x04: the
+    offset of the catch object from the establisher frame; absent = no catch object (an unnamed parameter,
+    catch(...))]; rva CatchFunclet; then the continuation addresses: Header & 0x30 = 0x10: one varint, 0x20:
+    two varints, none otherwise: each is an offset from the START OF THE FUNCTION (the RUNTIME_FUNCTION's
+    BeginAddress of the function that owns this table; for a catch funclet's own table, of the funclet) of the
+    code to resume at. Header bit 0x08 was never seen. Adjectives are FH3's (0x1 const, 0x2 volatile, 0x4
+    __unaligned, 0x8 reference, 0x40 'C++ exceptions only' on catch(...): present with /EHsc and /EHs on
+    every catch(...) clause, absent with /EHa). Observed headers: 0x16 typed clause with an object and one
+    continuation, 0x12 typed without an object, 0x17 typed with adjectives, 0x13 typed, adjectives, no object,
+    0x11 catch(...) (adjectives 0x40, no object), 0x10 catch(...) under /EHa, 0x26 two continuations, 0x06/0x07/0x03/0x01
+    no continuation listed (the funclet returns the address). Example (catch (const long& l) in function
+    f3 of probe p3, header 0x17): `17 12 <typedesc rva of long> 50 <funclet rva> 26`: adjectives 0x12>>1 = 9
+    (const | reference), object offset 0x50>>1 = 40, continuation 0x26>>1 = 19.
+  IPToState4: >
+    varint Count, then Count entries: varint IPDelta, varint StateIndex. The i-th entry's IP is the previous
+    entry's IP plus IPDelta (the first from the function's BeginAddress; for a catch funclet's table from
+    the funclet's own BeginAddress); its state is StateIndex - 1 (so 0 = state -1, 'outside'). An entry
+    says: from this address on, until the next entry, the state is S. The compiler puts an entry at the
+    first byte of each call (or of the instruction after one) whose state differs from the previous one; the
+    last entry runs to the end of the function; there is no entry for code that cannot throw. Under /EHa
+    (header 0x20 clear) entries also exist for instructions that can fault, not only for calls. LOOKUP: for
+    the control PC that the dispatcher gives for a frame (the RETURN ADDRESS for a frame that is calling), the
+    state is that of the last entry whose IP is strictly below the control PC (equivalently IP <= ControlPc
+    - 1), -1 before the first entry. (A call that never returns, followed by an `int 3`, has an entry exactly
+    AT its return address: the entry must not apply to the control PC equal to its own IP.) Example (probe
+    p2, `D a; thrower(); D b; thrower();`): `04 08 02 0c 04`: Count 2; entry 0: IP = start + 4, state 0;
+    entry 1: IP = previous + 6, state 1.
+  worked_example: >
+    One function, `int f1() { try { thrower(); } catch (int e) { return e; } return 0; }` compiled with
+    /EHsc (probe p1), as the compiler wrote it: UNWIND_INFO ... `<rva __CxxFrameHandler4> <rva cppxdata>`;
+    cppxdata: `38 <rva unwind map> <rva try map> <rva ip2state>` (header 0x38); unwind map `04 08 10` (two
+    states, both type 0: V=4 -> type 0, NextOffset 1 = none; V=8 -> type 0, NextOffset 2 = none); try map `02
+    00 00 02 <rva handler map>` (one try: TryLow 0, TryHigh 0, CatchHigh 1); handler map `02 16 <rva
+    typedesc of int> 40 <rva catch funclet> 1c` (one handler, header 0x16: type, catch object at offset
+    0x40>>1 = 32, one continuation 0x1c>>1 = 14 from the function start: the `mov eax, [e]` after the
+    funclet's return); ip2state `02 08 02` (one entry: IP = start + 4 = the call to thrower(), state 0).
+    The catch funclet's own UNWIND_INFO is a plain one (no handler): it has nothing to destroy. The
+    continuation is where the funclet's `mov rax, 0` (index 0) sends the runtime.
+  throw_side: "unchanged from FH3 (specs/windows/msvcrt.dll/_CxxThrowException.yaml): ThrowInfo {u32 attributes, rva destructor, rva forwardCompat, rva CatchableTypeArray}, CatchableTypeArray {i32 count, rva[count]}, CatchableType {u32 properties, rva TypeDescriptor, i32 mdisp, i32 pdisp (-1), i32 vdisp, i32 size, rva copy constructor}: Microsoft's compiler writes exactly these (28-byte CatchableType, properties 0x1 for simple types and pointers, 0x4 with virtual bases; a class thrown by value lists itself, its unambiguous public bases; a pointer lists itself and void*), the type descriptor name starts at offset 16 ('.H', '.PEAH', '.?AUS@@')"
+rules:
+  same_as_fh3: "every rule of specs/windows/msvcrt.dll/__CxxFrameHandler3.yaml (search before unwind, matching by type descriptor name and adjectives, base class and virtual base adjustment, catch object copy before the unwind, order of events, rethrow, throw in a catch block, SEH and C++ in one chain, unhandled exceptions, terminate from a destructor) holds: the 15 tests of that entry that Microsoft's compiler can express (not the older-magic ones) were rebuilt as fh4_* tests and pass on the oracle unchanged"
+  state_numbering: "a catch funclet with objects of its own has a FuncInfo4 with a state numbering of its own (its unwind map is a small table over its own objects), separate from the parent function's; the parent's table does not contain the funclet's code in its IP-to-state map. The parent's state while one of its catch blocks runs is the one it had at the throw (the try block's); that the objects of the try block were already destroyed when the catch block was entered is the runtime's to remember (a per-frame record that is dropped when the funclet returns; FH3 clang tables used the UnwindHelp slot, FH4 tables have none). Behaviour: fh4_throw_in_catch, fh4_nested_try, fh4_state_after_catch"
+  noexcept: "a function with header bit 0x40 (noexcept) that the search reaches with a C++ exception (it has no matching clause): terminate() is called during the search, before anything is unwound: the destructor of the noexcept function's own local object does not run first (fh4_noexcept_terminate: log 'terminate' only, the set_terminate handler runs on the throwing stack). The compiler may instead write the body as a state whose unwind action calls __std_terminate (clang); Microsoft's tables use the flag"
+  ehs_flag: "header bit 0x20 (EHs) makes the frame ignore non-C++ exceptions altogether (no catch(...), no destructors when an outer __except takes it): fh4_seh_sync. Without it (/EHa) catch(...) takes access violations and RaiseException codes and destructors run: fh4_seh_async. A catch(...) clause has Adjectives 0x40 with EHs: it takes only C++ exceptions"
+  extern_c_calls: "(compiler, not handler) under /EHsc and /EHs the compiler assumes a call to an extern \"C\" function does not throw: no state entry covers it, and a C++ exception thrown through it (a callback of qsort_s or EnumSystemCodePagesW) is NOT caught by a try block around the call: it ends as an unhandled exception. Declared with C++ linkage, or compiled with /EHs, the callback's exception is caught (fh4_through_dll_frames, /EHs). A handler needs nothing for this: the ip2state map is the only place it shows"
+  frames_in_other_dlls: "frames between the throw and the catch that belong to code without a C++ handler (ucrtbase's qsort_s, kernel32's callbacks) are searched and unwound through their UNWIND_INFO as usual; destructors on both sides run once, in order"
+  continuation: "after a catch block the function goes on at the continuation: with listed addresses the funclet's return value is the index (0 for the one address, 0 or 1 for two), the address is function start + the listed offset; without any, the funclet returns the address itself. Locals and non-volatile registers are those of the function's frame, as FH3's step (8)"
+  unwind_actions: "the kinds of cleanup in the unwind map (types 1, 2, 3) cover: locals, by-value parameters of class type, named return values, over-aligned locals, virtual-base destructors (the compiler uses the `??_D` vbase destructor as the Action), conditional temporaries and placement/operator-delete cleanups (fh4_unwind_action_kinds). The destructor Action of type 1 and 2 is called as `Action(RCX)` with RDX untouched; the funclet Action of type 3 is called as `Action(RDX = establisher frame)`"
+  uncaught_exceptions: "the count __uncaught_exceptions() returns (vcruntime140.dll) rises when an exception is thrown and falls when a catch block takes it: 1 in a destructor that runs during an unwind, 0 in a catch block (fh4_uncaught_exceptions)"
+errors:
+  noexcept_terminate: "see rules.noexcept"
+  unhandled: "no clause takes it: unhandled exception, code 0xE06D7363, 4 parameters, parameter 0 = 0x19930520 (fh4_unhandled): the top-level filter is called before any destructor ran"
+  bad_table: "a malformed table was never produced; no behaviour recorded"
+side_effects: >
+  Calls the program's copy constructors, destructors (unwind actions and ThrowInfo destructors), catch
+  funclets and terminate(). Keeps per thread which exception is being handled. Nothing else.
+threading: >
+  Per thread, as FH3: the exception being handled belongs to the thread. The tests are single-threaded
+  (fh4_through_dll_frames calls into ucrtbase on the same thread).
+ordering:
+  - "search before unwind (fh4_seh_mixed, fh4_unhandled); catch object copy before the unwind (fh4_by_value_lifetime); innermost frame first, reverse construction order (fh4_unwind_order); catch block, then its by-value catch object, then the exception object (fh4_by_value_lifetime); throw in a catch block (fh4_throw_in_catch)"
+timing:
+  typical: "each test runs in well under a second on the oracle (200 frames deep in fh4_deep_recursion)"
+  guarantees: none
+tests:
+  visible: 32  # count in <symbol>.tests/
+  held_out: 14  # count kept by the diff runner
+building_tests: >
+  The tests are C++ (`.cpp`) with the line `// poly-cxx: compiler=msvc` (ADR 0098 extended for ADR 0199): their
+  executables were built ON THE ORACLE MACHINE by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1:
+  cl /EHsc /GS- /Zl /O1, link /NODEFAULTLIB /ENTRY:mainCRTStartup /Brepro) and are checked in beside the
+  sources as `<name>.exe` (test artefacts, ~10 KB each): the container has no Microsoft compiler, and the
+  tables the compiler writes are the point. `cargo xtask pipeline win build` takes `<name>.exe` as it is
+  (the executable must import only from ntdll, kernel32, msvcrt, vcruntime140, vcruntime140_1, ucrtbase and
+  msvcp140). The programs import `__CxxFrameHandler4` from vcruntime140_1.dll, `_CxxThrowException`,
+  `__std_terminate` and the C++ helpers from vcruntime140.dll, `terminate`/`set_terminate` from ucrtbase.dll;
+  they define their own `??_7type_info@@6B@` (poly_wtest.h). Today on Poly every one of them that throws
+  fails: vcruntime140_1's __CxxFrameHandler4 logs and continues the search.
+notes: >
+  Probes and the decoder script are in the spec agent's kit (outside the repository); the compiler's
+  listings for p1..p16 are the evidence for the tables above. Not produced by our probes and therefore not
+  specified: header bits 0x02 (isSeparated, hot/cold splitting), 0x04 (BBT), handler header bit 0x08,
+  signed offsets, 4- and 5-byte varints in practice.

@@ -39,6 +39,17 @@
 
 #pragma once
 
+// ADR 0199 (spec-vcrt-1): a test may also be built by Microsoft's compiler (`cl /EHsc`,
+// `// poly-cxx: compiler=msvc`, tools/pipeline/windows/msvc-build.ps1): the same header
+// then takes the C++ runtime from vcruntime140.dll (and vcruntime140_1.dll, msvcp140.dll
+// for what a test imports from them) and the C runtime's terminate from ucrtbase.dll.
+#if defined(_MSC_VER) && !defined(__clang__)
+#define POLY_COMPILER_MSVC 1
+#ifndef POLY_CXX_RUNTIME_VCRUNTIME140
+#define POLY_CXX_RUNTIME_VCRUNTIME140 1
+#endif
+#endif
+
 typedef unsigned long long poly_u64;
 typedef long long poly_i64;
 typedef unsigned int poly_u32;
@@ -90,7 +101,11 @@ struct PolyExceptionPointers {
 // ----- msvcrt.dll: the C++ runtime functions a test names itself ----------------------
 
 typedef void (*poly_terminate_handler)();
-#ifdef POLY_CXX_RUNTIME_VCRUNTIME140
+#ifdef POLY_COMPILER_MSVC
+// Microsoft's headers declare set_terminate and terminate (corecrt_terminate.h); the program imports
+// them from ucrtbase.dll.
+#include <eh.h>
+#elif defined(POLY_CXX_RUNTIME_VCRUNTIME140)
 // ADR 0199: the C++ runtime is vcruntime140.dll, whose terminate() is the
 // Universal C runtime's: ucrtbase.dll exports set_terminate and terminate
 // under their C names (Learn: set_terminate, terminate).
@@ -118,12 +133,24 @@ __declspec(dllimport) __declspec(noreturn) void terminate();
 //   `poly_std_terminate_calls` (so a test can tell the compiler's terminate
 //   scope from the runtime's own decision to terminate) and calls msvcrt's
 //   terminate().
+#ifndef POLY_COMPILER_MSVC
 extern "C" const void* const poly_type_info_vftable[2] __asm__("??_7type_info@@6B@") = {0, 0};
 static int poly_std_terminate_calls = 0;
 extern "C" __declspec(noreturn) void __std_terminate() {
     poly_std_terminate_calls++;
     terminate();
 }
+#else
+// Microsoft's compiler: the vftable of type_info is not an export of vcruntime140.dll (the
+// static part of the C runtime has it); the test's own stands in, as above. `__std_terminate`,
+// which the compiler calls for a terminate scope, is vcruntime140.dll's (it ends in ucrtbase's
+// terminate()).
+extern "C" const void* const poly_type_info_vftable[2] = {0, 0};
+#pragma comment(linker, "/alternatename:??_7type_info@@6B@=poly_type_info_vftable")
+// clang's `__exception_code()` is Microsoft's `_exception_code()` (excpt.h's GetExceptionCode).
+extern "C" unsigned long __cdecl _exception_code(void);
+#define __exception_code _exception_code
+#endif
 
 // memset and memcpy, which the compiler may call for copies and
 // initialisation, come from msvcrt.dll (the import library has them).
@@ -247,6 +274,9 @@ struct Test {
     void value(const char* name, poly_i64 v) { Line().str("value ").str(name).str(" ").dec(v).end(); }
     void value_hex(const char* name, poly_u64 v) { Line().str("value ").str(name).str(" ").hex(v).end(); }
     void line(const char* s) { Line().str(s).end(); }
+    // `value <name> "<text>"`: what a test observed as text (an event log), when the value is
+    // the point and not a check.
+    void text(const char* name, const char* s) { Line().str("value ").str(name).str(" \"").str(s).str("\"").end(); }
     // `summary <p> passed, <f> failed`; the exit status.
     poly_u32 finish() {
         Line().str("summary ").dec(passed).str(" passed, ").dec(failed).str(" failed").end();

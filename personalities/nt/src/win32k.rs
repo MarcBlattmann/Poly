@@ -235,7 +235,13 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
             Request::RegisterEvent { handle } => return register_event(sys, caller, ctx, handle),
             Request::Surface { hwnd } => {
                 let w = &sys.win32k;
-                let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
+                // A child draws into its top-level window's surface, through a bitmap of its
+                // client size (`commit`).
+                let size = w
+                    .surfaces
+                    .size(&w.desktop, hwnd)
+                    .or_else(|| w.surfaces.child_area(&w.wm, &w.desktop, hwnd).map(|a| (a.width, a.height)))
+                    .map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
                 return Reply::Value { value: size };
             }
             // A layered window passes the hit through where it shows nothing.
@@ -273,6 +279,17 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
                     Reply::Error { code: 87 }
                 };
             }
+            // DefWindowProc's SC_MOVE / SC_SIZE: the compositor drags the surface (ADR 0128).
+            Request::MoveSize { hwnd, edges } => {
+                let w = &mut sys.win32k;
+                let Some(id) = w.surfaces.surface(hwnd) else { return Reply::Error { code: 1400 } };
+                if edges == 0 {
+                    w.desktop.begin_move(id);
+                } else {
+                    w.desktop.begin_resize(id, poly_win32k::link::Edges(edges));
+                }
+                return Reply::Ok {};
+            }
             // A system cursor over a top-level window's surface (ADR 0172).
             Request::CursorShape { hwnd, idc } => {
                 let w = &mut sys.win32k;
@@ -300,6 +317,9 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     let [hwnd, pixels, width, height, stride] = abi::args::<K, 5>(k, regs)?;
     let (hwnd, width, height) = (hwnd as u32, width as u32, height as u32);
     let size = k.with_state(|sys, _, _| sys.win32k.surfaces.size(&sys.win32k.desktop, hwnd));
+    if size.is_none() {
+        return commit_child(k, hwnd, pixels, width, height, stride);
+    }
     if size != Some((width, height)) || width > MAX_SIDE || height > MAX_SIDE || stride < u64::from(width) * 4 {
         return Err(STATUS_INVALID_PARAMETER);
     }
@@ -327,6 +347,54 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     let ok = k.with_state(|sys, _, _| {
         let w = &mut sys.win32k;
         w.surfaces.committed(&mut w.desktop, hwnd)
+    });
+    Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
+}
+
+/// A commit of a child window: its picture into its top-level window's surface where the child
+/// is (`Surfaces::child_area`), in pieces of whole rows as `commit`.
+fn commit_child<K: NtKernel>(
+    k: &mut K,
+    hwnd: u32,
+    pixels: u64,
+    width: u32,
+    height: u32,
+    stride: u64,
+) -> Result<NtStatus, NtStatus> {
+    let area = k.with_state(|sys, _, _| {
+        let w = &sys.win32k;
+        w.surfaces.child_area(&w.wm, &w.desktop, hwnd)
+    });
+    let Some(area) = area else { return Err(STATUS_INVALID_PARAMETER) };
+    if (area.width, area.height) != (width, height)
+        || width > MAX_SIDE
+        || height > MAX_SIDE
+        || stride < u64::from(width) * 4
+    {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let row = width as usize * 4;
+    let piece = (BAND_BYTES / row.max(1)).max(1) as u32;
+    let mut bytes = vec![0u8; row * piece.min(height) as usize];
+    let mut y = 0u32;
+    while y < height {
+        let n = piece.min(height - y) as usize;
+        let part = &mut bytes[..n * row];
+        for (i, chunk) in part.chunks_mut(row).enumerate() {
+            abi::read(k, pixels + (u64::from(y) + i as u64) * stride, chunk)?;
+        }
+        let ok = k.with_state(|sys, _, _| {
+            let w = &mut sys.win32k;
+            w.surfaces.write_child_rows(&w.desktop, &area, y, part)
+        });
+        if !ok {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        y += n as u32;
+    }
+    let ok = k.with_state(|sys, _, _| {
+        let w = &mut sys.win32k;
+        w.surfaces.child_committed(&mut w.desktop, &area)
     });
     Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
 }
