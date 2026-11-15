@@ -378,9 +378,42 @@ unsafe fn open_process(access: u32, pid: u32) -> Handle {
     }
 }
 
+/// A new socket like `s` (an unbound, unconnected one): the family, type, protocol and the options a
+/// program sets before it hands the socket on (`IPV6_V6ONLY` 0 for Chrome's).
+fn clone_unbound(s: Socket, info: &proto::Info) -> Option<Handle> {
+    let h = afd::open_endpoint(true).ok()?;
+    let req = proto::SocketReq { family: info.family, ty: info.ty, protocol: info.protocol };
+    if afd::ioctl(h, proto::SOCKET, &req.encode(), &mut []).0 >= 0xC000_0000 {
+        afd::close(h);
+        return None;
+    }
+    let options = [
+        (SOL_SOCKET, SO_REUSEADDR),
+        (SOL_SOCKET, SO_KEEPALIVE),
+        (SOL_SOCKET, SO_BROADCAST),
+        (SOL_SOCKET, SO_SNDBUF),
+        (SOL_SOCKET, SO_RCVBUF),
+        (SOL_SOCKET, 0x3005), // SO_RANDOMIZE_PORT
+        (IPPROTO_TCP, TCP_NODELAY),
+        (IPPROTO_IPV6, IPV6_V6ONLY),
+    ];
+    for (level, name) in options {
+        let mut out = [0u8; 16];
+        let (status, n) = afd::ioctl(s as Handle, proto::GET_OPTION, &proto::option_header(level, name), &mut out);
+        if status < 0xC000_0000 && n > 0 && n <= out.len() {
+            let mut set = proto::option_header(level, name).to_vec();
+            set.extend_from_slice(&out[..n]);
+            let _ = afd::ioctl(h, proto::SET_OPTION, &set, &mut []);
+        }
+    }
+    Some(h)
+}
+
 /// `WSADuplicateSocketW(s, dwProcessId, lpProtocolInfo)`: the endpoint's handle is duplicated into
 /// the target process and the record names it (`WSASocketW` with `FROM_PROTOCOL_INFO` in the
-/// target takes it up).
+/// target takes it up). A socket that is not bound, connected or listening yet is not shared: the
+/// duplicate is a new socket with the same options (Windows' own: a bind made through one does not
+/// show on the other); the others are the same socket.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mut u8) -> i32 {
     if let Err(e) = check_started() {
@@ -390,6 +423,18 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
         return fail(WSAEFAULT);
     }
     let Some(i) = afd::info(s as Handle) else { return fail(WSAENOTSOCK) };
+    let mut name = [0u8; poly_winsock::addr::MAX_SIZE];
+    let unbound = i.listening == 0
+        && afd::ioctl(s as Handle, proto::NAME, &0u32.to_le_bytes(), &mut name).0 >= 0xC000_0000
+        && afd::ioctl(s as Handle, proto::NAME, &1u32.to_le_bytes(), &mut name).0 >= 0xC000_0000;
+    let (source, cloned) = if unbound {
+        match clone_unbound(s, &i) {
+            Some(h) => (h, true),
+            None => return fail(WSAEINVAL),
+        }
+    } else {
+        (s as Handle, false)
+    };
     // SAFETY: plain kernel32 calls on our own and the target's handles.
     let dup_handle = unsafe {
         let me = GetCurrentProcess();
@@ -403,9 +448,12 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
             (t, true)
         };
         let mut d: Handle = 0;
-        let ok = DuplicateHandle(me, s as Handle, target, &mut d, 0, 0, DUPLICATE_SAME_ACCESS);
+        let ok = DuplicateHandle(me, source, target, &mut d, 0, 0, DUPLICATE_SAME_ACCESS);
         if opened {
             crate::CloseHandle(target);
+        }
+        if cloned {
+            afd::close(source);
         }
         if ok == 0 {
             return fail(WSAEINVAL);
@@ -417,6 +465,41 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
     // SAFETY: the caller's WSAPROTOCOL_INFOW.
     unsafe { core::ptr::copy_nonoverlapping(rec.as_ptr(), info, rec.len()) };
     0
+}
+
+/// The sockets made from each `WSADuplicateSocketW` record of this process: (record handle,
+/// socket). Windows ends every socket made from one record when one of them is closed (they are
+/// handles to one socket whose last user ends it), and so do we.
+struct MadeTable {
+    locked: AtomicBool,
+    list: core::cell::UnsafeCell<Vec<(Socket, isize)>>,
+}
+
+// SAFETY: access to `list` is serialised by `locked`.
+unsafe impl Sync for MadeTable {}
+
+static MADE: MadeTable = MadeTable { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) };
+
+fn with_made<R>(f: impl FnOnce(&mut Vec<(Socket, isize)>) -> R) -> R {
+    while MADE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held.
+    let list = unsafe { &mut *MADE.list.get() };
+    let r = f(list);
+    MADE.locked.store(false, Ordering::Release);
+    r
+}
+
+/// `closesocket(s)` of a socket made from a record: the other sockets made from the same record,
+/// which end with it (to be closed by the caller).
+pub fn siblings_of(s: Socket) -> Vec<Socket> {
+    with_made(|t| {
+        let Some(record) = t.iter().find(|(k, _)| *k == s).map(|(_, r)| *r) else { return Vec::new() };
+        let sibs: Vec<Socket> = t.iter().filter(|(k, r)| *r == record && *k != s).map(|(k, _)| *k).collect();
+        t.retain(|(_, r)| *r != record);
+        sibs
+    })
 }
 
 /// `WSASocketW(FROM_PROTOCOL_INFO, ...)` with a record of [`WSADuplicateSocketW`]: the socket it names.
@@ -440,6 +523,7 @@ pub unsafe fn from_protocol_info(info: *const u8) -> Result<Socket, u32> {
         return Err(WSAEINVAL);
     }
     let _ = afd::ioctl(mine, proto::SET_NONBLOCKING, &0u32.to_le_bytes(), &mut []);
+    with_made(|t| t.push((mine as Socket, handle)));
     Ok(mine as Socket)
 }
 

@@ -213,6 +213,8 @@ pub const STATUS_NOT_A_DIRECTORY: NtStatus = NtStatus(0xC000_0103);
 pub const STATUS_NAME_TOO_LONG: NtStatus = NtStatus(0xC000_0106);
 pub const STATUS_TOO_MANY_OPENED_FILES: NtStatus = NtStatus(0xC000_011F);
 pub const STATUS_CANCELLED: NtStatus = NtStatus(0xC000_0120);
+/// `STATUS_CONNECTION_ABORTED` (`ntstatus.h`).
+pub const STATUS_CONNECTION_ABORTED: NtStatus = NtStatus(0xC000_0241);
 pub const STATUS_CANNOT_DELETE: NtStatus = NtStatus(0xC000_0121);
 pub const STATUS_PIPE_BROKEN: NtStatus = NtStatus(0xC000_014B);
 pub const STATUS_IO_DEVICE_ERROR: NtStatus = NtStatus(0xC000_0185);

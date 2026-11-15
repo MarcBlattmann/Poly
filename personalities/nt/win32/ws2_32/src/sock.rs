@@ -251,6 +251,11 @@ pub extern "system" fn closesocket(s: Socket) -> i32 {
     }
     crate::events::forget(s);
     afd::close(handle(s));
+    // Sockets made from one `WSADuplicateSocketW` record end together.
+    for sib in crate::events::siblings_of(s) {
+        crate::events::forget(sib);
+        afd::close(handle(sib));
+    }
     0
 }
 
@@ -328,8 +333,8 @@ pub unsafe extern "system" fn getsockopt(s: Socket, level: i32, name: i32, value
             0
         }
         Err(e) => {
-            if e == WSAEINVAL || e == WSAENOPROTOOPT {
-                // The length of a refused option is 0.
+            if e == WSAEINVAL || e == WSAENOPROTOOPT && !proto::option_known(level, name) {
+                // The length of an option that does not exist is 0.
                 // SAFETY: the caller's length (checked non-null).
                 unsafe { *len = 0 };
             }
@@ -987,6 +992,11 @@ pub unsafe extern "system" fn WSAGetOverlappedResult(
         set_error(WSAEFAULT);
         return 0;
     }
+    if afd::info(handle(s)).is_none() {
+        // A socket that was closed has no result to ask for.
+        set_error(WSAENOTSOCK);
+        return 0;
+    }
     // SAFETY: the caller's OVERLAPPED and outputs.
     unsafe {
         if (*ov).internal as u32 == STATUS_PENDING {
@@ -1164,13 +1174,19 @@ pub unsafe extern "system" fn WSAPoll(fds: *mut u8, n: u32, timeout: i32) -> i32
         Err(e) => return fail(e),
     };
     let mut count = 0;
+    let mut invalid = false;
     for ((i, events), dev) in map.into_iter().zip(revents) {
         let r = poll::wsapoll_revents(events, dev);
         if r != 0 {
             count += 1;
         }
+        invalid |= r & POLLNVAL != 0;
         // SAFETY: the caller's entry.
         unsafe { core::ptr::write_unaligned(fds.add(i * WSAPOLLFD_SIZE + 10).cast::<i16>(), r) };
+    }
+    if invalid {
+        // Learn ("WSAPoll"): a descriptor that is not a socket fails the call, `revents` says which.
+        return fail(WSAENOTSOCK);
     }
     count
 }

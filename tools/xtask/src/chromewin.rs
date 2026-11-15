@@ -325,6 +325,11 @@ pub const SYSTEM32_ON_DISK: &str = "poly/nt/c/Windows/System32";
 pub const S1_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s1.html";
 /// What the dumped DOM holds when the script ran.
 pub const DOM_EXPECT: &str = "<p id=\"p\">script-ran 42</p>";
+/// The spec's network page (stage 4), `specs/windows/apps/chrome/pages/s4.html`: two frames, one
+/// `http://example.com/`, one `https://www.iana.org/`; the paragraph says which loaded.
+pub const S4_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s4.html";
+/// What the dumped DOM holds when both frames loaded.
+pub const S4_EXPECT: &str = "<p id=\"r\">http=1 https=1</p>";
 /// The recorded results of the stages, with the SHA-256 of the page and of
 /// each stage's standard output.
 pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
@@ -332,7 +337,16 @@ pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
 /// The page's bytes with LF line ends whatever the checkout did to them
 /// (the recorded DOM depends on them).
 pub fn s1_page() -> Result<Vec<u8>> {
-    let path = crate::root().join(S1_PAGE_PATH);
+    lf_page(S1_PAGE_PATH)
+}
+
+/// The network page's bytes (stage 4), with LF line ends.
+pub fn s4_page() -> Result<Vec<u8>> {
+    lf_page(S4_PAGE_PATH)
+}
+
+fn lf_page(relative: &str) -> Result<Vec<u8>> {
+    let path = crate::root().join(relative);
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut out = Vec::with_capacity(bytes.len());
     for (i, &b) in bytes.iter().enumerate() {
@@ -376,7 +390,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 3] = [
+pub const STAGES: [Stage; 4] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -413,6 +427,23 @@ pub const STAGES: [Stage; 3] = [
         args: &[],
         expect: "PROBE file C:\\Program Files\\Chrome\\chrome_elf.dll",
         seconds: 60,
+    },
+    // The network stage, headless (the spec's `s4-headless`): the page loads an http and an https
+    // frame; the guest has QEMU's user networking.
+    Stage {
+        number: 4,
+        name: "headless dump-dom of the network page (http and https frames), no sandbox, no GPU",
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s4.html",
+        ],
+        expect: S4_EXPECT,
+        seconds: 300,
     },
 ];
 
@@ -533,6 +564,7 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
     }
     tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
+    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
     for stage in &STAGES {
         let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
         tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
@@ -1009,7 +1041,9 @@ fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
     if st.program.is_some() {
         return None;
     }
-    let (want_bytes, want_sha) = match spec_stdout(&format!("s{}", st.number)) {
+    // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
+    let key = if st.number == 4 { "s4-headless".to_string() } else { format!("s{}", st.number) };
+    let (want_bytes, want_sha) = match spec_stdout(&key) {
         Ok(v) => v,
         Err(e) => return Some(e),
     };

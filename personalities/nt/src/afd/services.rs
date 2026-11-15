@@ -77,6 +77,10 @@ struct Snap {
     mapped: bool,
     broken: Option<NtStatus>,
     connected: bool,
+    /// The connect failed (its error is kept for `SO_ERROR`).
+    failed: bool,
+    /// When the last non-blocking connect started (0: none).
+    connect_at: u64,
     shut_rd: bool,
     shut_wr: bool,
 }
@@ -125,6 +129,8 @@ fn snap_raw<K: NtKernel>(k: &mut K, cookie: u64) -> Result<Snap> {
             mapped: e.mapped,
             broken: e.broken,
             connected: e.connected,
+            failed: e.conn_error.is_some(),
+            connect_at: e.connect_at,
             shut_rd: e.shut_rd,
             shut_wr: e.shut_wr,
         })
@@ -485,6 +491,13 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
     // A blocking connect waits for the stack's own timeout, not
     // SO_SNDTIMEO (Learn: "connect" names no timeout option).
     let wait = if s.nonblocking { SockWait::Now } else { SockWait::Forever };
+    // A second connect soon after a non-blocking one that is not through (Windows' loopback refusal
+    // takes a moment): the first is still under way.
+    let now = k.system_time();
+    const UNDER_WAY: u64 = 1_000_000; // 100 ms
+    if s.nonblocking && s.connect_at != 0 && now.saturating_sub(s.connect_at) < UNDER_WAY && !sock.established() {
+        return Err(NtStatus(werr::STATUS_INVALID_DEVICE_STATE));
+    }
     let r = sock.connect(target, wait);
     match r {
         Ok(()) => {
@@ -501,6 +514,7 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
                 endpoint(sys, cookie).map(|e| {
                     e.conn_error = None;
                     e.broken = None;
+                    e.connect_at = now;
                 })
             })?;
         }
@@ -591,19 +605,7 @@ fn read_data<K: NtKernel>(k: &mut K, buf: u64, len: usize) -> Result<Vec<u8>> {
 /// The status Winsock keeps reporting for a connection the stack ended with `e` (a reset by the
 /// peer, a reset after the peer had closed its side, a timeout): the same one for every later
 /// receive and send, where the stack reports it once.
-fn sticky_status(e: Errno, sock: &Arc<dyn NtSocket>) -> Option<NtStatus> {
-    match e {
-        // A reset after the peer had closed its side (its FIN came) is "connection aborted",
-        // as one we sent ourselves; one out of the blue is "connection reset".
-        Errno::ECONNRESET if sock.readiness().contains(Readiness::READ_HANGUP) => {
-            Some(NtStatus(werr::STATUS_CONNECTION_ABORTED))
-        }
-        Errno::ECONNRESET => Some(NtStatus(werr::STATUS_CONNECTION_RESET)),
-        Errno::EPIPE | Errno::ECONNABORTED => Some(NtStatus(werr::STATUS_CONNECTION_ABORTED)),
-        Errno::ETIMEDOUT => Some(NtStatus(werr::STATUS_IO_TIMEOUT)),
-        _ => None,
-    }
-}
+use super::sticky_status;
 
 /// Remember `status` as the endpoint's broken-connection status.
 fn set_broken<K: NtKernel>(k: &mut K, cookie: u64, status: NtStatus) {
@@ -720,6 +722,7 @@ fn send<K: NtKernel>(k: &mut K, file: (ObjectId, u64), n: Notify, input: &[u8]) 
         return Err(NtStatus(werr::STATUS_PIPE_DISCONNECTED));
     }
     if sock.kind() == SockType::Stream && !s.connected {
+        // Never connected, or the connect failed (a failed one keeps its error for `SO_ERROR`).
         return Err(NtStatus(werr::STATUS_INVALID_CONNECTION));
     }
     let mut to = None;
@@ -797,7 +800,7 @@ fn pend<K: NtKernel>(
         let irp = n.irp(sys, &caller, file, false, irp_op)?;
         Ok(sys.io.park(irp))
     })?;
-    match k.socket_pend(PendIo::new(irp, sock, op)) {
+    match k.socket_pend(PendIo::new(irp, file.1, sock, op)) {
         Ok(()) => Ok(STATUS_PENDING),
         Err(io) => {
             // No worker: wait here, then complete the request as the
@@ -867,7 +870,7 @@ fn accept_ex<K: NtKernel>(k: &mut K, file: (ObjectId, u64), n: Notify, input: &[
         conn: None,
     };
     let len = (req.recv_len + req.local_len + req.remote_len) as usize;
-    let irp_op = IrpOp::Read { offset: 0, len, buf: req.buf, key: 0 };
+    let irp_op = IrpOp::Read { offset: 0, len, buf: req.buf, key: crate::io::irp::SOCKET_CONNECT_KEY };
     pend(k, file, n, sock, op, irp_op)
 }
 
@@ -900,7 +903,7 @@ fn connect_ex<K: NtKernel>(k: &mut K, file: (ObjectId, u64), n: Notify, input: &
     }
     let data = read_data(k, req.buf, len)?;
     let op = PendOp::Connect { target: file.1, addr: a, started: false, data };
-    let irp_op = IrpOp::Write { offset: None, data: Vec::new(), key: 0 };
+    let irp_op = IrpOp::Write { offset: None, data: Vec::new(), key: crate::io::irp::SOCKET_CONNECT_KEY };
     pend(k, file, n, sock, op, irp_op)
 }
 
@@ -910,6 +913,10 @@ fn connect_ex<K: NtKernel>(k: &mut K, file: (ObjectId, u64), n: Notify, input: &
 /// `SO_UPDATE_CONNECT_CONTEXT`.
 pub fn place(sys: &mut NtSystem, p: Placement) {
     let Ok(e) = endpoint(sys, p.target) else { return };
+    if let Some(b) = p.broken {
+        e.broken = Some(b);
+        return;
+    }
     if let Some(sock) = p.sock {
         if let Some(old) = e.sock.replace(sock) {
             old.release();
@@ -945,7 +952,7 @@ fn recv<K: NtKernel>(
     if stream && !s.connected {
         let r = sock.readiness();
         // Never connected, or the connect failed (its error stays for `SO_ERROR`).
-        if r.0 & Readiness::READABLE.0 == 0 || r.contains(Readiness::ERROR) {
+        if s.failed || r.0 & Readiness::READABLE.0 == 0 || r.contains(Readiness::ERROR) {
             return Err(NtStatus(werr::STATUS_INVALID_CONNECTION));
         }
     }
@@ -1104,7 +1111,7 @@ fn poll<K: NtKernel>(k: &mut K, input: &[u8]) -> Result<Option<Done>> {
                 if twin.is_some() {
                     r = Readiness(r.0 | it.next().unwrap_or_default().0);
                 }
-                device_bits(sock.as_ref(), r, *connected, *failed) & (ev | 0x7)
+                device_bits(sock.as_ref(), r, *connected, *failed) & (ev | 0x7 | poly_winsock::poll::CONNECT_FAILED)
             }
         };
         if bits != 0 {

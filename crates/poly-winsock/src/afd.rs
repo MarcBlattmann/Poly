@@ -461,6 +461,45 @@ pub fn check_socket(family: i32, ty: i32, protocol: i32) -> Result<SocketReq, u3
     Ok(SocketReq { family, ty, protocol })
 }
 
+/// Whether `(level, name)` is an option Poly knows (for some kind of socket). `getsockopt` of an
+/// unknown option sets the length it returns to 0; one that is known but not the socket's own
+/// (`SO_BROADCAST` on a stream) leaves it.
+pub fn option_known(level: i32, name: i32) -> bool {
+    use crate::consts::*;
+    match level {
+        SOL_SOCKET => matches!(
+            name,
+            SO_DEBUG
+                | SO_ACCEPTCONN
+                | SO_REUSEADDR
+                | SO_KEEPALIVE
+                | SO_DONTROUTE
+                | SO_BROADCAST
+                | SO_LINGER
+                | SO_OOBINLINE
+                | SO_DONTLINGER
+                | SO_EXCLUSIVEADDRUSE
+                | SO_SNDBUF
+                | SO_RCVBUF
+                | SO_SNDTIMEO
+                | SO_RCVTIMEO
+                | SO_ERROR
+                | SO_TYPE
+                | SO_CONDITIONAL_ACCEPT
+                // `SO_MAX_MSG_SIZE`, `SO_PROTOCOL_INFOW`, `SO_RANDOMIZE_PORT`, `SO_CONNECT_TIME`
+                // (`winsock2.h`, `ws2def.h`, `mswsock.h`).
+                | 0x2003
+                | 0x2005
+                | 0x3005
+                | 0x700C
+        ),
+        IPPROTO_TCP => matches!(name, TCP_NODELAY | TCP_KEEPALIVE | TCP_KEEPINTVL | TCP_KEEPCNT),
+        IPPROTO_IP => matches!(name, IP_TTL | IP_TOS | 50),
+        IPPROTO_IPV6 => matches!(name, IPV6_UNICAST_HOPS | IPV6_V6ONLY | 50),
+        _ => false,
+    }
+}
+
 /// [`SET_OPTION`]'s and [`GET_OPTION`]'s level and name, then the value.
 pub fn option_header(level: i32, name: i32) -> [u8; 8] {
     let mut b = [0u8; 8];

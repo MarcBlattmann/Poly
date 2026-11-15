@@ -51,6 +51,10 @@ pub enum IrpOp {
     Lock { lock: ByteLock },
 }
 
+/// The `key` of the requests `AcceptEx` and `ConnectEx` make on a socket (the byte-range lock key
+/// means nothing to a socket): closing the socket cancels them, where it aborts a receive or send.
+pub const SOCKET_CONNECT_KEY: u32 = 0xAFD0_0001;
+
 /// Where a request is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrpState {
@@ -357,6 +361,22 @@ impl IoState {
             self.complete_with(id, status, 0, None, !thread_gone, false);
         }
         ids.len()
+    }
+
+    /// The requests pending on socket `file`, which was closed: the newest first, a receive or send
+    /// as an aborted connection, an accept or connect as cancelled.
+    pub fn cancel_socket_requests(&mut self, file: u64) {
+        let mut ids: Vec<u64> =
+            self.irps.values().filter(|i| i.state != IrpState::Running && i.file == file).map(|i| i.id).collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        for id in ids {
+            let accept_or_connect = self.irps.get(&id).is_some_and(|i| match &i.op {
+                IrpOp::Read { key, .. } | IrpOp::Write { key, .. } => *key == SOCKET_CONNECT_KEY,
+                IrpOp::Lock { .. } => false,
+            });
+            let status = if accept_or_connect { STATUS_CANCELLED } else { STATUS_CONNECTION_ABORTED };
+            self.complete_with(id, status, 0, None, false, false);
+        }
     }
 
     /// `NtCancelIoFile`: the calling thread's requests on one file object.

@@ -140,6 +140,8 @@ pub trait NtSocket: Send + Sync + core::fmt::Debug {
 #[derive(Debug)]
 pub struct PendIo {
     pub irp: u64,
+    /// The cookie of the request's file object (the endpoint).
+    pub file: u64,
     pub sock: Arc<dyn NtSocket>,
     pub op: PendOp,
     /// What a finished `AcceptEx` / `ConnectEx` puts into its socket's endpoint
@@ -175,6 +177,25 @@ pub enum PendOp {
 pub struct Placement {
     pub target: u64,
     pub sock: Option<Arc<dyn NtSocket>>,
+    /// A receive or send ended the connection (reset, aborted): every later one fails the same way.
+    pub broken: Option<NtStatus>,
+}
+
+/// The status Winsock keeps reporting for a connection the stack ended with `e` (a reset by the peer,
+/// a reset after the peer had closed its side, a timeout): the same one for every later receive and
+/// send, where the stack reports it once.
+pub fn sticky_status(e: Errno, sock: &Arc<dyn NtSocket>) -> Option<NtStatus> {
+    match e {
+        // A reset after the peer had closed its side (its FIN came) is "connection aborted",
+        // as one we sent ourselves; one out of the blue is "connection reset".
+        Errno::ECONNRESET if sock.readiness().contains(Readiness::READ_HANGUP) => {
+            Some(NtStatus(poly_winsock::error::STATUS_CONNECTION_ABORTED))
+        }
+        Errno::ECONNRESET => Some(NtStatus(poly_winsock::error::STATUS_CONNECTION_RESET)),
+        Errno::EPIPE | Errno::ECONNABORTED => Some(NtStatus(poly_winsock::error::STATUS_CONNECTION_ABORTED)),
+        Errno::ETIMEDOUT => Some(NtStatus(poly_winsock::error::STATUS_IO_TIMEOUT)),
+        _ => None,
+    }
 }
 
 /// How a request ended: its status, `Information`, and the data to write
@@ -182,8 +203,8 @@ pub struct Placement {
 pub type PendResult = (NtStatus, u64, Option<(u64, Vec<u8>)>);
 
 impl PendIo {
-    pub fn new(irp: u64, sock: Arc<dyn NtSocket>, op: PendOp) -> PendIo {
-        PendIo { irp, sock, op, placement: None }
+    pub fn new(irp: u64, file: u64, sock: Arc<dyn NtSocket>, op: PendOp) -> PendIo {
+        PendIo { irp, file, sock, op, placement: None }
     }
 
     /// What the request that just finished (it returned `Some` from [`attempt`](Self::attempt))
@@ -202,7 +223,13 @@ impl PendIo {
                 let mut data = alloc::vec![0u8; (*len).min(crate::io::irp::MAX_ASYNC_READ)];
                 match sock.recv(&mut data, *peek, SockWait::Now) {
                     Err(Errno::EAGAIN) => None,
-                    Err(e) => Some((status_of(e), 0, None)),
+                    Err(e) => {
+                        let broken = if sock.kind() == SockType::Stream { sticky_status(e, &sock) } else { None };
+                        if broken.is_some() {
+                            self.placement = Some(Placement { target: self.file, sock: None, broken });
+                        }
+                        Some((broken.unwrap_or_else(|| status_of(e)), 0, None))
+                    }
                     Ok(info) => {
                         data.truncate(info.len);
                         let status = if sock.kind() == SockType::Datagram && info.full_len > info.len {
@@ -260,7 +287,7 @@ impl PendIo {
                 };
                 put(&mut out, *recv_len, *local_len, c.local_addr().ok());
                 put(&mut out, *recv_len + *local_len, *remote_len, Some(peer));
-                self.placement = Some(Placement { target: *target, sock: Some(c) });
+                self.placement = Some(Placement { target: *target, sock: Some(c), broken: None });
                 Some((poly_ntobj::status::STATUS_SUCCESS, got as u64, Some((*buf, out))))
             }
             PendOp::Connect { target, addr, started, data } => {
@@ -285,7 +312,7 @@ impl PendIo {
                         Ok(n) => sent = n,
                     }
                 }
-                self.placement = Some(Placement { target: *target, sock: None });
+                self.placement = Some(Placement { target: *target, sock: None, broken: None });
                 Some((poly_ntobj::status::STATUS_SUCCESS, sent as u64, None))
             }
         }
@@ -331,6 +358,10 @@ pub struct Endpoint {
     pub connected: bool,
     /// The peer's address once known (`getpeername` still answers after the connection ended).
     pub peer: Option<SocketAddr>,
+    /// When the last non-blocking connect started (system time, 100 ns units; 0: none). Windows
+    /// answers a second `connect` made soon after with `WSAEALREADY`, where the stack on a loopback
+    /// may have refused the first already.
+    pub connect_at: u64,
     /// The socket `AcceptEx` / `ConnectEx` made: its addresses are not told until the context is
     /// updated (`SO_UPDATE_ACCEPT_CONTEXT` / `SO_UPDATE_CONNECT_CONTEXT`).
     pub needs_update: bool,

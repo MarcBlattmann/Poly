@@ -608,7 +608,14 @@ impl IoState {
         // (Learn: "ReadFile": "the write handle has been closed"), the others
         // are cancelled.
         let status = if self.np_end(cookie).is_some() { STATUS_PIPE_BROKEN } else { STATUS_CANCELLED };
-        self.cancel_where_status(|irp| irp.file == cookie, self.np_end(cookie).is_none(), status);
+        if self.files.get(&cookie).is_some_and(|r| matches!(r.target, Target::Socket(_))) {
+            // A receive or send pending on a socket that is closed ends as an aborted connection
+            // (Winsock: `WSAECONNABORTED`), a pending accept or connect is cancelled; the newest
+            // request first, as Windows completes them.
+            self.cancel_socket_requests(cookie);
+        } else {
+            self.cancel_where_status(|irp| irp.file == cookie, self.np_end(cookie).is_none(), status);
+        }
         let rec = self.files.remove(&cookie).expect("checked");
         if let Some(port) = rec.port {
             self.released.push(port.object);
