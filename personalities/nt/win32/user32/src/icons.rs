@@ -659,7 +659,8 @@ pub unsafe extern "system" fn LoadImageW(
     }
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn FindResourceW(module: usize, name: *const u16, ty: *const u16) -> usize;
     fn LoadResource(module: usize, res: usize) -> usize;

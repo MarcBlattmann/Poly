@@ -576,7 +576,7 @@ unsafe fn windows() {
     li[0] = 4;
     SetLastError(0);
     check_fail(GetLastInputInfo(li.as_mut_ptr()) as usize, ERROR_INVALID_PARAMETER);
-    check_eq(GetCaretBlinkTime() as usize, 530);
+    check_eq(GetCaretBlinkTime() as usize, 500);
 
     // Display devices: one adapter, one monitor under it.
     let mut dd = [0u8; 840];

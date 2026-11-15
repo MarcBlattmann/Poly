@@ -15,7 +15,6 @@ poly_win32_rt::fail_exports!(
         CloseTouchInputHandle,
         CloseWindowStation,
         CreateDesktopW,
-        CreateWindowExA,
         CreateWindowStationW,
         DdeClientTransaction,
         DdeConnect,
@@ -45,7 +44,6 @@ poly_win32_rt::fail_exports!(
         SetProcessWindowStation,
         SetThreadDesktop,
         UnregisterHotKey,
-        UnregisterClassA
     ]
 );
 

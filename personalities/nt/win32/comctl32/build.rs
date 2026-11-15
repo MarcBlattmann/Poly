@@ -18,7 +18,6 @@ fn main() {
 // BEGIN generated consts
 #[rustfmt::skip]
 const APPS_ORDINALS: &[u32] = &[
-    17,
     345,
     381,
     410,

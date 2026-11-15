@@ -25,7 +25,8 @@ pub(crate) static MENUS: SpinLock<Menus> = SpinLock::new(Menus::new());
 /// The system menu of each window that asked for one: window -> menu.
 static SYSMENUS: SpinLock<BTreeMap<u32, u32>> = SpinLock::new(BTreeMap::new());
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
     fn FindResourceExW(module: *mut u8, ty: *const u16, name: *const u16, lang: u16) -> *mut u8;
@@ -39,7 +40,7 @@ const WS_CHILD: u32 = 0x4000_0000;
 
 /// The 32-bit handle of an `HMENU` (0 when the upper half is not 0).
 pub(crate) fn h32(menu: H) -> u32 {
-    if menu >> 32 != 0 { 0 } else { menu as u32 }
+    if (menu as u64) >> 32 != 0 { 0 } else { menu as u32 }
 }
 
 pub(crate) fn with<R>(f: impl FnOnce(&mut Menus) -> R) -> R {

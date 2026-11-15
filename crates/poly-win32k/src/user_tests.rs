@@ -259,6 +259,7 @@ fn create(
         parent,
         menu,
         instance: 0x1_4000_0000,
+        ansi: false,
     };
     let h = u64::from(create_window(e, spec, 0, 0));
     NEXT.with(|n| n.set('?'));
