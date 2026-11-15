@@ -355,6 +355,11 @@ impl LinuxKernel for Thread<'_> {
         message.unwrap_or(poly_personality_linux::sys::io::CHUNK)
     }
 
+    fn read_piece(&mut self, fd: i32) -> usize {
+        let next = self.process.files.file(fd).ok().and_then(|f| f.device().and_then(|d| d.next_message_size()));
+        next.unwrap_or_else(|| self.io_piece(fd))
+    }
+
     fn close(&mut self, fd: i32) -> Result<(), Errno> {
         self.process.files.close(fd).map_err(vfs_errno)?;
         // Sockets only descriptors in flight hold (ADR 0048).

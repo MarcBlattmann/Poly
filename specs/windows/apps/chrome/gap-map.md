@@ -1219,6 +1219,29 @@ ACE order and merge rules of `SetEntriesInAclW`, the inheritance propagation rul
 cannot be set (DEP 50, CFG and shadow stack 5, strict handle checks need both flags), and the hash-based, case-insensitive,
 64-character-limited AppContainer SID.
 
+## 10b. Specs for stage 2 added by `spec-chrome-win-s2` (2026-11-14)
+
+The sandbox-side calls that stage 2 makes and no sheet covered (sheets `specs/windows/<dll>/<Symbol>.yaml`, tests `<Symbol>.tests/`,
+oracle build 26200.9974, SSH session 0 only): **alternate window station and desktop** (user32 `CreateWindowStationW`,
+`SetProcessWindowStation`, `CreateDesktopW`, `GetThreadDesktop`, `GetUserObjectInformationW`; `CloseWindowStation`, `CloseDesktop`,
+`GetProcessWindowStation` as pointer sheets); **what a locked-down target does and is refused** (`RegOpenKeyExW`, `LoadLibraryExW`,
+`SetHandleInformation`, `RegDisablePredefinedCache`, `SetDefaultDllDirectories`, `GetCurrentProcessorNumber`), built from a restricted
+Untrusted primary token plus the impersonation token the broker sets on the suspended main thread and the target's `RevertToSelf`;
+**process and thread information** (`SetProcessInformation`, `SetThreadInformation`, `SetErrorMode`); **Chrome's creation attributes**
+(rules added to `UpdateProcThreadAttribute`: the 16-byte mitigation words of the GPU, storage and renderer children as the child sees
+them, child process policy 367, `0x2001A`, win32k lockdown refusing user32); **time zones** (`SystemTimeToTzSpecificLocalTime`,
+`TzSpecificLocalTimeToSystemTime`, `GetTimeZoneInformation`, `GetDynamicTimeZoneInformation`); **COM basics** (`CoInitializeEx` with
+`CoUninitialize`, `CoGetApartmentType`, `CoRegisterMessageFilter`; `CoCreateInstance`/`CoGetClassObject`; `CLSIDFromString`/`StringFromCLSID`;
+`CoTaskMemAlloc`/`CoTaskMemFree`/`PropVariantClear`). Findings an implementer needs: a Low or Untrusted child on an alternate
+desktop only starts if both the station and the desktop carry a DACL for it and a mandatory label at its level (`D:(A;;GA;;;WD)S:(ML;;;;;LW)`
+works; the creator's default security ends the child with 0xC0000142); a restricted Untrusted process with no impersonation token on its
+main thread cannot initialise (0xC0000022) and an impersonation token of a higher integrity level than the process token ends it with
+0xC00000A5. Arguments of the window-station and desktop calls are not in the committed traces (the sync tracer reached the first
+`DuplicateTokenEx(.., 136, NULL, 1, 2)` and `SetTokenInformation(TokenIntegrityLevel)` of the executable-access check, then the unsigned proxy kit's
+children died, so the broker never reached its own calls). Not specified: `CreateAppContainerToken`, `AppContainerRegisterSid`
+(undocumented), `NtCreateKey`/`NtOpenKeyEx`, the Microsoft-signed-only effect on an unsigned DLL, `GetLogicalProcessorInformation(Ex)`,
+`GetComputerName*`, `GetProductInfo`, `VerifyVersionInfoW`, the locale and geo functions, and the remaining COM calls.
+
 ## 11. Cross-references and open problems
 
 * spec-win-sec: tokens, ACLs, SDs, jobs. spec-win-ipc: pipes, IOCP, attribute lists, `DuplicateHandle`, sections.

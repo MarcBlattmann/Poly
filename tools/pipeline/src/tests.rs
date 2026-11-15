@@ -26,6 +26,7 @@ fn parses_a_shard() {
 
 /// The real tracer on the real hello world, where a C compiler exists.
 #[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "builds Linux ELF test programs with the host compiler; needs Linux")]
 fn traces_hello_world() {
     let cc = corpus::compiler(None);
     if corpus::compiler_version(&cc).is_err() {
@@ -54,6 +55,7 @@ fn traces_hello_world() {
 /// A child that leaves the test's process group (setsid) is still
 /// traced to its end, and one that hangs there is killed on timeout.
 #[test]
+#[cfg_attr(not(target_os = "linux"), ignore = "builds Linux ELF test programs with the host compiler; needs Linux")]
 fn traces_children_that_leave_the_process_group() {
     let cc = corpus::compiler(None);
     if corpus::compiler_version(&cc).is_err() {

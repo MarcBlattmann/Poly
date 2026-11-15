@@ -873,6 +873,9 @@ impl Desktop {
             let (x, y) = w.position();
             let (cw, ch) = w.content().logical_size();
             println!("poly-compositor: window {:?} shown at {x},{y} size {cw}x{ch}", w.title());
+            // Who draws its frame (ADR 0183): Poly, or the app itself.
+            let frame = if w.is_decorated() { "poly" } else { "own" };
+            println!("poly-compositor: window {:?} frame: {frame}", w.title());
             if let Some((name, ms)) = self.launches.window_shown(now_ms()) {
                 println!("poly-compositor: launch-to-window {name}: {ms} ms");
             }

@@ -38,6 +38,42 @@ use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, 
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
+impl super::IoState {
+    /// One line per completion port that holds packets or is abandoned, for a wait report
+    /// (`poly.nt.waits`): a port with packets and a thread waiting on it is a lost wakeup.
+    pub fn port_debug_lines(&self, objects: &ObjectManager) -> Vec<alloc::string::String> {
+        self.ports
+            .iter()
+            .filter(|(_, p)| !p.queue.is_empty() || p.abandoned)
+            .map(|(cookie, p)| {
+                let held: Vec<alloc::string::String> =
+                    objects.holders(p.object).iter().map(|(pid, h)| alloc::format!("p{}:{:#x}", pid.0, h.0)).collect();
+                alloc::format!(
+                    "port cookie {cookie:#x} packets {} abandoned {} held by [{}] first {:?}",
+                    p.queue.len(),
+                    p.abandoned,
+                    held.join(","),
+                    p.queue.front()
+                )
+            })
+            .collect()
+    }
+
+    /// Requests waiting, by process, for a wait report: `(pid, count)`.
+    pub fn pending_by_process(&self) -> Vec<(u32, usize)> {
+        let mut by: alloc::collections::BTreeMap<u32, usize> = alloc::collections::BTreeMap::new();
+        for irp in self.irps.values() {
+            *by.entry(irp.process.0).or_insert(0) += 1;
+        }
+        by.into_iter().collect()
+    }
+
+    /// Completions queued and not yet delivered (they are delivered after every system call).
+    pub fn queued_completions(&self) -> usize {
+        self.completions.len()
+    }
+}
+
 /// One queued completion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Packet {

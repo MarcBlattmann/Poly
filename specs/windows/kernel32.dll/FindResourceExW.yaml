@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/FindResourceExW.yaml
+id: windows/api/kernel32.dll/FindResourceExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. The tests write a small generated PE32+ DLL image (no code, only a .rsrc section; lib/mkpe.py of the spec agent's kit builds the 2,048 bytes, and the test source carries them as a byte array) next to themselves and load it with LoadLibraryExW three ways: as a data file (0x2), as image resources (0x20) and as a normal image (0); every lookup gives the same lines in all three ways. Microsoft Learn: "FindResourceExW function (libloaderapi.h), Language Identifiers". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  FindResourceW with a language: the lookup returns the resource in that language. FindResourceW is this function with the neutral language 0.
+interface:
+  signature: "HRSRC FindResourceExW(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, WORD wLanguage)"
+  returns: "as FindResourceW (note that the type comes first here)"
+rules:
+  modes: "The three load modes give identical answers. A module handle is the one LoadLibraryExW returned: with LOAD_LIBRARY_AS_DATAFILE its low bit is\n        set (the handle is not an address of a mapped image), with LOAD_LIBRARY_AS_IMAGE_RESOURCE bit 1 is set and bit 0 clear, and a normal\n        image's handle is 64 KiB aligned. The resource functions must accept all three"
+  fixture: "The resources of the test image: RT_ICON #1 (8 bytes 01..08); RT_STRING blocks #1 (strings 1 \"Hello\", 2 empty, 3 \"World \" U+20AC U+00E9,\n        15 \"last\"), #2 (string 16 \"sixteen\") in the neutral language and block #7 (string 100 \"nur deutsch\") in de-DE (0x0407) only; RT_RCDATA\n        named \"ALPHA\" (1 byte), \"BETA\" (3), \"BLOB\" (20 bytes \"0123456789ABCDEFGHIJ\"), \"ZETA\" (2), numbered 100 (\"abc\"), 101 (0 bytes), and 7 in two\n        languages, en-US (0x0409, \"english text\") and de-DE (\"deutscher text!\"); RT_GROUP_ICON \"MAINICON\" and #2 (6 bytes each); RT_VERSION #1 in\n        en-US (16 bytes \"@ABCDEFGHIJKLMNO\"); a custom type \"TEXTFILE\" with the names #1 (14 bytes, two lines) and \"README\" (\"hello\"); a custom type\n        \"TEXTFILE2\" with the name #5 (70 bytes). All names and type names are stored in upper case, as resource compilers do"
+  exact: "the language must match exactly: RT_RCDATA #7 exists in 0x0409 and 0x0407; 0x0409 gives \"english text\" (12 bytes), 0x0407 gives \"deutscher text!\" (15). Other languages fail with ERROR_RESOURCE_LANG_NOT_FOUND (1815): 0x0809 (en-GB), 0x0C09, 0x0807, 0x0411, the primary languages alone (0x0001, 0x0009, 0x0007 are sublanguage-neutral ids that do not match), 0xFFFF. The resource is not found 'close enough' for any of them"
+  neutral: "language 0 (LANG_NEUTRAL) finds one of the languages the resource has (the choice depends on the user interface language, so the tests only check that something is found); a resource that only exists in one language is found with language 0 too (RT_VERSION #1 en-US-only: found with 0)"
+  neutral_resources: "a resource stored in the neutral language (RT_RCDATA #100) is found with ANY language asked for: 0, 0x0409, 0x0407, 0x0411 all give the same 3 bytes"
+  single_language: "a resource that exists only in 0x0407 (RT_STRING #7) is found with 0x0407 and with 0, and fails with 1815 for 0x0409, 0x0001 and 0x0007; RT_VERSION #1 (0x0409 only) fails with 1815 for 0x0407"
+  other_errors: "as FindResourceW: type missing 1813 (lang 0 or any), name missing 1814, strings and the #number form work as there (\"TEXTFILE\" + \"readme\" with language 0 finds \"hello\", \"#10\" + \"#100\" finds \"abc\")"
+errors:
+  error_resource_lang_not_found: "1815: the type and the name exist but not in that language"
+  others: "1812, 1813, 1814 as for FindResourceW"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll (and user32.dll for LoadStringW). Each line is one call with its type and name written as #n for a number and "text" for a string, then -> found/NULL and the last error, or the size and the first bytes of the data (non-printable bytes as <xx>). The tests need a loader that can load a PE image that has no code and no imports with LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE and normally (a DLL without an entry point); a program of another kind (a console exe) is not needed for the lookups.
+not_covered: >
+  Which language the neutral lookup picks (it follows the user interface language), the fallback to the thread's language lists.

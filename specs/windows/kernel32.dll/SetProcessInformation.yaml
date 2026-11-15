@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetProcessInformation.yaml
+id: windows/api/kernel32.dll/SetProcessInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SetProcessInformation function (processthreadsapi.h)", "GetProcessInformation function", "PROCESS_POWER_THROTTLING_STATE", "MEMORY_PRIORITY_INFORMATION", "Process Security and Access Rights"; processthreadsapi.h, winbase.h and winerror.h for constants and layouts. The read-back goes through GetProcessInformation (specs/windows/kernel32.dll/GetProcessInformation.yaml). Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sets a per-process attribute. Chrome's browser and GPU process call it 21 times in stage 2; the classes that matter are ProcessPowerThrottling (4: Version 1, a control mask and a state mask of EXECUTION_SPEED 1 and IGNORE_TIMER_RESOLUTION 4) and ProcessMemoryPriority (0: one 32-bit priority, 1 to 5). Power throttling stores both masks and reads them back; a state bit without its control bit and any undefined bit are refused. Memory priority takes a 4-byte value 1..5 (values 0, 6 and 7 are refused). The handle needs PROCESS_SET_INFORMATION (0x200).
+interface:
+  signature: "BOOL SetProcessInformation(HANDLE process, PROCESS_INFORMATION_CLASS class, LPVOID info, DWORD size)"
+  classes: "ProcessMemoryPriority 0, ProcessPowerThrottling 4 (processthreadsapi.h); the others in the rule other_classes"
+chrome:
+  calls: "browser and GPU process, 21 calls in stage 2 (specs/windows/apps/chrome/traces/s2.trace.json); the arguments are not in the committed traces: the tests use the forms Chrome's process priority code is known to use (ProcessPowerThrottling with EXECUTION_SPEED, ProcessMemoryPriority)"
+rules:
+  throttling_masks: "Version 1, size 12: ControlMask 1 StateMask 1 = TRUE and GetProcessInformation reads back Version 1 Control 1 State 1; Control 1 State 0: Control 1, State 0; Control 5 (EXECUTION_SPEED|IGNORE_TIMER_RESOLUTION) State 5: both stored; Control 4 State 0: Control 4 State 0 (the EXECUTION_SPEED bit is replaced, not merged); Control 0 State 0: back to 0/0 (the system's choice)"
+  throttling_refusals: "a state bit whose control bit is 0 (Control 1 State 5) and an undefined bit (Control 8 State 8): FALSE, error 87, nothing stored; Version 0 and Version 2: FALSE, error 87"
+  throttling_sizes: "any size other than 12 (0, 4, 8, 11, 13, 16, 24): FALSE, error 24 (ERROR_BAD_LENGTH)"
+  memory_priority: "ProcessMemoryPriority with size 4: values 1, 2, 3, 4, 5 are stored and read back (a fresh process reads 5); 0, 6 and 7 are refused and leave the value as it was; sizes 0, 3, 8 and 12: FALSE, error 24"
+  other_classes: "class 5: error 87; classes 6 and 10 with a 12-byte buffer: error 24; class 99: error 87"
+  access: "on a child: a handle with PROCESS_SET_INFORMATION works; PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION or SYNCHRONIZE only: FALSE, error 5; a NULL handle: error 6; the CreateProcessW handle (all access) works and the child reads back what was set"
+errors:
+  bad_length: "ERROR_BAD_LENGTH (24)"
+  bad_value: "ERROR_INVALID_PARAMETER (87)"
+  no_right: "ERROR_ACCESS_DENIED (5)"
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "changes the process's attribute (power throttling and memory priority are advisory to the scheduler and memory manager)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  The effect on scheduling or memory (only the stored values are observable), ProcessProtectionLevelInfo, ProcessLeapSecondInfo and the other classes beyond their error codes.

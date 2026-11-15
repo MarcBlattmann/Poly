@@ -454,8 +454,16 @@ fn statvfs_flags(dir: &Path) -> Option<u64> {
     (unsafe { libc::statvfs(c.as_ptr(), &mut st) } == 0).then_some(st.f_flag)
 }
 
+#[cfg(target_os = "linux")]
 fn allows_exec(dir: &Path) -> bool {
     statvfs_flags(dir).is_some_and(|f| f & libc::ST_NOEXEC == 0)
+}
+
+/// Only Linux reports `noexec` through statvfs(3); app trees are a Linux
+/// matter anyway (they need its namespaces), so elsewhere any directory will do.
+#[cfg(not(target_os = "linux"))]
+fn allows_exec(dir: &Path) -> bool {
+    statvfs_flags(dir).is_some()
 }
 
 fn writable(dir: &Path) -> bool {

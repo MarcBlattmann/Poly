@@ -16,6 +16,11 @@ pub const MEM_DECOMMIT: u32 = 0x4000;
 pub const MEM_RELEASE: u32 = 0x8000;
 pub const MEM_RESET: u32 = 0x8_0000;
 pub const MEM_TOP_DOWN: u32 = 0x10_0000;
+/// Placeholders (`winnt.h`; Learn, "VirtualAlloc2", "VirtualFree").
+pub const MEM_REPLACE_PLACEHOLDER: u32 = 0x4000;
+pub const MEM_RESERVE_PLACEHOLDER: u32 = 0x4_0000;
+pub const MEM_COALESCE_PLACEHOLDERS: u32 = 0x1;
+pub const MEM_PRESERVE_PLACEHOLDER: u32 = 0x2;
 
 /// `HEAP_*` flags (`winnt.h`).
 pub const HEAP_NO_SERIALIZE: u32 = 0x1;
@@ -40,13 +45,30 @@ pub const GMEM_ZEROINIT: u32 = 0x40;
 pub const GMEM_VALID_FLAGS: u32 = 0x7F72;
 
 /// `VirtualFree`: Learn: with `MEM_RELEASE` the size must be 0; exactly one
-/// of `MEM_DECOMMIT` and `MEM_RELEASE`.
+/// of `MEM_DECOMMIT` and `MEM_RELEASE`. With placeholders, `MEM_RELEASE |
+/// MEM_PRESERVE_PLACEHOLDER` (split a placeholder, or free a replaced allocation back to one) and
+/// `MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS` (join placeholders, the size is their whole range)
+/// take a size; the kernel checks the range.
 pub fn check_free(size: usize, free_type: u32) -> Result<(), u32> {
     match free_type {
         MEM_RELEASE if size != 0 => Err(ERROR_INVALID_PARAMETER),
         MEM_RELEASE | MEM_DECOMMIT => Ok(()),
+        t if t == MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER => Ok(()),
+        t if t == MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS && size != 0 => Ok(()),
         _ => Err(ERROR_INVALID_PARAMETER),
     }
+}
+
+/// `VirtualAlloc` / `VirtualAllocEx`: the placeholder types belong to `VirtualAlloc2` only (Learn,
+/// "VirtualAlloc2": "MEM_RESERVE_PLACEHOLDER ... can only be used with VirtualAlloc2"; the
+/// `VirtualAlloc` page lists neither); `ERROR_INVALID_PARAMETER` (to be confirmed by the spec
+/// agent). `MEM_REPLACE_PLACEHOLDER` is also `MEM_DECOMMIT`'s value, which an allocation never
+/// takes.
+pub fn check_alloc_type(alloc_type: u32) -> Result<(), u32> {
+    if alloc_type & (MEM_RESERVE_PLACEHOLDER | MEM_REPLACE_PLACEHOLDER) != 0 {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    Ok(())
 }
 
 /// `HeapCreate`'s `RtlCreateHeap` flags: Learn: a maximum size of 0 makes
@@ -104,6 +126,19 @@ mod tests {
         assert_eq!(check_free(4096, MEM_DECOMMIT), Ok(()));
         assert_eq!(check_free(0, MEM_DECOMMIT | MEM_RELEASE), Err(ERROR_INVALID_PARAMETER));
         assert_eq!(check_free(0, 0), Err(ERROR_INVALID_PARAMETER));
+        // Placeholders: splitting and joining name a range.
+        assert_eq!(check_free(1 << 36, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER), Ok(()));
+        assert_eq!(check_free(0, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER), Ok(()));
+        assert_eq!(check_free(1 << 20, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS), Ok(()));
+        assert_eq!(check_free(0, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(check_free(4096, MEM_DECOMMIT | MEM_PRESERVE_PLACEHOLDER), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(
+            check_free(4096, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER | MEM_COALESCE_PLACEHOLDERS),
+            Err(ERROR_INVALID_PARAMETER)
+        );
+        assert_eq!(check_alloc_type(MEM_RESERVE | MEM_COMMIT), Ok(()));
+        assert_eq!(check_alloc_type(MEM_RESERVE | MEM_RESERVE_PLACEHOLDER), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(check_alloc_type(MEM_RESERVE | MEM_REPLACE_PLACEHOLDER), Err(ERROR_INVALID_PARAMETER));
     }
 
     #[test]

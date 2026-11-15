@@ -526,6 +526,7 @@ pub unsafe extern "system" fn CreateWindowExW(
     instance: H,
     param: H,
 ) -> H {
+    first_call();
     if class.is_null() {
         set_last_error(poly_win32k::wm::ERROR_CANNOT_FIND_WND_CLASS);
         return 0;
@@ -867,6 +868,9 @@ fn set_long(hwnd: H, index: i32, size: u8, value: u64) -> u64 {
         };
         let mut done = u::StyleStruct { old, new: stored };
         u::send(&SYS, h, u::WM_STYLECHANGED, index as i64 as u64, &mut done as *mut _ as u64);
+        if index == GWL_STYLE && u::frame_style_changed(old, stored) {
+            u::style_frame_changed(&SYS, h);
+        }
         return u64::from(old);
     }
     match call(Request::SetLong { hwnd: hwnd as u64, index, size, value }) {
@@ -1210,8 +1214,26 @@ pub extern "system" fn GetKeyboardLayout(_thread: u32) -> usize {
 
 // ----- metrics
 
+/// Whether one of the functions that clear the last error once has run in this
+/// process (`SystemParametersInfoW.yaml` `first_call`).
+static FIRST_CALL_DONE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// The FIRST call of the process to `GetSystemMetrics`, `GetSystemMetricsForDpi`,
+/// `SystemParametersInfoW`, `AdjustWindowRect` or `CreateWindowExW` sets the
+/// last error to 0 before it returns; once per process, not per thread, and
+/// after one of them has done it none of the others does. The sheet has this
+/// in a process of a desktop session only (in session 0, without a desktop,
+/// no call clears the error); every Poly program runs on Poly's desktop, so
+/// it always does.
+pub(crate) fn first_call() {
+    if !FIRST_CALL_DONE.swap(true, core::sync::atomic::Ordering::AcqRel) {
+        set_last_error(0);
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
+    first_call();
     match metrics::system_metric(index, &u::screen(&SYS)) {
         Some(v) => v,
         None => {
@@ -1221,17 +1243,31 @@ pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
     }
 }
 
-/// GetSystemMetrics.yaml `for_dpi`; DPI 0 is ERROR_INVALID_PARAMETER, an
-/// undefined index 0 with the error unchanged.
+/// `ERROR_FILE_NOT_FOUND` (winerror.h): what index 87 (SM_MEDIACENTER) leaves.
+const ERROR_FILE_NOT_FOUND: u32 = 2;
+
+/// GetSystemMetricsForDpi.yaml `dpi_validity`: a DPI of 0 or of 0x80000000 and
+/// more fails for every index, a metric that scales takes the DPI modulo 65536
+/// and fails for a multiple of it, the others accept 1..0x7FFFFFFF; an
+/// undefined index is 0 with ERROR_INVALID_PARAMETER at every DPI; index 30
+/// clears the last error with every successful call, 87 sets
+/// ERROR_FILE_NOT_FOUND.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
-    // 0, 0x10000 and 0xFFFFFFFF fail; larger values count as 0xFFFF.
-    let Some(dpi) = metrics::metric_dpi(dpi) else {
+    first_call();
+    let Some(dpi) = metrics::metric_dpi(index, dpi) else {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     };
     match metrics::system_metric_for_dpi(index, dpi, &u::screen(&SYS)) {
-        Some(v) => v,
+        Some(v) => {
+            match index {
+                30 => set_last_error(0),
+                87 => set_last_error(ERROR_FILE_NOT_FOUND),
+                _ => {}
+            }
+            v
+        }
         None => {
             set_last_error(ERROR_INVALID_PARAMETER);
             0
@@ -1393,6 +1429,7 @@ pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AdjustWindowRectEx(rect: *mut i32, style: u32, menu: i32, ex: u32) -> i32 {
+    first_call();
     if rect.is_null() {
         return 0;
     }
@@ -1454,7 +1491,9 @@ pub extern "system" fn GetDC(hwnd: H) -> H {
 /// clip each other (the desktop is composed).
 fn dc_geometry(i: &WinInfo, dc: H, whole: bool) -> H {
     let area = if whole { i.window } else { i.client };
-    let screen = Rect::new(0, 0, GetSystemMetrics(0), GetSystemMetrics(1));
+    // Not GetSystemMetrics: a DC must not use up the first-call clearing of the last error.
+    let d = u::screen(&SYS);
+    let screen = Rect::new(0, 0, d.width, d.height);
     let visible_window = |h: u32| info(h as H).filter(|c| c.visible).map(|c| c.window);
     let children = |h: u32| match call(Request::Relatives { hwnd: h }) {
         Reply::Relatives { children, .. } => children,

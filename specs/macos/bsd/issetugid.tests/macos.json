@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "issetugid_exec_child",
+      "source_sha256": "910acb09cac56389bd1724887d7e21bdb1d606c5798ea28431f0db132e14d0fb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ca74f295535b0dc0f0cae306ac9e9849e595129e8dbaf4e40175ff6413efec98",
+          "exit_code": 0,
+          "stdout": "ok the new program: 0\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "issetugid_zero",
+      "source_sha256": "a06d285f56409952d9dcddaa7c5d7a9dbaf67729fdc59142dcdbcaf0f4974f84",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ffbf18ce4c28b184d4f8ca55ffd587e39632e60492016ea7cf6aebb47a55cc5d",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok with arguments: still 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "lockdown_registry",
+      "exe_sha256": "6e110afd17091b92fcdcfaca5511232e48104541d2a3a630ffbdf2a4b7ef0f8a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFyZW50LCB1bnJlc3RyaWN0ZWQ6IG5vIHRocmVhZCB0b2tlbiAoT3BlblRocmVhZFRva2VuIGVycm9yIDEwMDgpCnBhcmVudCwgdW5yZXN0cmljdGVkOiBSZWdPcGVuS2V5RXhXKEhLTE0gU09GVFdBUkUsIEtFWV9SRUFEKSA9IDAKcGFyZW50LCB1bnJlc3RyaWN0ZWQ6IFJlZ0NyZWF0ZUtleUV4VyhIS0NVIFNvZnR3YXJlXFBvbHlTMkxvY2tQcm9iZSwgdm9sYXRpbGUpID0gMApjaGlsZDogdGFyZ2V0LCBpbXBlcnNvbmF0aW5nOiBSZWdPcGVuS2V5RXhXKEhLTE0gQ3VycmVudFZlcnNpb24sIEtFWV9SRUFEKSA9IDAKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogUmVnT3BlbktleUV4VyhIS0NVIFNvZnR3YXJlLCBLRVlfUkVBRCkgPSAwCmNoaWxkOiB0YXJnZXQ6IFJldmVydFRvU2VsZiA9IDEKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBSZWdPcGVuS2V5RXhXKEhLTE0gQ3VycmVudFZlcnNpb24sIEtFWV9RVUVSWV9WQUxVRSkgPSA1CmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogUmVnT3BlbktleUV4VyhIS0xNLCBhIG1pc3Npbmcga2V5KSA9IDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "parent, unrestricted: no thread token (OpenThreadToken error 1008)\nparent, unrestricted: RegOpenKeyExW(HKLM SOFTWARE, KEY_READ) = 0\nparent, unrestricted: RegCreateKeyExW(HKCU Software\\PolyS2LockProbe, volatile) = 0\nchild: target, impersonating: RegOpenKeyExW(HKLM CurrentVersion, KEY_READ) = 0\nchild: target, impersonating: RegOpenKeyExW(HKCU Software, KEY_READ) = 0\nchild: target: RevertToSelf = 1\nchild: target, after RevertToSelf: RegOpenKeyExW(HKLM CurrentVersion, KEY_QUERY_VALUE) = 5\nchild: target, after RevertToSelf: RegOpenKeyExW(HKLM, a missing key) = 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "lockdown_registry_b",
+      "exe_sha256": "9e2ddfd6ffb1969726d55d376b3552aa37c4daf78bfa803e6a411b94464a5d28",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFyZW50LCB1bnJlc3RyaWN0ZWQ6IFJlZ09wZW5LZXlFeFcoSEtMTSBDdXJyZW50VmVyc2lvbiwgS0VZX1JFQUQpID0gMApwYXJlbnQsIHVucmVzdHJpY3RlZDogUmVnT3BlbktleUV4VyhIS0NVIFNvZnR3YXJlLCBLRVlfUkVBRCkgPSAwClNldFRocmVhZFRva2VuIG9uIHRoZSBzdXNwZW5kZWQgbWFpbiB0aHJlYWQgPSAxCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IFJlZ09wZW5LZXlFeFcoSEtMTSBDdXJyZW50VmVyc2lvbiwgS0VZX1FVRVJZX1ZBTFVFKSA9IDAKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogUmVnT3BlbktleUV4VyhIS0xNLCBhIG1pc3Npbmcga2V5KSA9IDIKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBubyB0aHJlYWQgdG9rZW4gKE9wZW5UaHJlYWRUb2tlbiBlcnJvciAxMDA4KQpjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IFJlZ09wZW5LZXlFeFcoSEtMTSBTT0ZUV0FSRSwgS0VZX1JFQUQpID0gNQpjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IFJlZ0NyZWF0ZUtleUV4VyhIS0NVIFNvZnR3YXJlXFBvbHlTMkxvY2tQcm9iZSwgdm9sYXRpbGUpID0gNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "parent, unrestricted: RegOpenKeyExW(HKLM CurrentVersion, KEY_READ) = 0\nparent, unrestricted: RegOpenKeyExW(HKCU Software, KEY_READ) = 0\nSetThreadToken on the suspended main thread = 1\nchild: target, impersonating: RegOpenKeyExW(HKLM CurrentVersion, KEY_QUERY_VALUE) = 0\nchild: target, impersonating: RegOpenKeyExW(HKLM, a missing key) = 2\nchild: target, after RevertToSelf: no thread token (OpenThreadToken error 1008)\nchild: target, after RevertToSelf: RegOpenKeyExW(HKLM SOFTWARE, KEY_READ) = 5\nchild: target, after RevertToSelf: RegCreateKeyExW(HKCU Software\\PolyS2LockProbe, volatile) = 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    }
+  ]
+}

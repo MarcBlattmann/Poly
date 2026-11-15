@@ -1252,6 +1252,52 @@ fn window_placements_follow_the_monitor_from_window_sheet() {
 }
 
 // The held-out hunt, one file per group (spec sheets re-read rule by rule).
+#[test]
+fn the_client_rectangle_follows_a_frame_style_change_without_frame_changed() {
+    // DwmGetWindowAttribute.yaml `ncrendering_enabled`: a style set with
+    // SetWindowLongPtr(GWL_STYLE) and no SWP_FRAMECHANGED moves the client
+    // rectangle at once (a popup: 260x170; thick frame alone 7 a side).
+    with_env(|e| {
+        register(e, "Frm");
+        let w = create(e, 'F', 0, "Frm", WS_POPUP | WS_VISIBLE, 120, 60, 260, 170, 0, 0);
+        let hidden = create(e, 'H', 0, "Frm", WS_POPUP, 120, 60, 260, 170, 0, 0);
+        let client = |e: &TestEnv| {
+            let i = info(e, w).expect("window");
+            (i.client.width(), i.client.height(), i.client.left - i.window.left, i.client.top - i.window.top)
+        };
+        let set = |e: &TestEnv, style: u32| {
+            let old = info(e, w).expect("window").style;
+            e.call(Request::SetStyle { hwnd: w as u32, which: -16, value: style });
+            let now = info(e, w).expect("window").style;
+            if frame_style_changed(old, now) {
+                style_frame_changed(e, w);
+            }
+        };
+        assert_eq!(client(e), (260, 170, 0, 0));
+        set(e, WS_POPUP | WS_VISIBLE | WS_THICKFRAME);
+        assert_eq!(client(e), (246, 156, 7, 7));
+        // Not a frame bit: nothing moves.
+        set(e, WS_POPUP | WS_THICKFRAME | WS_VISIBLE | WS_DISABLED);
+        assert_eq!(client(e), (246, 156, 7, 7));
+        set(e, WS_POPUP | WS_VISIBLE | WS_BORDER | WS_DLGFRAME);
+        let caption = client(e);
+        assert!(caption.0 < 260 && caption.3 > 7, "{caption:?}");
+        set(e, WS_POPUP | WS_VISIBLE | WS_DLGFRAME);
+        let dlg = client(e);
+        assert_eq!((dlg.0, dlg.1), (260 - 2 * dlg.2, 170 - 2 * dlg.2), "{dlg:?}");
+        assert!(dlg.2 > 0 && dlg.2 < 7);
+        set(e, WS_POPUP | WS_VISIBLE);
+        assert_eq!(client(e), (260, 170, 0, 0));
+        // A hidden window keeps its client rectangle (SetWindowLongPtrW.yaml `frame`).
+        let before = info(e, hidden).expect("window").client;
+        let old = info(e, hidden).expect("window").style;
+        e.call(Request::SetStyle { hwnd: hidden as u32, which: -16, value: WS_POPUP | WS_BORDER });
+        assert!(frame_style_changed(old, WS_POPUP | WS_BORDER));
+        style_frame_changed(e, hidden);
+        assert_eq!(info(e, hidden).expect("window").client, before);
+    });
+}
+
 #[path = "user_tests/focus.rs"]
 mod focus_hunt;
 #[path = "user_tests/input.rs"]
