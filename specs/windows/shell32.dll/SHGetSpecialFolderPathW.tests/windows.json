@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "ssp_errors",
+      "exe_sha256": "e6be669dc1f478794113b4be9420780287b94d0be22223fd2e4f193cbe4bdedf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MHgwMDAxOiAwLCBidWZmZXIgdW50b3VjaGVkLCBsYXN0IGVycm9yIDAKMHgwMDBjOiAwLCBidWZmZXIgdW50b3VjaGVkLCBsYXN0IGVycm9yIC0xCjB4MDAwZjogMCwgYnVmZmVyIHVudG91Y2hlZCwgbGFzdCBlcnJvciAtMQoweDAwMzI6IDAsIGJ1ZmZlciB1bnRvdWNoZWQsIGxhc3QgZXJyb3IgLTEKMHgwMDNmOiAwLCBidWZmZXIgdW50b3VjaGVkLCBsYXN0IGVycm9yIC0xCjB4MDA0MDogMCwgYnVmZmVyIHVudG91Y2hlZCwgbGFzdCBlcnJvciAtMQoweDAwZmY6IDAsIGJ1ZmZlciB1bnRvdWNoZWQsIGxhc3QgZXJyb3IgLTEKMHg3ZmZmOiAwLCBidWZmZXIgdW50b3VjaGVkLCBsYXN0IGVycm9yIC0xCjB4ZmZmZjogMCwgYnVmZmVyIHVudG91Y2hlZCwgbGFzdCBlcnJvciAtMQotMTogMCwgYnVmZmVyIHVudG91Y2hlZCwgbGFzdCBlcnJvciAtMQoweDEwMDAwOiAwLCBidWZmZXIgdW50b3VjaGVkLCBsYXN0IGVycm9yIC0xCkFQUERBVEEgfCBDU0lETF9GTEFHX0RPTlRfVkVSSUZZOiAxLCBsYXN0IGVycm9yIC0yCiAgJVVTRVJQUk9GSUxFJVxBcHBEYXRhXFJvYW1pbmcKREVTS1RPUCB8IENTSURMX0ZMQUdfRE9OVF9WRVJJRlk6IDEsIGxhc3QgZXJyb3IgLTIKICAlVVNFUlBST0ZJTEUlXERlc2t0b3AKUEVSU09OQUwgfCBDU0lETF9GTEFHX05PX0FMSUFTOiAxLCBsYXN0IGVycm9yIC0yCiAgJVVTRVJQUk9GSUxFJVxEb2N1bWVudHMKUEVSU09OQUwgfCBDU0lETF9GTEFHX0RPTlRfVU5FWFBBTkQ6IDEsIGxhc3QgZXJyb3IgLTIKICAlVVNFUlBST0ZJTEUlXERvY3VtZW50cwpQRVJTT05BTCB8IENTSURMX0ZMQUdfUEVSX1VTRVJfSU5JVDogMSwgbGFzdCBlcnJvciAtMgogICVVU0VSUFJPRklMRSVcRG9jdW1lbnRzCkNPTU1PTl9PRU1fTElOS1MgMHgzYSAobWF5IG5vdCBleGlzdCk6IDAsIGxhc3QgZXJyb3IgMgpDT01NT05fT0VNX0xJTktTIHwgQ1NJRExfRkxBR19ET05UX1ZFUklGWTogMSwgbGFzdCBlcnJvciAtMgogICVQcm9ncmFtRGF0YSVcT0VNIExpbmtzCkFOU0ksIDB4N2ZmZjogMCwgYnVmZmVyIHVudG91Y2hlZApBTlNJLCBXSU5ET1dTOiAxLCAlU3lzdGVtUm9vdCUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "0x0001: 0, buffer untouched, last error 0\n0x000c: 0, buffer untouched, last error -1\n0x000f: 0, buffer untouched, last error -1\n0x0032: 0, buffer untouched, last error -1\n0x003f: 0, buffer untouched, last error -1\n0x0040: 0, buffer untouched, last error -1\n0x00ff: 0, buffer untouched, last error -1\n0x7fff: 0, buffer untouched, last error -1\n0xffff: 0, buffer untouched, last error -1\n-1: 0, buffer untouched, last error -1\n0x10000: 0, buffer untouched, last error -1\nAPPDATA | CSIDL_FLAG_DONT_VERIFY: 1, last error -2\n  %USERPROFILE%\\AppData\\Roaming\nDESKTOP | CSIDL_FLAG_DONT_VERIFY: 1, last error -2\n  %USERPROFILE%\\Desktop\nPERSONAL | CSIDL_FLAG_NO_ALIAS: 1, last error -2\n  %USERPROFILE%\\Documents\nPERSONAL | CSIDL_FLAG_DONT_UNEXPAND: 1, last error -2\n  %USERPROFILE%\\Documents\nPERSONAL | CSIDL_FLAG_PER_USER_INIT: 1, last error -2\n  %USERPROFILE%\\Documents\nCOMMON_OEM_LINKS 0x3a (may not exist): 0, last error 2\nCOMMON_OEM_LINKS | CSIDL_FLAG_DONT_VERIFY: 1, last error -2\n  %ProgramData%\\OEM Links\nANSI, 0x7fff: 0, buffer untouched\nANSI, WINDOWS: 1, %SystemRoot%\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

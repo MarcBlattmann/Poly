@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetFolderPathW.yaml
+id: windows/api/shell32.dll/SHGetFolderPathW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (paths are shown with the user profile, ProgramData, Public, Windows and Program Files directories replaced by %USERPROFILE%, %PUBLIC%, %ProgramData%, %SystemRoot% and %ProgramFiles%, so no machine or user name is in the tests; files the tests make live in the temp directory and are removed). Microsoft Learn: "SHGetFileInfoW function", "SHGetSpecialFolderLocation function", "SHGetSpecialFolderPathW function", "SHGetFolderPathW function", "SHGetFolderPathA function", "SHGetPathFromIDListW function", "ILCreateFromPathW function", "ILFree function", "CSIDL", "SFGAO"; shlobj.h, shlobj_core.h, shellapi.h and shtypes.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives the file system path of a special folder for the current user (hToken NULL): the current location (dwFlags SHGFP_TYPE_CURRENT 0) or the default location (SHGFP_TYPE_DEFAULT 1) with an HRESULT.
+interface:
+  signature: "HRESULT SHGetFolderPathW(HWND hwnd, int csidl, HANDLE hToken, DWORD dwFlags, LPWSTR pszPath)"
+rules:
+  result: "S_OK and the path for the file system folders of the table in the SHGetSpecialFolderLocation sheet, for dwFlags 0 and 1 alike; E_FAIL (0x80004005) and the buffer untouched for the virtual folders (CONTROLS, PRINTERS, BITBUCKET, DRIVES, NETWORK, CONNECTIONS); the text equals that of SHGetSpecialFolderPathW"
+  dwflags: "dwFlags 0, 1, 2, 3, 0x10 and 0xFFFFFFFF all give S_OK and the same path for APPDATA"
+  verify: "a folder that does not exist (COMMON_OEM_LINKS 0x3a on the oracle) gives HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) (0x80070002), the buffer untouched and the last error 2; with CSIDL_FLAG_DONT_VERIFY the path (%ProgramData%\\OEM Links) is returned with S_OK; CSIDL_FLAG_CREATE on a folder that exists gives S_OK and the path"
+  flags: "CSIDL_FLAG_DONT_VERIFY (0x4000), CSIDL_FLAG_NO_ALIAS (0x1000), CSIDL_FLAG_DONT_UNEXPAND (0x2000) and CSIDL_FLAG_PER_USER_INIT (0x800) with valid CSIDLs give S_OK and the normal path"
+  token: "a made-up token handle (0x1234) gives E_HANDLE (0x80070006) and the buffer untouched, for a user folder and for WINDOWS alike"
+  window: "a made-up window handle is not checked: S_OK"
+  buffer: "the path is written with its NUL within MAX_PATH (260) characters: the units from index 260 on stay untouched"
+errors:
+  bad_csidl: "a value that is not a folder (0x0c, 0x0f, 0x32, 0x3f, 0x40, 0xff, 0x7fff, 0xffff, -1, 0x10000): E_INVALIDARG (0x80070057), the buffer untouched; CSIDL_INTERNET (1): E_FAIL (0x80004005)"
+  bad_token: "E_HANDLE (see rules)"
+  virtual_folder: "E_FAIL for the virtual folders"
+side_effects: "with CSIDL_FLAG_CREATE a missing folder is created"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Folders redirected to other drives or to OneDrive and domain roaming profiles (the oracle is a workgroup computer with a local profile), other languages (the type names are English), other users and tokens, network and removable drives, junctions and links, 32-bit processes (the %ProgramFiles% answers differ), the contents of virtual folders.

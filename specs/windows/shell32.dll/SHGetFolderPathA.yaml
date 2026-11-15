@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetFolderPathA.yaml
+id: windows/api/shell32.dll/SHGetFolderPathA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (paths are shown with the user profile, ProgramData, Public, Windows and Program Files directories replaced by %USERPROFILE%, %PUBLIC%, %ProgramData%, %SystemRoot% and %ProgramFiles%, so no machine or user name is in the tests; files the tests make live in the temp directory and are removed). Microsoft Learn: "SHGetFileInfoW function", "SHGetSpecialFolderLocation function", "SHGetSpecialFolderPathW function", "SHGetFolderPathW function", "SHGetFolderPathA function", "SHGetPathFromIDListW function", "ILCreateFromPathW function", "ILFree function", "CSIDL", "SFGAO"; shlobj.h, shlobj_core.h, shellapi.h and shtypes.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The ANSI form of SHGetFolderPathW: the same folders and results with the path in the ANSI code page (the oracle's paths are ASCII). PuTTY imports this one (for the settings and log folders).
+interface:
+  signature: "HRESULT SHGetFolderPathA(HWND hwnd, int csidl, HANDLE hToken, DWORD dwFlags, LPSTR pszPath)"
+rules:
+  result: "the same HRESULT and the same text as SHGetFolderPathW for every CSIDL of the table in the SHGetSpecialFolderLocation sheet: S_OK and the path for the file system folders, E_FAIL (buffer untouched) for the virtual ones"
+  dwflags: "dwFlags 0, 1, 2 and 0x10 give S_OK and the same path for APPDATA"
+  flags: "the CSIDL flags behave as for the W form: DONT_VERIFY on a missing folder (COMMON_OEM_LINKS) gives S_OK and the path, without it HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) (0x80070002) and the buffer untouched; CSIDL_FLAG_CREATE, NO_ALIAS on existing folders give S_OK and the normal path"
+  buffer: "at most 260 bytes are written: the bytes from index 260 on stay untouched"
+  window: "a made-up window handle is not checked: S_OK"
+errors:
+  bad_csidl: "values that are not folders: E_INVALIDARG (0x80070057), the buffer untouched; CSIDL_INTERNET (1): E_FAIL"
+side_effects: "with CSIDL_FLAG_CREATE a missing folder is created"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Folders redirected to other drives or to OneDrive and domain roaming profiles (the oracle is a workgroup computer with a local profile), other languages (the type names are English), other users and tokens, network and removable drives, junctions and links, 32-bit processes (the %ProgramFiles% answers differ), the contents of virtual folders. Paths with characters outside the ANSI code page.

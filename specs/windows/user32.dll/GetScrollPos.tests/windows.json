@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "gsp_defaults",
+      "exe_sha256": "2c3374c624d8c71fb0076bddc327dc9afe467584ea787f29e3476cbf5f494394",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IHdpdGhvdXQgYmFycywgdmVydGljYWw6IEdldFNjcm9sbFBvcyhTQl9WRVJUKSA9IDAgZXJyIDE0NDcKaG9yaXpvbnRhbDogR2V0U2Nyb2xsUG9zKFNCX0hPUlopID0gMCBlcnIgMTQ0NwpTQl9DVEw6IEdldFNjcm9sbFBvcyhTQl9DVEwpID0gMCBlcnIgLTEKU0JfQk9USDogR2V0U2Nyb2xsUG9zKFNCX0JPVEgpID0gMCBlcnIgODcKYmFyIDQ6IEdldFNjcm9sbFBvcyhiYXI/KSA9IDAgZXJyIDg3CmJhciAtMTogR2V0U2Nyb2xsUG9zKGJhcj8pID0gMCBlcnIgODcKTlVMTCB3aW5kb3c6IEdldFNjcm9sbFBvcyhTQl9WRVJUKSA9IDAgZXJyIDE0MDAKbWFkZS11cCB3aW5kb3c6IEdldFNjcm9sbFBvcyhTQl9WRVJUKSA9IDAgZXJyIDE0MDAKZGVzdHJveWVkIHdpbmRvdzogR2V0U2Nyb2xsUG9zKFNCX1ZFUlQpID0gMCBlcnIgMTQwMApyYW5nZSA1Li4xNTogU2V0U2Nyb2xsUmFuZ2UoU0JfVkVSVCwgNSwgMTUpID0gMSBlcnIgLTIKcG9zaXRpb24gb2YgYSBiYXIgdGhhdCBvbmx5IGhhcyBhIHJhbmdlOiBHZXRTY3JvbGxQb3MoU0JfVkVSVCkgPSA1IGVyciAtMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window without bars, vertical: GetScrollPos(SB_VERT) = 0 err 1447\nhorizontal: GetScrollPos(SB_HORZ) = 0 err 1447\nSB_CTL: GetScrollPos(SB_CTL) = 0 err -1\nSB_BOTH: GetScrollPos(SB_BOTH) = 0 err 87\nbar 4: GetScrollPos(bar?) = 0 err 87\nbar -1: GetScrollPos(bar?) = 0 err 87\nNULL window: GetScrollPos(SB_VERT) = 0 err 1400\nmade-up window: GetScrollPos(SB_VERT) = 0 err 1400\ndestroyed window: GetScrollPos(SB_VERT) = 0 err 1400\nrange 5..15: SetScrollRange(SB_VERT, 5, 15) = 1 err -2\nposition of a bar that only has a range: GetScrollPos(SB_VERT) = 5 err -1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}
