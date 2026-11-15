@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "lm_load",
+      "exe_sha256": "59e1a0b60012810fc55e207fe919fc5f0265c4b5eadc3d4c401876f114fa3c89",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TG9hZE1lbnVXKDEwMCk6IHdpbmRvdwptZW51IDEwMDogY291bnQgNApbMF0gaWQ9MHhmZmZmZmZmZiBzdGF0ZT0weDAgdHlwZT0weDAgdGV4dD0nJkZpbGUnCiAgc3ViOiBjb3VudCA2CiAgWzBdIGlkPTB4MTJkIHN0YXRlPTB4MCB0eXBlPTB4MCB0ZXh0PScmT3Blbj9DdHJsK08nCiAgWzFdIGlkPTB4MCBzdGF0ZT0weDMgdHlwZT0weDgwMCB0ZXh0PScnCiAgWzJdIGlkPTB4MTJlIHN0YXRlPTB4OCB0eXBlPTB4MCB0ZXh0PSdDaGVja2VkJwogIFszXSBpZD0weDEyZiBzdGF0ZT0weDEgdHlwZT0weDAgdGV4dD0nR3JheWVkJwogIFs0XSBpZD0weDEzMCBzdGF0ZT0weDIgdHlwZT0weDAgdGV4dD0nRGlzYWJsZWQnCiAgWzVdIGlkPTB4MTMxIHN0YXRlPTB4MCB0eXBlPTB4MCB0ZXh0PSdFJnhpdCcKWzFdIGlkPTB4ZmZmZmZmZmYgc3RhdGU9MHgwIHR5cGU9MHgwIHRleHQ9JyZFZGl0JwogIHN1YjogY291bnQgMgogIFswXSBpZD0weDEzNyBzdGF0ZT0weDAgdHlwZT0weDAgdGV4dD0nQ3V0JwogIFsxXSBpZD0weGZmZmZmZmZmIHN0YXRlPTB4MCB0eXBlPTB4MCB0ZXh0PSdNb3JlJwogIHN1YjogY291bnQgMgogICAgWzBdIGlkPTB4MTQxIHN0YXRlPTB4MCB0eXBlPTB4MCB0ZXh0PSdEZWVwJwogICAgWzFdIGlkPTB4MTQyIHN0YXRlPTB4MCB0eXBlPTB4NDAgdGV4dD0nRGVlcGVyJwpbMl0gaWQ9MHgxNGIgc3RhdGU9MHgwIHR5cGU9MHgyMCB0ZXh0PSdCYXJicmVhaycKWzNdIGlkPTB4MTRjIHN0YXRlPTB4MCB0eXBlPTB4NDAwMCB0ZXh0PScmSGVscCcKc2Vjb25kIGxvYWQgaXMgYW5vdGhlciBtZW51OiAxCmJvdGggdmFsaWQ6IDEKc2Vjb25kIHN0aWxsIHZhbGlkIGFmdGVyIHRoZSBmaXJzdCB3YXMgZGVzdHJveWVkOiAxCkxvYWRNZW51VygyMDAsIGV4dGVuZGVkKTogd2luZG93Cm1lbnUgMjAwOiBjb3VudCA3ClswXSBpZD0weDFmNCBzdGF0ZT0weDAgdHlwZT0weDAgdGV4dD0nUGxhaW4nClsxXSBpZD0weDFmNSBzdGF0ZT0weDggdHlwZT0weDIwMCB0ZXh0PSdSYWRpbyBjaGVja2VkJwpbMl0gaWQ9MHgwIHN0YXRlPTB4MyB0eXBlPTB4ODAwIHRleHQ9JycKWzNdIGlkPTB4MWY2IHN0YXRlPTB4MyB0eXBlPTB4MCB0ZXh0PSdHcmF5JwpbNF0gaWQ9MHgxZjcgc3RhdGU9MHgxMDAwIHR5cGU9MHgwIHRleHQ9J0RlZmF1bHQnCls1XSBpZD0weGZmZmZmZmZmIHN0YXRlPTB4MCB0eXBlPTB4MCB0ZXh0PSdNZW51JwogIHN1YjogY291bnQgMgogIFswXSBpZD0weDFmZSBzdGF0ZT0weDAgdHlwZT0weDAgdGV4dD0nU3ViIDEnCiAgWzFdIGlkPTB4MWZmIHN0YXRlPTB4MCB0eXBlPTB4NDAgdGV4dD0nU3ViIDIgYnJlYWsnCls2XSBpZD0weDFmOSBzdGF0ZT0weDAgdHlwZT0weDQwMDAgdGV4dD0nUmlnaHQnCmJ5IG5hbWUgQVBQTUVOVTogd2luZG93IGNvdW50IDEKYnkgbmFtZSBhcHBtZW51IChsb3dlciBjYXNlKTogd2luZG93Ck5VTEwgbW9kdWxlICh0aGUgZXhlY3V0YWJsZSk6IDAgZXJyPS0xCmFic2VudCBudW1iZXIgOTk5OiAxIGVycj0xODE0CmFic2VudCBuYW1lOiAxIGVycj0xODE0CmEgZGlhbG9nIHJlc291cmNlIG51bWJlciBudW1iZXIgMjogMSBlcnI9MTgxNAptYWRlLXVwIG1vZHVsZSBoYW5kbGU6IDEgZXJyPTE4MTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LoadMenuW(100): window\nmenu 100: count 4\n[0] id=0xffffffff state=0x0 type=0x0 text='&File'\n  sub: count 6\n  [0] id=0x12d state=0x0 type=0x0 text='&Open?Ctrl+O'\n  [1] id=0x0 state=0x3 type=0x800 text=''\n  [2] id=0x12e state=0x8 type=0x0 text='Checked'\n  [3] id=0x12f state=0x1 type=0x0 text='Grayed'\n  [4] id=0x130 state=0x2 type=0x0 text='Disabled'\n  [5] id=0x131 state=0x0 type=0x0 text='E&xit'\n[1] id=0xffffffff state=0x0 type=0x0 text='&Edit'\n  sub: count 2\n  [0] id=0x137 state=0x0 type=0x0 text='Cut'\n  [1] id=0xffffffff state=0x0 type=0x0 text='More'\n  sub: count 2\n    [0] id=0x141 state=0x0 type=0x0 text='Deep'\n    [1] id=0x142 state=0x0 type=0x40 text='Deeper'\n[2] id=0x14b state=0x0 type=0x20 text='Barbreak'\n[3] id=0x14c state=0x0 type=0x4000 text='&Help'\nsecond load is another menu: 1\nboth valid: 1\nsecond still valid after the first was destroyed: 1\nLoadMenuW(200, extended): window\nmenu 200: count 7\n[0] id=0x1f4 state=0x0 type=0x0 text='Plain'\n[1] id=0x1f5 state=0x8 type=0x200 text='Radio checked'\n[2] id=0x0 state=0x3 type=0x800 text=''\n[3] id=0x1f6 state=0x3 type=0x0 text='Gray'\n[4] id=0x1f7 state=0x1000 type=0x0 text='Default'\n[5] id=0xffffffff state=0x0 type=0x0 text='Menu'\n  sub: count 2\n  [0] id=0x1fe state=0x0 type=0x0 text='Sub 1'\n  [1] id=0x1ff state=0x0 type=0x40 text='Sub 2 break'\n[6] id=0x1f9 state=0x0 type=0x4000 text='Right'\nby name APPMENU: window count 1\nby name appmenu (lower case): window\nNULL module (the executable): 0 err=-1\nabsent number 999: 1 err=1814\nabsent name: 1 err=1814\na dialog resource number number 2: 1 err=1814\nmade-up module handle: 1 err=1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

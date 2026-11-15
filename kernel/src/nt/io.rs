@@ -79,6 +79,11 @@ pub(super) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     MEMORY.lock().get(&pid).and_then(Weak::upgrade)
 }
 
+/// Every running NT process's memory, by process id (`poly.nt.mem`).
+pub(super) fn memories() -> alloc::vec::Vec<(u32, Arc<Memory>)> {
+    MEMORY.lock().iter().filter_map(|(pid, m)| Some((*pid, m.upgrade()?))).collect()
+}
+
 /// NT process `pid` has ended.
 pub(super) fn unregister(pid: u32) {
     MEMORY.lock().remove(&pid);
@@ -156,11 +161,24 @@ pub(super) fn drain() {
     while let Some(c) = with(|s| s.sys.io.pop_completion()) {
         let memory = MEMORY.lock().get(&c.process.0).and_then(Weak::upgrade);
         if let Some(m) = &memory {
-            if let Some((addr, data)) = &c.data {
-                let _ = m.write(*addr, data);
+            if let Some((addr, data)) = &c.data
+                && m.write(*addr, data).is_err()
+            {
+                crate::kprintln!(
+                    "nt: p{}: a completion's {} bytes could not be written at {addr:#x}",
+                    c.process.0,
+                    data.len()
+                );
             }
             if c.iosb != 0 {
-                let _ = m.write(c.iosb, &c.iosb_bytes());
+                let w = c.iosb_write();
+                if m.write(w.addr, w.bytes()).is_err() {
+                    crate::kprintln!(
+                        "nt: p{}: a completion's status block could not be written at {:#x}",
+                        c.process.0,
+                        w.addr
+                    );
+                }
             }
         }
         drop(memory);

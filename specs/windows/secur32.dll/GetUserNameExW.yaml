@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/secur32.dll/GetUserNameExW.yaml
+id: windows/api/secur32.dll/GetUserNameExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "GetUserNameExW function (secext.h)", "EXTENDED_NAME_FORMAT enumeration"; secext.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the current user's name in a given format. Chrome calls GetUserNameExW(NameSamCompatible (2), buffer, &length) twice in the browser (and once in the network service of some stages), always TRUE. The name (domain or computer name, a backslash, the user) is the machine's and is never recorded; the tests record its shape (exactly one backslash with text on both sides) and the buffer rules: *length is the capacity in UTF-16 units including the NUL on input; on success it becomes the text length without the NUL; a NULL buffer with length 0 or a too short buffer fails with 234 (ERROR_MORE_DATA) and sets *length to the length with the NUL; a buffer one unit short is still partly written; formats 99 and -1 give 87; NameUnknown (0) gives 1332 (ERROR_NONE_MAPPED).
+interface:
+  signature: "BOOLEAN GetUserNameExW(EXTENDED_NAME_FORMAT format, LPWSTR buf, PULONG size)"
+  result: "TRUE or FALSE with GetLastError"
+chrome:
+  calls: "GetUserNameExW(2, buf, &len) 2 calls in the browser, TRUE; the result is used for the profile's identity"
+rules:
+  sizing: "NULL buffer with *size 0: FALSE, 234, *size = text length + 1"
+  success: "a 512-unit buffer: TRUE, the last error is not touched; *size = the text length (without the NUL); exactly one backslash with something before and after; a buffer of exactly text+NUL: TRUE, *size = text length, the text is intact and terminated"
+  too_short: "capacity equal to the text length: FALSE, 234, *size = text length + 1, and the buffer's first text+NUL units are NOT all untouched (part of the text is written); capacity 1: FALSE, 234"
+  formats: "NameSamCompatible (2): as above; 99 and -1: FALSE, 87; NameUnknown (0): FALSE, 1332 (ERROR_NONE_MAPPED)"
+  stable: "a second call gives the same text"
+errors:
+  more_data: "ERROR_MORE_DATA (234)"
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+  none_mapped: "ERROR_NONE_MAPPED (1332)"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The oracle is a workgroup computer: its SAM-compatible name has the computer name before the backslash and a domain machine has the domain name; the tests do not depend on which.
+not_covered: >
+  The other formats on a domain or workgroup machine (display name, UPN, canonical, DN: their results depend on the account and the domain, and are left out), a NULL size pointer (Windows crashes), impersonation tokens.

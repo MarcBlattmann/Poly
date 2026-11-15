@@ -11,7 +11,8 @@ use poly_win32k::proto::{Reply, Request};
 use poly_win32k::spi;
 use poly_win32k::user::{self as u};
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateSolidBrush(color: u32) -> usize;
     fn GetClipBox(hdc: usize, rect: *mut i32) -> i32;
@@ -291,62 +292,6 @@ fn iconmetrics(p: *mut u8, dpi: u32) {
     put_logfont(p, 16, font_height(dpi));
 }
 
-/// Simple getters: (action, values) of the oracle's settings.
-const SPI_VALUES: &[(u32, &[i32])] = &[
-    (0x0001, &[1]),           // SPI_GETBEEP
-    (0x0003, &[6, 10, 1]),    // SPI_GETMOUSE
-    (0x0005, &[1]),           // SPI_GETBORDER
-    (0x000A, &[31]),          // SPI_GETKEYBOARDSPEED
-    (0x000D, &[75]),          // SPI_ICONHORIZONTALSPACING
-    (0x0010, &[0]),           // SPI_GETSCREENSAVEACTIVE
-    (0x0016, &[1]),           // SPI_GETKEYBOARDDELAY
-    (0x0018, &[75]),          // SPI_ICONVERTICALSPACING
-    (0x0019, &[1]),           // SPI_GETICONTITLEWRAP
-    (0x001B, &[0]),           // SPI_GETMENUDROPALIGNMENT
-    (0x0026, &[1]),           // SPI_GETDRAGFULLWINDOWS
-    (0x0044, &[0]),           // SPI_GETKEYBOARDPREF
-    (0x0046, &[0]),           // SPI_GETSCREENREADER
-    (0x004A, &[1]),           // SPI_GETFONTSMOOTHING
-    (0x005E, &[0]),           // SPI_GETMOUSETRAILS
-    (0x005F, &[0]),           // SPI_GETSNAPTODEFBUTTON
-    (0x0062, &[4]),           // SPI_GETMOUSEHOVERWIDTH
-    (0x0064, &[4]),           // SPI_GETMOUSEHOVERHEIGHT
-    (0x0066, &[400]),         // SPI_GETMOUSEHOVERTIME
-    (0x0068, &[3]),           // SPI_GETWHEELSCROLLLINES
-    (0x006A, &[400]),         // SPI_GETMENUSHOWDELAY
-    (0x006C, &[3]),           // SPI_GETWHEELSCROLLCHARS
-    (0x006E, &[1]),           // SPI_GETSHOWIMEUI
-    (0x0070, &[10]),          // SPI_GETMOUSESPEED
-    (0x1000, &[0]),           // SPI_GETACTIVEWINDOWTRACKING
-    (0x1002, &[1]),           // SPI_GETMENUANIMATION
-    (0x1004, &[1]),           // SPI_GETCOMBOBOXANIMATION
-    (0x1006, &[1]),           // SPI_GETLISTBOXSMOOTHSCROLLING
-    (0x1008, &[1]),           // SPI_GETGRADIENTCAPTIONS
-    (0x100A, &[0]),           // SPI_GETKEYBOARDCUES
-    (0x100C, &[0]),           // SPI_GETACTIVEWNDTRKZORDER
-    (0x100E, &[1]),           // SPI_GETHOTTRACKING
-    (0x1012, &[1]),           // SPI_GETMENUFADE
-    (0x1014, &[1]),           // SPI_GETSELECTIONFADE
-    (0x1016, &[1]),           // SPI_GETTOOLTIPANIMATION
-    (0x1018, &[1]),           // SPI_GETTOOLTIPFADE
-    (0x101A, &[1]),           // SPI_GETCURSORSHADOW
-    (0x1022, &[1]),           // SPI_GETFLATMENU
-    (0x1024, &[1]),           // SPI_GETDROPSHADOW
-    (0x103E, &[1]),           // SPI_GETUIEFFECTS
-    (0x1040, &[0]),           // SPI_GETDISABLEOVERLAPPEDCONTENT
-    (0x1042, &[1]),           // SPI_GETCLIENTAREAANIMATION
-    (0x2000, &[0x7FFF_FFFF]), // SPI_GETFOREGROUNDLOCKTIMEOUT
-    (0x2002, &[0]),           // SPI_GETACTIVEWNDTRKTIMEOUT
-    (0x2004, &[7]),           // SPI_GETFOREGROUNDFLASHCOUNT
-    (0x2006, &[1]),           // SPI_GETCARETWIDTH
-    (0x2008, &[1200]),        // SPI_GETMOUSECLICKLOCKTIME
-    (0x200A, &[2]),           // SPI_GETFONTSMOOTHINGTYPE
-    (0x200C, &[1200]),        // SPI_GETFONTSMOOTHINGCONTRAST
-    (0x200E, &[1]),           // SPI_GETFOCUSBORDERWIDTH
-    (0x2010, &[1]),           // SPI_GETFOCUSBORDERHEIGHT
-    (0x2016, &[5]),           // SPI_GETMESSAGEDURATION
-];
-
 /// `SystemParametersInfoW` for the read-only getters (`SystemParametersInfoW.yaml`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SystemParametersInfoW(action: u32, param: u32, pv: *mut u8, ini: u32) -> i32 {
@@ -406,56 +351,44 @@ unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
         }
         0x0042 => {
             // SAFETY: as above.
-            if pv.is_null() || read32(pv, 0) != 16 {
+            // HIGHCONTRASTW: cbSize, dwFlags, a pointer (16 bytes, 12 in a 32-bit process).
+            if pv.is_null() || read32(pv, 0) as usize != 8 + core::mem::size_of::<usize>() {
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
             put32(pv, 4, 0x7E);
-            // SAFETY: the 8-byte scheme pointer of the structure.
-            unsafe { core::ptr::write_unaligned(pv.add(8) as *mut u64, 0) };
+            // SAFETY: the pointer-sized scheme field of the structure.
+            unsafe { core::ptr::write_unaligned(pv.add(8) as *mut usize, 0) };
             1
         }
         0x0012 | 0 => {
             set_last_error(ERROR_INVALID_SPI_VALUE);
             0
         }
-        _ => match SPI_VALUES.iter().find(|e| e.0 == action) {
-            Some(&(_, vals)) => {
-                // Simple getters write through pvParam (SPI_ICONHORIZONTALSPACING
-                // and the other uiParam-based ones also through uiParam 0).
-                if pv.is_null() {
+        // The simple getters (`SystemParametersInfoW.yaml`, getters) and the
+        // queries the sheet did not observe: what Learn documents as the
+        // defaults (`poly_win32k::spi`, ADR 0155); anything else is no
+        // action (87).
+        _ => {
+            // SAFETY: cbSize is the structure's first field.
+            let cb = if spi::has_cb_size(action) && !pv.is_null() { read32(pv, 0) } else { 0 };
+            let w = u::screen(&SYS).work;
+            match spi::query(action, param, cb, [w.left, w.top, w.right, w.bottom]) {
+                spi::Outcome::Bytes(bytes) if !pv.is_null() => {
+                    // SAFETY: the caller's buffer for this action holds the answer.
+                    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), pv, bytes.len()) };
+                    1
+                }
+                spi::Outcome::Error(code) => {
+                    set_last_error(code);
+                    0
+                }
+                _ => {
                     set_last_error(ERROR_INVALID_PARAMETER);
-                    return 0;
-                }
-                for (k, &v) in vals.iter().enumerate() {
-                    put32(pv, 4 * k, v);
-                }
-                1
-            }
-            // The queries the sheet did not observe: what Learn documents
-            // as the defaults (`poly_win32k::spi`, ADR 0155); anything
-            // else is no action (87).
-            None => {
-                // SAFETY: cbSize is the structure's first field.
-                let cb = if spi::has_cb_size(action) && !pv.is_null() { read32(pv, 0) } else { 0 };
-                let w = u::screen(&SYS).work;
-                match spi::query(action, param, cb, [w.left, w.top, w.right, w.bottom]) {
-                    spi::Outcome::Bytes(bytes) if !pv.is_null() => {
-                        // SAFETY: the caller's buffer for this action holds the answer.
-                        unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), pv, bytes.len()) };
-                        1
-                    }
-                    spi::Outcome::Error(code) => {
-                        set_last_error(code);
-                        0
-                    }
-                    _ => {
-                        set_last_error(ERROR_INVALID_PARAMETER);
-                        0
-                    }
+                    0
                 }
             }
-        },
+        }
     }
 }
 

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "sddd_flags",
+      "exe_sha256": "2e56a0a4017958e5e768327254af1641f2837a2dbee837b38069a14a5fdcaaee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBjb3B5IG9mIGEgc3lzdGVtIGxpYnJhcnkgbWFkZSBuZXh0IHRvIHRoZSBleGVjdXRhYmxlOiAxClNldERlZmF1bHREbGxEaXJlY3RvcmllcyhTWVNURU0zMiB8IEFQUExJQ0FUSU9OX0RJUiB8IFVTRVJfRElSUykgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCkxvYWRMaWJyYXJ5Vyh0aGUgY29weSwgYnkgbmFtZSwgU1lTVEVNMzIgb25seSk6IGxvYWRlZD0wIGxhc3QgZXJyb3IgMTI2CnRoZSBjb3B5IGJ5IGZ1bGwgcGF0aCAocGF0aCBrbm93biAxKTogbG9hZGVkPTEgbGFzdCBlcnJvciAwClNldERlZmF1bHREbGxEaXJlY3RvcmllcyhTWVNURU0zMiB8IDB4MSkgPSAwIGxhc3QgZXJyb3IgODcKU2V0RGVmYXVsdERsbERpcmVjdG9yaWVzKEFQUExJQ0FUSU9OX0RJUikgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a copy of a system library made next to the executable: 1\nSetDefaultDllDirectories(SYSTEM32 | APPLICATION_DIR | USER_DIRS) = 1 last error unchanged\nLoadLibraryW(the copy, by name, SYSTEM32 only): loaded=0 last error 126\nthe copy by full path (path known 1): loaded=1 last error 0\nSetDefaultDllDirectories(SYSTEM32 | 0x1) = 0 last error 87\nSetDefaultDllDirectories(APPLICATION_DIR) = 1 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    },
+    {
+      "name": "sddd_flags_c",
+      "exe_sha256": "033ccb3eddb6e6dd6605365dcb42d78132fc8b0356d24e8bf89acb64bf01bc92",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0RGVmYXVsdERsbERpcmVjdG9yaWVzKDApID0gMCBsYXN0IGVycm9yIDg3ClNldERlZmF1bHREbGxEaXJlY3RvcmllcyhTWVNURU0zMikgPSAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCkxvYWRMaWJyYXJ5VyhhIGxpYnJhcnkgdGhhdCBkb2VzIG5vdCBleGlzdCk6IGxvYWRlZD0wIGxhc3QgZXJyb3IgMTI2ClNldERlZmF1bHREbGxEaXJlY3RvcmllcygweDEpID0gMCBsYXN0IGVycm9yIDg3ClNldERlZmF1bHREbGxEaXJlY3RvcmllcygweEZGRkZGRkZGKSA9IDAgbGFzdCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetDefaultDllDirectories(0) = 0 last error 87\nSetDefaultDllDirectories(SYSTEM32) = 1 last error unchanged\nLoadLibraryW(a library that does not exist): loaded=0 last error 126\nSetDefaultDllDirectories(0x1) = 0 last error 87\nSetDefaultDllDirectories(0xFFFFFFFF) = 0 last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    }
+  ]
+}

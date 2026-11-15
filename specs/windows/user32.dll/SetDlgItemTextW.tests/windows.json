@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "sdt_text",
+      "exe_sha256": "14a7037be5cdb3e39353470aac03e12c6f91e5bc0055f64f55137635c06f791a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZWRpdCBpbml0aWFsIHRleHQ6IDcgZXJyPS0yIHRleHQ9J2luaXRpYWwnIHdyaXR0ZW49OApzdGF0aWM6IDYgZXJyPS0yIHRleHQ9JyZOYW1lOicgd3JpdHRlbj03CmJ1dHRvbjogNiBlcnI9LTIgdGV4dD0nJkNoZWNrJyB3cml0dGVuPTcKbGlzdCBib3ggKG5vIHRleHQpOiAwIGVycj0tMSB0ZXh0PScnIHdyaXR0ZW49MQpkaWFsb2cgdGl0bGUgYXMgaXRlbSAwOiAwIGVycj0xNDIxIHRleHQ9Jycgd3JpdHRlbj0xClNldERsZ0l0ZW1UZXh0VyBlZGl0OiAxCmVkaXQgYWZ0ZXI6IDggZXJyPS0yIHRleHQ9J25ldyB0ZXh0JyB3cml0dGVuPTkKZWRpdCwgc2l6ZSA0OiAzIGVycj0tMiB0ZXh0PSduZXcnIHdyaXR0ZW49NAplZGl0LCBzaXplIDg6IDcgZXJyPS0yIHRleHQ9J25ldyB0ZXgnIHdyaXR0ZW49OAplZGl0LCBzaXplIDk6IDggZXJyPS0yIHRleHQ9J25ldyB0ZXh0JyB3cml0dGVuPTkKZWRpdCwgc2l6ZSAxOiAwIGVycj0wIHRleHQ9Jycgd3JpdHRlbj0xCmVkaXQsIHNpemUgMDogMCBlcnI9LTEgdGV4dD0nJyB3cml0dGVuPTAKZWRpdCwgc2l6ZSAtMTogOCBlcnI9LTIgdGV4dD0nbmV3IHRleHQnIHdyaXR0ZW49OQpTZXREbGdJdGVtVGV4dFcgc3RhdGljOiAxCnN0YXRpYyBhZnRlcjogNyBlcnI9LTIgdGV4dD0nU3RhdGljPycgd3JpdHRlbj04ClNldERsZ0l0ZW1UZXh0VyBidXR0b246IDEKYnV0dG9uIGFmdGVyOiA4IGVycj0tMiB0ZXh0PScmUmVuYW1lZCcgd3JpdHRlbj05ClNldERsZ0l0ZW1UZXh0VyBlbXB0eTogMQplZGl0IGVtcHR5OiAwIGVycj0wIHRleHQ9Jycgd3JpdHRlbj0xClNldERsZ0l0ZW1UZXh0VyBOVUxMIHRleHQ6IDEKZWRpdCBhZnRlciBOVUxMOiAwIGVycj0wIHRleHQ9Jycgd3JpdHRlbj0xClNldERsZ0l0ZW1UZXh0VyAzMDAgY2hhcmFjdGVyczogMQplZGl0IGxvbmcsIHNpemUgNDAwOiAzMDAgZXJyPS0yIHRleHQ9J3p6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enoKU2V0RGxnSXRlbVRleHRXIHRoZSBkaWFsb2cgKGlkIDApOiAwIGVycj0xNDIxClNldERsZ0l0ZW1UZXh0VyBhYnNlbnQgaWQ6IDAgZXJyPTE0MjEKYWJzZW50IGlkOiAwIGVycj0xNDIxIHRleHQ9Jycgd3JpdHRlbj0xClNldERsZ0l0ZW1UZXh0VyBiYWQgZGlhbG9nOiAwIGVycj0xNDAwCmJhZCBkaWFsb2c6IDAgZXJyPTE0MDAgdGV4dD0nJyB3cml0dGVuPTEKU2V0RGxnSXRlbVRleHRXIHRoZW4gV01fR0VUVEVYVExFTkdUSDogNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "edit initial text: 7 err=-2 text='initial' written=8\nstatic: 6 err=-2 text='&Name:' written=7\nbutton: 6 err=-2 text='&Check' written=7\nlist box (no text): 0 err=-1 text='' written=1\ndialog title as item 0: 0 err=1421 text='' written=1\nSetDlgItemTextW edit: 1\nedit after: 8 err=-2 text='new text' written=9\nedit, size 4: 3 err=-2 text='new' written=4\nedit, size 8: 7 err=-2 text='new tex' written=8\nedit, size 9: 8 err=-2 text='new text' written=9\nedit, size 1: 0 err=0 text='' written=1\nedit, size 0: 0 err=-1 text='' written=0\nedit, size -1: 8 err=-2 text='new text' written=9\nSetDlgItemTextW static: 1\nstatic after: 7 err=-2 text='Static?' written=8\nSetDlgItemTextW button: 1\nbutton after: 8 err=-2 text='&Renamed' written=9\nSetDlgItemTextW empty: 1\nedit empty: 0 err=0 text='' written=1\nSetDlgItemTextW NULL text: 1\nedit after NULL: 0 err=0 text='' written=1\nSetDlgItemTextW 300 characters: 1\nedit long, size 400: 300 err=-2 text='zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\nSetDlgItemTextW the dialog (id 0): 0 err=1421\nSetDlgItemTextW absent id: 0 err=1421\nabsent id: 0 err=1421 text='' written=1\nSetDlgItemTextW bad dialog: 0 err=1400\nbad dialog: 0 err=1400 text='' written=1\nSetDlgItemTextW then WM_GETTEXTLENGTH: 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

@@ -109,7 +109,7 @@ pub fn drain_wakes() {
         let mut v = Vec::new();
         while let Some(w) = s.sys.objects.pop_wake() {
             let c = s.ctl.entry(w.thread).or_default();
-            c.completion = Some(w.status);
+            c.completion = Some((w.wait, w.status));
             if let Some(f) = &c.flags {
                 v.push(Arc::clone(f));
             }
@@ -148,11 +148,22 @@ pub fn wait(pid: ProcessId, tid: ThreadRef, id: WaitId, timeout: NtTimeout, aler
         }
         let next = with(|s| {
             let c = s.ctl.entry(tid).or_default();
-            if let Some(st) = c.completion.take() {
-                c.blocked = None;
-                return Next::Done(st);
+            // Only this wait's completion: one for an earlier wait is stale (ADR 0155 step 12).
+            match c.completion.take() {
+                Some((w, st)) if w == id => {
+                    c.blocked = None;
+                    return Next::Done(st);
+                }
+                _ => {}
             }
-            if alertable && let Some(apc) = c.apcs.pop_front() {
+            if alertable && c.apcs.front().is_some() {
+                // Satisfied before the APC could end it: the object is taken, report it (the
+                // APC runs at the next alertable wait).
+                if let Some(st) = s.sys.objects.take_wake(id) {
+                    c.blocked = None;
+                    return Next::Done(st);
+                }
+                let apc = c.apcs.pop_front().expect("checked");
                 c.blocked = None;
                 let _ = s.sys.objects.cancel_wait(id, WaitCancel::UserApc);
                 return Next::Apc(apc);
@@ -171,17 +182,26 @@ pub fn wait(pid: ProcessId, tid: ThreadRef, id: WaitId, timeout: NtTimeout, aler
             Unparked::TimedOut => {
                 return with(|s| {
                     let c = s.ctl.entry(tid).or_default();
-                    if let Some(st) = c.completion.take() {
-                        c.blocked = None;
+                    c.blocked = None;
+                    if let Some((w, st)) = c.completion.take()
+                        && w == id
+                    {
                         return st;
                     }
-                    c.blocked = None;
+                    // Satisfied, its wake not drained yet: the object is taken, so this is
+                    // not a timeout.
+                    if let Some(st) = s.sys.objects.take_wake(id) {
+                        return st;
+                    }
                     s.sys.objects.cancel_wait(id, WaitCancel::Timeout).unwrap_or(STATUS_TIMEOUT)
                 });
             }
             Unparked::Interrupted => {
                 with(|s| {
-                    s.ctl.entry(tid).or_default().blocked = None;
+                    let c = s.ctl.entry(tid).or_default();
+                    c.blocked = None;
+                    c.completion = None;
+                    let _ = s.sys.objects.take_wake(id);
                     let _ = s.sys.objects.cancel_wait(id, WaitCancel::Terminated);
                 });
                 // The thread is ending (its process is exiting or it was
@@ -246,20 +266,36 @@ pub fn test_alert(pid: ProcessId, tid: ThreadRef) -> NtStatus {
 /// Redirect the (current) thread to run `apc` on its way back to user mode,
 /// in `ntdll`'s `KiUserApcDispatcher` (R11 = the routine, RCX/RDX/R8 = its
 /// arguments, RSP 16-byte aligned), saving the context it interrupts for
-/// `PolyResumeApc` to restore (ADR 0065, 0071).
+/// `PolyResumeApc` to restore (ADR 0065, 0071). A thread of a 32-bit process
+/// gets the routine and its arguments on its stack instead
+/// (`poly_personality_nt::wow64::apc_frame`, ADR 0186).
 fn deliver_apc(pid: ProcessId, tid: ThreadRef, apc: Apc) {
     let Some(apc_dispatcher) = with(|s| s.processes.get(&pid).map(|p| p.apc_dispatcher)) else { return };
     let regs = user::registers();
     let mut resume = regs;
     resume.rax = u64::from(STATUS_USER_APC.0);
     with(|s| s.ctl.entry(tid).or_default().apc_saved = Some(resume));
-    let mut frame = regs;
-    frame.rip = apc_dispatcher;
-    frame.r11 = apc.routine;
-    frame.rcx = apc.arg1;
-    frame.rdx = apc.arg2;
-    frame.r8 = apc.arg3;
-    frame.rsp = resume.rsp & !0xF;
+    start_apc(pid, apc_dispatcher, &resume, &apc);
+}
+
+/// Start `apc` in the current thread at `dispatcher`, from the context `from`.
+fn start_apc(pid: ProcessId, dispatcher: u64, from: &UserRegs, apc: &Apc) {
+    let mut frame = *from;
+    frame.rip = dispatcher;
+    if super::is_wow64(pid.0) {
+        let Some((esp, bytes)) = poly_personality_nt::wow64::apc_frame(from.rsp, apc) else { return };
+        let Some(memory) = user::current_memory() else { return };
+        if memory.write(esp, &bytes).is_err() {
+            return;
+        }
+        frame.rsp = esp;
+    } else {
+        frame.r11 = apc.routine;
+        frame.rcx = apc.arg1;
+        frame.rdx = apc.arg2;
+        frame.r8 = apc.arg3;
+        frame.rsp = from.rsp & !0xF;
+    }
     let _ = user::set_registers(&frame);
 }
 
@@ -275,21 +311,17 @@ pub fn resume_apc(tid: ThreadRef) -> NtStatus {
             // Calls"): the next one starts now, with the same context saved.
             if status == STATUS_USER_APC {
                 let next = with(|s| {
-                    let dispatcher =
-                        s.processes.values().find(|p| p.thread(tid).is_some()).map(|p| p.apc_dispatcher)?;
+                    let (pid, dispatcher) = s
+                        .processes
+                        .iter()
+                        .find(|(_, p)| p.thread(tid).is_some())
+                        .map(|(pid, p)| (*pid, p.apc_dispatcher))?;
                     let apc = s.ctl.get_mut(&tid)?.apcs.pop_front()?;
                     s.ctl.get_mut(&tid)?.apc_saved = Some(regs);
-                    Some((dispatcher, apc))
+                    Some((pid, dispatcher, apc))
                 });
-                if let Some((dispatcher, apc)) = next {
-                    let mut frame = regs;
-                    frame.rip = dispatcher;
-                    frame.r11 = apc.routine;
-                    frame.rcx = apc.arg1;
-                    frame.rdx = apc.arg2;
-                    frame.r8 = apc.arg3;
-                    frame.rsp = regs.rsp & !0xF;
-                    let _ = user::set_registers(&frame);
+                if let Some((pid, dispatcher, apc)) = next {
+                    start_apc(pid, dispatcher, &regs, &apc);
                     return status;
                 }
             }
@@ -349,7 +381,7 @@ fn spawn(
     teb: u64,
 ) -> Result<(), NtStatus> {
     let tid_u32 = tref.0 as u32;
-    match user::spawn_nt_as(Arc::clone(process), Arc::clone(memory), entry, teb, user::DEFAULT_HOOK, tid_u32) {
+    match super::spawn_thread(process, memory, entry, teb, user::DEFAULT_HOOK, Some(tid_u32)) {
         Ok(kid) => {
             let _ = thread::detach(kid);
             if let Some(f) = process.thread_flags(tid_u32) {

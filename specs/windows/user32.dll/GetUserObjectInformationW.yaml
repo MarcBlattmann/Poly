@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetUserObjectInformationW.yaml
+id: windows/api/user32.dll/GetUserObjectInformationW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateWindowStationW", "CloseWindowStation", "OpenWindowStationW", "SetProcessWindowStation", "GetProcessWindowStation", "CreateDesktopW", "OpenDesktopW", "CloseDesktop", "GetThreadDesktop", "SetThreadDesktop", "GetUserObjectInformationW", "Window Station Security and Access Rights", "Desktop Security and Access Rights", "Mandatory Integrity Control"; winuser.h, winbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Reads a property of a window station or desktop handle: UOI_NAME (the object's name, UTF-16 with a NUL), UOI_TYPE ("WindowStation" or "Desktop"), UOI_FLAGS (12 bytes), UOI_USER_SID (always 0 bytes here), UOI_HEAPSIZE and UOI_IO (desktops only). A buffer that is too short gives FALSE, error 122 and the needed size. The broker calls it 44 times (names of the stations and desktops it compares). It needs WINSTA_READATTRIBUTES on a station handle (error 5 without it); a desktop handle needs no particular right. Handles of other kinds give error 1.
+interface:
+  signature: "BOOL GetUserObjectInformationW(HANDLE h, int index, PVOID info, DWORD length, LPDWORD needed); BOOL SetUserObjectInformationW(HANDLE h, int index, PVOID info, DWORD length)"
+  indexes: "UOI_FLAGS 1, UOI_NAME 2, UOI_TYPE 3, UOI_USER_SID 4, UOI_HEAPSIZE 5, UOI_IO 6 (winuser.h)"
+chrome:
+  flow: "the broker makes an alternate window station and an alternate desktop for its targets in the browser process (CreateWindowStationW 2 calls, one of them fails with ERROR_ACCESS_DENIED; GetProcessWindowStation 2, SetProcessWindowStation 2 (switch to the new station to create the desktop there, then back), CreateDesktopW 1, GetThreadDesktop 2, GetUserObjectInformationW 44, CloseDesktop 1, CloseWindowStation 1) and starts every confined child with CreateProcessAsUserW (creation flags 0x8040C: CREATE_SUSPENDED|DETACHED_PROCESS|CREATE_UNICODE_ENVIRONMENT|EXTENDED_STARTUPINFO_PRESENT); by the sandbox's published design STARTUPINFO.lpDesktop names the alternate \"station\\desktop\". The arguments of the window station and desktop calls are not in the committed traces"
+rules:
+  values: "station: UOI_FLAGS ok, 12 zero bytes; UOI_NAME = the name (need = 2 x (length + 1)); UOI_TYPE = \"WindowStation\" (28 bytes); UOI_USER_SID ok with 0 bytes; UOI_HEAPSIZE and UOI_IO: error 1 (ERROR_INVALID_FUNCTION). Desktop: UOI_FLAGS 12 zero bytes; UOI_NAME; UOI_TYPE = \"Desktop\" (16 bytes); UOI_USER_SID ok, 0 bytes; UOI_HEAPSIZE ok, 4 bytes (the value depends on the machine and is not recorded); UOI_IO ok, 4 bytes, value 0"
+  bad_index: "index 0 and 99: FALSE, error 87"
+  size_negotiation: "a buffer too short for UOI_NAME (4 bytes, or 0 bytes with a NULL pointer), UOI_FLAGS (11 bytes), UOI_TYPE (2 bytes): FALSE, error 122, the needed size is stored (22 or 26 for the names of the test, 12, 28 or 16); with a NULL needed-size pointer and length 0 the call still fails with 122"
+  bad_handles: "a NULL handle: FALSE, last error untouched; a process handle and INVALID_HANDLE_VALUE: FALSE, error 1"
+  access: "a station handle with WINSTA_ENUMDESKTOPS only: UOI_NAME fails with 5; with WINSTA_READATTRIBUTES it works; desktop handles opened with DESKTOP_ENUMERATE only or DESKTOP_WRITEOBJECTS only can read UOI_NAME and UOI_FLAGS"
+  set_flags: "SetUserObjectInformationW(station, UOI_FLAGS, {fInherit = 1, 0, 0}, 12) = TRUE and UOI_FLAGS then reads 01 00 00 00 ...; SetUserObjectInformationW(UOI_NAME) fails with 87"
+errors:
+  short_buffer: "ERROR_INSUFFICIENT_BUFFER (122)"
+  bad_index: "ERROR_INVALID_PARAMETER (87)"
+  wrong_object: "ERROR_INVALID_FUNCTION (1)"
+  no_access: "ERROR_ACCESS_DENIED (5)"
+side_effects: "none (SetUserObjectInformationW changes the station's flags)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  UOI_USER_SID with a real value (the tests' objects have none), the interactive session's stations, UOI_HEAPSIZE values.

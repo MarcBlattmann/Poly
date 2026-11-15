@@ -58,9 +58,8 @@ pub unsafe extern "system" fn CreatePipe(
     if read.is_null() || write.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SECURITY_ATTRIBUTES.bInheritHandle (minwinbase.h: at 16 on x64).
-    // SAFETY: the caller's structure when non-null.
-    let inherit = !attributes.is_null() && unsafe { (attributes.add(16) as *const i32).read_unaligned() } != 0;
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    let inherit = unsafe { crate::base::sa_inherits(attributes) };
     let pid = crate::process::GetCurrentProcessId();
     let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
     let name = NtName::new(pipe::nt_name(pid, serial));

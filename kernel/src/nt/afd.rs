@@ -164,7 +164,7 @@ impl NtSocket for KernelSocket {
         // A zero-length receive returns at once (nothing to wait for).
         if buf.is_empty() {
             let from = self.peer_addr().or_else(|_| self.local_addr())?;
-            return Ok(RecvInfo { len: 0, full_len: 0, from });
+            return Ok(RecvInfo { len: 0, full_len: 0, from, meta: Default::default() });
         }
         self.wait_for(PollEvents::READABLE, wait, || self.inner.recv(buf, peek))
     }

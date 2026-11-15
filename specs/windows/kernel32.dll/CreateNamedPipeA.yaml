@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateNamedPipeA.yaml
+id: windows/api/kernel32.dll/CreateNamedPipeA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "CreateNamedPipeA function (winbase.h), Named Pipe Type, Read, and Wait Modes, Pipe Names". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Creates the first or another instance of a named pipe, with an ANSI name. 9 packages import it; git's bash (MSYS2) stops with "couldn't create signal pipe, Win32 error 2" on the stub. It does what CreateNamedPipeW does (see its sheet) after converting the name from the ANSI code page, so this sheet records the name rules, the parameter checks, and what a client sees.
+interface:
+  signature: "HANDLE CreateNamedPipeA(LPCSTR lpName, DWORD dwOpenMode, DWORD dwPipeMode, DWORD nMaxInstances, DWORD nOutBufferSize, DWORD nInBufferSize, DWORD nDefaultTimeOut, LPSECURITY_ATTRIBUTES lpSecurityAttributes)"
+  returns: "a handle of the server end, or INVALID_HANDLE_VALUE with the last error set"
+rules:
+  name_prefix: "the name must be `\\\\.\\pipe\\` followed by a suffix, in any letter case for the prefix (`\\\\.\\PIPE\\x` works), with `/` accepted for `\\` (`//./pipe/x` works) and `\\\\?\\pipe\\x` accepted too. Other forms fail: an empty name fails with ERROR_PATH_NOT_FOUND (3); `pt_x` (no prefix), `\\\\.\\pipe\\` (nothing after it), `\\\\localhost\\pipe\\x`, `\\\\.\\mailslot\\x`, `C:\\pt_x` and `\\pipe\\x` fail with ERROR_INVALID_NAME (123); `\\\\pipe\\x` fails with ERROR_BAD_NETPATH (53)"
+  name_suffix: "the suffix may contain almost anything: spaces, dots, a backslash inside (`pt_cnpa_dir\\n4`) or at the end, `*`, `?`, `:`, `/`, `\"`, `<`, `|`, control characters, a tab, trailing spaces and trailing dots. A suffix of `.`, `..` or a single space fails with ERROR_INVALID_NAME (123). A suffix of 200 bytes works; one of 255, 256 or 300 bytes fails with ERROR_PATH_NOT_FOUND (3) (the limit lies between: the tests only try 200 and 255)"
+  case: "pipe names are matched without regard to case, also for non-ASCII letters of the code page: a pipe created as `pt_cnpa_` + 0xE9 + 0x80 is opened by the W name with U+00E9 U+20AC and with U+00C9 U+20AC and by the A name with 0xC9 0x80; the bytes are converted through the ANSI code page first (opening with U+00E9 U+0080 fails with ERROR_FILE_NOT_FOUND (2)); a byte with no defined character (0x81) is U+0081"
+  instances: "nMaxInstances: 1 to 255 (255 is PIPE_UNLIMITED_INSTANCES); 0 and 256 and more (1000, 0xFFFFFFFF) fail with ERROR_INVALID_PARAMETER (87). GetNamedPipeInfo reports the value given (1, 2, 254, 255). Creating more instances than the maximum fails with ERROR_PIPE_BUSY (231); asking for a different maximum than the first instance had also fails with 231; with FILE_FLAG_FIRST_PIPE_INSTANCE (0x80000) the second creation fails with ERROR_ACCESS_DENIED (5), and an instance created without the flag afterwards (within the maximum) works. After the first instance is closed the name is free again"
+  open_mode: "dwOpenMode is PIPE_ACCESS_INBOUND 1, OUTBOUND 2 or DUPLEX 3 plus the flags FILE_FLAG_WRITE_THROUGH 0x80000000, FILE_FLAG_OVERLAPPED 0x40000000, FILE_FLAG_FIRST_PIPE_INSTANCE 0x80000, WRITE_DAC 0x40000. 0, 4, 7, a flag alone (0x80000000, 0x40000000), the bits 0x10000, 0x20000, 0x100000 or 0x20000000 fail with ERROR_INVALID_PARAMETER (87)"
+  pipe_mode: "dwPipeMode: PIPE_NOWAIT 1, PIPE_READMODE_MESSAGE 2, PIPE_TYPE_MESSAGE 4, PIPE_REJECT_REMOTE_CLIENTS 8; 0 is byte mode. READMODE_MESSAGE needs TYPE_MESSAGE: 2 and 3 fail with 87; 4, 5, 6, 7, 8, 0xC, 0xF work; bits 0x10, 0x100 or more fail with 87. GetNamedPipeInfo on the server handle: flags 0x1 for a byte pipe (PIPE_SERVER_END), 0x5 for a message pipe, 0x9 and 0xD when PIPE_REJECT_REMOTE_CLIENTS is given (bit 0x8 shows); on a client handle the flags are 0"
+  buffer_sizes: "the sizes are reported back as given by GetNamedPipeInfo (0, 1, 100, 511, 512, 4096, 5000, 65536, 1 MiB, 0x7FFFFFFF and 0xFFFFFFFF are all accepted and reported unchanged); the client end reports the same sizes; for an inbound-only pipe the handle has no right to ask (GetNamedPipeInfo on an OUTBOUND server handle fails and writes nothing)"
+  timeout: "0, 1, 50, 1000 and 0xFFFFFFFF are all accepted"
+  client: "a client that opens the name with CreateFileA (GENERIC_READ|GENERIC_WRITE, OPEN_EXISTING) gets a handle; ConnectNamedPipe on the server handle after that returns FALSE with ERROR_PIPE_CONNECTED (535); bytes written by one end are read by the other in both directions"
+errors:
+  error_invalid_parameter: "87: open mode, pipe mode or instance count out of range"
+  error_invalid_name: "123: no pipe prefix, or the suffix is '.', '..' or ' '"
+  error_path_not_found: "3: empty name, or a suffix that is too long"
+  error_bad_netpath: "53: `\\\\pipe\\x`"
+  error_pipe_busy: "231: all instances taken or another maximum asked"
+  error_access_denied: "5: the first-instance flag when the pipe exists"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll. The line of every creation shows the parameters and either a handle or INVALID_HANDLE_VALUE with the error; GetNamedPipeInfo lines show the flags, sizes and maximum.
+not_covered: >
+  Security attributes, overlapped I/O on the pipe, message mode transfers, what a remote client sees, the exact limit between 200 and 255 bytes, a NULL name.

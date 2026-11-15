@@ -23,6 +23,9 @@
 //! same call, and its event is signalled after the block is written.
 
 pub mod services;
+pub mod wow64;
+
+pub use wow64::{View, view_of, wow64_view};
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -207,10 +210,8 @@ pub fn finish<K: NtKernel>(k: &mut K) {
     }
     for c in &mine {
         // IO_STATUS_BLOCK (wdm.h): Status (in a union with a pointer) at 0,
-        // Information at 8. Nothing is returned in Information.
-        let mut block = [0u8; 16];
-        block[..4].copy_from_slice(&c.status.0.to_le_bytes());
-        let _ = crate::abi::write(k, c.iosb, &block);
+        // Information at 8 (4 for a 32-bit caller). Nothing is returned in Information.
+        let _ = crate::io::services::write_iosb(k, c.iosb, c.status, 0);
     }
     k.with_state(|sys, _, b| {
         for c in &mine {
@@ -327,6 +328,43 @@ impl ParseHook for KeyParse<'_> {
 /// one view, so they are dropped.
 pub const fn key_access(desired: u64) -> AccessMask {
     desired as u32 & !KEY_WOW64_RES
+}
+
+/// Apply the registry view of the call (ADR 0186, stage 2) to the key name `attrs` gives:
+/// when the call's view is the 32-bit one ([`wow64::view_of`]: a 32-bit caller, or
+/// `KEY_WOW64_32KEY` in `access`) and the full path (the root key's path and the relative name,
+/// or the absolute name) is a redirected key ([`wow64_view`]), the name becomes the absolute
+/// physical path and the root handle is dropped. A root that is no key, or whose name does not
+/// resolve, is left to the object manager as it is.
+pub fn apply_view(
+    sys: &mut crate::system::NtSystem,
+    caller: &Caller,
+    wow64: bool,
+    access: u64,
+    attrs: &mut crate::abi::Attributes,
+) {
+    if view_of(wow64, access) != View::X86 {
+        return;
+    }
+    let name = attrs.name.as_deref().unwrap_or(&[]);
+    let mut full = Vec::new();
+    match attrs.root {
+        Some(h) => {
+            if name.first() == Some(&u16::from(b'\\')) {
+                return;
+            }
+            let Ok((_, _, key)) = key_of_handle(sys, caller, h, 0) else { return };
+            let Ok(root) = sys.registry.reg.full_path(key) else { return };
+            full.extend_from_slice(&root);
+            full.push(u16::from(b'\\'));
+            full.extend_from_slice(name);
+        }
+        None => full.extend_from_slice(name),
+    }
+    if let Some(physical) = wow64_view(&full, wow64, access) {
+        attrs.root = None;
+        attrs.name = Some(physical);
+    }
 }
 
 /// A key handle's object, open instance and key, checked for `access`.

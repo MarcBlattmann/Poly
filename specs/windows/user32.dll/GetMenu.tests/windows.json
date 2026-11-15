@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gm_class",
+      "exe_sha256": "6edd888e943e509166c059d6b99a171f952d33274e29f40b2a4648af843f8154",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3Mgd2l0aCBhIG51bWJlcmVkIG1lbnU6IDEKY2xhc3Mgd2l0aCBhIG5hbWVkIG1lbnU6IDEKY2xhc3Mgd2l0aCBubyBtZW51OiAxCmNsYXNzIHdpdGggYSBtZW51IHRoYXQgZG9lcyBub3QgZXhpc3Q6IDEKdHdvIHdpbmRvd3M6IG1lbnVzIHdpbmRvdyB3aW5kb3cgZGlmZmVyZW50IDEgaXRlbXMgNCA0Cm5hbWVkIG1lbnU6IHdpbmRvdyBpdGVtcyAxCmNsYXNzIHdpdGhvdXQgYSBtZW51OiBudWxsCmNsYXNzIHdob3NlIG1lbnUgaXMgbWlzc2luZzogd2luZG93IHdpbmRvdyBtZW51IG51bGwKYSBjaGlsZCB3aW5kb3cgb2YgdGhlIGNsYXNzOiB3aW5kb3cKYW4gZXhwbGljaXQgbWVudSBvdmVycmlkZXMgdGhlIGNsYXNzOiAxCm93biBtZW51IGRlc3Ryb3llZCB3aXRoIGl0cyB3aW5kb3c6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class with a numbered menu: 1\nclass with a named menu: 1\nclass with no menu: 1\nclass with a menu that does not exist: 1\ntwo windows: menus window window different 1 items 4 4\nnamed menu: window items 1\nclass without a menu: null\nclass whose menu is missing: window window menu null\na child window of the class: window\nan explicit menu overrides the class: 1\nown menu destroyed with its window: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

@@ -113,6 +113,9 @@ pub const PROCESS_BASIC_INFORMATION: u32 = 0;
 /// (ADR 0087).
 pub const PROCESS_TIMES: u32 = 4;
 pub const KERNEL_USER_TIMES_SIZE: usize = 32;
+/// `ProcessWow64Information` (Learn: `NtQueryInformationProcess`): a `ULONG_PTR`, nonzero (Poly:
+/// the address of its 32-bit PEB) when the process runs as a 32-bit one (ADR 0186).
+pub const PROCESS_WOW64_INFORMATION: u32 = 26;
 
 /// `THREADINFOCLASS` (`winternl.h` / `ntpsapi.h`).
 pub const THREAD_BASIC_INFORMATION: u32 = 0;

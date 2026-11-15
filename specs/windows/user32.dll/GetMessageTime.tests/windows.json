@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gmt_basic",
+      "exe_sha256": "e74c9b26009895454ad408a5dbb6c8020bdc351a40b46b7a05bbee92313832e3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIGFueSBtZXNzYWdlIHdhcyB0YWtlbjogemVybwpvayByZWdpc3RlcmVkCndpbmRvdyBjcmVhdGVkOiAxCj09IHRocmVlIG1lc3NhZ2VzIHBvc3RlZCBvbmUgYWZ0ZXIgdGhlIG90aGVyCiAgdGFrZW4gNCwgaGFuZGxlZCAzCiAgZWFjaCB0aW1lIGlzIG5lYXIgdGhlIHRpY2sgY291bnQ6IDEgMSAxCiAgbm9uLWRlY3JlYXNpbmc6IDEKICBHZXRNZXNzYWdlVGltZSBpbnNpZGUgdGhlIHByb2NlZHVyZSBlcXVhbHMgTVNHLnRpbWUgaW4gMyBvZiAzCiAgYWZ0ZXIgdGhlIGxvb3A6IGVxdWFscyB0aGUgbGFzdCBtZXNzYWdlJ3MgdGltZTogMQo9PSB0d28gbWVzc2FnZXMgcG9zdGVkIDEyMCBtcyBhcGFydCwgdGFrZW4gdG9nZXRoZXIKICBoYW5kbGVkIDIKICB0aGUgc2Vjb25kIGlzIGF0IGxlYXN0IDUwIG1zIGFmdGVyIHRoZSBmaXJzdDogMQogIHRoZSBmaXJzdCBtZXNzYWdlIGlzIGF0IGxlYXN0IDEwMCBtcyBvbGQgYWx0aG91Z2ggaXQgd2FzIHRha2VuIGp1c3Qgbm93OiAxCj09IGEgbWVzc2FnZSBzZW50IHdoaWxlIGEgcG9zdGVkIG9uZSBpcyBoYW5kbGVkCiAgdGhlIHNlbnQgbWVzc2FnZSBzZWVzIHRoZSBwb3N0ZWQgbWVzc2FnZSdzIHRpbWU6IDEKICB0aGUgcG9zdGVkIG1lc3NhZ2UncyB0aW1lIGlzIG5lYXIgdGhlIHRpY2sgY291bnQ6IDEKPT0gYSBtZXNzYWdlIHNlbnQgZnJvbSB0aGUgbG9vcCdzIGJvZHksIGEgY2FsbCBhZnRlciBhIHBhdXNlCiAgdGhlIHNlbnQgbWVzc2FnZSBzZWVzIHRoZSBsYXN0IHRha2VuIG1lc3NhZ2UncyB0aW1lOiAxCiAgYSBkaXJlY3QgY2FsbCA4MCBtcyBsYXRlciByZXR1cm5zIHRoZSBzYW1lOiAxCj09IFBlZWtNZXNzYWdlVyB3aXRoIFBNX05PUkVNT1ZFIG9mIGEgbWVzc2FnZSBwb3N0ZWQgbGF0ZXIKICBwZWVrZWQ6IDEKICB0aGUgbWVzc2FnZSBpcyBhdCBsZWFzdCA1MCBtcyBuZXdlciB0aGFuIHRoZSBsYXN0IHRha2VuIG9uZTogMQogIEdldE1lc3NhZ2VUaW1lIGFmdGVyd2FyZHMgaXMgc3RpbGwgdGhlIGxhc3QgdGFrZW4gbWVzc2FnZSdzOiAwCiAgR2V0TWVzc2FnZVRpbWUgYWZ0ZXJ3YXJkcyBpcyB0aGUgcGVla2VkIG1lc3NhZ2UnczogMQogIHRha2VuIGFuZCBoYW5kbGVkIGFmdGVyd2FyZHM6IDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before any message was taken: zero\nok registered\nwindow created: 1\n== three messages posted one after the other\n  taken 4, handled 3\n  each time is near the tick count: 1 1 1\n  non-decreasing: 1\n  GetMessageTime inside the procedure equals MSG.time in 3 of 3\n  after the loop: equals the last message's time: 1\n== two messages posted 120 ms apart, taken together\n  handled 2\n  the second is at least 50 ms after the first: 1\n  the first message is at least 100 ms old although it was taken just now: 1\n== a message sent while a posted one is handled\n  the sent message sees the posted message's time: 1\n  the posted message's time is near the tick count: 1\n== a message sent from the loop's body, a call after a pause\n  the sent message sees the last taken message's time: 1\n  a direct call 80 ms later returns the same: 1\n== PeekMessageW with PM_NOREMOVE of a message posted later\n  peeked: 1\n  the message is at least 50 ms newer than the last taken one: 1\n  GetMessageTime afterwards is still the last taken message's: 0\n  GetMessageTime afterwards is the peeked message's: 1\n  taken and handled afterwards: 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 365
+    }
+  ]
+}

@@ -3,7 +3,9 @@
 use super::{frame, inject, ipv4_packet, udp_v4};
 use crate::sim::{Dir, IP_A, IP_B, Sim};
 use crate::wire::{ethernet, ipv4, proto};
-use crate::{Domain, Errno, Readiness, RecvFlags, Shutdown, SockType};
+use crate::{
+    Domain, Errno, IFINDEX_DEVICE, IFINDEX_LOOPBACK, Readiness, RecvFlags, RecvInfo, RxMeta, Shutdown, SockType,
+};
 use alloc::vec;
 use core::net::{Ipv4Addr, SocketAddr};
 use core::time::Duration;
@@ -291,4 +293,91 @@ fn loopback_down_is_unreachable_and_up_works() {
     s.a.set_loopback(false);
     s.run_for(Duration::from_millis(10));
     assert_eq!(s.a.recv_from(srv, &mut buf, RecvFlags::default()).map(|i| i.len), Err(Errno::EAGAIN));
+}
+
+/// Receive one datagram on `h` of `stack` (what the socket layer asks for).
+fn recv_one(stack: &mut crate::Stack, h: crate::SocketHandle) -> RecvInfo {
+    let mut buf = [0u8; 64];
+    stack.recv_from(h, &mut buf, RecvFlags::default()).expect("a datagram is queued")
+}
+
+#[test]
+fn received_datagrams_remember_the_header_they_came_with() {
+    let mut s = Sim::new(48);
+    // IPv4 over loopback: the destination, the loopback interface, the
+    // sender's TOS and TTL (IP_PKTINFO, IP_RECVTOS, IP_RECVTTL of ip(7)).
+    let srv = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.bind(srv, sa(Ipv4Addr::UNSPECIFIED, 53)).unwrap();
+    let u = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.set_ip_options(u, Some(33), 0x2e).unwrap();
+    s.a.send_to(u, b"query", Some(sa(Ipv4Addr::LOCALHOST, 53))).unwrap();
+    s.run_for(Duration::from_millis(10));
+    let mut buf = [0u8; 16];
+    let peek = s.a.recv_from(srv, &mut buf, RecvFlags { peek: true }).unwrap();
+    let info = recv_one(&mut s.a, srv);
+    let want = RxMeta { dst: Some(Ipv4Addr::LOCALHOST.into()), ifindex: IFINDEX_LOOPBACK, tos: 0x2e, ttl: 33 };
+    assert_eq!((peek.meta, info.meta), (want, want), "a peek reports it too");
+    // Without options: TOS 0 and the stack's TTL.
+    s.a.set_ip_options(u, None, 0).unwrap();
+    s.a.send_to(u, b"again", Some(sa(Ipv4Addr::LOCALHOST, 53))).unwrap();
+    s.run_for(Duration::from_millis(10));
+    let m = recv_one(&mut s.a, srv).meta;
+    assert_eq!((m.tos, m.ttl, m.ifindex), (0, s.a.default_ttl(), IFINDEX_LOOPBACK));
+    // IPv4 over the device: the address it was sent to (the host's own),
+    // the Ethernet interface.
+    let srv_b = s.b.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.b.bind(srv_b, sa(Ipv4Addr::UNSPECIFIED, 7)).unwrap();
+    let c = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.set_ip_options(c, Some(9), 0x10).unwrap();
+    s.a.send_to(c, b"hello", Some(sa(IP_B, 7))).unwrap();
+    assert!(s.run_until(Duration::from_secs(1), |s| s.b.readiness(srv_b).unwrap().contains(Readiness::READABLE)));
+    let info = recv_one(&mut s.b, srv_b);
+    assert_eq!(info.from.ip(), IP_A);
+    assert_eq!(info.meta, RxMeta { dst: Some(IP_B.into()), ifindex: IFINDEX_DEVICE, tos: 0x10, ttl: 9 });
+    // What has not come from the network has no header to report.
+    assert_eq!(RxMeta::default().dst, None);
+}
+
+#[test]
+fn received_ipv6_datagrams_remember_traffic_class_and_hop_limit() {
+    use core::net::Ipv6Addr;
+    let mut s = Sim::new(49);
+    let lo = |port| SocketAddr::new(Ipv6Addr::LOCALHOST.into(), port);
+    let srv = s.a.socket(Domain::Inet6, SockType::Datagram, None).unwrap();
+    s.a.bind(srv, lo(53)).unwrap();
+    let u = s.a.socket(Domain::Inet6, SockType::Datagram, None).unwrap();
+    // IPV6_TCLASS is the socket's TOS; IPV6_UNICAST_HOPS its TTL.
+    s.a.set_ip_options(u, Some(5), 0xb8).unwrap();
+    s.a.send_to(u, b"v6", Some(lo(53))).unwrap();
+    s.run_for(Duration::from_millis(10));
+    let info = recv_one(&mut s.a, srv);
+    assert_eq!(
+        info.meta,
+        RxMeta { dst: Some(Ipv6Addr::LOCALHOST.into()), ifindex: IFINDEX_LOOPBACK, tos: 0xb8, ttl: 5 }
+    );
+    // Over the device.
+    let b_ll = s.b.ipv6_link_local().unwrap();
+    let srv_b = s.b.socket(Domain::Inet6, SockType::Datagram, None).unwrap();
+    s.b.bind(srv_b, SocketAddr::new(b_ll.into(), 53)).unwrap();
+    s.a.set_ip_options(u, None, 0x2e).unwrap();
+    s.a.send_to(u, b"v6 dev", Some(SocketAddr::new(b_ll.into(), 53))).unwrap();
+    assert!(s.run_until(Duration::from_secs(1), |s| s.b.readiness(srv_b).unwrap().contains(Readiness::READABLE)));
+    let info = recv_one(&mut s.b, srv_b);
+    assert_eq!(
+        info.meta,
+        RxMeta { dst: Some(b_ll.into()), ifindex: IFINDEX_DEVICE, tos: 0x2e, ttl: s.a.default_ttl() }
+    );
+}
+
+#[test]
+fn path_mtu_of_a_connected_socket() {
+    let mut s = Sim::new(50);
+    let u = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    assert_eq!(s.a.path_mtu_to_peer(u), Err(Errno::ENOTCONN));
+    s.a.connect(u, sa(IP_B, 9)).unwrap();
+    assert_eq!(s.a.path_mtu_to_peer(u), Ok(1500));
+    s.a.connect(u, sa(Ipv4Addr::LOCALHOST, 9)).unwrap();
+    assert!(s.a.path_mtu_to_peer(u).unwrap() >= 65535, "loopback carries whole datagrams");
+    let t = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
+    assert_eq!(s.a.path_mtu_to_peer(t), Err(Errno::ENOTCONN));
 }

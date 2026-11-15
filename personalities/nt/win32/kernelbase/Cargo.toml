@@ -18,6 +18,8 @@ poly-rtl = { path = "../../../../crates/poly-rtl" }
 poly-ntobj = { path = "../../../../crates/poly-ntobj" }
 poly-security = { path = "../../../../crates/poly-security" }
 poly-pe = { path = "../../../../crates/poly-pe" }
+# The loader structures' offsets for this build's pointer width (ADR 0186).
+poly-ldr = { path = "../../../../crates/poly-ldr" }
 
 [build-dependencies]
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }

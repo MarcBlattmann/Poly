@@ -6,9 +6,10 @@ use crate::sha256;
 use crate::syscalls::{self, ArgKind};
 use crate::trace::{Arg, Event, Exit, Syscall, Trace};
 use crate::util::{self, Result};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::collections::BTreeSet;
 use std::io::Read;
-use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
@@ -38,7 +39,13 @@ impl Tracer {
 }
 
 /// Run `program` on the host with `tracer`.
+///
+/// The reference system is Linux (ptrace, namespaces, `/proc`): on another
+/// host this reports that instead (ADR 0124).
 pub fn run(tracer: Tracer, program: &Path, test: &str, timeout: Duration) -> Result<Trace> {
+    if cfg!(not(unix)) {
+        return Err(util::needs_linux("trace and diff runs (reference runs: ptrace, namespaces, /proc)"));
+    }
     // Absolute: the program starts in `/` ([`reference`]).
     let program = &util::absolute(program);
     let mut t = match tracer {
@@ -102,6 +109,23 @@ pub fn run_app(
     Ok(t)
 }
 
+/// What a finished process did: its exit code, or the signal that ended it.
+#[cfg(unix)]
+fn exit_of(status: std::process::ExitStatus) -> Exit {
+    use std::os::unix::process::ExitStatusExt;
+    match (status.code(), status.signal()) {
+        (Some(c), _) => Exit::Code(c),
+        (None, Some(s)) => Exit::Signal(s),
+        _ => Exit::Unknown,
+    }
+}
+
+/// What a finished process did: Windows has exit codes only.
+#[cfg(not(unix))]
+fn exit_of(status: std::process::ExitStatus) -> Exit {
+    status.code().map_or(Exit::Unknown, Exit::Code)
+}
+
 /// Output and status of a command run with a timeout.
 pub(crate) struct Finished {
     pub exit: Exit,
@@ -115,6 +139,7 @@ pub(crate) struct Finished {
 /// ([`ptrace::cloexec_from_3`]), with the fixed umask
 /// ([`crate::identity::REFERENCE_UMASK`]), in `/`: as Poly's test init
 /// starts it.
+#[cfg(unix)]
 fn reference(cmd: &mut Command) -> &mut Command {
     cmd.current_dir("/");
     // SAFETY: the hook runs in the child between fork and exec and makes
@@ -127,6 +152,13 @@ fn reference(cmd: &mut Command) -> &mut Command {
             Ok(())
         })
     }
+}
+
+/// Windows has neither descriptors to close nor a umask nor a `/`; the
+/// reference runs that use this need Linux ([`run`]) and report so.
+#[cfg(not(unix))]
+fn reference(cmd: &mut Command) -> &mut Command {
+    cmd
 }
 
 /// How long the output of a finished or killed command is waited for past
@@ -172,14 +204,10 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
     let deadline = start + timeout;
     let exit = loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-            break match (status.code(), status.signal()) {
-                (Some(c), _) => Exit::Code(c),
-                (None, Some(s)) => Exit::Signal(s),
-                _ => Exit::Unknown,
-            };
+            break exit_of(status);
         }
         if Instant::now() > deadline {
-            kill_tree(child.id() as libc::pid_t);
+            kill_tree(child.id());
             let _ = child.kill();
             let _ = child.wait();
             break Exit::Timeout;
@@ -196,6 +224,7 @@ pub(crate) fn run_command(cmd: &mut Command, timeout: Duration) -> Result<Finish
 }
 
 /// The processes whose parent is in `parents`, from `/proc/<pid>/stat`.
+#[cfg(unix)]
 fn children_of(parents: &BTreeSet<libc::pid_t>) -> BTreeSet<libc::pid_t> {
     let mut found = BTreeSet::new();
     for entry in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
@@ -214,7 +243,9 @@ fn children_of(parents: &BTreeSet<libc::pid_t>) -> BTreeSet<libc::pid_t> {
 /// process descended from it, wherever it went (another process group,
 /// another session). The tree is stopped first, until a scan finds no new
 /// process, so nothing forks past the kill.
-fn kill_tree(pid: libc::pid_t) {
+#[cfg(unix)]
+fn kill_tree(pid: u32) {
+    let pid = pid as libc::pid_t;
     let mut stopped = BTreeSet::from([pid]);
     // SAFETY: kill has no memory-safety requirements. `pid` is our
     // unreaped child, so it cannot have been reused.
@@ -239,6 +270,13 @@ fn kill_tree(pid: libc::pid_t) {
         // a parent's wait (its parent is stopped too, or is us) frees a pid.
         unsafe { libc::kill(p, libc::SIGKILL) };
     }
+}
+
+/// Windows: the command's process tree, by `taskkill /T` on its own pid
+/// (what the Unix version does with signals and `/proc`).
+#[cfg(not(unix))]
+fn kill_tree(pid: u32) {
+    let _ = Command::new("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
 }
 
 fn untraced(program: &Path, test: &str, timeout: Duration) -> Result<Trace> {

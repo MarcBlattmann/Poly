@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "24260e201c8a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:34Z",
+  "tests": [
+    {
+      "name": "isroot_drive",
+      "exe_sha256": "c3e4f7a8cc1f6688b7f9ecc3154b6cfeedd66995bd9c033e1ce0800066d846cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UGF0aElzUm9vdFcgIkM6IiAtPiAwClBhdGhJc1Jvb3RXICJDOlwiIC0+IDEKUGF0aElzUm9vdFcgIkM6XFwiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGEiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcIiAtPiAwClBhdGhJc1Jvb3RXICJDOlxhXGIiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcYlwiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcYi50eHQiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcXGIiIC0+IDAKUGF0aElzUm9vdFcgIkM6XFxhIiAtPiAwClBhdGhJc1Jvb3RXICJDOmEiIC0+IDAKUGF0aElzUm9vdFcgIkM6YVxiIiAtPiAwClBhdGhJc1Jvb3RXICJDOmFcIiAtPiAwClBhdGhJc1Jvb3RXICJjOlxhIiAtPiAwClBhdGhJc1Jvb3RXICJjOlxBXEIiIC0+IDAKUGF0aElzUm9vdFcgIjE6XGEiIC0+IDAKUGF0aElzUm9vdFcgIjo6XGEiIC0+IDAKUGF0aElzUm9vdFcgIkM6LyIgLT4gMApQYXRoSXNSb290VyAiQzovYSIgLT4gMApQYXRoSXNSb290VyAiQzovYS9iIiAtPiAwClBhdGhJc1Jvb3RXICJDOi9hXGIiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGEvYiIgLT4gMApQYXRoSXNSb290VyAiQ0M6XGEiIC0+IDAKUGF0aElzUm9vdFcgIkM6OlxhIiAtPiAwClBhdGhJc1Jvb3RXICJDOlwuIiAtPiAwClBhdGhJc1Jvb3RXICJDOlwuLiIgLT4gMApQYXRoSXNSb290VyAiQzpcYVwuIiAtPiAwClBhdGhJc1Jvb3RXICJDOlxhXC4uIiAtPiAwClBhdGhJc1Jvb3RXICJDOlxhXC4uXGIiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcLlxiIiAtPiAwClBhdGhJc1Jvb3RXICJDOlxhXGJcLi4iIC0+IDAKUGF0aElzUm9vdFcgIkM6XC4uXGEiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGEgYlxjIGQiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcYiAiIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcYi4iIC0+IDAKUGF0aElzUm9vdFcgIkM6XGFcYi4uIiAtPiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PathIsRootW \"C:\" -> 0\nPathIsRootW \"C:\\\" -> 1\nPathIsRootW \"C:\\\\\" -> 0\nPathIsRootW \"C:\\a\" -> 0\nPathIsRootW \"C:\\a\\\" -> 0\nPathIsRootW \"C:\\a\\b\" -> 0\nPathIsRootW \"C:\\a\\b\\\" -> 0\nPathIsRootW \"C:\\a\\b.txt\" -> 0\nPathIsRootW \"C:\\a\\\\b\" -> 0\nPathIsRootW \"C:\\\\a\" -> 0\nPathIsRootW \"C:a\" -> 0\nPathIsRootW \"C:a\\b\" -> 0\nPathIsRootW \"C:a\\\" -> 0\nPathIsRootW \"c:\\a\" -> 0\nPathIsRootW \"c:\\A\\B\" -> 0\nPathIsRootW \"1:\\a\" -> 0\nPathIsRootW \"::\\a\" -> 0\nPathIsRootW \"C:/\" -> 0\nPathIsRootW \"C:/a\" -> 0\nPathIsRootW \"C:/a/b\" -> 0\nPathIsRootW \"C:/a\\b\" -> 0\nPathIsRootW \"C:\\a/b\" -> 0\nPathIsRootW \"CC:\\a\" -> 0\nPathIsRootW \"C::\\a\" -> 0\nPathIsRootW \"C:\\.\" -> 0\nPathIsRootW \"C:\\..\" -> 0\nPathIsRootW \"C:\\a\\.\" -> 0\nPathIsRootW \"C:\\a\\..\" -> 0\nPathIsRootW \"C:\\a\\..\\b\" -> 0\nPathIsRootW \"C:\\a\\.\\b\" -> 0\nPathIsRootW \"C:\\a\\b\\..\" -> 0\nPathIsRootW \"C:\\..\\a\" -> 0\nPathIsRootW \"C:\\a b\\c d\" -> 0\nPathIsRootW \"C:\\a\\b \" -> 0\nPathIsRootW \"C:\\a\\b.\" -> 0\nPathIsRootW \"C:\\a\\b..\" -> 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "isroot_prefix",
+      "exe_sha256": "cc8078c093eb0f8e103a4e4ef28e0621c7bd782590f3d98350319f26e1a603c3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UGF0aElzUm9vdFcgIlxcP1xDOiIgLT4gMApQYXRoSXNSb290VyAiXFw/XEM6XCIgLT4gMQpQYXRoSXNSb290VyAiXFw/XEM6XGEiIC0+IDAKUGF0aElzUm9vdFcgIlxcP1xDOlxhXCIgLT4gMApQYXRoSXNSb290VyAiXFw/XEM6XGFcYiIgLT4gMApQYXRoSXNSb290VyAiXFw/XEM6XGFcYi50eHQiIC0+IDAKUGF0aElzUm9vdFcgIlxcP1xjOlxhIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cQzpcXGEiIC0+IDAKUGF0aElzUm9vdFcgIlxcP1wiIC0+IDAKUGF0aElzUm9vdFcgIlxcP1xhIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cYVxiIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cVU5DIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cVU5DXCIgLT4gMQpQYXRoSXNSb290VyAiXFw/XFVOQ1xzIiAtPiAxClBhdGhJc1Jvb3RXICJcXD9cVU5DXHNcIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cVU5DXHNcc2giIC0+IDEKUGF0aElzUm9vdFcgIlxcP1xVTkNcc1xzaFwiIC0+IDAKUGF0aElzUm9vdFcgIlxcP1xVTkNcc1xzaFxmIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cVU5DXHNcc2hcZlxnIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cdW5jXHNcc2hcZiIgLT4gMApQYXRoSXNSb290VyAiXFw/XFZvbHVtZXsxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODlhYmN9XCIgLT4gMQpQYXRoSXNSb290VyAiXFw/XFZvbHVtZXsxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODlhYmN9IiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cVm9sdW1lezEyMzQ1Njc4LTEyMzQtMTIzNC0xMjM0LTEyMzQ1Njc4OWFiY31cYSIgLT4gMApQYXRoSXNSb290VyAiXFw/XFZvbHVtZXsxMjM0NTY3OC0xMjM0LTEyMzQtMTIzNC0xMjM0NTY3ODlhYmN9XGFcYiIgLT4gMApQYXRoSXNSb290VyAiXFw/XEM6XGFcLlxiIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cQzpcYVwuLlxiIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9cQzpcYS9iIiAtPiAwClBhdGhJc1Jvb3RXICJcXD9ccGlwZVx4IiAtPiAwClBhdGhJc1Jvb3RXICJcXC5cQzoiIC0+IDEKUGF0aElzUm9vdFcgIlxcLlxDOlwiIC0+IDAKUGF0aElzUm9vdFcgIlxcLlxDOlxhXGIiIC0+IDAKUGF0aElzUm9vdFcgIlw/P1xDOlxhXGIiIC0+IDAKUGF0aElzUm9vdFcgIlw/P1wiIC0+IDAKUGF0aElzUm9vdFcgIlw/P1xVTkNcc1xzaFxmIiAtPiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PathIsRootW \"\\\\?\\C:\" -> 0\nPathIsRootW \"\\\\?\\C:\\\" -> 1\nPathIsRootW \"\\\\?\\C:\\a\" -> 0\nPathIsRootW \"\\\\?\\C:\\a\\\" -> 0\nPathIsRootW \"\\\\?\\C:\\a\\b\" -> 0\nPathIsRootW \"\\\\?\\C:\\a\\b.txt\" -> 0\nPathIsRootW \"\\\\?\\c:\\a\" -> 0\nPathIsRootW \"\\\\?\\C:\\\\a\" -> 0\nPathIsRootW \"\\\\?\\\" -> 0\nPathIsRootW \"\\\\?\\a\" -> 0\nPathIsRootW \"\\\\?\\a\\b\" -> 0\nPathIsRootW \"\\\\?\\UNC\" -> 0\nPathIsRootW \"\\\\?\\UNC\\\" -> 1\nPathIsRootW \"\\\\?\\UNC\\s\" -> 1\nPathIsRootW \"\\\\?\\UNC\\s\\\" -> 0\nPathIsRootW \"\\\\?\\UNC\\s\\sh\" -> 1\nPathIsRootW \"\\\\?\\UNC\\s\\sh\\\" -> 0\nPathIsRootW \"\\\\?\\UNC\\s\\sh\\f\" -> 0\nPathIsRootW \"\\\\?\\UNC\\s\\sh\\f\\g\" -> 0\nPathIsRootW \"\\\\?\\unc\\s\\sh\\f\" -> 0\nPathIsRootW \"\\\\?\\Volume{12345678-1234-1234-1234-123456789abc}\\\" -> 1\nPathIsRootW \"\\\\?\\Volume{12345678-1234-1234-1234-123456789abc}\" -> 0\nPathIsRootW \"\\\\?\\Volume{12345678-1234-1234-1234-123456789abc}\\a\" -> 0\nPathIsRootW \"\\\\?\\Volume{12345678-1234-1234-1234-123456789abc}\\a\\b\" -> 0\nPathIsRootW \"\\\\?\\C:\\a\\.\\b\" -> 0\nPathIsRootW \"\\\\?\\C:\\a\\..\\b\" -> 0\nPathIsRootW \"\\\\?\\C:\\a/b\" -> 0\nPathIsRootW \"\\\\?\\pipe\\x\" -> 0\nPathIsRootW \"\\\\.\\C:\" -> 1\nPathIsRootW \"\\\\.\\C:\\\" -> 0\nPathIsRootW \"\\\\.\\C:\\a\\b\" -> 0\nPathIsRootW \"\\??\\C:\\a\\b\" -> 0\nPathIsRootW \"\\??\\\" -> 0\nPathIsRootW \"\\??\\UNC\\s\\sh\\f\" -> 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "isroot_unc",
+      "exe_sha256": "280c879c5a311471e51fc244edd151f100f797b67c5414dcda1788b896714d6f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UGF0aElzUm9vdFcgIlxcIiAtPiAxClBhdGhJc1Jvb3RXICJcXFwiIC0+IDAKUGF0aElzUm9vdFcgIlxccyIgLT4gMQpQYXRoSXNSb290VyAiXFxzXCIgLT4gMApQYXRoSXNSb290VyAiXFxzXFwiIC0+IDAKUGF0aElzUm9vdFcgIlxcc1xzaCIgLT4gMQpQYXRoSXNSb290VyAiXFxzXHNoXCIgLT4gMApQYXRoSXNSb290VyAiXFxzXHNoXFwiIC0+IDAKUGF0aElzUm9vdFcgIlxcc1xzaFxmIiAtPiAwClBhdGhJc1Jvb3RXICJcXHNcc2hcZlwiIC0+IDAKUGF0aElzUm9vdFcgIlxcc1xzaFxmXGcudHh0IiAtPiAwClBhdGhJc1Jvb3RXICJcXHNcc2hcZlxnXCIgLT4gMApQYXRoSXNSb290VyAiXFxzXHNoXGZcXGciIC0+IDAKUGF0aElzUm9vdFcgIlxcXHNcc2giIC0+IDAKUGF0aElzUm9vdFcgIlxcc1xcc2giIC0+IDAKUGF0aElzUm9vdFcgIlxcc1xzaFwuIiAtPiAwClBhdGhJc1Jvb3RXICJcXHNcc2hcLi4iIC0+IDAKUGF0aElzUm9vdFcgIlxcc1wuXGYiIC0+IDAKUGF0aElzUm9vdFcgIlxcc1wuLlxmIiAtPiAwClBhdGhJc1Jvb3RXICJcXC4iIC0+IDEKUGF0aElzUm9vdFcgIlxcLlwiIC0+IDAKUGF0aElzUm9vdFcgIlxcLlxDOiIgLT4gMQpQYXRoSXNSb290VyAiXFwuXEM6XGEiIC0+IDAKUGF0aElzUm9vdFcgIlxcLlxwaXBlXHgiIC0+IDAKUGF0aElzUm9vdFcgIlxcPyIgLT4gMApQYXRoSXNSb290VyAiXFw/XCIgLT4gMApQYXRoSXNSb290VyAiLy9zL3NoL2YiIC0+IDAKUGF0aElzUm9vdFcgIi9cc1xzaCIgLT4gMApQYXRoSXNSb290VyAiXFxzZXJ2ZXJcc2hhcmVcZGlyXGZpbGUudHh0IiAtPiAwClBhdGhJc1Jvb3RXICJcXHNlcnZlclxzaGFyZVxkaXJcIiAtPiAwClBhdGhJc1Jvb3RXICJcXHNlcnZlclxzaGFyZSIgLT4gMQpQYXRoSXNSb290VyAiXFxzZXJ2ZXJcc2hhcmVcIiAtPiAwClBhdGhJc1Jvb3RXICJcXHNlcnZlciIgLT4gMQpQYXRoSXNSb290VyAiXFxhYiIgLT4gMQpQYXRoSXNSb290VyAiXFxhYmMiIC0+IDEKUGF0aElzUm9vdFcgIlxcYWJjZCIgLT4gMQpQYXRoSXNSb290VyAiXFxhYmNkZWZnaCIgLT4gMQpQYXRoSXNSb290VyAiXFxhXGIiIC0+IDEKUGF0aElzUm9vdFcgIlxcYWJcY2QiIC0+IDEKUGF0aElzUm9vdFcgIlxcYWJjXGRlZlxnIiAtPiAwClBhdGhJc1Jvb3RXICJcXFxhIiAtPiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PathIsRootW \"\\\\\" -> 1\nPathIsRootW \"\\\\\\\" -> 0\nPathIsRootW \"\\\\s\" -> 1\nPathIsRootW \"\\\\s\\\" -> 0\nPathIsRootW \"\\\\s\\\\\" -> 0\nPathIsRootW \"\\\\s\\sh\" -> 1\nPathIsRootW \"\\\\s\\sh\\\" -> 0\nPathIsRootW \"\\\\s\\sh\\\\\" -> 0\nPathIsRootW \"\\\\s\\sh\\f\" -> 0\nPathIsRootW \"\\\\s\\sh\\f\\\" -> 0\nPathIsRootW \"\\\\s\\sh\\f\\g.txt\" -> 0\nPathIsRootW \"\\\\s\\sh\\f\\g\\\" -> 0\nPathIsRootW \"\\\\s\\sh\\f\\\\g\" -> 0\nPathIsRootW \"\\\\\\s\\sh\" -> 0\nPathIsRootW \"\\\\s\\\\sh\" -> 0\nPathIsRootW \"\\\\s\\sh\\.\" -> 0\nPathIsRootW \"\\\\s\\sh\\..\" -> 0\nPathIsRootW \"\\\\s\\.\\f\" -> 0\nPathIsRootW \"\\\\s\\..\\f\" -> 0\nPathIsRootW \"\\\\.\" -> 1\nPathIsRootW \"\\\\.\\\" -> 0\nPathIsRootW \"\\\\.\\C:\" -> 1\nPathIsRootW \"\\\\.\\C:\\a\" -> 0\nPathIsRootW \"\\\\.\\pipe\\x\" -> 0\nPathIsRootW \"\\\\?\" -> 0\nPathIsRootW \"\\\\?\\\" -> 0\nPathIsRootW \"//s/sh/f\" -> 0\nPathIsRootW \"/\\s\\sh\" -> 0\nPathIsRootW \"\\\\server\\share\\dir\\file.txt\" -> 0\nPathIsRootW \"\\\\server\\share\\dir\\\" -> 0\nPathIsRootW \"\\\\server\\share\" -> 1\nPathIsRootW \"\\\\server\\share\\\" -> 0\nPathIsRootW \"\\\\server\" -> 1\nPathIsRootW \"\\\\ab\" -> 1\nPathIsRootW \"\\\\abc\" -> 1\nPathIsRootW \"\\\\abcd\" -> 1\nPathIsRootW \"\\\\abcdefgh\" -> 1\nPathIsRootW \"\\\\a\\b\" -> 1\nPathIsRootW \"\\\\ab\\cd\" -> 1\nPathIsRootW \"\\\\abc\\def\\g\" -> 0\nPathIsRootW \"\\\\\\a\" -> 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

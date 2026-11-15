@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetErrorMode.yaml
+id: windows/api/kernel32.dll/SetErrorMode
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SetErrorMode function (errhandlingapi.h)", "GetErrorMode", "SetThreadErrorMode", "GetThreadErrorMode"; errhandlingapi.h and winbase.h (SEM_FAILCRITICALERRORS 1, SEM_NOGPFAULTERRORBOX 2, SEM_NOALIGNMENTFAULTEXCEPT 4, SEM_NOOPENFILEERRORBOX 0x8000) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sets the process's error mode and returns the old one. Chrome's processes call it 24 times. The mode keeps every bit it is given (undefined ones too: 0x10, 0x100, 0xFFFFFFFF read back), except that the SEM_NOALIGNMENTFAULTEXCEPT bit (4) can not be cleared once it is set. A child process inherits the mode in force when it is created. The per-thread mode (SetThreadErrorMode) is separate and accepts only the three bits 1, 2 and 0x8000.
+interface:
+  signature: "UINT SetErrorMode(UINT mode); UINT GetErrorMode(void); BOOL SetThreadErrorMode(DWORD mode, LPDWORD old); DWORD GetThreadErrorMode(void)"
+chrome:
+  calls: "24 calls from every process type; one returned 0 (the previous mode). The arguments are not in the committed traces"
+rules:
+  returns_old: "SetErrorMode returns the previous mode each time: after 0x8003, SetErrorMode(1) returns 0x8003 and GetErrorMode reads 1; SetErrorMode(0) returns 1 and the mode is 0"
+  stored_bits: "values 1, 2, 0x8000, 0x8003, 0x10, 0x100 and 0xFFFFFFFF are all stored as given (GetErrorMode reads them back); the next SetErrorMode returns them"
+  alignment_bit: "once bit 4 is set (by 4 or by 0xFFFFFFFF), SetErrorMode(0) leaves the mode at 4 and SetErrorMode(4) returns 4: it can not be cleared"
+  inheritance: "a child started while the mode is 0x8003 reads 0x8003 with GetErrorMode, 0x2: 0x2, 0x8000: 0x8000, 0: 0; a child started when bit 4 was set reads 4"
+  thread_mode: "SetThreadErrorMode(0x8003, &old) = TRUE with old 0 and GetThreadErrorMode 0x8003 while the process mode is unchanged; SetThreadErrorMode(0, NULL) = TRUE; SetThreadErrorMode(0x10, &old): FALSE, error 87"
+  start_value: "the mode at the start of a test process is inherited from its parent (the oracle's runner passes 0x8003); the tests set it first"
+errors:
+  thread_mode_bad_bits: "ERROR_INVALID_PARAMETER (87) from SetThreadErrorMode"
+side_effects: "changes the process's error mode (error dialogs, fault boxes)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  The dialogs themselves (no process faults in the tests), SEM_NOALIGNMENTFAULTEXCEPT's effect on a misaligned access.

@@ -46,7 +46,10 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`,
 /// `iphlpapi`, `oleacc`, `uiautomationcore`, with `ole32` and `oleaut32`
 /// for the COM objects they hand out, and `kernelbase` for the functions
-/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`).
+/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
+/// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
+/// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -62,6 +65,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "shlwapi.dll",
     "shell32.dll",
     "comctl32.dll",
+    "comdlg32.dll",
     "powrprof.dll",
     "wtsapi32.dll",
     "netapi32.dll",
@@ -71,6 +75,12 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "ole32.dll",
     "oleaut32.dll",
     "kernelbase.dll",
+    "ws2_32.dll",
+    "mswsock.dll",
+    "winhttp.dll",
+    "crypt32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -1355,8 +1365,14 @@ mod tests {
         // Chrome's first-stage DLLs (spec-chrome-win-5).
         let shell = image(&[("SHELL32.dll", &["SHGetKnownFolderPath"]), ("SHLWAPI.dll", &["PathMatchSpecW"])], 3);
         assert_eq!(check_image(&shell).unwrap()["shell32.dll"], ["SHGetKnownFolderPath"]);
-        let other = image(&[("winhttp.dll", &["WinHttpOpen"])], 3);
-        assert!(check_image(&other).unwrap_err().contains("winhttp.dll"));
+        // The common dialogs' tests import comdlg32 (spec-win-apps-2).
+        let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
+        assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // Chrome's network stage (spec-chrome-win-s4).
+        let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
+        assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
+        assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());

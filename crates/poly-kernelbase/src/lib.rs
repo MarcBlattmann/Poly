@@ -108,6 +108,7 @@ pub mod verinfo;
 pub mod version;
 pub mod waitreg;
 pub mod winmm;
+pub mod wow64;
 
 pub use poly_ntobj::NtStatus;
 

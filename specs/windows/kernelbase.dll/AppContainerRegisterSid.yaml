@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/AppContainerRegisterSid.yaml
+id: windows/api/kernelbase.dll/AppContainerRegisterSid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed. The registry values of Chrome's own AppContainers were read on the oracle (Moniker `cr.sb.net` followed by 40 hexadecimal digits, DisplayName `Chrome Sandbox`).
+summary: >
+  Records a mapping from an AppContainer SID to a name (moniker) and a display name, kept in the user's registry under the AppContainer Mappings key: it outlives the process and is seen by every other process of the user. Chrome's browser process resolves it by name (S2: 1 GetProcAddress) before it creates its sandbox's lowbox tokens; the S2 run on Poly stops when the lookup fails (0xC000007A). The signature is inferred, not documented: kernelbase.dll exports the name, Chrome's browser process resolves it by name (GetProcAddress in the S2 trace) and the tests call it through the pointer; the argument roles were found by calling it with other argument shapes (a small integer in a pointer slot crashes it, which shows the slot is a pointer that is read). No Microsoft binary was decompiled or disassembled, only called. Shape: HRESULT AppContainerRegisterSid(PSID sid, PCWSTR moniker, PCWSTR display_name). AppContainerLookupMoniker (a second undocumented export, shape HRESULT AppContainerLookupMoniker(PSID sid, PWSTR* moniker)) reads the mapping back and is how the tests see the effect.
+interface:
+  signature: "HRESULT AppContainerRegisterSid(PSID sid, PCWSTR moniker, PCWSTR display_name); HRESULT AppContainerLookupMoniker(PSID sid, PWSTR *moniker)"
+  result: "S_OK (0) or an HRESULT: E_INVALIDARG 0x80070057, HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS) 0x800700B7, lookup also 0x80070002 and 0x8007109A and 0x80072023; last error is not set"
+chrome:
+  calls: "one GetProcAddress of kernelbase.dll!AppContainerRegisterSid in the browser (S2, both runs); Chrome's profiles on the oracle are the monikers cr.sb.net<40 hex digits> and cr.sb.odm<40 hex digits> with DisplayName \"Chrome Sandbox\""
+rules:
+  register: "a SID derived from a name (DeriveAppContainerSidFromAppContainerName) that has no mapping, a moniker and a display name: S_OK; AppContainerLookupMoniker(sid) then gives S_OK and the moniker (case kept; it need not be the name the SID derives from); the registry key Mappings\\<SID text> has the values Moniker and DisplayName, as the two strings"
+  twice: "registering the same SID again (same or other strings): 0x800700B7, nothing changes (the first moniker and display name stay); this holds across processes: a new process that looks the SID up gets the moniker (the mapping is not per process)"
+  undo: "DeleteAppContainerProfile of the name the SID derives from returns 0, removes the mapping (lookup 0x80070002, registry key gone) whatever moniker was registered, and the SID can be registered again; there is no other unregister call"
+  profile: "CreateAppContainerProfile of the name of a registered SID (no profile folder existed): S_OK and the same SID; GetAppContainerFolderPath of a registered SID that has no profile: S_OK and a path (the folder is made as the path is asked for or as the profile is created: both were observed S_OK)"
+  arguments: "a NULL or empty moniker, a NULL or empty display name, a NULL SID: 0x80070057 and nothing is registered; a moniker of 64 characters registers and reads back; a moniker of 65 characters (and 300) registers (S_OK, the registry value is stored whole) but AppContainerLookupMoniker of it fails with 0x80072023; the SID is not checked to be an AppContainer SID (hand-made calls with a group SID and a capability SID were accepted and later lookups gave 0x8007109A: not exercised by the tests because such mappings cannot be removed again with DeleteAppContainerProfile)"
+  lookup: "AppContainerLookupMoniker: 0x80070002 for a SID nobody registered and no profile made; 0x8007109A (4250, ERROR_NOT_APPCONTAINER) for a SID that is not of the form S-1-15-2 with 8 sub-authorities (Everyone, ALL APPLICATION PACKAGES S-1-15-2-1, a capability SID); for a profile made by CreateAppContainerProfile it returns its name; the moniker is a heap string (not freed by the tests)"
+  needs_pointers: "the moniker and display name slots are read as strings: a NULL is E_INVALIDARG, a small integer (1, 2, 0x10) in the moniker slot is an access violation"
+errors:
+  invalid_argument: "0x80070057 for NULL or empty strings and a NULL SID"
+  already_exists: "0x800700B7 for a SID that has a mapping"
+  lookup: "0x80070002, 0x8007109A, 0x80072023 (see rules)"
+side_effects: "writes the user's AppContainer Mappings registry key for the SID (values Moniker, DisplayName)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. AppContainer profiles and registrations the tests create (names polys2b.*) are deleted again at the end of each test; where a test needs the registry mapping it reads HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Mappings\<SID text> (values Moniker and DisplayName). SIDs derived from the tests' own names are printed (they are the same on every machine); the user's, the logon and the machine's SIDs and the numbers the system hands out (AppContainerNumber) are never printed, only compared. The two exports are resolved with GetProcAddress on kernelbase.dll; the test that looks the SID up from a new process starts its own image again.
+not_covered: >
+  Whether the HRESULT is the only result (nothing else is returned), registrations for SIDs that are not derived from names (no way to delete them again), concurrent registrations, the key of the machine hive, non-administrator callers (the oracle's account is an elevated administrator), AppContainerFreeMemory (the moniker string is leaked by the tests), AppContainerDeriveSidFromMoniker.

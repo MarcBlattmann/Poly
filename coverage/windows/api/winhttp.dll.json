@@ -16,7 +16,7 @@
 {"symbol":"WinHttpFreeProxySettings","src":["wine-spec"]},
 {"symbol":"WinHttpGetDefaultProxyConfiguration","src":["wine-spec"],"seeds":["wine:winhttp/tests/winhttp.c:proxy_active"]},
 {"symbol":"WinHttpGetIEProxyConfigForCurrentUser","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"],"seeds":["wine:winhttp/tests/winhttp.c:test_WinHttpGetIEProxyConfigForCurrentUser"]},
-{"symbol":"WinHttpGetProxyForUrl","status":"stub","src":["wine-spec"],"seeds":["wine:winhttp/tests/winhttp.c:test_WinHttpGetProxyForUrl"]},
+{"symbol":"WinHttpGetProxyForUrl","status":"claimed","claimed_by":"spec-chrome-win-s4","src":["wine-spec"],"seeds":["wine:winhttp/tests/winhttp.c:test_WinHttpGetProxyForUrl"]},
 {"symbol":"WinHttpGetProxyForUrlEx","status":"stub","src":["wine-spec"]},
 {"symbol":"WinHttpGetProxyForUrlEx2","src":["wine-spec"]},
 {"symbol":"WinHttpGetProxyResult","status":"stub","src":["wine-spec"]},

@@ -43,6 +43,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfgmgr32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
@@ -149,6 +156,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hid"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "httptest"
 version = "0.0.1"
 dependencies = [
@@ -194,6 +208,7 @@ version = "0.0.1"
 dependencies = [
  "poly-console",
  "poly-kernelbase",
+ "poly-ldr",
  "poly-ntobj",
  "poly-pe",
  "poly-rtl",
@@ -215,6 +230,13 @@ dependencies = [
  "poly-crt",
  "poly-cxxeh",
  "poly-win32-crt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "ncrypt"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -247,6 +269,13 @@ name = "oleaut32"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "pdh"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -323,7 +352,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-ldr"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+ "poly-pe",
+]
+
+[[package]]
 name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvc32"
 version = "0.0.1"
 
 [[package]]
@@ -403,6 +444,9 @@ dependencies = [
 [[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
+dependencies = [
+ "poly-msvc32",
+]
 
 [[package]]
 name = "poly-win32k"
@@ -439,6 +483,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "propsys"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "s1test"
 version = "0.0.1"
 dependencies = [
@@ -451,6 +502,13 @@ version = "0.0.1"
 dependencies = [
  "poly-netapi",
  "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "setupapi"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -475,6 +533,13 @@ name = "shlwapi"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "tbs"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -530,6 +595,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "wevtapi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "win32u"
 version = "0.0.1"
 dependencies = [
@@ -559,6 +631,13 @@ name = "winmm"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wintrust"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

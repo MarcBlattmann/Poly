@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/CreateAppContainerProfile.yaml
+id: windows/api/userenv.dll/CreateAppContainerProfile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates an AppContainer profile (Learn: userenv.h) for a name: S_OK, the SID that DeriveAppContainerSidFromAppContainerName gives for the name, a registry mapping (Moniker, DisplayName) in the user's AppContainer Mappings key and a folder %LOCALAPPDATA%\Packages\<name>\AC (with AC\Temp). DeleteAppContainerProfile (pointer sheet) removes both. Chrome creates profiles named cr.sb.net<40 hex digits> (display name "Chrome Sandbox"); this call is not in the S2 trace (profiles are made on first use), but the sandbox's calls around it (derive, register, token) assume it works.
+interface:
+  signature: "HRESULT CreateAppContainerProfile(PCWSTR name, PCWSTR display_name, PCWSTR description, PSID_AND_ATTRIBUTES caps, DWORD n_caps, PSID *sid)"
+  result: "S_OK, 0x80070057 (E_INVALIDARG), 0x800700B7 (profile exists), 0x80070003, 0x8007010B"
+rules:
+  create: "S_OK, *sid is the derived SID (compare with DeriveAppContainerSidFromAppContainerName), the Mappings key of the SID has Moniker = the name and DisplayName = the display name (the description is not stored there), the folder <profile>\\Packages\\<name>\\AC exists and so does AC\\Temp; GetAppContainerFolderPath gives that folder"
+  again: "the same name again: 0x800700B7 and *sid is left unchanged (not set to NULL); the name in another case is the same profile: 0x800700B7"
+  delete: "DeleteAppContainerProfile(name): S_OK; the registry key and the folder are gone (GetAppContainerFolderPath: 0x80070002, the directory does not exist); deleting again or deleting a name that never existed: S_OK as well"
+  names: "empty: 0x80070057; 1 to 64 characters are accepted (63 and 64 work), 65: 0x80070057; spaces are accepted; a backslash or a slash: 0x80070003 (the name is a folder name); a colon: 0x8007010B"
+  display_name_and_description: "an empty display name or description: 0x80070057; the display name: 100 and 511 characters work, 512 and more: 0x80070057; the description: 2047 characters work, 2048 and more: 0x80070057 (a 520-character description works)"
+  capabilities: "a list of one capability SID (S-1-15-3-1 with SE_GROUP_ENABLED) works; a count of 1 with a NULL list: 0x80070057"
+  registry_location: "GetAppContainerRegistryLocation(KEY_READ, &key) from a process that is not in a container: 0x8000FFFF (E_UNEXPECTED), no key"
+errors:
+  invalid_argument: "0x80070057"
+  exists: "0x800700B7"
+  path_not_found: "0x80070003 for a backslash or slash in the name"
+  directory: "0x8007010B for a colon"
+side_effects: "writes the registry mapping and creates the profile folder"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. AppContainer profiles and registrations the tests create (names polys2b.*) are deleted again at the end of each test; where a test needs the registry mapping it reads HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Mappings\<SID text> (values Moniker and DisplayName). SIDs derived from the tests' own names are printed (they are the same on every machine); the user's, the logon and the machine's SIDs and the numbers the system hands out (AppContainerNumber) are never printed, only compared.
+not_covered: >
+  Callers that are not administrators, NULL display name or description (not tried), the ACLs of the profile folder and registry keys, the description's storage place, many profiles, a profile of a name made only by AppContainerRegisterSid with a different moniker.
