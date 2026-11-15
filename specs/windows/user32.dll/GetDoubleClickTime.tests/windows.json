@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gdct_basic",
+      "exe_sha256": "3f2cdc52a127f12f74cadac7671225e2b60ef7c8a7d4373d1611fc61794cebc9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGFzdCBlcnJvciBhZnRlciB0aGUgY2FsbDogMHhiZWVmCndpdGhpbiAyMDAuLjUwMDA6IDEKZXF1YWwgb24gYSBzZWNvbmQgY2FsbDogMQpub3QgMCBhbmQgbm90IElORklOSVRFOiAxCmVxdWFsIGZyb20gYW5vdGhlciB0aHJlYWQ6IDEKU01fQ1hET1VCTEVDTEsgaXMgcG9zaXRpdmU6IDEKU01fQ1lET1VCTEVDTEsgaXMgcG9zaXRpdmU6IDEKMTAwMCBmdXJ0aGVyIGNhbGxzIGFsbCBlcXVhbDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "last error after the call: 0xbeef\nwithin 200..5000: 1\nequal on a second call: 1\nnot 0 and not INFINITE: 1\nequal from another thread: 1\nSM_CXDOUBLECLK is positive: 1\nSM_CYDOUBLECLK is positive: 1\n1000 further calls all equal: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

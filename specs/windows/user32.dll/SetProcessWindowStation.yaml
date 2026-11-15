@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetProcessWindowStation.yaml
+id: windows/api/user32.dll/SetProcessWindowStation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateWindowStationW", "CloseWindowStation", "OpenWindowStationW", "SetProcessWindowStation", "GetProcessWindowStation", "CreateDesktopW", "OpenDesktopW", "CloseDesktop", "GetThreadDesktop", "SetThreadDesktop", "GetUserObjectInformationW", "Window Station Security and Access Rights", "Desktop Security and Access Rights", "Mandatory Integrity Control"; winuser.h, winbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes the given window station the process's: GetProcessWindowStation then returns that handle, desktops created or opened by name now belong to it, and the threads that already have a desktop keep it. The broker switches to its alternate station to create the targets' desktop and back. Only a window station handle is accepted (a NULL, invalid, desktop or event handle: error 6); the call does not check the handle's access rights. The process's current station handle cannot be closed (CloseWindowStation fails with ERROR_BUSY 170), nor can the handle of the station the process is switched to. This sheet also holds the rules of GetProcessWindowStation, CloseWindowStation and CloseDesktop.
+interface:
+  signature: "BOOL SetProcessWindowStation(HWINSTA h); HWINSTA GetProcessWindowStation(void); BOOL CloseWindowStation(HWINSTA h); BOOL CloseDesktop(HDESK h)"
+chrome:
+  flow: "the broker makes an alternate window station and an alternate desktop for its targets in the browser process (CreateWindowStationW 2 calls, one of them fails with ERROR_ACCESS_DENIED; GetProcessWindowStation 2, SetProcessWindowStation 2 (switch to the new station to create the desktop there, then back), CreateDesktopW 1, GetThreadDesktop 2, GetUserObjectInformationW 44, CloseDesktop 1, CloseWindowStation 1) and starts every confined child with CreateProcessAsUserW (creation flags 0x8040C: CREATE_SUSPENDED|DETACHED_PROCESS|CREATE_UNICODE_ENVIRONMENT|EXTENDED_STARTUPINFO_PRESENT); by the sandbox's published design STARTUPINFO.lpDesktop names the alternate \"station\\desktop\". The arguments of the window station and desktop calls are not in the committed traces"
+rules:
+  switch: "SetProcessWindowStation(a handle made by CreateWindowStationW) = TRUE (last error untouched); GetProcessWindowStation then returns exactly that handle value (and UOI_NAME the station's name), not the first handle; the calling thread keeps the desktop it had (GetThreadDesktop gives the same handle)"
+  desktop_goes_to_current_station: "a desktop made by CreateDesktopW now is in the switched-to station: it opens by name while that station is current and is not found (error 2) once the process is switched back"
+  switch_back: "SetProcessWindowStation(first handle) = TRUE and GetProcessWindowStation returns the first handle again"
+  refused_handles: "NULL, INVALID_HANDLE_VALUE, a desktop handle, an event handle: FALSE, error 6"
+  no_access_check: "a handle opened with WINSTA_ENUMDESKTOPS only, or with READATTRIBUTES|CREATEDESKTOP, is accepted: TRUE"
+  close_busy: "CloseWindowStation(the process's own station handle, or the handle of the station the process is switched to) = FALSE, error 170 (ERROR_BUSY); once the process has switched away the handle closes (TRUE)"
+  close_rules: "CloseWindowStation of a closed handle, NULL, or a desktop handle: FALSE, error 6; CloseDesktop of a desktop handle: TRUE, again: FALSE, error 6; CloseDesktop(the calling thread's desktop) = FALSE, error 170"
+errors:
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+  in_use: "ERROR_BUSY (170) from CloseWindowStation/CloseDesktop of an object the process or the calling thread uses"
+side_effects: "changes the process's window station; desktops created or opened afterwards belong to it"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Other processes' stations, threads that were created after the switch (their desktop), SetThreadDesktop of a desktop in another station (see GetThreadDesktop), the clipboard and atoms of the stations.

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoTaskMemAlloc.yaml
+id: windows/api/ole32.dll/CoTaskMemAlloc
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CoInitializeEx function (combaseapi.h)", "CoUninitialize", "CoGetApartmentType", "CoRegisterMessageFilter", "CoCreateInstance", "CoGetClassObject", "CLSIDFromString", "StringFromCLSID", "CoTaskMemAlloc", "CoTaskMemFree", "PropVariantClear", "COINIT enumeration"; objbase.h, combaseapi.h, wtypes.h, propidl.h, winerror.h (S_FALSE 1, RPC_E_CHANGED_MODE 0x80010106, CO_E_NOTINITIALIZED 0x800401F0, REGDB_E_CLASSNOTREG 0x80040154, CO_E_CLASSSTRING 0x800401F3, E_INVALIDARG 0x80070057) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The COM task allocator: CoTaskMemAlloc returns memory (16-byte aligned) that CoTaskMemFree releases, CoTaskMemRealloc resizes. A size of 0 gives a non-NULL block, an impossible size NULL. CoTaskMemFree(NULL) is harmless. PropVariantClear releases what a PROPVARIANT holds and sets its type to VT_EMPTY. Chrome's browser calls CoTaskMemAlloc 16 times and CoTaskMemFree 5 times, PropVariantClear 10 times (the results are plain: S_OK). This sheet also holds the rules of CoTaskMemFree and PropVariantClear.
+interface:
+  signature: "LPVOID CoTaskMemAlloc(SIZE_T size); LPVOID CoTaskMemRealloc(LPVOID p, SIZE_T size); void CoTaskMemFree(LPVOID p); HRESULT PropVariantClear(PROPVARIANT* pv); HRESULT PropVariantCopy(PROPVARIANT*, const PROPVARIANT*)"
+chrome:
+  calls: "CoTaskMemAlloc 16, CoTaskMemFree 5, PropVariantClear 10 (browser)"
+rules:
+  alloc: "sizes 1, 16, 100, 4096 and 1 MiB: non-NULL, 16-byte aligned, writable; size 0: non-NULL; usize::MAX and 1 << 62: NULL"
+  free: "CoTaskMemFree(NULL) returns"
+  realloc: "CoTaskMemRealloc(p, 64) keeps the first 8 bytes; CoTaskMemRealloc(p, 0) returns NULL (frees); CoTaskMemRealloc(NULL, 32) is an allocation"
+  propvariant_clear: "VT_EMPTY, VT_I4, VT_BOOL, VT_BSTR NULL, VT_LPWSTR NULL, VT_VECTOR|VT_I4 with no elements: S_OK and the type becomes 0 (VT_EMPTY); an invalid type 0x7FFF: the result 0x80070057 and the variant is left as it was; VT_LPWSTR with a CoTaskMemAlloc string and VT_BLOB with 16 bytes: S_OK, type 0, the pointer cleared; PropVariantCopy(VT_I4) copies type and value"
+errors:
+  invalid_type: "E_INVALIDARG 0x80070057 from PropVariantClear for a type no PROPVARIANT has"
+side_effects: "allocates and frees task memory"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Failure injection of the allocator, memory exhaustion, VT_STREAM, VT_STORAGE and VT_UNKNOWN members (they release interfaces), BSTRs (oleaut32).

@@ -18,12 +18,14 @@ use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, last_error, set_last_error, wide};
 use poly_win32_rt as _;
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
@@ -554,67 +556,50 @@ pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
     CreateRectRgn(r.left, r.top, r.right, r.bottom)
 }
 
-/// `CreateEllipticRgn`: the ellipse inscribed in the rectangle, one pixel
-/// narrower and shorter than the bounds given (GDI's regions of ellipses are
-/// 59x39 for 0,0,60,40; `GetWindowRgnBox.yaml`).
+/// A new region object holding `region`, or NULL with `ERROR_INVALID_PARAMETER`
+/// when the shape had a coordinate outside -2^27 .. 2^27-1.
+fn region_or_invalid(region: Option<Region>) -> H {
+    let Some(region) = region else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn != 0 {
+        gdi(|g| g.set_region(rgn as u64, region));
+    }
+    rgn
+}
+
+/// `CreateEllipticRgn`: the region of the rectangle's size, made as the
+/// sheet describes (Bezier quarter arcs flattened in sixteenths of a pixel,
+/// [`Region::ellipse`]); it is one pixel narrower and shorter than the bounds
+/// (0,0,60,40 gives the box 0,0,59,39).
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateEllipticRgn(l: i32, t: i32, r: i32, b: i32) -> H {
-    let (w, h) = (i64::from(r) - i64::from(l) - 1, i64::from(b) - i64::from(t) - 1);
-    let rgn = CreateRectRgn(0, 0, 1, 1);
-    if rgn == 0 {
-        return 0;
-    }
-    let mut rects = Vec::new();
-    if w > 0 && h > 0 {
-        // Integer arithmetic on twice the coordinates keeps the rounding exact.
-        let (a2, b2) = (w, h); // semi-axes times two
-        for y in 0..h {
-            let dy = 2 * y + 1 - h; // twice the distance of the row's centre from the middle
-            // x extent: |2x+1-w| <= a2 * sqrt(1 - (dy/b2)^2)
-            let num = (b2 * b2 - dy * dy).max(0);
-            // half-width squared, times b2^2: a2^2 * num / b2^2
-            let hw2 = (a2 * a2 * num) as f64 / (b2 * b2) as f64;
-            let hw = libm_sqrt(hw2);
-            let left = ((w as f64 - hw) / 2.0 + 0.5) as i64;
-            let right = ((w as f64 + hw) / 2.0 + 0.5) as i64;
-            if right > left {
-                rects.push(Rect::new(
-                    l.wrapping_add(left as i32),
-                    t.wrapping_add(y as i32),
-                    l.wrapping_add(right as i32),
-                    t.wrapping_add(y as i32 + 1),
-                ));
-            }
-        }
-    }
-    let region = Region::from_rects(&rects);
-    gdi(|g| g.set_region(rgn as u64, region));
-    rgn
+    region_or_invalid(Region::ellipse(l, t, r, b))
 }
 
-/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)` (Learn): a rectangle whose
-/// corners are rounded by an ellipse `w` wide and `h` high
-/// ([`Region::round_rect`]).
+/// `CreateEllipticRgnIndirect(&RECT)`: [`CreateEllipticRgn`] with the RECT's
+/// four values.
+///
+/// # Safety
+/// `rect` is NULL or points at a `RECT`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateEllipticRgnIndirect(rect: *const i32) -> H {
+    if rect.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    CreateEllipticRgn(r.left, r.top, r.right, r.bottom)
+}
+
+/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)`: a rectangle whose corners are
+/// rounded by an ellipse `w` wide and `h` high ([`Region::round_rect`]).
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateRoundRectRgn(l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> H {
-    let rgn = CreateRectRgn(0, 0, 1, 1);
-    if rgn == 0 {
-        return 0;
-    }
-    gdi(|g| g.set_region(rgn as u64, Region::round_rect(l, t, r, b, w, h)));
-    rgn
-}
-
-/// A square root without `std` (Newton's method on a positive double).
-fn libm_sqrt(x: f64) -> f64 {
-    if x <= 0.0 {
-        return 0.0;
-    }
-    let mut g = if x > 1.0 { x / 2.0 } else { 1.0 };
-    for _ in 0..40 {
-        g = 0.5 * (g + x / g);
-    }
-    g
+    region_or_invalid(Region::round_rect(l, t, r, b, w, h))
 }
 
 #[unsafe(no_mangle)]
@@ -800,9 +785,9 @@ fn display_size() -> Option<(i32, i32)> {
     use poly_win32k::proto::{Reply, Request};
     let req = poly_win32k::wire::encode(&Request::Desktop {});
     let mut out = [0u8; 256];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return None;
     }
@@ -936,9 +921,9 @@ fn screen_pixel(x: i32, y: i32) -> u32 {
     use poly_win32k::proto::{Reply, Request};
     let bytes = poly_win32k::wire::encode(&Request::ScreenPixel { x, y });
     let mut out = [0u8; 64];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return 0xFFFF_FFFF;
     }

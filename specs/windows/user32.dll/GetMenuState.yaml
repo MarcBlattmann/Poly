@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetMenuState.yaml
+id: windows/api/user32.dll/GetMenuState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The state flags of an item by command id (default) or position (MF_BYPOSITION); for a popup item the number of items of its popup in the high byte.
+interface:
+  signature: "UINT GetMenuState(HMENU hMenu, UINT uId, UINT uFlags)"
+rules:
+  bits: "plain 0; MF_GRAYED 1; MF_DISABLED 2; MF_CHECKED 8; MF_POPUP 0x10 with the item count of the popup in bits 8..15 (a popup of 3 items: 0x310; grayed 0x311) and the count follows changes; MF_HILITE 0x80; MF_MENUBARBREAK 0x20; MF_MENUBREAK 0x40; MF_OWNERDRAW 0x100; a separator 0x803 (MF_SEPARATOR | grayed | disabled), found by its id as well; grayed, disabled and checked together 0xB"
+  by_command_search: "by command the first item with the id: an id is looked up in the menu's items in order, and a popup item's sub menu is searched at the position of that item, before the later items (depth first, pre-order): the first item with the id wins wherever it is. In a menu with a popup item at position 0 that holds an item with id 5, and a plain item with id 5 later, the state of the one inside the popup is returned; after that one is deleted the next in this order"
+  absent: "an id or position that does not exist: 0xFFFFFFFF without an error; flags 0 mean by command"
+errors:
+  invalid_menu: "NULL or made-up menu: 0xFFFFFFFF with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  none known

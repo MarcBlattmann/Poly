@@ -14,7 +14,8 @@ use poly_win32_rt as _;
 
 extern crate alloc;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn LocalFree(mem: *mut u8) -> *mut u8;
@@ -175,7 +176,8 @@ pub unsafe extern "system" fn lstrcmpiA(a: *const u8, b: *const u8) -> i32 {
     unsafe { ansi_cmp(a, b, true) }
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetStartupInfoW(info: *mut u8);
 }
@@ -187,23 +189,24 @@ unsafe extern "system" {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
     use core::sync::atomic::{AtomicPtr, Ordering};
-    use poly_kernelbase::process::{SI_DESKTOP, SI_RESERVED, SI_TITLE, STARTUPINFO_SIZE};
+    // This process's own `STARTUPINFO` layout (68 bytes in a 32-bit process, ADR 0186).
+    use poly_kernelbase::process::{SI_NATIVE as SL, STARTUPINFO_SIZE};
     static ANSI: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
     let mut p = ANSI.load(Ordering::Acquire);
     if p.is_null() {
         let mut si = alloc::boxed::Box::new([0u8; STARTUPINFO_SIZE]);
-        // SAFETY: a STARTUPINFOW-sized buffer.
+        // SAFETY: a buffer at least as large as this process's STARTUPINFOW.
         unsafe { GetStartupInfoW(si.as_mut_ptr()) };
-        for field in [SI_RESERVED, SI_DESKTOP, SI_TITLE] {
-            let w = u64::from_le_bytes(si[field..field + 8].try_into().unwrap()) as *const u16;
+        for field in [SL.reserved, SL.desktop, SL.title] {
+            let w = SL.pointer(&si[..], field) as usize as *const u16;
             if w.is_null() {
                 continue;
             }
             // SAFETY: a NUL-terminated string in the process parameters.
             let mut a = poly_kernelbase::text::to_ansi(unsafe { poly_kernelbase::text::wide_at(w) });
             a.push(0);
-            let at = alloc::boxed::Box::leak(a.into_boxed_slice()).as_ptr() as u64;
-            si[field..field + 8].copy_from_slice(&at.to_le_bytes());
+            let at = alloc::boxed::Box::leak(a.into_boxed_slice()).as_ptr() as usize;
+            si[field..field + SL.ptr].copy_from_slice(&at.to_le_bytes());
         }
         let leaked = alloc::boxed::Box::leak(si).as_mut_ptr();
         p = match ANSI.compare_exchange(core::ptr::null_mut(), leaked, Ordering::AcqRel, Ordering::Acquire) {
@@ -212,10 +215,11 @@ pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
         };
     }
     // SAFETY: the caller's STARTUPINFOA; `p` holds one.
-    unsafe { core::ptr::copy_nonoverlapping(p, info, STARTUPINFO_SIZE) };
+    unsafe { core::ptr::copy_nonoverlapping(p, info, SL.size) };
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetSystemInfo(info: *mut u8);
 }

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "certcontrolstore_notify",
+      "exe_sha256": "3829729d4c08a5d602c773c271839da0f811c8af48d16d9be665174dc7404c9d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3lzdGVtIFJPT1Qgc3RvcmUgb3BlbmVkIDEKTk9USUZZX0NIQU5HRSBhIHNlY29uZCB0aW1lIHdpdGggdGhlIHNhbWUgZXZlbnQ6IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKQ0FOQ0VMX05PVElGWSBhZ2FpbjogMSBsYXN0IGVycm9yIHVuY2hhbmdlZApSRVNZTkMgb24gYSBtZW1vcnkgc3RvcmU6IDAgbGFzdCBlcnJvciAxMjAKdW5rbm93biBjb250cm9sIDk5OiAwIGxhc3QgZXJyb3IgMTIwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "system ROOT store opened 1\nNOTIFY_CHANGE a second time with the same event: 1 last error unchanged\nCANCEL_NOTIFY again: 1 last error unchanged\nRESYNC on a memory store: 0 last error 120\nunknown control 99: 0 last error 120\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 149
+    },
+    {
+      "name": "certcontrolstore_notify_c",
+      "exe_sha256": "43923b0e47aa907fab7fe9a2f3aab291ba3cb09b335e735932f39701263433c9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXZlbnQgc2lnbmFsbGVkIGJ5IHRoZSBjYWxsIGl0c2VsZiAwCkNBTkNFTF9OT1RJRlkgd2l0aCB0aGUgZXZlbnQ6IDEgbGFzdCBlcnJvciAwCk5PVElGWV9DSEFOR0Ugb24gYSBtZW1vcnkgc3RvcmU6IDAgbGFzdCBlcnJvciAxMjAKTk9USUZZX0NIQU5HRSB3aXRoIGEgTlVMTCBldmVudCBwb2ludGVyOiAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "event signalled by the call itself 0\nCANCEL_NOTIFY with the event: 1 last error 0\nNOTIFY_CHANGE on a memory store: 0 last error 120\nNOTIFY_CHANGE with a NULL event pointer: 1 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 152
+    }
+  ]
+}

@@ -4,23 +4,24 @@
 //!
 //! # Objects and names
 //!
-//! Each volume is a device object `\Device\PolyFs<N>` in the object
-//! manager, created with a parse procedure (ADR 0030's [`ParseHook`]): a
-//! lookup that reaches it hands the rest of the path to
+//! Each volume is a device object `\Device\HarddiskVolume<N>` in the object
+//! manager (ADR 0185: Windows' name for a disk volume, the system volume
+//! `C:` the lowest number), created with a parse procedure (ADR 0030's
+//! [`ParseHook`]): a lookup that reaches it hands the rest of the path to
 //! [`create::CreateHook`], which walks the VFS below the volume's root
 //! directory ([`walk`], case-insensitive and case-preserving) and makes a
 //! *file object*. Drive letters are symbolic links in `\??`:
 //!
 //! | Name | Target | VFS directory |
 //! |---|---|---|
-//! | `\??\C:` | `\Device\PolyFs1` | [`SYSTEM_ROOT`] (`/nt/c`), the NT system root |
-//! | `\??\Z:` | `\Device\PolyFs0` | `/`, the whole host-visible VFS |
-//! | (none) | `\Device\PolyFs2`... | every other VFS mount, by mount point |
+//! | `\??\C:` | `\Device\HarddiskVolume1` | [`SYSTEM_ROOT`] (`/nt/c`), the NT system root |
+//! | `\??\Z:` | `\Device\HarddiskVolume2` | `/`, the whole host-visible VFS |
+//! | (none) | `\Device\HarddiskVolume3`... | every other VFS mount, by mount point |
 //! | (none) | `\Device\PolyPipe` | Poly's loopback byte pipes (below) |
 //! | (none) | `\Device\PolyConsole` | the consoles ([`crate::console`], ADR 0080) |
 //! | (none) | `\Device\Afd` | sockets ([`crate::afd`], ADR 0095) |
 //!
-//! So `\??\C:\Windows\win.ini` reaches `\Device\PolyFs1` through the link
+//! So `\??\C:\Windows\win.ini` reaches `\Device\HarddiskVolume1` through the link
 //! and becomes `/nt/c/Windows/win.ini` (in whatever case it has on disk).
 //! The table of mounts is taken when the NT personality first starts;
 //! later mounts appear below `Z:` but get no device of their own (a later
@@ -144,7 +145,7 @@ pub struct VolumeConfig {
 /// One volume device.
 #[derive(Debug)]
 pub struct Volume {
-    /// `PolyFs<N>`.
+    /// `HarddiskVolume<N>` ([`harddisk_volume`]).
     pub device: Vec<u16>,
     pub root: NodeRef,
     pub path: Vec<u8>,
@@ -348,14 +349,24 @@ pub fn status_of(e: Errno) -> NtStatus {
     }
 }
 
-/// The volumes Poly creates on `vfs`: `\Device\PolyFs0` on `/` as `Z:`,
-/// `\Device\PolyFs1` on [`SYSTEM_ROOT`] as `C:`, then one device per other
-/// mount (by mount point, no letter).
+/// The name of the volume device with `number`, as Windows spells a disk
+/// volume's device (`\Device\HarddiskVolume<number>`; ADR 0185).
+pub fn harddisk_volume(number: usize) -> String {
+    alloc::format!("HarddiskVolume{number}")
+}
+
+/// The volumes Poly creates on `vfs`, named the way Windows names disk
+/// volumes (ADR 0185): `\Device\HarddiskVolume1` on [`SYSTEM_ROOT`] as `C:`
+/// (the system volume has the lowest number), `\Device\HarddiskVolume2` on
+/// `/` as `Z:`, then `HarddiskVolume3`... one per other mount (by mount
+/// point, no letter). The order of the list is the volumes' index (the
+/// number a file object's [`DiskFile::volume`] holds), not their number:
+/// `Z:` first.
 pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
     let mut v = alloc::vec![
-        VolumeConfig { device: "PolyFs0".into(), path: b"/".to_vec(), letter: Some('Z'), label: "Poly".into() },
+        VolumeConfig { device: harddisk_volume(2), path: b"/".to_vec(), letter: Some('Z'), label: "Poly".into() },
         VolumeConfig {
-            device: "PolyFs1".into(),
+            device: harddisk_volume(1),
             path: SYSTEM_ROOT.to_vec(),
             letter: Some('C'),
             label: "System".into()
@@ -371,14 +382,14 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
     paths.sort();
     paths.dedup();
     for (i, path) in paths.into_iter().enumerate() {
-        v.push(VolumeConfig { device: alloc::format!("PolyFs{}", i + 2), path, letter: None, label: String::new() });
+        v.push(VolumeConfig { device: harddisk_volume(i + 3), path, letter: None, label: String::new() });
     }
     v
 }
 
 impl IoState {
     /// The file a DOS path (`X:\dir\file`, or `\??\X:\dir\file`) names, as the object manager spells
-    /// it: `(\Device\PolyFs<N>, the path below that volume)`. The drive letter picks the volume.
+    /// it: `(\Device\HarddiskVolume<N>, the path below that volume)`. The drive letter picks the volume.
     pub fn dos_file_name(&self, dos: &[u16]) -> Option<(Vec<u16>, Vec<u16>)> {
         let sep = |c: u16| c == u16::from(b'\\') || c == u16::from(b'/');
         let nt_prefix = wide("\\??\\");
@@ -535,21 +546,13 @@ impl IoState {
         rec.disk().and_then(|d| d.open.clone()).ok_or(STATUS_INVALID_DEVICE_REQUEST)
     }
 
-    /// The whole contents of a disk file object, read in the calling
-    /// thread (an executable for `NtCreateUserProcess`, ADR 0079).
-    pub fn read_all(&self, cookie: u64) -> Result<Vec<u8>, NtStatus> {
-        let open = self.open_file(cookie)?;
-        let size = open.stat().map_err(status_of)?.size;
-        let mut out = alloc::vec![0u8; usize::try_from(size).map_err(|_| STATUS_NO_MEMORY)?];
-        let mut at = 0;
-        while at < out.len() {
-            match open.read_at(at as u64, &mut out[at..]).map_err(status_of)? {
-                0 => break,
-                n => at += n,
-            }
-        }
-        out.truncate(at);
-        Ok(out)
+    /// The image of a disk file object: an executable for
+    /// `NtCreateUserProcess` (ADR 0079). Nothing of it is read here; the
+    /// image section reads its headers and then each page when a view
+    /// touches it, from the file's cached pages (ADR 0155). An executable
+    /// is never held whole in the kernel heap: that fails above 4 MiB.
+    pub fn image_file(&self, cookie: u64) -> Result<Arc<dyn crate::image::ImageFile>, NtStatus> {
+        Ok(Arc::new(crate::image::VfsFile(self.open_file(cookie)?)))
     }
 
     pub fn file_count(&self) -> usize {

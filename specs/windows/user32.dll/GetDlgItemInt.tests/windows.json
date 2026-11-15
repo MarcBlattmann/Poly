@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "sdi_int",
+      "exe_sha256": "2a8ddafc20ad2111992976def78aa4187b1f21601b4426bbe92e6531bb28fac0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0RGxnSXRlbUludCAxMjMgdW5zaWduZWQ6IDEKYWZ0ZXI6IHRleHQgJzEyMycKU2V0RGxnSXRlbUludCAtNSBzaWduZWQ6IDEKYWZ0ZXI6IHRleHQgJy01JwpTZXREbGdJdGVtSW50IC01IHVuc2lnbmVkOiAxCmFmdGVyOiB0ZXh0ICc0Mjk0OTY3MjkxJwpTZXREbGdJdGVtSW50IDB4RkZGRkZGRkYgc2lnbmVkOiAxCmFmdGVyOiB0ZXh0ICctMScKU2V0RGxnSXRlbUludCAwIHNpZ25lZDogMQphZnRlcjogdGV4dCAnMCcKU2V0RGxnSXRlbUludCBpMzI6Ok1JTiBzaWduZWQ6IDEKYWZ0ZXI6IHRleHQgJy0wJwpTZXREbGdJdGVtSW50IGEgc3RhdGljOiAxClNldERsZ0l0ZW1JbnQgYWJzZW50OiAwIGVycj0xNDIxCkdldERsZ0l0ZW1JbnQgJzEyMycgc2lnbmVkPTA6IHZhbHVlIDB4N2IgKDEyMykgdHJhbnNsYXRlZCAxCkdldERsZ0l0ZW1JbnQgJzEyMycgc2lnbmVkPTE6IHZhbHVlIDB4N2IgKDEyMykgdHJhbnNsYXRlZCAxCkdldERsZ0l0ZW1JbnQgJy0xMjMnIHNpZ25lZD0xOiB2YWx1ZSAweGZmZmZmZjg1ICgtMTIzKSB0cmFuc2xhdGVkIDEKR2V0RGxnSXRlbUludCAnLTEyMycgc2lnbmVkPTA6IHZhbHVlIDB4MCAoMCkgdHJhbnNsYXRlZCAwCkdldERsZ0l0ZW1JbnQgJysxMjMnIHNpZ25lZD0xOiB2YWx1ZSAweDAgKDApIHRyYW5zbGF0ZWQgMApHZXREbGdJdGVtSW50ICcgIDEyMycgKGxlYWRpbmcgc3BhY2VzKSBzaWduZWQ9MDogdmFsdWUgMHg3YiAoMTIzKSB0cmFuc2xhdGVkIDEKR2V0RGxnSXRlbUludCAnMTIzICAnICh0cmFpbGluZyBzcGFjZXMpIHNpZ25lZD0wOiB2YWx1ZSAweDdiICgxMjMpIHRyYW5zbGF0ZWQgMApHZXREbGdJdGVtSW50ICcxMiAzJyBzaWduZWQ9MDogdmFsdWUgMHhjICgxMikgdHJhbnNsYXRlZCAwCkdldERsZ0l0ZW1JbnQgJzEyM2FiYycgc2lnbmVkPTA6IHZhbHVlIDB4N2IgKDEyMykgdHJhbnNsYXRlZCAwCkdldERsZ0l0ZW1JbnQgJ2FiYycgc2lnbmVkPTA6IHZhbHVlIDB4MCAoMCkgdHJhbnNsYXRlZCAwCkdldERsZ0l0ZW1JbnQgJycgKGVtcHR5KSBzaWduZWQ9MDogdmFsdWUgMHgwICgwKSB0cmFuc2xhdGVkIDAKR2V0RGxnSXRlbUludCAnLScgc2lnbmVkPTE6IHZhbHVlIDB4MCAoMCkgdHJhbnNsYXRlZCAwCkdldERsZ0l0ZW1JbnQgJzQyOTQ5NjcyOTUnIHNpZ25lZD0wOiB2YWx1ZSAweGZmZmZmZmZmICgtMSkgdHJhbnNsYXRlZCAxCkdldERsZ0l0ZW1JbnQgJzQyOTQ5NjcyOTYnIHNpZ25lZD0wOiB2YWx1ZSAweDAgKDApIHRyYW5zbGF0ZWQgMApHZXREbGdJdGVtSW50ICcyMTQ3NDgzNjQ3JyBzaWduZWQ9MTogdmFsdWUgMHg3ZmZmZmZmZiAoMjE0NzQ4MzY0NykgdHJhbnNsYXRlZCAxCkdldERsZ0l0ZW1JbnQgJzIxNDc0ODM2NDgnIHNpZ25lZD0xOiB2YWx1ZSAweDAgKDApIHRyYW5zbGF0ZWQgMApHZXREbGdJdGVtSW50ICctMjE0NzQ4MzY0OCcgc2lnbmVkPTE6IHZhbHVlIDB4ODAwMDAwMDAgKC0yMTQ3NDgzNjQ4KSB0cmFuc2xhdGVkIDAKR2V0RGxnSXRlbUludCAnLTIxNDc0ODM2NDknIHNpZ25lZD0xOiB2YWx1ZSAweDAgKDApIHRyYW5zbGF0ZWQgMApHZXREbGdJdGVtSW50ICcweDEwJyBzaWduZWQ9MDogdmFsdWUgMHgwICgwKSB0cmFuc2xhdGVkIDAKR2V0RGxnSXRlbUludCAnMWUzJyBzaWduZWQ9MDogdmFsdWUgMHgxICgxKSB0cmFuc2xhdGVkIDAKR2V0RGxnSXRlbUludCAnMDA3JyBzaWduZWQ9MDogdmFsdWUgMHg3ICg3KSB0cmFuc2xhdGVkIDEKR2V0RGxnSXRlbUludCB3aXRoIGEgTlVMTCB0cmFuc2xhdGVkIHBvaW50ZXI6IDU1CkdldERsZ0l0ZW1JbnQgYWJzZW50IGlkOiAwIGVycj0xNDIxCiAgdHJhbnNsYXRlZCBhZnRlciB0aGUgYWJzZW50IGlkOiAwCkdldERsZ0l0ZW1JbnQgYmFkIGRpYWxvZzogMCBlcnI9MTQwMAogIHRyYW5zbGF0ZWQgYWZ0ZXIgdGhlIGJhZCBkaWFsb2c6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetDlgItemInt 123 unsigned: 1\nafter: text '123'\nSetDlgItemInt -5 signed: 1\nafter: text '-5'\nSetDlgItemInt -5 unsigned: 1\nafter: text '4294967291'\nSetDlgItemInt 0xFFFFFFFF signed: 1\nafter: text '-1'\nSetDlgItemInt 0 signed: 1\nafter: text '0'\nSetDlgItemInt i32::MIN signed: 1\nafter: text '-0'\nSetDlgItemInt a static: 1\nSetDlgItemInt absent: 0 err=1421\nGetDlgItemInt '123' signed=0: value 0x7b (123) translated 1\nGetDlgItemInt '123' signed=1: value 0x7b (123) translated 1\nGetDlgItemInt '-123' signed=1: value 0xffffff85 (-123) translated 1\nGetDlgItemInt '-123' signed=0: value 0x0 (0) translated 0\nGetDlgItemInt '+123' signed=1: value 0x0 (0) translated 0\nGetDlgItemInt '  123' (leading spaces) signed=0: value 0x7b (123) translated 1\nGetDlgItemInt '123  ' (trailing spaces) signed=0: value 0x7b (123) translated 0\nGetDlgItemInt '12 3' signed=0: value 0xc (12) translated 0\nGetDlgItemInt '123abc' signed=0: value 0x7b (123) translated 0\nGetDlgItemInt 'abc' signed=0: value 0x0 (0) translated 0\nGetDlgItemInt '' (empty) signed=0: value 0x0 (0) translated 0\nGetDlgItemInt '-' signed=1: value 0x0 (0) translated 0\nGetDlgItemInt '4294967295' signed=0: value 0xffffffff (-1) translated 1\nGetDlgItemInt '4294967296' signed=0: value 0x0 (0) translated 0\nGetDlgItemInt '2147483647' signed=1: value 0x7fffffff (2147483647) translated 1\nGetDlgItemInt '2147483648' signed=1: value 0x0 (0) translated 0\nGetDlgItemInt '-2147483648' signed=1: value 0x80000000 (-2147483648) translated 0\nGetDlgItemInt '-2147483649' signed=1: value 0x0 (0) translated 0\nGetDlgItemInt '0x10' signed=0: value 0x0 (0) translated 0\nGetDlgItemInt '1e3' signed=0: value 0x1 (1) translated 0\nGetDlgItemInt '007' signed=0: value 0x7 (7) translated 1\nGetDlgItemInt with a NULL translated pointer: 55\nGetDlgItemInt absent id: 0 err=1421\n  translated after the absent id: 0\nGetDlgItemInt bad dialog: 0 err=1400\n  translated after the bad dialog: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

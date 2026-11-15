@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAPoll.yaml
+id: windows/api/ws2_32.dll/WSAPoll
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAPoll function", "WSAPOLLFD structure"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Polls sockets. Not called by Chrome's stage 4. Observed on loopback: the revents of a listener, a connected pair, a socket whose peer closed, a failed non-blocking connect, closed and invalid sockets.
+interface:
+  signature: "int WSAPoll(LPWSAPOLLFD fds, ULONG n, INT timeout_ms)"
+  result: "the number of entries with non-zero revents, 0 on timeout, SOCKET_ERROR"
+  events: "POLLRDNORM 0x100, POLLRDBAND 0x200, POLLWRNORM 0x10; revents also POLLERR 1, POLLHUP 2, POLLNVAL 4"
+chrome:
+  calls: "not called in S4"
+rules:
+  listener: "no pending connection, POLLRDNORM: 0, revents 0; with a connection pending: 1, revents 0x100"
+  connected: "a connected socket with POLLWRNORM: revents 0x10; POLLRDNORM with no data: 0; both events: 1, revents 0x10; events 0 and POLLRDBAND: 0; with data and POLLRDNORM: 0x100"
+  peer_closed: "after the peer closed: POLLRDNORM gives revents POLLHUP (2) only; POLLWRNORM gives POLLWRNORM|POLLHUP (0x12)"
+  failed_connect: "a non-blocking connect to a closed port, events POLLWRNORM: revents 0x13 (POLLWRNORM|POLLERR|POLLHUP); events POLLRDNORM: 0 (nothing reported)"
+  unconnected: "an unconnected TCP socket: POLLWRNORM and POLLRDNORM both 0"
+  invalid: "a closed socket and INVALID_SOCKET: returns -1 with WSAENOTSOCK (10038) and revents POLLNVAL (4); an empty array: -1/WSAEINVAL"
+  two_entries: "two entries of a pair, the first POLLRDNORM (nothing to read), the second POLLWRNORM: returns 1, revents 0 and 0x10"
+errors:
+  notsock: "WSAENOTSOCK 10038"
+  inval: "WSAEINVAL 10022"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  POLLPRI, more than a few entries, a timeout of -1, behaviour after the socket is closed by another thread.

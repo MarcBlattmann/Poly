@@ -101,6 +101,17 @@ impl UnicodeString {
         b
     }
 
+    /// The string as a caller of `UNICODE_STRING` size `size` lays it out: 16 bytes, or 8 in a
+    /// 32-bit process (`Buffer` at 4, ADR 0186).
+    pub fn to_bytes_in(&self, size: usize) -> Vec<u8> {
+        let mut b = alloc::vec![0u8; size];
+        b[0..2].copy_from_slice(&self.length.to_le_bytes());
+        b[2..4].copy_from_slice(&self.maximum_length.to_le_bytes());
+        let ptr = size / 2;
+        b[ptr..size].copy_from_slice(&self.buffer.to_le_bytes()[..ptr]);
+        b
+    }
+
     pub fn from_bytes(b: &[u8; UNICODE_STRING_SIZE]) -> UnicodeString {
         UnicodeString {
             length: u16::from_le_bytes([b[0], b[1]]),
@@ -108,6 +119,13 @@ impl UnicodeString {
             buffer: u64::from_le_bytes(b[8..16].try_into().expect("8 bytes")),
         }
     }
+}
+
+/// The size of a `UNICODE_STRING` in the calling process: 16, or 8 in a 32-bit one. Services
+/// that return structures holding strings and pointers into their own buffer lay them out in the
+/// caller's width with it (ADR 0186).
+pub fn caller_unicode_size<K: NtKernel>(k: &mut K) -> usize {
+    k.with_state(|_, p, _| p.layout().unicode_string as usize)
 }
 
 pub fn read_unicode_header<K: NtKernel>(k: &mut K, addr: u64) -> Result<UnicodeString, NtStatus> {

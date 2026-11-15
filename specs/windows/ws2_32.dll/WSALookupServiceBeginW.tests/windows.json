@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsalookupservicebeginw_probe",
+      "exe_sha256": "ccbad57caffe4ea2c8836b0b85fdfd3f36e850da5cd06a480a3d5e7c39576817",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QmVnaW4gTlNfQUxMIGZsYWdzIDB4RkYwOiAwIGhhbmRsZS13cml0dGVuPTEKTlNfQUxMOiBOZXh0IHdpdGggbm8gYnVmZmVyOiBmYWlscz0xIGVycm9yLWlzLWZhdWx0LW9yLW5vLW1vcmU9MSBsZW5ndGgtYXNrZWQtZm9yLXBvc2l0aXZlLXdoZW4tZmF1bHQ9MQpOU19BTEw6IE5leHQgYWZ0ZXIgRW5kIC0xL0VSUk9SX0lOVkFMSURfSEFORExFCk5TX05MQSAoMTUpOiBmaXJzdCBOZXh0IGlzIG9rIG9yIFdTQV9FX05PX01PUkU6IDEKTlNfTkxBICgxNSk6IEVuZCAwCkJlZ2luIE5TX05MQSAoMTUpIGZsYWdzIExVUF9SRVRVUk5fTkFNRXxMVVBfQ09OVEFJTkVSUzogLTEvV1NBTk9fREFUQSBoYW5kbGUtd3JpdHRlbj0wCkJlZ2luIE5TX05FVEJUICgxMykgZmxhZ3MgMHhGRjA6IC0xLzEwMTA4IGhhbmRsZS13cml0dGVuPTAKQmVnaW4gTlNfV0lOUyAoMTQpIGZsYWdzIExVUF9SRVRVUk5fTkFNRXxMVVBfQ09OVEFJTkVSUzogLTEvMTAxMDggaGFuZGxlLXdyaXR0ZW49MApCZWdpbiBuYW1lc3BhY2UgOTkgZmxhZ3MgMHhGRjA6IC0xLzEwMTA4IGhhbmRsZS13cml0dGVuPTAKYWZ0ZXIgYSByZWZ1c2VkIEJlZ2luIHRoZSBoYW5kbGUgaXMgTlVMTApCZWdpbiBmbGFncyAwOiAwIGhhbmRsZS13cml0dGVuPTEKTmV4dChOVUxMKSAtMS9FUlJPUl9JTlZBTElEX0hBTkRMRQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Begin NS_ALL flags 0xFF0: 0 handle-written=1\nNS_ALL: Next with no buffer: fails=1 error-is-fault-or-no-more=1 length-asked-for-positive-when-fault=1\nNS_ALL: Next after End -1/ERROR_INVALID_HANDLE\nNS_NLA (15): first Next is ok or WSA_E_NO_MORE: 1\nNS_NLA (15): End 0\nBegin NS_NLA (15) flags LUP_RETURN_NAME|LUP_CONTAINERS: -1/WSANO_DATA handle-written=0\nBegin NS_NETBT (13) flags 0xFF0: -1/10108 handle-written=0\nBegin NS_WINS (14) flags LUP_RETURN_NAME|LUP_CONTAINERS: -1/10108 handle-written=0\nBegin namespace 99 flags 0xFF0: -1/10108 handle-written=0\nafter a refused Begin the handle is NULL\nBegin flags 0: 0 handle-written=1\nNext(NULL) -1/ERROR_INVALID_HANDLE\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "wsalookupservicebeginw_probe_c",
+      "exe_sha256": "670ed42caba75aa33e393029e71ccc23f998ba730d176fccda6a6c9beaa28bde",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlNfQUxMOiByZXN1bHQncyBkd1NpemUgZmllbGQgPj0gODA6IDEKTlNfQUxMOiBFbmQgYWdhaW4gLTEvRVJST1JfSU5WQUxJRF9IQU5ETEUKQmVnaW4gTlNfTkxBICgxNSkgZmxhZ3MgMHhGRjA6IDAgaGFuZGxlLXdyaXR0ZW49MQpOU19OTEEgKDE1KTogTmV4dCB3aXRoIG5vIGJ1ZmZlcjogZmFpbHM9MSBlcnJvci1pcy1mYXVsdC1vci1uby1tb3JlPTEgbGVuZ3RoLWFza2VkLWZvci1wb3NpdGl2ZS13aGVuLWZhdWx0PTEKTlNfTkxBICgxNSk6IE5leHQgYWZ0ZXIgRW5kIC0xL0VSUk9SX0lOVkFMSURfSEFORExFCkJlZ2luIE5TX0ROUyAoMTIpIGZsYWdzIExVUF9SRVRVUk5fTkFNRXxMVVBfQ09OVEFJTkVSUzogLTEvRVJST1JfSU5WQUxJRF9QQVJBTUVURVIgaGFuZGxlLXdyaXR0ZW49MApCZWdpbiBOU19XSU5TICgxNCkgZmxhZ3MgMHhGRjA6IC0xLzEwMTA4IGhhbmRsZS13cml0dGVuPTAKQmVnaW4gTlNfTlREUyAoMzIpIGZsYWdzIExVUF9SRVRVUk5fTkFNRXxMVVBfQ09OVEFJTkVSUzogLTEvRVJST1JfSU5WQUxJRF9QQVJBTUVURVIgaGFuZGxlLXdyaXR0ZW49MApCZWdpbiBOVUxMIHF1ZXJ5OiAtMS9XU0FFRkFVTFQgaGFuZGxlLXdyaXR0ZW49MApCZWdpbiBkd1NpemUgMDogLTEvV1NBRUlOVkFMIGhhbmRsZS13cml0dGVuPTAKRW5kKE5VTEwpIC0xL0VSUk9SX0lOVkFMSURfSEFORExFCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NS_ALL: result's dwSize field >= 80: 1\nNS_ALL: End again -1/ERROR_INVALID_HANDLE\nBegin NS_NLA (15) flags 0xFF0: 0 handle-written=1\nNS_NLA (15): Next with no buffer: fails=1 error-is-fault-or-no-more=1 length-asked-for-positive-when-fault=1\nNS_NLA (15): Next after End -1/ERROR_INVALID_HANDLE\nBegin NS_DNS (12) flags LUP_RETURN_NAME|LUP_CONTAINERS: -1/ERROR_INVALID_PARAMETER handle-written=0\nBegin NS_WINS (14) flags 0xFF0: -1/10108 handle-written=0\nBegin NS_NTDS (32) flags LUP_RETURN_NAME|LUP_CONTAINERS: -1/ERROR_INVALID_PARAMETER handle-written=0\nBegin NULL query: -1/WSAEFAULT handle-written=0\nBegin dwSize 0: -1/WSAEINVAL handle-written=0\nEnd(NULL) -1/ERROR_INVALID_HANDLE\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

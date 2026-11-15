@@ -296,6 +296,13 @@ pub fn install(
             let root = reg.hive(id).root;
             populate(reg, root, spec, now)?;
         }
+        if spec.file == "SOFTWARE" {
+            // The 32-bit view of `HKLM\SOFTWARE` (ADR 0186, stage 2) lives here: a machine
+            // whose hive file is older than that gets the empty key too (Learn: "Registry
+            // Redirector").
+            let root = reg.hive(id).root;
+            make_path(reg, root, WOW6432_NODE, false, now)?;
+        }
         out.push(outcome);
     }
     volatile_keys(reg, now)?;

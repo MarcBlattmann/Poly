@@ -1,4 +1,4 @@
-//! A PE32+ image builder for the tests: executables and DLLs with exports
+//! A PE32+ (or, with [`PeBuilder::pe32`], PE32) image builder for the tests: executables and DLLs with exports
 //! (by name, by ordinal, forwarders), imports (by name with a hint, by
 //! ordinal, new-style bound imports), delay-load imports, a TLS directory
 //! with callbacks, base relocations and an exception directory. Poly's own
@@ -9,7 +9,9 @@
 //! 0x1000, each on its own page; then one generated section `.poly` (read
 //! and write) with every table, at [`PeBuilder::generated_rva`] if given
 //! (so hand-assembled code can address the tables), else on the next page;
-//! then `.reloc`. File and section alignment are both 4 KiB, so the file is
+//! then `.reloc`. A PE32 image (I386, 32-bit pointers; [`PeBuilder::x86`]) is
+//! the same with 4-byte address table slots, TLS directory fields and
+//! callbacks, `HIGHLOW` relocations and the PE32 optional header. File and section alignment are both 4 KiB, so the file is
 //! laid out as the image is mapped. In `.poly`, in this order: the import
 //! address tables (one per imported DLL, each ending in a zero slot), the
 //! delay-load address tables, the delay-load module handle slots, the TLS
@@ -21,7 +23,11 @@ use alloc::vec::Vec;
 
 const ALIGN: u32 = 0x1000;
 const PE_OFFSET: usize = 0x40;
+/// Size of the optional header of a PE32+ image, and of a PE32 one.
 const OPTIONAL_HEADER_SIZE: usize = 240;
+const OPTIONAL_HEADER_SIZE_32: usize = 224;
+/// Machine type of 32-bit x86 (`IMAGE_FILE_MACHINE_I386`).
+pub const MACHINE_I386: u16 = 0x014C;
 
 /// `IMAGE_SCN_*` combinations.
 pub const TEXT: u32 = 0x6000_0020; // CNT_CODE | MEM_EXECUTE | MEM_READ
@@ -111,6 +117,9 @@ pub struct PeBuilder {
     /// `IMAGE_FILE_RELOCS_STRIPPED`.
     pub fixed: bool,
     pub machine: u16,
+    /// A PE32 image (4-byte pointers, `ImageBase` and stack sizes) instead of
+    /// PE32+; see [`PeBuilder::x86`].
+    pub pe32: bool,
     pub time_date_stamp: u32,
     pub checksum: u32,
     pub sections: Vec<Section>,
@@ -121,7 +130,7 @@ pub struct PeBuilder {
     pub imports: Vec<Import>,
     pub delay_imports: Vec<Import>,
     pub tls: Option<Tls>,
-    /// RVAs of 64-bit absolute addresses to relocate.
+    /// RVAs of the absolute addresses to relocate (64-bit, or 32-bit in a PE32 image).
     pub relocations: Vec<u32>,
     /// The exception directory (RVA, size), if the code has `.pdata`.
     pub exception: Option<(u32, u32)>,
@@ -139,6 +148,7 @@ impl Default for PeBuilder {
             entry: 0,
             fixed: false,
             machine: 0x8664,
+            pe32: false,
             time_date_stamp: 0x5000_0000,
             checksum: 0,
             sections: Vec::new(),
@@ -154,6 +164,18 @@ impl Default for PeBuilder {
             stack_reserve: 0x10_0000,
             stack_commit: 0x1000,
         }
+    }
+}
+
+impl PeBuilder {
+    /// A 32-bit x86 image: I386, PE32, a 32-bit preferred base.
+    pub fn x86() -> PeBuilder {
+        PeBuilder { pe32: true, machine: MACHINE_I386, image_base: 0x1000_0000, ..PeBuilder::default() }
+    }
+
+    /// Bytes in a pointer of this image.
+    fn ptr(&self) -> u32 {
+        if self.pe32 { 4 } else { 8 }
     }
 }
 
@@ -206,6 +228,20 @@ impl Gen {
     fn put64(&mut self, at: u32, v: u64) {
         self.bytes[at as usize..at as usize + 8].copy_from_slice(&v.to_le_bytes());
     }
+    /// A pointer of `w` bytes (4 or 8).
+    fn put_ptr(&mut self, w: u32, at: u32, v: u64) {
+        if w == 4 {
+            self.put32(at, v as u32);
+        } else {
+            self.put64(at, v);
+        }
+    }
+    fn get_ptr(&self, w: u32, at: u32) -> u64 {
+        let b = &self.bytes[at as usize..(at + w) as usize];
+        let mut v = [0u8; 8];
+        v[..b.len()].copy_from_slice(b);
+        u64::from_le_bytes(v)
+    }
     fn cstr(&mut self, s: &str) -> u32 {
         let at = self.at();
         self.bytes.extend_from_slice(s.as_bytes());
@@ -242,23 +278,24 @@ impl PeBuilder {
         let mut relocs: Vec<u32> = self.relocations.clone();
         let mut lay = Layout { sections: sec_rvas.clone(), generated: gen_rva, ..Layout::default() };
         let va = |off: u32| self.image_base + u64::from(gen_rva + off);
+        let w = self.ptr();
 
         // Address tables first, at fixed places.
         let mut iat_off = Vec::new();
         for imp in &self.imports {
-            let at = g.reserve((imp.symbols.len() + 1) * 8);
+            let at = g.reserve((imp.symbols.len() + 1) * w as usize);
             iat_off.push(at);
-            lay.iat.push((0..imp.symbols.len()).map(|j| gen_rva + at + 8 * j as u32).collect());
+            lay.iat.push((0..imp.symbols.len()).map(|j| gen_rva + at + w * j as u32).collect());
         }
         let mut diat_off = Vec::new();
         for imp in &self.delay_imports {
-            let at = g.reserve((imp.symbols.len() + 1) * 8);
+            let at = g.reserve((imp.symbols.len() + 1) * w as usize);
             diat_off.push(at);
-            lay.delay_iat.push((0..imp.symbols.len()).map(|j| gen_rva + at + 8 * j as u32).collect());
+            lay.delay_iat.push((0..imp.symbols.len()).map(|j| gen_rva + at + w * j as u32).collect());
         }
         let mut handle_off = Vec::new();
         for _ in &self.delay_imports {
-            let at = g.reserve(8);
+            let at = g.reserve(w as usize);
             handle_off.push(at);
             lay.delay_handles.push(gen_rva + at);
         }
@@ -273,24 +310,25 @@ impl PeBuilder {
             g.bytes.extend_from_slice(&t.template);
             lay.tls_template = Some(gen_rva + tpl);
             g.align(8);
-            let cbs = g.reserve((t.callbacks.len() + 1) * 8);
+            let cbs = g.reserve((t.callbacks.len() + 1) * w as usize);
             for (i, &cb) in t.callbacks.iter().enumerate() {
-                let at = cbs + 8 * i as u32;
-                g.put64(at, self.image_base + u64::from(cb));
+                let at = cbs + w * i as u32;
+                g.put_ptr(w, at, self.image_base + u64::from(cb));
                 relocs.push(gen_rva + at);
             }
-            let dir = g.reserve(40);
-            g.put64(dir, va(tpl));
-            g.put64(dir + 8, va(tpl) + t.template.len() as u64);
-            g.put64(dir + 16, va(tls_index_off.unwrap_or(0)));
-            g.put64(dir + 24, if t.callbacks.is_empty() { 0 } else { va(cbs) });
-            g.put32(dir + 32, t.zero_fill);
-            g.put32(dir + 36, t.align_flag);
+            // IMAGE_TLS_DIRECTORY32 / 64: four pointers, then two 32-bit fields.
+            let dir = g.reserve(4 * w as usize + 8);
+            g.put_ptr(w, dir, va(tpl));
+            g.put_ptr(w, dir + w, va(tpl) + t.template.len() as u64);
+            g.put_ptr(w, dir + 2 * w, va(tls_index_off.unwrap_or(0)));
+            g.put_ptr(w, dir + 3 * w, if t.callbacks.is_empty() { 0 } else { va(cbs) });
+            g.put32(dir + 4 * w, t.zero_fill);
+            g.put32(dir + 4 * w + 4, t.align_flag);
             for k in 0..3 {
-                relocs.push(gen_rva + dir + 8 * k);
+                relocs.push(gen_rva + dir + w * k);
             }
             if !t.callbacks.is_empty() {
-                relocs.push(gen_rva + dir + 24);
+                relocs.push(gen_rva + dir + 3 * w);
             }
             tls_dir = Some(dir);
         }
@@ -298,10 +336,10 @@ impl PeBuilder {
         // Lookup tables shared by imports and delay imports.
         let name_table = |g: &mut Gen, syms: &[Sym]| -> u32 {
             g.align(8);
-            let ilt = g.reserve((syms.len() + 1) * 8);
+            let ilt = g.reserve((syms.len() + 1) * w as usize);
             for (j, s) in syms.iter().enumerate() {
                 let entry = match s {
-                    Sym::Ordinal(o) => (1u64 << 63) | u64::from(*o),
+                    Sym::Ordinal(o) => (1u64 << (8 * w - 1)) | u64::from(*o),
                     Sym::Name { name, hint } => {
                         g.align(2);
                         let hn = g.at();
@@ -310,7 +348,7 @@ impl PeBuilder {
                         u64::from(gen_rva + hn)
                     }
                 };
-                g.put64(ilt + 8 * j as u32, entry);
+                g.put_ptr(w, ilt + w * j as u32, entry);
             }
             ilt
         };
@@ -335,11 +373,9 @@ impl PeBuilder {
                 for j in 0..imp.symbols.len() {
                     let v = match &imp.bound {
                         Some((_, addrs)) => addrs.get(j).copied().unwrap_or(0),
-                        None => u64::from_le_bytes(
-                            g.bytes[(ilt as usize + 8 * j)..(ilt as usize + 8 * j + 8)].try_into().unwrap(),
-                        ),
+                        None => g.get_ptr(w, ilt + w * j as u32),
                     };
-                    g.put64(iat_off[i] + 8 * j as u32, v);
+                    g.put_ptr(w, iat_off[i] + w * j as u32, v);
                 }
             }
             import_dir = Some((descs, (self.imports.len() as u32 + 1) * 20));
@@ -361,8 +397,8 @@ impl PeBuilder {
                 g.put32(d + 12, gen_rva + diat_off[i]);
                 g.put32(d + 16, gen_rva + int);
                 for (j, &thunk) in imp.delay_thunks.iter().enumerate().take(imp.symbols.len()) {
-                    g.put64(diat_off[i] + 8 * j as u32, self.image_base + u64::from(thunk));
-                    relocs.push(gen_rva + diat_off[i] + 8 * j as u32);
+                    g.put_ptr(w, diat_off[i] + w * j as u32, self.image_base + u64::from(thunk));
+                    relocs.push(gen_rva + diat_off[i] + w * j as u32);
                 }
             }
             delay_dir = Some((descs, (self.delay_imports.len() as u32 + 1) * 32));
@@ -428,7 +464,7 @@ impl PeBuilder {
         g.align(16);
         let gen_size = g.at().max(16);
         let reloc_rva = gen_rva + align(gen_size);
-        let reloc = if self.fixed { Vec::new() } else { reloc_table(&relocs) };
+        let reloc = if self.fixed { Vec::new() } else { reloc_table(&relocs, self.pe32) };
         let size_of_image = reloc_rva + if reloc.is_empty() { 0 } else { align(reloc.len() as u32) };
         lay.size_of_image = size_of_image;
 
@@ -452,8 +488,12 @@ impl PeBuilder {
         put16(&mut out, coff, self.machine);
         put16(&mut out, coff + 2, all.len() as u16);
         put32(&mut out, coff + 4, self.time_date_stamp);
-        put16(&mut out, coff + 16, OPTIONAL_HEADER_SIZE as u16);
+        let opt_size = if self.pe32 { OPTIONAL_HEADER_SIZE_32 } else { OPTIONAL_HEADER_SIZE };
+        put16(&mut out, coff + 16, opt_size as u16);
         let mut ch: u16 = 0x0002 | 0x0020; // EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE
+        if self.pe32 {
+            ch |= 0x0100; // 32BIT_MACHINE
+        }
         if self.dll {
             ch |= 0x2000;
         }
@@ -462,10 +502,18 @@ impl PeBuilder {
         }
         put16(&mut out, coff + 18, ch);
         let opt = coff + 20;
-        put16(&mut out, opt, 0x20B);
+        put16(&mut out, opt, if self.pe32 { 0x10B } else { 0x20B });
         put32(&mut out, opt + 16, self.entry);
         put32(&mut out, opt + 20, ALIGN);
-        put64(&mut out, opt + 24, self.image_base);
+        // PE32 has BaseOfData (offset 24) and a 4-byte ImageBase (offset 28).
+        let dirs_at = if self.pe32 {
+            put32(&mut out, opt + 24, ALIGN);
+            put32(&mut out, opt + 28, self.image_base as u32);
+            96
+        } else {
+            put64(&mut out, opt + 24, self.image_base);
+            112
+        };
         put32(&mut out, opt + 32, ALIGN);
         put32(&mut out, opt + 36, ALIGN);
         put16(&mut out, opt + 40, 6);
@@ -476,16 +524,27 @@ impl PeBuilder {
         put16(&mut out, opt + 68, if self.dll { 2 } else { 3 });
         let mut dllch: u16 = 0x0100; // NX_COMPAT
         if !self.fixed {
-            dllch |= 0x0040 | 0x0020; // DYNAMIC_BASE | HIGH_ENTROPY_VA
+            dllch |= 0x0040; // DYNAMIC_BASE
+            if !self.pe32 {
+                dllch |= 0x0020; // HIGH_ENTROPY_VA
+            }
         }
         put16(&mut out, opt + 70, dllch);
-        put64(&mut out, opt + 72, self.stack_reserve);
-        put64(&mut out, opt + 80, self.stack_commit);
-        put64(&mut out, opt + 88, 0x10_0000);
-        put64(&mut out, opt + 96, 0x1000);
-        put32(&mut out, opt + 108, 16);
+        if self.pe32 {
+            put32(&mut out, opt + 72, self.stack_reserve as u32);
+            put32(&mut out, opt + 76, self.stack_commit as u32);
+            put32(&mut out, opt + 80, 0x10_0000);
+            put32(&mut out, opt + 84, 0x1000);
+            put32(&mut out, opt + 92, 16);
+        } else {
+            put64(&mut out, opt + 72, self.stack_reserve);
+            put64(&mut out, opt + 80, self.stack_commit);
+            put64(&mut out, opt + 88, 0x10_0000);
+            put64(&mut out, opt + 96, 0x1000);
+            put32(&mut out, opt + 108, 16);
+        }
         let set_dir = |o: &mut Vec<u8>, idx: usize, rva: u32, size: u32| {
-            let d = opt + 112 + idx * 8;
+            let d = opt + dirs_at + idx * 8;
             put32(o, d, rva);
             put32(o, d + 4, size);
         };
@@ -502,20 +561,20 @@ impl PeBuilder {
             set_dir(&mut out, 5, reloc_rva, reloc.len() as u32);
         }
         if let Some(o) = tls_dir {
-            set_dir(&mut out, 9, gen_rva + o, 40);
+            set_dir(&mut out, 9, gen_rva + o, 4 * w + 8);
         }
         if let Some((o, s)) = bound_dir {
             set_dir(&mut out, 11, gen_rva + o, s);
         }
         if !self.imports.is_empty() {
             let first = iat_off[0];
-            let end = *iat_off.last().unwrap() + 8 * (self.imports.last().unwrap().symbols.len() as u32 + 1);
+            let end = *iat_off.last().unwrap() + w * (self.imports.last().unwrap().symbols.len() as u32 + 1);
             set_dir(&mut out, 12, gen_rva + first, end - first);
         }
         if let Some((o, s)) = delay_dir {
             set_dir(&mut out, 13, gen_rva + o, s);
         }
-        let table = opt + OPTIONAL_HEADER_SIZE;
+        let table = opt + opt_size;
         for (i, (name, rva, vsize, chars, data)) in all.iter().enumerate() {
             let h = table + i * 40;
             out[h..h + 8].copy_from_slice(*name);
@@ -534,8 +593,9 @@ impl PeBuilder {
 /// A section as written: name, RVA, virtual size, characteristics, bytes.
 type Placed<'a> = (&'a [u8; 8], u32, u32, u32, &'a [u8]);
 
-/// A `.reloc` table of `IMAGE_REL_BASED_DIR64` entries.
-fn reloc_table(rvas: &[u32]) -> Vec<u8> {
+/// A `.reloc` table of `IMAGE_REL_BASED_DIR64` entries (`HIGHLOW` for a PE32 image).
+fn reloc_table(rvas: &[u32], pe32: bool) -> Vec<u8> {
+    let kind: u16 = if pe32 { 3 } else { 10 };
     let mut rvas = rvas.to_vec();
     rvas.sort_unstable();
     rvas.dedup();
@@ -545,7 +605,7 @@ fn reloc_table(rvas: &[u32]) -> Vec<u8> {
         let page = rvas[i] & !(ALIGN - 1);
         let mut entries: Vec<u16> = Vec::new();
         while i < rvas.len() && rvas[i] & !(ALIGN - 1) == page {
-            entries.push((10 << 12) | (rvas[i] & (ALIGN - 1)) as u16);
+            entries.push((kind << 12) | (rvas[i] & (ALIGN - 1)) as u16);
             i += 1;
         }
         if !entries.len().is_multiple_of(2) {
@@ -558,4 +618,122 @@ fn reloc_table(rvas: &[u32]) -> Vec<u8> {
         }
     }
     data
+}
+
+/// Where [`append_section`] put a section, and how long the file must be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Appended {
+    /// The section's RVA (and its file offset: file and image are laid out alike).
+    pub rva: u32,
+    /// The file's length once the section's whole raw size is in it.
+    pub file_len: u64,
+}
+
+/// Add a section to an image file made by [`PeBuilder::write`], for a test
+/// that needs a big executable without holding it in memory. `size` (a
+/// multiple of 4 KiB, at least `data.len()`) is the section's raw and
+/// virtual size; only `data` is appended to `file`, and the rest of the
+/// section is zeros the caller makes by growing the file to
+/// [`Appended::file_len`] (a sparse file, a counting reader, `resize`).
+/// `None` when the headers have no room for another section header.
+pub fn append_section(
+    file: &mut Vec<u8>,
+    name: &str,
+    data: &[u8],
+    size: u32,
+    characteristics: u32,
+) -> Option<Appended> {
+    let u16_at = |f: &[u8], at: usize| u16::from_le_bytes([f[at], f[at + 1]]);
+    let u32_at = |f: &[u8], at: usize| u32::from_le_bytes([f[at], f[at + 1], f[at + 2], f[at + 3]]);
+    if !size.is_multiple_of(ALIGN) || (size as usize) < data.len() {
+        return None;
+    }
+    let coff = PE_OFFSET + 4;
+    let opt = coff + 20;
+    let count = usize::from(u16_at(file, coff + 2));
+    let size_of_image = u32_at(file, opt + 56);
+    let header = opt + usize::from(u16_at(file, coff + 16)) + count * 40;
+    // The file is the image (4 KiB alignment), and the headers fit in a page.
+    if file.len() != size_of_image as usize || header + 40 > ALIGN as usize {
+        return None;
+    }
+    let rva = size_of_image;
+    let mut n = [0u8; 8];
+    n[..name.len().min(8)].copy_from_slice(&name.as_bytes()[..name.len().min(8)]);
+    file[header..header + 8].copy_from_slice(&n);
+    file[header + 8..header + 12].copy_from_slice(&size.to_le_bytes());
+    file[header + 12..header + 16].copy_from_slice(&rva.to_le_bytes());
+    file[header + 16..header + 20].copy_from_slice(&size.to_le_bytes());
+    file[header + 20..header + 24].copy_from_slice(&rva.to_le_bytes());
+    file[header + 36..header + 40].copy_from_slice(&characteristics.to_le_bytes());
+    file[coff + 2..coff + 4].copy_from_slice(&(count as u16 + 1).to_le_bytes());
+    file[opt + 56..opt + 60].copy_from_slice(&(rva + size).to_le_bytes());
+    file.extend_from_slice(data);
+    Some(Appended { rva, file_len: u64::from(rva) + u64::from(size) })
+}
+
+/// Point data directory `index` (`IMAGE_DIRECTORY_ENTRY_*`) of an image file
+/// at `rva` and `size`.
+pub fn set_directory(file: &mut [u8], index: usize, rva: u32, size: u32) {
+    let opt = PE_OFFSET + 4 + 20;
+    let dirs_at = if u16::from_le_bytes([file[opt], file[opt + 1]]) == 0x10B { 96 } else { 112 };
+    let at = opt + dirs_at + index * 8;
+    file[at..at + 4].copy_from_slice(&rva.to_le_bytes());
+    file[at + 4..at + 8].copy_from_slice(&size.to_le_bytes());
+}
+
+#[cfg(test)]
+mod append_tests {
+    use super::*;
+
+    fn exe() -> Vec<u8> {
+        PeBuilder {
+            image_base: 0x1_4000_0000,
+            entry: 0x1000,
+            sections: vec![Section::new(".text", vec![0xC3], TEXT)],
+            stack_reserve: 0x1_0000,
+            stack_commit: 0x1000,
+            ..PeBuilder::default()
+        }
+        .write()
+    }
+
+    #[test]
+    fn a_big_section_is_described_not_held() {
+        let mut file = exe();
+        let before = file.len() as u64;
+        let pad = 64u32 << 20;
+        let at = append_section(&mut file, ".pad", &[7; 100], pad, DATA).unwrap();
+        assert_eq!(at.rva as u64, before);
+        assert_eq!(at.file_len, before + u64::from(pad));
+        assert_eq!(file.len() as u64, before + 100, "only the data is in the vector");
+        let pe = poly_pe::Pe::parse(&file).unwrap();
+        assert_eq!(u64::from(pe.info().optional.size_of_image), before + u64::from(pad));
+        // The plan accepts the file once it has its full length.
+        let plan = pe.load_plan_in(at.file_len).unwrap();
+        let pad_region = plan.regions().find(|r| r.rva == at.rva).expect("the padded section is planned");
+        assert_eq!(pad_region.size, pad);
+        assert_eq!(pad_region.data_size, pad);
+        assert_eq!(pad_region.data_offset as u64, before);
+    }
+
+    #[test]
+    fn append_refuses_what_does_not_fit() {
+        let mut file = exe();
+        assert!(append_section(&mut file, ".x", &[0; 10], 0x800, DATA).is_none(), "not a page multiple");
+        assert!(append_section(&mut file, ".x", &[0; 0x2000], 0x1000, DATA).is_none(), "data over the size");
+        // A header made for 100 sections has no room for one more.
+        let mut full = exe();
+        full[PE_OFFSET + 4 + 2] = 100;
+        assert!(append_section(&mut full, ".x", &[], 0x1000, DATA).is_none());
+    }
+
+    #[test]
+    fn set_directory_writes_the_entry() {
+        let mut file = exe();
+        set_directory(&mut file, 5, 0x1234, 0x56);
+        let pe = poly_pe::Pe::parse(&file).unwrap();
+        let d = pe.info().directory(poly_pe::dir::BASERELOC).unwrap();
+        assert_eq!((d.virtual_address, d.size), (0x1234, 0x56));
+    }
 }

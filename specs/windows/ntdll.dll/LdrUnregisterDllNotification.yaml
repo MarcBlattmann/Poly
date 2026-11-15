@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/LdrUnregisterDllNotification.yaml
+id: windows/api/ntdll.dll/LdrUnregisterDllNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "LdrRegisterDllNotification function", "LdrUnregisterDllNotification function", "DLL_NOTIFICATION_DATA", "LDR_DLL_NOTIFICATION_FUNCTION"; winternl.h for the layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Removes a registration made by LdrRegisterDllNotification. No tests of its own: the tests of LdrRegisterDllNotification call it.
+same_as: "windows/api/ntdll.dll/LdrRegisterDllNotification"
+interface:
+  signature: "NTSTATUS NTAPI LdrUnregisterDllNotification(PVOID cookie)"
+rules:
+  results: "STATUS_SUCCESS for a live cookie, after which the callback is not called any more; 0xC0000135 (STATUS_DLL_NOT_FOUND) for a cookie that was already unregistered, NULL or a made-up value"
+errors:
+  see_sheet: "the LdrRegisterDllNotification sheet"
+side_effects: "none beyond the registration"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  see the LdrRegisterDllNotification sheet
+not_covered: >
+  Everything the LdrRegisterDllNotification sheet lists as not covered.

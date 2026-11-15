@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gcn_basic",
+      "exe_sha256": "5ff9ee1715e084ca8423c16d9033c17165153b340719f1c5b24017a9096093d4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VGFnZ2VkLCBzaXplIDEwMDogcmV0dXJuZWQgNiB0ZXh0ICJUYWdnZWQiIChsYXN0IGVycm9yIDApClRhZ2dlZCwgc2l6ZSA3OiByZXR1cm5lZCA2IHRleHQgIlRhZ2dlZCIgKGxhc3QgZXJyb3IgMCkKVGFnZ2VkLCBzaXplIDY6IHJldHVybmVkIDUgdGV4dCAiVGFnZ2UiIChsYXN0IGVycm9yIDApClRhZ2dlZCwgc2l6ZSAxOiByZXR1cm5lZCAwIHRleHQgIjx1bnRvdWNoZWQ+IiAobGFzdCBlcnJvciAxMjIpClRhZ2dlZCwgc2l6ZSAwOiByZXR1cm5lZCAwIHRleHQgIjx1bnRvdWNoZWQ+IiAobGFzdCBlcnJvciAxMjIpClRhZ2dlZCwgc2l6ZSAtMTogcmV0dXJuZWQgMCB0ZXh0ICI8dW50b3VjaGVkPiIgKGxhc3QgZXJyb3IgOTk4KQpvbmUtY2hhcmFjdGVyIGNsYXNzLCBzaXplIDEwMDogcmV0dXJuZWQgMSB0ZXh0ICJYIiAobGFzdCBlcnJvciAwKQpvbmUtY2hhcmFjdGVyIGNsYXNzLCBzaXplIDE6IHJldHVybmVkIDAgdGV4dCAiPHVudG91Y2hlZD4iIChsYXN0IGVycm9yIDEyMikKb25lLWNoYXJhY3RlciBjbGFzcywgc2l6ZSAyOiByZXR1cm5lZCAxIHRleHQgIlgiIChsYXN0IGVycm9yIDApCkNocm9tZV9XaWRnZXRXaW5fMSwgc2l6ZSAxMDA6IHJldHVybmVkIDE4IHRleHQgIkNocm9tZV9XaWRnZXRXaW5fMSIgKGxhc3QgZXJyb3IgMCkKQ2hyb21lX1dpZGdldFdpbl8xLCBzaXplIDE5OiByZXR1cm5lZCAxOCB0ZXh0ICJDaHJvbWVfV2lkZ2V0V2luXzEiIChsYXN0IGVycm9yIDApCkNocm9tZV9XaWRnZXRXaW5fMSwgc2l6ZSAxODogcmV0dXJuZWQgMTcgdGV4dCAiQ2hyb21lX1dpZGdldFdpbl8iIChsYXN0IGVycm9yIDApCnRoZSBsb25nIG5hbWUsIHNpemUgMTAwOiByZXR1cm5lZCA0MiB0ZXh0ICJBX2NsYXNzX25hbWVfb2ZfZXhhY3RseV9mb3J0eV9jaGFyYWN0ZXJzX3giIChsYXN0IGVycm9yIDApCnRoZSBsb25nIG5hbWUsIHNpemUgNDE6IHJldHVybmVkIDQwIHRleHQgIkFfY2xhc3NfbmFtZV9vZl9leGFjdGx5X2ZvcnR5X2NoYXJhY3RlcnMiIChsYXN0IGVycm9yIDApCnRoZSBsb25nIG5hbWUsIHNpemUgNDA6IHJldHVybmVkIDM5IHRleHQgIkFfY2xhc3NfbmFtZV9vZl9leGFjdGx5X2ZvcnR5X2NoYXJhY3RlciIgKGxhc3QgZXJyb3IgMCkKdGhlIGRlc2t0b3Agd2luZG93LCBzaXplIDEwMDogcmV0dXJuZWQgNiB0ZXh0ICIjMzI3NjkiIChsYXN0IGVycm9yIDApCnRoZSBkZWZhdWx0IElNRSB3aW5kb3csIHNpemUgMTAwOiByZXR1cm5lZCAzIHRleHQgIklNRSIgKGxhc3QgZXJyb3IgMCkKTlVMTCwgc2l6ZSAxMDA6IHJldHVybmVkIDAgdGV4dCAiPHVudG91Y2hlZD4iIChsYXN0IGVycm9yIDE0MDApCmEgbWFkZS11cCBoYW5kbGUsIHNpemUgMTAwOiByZXR1cm5lZCAwIHRleHQgIjx1bnRvdWNoZWQ+IiAobGFzdCBlcnJvciAxNDAwKQpOVUxMIGJ1ZmZlcjogcmV0dXJuZWQgMCAobGFzdCBlcnJvciA5OTgpCmEgY2hpbGQgb2YgdGhlIHNhbWUgY2xhc3MsIHNpemUgMTAwOiByZXR1cm5lZCA2IHRleHQgIlRhZ2dlZCIgKGxhc3QgZXJyb3IgMCkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Tagged, size 100: returned 6 text \"Tagged\" (last error 0)\nTagged, size 7: returned 6 text \"Tagged\" (last error 0)\nTagged, size 6: returned 5 text \"Tagge\" (last error 0)\nTagged, size 1: returned 0 text \"<untouched>\" (last error 122)\nTagged, size 0: returned 0 text \"<untouched>\" (last error 122)\nTagged, size -1: returned 0 text \"<untouched>\" (last error 998)\none-character class, size 100: returned 1 text \"X\" (last error 0)\none-character class, size 1: returned 0 text \"<untouched>\" (last error 122)\none-character class, size 2: returned 1 text \"X\" (last error 0)\nChrome_WidgetWin_1, size 100: returned 18 text \"Chrome_WidgetWin_1\" (last error 0)\nChrome_WidgetWin_1, size 19: returned 18 text \"Chrome_WidgetWin_1\" (last error 0)\nChrome_WidgetWin_1, size 18: returned 17 text \"Chrome_WidgetWin_\" (last error 0)\nthe long name, size 100: returned 42 text \"A_class_name_of_exactly_forty_characters_x\" (last error 0)\nthe long name, size 41: returned 40 text \"A_class_name_of_exactly_forty_characters\" (last error 0)\nthe long name, size 40: returned 39 text \"A_class_name_of_exactly_forty_character\" (last error 0)\nthe desktop window, size 100: returned 6 text \"#32769\" (last error 0)\nthe default IME window, size 100: returned 3 text \"IME\" (last error 0)\nNULL, size 100: returned 0 text \"<untouched>\" (last error 1400)\na made-up handle, size 100: returned 0 text \"<untouched>\" (last error 1400)\nNULL buffer: returned 0 (last error 998)\na child of the same class, size 100: returned 6 text \"Tagged\" (last error 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 158
+    }
+  ]
+}

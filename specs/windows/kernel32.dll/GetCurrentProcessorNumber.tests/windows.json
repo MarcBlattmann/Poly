@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "gcpn_affinity_b",
+      "exe_sha256": "fa1ef1cd1cf9d554a437766ebc42da648d96ebf3faa409333634c0100f89ee01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGN1cnJlbnQgcHJvY2Vzc29yIGlzIG9uZSBvZiB0aGUgc3lzdGVtJ3MgcHJvY2Vzc29yczogMQpTZXRUaHJlYWRBZmZpbml0eU1hc2sob25seSBwcm9jZXNzb3JzIHRoZSBzeXN0ZW0gZG9lcyBub3QgaGF2ZSk6IHJldHVybnMgMCBsYXN0IGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the current processor is one of the system's processors: 1\nSetThreadAffinityMask(only processors the system does not have): returns 0 last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 163
+    },
+    {
+      "name": "gcpn_affinity_c",
+      "exe_sha256": "5552345e7a2a9748c5f31a4e38f55bba08c8299ec8f78df05a134c3c62b2c968",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSB0aHJlYWQgcGlubmVkIHRvIGVhY2ggb2YgdGhlIGZpcnN0IDQgcHJvY2Vzc29ycyByZWFkcyB0aGF0IG51bWJlciBldmVyeSB0aW1lOiAxClNldFRocmVhZEFmZmluaXR5TWFzayh0aGUgd2hvbGUgcHJvY2VzcyBtYXNrKSByZXR1cm5zIGEgbm9uemVybyBwcmV2aW91cyBtYXNrOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a thread pinned to each of the first 4 processors reads that number every time: 1\nSetThreadAffinityMask(the whole process mask) returns a nonzero previous mask: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 167
+    }
+  ]
+}

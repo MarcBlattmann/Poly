@@ -19,7 +19,8 @@ use poly_security::sid::Sid;
 use poly_security::token::{self, class};
 use poly_security::{access, error as serr};
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtOpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> NtStatus;
     fn NtOpenThreadToken(thread: Handle, access: u32, as_self: u8, token: *mut Handle) -> NtStatus;
@@ -154,7 +155,8 @@ fn query_token_status(h: Handle, class: u32) -> Result<Vec<u8>, NtStatus> {
 /// The process token's user (`GetCurrentProcessToken()`, `TokenUser`).
 pub fn token_user() -> Option<Sid> {
     let b = query_token(token::CURRENT_PROCESS_TOKEN as Handle, class::TOKEN_USER)?;
-    Sid::from_bytes(b.get(16..)?)
+    // TOKEN_USER: a SID_AND_ATTRIBUTES (two pointer-sized slots), then the SID.
+    Sid::from_bytes(b.get(2 * P..)?)
 }
 
 /// `SetTokenInformation`.
@@ -195,39 +197,44 @@ pub unsafe extern "system" fn AdjustTokenGroups(
     TRUE
 }
 
+/// The size of a pointer: the structures the token services return (`TOKEN_USER`,
+/// `TOKEN_GROUPS`, ...) are laid out in this process's width, 8 bytes or 4 (ADR 0186).
+const P: usize = core::mem::size_of::<usize>();
+
 // ----- duplicating and restricting ---------------------------------------------------------
 
-/// `SECURITY_ATTRIBUTES` (`minwinbase.h`, x64).
-#[repr(C)]
-pub struct SecurityAttributes {
-    pub length: u32,
-    pub descriptor: *const u8,
-    pub inherit: i32,
-}
+/// `SECURITY_ATTRIBUTES` (`minwinbase.h`): this build's own layout (ADR 0186).
+pub use crate::base::SecurityAttributesRaw as SecurityAttributes;
 
 /// The `OBJECT_ATTRIBUTES` and `SECURITY_QUALITY_OF_SERVICE` for a call
 /// that takes security attributes and (if `level`) an impersonation level.
 struct Attrs {
-    oa: [u64; 6],
+    oa: crate::nt::ObjectAttributes,
     qos: [u32; 3],
 }
 
 impl Attrs {
     fn new(sa: *const SecurityAttributes, level: Option<u32>) -> alloc::boxed::Box<Attrs> {
-        let mut a = alloc::boxed::Box::new(Attrs { oa: [0; 6], qos: [12, level.unwrap_or(0), 0] });
-        a.oa[0] = 48;
-        if !sa.is_null() {
-            // SAFETY: the caller's SECURITY_ATTRIBUTES.
-            let sa = unsafe { &*sa };
-            a.oa[4] = sa.descriptor as u64;
-            if sa.inherit != 0 {
-                a.oa[3] = u64::from(crate::nt::OBJ_INHERIT);
+        let mut a = alloc::boxed::Box::new(Attrs {
+            oa: crate::nt::ObjectAttributes::new(None, 0),
+            qos: [12, level.unwrap_or(0), 0],
+        });
+        // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+        unsafe {
+            a.oa.security_descriptor = crate::base::sa_descriptor(sa.cast());
+            if crate::base::sa_inherits(sa.cast()) {
+                a.oa.attributes = crate::nt::OBJ_INHERIT;
             }
         }
         if level.is_some() {
-            a.oa[5] = a.qos.as_ptr() as u64;
+            a.oa.security_qos = a.qos.as_ptr().cast();
         }
         a
+    }
+
+    /// The block as `NtDuplicateToken`'s `ObjectAttributes`.
+    fn oa(&self) -> *const u8 {
+        (&self.oa as *const crate::nt::ObjectAttributes).cast()
     }
 }
 
@@ -244,7 +251,7 @@ pub unsafe extern "system" fn DuplicateTokenEx(
     let a = Attrs::new(sa, Some(level));
     let mut h = 0;
     // SAFETY: the attribute block and `h` are locals.
-    let st = unsafe { NtDuplicateToken(token, access, a.oa.as_ptr().cast(), 0, ty, &mut h) };
+    let st = unsafe { NtDuplicateToken(token, access, a.oa(), 0, ty, &mut h) };
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
@@ -279,11 +286,13 @@ pub unsafe extern "system" fn CreateRestrictedToken(
         if count == 0 || p.is_null() {
             return None;
         }
-        let mut v = Vec::with_capacity(8 + 16 * count as usize);
+        // TOKEN_GROUPS: the count, padded to a pointer, then the array (SID_AND_ATTRIBUTES:
+        // a pointer and a DWORD, padded: 16 bytes, 8 in a 32-bit process).
+        let mut v = Vec::with_capacity(P + 2 * P * count as usize);
         v.extend_from_slice(&count.to_le_bytes());
-        v.extend_from_slice(&[0; 4]);
+        v.extend_from_slice(&[0; P - 4]);
         // SAFETY: the caller's array of `count` SID_AND_ATTRIBUTES.
-        v.extend_from_slice(unsafe { core::slice::from_raw_parts(p, 16 * count as usize) });
+        v.extend_from_slice(unsafe { core::slice::from_raw_parts(p, 2 * P * count as usize) });
         Some(v)
     };
     let d = groups(disable_count, disable);
@@ -383,7 +392,7 @@ pub unsafe extern "system" fn CheckTokenMembership(
             }
             let a = Attrs::new(core::ptr::null(), Some(token::SECURITY_IDENTIFICATION));
             // SAFETY: as above.
-            let st = unsafe { NtDuplicateToken(p, token::TOKEN_QUERY, a.oa.as_ptr().cast(), 0, 2, &mut h) };
+            let st = unsafe { NtDuplicateToken(p, token::TOKEN_QUERY, a.oa(), 0, 2, &mut h) };
             // SAFETY: our handle.
             unsafe { NtClose(p) };
             if !st.is_success() {
@@ -418,16 +427,19 @@ fn member_of(h: Handle, want: &Sid) -> Option<bool> {
         let count = u32::from_le_bytes(b.get(0..4)?.try_into().ok()?) as usize;
         let mut out = Vec::new();
         for i in 0..count {
-            let at = 8 + 16 * i;
-            let off = u64::from_le_bytes(b.get(at..at + 8)?.try_into().ok()?).wrapping_sub(base) as usize;
-            let attrs = u32::from_le_bytes(b.get(at + 8..at + 12)?.try_into().ok()?);
+            // TOKEN_GROUPS: the count, then SID_AND_ATTRIBUTES at P + 2 * P * i (a pointer, a DWORD).
+            let at = P + 2 * P * i;
+            let mut ptr = [0u8; 8];
+            ptr[..P].copy_from_slice(b.get(at..at + P)?);
+            let off = u64::from_le_bytes(ptr).wrapping_sub(base) as usize;
+            let attrs = u32::from_le_bytes(b.get(at + P..at + P + 4)?.try_into().ok()?);
             out.push((Sid::from_bytes(b.get(off..)?)?, attrs));
         }
         Some(out)
     };
     let user = {
         let b = query_token(h, class::TOKEN_USER)?;
-        (Sid::from_bytes(b.get(16..)?)?, u32::from_le_bytes(b.get(8..12)?.try_into().ok()?))
+        (Sid::from_bytes(b.get(2 * P..)?)?, u32::from_le_bytes(b.get(P..P + 4)?.try_into().ok()?))
     };
     let enabled = |attrs: u32| attrs & token::SE_GROUP_ENABLED != 0 && attrs & token::SE_GROUP_USE_FOR_DENY_ONLY == 0;
     let groups = groups_of(class::TOKEN_GROUPS)?;
@@ -529,9 +541,8 @@ pub unsafe extern "system" fn ImpersonateLoggedOnUser(token: Handle) -> i32 {
         let a = Attrs::new(core::ptr::null(), Some(token::SECURITY_IMPERSONATION));
         let mut d = 0;
         // SAFETY: locals.
-        let st = unsafe {
-            NtDuplicateToken(token, token::TOKEN_IMPERSONATE | token::TOKEN_QUERY, a.oa.as_ptr().cast(), 0, 2, &mut d)
-        };
+        let st =
+            unsafe { NtDuplicateToken(token, token::TOKEN_IMPERSONATE | token::TOKEN_QUERY, a.oa(), 0, 2, &mut d) };
         if !st.is_success() {
             return fail_status(st, FALSE);
         }

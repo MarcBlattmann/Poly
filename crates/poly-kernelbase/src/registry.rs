@@ -187,9 +187,19 @@ pub fn named_object_path(name: &str, user_sid: &str) -> Option<String> {
 }
 
 /// The access mask passed to `NtOpenKey`/`NtCreateKey`: the `KEY_WOW64_*`
-/// view bits are the Win32 layer's (Poly has one view) and are dropped.
+/// view bits go through to the kernel, which resolves the name in the view
+/// they name and does not take them for rights (Learn: "Accessing an
+/// Alternate Registry View"; ADR 0186, stage 2).
 pub const fn key_access(sam: u32) -> u32 {
-    sam & !KEY_WOW64_RES
+    sam
+}
+
+/// Whether `sam` names both views, which `RegCreateKeyEx`, `RegOpenKeyEx`
+/// and `RegDeleteKeyEx` refuse with `ERROR_INVALID_PARAMETER` (Learn:
+/// "If both flags are specified, the function fails with
+/// ERROR_INVALID_PARAMETER").
+pub const fn both_views(sam: u32) -> bool {
+    sam & KEY_WOW64_RES == KEY_WOW64_RES
 }
 
 /// The components of a subkey path, without empty ones (a leading,
@@ -454,8 +464,12 @@ mod tests {
         assert_eq!(components(&p), [&wide("Software")[..], &wide("Poly")[..]]);
         assert_eq!(normalized(&p), wide("Software\\Poly"));
         assert!(components(&[]).is_empty());
-        assert_eq!(key_access(KEY_READ | KEY_WOW64_64KEY), KEY_READ);
-        assert_eq!(key_access(KEY_ALL_ACCESS | KEY_WOW64_32KEY), KEY_ALL_ACCESS);
+        // The view bits reach the kernel (ADR 0186, stage 2).
+        assert_eq!(key_access(KEY_READ | KEY_WOW64_64KEY), KEY_READ | KEY_WOW64_64KEY);
+        assert_eq!(key_access(KEY_ALL_ACCESS | KEY_WOW64_32KEY), KEY_ALL_ACCESS | KEY_WOW64_32KEY);
+        assert!(both_views(KEY_READ | KEY_WOW64_32KEY | KEY_WOW64_64KEY));
+        assert!(!both_views(KEY_READ | KEY_WOW64_32KEY));
+        assert!(!both_views(KEY_READ));
     }
 
     #[test]

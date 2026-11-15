@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "il_basic",
+      "exe_sha256": "ca0ae41c05f8ee37e7eb544e4b24a9853086b436f0df9dd2c613cd3f19ffd70d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW1hZ2VMaXN0X0NyZWF0ZSAxNngxNiBJTENfQ09MT1IzMnxJTENfTUFTSzogd2luZG93Cm5ldyBsaXN0OiBjb3VudCAwIHNpemUgMSAxNngxNgo0eDQgbGlzdDogY291bnQgMCBzaXplIDEgNHg0CkltYWdlTGlzdF9BZGQgb2YgYSAzLWltYWdlIHN0cmlwLCBubyBtYXNrOiAwCmFmdGVyIEFkZDogY291bnQgMyBzaXplIDEgNHg0CkltYWdlTGlzdF9BZGRNYXNrZWQgd2l0aCB0aGUgZ3JlZW4gYXMgdHJhbnNwYXJlbnQ6IDMKYWZ0ZXIgQWRkTWFza2VkOiBjb3VudCA2IHNpemUgMSA0eDQKSW1hZ2VMaXN0X1JlcGxhY2VJY29uKC0xKSBhcHBlbmRzOiAwCkltYWdlTGlzdF9SZXBsYWNlSWNvbigtMSkgYWdhaW46IDEKSW1hZ2VMaXN0X1JlcGxhY2VJY29uKDApIHJlcGxhY2VzOiAwCkltYWdlTGlzdF9SZXBsYWNlSWNvbig1KSAocGFzdCB0aGUgZW5kKTogLTEKaWwxNjogY291bnQgMiBzaXplIDEgMTZ4MTYKSW1hZ2VMaXN0X0dldEljb24oMSk6IHdpbmRvdwpJbWFnZUxpc3RfR2V0SWNvbig5KSBwYXN0IHRoZSBlbmQ6IDEKSW1hZ2VMaXN0X0dldEltYWdlSW5mbygxKTogMQogICBpbWFnZSByZWN0IDE2eDE2IGF0ICgxNiwwKQpJbWFnZUxpc3RfR2V0SW1hZ2VJbmZvKDkpOiAwCkltYWdlTGlzdF9SZW1vdmUoMCk6IDEKYWZ0ZXIgUmVtb3ZlKDApOiBjb3VudCAxIHNpemUgMSAxNngxNgpJbWFnZUxpc3RfUmVtb3ZlKDcpOiAwCkltYWdlTGlzdF9TZXRJbWFnZUNvdW50KDUpOiAxCmFmdGVyIFNldEltYWdlQ291bnQoNSk6IGNvdW50IDUgc2l6ZSAxIDE2eDE2CkltYWdlTGlzdF9TZXRJbWFnZUNvdW50KDEpOiAxCmFmdGVyIFNldEltYWdlQ291bnQoMSk6IGNvdW50IDEgc2l6ZSAxIDE2eDE2CkltYWdlTGlzdF9SZW1vdmUoLTEpIGNsZWFycyB0aGUgbGlzdDogMQphZnRlciBSZW1vdmUoLTEpOiBjb3VudCAwIHNpemUgMSAxNngxNgpJbWFnZUxpc3RfRHVwbGljYXRlOiB3aW5kb3cgY291bnQgNgpiYWNrZ3JvdW5kIGNvbG91ciBvZiBhIG5ldyBsaXN0OiA0Mjk0OTY3Mjk1CkltYWdlTGlzdF9TZXRCa0NvbG9yKENMUl9OT05FKSByZXR1cm5zIHRoZSBvbGQgb25lOiA0Mjk0OTY3Mjk1Cm5vdzogNDI5NDk2NzI5NQpDcmVhdGUgMHgwOiAxCkNyZWF0ZSAxNngwOiAxCkNyZWF0ZSAtMXgtMTogMQpDcmVhdGUgMTZ4MTYgd2l0aCAwIGluaXRpYWwgYW5kIDAgZ3JvdzogMApDcmVhdGUgd2l0aCBmbGFncyAwIChkZXZpY2UgZGVwZW5kZW50IGRlZmF1bHQpOiAwCkdldEltYWdlQ291bnQoTlVMTCk6IDAKR2V0SW1hZ2VDb3VudChtYWRlIHVwKTogMApHZXRJY29uU2l6ZShOVUxMKTogMApBZGQgdG8gTlVMTCBsaXN0OiAtMQpEZXN0cm95KE5VTEwpOiAwCkRlc3Ryb3kgaWw6IDEKRGVzdHJveSBpbCBhZ2FpbjogMApHZXRJbWFnZUNvdW50IG9mIGEgZGVzdHJveWVkIGxpc3Q6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ImageList_Create 16x16 ILC_COLOR32|ILC_MASK: window\nnew list: count 0 size 1 16x16\n4x4 list: count 0 size 1 4x4\nImageList_Add of a 3-image strip, no mask: 0\nafter Add: count 3 size 1 4x4\nImageList_AddMasked with the green as transparent: 3\nafter AddMasked: count 6 size 1 4x4\nImageList_ReplaceIcon(-1) appends: 0\nImageList_ReplaceIcon(-1) again: 1\nImageList_ReplaceIcon(0) replaces: 0\nImageList_ReplaceIcon(5) (past the end): -1\nil16: count 2 size 1 16x16\nImageList_GetIcon(1): window\nImageList_GetIcon(9) past the end: 1\nImageList_GetImageInfo(1): 1\n   image rect 16x16 at (16,0)\nImageList_GetImageInfo(9): 0\nImageList_Remove(0): 1\nafter Remove(0): count 1 size 1 16x16\nImageList_Remove(7): 0\nImageList_SetImageCount(5): 1\nafter SetImageCount(5): count 5 size 1 16x16\nImageList_SetImageCount(1): 1\nafter SetImageCount(1): count 1 size 1 16x16\nImageList_Remove(-1) clears the list: 1\nafter Remove(-1): count 0 size 1 16x16\nImageList_Duplicate: window count 6\nbackground colour of a new list: 4294967295\nImageList_SetBkColor(CLR_NONE) returns the old one: 4294967295\nnow: 4294967295\nCreate 0x0: 1\nCreate 16x0: 1\nCreate -1x-1: 1\nCreate 16x16 with 0 initial and 0 grow: 0\nCreate with flags 0 (device dependent default): 0\nGetImageCount(NULL): 0\nGetImageCount(made up): 0\nGetIconSize(NULL): 0\nAdd to NULL list: -1\nDestroy(NULL): 0\nDestroy il: 1\nDestroy il again: 0\nGetImageCount of a destroyed list: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

@@ -47,7 +47,7 @@ the blocking and the completion delivery.
 ### Objects and names
 
 - **A device per VFS mount.** Each mount is an opaque `Device` object
-  `\Device\PolyFs<N>` created with `parse: true`; a namespace walk that
+  `\Device\PolyFs<N>` (named `\Device\HarddiskVolume<N>` since ADR 0185) created with `parse: true`; a namespace walk that
   reaches it hands the rest of the path to the create hook. **Drive letters
   are symbolic links in `\??`**: `\??\C:` → `\Device\PolyFs1`, the VFS path
   `/nt/c`, the NT *system root*; `\??\Z:` → `\Device\PolyFs0`, `/`, the whole

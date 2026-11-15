@@ -66,10 +66,12 @@ impl KdeMode {
 }
 
 /// The mode the server decoration manager announces and uses for an object
-/// that asked for none. Not `Server`, though Poly prefers its own frame:
-/// GTK 3.24 takes a path to its window size with `server` that is sometimes
-/// garbage under Poly (ADR 0183).
-pub const KDE_DEFAULT: KdeMode = KdeMode::Client;
+/// that asked for none: Poly's frame, which GTK 3 and 4 then ask for (a GTK
+/// window with a header bar makes no object and draws its own). It was
+/// `Client` for a while because GTK 3 sometimes crashed with a window 1.4
+/// million pixels tall; that was GTK without any font, not this mode
+/// (ADR 0183).
+pub const KDE_DEFAULT: KdeMode = KdeMode::Server;
 
 /// What the client did with KDE's server decoration protocol.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -193,7 +195,7 @@ mod tests {
         let asks = Signals { kde: Kde::Object { requested: Some(KdeMode::Server) }, ..Signals::default() };
         assert_eq!(decide(&asks), (Frame::Poly, Reason::KdeServer));
         let none = Signals { kde: Kde::Object { requested: None }, ..Signals::default() };
-        assert_eq!(decide(&none), (Frame::Client, Reason::KdeClient), "the default is {KDE_DEFAULT:?}");
+        assert_eq!(decide(&none), (Frame::Poly, Reason::KdeServer), "the default is {KDE_DEFAULT:?}");
     }
 
     #[test]

@@ -23,6 +23,8 @@ pub struct Plan {
     pub packages: Vec<String>,
     /// xtask for Windows (clippy with `--target x86_64-pc-windows-msvc`).
     pub xtask_windows: bool,
+    /// The pipeline tool for Windows (the same clippy run, ADR 0124).
+    pub pipeline_windows: bool,
     pub kernel: bool,
     pub native: bool,
     pub aarch64: bool,
@@ -38,6 +40,7 @@ impl Plan {
             all_host: true,
             packages: Vec::new(),
             xtask_windows: true,
+            pipeline_windows: true,
             kernel: true,
             native: true,
             aarch64: true,
@@ -56,6 +59,7 @@ impl Plan {
         units.extend(self.packages.iter().cloned());
         for (on, name) in [
             (self.xtask_windows, "xtask for Windows"),
+            (self.pipeline_windows, "the pipeline for Windows"),
             (self.kernel, "the kernel"),
             (self.native, "the native programs"),
             (self.aarch64, "the aarch64 stub"),
@@ -105,6 +109,7 @@ pub fn plan(changed: &[String], members: &[(String, String)]) -> std::result::Re
                 plan.packages.push(package.clone());
             }
             plan.xtask_windows |= package == "xtask";
+            plan.pipeline_windows |= package == "poly-pipeline";
         }
     }
     plan.packages.sort();
@@ -227,6 +232,7 @@ mod tests {
             ("personalities/nt", "poly-nt"),
             ("tools/xtask", "xtask"),
             ("tools/coverage", "poly-coverage"),
+            ("tools/pipeline", "poly-pipeline"),
         ]
         .map(|(d, n)| (d.to_string(), n.to_string()))
         .to_vec()
@@ -269,6 +275,7 @@ mod tests {
                 all_host: false,
                 packages: vec!["poly-nt".into(), "xtask".into()],
                 xtask_windows: true,
+                pipeline_windows: false,
                 kernel: true,
                 native: true,
                 aarch64: true,
@@ -278,6 +285,16 @@ mod tests {
             }
         );
         assert!(p.describe().starts_with("poly-nt, xtask, xtask for Windows, the kernel"));
+    }
+
+    /// The pipeline tool is also linted for Windows (ADR 0124), the other
+    /// host tools are not.
+    #[test]
+    fn the_pipeline_is_linted_for_windows() {
+        let p = plan_of(&["tools/pipeline/src/runner.rs"]).unwrap();
+        assert_eq!(p, Plan { packages: vec!["poly-pipeline".into()], pipeline_windows: true, ..Plan::default() });
+        assert_eq!(p.describe(), "poly-pipeline, the pipeline for Windows");
+        assert!(!plan_of(&["tools/coverage/src/main.rs"]).unwrap().pipeline_windows);
     }
 
     #[test]

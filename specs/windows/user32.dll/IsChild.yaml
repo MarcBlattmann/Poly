@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/IsChild
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Returns 1 when hwnd is a child, grandchild or deeper descendant of parent (the chain of parents of a
+  WS_CHILD window), else 0. Owners do not count; the desktop is nobody's parent here. Chrome's browser calls
+  it twice a run (S3).
+interface:
+  signature: "BOOL IsChild(HWND parent, HWND hwnd)"
+rules:
+  descendants: "IsChild(A, C) = 1 for a child, IsChild(A, G) = 1 for a grandchild, IsChild(C, G) = 1; reversed (G, A) and (C, A) 0; IsChild(A, A) 0; siblings 0; an unrelated top-level window 0; a hidden parent does not matter"
+  owner: "an owned popup is not a child (IsChild(A, O) 0, IsChild(O, A) 0)"
+  desktop: "IsChild(desktop, A) and IsChild(desktop, desktop) and IsChild(A, desktop) all 0 (top-level windows are not children of the desktop for this call)"
+  message_only: "a child of a message-only window M: IsChild(M, N) = 1; IsChild(A, N) 0"
+  set_parent: "after SetParent(G, B): IsChild(C, G) 0 and IsChild(B, G) 1"
+  chrome: "Chrome's child is a child of the top-level window while it is under it (1, hid 0), of the holder while the top-level window is minimized (main 0, hid 1); the thread's IME window is not a child of either, the MSCTFIME UI window is not a child of the IME window or of main (both are owned windows); IsChild(hid, main) 0"
+errors:
+  bad_window: "NULL or a made-up handle in either position: 0 with ERROR_INVALID_WINDOW_HANDLE (1400); a destroyed window the same; with an invalid window the call sets 1400 also when the other is valid"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

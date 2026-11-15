@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSALookupServiceEnd.yaml
+id: windows/api/ws2_32.dll/WSALookupServiceEnd
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  The same observations as the WSALookupServiceBeginW entry of this DLL.
+summary: >
+  Ends a lookup and invalidates its handle (Chrome: End(h) -> 0 once). A second End or a Next afterwards fails with error 6. No tests of its own.
+same_as: "windows/api/ws2_32.dll/WSALookupServiceBeginW"
+interface:
+  signature: "INT WSALookupServiceEnd(HANDLE h)"
+rules:
+  values: "see the handles rule of WSALookupServiceBeginW"
+errors:
+  see_sheet: "the errors of the WSALookupServiceBeginW sheet"
+side_effects: "releases the lookup"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the WSALookupServiceBeginW sheet lists as not covered.

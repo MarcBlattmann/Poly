@@ -166,18 +166,21 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, dest
         _ => Vec::new(),
     };
     for &o in &owned {
-        let mut wp =
-            WindowPos { hwnd: u64::from(o), flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+        let mut wp = WindowPos {
+            hwnd: (u64::from(o)) as usize,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            ..WindowPos::default()
+        };
         send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
-    let mut wp = WindowPos { hwnd: h, flags: SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+    let mut wp = WindowPos { hwnd: h as usize, flags: SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
     send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     // A hidden window changes no z order the screen shows: no
     // WM_WINDOWPOSCHANGED (SetActiveWindow.yaml `hidden`).
     let changed = changed && y.style & WS_VISIBLE != 0;
     if y.owner != 0 {
         let mut ow = WindowPos {
-            hwnd: u64::from(y.owner),
+            hwnd: (u64::from(y.owner)) as usize,
             flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
             ..WindowPos::default()
         };
@@ -198,7 +201,7 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, dest
                 let Some(oi) = info(env, u64::from(o)) else { continue };
                 let hidden = if oi.style & WS_VISIBLE == 0 { SWP_NOREDRAW } else { 0 };
                 let mut od = WindowPos {
-                    hwnd: u64::from(o),
+                    hwnd: (u64::from(o)) as usize,
                     x: oi.window_rel.left,
                     y: oi.window_rel.top,
                     cx: oi.window_rel.width(),
@@ -209,7 +212,7 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, dest
                 send(env, u64::from(o), WM_WINDOWPOSCHANGED, 0, ptr(&mut od));
             }
             let mut done = WindowPos {
-                hwnd: h,
+                hwnd: h as usize,
                 x: y.window_rel.left,
                 y: y.window_rel.top,
                 cx: y.window_rel.width(),
@@ -468,7 +471,7 @@ pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool, ask: u32) 
         send(env, u64::from(x), WM_ACTIVATE, WA_INACTIVE | min_bits(xi), h);
     }
     if x != 0 {
-        let mut wp = WindowPos { hwnd: h, flags: ask, ..WindowPos::default() };
+        let mut wp = WindowPos { hwnd: h as usize, flags: ask, ..WindowPos::default() };
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
     if !in_swp {
@@ -476,7 +479,7 @@ pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool, ask: u32) 
             matches!(env.call(Request::ZOrder { hwnd: y, after: HWND_TOP, apply: true }), Reply::Bool { value: true });
         if moved && x != 0 && yi.style & WS_VISIBLE != 0 {
             let mut done = WindowPos {
-                hwnd: h,
+                hwnd: h as usize,
                 x: yi.window_rel.left,
                 y: yi.window_rel.top,
                 cx: yi.window_rel.width(),

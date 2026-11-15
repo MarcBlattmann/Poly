@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "ed_modal",
+      "exe_sha256": "fcce7b5f48f2c56b8974608fba409a1ffd2dc7e6e3e31c0ba87c5a0a00aee745",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RW5kRGlhbG9nKDUpOiAxCnN0aWxsIGEgd2luZG93IDEgdmlzaWJsZSAwCkVuZERpYWxvZyg2KSBhZ2FpbjogMQpFbmREaWFsb2cgb24gYSBiYWQgaGFuZGxlOiAwIGVycj0xNDAwCkVuZERpYWxvZyBvbiBOVUxMOiAwIGVycj0xNDAwCkVuZERpYWxvZyBvbiBhIGNvbnRyb2wgb2YgdGhlIGRpYWxvZzogMCBlcnI9MTQyMApFbmREaWFsb2cgb24gYSB3aW5kb3cgdGhhdCBpcyBub3QgYSBkaWFsb2c6IDAgZXJyPTE0MjAKZGlhbG9nIHJlc3VsdCA2CiAgV01fREVTVFJPWQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "EndDialog(5): 1\nstill a window 1 visible 0\nEndDialog(6) again: 1\nEndDialog on a bad handle: 0 err=1400\nEndDialog on NULL: 0 err=1400\nEndDialog on a control of the dialog: 0 err=1420\nEndDialog on a window that is not a dialog: 0 err=1420\ndialog result 6\n  WM_DESTROY\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

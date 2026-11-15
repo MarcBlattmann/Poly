@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "closesocket_pending",
+      "exe_sha256": "e4a5be70404ce10719069bf603343b9be05ad6c9ec6a75c924e9366ccbb52034",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xvc2Vzb2NrZXQgYWZ0ZXIgYSBzZW5kIDAKcGVlciByZWN2IG9uY2UgbW9yZSAwCnJlY3YgYWZ0ZXIgdGhlIHJlc2V0IC0xL1dTQUVDT05OQUJPUlRFRApwZWVyIHJlY3YgYWdhaW4gLTEvV1NBRUNPTk5SRVNFVAphY2NlcHQgcmVzdWx0OiBmYWlsZWQgMSBlcnJvciBXU0FFSU5UUgpyZWN2IHJlc3VsdCAtMSBlcnJvciBXU0FFQ09OTkFCT1JURUQKV1NBQ2xvc2VFdmVudCAxCmNsb3Nlc29ja2V0KElOVkFMSURfU09DS0VUKSAtMS9XU0FFTk9UU09DSwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "closesocket after a send 0\npeer recv once more 0\nrecv after the reset -1/WSAECONNABORTED\npeer recv again -1/WSAECONNRESET\naccept result: failed 1 error WSAEINTR\nrecv result -1 error WSAECONNABORTED\nWSACloseEvent 1\nclosesocket(INVALID_SOCKET) -1/WSAENOTSOCK\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1091
+    },
+    {
+      "name": "closesocket_pending_c",
+      "exe_sha256": "bbc9032297394a6ae3bd82abf02b7f17e0416f1fc2f2d4e4ebb85d990cfd7c6b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGVlciByZWN2IGFnYWluIDAKc2VuZCBhZ2FpbiAtMS9XU0FFQ09OTkFCT1JURUQKcGVlciByZWN2IGFmdGVyIHRoZSByZXNldCAtMS9XU0FFQ09OTlJFU0VUCnRoZSB0aHJlYWQgZW5kZWQgd2l0aGluIDUgcyAxCnRoZSB0aHJlYWQgZW5kZWQgd2l0aGluIDUgcyAxCldTQUVudW1OZXR3b3JrRXZlbnRzIG9uIHRoZSBjbG9zZWQgc29ja2V0IC0xL1dTQUVOT1RTT0NLCmNsb3Nlc29ja2V0KGEgc21hbGwgbnVtYmVyKSAtMS9XU0FFTk9UU09DSwp0aGUgZXZlbnQgaGFuZGxlIGlzIHN0aWxsIHZhbGlkIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "peer recv again 0\nsend again -1/WSAECONNABORTED\npeer recv after the reset -1/WSAECONNRESET\nthe thread ended within 5 s 1\nthe thread ended within 5 s 1\nWSAEnumNetworkEvents on the closed socket -1/WSAENOTSOCK\nclosesocket(a small number) -1/WSAENOTSOCK\nthe event handle is still valid 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1107
+    }
+  ]
+}

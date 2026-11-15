@@ -478,13 +478,17 @@ fn client_mouse_move_sends_nchittest_before_setcursor() {
         register(e, "MouseMove");
         let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_NCHITTEST screen=50,50", "A WM_SETCURSOR window=A hit=1 msg=512"]);
-        assert_eq!(message.l, makelparam(50, 50));
+        assert_eq!(message.l, (makelparam(50, 50)) as usize);
     });
 }
 
@@ -494,15 +498,19 @@ fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
         register(e, "MouseMoveNc");
         let h = create(e, 'A', 0, "MouseMoveNc", WS_POPUP | WS_VISIBLE | WS_CAPTION, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 5), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 5)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=2 msg=512"]);
         assert_eq!(message.message, 0x00A0);
         assert_eq!(message.w, 2);
-        assert_eq!(message.l, makelparam(50, 5));
+        assert_eq!(message.l, (makelparam(50, 5)) as usize);
     });
 }
 
@@ -860,13 +868,18 @@ fn a_disabled_popup_gets_wm_setcursor_with_a_hit_error_and_nothing_else() {
         let d = create(e, 'D', 0, "Dis", WS_POPUP | WS_VISIBLE | WS_DISABLED, 0, 0, 100, 100, 0, 0);
         take_log();
         for (msg, hit_msg) in [(crate::wm::raw::WM_LBUTTONDOWN, 513), (crate::wm::raw::WM_MOUSEMOVE, 512)] {
-            let mut m = CMsg { hwnd: d, message: msg, l: makelparam(50, 50), ..CMsg::default() };
+            let mut m = CMsg { hwnd: d as usize, message: msg, l: (makelparam(50, 50)) as usize, ..CMsg::default() };
             assert!(!input::mouse_retrieved(e, &mut m), "the message is dropped");
             assert_eq!(take_log(), [format!("D WM_SETCURSOR window=D hit=65534 msg={hit_msg}")]);
         }
         // Enabled again it is hit-tested and delivered as usual.
         e.call(Request::SetStyle { hwnd: d as u32, which: -16, value: WS_POPUP | WS_VISIBLE });
-        let mut m = CMsg { hwnd: d, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut m = CMsg {
+            hwnd: d as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
         assert!(input::mouse_retrieved(e, &mut m));
         assert_eq!(take_log().first().map(String::as_str), Some("D WM_NCHITTEST screen=50,50"));
     });
