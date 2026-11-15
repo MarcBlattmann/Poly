@@ -10,7 +10,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 pub type H = usize;
 pub type WndProc = unsafe extern "system" fn(H, u32, usize, isize) -> isize;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn GetModuleHandleW(name: *const u16) -> H;
     pub fn LoadLibraryW(name: *const u16) -> H;
@@ -37,7 +38,8 @@ unsafe extern "system" {
     ) -> i32;
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn IsWindow(hwnd: H) -> i32;
     pub fn EnableWindow(hwnd: H, enable: i32) -> i32;
@@ -64,7 +66,8 @@ unsafe extern "system" {
     pub fn GetSystemMetrics(index: i32) -> i32;
 }
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn CreateSolidBrush(color: u32) -> H;
     pub fn DeleteObject(obj: H) -> i32;

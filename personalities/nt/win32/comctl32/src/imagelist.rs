@@ -11,7 +11,8 @@ use poly_win32_gui::SpinLock;
 
 type H = usize;
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyGdiBitmapPixels(hbm: H, out: *mut u8, cap: usize) -> u64;
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> H;
@@ -20,7 +21,8 @@ unsafe extern "system" {
     fn SetPixelV(hdc: H, x: i32, y: i32, color: u32) -> i32;
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetIconInfo(icon: H, info: *mut u8) -> i32;
     fn CreateIconIndirect(info: *const u8) -> H;
