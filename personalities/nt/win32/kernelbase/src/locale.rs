@@ -31,6 +31,32 @@ pub extern "system" fn GetSystemDefaultLangID() -> u16 {
     locale::LCID_EN_US as u16
 }
 
+/// `GetThreadLocale`: the locale of the calling thread. Poly has one locale, so every thread has
+/// it (ADR 0155's locale policy): `SetThreadLocale` accepts the locales Poly has and changes
+/// nothing.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetThreadLocale() -> u32 {
+    locale::LCID_EN_US
+}
+
+/// `SetThreadLocale`: TRUE for a locale Poly has (`IsValidLocale`), else FALSE with
+/// `ERROR_INVALID_PARAMETER`.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetThreadLocale(lcid: u32) -> i32 {
+    if locale::is_valid_lcid(lcid, 0) { TRUE } else { fail(ERROR_INVALID_PARAMETER, FALSE) }
+}
+
+/// `GetUserDefaultUILanguage`, `GetSystemDefaultUILanguage`: the language of the one UI language.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetUserDefaultUILanguage() -> u16 {
+    locale::LCID_EN_US as u16
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn GetSystemDefaultUILanguage() -> u16 {
+    locale::LCID_EN_US as u16
+}
+
 /// Copy `text` and a NUL to `buf` of `cch` units the way the locale
 /// functions answer: the length with the NUL, or (with `cch` 0) only the
 /// size needed; a buffer too small is `ERROR_INSUFFICIENT_BUFFER`.

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/_strnicmp.yaml
+id: windows/api/ntdll.dll/_strnicmp
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: _strnicmp, _wcsnicmp, _strnicmp_l, _wcsnicmp_l, _mbsnicmp, _mbsnicmp_l (the C run-time page; ntdll's export has the same name and prototype). ntdll's export names (export table). Chrome on Poly (specs/windows/apps/chrome/s2-interception.md): every sandboxed child called a NULL pointer with a pointer to the mapped chrome_elf.dll's export name and a pointer to the text "kernel32.dll" as its first two arguments, and stopped doing so once Poly's ntdll exported this name, strlen and wcslen. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  ntdll.dll exports the C run-time function _strnicmp as code of its own (the address GetProcAddress returns lies in ntdll's image, on an executable page). It compares at most n bytes of two strings without regard to ASCII case and stops at the first NUL; the result is the difference of the first differing bytes after ASCII upper-case letters are made lower case (bytes above 0x7F are compared as they are), 0 when the strings are equal for n bytes or up to a common NUL.
+interface:
+  signature: "int __cdecl _strnicmp(const char *a, const char *b, size_t n)"
+  result: "0 when equal; otherwise (lowered a[i]) - (lowered b[i]) at the first difference i < n, as a signed int"
+chrome:
+  calls: "Chrome's sandboxed processes (GPU, network service, renderers) resolve _strnicmp, strlen and wcslen (and the Nt*/Rtl* functions their sandbox code uses) from ntdll by name; with any of these missing the child calls a NULL function pointer right after its first image mapping through the patched NtMapViewOfSection (it compares the new module's export name, \"chrome_elf.dll\", with \"kernel32.dll\")"
+rules:
+  export: "GetProcAddress(GetModuleHandle(\"ntdll.dll\"), \"_strnicmp\") is not NULL; VirtualQuery of the address: MEM_IMAGE, allocation base = ntdll's module handle, an executable protection"
+  equal_ignoring_case: "(\"KERNEL32.DLL\", \"kernel32.dll\", 12) = 0; (\"kernel32.dll\", \"KERNEL32.DLL\", 13) = 0 (the NUL at index 12 ends the comparison); (\"Kernel32.dll\", \"kernel32.dllx\", 12) = 0 (only n bytes are compared)"
+  difference_value: "the result is the difference of the lowered bytes, not just its sign: (\"chrome_elf.dll\", \"kernel32.dll\", 12) = -8 ('c' - 'k'); (\"abc\", \"abd\", 3) = -1; (\"abd\", \"abc\", 3) = 1; (\"a\", \"z\", 1) = -25; (\"abc\", \"ab\", 5) = 99 ('c' - NUL); (\"ab\", \"abc\", 5) = -99"
+  limits: "(\"abc\", \"abd\", 2) = 0; (\"ab\", \"ab\", 100) = 0 (stops at the common NUL, reads no further); n = 0 gives 0 without reading the strings"
+  folding: "letters are folded to lower case before comparing: (\"_\", \"A\", 1) = -2 (0x5F - 0x61) and (\"[\", \"a\", 1) = -6 (0x5B - 0x61): characters between 'Z' and 'a' sort before letters"
+  high_bytes: "bytes above 0x7F are not folded: (\"\\xC9\", \"\\xE9\", 1) = -32; (\"\\xE9\", \"E\", 1) = 132 (0xE9 - 'e')"
+  null: "a NULL first or second pointer with n = 3: an access violation (the process ends with 0xC0000005); NULL pointers with n = 0: returns 0, no fault"
+errors:
+  none: "no error value; no last error"
+side_effects: none
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a microsecond for short strings"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). The function is resolved with GetProcAddress on ntdll.dll and called through a C prototype. Each test exists in three files that make the same calls; each file writes every third observation line. NULL cases run in a child process (the test's own image started again with --child <case>); its exit code is the result or the fault status.
+not_covered: >
+  Locale-dependent behaviour (ntdll's function took no locale into account in any case tried), strings longer than a page, n larger than both strings with no NUL (undefined).

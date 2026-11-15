@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "vae_thunks",
+      "exe_sha256": "044875574562135594db5b8bd02f09f3a269f52df0bda44dcf72c5611eeb70ab",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVzZXJ2ZSA2NCBLaUI6IG5vbi1udWxsPXRydWUgYWxpZ25lZCB0byA2NCBLaUI9dHJ1ZSBlcnJvcj0KY29tbWl0ICsweGFmZjAgMHgyMCBieXRlcyAodHdvIHBhZ2VzKTogb2Zmc2V0PTB4YTAwMCBlcnJvcj0gcGFnZSArMHhhMDAwIHN0YXRlPTB4MTAwMCBwYWdlICsweGIwMDAgc3RhdGU9MHgxMDAwCnJlZ2lvbiArMHg4MDAwOiBzaXplPTB4MTAwMCBzdGF0ZT0weDIwMDAgcHJvdGVjdD0weDAgYWxsb2Nwcm90ZWN0PTB4MSB0eXBlPTB4MjAwMDAgYWxsb2NiYXNlIGlzIHRoZSByZXNlcnZhdGlvbj10cnVlCnJlc2VydmUgaW5zaWRlIHRoZSByZXNlcnZhdGlvbiBhZ2FpbjogbnVsbD10cnVlIGVycm9yPTQ4Nwp0d28gcHJvdGVjdGlvbnM6IG51bGw9dHJ1ZSBlcnJvcj04Nwp3cml0ZSB0aGUgcGFnZSdzIGFkZHJlc3MgdG8gdGhlIGNoaWxkJ3MgZGF0YTogb2s9dHJ1ZSBjb3BpZWQ9OApWaXJ0dWFsRnJlZUV4IE1FTV9SRUxFQVNFIHdpdGggYSBzaXplOiBvaz1mYWxzZSBlcnJvcj04NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "reserve 64 KiB: non-null=true aligned to 64 KiB=true error=\ncommit +0xaff0 0x20 bytes (two pages): offset=0xa000 error= page +0xa000 state=0x1000 page +0xb000 state=0x1000\nregion +0x8000: size=0x1000 state=0x2000 protect=0x0 allocprotect=0x1 type=0x20000 allocbase is the reservation=true\nreserve inside the reservation again: null=true error=487\ntwo protections: null=true error=87\nwrite the page's address to the child's data: ok=true copied=8\nVirtualFreeEx MEM_RELEASE with a size: ok=false error=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    },
+    {
+      "name": "vae_thunks_b",
+      "exe_sha256": "d674c3947f1428ac954912b578f051916c657d40adced76e9e40e7b282857940",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29tbWl0ICsweDcwMDAgNCBLaUIgUEFHRV9FWEVDVVRFX1JFQURXUklURTogb2Zmc2V0PTB4NzAwMCBlcnJvcj0KcmVnaW9uICsweDA6IHNpemU9MHg3MDAwIHN0YXRlPTB4MjAwMCBwcm90ZWN0PTB4MCBhbGxvY3Byb3RlY3Q9MHgxIHR5cGU9MHgyMDAwMCBhbGxvY2Jhc2UgaXMgdGhlIHJlc2VydmF0aW9uPXRydWUKcmVnaW9uICsweDkwMDA6IHNpemU9MHgzMDAwIHN0YXRlPTB4MTAwMCBwcm90ZWN0PTB4NCBhbGxvY3Byb3RlY3Q9MHgxIHR5cGU9MHgyMDAwMCBhbGxvY2Jhc2UgaXMgdGhlIHJlc2VydmF0aW9uPXRydWUKc2l6ZSAwOiBudWxsPXRydWUgZXJyb3I9ODcKUEFHRV9XUklURUNPUFkgZm9yIHByaXZhdGUgbWVtb3J5OiBudWxsPXRydWUgZXJyb3I9ODcKVmlydHVhbEZyZWVFeCBNRU1fUkVMRUFTRTogb2s9dHJ1ZSB0aGVuIHN0YXRlPTB4MTAwMDAKY2hpbGQgcmFuOiBleGl0IGNvZGUgMTcwNwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "commit +0x7000 4 KiB PAGE_EXECUTE_READWRITE: offset=0x7000 error=\nregion +0x0: size=0x7000 state=0x2000 protect=0x0 allocprotect=0x1 type=0x20000 allocbase is the reservation=true\nregion +0x9000: size=0x3000 state=0x1000 protect=0x4 allocprotect=0x1 type=0x20000 allocbase is the reservation=true\nsize 0: null=true error=87\nPAGE_WRITECOPY for private memory: null=true error=87\nVirtualFreeEx MEM_RELEASE: ok=true then state=0x10000\nchild ran: exit code 1707\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

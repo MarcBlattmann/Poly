@@ -165,6 +165,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("shlwapi.dll", super::SHLWAPI),
         ("wtsapi32.dll", super::WTSAPI32),
         ("comctl32.dll", super::COMCTL32),
+        ("comdlg32.dll", super::COMDLG32),
         ("oleacc.dll", super::OLEACC),
         ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
         ("mfplat.dll", super::MFPLAT),
@@ -234,14 +235,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     }
     // The 32-bit modules go into SysWOW64, the System32 of a 32-bit program (ADR 0186; Learn:
     // "File System Redirector").
-    for (name, bytes) in [
-        ("ntdll.dll", super::NTDLL32),
-        ("kernelbase.dll", super::KERNELBASE32),
-        ("kernel32.dll", super::KERNEL32_32),
-        ("win32u.dll", super::WIN32U32),
-        ("gdi32.dll", super::GDI32_32),
-        ("user32.dll", super::USER32_32),
-    ] {
+    for &(name, bytes) in super::WOW64_DLLS {
         if bytes.is_empty() {
             continue;
         }

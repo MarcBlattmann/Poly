@@ -26,7 +26,8 @@ const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
 /// `MAX_PATH` (`minwindef.h`): the size of the buffer `SHGetFolderPathW` fills.
 const MAX_PATH: usize = 260;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
@@ -42,17 +43,20 @@ unsafe extern "system" {
     fn ReleaseSRWLockExclusive(lock: *mut usize);
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn IsWindow(hwnd: usize) -> i32;
 }
 
-#[link(name = "advapi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetTokenInformation(token: *mut u8, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
 }
 
-#[link(name = "ole32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ole32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ole32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CoTaskMemAlloc(bytes: usize) -> *mut u8;
 }
@@ -100,7 +104,7 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
         let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), path.as_mut_ptr(), 1024) } as usize;
         args.push(Vec::from(&path[..n.min(1023)]));
     }
-    let size = shell::argv_block_size(&args);
+    let size = shell::argv_block_size(&args, core::mem::size_of::<usize>());
     // SAFETY: LMEM_FIXED (0): the handle is the block's address.
     let block = unsafe { LocalAlloc(0, size) };
     if block.is_null() {
@@ -110,7 +114,12 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
     }
     // SAFETY: `block` is `size` writable bytes; `num_args` is the caller's out-pointer.
     unsafe {
-        shell::write_argv_block(&args, block as u64, core::slice::from_raw_parts_mut(block, size));
+        shell::write_argv_block(
+            &args,
+            block as usize as u64,
+            core::mem::size_of::<usize>(),
+            core::slice::from_raw_parts_mut(block, size),
+        );
         num_args.write(args.len() as i32);
     }
     block.cast()

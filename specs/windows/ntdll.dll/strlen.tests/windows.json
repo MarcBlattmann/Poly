@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "ntdll_strlen_b",
+      "exe_sha256": "a87eb34b95055769998c5afb5ac8dab7b0c6ffee4592d2b2cb3e694f90d891d6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RybGVuKCIiKSA9IDAKc3RybGVuKGhpZ2ggYnl0ZXMgXHhlOVx4ZmZceDgwKSA9IDMKc3RybGVuKDQwIGxldHRlcnMgZnJvbSBvZmZzZXQgMikgPSAzOApzdHJsZW4oNDAgbGV0dGVycyBmcm9tIG9mZnNldCA1KSA9IDM1CnN0cmxlbihOVUxMKSBpbiBhIGNoaWxkOiAweGMwMDAwMDA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "strlen(\"\") = 0\nstrlen(high bytes \\xe9\\xff\\x80) = 3\nstrlen(40 letters from offset 2) = 38\nstrlen(40 letters from offset 5) = 35\nstrlen(NULL) in a child: 0xc0000005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "ntdll_strlen_c",
+      "exe_sha256": "14709c2681d654194ad51016571a73590381b7e4382d7425deb2ff1b234171b7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RybGVuKCJrZXJuZWwzMi5kbGwiKSA9IDEyCnN0cmxlbigiYWJcMGNkIikgPSAyCnN0cmxlbig0MCBsZXR0ZXJzIGZyb20gb2Zmc2V0IDMpID0gMzcKc3RybGVuKDQwIGxldHRlcnMgZnJvbSBvZmZzZXQgNikgPSAzNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "strlen(\"kernel32.dll\") = 12\nstrlen(\"ab\\0cd\") = 2\nstrlen(40 letters from offset 3) = 37\nstrlen(40 letters from offset 6) = 34\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}
