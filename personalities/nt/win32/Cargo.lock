@@ -54,6 +54,7 @@ dependencies = [
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
+ "poly-comctl",
  "poly-imagelist",
  "poly-kernelbase",
  "poly-win32-gui",
@@ -295,6 +296,10 @@ dependencies = [
 
 [[package]]
 name = "poly-com"
+version = "0.0.1"
+
+[[package]]
+name = "poly-comctl"
 version = "0.0.1"
 
 [[package]]

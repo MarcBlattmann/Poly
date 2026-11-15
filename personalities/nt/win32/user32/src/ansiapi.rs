@@ -219,6 +219,18 @@ pub fn send_form(hwnd: H, msg: u32, w: usize, l: isize, from: Form) -> isize {
     let Some(i) = info(hwnd) else {
         return u::send(&SYS, hwnd as u64, msg, w as u64, l as u64) as isize;
     };
+    if msg == ansi::WM_GETTEXTLENGTH && i.unicode && (i.wndproc > poly_win32k::dlg::sysproc::MAX || i.wndproc == poly_win32k::dlg::sysproc::DIALOG) {
+        // The length of a UTF-16 text in bytes: the window procedure of a Unicode window gets the
+        // length and then the text, as far as it needs (DefDlgProcW.yaml: WM_GETTEXT with the length
+        // and the NUL).
+        let n = u::send(&SYS, hwnd as u64, msg, 0, 0) as usize;
+        if n == 0 {
+            return 0;
+        }
+        let mut buf = alloc::vec![0u16; n + 1];
+        let got = u::send(&SYS, hwnd as u64, ansi::WM_GETTEXT, (n + 1) as u64, buf.as_mut_ptr() as u64) as usize;
+        return ansi::ansi_of(&buf[..got.min(n)]).len() as isize;
+    }
     if i.tid == SYS.tid() {
         // The same thread: the window procedure is called from here and converts if it must.
         ansi::with_form(from, || u::send(&SYS, hwnd as u64, msg, w as u64, l as u64) as isize)

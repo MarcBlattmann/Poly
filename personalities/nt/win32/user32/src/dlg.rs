@@ -622,7 +622,8 @@ fn dialog_proc_in(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
         WM_CLOSE => {
             let cancel = find_item(h, 2);
             if cancel != 0 && info(cancel).is_some_and(|i| i.style & 0x0800_0000 == 0) {
-                send(h, ctl::WM_COMMAND, 2, cancel as isize);
+                // The dialog manager posts IDCANCEL (DefDlgProcA.yaml `close`: not sent).
+                super::PostMessageW(h, ctl::WM_COMMAND, 2, cancel as isize);
             } else {
                 super::MessageBeep(0);
             }
@@ -788,7 +789,23 @@ pub unsafe extern "system" fn GetDlgItemTextA(dlg: H, id: i32, buf: *mut u8, max
         }
         return 0;
     }
-    ansiapi::send_form(c, ctl::WM_GETTEXT, max as u32 as usize, buf as isize, Form::Ansi) as u32
+    if max < 0 {
+        // A negative size: an empty string and the last error 0 (GetDlgItemTextA.yaml `size -1`).
+        if !buf.is_null() {
+            // SAFETY: the caller's buffer.
+            unsafe { *buf = 0 };
+        }
+        set_last_error(0);
+        return 0;
+    }
+    if max == 0 {
+        return 0;
+    }
+    let n = ansiapi::send_form(c, ctl::WM_GETTEXT, max as usize, buf as isize, Form::Ansi) as u32;
+    if n == 0 && max == 1 {
+        set_last_error(0);
+    }
+    n
 }
 
 #[unsafe(no_mangle)]

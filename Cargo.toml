@@ -37,6 +37,7 @@ members = [
     "crates/poly-hda",
     "crates/poly-heap",
     "crates/poly-http",
+    "crates/poly-comctl",
     "crates/poly-imagelist",
     "crates/poly-input",
     "crates/poly-iphlp",
@@ -148,6 +149,7 @@ poly-gfx = { path = "crates/poly-gfx" }
 poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
+poly-comctl = { path = "crates/poly-comctl" }
 poly-imagelist = { path = "crates/poly-imagelist" }
 poly-input = { path = "crates/poly-input" }
 poly-iphlp = { path = "crates/poly-iphlp" }

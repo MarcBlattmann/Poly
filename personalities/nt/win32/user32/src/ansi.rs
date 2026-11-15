@@ -260,10 +260,12 @@ pub fn enter(h: H, from: Form, to: Form, msg: u32, w: usize, l: isize) -> Conv {
                 return plain(w, l);
             }
             let line = msg == EM_GETLINE;
+            // A size nobody can mean (GetDlgItemTextA with -1): what the text needs is far less.
+            const MAX_UNITS: usize = 1 << 20;
             // The size the sender gave: characters for `WM_GETTEXT`, in the first word for
             // `EM_GETLINE`; the item's length (asked of the window) for the list messages.
             let cap = match msg {
-                WM_GETTEXT => w,
+                WM_GETTEXT => w.min(MAX_UNITS),
                 // SAFETY: the sender's buffer starts with the size word.
                 EM_GETLINE => unsafe { (l as *const u16).read_unaligned() as usize },
                 _ => 4096,

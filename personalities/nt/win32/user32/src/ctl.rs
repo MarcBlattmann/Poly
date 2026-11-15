@@ -308,7 +308,8 @@ pub fn builtin(id: u64, h: H, msg: u32, w: usize, l: isize) -> isize {
         dlg::sysproc::EDIT => edit(h, msg, w, l),
         dlg::sysproc::LISTBOX | dlg::sysproc::COMBOLBOX => listbox(h, msg, w, l),
         dlg::sysproc::DIALOG => super::dlg::dialog_proc(h, msg, w, l),
-        dlg::sysproc::COMBOBOX | dlg::sysproc::SCROLLBAR => other(h, msg, w, l),
+        dlg::sysproc::COMBOBOX => combobox(h, msg, w, l),
+        dlg::sysproc::SCROLLBAR => other(h, msg, w, l),
         dlg::sysproc::MENU => def(h, msg, w, l),
         _ => def(h, msg, w, l),
     }
@@ -355,6 +356,24 @@ fn other(h: H, msg: u32, w: usize, l: isize) -> isize {
         forget(h);
     }
     def(h, msg, w, l)
+}
+
+/// A combo box: `CBS_HASSTRINGS` is on unless the box draws its items itself, and the window
+/// text it was made with is not kept (its text is the edit field's: empty at first;
+/// `InitCommonControlsEx.yaml` `classes_5_82`).
+fn combobox(h: H, msg: u32, w: usize, l: isize) -> isize {
+    let r = other(h, msg, w, l);
+    if msg == WM_NCCREATE && r != 0 {
+        const CBS_OWNERDRAW: u32 = 0x30;
+        const CBS_HASSTRINGS: u32 = 0x200;
+        let style = style_of(h);
+        if style & CBS_OWNERDRAW == 0 {
+            call(Request::SetStyle { hwnd: h as u32, which: -16, value: style | CBS_HASSTRINGS });
+        }
+        let empty = [0u16];
+        def(h, WM_SETTEXT, 0, empty.as_ptr() as isize);
+    }
+    r
 }
 
 // ---- Button
@@ -1256,6 +1275,23 @@ fn listbox(h: H, msg: u32, w: usize, l: isize) -> isize {
     let style = style_of(h);
     let w32 = w as u32 as i32;
     match msg {
+        WM_CREATE => {
+            // A list box whose style has no LBS_NOINTEGRALHEIGHT shows whole items only: its height
+            // becomes a multiple of the item height (plus its frame).
+            const LBS_NOINTEGRALHEIGHT: u32 = 0x100;
+            if style & (LBS_NOINTEGRALHEIGHT | LBS_OWNERDRAWVARIABLE) == 0
+                && let Some(i) = info(h)
+            {
+                let ih = list_item_height(h).max(1);
+                let frame = i.window.height() - i.client.height();
+                let client = (i.client.height() / ih) * ih;
+                if client + frame != i.window.height() {
+                    // SAFETY: a plain window call (no move, no z order change, no activation).
+                    unsafe { super::SetWindowPos(h, 0, 0, 0, i.window.width(), client + frame, 0x16) };
+                }
+            }
+            0
+        }
         WM_GETDLGCODE => (DLGC_WANTARROWS | DLGC_WANTCHARS) as isize,
         LB_ADDSTRING | LB_INSERTSTRING => {
             // SAFETY: a NUL-terminated string (or item data for an owner-drawn list).

@@ -317,13 +317,8 @@ pub extern "system" fn ImageList_Copy(dst: H, di: i32, src: H, si: i32, flags: u
     if dst == src {
         return with(dst, |l| l.copy_within(di, si, flags)).map_or(0, i32::from);
     }
-    // Two lists: work on a copy of the source, then store it back.
-    let Some(mut from) = with(src, |l| l.clone()) else { return 0 };
-    let ok = with(dst, |l| l.copy_from(di, &mut from, si, flags)).unwrap_or(false);
-    if ok && flags & poly_imagelist::ILCF_SWAP != 0 {
-        with(src, |l| *l = from);
-    }
-    i32::from(ok)
+    // Between two lists it fails, also when they are equal (ImageList_Copy.yaml `two_lists`).
+    0
 }
 
 #[unsafe(no_mangle)]
