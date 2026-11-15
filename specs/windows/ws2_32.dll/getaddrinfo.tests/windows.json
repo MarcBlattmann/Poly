@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getaddrinfo_hints",
+      "exe_sha256": "58be083d7281daf81949963251826d5fc0444c99e0accde665584d58c35ca9ea",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bG9jYWxob3N0IEFGX0lORVQgc3RyZWFtOiByZXQ9MCB3c2E9MCBnbGU9MApsb2NhbGhvc3QgQUZfVU5TUEVDIHN0cmVhbSBBSV9ETlNfT05MWTogcmV0PTAgZ2xlLWVxdWFsPTEgaGFzLWVudHJpZXM9MSBhbGwtbG9vcGJhY2s9MSBoYXMtMTI3LjAuMC4xPTEKbG9jYWxob3N0IDgwOiByZXQ9MCB3c2E9MCBnbGU9MApsb2NhbGhvc3QuIDogcmV0PTAgZW50cmllcz0xCmhpbnRzIGZhbWlseSBBRl9JTkVUIHNvY2t0eXBlIDk5OiByZXQ9MTAwNDQgd3NhPTEwMDQ0IGdsZT0xMDA0NCBlbnRyaWVzPTAKaGludHMgc29ja3R5cGUgMyAocmF3KTogcmV0PTAgd3NhPTAgZ2xlPTAgZW50cmllcz0xCmhpbnRzIEFJX1BBU1NJVkUgd2l0aCBBSV9DQU5PTk5BTUU6IHJldD0wIHdzYT0wIGdsZT0wIGVudHJpZXM9MQpoaW50cyB3aXRoIGFpX2Nhbm9ubmFtZSBzZXQ6IHJldD0xMTAwMyBlbnRyaWVzPTAKdHdvIGxpc3RzIGFyZSBkaWZmZXJlbnQgYWxsb2NhdGlvbnM9MQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "localhost AF_INET stream: ret=0 wsa=0 gle=0\nlocalhost AF_UNSPEC stream AI_DNS_ONLY: ret=0 gle-equal=1 has-entries=1 all-loopback=1 has-127.0.0.1=1\nlocalhost 80: ret=0 wsa=0 gle=0\nlocalhost. : ret=0 entries=1\nhints family AF_INET socktype 99: ret=10044 wsa=10044 gle=10044 entries=0\nhints socktype 3 (raw): ret=0 wsa=0 gle=0 entries=1\nhints AI_PASSIVE with AI_CANONNAME: ret=0 wsa=0 gle=0 entries=1\nhints with ai_canonname set: ret=11003 entries=0\ntwo lists are different allocations=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "getaddrinfo_hints_c",
+      "exe_sha256": "0b20c0f0d4e93d3f80508acff84e84da0d71602d6d37af87347448e02c852a11",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bG9jYWxob3N0IEFGX1VOU1BFQyBzdHJlYW0gZmxhZ3MgMDogcmV0PTAgZ2xlLWVxdWFsPTEgaGFzLWVudHJpZXM9MSBhbGwtbG9vcGJhY2s9MSBoYXMtMTI3LjAuMC4xPTEKbG9jYWxob3N0IEFGX1VOU1BFQyBzdHJlYW0gQUlfQUxMfEFJX1Y0TUFQUEVEOiByZXQ9MCBnbGUtZXF1YWw9MSBoYXMtZW50cmllcz0xIGFsbC1sb29wYmFjaz0xIGhhcy0xMjcuMC4wLjE9MQpMT0NBTEhPU1Q6IHJldD0wIGVudHJpZXM9MQpoaW50cyBmYW1pbHkgOTk6IHJldD0xMDA0NyB3c2E9MTAwNDcgZ2xlPTEwMDQ3IGVudHJpZXM9MApoaW50cyBmYW1pbHkgQUZfSU5FVCBkZ3JhbSBwcm90b2NvbCBUQ1A6IHJldD0wIHdzYT0wIGdsZT0wIGVudHJpZXM9MQpoaW50cyBBSV9DQU5PTk5BTUUgd2l0aCBhIG51bWVyaWMgaG9zdDogcmV0PTAgd3NhPTAgZ2xlPTAgZW50cmllcz0xCmhpbnRzIHdpdGggYWlfYWRkcmxlbiAxNjogcmV0PTExMDAzIGVudHJpZXM9MApoaW50cyB3aXRoIGFpX25leHQgc2V0OiByZXQ9MTEwMDMgZW50cmllcz0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "localhost AF_UNSPEC stream flags 0: ret=0 gle-equal=1 has-entries=1 all-loopback=1 has-127.0.0.1=1\nlocalhost AF_UNSPEC stream AI_ALL|AI_V4MAPPED: ret=0 gle-equal=1 has-entries=1 all-loopback=1 has-127.0.0.1=1\nLOCALHOST: ret=0 entries=1\nhints family 99: ret=10047 wsa=10047 gle=10047 entries=0\nhints family AF_INET dgram protocol TCP: ret=0 wsa=0 gle=0 entries=1\nhints AI_CANONNAME with a numeric host: ret=0 wsa=0 gle=0 entries=1\nhints with ai_addrlen 16: ret=11003 entries=0\nhints with ai_next set: ret=11003 entries=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "getaddrinfo_numeric",
+      "exe_sha256": "655b629b5f70ae510c31a22c6db5afcb0a9502d011ed1ab73a3f5c1c8bccd9dc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTI3LjAuMC4xIE5VTEwgc3RyZWFtOiByZXQ9MCB3c2E9MCBnbGU9MAogIFswXSBmbGFncz0weDQgZmFtaWx5PTIgdHlwZT0xIHByb3RvPTAgYWRkcmxlbj0xNiBjYW5vbj1OVUxMIEFGX0lORVQgMTI3LjAuMC4xIHBvcnQgODAKOjpmZmZmOjEyNy4wLjAuMSBBRl9JTkVUNjogcmV0PTAgd3NhPTAgZ2xlPTAKICAobm8gbGlzdCkKOjoxIEFGX0lORVQ6IHJldD0xMTAwMSB3c2E9MTEwMDEgZ2xlPTExMDAxCjEyNy4wLjAuMSA4MCBBRl9JTkVUIHNvY2t0eXBlIDA6IHJldD0wIHdzYT0wIGdsZT0wCiAgWzBdIGZsYWdzPTB4NCBmYW1pbHk9MiB0eXBlPTIgcHJvdG89MCBhZGRybGVuPTE2IGNhbm9uPU5VTEwgQUZfSU5FVCAxMjcuMC4wLjEgcG9ydCA4MApOVUxMIG5vZGUsIG5vIFBBU1NJVkUsIEFGX0lORVQ6IHJldD0wIHdzYT0wIGdsZT0wCiAgWzBdIGZsYWdzPTB4MCBmYW1pbHk9MiB0eXBlPTEgcHJvdG89MCBhZGRybGVuPTE2IGNhbm9uPU5VTEwgQUZfSU5FVCAwLjAuMC4wIHBvcnQgODAKTlVMTCBub2RlLCBubyBQQVNTSVZFLCBBRl9JTkVUNjogcmV0PTAgd3NhPTAgZ2xlPTAKICAobm8gbGlzdCkKc2VydmljZSBodHRwIHdpdGggTlVNRVJJQ1NFUlY6IHJldD0xMTAwMSB3c2E9MTEwMDEgZ2xlPTExMDAxCiAgWzBdIGZsYWdzPTB4NCBmYW1pbHk9MiB0eXBlPTEgcHJvdG89MCBhZGRybGVuPTE2IGNhbm9uPU5VTEwgQUZfSU5FVCAxMjcuMC4wLjEgcG9ydCAwCnVua25vd24gc2VydmljZSBuYW1lOiByZXQ9MTAxMDkgd3NhPTEwMTA5IGdsZT0xMDEwOQogIChubyBsaXN0KQplbXB0eSBub2RlIE5VTUVSSUNIT1NUOiByZXQ9MTEwMDEgd3NhPTExMDAxIGdsZT0xMTAwMQpubyBoaW50czogZW50cmllcyAxCmZyZWVhZGRyaW5mbyhOVUxMKSByZXR1cm5lZApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "127.0.0.1 NULL stream: ret=0 wsa=0 gle=0\n  [0] flags=0x4 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 80\n::ffff:127.0.0.1 AF_INET6: ret=0 wsa=0 gle=0\n  (no list)\n::1 AF_INET: ret=11001 wsa=11001 gle=11001\n127.0.0.1 80 AF_INET socktype 0: ret=0 wsa=0 gle=0\n  [0] flags=0x4 family=2 type=2 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 80\nNULL node, no PASSIVE, AF_INET: ret=0 wsa=0 gle=0\n  [0] flags=0x0 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 0.0.0.0 port 80\nNULL node, no PASSIVE, AF_INET6: ret=0 wsa=0 gle=0\n  (no list)\nservice http with NUMERICSERV: ret=11001 wsa=11001 gle=11001\n  [0] flags=0x4 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 0\nunknown service name: ret=10109 wsa=10109 gle=10109\n  (no list)\nempty node NUMERICHOST: ret=11001 wsa=11001 gle=11001\nno hints: entries 1\nfreeaddrinfo(NULL) returned\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "getaddrinfo_numeric_b",
+      "exe_sha256": "3ca9fb14f8abb2ba26f3761150dd16731636354716915007d44dc03a60e9b91e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBbMF0gZmxhZ3M9MHg0IGZhbWlseT0yIHR5cGU9MSBwcm90bz0wIGFkZHJsZW49MTYgY2Fub249TlVMTCBBRl9JTkVUIDEyNy4wLjAuMSBwb3J0IDAKOjoxIDgwODAgTlVNRVJJQ0hPU1Q6IHJldD0wIHdzYT0wIGdsZT0wCiAgWzBdIGZsYWdzPTB4NCBmYW1pbHk9MjMgdHlwZT0xIHByb3RvPTAgYWRkcmxlbj0yOCBjYW5vbj1OVUxMIEFGX0lORVQ2IDo6ZmZmZjoxMjcuMC4wLjEgcG9ydCAwCjEyNy4wLjAuMSBBRl9JTkVUNiBWNE1BUFBFRDogcmV0PTExMDAxIHdzYT0xMTAwMSBnbGU9MTEwMDEKICAobm8gbGlzdCkKICBbMF0gZmxhZ3M9MHg0IGZhbWlseT0yIHR5cGU9MCBwcm90bz0wIGFkZHJsZW49MTYgY2Fub249TlVMTCBBRl9JTkVUIDEyNy4wLjAuMSBwb3J0IDgwCnByb3RvY29sIFVEUCwgc29ja3R5cGUgMDogcmV0PTAgd3NhPTAgZ2xlPTAKICBbMF0gZmxhZ3M9MHgwIGZhbWlseT0yIHR5cGU9MSBwcm90bz0wIGFkZHJsZW49MTYgY2Fub249TlVMTCBBRl9JTkVUIDEyNy4wLjAuMSBwb3J0IDgwCk5VTEwgbm9kZSwgUEFTU0lWRSwgQUZfSU5FVDY6IHJldD0wIHdzYT0wIGdsZT0wCiAgWzBdIGZsYWdzPTB4MCBmYW1pbHk9MjMgdHlwZT0xIHByb3RvPTAgYWRkcmxlbj0yOCBjYW5vbj1OVUxMIEFGX0lORVQ2IDo6MSBwb3J0IDgwCnNlcnZpY2UgaHR0cDogcmV0PTAgd3NhPTAgZ2xlPTAKICAobm8gbGlzdCkKc2VydmljZSAwOiByZXQ9MCB3c2E9MCBnbGU9MAogIChubyBsaXN0KQo5OTkuMS4xLjEgTlVNRVJJQ0hPU1Q6IHJldD0xMTAwMSB3c2E9MTEwMDEgZ2xlPTExMDAxCiAgKG5vIGxpc3QpCjEyNy4wLjAuMSA4MCBubyBoaW50czogcmV0PTAgd3NhPTAgZ2xlPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  [0] flags=0x4 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 0\n::1 8080 NUMERICHOST: ret=0 wsa=0 gle=0\n  [0] flags=0x4 family=23 type=1 proto=0 addrlen=28 canon=NULL AF_INET6 ::ffff:127.0.0.1 port 0\n127.0.0.1 AF_INET6 V4MAPPED: ret=11001 wsa=11001 gle=11001\n  (no list)\n  [0] flags=0x4 family=2 type=0 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 80\nprotocol UDP, socktype 0: ret=0 wsa=0 gle=0\n  [0] flags=0x0 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 80\nNULL node, PASSIVE, AF_INET6: ret=0 wsa=0 gle=0\n  [0] flags=0x0 family=23 type=1 proto=0 addrlen=28 canon=NULL AF_INET6 ::1 port 80\nservice http: ret=0 wsa=0 gle=0\n  (no list)\nservice 0: ret=0 wsa=0 gle=0\n  (no list)\n999.1.1.1 NUMERICHOST: ret=11001 wsa=11001 gle=11001\n  (no list)\n127.0.0.1 80 no hints: ret=0 wsa=0 gle=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

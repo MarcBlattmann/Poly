@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/CreateWindowStationW.yaml
+id: windows/api/user32.dll/CreateWindowStationW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateWindowStationW", "CloseWindowStation", "OpenWindowStationW", "SetProcessWindowStation", "GetProcessWindowStation", "CreateDesktopW", "OpenDesktopW", "CloseDesktop", "GetThreadDesktop", "SetThreadDesktop", "GetUserObjectInformationW", "Window Station Security and Access Rights", "Desktop Security and Access Rights", "Mandatory Integrity Control"; winuser.h, winbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a window station of the given name in the caller's session and returns a handle with the access asked for; the same name again gives another handle to the same station. The broker makes a named station for its sandboxed targets and creates the targets' desktop in it. A NULL or empty name is refused with ERROR_ACCESS_DENIED (the stage-2 trace has one of two calls fail with 5), a name with a backslash with ERROR_PATH_NOT_FOUND. The station exists as long as one handle is open. The window stations of the oracle's SSH session are service stations; the tests create their own and never print the process's.
+interface:
+  signature: "HWINSTA CreateWindowStationW(LPCWSTR name, DWORD flags, ACCESS_MASK desired_access, LPSECURITY_ATTRIBUTES sa)"
+  returns: "a handle (NULL on failure, with a last error)"
+  flags: "CWF_CREATE_ONLY 1 (winuser.h) is the only flag Learn names; the call accepts every value"
+  access: "WINSTA_ENUMDESKTOPS 0x1, READATTRIBUTES 0x2, ACCESSCLIPBOARD 0x4, CREATEDESKTOP 0x8, WRITEATTRIBUTES 0x10, ACCESSGLOBALATOMS 0x20, EXITWINDOWS 0x40, ENUMERATE 0x100, READSCREEN 0x200, WINSTA_ALL_ACCESS 0x37F"
+chrome:
+  flow: "the broker makes an alternate window station and an alternate desktop for its targets in the browser process (CreateWindowStationW 2 calls, one of them fails with ERROR_ACCESS_DENIED; GetProcessWindowStation 2, SetProcessWindowStation 2 (switch to the new station to create the desktop there, then back), CreateDesktopW 1, GetThreadDesktop 2, GetUserObjectInformationW 44, CloseDesktop 1, CloseWindowStation 1) and starts every confined child with CreateProcessAsUserW (creation flags 0x8040C: CREATE_SUSPENDED|DETACHED_PROCESS|CREATE_UNICODE_ENVIRONMENT|EXTENDED_STARTUPINFO_PRESENT); by the sandbox's published design STARTUPINFO.lpDesktop names the alternate \"station\\desktop\". The arguments of the window station and desktop calls are not in the committed traces"
+rules:
+  named_station: "CreateWindowStationW(\"polyws_create\", 0, GENERIC_ALL, NULL) returns a handle and sets the last error to 0; GetUserObjectInformationW gives UOI_NAME = the name as given, UOI_TYPE = \"WindowStation\" (28 bytes with the NUL), UOI_FLAGS = 12 zero bytes; UOI_NAME in a 4-byte buffer fails with error 122 and says 28 bytes are needed (the name's length plus one, times two)"
+  same_name_again: "creating the same name again returns a second handle (a different handle value) to the same station, error 0, name equal; the name is case-insensitive: \"POLYWS_CREATE\" with CWF_CREATE_ONLY fails with 183"
+  create_only: "CWF_CREATE_ONLY with a name that exists: NULL, error 183 (ERROR_ALREADY_EXISTS); with a new name it works"
+  other_flags: "2, 0x100 and 0x80000000 are accepted: a handle, error 0"
+  access_masks: "every mask is accepted and gives a handle that has exactly those rights: WINSTA_ALL_ACCESS, CREATEDESKTOP|READATTRIBUTES and MAXIMUM_ALLOWED can ask for UOI_NAME; a handle created with access 0 or READ_CONTROL|WRITE_DAC only cannot (error 5)"
+  names: "a NULL name and an empty name: NULL with error 5 (ERROR_ACCESS_DENIED); a 299-character name works; a name with a backslash in it (\"pa\\b\"): NULL with error 3 (ERROR_PATH_NOT_FOUND)"
+  lifetime: "OpenWindowStationW(name, FALSE, WINSTA_READATTRIBUTES) finds a station that has a handle (the name reads back); a missing name: NULL, error 2; after the last handle was closed with CloseWindowStation the name is gone (error 2)"
+  child_start: "a child started with STARTUPINFO.lpDesktop = \"polyws_child0\\polydesk_child0\" sees that station as its process station (see the CreateDesktopW sheet for what happens when the name is wrong)"
+errors:
+  null_or_empty_name: "ERROR_ACCESS_DENIED (5)"
+  name_with_separator: "ERROR_PATH_NOT_FOUND (3)"
+  create_only_exists: "ERROR_ALREADY_EXISTS (183)"
+  open_missing: "ERROR_FILE_NOT_FOUND (2) from OpenWindowStationW"
+side_effects: "creates a named kernel object in the session's window station directory, destroyed when its last handle is closed"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Security attributes beyond NULL (their use for the targets' access is in the CreateDesktopW sheet's child test), the interactive session (the tests ran in the SSH session), more than one session, window station inheritance flags in the attributes, the stations' DACL read-back, clipboard and global atoms.

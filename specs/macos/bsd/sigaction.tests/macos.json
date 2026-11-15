@@ -1,0 +1,61 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "sigaction_delivery",
+      "source_sha256": "ea992cd593dcccf7d95c02b1f9a83e9e2699995c40d4350d9df4a70ff5edae92",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "517e54ecc50786d549383166d89b83314fadaea4a50bdcb7e5c37ea4c16de9d0",
+          "exit_code": 0,
+          "stdout": "ok kill returns 0\nok the handler ran once before kill returned\nok with the signal number\nok siginfo: si_signo is the signal\nok siginfo: si_code is 0 for kill\nok siginfo: si_pid is the sender\nok the signal was blocked inside the handler\nok and the mask is restored afterwards\nok SIG_IGN: no handler runs\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sigaction_flags",
+      "source_sha256": "fd0836ea92cbac376cef583497d02e82259e03e1ba8b7a8f3f26245f3185e6fe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "035618f2077365a580b4f2d5ec6d33b9b2212cbe612eaa9e4a714cc63cd53a92",
+          "exit_code": 0,
+          "stdout": "ok SA_RESETHAND: the handler ran once\nok and the action is back to SIG_DFL\nok SA_NODEFER: the signal is not blocked in its handler\nok the action's mask is blocked too\nok the mask is restored\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sigaction_query_set",
+      "source_sha256": "275ae3f748273a57b12e01f19874814b9c522735e335fd27d4f815d04f9e4ca5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "92a6f01004ecc27859c83cb80f5b57e738481d3778739578e75bbf4cecd83d60",
+          "exit_code": 0,
+          "stdout": "ok the default: success\nok handler 0, mask 0, flags 0\nok setting an action returns the old one (default)\nok the handler reads back\nok the mask reads back\nok the flags read back (SA_SIGINFO|SA_RESTART)\nok replacing returns the previous handler\nok SIG_IGN reads back as 1\nok and SIG_DFL as 0\nvalue SIGUSR1 30\nvalue SIGUSR2 31\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

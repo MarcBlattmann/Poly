@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "ac_translate",
+      "exe_sha256": "4e6b54b80fe17511c78cb4f84c4712fdd357e71516abe359ea4a1ea649f27a0a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TG9hZEFjY2VsZXJhdG9yc1coMzAwKTogd2luZG93CkxvYWRBY2NlbGVyYXRvcnNXKCdBQ0NFTCcpOiB3aW5kb3cKQ3JlYXRlQWNjZWxlcmF0b3JUYWJsZVc6IHdpbmRvdwpDcmVhdGVBY2NlbGVyYXRvclRhYmxlVyB3aXRoIGNvdW50IDA6IDEgZXJyPTg3CkNyZWF0ZUFjY2VsZXJhdG9yVGFibGVXIHdpdGggYSBOVUxMIGFycmF5OiAxIGVycj0tMQpGMSBrZXkgZG93biAodGFibGUgMzAwKTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMQogICAgIFdNX0NPTU1BTkQgaWQgMzAzIHNvdXJjZSAxIChjb250cm9sIGhhbmRsZSBudWxsKQpGMSBrZXkgdXA6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKRjIga2V5IGRvd24gKG5vdCBpbiB0aGUgdGFibGUpOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAwCldNX0NIQVIgJ0EnIChhIGNoYXJhY3RlciBhY2NlbGVyYXRvcik6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDEKICAgICBXTV9DT01NQU5EIGlkIDMwNCBzb3VyY2UgMSAoY29udHJvbCBoYW5kbGUgbnVsbCkKV01fQ0hBUiAnYSc6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKV01fS0VZRE9XTiAnQScgKGEgdmlydHVhbCBrZXksIHRoZSB0YWJsZSBoYXMgdGhlIGNoYXJhY3Rlcik6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKJ08nIGtleSBkb3duIHdpdGhvdXQgQ3RybCAodGhlIGVudHJ5IHdhbnRzIEN0cmwpOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAwCkY1IHdpdGhvdXQgU2hpZnQgKHRoZSBlbnRyeSB3YW50cyBTaGlmdCk6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKQWx0K0VudGVyIGFzIFdNX1NZU0tFWURPV046IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKRjEgYXMgV01fU1lTS0VZRE9XTjogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMQogICAgIFdNX0NPTU1BTkQgaWQgMzAzIHNvdXJjZSAxIChjb250cm9sIGhhbmRsZSBudWxsKQpGMiAodGFibGUgbWFkZSBieSBDcmVhdGVBY2NlbGVyYXRvclRhYmxlVyk6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDEKICAgICBXTV9DT01NQU5EIGlkIDQwIHNvdXJjZSAxIChjb250cm9sIGhhbmRsZSBudWxsKQpXTV9DSEFSICd4JzogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMQogICAgIFdNX0NPTU1BTkQgaWQgNDEgc291cmNlIDEgKGNvbnRyb2wgaGFuZGxlIG51bGwpCldNX0NIQVIgJ1gnOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAwCmEgbW91c2UgbWVzc2FnZTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMAphIE5VTEwgdGFibGU6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKYSBtYWRlLXVwIHRhYmxlOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAwCmEgTlVMTCB3aW5kb3c6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKRGVzdHJveUFjY2VsZXJhdG9yVGFibGUgY3JlYXRlZDogMQpkZXN0cm95IGFnYWluOiAwIGVycj0xNDAzCk5VTEw6IDAgZXJyPTE0MDMKYWJzZW50IG51bWJlcjogMSBlcnI9MTgxNAphYnNlbnQgbmFtZTogMSBlcnI9MTgxNApOVUxMIG1vZHVsZTogMCBlcnI9LTEKbWFkZS11cCBtb2R1bGU6IDEgZXJyPTE4MTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LoadAcceleratorsW(300): window\nLoadAcceleratorsW('ACCEL'): window\nCreateAcceleratorTableW: window\nCreateAcceleratorTableW with count 0: 1 err=87\nCreateAcceleratorTableW with a NULL array: 1 err=-1\nF1 key down (table 300): TranslateAcceleratorW = 1\n     WM_COMMAND id 303 source 1 (control handle null)\nF1 key up: TranslateAcceleratorW = 0\nF2 key down (not in the table): TranslateAcceleratorW = 0\nWM_CHAR 'A' (a character accelerator): TranslateAcceleratorW = 1\n     WM_COMMAND id 304 source 1 (control handle null)\nWM_CHAR 'a': TranslateAcceleratorW = 0\nWM_KEYDOWN 'A' (a virtual key, the table has the character): TranslateAcceleratorW = 0\n'O' key down without Ctrl (the entry wants Ctrl): TranslateAcceleratorW = 0\nF5 without Shift (the entry wants Shift): TranslateAcceleratorW = 0\nAlt+Enter as WM_SYSKEYDOWN: TranslateAcceleratorW = 0\nF1 as WM_SYSKEYDOWN: TranslateAcceleratorW = 1\n     WM_COMMAND id 303 source 1 (control handle null)\nF2 (table made by CreateAcceleratorTableW): TranslateAcceleratorW = 1\n     WM_COMMAND id 40 source 1 (control handle null)\nWM_CHAR 'x': TranslateAcceleratorW = 1\n     WM_COMMAND id 41 source 1 (control handle null)\nWM_CHAR 'X': TranslateAcceleratorW = 0\na mouse message: TranslateAcceleratorW = 0\na NULL table: TranslateAcceleratorW = 0\na made-up table: TranslateAcceleratorW = 0\na NULL window: TranslateAcceleratorW = 0\nDestroyAcceleratorTable created: 1\ndestroy again: 0 err=1403\nNULL: 0 err=1403\nabsent number: 1 err=1814\nabsent name: 1 err=1814\nNULL module: 0 err=-1\nmade-up module: 1 err=1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

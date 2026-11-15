@@ -110,18 +110,21 @@ pub unsafe extern "system" fn UnhandledExceptionFilter(pointers: *mut u8) -> i32
 unsafe fn exchange(p: *mut u64, old: (u64, u64), new: (u64, u64)) -> Result<(), (u64, u64)> {
     let (mut lo, mut hi) = old;
     let ok: u8;
-    // SAFETY: the caller's contract; RBX cannot be an asm operand, so the
-    // new low quadword travels in another register and is swapped in and
-    // back around the instruction.
+    // SAFETY: the caller's contract. RBX cannot be an asm operand, so the new low quadword
+    // travels in R9 and is swapped into RBX and back around the instruction. The compiler does not
+    // know the asm uses RBX, so it may hand out RBX (BL) for an operand it picks: every operand
+    // here is a fixed register other than RBX, and the result is read after RBX is back (XCHG
+    // leaves the flags alone). With `ok` in BL, the swap back overwrote it and the loop tested the
+    // caller's RBX instead: a push looped forever, re-linking its entry to itself (ADR 0155 step 13).
     unsafe {
         core::arch::asm!(
-            "xchg {new_lo}, rbx",
-            "lock cmpxchg16b [{p}]",
-            "sete {ok}",
-            "xchg {new_lo}, rbx",
-            p = in(reg) p,
-            new_lo = inout(reg) new.0 => _,
-            ok = out(reg_byte) ok,
+            "xchg r9, rbx",
+            "lock cmpxchg16b [r8]",
+            "xchg r9, rbx",
+            "sete r10b",
+            in("r8") p,
+            inout("r9") new.0 => _,
+            out("r10b") ok,
             inout("rax") lo,
             inout("rdx") hi,
             in("rcx") new.1,

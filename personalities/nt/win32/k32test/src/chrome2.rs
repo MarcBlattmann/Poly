@@ -49,6 +49,7 @@ unsafe extern "system" {
     fn CreateFileMappingW(f: Handle, sa: *const u8, prot: u32, hi: u32, lo: u32, n: *const u16) -> Handle;
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
     fn SetEvent(h: Handle) -> i32;
+    fn ResetEvent(h: Handle) -> i32;
     fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
     fn RegisterWaitForSingleObject(
         out: *mut Handle,
@@ -242,6 +243,10 @@ unsafe fn files() {
         check(nl2 > 0 && fin[0] == u16::from(b'\\') && fin[1] != u16::from(b'\\'));
         check(GetFinalPathNameByHandleW(h, fin.as_mut_ptr(), 400, 3) == 0);
         check_error(87);
+        // VOLUME_NAME_NT: \Device\HarddiskVolume<N>\... (ADR 0185).
+        let nt = GetFinalPathNameByHandleW(h, fin.as_mut_ptr(), 400, 2) as usize;
+        check(nt > 24 && ascii_eq(&fin[..22], b"\\Device\\HarddiskVolume") && fin[22] >= u16::from(b'1'));
+        check(ends_with_ascii(&fin[..nt], b"\\k32c2\\a.dat"));
 
         // SetFileInformationByHandle: end of file, then the I/O priority.
         let mut eof = [0u8; 8];
@@ -542,6 +547,21 @@ unsafe fn waits() {
         check(FIRED_TIMEOUT.load(Ordering::SeqCst) == 1);
         check(WaitForSingleObject(done, 300) == 0x102);
         check(UnregisterWait(wait) != 0);
+
+        // A completion event is signaled once the wait is unregistered, also when no callback
+        // runs (Learn: after success the caller waits for it; Chrome's browser does, ADR 0155
+        // step 12): a wait that never fired, and a once-only wait whose thread has ended.
+        let completion = CreateEventW(np(), 1, 0, np());
+        check(RegisterWaitForSingleObject(&mut wait, never, on_wait, done as *mut u8, INFINITE, 0) != 0);
+        check(UnregisterWaitEx(wait, completion) != 0);
+        check(WaitForSingleObject(completion, 10_000) == 0);
+        check(ResetEvent(completion) != 0);
+        check(RegisterWaitForSingleObject(&mut wait, never, on_wait, done as *mut u8, 50, 8) != 0);
+        check(WaitForSingleObject(done, 10_000) == 0);
+        check(WaitForSingleObject(done, 300) == 0x102);
+        check(UnregisterWaitEx(wait, completion) != 0);
+        check(WaitForSingleObject(completion, 10_000) == 0);
+        check(CloseHandle(completion) != 0);
 
         // Arguments.
         check(RegisterWaitForSingleObject(&mut wait, never, on_wait, np::<u8>() as *mut u8, 50, 0x400) == 0);

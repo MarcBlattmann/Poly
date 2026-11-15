@@ -91,6 +91,28 @@ unsafe extern "system" {
         returned: *mut usize,
     ) -> NtStatus;
     pub fn NtQueryInformationFile(handle: isize, iosb: *mut u8, info: *mut u8, len: u32, class: u32) -> NtStatus;
+    pub fn NtCreateSection(
+        section: *mut isize,
+        access: u32,
+        attributes: *const u8,
+        maximum_size: *const i64,
+        page_protection: u32,
+        allocation_attributes: u32,
+        file: isize,
+    ) -> NtStatus;
+    pub fn NtMapViewOfSection(
+        section: isize,
+        process: isize,
+        base: *mut *mut u8,
+        zero_bits: usize,
+        commit_size: usize,
+        offset: *const i64,
+        view_size: *mut usize,
+        inherit: u32,
+        allocation_type: u32,
+        protect: u32,
+    ) -> NtStatus;
+    pub fn NtUnmapViewOfSection(process: isize, base: *const u8) -> NtStatus;
 }
 
 /// The current process pseudo-handle (`NtCurrentProcess()`).

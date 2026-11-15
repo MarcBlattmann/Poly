@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/select.yaml
+id: windows/api/ws2_32.dll/select
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "select function (winsock2.h)", "fd_set", "Winsock Error Codes"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Waits for readable, writable and failed sockets. Chrome's network service does not call it (it uses event objects); the tests give the answers on loopback: the count and what is left in each set, the exception set for a failed non-blocking connect, the argument errors.
+interface:
+  signature: "int select(int nfds, fd_set* read, fd_set* write, fd_set* except, const timeval* timeout)"
+  result: "the number of ready sockets, 0 on timeout, or SOCKET_ERROR; nfds is ignored"
+chrome:
+  calls: "not called in S4"
+rules:
+  listener: "a listener with no pending connection: 0 and the read set empties (count 0); with a pending connection: 1 and the listener stays in the read set"
+  connected: "a connected socket is writable (1, write set keeps it); readable only with data (0 with none, 1 with data) and after the peer closed (1); the sets that were not passed are not touched"
+  failed_connect: "a non-blocking connect to a closed port: the socket appears in the EXCEPT set only (read and write sets end empty), n = 1; a successful non-blocking connect makes it writable and not exceptional"
+  arguments: "an empty read set (count 0) and no other set, and all three NULL: -1/WSAEINVAL (10022); a set containing a non-socket value: -1/WSAENOTSOCK (10038)"
+  duplicates: "a write set of the client and the listener: only the connected client stays in it (count 1, first element the client)"
+errors:
+  inval: "WSAEINVAL 10022"
+  notsock: "WSAENOTSOCK 10038"
+side_effects: "modifies the sets"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Sets of 64 sockets, out-of-band data, the NULL timeout (blocks), nfds values.

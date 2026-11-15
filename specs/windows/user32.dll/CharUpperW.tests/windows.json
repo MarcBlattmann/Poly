@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "cu_chrome",
+      "exe_sha256": "1c666fc6e7b0ba503913bf95cf73adb0132094fdbece687d70fa0d8c73b3fa67",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gd2luZG93IHRleHQgYW5kIGNsYXNzIG5hbWVzLCB1cHBlci1jYXNlZCBpbiBwbGFjZQogIHRpdGxlICgzNiBjaGFyYWN0ZXJzKTogIlVOVElUTEVEIC0gR09PR0xFIENIUk9NRSBGT1IgVEVTVElORyIgc2FtZSBwb2ludGVyOiAxCiAgY2xhc3Mgb2YgbWFpbiAoMTggY2hhcmFjdGVycyk6ICJDSFJPTUVfV0lER0VUV0lOXzEiCiAgY2xhc3Mgb2YgcndoICgyNyBjaGFyYWN0ZXJzKTogIkNIUk9NRV9SRU5ERVJXSURHRVRIT1NUSFdORCIKICBjbGFzcyBvZiBoaWQgKDE4IGNoYXJhY3RlcnMpOiAiQ0hST01FX1dJREdFVFdJTl8wIgo9PSAxNDAwMCBjYWxscwogIDE0MDAwIGNhbGxzOiBzaW5nbGUtY2hhcmFjdGVyIHJlc3VsdHMgYXMgZXhwZWN0ZWQ6IDcwMDAgb2YgNzAwMCwgc3RyaW5ncyBhcyBleHBlY3RlZDogNzAwMCBvZiA3MDAwCiAgbWVzc2FnZXMgcmVjZWl2ZWQgYnkgdGhlIHdpbmRvdyBkdXJpbmcgdGhlIGxvb3A6IDAKbWFpbiBpcyB0aGUgZm9yZWdyb3VuZCB3aW5kb3c6IDEKPT0gcCBvIGwgeSB0eXBlZCBhcyB2aXJ0dWFsIGtleXMKICBzZW50IDIgZXZlbnRzIGZvciB2ayAweDUwCiAgc2VudCAyIGV2ZW50cyBmb3IgdmsgMHg0ZgogIHNlbnQgMiBldmVudHMgZm9yIHZrIDB4NGMKICBzZW50IDIgZXZlbnRzIGZvciB2ayAweDU5CiAgV01fQ0hBUiAncCcgLT4gQ2hhclVwcGVyVyAnUCcKICBXTV9DSEFSICdvJyAtPiBDaGFyVXBwZXJXICdPJwogIFdNX0NIQVIgJ2wnIC0+IENoYXJVcHBlclcgJ0wnCiAgV01fQ0hBUiAneScgLT4gQ2hhclVwcGVyVyAnWScKICA0IGNoYXJhY3RlcnMgdHlwZWQsIHVwcGVyLWNhc2VkIGFzIGEgc3RyaW5nOiAiUE9MWSIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== window text and class names, upper-cased in place\n  title (36 characters): \"UNTITLED - GOOGLE CHROME FOR TESTING\" same pointer: 1\n  class of main (18 characters): \"CHROME_WIDGETWIN_1\"\n  class of rwh (27 characters): \"CHROME_RENDERWIDGETHOSTHWND\"\n  class of hid (18 characters): \"CHROME_WIDGETWIN_0\"\n== 14000 calls\n  14000 calls: single-character results as expected: 7000 of 7000, strings as expected: 7000 of 7000\n  messages received by the window during the loop: 0\nmain is the foreground window: 1\n== p o l y typed as virtual keys\n  sent 2 events for vk 0x50\n  sent 2 events for vk 0x4f\n  sent 2 events for vk 0x4c\n  sent 2 events for vk 0x59\n  WM_CHAR 'p' -> CharUpperW 'P'\n  WM_CHAR 'o' -> CharUpperW 'O'\n  WM_CHAR 'l' -> CharUpperW 'L'\n  WM_CHAR 'y' -> CharUpperW 'Y'\n  4 characters typed, upper-cased as a string: \"POLY\"\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 822
+    }
+  ]
+}

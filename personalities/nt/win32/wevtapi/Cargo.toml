@@ -1,0 +1,17 @@
+[package]
+name = "wevtapi"
+description = "Our wevtapi.dll (ADR 0155, step 12): event log queries Chrome delay-loads, on a system without an event log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "wevtapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

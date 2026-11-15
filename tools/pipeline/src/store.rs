@@ -54,14 +54,23 @@ impl EntryId {
         format!("{}/{}/{}/{}", self.os, self.layer, self.component, self.symbol)
     }
 
-    /// The spec sheet, relative to the repository root.
+    /// The spec sheet, relative to the repository root, with `/` between
+    /// the components on every host: the path is recorded in the hand-off
+    /// log and given to git.
     pub fn spec_path(&self) -> PathBuf {
-        PathBuf::from("specs").join(&self.os).join(&self.component).join(format!("{}.yaml", self.symbol))
+        PathBuf::from(format!("specs/{}/{}/{}.yaml", self.os, self.component, self.symbol))
     }
 
-    /// The visible tests directory, relative to the repository root.
+    /// The visible tests directory, relative to the repository root, with
+    /// `/` (as [`EntryId::spec_path`]).
     pub fn tests_dir(&self) -> PathBuf {
-        PathBuf::from("specs").join(&self.os).join(&self.component).join(format!("{}.tests", self.symbol))
+        PathBuf::from(format!("specs/{}/{}/{}.tests", self.os, self.component, self.symbol))
+    }
+
+    /// The visible test file `name` (itself `/`-separated), relative to the
+    /// repository root, with `/` throughout.
+    pub fn test_file(&self, name: &str) -> PathBuf {
+        PathBuf::from(format!("{}/{name}", self.tests_dir().display()))
     }
 
     /// This entry's directory in the held-out store.
@@ -73,13 +82,18 @@ impl EntryId {
 /// The held-out store: `$POLY_HELDOUT_DIR`, else `~/.poly-heldout`. It must
 /// not be inside the repository.
 pub fn heldout_root(repo: &Path) -> Result<PathBuf> {
-    heldout_root_from(repo, std::env::var_os(HELDOUT_ENV), std::env::var_os("HOME"))
+    // HOME is a Unix variable; a Windows host has USERPROFILE.
+    heldout_root_from(
+        repo,
+        std::env::var_os(HELDOUT_ENV),
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")),
+    )
 }
 
 fn heldout_root_from(repo: &Path, var: Option<OsString>, home: Option<OsString>) -> Result<PathBuf> {
     let dir = match var {
         Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => PathBuf::from(home.ok_or("neither POLY_HELDOUT_DIR nor HOME is set")?).join(".poly-heldout"),
+        _ => PathBuf::from(home.ok_or("neither POLY_HELDOUT_DIR nor HOME (USERPROFILE) is set")?).join(".poly-heldout"),
     };
     let dir = util::absolute(&dir);
     if util::is_inside(&dir, repo) || util::is_inside(repo, &dir) {
@@ -311,7 +325,7 @@ pub fn split_tests(repo: &Path, heldout: &Path, req: &SplitRequest<'_>) -> Resul
             manifest.held_out.push(FileHash { path: name.clone(), sha256: hashes[name].clone() });
             held_out.push(name.clone());
         } else {
-            let rel = entry.tests_dir().join(name);
+            let rel = entry.test_file(name);
             util::write(&repo.join(&rel), &data)?;
             manifest.visible.push(FileHash { path: rel.to_string_lossy().into_owned(), sha256: hashes[name].clone() });
             visible.push(name.clone());

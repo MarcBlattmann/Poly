@@ -45,6 +45,13 @@ impl SharedFrame {
         SharedFrame(Owner::User(frame))
     }
 
+    /// A user frame filled by its maker (a page of an image that every view of it maps, ADR
+    /// 0188), freed with the last reference; a private mapping's last user that writes it takes
+    /// it over as its own.
+    pub fn user(frame: UserFrame) -> SharedFrame {
+        SharedFrame::owned(frame)
+    }
+
     /// The page at `phys` (page-aligned RAM in the direct map) of device
     /// memory that `memory` keeps allocated as long as it lives.
     pub fn device(phys: u64, memory: Arc<dyn Any + Send + Sync>) -> SharedFrame {

@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegOpenKeyExW.yaml
+id: windows/api/advapi32.dll/RegOpenKeyExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateRestrictedToken", "SetThreadToken", "RevertToSelf", "CreateProcessAsUserW", "Mandatory Integrity Control", "Restricted Tokens", "Access Control Lists", "Registry Key Security and Access Rights"; winreg.h, winnt.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Opens a registry key. In stage 2 the confined renderers and the storage service get ERROR_ACCESS_DENIED (5) from RegOpenKeyExW(HKLM, "SOFTWARE\Microsoft\Windows NT\CurrentVersion") and from NtCreateKey, which succeed in stage 1; their RegQueryValueExW calls never succeed. The tests build the sandbox's token pair from public calls: the process token is a restricted primary token (CreateRestrictedToken with DISABLE_MAX_PRIVILEGE, Administrators and Users as deny-only, restricted to the Null SID S-1-0-0) lowered to Untrusted integrity (S-1-16-0); the main thread of the suspended child gets an impersonation token (restricted copy with no group disabled, restricted to Everyone, Users, RESTRICTED and the Null SID, same integrity) through SetThreadToken(&thread, token) before ResumeThread; the child calls RevertToSelf() after its start-up. The same questions are asked in the unrestricted parent for contrast. Result: while the thread carries the impersonation token the keys open (HKLM, HKCU) but creating a key in HKCU is refused with 5; after RevertToSelf every key that exists is refused with 5 (a missing key is still reported as 2). The unrestricted parent opens everything.
+interface:
+  signature: "LSTATUS RegOpenKeyExW(HKEY key, LPCWSTR sub_key, DWORD options, REGSAM access, PHKEY result); LSTATUS RegCreateKeyExW(...)"
+  result: "0 on success, otherwise a Win32 error code (not a last error)"
+chrome:
+  calls: "RegOpenKeyExW 339 calls over all process types; in the confined renderers and storage service the open of HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion fails with 5, NtCreateKey with 0xC0000022, 12 to 16 RegQueryValueExW calls per renderer do not succeed (stage 2 compared with stage 1, gap-map section 4a). Chrome calls RegDisablePredefinedCache and RevertToSelf first"
+rules:
+  unrestricted: "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion with KEY_READ and with KEY_QUERY_VALUE, HKLM\\SOFTWARE, HKCU\\Software: 0; a key that does not exist: 2; RegCreateKeyExW(HKCU, \"Software\\PolyS2LockProbe\", REG_OPTION_VOLATILE, KEY_WRITE): 0"
+  while_impersonating: "in the target, before RevertToSelf (the thread has the broker's impersonation token): all four opens 0, the missing key 2, RegCreateKeyExW in HKCU: 5; OpenThreadToken(TOKEN_QUERY) on that thread token fails with 5 (the process token's restriction applies to it)"
+  after_revert: "after RevertToSelf = TRUE: OpenThreadToken fails with 1008 (ERROR_NO_TOKEN); every existing key opens with 5: HKLM CurrentVersion (KEY_READ and KEY_QUERY_VALUE), HKLM\\SOFTWARE, HKCU\\Software; RegCreateKeyExW: 5; the missing key under HKLM\\SOFTWARE still 2"
+  start_without_impersonation: "see the LoadLibraryExW sheet: a process whose main thread has no impersonation token cannot start (exit 0xC0000022)"
+errors:
+  access_denied: "ERROR_ACCESS_DENIED (5)"
+  not_found: "ERROR_FILE_NOT_FOUND (2)"
+side_effects: "none (the volatile key the test creates is deleted)"
+threading: "the token of the calling thread decides: the process token or the thread's impersonation token"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. Registry results are the functions' return values (Win32 codes); the child reports through an inherited pipe.
+not_covered: >
+  NtOpenKeyEx and NtCreateKey themselves (the same refusals with NTSTATUS 0xC0000022), RegQueryValueExW on keys that were opened before the revert, keys of other users, tokens with the groups Chrome keeps (the tests' groups are their own), AppContainer tokens.

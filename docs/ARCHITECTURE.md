@@ -1802,7 +1802,7 @@ documentation and SDK/WDK headers (no oracle VM yet); guesses are marked
   chance, a fail-fast) ends the process with the exception code, after a
   `.pdata`-walked backtrace in the log.
 - **File I/O** (`personalities/nt/src/io`, `kernel/src/nt/io.rs`, ADR 0067):
-  each VFS mount is a device `\Device\PolyFs<N>` with a `ParseHook`, reached
+  each VFS mount is a device `\Device\HarddiskVolume<N>` (ADR 0185) with a `ParseHook`, reached
   through drive-letter links in `\??` (`\??\C:` → `/nt/c`, the NT system
   root; `\??\Z:` → `/`, the whole VFS). `NtCreateFile`/`NtOpenFile` walk the
   VFS case-insensitively but case-preservingly, apply the create

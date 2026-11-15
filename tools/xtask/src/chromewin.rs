@@ -433,12 +433,16 @@ pub struct Debugging {
     pub trace_ring: Option<u32>,
     /// The kernel keeps every process's last N NT calls for a breakpoint (`--trail`).
     pub trail: Option<u32>,
+    /// NT services the trail leaves out, comma separated (`--trail-skip`).
+    pub trail_skip: Option<String>,
     /// The call tracer writes each function's first call with each outcome only
     /// (`--trace-first`: `POLYTRACE_FIRST`).
     pub trace_first: bool,
     /// The call tracer also writes its ring this many seconds after a process started
     /// (`--ring-at`): what a process that went quiet did last.
     pub ring_at: Option<u32>,
+    /// The kernel logs where the frames are every N seconds (`--mem[=N]`: `poly.nt.mem`, ADR 0188).
+    pub mem: Option<u32>,
 }
 
 static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
@@ -693,18 +697,64 @@ impl Summary {
                 s.expected = true;
             }
         }
+        // The launcher's markers again, from its console output alone: the kernel's own log
+        // lines can land in the middle of a marker, and the console wraps long lines with cursor
+        // moves (a SHA-256 line is 85 columns), so the lines above may have missed them.
+        let stream = console_stream(log);
+        let after = |marker: &str| stream.find(marker).map(|at| &stream[at + marker.len()..]);
+        if let Some(rest) = after("LAUNCH-EXIT code=0x") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).collect();
+            if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                s.code = Some(code);
+                s.exit = Some(format!("code=0x{hex}"));
+            }
+        }
+        if s.stdout_bytes.is_none()
+            && let Some(rest) = after("LAUNCH-DIGEST stdout bytes=")
+        {
+            s.stdout_bytes = rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok();
+        }
+        if let Some(rest) = after("LAUNCH-SHA256 stdout ") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).take(64).collect();
+            if hex.len() == 64 {
+                s.stdout_sha256 = Some(hex);
+            }
+        }
+        if !expect.is_empty() && stream.contains(expect) {
+            s.expected = true;
+        }
         s
     }
 }
 
-/// Guest memory: Chrome's browser, GPU, network and renderer processes.
+/// The launcher's console output in a serial log as one stream: the kernel's own log lines
+/// (`nt: pid ...`, `nt-waits: ...`, written whole and ending in a line break, possibly in the
+/// middle of a console line) cut out, then the escape sequences (the console's cursor moves,
+/// with which it also wraps long lines) and the line breaks removed.
+pub fn console_stream(log: &str) -> String {
+    const KERNEL: [&str; 6] = ["nt: pid ", "nt-waits: ", "nt-trace: ", "nt-trail: ", "nt-exc: ", "ptrace"];
+    let mut kept = String::with_capacity(log.len());
+    let mut rest = log;
+    while let Some(at) = KERNEL.iter().filter_map(|k| rest.find(k)).min() {
+        kept.push_str(&rest[..at]);
+        rest = rest[at..].find('\n').map_or("", |nl| &rest[at + nl + 1..]);
+    }
+    kept.push_str(rest);
+    crate::console::strip_ansi(&kept).chars().filter(|&c| c != '\n').collect()
+}
+
+/// Guest memory: Chrome's browser, GPU, network and renderer processes. Stage 1 starts about
+/// ten Chrome processes; they share `chrome.dll`'s clean pages since DLLs are image section views
+/// (ADR 0188): about 360 MiB of user pages at the most, where every process had its own 300 MB
+/// copy before and the 4 GiB guest ran out of frames (ADR 0155 steps 12 and 13).
 pub const MEMORY: &str = "4G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
 /// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
 /// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
-/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--memory=SIZE] [--cpus=N]`: boot a
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--mem[=SECS]] [--memory=SIZE]
+/// [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
 /// every host (no QMP). `--exceptions` asks the kernel to log every exception
@@ -741,6 +791,11 @@ fn run(args: &[String]) -> Result {
             "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
             "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
             "--trace-first" => debugging.trace_first = true,
+            "--mem" => debugging.mem = Some(5),
+            m if m.starts_with("--mem=") => {
+                debugging.mem = Some(m["--mem=".len()..].parse().map_err(|e| format!("--mem: {e}"))?)
+            }
+            "--trail-skip" => debugging.trail_skip = Some(it.next().ok_or("--trail-skip needs names")?.clone()),
             "--ring-at" => {
                 debugging.ring_at =
                     Some(it.next().ok_or("--ring-at needs seconds")?.parse().map_err(|e| format!("--ring-at: {e}"))?)
@@ -838,6 +893,13 @@ pub fn debugging_kernel_arguments(d: &Debugging) -> String {
     }
     if let Some(n) = d.trail {
         more.push_str(&format!(" poly.nt.trail={n}"));
+    }
+    if let Some(skip) = &d.trail_skip {
+        more.push_str(" poly.nt.trail.skip=");
+        more.push_str(skip);
+    }
+    if let Some(n) = d.mem {
+        more.push_str(&format!(" poly.nt.mem={n}"));
     }
     more
 }
@@ -1045,11 +1107,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 does not pass yet
-/// ([`S1_REQUIRED`]): until it does the group reports how far Chrome got
-/// and succeeds, so `cargo xtask ci` on a machine with the cache keeps
-/// passing for everyone else's changes; `POLY_CHROME_REQUIRED=1` makes the
-/// outcome the group's result.
+/// downloads the 210 MB package; CI has none). Stage 1 must pass
+/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
+/// unless `POLY_CHROME_REQUIRED=1`.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
@@ -1093,8 +1153,9 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
 }
 
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
-/// pass. Set to `true` by the change that makes stage 1 pass.
-pub const S1_REQUIRED: bool = false;
+/// pass. It passes every time since ADR 0155 step 13 (the failed check at
+/// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
+pub const S1_REQUIRED: bool = true;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
@@ -1213,6 +1274,8 @@ mod tests {
         assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
         let kernel = Debugging { trail: Some(128), ..ring };
         assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
+        let mem = Debugging { mem: Some(3), ..Debugging::default() };
+        assert_eq!(debugging_kernel_arguments(&mem), " poly.nt.mem=3");
     }
 
     #[test]
@@ -1231,6 +1294,21 @@ mod tests {
         );
         assert!(ok.expected && ok.code == Some(0));
         assert_eq!((ok.stdout_bytes, ok.stdout_sha256.as_deref()), (Some(440), Some("abc123")));
+        // The kernel's lines inside the console's, and the console's own wrap (ADR 0155 step 12:
+        // the first stage 1 run that printed the DOM).
+        let mixed = "LAUNCH-BEGIN stdout\x1b[3;1H<p id=\"p\">script-ran 42</p>\x1b[18;1HLAUNCH-END stdout\x1b[19;1H\
+                     LAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 nt: pid 3: stub: kernel32!GetThreadPriority\r\n\
+                     stdout 7b79f8b475nt: pid 3: ldr: LdrLoadDll(x) failed (0xc0000135)\r\n\
+                     542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea1\x1b[21;1H3807b\x1b[22;1H\
+                     LAUNCH-EXIT code=0nt-waits: p3 ends a thread status 0x0\r\nx0\x1b[23;1H\n";
+        let m = Summary::parse(mixed, DOM_EXPECT);
+        assert_eq!(m.stdout_bytes, Some(440));
+        assert_eq!(
+            m.stdout_sha256.as_deref(),
+            Some("7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b")
+        );
+        assert_eq!((m.code, m.expected), (Some(0), true));
+        assert!(m.loader.iter().any(|l| l.contains("LdrLoadDll(x)")));
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "lockdown_handles",
+      "exe_sha256": "9b7982a5610dd409ec653f460725ad4ba7fa9d7ce7efa0e06f7bd7d0a93f3d1d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFyZW50LCB1bnJlc3RyaWN0ZWQ6IER1cGxpY2F0ZUhhbmRsZShldmVudCwgU1lOQ0hST05JWkUpID0gMQpwYXJlbnQsIHVucmVzdHJpY3RlZDogRHVwbGljYXRlSGFuZGxlKFNZTkNIUk9OSVpFLW9ubHkgaGFuZGxlLCBhY2Nlc3MgMikgPSAxIGVycm9yPXVuY2hhbmdlZApwYXJlbnQsIHVucmVzdHJpY3RlZDogRHVwbGljYXRlSGFuZGxlKHRoZSBzYW1lIGhhbmRsZSwgU1lOQ0hST05JWkUpID0gMSBlcnJvcj11bmNoYW5nZWQKcGFyZW50LCB1bnJlc3RyaWN0ZWQ6IFNldEhhbmRsZUluZm9ybWF0aW9uKElOSEVSSVQpID0gMSBmbGFncyBub3cgMQpwYXJlbnQsIHVucmVzdHJpY3RlZDogR2V0UHJvY2Vzc0hhbmRsZUNvdW50OiBvbmUgbW9yZSBoYW5kbGUgYWRkcyAxLCBjbG9zaW5nIGl0IHJlbW92ZXMgMQpjaGlsZDogdGFyZ2V0LCBpbXBlcnNvbmF0aW5nOiBEdXBsaWNhdGVIYW5kbGUoYWNjZXNzIDIgKEVWRU5UX01PRElGWV9TVEFURSkgZnJvbSB0aGUgZnVsbCBoYW5kbGUpID0gMSBlcnJvcj11bmNoYW5nZWQKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogRHVwbGljYXRlSGFuZGxlKFNZTkNIUk9OSVpFLW9ubHkgaGFuZGxlLCBTWU5DSFJPTklaRSkgPSAxIGVycm9yPXVuY2hhbmdlZApjaGlsZDogdGFyZ2V0LCBpbXBlcnNvbmF0aW5nOiBEdXBsaWNhdGVIYW5kbGUodGhlIHNhbWUgaGFuZGxlLCBTQU1FX0FDQ0VTUykgPSAxIGVycm9yPXVuY2hhbmdlZApjaGlsZDogdGFyZ2V0LCBpbXBlcnNvbmF0aW5nOiBTZXRIYW5kbGVJbmZvcm1hdGlvbihjbGVhciBib3RoKSA9IDEgZmxhZ3Mgbm93IDAKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogR2V0UHJvY2Vzc0hhbmRsZUNvdW50KE5VTEwpID0gMCBlcnJvcj02CmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogRHVwbGljYXRlSGFuZGxlKGFjY2VzcyAyIChFVkVOVF9NT0RJRllfU1RBVEUpIGZyb20gdGhlIGZ1bGwgaGFuZGxlKSA9IDEgZXJyb3I9dW5jaGFuZ2VkCmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogRHVwbGljYXRlSGFuZGxlKFNZTkNIUk9OSVpFLW9ubHkgaGFuZGxlLCBTWU5DSFJPTklaRSkgPSAxIGVycm9yPXVuY2hhbmdlZApjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IER1cGxpY2F0ZUhhbmRsZSh0aGUgc2FtZSBoYW5kbGUsIFNBTUVfQUNDRVNTKSA9IDEgZXJyb3I9dW5jaGFuZ2VkCmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogU2V0SGFuZGxlSW5mb3JtYXRpb24oY2xlYXIgYm90aCkgPSAxIGZsYWdzIG5vdyAwCmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogR2V0UHJvY2Vzc0hhbmRsZUNvdW50KE5VTEwpID0gMCBlcnJvcj02CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "parent, unrestricted: DuplicateHandle(event, SYNCHRONIZE) = 1\nparent, unrestricted: DuplicateHandle(SYNCHRONIZE-only handle, access 2) = 1 error=unchanged\nparent, unrestricted: DuplicateHandle(the same handle, SYNCHRONIZE) = 1 error=unchanged\nparent, unrestricted: SetHandleInformation(INHERIT) = 1 flags now 1\nparent, unrestricted: GetProcessHandleCount: one more handle adds 1, closing it removes 1\nchild: target, impersonating: DuplicateHandle(access 2 (EVENT_MODIFY_STATE) from the full handle) = 1 error=unchanged\nchild: target, impersonating: DuplicateHandle(SYNCHRONIZE-only handle, SYNCHRONIZE) = 1 error=unchanged\nchild: target, impersonating: DuplicateHandle(the same handle, SAME_ACCESS) = 1 error=unchanged\nchild: target, impersonating: SetHandleInformation(clear both) = 1 flags now 0\nchild: target, impersonating: GetProcessHandleCount(NULL) = 0 error=6\nchild: target, after RevertToSelf: DuplicateHandle(access 2 (EVENT_MODIFY_STATE) from the full handle) = 1 error=unchanged\nchild: target, after RevertToSelf: DuplicateHandle(SYNCHRONIZE-only handle, SYNCHRONIZE) = 1 error=unchanged\nchild: target, after RevertToSelf: DuplicateHandle(the same handle, SAME_ACCESS) = 1 error=unchanged\nchild: target, after RevertToSelf: SetHandleInformation(clear both) = 1 flags now 0\nchild: target, after RevertToSelf: GetProcessHandleCount(NULL) = 0 error=6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    },
+    {
+      "name": "lockdown_handles_b",
+      "exe_sha256": "5ab86a81a51b75e09331e2b9f07c9a03f6073d78c9372c92328ab7d9fa622074",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFyZW50LCB1bnJlc3RyaWN0ZWQ6IER1cGxpY2F0ZUhhbmRsZShhY2Nlc3MgMiAoRVZFTlRfTU9ESUZZX1NUQVRFKSBmcm9tIHRoZSBmdWxsIGhhbmRsZSkgPSAxIGVycm9yPXVuY2hhbmdlZApwYXJlbnQsIHVucmVzdHJpY3RlZDogRHVwbGljYXRlSGFuZGxlKFNZTkNIUk9OSVpFLW9ubHkgaGFuZGxlLCBTWU5DSFJPTklaRSkgPSAxIGVycm9yPXVuY2hhbmdlZApwYXJlbnQsIHVucmVzdHJpY3RlZDogRHVwbGljYXRlSGFuZGxlKHRoZSBzYW1lIGhhbmRsZSwgU0FNRV9BQ0NFU1MpID0gMSBlcnJvcj11bmNoYW5nZWQKcGFyZW50LCB1bnJlc3RyaWN0ZWQ6IFNldEhhbmRsZUluZm9ybWF0aW9uKGNsZWFyIGJvdGgpID0gMSBmbGFncyBub3cgMApwYXJlbnQsIHVucmVzdHJpY3RlZDogR2V0UHJvY2Vzc0hhbmRsZUNvdW50KE5VTEwpID0gMCBlcnJvcj02CmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IER1cGxpY2F0ZUhhbmRsZSh0aGUgc2FtZSBhY2Nlc3MgYXMgdGhlIHNvdXJjZSAoU0FNRV9BQ0NFU1MpKSA9IDEgZXJyb3I9dW5jaGFuZ2VkCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IER1cGxpY2F0ZUhhbmRsZShoYW5kbGUgbWFkZSBieSB0aGUgb3RoZXIgcHJvY2VzcyB3aXRoIFNZTkNIUk9OSVpFIG9ubHksIGFjY2VzcyAyKSA9IDEgZXJyb3I9dW5jaGFuZ2VkCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IEdldEhhbmRsZUluZm9ybWF0aW9uID0gMSBmbGFncyAwCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IFNldEhhbmRsZUluZm9ybWF0aW9uKE5VTEwpID0gMCBlcnJvcj02CmNoaWxkOiB0YXJnZXQ6IFJldmVydFRvU2VsZiA9IDEKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBEdXBsaWNhdGVIYW5kbGUodGhlIHNhbWUgYWNjZXNzIGFzIHRoZSBzb3VyY2UgKFNBTUVfQUNDRVNTKSkgPSAxIGVycm9yPXVuY2hhbmdlZApjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IER1cGxpY2F0ZUhhbmRsZShoYW5kbGUgbWFkZSBieSB0aGUgb3RoZXIgcHJvY2VzcyB3aXRoIFNZTkNIUk9OSVpFIG9ubHksIGFjY2VzcyAyKSA9IDEgZXJyb3I9dW5jaGFuZ2VkCmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogR2V0SGFuZGxlSW5mb3JtYXRpb24gPSAxIGZsYWdzIDAKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBTZXRIYW5kbGVJbmZvcm1hdGlvbihOVUxMKSA9IDAgZXJyb3I9Ngp0YXJnZXQgZXhpdCBjb2RlIDB4MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "parent, unrestricted: DuplicateHandle(access 2 (EVENT_MODIFY_STATE) from the full handle) = 1 error=unchanged\nparent, unrestricted: DuplicateHandle(SYNCHRONIZE-only handle, SYNCHRONIZE) = 1 error=unchanged\nparent, unrestricted: DuplicateHandle(the same handle, SAME_ACCESS) = 1 error=unchanged\nparent, unrestricted: SetHandleInformation(clear both) = 1 flags now 0\nparent, unrestricted: GetProcessHandleCount(NULL) = 0 error=6\nchild: target, impersonating: DuplicateHandle(the same access as the source (SAME_ACCESS)) = 1 error=unchanged\nchild: target, impersonating: DuplicateHandle(handle made by the other process with SYNCHRONIZE only, access 2) = 1 error=unchanged\nchild: target, impersonating: GetHandleInformation = 1 flags 0\nchild: target, impersonating: SetHandleInformation(NULL) = 0 error=6\nchild: target: RevertToSelf = 1\nchild: target, after RevertToSelf: DuplicateHandle(the same access as the source (SAME_ACCESS)) = 1 error=unchanged\nchild: target, after RevertToSelf: DuplicateHandle(handle made by the other process with SYNCHRONIZE only, access 2) = 1 error=unchanged\nchild: target, after RevertToSelf: GetHandleInformation = 1 flags 0\nchild: target, after RevertToSelf: SetHandleInformation(NULL) = 0 error=6\ntarget exit code 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    }
+  ]
+}

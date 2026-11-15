@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "ddc_basic",
+      "exe_sha256": "de6f4e2999de6df0b8e7e7dd3bf6aedefd051bd4a6556af66288eb838f196085",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWVtb3J5IERDOiB0eXBlIDEwIChPQkpfTUVNREMgaXMgMTApCkRlbGV0ZURDOiBmaXJzdCAxIChlcnJvciAwKSwgc2Vjb25kIDAgKGVycm9yIDApOyB0eXBlIGFmdGVyIDM7IEdldERldmljZUNhcHMgYWZ0ZXIgMApEZWxldGVEQyhOVUxMKTogMCAoZXJyb3IgNikKRGVsZXRlREMobWFkZS11cCBoYW5kbGUpOiAwIChlcnJvciA2KQpEZWxldGVEQyhzdG9jayBicnVzaCk6IDAgKGVycm9yIDYpCkRlbGV0ZURDKGJpdG1hcCBoYW5kbGUpOiAwIChlcnJvciA2KTsgdGhlIGJpdG1hcCBpcyBzdGlsbCB0aGVyZTogNwpHZXREQyh3aW5kb3cpOiB0eXBlIDMKRGVsZXRlREMod2luZG93IERDKTogMSAoZXJyb3IgMCkKR2V0REMod2luZG93KSBhZ2FpbiB3b3JrcyAxIDsgUmVsZWFzZURDKHdpbmRvdyBEQykgMQpSZWxlYXNlREMgb2YgdGhlIGZpcnN0LCBkZWxldGVkIG9uZTogMApESVNQTEFZIERDIHR5cGUgMyBpbmZvcm1hdGlvbiBEQyB0eXBlIDMKRGVsZXRlREMoZGlzcGxheSkgMSBEZWxldGVEQyhpbmZvcm1hdGlvbiBEQykgMSBhZ2FpbiAwIDAKRGVsZXRlT2JqZWN0KG1lbW9yeSBEQyk6IDEgKGVycm9yIDApOyBEQyBzdGlsbCB0aGVyZTogdHlwZSAzCnRoZW4gRGVsZXRlREMgMApzZWxlY3RlZDogRGVsZXRlT2JqZWN0KGJpdG1hcCkgMSBEZWxldGVPYmplY3QoYnJ1c2gpIDEgRGVsZXRlT2JqZWN0KHBlbikgMQpEZWxldGVEQyB3aXRoIHRoZW0gc2VsZWN0ZWQ6IDEKdGhlIGZpcnN0IGJydXNoIGFuZCBwZW4gKGRlbGV0ZWQgd2hpbGUgc2VsZWN0ZWQpOiB0eXBlcyAwIDAKYWZ0ZXI6IGJpdG1hcCB0eXBlIDcgYnJ1c2ggdHlwZSAyIHBlbiB0eXBlIDEKYml0bWFwIGludG8gYW5vdGhlciBEQzogcHJldmlvdXMgdHlwZSAwCmN1cnJlbnQgaW4gdGhlIG90aGVyIERDOiBicnVzaCBpcyBvdXJzIDEgcGVuIGlzIG91cnMgMQpEZWxldGVEQyhvdGhlcikgMQpEZWxldGVPYmplY3QgMCAxIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "memory DC: type 10 (OBJ_MEMDC is 10)\nDeleteDC: first 1 (error 0), second 0 (error 0); type after 3; GetDeviceCaps after 0\nDeleteDC(NULL): 0 (error 6)\nDeleteDC(made-up handle): 0 (error 6)\nDeleteDC(stock brush): 0 (error 6)\nDeleteDC(bitmap handle): 0 (error 6); the bitmap is still there: 7\nGetDC(window): type 3\nDeleteDC(window DC): 1 (error 0)\nGetDC(window) again works 1 ; ReleaseDC(window DC) 1\nReleaseDC of the first, deleted one: 0\nDISPLAY DC type 3 information DC type 3\nDeleteDC(display) 1 DeleteDC(information DC) 1 again 0 0\nDeleteObject(memory DC): 1 (error 0); DC still there: type 3\nthen DeleteDC 0\nselected: DeleteObject(bitmap) 1 DeleteObject(brush) 1 DeleteObject(pen) 1\nDeleteDC with them selected: 1\nthe first brush and pen (deleted while selected): types 0 0\nafter: bitmap type 7 brush type 2 pen type 1\nbitmap into another DC: previous type 0\ncurrent in the other DC: brush is ours 1 pen is ours 1\nDeleteDC(other) 1\nDeleteObject 0 1 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 110
+    }
+  ]
+}

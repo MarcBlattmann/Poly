@@ -434,3 +434,43 @@ fn an_image_that_would_end_above_4_gib_is_not_loaded() {
     assert_eq!(w.l.load(&mut w.p, &wide("high"), None).unwrap_err(), STATUS_NO_MEMORY);
     assert_eq!((w.p.images(), w.p.heap_blocks()), before, "nothing stays mapped");
 }
+
+/// In a 32-bit process too, a DLL comes as the kernel's image section view (ADR 0188): relocated
+/// in place with `HIGHLOW` entries when the view is not at its base, bound with 4-byte slots,
+/// unmapped with the module; a view of an x64 image is refused and unmapped again.
+#[test]
+fn a_32_bit_dll_mapped_as_an_image_view_is_relocated_and_bound_in_place() {
+    let mut d = dll32("v.dll", EXE32, named(&[("Get", 0x1010)]), vec![imports("lib.dll", &[Sym::name("Lib")])]);
+    let mut data = vec![0u8; 16];
+    data[..4].copy_from_slice(&(EXE32 as u32 + 0x1010).to_le_bytes());
+    d.sections.push(Section::new(".data", data, DATA));
+    d.relocations.push(0x2000);
+    let lib = dll32("lib.dll", 0x6800_0000, named(&[("Lib", 0x1010)]), vec![]);
+    let mut w = world32(&exe32(vec![]).write());
+    w.p.views = true;
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    w.p.file("C:\\app\\v.dll", d.write());
+    w.p.file("C:\\app\\lib.dll", lib.write());
+    let (_, base, _) = w.l.load(&mut w.p, &wide("v"), None).unwrap();
+    assert_ne!(base, EXE32);
+    assert!(base < 1 << 32);
+    assert_eq!(rd(&mut w, base + 0x2000), base + 0x1010, "the pointer moved with the image");
+    let lb = base_of(&w, "lib.dll");
+    assert_eq!(lb, 0x6800_0000);
+    let iat_rva = u64::from(d.layout().iat[0][0]);
+    assert_eq!(rd(&mut w, base + iat_rva), lb + 0x1010, "a 4-byte import slot");
+    assert_eq!(w.p.prot_at(base + 0x1000), page::EXECUTE_READ);
+    let u = w.l.unload(base).unwrap();
+    w.l.finish_unload(&mut w.p, u);
+    let mut gone = w.p.unmapped.clone();
+    gone.sort();
+    let mut want = vec![base, lb];
+    want.sort();
+    assert_eq!(gone, want);
+    // An x64 DLL is the wrong machine here.
+    let x64 = dll("x.dll", 0x6900_0000, vec![], vec![]);
+    w.p.file("C:\\app\\x.dll", x64.write());
+    w.p.unmapped.clear();
+    assert_eq!(w.l.load(&mut w.p, &wide("x"), None).unwrap_err(), STATUS_INVALID_IMAGE_FORMAT);
+    assert_eq!(w.p.unmapped, [0x6900_0000]);
+}

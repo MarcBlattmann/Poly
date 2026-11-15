@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "dbp_errors",
+      "exe_sha256": "a35bd11656876808b09c05b9a93c7f9cbfb6e3c865086d37011b78b2af4bd3b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWlzc2luZyBudW1iZXI6IC0xIGVycj0xODE0Cm1pc3NpbmcgbmFtZTogLTEgZXJyPTE4MTQKTlVMTCBtb2R1bGUgKHRoZSBleGVjdXRhYmxlKTogMwptYWRlLXVwIG1vZHVsZTogLTEgZXJyPTE4MTIKYSB0ZW1wbGF0ZSB3aXRoIGFuIHVua25vd24gY29udHJvbCBjbGFzcyAoMTAzKTogLTEgZXJyPTE0MDcKYSBtZW51IHJlc291cmNlIG51bWJlciB1c2VkIGFzIHRlbXBsYXRlICgyMDApOiAtMSBlcnI9MTgxNApiYWQgcGFyZW50IHdpbmRvdzogMCBlcnI9MTQwMApFbmREaWFsb2coMCkgZ2l2ZXMgYmFjayB0aGUgc2FtZSB2YWx1ZQpFbmREaWFsb2coMSkgZ2l2ZXMgYmFjayB0aGUgc2FtZSB2YWx1ZQpFbmREaWFsb2coLTEpIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKDB4N0ZGRkZGRkYpIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKDB4MTAwMDAwMDAwKSBnaXZlcyBiYWNrIHRoZSBzYW1lIHZhbHVlCkVuZERpYWxvZygtMHgxMDAwMDAwMDApIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKGlzaXplOjpNQVgpIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKGlzaXplOjpNSU4pIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKV01fSU5JVERJQUxPRyByZXR1cm5zIFRSVUU6IDExCldNX0lOSVRESUFMT0cgcmV0dXJucyBGQUxTRTogMTEKRW5kRGlhbG9nIGZyb20gYSBwb3N0ZWQgbWVzc2FnZTogMTA1CnRoZSBwb3N0ZWQgbWVzc2FnZSBhcnJpdmVkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "missing number: -1 err=1814\nmissing name: -1 err=1814\nNULL module (the executable): 3\nmade-up module: -1 err=1812\na template with an unknown control class (103): -1 err=1407\na menu resource number used as template (200): -1 err=1814\nbad parent window: 0 err=1400\nEndDialog(0) gives back the same value\nEndDialog(1) gives back the same value\nEndDialog(-1) gives back the same value\nEndDialog(0x7FFFFFFF) gives back the same value\nEndDialog(0x100000000) gives back the same value\nEndDialog(-0x100000000) gives back the same value\nEndDialog(isize::MAX) gives back the same value\nEndDialog(isize::MIN) gives back the same value\nWM_INITDIALOG returns TRUE: 11\nWM_INITDIALOG returns FALSE: 11\nEndDialog from a posted message: 105\nthe posted message arrived: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "dbp_init",
+      "exe_sha256": "3c0d40ded1f74c9cba996d594d448ca9b4d6b3a2c65280257727b4189524afd5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGlhbG9nQm94UGFyYW1XIHRlbXBsYXRlIDEwMCwgcGFyYW0gMHgxMjM0OiA0MgogIG1zZyBXTV9TRVRGT05UIDAKICBtc2cgV01fSU5JVERJQUxPRyA0NjYwCiAgaW5pdDogd1BhcmFtIGlzIGNvbnRyb2wgMTAwMgogIGluaXQ6IHN0eWxlIDB4ODRjODAwYzQgZXhzdHlsZSAweDEwMTAxCiAgaW5pdDogdGl0bGUgJ1Rlc3QgZGlhbG9nJwogIGluaXQ6IGNsYXNzICcjMzI3NzAnCiAgaW5pdDogdmlzaWJsZSAwIGVuYWJsZWQgMSBjaGlsZCAwCiAgaW5pdDogRFdMX0RMR1BST0MgaXMgb3VyczogMAogIGluaXQ6IGNoaWxkIGlkIDEwMDEgY2xhc3MgJ1N0YXRpYycgc3R5bGUgMHg1MDAwMDAwMCB0ZXh0ICcmTmFtZTonCiAgaW5pdDogY2hpbGQgaWQgMTAwMiBjbGFzcyAnRWRpdCcgc3R5bGUgMHg1MDAxMDA4MCB0ZXh0ICdpbml0aWFsJwogIGluaXQ6IGNoaWxkIGlkIDEwMDMgY2xhc3MgJ0J1dHRvbicgc3R5bGUgMHg1MDAxMDAwMyB0ZXh0ICcmQ2hlY2snCiAgaW5pdDogY2hpbGQgaWQgMTAwNCBjbGFzcyAnQnV0dG9uJyBzdHlsZSAweDUwMDMwMDA5IHRleHQgJyZPbmUnCiAgaW5pdDogY2hpbGQgaWQgMTAwNSBjbGFzcyAnQnV0dG9uJyBzdHlsZSAweDUwMDAwMDA5IHRleHQgJ1Qmd28nCiAgaW5pdDogY2hpbGQgaWQgMTAwNiBjbGFzcyAnQnV0dG9uJyBzdHlsZSAweDUwMDAwMDA5IHRleHQgJ1QmaHJlZScKICBpbml0OiBjaGlsZCBpZCAxMDA3IGNsYXNzICdCdXR0b24nIHN0eWxlIDB4NTAwMzAwMDYgdGV4dCAnVCZyaScKICBpbml0OiBjaGlsZCBpZCAxMDA4IGNsYXNzICdMaXN0Qm94JyBzdHlsZSAweDUwMDEwMDAxIHRleHQgJycKICBpbml0OiBjaGlsZCBpZCAxIGNsYXNzICdCdXR0b24nIHN0eWxlIDB4NTAwMzAwMDEgdGV4dCAnT0snCiAgaW5pdDogY2hpbGQgaWQgMiBjbGFzcyAnQnV0dG9uJyBzdHlsZSAweDUwMDEwMDAwIHRleHQgJ0NhbmNlbCcKICBpbml0OiBjaGlsZCBpZCAxMDA5IGNsYXNzICdCdXR0b24nIHN0eWxlIDB4NTAwMDAwMDcgdGV4dCAnR3JvdXAnCiAgbXNnIFdNX0RFU1RST1kgMAogIG1zZyBXTV9OQ0RFU1RST1kgMAp0ZW1wbGF0ZSAxMDIgKG5vIGNvbnRyb2xzKTogNDIKICBtc2cgV01fSU5JVERJQUxPRyAtNQogIGluaXQ6IHdQYXJhbSBpcyBjb250cm9sIDAKICBpbml0OiBzdHlsZSAweDg0MDAwMDg0IGV4c3R5bGUgMHgxMDEwMQogIGluaXQ6IHRpdGxlICcnCiAgaW5pdDogY2xhc3MgJyMzMjc3MCcKICBpbml0OiB2aXNpYmxlIDAgZW5hYmxlZCAxIGNoaWxkIDAKICBpbml0OiBEV0xfRExHUFJPQyBpcyBvdXJzOiAwCiAgbXNnIFdNX0RFU1RST1kgMAogIG1zZyBXTV9OQ0RFU1RST1kgMApieSBuYW1lIE5BTUVERExHOiA0MgogIG1zZyBXTV9JTklURElBTE9HIDAKICBpbml0OiB3UGFyYW0gaXMgY29udHJvbCA1CiAgaW5pdDogc3R5bGUgMHg4NDAwMDA4NCBleHN0eWxlIDB4MTAxMDEKICBpbml0OiB0aXRsZSAnbmFtZWQnCiAgaW5pdDogY2xhc3MgJyMzMjc3MCcKICBpbml0OiB2aXNpYmxlIDAgZW5hYmxlZCAxIGNoaWxkIDAKICBpbml0OiBEV0xfRExHUFJPQyBpcyBvdXJzOiAwCiAgaW5pdDogY2hpbGQgaWQgNSBjbGFzcyAnU3RhdGljJyBzdHlsZSAweDUwMDAwMDAwIHRleHQgJ24nCiAgbXNnIFdNX0RFU1RST1kgMAogIG1zZyBXTV9OQ0RFU1RST1kgMApieSBuYW1lIG5hbWVkZGxnIChsb3dlciBjYXNlKTogNDIKZXh0ZW5kZWQgdGVtcGxhdGUgMTAxOiA0MgogIG1zZyBXTV9TRVRGT05UIDAKICBtc2cgV01fSU5JVERJQUxPRyAwCiAgaW5pdDogd1BhcmFtIGlzIGNvbnRyb2wgNzQ1NjUKICBpbml0OiBzdHlsZSAweDg0YzAwMGM0IGV4c3R5bGUgMHgxMDEwMQogIGluaXQ6IHRpdGxlICdFeCBkaWFsb2cnCiAgaW5pdDogY2xhc3MgJyMzMjc3MCcKICBpbml0OiB2aXNpYmxlIDAgZW5hYmxlZCAxIGNoaWxkIDAKICBpbml0OiBEV0xfRExHUFJPQyBpcyBvdXJzOiAwCiAgaW5pdDogY2hpbGQgaWQgNjU1MzUgY2xhc3MgJ1N0YXRpYycgc3R5bGUgMHg1MDAwMDAwMCB0ZXh0ICdTdGF0aWMgLTEnCiAgaW5pdDogY2hpbGQgaWQgNzQ1NjUgY2xhc3MgJ0VkaXQnIHN0eWxlIDB4NTAwMTAwMDAgdGV4dCAnYmlnIGlkJwogIGluaXQ6IGNoaWxkIGlkIDcgY2xhc3MgJ0VkaXQnIHN0eWxlIDB4NTAwMTAwMDAgdGV4dCAnc2V2ZW4nCiAgaW5pdDogY2hpbGQgaWQgNyBjbGFzcyAnRWRpdCcgc3R5bGUgMHg1MDAxMDAwMCB0ZXh0ICdzZXZlbiB0b28nCiAgaW5pdDogY2hpbGQgaWQgMSBjbGFzcyAnQnV0dG9uJyBzdHlsZSAweDUwMDEwMDAxIHRleHQgJ09LJwogIG1zZyBXTV9ERVNUUk9ZIDAKICBtc2cgV01fTkNERVNUUk9ZIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DialogBoxParamW template 100, param 0x1234: 42\n  msg WM_SETFONT 0\n  msg WM_INITDIALOG 4660\n  init: wParam is control 1002\n  init: style 0x84c800c4 exstyle 0x10101\n  init: title 'Test dialog'\n  init: class '#32770'\n  init: visible 0 enabled 1 child 0\n  init: DWL_DLGPROC is ours: 0\n  init: child id 1001 class 'Static' style 0x50000000 text '&Name:'\n  init: child id 1002 class 'Edit' style 0x50010080 text 'initial'\n  init: child id 1003 class 'Button' style 0x50010003 text '&Check'\n  init: child id 1004 class 'Button' style 0x50030009 text '&One'\n  init: child id 1005 class 'Button' style 0x50000009 text 'T&wo'\n  init: child id 1006 class 'Button' style 0x50000009 text 'T&hree'\n  init: child id 1007 class 'Button' style 0x50030006 text 'T&ri'\n  init: child id 1008 class 'ListBox' style 0x50010001 text ''\n  init: child id 1 class 'Button' style 0x50030001 text 'OK'\n  init: child id 2 class 'Button' style 0x50010000 text 'Cancel'\n  init: child id 1009 class 'Button' style 0x50000007 text 'Group'\n  msg WM_DESTROY 0\n  msg WM_NCDESTROY 0\ntemplate 102 (no controls): 42\n  msg WM_INITDIALOG -5\n  init: wParam is control 0\n  init: style 0x84000084 exstyle 0x10101\n  init: title ''\n  init: class '#32770'\n  init: visible 0 enabled 1 child 0\n  init: DWL_DLGPROC is ours: 0\n  msg WM_DESTROY 0\n  msg WM_NCDESTROY 0\nby name NAMEDDLG: 42\n  msg WM_INITDIALOG 0\n  init: wParam is control 5\n  init: style 0x84000084 exstyle 0x10101\n  init: title 'named'\n  init: class '#32770'\n  init: visible 0 enabled 1 child 0\n  init: DWL_DLGPROC is ours: 0\n  init: child id 5 class 'Static' style 0x50000000 text 'n'\n  msg WM_DESTROY 0\n  msg WM_NCDESTROY 0\nby name nameddlg (lower case): 42\nextended template 101: 42\n  msg WM_SETFONT 0\n  msg WM_INITDIALOG 0\n  init: wParam is control 74565\n  init: style 0x84c000c4 exstyle 0x10101\n  init: title 'Ex dialog'\n  init: class '#32770'\n  init: visible 0 enabled 1 child 0\n  init: DWL_DLGPROC is ours: 0\n  init: child id 65535 class 'Static' style 0x50000000 text 'Static -1'\n  init: child id 74565 class 'Edit' style 0x50010000 text 'big id'\n  init: child id 7 class 'Edit' style 0x50010000 text 'seven'\n  init: child id 7 class 'Edit' style 0x50010000 text 'seven too'\n  init: child id 1 class 'Button' style 0x50010001 text 'OK'\n  msg WM_DESTROY 0\n  msg WM_NCDESTROY 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

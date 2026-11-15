@@ -349,6 +349,9 @@ pub unsafe extern "system" fn ReplaceFileW(
 
 // ----- GetFinalPathNameByHandleW ---------------------------------------------------------------------
 
+/// `ObjectNameInformation` (`OBJECT_INFORMATION_CLASS`, `ntifs.h`).
+const OBJECT_NAME_INFORMATION: u32 = 1;
+
 /// `FileNameInformation` (`wdm.h`): `FileNameLength` and `FileName`.
 fn name_below_volume(h: Handle) -> Result<Vec<u16>, NtStatus> {
     let mut buf = alloc::vec![0u8; 4 + 2 * 4096];
@@ -376,17 +379,41 @@ fn drive_with_serial(serial: u32) -> Option<u16> {
 
 /// `GetFinalPathNameByHandleW`: Learn: the length without the NUL, or the
 /// size needed (with it) when the buffer is too small, 0 on failure. Poly
-/// answers `VOLUME_NAME_DOS` (`\\?\C:\...`) and `VOLUME_NAME_NONE`; the GUID
-/// and NT forms are `ERROR_NOT_SUPPORTED` (Poly's volumes have neither
-/// name).
+/// answers `VOLUME_NAME_DOS` (`\\?\C:\...`), `VOLUME_NAME_NT`
+/// (`\Device\HarddiskVolume1\...`, the file's object name, ADR 0185) and
+/// `VOLUME_NAME_NONE`; the GUID form is `ERROR_NOT_SUPPORTED` (Poly's volumes
+/// have no GUID name).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetFinalPathNameByHandleW(handle: Handle, buf: *mut u16, size: u32, flags: u32) -> u32 {
     let volume = match fileex::final_path_volume(flags) {
         Ok(v) => v,
         Err(e) => return fail(e, 0),
     };
-    if volume == fileex::VOLUME_NAME_GUID || volume == fileex::VOLUME_NAME_NT {
+    if volume == fileex::VOLUME_NAME_GUID {
         return fail(ERROR_NOT_SUPPORTED, 0);
+    }
+    if volume == fileex::VOLUME_NAME_NT {
+        // The file object's name: the volume's device and the path on it.
+        let mut name = alloc::vec![0u8; 16 + 2 * 4096];
+        let mut ret = 0u32;
+        // SAFETY: a buffer of the stated length.
+        let st = unsafe {
+            crate::handles::NtQueryObject(
+                handle,
+                OBJECT_NAME_INFORMATION,
+                name.as_mut_ptr(),
+                name.len() as u32,
+                &mut ret,
+            )
+        };
+        if !st.is_success() {
+            return fail_status(st, 0);
+        }
+        // A UNICODE_STRING (Length at 0) followed by its characters at offset 16.
+        let len = usize::from(u16::from_le_bytes([name[0], name[1]])).min(name.len() - 16);
+        let path: Vec<u16> = name[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        // SAFETY: the caller's buffer.
+        return unsafe { return_sized(&path, buf, size) };
     }
     let below = match name_below_volume(handle) {
         Ok(n) => n,

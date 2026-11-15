@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/kill.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# kill.tests/macos.json.
+id: macos/syscall/bsd/kill
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 37,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 37, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. kill(pid, signal)
+  sends a signal; signal 0 only checks that the process exists and may be
+  signalled. 0 for the caller itself. The signal number is checked first:
+  signal 32 or -1 is EINVAL even for a pid that does not exist. SIGTERM,
+  SIGKILL and SIGUSR1 end a child with no action for them (wait status =
+  the number); a child that ignores SIGTERM survives it, SIGKILL cannot be
+  ignored. SIGSTOP stops the child (wait4 with WUNTRACED: 0x117f); SIGCONT
+  continues it and is not reported as a stop. A signal a process sends
+  itself is delivered before kill returns (unless blocked).
+returns:
+  success: "0"
+errors:
+  no_process: "ESRCH (3): a pid that does not exist (99999999)"
+  not_permitted: "EPERM (1): pid 1 (launchd, another user's process), signal 0"
+  bad_signal: "EINVAL (22): signal 32, -1"
+side_effects: "the target receives the signal"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

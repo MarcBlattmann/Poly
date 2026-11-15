@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/crypt32.dll/CertOpenStore.yaml
+id: windows/api/crypt32.dll/CertOpenStore
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "CertOpenStore function (wincrypt.h)", "Certificate Store Provider Types", "CertAddStoreToCollection", "CertCloseStore", "CertControlStore", "CertFindCertificateInStore", "CertEnumCertificatesInStore", "Collection and Sibling Certificate Stores", "System Store Locations"; wincrypt.h, winerror.h and winnt.h for constants and layouts. The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Opens or creates a certificate store. In stage 4 Chrome's browser process builds its own view of the Windows trust stores: five collection stores (CERT_STORE_PROV_COLLECTION, all other arguments zero), and for each of the stores ROOT, CA, TrustedPeople and Disallowed it opens the registry-backed system store read-only (CERT_STORE_PROV_SYSTEM_REGISTRY_W with READONLY|OPEN_EXISTING and five locations), puts it into a collection with CertAddStoreToCollection and closes the handle again. Chrome verifies certificates with its own root list, so what matters is that these calls succeed, that a missing store gives NULL and a last error (not a crash), and that the collections can be searched (they find nothing).
+interface:
+  signature: "HCERTSTORE CertOpenStore(LPCSTR provider, DWORD encoding, HCRYPTPROV_LEGACY prov, DWORD flags, const void *para)"
+  result: "a store handle, or NULL with the last error set"
+chrome:
+  calls: "CertOpenStore 23 calls in the browser: 5 x (0xB, 0, 0, 0, NULL); 18 x (0xD, 0, 0, flags, L\"ROOT\"/L\"CA\"/L\"TrustedPeople\"/L\"Disallowed\") with flags 0x2C000 (LOCAL_MACHINE), 0x8C000 (LOCAL_MACHINE_GROUP_POLICY), 0x9C000 (LOCAL_MACHINE_ENTERPRISE), 0x1C000 (CURRENT_USER), 0x7C000 (CURRENT_USER_GROUP_POLICY), every one with READONLY|OPEN_EXISTING (0xC000). All return a store except the CURRENT_USER_GROUP_POLICY open of ROOT on the owner's PC (NULL, last error 2). The CURRENT_USER open of ROOT succeeded and left last error 0x80092004 (CRYPT_E_NOT_FOUND)"
+rules:
+  collection: "provider 0xB with encoding 0, no provider handle, flags 0 and a NULL parameter returns a store and sets the last error to 0 (a marked last error is overwritten by 0); five calls give five different handles; the empty collection enumerates nothing"
+  memory: "provider 2 (CERT_STORE_PROV_MEMORY) with flags 0 returns a store and leaves the last error as it was; the same with an encoding type 1, with CERT_STORE_CREATE_NEW_FLAG, with CERT_STORE_OPEN_EXISTING_FLAG and with CERT_STORE_READONLY_FLAG: all return a store, last error untouched. A READONLY memory store still accepts CertAddEncodedCertificateToStore (TRUE, last error 0)"
+  unknown_provider: "providers 0, 1000 and 0x7fff (not strings) return NULL with last error 2 (ERROR_FILE_NOT_FOUND)"
+  system_stores_open: "SYSTEM_REGISTRY_W (0xD) and SYSTEM_W (10) with the names ROOT, CA, TrustedPeople and Disallowed in the LOCAL_MACHINE (0x20000) and CURRENT_USER (0x10000) locations, READONLY|OPEN_EXISTING: a store is returned (all 32 combinations on both oracle machines)"
+  missing_store: "a made-up name with OPEN_EXISTING in either location and either provider: NULL, last error 2; nothing is created"
+  no_location: "SYSTEM_W with READONLY|OPEN_EXISTING and no location bits: NULL (opened 0)"
+  null_name: "SYSTEM_W with a NULL name: NULL, last error 0x80070057 (87, E_INVALIDARG form)"
+  read_only: "adding a certificate to a read-only system store: FALSE, last error 0x80070005 (E_ACCESSDENIED form)"
+  last_error_after_success: "the successful open of the CURRENT_USER ROOT store leaves last error 0x80092004 (CRYPT_E_NOT_FOUND) set, every time (three rounds, each starting from a marked last error); callers must not read the last error after a success"
+errors:
+  missing_store: "ERROR_FILE_NOT_FOUND (2)"
+  unknown_provider: "ERROR_FILE_NOT_FOUND (2)"
+  null_name: "0x80070057"
+  read_only_write: "0x80070005"
+side_effects: "creates a store object; none on the system (system stores are only read)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING.
+not_covered: >
+  Machine dependent and therefore not recorded: how many certificates a system store holds and which, whether the group-policy and enterprise locations (LOCAL_MACHINE_GROUP_POLICY 0x80000, LOCAL_MACHINE_ENTERPRISE 0x90000, CURRENT_USER_GROUP_POLICY 0x70000) exist (Chrome opens them too; on the owner's domain PC the current-user group-policy ROOT store was missing, error 2). Opening a store without OPEN_EXISTING (it creates the registry key), writable system stores, CERT_STORE_PROV_FILE/FILENAME/PHYSICAL providers, smart card and LDAP providers, SERVICES and USERS locations, the exact handle values.

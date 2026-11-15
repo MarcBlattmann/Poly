@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "cryptprotectmemory_args",
+      "exe_sha256": "c5e07e314bceec14dc03d5de6021864bd689adffb7733e0812b2cc4aa15998cb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvdGVjdCAzMiBieXRlcyBmbGFncyAwOiAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnNhbWUgcGxhaW50ZXh0LCBzYW1lIGNpcGhlcnRleHQgaW4gYSBzZWNvbmQgY2FsbDogMQp0aGUgc2Vjb25kIHVucHJvdGVjdCByZXR1cm5zIHRoZSBwbGFpbnRleHQ6IDEKbGVuZ3RoIDg6IHByb3RlY3QgMSBsYXN0IGVycm9yIHVuY2hhbmdlZCB1bnByb3RlY3QgMSByZXN0b3JlZCAxCmxlbmd0aCAxNzogcHJvdGVjdCAwIGxhc3QgZXJyb3IgODcgdW5wcm90ZWN0IDAgcmVzdG9yZWQgMQpsZW5ndGggNDg6IHByb3RlY3QgMSBsYXN0IGVycm9yIHVuY2hhbmdlZCB1bnByb3RlY3QgMSByZXN0b3JlZCAxCmZsYWdzIFNBTUVfUFJPQ0VTUyAwOiBwcm90ZWN0IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQgY2hhbmdlZCAxIHVucHJvdGVjdCAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIHJlc3RvcmVkIDEKZmxhZ3MgMzogcHJvdGVjdCAwIGxhc3QgZXJyb3IgODcgY2hhbmdlZCAwIHVucHJvdGVjdCAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIHJlc3RvcmVkIDEKZmxhZ3MgMHhGRkZGRkZGRjogcHJvdGVjdCAwIGxhc3QgZXJyb3IgODcgY2hhbmdlZCAwIHVucHJvdGVjdCAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIHJlc3RvcmVkIDEKY2lwaGVydGV4dHMgb2YgZmxhZ3MgMCwxLDIgcGFpcndpc2UgZGlmZmVyZW50OiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "protect 32 bytes flags 0: 1 last error unchanged\nsame plaintext, same ciphertext in a second call: 1\nthe second unprotect returns the plaintext: 1\nlength 8: protect 1 last error unchanged unprotect 1 restored 1\nlength 17: protect 0 last error 87 unprotect 0 restored 1\nlength 48: protect 1 last error unchanged unprotect 1 restored 1\nflags SAME_PROCESS 0: protect 1 last error unchanged changed 1 unprotect 1 last error unchanged restored 1\nflags 3: protect 0 last error 87 changed 0 unprotect 0 last error unchanged restored 1\nflags 0xFFFFFFFF: protect 0 last error 87 changed 0 unprotect 0 last error unchanged restored 1\nciphertexts of flags 0,1,2 pairwise different: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "cryptprotectmemory_args_c",
+      "exe_sha256": "a11818ff2ac8e1f8a5b317671d1da0f2d24c95597a25fec113e621f5c98f30b5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5wcm90ZWN0OiAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIHJvdW5kIHRyaXAgcmVzdG9yZXMgdGhlIHBsYWludGV4dCAxCm9uZSB1bnByb3RlY3QgcmV0dXJucyB0aGUgZmlyc3QgY2lwaGVydGV4dDogMQpsZW5ndGggMTogcHJvdGVjdCAwIGxhc3QgZXJyb3IgODcgdW5wcm90ZWN0IDAgcmVzdG9yZWQgMQpsZW5ndGggMTY6IHByb3RlY3QgMSBsYXN0IGVycm9yIHVuY2hhbmdlZCB1bnByb3RlY3QgMSByZXN0b3JlZCAxCmxlbmd0aCAzMjogcHJvdGVjdCAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIHVucHJvdGVjdCAxIHJlc3RvcmVkIDEKdW5wcm90ZWN0IGRhdGEgdGhhdCB3YXMgbmV2ZXIgcHJvdGVjdGVkOiAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkIGNoYW5nZWQgMQpmbGFncyBTQU1FX0xPR09OIDI6IHByb3RlY3QgMSBsYXN0IGVycm9yIHVuY2hhbmdlZCBjaGFuZ2VkIDEgdW5wcm90ZWN0IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQgcmVzdG9yZWQgMQpmbGFncyAweDEwOiBwcm90ZWN0IDAgbGFzdCBlcnJvciA4NyBjaGFuZ2VkIDAgdW5wcm90ZWN0IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQgcmVzdG9yZWQgMQpwcm90ZWN0IHdpdGggMSwgdW5wcm90ZWN0IHdpdGggMDogMSBsYXN0IGVycm9yIHVuY2hhbmdlZCByZXN0b3JlZCAwCmJ5dGVzIGFmdGVyIHRoZSBmaXJzdCAxNiB1bnRvdWNoZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unprotect: 1 last error unchanged round trip restores the plaintext 1\none unprotect returns the first ciphertext: 1\nlength 1: protect 0 last error 87 unprotect 0 restored 1\nlength 16: protect 1 last error unchanged unprotect 1 restored 1\nlength 32: protect 1 last error unchanged unprotect 1 restored 1\nunprotect data that was never protected: 1 last error unchanged changed 1\nflags SAME_LOGON 2: protect 1 last error unchanged changed 1 unprotect 1 last error unchanged restored 1\nflags 0x10: protect 0 last error 87 changed 0 unprotect 0 last error unchanged restored 1\nprotect with 1, unprotect with 0: 1 last error unchanged restored 0\nbytes after the first 16 untouched: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

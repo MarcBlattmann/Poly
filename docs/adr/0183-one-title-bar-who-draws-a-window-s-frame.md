@@ -65,22 +65,46 @@ floating window that only uses KDE's protocol is not (below).
 
 ### What the compositor tells GTK about the default
 
-`default_mode` is **`client`**, although Poly prefers its own frame:
+`default_mode` is **`server`**: Poly's frame, the Alpine Shell look, for every
+GTK window that does not draw its own title bar. GTK 3 and GTK 4 ask for
+`server` back and draw no bar; a GTK window with a header bar makes no object
+and draws its own (the toolkits group's `gtk3-header-bar`, gtk3-demo,
+gtk4-demo, CPU-X). Seen with `WAYLAND_DEBUG=1`: GTK 3 hears `default_mode(2)`
+right after binding, makes its toplevel, commits, then makes the object and
+asks `request_mode(2)`, and gets one `mode(2)` after its first configure (0 x
+0, its own size); GTK 4 makes the object and asks before its xdg_surface.
 
-- With `server`, GTK 3.24.41 takes another path to its window size, and under
-  Poly that size was garbage in a quarter to a half of the starts (2 of 6, 2 of 6, 1 of 6 and 4 of 8 in four boots): `Gdk-WARNING:
-  Native Windows taller than 65535 pixels`, a `wl_shm` pool of 2 GB for a
-  window 1.4 million pixels tall, then a crash, before the compositor sent
-  anything else. Six starts of the baseline never failed; eight of the same
-  build with `client` never failed. The cause is not understood (a GTK 3 path
-  reading an unset value; not found on Poly's side), so Poly does not take it.
-- Told `client`, GTK 3 and GTK 4 draw their own title bar (one, as in
-  GNOME or on any desktop that does not draw frames), and say it themselves
-  (`request_mode(client)`, a header bar's missing object, the shadow).
-  Poly draws nothing around them.
+**The crash that made it `client` for a while was GTK without any font, not
+this mode.** With `server`, GTK 3.24.41 sometimes computed a window about 1.4
+million pixels tall (`Gdk-WARNING: Native Windows taller than 65535 pixels`, a
+2 GB `wl_shm` pool, a crash). Found (hand-off `gtk-huge-window`):
 
-GTK's own title bar has a close button only (double click maximizes; the
-shell's window list minimizes). `gtk-decoration-layout=:minimize,maximize,close`
+- On a disk without fonts, 7 of 10 starts of gtk3-hello with `server` printed
+  the warning and crashed (SIGSEGV), and the warning comes **before GTK makes
+  its xdg_surface**: by then the compositor had sent only the registry,
+  `wl_output`, `wl_shm`'s formats, the seat and `default_mode(2)`. No
+  configure, bound, state or scale about the window can be the cause.
+- That is the no-font path of ADR 0173's note (Pango with no font, font
+  metrics 0): with a client-drawn frame GTK took it only after a relayout (a
+  click), with the server's frame already at its start, so measured by
+  starting apps the crash looked like the mode's. A `cargo xtask toolkits`
+  disk made before the fonts were fetched has none (only the boot test fetched
+  them); it now fetches them too and makes such a disk again.
+- With the fonts: 0 failures in 45 starts of gtk3-hello with `server` (single
+  boot-test runs, the whole group, 12 starts in one boot), and the toolkits
+  group 10 times out of 10 with `server` as the default.
+
+What the compositor sends was checked against the protocols on the way:
+`configure_bounds` and every `configure` size are never negative (xdg-shell
+gives 0 a meaning and a negative size none; an output smaller than Poly's
+frame, or a tile smaller than it, made negative ones), events newer than an
+object's version are not sent (GTK 3 binds `wl_compositor` 3, so it never gets
+`preferred_buffer_scale`), and a `mode` event comes once when the object is
+made and again only when the mode changes. Host tests in
+`server/tests/frame_ownership.rs` replay GTK 3's and GTK 4's start sequences.
+
+A GTK window that draws its own title bar has a close button only (double
+click maximizes; the shell's window list minimizes). `gtk-decoration-layout=:minimize,maximize,close`
 in `settings.ini` (read: `gtk-application-prefer-dark-theme` from the same file
 took effect) did not add the buttons for GTK 3's default title bar, nor in the
 user's `~/.config/gtk-3.0/` with `menu:` in front; why is open (below).
@@ -93,10 +117,10 @@ user's `~/.config/gtk-3.0/` with `menu:` in front; why is open (below).
   (GTK always draws those) and is not read by every toolkit.
 - **Drawing Poly's frame over GTK's** and hiding GTK's: impossible for the
   compositor; the client's pixels are the client's.
-- **Server-side GTK** (`default_mode(server)`): what Poly would prefer, so GTK
-  windows look like Alpine Shell's frame. Revisit it when the GTK 3 crash above
-  is understood; the decision code does not change (a client that asks for
-  `server` is framed: GTK 4 asked for it when told `server` was the default).
+- **Client-side GTK** (`default_mode(client)`, as this ADR first decided):
+  GTK 3 and GTK 4 then draw their own Adwaita title bar with a close button
+  only, not Alpine Shell's frame. It was taken only because of the crash
+  above, which was not the mode's.
 
 X11 clients (Xwayland) are decided by their window properties as before
 (`_MOTIF_WM_HINTS`, window types, override-redirect; ADR 0118): GTK 3 under X11
@@ -105,15 +129,17 @@ sets the Motif hint for its own title bar.
 ## Consequences
 
 - GTK 3, GTK 4, Qt 5/6 and Chromium windows have one title bar and one set of
-  buttons. GTK windows look like GTK (Adwaita title bars), not like Poly's
-  frame: the price of the decision above.
+  buttons. Plain GTK windows have Poly's frame like Qt's; GTK windows with a
+  header bar (and Chromium) draw their own.
 - The toolkits boot group asserts who draws each app's frame
-  (`poly-compositor: window "T" frame: own|poly`, new): `own` for the GTK apps,
-  `poly` for Qt; Poly's title bar pixels are only looked for where Poly draws.
+  (`poly-compositor: window "T" frame: own|poly`, new): `poly` for gtk3-hello,
+  gtk4-hello and Qt, `own` for gtk3-hello with a header bar
+  (`POLY_GTK_HEADER_BAR=1`, launcher entry "GTK 3 Header Bar"), whose own
+  title bar the group drives (move, maximize, restore, resize, close); Poly's
+  title bar pixels are only looked for where Poly draws.
 - `cargo xtask wayland` takes a protocol file of Poly's own (no SHA-256 of a
   release); its generated module says so.
 - Not done: Poly's shadow and rounding around client-drawn windows without
-  their own (Chromium); the cause of GTK 3's server-mode crash; minimize and
-  maximize buttons in GTK's title bars (`gtk-decoration-layout` had no effect
+  their own (Chromium); minimize and maximize buttons in GTK's own title bars (`gtk-decoration-layout` had no effect
   in the test apps); a dark GTK theme for the title bars
   (`gtk-application-prefer-dark-theme=1` works).
