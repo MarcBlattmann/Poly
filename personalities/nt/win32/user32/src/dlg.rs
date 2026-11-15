@@ -549,8 +549,10 @@ fn dialog_proc_in(h: H, msg: u32, w: usize, l: isize, form: Form) -> isize {
         let f: DlgProc = unsafe { core::mem::transmute(proc_) };
         let to = if info(h).is_some_and(|i| !i.unicode) { Form::Ansi } else { Form::Wide };
         let c = ansi::enter(h, form, to, msg, w, l);
+        let (cw, cl) = (c.w, c.l);
         // SAFETY: the documented call.
-        r = c.finish(to, unsafe { f(h, msg, c.w, c.l) });
+        let raw = unsafe { f(h, msg, cw, cl) };
+        r = c.finish(to, raw);
         handled = r != 0;
     }
     match msg {

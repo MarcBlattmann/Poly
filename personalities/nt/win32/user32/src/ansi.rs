@@ -17,6 +17,7 @@
 use super::{H, SYS, SpinLock, info};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use poly_win32k::user::Env as _;
 use poly_kernelbase::text::{from_ansi, to_ansi};
 
 /// The form of a message or of a window procedure.

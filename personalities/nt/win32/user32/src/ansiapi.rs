@@ -10,7 +10,7 @@ use super::{H, SYS, SpinLock, call, info, set_last_error, u};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use poly_win32k::proto::{ClassSpec, Reply, Request};
-use poly_win32k::user::CMsg;
+use poly_win32k::user::{CMsg, Env as _};
 
 const ERROR_INVALID_PARAMETER: u32 = 87;
 const ERROR_INVALID_WINDOW_HANDLE: u32 = 1400;

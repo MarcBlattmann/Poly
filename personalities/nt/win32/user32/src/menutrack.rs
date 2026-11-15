@@ -1246,3 +1246,87 @@ pub(crate) fn bar_item_at(hwnd: H, menu: u32, x: i32, y: i32) -> i32 {
         _ => -1,
     }
 }
+
+// ----- GetMenuBarInfo
+
+/// `MENUBARINFO` (`winuser.h`: cbSize, rcBar, hMenu, hwndMenu, flags; 48 bytes on x64, 32 in 32 bits).
+#[repr(C)]
+struct MenuBarInfo {
+    size: u32,
+    bar: [i32; 4],
+    menu: usize,
+    hwnd: usize,
+    flags: u32,
+}
+
+/// `GetMenuBarInfo(hwnd, idObject, idItem, pmbi)` (GetMenuBarInfo.yaml): the menu bar
+/// (`OBJID_MENU`, -3) with its items 1 to n, or the system menu (`OBJID_SYSMENU`, -1) with the
+/// icon as item 0 and the first entry inside it as item 1. The bar is as wide as the client
+/// area and lies above it, as high as its rows are.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetMenuBarInfo(hwnd: H, object: i32, item: i32, pmbi: *mut u8) -> i32 {
+    const OBJID_SYSMENU: i32 = -1;
+    const OBJID_MENU: i32 = -3;
+    const OBJID_CLIENT: i32 = -4;
+    if pmbi.is_null() {
+        set_last_error(998);
+        return 0;
+    }
+    let Some(i) = (if hwnd == 0 { None } else { info(hwnd) }) else {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    };
+    // SAFETY: the caller's MENUBARINFO (its size first).
+    let size = unsafe { (pmbi as *const u32).read_unaligned() } as usize;
+    if size != core::mem::size_of::<MenuBarInfo>() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let (bar, hmenu) = match object {
+        OBJID_CLIENT => {
+            set_last_error(menu::ERROR_INVALID_MENU_HANDLE);
+            return 0;
+        }
+        OBJID_MENU => {
+            if i.style & 0x4000_0000 != 0 || i.id == 0 || i.id >> 32 != 0 || !menu::is_menu(i.id as usize) {
+                return 0;
+            }
+            let m = i.id as u32;
+            let items = items_of(m);
+            let width = i.client.width();
+            let row = if i.menu_bar > 0 { i.menu_bar - 2 } else { bar_height() - 2 };
+            let (cells, rows) = with_measure(|p| mn::bar_layout(&items, row, BAR_PAD, width, &|t| p.width(t)));
+            let height = rows * (row + 2).max(1);
+            let rect = [i.client.left, i.client.top - height, i.client.right, i.client.top];
+            if item < 0 || item as usize > items.len() {
+                return 0;
+            }
+            let r = if item == 0 {
+                rect
+            } else {
+                let c = &cells[item as usize - 1];
+                [rect[0] + c.left, rect[1] + c.top, rect[0] + c.right, rect[1] + c.bottom]
+            };
+            (r, m as usize)
+        }
+        OBJID_SYSMENU => {
+            if i.style & 0x00C0_0000 != 0x00C0_0000 && i.style & 0x0080_0000 == 0 {
+                return 0;
+            }
+            let cap = wm_metrics::caption_for_dpi(96);
+            let frame = wm_metrics::frame_for_dpi(96);
+            let icon = [i.window.left + frame, i.window.top + frame, i.window.left + frame + cap, i.window.top + frame + cap];
+            let r = match item {
+                0 => icon,
+                1 => [icon[0] + 2, icon[1] + 2, icon[2] - 2, icon[3] - 2],
+                _ => return 0,
+            };
+            (r, menu::GetSystemMenu(hwnd, 0))
+        }
+        _ => return 0,
+    };
+    let out = MenuBarInfo { size: size as u32, bar, menu: hmenu, hwnd: 0, flags: 0 };
+    // SAFETY: the caller's MENUBARINFO.
+    unsafe { (pmbi as *mut MenuBarInfo).write_unaligned(out) };
+    1
+}

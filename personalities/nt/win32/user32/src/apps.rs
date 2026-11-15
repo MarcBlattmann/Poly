@@ -8,7 +8,6 @@ poly_win32_rt::fail_exports!(
     "user32",
     invalid_handle,
     [
-        DialogBoxParamA,
         VkKeyScanExW,
         VkKeyScanW,
     ]
@@ -42,7 +41,6 @@ poly_win32_rt::fail_exports!(
         ChildWindowFromPointEx,
         CloseGestureInfoHandle,
         CloseWindow,
-        CreateDialogParamA,
         CreateIcon,
         CreateIconFromResource,
         CreateIconFromResourceEx,
@@ -59,7 +57,6 @@ poly_win32_rt::fail_exports!(
         DdeQueryStringW,
         DdeReconnect,
         DdeUnaccessData,
-        DefDlgProcA,
         DefFrameProcW,
         DefMDIChildProcW,
         DeferWindowPos,
@@ -83,11 +80,9 @@ poly_win32_rt::fail_exports!(
         GetClipboardViewer,
         GetComboBoxInfo,
         GetDCEx,
-        GetDlgItemTextA,
         GetGestureInfo,
         GetKeyNameTextW,
         GetKeyboardLayoutNameA,
-        GetMenuBarInfo,
         GetPointerDeviceProperties,
         GetPointerDeviceRects,
         GetPointerFrameInfo,
@@ -120,23 +115,18 @@ poly_win32_rt::fail_exports!(
         IsCharAlphaW,
         IsCharLowerW,
         IsCharUpperW,
-        IsDialogMessageA,
         IsGUIThread,
         IsHungAppWindow,
         IsImmersiveProcess,
         IsTouchWindow,
         IsWinEventHookInstalled,
         IsWindowInDestroy,
-        LoadCursorA,
         LoadCursorFromFileA,
-        LoadIconA,
-        LoadImageA,
         LoadKeyboardLayoutA,
         LoadKeyboardLayoutW,
         LockWindowUpdate,
         LockWorkStation,
         MapVirtualKeyA,
-        MessageBoxIndirectW,
         OpenIcon,
         PackDDElParam,
         PhysicalToLogicalPoint,
@@ -151,7 +141,6 @@ poly_win32_rt::fail_exports!(
         ScrollDC,
         ScrollWindow,
         ScrollWindowEx,
-        SendDlgItemMessageA,
         SendMessageCallbackW,
         SetClassLongPtrA,
         SetClassLongPtrW,
@@ -159,7 +148,6 @@ poly_win32_rt::fail_exports!(
         SetClipboardViewer,
         SetCoalescableTimer,
         SetDisplayAutoRotationPreferences,
-        SetDlgItemTextA,
         SetGestureConfig,
         SetProcessDefaultLayout,
         SetScrollInfo,
@@ -197,6 +185,3 @@ poly_win32_rt::fail_exports!(
     ]
 );
 
-// The real versions are written by the implementer track `impl-win-apps` (branch `impl-win-apps`, spec-win-apps-1): when it
-// merges, delete these names (and the group when it is empty).
-poly_win32_rt::fail_exports!("user32", win32, [LoadStringA,]);

@@ -13,6 +13,7 @@ extern crate alloc;
 mod acc;
 mod ansi;
 mod ansiapi;
+mod ansires;
 mod caret;
 mod caretdraw;
 mod clipboard;

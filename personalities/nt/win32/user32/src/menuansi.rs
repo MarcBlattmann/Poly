@@ -91,16 +91,29 @@ pub extern "system" fn GetMenuCheckMarkDimensions() -> u32 {
     15 | (15 << 16)
 }
 
-/// `SetMenuItemBitmaps`: the bitmaps are kept for `GetMenuItemInfo` (the drawing shows
-/// Poly's own check mark).
+/// `SetMenuItemBitmaps(hMenu, uPosition, uFlags, hBitmapUnchecked, hBitmapChecked)`: the bitmaps are kept for
+/// `GetMenuItemInfo` (the drawing shows Poly's own check mark); a handle that is no bitmap is
+/// refused (`SetMenuItemBitmaps.yaml`: 87).
 #[unsafe(no_mangle)]
-pub extern "system" fn SetMenuItemBitmaps(menu: H, pos: u32, flags: u32, checked: usize, unchecked: usize) -> i32 {
+pub extern "system" fn SetMenuItemBitmaps(menu: H, pos: u32, flags: u32, unchecked: usize, checked: usize) -> i32 {
+    for h in [unchecked, checked] {
+        // SAFETY: gdi32 looks the handle up.
+        if h != 0 && unsafe { GetObjectType(h) } != 7 {
+            return fail(87, 0);
+        }
+    }
     let info =
         InfoIn { mask: mn::MIIM_CHECKMARKS, hbm_checked: checked, hbm_unchecked: unchecked, ..InfoIn::default() };
     match with(|m| m.set_item_info(h32(menu), Sel::of(pos, flags), &info)) {
         Ok(()) => 1,
         Err(e) => fail(e, 0),
     }
+}
+
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetObjectType(h: usize) -> u32;
 }
 
 /// `HiliteMenuItem`: sets or clears the highlight state of an item.
