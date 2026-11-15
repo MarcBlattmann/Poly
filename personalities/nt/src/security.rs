@@ -836,6 +836,29 @@ pub fn access_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
 pub fn set_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, info_class, info, length] = abi::args::<K, 4>(k, regs)?;
     const THREAD_IMPERSONATION_TOKEN: u64 = 5;
+    /// `ThreadBasePriority`: the priority relative to the process's class, -16 to 16 (a 32-bit value).
+    const THREAD_BASE_PRIORITY: u64 = 3;
+    if info_class == THREAD_BASE_PRIORITY {
+        // `THREAD_SET_LIMITED_INFORMATION` or `THREAD_SET_INFORMATION` set it.
+        let tid = crate::threads::thread_of_any(
+            k,
+            Handle(h),
+            &[poly_ntobj::access::THREAD_SET_LIMITED_INFORMATION, poly_ntobj::access::THREAD_SET_INFORMATION],
+        )?;
+        if length as u32 != 4 {
+            return Err(token::STATUS_INFO_LENGTH_MISMATCH);
+        }
+        let value = abi::read_u32(k, info)? as i32;
+        if !(-16..=16).contains(&value) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        k.with_state(|_, proc, _| {
+            if let Some(t) = proc.threads.iter_mut().find(|t| t.thread == tid) {
+                t.base_priority = value;
+            }
+        });
+        return Ok(STATUS_SUCCESS);
+    }
     if info_class != THREAD_IMPERSONATION_TOKEN {
         return Err(STATUS_INVALID_INFO_CLASS);
     }

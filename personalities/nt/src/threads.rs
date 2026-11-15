@@ -13,8 +13,8 @@ use crate::objects::{Result, return_handle};
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT,
-    THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
+    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
+    THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
 };
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, NtStatus, ObjectType, ProcessId, ThreadRef};
@@ -366,6 +366,26 @@ pub fn open_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, info, length] = abi::args::<K, 4>(k, regs)?;
     const PROCESS_MITIGATION_POLICY: u64 = 52;
+    /// `ProcessPriorityClass`: a `PROCESS_PRIORITY_CLASS` (foreground flag, class 1 to 6).
+    const PROCESS_PRIORITY_CLASS: u64 = 18;
+    if class == PROCESS_PRIORITY_CLASS {
+        let pid = process_of(k, Handle(h), poly_ntobj::access::PROCESS_SET_INFORMATION)?;
+        if length != 2 {
+            return Err(STATUS_INFO_LENGTH_MISMATCH);
+        }
+        let mut b = [0u8; 2];
+        abi::read(k, info, &mut b)?;
+        if !(1..=6).contains(&b[1]) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let set = |p: &mut crate::system::NtProcess| p.priority_class = b[1];
+        if pid == k.caller().process {
+            k.with_state(|_, proc, _| set(proc));
+        } else {
+            k.with_process(pid, |_, proc, _| set(proc)).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
+        }
+        return Ok(STATUS_SUCCESS);
+    }
     if class != PROCESS_MITIGATION_POLICY {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -386,63 +406,231 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     Ok(STATUS_SUCCESS)
 }
 
-/// `NtQueryInformationProcess(ProcessBasicInformation)`. ExitStatus is
-/// `STATUS_PENDING` for a running process and its exit status once it has
-/// ended ([`crate::system::NtSystem::process_exits`]); the PEB base (of the
-/// caller's own process only) and the process id are reported.
-pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
-    if class as u32 == PROCESS_TIMES {
-        return query_process_times(k, h, buf, length, ret);
+/// `STATUS_PORT_NOT_SET` (`ntstatus.h`): a process with no debug object.
+const STATUS_PORT_NOT_SET: NtStatus = NtStatus(0xC000_0353);
+
+/// The NT base priority of a process priority class (`ProcessPriorityClass` 1 idle, 2 normal, 3 high,
+/// 4 real-time, 5 below normal, 6 above normal): `PROCESS_BASIC_INFORMATION.BasePriority`.
+fn class_base_priority(class: u8) -> i32 {
+    match class {
+        1 => 4,
+        3 => 13,
+        4 => 24,
+        5 => 6,
+        6 => 10,
+        _ => 8,
     }
-    if class as u32 == PROCESS_WOW64_INFORMATION {
-        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
-        let peb32 = |p: &crate::system::NtProcess| if p.wow64 { p.peb } else { 0 };
-        let own = k.with_state(|_, proc, _| (proc.pid == pid).then(|| peb32(proc)));
-        let value = match own {
-            Some(v) => v,
-            None => k.with_process(pid, |_, p, _| peb32(p)).unwrap_or(0),
-        };
-        return write_info(k, buf, length, ret, &value.to_le_bytes());
-    }
-    if class as u32 != PROCESS_BASIC_INFORMATION {
-        return Err(STATUS_INVALID_INFO_CLASS);
-    }
-    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
-    let (exit, peb) = k.with_state(|sys, proc, _| {
-        if proc.pid == pid {
-            (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb)
-        } else {
-            // Another process: its exit status once it has ended (ADR 0079).
-            (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), 0)
-        }
-    });
-    let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
-    b[0..4].copy_from_slice(&exit.0.to_le_bytes());
-    b[8..16].copy_from_slice(&peb.to_le_bytes());
-    b[32..40].copy_from_slice(&u64::from(pid.0).to_le_bytes());
-    write_info(k, buf, length, ret, &b)
 }
 
-/// `NtQueryInformationThread(ThreadBasicInformation)`: ExitStatus (pending
-/// while live), the TEB base and the client id.
+/// `NtQueryInformationProcess(Process, Class, Buffer, Length, ReturnLength)`: the classes programs
+/// ask with their exact lengths (`specs/windows/ntdll.dll/NtQueryInformationProcess.yaml`).
+/// `ExitStatus` of the basic information is `STATUS_PENDING` for a running process and its exit
+/// status once it has ended ([`crate::system::NtSystem::process_exits`]); the PEB base is the
+/// caller's own process's only. A wrong length is `STATUS_INFO_LENGTH_MISMATCH` and the returned
+/// length stays as it was.
+pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
+    let (class, length) = (class as u32, length as u32);
+    if Handle(h) == Handle::CURRENT_THREAD {
+        return Err(STATUS_OBJECT_TYPE_MISMATCH);
+    }
+    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+    let le32 = |v: u32| v.to_le_bytes();
+    match class {
+        PROCESS_BASIC_INFORMATION => {
+            if length != PROCESS_BASIC_INFORMATION_SIZE as u32 && length != 64 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let (exit, peb, parent, priority) = k.with_state(|sys, proc, _| {
+                if proc.pid == pid {
+                    (
+                        proc.exit_status.unwrap_or(STATUS_PENDING),
+                        proc.peb,
+                        if proc.parent != 0 { proc.parent } else { 4 },
+                        class_base_priority(proc.priority_class),
+                    )
+                } else {
+                    // Another process: its exit status once it has ended (ADR 0079).
+                    (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), 0, 4, 8)
+                }
+            });
+            let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
+            b[0..4].copy_from_slice(&exit.0.to_le_bytes());
+            b[8..16].copy_from_slice(&peb.to_le_bytes());
+            b[16..24].copy_from_slice(&1u64.to_le_bytes());
+            b[24..28].copy_from_slice(&priority.to_le_bytes());
+            b[32..40].copy_from_slice(&u64::from(pid.0).to_le_bytes());
+            b[40..48].copy_from_slice(&u64::from(parent).to_le_bytes());
+            if length == 64 {
+                // PROCESS_EXTENDED_BASIC_INFORMATION: its size, the basic information, the flags.
+                let mut ext = [0u8; 64];
+                ext[0..8].copy_from_slice(&64u64.to_le_bytes());
+                ext[8..56].copy_from_slice(&b);
+                return reply(k, buf, length, ret, &ext);
+            }
+            reply(k, buf, length, ret, &b)
+        }
+        // IoCounters.
+        2 => reply(k, buf, length, ret, &[0u8; 48]),
+        PROCESS_TIMES => query_process_times(k, pid, buf, length, ret),
+        // DebugPort.
+        7 => reply(k, buf, length, ret, &[0u8; 8]),
+        // DefaultHardErrorMode, PriorityBoost, BreakOnTermination.
+        12 | 22 | 29 => reply(k, buf, length, ret, &le32(0)),
+        // PriorityClass: PROCESS_PRIORITY_CLASS (foreground flag, class).
+        18 => {
+            let class = k.with_state(|_, proc, _| proc.priority_class);
+            reply(k, buf, length, ret, &[0, class])
+        }
+        // HandleCount.
+        20 => reply(k, buf, length, ret, &le32(8)),
+        // AffinityMask.
+        21 => reply(k, buf, length, ret, &1u64.to_le_bytes()),
+        // SessionInformation: the session id of the PEB.
+        24 => {
+            let (peb, off) = k.with_state(|_, proc, _| (proc.peb, proc.layout().peb_session_id));
+            let session = abi::read_u32(k, peb + off).unwrap_or(0);
+            reply(k, buf, length, ret, &le32(session))
+        }
+        PROCESS_WOW64_INFORMATION => {
+            let peb32 = |p: &crate::system::NtProcess| if p.wow64 { p.peb } else { 0 };
+            let own = k.with_state(|_, proc, _| (proc.pid == pid).then(|| peb32(proc)));
+            let value = match own {
+                Some(v) => v,
+                None => k.with_process(pid, |_, p, _| peb32(p)).unwrap_or(0),
+            };
+            reply(k, buf, length, ret, &value.to_le_bytes())
+        }
+        // ImageFileName: a UNICODE_STRING and its text, the NT name of the image.
+        27 => {
+            let us = abi::caller_unicode_size(k);
+            let (device, path) = k.with_state(|sys, proc, _| crate::memory::mapped_file_of(sys, proc, proc.image_base))?;
+            // The name as the kernel was given the image's path may end in a NUL.
+            let path = path.map(|mut p| {
+                while p.last() == Some(&0) {
+                    p.pop();
+                }
+                p
+            });
+            let a = crate::objects::file_name_answer(&device, path.as_deref(), length as usize, buf, us);
+            if a.status != STATUS_SUCCESS {
+                return Err(if a.status == STATUS_BUFFER_OVERFLOW { STATUS_INFO_LENGTH_MISMATCH } else { a.status });
+            }
+            abi::write(k, buf, &a.bytes)?;
+            abi::write_opt_u32(k, ret, a.return_length)?;
+            Ok(STATUS_SUCCESS)
+        }
+        // DebugObjectHandle: there is none, and the length is returned.
+        30 => {
+            abi::write_opt_u32(k, ret, 8)?;
+            Ok(STATUS_PORT_NOT_SET)
+        }
+        // DebugFlags.
+        31 => reply(k, buf, length, ret, &le32(1)),
+        // IoPriority (normal).
+        33 => reply(k, buf, length, ret, &le32(2)),
+        // ExecuteFlags.
+        34 => reply(k, buf, length, ret, &le32(0xD)),
+        // Cookie.
+        36 => reply(k, buf, length, ret, &le32(pid.0 ^ 0x5EED_C0DE)),
+        // ImageInformation (SECTION_IMAGE_INFORMATION).
+        37 => reply(k, buf, length, ret, &[0u8; 64]),
+        // QuotaLimits and VmCounters have lengths Poly's callers do not use.
+        1 | 3 => Err(STATUS_INFO_LENGTH_MISMATCH),
+        32 => Err(STATUS_INVALID_PARAMETER),
+        _ => Err(STATUS_INVALID_INFO_CLASS),
+    }
+}
+
+/// `NtQueryInformationThread(Thread, Class, Buffer, Length, ReturnLength)`: basic information (0),
+/// times (1) and the Win32 start address (9), each with the access rights that open it, a few
+/// classes that answer with zeros, and the statuses of the rest
+/// (`specs/windows/ntdll.dll/NtQueryInformationThread.yaml`). Poly's own class 0x1000 gives the
+/// thread's base priority to `GetThreadPriority`, which `THREAD_QUERY_LIMITED_INFORMATION` allows.
 pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
-    if class as u32 != THREAD_BASIC_INFORMATION {
-        return Err(STATUS_INVALID_INFO_CLASS);
+    // Poly's own class 0x1001 is class 0 for a handle with any query right (`GetThreadId`,
+    // `GetExitCodeThread`: Learn asks `THREAD_QUERY_LIMITED_INFORMATION` of them).
+    let (class, length, limited_ok) = if class as u32 == 0x1001 { (0, length as u32, true) } else { (class as u32, length as u32, false) };
+    if Handle(h) == Handle::CURRENT_PROCESS {
+        return Err(STATUS_OBJECT_TYPE_MISMATCH);
     }
-    let tid = thread_of_any(k, Handle(h), &[THREAD_QUERY_LIMITED_INFORMATION, THREAD_QUERY_INFORMATION])?;
-    let (exit, teb, pid) = k.with_state(|_sys, proc, _| {
-        let teb = proc.thread(tid).map(|t| t.teb).unwrap_or(0);
-        let exit = proc.thread_exit_status(tid).unwrap_or(STATUS_PENDING);
-        (exit, teb, proc.pid)
-    });
-    let mut b = [0u8; THREAD_BASIC_INFORMATION_SIZE];
-    b[0..4].copy_from_slice(&exit.0.to_le_bytes());
-    b[8..16].copy_from_slice(&teb.to_le_bytes());
-    b[16..24].copy_from_slice(&u64::from(pid.0).to_le_bytes());
-    b[24..32].copy_from_slice(&tid.0.to_le_bytes());
-    write_info(k, buf, length, ret, &b)
+    // The handle first, whatever rights it has: the class decides what it needs.
+    let _ = thread_of(k, Handle(h), 0)?;
+    let t = |k: &mut K, rights: &[u32]| thread_of_any(k, Handle(h), rights);
+    const QUERY: u32 = THREAD_QUERY_INFORMATION;
+    const LIMITED: u32 = THREAD_QUERY_LIMITED_INFORMATION;
+    const SUSPEND: u32 = THREAD_SUSPEND_RESUME;
+    match class {
+        THREAD_BASIC_INFORMATION | 9 | 1 | 0x1000 => {
+            let rights: &[u32] = match class {
+                THREAD_BASIC_INFORMATION if limited_ok => &[QUERY, LIMITED, SUSPEND],
+                THREAD_BASIC_INFORMATION => &[QUERY, SUSPEND],
+                // The oracle gave the start address to `THREAD_SUSPEND_RESUME` and full access, not to
+                // `THREAD_QUERY_INFORMATION`.
+                9 => &[SUSPEND],
+                1 => &[QUERY, LIMITED],
+                _ => &[QUERY, LIMITED],
+            };
+            let tid = t(k, rights)?;
+            let (exit, teb, pid, start, priority, created) = k.with_state(|_sys, proc, _| {
+                let th = proc.thread(tid);
+                (
+                    proc.thread_exit_status(tid).unwrap_or(STATUS_PENDING),
+                    th.map_or(0, |t| t.teb),
+                    proc.pid,
+                    th.map_or(0, |t| t.start),
+                    th.map_or(0, |t| t.base_priority),
+                    0u64,
+                )
+            });
+            let created = if created == 0 { k.process_times(pid).map_or(0, |t| t[0]) } else { created };
+            match class {
+                THREAD_BASIC_INFORMATION => {
+                    let mut b = [0u8; THREAD_BASIC_INFORMATION_SIZE];
+                    b[0..4].copy_from_slice(&exit.0.to_le_bytes());
+                    b[8..16].copy_from_slice(&teb.to_le_bytes());
+                    b[16..24].copy_from_slice(&u64::from(pid.0).to_le_bytes());
+                    b[24..32].copy_from_slice(&tid.0.to_le_bytes());
+                    b[32..40].copy_from_slice(&1u64.to_le_bytes());
+                    b[40..44].copy_from_slice(&8i32.to_le_bytes());
+                    b[44..48].copy_from_slice(&priority.to_le_bytes());
+                    reply(k, buf, length, ret, &b)
+                }
+                1 => {
+                    let mut b = [0u8; 32];
+                    b[0..8].copy_from_slice(&created.to_le_bytes());
+                    reply(k, buf, length, ret, &b)
+                }
+                9 => reply(k, buf, length, ret, &start.to_le_bytes()),
+                _ => reply(k, buf, length, ret, &priority.to_le_bytes()),
+            }
+        }
+        // Classes that answer with zeros (what is asked is of no use to Poly).
+        23 | 30 | 38 | 41 => {
+            if length < 16 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            abi::write(k, buf, &[0u8; 16])?;
+            abi::write_opt_u32(k, ret, 16)?;
+            Ok(STATUS_SUCCESS)
+        }
+        39 => {
+            if length < 8 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            abi::write(k, buf, &[0u8; 8])?;
+            abi::write_opt_u32(k, ret, 8)?;
+            Ok(STATUS_SUCCESS)
+        }
+        21 | 29 | 34 => Err(STATUS_ACCESS_DENIED),
+        26 => Err(STATUS_ACCESS_VIOLATION),
+        37 => Err(STATUS_INVALID_PARAMETER),
+        11 | 12 | 14 | 16 | 17 | 18 | 20 | 22 | 24 | 25 | 32 | 33 | 35 | 36 | 40 | 42 | 43 => {
+            Err(STATUS_INFO_LENGTH_MISMATCH)
+        }
+        _ => Err(STATUS_INVALID_INFO_CLASS),
+    }
 }
 
 pub fn suspend_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
@@ -527,23 +715,22 @@ pub fn set_context_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<
 /// Poly noted when the process was made (a `FILETIME`), an exit time of 0
 /// (Poly keeps no times of ended processes), and the kernel and user CPU
 /// time the kernel counted ([`NtKernel::process_times`]), in 100 ns units.
-fn query_process_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
-    // Learn, `GetProcessTimes`: "The handle must have the PROCESS_QUERY_INFORMATION or
-    // PROCESS_QUERY_LIMITED_INFORMATION access right".
-    let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+fn query_process_times<K: NtKernel>(k: &mut K, pid: ProcessId, buf: u64, length: u32, ret: u64) -> Result<NtStatus> {
     let [created, kernel, user] = k.process_times(pid).unwrap_or([0; 3]);
     let mut b = [0u8; KERNEL_USER_TIMES_SIZE];
     b[0..8].copy_from_slice(&created.to_le_bytes());
     b[16..24].copy_from_slice(&kernel.to_le_bytes());
     b[24..32].copy_from_slice(&user.to_le_bytes());
-    write_info(k, buf, length, ret, &b)
+    reply(k, buf, length, ret, &b)
 }
 
-fn write_info<K: NtKernel>(k: &mut K, buf: u64, length: u64, ret: u64, info: &[u8]) -> Result<NtStatus> {
-    abi::write_opt_u32(k, ret, info.len() as u32)?;
-    if (length as usize) < info.len() {
-        return Ok(STATUS_INFO_LENGTH_MISMATCH);
+/// Answer a query with exactly `info`: every class has one length, any other is
+/// `STATUS_INFO_LENGTH_MISMATCH` and leaves the returned length alone (what Windows does).
+fn reply<K: NtKernel>(k: &mut K, buf: u64, length: u32, ret: u64, info: &[u8]) -> Result<NtStatus> {
+    if length as usize != info.len() {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
     abi::write(k, buf, info)?;
+    abi::write_opt_u32(k, ret, info.len() as u32)?;
     Ok(STATUS_SUCCESS)
 }

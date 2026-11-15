@@ -36,7 +36,5 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!("advapi32", value(120), [RegDisablePredefinedCache]);
 
 // The LSA policy functions return an `NTSTATUS`.
-poly_win32_rt::fail_exports!("advapi32", status, [LsaAddAccountRights, LsaClose, LsaOpenPolicy]);
+poly_win32_rt::fail_exports!("advapi32", status, [LsaAddAccountRights]);
 
-// `LsaNtStatusToWinError` returns a Win32 error code for the status it is given.
-poly_win32_rt::fail_exports!("advapi32", value(120), [LsaNtStatusToWinError]);

@@ -102,6 +102,7 @@ pub mod sysex;
 pub mod sysmsg;
 pub mod system;
 pub mod text;
+pub mod threadpool;
 pub mod time;
 pub mod tls;
 pub mod tz;

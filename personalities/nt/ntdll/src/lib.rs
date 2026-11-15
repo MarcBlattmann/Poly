@@ -19,6 +19,7 @@ extern crate alloc;
 
 #[cfg(target_arch = "x86_64")]
 mod chkstk;
+mod curdir;
 mod exports;
 mod heap;
 mod lock;

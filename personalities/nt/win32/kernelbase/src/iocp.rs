@@ -506,7 +506,7 @@ pub extern "system" fn GetThreadId(thread: Handle) -> u32 {
     let mut b = [0u8; 48];
     let mut ret = 0u32;
     // SAFETY: valid pointers; THREAD_BASIC_INFORMATION is 48 bytes.
-    let st = unsafe { nt::NtQueryInformationThread(thread, 0, b.as_mut_ptr(), 48, &mut ret) };
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0x1001, b.as_mut_ptr(), 48, &mut ret) };
     if st.is_success() { crate::base::id_in(&b, crate::base::TBI_UNIQUE_THREAD) } else { fail_status(st, 0) }
 }
 

@@ -69,6 +69,37 @@ fn open_file(nt_path: &[u16], access: u32) -> Result<isize, NtStatus> {
     if st.is_success() { Ok(handle) } else { Err(st) }
 }
 
+/// Open the directory at `nt_path` (to see that it exists): the handle, or the status.
+pub(crate) fn open_directory(nt_path: &[u16]) -> Result<isize, NtStatus> {
+    /// `FILE_LIST_DIRECTORY | SYNCHRONIZE`.
+    const ACCESS: u32 = 0x0001 | 0x0010_0000;
+    /// `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`.
+    const SHARE_ALL: u32 = 7;
+    /// `FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT`.
+    const DIRECTORY_OPTIONS: u32 = 0x01 | 0x20 | 0x4000;
+    let name = UnicodeName::new(nt_path);
+    let oa = ObjectAttributes::new(&name);
+    let mut handle: isize = 0;
+    let mut iosb = [0usize; 2];
+    // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
+    let st = unsafe {
+        NtCreateFile(
+            &mut handle,
+            ACCESS,
+            oa.as_ptr(),
+            iosb.as_mut_ptr().cast::<u8>(),
+            core::ptr::null(),
+            0,
+            SHARE_ALL,
+            OPEN,
+            DIRECTORY_OPTIONS,
+            core::ptr::null(),
+            0,
+        )
+    };
+    if st.is_success() { Ok(handle) } else { Err(st) }
+}
+
 impl Process for Sys {
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
         let handle = open_file(nt_path, FILE_READ)?;

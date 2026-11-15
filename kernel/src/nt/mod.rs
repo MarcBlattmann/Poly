@@ -1186,6 +1186,7 @@ fn start_params(
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
+        proc.parent = handles.map_or(0, |h| h.caller.process.0);
         proc.image_name = s.sys.io.dos_file_name(&params.image_path);
         let mut b = MemBackend { memory, sections: &mut s.sections };
         // Its creator's inheritable handles, before any other (ADR 0089).

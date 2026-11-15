@@ -69,7 +69,6 @@ fail_exports!(
         RtlQueryInformationActiveActivationContext,
         RtlQueryProcessDebugInformation,
         RtlQueryRegistryValues,
-        RtlSetCurrentDirectory_U,
         RtlSubscribeWnfStateChangeNotification,
         RtlUnsubscribeWnfStateChangeNotification,
     ]

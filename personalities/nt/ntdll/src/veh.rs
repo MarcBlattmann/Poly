@@ -85,9 +85,10 @@ pub extern "system" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32
 
 /// `RtlAddVectoredContinueHandler(First, Handler)` (Learn:
 /// `AddVectoredContinueHandler`): registered first or last like an exception
-/// handler, in a list of its own. Learn does not say at which point of the
-/// dispatch continue handlers are called, so Poly keeps them registered and
-/// does not call them yet.
+/// handler, in a list of its own. They are called after an exception has been
+/// resolved by a handler that continued execution (and not when none did,
+/// `specs/windows/kernel32.dll/AddVectoredContinueHandler.yaml`); their results
+/// change nothing.
 #[unsafe(no_mangle)]
 pub extern "system" fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
     add(&CONTINUE, first, handler)
@@ -98,6 +99,23 @@ pub extern "system" fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u
 #[unsafe(no_mangle)]
 pub extern "system" fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
     remove(&CONTINUE, handle)
+}
+
+/// Call the vectored continue handlers, first to last, on the exception at `record` / `context`
+/// that was resolved: a handler continued execution.
+///
+/// # Safety
+/// `record` and `context` are a valid `EXCEPTION_RECORD` and `CONTEXT`.
+#[cfg_attr(target_arch = "x86", allow(dead_code))]
+pub unsafe fn call_continue_handlers(record: *mut u8, context: *mut u8) {
+    let handlers: Vec<u64> = with_list(&CONTINUE, |l| l.iter().map(|&(_, h)| h).collect());
+    let mut pointers: [*mut u8; 2] = [record, context];
+    type Handler = unsafe extern "system" fn(*mut [*mut u8; 2]) -> i32;
+    for h in handlers {
+        // SAFETY: a handler the program registered, with the documented
+        // `PVECTORED_EXCEPTION_HANDLER` signature.
+        unsafe { core::mem::transmute::<usize, Handler>(h as usize)(&mut pointers) };
+    }
 }
 
 /// Call the vectored handlers on the exception at `record` / `context`

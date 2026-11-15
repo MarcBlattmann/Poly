@@ -345,6 +345,8 @@ unsafe extern "system" {
         length: u32,
         returned: *mut u32,
     ) -> NtStatus;
+    pub fn NtSetInformationThread(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;
