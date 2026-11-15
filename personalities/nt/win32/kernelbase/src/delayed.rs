@@ -7,5 +7,5 @@
 poly_win32_rt::fail_exports!(
     "kernelbase",
     win32,
-    [CompareObjectHandles, WaitOnAddress, WakeByAddressAll, WakeByAddressSingle]
+    [CompareObjectHandles]
 );

@@ -24,6 +24,7 @@ mod heap;
 mod lock;
 mod params;
 mod rtlsec;
+mod rtlsync;
 #[cfg(target_arch = "x86_64")]
 mod seh;
 mod start;
