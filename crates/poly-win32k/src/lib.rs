@@ -30,6 +30,7 @@
 //!   compositor, the compositor's records read back.
 //! - [`frame`]: Poly's frame as the non-client area of a top-level window:
 //!   rectangles and the non-client hit test.
+//! - [`hooks`]: the process's `SetWindowsHookExW` table and chains.
 //! - [`kbd`]: the keyboard layout (the oracle's German layout): virtual
 //!   keys, scan codes, characters and dead keys for `MapVirtualKeyW`,
 //!   `ToUnicode` and `TranslateMessage`.
@@ -53,6 +54,7 @@ pub mod dib;
 pub mod exports;
 pub mod frame;
 pub mod guic;
+pub mod hooks;
 pub mod icofile;
 pub mod ime;
 pub mod kbd;
@@ -65,6 +67,7 @@ pub mod services;
 pub mod spi;
 pub mod surfaces;
 pub mod user;
+pub mod winevent;
 pub mod wire;
 pub mod wm;
 pub mod zorder;

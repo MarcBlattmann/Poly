@@ -111,6 +111,10 @@ pub fn thread_input<E: Env + ?Sized>(env: &E, tid: u32) -> Input {
 
 fn set<E: Env + ?Sized>(env: &E, active: u32, focus: u32, which: u8) {
     env.call(Request::SetInput { active, focus, capture: 0, which });
+    if which & SET_FOCUS != 0 {
+        // EVENT_OBJECT_FOCUS: the client object of the window that has the focus now (NULL: none).
+        env.win_event(crate::winevent::EVENT_OBJECT_FOCUS, focus, -4, 0);
+    }
 }
 
 /// The top-level window above `h` (itself if it is one).
@@ -161,19 +165,24 @@ pub fn tops_of<E: Env + ?Sized>(env: &E, tid: u32) -> Vec<u32> {
 /// below (`changed`: also send WM_WINDOWPOSCHANGED when the z order moved).
 fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, destroyed: u32) {
     let h = u64::from(y.hwnd);
-    let owned = match env.call(Request::Relatives { hwnd: y.hwnd }) {
-        Reply::Relatives { owned, .. } => owned,
-        _ => Vec::new(),
-    };
+    let owned = owned_chain(env, y.hwnd);
     for &o in &owned {
+        let after = report_after(env, o, HWND_TOP);
         let mut wp = WindowPos {
-            hwnd: (u64::from(o)) as usize,
+            hwnd: u64::from(o) as usize,
+            insert_after: after as usize,
             flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
             ..WindowPos::default()
         };
         send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
-    let mut wp = WindowPos { hwnd: h as usize, flags: SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+    let after = report_after(env, y.hwnd, HWND_TOP);
+    let mut wp = WindowPos {
+        hwnd: h as usize,
+        insert_after: after as usize,
+        flags: SWP_NOMOVE | SWP_NOSIZE,
+        ..WindowPos::default()
+    };
     send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     // A hidden window changes no z order the screen shows: no
     // WM_WINDOWPOSCHANGED (SetActiveWindow.yaml `hidden`).
@@ -286,11 +295,12 @@ pub fn activate_with<E: Env + ?Sized>(env: &E, y: u32, how: How) -> u32 {
     // even at the top already (SetActiveWindow.yaml saw_special `O`, SetForegroundWindow.yaml
     // sfw_owned); SetForegroundWindow, clicks and shows do not.
     raise(env, &yi, !in_show && !behind_sibling, !foreground && yi.owner != 0, destroyed);
+    // The windows are told in the order they lie in now: the default IME window moves above the
+    // new active window only with the change below (sw_chrome_show).
+    let tops_now = if x == 0 { thread_tops(env) } else { Vec::new() };
     set(env, y, 0, SET_ACTIVE | if background { 0 } else { SET_FOREGROUND });
-    if x == 0 {
-        for t in thread_tops(env) {
-            send(env, u64::from(t), WM_ACTIVATEAPP, 1, 0);
-        }
+    for t in tops_now {
+        send(env, u64::from(t), WM_ACTIVATEAPP, 1, 0);
     }
     let yi = info(env, u64::from(y)).unwrap_or(yi);
     let other = if xi.is_some() { u64::from(x) } else { 0 };
@@ -793,6 +803,7 @@ pub fn enable_window<E: Env + ?Sized>(env: &E, hwnd: u64, enable: bool) -> bool 
         if was_disabled {
             env.call(Request::SetStyle { hwnd: i.hwnd, which: GWL_STYLE, value: i.style & !WS_DISABLED });
             send(env, hwnd, WM_ENABLE, 1, 0);
+            env.win_event(crate::winevent::EVENT_OBJECT_STATECHANGE, i.hwnd, 0, 0);
         }
     } else {
         send(env, hwnd, WM_CANCELMODE, 0, 0);
@@ -809,6 +820,7 @@ pub fn enable_window<E: Env + ?Sized>(env: &E, hwnd: u64, enable: bool) -> bool 
         if !was_disabled {
             env.call(Request::SetStyle { hwnd: i.hwnd, which: GWL_STYLE, value: i.style | WS_DISABLED });
             send(env, hwnd, WM_ENABLE, 0, 0);
+            env.win_event(crate::winevent::EVENT_OBJECT_STATECHANGE, i.hwnd, 0, 0);
         }
     }
     was_disabled

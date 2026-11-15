@@ -940,3 +940,57 @@ loader's own "failed" log lines.
   `user32`) carry none of the fail-only exports or doc-derived functions of this step (`#[cfg(target_arch = "x86_64")]`,
   and `build.rs` skips the ordinals, forwarders and aliases there): a stub without parameters is wrong for `stdcall`, and the
   i686 `ntdll` has its own `RtlUnwind`.
+## Addendum (2026-11-15): S3 hunt, the browser window stays up
+
+Chrome's S3 window (`--disable-gpu --no-sandbox`, Poly's desktop, `cargo xtask win-app run --mode
+desktop`) died in every run: either before its window (an access violation in
+`KiUserExceptionDispatcher` after a stack overflow of the browser's main thread) or 60–90 s after
+it (a breakpoint `0x80000003` at `chrome.dll+0xc62f809` on a browser thread-pool worker, the
+address the S1 flake had). Found with Poly's own diagnostics only (the per-thread trail of the
+breaking thread, the other threads' calls beside it, the wait report's suspended threads and CPU
+columns, the kernel's `stub:` lines); Chrome's own log (`--enable-logging --log-file`, read back
+from the disk image with `debugfs`) had no message for either.
+
+1. **The stack overflow: no fonts on the `win-app` disk.** Each level of the recursion made the
+   same three win32k requests (`Desktop`, twice from user32 and once from gdi32's
+   `GetDeviceCaps`), the pattern of a screen-DPI query around a font set-up: the failure step 9
+   recorded for stage 1 (Chrome's UI font set-up finds no face and starts over until the stack is
+   full). `chrome-win`'s disk carries Poly's fonts in `C:\Windows\Fonts`; `win-app`'s did not.
+   It does now (`winapps::disk`), and the `win-app` desktop file escapes `%` as `%%` (the Desktop
+   Entry Specification's field codes ate the `%20` and `%23` of a `data:` URL).
+2. **`GetThreadContext` of a suspended thread that waits in the kernel did not answer.** Chrome's
+   stack sampler (a browser thread, one in each renderer) suspends a thread every 50 ms, reads its
+   context and resumes it. Poly's `NtGetContextThread` waited (2 s, yielding) for the target to
+   park at its return to user mode, which a thread blocked in `NtRemoveIoCompletion` or
+   `NtWaitForMultipleObjects` does not reach: the wait report showed `p2 t24 suspend count 1
+   running` and the sampler with 19 s of system time; every sample kept its target suspended up to
+   2 s. A thread that does not run now has its user registers in the trap frame at the top of its
+   kernel stack (its last entry from ring 3); the kernel reads them there under the thread table's
+   lock (`thread::user_regs_of`, `arch::user::regs_at`), as Windows answers at once for a
+   suspended thread (Learn, `GetThreadContext`). `k32test`: a thread suspended in an infinite wait
+   gives its context in under a second and does not end while suspended.
+3. **The breakpoint: `K32GetModuleInformation` and `K32GetProcessMemoryInfo` were fail-only
+   stubs.** The breaking worker's trail ended, each time, in a batch of `stub:` prints 38 bytes
+   long, right after the UI thread posted it a task; the browser called
+   `kernel32!K32GetModuleInformation` 900 times in a run (and `K32GetProcessMemoryInfo`). Both are
+   implemented from Learn: `MODULEINFO` from the loader's module list and the module's PE headers
+   (`AddressOfEntryPoint`; another process's modules answer `ERROR_PARTIAL_COPY` for now),
+   `PROCESS_MEMORY_COUNTERS[_EX[2]]` from a new `NtQueryInformationProcess(ProcessVmCounters)`
+   that reports the kernel's page counts (working set, its peak, the process's own pages as its
+   commit and private usage; Poly counts no reserved address space, so the virtual sizes are the
+   working set's). With them the browser ran through every following run (table below).
+4. **The other constantly hit stubs, from Learn** (`poly_kernelbase::priority`,
+   `kernelbase/src/sched.rs`): `Set/GetThreadPriority`, `Set/GetThreadPriorityBoost`,
+   `Set/GetProcessPriorityBoost`, `Set/GetPriorityClass` (kept per process and read back, every
+   documented value accepted, the background modes only for the caller; Poly's scheduler has no
+   priorities yet), `SetThreadInformation` (sizes checked), `GetThreadTimes` (new
+   `NtQueryInformationThread(ThreadTimes)` from the kernel's per-thread CPU time; the thread's
+   creation time is its process's), `QueryThreadCycleTime` (its kernel + user time in 100 ns
+   units stands in for cycles). The table they keep takes no lock and allocates nothing, because
+   the sampler asks while the thread it reads is suspended. `GetThreadContext`, `SetThreadContext`
+   and `TerminateThread` are the same wrappers as `win-git-bash`'s (ADR 0194), placed identically.
+
+**Memory.** With ADR 0188's shared image pages (merged from `main`) a desktop run peaks at about
+500 MiB of user pages, 200 MiB of page cache and 80 MiB of kernel heap (seven renderers, a GPU and
+two utility processes); the default 4 GiB is enough (`win-app` keeps its 4 GiB default; the
+`--memory=6G` of the first S3 runs is not needed).

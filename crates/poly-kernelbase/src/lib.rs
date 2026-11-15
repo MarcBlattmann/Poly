@@ -70,6 +70,7 @@ extern crate alloc;
 
 pub mod advapi;
 pub mod apps;
+pub mod atoms;
 pub mod cpu;
 pub mod env;
 pub mod error;
@@ -87,6 +88,7 @@ pub mod nls;
 pub mod oleaut;
 pub mod path;
 pub mod pipe;
+pub mod priority;
 pub mod process;
 pub mod procinfo;
 pub mod propstore;
