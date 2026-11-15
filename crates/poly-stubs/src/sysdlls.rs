@@ -7,37 +7,6 @@ use crate::system::{Fail, SystemDll};
 #[rustfmt::skip]
 pub const SYSTEM_DLLS: &[SystemDll] = &[
     SystemDll {
-        file: "comdlg32.dll",
-        exports: &[
-            ("ChooseColorA", Fail::Win32),
-            ("ChooseColorW", Fail::Win32),
-            ("ChooseFontA", Fail::Win32),
-            ("ChooseFontW", Fail::Win32),
-            ("CommDlgExtendedError", Fail::Value(65535)),
-            ("FindTextA", Fail::Win32),
-            ("FindTextW", Fail::Win32),
-            ("GetFileTitleA", Fail::Win32),
-            ("GetFileTitleW", Fail::Win32),
-            ("GetOpenFileNameA", Fail::Win32),
-            ("GetOpenFileNameW", Fail::Win32),
-            ("GetSaveFileNameA", Fail::Win32),
-            ("GetSaveFileNameW", Fail::Win32),
-            ("LoadAlterBitmap", Fail::Win32),
-            ("PageSetupDlgA", Fail::Win32),
-            ("PageSetupDlgW", Fail::Win32),
-            ("PrintDlgA", Fail::Win32),
-            ("PrintDlgExA", Fail::Win32),
-            ("PrintDlgExW", Fail::Win32),
-            ("PrintDlgW", Fail::Win32),
-            ("ReplaceTextA", Fail::Win32),
-            ("ReplaceTextW", Fail::Win32),
-            ("WantArrows", Fail::Win32),
-            ("dwLBSubclass", Fail::Win32),
-            ("dwOKSubclass", Fail::Win32),
-        ],
-        forwards: &[],
-    },
-    SystemDll {
         file: "rpcrt4.dll",
         exports: &[
             ("CStdStubBuffer_AddRef", Fail::Value(120)),

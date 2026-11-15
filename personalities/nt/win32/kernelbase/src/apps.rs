@@ -4,7 +4,9 @@
 //! implementation replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 //! Generated from the programs' import tables (names only) and our export table.
 
-poly_win32_rt::fail_exports!("kernelbase", invalid_handle, [CreateFile2,]);
+poly_win32_rt::fail_exports!("kernelbase", invalid_handle, [
+        CreateFile2,
+    ]);
 
 poly_win32_rt::fail_exports!(
     "kernelbase",
@@ -87,8 +89,6 @@ poly_win32_rt::fail_exports!(
         LockFile,
         OpenSemaphoreW,
         PathAllocCombine,
-        PathCchCanonicalize,
-        PathCchCombine,
         PathCchRemoveBackslash,
         PathCchRemoveExtension,
         PathCchRemoveFileSpec,
@@ -116,16 +116,7 @@ poly_win32_rt::fail_exports!(
     "kernelbase",
     win32,
     [
-        FindResourceExW,
-        FindResourceW,
-        GetEnvironmentVariableA,
-        LoadResource,
         LoadStringA,
         LoadStringW,
-        LockResource,
-        PathCchCanonicalizeEx,
-        PathCchCombineEx,
-        PathCchSkipRoot,
-        SizeofResource,
     ]
 );

@@ -7,7 +7,13 @@
 poly_win32_rt::fail_exports!(
     "shlwapi",
     hresult,
-    [SHAutoComplete, SHCreateStreamOnFileA, SHCreateStreamOnFileEx, SHCreateStreamOnFileW, SHStrDupW,]
+    [
+        SHAutoComplete,
+        SHCreateStreamOnFileA,
+        SHCreateStreamOnFileEx,
+        SHCreateStreamOnFileW,
+        SHStrDupW,
+    ]
 );
 
 poly_win32_rt::fail_exports!(
@@ -58,10 +64,6 @@ poly_win32_rt::fail_exports!(
     win32,
     [
         PathAddBackslashA,
-        PathAddBackslashW,
-        PathAppendW,
-        PathCanonicalizeW,
-        PathCombineW,
         PathCommonPrefixW,
         PathCompactPathExW,
         PathCompactPathW,
@@ -71,25 +73,14 @@ poly_win32_rt::fail_exports!(
         PathFindExtensionA,
         PathFindFileNameA,
         PathGetCharTypeW,
-        PathGetDriveNumberW,
         PathIsContentTypeW,
         PathIsDirectoryW,
-        PathIsFileSpecW,
-        PathIsNetworkPathW,
         PathIsRelativeA,
-        PathIsRelativeW,
-        PathIsRootW,
-        PathIsUNCServerShareW,
-        PathIsUNCW,
         PathMatchSpecA,
         PathQuoteSpacesW,
         PathRemoveArgsW,
         PathRemoveFileSpecA,
-        PathRemoveFileSpecW,
         PathRenameExtensionW,
-        PathSkipRootW,
-        PathStripPathW,
-        PathStripToRootW,
         PathUnExpandEnvStringsW,
         PathUnquoteSpacesW,
     ]
