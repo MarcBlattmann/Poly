@@ -538,6 +538,16 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
                     (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), 0, 4, 8)
                 }
             });
+            // A process that is still there (a suspended child included) has a PEB and a parent of its
+            // own; the state of the calling process does not hold them.
+            let (peb, parent, priority) = if peb == 0 && pid != k.caller().process {
+                k.with_process(pid, |_, proc, _| {
+                    (proc.peb, if proc.parent != 0 { proc.parent } else { 4 }, class_base_priority(proc.priority_class))
+                })
+                .unwrap_or((peb, parent, priority))
+            } else {
+                (peb, parent, priority)
+            };
             let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
             b[0..4].copy_from_slice(&exit.0.to_le_bytes());
             b[8..16].copy_from_slice(&peb.to_le_bytes());
