@@ -216,3 +216,36 @@ pub unsafe extern "system" fn QueryThreadCycleTime(thread: Handle, cycles: *mut 
 
 /// `ERROR_NOACCESS` (`winerror.h`).
 const ERROR_NOACCESS: u32 = 998;
+
+/// `ProcessVmCounters` (`ntddk.h`'s `PROCESSINFOCLASS`).
+const PROCESS_VM_COUNTERS: u32 = 3;
+
+/// `K32GetProcessMemoryInfo` (Learn; `GetProcessMemoryInfo` in `psapi.h` maps to it): the
+/// process's working set, its peak and its private usage, from
+/// `NtQueryInformationProcess(ProcessVmCounters)`; `PROCESS_MEMORY_COUNTERS`, `_EX` or `_EX2` as
+/// `cb` asks (`poly_kernelbase::procinfo::process_memory_counters`).
+///
+/// # Safety
+/// `counters` holds `cb` writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn K32GetProcessMemoryInfo(process: Handle, counters: *mut u8, cb: u32) -> i32 {
+    let mut vm = [0u8; 96];
+    // SAFETY: a valid buffer of the size passed.
+    let st = unsafe {
+        nt::NtQueryInformationProcess(process, PROCESS_VM_COUNTERS, vm.as_mut_ptr(), 96, core::ptr::null_mut())
+    };
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    match poly_kernelbase::procinfo::process_memory_counters(&vm, cb, core::mem::size_of::<usize>()) {
+        Ok(b) => {
+            if counters.is_null() {
+                return fail(ERROR_NOACCESS, FALSE);
+            }
+            // SAFETY: `b` is at most `cb` bytes, the caller's structure.
+            unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), counters, b.len()) };
+            TRUE
+        }
+        Err(e) => fail(e, FALSE),
+    }
+}

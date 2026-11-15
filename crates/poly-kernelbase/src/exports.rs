@@ -436,6 +436,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetThreadInformation", "api-ms-win-core-processthreads-l1-1-3"),
     ("GetThreadTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
+    ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our

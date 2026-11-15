@@ -329,6 +329,13 @@ pub trait NtKernel {
         None
     }
 
+    /// Process `pid`'s memory as `NtQueryInformationProcess(ProcessVmCounters)` reports it:
+    /// [`VmCounters`]; `None` when the kernel does not know the process (all zero then).
+    fn memory_counters(&self, pid: poly_ntobj::ProcessId) -> Option<crate::threads::VmCounters> {
+        let _ = pid;
+        None
+    }
+
     /// Thread `thread` of process `pid`: its creation time (a `FILETIME`) and the kernel and
     /// user CPU time it used (100 ns units), for `NtQueryInformationThread(ThreadTimes)`;
     /// `None` when the kernel does not know it (all zero then).

@@ -291,6 +291,9 @@ struct NtState {
     /// reading never goes down, and an ended process keeps at least what was read while it ran
     /// (its last thread's time is only counted once that thread is gone).
     peak: BTreeMap<ProcessId, [u64; 2]>,
+    /// The most pages of its own a live process held when its memory counters were read
+    /// (`PeakPagefileUsage`).
+    private_peak: BTreeMap<ProcessId, u64>,
 }
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
@@ -720,6 +723,7 @@ fn make_state(slot: &mut Option<NtState>) {
         created: BTreeMap::new(),
         finished: BTreeMap::new(),
         peak: BTreeMap::new(),
+        private_peak: BTreeMap::new(),
     };
     // The i686 ntdll every 32-bit process maps (ADR 0186).
     state.sys.ntdll32 = NTDLL32;
@@ -967,6 +971,19 @@ impl NtKernel for Kernel {
             *peak
         });
         Some([created, seen[0], seen[1]])
+    }
+
+    fn memory_counters(&self, pid: ProcessId) -> Option<poly_personality_nt::threads::VmCounters> {
+        let memory = io::memory_of(pid.0)?;
+        let (resident, cached, shared) = memory.page_counts();
+        let private = resident.saturating_sub(cached + shared);
+        let (faults, peak_resident) = crate::process::find(pid.0).map_or((0, 0), |p| p.cpu.memory_counts());
+        let peak_private = with(|s| {
+            let p = s.private_peak.entry(pid).or_insert(0);
+            *p = (*p).max(private);
+            *p
+        });
+        Some(poly_personality_nt::threads::VmCounters { faults, resident, peak_resident, private, peak_private })
     }
 
     fn thread_times(&self, pid: ProcessId, thread: ThreadRef) -> Option<[u64; 3]> {

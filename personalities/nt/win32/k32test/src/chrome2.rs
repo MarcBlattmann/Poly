@@ -99,6 +99,7 @@ unsafe extern "system" {
     fn GetThreadTimes(t: Handle, c: *mut u64, e: *mut u64, k: *mut u64, u: *mut u64) -> i32;
     fn QueryThreadCycleTime(t: Handle, cycles: *mut u64) -> i32;
     fn SetThreadInformation(t: Handle, class: u32, info: *const u8, size: u32) -> i32;
+    fn K32GetProcessMemoryInfo(p: Handle, counters: *mut u8, cb: u32) -> i32;
 }
 
 const GENERIC_READ: u32 = 0x8000_0000;
@@ -235,6 +236,18 @@ unsafe fn suspended_waiter() {
         let mut cycles = 0u64;
         check(QueryThreadCycleTime(GetCurrentThread(), &mut cycles) != 0 && cycles >= k + u);
         check(CloseHandle(t) != 0 && CloseHandle(event) != 0);
+
+        // Memory: PROCESS_MEMORY_COUNTERS (72 bytes) and _EX (80): a working set and a peak
+        // at least as big, and the structure's size in cb; too small a buffer is refused.
+        let mut pmc = [0u8; 96];
+        check(K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), 72) != 0);
+        check(u32_at(&pmc, 0) == 72);
+        let (peak, now) = (u64_at(&pmc, 8), u64_at(&pmc, 16));
+        check(now > 0 && peak >= now);
+        check(K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), 80) != 0);
+        check(u32_at(&pmc, 0) == 80 && u64_at(&pmc, 72) > 0);
+        check(K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), 16) == 0);
+        check_error(122);
     }
 }
 

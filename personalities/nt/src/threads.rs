@@ -395,6 +395,13 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     if class as u32 == PROCESS_TIMES {
         return query_process_times(k, h, buf, length, ret);
     }
+    if class as u32 == PROCESS_VM_COUNTERS {
+        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+        let c = k.memory_counters(pid).unwrap_or_default();
+        // The plain structure, or the extended one when the buffer is big enough for it.
+        let size = if length as usize >= VM_COUNTERS_EX_SIZE { VM_COUNTERS_EX_SIZE } else { VM_COUNTERS_SIZE };
+        return write_info(k, buf, length, ret, &c.bytes()[..size]);
+    }
     if class as u32 == PROCESS_WOW64_INFORMATION {
         let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
         let peb32 = |p: &crate::system::NtProcess| if p.wow64 { p.peb } else { 0 };
@@ -540,6 +547,44 @@ fn query_process_times<K: NtKernel>(k: &mut K, h: u64, buf: u64, length: u64, re
     b[16..24].copy_from_slice(&kernel.to_le_bytes());
     b[24..32].copy_from_slice(&user.to_le_bytes());
     write_info(k, buf, length, ret, &b)
+}
+
+/// A process's memory in pages, what `VM_COUNTERS_EX` (`ntddk.h`) reports in bytes: the page
+/// faults, the pages it maps now (its working set) and the most it mapped at once, and its own
+/// pages (not shared with another process or the page cache: its commit charge and private
+/// usage) now and at most. Poly does not count reserved address space: the virtual sizes are
+/// the working set's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VmCounters {
+    pub faults: u64,
+    pub resident: u64,
+    pub peak_resident: u64,
+    pub private: u64,
+    pub peak_private: u64,
+}
+
+impl VmCounters {
+    /// The `VM_COUNTERS_EX` bytes (x64): `PeakVirtualSize`, `VirtualSize`, `PageFaultCount`
+    /// (a `ULONG`, padded), `PeakWorkingSetSize`, `WorkingSetSize`, the four quota pool sizes
+    /// (0), `PagefileUsage`, `PeakPagefileUsage`, `PrivateUsage`.
+    pub fn bytes(&self) -> [u8; VM_COUNTERS_EX_SIZE] {
+        const PAGE: u64 = 4096;
+        let peak_resident = self.peak_resident.max(self.resident) * PAGE;
+        let resident = self.resident * PAGE;
+        let private = self.private * PAGE;
+        let peak_private = self.peak_private.max(self.private) * PAGE;
+        let mut b = [0u8; VM_COUNTERS_EX_SIZE];
+        let mut put = |at: usize, v: u64| b[at..at + 8].copy_from_slice(&v.to_le_bytes());
+        put(0, peak_resident);
+        put(8, resident);
+        put(24, peak_resident);
+        put(32, resident);
+        put(72, private);
+        put(80, peak_private);
+        put(88, private);
+        b[16..20].copy_from_slice(&(self.faults.min(u64::from(u32::MAX)) as u32).to_le_bytes());
+        b
+    }
 }
 
 /// `NtQueryInformationThread(ThreadTimes)` (Learn, `GetThreadTimes`: the handle needs

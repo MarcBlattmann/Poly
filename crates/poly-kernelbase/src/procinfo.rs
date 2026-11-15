@@ -239,6 +239,43 @@ pub fn mapped_name_copy(name: &[u16], size: u32) -> (usize, bool, u32, Option<u3
     }
 }
 
+// ----- K32GetProcessMemoryInfo --------------------------------------------------------------
+
+/// `K32GetProcessMemoryInfo(process, ppsmemCounters, cb)` (Learn, `psapi.h`): the structure
+/// `cb` asks for, from `VM_COUNTERS_EX` (`vm`, the 96 bytes of
+/// `NtQueryInformationProcess(ProcessVmCounters)`), for a process whose `SIZE_T` is `word`
+/// bytes (8, or 4 in a 32-bit process). `PROCESS_MEMORY_COUNTERS` is `cb` and `PageFaultCount`
+/// (two `DWORD`s) and eight `SIZE_T`s: peak and current working set, the four quota pool sizes,
+/// pagefile usage and its peak (72 bytes on x64, 40 in 32 bits); `_EX` adds `PrivateUsage`
+/// (80/44); `_EX2` adds `PrivateWorkingSetSize` and `SharedCommitUsage` (96/52). A smaller
+/// `cb` is `ERROR_INSUFFICIENT_BUFFER`; a bigger one gets the biggest form, `cb` naming it.
+pub fn process_memory_counters(vm: &[u8], cb: u32, word: usize) -> Result<Vec<u8>, u32> {
+    use crate::error::ERROR_INSUFFICIENT_BUFFER;
+    let q = |at: usize| vm.get(at..at + 8).map_or(0, |b| u64::from_le_bytes(b.try_into().unwrap_or([0; 8])));
+    let base = 8 + 8 * word;
+    let size = match cb as usize {
+        n if n < base => return Err(ERROR_INSUFFICIENT_BUFFER),
+        n if n < base + word => base,
+        n if n < base + 3 * word => base + word,
+        _ => base + 3 * word,
+    };
+    let faults = vm.get(16..20).map_or(0, |b| u32::from_le_bytes(b.try_into().unwrap_or([0; 4])));
+    // PeakWorkingSetSize .. PeakPagefileUsage, then PrivateUsage, PrivateWorkingSetSize
+    // (its own pages: the private usage, all resident on Poly), SharedCommitUsage (none).
+    let values = [q(24), q(32), q(40), q(48), q(56), q(64), q(72), q(80), q(88), q(88), 0];
+    let mut out = Vec::with_capacity(size);
+    out.extend_from_slice(&(size as u32).to_le_bytes());
+    out.extend_from_slice(&faults.to_le_bytes());
+    for v in values {
+        if out.len() >= size {
+            break;
+        }
+        let bytes = v.to_le_bytes();
+        out.extend_from_slice(&bytes[..word]);
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -360,5 +397,35 @@ mod tests {
         assert_eq!(mapped_name_copy(&name, n as u32), (n - 1, true, n as u32, Some(122)));
         assert_eq!(mapped_name_copy(&name, 10), (9, true, 10, Some(122)));
         assert_eq!(mapped_name_copy(&name, 0), (0, false, 0, Some(122)));
+    }
+
+    #[test]
+    fn process_memory_counters_forms() {
+        let mut vm = [0u8; 96];
+        let mut put = |at: usize, v: u64| vm[at..at + 8].copy_from_slice(&v.to_le_bytes());
+        put(24, 0x30_0000);
+        put(32, 0x20_0000);
+        put(72, 0x10_0000);
+        put(80, 0x18_0000);
+        put(88, 0x10_0000);
+        vm[16..20].copy_from_slice(&77u32.to_le_bytes());
+        assert_eq!(process_memory_counters(&vm, 71, 8), Err(122));
+        let pmc = process_memory_counters(&vm, 72, 8).unwrap();
+        assert_eq!(pmc.len(), 72);
+        assert_eq!(&pmc[0..8], &[72, 0, 0, 0, 77, 0, 0, 0]);
+        assert_eq!(u64::from_le_bytes(pmc[8..16].try_into().unwrap()), 0x30_0000);
+        assert_eq!(u64::from_le_bytes(pmc[16..24].try_into().unwrap()), 0x20_0000);
+        assert_eq!(u64::from_le_bytes(pmc[56..64].try_into().unwrap()), 0x10_0000);
+        assert_eq!(u64::from_le_bytes(pmc[64..72].try_into().unwrap()), 0x18_0000);
+        let ex = process_memory_counters(&vm, 80, 8).unwrap();
+        assert_eq!((ex.len(), ex[0]), (80, 80));
+        assert_eq!(u64::from_le_bytes(ex[72..80].try_into().unwrap()), 0x10_0000);
+        let ex2 = process_memory_counters(&vm, 200, 8).unwrap();
+        assert_eq!((ex2.len(), ex2[0]), (96, 96));
+        // 32 bits: 40, 44, 52 bytes.
+        assert_eq!(process_memory_counters(&vm, 40, 4).unwrap().len(), 40);
+        assert_eq!(process_memory_counters(&vm, 44, 4).unwrap().len(), 44);
+        assert_eq!(process_memory_counters(&vm, 52, 4).unwrap().len(), 52);
+        assert_eq!(process_memory_counters(&vm, 39, 4), Err(122));
     }
 }
