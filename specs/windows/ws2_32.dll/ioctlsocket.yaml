@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/ioctlsocket.yaml
+id: windows/api/ws2_32.dll/ioctlsocket
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER", "Defining I/O Control Codes"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  ioctlsocket(s, FIONBIO, &1) is the first thing Chrome does to every TCP socket (8 to 39 calls per run, result 0). Observed: FIONBIO takes any nonzero value as on (7 works); a non-blocking recv with nothing there is -1/WSAEWOULDBLOCK (also with MSG_PEEK), a blocking recv with SO_RCVTIMEO 200 returns -1/WSAETIMEDOUT (10060) after the time; after WSAEventSelect the socket is non-blocking and ioctlsocket(FIONBIO, 0) fails with WSAEINVAL (10022) and the socket stays non-blocking; after WSAEventSelect(s, NULL, 0) clears the selection FIONBIO 0 works. FIONREAD gives the bytes waiting (5 after 5 bytes arrived, 3 after reading 2, still 3 after a MSG_PEEK; for UDP it is the total of all queued datagrams, 13 for datagrams of 10 and 3 bytes) and returns 0 for a listener; SIOCATMARK returns 0 with the value 1 (no out-of-band data). Refusals: non-socket WSAENOTSOCK, NULL argument WSAEFAULT, unknown command WSAEOPNOTSUPP (10045).
+interface:
+  signature: "int ioctlsocket(SOCKET s, long cmd, u_long *argp)"
+  result: "0 or SOCKET_ERROR"
+chrome:
+  calls: "ioctlsocket (#10) 6 to 39 calls per run: (s, 0x8004667E (FIONBIO), &1) -> 0, right after WSASocketW and the V6ONLY option"
+rules:
+  fionbio: "FIONBIO 1 -> 0; FIONBIO 7 -> 0 and recv is WSAEWOULDBLOCK; FIONBIO 0 -> 0 (blocking again)"
+  nonblocking_recv: "connected socket, nothing waiting: recv -1/WSAEWOULDBLOCK and recv(MSG_PEEK) -1/WSAEWOULDBLOCK; blocking with SO_RCVTIMEO 200: -1/WSAETIMEDOUT"
+  event_select: "WSAEventSelect(s, ev, FD_READ) -> 0 makes recv non-blocking; FIONBIO 0 then fails with WSAEINVAL and recv is still WSAEWOULDBLOCK; WSAEventSelect(s, NULL, 0) -> 0 and then FIONBIO 0 -> 0 and recv waits (WSAETIMEDOUT with the timeout)"
+  fionread: "nothing: 0 bytes; after the peer sent 5 bytes: 5; after recv of 2: 3; after a MSG_PEEK of 3: 3; UDP with datagrams of 10 and 3 bytes queued: 13 (the total queued); a listener: returns 0"
+  atmark: "SIOCATMARK (0x40047307): returns 0 and the value 1"
+  refusals: "not a socket: -1/WSAENOTSOCK; NULL argument: -1/WSAEFAULT; unknown command 0x12345678: -1/WSAEOPNOTSUPP"
+errors:
+  socket: "WSAENOTSOCK 10038"
+  pointer: "WSAEFAULT 10014"
+  command: "WSAEOPNOTSUPP 10045"
+  event_select_active: "WSAEINVAL 10022"
+side_effects: "FIONBIO changes the socket's blocking mode"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  FIOASYNC, SIOCATMARK with real out-of-band data, FIONREAD for SOCK_STREAM sockets in other states.

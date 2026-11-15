@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "lb_bitmap",
+      "exe_sha256": "7c07e3b82d0fcdc60631c3a4fb566f47adf2e32ecfc2157fce5386cb8f6fc340",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TG9hZEJpdG1hcFcoNDAwKTogR2V0T2JqZWN0IDMyIHdpZHRoIDQgaGVpZ2h0IDMgcGxhbmVzIDEgYml0cyAzMiB3aWR0aF9ieXRlcyAxNiBoYXMgYml0cyBwb2ludGVyIDAKTG9hZEJpdG1hcFcoNDAwKTogcGl4ZWxzIChyLGcsYikgKDAsMCk9I2ZmMDAwMCAoMSwwKT0jMDAwMGZmICgwLDEpPSMwMDAwZmYgKDMsMik9IzAwMDBmZiAoMiwyKT0jZmYwMDAwCkRlbGV0ZU9iamVjdCAxCkxvYWRCaXRtYXBXKCdOQU1FREJNUCcpOiBHZXRPYmplY3QgMzIgd2lkdGggOCBoZWlnaHQgMiBwbGFuZXMgMSBiaXRzIDMyIHdpZHRoX2J5dGVzIDMyIGhhcyBiaXRzIHBvaW50ZXIgMApMb2FkQml0bWFwVygnTkFNRURCTVAnKTogcGl4ZWxzIChyLGcsYikgKDAsMCk9IzAwZmYwMCAoNywxKT0jMDBmZjAwCkxvYWRCaXRtYXBXKCduYW1lZGJtcCcpOiB3aW5kb3cKdHdvIGxvYWRzIGFyZSB0d28gaGFuZGxlczogMQpMb2FkSW1hZ2VXIGJpdG1hcCwgbm8gZmxhZ3M6IEdldE9iamVjdCAzMiB3aWR0aCA0IGhlaWdodCAzIHBsYW5lcyAxIGJpdHMgMzIgd2lkdGhfYnl0ZXMgMTYgaGFzIGJpdHMgcG9pbnRlciAwCkxvYWRJbWFnZVcgYml0bWFwLCBMUl9DUkVBVEVESUJTRUNUSU9OOiBHZXRPYmplY3QgMzIgd2lkdGggNCBoZWlnaHQgMyBwbGFuZXMgMSBiaXRzIDI0IHdpZHRoX2J5dGVzIDEyIGhhcyBiaXRzIHBvaW50ZXIgMQogIERJQiBzZWN0aW9uOiBwaXhlbHMgKHIsZyxiKSAoMCwwKT0jZmYwMDAwICgxLDApPSMwMDAwZmYKTG9hZEltYWdlVyBiaXRtYXAgc3RyZXRjaGVkIHRvIDh4NjogR2V0T2JqZWN0IDMyIHdpZHRoIDggaGVpZ2h0IDYgcGxhbmVzIDEgYml0cyAzMiB3aWR0aF9ieXRlcyAzMiBoYXMgYml0cyBwb2ludGVyIDAKTG9hZEltYWdlVyBiaXRtYXAsIExSX01PTk9DSFJPTUU6IEdldE9iamVjdCAzMiB3aWR0aCA0IGhlaWdodCAzIHBsYW5lcyAxIGJpdHMgMSB3aWR0aF9ieXRlcyAyIGhhcyBiaXRzIHBvaW50ZXIgMAphYnNlbnQgbnVtYmVyOiAxIGVycj0xODE0CmFic2VudCBuYW1lOiAxIGVycj0xODE0CmFuIGljb24gcmVzb3VyY2UgbnVtYmVyOiAxIGVycj0xODE0Cm1hZGUtdXAgbW9kdWxlOiAxIGVycj0xODEyCk5VTEwgbW9kdWxlICh0aGUgZXhlY3V0YWJsZSk6IDEgZXJyPTE4MTQKTG9hZEltYWdlVyBhYnNlbnQ6IDEgZXJyPTE4MTQKTG9hZEltYWdlVyB1bmtub3duIHR5cGUgNzogMSBlcnI9LTEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LoadBitmapW(400): GetObject 32 width 4 height 3 planes 1 bits 32 width_bytes 16 has bits pointer 0\nLoadBitmapW(400): pixels (r,g,b) (0,0)=#ff0000 (1,0)=#0000ff (0,1)=#0000ff (3,2)=#0000ff (2,2)=#ff0000\nDeleteObject 1\nLoadBitmapW('NAMEDBMP'): GetObject 32 width 8 height 2 planes 1 bits 32 width_bytes 32 has bits pointer 0\nLoadBitmapW('NAMEDBMP'): pixels (r,g,b) (0,0)=#00ff00 (7,1)=#00ff00\nLoadBitmapW('namedbmp'): window\ntwo loads are two handles: 1\nLoadImageW bitmap, no flags: GetObject 32 width 4 height 3 planes 1 bits 32 width_bytes 16 has bits pointer 0\nLoadImageW bitmap, LR_CREATEDIBSECTION: GetObject 32 width 4 height 3 planes 1 bits 24 width_bytes 12 has bits pointer 1\n  DIB section: pixels (r,g,b) (0,0)=#ff0000 (1,0)=#0000ff\nLoadImageW bitmap stretched to 8x6: GetObject 32 width 8 height 6 planes 1 bits 32 width_bytes 32 has bits pointer 0\nLoadImageW bitmap, LR_MONOCHROME: GetObject 32 width 4 height 3 planes 1 bits 1 width_bytes 2 has bits pointer 0\nabsent number: 1 err=1814\nabsent name: 1 err=1814\nan icon resource number: 1 err=1814\nmade-up module: 1 err=1812\nNULL module (the executable): 1 err=1814\nLoadImageW absent: 1 err=1814\nLoadImageW unknown type 7: 1 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

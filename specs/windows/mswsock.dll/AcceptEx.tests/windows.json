@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "acceptex_basic_b",
+      "exe_sha256": "ca26241a192608a64afb9208bac6a982277dd94aa82f47343ec5d7b3967360c5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xpZW50IGNvbm5lY3QgMApXU0FHZXRPdmVybGFwcGVkUmVzdWx0IFRSVUUgYnl0ZXMgNSBmbGFncyAwCmxvY2FsIGZhbWlseSAyIHBvcnQtaXMtbGlzdGVuZXIgMSBhZGRyIFsxMjcsIDAsIDAsIDFdCmdldHNvY2tuYW1lIGJlZm9yZSB0aGUgdXBkYXRlIC0xL1dTQUVJTlZBTApkYXRhIGJvdGggd2F5cyA0CnJlc3VsdCBUUlVFIGJ5dGVzIDAKbm90IGEgc29ja2V0IGFzIHRoZSBhY2NlcHQgc29ja2V0IC0xL1dTQUVOT1RTT0NLCkFjY2VwdEV4IC0xL1dTQV9JT19QRU5ESU5HCmNsb3NpbmcgdGhlIGxpc3RlbmVyOiBGQUxTRSBlcnIgOTk1IGJ5dGVzIDAga2V5IDIxIG92LW1hdGNoZXMgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "client connect 0\nWSAGetOverlappedResult TRUE bytes 5 flags 0\nlocal family 2 port-is-listener 1 addr [127, 0, 0, 1]\ngetsockname before the update -1/WSAEINVAL\ndata both ways 4\nresult TRUE bytes 0\nnot a socket as the accept socket -1/WSAENOTSOCK\nAcceptEx -1/WSA_IO_PENDING\nclosing the listener: FALSE err 995 bytes 0 key 21 ov-matches 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 361
+    },
+    {
+      "name": "acceptex_connectex",
+      "exe_sha256": "cc90f328e30cf8e0669d5cf3c1134ab00dc1cf7e9ee4f3773c6e3987f1bc93ce",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z290IGEgQ29ubmVjdEV4IHBvaW50ZXIKQ29ubmVjdEV4IG9uIGEgYm91bmQgc29ja2V0IC0xL1dTQV9JT19QRU5ESU5HCmdldHBlZXJuYW1lIGJlZm9yZSBTT19VUERBVEVfQ09OTkVDVF9DT05URVhUIC0xL1dTQUVOT1RDT05OCmFjY2VwdGVkIDEKV1NBR2V0T3ZlcmxhcHBlZFJlc3VsdCBUUlVFIGJ5dGVzIDcKY29tcGxldGVkIDEKQ29ubmVjdEV4IG9uIGEgVURQIHNvY2tldCAtMS9XU0FFSU5WQUwKZXh0ZW5zaW9uIHBvaW50ZXIgZm9yIEFjY2VwdEV4IDAgYnl0ZXMgOCBub256ZXJvIDEKdGhlIHNhbWUgb24gYSBVRFAgc29ja2V0IDAgYnl0ZXMgOApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "got a ConnectEx pointer\nConnectEx on a bound socket -1/WSA_IO_PENDING\ngetpeername before SO_UPDATE_CONNECT_CONTEXT -1/WSAENOTCONN\naccepted 1\nWSAGetOverlappedResult TRUE bytes 7\ncompleted 1\nConnectEx on a UDP socket -1/WSAEINVAL\nextension pointer for AcceptEx 0 bytes 8 nonzero 1\nthe same on a UDP socket 0 bytes 8\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2078
+    },
+    {
+      "name": "acceptex_connectex_b",
+      "exe_sha256": "9d45b497658551b7f109bdfebb6785e9f448a8a4127db7f7352906e785ceeeb2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29ubmVjdEV4IG9uIGFuIHVuYm91bmQgc29ja2V0IC0xL1dTQUVJTlZBTApjb21wbGV0ZWQgMQpTT19VUERBVEVfQ09OTkVDVF9DT05URVhUIDAKQ29ubmVjdEV4IHdpdGggNyBieXRlcyBvZiBkYXRhIC0xL1dTQV9JT19QRU5ESU5HIHNlbnQgKGJlZm9yZSBjb21wbGV0aW9uKSAwCnRoZSBwZWVyIGhhcyB0aGUgZGF0YSAoMCwgNykKV1NBR2V0T3ZlcmxhcHBlZFJlc3VsdCBGQUxTRS9XU0FFQ09OTlJFRlVTRUQgSW50ZXJuYWwgMHhjMDAwMDIzNgpDb25uZWN0RXggd2l0aCBuYW1lIGxlbmd0aCA0IC0xL1dTQUVBRERSTk9UQVZBSUwKZXh0ZW5zaW9uIHBvaW50ZXIgZm9yIEdldEFjY2VwdEV4U29ja2FkZHJzIDAKd2l0aCBhIDQtYnl0ZSBvdXRwdXQgYnVmZmVyIC0xL1dTQUVGQVVMVApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ConnectEx on an unbound socket -1/WSAEINVAL\ncompleted 1\nSO_UPDATE_CONNECT_CONTEXT 0\nConnectEx with 7 bytes of data -1/WSA_IO_PENDING sent (before completion) 0\nthe peer has the data (0, 7)\nWSAGetOverlappedResult FALSE/WSAECONNREFUSED Internal 0xc0000236\nConnectEx with name length 4 -1/WSAEADDRNOTAVAIL\nextension pointer for GetAcceptExSockaddrs 0\nwith a 4-byte output buffer -1/WSAEFAULT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2086
+    },
+    {
+      "name": "acceptex_connectex_c",
+      "exe_sha256": "120d2f802ec0acbd0d4ee0dfe5fa7e8de6d051f42d2d7234bcc197e64047ea5f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmluZCAwLjAuMC4wOjAgMApXU0FHZXRPdmVybGFwcGVkUmVzdWx0IFRSVUUgYnl0ZXMgMApnZXRwZWVybmFtZSBhZnRlciAwIHBlZXItcG9ydC1pcy1saXN0ZW5lciAxCmNvbXBsZXRlZCAxCkNvbm5lY3RFeCB0byBhIGNsb3NlZCBwb3J0IC0xL1dTQV9JT19QRU5ESU5HCkNvbm5lY3RFeCBvbiBhIGNvbm5lY3RlZCBzb2NrZXQgLTEvV1NBRUlTQ09OTgpleHRlbnNpb24gcG9pbnRlciBmb3IgYW4gdW5rbm93biBHVUlEIC0xL1dTQUVJTlZBTCBwb2ludGVyIDAKZXh0ZW5zaW9uIHBvaW50ZXIgZm9yIFdTQVJlY3ZNc2cgKENocm9tZSBhc2tzIGZvciBpdCkgb24gYSBUQ1Agc29ja2V0IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bind 0.0.0.0:0 0\nWSAGetOverlappedResult TRUE bytes 0\ngetpeername after 0 peer-port-is-listener 1\ncompleted 1\nConnectEx to a closed port -1/WSA_IO_PENDING\nConnectEx on a connected socket -1/WSAEISCONN\nextension pointer for an unknown GUID -1/WSAEINVAL pointer 0\nextension pointer for WSARecvMsg (Chrome asks for it) on a TCP socket 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2076
+    }
+  ]
+}

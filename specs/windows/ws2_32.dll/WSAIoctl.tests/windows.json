@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsaioctl_extfn",
+      "exe_sha256": "9e7d1c77cb9694f7ac09c0a6a9f06d15bbade3f51ab5ed2554a7007321484058",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBUmVjdk1zZyBvbiBhIFRDUCBzb2NrZXQ6IDAgcG9pbnRlciBub24tbnVsbCAxIHNlY29uZCB3b3JkIHVudG91Y2hlZCAxIGJ5dGVzIHJldHVybmVkIDgKV1NBU2VuZE1zZyBvbiBhIFVEUCBzb2NrZXQ6IDAgcG9pbnRlciBub24tbnVsbCAxIHNlY29uZCB3b3JkIHVudG91Y2hlZCAxIGJ5dGVzIHJldHVybmVkIDgKQWNjZXB0RXggb24gYSBUQ1Agc29ja2V0OiAwIHBvaW50ZXIgbm9uLW51bGwgMSBzZWNvbmQgd29yZCB1bnRvdWNoZWQgMSBieXRlcyByZXR1cm5lZCA4CkdldEFjY2VwdEV4U29ja2FkZHJzIG9uIGEgVURQIHNvY2tldDogMCBwb2ludGVyIG5vbi1udWxsIDEgc2Vjb25kIHdvcmQgdW50b3VjaGVkIDEgYnl0ZXMgcmV0dXJuZWQgOApEaXNjb25uZWN0RXggb24gYSBUQ1Agc29ja2V0OiAwIHBvaW50ZXIgbm9uLW51bGwgMSBzZWNvbmQgd29yZCB1bnRvdWNoZWQgMSBieXRlcyByZXR1cm5lZCA4CmFuIHVua25vd24gR1VJRCBvbiBhIFVEUCBzb2NrZXQ6IC0xL1dTQUVJTlZBTCBvdXRwdXQgdW50b3VjaGVkIDEgYnl0ZXMtcmV0dXJuZWQgdW50b3VjaGVkIDEKV1NBUmVjdk1zZyAoc2Vjb25kIFRDUCBzb2NrZXQpOiAwIHBvaW50ZXIgbm9uLW51bGwgMSBzZWNvbmQgd29yZCB1bnRvdWNoZWQgMSBieXRlcyByZXR1cm5lZCA4CkNvbm5lY3RFeCAoVENQKTogMCBwb2ludGVyIG5vbi1udWxsIDEgc2Vjb25kIHdvcmQgdW50b3VjaGVkIDEgYnl0ZXMgcmV0dXJuZWQgOAppbnB1dCBsZW5ndGggMTU6IC0xL1dTQUVGQVVMVCBvdXRwdXQgdW50b3VjaGVkIDEgYnl0ZXMtcmV0dXJuZWQgdW50b3VjaGVkIDEKb3V0cHV0IGxlbmd0aCA0OiAtMS9XU0FFRkFVTFQgb3V0cHV0IHVudG91Y2hlZCAxIGJ5dGVzLXJldHVybmVkIHVudG91Y2hlZCAxCm91dHB1dCBsZW5ndGggMDogLTEvV1NBRUZBVUxUIG91dHB1dCB1bnRvdWNoZWQgMSBieXRlcy1yZXR1cm5lZCB1bnRvdWNoZWQgMQpub3QgYSBzb2NrZXQgLTEvV1NBRU5PVFNPQ0sKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSARecvMsg on a TCP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nWSASendMsg on a UDP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nAcceptEx on a TCP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nGetAcceptExSockaddrs on a UDP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nDisconnectEx on a TCP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nan unknown GUID on a UDP socket: -1/WSAEINVAL output untouched 1 bytes-returned untouched 1\nWSARecvMsg (second TCP socket): 0 pointer non-null 1 second word untouched 1 bytes returned 8\nConnectEx (TCP): 0 pointer non-null 1 second word untouched 1 bytes returned 8\ninput length 15: -1/WSAEFAULT output untouched 1 bytes-returned untouched 1\noutput length 4: -1/WSAEFAULT output untouched 1 bytes-returned untouched 1\noutput length 0: -1/WSAEFAULT output untouched 1 bytes-returned untouched 1\nnot a socket -1/WSAENOTSOCK\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "wsaioctl_extfn_c",
+      "exe_sha256": "6a5df90f9adad40e335fadbb4008eb8daa3032e91e4077f36d5a108abe928ded",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBU2VuZE1zZyBvbiBhIFRDUCBzb2NrZXQ6IDAgcG9pbnRlciBub24tbnVsbCAxIHNlY29uZCB3b3JkIHVudG91Y2hlZCAxIGJ5dGVzIHJldHVybmVkIDgKQ29ubmVjdEV4IG9uIGEgVURQIHNvY2tldDogMCBwb2ludGVyIG5vbi1udWxsIDEgc2Vjb25kIHdvcmQgdW50b3VjaGVkIDEgYnl0ZXMgcmV0dXJuZWQgOApHZXRBY2NlcHRFeFNvY2thZGRycyBvbiBhIFRDUCBzb2NrZXQ6IDAgcG9pbnRlciBub24tbnVsbCAxIHNlY29uZCB3b3JkIHVudG91Y2hlZCAxIGJ5dGVzIHJldHVybmVkIDgKVHJhbnNtaXRGaWxlIG9uIGEgVURQIHNvY2tldDogMCBwb2ludGVyIG5vbi1udWxsIDEgc2Vjb25kIHdvcmQgdW50b3VjaGVkIDEgYnl0ZXMgcmV0dXJuZWQgOAphbiB1bmtub3duIEdVSUQgb24gYSBUQ1Agc29ja2V0OiAtMS9XU0FFSU5WQUwgb3V0cHV0IHVudG91Y2hlZCAxIGJ5dGVzLXJldHVybmVkIHVudG91Y2hlZCAxCldTQVJlY3ZNc2cgYWdhaW4gKFRDUCk6IDAgcG9pbnRlciBub24tbnVsbCAxIHNlY29uZCB3b3JkIHVudG91Y2hlZCAxIGJ5dGVzIHJldHVybmVkIDgKc2FtZSBwb2ludGVyIGZyb20gdHdvIFRDUCBzb2NrZXRzIDEgZnJvbSBUQ1AgYW5kIFVEUCAxCnNhbWUgQ29ubmVjdEV4IHBvaW50ZXIgMQppbnB1dCBsZW5ndGggMDogLTEvV1NBRUZBVUxUIG91dHB1dCB1bnRvdWNoZWQgMSBieXRlcy1yZXR1cm5lZCB1bnRvdWNoZWQgMQpvdXRwdXQgbGVuZ3RoIDE2OiAwIHBvaW50ZXIgbm9uLW51bGwgMSBzZWNvbmQgd29yZCB1bnRvdWNoZWQgMSBieXRlcyByZXR1cm5lZCA4Ck5VTEwgYnl0ZXMtcmV0dXJuZWQgcG9pbnRlciAtMS9XU0FFRkFVTFQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSASendMsg on a TCP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nConnectEx on a UDP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nGetAcceptExSockaddrs on a TCP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nTransmitFile on a UDP socket: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nan unknown GUID on a TCP socket: -1/WSAEINVAL output untouched 1 bytes-returned untouched 1\nWSARecvMsg again (TCP): 0 pointer non-null 1 second word untouched 1 bytes returned 8\nsame pointer from two TCP sockets 1 from TCP and UDP 1\nsame ConnectEx pointer 1\ninput length 0: -1/WSAEFAULT output untouched 1 bytes-returned untouched 1\noutput length 16: 0 pointer non-null 1 second word untouched 1 bytes returned 8\nNULL bytes-returned pointer -1/WSAEFAULT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "wsaioctl_keepalive_b",
+      "exe_sha256": "2c7a3b4e48fc5f26e0e1d97e8ceb367c56a8570ef0a17fdf7e702a8e8e293b70",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBieXRlcyByZXR1cm5lZCAwCiAgU09fS0VFUEFMSVZFIHJlYWRzIDAKezUsNDUwMDAsNDUwMDB9IChvbm9mZiA1KTogMAppbnB1dCBsZW5ndGggMTY6IDAKTlVMTCBieXRlcy1yZXR1cm5lZCBwb2ludGVyOiAtMS9XU0FFRkFVTFQKb24gdGhlIGFjY2VwdGVkIHNvY2tldDogMApub3QgYSBzb2NrZXQ6IC0xL1dTQUVOT1RTT0NLClVEUCBTSU9fVURQX0NPTk5SRVNFVCBGQUxTRTogMApVRFAgU0lPX1VEUF9DT05OUkVTRVQsIGlucHV0IGxlbmd0aCAxOiAwClVEUCBTSU9fVURQX05FVFJFU0VUIEZBTFNFOiAwClNJT19CQVNFX0hBTkRMRTogMApTSU9fQkFTRV9IQU5ETEUgd2l0aCBhIE5VTEwgb3V0cHV0OiAtMS9XU0FFRkFVTFQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  bytes returned 0\n  SO_KEEPALIVE reads 0\n{5,45000,45000} (onoff 5): 0\ninput length 16: 0\nNULL bytes-returned pointer: -1/WSAEFAULT\non the accepted socket: 0\nnot a socket: -1/WSAENOTSOCK\nUDP SIO_UDP_CONNRESET FALSE: 0\nUDP SIO_UDP_CONNRESET, input length 1: 0\nUDP SIO_UDP_NETRESET FALSE: 0\nSIO_BASE_HANDLE: 0\nSIO_BASE_HANDLE with a NULL output: -1/WSAEFAULT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "wsaioctl_keepalive_c",
+      "exe_sha256": "10ffa45326a5300cb9540f45de50faaa5f2726e16f05761a7e34ce262bf86ea2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBTT19LRUVQQUxJVkUgcmVhZHMgMQp7MSwwLDB9OiAwCiAgU09fS0VFUEFMSVZFIHJlYWRzIDAKaW5wdXQgbGVuZ3RoIDA6IC0xL1dTQUVGQVVMVAp3aXRoIGEgMTYtYnl0ZSBvdXRwdXQgYnVmZmVyOiAwCm9uIHRoZSBsaXN0ZW5lcjogMApvbiBhIHNvY2tldCB0aGF0IGlzIG5vdCBjb25uZWN0ZWQ6IDAKICBieXRlcyByZXR1cm5lZCAwClVEUCBTSU9fVURQX0NPTk5SRVNFVCwgaW5wdXQgbGVuZ3RoIDA6IC0xL1dTQUVGQVVMVApTSU9fQkFTRV9IQU5ETEUgd2l0aCBhbiA4LWJ5dGUgb3V0cHV0OiAwCiAgYnl0ZXMgcmV0dXJuZWQgOCB0aGUgYmFzZSBoYW5kbGUgaXMgdGhlIHNvY2tldCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  SO_KEEPALIVE reads 1\n{1,0,0}: 0\n  SO_KEEPALIVE reads 0\ninput length 0: -1/WSAEFAULT\nwith a 16-byte output buffer: 0\non the listener: 0\non a socket that is not connected: 0\n  bytes returned 0\nUDP SIO_UDP_CONNRESET, input length 0: -1/WSAEFAULT\nSIO_BASE_HANDLE with an 8-byte output: 0\n  bytes returned 8 the base handle is the socket 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

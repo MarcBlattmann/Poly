@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "dhcpcapiinitialize_basic",
+      "exe_sha256": "c051036355b273fe8594b61bf1f2664dba32474272f97516ad462aeb91feb78e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGhjcFJlcXVlc3RQYXJhbXMgYmVmb3JlIERoY3BDQXBpSW5pdGlhbGl6ZTogODcKRGhjcFJlcXVlc3RQYXJhbXMgc3luY2hyb25vdXMsIGEgbmFtZSBubyBhZGFwdGVyIGhhcywgZW1wdHkgYXJyYXlzOiA4NyBzaXplIDEwMjQKRGhjcFJlcXVlc3RQYXJhbXMgc3luY2hyb25vdXMsIG9wdGlvbiAyNTIgcmVxdWVzdGVkLCBubyBzdWNoIGFkYXB0ZXI6IDEyMyBzaXplIDEwMjQKRGhjcENBcGlDbGVhbnVwIHJldHVybmVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DhcpRequestParams before DhcpCApiInitialize: 87\nDhcpRequestParams synchronous, a name no adapter has, empty arrays: 87 size 1024\nDhcpRequestParams synchronous, option 252 requested, no such adapter: 123 size 1024\nDhcpCApiCleanup returned\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "dhcpcapiinitialize_basic_b",
+      "exe_sha256": "d47da6650523daabc2c29f5de2f2c0617b299858063f2aedc42a151e3d9cbae3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGhjcENBcGlJbml0aWFsaXplOiAwIHZlcnNpb24gMHgyCkRoY3BSZXF1ZXN0UGFyYW1zIHN5bmNocm9ub3VzLCBhIEdVSUQtc2hhcGVkIG5hbWUgbm8gYWRhcHRlciBoYXMsIGVtcHR5IGFycmF5czogODcgc2l6ZSAxMDI0CkRoY3BSZXF1ZXN0UGFyYW1zIHN5bmNocm9ub3VzLCBOVUxMIGFkYXB0ZXIgbmFtZTogODcKRGhjcFJlcXVlc3RQYXJhbXMgYWZ0ZXIgRGhjcENBcGlDbGVhbnVwOiA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DhcpCApiInitialize: 0 version 0x2\nDhcpRequestParams synchronous, a GUID-shaped name no adapter has, empty arrays: 87 size 1024\nDhcpRequestParams synchronous, NULL adapter name: 87\nDhcpRequestParams after DhcpCApiCleanup: 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

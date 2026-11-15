@@ -105,6 +105,7 @@ return ((status >> 8) & 0xff) == 3 ? 0 : 1;
     // possible, so run the same binary through a wrapper argument.
     let hang = base.join("hang.sh");
     util::write(&hang, format!("#!/bin/sh\nexec {} hang\n", bin.join("leaves_group").display())).unwrap();
+    #[cfg(unix)]
     std::fs::set_permissions(&hang, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     let start = std::time::Instant::now();
     let t = ptrace::trace(&hang, "hang", Duration::from_secs(2)).unwrap();

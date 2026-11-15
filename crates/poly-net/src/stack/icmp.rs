@@ -237,7 +237,7 @@ impl Stack {
                 && s.local.is_some_and(|l| l.port() == ident)
                 && s.remote.is_none_or(|r| r.ip() == from.ip())
             {
-                s.deliver(from, msg);
+                s.deliver(from, msg, RxMeta::default());
                 return;
             }
         }

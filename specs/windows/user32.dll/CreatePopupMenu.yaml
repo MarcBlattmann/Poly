@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/CreatePopupMenu.yaml
+id: windows/api/user32.dll/CreatePopupMenu
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Creates an empty popup menu (a drop-down, shortcut or sub menu). Like CreateMenu it returns a new handle valid until DestroyMenu or until the menu it belongs to is destroyed; the difference from CreateMenu is that SetMenu refuses a popup menu as a window's bar (error 87).
+interface:
+  signature: "HMENU CreatePopupMenu(void)"
+rules:
+  new_menu: "a non-NULL handle, IsMenu 1, GetMenuItemCount 0, a different handle each call; twenty in a row are all distinct and valid"
+  menu_info: "GetMenuInfo with the mask MIM_MAXHEIGHT | MIM_HELPID | MIM_MENUDATA | MIM_STYLE: succeeds with style 0, height 0, help id 0, data 0. SetMenuInfo writes what the mask names and GetMenuInfo reads it back (style, height 77, help id 1234, data); a mask of MIM_STYLE alone changes only the style; MIM_APPLYTOSUBMENUS (0x80000000) applies to the popups inside as well"
+  menu_info_cbsize: "SetMenuInfo accepts cbSize 40 (the structure's size) only: 0, 28 and 44 fail with error 87; a NULL or bad handle: 87 for SetMenuInfo, 1401 for GetMenuInfo"
+  attached: "a popup appended with MF_POPUP to a menu is destroyed with it (twenty popups, five of them attached to a bar: after DestroyMenu(bar) exactly those five are gone)"
+  not_a_bar: "SetMenu(window, popup) is refused with error 87 and GetMenu stays as it was"
+errors:
+  invalid_handle: "destroyed or made-up handle: DestroyMenu FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Showing the popup (see TrackPopupMenu); MNS_ styles that change drawing, drag and drop.
