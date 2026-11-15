@@ -580,6 +580,24 @@ impl<'a> Typeface<'a> {
         }
     }
 
+    /// The average character width an edit control takes (`DT_EDITCONTROL`,
+    /// Learn: "calculated in the same manner as for an edit control"): the
+    /// width of the 52 letters `a` to `z` and `A` to `Z`, divided by 26 and
+    /// halved with rounding, as for the dialog base units. A letter the font
+    /// has no glyph for counts as a blank (`DrawTextW.yaml`, `last_line`:
+    /// PolyTest Sans, whose 52 letters are 338 wide, gives 7).
+    pub fn edit_average_width(&self) -> i32 {
+        let blank = self.width(0x20);
+        let total: i32 = (b'a'..=b'z')
+            .chain(b'A'..=b'Z')
+            .map(|c| match &self.outline {
+                Some((_, font)) if font.glyph_index(char::from(c)).is_none() => blank,
+                _ => self.width(u16::from(c)),
+            })
+            .sum();
+        ((total / 26 + 1) / 2).max(1)
+    }
+
     /// The advance of `c` in a string being measured: tab, line feed and
     /// carriage return take no room in an outline font
     /// (`GetTextExtentPoint32W.yaml`).

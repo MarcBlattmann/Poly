@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetEnvironmentVariableA.yaml
+id: windows/api/kernel32.dll/SetEnvironmentVariableA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "SetEnvironmentVariableA function (processenv.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Creates, replaces or deletes an environment variable of the calling process; name and value are converted from the ANSI code page to UTF-16. It stops git's bash, Python and Firefox's start-up indirectly (they build their own environment). The block is the one GetEnvironmentVariable and CreateProcess (with a NULL environment) see; children started afterwards inherit it. The same function as SetEnvironmentVariableW after the conversion.
+interface:
+  signature: "BOOL SetEnvironmentVariableA(LPCSTR lpName, LPCSTR lpValue)"
+  returns: "TRUE on success; FALSE with the last error set"
+  value: "NULL deletes the variable; an empty string creates it with an empty value"
+rules:
+  set: "a new name is added, an existing one (found without regard to letter case) gets the new value and keeps the spelling of its name from when it was first created (set 'PT_CASE_Abc', then 'pt_case_ABC': one entry named PT_CASE_Abc). On success the last error is not changed"
+  delete: "a NULL value removes the variable; afterwards it is not found (GetEnvironmentVariable gives 203, the block has no entry). Deleting a variable that does not exist ALSO succeeds: the result is TRUE and the last error is not changed (Learn says it fails with 203; it does not)"
+  empty: "an empty value creates the variable: the block holds the entry \"NAME=\", GetEnvironmentVariableA finds it with 0 bytes (see that sheet), and a child process inherits it"
+  name: "the name must not be NULL or empty and must not contain an equal sign anywhere except as its first character: 'A=B', 'PT=' and '' (and NULL) fail with ERROR_INVALID_PARAMETER (87). A name that starts with an equal sign is accepted ('=PT:', '=PTQ', and even '=' alone). Tab, newline, semicolon, percent sign, backslash, quote, space and non-ASCII bytes inside a name are accepted"
+  value_stored: "the value is stored as given: no expansion of %NAME% references, spaces at either end are kept, '=' and ';' are ordinary"
+  order: "the block is kept sorted: entries are ordered by the name compared without regard to case as upper-case UTF-16 units, code unit by code unit, a shorter name before a longer one that starts with it. Set in the order m, Z, a, B, 9, (empty suffix), a2, _, ~ under the prefix PT_ORD_, the entries come out as: (empty), 9, a, a2, B, m, Z, _, ~. Names keep their own letter case in the block"
+  limits: "a value of 32,766 bytes works; 32,767 bytes and more fail with ERROR_INVALID_PARAMETER (87) and nothing is stored; a name of 32,766 bytes works, 32,767 and more fail with 87 (a name of 255 and 256 bytes work)"
+  conversion: "bytes are converted with the ANSI code page of the system (GetACP; 1252 on the oracle), so the W function sees the UTF-16 units: bytes 0x80-0x9F map through the Windows-1252 table (0x80 U+20AC, 0x81 U+0081, 0x82 U+201A, 0x83 U+0192, 0x84 U+201E, 0x85 U+2026, 0x86 U+2020, 0x87 U+2021, 0x88 U+02C6, 0x89 U+2030, 0x8A U+0160, 0x8B U+2039, 0x8C U+0152, 0x8D U+008D, 0x8E U+017D, 0x8F U+008F, 0x90 U+0090, 0x91 U+2018, 0x92 U+2019, 0x93 U+201C, 0x94 U+201D, 0x95 U+2022, 0x96 U+2013, 0x97 U+2014, 0x98 U+02DC, 0x99 U+2122, 0x9A U+0161, 0x9B U+203A, 0x9C U+0153, 0x9D U+009D, 0x9E U+017E, 0x9F U+0178), bytes 0xA0-0xFF are U+00A0-U+00FF, 0x20-0x7E are themselves. 100 bytes become 100 units. A name given in bytes is converted the same way, and then matched without regard to case ('PT_' + 0xE9 + 0x80 is the variable PT_é€ and 'PT_' + 0xC9 + 0x80 finds it)"
+  children: "a child started afterwards with a NULL environment inherits the block as it is at that moment: set and replaced values, empty variables (found with 0 bytes), and not deleted ones; a variable set after the child started is not seen by it"
+errors:
+  error_invalid_parameter: "87: NULL, empty or '='-containing name; value or name too long (32,767 bytes and more)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test; they import kernel32.dll. Each line is one call: the arguments, the result, the last error (a marker is set before every call: `unchanged` when the call left it alone) and, for buffers, how many bytes the call wrote (the buffer is filled with 0xAA first, so `wrote N bytes` is the position of the last byte that changed). Bytes outside printable ASCII are written <xx>, UTF-16 units <xxxx>. The ANSI code page of the oracle is 1252.
+not_covered: >
+  Failures for lack of memory, concurrent calls from several threads, the maximum size of the whole block, variables whose name differs only in non-ASCII case beyond Latin-1.

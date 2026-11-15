@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6b55edb62ca7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:54:12Z",
+  "tests": [
+    {
+      "name": "szr_errors",
+      "exe_sha256": "9be8092295a05cb95f6fcb1eb5e4f3f451c7273d6bc0683851a23f98aebc0fb7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGF0YWZpbGU6IGZpbGUgd3JpdHRlbiAxLCBMb2FkTGlicmFyeUV4VyhmbGFncyAweDIpIC0+IGEgbW9kdWxlCmRhdGFmaWxlOiBGaW5kUmVzb3VyY2VXIHR5cGUgIzEwIG5hbWUgIzEwMCAtPiBmb3VuZCwgc2l6ZSAzLCBsb2FkZWQgMSwgZGF0YSAiYWJjIgpMb2FkUmVzb3VyY2UobW9kdWxlLCBOVUxMKSAtPiBOVUxMLCBlcnJvciA4NwpMb2FkUmVzb3VyY2UoTlVMTCwgTlVMTCkgLT4gTlVMTCwgZXJyb3IgODcKTG9ja1Jlc291cmNlKE5VTEwpIC0+IE5VTEwsIGVycm9yIHVuY2hhbmdlZApTaXplb2ZSZXNvdXJjZShtb2R1bGUsIE5VTEwpIC0+IDAsIGVycm9yIDg3ClNpemVvZlJlc291cmNlKE5VTEwsIE5VTEwpIC0+IDAsIGVycm9yIDg3ClNpemVvZlJlc291cmNlKHRoaXMgZXhlLCBoYW5kbGUgb2YgdGhlIERMTCdzIHJlc291cmNlKSAtPiAwLCBlcnJvciAxODEyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "datafile: file written 1, LoadLibraryExW(flags 0x2) -> a module\ndatafile: FindResourceW type #10 name #100 -> found, size 3, loaded 1, data \"abc\"\nLoadResource(module, NULL) -> NULL, error 87\nLoadResource(NULL, NULL) -> NULL, error 87\nLockResource(NULL) -> NULL, error unchanged\nSizeofResource(module, NULL) -> 0, error 87\nSizeofResource(NULL, NULL) -> 0, error 87\nSizeofResource(this exe, handle of the DLL's resource) -> 0, error 1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

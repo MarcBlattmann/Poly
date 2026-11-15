@@ -90,6 +90,12 @@ pub const SPI_GETFOCUSBORDERWIDTH: u32 = 0x200E;
 pub const SPI_GETFOCUSBORDERHEIGHT: u32 = 0x2010;
 pub const SPI_GETFONTSMOOTHINGORIENTATION: u32 = 0x2012;
 pub const SPI_GETMESSAGEDURATION: u32 = 0x2016;
+pub const SPI_GETMOUSETRAILS: u32 = 0x005E;
+pub const SPI_GETCONTACTVISUALIZATION: u32 = 0x2018;
+pub const SPI_GETGESTUREVISUALIZATION: u32 = 0x201A;
+pub const SPI_GETMOUSEWHEELROUTING: u32 = 0x201C;
+pub const SPI_GETPENVISUALIZATION: u32 = 0x201E;
+pub const SPI_GETSNAPSIZING: u32 = 0x2020;
 
 /// What a query answers.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -203,7 +209,8 @@ pub fn query(action: u32, ui_param: u32, cb_size: u32, work: [i32; 4]) -> Outcom
         | SPI_GETCURSORSHADOW
         | SPI_GETFLATMENU
         | SPI_GETDROPSHADOW
-        | SPI_GETBLOCKSENDINPUTRESETS
+        | SPI_GETMOUSEVANISH
+        | SPI_GETCONTACTVISUALIZATION
         | SPI_GETUIEFFECTS
         | SPI_GETCLIENTAREAANIMATION
         | SPI_GETCLEARTYPE => word(1),
@@ -219,10 +226,10 @@ pub fn query(action: u32, ui_param: u32, cb_size: u32, work: [i32; 4]) -> Outcom
         | SPI_GETACTIVEWNDTRKZORDER
         | SPI_GETMOUSESONAR
         | SPI_GETMOUSECLICKLOCK
-        | SPI_GETMOUSEVANISH
+        | SPI_GETBLOCKSENDINPUTRESETS
+        | SPI_GETMOUSETRAILS
         | SPI_GETDISABLEOVERLAPPEDCONTENT
         | SPI_GETSPEECHRECOGNITION
-        | SPI_GETFOREGROUNDLOCKTIMEOUT
         | SPI_GETACTIVEWNDTRKTIMEOUT
         | SPI_GETGRIDGRANULARITY => word(0),
         SPI_GETBORDER => word(1),
@@ -232,12 +239,20 @@ pub fn query(action: u32, ui_param: u32, cb_size: u32, work: [i32; 4]) -> Outcom
         SPI_ICONHORIZONTALSPACING | SPI_ICONVERTICALSPACING => word(75),
         SPI_GETMOUSEHOVERWIDTH | SPI_GETMOUSEHOVERHEIGHT => word(4),
         SPI_GETMOUSEHOVERTIME | SPI_GETMENUSHOWDELAY => word(400),
-        SPI_GETWHEELSCROLLLINES | SPI_GETWHEELSCROLLCHARS | SPI_GETFOREGROUNDFLASHCOUNT => word(3),
+        SPI_GETWHEELSCROLLLINES | SPI_GETWHEELSCROLLCHARS => word(3),
+        SPI_GETFOREGROUNDFLASHCOUNT => word(7),
+        SPI_GETFOREGROUNDLOCKTIMEOUT => word(0x7FFF_FFFF),
+        // The user's own settings: Poly's defaults are the recorded desktop user's
+        // (`SystemParametersInfoW.yaml`, getters).
+        SPI_GETGESTUREVISUALIZATION => word(0x1F),
+        SPI_GETMOUSEWHEELROUTING => word(2),
+        SPI_GETPENVISUALIZATION => word(0x23),
+        SPI_GETSNAPSIZING => word(3),
         SPI_GETMOUSESPEED => word(10),
         SPI_GETCARETWIDTH | SPI_GETFOCUSBORDERWIDTH | SPI_GETFOCUSBORDERHEIGHT => word(1),
         SPI_GETMOUSECLICKLOCKTIME => word(1200),
         SPI_GETFONTSMOOTHINGTYPE => word(2), // FE_FONTSMOOTHINGCLEARTYPE
-        SPI_GETFONTSMOOTHINGCONTRAST => word(1400),
+        SPI_GETFONTSMOOTHINGCONTRAST => word(1200),
         SPI_GETFONTSMOOTHINGORIENTATION => word(1), // FE_FONTSMOOTHINGORIENTATIONRGB
         SPI_GETMESSAGEDURATION => word(5),
         SPI_GETMOUSE => {
@@ -370,6 +385,100 @@ mod tests {
             assert_eq!(query(a, 0, size + 1, [0; 4]), Outcome::Error(ERROR_INVALID_PARAMETER));
         }
         assert!(!has_cb_size(SPI_GETWORKAREA));
+    }
+
+    /// `SystemParametersInfoW.yaml`, getters: the value of every simple
+    /// getter, as in `winuser.h` (spi_get_basic prints 36 of them, the
+    /// held-out spi_getters all).
+    const GETTERS: &[(&str, u32, u32)] = &[
+        ("BEEP", 0x01, 1),
+        ("BORDER", 0x05, 1),
+        ("KEYBOARDSPEED", 0x0A, 31),
+        ("KEYBOARDDELAY", 0x16, 1),
+        ("ICONTITLEWRAP", 0x19, 1),
+        ("DRAGFULLWINDOWS", 0x26, 1),
+        ("SNAPTODEFBUTTON", 0x5F, 0),
+        ("MOUSEHOVERWIDTH", 0x62, 4),
+        ("MOUSEHOVERHEIGHT", 0x64, 4),
+        ("MOUSEHOVERTIME", 0x66, 400),
+        ("WHEELSCROLLLINES", 0x68, 3),
+        ("MENUSHOWDELAY", 0x6A, 400),
+        ("WHEELSCROLLCHARS", 0x6C, 3),
+        ("SHOWIMEUI", 0x6E, 1),
+        ("MOUSESPEED", 0x70, 10),
+        ("SCREENREADER", 0x46, 0),
+        ("FONTSMOOTHING", 0x4A, 1),
+        ("KEYBOARDPREF", 0x44, 0),
+        ("FONTSMOOTHINGTYPE", 0x200A, 2),
+        ("FONTSMOOTHINGCONTRAST", 0x200C, 1200),
+        ("FOCUSBORDERWIDTH", 0x200E, 1),
+        ("FOCUSBORDERHEIGHT", 0x2010, 1),
+        ("CARETWIDTH", 0x2006, 1),
+        ("ACTIVEWINDOWTRACKING", 0x1000, 0),
+        ("MENUANIMATION", 0x1002, 1),
+        ("COMBOBOXANIMATION", 0x1004, 1),
+        ("LISTBOXSMOOTHSCROLLING", 0x1006, 1),
+        ("GRADIENTCAPTIONS", 0x1008, 1),
+        ("KEYBOARDCUES", 0x100A, 0),
+        ("ACTIVEWNDTRKZORDER", 0x100C, 0),
+        ("HOTTRACKING", 0x100E, 1),
+        ("MENUFADE", 0x1012, 1),
+        ("SELECTIONFADE", 0x1014, 1),
+        ("TOOLTIPANIMATION", 0x1016, 1),
+        ("TOOLTIPFADE", 0x1018, 1),
+        ("UIEFFECTS", 0x103E, 1),
+        ("DISABLEOVERLAPPEDCONTENT", 0x1040, 0),
+        ("CLIENTAREAANIMATION", 0x1042, 1),
+        ("CLEARTYPE", 0x1048, 1),
+        ("SPEECHRECOGNITION", 0x104A, 0),
+        ("FOREGROUNDLOCKTIMEOUT", 0x2000, 0x7FFF_FFFF),
+        ("ACTIVEWNDTRKTIMEOUT", 0x2002, 0),
+        ("FOREGROUNDFLASHCOUNT", 0x2004, 7),
+        ("MOUSECLICKLOCKTIME", 0x2008, 1200),
+        ("MOUSESONAR", 0x101C, 0),
+        ("MOUSECLICKLOCK", 0x101E, 0),
+        ("MOUSEVANISH", 0x1020, 1),
+        ("FLATMENU", 0x1022, 1),
+        ("BLOCKSENDINPUTRESETS", 0x1026, 0),
+        ("SCREENSAVERRUNNING", 0x72, 0),
+        ("MESSAGEDURATION", 0x2016, 5),
+        ("PENVISUALIZATION", 0x201E, 0x23),
+        ("SNAPSIZING", 0x2020, 3),
+        // The first of the sheet's range settings (the recorded desktop user's).
+        ("SCREENSAVEACTIVE", 0x10, 0),
+        ("MENUDROPALIGNMENT", 0x1B, 0),
+        ("CURSORSHADOW", 0x101A, 1),
+        ("DROPSHADOW", 0x1024, 1),
+        ("CONTACTVISUALIZATION", 0x2018, 1),
+        ("GESTUREVISUALIZATION", 0x201A, 0x1F),
+        ("MOUSEWHEELROUTING", 0x201C, 2),
+    ];
+
+    #[test]
+    fn the_getters_answer_the_sheets_defaults() {
+        assert_eq!(GETTERS.len() + 1, 61, "the sheet's 61 getters, SPI_GETMOUSE (three ints) apart");
+        for &(name, action, want) in GETTERS {
+            assert_eq!(bytes(query(action, 0, 0, [0; 4])), want.to_le_bytes(), "SPI_GET{name} ({action:#x})");
+        }
+        // SPI_GETMOUSE: the three ints are 6, 10, 1.
+        let m = bytes(query(SPI_GETMOUSE, 0, 0, [0; 4]));
+        assert_eq!((i32_at(&m, 0), i32_at(&m, 4), i32_at(&m, 8)), (6, 10, 1));
+    }
+
+    #[test]
+    fn the_range_settings_default_to_a_value_in_their_range() {
+        let v = |a| u32::from_le_bytes(bytes(query(a, 0, 0, [0; 4])).try_into().unwrap());
+        assert!(v(SPI_GETSCREENSAVEACTIVE) <= 1 && v(SPI_GETMENUDROPALIGNMENT) <= 1);
+        assert!(v(SPI_GETCURSORSHADOW) <= 1 && v(SPI_GETDROPSHADOW) <= 1);
+        assert!(v(SPI_GETCONTACTVISUALIZATION) <= 2 && v(SPI_GETMOUSEWHEELROUTING) <= 2);
+        assert_eq!(v(SPI_GETGESTUREVISUALIZATION) & !0x1F, 0, "only bits 0 to 4");
+    }
+
+    #[test]
+    fn the_five_actions_of_windows_11_exist() {
+        for a in [0x2018, 0x201A, 0x201C, 0x201E, 0x2020] {
+            assert!(matches!(query(a, 0, 0, [0; 4]), Outcome::Bytes(b) if b.len() == 4), "{a:#x}");
+        }
     }
 
     #[test]

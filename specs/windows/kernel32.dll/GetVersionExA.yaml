@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetVersionExA.yaml
+id: windows/api/kernel32.dll/GetVersionExA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "GetVersionExA function (sysinfoapi.h), OSVERSIONINFOA, OSVERSIONINFOEXA, Operating system version changes in Windows 8.1 and Windows 10". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Fills an OSVERSIONINFOA or OSVERSIONINFOEXA with the operating system version. It decides whether Everything and VLC start at all (Everything quits with 255 when it fails; VLC checks it too), and 7 packages import it (3 main executables). For a process without a compatibility manifest Windows 11 answers with the version of Windows 8: 6.2.9200.
+interface:
+  signature: "BOOL GetVersionExA(LPOSVERSIONINFOA lpVersionInformation)"
+  layout: "OSVERSIONINFOA (winnt.h): DWORD size (148), major, minor, build, platform, CHAR szCSDVersion[128]; OSVERSIONINFOEXA adds WORD wServicePackMajor, wServicePackMinor, wSuiteMask, BYTE wProductType, wReserved: 156 bytes"
+  returns: "TRUE on success; FALSE with the last error ERROR_INSUFFICIENT_BUFFER (122) for any size field other than 148 and 156"
+rules:
+  size: "only the structure sizes 148 (OSVERSIONINFOA) and 156 (OSVERSIONINFOEXA) are accepted. Every other value of the size field (0, 1, 4, 19, 20, 24, 100, 147, 149, 150, 155, 157, 160, 200, 276, 284, 400, 0xFFFFFFFF) makes the call fail with ERROR_INSUFFICIENT_BUFFER (122), and nothing is written to the structure. The size field itself is never changed"
+  values: "the value Windows 11 reports to a process WITHOUT a compatibility manifest (the test programs have none): major 6, minor 2, build 9200,\n        platform 2 (VER_PLATFORM_WIN32_NT), empty service-pack string, service pack 0.0, product type 1 (VER_NT_WORKSTATION),\n        reserved 0. Since Windows 8.1 GetVersionEx tells the truth only to processes whose manifest names the newer system\n        (supportedOS ids for 8.1 and 10: 6.3.9600, 10.0.<build>); Learn documents this (\"Operating system version changes in Windows 8.1 and Windows 10\")\n        and it could not be observed here: the test build embeds no manifest and an external one was ignored by the loader."
+  write_basic: "with size 148 only the four DWORDs after the size (major, minor, build, platform) and the first byte of szCSDVersion (a NUL: an empty string) are written; the other 127 bytes of the string are left as the caller had them (17 bytes after the size field change). Bytes after the structure are untouched"
+  write_ex: "with size 156 the whole structure after the size field is written (152 bytes), the CSD string zero-filled, service pack 0.0, suite mask as the edition has it (not specified here: 0x300 on the oracle, a Home edition), product type 1, reserved 0"
+  getversion: "GetVersion() reports the same version packed: low byte major, next byte minor, bits 16-30 the build, bit 31 clear: 6, 2, 9200 for a process without manifest"
+  ntdll: "ntdll's RtlGetVersion and RtlGetNtVersionNumbers give the real 10.0.<build> to every process (see their sheets); GetVersionEx is the one that lies"
+errors:
+  error_insufficient_buffer: "122, for a size field that is not 148 or 156; the structure is not written"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll. The structure is filled with 0xAA before every call so that `bytes written after the size field` shows what was written. The build number of the real system is never printed.
+not_covered: >
+  The values for processes with a compatibility manifest (see the rule values), a NULL structure pointer (crashes), the CSD string of a system with a service pack (none on Windows 11), server editions.

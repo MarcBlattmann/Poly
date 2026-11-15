@@ -389,7 +389,8 @@ mod tests {
         for want in ["--target=x86_64-pc-windows-msvc", "-ffreestanding", "-nostdlib", "-fcxx-exceptions"] {
             assert!(f.iter().any(|x| x == want), "{want}");
         }
-        assert!(f.contains(&"-I/r/tests/windows/cxx".to_string()));
+        let support = Path::new("/r").join(SUPPORT_DIR);
+        assert!(f.contains(&format!("-I{}", support.display())));
         assert!(f.contains(&"-ffile-prefix-map=/r=/poly".to_string()));
         assert!(LINK_FLAGS.contains(&"/Brepro") && LINK_FLAGS.contains(&"/NODEFAULTLIB"));
     }

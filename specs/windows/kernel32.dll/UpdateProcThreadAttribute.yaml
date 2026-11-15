@@ -7,11 +7,13 @@ oracle:
   observed_by: spec-win-ipc
   date: 2026-11-09
 sources: >
-  Observations of our own test programs on the machine above. Microsoft Learn: UpdateProcThreadAttribute, CreateProcessW, Handle Inheritance, Process Mitigation Options, Job Objects. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+  Observations of our own test programs on the machine above. Microsoft Learn: UpdateProcThreadAttribute, CreateProcessW, Handle Inheritance, Process Mitigation Options, Job Objects. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here. The chrome_* rules were added by spec-chrome-win-s2 (2026-11-14, build 26200.9974) with the test upa_chrome_policy.
 summary: >
   Adds one attribute to an initialised list: the value is a pointer and size that must stay valid until the process is created. The Chrome launcher's attributes work as follows: HANDLE_LIST makes CreateProcessW inherit exactly the listed inheritable handles; MITIGATION_POLICY applies creation-time mitigations to the child; JOB_LIST puts the child into the listed jobs from the start.
 interface:
   signature: "BOOL UpdateProcThreadAttribute(LPPROC_THREAD_ATTRIBUTE_LIST list, DWORD flags, DWORD_PTR attribute, PVOID value, SIZE_T size, PVOID previousValue, PSIZE_T returnSize)"
+chrome:
+  calls: "UpdateProcThreadAttribute 62 calls in the browser (stage 2, both runs): 0x20002 handle list (24 bytes = 3 handles), 0x20007 mitigation policy (16 bytes), 0x2000E child process policy (4 bytes, value 1), 0x2001A (4 bytes, value 1), and for most children 0x2000D job list (8 bytes); InitializeProcThreadAttributeList twice per child (sizing call fails with 122, then fills; 5 or 6 attributes); the mitigation words per process type are in the gap map section 4a"
 rules:
   attribute_numbers: "Attribute numbers (winbase.h): PROC_THREAD_ATTRIBUTE_PARENT_PROCESS 0x20000, HANDLE_LIST 0x20002, MITIGATION_POLICY 0x20007, SECURITY_CAPABILITIES 0x20009, JOB_LIST 0x2000D, CHILD_PROCESS_POLICY 0x2000E."
   handle_list_inherit: "HANDLE_LIST with bInheritHandles = TRUE: the child gets exactly the listed handles, with the same handle values, however many other inheritable handles the parent has (listed first only, second only and both seen). Without a list, bInheritHandles = TRUE inherits every inheritable handle; bInheritHandles = FALSE inherits none."
@@ -26,6 +28,12 @@ rules:
   unknown_attribute: "an attribute number nothing defines (0x20FFF), 0, or a thread attribute (0x28004): FALSE, ERROR_NOT_SUPPORTED (50)."
   null_value: "a NULL value pointer with size 8 is accepted by the update call (it would be read when the process is created)."
   other_attributes_accept_documented_sizes: "CHILD_PROCESS_POLICY with 4 bytes and PARENT_PROCESS with 8 bytes are accepted; a fifth attribute (SECURITY_CAPABILITIES) in a list made for four is refused with ERROR_GEN_FAILURE (31)."
+  chrome_mitigation_16_bytes: "MITIGATION_POLICY (0x20007) with the 16-byte value of two 64-bit words is accepted (TRUE) and read by CreateProcessW: the sizes 4, 8 and 16 are accepted, 0, 12 and 24 fail with ERROR_BAD_LENGTH (24). Chrome's words: GPU process {0x0111000100011000, 0x0100000000010000}, storage service {0x0111000110011000, 0x0100000000010000}, renderers {0x0111100110011000, 0x0100000020011000}. The child reports with GetProcessMitigationPolicy: GPU words: ExtensionPointDisable flags 1, FontDisable 1, ImageLoad 3 (no remote images, no low-label images), SystemCallDisable 4 (FSCTL system calls only), ChildProcess 1, SideChannelIsolation 1, Signature 0, StrictHandleCheck 0; storage-service words: the same but SystemCallDisable 5 (win32k and FSCTL system calls disabled); renderer words: as storage plus Signature 5 (Microsoft-signed binaries only, with the mitigation-opt-in bit)"
+  chrome_win32k_lockdown: "a child created with the storage-service or renderer words cannot initialise user32: LoadLibraryW(\"user32.dll\") returns NULL with ERROR_DLL_INIT_FAILED (1114) (GetProcAddress cannot be reached); with the GPU words or no attribute it loads. winmm.dll loads in every case"
+  chrome_child_process_policy: "CHILD_PROCESS_POLICY (0x2000E) with the 4-byte value 1 (PROCESS_CREATION_CHILD_PROCESS_RESTRICTED) is accepted (8 and 2 bytes: ERROR_BAD_LENGTH 24); in the child GetProcessMitigationPolicy(ChildProcess) reads flags 1 and CreateProcessW fails with ERROR_CHILD_PROCESS_BLOCKED (367); without the attribute the child may start a process. The same attribute with the mitigation words (Chrome's sandboxed children) behaves the same"
+  chrome_component_filter: "attribute 0x2001A (PROC_THREAD_ATTRIBUTE_COMPONENT_FILTER) with the 4-byte value 1 is accepted (8 and 2 bytes: error 24) and the child starts; nothing about it is visible in the child (GetProcessMitigationPolicy and the tests above read the same as without it)"
+  chrome_dynamic_code: "none of Chrome's three word pairs sets prohibit-dynamic-code: VirtualAlloc(PAGE_EXECUTE_READWRITE) works in all three children (the browser sets the dynamic-code policy on itself later, with SetProcessMitigationPolicy)"
+  chrome_attribute_list: "InitializeProcThreadAttributeList(NULL, 6, 0, &size) fails with ERROR_INSUFFICIENT_BUFFER (122) and returns the size (Chrome's sizing call); a list for 4 attributes (handle list, mitigation policy, child process policy, 0x2001A) is filled and CreateProcessW (EXTENDED_STARTUPINFO_PRESENT, handles inherited) starts the child; the pipe handle in the handle list reaches the child"
 errors:
   duplicate_attribute: "ERROR_OBJECT_NAME_EXISTS (698)"
   list_full: "ERROR_GEN_FAILURE (31)"
@@ -41,8 +49,8 @@ timing:
   typical: "well under a millisecond per call on the oracle, except where the call waits"
   guarantees: none
 tests:
-  visible: 3
-  held_out: 1
+  visible: 5
+  held_out: 2
 building_tests: >
   Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
 not_covered: >

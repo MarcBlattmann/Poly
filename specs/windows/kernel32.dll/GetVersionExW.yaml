@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetVersionExW.yaml
+id: windows/api/kernel32.dll/GetVersionExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "GetVersionExW function (sysinfoapi.h), OSVERSIONINFOW, OSVERSIONINFOEXW". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The wide twin of GetVersionExA: OSVERSIONINFOW (276 bytes) and OSVERSIONINFOEXW (284 bytes), with the same version values, error and size rule. A process without a compatibility manifest gets 6.2.9200.
+interface:
+  signature: "BOOL GetVersionExW(LPOSVERSIONINFOW lpVersionInformation)"
+  layout: "OSVERSIONINFOW: DWORD size (276), major, minor, build, platform, WCHAR szCSDVersion[128]; OSVERSIONINFOEXW adds WORD wServicePackMajor, wServicePackMinor, wSuiteMask, BYTE wProductType, wReserved: 284 bytes"
+  returns: "TRUE on success; FALSE with ERROR_INSUFFICIENT_BUFFER (122) for any size field other than 276 and 284"
+rules:
+  size: "only 276 and 284 are accepted; every other size (including 148 and 156, the A sizes) fails with ERROR_INSUFFICIENT_BUFFER (122) and writes nothing"
+  values: "the value Windows 11 reports to a process WITHOUT a compatibility manifest (the test programs have none): major 6, minor 2, build 9200,\n        platform 2 (VER_PLATFORM_WIN32_NT), empty service-pack string, service pack 0.0, product type 1 (VER_NT_WORKSTATION),\n        reserved 0. Since Windows 8.1 GetVersionEx tells the truth only to processes whose manifest names the newer system\n        (supportedOS ids for 8.1 and 10: 6.3.9600, 10.0.<build>); Learn documents this (\"Operating system version changes in Windows 8.1 and Windows 10\")\n        and it could not be observed here: the test build embeds no manifest and an external one was ignored by the loader."
+  write_basic: "with size 276: the four DWORDs and the first unit of szCSDVersion (a NUL) are written: 18 bytes after the size field; the rest of the string is untouched"
+  write_ex: "with size 284 the whole structure after the size field is written (280 bytes): zero-filled string, service pack 0.0, the suite mask of the edition (0x300 on the oracle), product type 1, reserved 0"
+  same_as_a: "everything else is as in GetVersionExA"
+errors:
+  error_insufficient_buffer: "122, for a size field that is not 276 or 284"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll; the structure is prefilled with 0xAA.
+not_covered: >
+  As GetVersionExA.

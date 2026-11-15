@@ -22,6 +22,7 @@ use crate::user;
 use crate::user::exec::{self, ExecError, ExecParams};
 use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -78,8 +79,11 @@ pub fn exec_path(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> R
 pub enum Prepared {
     /// A Linux ELF: its process record and loaded image.
     Linux { process: Arc<Process>, image: exec::Image },
-    /// A PE executable: its process record and bytes, started by `crate::nt`.
-    Nt { process: Arc<Process>, file: Vec<u8>, launch: crate::nt::Launch },
+    /// A PE executable: its process record and image (its headers parsed;
+    /// its pages are read from the file as they are touched, ADR 0155),
+    /// started by `crate::nt`. Boxed: the section record is several times
+    /// the size of the other variants.
+    Nt { process: Arc<Process>, image: Box<poly_personality_nt::image::ImageSection>, launch: crate::nt::Launch },
     /// A native Poly program (ADR 0125): its process record and loaded
     /// image, started like a Linux ELF.
     Native { process: Arc<Process>, image: exec::Image },
@@ -106,8 +110,8 @@ impl Prepared {
                 let _ = thread::detach(tid);
                 Ok(process)
             }
-            Prepared::Nt { process, file, launch } => {
-                crate::nt::spawn_pe_with(&process, &file, user::DEFAULT_HOOK, &launch)
+            Prepared::Nt { process, image, launch } => {
+                crate::nt::spawn_pe_with(&process, *image, user::DEFAULT_HOOK, &launch)
                     .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not start: {e:?}")))?;
                 Ok(process)
             }
@@ -203,25 +207,17 @@ fn prepare_full(
     match format.personality() {
         Some(Personality::Linux) => {}
         Some(Personality::Nt) => {
-            // Read the whole image; the NT loader maps it as a section.
-            let mut file_bytes = header;
-            file_bytes.truncate(len);
-            loop {
-                let at = file_bytes.len();
-                file_bytes.resize(at + HEADER_BYTES, 0);
-                match file.read_at(at as u64, &mut file_bytes[at..]) {
-                    Ok(0) => {
-                        file_bytes.truncate(at);
-                        break;
-                    }
-                    Ok(n) => file_bytes.truncate(at + n),
-                    Err(e) => return Err(ExecPathError::Open(e)),
-                }
-            }
+            // Only its headers are read here and by the loader: the image
+            // is mapped from the file's pages (ADR 0155), never copied
+            // whole into the kernel heap (it holds at most 4 MiB at a time).
+            let image = poly_personality_nt::image::ImageSection::from_reader(Arc::new(
+                poly_personality_nt::image::VfsFile(Arc::clone(&file)),
+            ))
+            .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not be loaded: {e:?}")))?;
             let process = Arc::new(Process::new_nt(process::alloc_pid(), format, traced));
             // Its DOS path and arguments go into its process parameters.
             let launch = crate::nt::Launch::of(path, argv);
-            return Ok(Prepared::Nt { process, file: file_bytes, launch });
+            return Ok(Prepared::Nt { process, image: Box::new(image), launch });
         }
         Some(Personality::Native) => {
             // A native program is a static ELF executable with Poly's ABI

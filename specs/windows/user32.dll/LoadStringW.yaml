@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadStringW.yaml
+id: windows/api/user32.dll/LoadStringW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. The tests write a small generated PE32+ DLL image (no code, only a .rsrc section; lib/mkpe.py of the spec agent's kit builds the 2,048 bytes, and the test source carries them as a byte array) next to themselves and load it with LoadLibraryExW three ways: as a data file (0x2), as image resources (0x20) and as a normal image (0); every lookup gives the same lines in all three ways. Microsoft Learn: "LoadStringW function (winuser.h), String Table resource (strings of 16 per block)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies a string of the string-table resource of a module into a buffer. Today a fail-only stub: 7-Zip File Manager calls it repeatedly before any window, and every app with a menu or dialog needs it. The strings live in RT_STRING blocks of 16: the string with id n is entry n mod 16 of the block with id n / 16 + 1; each entry is a length in UTF-16 units followed by the units, without a NUL.
+interface:
+  signature: "int LoadStringW(HINSTANCE hInstance, UINT uID, LPWSTR lpBuffer, int cchBufferMax)"
+  returns: "the number of UTF-16 units copied, without the NUL; 0 when the string is empty, missing, or the call failed"
+rules:
+  modes: "The three load modes give identical answers. A module handle is the one LoadLibraryExW returned: with LOAD_LIBRARY_AS_DATAFILE its low bit is\n        set (the handle is not an address of a mapped image), with LOAD_LIBRARY_AS_IMAGE_RESOURCE bit 1 is set and bit 0 clear, and a normal\n        image's handle is 64 KiB aligned. The resource functions must accept all three"
+  fixture: "The resources of the test image: RT_ICON #1 (8 bytes 01..08); RT_STRING blocks #1 (strings 1 \"Hello\", 2 empty, 3 \"World \" U+20AC U+00E9,\n        15 \"last\"), #2 (string 16 \"sixteen\") in the neutral language and block #7 (string 100 \"nur deutsch\") in de-DE (0x0407) only; RT_RCDATA\n        named \"ALPHA\" (1 byte), \"BETA\" (3), \"BLOB\" (20 bytes \"0123456789ABCDEFGHIJ\"), \"ZETA\" (2), numbered 100 (\"abc\"), 101 (0 bytes), and 7 in two\n        languages, en-US (0x0409, \"english text\") and de-DE (\"deutscher text!\"); RT_GROUP_ICON \"MAINICON\" and #2 (6 bytes each); RT_VERSION #1 in\n        en-US (16 bytes \"@ABCDEFGHIJKLMNO\"); a custom type \"TEXTFILE\" with the names #1 (14 bytes, two lines) and \"README\" (\"hello\"); a custom type\n        \"TEXTFILE2\" with the name #5 (70 bytes). All names and type names are stored in upper case, as resource compilers do"
+  found: "id 1 -> \"Hello\" (returns 5, the NUL after it), id 3 -> \"World \" U+20AC U+00E9 (8), id 15 -> \"last\" (4), id 16 -> \"sixteen\" (7, the first string of block 2), id 100 -> \"nur deutsch\" (11: the block exists only in de-DE and is found whatever the user's language), all with the last error unchanged"
+  truncation: "the buffer holds cch units including the NUL: cch 100, 7 and 6 give all 5 units of \"Hello\" (a buffer of 6 is exactly enough); cch 5 gives \"Hell\" and returns 4; cch 4 \"Hel\" (3); cch 2 \"H\" (1); cch 1 only the NUL and returns 0. \"World \" U+20AC U+00E9 in 10, 4, 3, 2, 1 gives 8, 3 (\"Wor\"), 2, 1, 0 units. The result is always NUL-terminated when cch is at least 1; the last error is not changed"
+  empty_or_missing_entry: "an entry that is empty (id 2) or does not exist in a block that does (ids 0, 4, 14, 17, 99) returns 0, writes a NUL to the buffer, and leaves the last error unchanged"
+  missing_block: "ids whose block does not exist (1000, 65535, 0xFFFFFFFF) return 0, write a NUL and set ERROR_RESOURCE_NAME_NOT_FOUND (1814); id 0x10000 returns 0 with the last error unchanged (a block number that does not fit the 16-bit id; observed as is)"
+  pointer_form: "with cchBufferMax 0 the buffer argument is the ADDRESS of a pointer (an LPWSTR*): the function sets it to point at the string inside the resource (not NUL-terminated) and returns its length: id 1 -> 5 and the pointer reads \"Hello\"; for the empty id 2 and for the missing entry id 4 of an existing block the pointer is set (non-NULL) and the result is 0"
+  no_resources: "this program's executable, a NULL module and an address that is no module: 0 with ERROR_RESOURCE_DATA_NOT_FOUND (1812), a NUL written to the buffer"
+  bad_buffer: "a NULL buffer with cch 5: 0 with ERROR_INVALID_PARAMETER (87) (nothing is written)"
+errors:
+  error_resource_name_not_found: "1814: the block is not in the module"
+  error_resource_data_not_found: "1812: the module has no resources"
+  error_invalid_parameter: "87: NULL buffer with a size"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll (and user32.dll for LoadStringW). Each line is one call with its type and name written as #n for a number and "text" for a string, then -> found/NULL and the last error, or the size and the first bytes of the data (non-printable bytes as <xx>). The tests need a loader that can load a PE image that has no code and no imports with LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE and normally (a DLL without an entry point); a program of another kind (a console exe) is not needed for the lookups.
+not_covered: >
+  Negative sizes (crash), the A function LoadStringA (it converts to the ANSI code page), string tables in several languages, the thread's language preference for a block that exists in two languages.

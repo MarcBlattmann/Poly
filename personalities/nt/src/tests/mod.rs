@@ -5,6 +5,7 @@
 
 extern crate std;
 
+mod bigimage;
 mod exceptions;
 mod exec;
 mod memory;
@@ -357,7 +358,7 @@ impl NtKernel for Fake {
             &mut self.sys,
             &mut child,
             &mut mem,
-            &req.image,
+            req.image.clone(),
             &ntdll,
             &req.params,
             tid,
