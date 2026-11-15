@@ -292,6 +292,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // 0087). The contract is the oldest version of the one each page's
     // "APILocation" metadata names (as ADR 0083 reads advapi32's).
     ("ResumeThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TerminateThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
     ("SuspendThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),

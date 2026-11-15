@@ -244,6 +244,7 @@ jobs:
             shards: sevenzip-b
             accel: auto
             sevenzip: true
+            mingit: true
           - boot: shell
             shards: desktop-shell
             accel: auto
@@ -302,6 +303,17 @@ jobs:
       - name: Fetch 7-Zip (the 7zip and wintrace boot tests)
         if: matrix.sevenzip
         run: target/debug/xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
+      # MinGit (Git for Windows) for the `git-win` boot test (ADR 0194): the
+      # pinned zip, checked and unpacked by xtask, kept in a cache by version.
+      - name: MinGit's cache
+        if: matrix.mingit
+        uses: actions/cache@v4
+        with:
+          path: target/mingit
+          key: mingit-2.56.1
+      - name: Fetch MinGit (the git-win boot test)
+        if: matrix.mingit
+        run: target/debug/xtask win fetch-git || echo "::warning::could not fetch MinGit; the git-win boot test is skipped"
       - run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
       - name: Keep the boot logs
         if: failure()

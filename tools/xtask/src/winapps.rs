@@ -143,9 +143,10 @@ struct Opts {
     exe: String,
     name: String,
     args: String,
-    /// More runs of the same program after the first one, in the same boot (`--then "ARGS"`,
-    /// repeatable): each one's arguments.
-    then: Vec<String>,
+    /// The runs, in order, in one boot: the program and its arguments (`--args`), then the same
+    /// program again for each `--then "ARGS"` (or other programs of the directory, for the
+    /// boot tests: [`run_sequence`]). Paths are relative to the directory, with `/`.
+    runs: Vec<(String, String)>,
     cwd: String,
     desktop: bool,
     seconds: u64,
@@ -191,9 +192,12 @@ fn parse(args: &[String]) -> Result<Opts> {
         out: flag(args, "--out")
             .map_or_else(|| root().join("target/win-app").join(format!("{name}-out")), PathBuf::from),
         dir,
+        runs: core::iter::once(flag(args, "--args").unwrap_or_default())
+            .chain(flags(args, "--then"))
+            .map(|a| (exe.clone(), a))
+            .collect(),
         exe,
         args: flag(args, "--args").unwrap_or_default(),
-        then: flags(args, "--then"),
         cwd: flag(args, "--dir-cwd").unwrap_or_default(),
         desktop: mode == "desktop",
         seconds: num("--seconds", 60)?,
@@ -230,13 +234,14 @@ fn disk(o: &Opts) -> Result<PathBuf> {
         o.cwd.clone()
     };
     // One stage per run; each but the last asks the launcher for the next one (line 7).
-    let runs: Vec<&String> = core::iter::once(&o.args).chain(o.then.iter()).collect();
-    let stages: Vec<String> = runs
+    let stages: Vec<String> = o
+        .runs
         .iter()
         .enumerate()
-        .map(|(i, args)| {
+        .map(|(i, (exe, args))| {
+            let exe_dos = format!("{APPS_DOS}\\{}\\{}", o.name, exe.replace('/', "\\"));
             let cmdline = format!("\"{exe_dos}\" {args}").trim_end().to_string();
-            let next = if i + 1 < runs.len() { "next" } else { "" };
+            let next = if i + 1 < o.runs.len() { "next" } else { "" };
             format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n\n\n{next}\n", o.seconds)
         })
         .collect();
@@ -310,6 +315,45 @@ fn run(args: &[String]) -> Result {
     Ok(())
 }
 
+/// Boot `kernel` with the program directory `dir` as `C:\apps\<name>` and run `runs` (a
+/// program of the directory, relative with `/`, and its arguments) one after another in `cwd`
+/// (a DOS path), each for at most `seconds`: the serial log, cleaned, also written to `log`. For
+/// boot tests of downloaded apps (`gitwin.rs`).
+pub fn run_sequence(
+    kernel: &Path,
+    dir: &Path,
+    name: &str,
+    cwd: &str,
+    runs: &[(&str, &str)],
+    seconds: u64,
+    log: &Path,
+) -> Result<String> {
+    let (exe, args) = *runs.first().ok_or("nothing to run")?;
+    let o = Opts {
+        dir: dir.to_path_buf(),
+        exe: exe.to_string(),
+        name: name.to_string(),
+        args: args.to_string(),
+        runs: runs.iter().map(|&(e, a)| (e.to_string(), a.to_string())).collect(),
+        cwd: cwd.to_string(),
+        desktop: false,
+        seconds,
+        timeout: 120 + seconds * runs.len() as u64,
+        exceptions: Some(String::new()),
+        trace: false,
+        kernel: String::new(),
+        release: false,
+        out: log.parent().map_or_else(|| root().join("target"), Path::to_path_buf),
+        steps: Vec::new(),
+        rest: Vec::new(),
+    };
+    let image = disk(&o)?;
+    let _ = std::fs::remove_file(log);
+    let res = crate::resources::Resources::from_args(&[])?;
+    let text = run_console(&o, kernel, &image, log, &res, &kernel_arguments(&o))?;
+    Ok(clean(&text))
+}
+
 /// The serial log without the terminal's escape sequences (a cursor move starts a new line).
 fn clean(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -363,10 +407,10 @@ fn report(o: &Opts, s: &crate::chromewin::Summary, text: &str) -> String {
     let mut r = String::new();
     let _ = writeln!(r, "program: {}\\{}\\{} {}", APPS_DOS, o.name, o.exe, o.args);
     let _ = writeln!(r, "launcher: {}", s.exit.as_deref().unwrap_or("(no LAUNCH-EXIT line)"));
-    for (i, args) in o.then.iter().enumerate() {
-        let _ = writeln!(r, "then {}: {args}", i + 2);
+    for (i, (exe, args)) in o.runs.iter().enumerate().skip(1) {
+        let _ = writeln!(r, "then {}: {exe} {args}", i + 1);
     }
-    if !o.then.is_empty() {
+    if o.runs.len() > 1 {
         for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT")) {
             let _ = writeln!(r, "  {}", l.trim());
         }
