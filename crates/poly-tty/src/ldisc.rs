@@ -68,6 +68,8 @@ pub struct Effects {
     pub readable: bool,
     /// Output was started again (`START`, `IXANY`): wake writers.
     pub output_started: bool,
+    /// Output was stopped (`STOP`): a pty master in packet mode is told.
+    pub output_stopped: bool,
     /// Throw away output not sent yet (a signal character without
     /// `NOFLSH`).
     pub flush_output: bool,
@@ -254,9 +256,11 @@ impl LineDiscipline {
                 // The same character for both toggles.
                 self.stopped = !self.stopped;
                 out.output_started |= !self.stopped;
+                out.output_stopped |= self.stopped;
                 return;
             }
             if stop {
+                out.output_stopped |= !self.stopped;
                 self.stopped = true;
                 return;
             }

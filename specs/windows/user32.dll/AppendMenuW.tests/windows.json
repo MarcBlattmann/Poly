@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "apm_popup",
+      "exe_sha256": "7ef0efdb186ff33832da522afc57ce4e8b46a984cfc2f44ca3f9f25f25fdbe90",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXBwZW5kIHBvcHVwOiAxCmFwcGVuZCB0aGUgc2FtZSBwb3B1cCBhZ2FpbiwgZ3JheWVkOiAxCmFwcGVuZCBwb3B1cCwgaW52YWxpZCBoYW5kbGU6IDEKYXBwZW5kIHBvcHVwLCBOVUxMIGhhbmRsZTogMQphcHBlbmQgYSBtZW51IGJhciBhcyBhIHBvcHVwOiAxCmJhcjogY291bnQgNQogIFswXSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9JyZGaWxlJyBjY2g9NQogIFsxXSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgxIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J0dyYXknIGNjaD00CiAgWzJdIG9rPTEgaWQ9MHhiYWQwYmFkIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdCb2d1cycgY2NoPTUKICBbM10gb2s9MSBpZD0weDAgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J051bGxTdWInIGNjaD03CiAgWzRdIG9rPTEgaWQ9MHhmZmZmZmZmZiBzdWI9MSBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0nQmFyJyBjY2g9MwpHZXRTdWJNZW51IDAgaXMgczogMQpHZXRTdWJNZW51IDEgaXMgczogMQpHZXRTdWJNZW51IDIgbnVsbDogMQpHZXRTdWJNZW51IDQgaXMgb3RoZXJfYmFyOiAxCkdldE1lbnVJdGVtSUQgb2YgYSBwb3B1cCBpdGVtOiAtMSBlcnI9LTEKR2V0TWVudVN0YXRlIG9mIGEgcG9wdXAgaXRlbSBieSBwb3NpdGlvbjogMjcyCkdldE1lbnVTdGF0ZSBvZiBpZCAyMDEgKGluIHRoZSBzdWIgbWVudSkgYXNrZWQgb2YgYmFyOiAwIGVycj0tMQphZnRlciBkZXN0cm95aW5nIGJhcjogcyAwIG90aGVyX2JhciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "append popup: 1\nappend the same popup again, grayed: 1\nappend popup, invalid handle: 1\nappend popup, NULL handle: 1\nappend a menu bar as a popup: 1\nbar: count 5\n  [0] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='&File' cch=5\n  [1] ok=1 id=0xffffffff sub=1 state=0x1 type=0x0 data=0x0 text='Gray' cch=4\n  [2] ok=1 id=0xbad0bad sub=0 state=0x0 type=0x0 data=0x0 text='Bogus' cch=5\n  [3] ok=1 id=0x0 sub=0 state=0x0 type=0x0 data=0x0 text='NullSub' cch=7\n  [4] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='Bar' cch=3\nGetSubMenu 0 is s: 1\nGetSubMenu 1 is s: 1\nGetSubMenu 2 null: 1\nGetSubMenu 4 is other_bar: 1\nGetMenuItemID of a popup item: -1 err=-1\nGetMenuState of a popup item by position: 272\nGetMenuState of id 201 (in the sub menu) asked of bar: 0 err=-1\nafter destroying bar: s 0 other_bar 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

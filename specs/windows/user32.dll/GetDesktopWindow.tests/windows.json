@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gdw_chrome",
+      "exe_sha256": "507c8b7277b891f265e7fea8df6fc5c219f1a18b5ccc769ea7f7ebee577cea4e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHRvcC1sZXZlbCB3aW5kb3cgaXMgZm91bmQgb25jZSB3YWxraW5nIGZyb20gdGhlIGRlc2t0b3AncyBmaXJzdCBjaGlsZDogMQpHZXRBbmNlc3RvcihtYWluLCBHQV9QQVJFTlQpIGlzIHRoZSBkZXNrdG9wOiAxIEdldEFuY2VzdG9yKHJ3aCwgR0FfUk9PVCkgaXMgbWFpbjogMQpNYXBXaW5kb3dQb2ludHMobWFpbiwgZGVza3RvcCkgZXF1YWxzIENsaWVudFRvU2NyZWVuOiAxCk1hcFdpbmRvd1BvaW50cyhkZXNrdG9wLCBtYWluKSByZXR1cm5zIHRvIDEwLDIwOiAxCkdldERDKGRlc2t0b3ApIGFuZCBHZXREQyhOVUxMKSBhcmUgRENzIG9mIHRoZSBzY3JlZW46IDEgMSBzYW1lIEhPUlpSRVM6IDEKSE9SWlJFUyBlcXVhbHMgU01fQ1hTQ1JFRU46IDEKdGhlIHRvcC1sZXZlbCB3aW5kb3cgbGllcyB3aXRoaW4gdGhlIGRlc2t0b3AncyByZWN0YW5nbGU6IDEKR2V0R1VJVGhyZWFkSW5mbygwKSB3b3JrcyBmb3IgdGhlIGZvcmVncm91bmQgdGhyZWFkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the top-level window is found once walking from the desktop's first child: 1\nGetAncestor(main, GA_PARENT) is the desktop: 1 GetAncestor(rwh, GA_ROOT) is main: 1\nMapWindowPoints(main, desktop) equals ClientToScreen: 1\nMapWindowPoints(desktop, main) returns to 10,20: 1\nGetDC(desktop) and GetDC(NULL) are DCs of the screen: 1 1 same HORZRES: 1\nHORZRES equals SM_CXSCREEN: 1\nthe top-level window lies within the desktop's rectangle: 1\nGetGUIThreadInfo(0) works for the foreground thread: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 277
+    }
+  ]
+}

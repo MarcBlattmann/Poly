@@ -38,6 +38,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
 use poly_ntobj::status::STATUS_INVALID_PARAMETER;
+use poly_rtl::layout::{Layout, X64};
 
 /// `PEB.ProcessParameters`.
 pub const PEB_PROCESS_PARAMETERS: u64 = 0x20;
@@ -102,9 +103,21 @@ pub const PP_STANDARD_ERROR: u64 = 0x30;
 /// Put a process's console connection and standard handles into its
 /// parameters at `base` (what [`write`] returned).
 pub fn write_handles(b: &mut dyn Backend, base: u64, console: u64, std: [u64; 3]) -> Result<(), NtStatus> {
-    b.write(base + PP_CONSOLE_HANDLE, &console.to_le_bytes())?;
+    write_handles_for(&X64, b, base, console, std)
+}
+
+/// [`write_handles`] for parameters laid out as `l` (a 32-bit process's, ADR 0186).
+pub fn write_handles_for(
+    l: &Layout,
+    b: &mut dyn Backend,
+    base: u64,
+    console: u64,
+    std: [u64; 3],
+) -> Result<(), NtStatus> {
+    let n = l.ptr as usize;
+    b.write(base + l.pp_console_handle, &console.to_le_bytes()[..n])?;
     for (i, h) in std.iter().enumerate() {
-        b.write(base + PP_STANDARD_INPUT + 8 * i as u64, &h.to_le_bytes())?;
+        b.write(base + l.pp_standard_input + l.ptr * i as u64, &h.to_le_bytes()[..n])?;
     }
     Ok(())
 }
@@ -186,20 +199,18 @@ impl Parameters {
     }
 }
 
-fn put_u64(buf: &mut [u8], at: u64, v: u64) {
-    buf[at as usize..][..8].copy_from_slice(&v.to_le_bytes());
+fn put_ptr(l: &Layout, buf: &mut [u8], at: u64, v: u64) {
+    let n = l.ptr as usize;
+    buf[at as usize..][..n].copy_from_slice(&v.to_le_bytes()[..n]);
 }
 
 /// A `UNICODE_STRING` at `at` for `len` UTF-16 units at `buffer`, with room
 /// for a NUL.
-fn put_string(buf: &mut [u8], at: u64, buffer: u64, len: usize) -> Result<(), NtStatus> {
+fn put_string(l: &Layout, buf: &mut [u8], at: u64, buffer: u64, len: usize) -> Result<(), NtStatus> {
     let length = u16::try_from(len * 2).map_err(|_| STATUS_INVALID_PARAMETER)?;
     let max = length.checked_add(2).ok_or(STATUS_INVALID_PARAMETER)?;
-    let at = at as usize;
-    buf[at..at + 2].copy_from_slice(&length.to_le_bytes());
-    buf[at + 2..at + 4].copy_from_slice(&max.to_le_bytes());
-    buf[at + 4..at + 8].fill(0);
-    buf[at + 8..at + 16].copy_from_slice(&buffer.to_le_bytes());
+    let (bytes, n) = l.unicode(length, max, buffer);
+    buf[at as usize..][..n].copy_from_slice(&bytes[..n]);
     Ok(())
 }
 
@@ -212,6 +223,12 @@ fn push_wide(buf: &mut Vec<u8>, s: &[u16]) {
 /// environment block (16-aligned). A string longer than a `UNICODE_STRING`
 /// can describe (32,766 units) is `STATUS_INVALID_PARAMETER`.
 pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
+    image_for(&X64, base, p)
+}
+
+/// [`image`] laid out as `l`: a 32-bit process's parameters have 4-byte
+/// pointers and their own offsets (ADR 0186, `poly_rtl::layout`).
+pub fn image_for(l: &Layout, base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     let mut buf = alloc::vec![0u8; PARAMETERS_SIZE as usize];
     let align = |buf: &mut Vec<u8>, to: usize| buf.resize(buf.len().next_multiple_of(to), 0);
     let image_at = base + buf.len() as u64;
@@ -228,29 +245,29 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     align(&mut buf, 8);
     // The STARTUPINFO's fields, strings and bytes (ADR 0089).
     let st = &p.startup;
-    let at = PP_STARTUP as usize;
+    let at = l.pp_startup as usize;
     buf[at..at + STARTUP_FIXED].copy_from_slice(&st.fixed);
-    for (field, text) in [(PP_DESKTOP, &st.desktop), (PP_TITLE, &st.title), (PP_SHELL_INFO, &st.shell_info)] {
+    for (field, text) in [(l.pp_desktop, &st.desktop), (l.pp_title, &st.title), (l.pp_shell_info, &st.shell_info)] {
         if let Some(text) = text {
             let text_at = base + buf.len() as u64;
             push_wide(&mut buf, text);
             buf.extend_from_slice(&[0, 0]);
             align(&mut buf, 8);
-            put_string(&mut buf, field, text_at, text.len())?;
+            put_string(l, &mut buf, field, text_at, text.len())?;
         }
     }
     let reserved2 = u16::try_from(st.reserved2.len()).map_err(|_| STATUS_INVALID_PARAMETER)?;
     if reserved2 > 0 {
         let reserved2_at = base + buf.len() as u64;
-        put_u64(&mut buf, PP_RESERVED2, reserved2_at);
+        put_ptr(l, &mut buf, l.pp_reserved2, reserved2_at);
         buf.extend_from_slice(&st.reserved2);
         align(&mut buf, 8);
     }
     // `cbReserved2` counts the bytes there are.
-    let cb2 = PP_STARTUP_CB_RESERVED2 as usize;
+    let cb2 = (l.pp_startup + poly_rtl::layout::STARTUP_CB_RESERVED2) as usize;
     buf[cb2..cb2 + 2].copy_from_slice(&reserved2.to_le_bytes());
     for (i, h) in p.std_handles.iter().enumerate() {
-        put_u64(&mut buf, PP_STANDARD_INPUT + 8 * i as u64, *h);
+        put_ptr(l, &mut buf, l.pp_standard_input + l.ptr * i as u64, *h);
     }
     // The documented `RTL_USER_PROCESS_PARAMETERS` fields programs read directly: the current
     // directory (always with a trailing backslash) and the DLL search path.
@@ -269,18 +286,18 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
     // `MaximumLength` and `Length` are the whole allocation, `Flags` says the strings are
     // pointers (`RTL_USER_PROC_PARAMS_NORMALIZED`).
     let total = u32::try_from(buf.len()).map_err(|_| STATUS_INVALID_PARAMETER)?;
-    buf[PP_MAXIMUM_LENGTH as usize..][..4].copy_from_slice(&total.to_le_bytes());
-    buf[PP_LENGTH as usize..][..4].copy_from_slice(&total.to_le_bytes());
-    buf[PP_FLAGS as usize..][..4].copy_from_slice(&RTL_USER_PROC_PARAMS_NORMALIZED.to_le_bytes());
-    put_string(&mut buf, PP_DOS_CURRENT_DIRECTORY, dos_at, dos.len())?;
-    put_string(&mut buf, PP_DLL_PATH, dll_at, dll_path.len())?;
+    buf[l.pp_maximum_length as usize..][..4].copy_from_slice(&total.to_le_bytes());
+    buf[l.pp_length as usize..][..4].copy_from_slice(&total.to_le_bytes());
+    buf[l.pp_flags as usize..][..4].copy_from_slice(&RTL_USER_PROC_PARAMS_NORMALIZED.to_le_bytes());
+    put_string(l, &mut buf, l.pp_dos_current_directory, dos_at, dos.len())?;
+    put_string(l, &mut buf, l.pp_dll_path, dll_at, dll_path.len())?;
     let env_size = (p.environment.len() * 2) as u64;
-    put_u64(&mut buf, PP_ENVIRONMENT_SIZE_FIELD, env_size);
-    put_string(&mut buf, PP_IMAGE_PATH_NAME, image_at, p.image_path.len())?;
-    put_string(&mut buf, PP_COMMAND_LINE, command_at, p.command_line.len())?;
-    put_string(&mut buf, PP_CURRENT_DIRECTORY, current_at, p.current_dir.len())?;
-    put_u64(&mut buf, PP_ENVIRONMENT, env_at);
-    put_u64(&mut buf, PP_ENVIRONMENT_SIZE, (p.environment.len() * 2) as u64);
+    put_ptr(l, &mut buf, l.pp_environment_size_field, env_size);
+    put_string(l, &mut buf, l.pp_image_path_name, image_at, p.image_path.len())?;
+    put_string(l, &mut buf, l.pp_command_line, command_at, p.command_line.len())?;
+    put_string(l, &mut buf, l.pp_current_directory, current_at, p.current_dir.len())?;
+    put_ptr(l, &mut buf, l.pp_environment, env_at);
+    put_ptr(l, &mut buf, l.pp_environment_size, (p.environment.len() * 2) as u64);
     Ok(buf)
 }
 
@@ -288,12 +305,13 @@ pub fn image(base: u64, p: &Parameters) -> Result<Vec<u8>, NtStatus> {
 /// private read-write allocation holding [`image`], and
 /// `PEB.ProcessParameters` pointing at it. Returns the structure's address.
 pub fn write(proc: &mut NtProcess, b: &mut dyn Backend, peb: u64, p: &Parameters) -> Result<u64, NtStatus> {
+    let l = proc.layout();
     // The size does not depend on the base: lay it out once to measure.
-    let size = image(0, p)?.len() as u64;
+    let size = image_for(&l, 0, p)?.len() as u64;
     let (base, _) = proc.vm.allocate(b, 0, size, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)?;
-    let bytes = image(base, p)?;
+    let bytes = image_for(&l, base, p)?;
     b.write(base, &bytes)?;
-    b.write(peb + PEB_PROCESS_PARAMETERS, &base.to_le_bytes())?;
+    b.write(peb + l.peb_process_parameters, &base.to_le_bytes()[..l.ptr as usize])?;
     Ok(base)
 }
 

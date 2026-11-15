@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/AppendMenuW.yaml
+id: windows/api/user32.dll/AppendMenuW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Adds an item at the end of a menu. The flags choose the kind: MF_STRING (the default, 0), MF_SEPARATOR, MF_POPUP (uIDNewItem is the handle of the popup), MF_OWNERDRAW (lpNewItem is kept as item data) and the state flags. GetMenuItemInfoW shows exactly what was stored.
+interface:
+  signature: "BOOL AppendMenuW(HMENU hMenu, UINT uFlags, UINT_PTR uIDNewItem, LPCWSTR lpNewItem)"
+rules:
+  string_item: "MF_STRING with a text: type 0, state 0, the id as given (the low 32 bits of uIDNewItem: 0x100000007 gives 7), the text is copied whole (300 characters stay 300), tabs and ampersands are kept; no flags at all is MF_STRING"
+  separator: "MF_SEPARATOR: type MFT_SEPARATOR (0x800), state 3 (grayed and disabled), the id as given, the text ignored (it reads back empty)"
+  no_text_is_separator: "MF_STRING with a NULL text becomes a separator exactly like MF_SEPARATOR (type 0x800, state 3, the given id kept); an empty text \"\" stays an ordinary item with the empty text"
+  states: "MF_CHECKED -> state 8, MF_GRAYED -> 1, MF_DISABLED -> 2, MF_HILITE -> 0x80; MF_DEFAULT (0x1000) and MF_MOUSESELECT (0x8000) leave the state 0"
+  breaks: "MF_MENUBREAK -> type 0x40, MF_MENUBARBREAK -> type 0x20"
+  owner_draw: "MF_OWNERDRAW: type 0x100, the lpNewItem value is the item data (0x1234 reads back as 0x1234), no text"
+  popup_item: "MF_POPUP: uIDNewItem is the popup's handle; the item has a sub menu (GetSubMenu returns it), GetMenuItemID is -1 (0xFFFFFFFF), GetMenuItemInfoW(MIIM_ID) gives the low 32 bits of the handle, the text is lpNewItem, the state flags are kept (MF_GRAYED -> 1); GetMenuState gives MF_POPUP (0x10) | the number of items of the popup << 8 (0x110 for one item) and follows later changes of the popup"
+  popup_twice: "the same popup can be appended twice (two items with the same sub menu); a menu bar can be appended as a popup like any other menu; destroying the parent destroys the popup once"
+  popup_invalid: "MF_POPUP with a made-up handle: returns TRUE but sets error 1401, the item is stored as an ordinary item with that value as its id and no sub menu; with the handle 0: TRUE, an ordinary item with id 0"
+  count: "every successful call adds one item at the end"
+errors:
+  invalid_menu: "NULL or made-up menu: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  MF_BITMAP items (bitmap handle in lpNewItem), MFT_RIGHTORDER and drawing; very long texts above 300 characters; items appended to a window's attached bar (the same rules, tested for the bar through SetMenu).

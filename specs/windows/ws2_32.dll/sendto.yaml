@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/sendto.yaml
+id: windows/api/ws2_32.dll/sendto
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "connect function (winsock2.h)", "WSAEventSelect function", "WSAEnumNetworkEvents function", "recv function", "WSASend function", "sendto function", "WSARecv function", "WSAGetOverlappedResult function", "AcceptEx function (mswsock.h)", "Winsock Error Codes", "I/O Completion Ports"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sends a datagram. Chrome's QUIC sockets (UDP, AF_INET6, connected with connect) call it 59 times in a run with a 28-byte sockaddr_in6 on every call although the socket is connected, for 31 to 1230 bytes. On Windows the address of a sendto on a connected UDP socket is used: a different address sends the datagram there. The tests also give the argument errors and the datagram size limits.
+interface:
+  signature: "int sendto(SOCKET s, const char* buf, int len, int flags, const sockaddr* to, int tolen)"
+  result: "bytes sent, or SOCKET_ERROR"
+chrome:
+  calls: "sendto 357 calls over all stages (59 in one network service run): (buffer, len 29..1230, flags 0, sockaddr_in6, 28) each returning len"
+rules:
+  connected_udp: "after connect(c, a): sendto(c, ..., a) returns 1 and a receives it; sendto(c, ..., b) (another bound loopback socket) returns 1 and b receives it, a does not (the connection is NOT enforced); sendto with a NULL address and length 0 sends to the connected peer (1)"
+  address_errors: "length 15 for a sockaddr_in: -1/WSAEFAULT (10014); AF_UNSPEC family: -1/WSAEAFNOSUPPORT (10047); an AF_INET6 address on an AF_INET socket: -1/WSAEAFNOSUPPORT; port 0: returns 1 (accepted); length 40 for a 16-byte address: accepted (1)"
+  unconnected: "no address on an unconnected UDP socket: -1/WSAENOTCONN (10057); with an address it sends (1) and binds the socket to a local port"
+  sizes: "70000 bytes: -1/WSAEMSGSIZE (10040); 65507: 65507; 65508: -1/WSAEMSGSIZE; 0 bytes: 0"
+  tcp: "sendto on a connected TCP socket ignores the address: with an address of another socket 1 and the TCP peer receives the byte; without an address: 1"
+  ipv6: "(only where an AF_INET6 socket can be created) a dual-stack UDP socket connected to ::1: sendto with the 28-byte address returns 1 and the datagram arrives; with length 16 for that address: -1/WSAEFAULT; with a 16-byte AF_INET address on an AF_INET6 socket: -1/WSAEFAULT; with a v4-mapped 28-byte address on a socket connected to ::1: 1"
+errors:
+  fault: "WSAEFAULT 10014"
+  af: "WSAEAFNOSUPPORT 10047"
+  msgsize: "WSAEMSGSIZE 10040"
+  notconn: "WSAENOTCONN 10057"
+side_effects: "sends a datagram; binds an unbound socket"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The IPv6 lines are printed only where an AF_INET6 socket can be created.
+not_covered: >
+  Non-loopback destinations, broadcast, multicast, WSASendTo/WSASendMsg (Chrome fetches WSARecvMsg through SIO_GET_EXTENSION_FUNCTION_POINTER and calls it by pointer; see the AcceptEx sheet for that ioctl's answers), ICMP errors for connected sockets other than the one shown in the connect sheet.

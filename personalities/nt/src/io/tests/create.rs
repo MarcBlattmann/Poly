@@ -12,7 +12,7 @@ fn drive_letters_and_devices_are_in_the_namespace() {
         om.directory_entries(id).unwrap().into_iter().map(|(n, k)| (String::from_utf16(&n).unwrap(), k)).collect()
     };
     let devices = names(om, "\\Device");
-    for d in ["PolyFs0", "PolyFs1", "PolyPipe"] {
+    for d in ["HarddiskVolume1", "HarddiskVolume2", "PolyPipe"] {
         assert!(devices.contains(&(String::from(d), "Device")), "{d}");
     }
     let dos = names(om, "\\??");
@@ -20,6 +20,71 @@ fn drive_letters_and_devices_are_in_the_namespace() {
     assert!(dos.contains(&(String::from("Z:"), "SymbolicLink")));
     assert_eq!(t.f.sys.io.volumes[1].path, b"/nt/c");
     assert_eq!(t.f.sys.io.volumes[0].letter, Some('Z'));
+}
+
+/// ADR 0185: the volume devices are named like Windows' disk volumes, the
+/// system volume (`C:`) has the lowest number, and nothing is called
+/// `PolyFs` any more.
+#[test]
+fn volume_devices_are_named_like_windows_disk_volumes() {
+    let mut t = setup();
+    let ctx = t.vfs.root_context().unwrap();
+    let configs = default_volumes(t.vfs, &ctx);
+    let named = |letter: char| configs.iter().find(|c| c.letter == Some(letter)).unwrap().device.clone();
+    assert_eq!((named('C').as_str(), named('Z').as_str()), ("HarddiskVolume1", "HarddiskVolume2"));
+    assert!(configs.iter().all(|c| c.device.starts_with("HarddiskVolume")));
+    let numbers: Vec<usize> = configs.iter().map(|c| c.device["HarddiskVolume".len()..].parse().unwrap()).collect();
+    let mut sorted = numbers.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted.len(), numbers.len(), "every volume has its own number");
+    assert_eq!(sorted[0], 1);
+
+    // The drive letters are links to those devices (`NtQuerySymbolicLinkObject`).
+    let target = |t: &mut T, link: &str| {
+        let out = t.f.alloc(8);
+        let oa = t.f.attrs(link, CI);
+        assert_eq!(t.f.call(Service::OpenSymbolicLinkObject, &[out, 1, oa]), STATUS_SUCCESS, "{link}");
+        let h = t.f.u64_at(out);
+        let buf = t.f.alloc(256);
+        let mut header = Vec::new();
+        header.extend_from_slice(&0u16.to_le_bytes());
+        header.extend_from_slice(&256u16.to_le_bytes());
+        header.extend_from_slice(&[0; 4]);
+        header.extend_from_slice(&buf.to_le_bytes());
+        let ustr = t.f.put(&header);
+        assert_eq!(t.f.call(Service::QuerySymbolicLinkObject, &[h, ustr, 0]), STATUS_SUCCESS);
+        let len = usize::from(u16::from_le_bytes(t.f.bytes_at(ustr, 2).try_into().unwrap()));
+        wide_str(&t.f.bytes_at(buf, len))
+    };
+    assert_eq!(target(&mut t, "\\??\\C:"), "\\Device\\HarddiskVolume1");
+    assert_eq!(target(&mut t, "\\??\\Z:"), "\\Device\\HarddiskVolume2");
+    let devices = {
+        let om = &mut t.f.sys.objects;
+        let id = om.lookup(&poly_ntobj::name::wide("\\Device"), true).unwrap();
+        om.directory_entries(id).unwrap().into_iter().map(|(n, _)| String::from_utf16(&n).unwrap()).collect::<Vec<_>>()
+    };
+    assert!(devices.iter().all(|d| !d.starts_with("PolyFs")), "{devices:?}");
+
+    // A file's object name (`NtQueryObject`, ObjectNameInformation): its
+    // device and the path below it, the same file on both letters.
+    let object_name = |t: &mut T, h: u64| {
+        let buf = t.f.alloc(528);
+        let ret = t.f.alloc(8);
+        let s = t.f.call(Service::QueryObject, &[h, 1, buf, 528, ret]);
+        let b = t.f.bytes_at(buf, 528);
+        let len = usize::from(u16::from_le_bytes([b[0], b[1]]));
+        (s, wide_str(&b[16..16 + len]))
+    };
+    let on_c = t.file("\\??\\C:\\a.txt");
+    assert_eq!(object_name(&mut t, on_c), (STATUS_SUCCESS, "\\Device\\HarddiskVolume1\\a.txt".into()));
+    let on_z = t.file("\\??\\Z:\\nt\\c\\a.txt");
+    assert_eq!(object_name(&mut t, on_z), (STATUS_SUCCESS, "\\Device\\HarddiskVolume2\\nt\\c\\a.txt".into()));
+    // Opening by the device name works as it does on Windows.
+    let by_device = t.file("\\Device\\HarddiskVolume1\\a.txt");
+    assert_eq!(object_name(&mut t, by_device).1, "\\Device\\HarddiskVolume1\\a.txt");
+    // Poly's old device names are gone.
+    assert_ne!(t.create("\\Device\\PolyFs1\\a.txt", RW, SHARE_ALL, FILE_OPEN, SYNC, 0).0, STATUS_SUCCESS);
 }
 
 #[test]

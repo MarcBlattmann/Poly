@@ -1,0 +1,1008 @@
+//! LockResource (with LoadResource and the others around it): the data, its size, repeated calls, NULL arguments.
+#![no_std]
+#![no_main]
+#![allow(dead_code, non_camel_case_types, non_upper_case_globals, non_snake_case, clippy::all)]
+
+// The declarations in this file are from Microsoft Learn (prototypes) and the
+// public SDK headers named beside them (constants, layouts); the helpers are
+// this test's own.
+
+use core::ffi::c_void;
+use core::fmt::Write as _;
+use poly_wtest::*;
+
+type BOOL = i32;
+
+/// A fixed-size text buffer for formatting lines.
+struct Buf<const N: usize> {
+    b: [u8; N],
+    n: usize,
+}
+
+impl<const N: usize> Buf<N> {
+    const fn new() -> Self {
+        Buf { b: [0; N], n: 0 }
+    }
+    fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.b[..self.n]).unwrap_or("?")
+    }
+}
+
+impl<const N: usize> core::fmt::Write for Buf<N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for &c in s.as_bytes() {
+            if self.n < N {
+                self.b[self.n] = c;
+                self.n += 1;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where observation lines go: the test's output file, or (in a child process) a pipe to the parent.
+trait Sink {
+    fn put(&mut self, s: &str);
+}
+
+impl Sink for Test {
+    fn put(&mut self, s: &str) {
+        self.line(s);
+    }
+}
+
+/// One observation line, formatted.
+macro_rules! say {
+    ($t:expr, $($a:tt)*) => {{
+        let mut b = Buf::<600>::new();
+        let _ = write!(b, $($a)*);
+        $t.put(b.as_str());
+    }};
+}
+
+/// A NUL-terminated UTF-16 copy of a string (up to 299 units; characters outside the BMP are not used).
+fn wide(s: &str) -> [u16; 300] {
+    let mut w = [0u16; 300];
+    for (i, c) in s.chars().enumerate().take(299) {
+        w[i] = c as u32 as u16;
+    }
+    w
+}
+
+/// UTF-16 units as text: printable ASCII as it is, anything else as `<xxxx>`.
+fn units_text(u: &[u16]) -> Buf<600> {
+    let mut b = Buf::<600>::new();
+    for &c in u {
+        if (0x20..0x7f).contains(&c) {
+            let _ = write!(b, "{}", c as u8 as char);
+        } else {
+            let _ = write!(b, "<{c:04x}>");
+        }
+    }
+    b
+}
+
+/// The units of a NUL-terminated UTF-16 string at `p` (at most `max`).
+fn wstr_at<'a>(p: *const u16, max: usize) -> &'a [u16] {
+    if p.is_null() {
+        return &[];
+    }
+    let mut n = 0;
+    // SAFETY: the caller passes a NUL-terminated string the system returned; the scan stops at `max`.
+    unsafe {
+        while n < max && *p.add(n) != 0 {
+            n += 1;
+        }
+        core::slice::from_raw_parts(p, n)
+    }
+}
+
+/// Whether two UTF-16 strings are equal without regard to ASCII case.
+fn eq_nocase(a: &[u16], b: &[u16]) -> bool {
+    let low = |c: u16| if (0x41..=0x5a).contains(&c) { c + 0x20 } else { c };
+    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| low(x) == low(y))
+}
+
+const INVALID_HANDLE_VALUE: HANDLE = -1isize as HANDLE;
+const INFINITE: u32 = 0xFFFF_FFFF;
+/// A value no call sets as last error: "unchanged" when it is still there afterwards.
+const MARK: u32 = 0xDEAD;
+
+/// winbase.h `SECURITY_ATTRIBUTES`.
+#[repr(C)]
+struct SECURITY_ATTRIBUTES {
+    length: u32,
+    security_descriptor: *mut c_void,
+    inherit_handle: BOOL,
+}
+
+fn inheritable() -> SECURITY_ATTRIBUTES {
+    SECURITY_ATTRIBUTES { length: 24, security_descriptor: core::ptr::null_mut(), inherit_handle: 1 }
+}
+
+/// processthreadsapi.h `STARTUPINFOW` (104 bytes on x64).
+#[repr(C)]
+struct STARTUPINFOW {
+    cb: u32,
+    reserved: *mut u16,
+    desktop: *mut u16,
+    title: *mut u16,
+    pos: [u32; 7],
+    flags: u32,
+    show_window: u16,
+    cb_reserved2: u16,
+    reserved2: *mut u8,
+    std: [HANDLE; 3],
+}
+
+/// processthreadsapi.h `PROCESS_INFORMATION`.
+#[repr(C)]
+struct PROCESS_INFORMATION {
+    process: HANDLE,
+    thread: HANDLE,
+    pid: u32,
+    tid: u32,
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CloseHandle(h: HANDLE) -> BOOL;
+    fn GetCurrentProcess() -> HANDLE;
+    fn GetCurrentThread() -> HANDLE;
+    fn GetCurrentProcessId() -> u32;
+    fn GetCurrentThreadId() -> u32;
+    fn GetLastError() -> u32;
+    fn SetLastError(e: u32);
+    fn Sleep(ms: u32);
+    fn CreatePipe(read: *mut HANDLE, write: *mut HANDLE, sa: *const SECURITY_ATTRIBUTES, size: u32) -> BOOL;
+    fn ReadFile(h: HANDLE, buf: *mut u8, n: u32, got: *mut u32, ov: *mut c_void) -> BOOL;
+    fn WriteFile(h: HANDLE, buf: *const u8, n: u32, put: *mut u32, ov: *mut c_void) -> BOOL;
+    fn CreateEventW(sa: *const SECURITY_ATTRIBUTES, manual: BOOL, initial: BOOL, name: *const u16) -> HANDLE;
+    fn SetEvent(h: HANDLE) -> BOOL;
+    fn CreateProcessW(
+        app: *const u16,
+        cmd: *mut u16,
+        pa: *const SECURITY_ATTRIBUTES,
+        ta: *const SECURITY_ATTRIBUTES,
+        inherit: BOOL,
+        flags: u32,
+        env: *const c_void,
+        dir: *const u16,
+        si: *const STARTUPINFOW,
+        pi: *mut PROCESS_INFORMATION,
+    ) -> BOOL;
+    fn WaitForSingleObject(h: HANDLE, ms: u32) -> u32;
+    fn TerminateProcess(h: HANDLE, code: u32) -> BOOL;
+    fn GetExitCodeProcess(h: HANDLE, code: *mut u32) -> BOOL;
+    fn GetCommandLineW() -> *const u16;
+    fn GetModuleFileNameW(module: HANDLE, buf: *mut u16, n: u32) -> u32;
+}
+
+fn close(h: HANDLE) {
+    if !h.is_null() && h != INVALID_HANDLE_VALUE {
+        // SAFETY: a handle this test opened, closed once.
+        unsafe { CloseHandle(h) };
+    }
+}
+
+fn last_error() -> u32 {
+    // SAFETY: no arguments.
+    unsafe { GetLastError() }
+}
+
+fn mark_error() {
+    // SAFETY: sets this thread's last error.
+    unsafe { SetLastError(MARK) };
+}
+
+/// The last error as text: `unchanged` when it still is the mark set before the call.
+fn err_text() -> Buf<24> {
+    let e = last_error();
+    let mut b = Buf::<24>::new();
+    if e == MARK {
+        let _ = write!(b, "unchanged");
+    } else {
+        let _ = write!(b, "{e}");
+    }
+    b
+}
+
+/// 1 for a usable handle, else 0.
+fn opened(h: HANDLE) -> u32 {
+    u32::from(!h.is_null() && h != INVALID_HANDLE_VALUE)
+}
+
+// ----------------------------------------------------- child processes
+
+/// The ASCII text after ` --child ` on this process's command line.
+fn child_args() -> Option<Buf<160>> {
+    // SAFETY: GetCommandLineW returns a NUL-terminated string that lives as long as the process.
+    let p = unsafe { GetCommandLineW() };
+    let units = wstr_at(p, 700);
+    let n = units.len();
+    let key = b" --child ";
+    let at = (0..n.saturating_sub(key.len())).find(|&i| (0..key.len()).all(|j| units[i + j] == u16::from(key[j])))?;
+    let mut out = Buf::<160>::new();
+    for &u in &units[at + key.len()..n] {
+        let _ = write!(out, "{}", u as u8 as char);
+    }
+    Some(out)
+}
+
+/// The `i`th space-separated word of `args` as a hexadecimal handle value.
+fn arg_handle(args: &str, i: usize) -> HANDLE {
+    let v = args.split(' ').nth(i).and_then(|w| usize::from_str_radix(w, 16).ok()).unwrap_or(0);
+    v as HANDLE
+}
+
+/// A child process: this test's own image started with `--child <args>`.
+struct Child {
+    process: HANDLE,
+    thread: HANDLE,
+    pid: u32,
+    tid: u32,
+}
+
+/// Start this test's own image with `--child <args>` (handles inherited, creation `flags`).
+fn start_child(args: &str, flags: u32) -> Option<Child> {
+    let mut exe = [0u16; 600];
+    // SAFETY: the buffer holds 600 units; a NULL module is the executable.
+    let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), exe.as_mut_ptr(), 599) } as usize;
+    let mut cmd = [0u16; 800];
+    let mut m = 0;
+    let mut push = |u: u16| {
+        if m < 799 {
+            cmd[m] = u;
+            m += 1;
+        }
+    };
+    push(u16::from(b'"'));
+    for &u in &exe[..n] {
+        push(u);
+    }
+    push(u16::from(b'"'));
+    for b in " --child ".bytes().chain(args.bytes()) {
+        push(u16::from(b));
+    }
+    let si = STARTUPINFOW {
+        cb: 104,
+        reserved: core::ptr::null_mut(),
+        desktop: core::ptr::null_mut(),
+        title: core::ptr::null_mut(),
+        pos: [0; 7],
+        flags: 0,
+        show_window: 0,
+        cb_reserved2: 0,
+        reserved2: core::ptr::null_mut(),
+        std: [core::ptr::null_mut(); 3],
+    };
+    let mut pi = PROCESS_INFORMATION { process: core::ptr::null_mut(), thread: core::ptr::null_mut(), pid: 0, tid: 0 };
+    // SAFETY: `cmd` is mutable and NUL-terminated; the structures are live locals.
+    let ok = unsafe {
+        CreateProcessW(
+            core::ptr::null(),
+            cmd.as_mut_ptr(),
+            core::ptr::null(),
+            core::ptr::null(),
+            1,
+            flags,
+            core::ptr::null(),
+            core::ptr::null(),
+            &si,
+            &mut pi,
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+    Some(Child { process: pi.process, thread: pi.thread, pid: pi.pid, tid: pi.tid })
+}
+
+impl Child {
+    /// Wait for the child (10 s at most, then it is ended with 0xDEAD); close its handles; its exit code.
+    fn finish(self) -> u32 {
+        let mut code = 0u32;
+        // SAFETY: the handles of the process this test started, closed once.
+        unsafe {
+            if WaitForSingleObject(self.process, 10_000) != 0 {
+                TerminateProcess(self.process, 0xDEAD);
+                WaitForSingleObject(self.process, 5_000);
+            }
+            GetExitCodeProcess(self.process, &mut code);
+            CloseHandle(self.thread);
+            CloseHandle(self.process);
+        }
+        code
+    }
+    /// End the child now and close its handles.
+    fn kill(self) {
+        // SAFETY: the handles of the process this test started, closed once.
+        unsafe {
+            TerminateProcess(self.process, 0xDEAD);
+            WaitForSingleObject(self.process, 5_000);
+            CloseHandle(self.thread);
+            CloseHandle(self.process);
+        }
+    }
+}
+
+/// Start this test's own image with `--child <args>` and wait for it; its exit code.
+fn run_child(args: &str) -> Option<u32> {
+    start_child(args, 0).map(Child::finish)
+}
+
+/// The child's report: lines written to an inherited anonymous pipe. The parent side.
+struct Report {
+    read: HANDLE,
+    write: HANDLE,
+}
+
+impl Report {
+    fn new() -> Report {
+        let mut r = Report { read: core::ptr::null_mut(), write: core::ptr::null_mut() };
+        let sa = inheritable();
+        // SAFETY: live out pointers and attributes.
+        unsafe { CreatePipe(&mut r.read, &mut r.write, &sa, 8192) };
+        r
+    }
+    /// Close the write end and print what the child wrote, each line with `child: ` before it.
+    fn print(self, t: &mut Test) {
+        close(self.write);
+        let mut all = [0u8; 8192];
+        let mut n = 0usize;
+        loop {
+            let mut got = 0u32;
+            // SAFETY: reads into the free part of `all`.
+            let ok = unsafe {
+                ReadFile(self.read, all.as_mut_ptr().add(n), (all.len() - n) as u32, &mut got, core::ptr::null_mut())
+            };
+            if ok == 0 || got == 0 {
+                break;
+            }
+            n += got as usize;
+            if n == all.len() {
+                break;
+            }
+        }
+        close(self.read);
+        for line in core::str::from_utf8(&all[..n]).unwrap_or("?").split('\n') {
+            if !line.is_empty() {
+                say!(t, "child: {line}");
+            }
+        }
+    }
+}
+
+/// The child side of a report: lines go into the inherited pipe.
+struct ChildOut {
+    h: HANDLE,
+}
+
+impl Sink for ChildOut {
+    fn put(&mut self, s: &str) {
+        let mut put = 0u32;
+        // SAFETY: writes the bytes of `s` and a newline to the inherited pipe handle.
+        unsafe {
+            WriteFile(self.h, s.as_ptr(), s.len() as u32, &mut put, core::ptr::null_mut());
+            WriteFile(self.h, b"\n".as_ptr(), 1, &mut put, core::ptr::null_mut());
+        }
+    }
+}
+
+/// The entry point of a test that starts its own image again: a process started with
+/// `--child <args>` runs `$child(args) -> u32` (its exit code) and never opens the observation
+/// file (the parent holds it); the other one runs `$test` like `poly_wtest::main!`.
+macro_rules! main_with_child {
+    ($child:path, $test:path) => {
+        #[unsafe(no_mangle)]
+        pub extern "system" fn mainCRTStartup() -> ! {
+            if let Some(a) = child_args() {
+                exit($child(a.as_str()))
+            }
+            if open_output().is_err() {
+                exit(EXIT_NO_OUTPUT);
+            }
+            let mut t = Test::new();
+            $test(&mut t);
+            let code = t.finish();
+            exit(code)
+        }
+    };
+}
+
+// Helpers for the ANSI (`...A`) entries: byte strings.
+
+/// A NUL-terminated copy of `s` (up to 399 bytes).
+fn cs(s: &[u8]) -> [u8; 400] {
+    let mut o = [0u8; 400];
+    let n = s.len().min(399);
+    o[..n].copy_from_slice(&s[..n]);
+    o
+}
+
+/// Bytes as text: printable ASCII as it is, anything else as `<xx>` (hexadecimal).
+fn bshow(b: &[u8]) -> Buf<900> {
+    let mut o = Buf::<900>::new();
+    for &c in b {
+        if (0x20..0x7f).contains(&c) {
+            let _ = write!(o, "{}", c as char);
+        } else {
+            let _ = write!(o, "<{c:02x}>");
+        }
+    }
+    o
+}
+
+/// The bytes of a NUL-terminated string at `p` (at most `max`).
+fn bstr_at<'a>(p: *const u8, max: usize) -> &'a [u8] {
+    if p.is_null() {
+        return &[];
+    }
+    let mut n = 0;
+    // SAFETY: the caller passes a NUL-terminated string; the scan stops at `max`.
+    unsafe {
+        while n < max && *p.add(n) != 0 {
+            n += 1;
+        }
+        core::slice::from_raw_parts(p, n)
+    }
+}
+
+/// A text for a line: as it is up to 40 bytes, else its first 10 and its length.
+fn bshort(b: &[u8]) -> Buf<900> {
+    if b.len() <= 40 {
+        return bshow(b);
+    }
+    let mut o = Buf::<900>::new();
+    let _ = write!(o, "{}...({} bytes)", bshow(&b[..10]).as_str(), b.len());
+    o
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetACP() -> u32;
+    fn GetOEMCP() -> u32;
+}
+
+// Running a copy of this test's image with an external manifest beside it.
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const c_void,
+        disp: u32,
+        flags: u32,
+        tmpl: HANDLE,
+    ) -> HANDLE;
+    fn CopyFileW(from: *const u16, to: *const u16, fail_if_exists: BOOL) -> BOOL;
+    fn DeleteFileW(name: *const u16) -> BOOL;
+}
+
+/// The full path of a file beside this image, as UTF-16 with a NUL.
+fn beside(name: &str) -> [u16; 600] {
+    let mut p = [0u16; 600];
+    // SAFETY: the buffer holds 600 units; NULL is this executable.
+    let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), p.as_mut_ptr(), 500) } as usize;
+    let mut cut = 0;
+    for (i, &c) in p[..n].iter().enumerate() {
+        if c == u16::from(b'\\') {
+            cut = i + 1;
+        }
+    }
+    for (i, c) in name.encode_utf16().enumerate() {
+        p[cut + i] = c;
+    }
+    p[cut + name.len()] = 0;
+    p
+}
+
+/// Write `bytes` to a new file.
+fn write_file(path: &[u16], bytes: &[u8]) -> bool {
+    // SAFETY: NUL-terminated path; the handle is closed below.
+    let h = unsafe { CreateFileW(path.as_ptr(), 0x4000_0000, 0, core::ptr::null(), 2, 0x80, core::ptr::null_mut()) };
+    if h == INVALID_HANDLE_VALUE {
+        return false;
+    }
+    let mut put = 0u32;
+    // SAFETY: writes the bytes of a live slice.
+    let ok = unsafe { WriteFile(h, bytes.as_ptr(), bytes.len() as u32, &mut put, core::ptr::null_mut()) };
+    close(h);
+    ok != 0 && put as usize == bytes.len()
+}
+
+/// Copy this image to `name` beside it; `manifest` is written to `name.manifest` when given.
+/// Starts it with ` --child <args>`, waits and returns the exit code (None when it did not start).
+fn run_copy(name: &str, manifest: Option<&str>, args: &str) -> Option<u32> {
+    let exe = beside(name);
+    let mut mf = [0u16; 620];
+    let mut n = 0;
+    while exe[n] != 0 {
+        mf[n] = exe[n];
+        n += 1;
+    }
+    for c in ".manifest".encode_utf16() {
+        mf[n] = c;
+        n += 1;
+    }
+    let mut me = [0u16; 600];
+    // SAFETY: the buffer holds 600 units; NULL is this executable.
+    unsafe { GetModuleFileNameW(core::ptr::null_mut(), me.as_mut_ptr(), 599) };
+    // SAFETY: NUL-terminated paths.
+    let copied = unsafe { CopyFileW(me.as_ptr(), exe.as_ptr(), 0) };
+    if copied == 0 {
+        return None;
+    }
+    if let Some(m) = manifest {
+        write_file(&mf, m.as_bytes());
+    }
+    let mut cmd = [0u16; 900];
+    let mut m = 0;
+    let mut push = |u: u16| {
+        if m < 899 {
+            cmd[m] = u;
+            m += 1;
+        }
+    };
+    push(u16::from(b'"'));
+    let mut k = 0;
+    while exe[k] != 0 {
+        push(exe[k]);
+        k += 1;
+    }
+    push(u16::from(b'"'));
+    for b in " --child ".bytes().chain(args.bytes()) {
+        push(u16::from(b));
+    }
+    let si = STARTUPINFOW {
+        cb: 104,
+        reserved: core::ptr::null_mut(),
+        desktop: core::ptr::null_mut(),
+        title: core::ptr::null_mut(),
+        pos: [0; 7],
+        flags: 0,
+        show_window: 0,
+        cb_reserved2: 0,
+        reserved2: core::ptr::null_mut(),
+        std: [core::ptr::null_mut(); 3],
+    };
+    let mut pi = PROCESS_INFORMATION { process: core::ptr::null_mut(), thread: core::ptr::null_mut(), pid: 0, tid: 0 };
+    // SAFETY: `cmd` is mutable and NUL-terminated; the structures are live locals.
+    let ok = unsafe {
+        CreateProcessW(
+            exe.as_ptr(),
+            cmd.as_mut_ptr(),
+            core::ptr::null(),
+            core::ptr::null(),
+            1,
+            0,
+            core::ptr::null(),
+            core::ptr::null(),
+            &si,
+            &mut pi,
+        )
+    };
+    let code = if ok == 0 {
+        None
+    } else {
+        Some(Child { process: pi.process, thread: pi.thread, pid: pi.pid, tid: pi.tid }.finish())
+    };
+    // SAFETY: NUL-terminated paths of files this test made.
+    unsafe {
+        DeleteFileW(exe.as_ptr());
+        DeleteFileW(mf.as_ptr());
+    }
+    code
+}
+
+/// An application manifest that names the given supportedOS ids.
+fn manifest_for(ids: &[&str]) -> Buf<1500> {
+    let mut b = Buf::<1500>::new();
+    let _ = write!(b, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n");
+    let _ = write!(b, "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\r\n");
+    let _ = write!(b, "<compatibility xmlns=\"urn:schemas-microsoft-com:compatibility.v1\"><application>\r\n");
+    for id in ids {
+        let _ = write!(b, "<supportedOS Id=\"{id}\"/>\r\n");
+    }
+    let _ = write!(b, "</application></compatibility></assembly>\r\n");
+    b
+}
+
+const OS_VISTA: &str = "{e2011457-1546-43c5-a5fe-008deee3d3f0}";
+const OS_WIN7: &str = "{35138b9a-5d96-4fbd-8e2d-a2440225f93a}";
+const OS_WIN8: &str = "{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}";
+const OS_WIN81: &str = "{1f676c76-80e1-4239-95bb-83d0f6d0da78}";
+const OS_WIN10: &str = "{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}";
+
+// A generated data file: a PE32+ DLL image with no code whose .rsrc section holds the test resources
+// (lib/mkpe.py in the spec agent's kit). Written to disk and loaded by the resource tests.
+static PE: [u8; 2048] = [
+    0x4d, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x50, 0x45, 0x00, 0x00, 0x64, 0x86, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x22, 0x20, 0x0b, 0x02, 0x0e, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0xe4, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x72, 0x73, 0x72, 0x63, 0x00, 0x00, 0x00, 0xe4, 0x05, 0x00, 0x00, 0x00, 0x10,
+    0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x05, 0x00, 0x40, 0x04, 0x00, 0x80,
+    0x48, 0x00, 0x00, 0x80, 0x52, 0x04, 0x00, 0x80, 0x68, 0x00, 0x00, 0x80, 0x03, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00,
+    0x80, 0x06, 0x00, 0x00, 0x00, 0x98, 0x00, 0x00, 0x80, 0x0a, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x80, 0x0e, 0x00,
+    0x00, 0x00, 0x08, 0x01, 0x00, 0x80, 0x10, 0x00, 0x00, 0x00, 0x28, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x32, 0x04, 0x00, 0x80, 0x40, 0x01, 0x00, 0x80,
+    0x01, 0x00, 0x00, 0x00, 0x58, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x00, 0x00, 0x70, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x88, 0x01, 0x00, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0xa0, 0x01, 0x00, 0x80, 0x02, 0x00, 0x00, 0x00, 0xb8, 0x01, 0x00, 0x80, 0x07, 0x00, 0x00, 0x00, 0xd0, 0x01, 0x00,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x03, 0x00, 0x00, 0x04,
+    0x00, 0x80, 0xe8, 0x01, 0x00, 0x80, 0x0c, 0x04, 0x00, 0x80, 0x00, 0x02, 0x00, 0x80, 0x16, 0x04, 0x00, 0x80, 0x18,
+    0x02, 0x00, 0x80, 0x66, 0x04, 0x00, 0x80, 0x30, 0x02, 0x00, 0x80, 0x07, 0x00, 0x00, 0x00, 0x48, 0x02, 0x00, 0x80,
+    0x64, 0x00, 0x00, 0x00, 0x68, 0x02, 0x00, 0x80, 0x65, 0x00, 0x00, 0x00, 0x80, 0x02, 0x00, 0x80, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x20, 0x04, 0x00, 0x80, 0x98, 0x02,
+    0x00, 0x80, 0x02, 0x00, 0x00, 0x00, 0xb0, 0x02, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0xc8, 0x02, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe0, 0x02, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0xf0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x03,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x30, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x07, 0x04, 0x00, 0x00, 0x40, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x03, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60,
+    0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x70, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x07, 0x04, 0x00, 0x00, 0x90, 0x03, 0x00, 0x00, 0x09,
+    0x04, 0x00, 0x00, 0xa0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x03, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd0,
+    0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xe0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x09, 0x04, 0x00, 0x00, 0xf0, 0x03, 0x00, 0x00, 0x94, 0x15, 0x00, 0x00, 0x05, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x84, 0x15, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x9c, 0x15, 0x00, 0x00, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x70, 0x14, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x78, 0x14, 0x00, 0x00, 0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xbc, 0x14,
+    0x00, 0x00, 0x2e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xec, 0x14, 0x00, 0x00, 0x36,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x15, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x15, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x15, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x3c, 0x15, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x54,
+    0x15, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x15, 0x00, 0x00,
+    0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x44, 0x15, 0x00, 0x00, 0x03, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x64, 0x15, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x6c, 0x15, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x74, 0x15, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x41,
+    0x00, 0x4c, 0x00, 0x50, 0x00, 0x48, 0x00, 0x41, 0x00, 0x04, 0x00, 0x42, 0x00, 0x45, 0x00, 0x54, 0x00, 0x41, 0x00,
+    0x04, 0x00, 0x42, 0x00, 0x4c, 0x00, 0x4f, 0x00, 0x42, 0x00, 0x08, 0x00, 0x4d, 0x00, 0x41, 0x00, 0x49, 0x00, 0x4e,
+    0x00, 0x49, 0x00, 0x43, 0x00, 0x4f, 0x00, 0x4e, 0x00, 0x06, 0x00, 0x52, 0x00, 0x45, 0x00, 0x41, 0x00, 0x44, 0x00,
+    0x4d, 0x00, 0x45, 0x00, 0x08, 0x00, 0x54, 0x00, 0x45, 0x00, 0x58, 0x00, 0x54, 0x00, 0x46, 0x00, 0x49, 0x00, 0x4c,
+    0x00, 0x45, 0x00, 0x09, 0x00, 0x54, 0x00, 0x45, 0x00, 0x58, 0x00, 0x54, 0x00, 0x46, 0x00, 0x49, 0x00, 0x4c, 0x00,
+    0x45, 0x00, 0x32, 0x00, 0x04, 0x00, 0x5a, 0x00, 0x45, 0x00, 0x54, 0x00, 0x41, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
+    0x06, 0x07, 0x08, 0x00, 0x00, 0x05, 0x00, 0x48, 0x00, 0x65, 0x00, 0x6c, 0x00, 0x6c, 0x00, 0x6f, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0x57, 0x00, 0x6f, 0x00, 0x72, 0x00, 0x6c, 0x00, 0x64, 0x00, 0x20, 0x00, 0xac, 0x20, 0xe9, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x6c, 0x00, 0x61, 0x00, 0x73, 0x00, 0x74, 0x00, 0x00, 0x00, 0x07, 0x00, 0x73, 0x00, 0x69,
+    0x00, 0x78, 0x00, 0x74, 0x00, 0x65, 0x00, 0x65, 0x00, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x6e, 0x00, 0x75, 0x00,
+    0x72, 0x00, 0x20, 0x00, 0x64, 0x00, 0x65, 0x00, 0x75, 0x00, 0x74, 0x00, 0x73, 0x00, 0x63, 0x00, 0x68, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41, 0x42, 0x43, 0x44, 0x45,
+    0x46, 0x47, 0x48, 0x49, 0x4a, 0x41, 0x00, 0x00, 0x00, 0x5a, 0x5a, 0x00, 0x00, 0x42, 0x42, 0x42, 0x00, 0x61, 0x62,
+    0x63, 0x00, 0x65, 0x6e, 0x67, 0x6c, 0x69, 0x73, 0x68, 0x20, 0x74, 0x65, 0x78, 0x74, 0x64, 0x65, 0x75, 0x74, 0x73,
+    0x63, 0x68, 0x65, 0x72, 0x20, 0x74, 0x65, 0x78, 0x74, 0x21, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a,
+    0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x6c, 0x69, 0x6e, 0x65, 0x31, 0x0d, 0x0a, 0x6c, 0x69, 0x6e, 0x65, 0x32, 0x0d, 0x0a,
+    0x00, 0x00, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x00, 0x00, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+    0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+    0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+    0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+    0x78, 0x78, 0x78, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+];
+
+// winbase.h / winuser.h: the resource functions, and the helpers around the generated test image (rsrcpe_data).
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn LoadLibraryExW(name: *const u16, file: HANDLE, flags: u32) -> HANDLE;
+    fn FreeLibrary(h: HANDLE) -> BOOL;
+    fn GetModuleHandleW(name: *const u16) -> HANDLE;
+    fn FindResourceW(h: HANDLE, name: *const u16, ty: *const u16) -> HANDLE;
+    fn FindResourceExW(h: HANDLE, ty: *const u16, name: *const u16, lang: u16) -> HANDLE;
+    fn LoadResource(h: HANDLE, r: HANDLE) -> HANDLE;
+    fn LockResource(h: HANDLE) -> *mut c_void;
+    fn SizeofResource(h: HANDLE, r: HANDLE) -> u32;
+    fn FreeResource(h: HANDLE) -> BOOL;
+    fn EnumResourceNamesW(
+        h: HANDLE,
+        ty: *const u16,
+        cb: extern "system" fn(HANDLE, *const u16, *const u16, isize) -> BOOL,
+        lp: isize,
+    ) -> BOOL;
+    fn EnumResourceTypesW(h: HANDLE, cb: extern "system" fn(HANDLE, *const u16, isize) -> BOOL, lp: isize) -> BOOL;
+}
+
+#[link(name = "user32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn LoadStringW(h: HANDLE, id: u32, buf: *mut u16, cch: i32) -> i32;
+}
+
+const LOAD_AS_DATAFILE: u32 = 0x2;
+const LOAD_AS_IMAGE_RESOURCE: u32 = 0x20;
+const RT_RCDATA: u16 = 10;
+const RT_STRING: u16 = 6;
+const RT_ICON: u16 = 3;
+const RT_GROUP_ICON: u16 = 14;
+const RT_VERSION: u16 = 16;
+
+/// A resource type or name: a number (MAKEINTRESOURCE) or a string.
+#[derive(Clone, Copy)]
+enum Rid {
+    N(u16),
+    S(&'static str),
+}
+
+/// The pointer for a type or name; `buf` holds the string form.
+fn rid_ptr(r: Rid, buf: &mut [u16; 100]) -> *const u16 {
+    match r {
+        Rid::N(n) => n as usize as *const u16,
+        Rid::S(s) => {
+            *buf = [0; 100];
+            for (i, c) in s.encode_utf16().enumerate().take(99) {
+                buf[i] = c;
+            }
+            buf.as_ptr()
+        }
+    }
+}
+
+fn rid_text(r: Rid) -> Buf<120> {
+    let mut b = Buf::<120>::new();
+    match r {
+        Rid::N(n) => {
+            let _ = write!(b, "#{n}");
+        }
+        Rid::S(s) => {
+            let _ = write!(b, "\"{s}\"");
+        }
+    }
+    b
+}
+
+/// A type or name as a callback received it: an integer id or a string.
+fn ptr_text(p: *const u16) -> Buf<160> {
+    let mut b = Buf::<160>::new();
+    if (p as usize) < 0x10000 {
+        let _ = write!(b, "#{}", p as usize);
+    } else {
+        let _ = write!(b, "\"{}\"", units_text(wstr_at(p, 100)).as_str());
+    }
+    b
+}
+
+/// Write the generated image beside this test and load it with `flags` (None when it did not load).
+fn open_pe(t: &mut Test, tag: &str, flags: u32) -> HANDLE {
+    let path = beside("pt_res.dll");
+    let ok = write_file(&path, &PE);
+    mark_error();
+    // SAFETY: NUL-terminated path.
+    let h = unsafe { LoadLibraryExW(path.as_ptr(), core::ptr::null_mut(), flags) };
+    let e = err_text();
+    if h.is_null() {
+        say!(
+            t,
+            "{tag}: file written {}, LoadLibraryExW(flags {flags:#x}) -> NULL, error {}",
+            u32::from(ok),
+            e.as_str()
+        );
+    } else {
+        say!(t, "{tag}: file written {}, LoadLibraryExW(flags {flags:#x}) -> a module", u32::from(ok));
+    }
+    h
+}
+
+fn close_pe(h: HANDLE) {
+    let path = beside("pt_res.dll");
+    // SAFETY: a module this test loaded; its file.
+    unsafe {
+        if !h.is_null() {
+            FreeLibrary(h);
+        }
+        DeleteFileW(path.as_ptr());
+    }
+}
+
+/// The first bytes of a resource's data as text, up to `max`.
+fn data_text(p: *const u8, n: u32, max: usize) -> Buf<300> {
+    let mut b = Buf::<300>::new();
+    if p.is_null() {
+        let _ = write!(b, "<null>");
+        return b;
+    }
+    let k = (n as usize).min(max);
+    // SAFETY: the resource data is at least `n` bytes long.
+    let s = unsafe { core::slice::from_raw_parts(p, k) };
+    let _ = write!(b, "{}", bshow(s).as_str());
+    if (n as usize) > max {
+        let _ = write!(b, "...");
+    }
+    b
+}
+
+/// FindResourceW (lang None) or FindResourceExW; then SizeofResource, LoadResource and LockResource: one line.
+/// Returns the resource handle.
+fn fr(t: &mut Test, h: HANDLE, tag: &str, ty: Rid, name: Rid, lang: Option<u16>) -> HANDLE {
+    let (mut tb, mut nb) = ([0u16; 100], [0u16; 100]);
+    let tp = rid_ptr(ty, &mut tb);
+    let np = rid_ptr(name, &mut nb);
+    mark_error();
+    // SAFETY: NUL-terminated strings or small integers.
+    let r = unsafe {
+        match lang {
+            None => FindResourceW(h, np, tp),
+            Some(l) => FindResourceExW(h, tp, np, l),
+        }
+    };
+    let e = err_text();
+    let mut call_s = Buf::<60>::new();
+    match lang {
+        None => {
+            let _ = write!(call_s, "FindResourceW");
+        }
+        Some(l) => {
+            let _ = write!(call_s, "FindResourceExW lang {l:#x}");
+        }
+    }
+    if r.is_null() {
+        say!(
+            t,
+            "{tag}: {} type {} name {} -> NULL, error {}",
+            call_s.as_str(),
+            rid_text(ty).as_str(),
+            rid_text(name).as_str(),
+            e.as_str()
+        );
+        return r;
+    }
+    // SAFETY: a resource handle this module returned.
+    let (size, g) = unsafe { (SizeofResource(h, r), LoadResource(h, r)) };
+    // SAFETY: the handle LoadResource returned.
+    let p = unsafe { LockResource(g) } as *const u8;
+    say!(
+        t,
+        "{tag}: {} type {} name {} -> found, size {size}, loaded {}, data \"{}\"",
+        call_s.as_str(),
+        rid_text(ty).as_str(),
+        rid_text(name).as_str(),
+        u32::from(!g.is_null()),
+        data_text(p, size, 24).as_str()
+    );
+    r
+}
+
+/// Print what an enumeration collected, six entries to a line.
+fn print_collect(t: &mut Test, tag: &str, c: &Collect, ret: BOOL, err: &str) {
+    say!(t, "{tag}: returned {ret}, error {err}, callbacks {}", c.count);
+    let mut line = Buf::<500>::new();
+    let mut k = 0;
+    for tok in c.lines.as_str().split(' ').filter(|s| !s.is_empty()) {
+        let _ = write!(line, " {tok}");
+        k += 1;
+        if k % 6 == 0 {
+            say!(t, "  {}", line.as_str());
+            line = Buf::<500>::new();
+        }
+    }
+    if k % 6 != 0 {
+        say!(t, "  {}", line.as_str());
+    }
+}
+
+/// What an enumeration collected.
+struct Collect {
+    lines: Buf<1500>,
+    count: u32,
+    stop_at: u32,
+    lparam_ok: bool,
+    expect: isize,
+}
+
+extern "system" fn name_cb(_m: HANDLE, ty: *const u16, name: *const u16, lp: isize) -> BOOL {
+    // SAFETY: `lp` is the address of a live `Collect` of the calling test.
+    let c = unsafe { &mut *(lp as *mut Collect) };
+    c.count += 1;
+    let _ = write!(c.lines, " {}/{}", ptr_text(ty).as_str(), ptr_text(name).as_str());
+    BOOL::from(!(c.stop_at != 0 && c.count >= c.stop_at))
+}
+
+extern "system" fn type_cb(_m: HANDLE, ty: *const u16, lp: isize) -> BOOL {
+    // SAFETY: `lp` is the address of a live `Collect` of the calling test.
+    let c = unsafe { &mut *(lp as *mut Collect) };
+    c.count += 1;
+    let _ = write!(c.lines, " {}", ptr_text(ty).as_str());
+    BOOL::from(!(c.stop_at != 0 && c.count >= c.stop_at))
+}
+
+fn new_collect(stop_at: u32) -> Collect {
+    Collect { lines: Buf::<1500>::new(), count: 0, stop_at, lparam_ok: true, expect: 0 }
+}
+
+poly_wtest::main!(test);
+
+fn test(t: &mut Test) {
+    for (tag, flags) in [("datafile", LOAD_AS_DATAFILE), ("image resource", LOAD_AS_IMAGE_RESOURCE), ("normal", 0)] {
+        let h = open_pe(t, tag, flags);
+        if h.is_null() {
+            close_pe(h);
+            continue;
+        }
+        let r = fr(t, h, tag, Rid::N(RT_RCDATA), Rid::S("BLOB"), None);
+        // SAFETY: handles of this test's module and resource.
+        unsafe {
+            let g1 = LoadResource(h, r);
+            let g2 = LoadResource(h, r);
+            say!(t, "{tag}: two loads give the same handle: {}", u32::from(g1 == g2));
+            let p1 = LockResource(g1) as *const u8;
+            let p2 = LockResource(g2) as *const u8;
+            say!(t, "{tag}: two locks give the same pointer: {}", u32::from(p1 == p2));
+            let n = SizeofResource(h, r);
+            // The bytes, read in full, and the byte after the data is not asked for.
+            say!(t, "{tag}: size {n}, data \"{}\"", data_text(p1, n, 40).as_str());
+            // Reading each byte works (the pages are mapped).
+            let mut sum = 0u32;
+            for i in 0..n as usize {
+                sum += u32::from(*p1.add(i));
+            }
+            say!(t, "{tag}: sum of the bytes {sum}");
+            // Data of a resource of size 0.
+            let z = FindResourceW(h, 101 as *const u16, RT_RCDATA as usize as *const u16);
+            let gz = LoadResource(h, z);
+            mark_error();
+            let n0 = SizeofResource(h, z);
+            say!(
+                t,
+                "{tag}: empty resource: size {n0}, loaded {}, locked {}, error {}",
+                u32::from(!gz.is_null()),
+                u32::from(!LockResource(gz).is_null()),
+                err_text().as_str()
+            );
+            // FreeResource does nothing harmful and says so.
+            mark_error();
+            let f = FreeResource(g1);
+            say!(t, "{tag}: FreeResource -> {f}, error {}", err_text().as_str());
+            let p3 = LockResource(LoadResource(h, r)) as *const u8;
+            say!(t, "{tag}: data after FreeResource \"{}\"", data_text(p3, n, 40).as_str());
+        }
+        // The version resource and the string block.
+        let rv = fr(t, h, tag, Rid::N(RT_VERSION), Rid::N(1), None);
+        say!(t, "{tag}: version resource found {}", u32::from(!rv.is_null()));
+        close_pe(h);
+    }
+}

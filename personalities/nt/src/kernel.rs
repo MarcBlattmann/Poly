@@ -104,11 +104,13 @@ pub struct ThreadCreated {
 }
 
 /// A request to create a process (`NtCreateUserProcess`, ADR 0079), once
-/// the service has decoded it: the executable's bytes (opened and read
-/// from the image path for the caller) and the new process's parameters.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// the service has decoded it: the executable's image (opened from the
+/// image path for the caller; only its headers are read, its pages come
+/// from the file when they are touched, ADR 0155) and the new process's
+/// parameters.
+#[derive(Clone, Debug)]
 pub struct ProcessCreate {
-    pub image: alloc::vec::Vec<u8>,
+    pub image: crate::image::ImageSection,
     pub params: crate::params::Parameters,
     /// The access the handles to the new process and its first thread are
     /// opened with.

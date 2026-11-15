@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getpeername_basic",
+      "exe_sha256": "067685cc13668d49547a9dc5be904990942ec48e325250165fcf9a40b4c6c748",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJlc2ggVENQIHNvY2tldDogLTEvV1NBRU5PVENPTk4gbGVuZ3RoIG5vdyAxNiBieXRlcyB3cml0dGVuIDAKbGlzdGVuZXI6IC0xL1dTQUVOT1RDT05OIGxlbmd0aCBub3cgMTYgYnl0ZXMgd3JpdHRlbiAwCmxlbmd0aCA4OiAtMS9XU0FFRkFVTFQgbGVuZ3RoIG5vdyA4IGJ5dGVzIHdyaXR0ZW4gMAogIGZhbWlseSAyIHBvcnQgaXMgdGhlIGxpc3RlbmVyJ3MgMSBhZGRyZXNzIFsxMjcsIDAsIDAsIDFdCmNsaWVudCBhZnRlciB0aGUgcGVlciBjbG9zZWQ6IDAgbGVuZ3RoIG5vdyAxNiBieXRlcyB3cml0dGVuIDE2CmNvbm5lY3QgdG8gYSBjbG9zZWQgcG9ydCAtMS9XU0FFQ09OTlJFRlVTRUQKYWZ0ZXIgRkRfQ09OTkVDVDogMCBsZW5ndGggbm93IDE2IGJ5dGVzIHdyaXR0ZW4gMTYKICBwb3J0IGlzIHRoZSBvbmUgY29ubmVjdGVkIHRvIDEgYWRkcmVzcyBbMTI3LCAwLCAwLCAxXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fresh TCP socket: -1/WSAENOTCONN length now 16 bytes written 0\nlistener: -1/WSAENOTCONN length now 16 bytes written 0\nlength 8: -1/WSAEFAULT length now 8 bytes written 0\n  family 2 port is the listener's 1 address [127, 0, 0, 1]\nclient after the peer closed: 0 length now 16 bytes written 16\nconnect to a closed port -1/WSAECONNREFUSED\nafter FD_CONNECT: 0 length now 16 bytes written 16\n  port is the one connected to 1 address [127, 0, 0, 1]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2269
+    },
+    {
+      "name": "getpeername_basic_b",
+      "exe_sha256": "03222793b2ea9840fc9c979a3df2e6afb665896c5baa48e2fd4f1722e39bb496",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJlc2ggVURQIHNvY2tldDogLTEvV1NBRU5PVENPTk4gbGVuZ3RoIG5vdyAxNiBieXRlcyB3cml0dGVuIDAKY29ubmVjdGVkIGNsaWVudCwgbGVuZ3RoIDE2OiAwIGxlbmd0aCBub3cgMTYgYnl0ZXMgd3JpdHRlbiAxNgpsZW5ndGggMDogLTEvV1NBRUZBVUxUIGxlbmd0aCBub3cgMCBieXRlcyB3cml0dGVuIDAKYWNjZXB0ZWQgc29ja2V0J3MgcGVlciBwb3J0IGlzIHRoZSBjbGllbnQncyBsb2NhbCBwb3J0IDEKY2xpZW50IGFmdGVyIGl0cyBvd24gU0RfQk9USDogMCBsZW5ndGggbm93IDE2IGJ5dGVzIHdyaXR0ZW4gMTYKc29ja2V0IGFmdGVyIHRoZSByZWZ1c2VkIGNvbm5lY3Q6IC0xL1dTQUVOT1RDT05OIGxlbmd0aCBub3cgMTYgYnl0ZXMgd3JpdHRlbiAwClVEUCBjb25uZWN0IDAKVURQIGNvbm5lY3QgdG8gMC4wLjAuMDowIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fresh UDP socket: -1/WSAENOTCONN length now 16 bytes written 0\nconnected client, length 16: 0 length now 16 bytes written 16\nlength 0: -1/WSAEFAULT length now 0 bytes written 0\naccepted socket's peer port is the client's local port 1\nclient after its own SD_BOTH: 0 length now 16 bytes written 16\nsocket after the refused connect: -1/WSAENOTCONN length now 16 bytes written 0\nUDP connect 0\nUDP connect to 0.0.0.0:0 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2255
+    }
+  ]
+}

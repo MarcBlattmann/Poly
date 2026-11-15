@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "sendto_connected_udp",
+      "exe_sha256": "bca15e481bc4f5a77535abdacb65eda4b1c98fe82fcf957a2c7e5b7269a2cbb1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29ubmVjdCB0byBhIDAKc2VuZHRvIHdpdGggYSBOVUxMIGFkZHJlc3MgMSBhIGdvdCBpdCAxCnNlbmR0byB3aXRoIGEgMjgtYnl0ZSBBRl9JTkVUNiBhZGRyZXNzIG9uIGFuIEFGX0lORVQgc29ja2V0IC0xL1dTQUVBRk5PU1VQUE9SVAp1bmNvbm5lY3RlZCwgbm8gYWRkcmVzcyAtMS9XU0FFTk9UQ09OTgo2NTUwNyBieXRlcyA2NTUwNwpzZW5kdG8gb24gYSBjb25uZWN0ZWQgVENQIHNvY2tldCB3aXRoIGFub3RoZXIgYWRkcmVzcyAxCnY2IGNvbm5lY3QgMAp2NiBzb2NrZXQsIEFGX0lORVQgYWRkcmVzcyAtMS9XU0FFRkFVTFQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "connect to a 0\nsendto with a NULL address 1 a got it 1\nsendto with a 28-byte AF_INET6 address on an AF_INET socket -1/WSAEAFNOSUPPORT\nunconnected, no address -1/WSAENOTCONN\n65507 bytes 65507\nsendto on a connected TCP socket with another address 1\nv6 connect 0\nv6 socket, AF_INET address -1/WSAEFAULT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 569
+    },
+    {
+      "name": "sendto_connected_udp_c",
+      "exe_sha256": "2bde7148a57c0893757e5c36084e0d661f4c784ce3aeb008fa1346a644dbb5c4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VuZHRvIGFub3RoZXIgYWRkcmVzcyAxIGEgZ290IGl0IDAgYiBnb3QgaXQgMQpzZW5kdG8gd2l0aCBBRl9VTlNQRUMgLTEvV1NBRUFGTk9TVVBQT1JUCnNlbmR0byB3aXRoIGxlbmd0aCA0MCAxIGEgZ290IGl0IDEKNzAwMDAgYnl0ZXMgLTEvV1NBRU1TR1NJWkUKMCBieXRlcyAwCnNlbmR0byBvbiBhIGNvbm5lY3RlZCBUQ1Agc29ja2V0IHdpdGggbm8gYWRkcmVzcyAxCnY2IHNlbmR0byBsZW5ndGggMTYgLTEvV1NBRUZBVUxUCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sendto another address 1 a got it 0 b got it 1\nsendto with AF_UNSPEC -1/WSAEAFNOSUPPORT\nsendto with length 40 1 a got it 1\n70000 bytes -1/WSAEMSGSIZE\n0 bytes 0\nsendto on a connected TCP socket with no address 1\nv6 sendto length 16 -1/WSAEFAULT\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 573
+    }
+  ]
+}

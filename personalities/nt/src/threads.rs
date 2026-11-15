@@ -180,7 +180,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         &attrs,
         FILE_EXECUTE | FILE_READ_DATA | SYNCHRONIZE,
         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        |sys, cookie| sys.io.read_all(cookie),
+        |sys, cookie| crate::image::ImageSection::from_reader(sys.io.image_file(cookie)?),
     )?;
     let all = |a: u32, all: u32| if a == 0 { all } else { a };
     // Poly's own flag: CreateInfo is a handle to the primary token to give it.
@@ -477,6 +477,16 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
             sys.proc_attrs.get(&pid).copied().unwrap_or(ProcAttrs::new(0)).get(class).expect("a class it keeps")
         });
         return write_info(k, buf, length, ret, &bytes);
+    }
+    if class as u32 == PROCESS_WOW64_INFORMATION {
+        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+        let peb32 = |p: &crate::system::NtProcess| if p.wow64 { p.peb } else { 0 };
+        let own = k.with_state(|_, proc, _| (proc.pid == pid).then(|| peb32(proc)));
+        let value = match own {
+            Some(v) => v,
+            None => k.with_process(pid, |_, p, _| peb32(p)).unwrap_or(0),
+        };
+        return write_info(k, buf, length, ret, &value.to_le_bytes());
     }
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);

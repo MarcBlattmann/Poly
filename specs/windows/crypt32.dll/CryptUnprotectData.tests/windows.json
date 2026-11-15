@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "cryptunprotectdata_blobs_b",
+      "exe_sha256": "c396caae97370b29fa00bb418ff918c339ae75de9462b95c79b36a13a8b76450",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5wcm90ZWN0IGFza2luZyBmb3IgdGhlIGRlc2NyaXB0aW9uOiAxIGxhc3QgZXJyb3IgMCB0ZXh0ICdwb2x5IGRlc2NyaXB0aW9uJwp1bnByb3RlY3Qgd2l0aCB0aGUgc2FtZSBlbnRyb3B5OiAxIGxhc3QgZXJyb3IgMCByb3VuZCB0cmlwIDEKdW5wcm90ZWN0IGEgYmxvYiBtYWRlIHdpdGhvdXQgZW50cm9weSB1c2luZyBlbnRyb3B5OiAwIGxhc3QgZXJyb3IgMTMgb3V0cHV0IE5VTEwgMQpvbmx5IHRoZSBmaXJzdCA4IGJ5dGVzIG9mIGEgYmxvYjogMCBsYXN0IGVycm9yIDg3CkNocm9tZSdzIGZvcm0gKG5vIGRlc2NyaXB0aW9uIG91dCBwb2ludGVyKTogMSBsYXN0IGVycm9yIDAgcm91bmQgdHJpcCAxCnVucHJvdGVjdCBmbGFncyB1bmtub3duIDB4MTAwMDogMSBsYXN0IGVycm9yIDAgcm91bmQgdHJpcCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unprotect asking for the description: 1 last error 0 text 'poly description'\nunprotect with the same entropy: 1 last error 0 round trip 1\nunprotect a blob made without entropy using entropy: 0 last error 13 output NULL 1\nonly the first 8 bytes of a blob: 0 last error 87\nChrome's form (no description out pointer): 1 last error 0 round trip 1\nunprotect flags unknown 0x1000: 1 last error 0 round trip 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "cryptunprotectdata_blobs_c",
+      "exe_sha256": "ff165abeddbf738bd5d3b3c5eb21d3e665db4e11bf084bb82b2ace3794035a68",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVzY3JpcHRpb24gb2YgYSBibG9iIG1hZGUgd2l0aG91dCBvbmU6IDEgbGFzdCBlcnJvciAwIHRleHQgJycgbm9uLU5VTEwgMQp1bnByb3RlY3Qgd2l0aCBvdGhlciBlbnRyb3B5OiAwIGxhc3QgZXJyb3IgMTMgb3V0cHV0IE5VTEwgMQpvbmUgZmxpcHBlZCBiaXQgaW4gdGhlIG1pZGRsZSBvZiB0aGUgYmxvYjogMCBsYXN0IGVycm9yIDEzCnVucHJvdGVjdCBwbGFpbiBkYXRhOiAwIGxhc3QgZXJyb3IgODcKdW5wcm90ZWN0IGZsYWdzIFVJX0ZPUkJJRERFTiAxOiAxIGxhc3QgZXJyb3IgMCByb3VuZCB0cmlwIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "description of a blob made without one: 1 last error 0 text '' non-NULL 1\nunprotect with other entropy: 0 last error 13 output NULL 1\none flipped bit in the middle of the blob: 0 last error 13\nunprotect plain data: 0 last error 87\nunprotect flags UI_FORBIDDEN 1: 1 last error 0 round trip 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

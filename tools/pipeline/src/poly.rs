@@ -56,6 +56,10 @@ use std::time::Duration;
 pub const INIT_PATH: &str = "/test-binary";
 /// Kernel arguments for a test run.
 pub const KERNEL_ARGS: &str = "poly.qemu_exit poly.init=/test-binary poly.test.capture";
+/// [`KERNEL_ARGS`] for a program at `init` instead of [`INIT_PATH`].
+pub fn kernel_args_for(init: &str) -> String {
+    format!("poly.qemu_exit poly.init={init} poly.test.capture")
+}
 /// Kernel arguments of an app test run on top of [`KERNEL_ARGS`]: the
 /// files whose contents are the run's standard output and error, which
 /// the kernel reports (`POLY-OUT`) when the program has ended: the files
@@ -302,13 +306,18 @@ pub fn initramfs(binary: &[u8]) -> Result<Vec<u8>> {
 /// directories made on the way. A Windows test's `C:` is `/nt/c` without a disk
 /// (ADR 0073), so `nt/c/Windows/Fonts/x.ttf` is `C:\Windows\Fonts\x.ttf`.
 pub fn initramfs_with(binary: &[u8], files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
-    let mut entries = vec![
-        cpio::Entry::dir("dev"),
-        cpio::Entry::dir_mode("tmp", 0o1777),
-        cpio::Entry::file(INIT_PATH.trim_start_matches('/'), 0o755, binary.to_vec()),
-    ];
+    initramfs_at(INIT_PATH, binary, files)
+}
+
+/// [`initramfs_with`] with the program at `init` (an absolute path in the
+/// root) instead of [`INIT_PATH`], its directories made on the way. The
+/// Windows tests run from `C:\PolyTests` (`/nt/c/PolyTests`, ADR 0185).
+pub fn initramfs_at(init: &str, binary: &[u8], files: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
+    let mut entries = vec![cpio::Entry::dir("dev"), cpio::Entry::dir_mode("tmp", 0o1777)];
+    let mut files: Vec<(String, Vec<u8>, u32)> = files.iter().map(|(p, d)| (p.clone(), d.clone(), 0o644)).collect();
+    files.push((init.trim_start_matches('/').to_string(), binary.to_vec(), 0o755));
     let mut made: Vec<String> = Vec::new();
-    for (path, data) in files {
+    for (path, data, mode) in &files {
         let mut prefix = String::new();
         let parts: Vec<&str> = path.split('/').collect();
         for part in &parts[..parts.len() - 1] {
@@ -321,7 +330,7 @@ pub fn initramfs_with(binary: &[u8], files: &[(String, Vec<u8>)]) -> Result<Vec<
                 made.push(prefix.clone());
             }
         }
-        entries.push(cpio::Entry::file(path, 0o644, data.clone()));
+        entries.push(cpio::Entry::file(path, *mode, data.clone()));
     }
     cpio::write(&entries)
 }
@@ -552,6 +561,23 @@ impl Target {
 mod tests {
     use super::*;
     use crate::trace::{NormOptions, normalize};
+
+    #[test]
+    fn initramfs_at_puts_the_program_where_asked() {
+        let files = vec![("nt/c/Windows/Fonts/a.ttf".to_string(), b"a".to_vec())];
+        let entries = cpio::read(&initramfs_at("/nt/c/PolyTests/test-binary", b"exe", &files).unwrap()).unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        for n in ["nt/c", "nt/c/PolyTests", "nt/c/PolyTests/test-binary", "nt/c/Windows/Fonts/a.ttf"] {
+            assert_eq!(names.iter().filter(|x| **x == n).count(), 1, "{n}");
+        }
+        assert!(!names.contains(&"test-binary"));
+        let exe = entries.iter().find(|e| e.name == "nt/c/PolyTests/test-binary").unwrap();
+        assert_eq!((exe.mode & 0o777, exe.data.as_slice()), (0o755, &b"exe"[..]));
+        assert_eq!(
+            kernel_args_for("/nt/c/PolyTests/test-binary"),
+            "poly.qemu_exit poly.init=/nt/c/PolyTests/test-binary poly.test.capture"
+        );
+    }
 
     #[test]
     fn initramfs_with_makes_the_directories_once() {

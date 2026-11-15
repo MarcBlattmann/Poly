@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "setsockopt_chrome",
+      "exe_sha256": "31bb1c2216c847607da740f1fcff26f485b0e303cd4151fe31558e1303414064",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c29ja2V0cyBtYWRlOiB0Y3A2IDEgdWRwNiAxCnRjcDYgSVBWNl9WNk9OTFkgNTogc2V0IDUgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gNAp0Y3A2IElQVjZfVjZPTkxZIDEgYWZ0ZXIgYmluZDogc2V0IDEgLT4gLTEvV1NBRUlOVkFMLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiA0CnRjcDQgVENQX05PREVMQVkgNzogc2V0IDcgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gMQp0Y3A0IFNPX1JBTkRPTUlaRV9QT1JUIDE6IHNldCAxIC0+IDAsIGdldCAtPiAwIHZhbHVlIDEgbGVuIDQKdWRwNiBTT19SQU5ET01JWkVfUE9SVCAxOiBzZXQgMSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiAxCnVkcDQgU09fUkNWQlVGIDY1NTM2OiBzZXQgNjU1MzYgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgNjU1MzYgbGVuIDQKdGNwNCBTT19SQ1ZCVUYgMSBNaUI6IHNldCAxMDQ4NTc2IC0+IDAsIGdldCAtPiAwIHZhbHVlIDEwNDg1NzYgbGVuIDQKdGNwNCBTT19TTkRCVUYgMDogc2V0IDAgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMCBsZW4gNAp1ZHA0IFNPX1JDVkJVRiAweDdmZmZmZmZmOiBzZXQgMjE0NzQ4MzY0NyAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAyMTQ3NDgzNjQ3IGxlbiA0CnVkcDYgSVBWNl9FQ04gMzogc2V0IDMgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gNAp1ZHA0IElQX0VDTiAobGV2ZWwgSVAsIDUwKSAxOiBzZXQgMSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiA0CnRjcDQgU09fUkVVU0VBRERSIDE6IHNldCAxIC0+IDAsIGdldCAtPiAwIHZhbHVlIDEgbGVuIDQKdGNwNCAoZnJlc2gpIFNPX1JFVVNFQUREUiAxIGFmdGVyIFNPX0VYQ0xVU0lWRUFERFJVU0U6IHNldCAxIC0+IC0xL1dTQUVJTlZBTCwgZ2V0IC0+IDAgdmFsdWUgMCBsZW4gNAp0Y3A0IFNPX1JDVlRJTUVPIDI1MCAobWlsbGlzZWNvbmRzKTogc2V0IDI1MCAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAyNTAgbGVuIDQKdGNwNCBTT19FUlJPUiBzZXQgdG8gNTogc2V0IDUgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgNSBsZW4gNApsaXN0ZW5lciBTT19BQ0NFUFRDT05OIDAgMSBsZW4gNApTT19MSU5HRVIgezEsNX0gc2V0IDAgcmVhZCBiYWNrIG9ub2ZmIDEgbGluZ2VyIDUKU09fTElOR0VSIG9uIGEgZGF0YWdyYW0gc29ja2V0IC0xL1dTQUVOT1BST1RPT1BUClNPX0VSUk9SIGFmdGVyIHRoZSByZWZ1c2FsIDAgdmFsdWUgV1NBRUNPTk5SRUZVU0VEIGxlbiA0ClNPX0VSUk9SIG9mIGEgc29ja2V0IHdpdGggbm8gZXJyb3IgMCB2YWx1ZSAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sockets made: tcp6 1 udp6 1\ntcp6 IPV6_V6ONLY 5: set 5 -> 0, get -> 0 value 1 len 4\ntcp6 IPV6_V6ONLY 1 after bind: set 1 -> -1/WSAEINVAL, get -> 0 value 1 len 4\ntcp4 TCP_NODELAY 7: set 7 -> 0, get -> 0 value 1 len 1\ntcp4 SO_RANDOMIZE_PORT 1: set 1 -> 0, get -> 0 value 1 len 4\nudp6 SO_RANDOMIZE_PORT 1: set 1 -> 0, get -> 0 value 1 len 1\nudp4 SO_RCVBUF 65536: set 65536 -> 0, get -> 0 value 65536 len 4\ntcp4 SO_RCVBUF 1 MiB: set 1048576 -> 0, get -> 0 value 1048576 len 4\ntcp4 SO_SNDBUF 0: set 0 -> 0, get -> 0 value 0 len 4\nudp4 SO_RCVBUF 0x7fffffff: set 2147483647 -> 0, get -> 0 value 2147483647 len 4\nudp6 IPV6_ECN 3: set 3 -> 0, get -> 0 value 1 len 4\nudp4 IP_ECN (level IP, 50) 1: set 1 -> 0, get -> 0 value 1 len 4\ntcp4 SO_REUSEADDR 1: set 1 -> 0, get -> 0 value 1 len 4\ntcp4 (fresh) SO_REUSEADDR 1 after SO_EXCLUSIVEADDRUSE: set 1 -> -1/WSAEINVAL, get -> 0 value 0 len 4\ntcp4 SO_RCVTIMEO 250 (milliseconds): set 250 -> 0, get -> 0 value 250 len 4\ntcp4 SO_ERROR set to 5: set 5 -> 0, get -> 0 value 5 len 4\nlistener SO_ACCEPTCONN 0 1 len 4\nSO_LINGER {1,5} set 0 read back onoff 1 linger 5\nSO_LINGER on a datagram socket -1/WSAENOPROTOOPT\nSO_ERROR after the refusal 0 value WSAECONNREFUSED len 4\nSO_ERROR of a socket with no error 0 value 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2097
+    },
+    {
+      "name": "setsockopt_chrome_b",
+      "exe_sha256": "03c83da30053c1c4bf4831f86cc303607dffc1f65c9e49d5a784920d93c688e0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGNwNiBJUFY2X1Y2T05MWSAwOiBzZXQgMCAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAwIGxlbiA0CnVkcDYgSVBWNl9WNk9OTFkgMDogc2V0IDAgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMCBsZW4gMQp0Y3A0IFRDUF9OT0RFTEFZIDE6IHNldCAxIC0+IDAsIGdldCAtPiAwIHZhbHVlIDEgbGVuIDEKdWRwNCBUQ1BfTk9ERUxBWSAxIChhIGRhdGFncmFtIHNvY2tldCk6IHNldCAxIC0+IC0xL1dTQUVJTlZBTCwgZ2V0IC0+IC0xL1dTQUVJTlZBTCB2YWx1ZSAxNTE1ODcwODEwIGxlbiAwCnVkcDQgU09fUkFORE9NSVpFX1BPUlQgMTogc2V0IDEgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gMQp1ZHA0IFNPX1JDVkJVRiAxIE1pQjogc2V0IDEwNDg1NzYgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMTA0ODU3NiBsZW4gNAp1ZHA0IFNPX1NOREJVRiAwOiBzZXQgMCAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAwIGxlbiA0CnRjcDQgU09fU05EQlVGIDEgTWlCOiBzZXQgMTA0ODU3NiAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxMDQ4NTc2IGxlbiA0CnRjcDQgU09fUkNWQlVGIC0xOiBzZXQgLTEgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgLTEgbGVuIDQKdWRwNiBJUFY2X0VDTiAxOiBzZXQgMSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiA0CnVkcDYgSVBWNl9FQ04gNDogc2V0IDQgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gNAp0Y3A0IFNPX0tFRVBBTElWRSAxOiBzZXQgMSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiAxCnRjcDQgU09fRVhDTFVTSVZFQUREUlVTRSAxIGFmdGVyIFNPX1JFVVNFQUREUjogc2V0IDEgLT4gLTEvV1NBRUlOVkFMLCBnZXQgLT4gMCB2YWx1ZSAwIGxlbiA0CnVkcDQgU09fQlJPQURDQVNUIDE6IHNldCAxIC0+IDAsIGdldCAtPiAwIHZhbHVlIDEgbGVuIDQKdGNwNCBTT19UWVBFIHNldCB0byAyOiBzZXQgMiAtPiAtMS9XU0FFTk9QUk9UT09QVCwgZ2V0IC0+IDAgdmFsdWUgMSBsZW4gNAp0Y3A0IFNPX1RZUEUgMCAxIGxlbiA0CnBsYWluIHNvY2tldCBTT19BQ0NFUFRDT05OIDAgMCBsZW4gNApTT19MSU5HRVIgezUsNDQ2NH0gc2V0IDAgcmVhZCBiYWNrIG9ub2ZmIDUgbGluZ2VyIDQ0NjQKY29ubmVjdCB0byBhIGNsb3NlZCBwb3J0LCBub24tYmxvY2tpbmcgLTEvV1NBRVdPVUxEQkxPQ0sKU09fRVJST1IgcmVhZCBhZ2FpbiAwIHZhbHVlIFdTQUVDT05OUkVGVVNFRCBsZW4gNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "tcp6 IPV6_V6ONLY 0: set 0 -> 0, get -> 0 value 0 len 4\nudp6 IPV6_V6ONLY 0: set 0 -> 0, get -> 0 value 0 len 1\ntcp4 TCP_NODELAY 1: set 1 -> 0, get -> 0 value 1 len 1\nudp4 TCP_NODELAY 1 (a datagram socket): set 1 -> -1/WSAEINVAL, get -> -1/WSAEINVAL value 1515870810 len 0\nudp4 SO_RANDOMIZE_PORT 1: set 1 -> 0, get -> 0 value 1 len 1\nudp4 SO_RCVBUF 1 MiB: set 1048576 -> 0, get -> 0 value 1048576 len 4\nudp4 SO_SNDBUF 0: set 0 -> 0, get -> 0 value 0 len 4\ntcp4 SO_SNDBUF 1 MiB: set 1048576 -> 0, get -> 0 value 1048576 len 4\ntcp4 SO_RCVBUF -1: set -1 -> 0, get -> 0 value -1 len 4\nudp6 IPV6_ECN 1: set 1 -> 0, get -> 0 value 1 len 4\nudp6 IPV6_ECN 4: set 4 -> 0, get -> 0 value 1 len 4\ntcp4 SO_KEEPALIVE 1: set 1 -> 0, get -> 0 value 1 len 1\ntcp4 SO_EXCLUSIVEADDRUSE 1 after SO_REUSEADDR: set 1 -> -1/WSAEINVAL, get -> 0 value 0 len 4\nudp4 SO_BROADCAST 1: set 1 -> 0, get -> 0 value 1 len 4\ntcp4 SO_TYPE set to 2: set 2 -> -1/WSAENOPROTOOPT, get -> 0 value 1 len 4\ntcp4 SO_TYPE 0 1 len 4\nplain socket SO_ACCEPTCONN 0 0 len 4\nSO_LINGER {5,4464} set 0 read back onoff 5 linger 4464\nconnect to a closed port, non-blocking -1/WSAEWOULDBLOCK\nSO_ERROR read again 0 value WSAECONNREFUSED len 4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2100
+    },
+    {
+      "name": "setsockopt_chrome_c",
+      "exe_sha256": "1900f6136bd623c7e062c1575c27f8f4abe359f6dede3481a3b9dec1851a3d50",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGNwNiBJUFY2X1Y2T05MWSAxOiBzZXQgMSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxIGxlbiA0CnRjcDQgSVBWNl9WNk9OTFkgMCAoYW4gSVB2NCBzb2NrZXQpOiBzZXQgMCAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAwIGxlbiA0CnRjcDQgVENQX05PREVMQVkgMDogc2V0IDAgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMCBsZW4gMQp0Y3A0IFRDUF9OT0RFTEFZIHdpdGggYSBvbmUtYnl0ZSB2YWx1ZSAwCnRjcDYgKGFscmVhZHkgYm91bmQpIFNPX1JBTkRPTUlaRV9QT1JUIDE6IHNldCAxIC0+IC0xL1dTQUVJTlZBTCwgZ2V0IC0+IDAgdmFsdWUgMCBsZW4gNAp1ZHA0IFNPX1NOREJVRiAxIE1pQjogc2V0IDEwNDg1NzYgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgMTA0ODU3NiBsZW4gNAp1ZHA0IFNPX1JDVkJVRiAtMTogc2V0IC0xIC0+IDAsIGdldCAtPiAwIHZhbHVlIC0xIGxlbiA0CnRjcDQgU09fUkNWQlVGIDY1NTM2OiBzZXQgNjU1MzYgLT4gMCwgZ2V0IC0+IDAgdmFsdWUgNjU1MzYgbGVuIDQKdWRwNCBTT19SQ1ZCVUYgMTIzNDU6IHNldCAxMjM0NSAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAxMjM0NSBsZW4gNAp1ZHA2IElQVjZfRUNOIDA6IHNldCAwIC0+IDAsIGdldCAtPiAwIHZhbHVlIDAgbGVuIDQKdGNwNiBJUFY2X0VDTiAxOiBzZXQgMSAtPiAtMS9XU0FFSU5WQUwsIGdldCAtPiAtMS9XU0FFSU5WQUwgdmFsdWUgMTUxNTg3MDgxMCBsZW4gMAp0Y3A0IFNPX0tFRVBBTElWRSAwOiBzZXQgMCAtPiAwLCBnZXQgLT4gMCB2YWx1ZSAwIGxlbiAxCnRjcDQgKGZyZXNoKSBTT19FWENMVVNJVkVBRERSVVNFIDE6IHNldCAxIC0+IDAsIGdldCAtPiAwIHZhbHVlIDEgbGVuIDQKdGNwNCBTT19CUk9BRENBU1QgMSAoYSBzdHJlYW0gc29ja2V0KTogc2V0IDEgLT4gLTEvV1NBRU5PUFJPVE9PUFQsIGdldCAtPiAtMS9XU0FFTk9QUk9UT09QVCB2YWx1ZSAxNTE1ODcwODEwIGxlbiA0CnRjcDQgU09fQUNDRVBUQ09OTiBzZXQgdG8gMTogc2V0IDEgLT4gLTEvV1NBRU5PUFJPVE9PUFQsIGdldCAtPiAwIHZhbHVlIDAgbGVuIDQKdWRwNCBTT19UWVBFIDAgMiBsZW4gNApTT19MSU5HRVIgZGVmYXVsdCAwIG9ub2ZmIDAgbGluZ2VyIDAgbGVuIDQKU09fTElOR0VSIHdpdGggbGVuZ3RoIDIgLTEvV1NBRUZBVUxUCmV2ZW50IHNpZ25hbGxlZCAxCldTQUVudW1OZXR3b3JrRXZlbnRzIDAgZXZlbnRzIENPTk5FQ1QgY29ubmVjdC1lcnJvciBXU0FFQ09OTlJFRlVTRUQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "tcp6 IPV6_V6ONLY 1: set 1 -> 0, get -> 0 value 1 len 4\ntcp4 IPV6_V6ONLY 0 (an IPv4 socket): set 0 -> 0, get -> 0 value 0 len 4\ntcp4 TCP_NODELAY 0: set 0 -> 0, get -> 0 value 0 len 1\ntcp4 TCP_NODELAY with a one-byte value 0\ntcp6 (already bound) SO_RANDOMIZE_PORT 1: set 1 -> -1/WSAEINVAL, get -> 0 value 0 len 4\nudp4 SO_SNDBUF 1 MiB: set 1048576 -> 0, get -> 0 value 1048576 len 4\nudp4 SO_RCVBUF -1: set -1 -> 0, get -> 0 value -1 len 4\ntcp4 SO_RCVBUF 65536: set 65536 -> 0, get -> 0 value 65536 len 4\nudp4 SO_RCVBUF 12345: set 12345 -> 0, get -> 0 value 12345 len 4\nudp6 IPV6_ECN 0: set 0 -> 0, get -> 0 value 0 len 4\ntcp6 IPV6_ECN 1: set 1 -> -1/WSAEINVAL, get -> -1/WSAEINVAL value 1515870810 len 0\ntcp4 SO_KEEPALIVE 0: set 0 -> 0, get -> 0 value 0 len 1\ntcp4 (fresh) SO_EXCLUSIVEADDRUSE 1: set 1 -> 0, get -> 0 value 1 len 4\ntcp4 SO_BROADCAST 1 (a stream socket): set 1 -> -1/WSAENOPROTOOPT, get -> -1/WSAENOPROTOOPT value 1515870810 len 4\ntcp4 SO_ACCEPTCONN set to 1: set 1 -> -1/WSAENOPROTOOPT, get -> 0 value 0 len 4\nudp4 SO_TYPE 0 2 len 4\nSO_LINGER default 0 onoff 0 linger 0 len 4\nSO_LINGER with length 2 -1/WSAEFAULT\nevent signalled 1\nWSAEnumNetworkEvents 0 events CONNECT connect-error WSAECONNREFUSED\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2088
+    },
+    {
+      "name": "setsockopt_errors_c",
+      "exe_sha256": "782549a2f54fe5d05bbe01581e1d48a2ec3e6ff54588e6179a4c94ddc18f82c9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2V0c29ja29wdCB1bmtub3duIG9wdGlvbiA5OTkgYXQgSVBQUk9UT19UQ1A6IC0xL1dTQUVOT1BST1RPT1BUCnNldHNvY2tvcHQgTlVMTCB2YWx1ZSwgbGVuZ3RoIDQ6IC0xL1dTQUVGQVVMVApzZXRzb2Nrb3B0IGxlbmd0aCAxOiAwCnNldHNvY2tvcHQgbGVuZ3RoIDg6IDAKc2V0c29ja29wdCBUQ1BfTk9ERUxBWSBsZW5ndGggMjogMApnZXRzb2Nrb3B0IFNPX1JDVkJVRiB3aXRoIGxlbmd0aCAxOiAtMS9XU0FFRkFVTFQgbGVuZ3RoIG5vdyAxCmdldHNvY2tvcHQgU09fUkNWQlVGIHdpdGggbGVuZ3RoIDA6IC0xL1dTQUVGQVVMVCBsZW5ndGggbm93IDAKZ2V0c29ja29wdCBTT19SQ1ZCVUYgd2l0aCBhIE5VTEwgbGVuZ3RoIHBvaW50ZXI6IC0xL1dTQUVGQVVMVApnZXRzb2Nrb3B0IFNPX0xJTkdFUiB3aXRoIGxlbmd0aCA4OiAwIGxlbmd0aCBub3cgNApnZXRzb2Nrb3B0IGxldmVsIDk5OTogLTEvV1NBRUlOVkFMIGxlbmd0aCBub3cgMApnZXRzb2Nrb3B0IFRDUF9OT0RFTEFZIHdpdGggbGVuZ3RoIDE6IDAgbGVuZ3RoIG5vdyAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "setsockopt unknown option 999 at IPPROTO_TCP: -1/WSAENOPROTOOPT\nsetsockopt NULL value, length 4: -1/WSAEFAULT\nsetsockopt length 1: 0\nsetsockopt length 8: 0\nsetsockopt TCP_NODELAY length 2: 0\ngetsockopt SO_RCVBUF with length 1: -1/WSAEFAULT length now 1\ngetsockopt SO_RCVBUF with length 0: -1/WSAEFAULT length now 0\ngetsockopt SO_RCVBUF with a NULL length pointer: -1/WSAEFAULT\ngetsockopt SO_LINGER with length 8: 0 length now 4\ngetsockopt level 999: -1/WSAEINVAL length now 0\ngetsockopt TCP_NODELAY with length 1: 0 length now 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

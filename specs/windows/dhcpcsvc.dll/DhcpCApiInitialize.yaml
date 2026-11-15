@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dhcpcsvc.dll/DhcpCApiInitialize.yaml
+id: windows/api/dhcpcsvc.dll/DhcpCApiInitialize
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "DhcpCApiInitialize function (dhcpcsdk.h)", "DhcpCApiCleanup", "DhcpRequestParams", "DHCPCAPI_PARAMS_ARRAY structure"; dhcpcsdk.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Chrome's WPAD discovery asks the DHCP client for option 252: DhcpCApiInitialize(&version) -> 0 once, then DhcpRequestParams(DHCPCAPI_REQUEST_SYNCHRONOUS (2), NULL, adapterName, NULL, send, recd, buffer, &size, NULL) -> 0 twice (browser, network service) for the machine's adapters. Offline the adapter names of the machine cannot be used, so the tests use a name no adapter has. Results: Initialize returns 0 and a version of 2 (also on a second call); DhcpRequestParams before Initialize returns 87; after Initialize with an unknown adapter and empty arrays 87 (with a GUID-shaped unknown name too, and an empty name), with option 252 requested for an unknown adapter 123 (ERROR_INVALID_NAME); a NULL adapter name or flags 0xFFFF0000: 87; after DhcpCApiCleanup: 87 again.
+interface:
+  signature: "DWORD DhcpCApiInitialize(LPDWORD version); void DhcpCApiCleanup(void); DWORD DhcpRequestParams(DWORD flags, LPVOID reserved, LPWSTR adapter, LPDHCPCAPI_CLASSID class, DHCPCAPI_PARAMS_ARRAY send, DHCPCAPI_PARAMS_ARRAY recd, LPBYTE buffer, LPDWORD size, LPWSTR requestId)"
+chrome:
+  calls: "DhcpCApiInitialize(&v) -> 0 once, DhcpRequestParams(0x2, NULL, name, NULL, ...) -> 0 twice, in the network service; the adapter names were those of GetAdaptersAddresses"
+rules:
+  initialize: "0 with *version = 2; again: 0 and 2"
+  before_initialize: "DhcpRequestParams before DhcpCApiInitialize: 87 (ERROR_INVALID_PARAMETER)"
+  unknown_adapter: "synchronous, empty arrays: a name no adapter has, a GUID-shaped one, an empty name: 87 and the size is left at 1024; with a receive array that asks for option 252: 123"
+  arguments: "a NULL adapter name with a receive array: 87; flags 0xFFFF0000: 87"
+  after_cleanup: "DhcpCApiCleanup returns nothing; the next DhcpRequestParams: 87"
+errors:
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+  invalid_name: "ERROR_INVALID_NAME (123)"
+side_effects: "none for the tests (the request is for an adapter that does not exist)"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  A request for a real adapter (the results are the DHCP lease's and the adapters' names are the machine's: Chrome's 0), asynchronous requests (flags 1), send parameters, vendor options, DhcpRequestParams on a machine without a DHCP client service.

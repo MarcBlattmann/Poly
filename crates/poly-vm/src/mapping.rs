@@ -17,6 +17,21 @@ impl<F: Clone + PartialEq> VmMap<F> {
     /// [`Placement::FixedNoReplace`] ([`Error::Exists`]); no hole large
     /// enough, or too many regions ([`Error::NoMemory`]).
     pub fn map(&mut self, req: MapRequest<F>) -> Result<Mapped<F>, Error> {
+        self.map_within(req, None)
+    }
+
+    /// [`VmMap::map`] for `MAP_32BIT`: a mapping without a fixed address
+    /// ([`Placement::Hint`]) must end at or below `limit` (2 GiB, [`LOW_2G`]);
+    /// it goes at the hint if that range is free, else in the lowest hole at
+    /// or above [`LOW_SEARCH_BASE`], else the lowest one below it. With
+    /// nothing free there it fails with [`Error::NoMemory`]. Fixed
+    /// placements ignore `limit` (mmap(2): `MAP_32BIT` is ignored with
+    /// `MAP_FIXED`).
+    pub fn map_below(&mut self, req: MapRequest<F>, limit: u64) -> Result<Mapped<F>, Error> {
+        self.map_within(req, Some(limit))
+    }
+
+    fn map_within(&mut self, req: MapRequest<F>, below: Option<u64>) -> Result<Mapped<F>, Error> {
         let MapRequest { placement, len, prot, max_prot, backing } = req;
         if len == 0 {
             return Err(Error::Invalid);
@@ -59,7 +74,11 @@ impl<F: Clone + PartialEq> VmMap<F> {
                 }
                 addr
             }
-            Placement::Hint(hint) => self.place(hint, len).ok_or(Error::NoMemory)?,
+            Placement::Hint(hint) => match below {
+                None => self.place(hint, len),
+                Some(limit) => self.place_below(hint, len, limit),
+            }
+            .ok_or(Error::NoMemory)?,
         };
         let vma = Vma {
             start: addr,

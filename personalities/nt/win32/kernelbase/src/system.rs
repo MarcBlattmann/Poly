@@ -222,8 +222,11 @@ const PROCESS_HANDLE_COUNT: u32 = 20;
 
 /// The processor's `CPUID` leaves and `XCR0` (`poly_kernelbase::cpu`).
 fn cpuid() -> CpuId {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::__cpuid_count;
+    #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::__cpuid_count;
-    // SAFETY: CPUID exists on every x64 processor; leaves beyond the
+    // SAFETY: CPUID exists on every x64 processor (and every one that runs a 32-bit process here); leaves beyond the
     // maximum are not read.
     unsafe {
         let max = __cpuid_count(0, 0).eax;
