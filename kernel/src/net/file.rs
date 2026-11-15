@@ -20,8 +20,10 @@ use super::{Domain, Errno as NetErrno, NsStack, Protocol, RecvFlags, SockType, S
 use super::{call_and_wake_in, call_in, notify, stack_id};
 use crate::sync::SpinLock;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::any::Any;
 use core::net::SocketAddr;
+use poly_personality_linux::net::ipopt::{IpOptions, Membership};
 use poly_unix::SocketOptions;
 use poly_vfs::{Errno, FileObject, PollEvents, WaitQueue};
 
@@ -48,6 +50,9 @@ pub struct InetState {
     /// `TCP_MAXSEG` as set (reported back; the stack sizes segments from
     /// the path).
     pub maxseg: Option<u32>,
+    /// The `IP_*`, `IPV6_*` and `TCP_*` options the personality stores and
+    /// reports back (`poly_personality_linux::net::ipopt`).
+    pub ip: IpOptions,
 }
 
 /// An `AF_INET` / `AF_INET6` socket.
@@ -59,6 +64,9 @@ pub struct InetSocket {
     pub protocol: Protocol,
     queue: Arc<WaitQueue>,
     state: SpinLock<InetState>,
+    /// Multicast groups joined with `IP_ADD_MEMBERSHIP` /
+    /// `IPV6_ADD_MEMBERSHIP`: kept, not acted on.
+    memberships: SpinLock<Vec<Membership>>,
     /// The stack it is in (`None`: the interface's).
     stack: Option<Arc<NsStack>>,
     /// What the socket keeps alive besides its stack.
@@ -114,6 +122,7 @@ impl InetSocket {
             protocol,
             queue: Arc::new(WaitQueue::new()),
             state: SpinLock::new(st),
+            memberships: SpinLock::new(Vec::new()),
             stack,
             home,
         });
@@ -142,6 +151,11 @@ impl InetSocket {
     /// Change the kernel-side state (`f` must not block).
     pub fn update<R>(&self, f: impl FnOnce(&mut InetState) -> R) -> R {
         f(&mut self.state.lock())
+    }
+
+    /// The socket's multicast memberships (`f` must not block).
+    pub fn memberships<R>(&self, f: impl FnOnce(&mut Vec<Membership>) -> R) -> R {
+        f(&mut self.memberships.lock())
     }
 
     /// Run a stack call on this socket.

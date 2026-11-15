@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 poly-vfs.workspace = true
+poly-vm.workspace = true
 
 [lints]
 workspace = true
