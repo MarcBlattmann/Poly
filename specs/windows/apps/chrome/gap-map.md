@@ -1242,6 +1242,26 @@ children died, so the broker never reached its own calls). Not specified: `Creat
 (undocumented), `NtCreateKey`/`NtOpenKeyEx`, the Microsoft-signed-only effect on an unsigned DLL, `GetLogicalProcessorInformation(Ex)`,
 `GetComputerName*`, `GetProductInfo`, `VerifyVersionInfoW`, the locale and geo functions, and the remaining COM calls.
 
+## 10c. Specs for stage 2 added by `spec-chrome-win-s2b` (2026-11-15): AppContainers and the rest of the sandbox start
+
+Where the S2 run on Poly stopped after the broker set-up (`impl-chrome-s2`): `LdrLoadDll(MDMRegistration.dll)` (twice),
+`LdrGetProcedureAddress(ntdll!LdrRegisterDllNotification)` and `kernelbase!AppContainerRegisterSid` = 0xC000007A. Specified now (sheets
+`specs/windows/<dll>/<Symbol>.yaml`, tests `<Symbol>.tests/`, oracle build 26200.9974, SSH session 0 only):
+
+* `kernelbase.dll` **`AppContainerRegisterSid`** (inferred shape `HRESULT (PSID, PCWSTR moniker, PCWSTR display_name)`; writes a persistent SID-to-name mapping in the
+  user's AppContainer Mappings registry key, 0x800700B7 the second time, undone by `DeleteAppContainerProfile` of the name the SID derives from) and
+  `AppContainerLookupMoniker` (pointer sheet; reads it back). **`CreateAppContainerToken`** (`BOOL (source token, SECURITY_CAPABILITIES*, HANDLE*)`: a primary lowbox
+  token, Low integrity, the source's groups, two privileges, capabilities as given, `AppContainerNumber` per SID; the argument and error rules; two-pass access checks
+  with ALL APPLICATION PACKAGES, the container SID and capabilities; a child started with it through `CreateProcessAsUserW` or the 0x20009 attribute, which needs a
+  profile). `NtCreateLowBoxToken` is a pointer sheet.
+* `userenv.dll` `CreateAppContainerProfile` (+ pointer sheets `DeleteAppContainerProfile`, `GetAppContainerRegistryLocation`), `GetAppContainerFolderPath`;
+  `kernelbase.dll` `GetAppContainerNamedObjectPath`, `DeriveCapabilitySidsFromName` (exported by kernelbase only; the SIDs are SHA-256 words of the upper-cased name).
+* `ntdll.dll` `LdrRegisterDllNotification` (+ pointer sheet `LdrUnregisterDllNotification`): reasons, data, thread, order, the statuses.
+  `mdmregistration.dll` `IsDeviceRegisteredWithManagement`: S_OK and FALSE on a machine that is not enrolled, tolerant of NULLs.
+* Chrome's own profiles on the oracle (made by the S2 runs): monikers `cr.sb.net<40 hex digits>` and `cr.sb.odm<40 hex digits>`, display name `Chrome Sandbox`.
+* Not specified: `NtCreateLowBoxToken` arguments, LPAC and child containers with a parent, the interactive session's object directory prefix, an enrolled device,
+  `IsSandboxedProcess` (resolved by name in the browser; no kernelbase, kernel32, ntdll, advapi32 or user32 export of that name was found).
+
 ## 11. Cross-references and open problems
 
 * spec-win-sec: tokens, ACLs, SDs, jobs. spec-win-ipc: pipes, IOCP, attribute lists, `DuplicateHandle`, sections.

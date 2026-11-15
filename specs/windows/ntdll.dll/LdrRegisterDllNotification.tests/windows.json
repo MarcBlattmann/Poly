@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "15bb70091a8b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T11:00:14Z",
+  "tests": [
+    {
+      "name": "ldrn_args",
+      "exe_sha256": "e05f07774c27182d362d2d38d2503baf8ba18247e15c235f219aa6be37e906eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2s6IDB4MApmbGFnc19iaWc6IDB4YzAwMDAwMGQKdW5yZWdfbnVsbDogMHhjMDAwMDEzNQpjb29raWVfdW50b3VjaGVkX29uX2Vycm9yOiAweDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok: 0x0\nflags_big: 0xc000000d\nunreg_null: 0xc0000135\ncookie_untouched_on_error: 0x1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 136
+    },
+    {
+      "name": "ldrn_args_c",
+      "exe_sha256": "c5192b611ef72c455daa2159414cf30d977ec2469e974080ab53c85cf8675086",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmxhZ3MyOiAweGMwMDAwMDBkCm51bGxjb29raWU6IDB4YzAwMDAwMGQKdW5yZWdfdHdpY2U6IDB4YzAwMDAxMzUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "flags2: 0xc000000d\nnullcookie: 0xc000000d\nunreg_twice: 0xc0000135\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 138
+    },
+    {
+      "name": "ldrn_events_b",
+      "exe_sha256": "c36a9af50bb5946d2b2a2836e020726ea867f55ac4e9fd505b06329b6fca5682",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TG9hZExpYnJhcnlXKHdpbm1tLmRsbCk6IDEKICBmdWxsIG5hbWUgaGFzIGEgZGlyZWN0b3J5IGFuZCBlbmRzIHdpdGggdGhlIGJhc2UgbmFtZSB0cnVlLCBEbGxCYXNlIGlzIHRoZSBtb2R1bGUgaGFuZGxlIHRydWUKZGVwZW5kZW5jaWVzIG9mIHdpbm1tLmRsbCBub3RpZmllZCBhcyB3ZWxsOiB0cnVlCmFmdGVyIHRoZSBzZWNvbmQgRnJlZUxpYnJhcnk6IGxvYWRlZCAxLCB1bmxvYWRlZCAxCnZlcnNpb24uZGxsIGFzIGEgZGF0YSBmaWxlIChMT0FEX0xJQlJBUllfQVNfREFUQUZJTEUpOiBsb2FkZWQgMSwgbm90aWZpY2F0aW9ucyBmb3IgaXQgKDAsIDApCnNlY29uZCByZWdpc3RyYXRpb246IHN0YXR1cyAweDAsIGEgZGlmZmVyZW50IGNvb2tpZSB0cnVlCnVubG9hZGluZyB3aW5tbS5kbGwgYWZ0ZXIgdGhhdCBub3RpZmllZDogMgp1bnJlZ2lzdGVyIHRoZSBmaXJzdCBhZ2Fpbjogc3RhdHVzIDB4YzAwMDAxMzUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LoadLibraryW(winmm.dll): 1\n  full name has a directory and ends with the base name true, DllBase is the module handle true\ndependencies of winmm.dll notified as well: true\nafter the second FreeLibrary: loaded 1, unloaded 1\nversion.dll as a data file (LOAD_LIBRARY_AS_DATAFILE): loaded 1, notifications for it (0, 0)\nsecond registration: status 0x0, a different cookie true\nunloading winmm.dll after that notified: 2\nunregister the first again: status 0xc0000135\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "ldrn_events_c",
+      "exe_sha256": "1dbfe78439eb15d29c7a42d24e2b7dec4dd2d2b026a38f8fa5c95e96facd3565",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90aWZpY2F0aW9ucyBmb3Igd2lubW0uZGxsOiBsb2FkZWQgMSwgdW5sb2FkZWQgMAogIFNpemVPZkltYWdlIG5vbi16ZXJvIHRydWUKc2Vjb25kIExvYWRMaWJyYXJ5Vyh3aW5tbS5kbGwpOiBzYW1lIG1vZHVsZSB0cnVlLCBuZXcgbm90aWZpY2F0aW9ucyAwCiAgdW5sb2FkZWQ6IGNvbnRleHQgdHJ1ZSB0aHJlYWQgdHJ1ZSBiYXNlIG5vbi16ZXJvIHRydWUKICBhZnRlciBGcmVlTGlicmFyeTogKDAsIDApCmJvdGggY2FsbGJhY2tzIHJ1biBmb3Igd2lubW0uZGxsLCBpbiB0aGlzIG9yZGVyIG9mIHJlZ2lzdHJhdGlvbnM6IDEyCnVucmVnaXN0ZXIgdGhlIHNlY29uZDogc3RhdHVzIDB4MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "notifications for winmm.dll: loaded 1, unloaded 0\n  SizeOfImage non-zero true\nsecond LoadLibraryW(winmm.dll): same module true, new notifications 0\n  unloaded: context true thread true base non-zero true\n  after FreeLibrary: (0, 0)\nboth callbacks run for winmm.dll, in this order of registrations: 12\nunregister the second: status 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
