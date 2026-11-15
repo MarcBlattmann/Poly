@@ -1,0 +1,19 @@
+[package]
+name = "comdlg32"
+description = "Our comdlg32.dll: the common dialogs (open and save a file, choose a colour, choose a font) as in-memory dialog templates run by user32, over poly-comdlg's rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "comdlg32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-comdlg = { path = "../../../../crates/poly-comdlg" }
+
+[lints]
+workspace = true

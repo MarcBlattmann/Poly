@@ -1,0 +1,11 @@
+[package]
+name = "poly-imagelist"
+description = "The rules of comctl32's image lists (ImageList_*): images of one size in a strip, masks and colour keys, icons in and out, merging, copying and compositing a pixel for drawing; no_std with alloc, host-tested, the DLL only reads and writes GDI bitmaps"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
