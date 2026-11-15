@@ -492,6 +492,14 @@ impl NtKernel for Fake {
     fn trace(&mut self, values: [u64; 3]) {
         self.traces.push(values);
     }
+
+    fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
+        // A counter: the tests see that every byte was written.
+        for (i, b) in buf.iter_mut().enumerate() {
+            *b = (i as u8).wrapping_add(1);
+        }
+        true
+    }
 }
 
 pub const IMAGE_BASE: u64 = 0x1_4000_0000;

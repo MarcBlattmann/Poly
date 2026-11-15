@@ -307,6 +307,12 @@ pub enum Service {
     /// import did not bind; a debugging aid, not an interface). Returns
     /// `STATUS_SUCCESS`.
     PolyDebugPrint,
+    /// `PolyRandomBytes(Buffer, Length)`: fills the buffer with random bytes from the kernel's
+    /// generator (ADR 0206). `ProcessPrng`, `RtlGenRandom` and `rand_s` need no file: a sandboxed
+    /// process whose token cannot open the random device file still draws random numbers, as on
+    /// Windows (where a driver, not a file, gives them). `STATUS_SUCCESS`, or `STATUS_NOT_IMPLEMENTED`
+    /// from a kernel without a generator.
+    PolyRandomBytes,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -470,7 +476,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 77] = [
+pub const SERVICES: [(Service, u32, &str); 78] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -548,6 +554,7 @@ pub const SERVICES: [(Service, u32, &str); 77] = [
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
     (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
     (Service::PolyDebugPrint, (TABLE_POLY << 12) | 2, "PolyDebugPrint"),
+    (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the

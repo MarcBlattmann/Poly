@@ -4,6 +4,12 @@
 pub type Handle = isize;
 pub const INVALID_HANDLE_VALUE: Handle = -1;
 
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    /// Poly's own: random bytes of the kernel's generator (ADR 0206); an `NTSTATUS`.
+    pub fn PolyRandomBytes(buffer: *mut u8, length: usize) -> i32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     pub fn ExitProcess(code: u32) -> !;

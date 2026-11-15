@@ -786,6 +786,10 @@ impl<K: NtKernel> NtKernel for Thunked<'_, K> {
         self.k.trace(values)
     }
 
+    fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
+        self.k.random_bytes(buf)
+    }
+
     fn debug_print(&mut self, text: &[u8]) {
         self.k.debug_print(text)
     }

@@ -322,6 +322,12 @@ pub trait NtKernel {
     /// Log text for the calling process (`PolyDebugPrint`, ADR 0155).
     fn debug_print(&mut self, _text: &[u8]) {}
 
+    /// Fill `buf` from the kernel's random generator (`PolyRandomBytes`, ADR 0206); false from a
+    /// kernel that has none.
+    fn random_bytes(&mut self, _buf: &mut [u8]) -> bool {
+        false
+    }
+
     /// The system time as a `FILETIME` (100 ns since 1601-01-01 UTC), for
     /// registry last-write times (ADR 0066). A kernel without a clock
     /// answers 0.

@@ -289,6 +289,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             k.debug_print(&buf[..n]);
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
+        PolyRandomBytes => sysinfo::random_bytes(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

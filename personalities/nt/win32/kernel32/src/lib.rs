@@ -21,16 +21,27 @@ unsafe extern "system" {
     fn LocalFree(mem: *mut u8) -> *mut u8;
     fn LocalSize(mem: *mut u8) -> usize;
     fn SetLastError(error: u32);
-    #[link_name = "CreateThread"]
-    fn kernelbase_create_thread(
-        security: *const u8,
-        stack: usize,
-        start: *const u8,
-        parameter: *mut u8,
-        flags: u32,
-        thread_id: *mut u32,
-    ) -> isize;
+    fn GetModuleHandleW(name: *const u16) -> isize;
+    fn GetProcAddress(module: isize, name: *const u8) -> usize;
 }
+
+/// `kernelbase.dll`, UTF-16, NUL-terminated.
+const KERNELBASE_DLL: [u16; 15] = {
+    let text = b"kernelbase.dll\0";
+    let mut out = [0u16; 15];
+    let mut i = 0;
+    while i < 15 {
+        out[i] = text[i] as u16;
+        i += 1;
+    }
+    out
+};
+
+/// `kernelbase!CreateThread`, found once by name: the import cannot be used, `kernel32` exports a
+/// `CreateThread` of its own and the linker would bind the import to it (endless recursion).
+static KERNELBASE_CREATE_THREAD: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+type CreateThreadFn = unsafe extern "system" fn(*const u8, usize, *const u8, *mut u8, u32, *mut u32) -> isize;
 
 /// `CreateThread`: `kernelbase`'s, as code of `kernel32`'s own. Windows' export is code, not a
 /// forwarder, and Chrome's sandboxed children take its address from the export table and run what
@@ -45,8 +56,22 @@ pub unsafe extern "system" fn CreateThread(
     flags: u32,
     thread_id: *mut u32,
 ) -> isize {
-    // SAFETY: the caller's arguments, passed on as they are.
-    let handle = unsafe { kernelbase_create_thread(security, stack, start, parameter, flags, thread_id) };
+    use core::sync::atomic::Ordering;
+    let mut f = KERNELBASE_CREATE_THREAD.load(Ordering::Relaxed);
+    if f == 0 {
+        // SAFETY: a NUL-terminated module name and export name.
+        f = unsafe { GetProcAddress(GetModuleHandleW(KERNELBASE_DLL.as_ptr()), b"CreateThread\0".as_ptr()) };
+        KERNELBASE_CREATE_THREAD.store(f, Ordering::Relaxed);
+    }
+    if f == 0 {
+        // SAFETY: no pointers.
+        unsafe { SetLastError(127) };
+        return 0;
+    }
+    // SAFETY: `f` is kernelbase's `CreateThread`; the arguments are the caller's, passed on as they are.
+    let handle = unsafe {
+        core::mem::transmute::<usize, CreateThreadFn>(f)(security, stack, start, parameter, flags, thread_id)
+    };
     core::hint::black_box(handle)
 }
 

@@ -79,6 +79,10 @@ fn main() {
     assert!(seen.iter().any(|n| n == "PolyResumeApc"), "no PolyResumeApc service found");
     // The diagnostics service is exported for Poly's own stub DLLs (ADR 0155).
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
+    // And the random bytes of the kernel's generator, for the DLLs that give programs random
+    // numbers (ADR 0206): no file is opened, so a sandboxed token that cannot open the random device
+    // still gets them.
+    println!("cargo:rustc-link-arg=/EXPORT:PolyRandomBytes");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
     if !x86 {

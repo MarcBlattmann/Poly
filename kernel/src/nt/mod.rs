@@ -982,6 +982,11 @@ impl NtKernel for Kernel {
         crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
     }
 
+    fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
+        crate::random::fill(buf);
+        true
+    }
+
     fn system_time(&self) -> u64 {
         registry::filetime_now()
     }
