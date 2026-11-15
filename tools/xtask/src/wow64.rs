@@ -330,6 +330,32 @@ fn verify(dir: &Path) -> Result {
             }
         }
     }
+    verify_imports(dir)
+}
+
+/// Every name one of our 32-bit modules or programs imports from another of ours is an export of
+/// it, by the name as imported: a module that imports `_FindResourceExW@16` (a `raw-dylib` block
+/// without `import_name_type = "undecorated"`) or a name `kernel32.dll` does not export would
+/// otherwise only fail when a program starts ("process start failed (0xc0000139)").
+fn verify_imports(dir: &Path) -> Result {
+    let files: Vec<String> =
+        MODULES.iter().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
+    let mut exports = std::collections::BTreeMap::new();
+    for m in MODULES {
+        let bytes = read(&dir.join(m))?;
+        exports.insert(m.to_string(), export_names(m, &parse(m, &bytes)?)?);
+    }
+    for file in &files {
+        let bytes = read(&dir.join(file))?;
+        let pe = parse(file, &bytes)?;
+        for (dll, names) in imports(file, &pe)? {
+            let Some(have) = exports.get(&dll) else { continue };
+            let missing: Vec<&String> = names.iter().filter(|n| !have.contains(*n)).collect();
+            if !missing.is_empty() {
+                return Err(format!("{file} imports what {dll} does not export: {missing:?}"));
+            }
+        }
+    }
     Ok(())
 }
 

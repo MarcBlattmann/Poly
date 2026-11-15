@@ -27,7 +27,6 @@ poly_win32_rt::fail_exports!(
         GetIpAddrTable,
         GetIpInterfaceTable,
         GetIpNetEntry2,
-        GetNetworkParams,
         GetUnicastIpAddressTable,
         NotifyIpInterfaceChange,
         ResolveIpNetEntry2,

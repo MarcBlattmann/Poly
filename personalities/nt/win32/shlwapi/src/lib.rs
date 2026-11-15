@@ -17,6 +17,8 @@ extern crate alloc;
 use alloc::vec::Vec;
 use poly_kernelbase::shlwapi as logic;
 
+mod path;
+
 poly_win32_rt::process_heap_allocator!();
 
 /// `S_OK`, `E_NOINTERFACE`, `E_POINTER`, `E_INVALIDARG` (`winerror.h`).
