@@ -262,11 +262,14 @@ fn peek_answers_by_state_and_disconnect_twice_is_refused() {
     let (st, out, _) = t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16 + 5);
     assert_eq!(st, STATUS_SUCCESS);
     assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 3);
-    // The client closes: the instance is closing, a peek still answers (state 4).
+    // The client closes with data left: the instance is closing, a peek still answers (state 4);
+    // once the data is read it is a broken pipe.
     t.close(c);
     let (st, out, _) = t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16 + 5);
     assert_eq!(st, STATUS_SUCCESS);
     assert_eq!(u32::from_le_bytes(out[0..4].try_into().unwrap()), 4);
+    assert_eq!(t.npread(s, 16, None).0, STATUS_SUCCESS);
+    assert_eq!(t.fsctl(s, FSCTL_PIPE_PEEK, &[], 16).0, STATUS_PIPE_BROKEN);
     // Disconnect: the instance is disconnected, a peek says invalid state, a
     // second disconnect says disconnected; a listen makes it listen again.
     assert_eq!(t.fsctl(s, FSCTL_PIPE_DISCONNECT, &[], 0).0, STATUS_SUCCESS);
