@@ -132,6 +132,16 @@ pub const USER_MIN_ADDR: u64 = 0x1_0000;
 /// 48-bit address space minus its last page (see the crate docs).
 pub const USER_END: u64 = 0x7fff_ffff_f000;
 
+/// End (exclusive) of the area `MAP_32BIT` mappings go in: the first 2 GiB
+/// (mmap(2): "Put the mapping into the first 2 Gigabytes of the process
+/// address space").
+pub const LOW_2G: u64 = 0x8000_0000;
+
+/// Where the search for a `MAP_32BIT` mapping starts (1 GiB), clear of a
+/// non-PIE program at 0x400000, its heap and the first libraries; it falls
+/// back to the lowest hole when nothing is free above it.
+pub const LOW_SEARCH_BASE: u64 = 0x4000_0000;
+
 /// Default stack size limit: 8 MiB, the usual `RLIMIT_STACK` soft limit.
 pub const DEFAULT_STACK_MAX: u64 = 8 << 20;
 
@@ -567,7 +577,10 @@ pub enum Placement {
     /// Anywhere; 0 means no preference. Otherwise the address, rounded up
     /// to a page and raised to [`Layout::min_addr`] ("a nearby page
     /// boundary, but always above or equal to `mmap_min_addr`", `mmap(2)`),
-    /// is used if the range is free and the stack's guard gap is not in it.
+    /// is used if the whole range is inside the address space, free, and the
+    /// stack's guard gap is not in it; if not, the search picks a new
+    /// address ("If another mapping already exists there, the kernel picks a
+    /// new address").
     Hint(u64),
     /// Exactly here, replacing whatever was mapped (`MAP_FIXED`).
     Fixed(u64),

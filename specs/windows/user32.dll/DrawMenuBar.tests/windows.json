@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "dmb_bar",
+      "exe_sha256": "3d769b7553b54a74de0ec2d4769a5234905a9deb2b6b19acffcdc7e0e2014552",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3ZlcmxhcHBlZCB3aW5kb3cgd2l0aCBhIGxvYWRlZCBtZW51OiAxCml0ZW1zIGJlZm9yZSA0IGFmdGVyIDQKcG9wdXAgd2luZG93IHdpdGhvdXQgYSBtZW51OiAxCm1lc3NhZ2Utb25seSB3aW5kb3c6IDEKd2luZG93IHdob3NlIG1lbnUgd2FzIGRlc3Ryb3llZCAoYSBzdGFsZSBoYW5kbGUpOiAxCmFmdGVyIFNldE1lbnUoTlVMTCk6IDEKYSBkZXN0cm95ZWQgd2luZG93OiAwIGVycj0xNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "overlapped window with a loaded menu: 1\nitems before 4 after 4\npopup window without a menu: 1\nmessage-only window: 1\nwindow whose menu was destroyed (a stale handle): 1\nafter SetMenu(NULL): 1\na destroyed window: 0 err=1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

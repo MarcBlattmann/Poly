@@ -10,11 +10,16 @@
  * test (tools/xtask/src/toolkits.rs): the window mapped and drawn, the
  * button clicked, keys pressed; Q or the window's close ends it.
  *
+ * With POLY_GTK_HEADER_BAR set it has a header bar with a close button
+ * (gtk_window_set_titlebar): GTK then always draws the window's title bar
+ * itself, whatever the compositor offers (ADR 0183).
+ *
  * Not in tests/linux/ itself: the diff runner compares those with real
  * Linux.
  */
 #include <gtk/gtk.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* The button's two colours (toolkits.rs checks them on the screen). */
 #define GTK3_A "#2a6fb0"
@@ -71,6 +76,12 @@ static void on_activate(GtkApplication *app, gpointer data) {
     GtkWidget *win = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(win), "Poly GTK 3");
     gtk_window_set_default_size(GTK_WINDOW(win), 360, 240);
+    if (getenv("POLY_GTK_HEADER_BAR")) {
+        GtkWidget *bar = gtk_header_bar_new();
+        gtk_header_bar_set_title(GTK_HEADER_BAR(bar), "Poly GTK 3");
+        gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(bar), TRUE);
+        gtk_window_set_titlebar(GTK_WINDOW(win), bar);
+    }
     GtkWidget *button = gtk_button_new_with_label("Click me");
     gtk_style_context_add_class(gtk_widget_get_style_context(button), "poly-a");
     g_signal_connect(button, "clicked", G_CALLBACK(on_clicked), NULL);

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "rdpc_basic",
+      "exe_sha256": "d8af57be00f3f87e70df800f0938bcf10d44ccd339315374f4bc015380ce47f6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiBIS0xNIFNPRlRXQVJFIG9wZW5zID0gMAphIHNlY29uZCBjYWxsID0gMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: HKLM SOFTWARE opens = 0\na second call = 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "rdpc_basic_c",
+      "exe_sha256": "10360e60bc4ec48c5498ea171a4aa8f0e019873492408d19cd3f02fe08a3c4ce",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXI6IEhLTE0gU09GVFdBUkUgb3BlbnMgPSAwCmEgbWlzc2luZyBrZXkgaXMgc3RpbGwgMjogMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after: HKLM SOFTWARE opens = 0\na missing key is still 2: 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

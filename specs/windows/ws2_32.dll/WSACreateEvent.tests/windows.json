@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsacreateevent_basics",
+      "exe_sha256": "776c51e493b2e69f5e9527ca8820db93323fc39c00ab600186cfcd78ff54971b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlZCAxCldTQVdhaXRGb3JNdWx0aXBsZUV2ZW50cyB0aW1lb3V0ICgyNTgsIDApCldTQVdhaXRGb3JNdWx0aXBsZUV2ZW50cyAoMCwgMCkKV1NBUmVzZXRFdmVudCB0d2ljZSAxClJlc2V0RXZlbnQgMQp3YWl0IGFueSwgdGhpcmQgc2V0ICgyLCAwKQp3YWl0IGFsbCwgYWxsIHNldCAoMCwgMCkKNjUgZXZlbnRzICg0Mjk0OTY3Mjk1LCA4NykKV1NBQ2xvc2VFdmVudCAxCldTQVJlc2V0RXZlbnQgb24gTlVMTCAwIGVycm9yIDYKV1NBR2V0TGFzdEVycm9yIDYgR2V0TGFzdEVycm9yIDYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "created 1\nWSAWaitForMultipleEvents timeout (258, 0)\nWSAWaitForMultipleEvents (0, 0)\nWSAResetEvent twice 1\nResetEvent 1\nwait any, third set (2, 0)\nwait all, all set (0, 0)\n65 events (4294967295, 87)\nWSACloseEvent 1\nWSAResetEvent on NULL 0 error 6\nWSAGetLastError 6 GetLastError 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 107
+    },
+    {
+      "name": "wsacreateevent_basics_b",
+      "exe_sha256": "8bccbdd9300a8db16231e25b50b7c53c856f50c7503937888ab71d3a4f1d0402",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0SGFuZGxlSW5mb3JtYXRpb24gMSBmbGFncyAwCldTQVNldEV2ZW50IDEKV1NBUmVzZXRFdmVudCAxClNldEV2ZW50IDEKV1NBV2FpdEZvck11bHRpcGxlRXZlbnRzIGFmdGVyIFJlc2V0RXZlbnQgKDI1OCwgMCkKd2FpdCBhbnksIHNlY29uZCBhbmQgdGhpcmQgc2V0IChsb3dlc3QgaW5kZXggd2lucykgKDEsIDApCndhaXQgd2l0aCBhIDUwIG1zIHRpbWVvdXQgb24gYSByZXNldCBldmVudCAoMjU4LCAwKQo2NCBldmVudHMgKDI1OCwgMCkKV1NBQ2xvc2VFdmVudCBhZ2FpbiAwIGVycm9yIDYKV1NBQ2xvc2VFdmVudCBvbiBOVUxMIDAgZXJyb3IgNgpDbG9zZUhhbmRsZSAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetHandleInformation 1 flags 0\nWSASetEvent 1\nWSAResetEvent 1\nSetEvent 1\nWSAWaitForMultipleEvents after ResetEvent (258, 0)\nwait any, second and third set (lowest index wins) (1, 0)\nwait with a 50 ms timeout on a reset event (258, 0)\n64 events (258, 0)\nWSACloseEvent again 0 error 6\nWSACloseEvent on NULL 0 error 6\nCloseHandle 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 103
+    }
+  ]
+}

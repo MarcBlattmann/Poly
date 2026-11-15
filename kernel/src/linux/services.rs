@@ -219,14 +219,13 @@ fn map_placed(memory: &Memory, req: poly_vm::MapRequest<FileRef>, r: &MapRequest
         Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
         Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
     };
-    let addr = memory.map(req.at(placement)).map_err(memory_errno)?;
-    // MAP_32BIT: the region map has no "below 2 GiB" placement yet; a
-    // mapping that landed higher is taken back.
-    if r.hints.low_2g && addr.saturating_add(r.len) > 1 << 31 {
-        let _ = memory.unmap(addr, r.len);
-        return Err(Errno::ENOMEM);
+    let req = req.at(placement);
+    // MAP_32BIT (only set with a non-fixed placement): the mapping goes into
+    // the first 2 GiB, or fails with ENOMEM when nothing is free there.
+    if r.hints.low_2g {
+        return memory.map_below(req, poly_vm::LOW_2G).map_err(memory_errno);
     }
-    Ok(addr)
+    memory.map(req).map_err(memory_errno)
 }
 
 fn memory_errno(e: MemoryError) -> Errno {
@@ -386,13 +385,6 @@ impl LinuxKernel for Thread<'_> {
     }
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
-        fn placement_of(r: &MapRequest) -> poly_vm::Placement {
-            match r.placement {
-                Placement::Hint => poly_vm::Placement::Hint(r.addr),
-                Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
-                Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
-            }
-        }
         let memory = self.memory()?;
         let prot = vm_prot(r.prot);
         let req = match r.backing {
@@ -441,12 +433,7 @@ impl LinuxKernel for Thread<'_> {
                     }
                     let object = FileRef::new(source);
                     let req = poly_vm::MapRequest::file(r.len, prot, object, offset, r.shared);
-                    let placement = match r.placement {
-                        Placement::Hint => poly_vm::Placement::Hint(r.addr),
-                        Placement::Fixed => poly_vm::Placement::Fixed(r.addr),
-                        Placement::FixedNoReplace => poly_vm::Placement::FixedNoReplace(r.addr),
-                    };
-                    return memory.map(req.at(placement)).map_err(memory_errno);
+                    return map_placed(&memory, req, r);
                 }
                 // A sound card's PCM device maps its ring buffer and its
                 // status and control pages (ADR 0109).
@@ -455,8 +442,7 @@ impl LinuxKernel for Thread<'_> {
                 {
                     let (source, at) = m?;
                     let req = poly_vm::MapRequest::file(r.len, prot, FileRef::new(source), at, true);
-                    let addr = memory.map(req.at(placement_of(r))).map_err(memory_errno)?;
-                    return Ok(addr);
+                    return map_placed(&memory, req, r);
                 }
                 // A loop device maps its backing file, from where the device
                 // starts in it (ADR 0168): the same pages as the file's own

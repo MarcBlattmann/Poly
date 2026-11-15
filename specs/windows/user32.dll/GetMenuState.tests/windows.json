@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gms_flags",
+      "exe_sha256": "80e18fd7a7f37735ebcd7dd04ed2442005de6179a93cbebdd5d8f14a8ba2b45f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cG9zaXRpb24gMDogMHgwCnBvc2l0aW9uIDE6IDB4OApwb3NpdGlvbiAyOiAweDEKcG9zaXRpb24gMzogMHgyCnBvc2l0aW9uIDQ6IDB4Ygpwb3NpdGlvbiA1OiAweDgwMwpwb3NpdGlvbiA2OiAweDMxMApwb3NpdGlvbiA3OiAweDMxMQpwb3NpdGlvbiA4OiAweDQwCnBvc2l0aW9uIDk6IDB4MjAKcG9zaXRpb24gMTA6IDB4MTAwCnBvc2l0aW9uIDExOiAweDgwCmJ5IGNvbW1hbmQgMjogOApieSBjb21tYW5kIDYgKHNlcGFyYXRvciBpZCk6IDIwNTEKYnkgY29tbWFuZCAzMDAgKGluIHRoZSBzdWIgbWVudSk6IDAgZXJyPS0xCmJ5IGNvbW1hbmQgYWJzZW50OiAtMSBlcnI9LTEKYnkgcG9zaXRpb24gYWJzZW50OiAtMSBlcnI9LTEKZmxhZ3MgMCBtZWFucyBieSBjb21tYW5kOiAxCmJhZCBtZW51OiAtMSBlcnI9MTQwMQpOVUxMIG1lbnU6IC0xIGVycj0xNDAxCnBvcHVwIGl0ZW0gYWZ0ZXIgdGhlIHN1YiBtZW51IGdvdCBhIDR0aCBpdGVtOiAxMDQwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "position 0: 0x0\nposition 1: 0x8\nposition 2: 0x1\nposition 3: 0x2\nposition 4: 0xb\nposition 5: 0x803\nposition 6: 0x310\nposition 7: 0x311\nposition 8: 0x40\nposition 9: 0x20\nposition 10: 0x100\nposition 11: 0x80\nby command 2: 8\nby command 6 (separator id): 2051\nby command 300 (in the sub menu): 0 err=-1\nby command absent: -1 err=-1\nby position absent: -1 err=-1\nflags 0 means by command: 1\nbad menu: -1 err=1401\nNULL menu: -1 err=1401\npopup item after the sub menu got a 4th item: 1040\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

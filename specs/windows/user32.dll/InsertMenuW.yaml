@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/InsertMenuW.yaml
+id: windows/api/user32.dll/InsertMenuW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Inserts an item before the item named by uPosition: by position with MF_BYPOSITION, or before the item with that command id (MF_BYCOMMAND, the default, also 0 flags). The item is made as AppendMenuW makes it (same flags, same results).
+interface:
+  signature: "BOOL InsertMenuW(HMENU hMenu, UINT uPosition, UINT uFlags, UINT_PTR uIDNewItem, LPCWSTR lpNewItem)"
+rules:
+  by_position: "position 0 inserts first, 2 inserts before the third item, 0xFFFFFFFF (-1) appends, a position past the end appends"
+  by_command: "MF_BYCOMMAND inserts before the first item with that id, searching sub menus depth first (an id that lives in a sub menu of the menu inserts into that sub menu); an id that is not found appends and still returns TRUE"
+  zero_flags: "flags 0 mean MF_BYCOMMAND | MF_STRING"
+  item_kinds: "checked, grayed, disabled, popup, owner-draw, menu break, separator (with MF_SEPARATOR; a text with it is ignored), a NULL text with MF_STRING (a separator): the stored item is the same as AppendMenuW gives, see that sheet; a popup with an invalid handle is stored as an ordinary item"
+  count: "every successful call adds one item"
+errors:
+  invalid_menu: "NULL or made-up menu: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Insertion into a menu bar shown on a window (same rules); MF_BITMAP.

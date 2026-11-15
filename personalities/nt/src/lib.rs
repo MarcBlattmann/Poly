@@ -56,6 +56,7 @@ pub mod diag;
 pub mod exception;
 pub mod exec;
 pub mod image;
+pub mod imageshare;
 pub mod io;
 pub mod job;
 pub mod kernel;

@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/iphlpapi.dll/GetAdaptersAddresses.yaml
+id: windows/api/iphlpapi.dll/GetAdaptersAddresses
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "GetAdaptersAddresses function (iphlpapi.h)", "IP_ADAPTER_ADDRESSES_LH structure", "IP_ADAPTER_UNICAST_ADDRESS_LH structure", "GAA_FLAG_* flags"; iptypes.h, iphlpapi.h, ifdef.h and winerror.h for constants and layouts. Field offsets used by the tests (x64): Length 0, IfIndex 4, Next 8, AdapterName 16, FirstUnicastAddress 24, FirstAnycastAddress 32, FirstMulticastAddress 40, FirstDnsServerAddress 48, FriendlyName 72, PhysicalAddressLength 88, Mtu 96, IfType 100, OperStatus 104, Ipv6IfIndex 108, FirstPrefix 176, FirstGatewayAddress 208; unicast address: Length 0, Next 8, sockaddr pointer 16 and length 24, DadState 40, OnLinkPrefixLength 56. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Lists the machine's network adapters with their addresses. Chrome's network change notifier and network-interface code call it 4 times in the browser and 7 in the network service with family AF_UNSPEC and flags 0x80E, 0x2E, 0x27 and 0xF and a 15000-byte buffer, which is enough: the result is 0 on the first try and *size is left at 15000 (not changed on success). The tests record only machine-independent facts: sizing (NULL buffer and size 0: 111 ERROR_BUFFER_OVERFLOW and the size), the argument errors, what each GAA flag removes from the list, the family filter, and invariants of every adapter and unicast entry (plus what the software loopback adapter looks like). Surprises: a non-NULL reserved pointer and unknown flag bits are NOT refused; GAA_FLAG_SKIP_FRIENDLY_NAME does not remove the friendly name.
+interface:
+  signature: "ULONG GetAdaptersAddresses(ULONG family, ULONG flags, PVOID reserved, PIP_ADAPTER_ADDRESSES addrs, PULONG size)"
+  result: "0 (NO_ERROR), 111 (ERROR_BUFFER_OVERFLOW, *size = bytes needed), 87 (ERROR_INVALID_PARAMETER), 232 (ERROR_NO_DATA) when no adapter matches"
+chrome:
+  calls: "GetAdaptersAddresses(0, 2062 (0x80E: SKIP_ANYCAST|SKIP_MULTICAST|SKIP_DNS_SERVER|SKIP_DNS_INFO), NULL, buf, &15000) 4 times, (0, 46 (0x2E: SKIP_ANYCAST|SKIP_MULTICAST|SKIP_DNS_SERVER|SKIP_FRIENDLY_NAME)) 2 times, (0, 39 (0x27: SKIP_UNICAST|SKIP_ANYCAST|SKIP_MULTICAST|SKIP_FRIENDLY_NAME)) and (0, 15 (0xF: SKIP_UNICAST|ANYCAST|MULTICAST|DNS_SERVER)) once each; every call returns 0 on the first try; calls happen at start and again after a NotifyAddrChange event"
+rules:
+  sizing: "NULL buffer with *size 0 and flags 0x80E: 111 and *size > 0; a 100-byte buffer: 111 and *size > 100; a buffer of exactly the size asked for: 0; two size queries give the same size"
+  chrome_calls: "AF_UNSPEC with each of 0x80E, 0x2E, 0x27, 0xF and 0, a 15000-byte buffer: 0 and *size stays 15000; at least one adapter"
+  argument_errors: "family 99: 87; a NULL size pointer: 87; NOT refused: a non-NULL reserved pointer (0), unknown flag bits 0x40000000 (0)"
+  flag_skip: "GAA_FLAG_SKIP_UNICAST: no adapter has FirstUnicastAddress; SKIP_ANYCAST, SKIP_MULTICAST, SKIP_DNS_SERVER and SKIP_DNS_INFO (0x800): no adapter has the corresponding list (SKIP_DNS_INFO empties the DNS server list); the number of adapters is the same as with flags 0 in every case"
+  flag_friendly_name: "GAA_FLAG_SKIP_FRIENDLY_NAME (0x20) has no effect on this Windows: the friendly name is still set; with flags 0 every adapter has an AdapterName and a FriendlyName"
+  flag_prefix: "GAA_FLAG_INCLUDE_PREFIX (0x10) gives some adapter a FirstPrefix; flags 0 gives none (prefixes are not included by default)"
+  default_list: "with flags 0 some adapter has a unicast address; anycast lists are empty on every adapter"
+  family_filter: "AF_INET: every unicast address has family 2 (AF_INET); AF_INET6: every unicast address has family 23"
+  invariants: "every adapter has Length 0x1c0 (the same for all) and >= 0x90, IfIndex nonzero and unique, AdapterName non-NULL, PhysicalAddressLength <= 8, OperStatus 1..7, IfType nonzero; every unicast address: Length >= 48, family 2 with sockaddr length 16 or family 23 with length 28, DadState <= 4, OnLinkPrefixLength <= 128"
+  loopback: "exactly one adapter of IfType 24 (software loopback) on the oracle, with 127.0.0.1 and ::1, OperStatus 1 (up), Mtu 0xFFFFFFFF, PhysicalAddressLength 0, OnLinkPrefixLength of 127.0.0.1 = 8, DadState 4 (preferred), an Ipv6IfIndex"
+errors:
+  buffer_overflow: "ERROR_BUFFER_OVERFLOW (111) with the size"
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+  no_data: "ERROR_NO_DATA (232)"
+side_effects: "none"
+threading: "may be called from any thread; Chrome calls it from its network-change thread and from the browser's IO thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). Adapter names, friendly names, MAC addresses, addresses other than 127.0.0.1 and ::1, DNS servers, gateways, MTUs and counts of adapters are the machine's and are never recorded; where a result could depend on the machine the test prints only a boolean that holds on every Windows machine with a loopback adapter.
+not_covered: >
+  The values of the real adapters (everything physical), IP_ADAPTER_ADDRESSES fields after FirstPrefix beyond the invariants above (Luid, lifetimes, DHCP servers, compartment, network GUID), GAA_FLAG_INCLUDE_ALL_INTERFACES/COMPARTMENTS, GAA_FLAG_INCLUDE_WINS_INFO, family AF_INET with no adapter (ERROR_NO_DATA), size reports on a changing machine.

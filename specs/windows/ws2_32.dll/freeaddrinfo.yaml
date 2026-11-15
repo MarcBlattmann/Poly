@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/freeaddrinfo.yaml
+id: windows/api/ws2_32.dll/freeaddrinfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  The same observations as the getaddrinfo entry of this DLL; every test of that entry frees its lists with it.
+summary: >
+  Releases a list that getaddrinfo returned (all entries, canonical names and addresses). NULL is harmless. Chrome calls it once per getaddrinfo. No tests of its own.
+same_as: "windows/api/ws2_32.dll/getaddrinfo"
+interface:
+  signature: "void freeaddrinfo(PADDRINFOA res)"
+rules:
+  free: "see the free rule of getaddrinfo: freeaddrinfo(NULL) returns without harm"
+errors:
+  none: "no result, no last error"
+side_effects: "none beyond the release"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the getaddrinfo sheet lists as not covered.

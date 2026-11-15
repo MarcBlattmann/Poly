@@ -465,7 +465,9 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         });
         let image = if chromium {
             let files = crate::chromium::PolyFiles { test_apps, compositor_args, test_page: None };
-            crate::chromium::desktop_parts(&files, fresh_disk).map(|p| (p.initrd, Some(p.disk)))
+            crate::chromium::apply_disk_size(args)
+                .and_then(|()| crate::chromium::desktop_parts(&files, fresh_disk))
+                .map(|p| (p.initrd, Some(p.disk)))
         } else {
             image(test_apps).map(|i| (i, None))
         };

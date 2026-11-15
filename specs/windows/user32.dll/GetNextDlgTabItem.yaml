@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetNextDlgTabItem.yaml
+id: windows/api/user32.dll/GetNextDlgTabItem
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The next (or previous) control in the tab order after hCtl: the next sibling with WS_TABSTOP that is enabled and visible, wrapping around.
+interface:
+  signature: "HWND GetNextDlgTabItem(HWND hDlg, HWND hCtl, BOOL bPrevious)"
+rules:
+  order: "forward from 1002 in the first template: 1003 1004 1007 1008 1 2 1002 1003 1004; backward: 2 1 1008 1007 1004 1003 1002 2 1; the group's tab stop is its first radio button (1004), the other radios (no tab stop) are skipped"
+  start: "NULL as hCtl: forward gives the first tab stop (1002), backward gives NULL here (nothing before the start; the walk wraps from the end only for a control given); from a control without a tab stop (a static, a radio in the middle of a group) the walk starts from its position (forward from the second radio is 1007, backward 1004); from the dialog window itself (not a child) the first tab stop"
+  skipped: "a disabled or hidden control is skipped"
+  group_items: "GetNextDlgGroupItem walks the controls of one WS_GROUP group (1004 1005 1006 wrapping), skipping disabled and hidden ones; backward the other way; NULL starts at the first control of the dialog"
+  no_usable: "when no control of the group is usable GetNextDlgGroupItem returns the starting control itself (1004 with 1005 and 1006 disabled or hidden)"
+errors:
+  invalid_dialog: "NULL with error 1400 for a bad dialog handle"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Nested dialogs (WS_EX_CONTROLPARENT children).

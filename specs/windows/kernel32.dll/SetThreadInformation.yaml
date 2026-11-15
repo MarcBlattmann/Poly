@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetThreadInformation.yaml
+id: windows/api/kernel32.dll/SetThreadInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SetThreadInformation function (processthreadsapi.h)", "GetThreadInformation function", "THREAD_POWER_THROTTLING_STATE", "Thread Security and Access Rights"; processthreadsapi.h, winbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sets a per-thread attribute. Chrome's processes call it 89 times in stage 2 (every process type but crash handler). ThreadPowerThrottling (3) takes Version 1 (Version 0 is accepted too, 2 is refused), a control mask and a state mask of EXECUTION_SPEED 1 and reads them back through GetThreadInformation; ThreadMemoryPriority (0) takes a 4-byte value 1..5. Sizes of 12 and more are accepted for the throttling state (the first 12 bytes count). The handle needs THREAD_SET_INFORMATION (0x20); THREAD_SET_LIMITED_INFORMATION is not enough for the power state.
+interface:
+  signature: "BOOL SetThreadInformation(HANDLE thread, THREAD_INFORMATION_CLASS class, LPVOID info, DWORD size); BOOL GetThreadInformation(HANDLE, THREAD_INFORMATION_CLASS, LPVOID, DWORD)"
+  classes: "ThreadMemoryPriority 0, ThreadAbsoluteCpuPriority 1, ThreadDynamicCodePolicy 2, ThreadPowerThrottling 3 (processthreadsapi.h)"
+chrome:
+  calls: "89 calls in stage 2 by browser, GPU, network, utility and renderer processes; the arguments are not in the committed traces"
+rules:
+  throttling_masks: "Control 1 State 1, Control 1 State 0, Control 0 State 0 are stored and read back (a fresh thread reads Version 1 Control 0 State 0); Control 8 State 8 (an undefined bit): FALSE, error 87"
+  throttling_version: "Version 1 and Version 0 are accepted (TRUE); Version 2: FALSE, error 87"
+  throttling_sizes: "size 12, 13 and 16: TRUE; 0, 4, 8 and 11: FALSE, error 87"
+  memory_priority: "ThreadMemoryPriority size 4: values 1, 3, 5 are stored and read back (a fresh thread reads 5); 0 and 7 are refused and the value stays; sizes 0, 3, 8, 12: FALSE, error 24"
+  other_classes: "class 1 (ThreadAbsoluteCpuPriority) with size 4: TRUE; class 2 (ThreadDynamicCodePolicy): FALSE, error 5; classes 4, 9 and 99: error 87"
+  other_thread: "another thread of the process, through the CreateThread handle: works and reads back; through a handle with THREAD_SET_INFORMATION: works; with THREAD_SET_LIMITED_INFORMATION, THREAD_QUERY_LIMITED_INFORMATION or THREAD_SUSPEND_RESUME only: FALSE, error 5; NULL handle: error 6"
+errors:
+  bad_length: "ERROR_BAD_LENGTH (24) for ThreadMemoryPriority"
+  bad_value: "ERROR_INVALID_PARAMETER (87)"
+  no_right: "ERROR_ACCESS_DENIED (5)"
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "changes the thread's attribute"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  The scheduling effect, threads of other processes, THREAD_SET_LIMITED_INFORMATION for the memory priority.

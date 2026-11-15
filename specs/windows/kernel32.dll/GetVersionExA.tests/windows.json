@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3b0da0f262c8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:44:14Z",
+  "tests": [
+    {
+      "name": "vera_basic",
+      "exe_sha256": "c0d14cf62b8131993f189ffeed1a81ba48fa5c7c1e11caaeede86b7889278cb4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSAxNDggLT4gMTogbWFqb3IgNiwgbWlub3IgMiwgYnVpbGQgOTIwMCwgcGxhdGZvcm0gMgogIGNzZCBsZW5ndGggMCwgYnl0ZXMgYWZ0ZXIgdGhlIGZpcnN0IE5VTCBhcmUgemVybzogMAogIGJ5dGUgYWZ0ZXIgdGhlIHN0cnVjdHVyZSB1bnRvdWNoZWQ6IDEKc2l6ZSAxNTYgLT4gMTogbWFqb3IgNiwgbWlub3IgMiwgYnVpbGQgOTIwMCwgcGxhdGZvcm0gMgogIGNzZCBsZW5ndGggMCwgYnl0ZXMgYWZ0ZXIgdGhlIGZpcnN0IE5VTCBhcmUgemVybzogMAogIHNlcnZpY2UgcGFjayAwLjAsIHN1aXRlIG1hc2sgYml0IDB4ODAgKG5vdCBhIHNlcnZlcik6IDAsIHByb2R1Y3QgdHlwZSAxLCByZXNlcnZlZCAwCnNpemUgZmllbGQgYWZ0ZXIgdGhlIGNhbGwgMTU2CkdldFZlcnNpb246IG1ham9yIDYsIG1pbm9yIDIsIGJ1aWxkIDkyMDAsIGhpZ2ggYml0IDAKR2V0VmVyc2lvbkV4QSBzaXplIDE0OCAtPiAxLCBlcnJvciB1bmNoYW5nZWQsIGJ5dGVzIHdyaXR0ZW4gYWZ0ZXIgdGhlIHNpemUgZmllbGQ6IDE3CiAgcGxhdGZvcm0gMiwgY3NkIGZpcnN0IHVuaXQgMApHZXRWZXJzaW9uRXhBIHNpemUgMTU2IC0+IDEsIGVycm9yIHVuY2hhbmdlZCwgYnl0ZXMgd3JpdHRlbiBhZnRlciB0aGUgc2l6ZSBmaWVsZDogMTUyCiAgcGxhdGZvcm0gMiwgY3NkIGZpcnN0IHVuaXQgMAogIHNlcnZpY2UgcGFjayAwLjAsIHN1aXRlIDB4MzAwLCBwcm9kdWN0IHR5cGUgMSwgcmVzZXJ2ZWQgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size 148 -> 1: major 6, minor 2, build 9200, platform 2\n  csd length 0, bytes after the first NUL are zero: 0\n  byte after the structure untouched: 1\nsize 156 -> 1: major 6, minor 2, build 9200, platform 2\n  csd length 0, bytes after the first NUL are zero: 0\n  service pack 0.0, suite mask bit 0x80 (not a server): 0, product type 1, reserved 0\nsize field after the call 156\nGetVersion: major 6, minor 2, build 9200, high bit 0\nGetVersionExA size 148 -> 1, error unchanged, bytes written after the size field: 17\n  platform 2, csd first unit 0\nGetVersionExA size 156 -> 1, error unchanged, bytes written after the size field: 152\n  platform 2, csd first unit 0\n  service pack 0.0, suite 0x300, product type 1, reserved 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/NotifyWinEvent
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Signals an event for a window: the hooks installed with SetWinEventHook whose range, process and thread
+  filters match are called back (out of context: queued for their threads). No return value. Chrome's browser
+  calls it 105 times a run (S3) with no hook installed by anyone, so it must be cheap and never fail.
+interface:
+  signature: "void NotifyWinEvent(DWORD event, HWND hwnd, LONG idObject, LONG idChild)"
+rules:
+  no_hook: "with no hook installed the call does nothing and does not change the last error (a valid window); it queues nothing"
+  arguments: "a hook for 0xA000..0xAFFF gets exactly the event, the window, idObject and idChild passed: idObject 0, -1 (OBJID_SYSMENU), -2, -3, -4 (OBJID_CLIENT), -5, -6, -8, -9, a custom 1, 7, 1000, 0x7FFFFFFF and i32::MIN arrive unchanged; so do idChild values 1, -1, 0x7FFFFFFF; the event thread and the callback thread are the calling thread"
+  hooks_order: "two hooks with the ranges of the event get a callback each; events are queued in the order of the calls and delivered in that order; five identical calls give five callbacks, not merged"
+  windows: "a valid window of this process (top-level, hidden or visible, a child, the desktop window: the desktop window gives no callback) is passed on; NULL, a made-up handle (0x1234) and -1 and a destroyed window: no callback and the last error is ERROR_INVALID_WINDOW_HANDLE (1400)"
+  chrome: "the browser notifies about its windows: with a hook for the object ranges the three windows' notifications arrive in order after the pump; 105 calls with no hook leave the last error unchanged; from a worker thread the call works for windows of the main thread and the callback runs in the installing thread, with hooks restricted by thread or process and with SKIPOWNTHREAD or SKIPOWNPROCESS giving exactly the callbacks the filters allow"
+errors:
+  bad_window: "NULL, a made-up handle, -1 and a destroyed window: nothing is called back and the last error is ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

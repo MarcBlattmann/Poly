@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "certclosestore_flags_b",
+      "exe_sha256": "28a1d4b8ce4e2fe320fb7c8222b74b2328dc37b5d6d8fa52e54bb49a2c13c02d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xvc2UgdGhlIHNpYmxpbmcgKGZsYWdzIDApIHdoaWxlIHRoZSBjb2xsZWN0aW9uIGhvbGRzIGl0OiAxIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCmNsb3NlIHdpdGggQ0hFQ0tfRkxBRyB3aGlsZSBhIGNvbnRleHQgaXMgb3BlbjogMCBsYXN0IGVycm9yIDB4ODAwOTIwMEYKQ0hFQ0tfRkxBRyB3aXRoIG5vIGNvbnRleHQgb3BlbjogMSBsYXN0IGVycm9yIHVuY2hhbmdlZApjbG9zZSB3aXRoIEZPUkNFX0ZMQUcgd2hpbGUgYSBjb250ZXh0IGlzIG9wZW46IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "close the sibling (flags 0) while the collection holds it: 1 last error unchanged\nclose with CHECK_FLAG while a context is open: 0 last error 0x8009200F\nCHECK_FLAG with no context open: 1 last error unchanged\nclose with FORCE_FLAG while a context is open: 1 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "certclosestore_flags_c",
+      "exe_sha256": "66f409949461dd85dde5ef2ea153b551cc52dca0e78c3e441b7d6fd2cb74879a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGNvbGxlY3Rpb24gc3RpbGwgZW51bWVyYXRlcyBCQQp0aGUgY29udGV4dCBpcyBzdGlsbCB1c2FibGUgYWZ0ZXIgdGhhdCBjbG9zZTogQQpjbG9zZSB3aXRoIGZsYWdzIDAgd2hpbGUgYSBjb250ZXh0IGlzIG9wZW46IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKY2xvc2UgdGhlIGNvbGxlY3Rpb246IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the collection still enumerates BA\nthe context is still usable after that close: A\nclose with flags 0 while a context is open: 1 last error unchanged\nclose the collection: 1 last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
