@@ -649,7 +649,8 @@ unsafe fn errors() {
             select(0, core::ptr::null_mut(), core::ptr::null_mut(), core::ptr::null_mut(), tv.as_ptr()),
             WSAEINVAL,
         );
-        check(socket(AF_INET, 3, 0) == INVALID_SOCKET && last() == 10044);
+        // A raw socket needs a privilege Poly has no use for (Windows: WSAEACCES without it).
+        check(socket(AF_INET, 3, 0) == INVALID_SOCKET && last() == 10013);
         check(socket(5, SOCK_STREAM, 0) == INVALID_SOCKET && last() == WSAEAFNOSUPPORT);
         closesocket(s);
         closesocket(l);
