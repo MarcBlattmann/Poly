@@ -15,9 +15,9 @@
 {"symbol":"CreateProxyPage","src":["wine-spec"]},
 {"symbol":"CreateStatusWindow","src":["wine-spec"]},
 {"symbol":"CreateStatusWindowA","src":["wine-spec"]},
-{"symbol":"CreateStatusWindowW","status":"stub","src":["wine-spec"]},
+{"symbol":"CreateStatusWindowW","status":"claimed","claimed_by":"spec-win-apps-5","src":["wine-spec"]},
 {"symbol":"CreateToolbar","src":["wine-spec"]},
-{"symbol":"CreateToolbarEx","status":"stub","src":["wine-spec"],"seeds":["wine:comctl32/tests/toolbar.c:test_get_set_style","wine:comctl32/tests/toolbar.c:test_setrows","wine:comctl32/tests/toolbar.c:basic_test"]},
+{"symbol":"CreateToolbarEx","status":"claimed","claimed_by":"spec-win-apps-5","src":["wine-spec"],"seeds":["wine:comctl32/tests/toolbar.c:test_get_set_style","wine:comctl32/tests/toolbar.c:test_setrows","wine:comctl32/tests/toolbar.c:basic_test"]},
 {"symbol":"CreateUpDownControl","src":["wine-spec"],"seeds":["wine:comctl32/tests/updown.c:test_CreateUpDownControl"]},
 {"symbol":"DPA_Clone","src":["wine-spec"],"seeds":["wine:comctl32/tests/dpa.c:test_dpa"]},
 {"symbol":"DPA_Create","src":["wine-spec"],"seeds":["wine:comctl32/tests/dpa.c:test_DPA_DestroyCallback","wine:comctl32/tests/dpa.c:test_DPA_EnumCallback","wine:comctl32/tests/dpa.c:test_DPA_SaveStream","wine:comctl32/tests/dpa.c:test_DPA_Merge","wine:comctl32/tests/dpa.c:test_dpa"]},
@@ -176,7 +176,11 @@
 {"symbol":"Str_GetPtrW","src":["wine-spec"]},
 {"symbol":"Str_SetPtrA","src":["wine-spec"]},
 {"symbol":"Str_SetPtrW","src":["wine-spec"]},
+{"symbol":"SysListView32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]},
+{"symbol":"SysTreeView32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]},
 {"symbol":"TextOutWrap","forward":"gdi32.TextOutW","src":["wine-spec"]},
+{"symbol":"ToolbarWindow32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]},
 {"symbol":"UninitializeFlatSB","src":["wine-spec"]},
-{"symbol":"_TrackMouseEvent","status":"stub","src":["wine-spec"],"seeds":["wine:comctl32/tests/listview.c:test_oneclickactivate"]}
+{"symbol":"_TrackMouseEvent","status":"stub","src":["wine-spec"],"seeds":["wine:comctl32/tests/listview.c:test_oneclickactivate"]},
+{"symbol":"msctls_statusbar32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]}
 ]

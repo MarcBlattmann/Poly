@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "cte_basic",
+      "exe_sha256": "577b5b09d990bb711c16cf2a82c849bc26cfdc1f4e22fef1bf806b16acd1bb72",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Yml0bWFwIGhhbmRsZSwgNCBidXR0b25zLCAxNiB4IDE1IGltYWdlcyBhbmQgYnV0dG9uczogd2luZG93IG1hZGUKICBjbGFzcyAnVG9vbGJhcldpbmRvdzMyJywgc3R5bGUgMHg1MDAwMDAwMSwgY29udHJvbCBpZCAzMDEsIHRydWUKICB3aW5kb3cgNDAwIHggMjg7IGJ1dHRvbiBjb3VudCA0OyBidXR0b24gc2l6ZSAweDE1MDAxNzsgcm93cyAxCiAgYnV0dG9uIDA6IGJpdG1hcCAwIGNvbW1hbmQgMTAxIHN0YXRlIDB4NCBzdHlsZSAweDA7IHJlY3RhbmdsZSAoMCwgMiwgMjMsIDIzKQogIGJ1dHRvbiAxOiBiaXRtYXAgOCBjb21tYW5kIDAgc3RhdGUgMHgwIHN0eWxlIDB4MTsgcmVjdGFuZ2xlICgyMywgMiwgMzEsIDIzKQogIGJ1dHRvbiAyOiBiaXRtYXAgMSBjb21tYW5kIDEwMiBzdGF0ZSAweDQgc3R5bGUgMHgyOyByZWN0YW5nbGUgKDMxLCAyLCA1NCwgMjMpCiAgYnV0dG9uIDM6IGJpdG1hcCAyIGNvbW1hbmQgMTAzIHN0YXRlIDB4MCBzdHlsZSAweDA7IHJlY3RhbmdsZSAoNTQsIDIsIDc3LCAyMykKYm90dG9tLCBmbGF0LCAyNCB4IDIyOiB3aW5kb3cgbWFkZQogIGNsYXNzICdUb29sYmFyV2luZG93MzInLCBzdHlsZSAweDUwMDAwODAzLCBjb250cm9sIGlkIDMwMiwgdHJ1ZQogIHdpbmRvdyA0MDAgeCAyODsgYnV0dG9uIGNvdW50IDQ7IGJ1dHRvbiBzaXplIDB4MWMwMDFmOyByb3dzIDEKICBidXR0b24gMDogYml0bWFwIDAgY29tbWFuZCAxMDEgc3RhdGUgMHg0IHN0eWxlIDB4MDsgcmVjdGFuZ2xlICgwLCAwLCAzMSwgMjgpCiAgYnV0dG9uIDE6IGJpdG1hcCA4IGNvbW1hbmQgMCBzdGF0ZSAweDAgc3R5bGUgMHgxOyByZWN0YW5nbGUgKDMxLCAwLCAzOSwgMjgpCiAgYnV0dG9uIDI6IGJpdG1hcCAxIGNvbW1hbmQgMTAyIHN0YXRlIDB4NCBzdHlsZSAweDI7IHJlY3RhbmdsZSAoMzksIDAsIDcwLCAyOCkKICBidXR0b24gMzogYml0bWFwIDIgY29tbWFuZCAxMDMgc3RhdGUgMHgwIHN0eWxlIDB4MDsgcmVjdGFuZ2xlICg3MCwgMCwgMTAxLCAyOCkKbm8gYml0bWFwLCBubyBidXR0b25zOiB3aW5kb3cgbWFkZQogIGNsYXNzICdUb29sYmFyV2luZG93MzInLCBzdHlsZSAweDUwMDAwMDAxLCBjb250cm9sIGlkIDMwMywgdHJ1ZQogIHdpbmRvdyA0MDAgeCAyODsgYnV0dG9uIGNvdW50IDA7IGJ1dHRvbiBzaXplIDB4MTYwMDE3OyByb3dzIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bitmap handle, 4 buttons, 16 x 15 images and buttons: window made\n  class 'ToolbarWindow32', style 0x50000001, control id 301, true\n  window 400 x 28; button count 4; button size 0x150017; rows 1\n  button 0: bitmap 0 command 101 state 0x4 style 0x0; rectangle (0, 2, 23, 23)\n  button 1: bitmap 8 command 0 state 0x0 style 0x1; rectangle (23, 2, 31, 23)\n  button 2: bitmap 1 command 102 state 0x4 style 0x2; rectangle (31, 2, 54, 23)\n  button 3: bitmap 2 command 103 state 0x0 style 0x0; rectangle (54, 2, 77, 23)\nbottom, flat, 24 x 22: window made\n  class 'ToolbarWindow32', style 0x50000803, control id 302, true\n  window 400 x 28; button count 4; button size 0x1c001f; rows 1\n  button 0: bitmap 0 command 101 state 0x4 style 0x0; rectangle (0, 0, 31, 28)\n  button 1: bitmap 8 command 0 state 0x0 style 0x1; rectangle (31, 0, 39, 28)\n  button 2: bitmap 1 command 102 state 0x4 style 0x2; rectangle (39, 0, 70, 28)\n  button 3: bitmap 2 command 103 state 0x0 style 0x0; rectangle (70, 0, 101, 28)\nno bitmap, no buttons: window made\n  class 'ToolbarWindow32', style 0x50000001, control id 303, true\n  window 400 x 28; button count 0; button size 0x160017; rows 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}

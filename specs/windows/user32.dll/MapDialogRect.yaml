@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/MapDialogRect.yaml
+id: windows/api/user32.dll/MapDialogRect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Two TrueType test fonts are written by the test itself and added with AddFontMemResourceEx ('PolyDlg Mixed': lower case letters 448 units wide, upper case 704, digits 512 on a 1024 unit em; 'PolyDlg Even': every glyph 640 units), so no Microsoft font enters the results. Microsoft Learn: "MapDialogRect function", "GetDialogBaseUnits function", "DLGTEMPLATE structure", "DLGTEMPLATEEX structure", "Dialog Box Units"; winuser.h. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Converts a rectangle from dialog units to pixels with the base units of the dialog's own font. PuTTY's configuration dialog calls MapDialogRect(0, 0, 4, 8) on its window to get the width of a dialog unit and lays out every radio button, check box and group box from it: with the wrong units the radio buttons inside a group box land in the wrong place (impl-win-apps-3 screenshot).
+interface:
+  signature: "BOOL MapDialogRect(HWND hDlg, LPRECT lpRect)"
+  base_units: "a dialog unit is 1/4 of the base width and 1/8 of the base height of the dialog's font"
+rules:
+  base_units: "the base height is the font's tmHeight and the base width is (W / 26 + 1) / 2 where W is the width of the 52 letters 'abc...zABC...Z' in that font (integer division): for the test font 'PolyDlg Mixed' at 8 points the letters measure 338 pixels and the units are (7, 11); at 10 points 390 and (8, 13); at 12 points 468 and (9, 16); for 'PolyDlg Even' at 9 points 416 and (8, 12); for the system font 429 and (8, 16)"
+  font_size: "the template's point size becomes a font height of -MulDiv(points, 96, 72) pixels (8 points: -11, 9: -12, 10: -13, 12: -16 at 96 dpi), weight 400 (the template's weight for an extended template: 400 in the test), character set 0, the face name of the template; DS_SHELLFONT and the extended template DLGTEMPLATEEX give the same font as DS_SETFONT with the same size and face"
+  no_font: "a template without DS_SETFONT uses the system font: the units are those of GetDialogBaseUnits (8, 16) and the font handle of the dialog is the system font ('System', height 16, weight 700)"
+  missing_face: "a typeface that no font provides ('No Such Typeface Poly') also gives the system font: font 'System', height 16, units (8, 16)"
+  rounding: "every value is converted as (value * unit + divisor / 2) / divisor with C integer division (truncation toward zero), the unit being the base width and the divisor 4 for left and right, the base height and 8 for top and bottom: with units (7, 11) MapDialogRect(1, 1, 1, 1) is (2, 1, 2, 1), (2, 3, 5, 7) is (4, 4, 9, 10), (3, 7, 3, 7) is (5, 10, 5, 10), (100, 50, 200, 150) is (175, 69, 350, 206), (-1, -1, -1, -1) is (-1, 0, -1, 0), (-4, -8, -9, -17) is (-6, -10, -15, -22); with units (8, 13): (1, 1, 1, 1) is (2, 2, 2, 2), (-1, -1, -1, -1) is (-1, -1, -1, -1)"
+  client_size: "the client area of a dialog made from a template of width cx and height cy is MapDialogRect(0, 0, cx, cy): 315 x 138 for 180 x 100 units at (7, 11)"
+  children: "a child control of a dialog made from a template is placed at left = M(x), top = M(y) with width M(cx) and height M(cy), each converted on its own with the rule above (not as M(x + cx) - M(x)): with units (7, 11) a control at (70, 20) of 100 x 44 gets the rectangle (123, 28, 298, 89) (width 175, height 61) while MapDialogRect(70, 20, 170, 64) is (123, 28, 298, 88); the check in the test shows 1 control of 7 off by one pixel at 8 points, 3 at 10 points and none at 12 points or for 'PolyDlg Even'"
+  fixed_at_creation: "the units are those of the font the dialog had when it was created: a later WM_SETFONT on the dialog (16 pixel PolyDlg Even) or WM_SETFONT with NULL does not change what MapDialogRect gives; two dialogs with different fonts have different units at the same time"
+  group_box_layout: "PuTTY's page layout in the test (a static text, a group box of 100 x 44 units, three radio buttons of 40 x 10 units, an edit control and a default button, all at the positions of the test template) is placed with the children rule above at every size tried; at 12 points every child lies exactly where MapDialogRect puts its template rectangle"
+errors:
+  not_a_dialog: "a plain window (also one given a font with WM_SETFONT) and a NULL, made-up or destroyed handle: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400), the rectangle is not changed"
+  child: "a child control of a dialog (its own handle): FALSE with ERROR_WINDOW_NOT_DIALOG (1420), the rectangle is not changed"
+side_effects: "none beyond the rules above"
+threading: "the dialog's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  A NULL rectangle pointer (the call faults, not tested), dialogs made with a bold or italic font weight (the extended template's weight and italic fields), the base units at other screen resolutions (the tests run at 96 dpi), right-to-left dialogs, MapDialogRect on a dialog created by a framework that handles WM_SETFONT itself, a system font other than the 'System' bitmap font of the oracle (8 x 16).
