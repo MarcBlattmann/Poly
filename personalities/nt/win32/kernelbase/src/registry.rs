@@ -92,9 +92,6 @@ const KEY_FULL_INFORMATION: u32 = 2;
 const KEY_VALUE_FULL_INFORMATION: u32 = 1;
 const KEY_VALUE_PARTIAL_INFORMATION: u32 = 2;
 
-/// `SECURITY_ATTRIBUTES.bInheritHandle` (offset 16 on x64, `minwinbase.h`).
-const SA_INHERIT_OFFSET: usize = 16;
-
 fn err(status: NtStatus) -> u32 {
     poly_kernelbase::error::from_status(status)
 }
@@ -305,7 +302,7 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     // SAFETY: the caller's string or null.
     let class = unsafe { wide_arg(class) };
     // SAFETY: a SECURITY_ATTRIBUTES or null.
-    let inherit = !security.is_null() && unsafe { (security.add(SA_INHERIT_OFFSET) as *const i32).read() } != 0;
+    let inherit = unsafe { crate::base::sa_inherits(security) };
     let parts = reg::components(sub);
     let options = options & (reg::REG_OPTION_VOLATILE | reg::REG_OPTION_CREATE_LINK | reg::REG_OPTION_BACKUP_RESTORE);
     let start = if reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot) && !parts.is_empty() {

@@ -196,17 +196,21 @@ unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done
     let mut ok = true;
     while copied < size {
         let at = base.wrapping_add(copied);
-        let mut info = [0u8; 48];
-        // SAFETY: a 48-byte MEMORY_BASIC_INFORMATION buffer.
-        let q = unsafe { VirtualQuery(at as *const u8, info.as_mut_ptr(), 48) };
+        let mut info = crate::base::MemoryBasicInformation::default();
+        // SAFETY: a MEMORY_BASIC_INFORMATION buffer of this build's layout (28 bytes, 48 in 64 bits).
+        let q = unsafe {
+            VirtualQuery(
+                at as *const u8,
+                (&mut info as *mut crate::base::MemoryBasicInformation).cast(),
+                core::mem::size_of::<crate::base::MemoryBasicInformation>(),
+            )
+        };
         if q == 0 {
             ok = false;
             break;
         }
-        let region_base = u64::from_le_bytes(info[0..8].try_into().expect("8")) as usize;
-        let region_size = u64::from_le_bytes(info[24..32].try_into().expect("8")) as usize;
-        let state = u32::from_le_bytes(info[32..36].try_into().expect("4"));
-        let protect = u32::from_le_bytes(info[36..40].try_into().expect("4"));
+        let (region_base, region_size) = (info.base_address, info.region_size);
+        let (state, protect) = (info.state, info.protect);
         if !region_readable(state, protect) {
             ok = false;
             break;

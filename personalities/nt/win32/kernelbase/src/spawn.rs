@@ -148,27 +148,6 @@ fn basic_information(process: Handle) -> Result<[u8; 48], u32> {
     if st.is_success() { Ok(info) } else { Err(from_status(st)) }
 }
 
-/// The `lpSecurityDescriptor` of a `SECURITY_ATTRIBUTES` (after `nLength`, at the pointer
-/// size: 8, or 4 in a 32-bit process), or null.
-///
-/// # Safety
-/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
-pub(crate) unsafe fn descriptor_of(sa: *const u8) -> *const u8 {
-    // SAFETY: the caller's structure when non-null.
-    let at = core::mem::size_of::<usize>();
-    if sa.is_null() { core::ptr::null() } else { unsafe { (sa.add(at) as *const *const u8).read_unaligned() } }
-}
-
-/// `SECURITY_ATTRIBUTES.bInheritHandle` (offset 16 on x64, 8 in a 32-bit
-/// process, `minwinbase.h`).
-///
-/// # Safety
-/// `sa` is null or a `SECURITY_ATTRIBUTES`.
-unsafe fn inherits(sa: *const u8) -> bool {
-    // SAFETY: the caller's structure when non-null.
-    !sa.is_null() && unsafe { (sa.add(2 * core::mem::size_of::<usize>()) as *const i32).read_unaligned() } != 0
-}
-
 /// The caller's `STARTUPINFOW` or `STARTUPINFOA` (the same layout,
 /// `processthreadsapi.h`): its fixed part, its strings (`string` reads one
 /// as UTF-16) and its `lpReserved2` bytes. Null: none given.
@@ -231,10 +210,10 @@ pub unsafe extern "system" fn CreateProcessW(
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: wide_arg(application),
@@ -276,10 +255,10 @@ pub unsafe extern "system" fn CreateProcessAsUserW(
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: wide_arg(application),
@@ -319,10 +298,10 @@ pub unsafe extern "system" fn CreateProcessA(
     unsafe {
         let startup = startup_from(startup_info, &ansi_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: app.as_deref(),

@@ -265,7 +265,7 @@ fn thread_id(thread: Handle) -> Result<u32, u32> {
     let mut info = [0u8; 48];
     // SAFETY: valid pointers; ThreadBasicInformation (0) is 48 bytes.
     let st = unsafe { nt::NtQueryInformationThread(thread, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
-    if st.is_success() { Ok(u64::from_le_bytes(info[24..32].try_into().unwrap()) as u32) } else { Err(from_status(st)) }
+    if st.is_success() { Ok(id_in(&info, TBI_UNIQUE_THREAD)) } else { Err(from_status(st)) }
 }
 
 /// `HRESULT_FROM_WIN32`.

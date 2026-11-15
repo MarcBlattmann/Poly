@@ -10,7 +10,7 @@
 use crate::base::*;
 use crate::nt::{self, Handle, IoStatusBlock, ObjectAttributes, UnicodeString};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use poly_kernelbase::cpu::CpuId;
 use poly_kernelbase::error::*;
 use poly_kernelbase::file::{FILE_DIRECTORY_FILE, FILE_READ_ATTRIBUTES, FILE_SYNCHRONOUS_IO_NONALERT, SYNCHRONIZE};
@@ -97,7 +97,7 @@ pub unsafe extern "system" fn GetStartupInfoW(info: *mut u8) {
 /// This process's affinity mask as `SetProcessAffinityMask` set it (0:
 /// the system's). Poly's scheduler does not pin threads yet, so the masks
 /// are recorded and reported, not enforced (ADR 0087).
-static PROCESS_AFFINITY: AtomicU64 = AtomicU64::new(0);
+static PROCESS_AFFINITY: AtomicUsize = AtomicUsize::new(0);
 
 /// Whether `process` is a handle to this process.
 fn is_current_process(process: Handle) -> bool {
@@ -107,11 +107,12 @@ fn is_current_process(process: Handle) -> bool {
     same
 }
 
-fn system_affinity() -> u64 {
-    system::system_affinity(crate::misc::processors())
+/// The system's mask as a `DWORD_PTR`: in a 32-bit process only the first 32 processors fit.
+fn system_affinity() -> usize {
+    (system::system_affinity(crate::misc::processors()) & usize::MAX as u64) as usize
 }
 
-fn process_affinity() -> u64 {
+fn process_affinity() -> usize {
     match PROCESS_AFFINITY.load(Ordering::Relaxed) {
         0 => system_affinity(),
         m => m,
@@ -120,7 +121,11 @@ fn process_affinity() -> u64 {
 
 /// `GetProcessAffinityMask`: the process's and the system's masks.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetProcessAffinityMask(process: Handle, mask: *mut u64, system_mask: *mut u64) -> i32 {
+pub unsafe extern "system" fn GetProcessAffinityMask(
+    process: Handle,
+    mask: *mut usize,
+    system_mask: *mut usize,
+) -> i32 {
     if mask.is_null() || system_mask.is_null() {
         return fail(ERROR_NOACCESS, FALSE);
     }
@@ -136,8 +141,8 @@ pub unsafe extern "system" fn GetProcessAffinityMask(process: Handle, mask: *mut
 /// `SetProcessAffinityMask`: Learn: the mask must be a subset of the
 /// system's (`ERROR_INVALID_PARAMETER`).
 #[unsafe(no_mangle)]
-pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: u64) -> i32 {
-    if !system::valid_affinity(mask, system_affinity()) {
+pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: usize) -> i32 {
+    if !system::valid_affinity(mask as u64, system_affinity() as u64) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     if process == nt::CURRENT_PROCESS || is_current_process(process) {
@@ -150,9 +155,9 @@ pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: u64) -> i32
 /// process's), 0 with `ERROR_INVALID_PARAMETER` for a mask outside the
 /// process's.
 #[unsafe(no_mangle)]
-pub extern "system" fn SetThreadAffinityMask(_thread: Handle, mask: u64) -> u64 {
+pub extern "system" fn SetThreadAffinityMask(_thread: Handle, mask: usize) -> usize {
     let process = process_affinity();
-    if !system::valid_affinity(mask, process) {
+    if !system::valid_affinity(mask as u64, process as u64) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     process
@@ -504,8 +509,9 @@ pub unsafe extern "system" fn DeviceIoControl(
     let (iosb, event) = if overlapped.is_null() {
         (&mut local as *mut IoStatusBlock, 0)
     } else {
-        // SAFETY: the caller's OVERLAPPED: Internal at 0, hEvent at 24.
-        (overlapped.cast::<IoStatusBlock>(), unsafe { overlapped.add(24).cast::<Handle>().read_unaligned() })
+        // SAFETY: the caller's OVERLAPPED: Internal at 0, hEvent after the offsets (24 in a 64-bit
+        // process, 16 in a 32-bit one: `Overlapped`'s layout is this build's own).
+        (overlapped.cast::<IoStatusBlock>(), unsafe { (*overlapped.cast::<crate::file::Overlapped>()).event })
     };
     // SAFETY: the caller's buffers; the kernel checks their sizes.
     let mut st = unsafe {

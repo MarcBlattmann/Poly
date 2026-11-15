@@ -42,7 +42,7 @@ pub unsafe extern "system" fn CreateThread(
     // `lpThreadAttributes->lpSecurityDescriptor` is the new thread object's descriptor.
     // SAFETY: the caller's structure when non-null.
     let mut oa = ObjectAttributes::new(None, 0);
-    oa.security_descriptor = unsafe { crate::spawn::descriptor_of(security) };
+    oa.security_descriptor = unsafe { sa_descriptor(security) };
     let oa_ptr: *const ObjectAttributes = if oa.security_descriptor.is_null() { core::ptr::null() } else { &oa };
     let suspended = flags & CREATE_SUSPENDED != 0;
     let (commit, reserve) = if flags & STACK_SIZE_PARAM_IS_A_RESERVATION != 0 { (0, stack) } else { (stack, 0) };
@@ -195,18 +195,14 @@ pub(crate) unsafe fn create_named(
     let full = unsafe { wide_arg(name) }.and_then(sync::object_name);
     let string = full.as_ref().map(|f| UnicodeString::new(f));
     let mut attrs = nt::OBJ_OPENIF;
-    // SECURITY_ATTRIBUTES.bInheritHandle at 16 (minwinbase.h).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() && unsafe { (security.add(16) as *const i32).read() } != 0 {
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    if unsafe { sa_inherits(security) } {
         attrs |= nt::OBJ_INHERIT;
     }
     let mut oa = ObjectAttributes::new(string.as_ref(), attrs);
-    // SECURITY_ATTRIBUTES.lpSecurityDescriptor at 8: the new object's
-    // descriptor (ADR 0171).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() {
-        oa.security_descriptor = unsafe { (security.add(8) as *const *const u8).read() };
-    }
+    // The new object's descriptor (ADR 0171).
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    oa.security_descriptor = unsafe { sa_descriptor(security) };
     let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 || !oa.security_descriptor.is_null() {
         &oa as *const ObjectAttributes
     } else {
