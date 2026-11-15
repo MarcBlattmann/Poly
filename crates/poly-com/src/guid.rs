@@ -110,6 +110,40 @@ mod tests {
     }
 
     #[test]
+    fn sheet_forms_parse_to_the_documented_bytes() {
+        let g = Guid::parse(&w("{0000000a-bcde-f012-C000-00000000004f}")).unwrap();
+        let b = [
+            g.data1.to_le_bytes().as_slice(),
+            g.data2.to_le_bytes().as_slice(),
+            g.data3.to_le_bytes().as_slice(),
+            g.data4.as_slice(),
+        ]
+        .concat();
+        assert_eq!(b, [0x0a, 0, 0, 0, 0xde, 0xbc, 0x12, 0xf0, 0xc0, 0, 0, 0, 0, 0, 0, 0x4f]);
+        let m = Guid::parse(&w("{12345678-9ABC-DEF0-1122-334455667788}")).unwrap();
+        assert_eq!(m.data1, 0x1234_5678);
+        assert_eq!(m.data2, 0x9abc);
+        assert_eq!(m.data3, 0xdef0);
+        assert_eq!(m.data4, [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]);
+        assert_eq!(String::from_utf16(&m.to_text()).unwrap(), "{12345678-9ABC-DEF0-1122-334455667788}");
+        let ones = Guid { data1: !0, data2: !0, data3: !0, data4: [0xFF; 8] };
+        assert_eq!(String::from_utf16(&ones.to_text()).unwrap(), "{FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}");
+        assert_eq!(String::from_utf16(&Guid::default().to_text()).unwrap(), "{00000000-0000-0000-0000-000000000000}");
+    }
+
+    #[test]
+    fn white_space_around_and_missing_dashes_are_refused() {
+        for bad in [
+            " {00000000-0000-0000-C000-000000000046}",
+            "{00000000-0000-0000-C000-000000000046} ",
+            "{00000000000000000000000000000000000000}",
+            "{00000000-0000-0000-C000-0000000000466}",
+        ] {
+            assert_eq!(Guid::parse(&w(bad)), None, "{bad}");
+        }
+    }
+
+    #[test]
     fn rejects_other_forms() {
         for bad in [
             "",

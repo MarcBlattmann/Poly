@@ -668,10 +668,25 @@ impl Loader {
         if let Some(id) = self.find_loaded(&n) {
             return Ok(Found::Loaded(id));
         }
-        let candidates = if path::has_path(&n) { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
+        // A known DLL comes from a section the system made: what the caller's token may do with
+        // it decides, before any file is looked for (the sheet of `LoadLibraryExW`: after a
+        // process lowered its token `msctf.dll` is refused with `ERROR_ACCESS_DENIED`, while
+        // `version.dll`, which is not known, is simply not found).
+        if !path::has_path(&n) && path::is_windows_known(&n) {
+            p.known_dll_access()?;
+        }
+        let explicit = path::has_path(&n);
+        let candidates = if explicit { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
         for c in candidates {
-            if let Ok(file) = p.open_image(&path::nt_path(&c)) {
-                return Ok(Found::File(c, file));
+            match p.open_image(&path::nt_path(&c)) {
+                Ok(file) => return Ok(Found::File(c, file)),
+                // A file the caller named that its token may not open is refused as it is (the
+                // `LoadLibraryExW` sheet: `ERROR_ACCESS_DENIED`); in a search a candidate that
+                // cannot be opened is passed over like one that is not there.
+                Err(e) if explicit && (e == STATUS_ACCESS_DENIED || e == STATUS_BAD_IMPERSONATION_LEVEL) => {
+                    return Err(e);
+                }
+                Err(_) => {}
             }
         }
         Err(STATUS_DLL_NOT_FOUND)

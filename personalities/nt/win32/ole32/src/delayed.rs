@@ -16,7 +16,6 @@ poly_win32_rt::fail_exports!(
         DoDragDrop,
         GetHGlobalFromILockBytes,
         GetHGlobalFromStream,
-        PropVariantCopy,
         ReleaseStgMedium,
         RoGetAgileReference,
         StgCreateDocfileOnILockBytes,
