@@ -33,7 +33,7 @@
 use super::consts::*;
 use super::create::{CreateHook, CreateParams};
 use super::fileinfo::RenameTo;
-use super::irp::{Irp, IrpOp, IrpState, iosb_bytes};
+use super::irp::{Irp, IrpOp, IrpState, iosb_address, iosb_write};
 use super::locks::{self, ByteLock, LockOwner};
 use super::{Target, dir, info, status_of};
 use crate::abi::{self, Attributes};
@@ -94,7 +94,7 @@ impl Notify {
         (self.apc_routine != 0).then_some(Apc {
             routine: self.apc_routine,
             arg1: self.apc_context,
-            arg2: self.iosb,
+            arg2: iosb_address(self.iosb),
             arg3: 0,
         })
     }
@@ -164,7 +164,10 @@ impl Notify {
         status: NtStatus,
         info: u64,
     ) {
-        if self.event == 0 && self.apc_routine == 0 {
+        // A file with a completion port gets its packet for a request that finished at once, too
+        // (unless the file asked to skip it on success).
+        let has_port = sys.io.file(file.1).is_some_and(|r| r.port.is_some());
+        if self.event == 0 && self.apc_routine == 0 && !has_port {
             return;
         }
         if let Ok(mut irp) = self.irp(sys, caller, file, false, IrpOp::Write { offset: None, data: Vec::new(), key: 0 })
@@ -175,8 +178,11 @@ impl Notify {
     }
 }
 
+/// Write status block `iosb` (a 64-bit caller's address, or a 32-bit caller's marked
+/// [`super::irp::IOSB32`]).
 pub(crate) fn write_iosb<K: NtKernel>(k: &mut K, iosb: u64, status: NtStatus, info: u64) -> Result<()> {
-    abi::write(k, iosb, &iosb_bytes(status, info))
+    let w = iosb_write(iosb, status, info);
+    abi::write(k, w.addr, w.bytes())
 }
 
 /// An optional `PLARGE_INTEGER` argument.

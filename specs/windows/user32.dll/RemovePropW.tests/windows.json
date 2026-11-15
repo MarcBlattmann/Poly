@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "rprop_values",
+      "exe_sha256": "a3e6ee8735cbc76bdc14c28d035beba527e16007e20bdaf32a61f9b785cfd663",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApSZW1vdmVQcm9wVyhPbmUpID0gNSAobGFzdCBlcnJvciAwKQpHZXRQcm9wVyhPbmUpID0gMCwgR2V0UHJvcFcoVHdvKSA9IDYKUmVtb3ZlUHJvcFcoT25lKSBhZ2FpbiA9IDAgKGxhc3QgZXJyb3IgMCBvciAyKQpSZW1vdmVQcm9wVyhaZXJvKSBvZiB0aGUgc3RvcmVkIDAgPSAwCkdldFByb3BXKFplcm8pIGFmdGVyd2FyZHMgPSAwClJlbW92ZVByb3BXKFRXTykgaW4gYW5vdGhlciBjYXNlID0gNgpSZW1vdmVQcm9wVyB3aXRoIHRoZSBhdG9tIG9mIGEgc3RyaW5nIHByb3BlcnR5ID0gOApSZW1vdmVQcm9wVyB3aXRoIHRoZSBzdHJpbmcgb2YgYW4gYXRvbSBwcm9wZXJ0eSA9IDkKUmVtb3ZlUHJvcFcoTlVMTCkgPSAwIChsYXN0IGVycm9yIDAgb3IgMikKUmVtb3ZlUHJvcFcoYSBtYWRlLXVwIGhhbmRsZSkgPSAwIChsYXN0IGVycm9yIDAgb3IgMikKUmVtb3ZlUHJvcFcgaW5zaWRlIFdNX0RFU1RST1kgcmV0dXJuZWQgMzEKUmVtb3ZlUHJvcFcgaW5zaWRlIFdNX05DREVTVFJPWSByZXR1cm5lZCAzMgpSZW1vdmVQcm9wVyBvbiB0aGUgZGVzdHJveWVkIHdpbmRvdyA9IDAgKGxhc3QgZXJyb3IgMCBvciAyKQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nRemovePropW(One) = 5 (last error 0)\nGetPropW(One) = 0, GetPropW(Two) = 6\nRemovePropW(One) again = 0 (last error 0 or 2)\nRemovePropW(Zero) of the stored 0 = 0\nGetPropW(Zero) afterwards = 0\nRemovePropW(TWO) in another case = 6\nRemovePropW with the atom of a string property = 8\nRemovePropW with the string of an atom property = 9\nRemovePropW(NULL) = 0 (last error 0 or 2)\nRemovePropW(a made-up handle) = 0 (last error 0 or 2)\nRemovePropW inside WM_DESTROY returned 31\nRemovePropW inside WM_NCDESTROY returned 32\nRemovePropW on the destroyed window = 0 (last error 0 or 2)\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 158
+    }
+  ]
+}

@@ -29,6 +29,7 @@ extern crate alloc;
 
 pub mod afd;
 pub mod events;
+pub mod ext;
 pub mod names;
 pub mod sock;
 
@@ -144,6 +145,12 @@ pub unsafe extern "system" fn WSAStartup(version: u16, data: *mut u8) -> i32 {
     };
     // SAFETY: the caller's WSADATA.
     unsafe { write_wsadata(data, used, high) };
+    let (sockets, dg) = poly_winsock::wsadata_limits(used);
+    // SAFETY: the same WSADATA (`iMaxSockets` at 4, `iMaxUdpDg` at 6).
+    unsafe {
+        core::ptr::write_unaligned(data.add(4).cast::<u16>(), sockets);
+        core::ptr::write_unaligned(data.add(6).cast::<u16>(), dg);
+    }
     STARTED.fetch_add(1, Ordering::SeqCst);
     0
 }

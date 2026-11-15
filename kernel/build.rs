@@ -8,6 +8,7 @@ fn main() {
     build_vdso(Path::new(&dir));
     embed_ntdll();
     embed_win32();
+    embed_wow64();
 }
 
 /// Where `cargo xtask` names the directory with our `kernelbase.dll`,
@@ -72,6 +73,8 @@ fn embed_win32() {
         "secur32.dll",
         "dhcpcsvc.dll",
         "dnsapi.dll",
+        // ADR 0195.
+        "mswsock.dll",
         "dbghelp.dll",
         "b35test.exe",
         // ADR 0170.
@@ -107,6 +110,45 @@ fn embed_win32() {
                 std::fs::copy(&path, out.join(name)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             }
             None => std::fs::write(out.join(name), []).expect("write an empty module"),
+        }
+    }
+}
+
+/// Where `cargo xtask` names the directory with the 32-bit modules (ADR 0186): the i686
+/// `ntdll.dll`, `kernelbase.dll`, `kernel32.dll` and the 32-bit test programs
+/// (`tools/xtask/src/wow64.rs`).
+const WOW64_ENV: &str = "POLY_WOW64_DIR";
+
+/// Copy the 32-bit modules to `$OUT_DIR/wow64-<name>`, which the kernel embeds
+/// (`nt::NTDLL32`, ...). Without `xtask` they are empty files: that kernel refuses 32-bit
+/// programs as before.
+fn embed_wow64() {
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    println!("cargo:rerun-if-env-changed={WOW64_ENV}");
+    let dir = std::env::var_os(WOW64_ENV).map(PathBuf::from);
+    if dir.is_none() {
+        println!(
+            "cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)"
+        );
+    }
+    for name in [
+        "ntdll.dll",
+        "kernelbase.dll",
+        "kernel32.dll",
+        "win32u.dll",
+        "gdi32.dll",
+        "user32.dll",
+        "hello32.exe",
+        "gui32.exe",
+    ] {
+        let to = out.join(format!("wow64-{name}"));
+        match &dir {
+            Some(d) => {
+                let path = d.join(name);
+                println!("cargo:rerun-if-changed={}", path.display());
+                std::fs::copy(&path, &to).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            }
+            None => std::fs::write(&to, []).expect("write an empty module"),
         }
     }
 }

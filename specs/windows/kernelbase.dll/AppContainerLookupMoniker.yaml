@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/AppContainerLookupMoniker.yaml
+id: windows/api/kernelbase.dll/AppContainerLookupMoniker
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Reads the moniker registered for an AppContainer SID (by AppContainerRegisterSid or by CreateAppContainerProfile). No tests of its own: the tests of AppContainerRegisterSid call it. Shape, inferred from probing: HRESULT AppContainerLookupMoniker(PSID sid, PWSTR *moniker); the string is allocated by the call.
+same_as: "windows/api/kernelbase.dll/AppContainerRegisterSid"
+interface:
+  signature: "HRESULT AppContainerLookupMoniker(PSID sid, PWSTR *moniker)"
+rules:
+  results: "S_OK with the moniker; 0x80070002 for an unknown AppContainer SID; 0x8007109A for a SID that is not an AppContainer SID; 0x80072023 when the registered moniker has more than 64 characters; the output pointer stays NULL on failure (the tests pass NULL)"
+errors:
+  see_sheet: "the AppContainerRegisterSid sheet"
+side_effects: "none (allocates the string)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  see the AppContainerRegisterSid sheet
+not_covered: >
+  Everything the AppContainerRegisterSid sheet lists as not covered.

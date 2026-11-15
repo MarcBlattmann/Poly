@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cm_many",
+      "exe_sha256": "e6add6c4f3b89a81b21d6d80dbdb929721f37d2e55a2440dc5d768ee73b963be",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlzdGluY3Q6IDEKYWxsIHZhbGlkOiAxCkRlc3Ryb3lNZW51IGE6IDEKYWZ0ZXIgZGVzdHJveWluZyBhOiBhIDAgYiAxIGMgMCBkIDAgZSAwClJlbW92ZU1lbnUgcCBieSBwb3NpdGlvbjogMQpwIHZhbGlkIDEgY291bnQgMQpEZWxldGVNZW51IHEgYnkgcG9zaXRpb246IDEKcSB2YWxpZCAwIGNvdW50IDAKcCBpbiBiIGFuZCBiMjogY291bnRzIDEgMQpEZXN0cm95TWVudSBiOiAxCnAgdmFsaWQgYWZ0ZXIgZGVzdHJveWluZyBiOiAwOyBiMiBjb3VudCAxCnAgdmFsaWQgYWZ0ZXIgZGVzdHJveWluZyBiMjogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "distinct: 1\nall valid: 1\nDestroyMenu a: 1\nafter destroying a: a 0 b 1 c 0 d 0 e 0\nRemoveMenu p by position: 1\np valid 1 count 1\nDeleteMenu q by position: 1\nq valid 0 count 0\np in b and b2: counts 1 1\nDestroyMenu b: 1\np valid after destroying b: 0; b2 count 1\np valid after destroying b2: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

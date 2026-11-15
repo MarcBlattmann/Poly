@@ -51,6 +51,10 @@ pub enum IrpOp {
     Lock { lock: ByteLock },
 }
 
+/// The `key` of the requests `AcceptEx` and `ConnectEx` make on a socket (the byte-range lock key
+/// means nothing to a socket): closing the socket cancels them, where it aborts a receive or send.
+pub const SOCKET_CONNECT_KEY: u32 = 0xAFD0_0001;
+
 /// Where a request is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrpState {
@@ -162,18 +166,56 @@ pub struct Completion {
 }
 
 impl Completion {
-    /// The `IO_STATUS_BLOCK` bytes: `Status` (a 32-bit `NTSTATUS` in the
-    /// first pointer-sized slot) and `Information` at 8.
-    pub fn iosb_bytes(&self) -> [u8; IO_STATUS_BLOCK_SIZE] {
-        iosb_bytes(self.status, self.information)
+    /// Where and what to write as the request's `IO_STATUS_BLOCK`.
+    pub fn iosb_write(&self) -> IosbWrite {
+        iosb_write(self.iosb, self.status, self.information)
     }
 }
 
+/// A 32-bit caller's `IO_STATUS_BLOCK` (ADR 0186): its address (below 4 GiB) with this bit set,
+/// as the 32-bit system-call conversion (`crate::wow64::thunk`) passes it to the services. The
+/// request keeps it, so a completion that comes after the call writes the 8-byte 32-bit block
+/// (`Status`, then a 4-byte `Information`) at the caller's own address. With the bit set the
+/// value is not a canonical address, so a write that forgot to decode it faults instead of
+/// writing somewhere else.
+pub const IOSB32: u64 = 1 << 62;
+
+/// The address a status-block value names (without [`IOSB32`]): what an APC routine is given.
+pub fn iosb_address(iosb: u64) -> u64 {
+    iosb & !IOSB32
+}
+
+/// An `IO_STATUS_BLOCK` to write: the 16-byte 64-bit block (`Status` in the first pointer-sized
+/// slot, `Information` at 8), or the 8-byte 32-bit one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IosbWrite {
+    pub addr: u64,
+    bytes: [u8; IO_STATUS_BLOCK_SIZE],
+    len: usize,
+}
+
+impl IosbWrite {
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes[..self.len]
+    }
+}
+
+/// What to write for status block `iosb` (an address, or one marked [`IOSB32`]).
+pub fn iosb_write(iosb: u64, status: NtStatus, information: u64) -> IosbWrite {
+    let mut bytes = [0u8; IO_STATUS_BLOCK_SIZE];
+    bytes[0..4].copy_from_slice(&status.0.to_le_bytes());
+    if iosb & IOSB32 != 0 {
+        bytes[4..8].copy_from_slice(&(information as u32).to_le_bytes());
+        IosbWrite { addr: iosb_address(iosb), bytes, len: 8 }
+    } else {
+        bytes[8..16].copy_from_slice(&information.to_le_bytes());
+        IosbWrite { addr: iosb, bytes, len: IO_STATUS_BLOCK_SIZE }
+    }
+}
+
+/// The 64-bit `IO_STATUS_BLOCK` bytes (`FILE_IO_COMPLETION_INFORMATION`'s, ...).
 pub fn iosb_bytes(status: NtStatus, information: u64) -> [u8; IO_STATUS_BLOCK_SIZE] {
-    let mut b = [0u8; IO_STATUS_BLOCK_SIZE];
-    b[0..4].copy_from_slice(&status.0.to_le_bytes());
-    b[8..16].copy_from_slice(&information.to_le_bytes());
-    b
+    iosb_write(0, status, information).bytes
 }
 
 impl IoState {
@@ -357,6 +399,22 @@ impl IoState {
             self.complete_with(id, status, 0, None, !thread_gone, false);
         }
         ids.len()
+    }
+
+    /// The requests pending on socket `file`, which was closed: the newest first, a receive or send
+    /// as an aborted connection, an accept or connect as cancelled.
+    pub fn cancel_socket_requests(&mut self, file: u64) {
+        let mut ids: Vec<u64> =
+            self.irps.values().filter(|i| i.state != IrpState::Running && i.file == file).map(|i| i.id).collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        for id in ids {
+            let accept_or_connect = self.irps.get(&id).is_some_and(|i| match &i.op {
+                IrpOp::Read { key, .. } | IrpOp::Write { key, .. } => *key == SOCKET_CONNECT_KEY,
+                IrpOp::Lock { .. } => false,
+            });
+            let status = if accept_or_connect { STATUS_CANCELLED } else { STATUS_CONNECTION_ABORTED };
+            self.complete_with(id, status, 0, None, false, false);
+        }
     }
 
     /// `NtCancelIoFile`: the calling thread's requests on one file object.

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gw_chrome",
+      "exe_sha256": "5221909e9e270ec33d763209672cf9b64c286de80b1bcb2a350d84a5185d6b40",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YnVpbHQ6IHogb3JkZXIgb2YgdGhlIHRocmVhZCdzIHdpbmRvd3MgKH4gaGlkZGVuKTogbWFpbn4gaGlkfiBpbWV+IAogIElNRSB3aW5kb3cgaW1lIG93bmVyPWhpZCBjaGlsZD1udWxsIHwgbWFpbiBvd25lcj1udWxsIGNoaWxkPXJ3aCB8IHJ3aCBvd25lcj1udWxsIG5leHQ9bnVsbCBwcmV2PW51bGwgfCBoaWQgb3duZXI9bnVsbCBjaGlsZD1udWxsCnRvcC1sZXZlbCBzaG93bjogeiBvcmRlciBvZiB0aGUgdGhyZWFkJ3Mgd2luZG93cyAofiBoaWRkZW4pOiBjdGZ+IGltZX4gbWFpbiBoaWR+IAogIElNRSB3aW5kb3cgaW1lIG93bmVyPW1haW4gY2hpbGQ9bnVsbCB8IG1haW4gb3duZXI9bnVsbCBjaGlsZD1yd2ggfCByd2ggb3duZXI9bnVsbCBuZXh0PW51bGwgcHJldj1udWxsIHwgaGlkIG93bmVyPW51bGwgY2hpbGQ9bnVsbApmb2N1c2VkOiB6IG9yZGVyIG9mIHRoZSB0aHJlYWQncyB3aW5kb3dzICh+IGhpZGRlbik6IGN0Zn4gaW1lfiBtYWluIGhpZH4gCiAgSU1FIHdpbmRvdyBpbWUgb3duZXI9bWFpbiBjaGlsZD1udWxsIHwgbWFpbiBvd25lcj1udWxsIGNoaWxkPXJ3aCB8IHJ3aCBvd25lcj1udWxsIG5leHQ9bnVsbCBwcmV2PW51bGwgfCBoaWQgb3duZXI9bnVsbCBjaGlsZD1udWxsCm1pbmltaXplZDogeiBvcmRlciBvZiB0aGUgdGhyZWFkJ3Mgd2luZG93cyAofiBoaWRkZW4pOiBoaWR+IGN0Zn4gaW1lfiBtYWluIAogIElNRSB3aW5kb3cgaW1lIG93bmVyPW1haW4gY2hpbGQ9bnVsbCB8IG1haW4gb3duZXI9bnVsbCBjaGlsZD1udWxsIHwgcndoIG93bmVyPW51bGwgbmV4dD1udWxsIHByZXY9bnVsbCB8IGhpZCBvd25lcj1udWxsIGNoaWxkPXJ3aApyZXN0b3JlZDogeiBvcmRlciBvZiB0aGUgdGhyZWFkJ3Mgd2luZG93cyAofiBoaWRkZW4pOiBjdGZ+IGltZX4gbWFpbiBoaWR+IAogIElNRSB3aW5kb3cgaW1lIG93bmVyPW1haW4gY2hpbGQ9bnVsbCB8IG1haW4gb3duZXI9bnVsbCBjaGlsZD1yd2ggfCByd2ggb3duZXI9bnVsbCBuZXh0PW51bGwgcHJldj1udWxsIHwgaGlkIG93bmVyPW51bGwgY2hpbGQ9bnVsbAp0b3AtbGV2ZWwgZGVzdHJveWVkOiB6IG9yZGVyIG9mIHRoZSB0aHJlYWQncyB3aW5kb3dzICh+IGhpZGRlbik6IGltZX4gY3RmfiBoaWR+IApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: z order of the thread's windows (~ hidden): main~ hid~ ime~ \n  IME window ime owner=hid child=null | main owner=null child=rwh | rwh owner=null next=null prev=null | hid owner=null child=null\ntop-level shown: z order of the thread's windows (~ hidden): ctf~ ime~ main hid~ \n  IME window ime owner=main child=null | main owner=null child=rwh | rwh owner=null next=null prev=null | hid owner=null child=null\nfocused: z order of the thread's windows (~ hidden): ctf~ ime~ main hid~ \n  IME window ime owner=main child=null | main owner=null child=rwh | rwh owner=null next=null prev=null | hid owner=null child=null\nminimized: z order of the thread's windows (~ hidden): hid~ ctf~ ime~ main \n  IME window ime owner=main child=null | main owner=null child=null | rwh owner=null next=null prev=null | hid owner=null child=rwh\nrestored: z order of the thread's windows (~ hidden): ctf~ ime~ main hid~ \n  IME window ime owner=main child=null | main owner=null child=rwh | rwh owner=null next=null prev=null | hid owner=null child=null\ntop-level destroyed: z order of the thread's windows (~ hidden): ime~ ctf~ hid~ \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 782
+    }
+  ]
+}

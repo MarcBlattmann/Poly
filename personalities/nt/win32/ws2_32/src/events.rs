@@ -95,9 +95,19 @@ fn hook(s: Socket, f: impl FnOnce(&mut Registration)) {
     });
 }
 
-/// `recv` ran on `s`.
+/// `recv` ran on `s`: `FD_READ` may be recorded again, and when no data is left the record that
+/// was not taken yet loses its `FD_READ` (the event object stays signalled).
 pub fn after_recv(s: Socket) {
-    hook(s, Registration::after_recv);
+    if COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let drained = bytes_readable(s) == 0;
+    hook(s, |r| {
+        r.after_recv();
+        if drained {
+            r.data_drained();
+        }
+    });
 }
 
 /// `send` failed with `WSAEWOULDBLOCK` on `s`.
@@ -121,6 +131,19 @@ pub fn connected(s: Socket) {
         r.connected();
         signal(r);
     });
+}
+
+/// Has `s` a selection (`ioctlsocket(FIONBIO, 0)` is refused while it has)?
+pub fn is_selected(s: Socket) -> bool {
+    if COUNT.load(Ordering::Acquire) == 0 {
+        return false;
+    }
+    with_table(|t| find(t, s).is_some())
+}
+
+/// `shutdown(s, how)` ran: `receive` when the receiving side was shut down.
+pub fn local_shutdown(s: Socket, receive: bool) {
+    hook(s, |r| r.local_shutdown(receive));
 }
 
 /// `closesocket(s)`: the association ends.
@@ -157,13 +180,75 @@ fn so_error(s: Socket) -> u32 {
     }
 }
 
+/// Numbers the looks at the sockets (taken before the device is asked, see `Registration::last_look`).
+static LOOKS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+
+fn next_look() -> u64 {
+    LOOKS.fetch_add(1, Ordering::AcqRel)
+}
+
+/// Fold what the device says about `s` (`revents`, asked for at `look`) into its registration; true
+/// when something is recorded that was not before.
+fn observe(s: Socket, r: u32, look: u64) -> bool {
+    let (readable, writable, error, hangup) = poll::flags(r);
+    if !(readable || writable || error || hangup) {
+        return false;
+    }
+    let inputs = Inputs {
+        readable,
+        writable,
+        error,
+        hangup,
+        bytes: if readable { bytes_readable(s) } else { 0 },
+        so_error: if error { so_error(s) } else { 0 },
+    };
+    let mut moved = false;
+    with_table(|t| {
+        if let Some(reg) = find(t, s)
+            && look > reg.last_look
+        {
+            reg.last_look = look;
+            let before = reg.pending;
+            if reg.step(&inputs) {
+                moved = reg.pending != before;
+                signal(reg);
+            }
+        }
+    });
+    moved
+}
+
+/// Look at `s` right now, as the helper would a moment later: `WSAEnumNetworkEvents` answers with
+/// what has happened, not with what the helper had time to see.
+fn refresh(s: Socket) {
+    if COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let interest = with_table(|t| {
+        find(t, s).map(|r| {
+            let (read, write) = r.wants();
+            poll::events_interest(read, write, r.watches_end())
+        })
+    });
+    let Some(interest) = interest else { return };
+    let look = next_look();
+    if let Ok(revents) = sock::poll_handles(&[(s as u64, interest)], 0)
+        && let Some(&r) = revents.first()
+        && r & poll::nval() == 0
+    {
+        observe(s, r, look);
+    }
+}
+
 unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
     loop {
         let snap: Vec<(Socket, u32)> = with_table(|t| {
             t.iter()
-                .map(|(s, r)| {
+                .filter_map(|(s, r)| {
                     let (read, write) = r.wants();
-                    (*s, poll::events_interest(read, write))
+                    let end = r.watches_end();
+                    // A socket with nothing left to watch is not polled (it would return at once).
+                    (read || write || end).then(|| (*s, poll::events_interest(read, write, end)))
                 })
                 .collect()
         });
@@ -173,6 +258,7 @@ unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
             continue;
         }
         let entries: Vec<(u64, u32)> = snap.iter().map(|&(s, i)| (s as u64, i)).collect();
+        let look = next_look();
         let Ok(revents) = sock::poll_handles(&entries, POLL_MS) else {
             // SAFETY: plain kernel32 call.
             unsafe { Sleep(20) };
@@ -185,29 +271,7 @@ unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
                 with_table(|t| t.retain(|(k, _)| *k != s));
                 continue;
             }
-            let (readable, writable, error, hangup) = poll::flags(r);
-            if !(readable || writable || error || hangup) {
-                continue;
-            }
-            let inputs = Inputs {
-                readable,
-                writable,
-                error,
-                hangup,
-                bytes: if readable { bytes_readable(s) } else { 0 },
-                so_error: if error { so_error(s) } else { 0 },
-            };
-            with_table(|t| {
-                if let Some(reg) = find(t, s) {
-                    let before = reg.pending;
-                    if reg.step(&inputs) {
-                        if reg.pending != before {
-                            moved = true;
-                        }
-                        signal(reg);
-                    }
-                }
-            });
+            moved |= observe(s, r, look);
         }
         if !moved {
             // Ready sockets nobody can record anything for (the program has not acted yet) would
@@ -251,6 +315,10 @@ pub extern "system" fn WSAEventSelect(s: Socket, event: Handle, mask: i32) -> i3
     if let Err(e) = ev::check_select(event, mask) {
         return fail(e);
     }
+    // Learn: the event has to be an event object (Windows says "not a socket" for anything else).
+    if event != 0 && !afd::is_event(event) {
+        return fail(WSAENOTSOCK);
+    }
     // Learn: the socket becomes non-blocking.
     let mut nb = [0u8; 0];
     let (status, _) = afd::ioctl(s as Handle, proto::SET_NONBLOCKING, &1u32.to_le_bytes(), &mut nb);
@@ -280,12 +348,17 @@ pub unsafe extern "system" fn WSAEnumNetworkEvents(s: Socket, event: Handle, out
     if let Err(e) = check_started() {
         return fail(e);
     }
-    if out.is_null() {
-        return fail(WSAEFAULT);
-    }
     if afd::info(s as Handle).is_none() {
         return fail(WSAENOTSOCK);
     }
+    // A bogus event handle is "not a socket", as on Windows; a missing record is an invalid call.
+    if event != 0 && !afd::is_event(event) {
+        return fail(WSAENOTSOCK);
+    }
+    if out.is_null() {
+        return fail(WSAEINVAL);
+    }
+    refresh(s);
     // Reset the event and take the record in one step, so an event recorded meanwhile is not lost.
     let (events, errors) = with_table(|t| {
         if event != 0 {
@@ -294,9 +367,14 @@ pub unsafe extern "system" fn WSAEnumNetworkEvents(s: Socket, event: Handle, out
         }
         find(t, s).map_or((0, [0; ev::FD_MAX_EVENTS]), |r| r.take())
     });
-    let b = ev::encode_network_events(events, &errors);
-    // SAFETY: the caller's WSANETWORKEVENTS.
-    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), out, b.len()) };
+    // SAFETY: the caller's WSANETWORKEVENTS (44 bytes): only the slots of events that happened are
+    // written, the others keep what the program put there.
+    unsafe {
+        let mut b = [0u8; ev::NETWORK_EVENTS_SIZE];
+        core::ptr::copy_nonoverlapping(out, b.as_mut_ptr(), b.len());
+        ev::fill_network_events(&mut b, events, &errors);
+        core::ptr::copy_nonoverlapping(b.as_ptr(), out, b.len());
+    }
     0
 }
 
@@ -322,9 +400,42 @@ unsafe fn open_process(access: u32, pid: u32) -> Handle {
     }
 }
 
+/// A new socket like `s` (an unbound, unconnected one): the family, type, protocol and the options a
+/// program sets before it hands the socket on (`IPV6_V6ONLY` 0 for Chrome's).
+fn clone_unbound(s: Socket, info: &proto::Info) -> Option<Handle> {
+    let h = afd::open_endpoint(true).ok()?;
+    let req = proto::SocketReq { family: info.family, ty: info.ty, protocol: info.protocol };
+    if afd::ioctl(h, proto::SOCKET, &req.encode(), &mut []).0 >= 0xC000_0000 {
+        afd::close(h);
+        return None;
+    }
+    let options = [
+        (SOL_SOCKET, SO_REUSEADDR),
+        (SOL_SOCKET, SO_KEEPALIVE),
+        (SOL_SOCKET, SO_BROADCAST),
+        (SOL_SOCKET, SO_SNDBUF),
+        (SOL_SOCKET, SO_RCVBUF),
+        (SOL_SOCKET, 0x3005), // SO_RANDOMIZE_PORT
+        (IPPROTO_TCP, TCP_NODELAY),
+        (IPPROTO_IPV6, IPV6_V6ONLY),
+    ];
+    for (level, name) in options {
+        let mut out = [0u8; 16];
+        let (status, n) = afd::ioctl(s as Handle, proto::GET_OPTION, &proto::option_header(level, name), &mut out);
+        if status < 0xC000_0000 && n > 0 && n <= out.len() {
+            let mut set = proto::option_header(level, name).to_vec();
+            set.extend_from_slice(&out[..n]);
+            let _ = afd::ioctl(h, proto::SET_OPTION, &set, &mut []);
+        }
+    }
+    Some(h)
+}
+
 /// `WSADuplicateSocketW(s, dwProcessId, lpProtocolInfo)`: the endpoint's handle is duplicated into
 /// the target process and the record names it (`WSASocketW` with `FROM_PROTOCOL_INFO` in the
-/// target takes it up).
+/// target takes it up). A socket that is not bound, connected or listening yet is not shared: the
+/// duplicate is a new socket with the same options (Windows' own: a bind made through one does not
+/// show on the other); the others are the same socket.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mut u8) -> i32 {
     if let Err(e) = check_started() {
@@ -334,6 +445,18 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
         return fail(WSAEFAULT);
     }
     let Some(i) = afd::info(s as Handle) else { return fail(WSAENOTSOCK) };
+    let mut name = [0u8; poly_winsock::addr::MAX_SIZE];
+    let unbound = i.listening == 0
+        && afd::ioctl(s as Handle, proto::NAME, &0u32.to_le_bytes(), &mut name).0 >= 0xC000_0000
+        && afd::ioctl(s as Handle, proto::NAME, &1u32.to_le_bytes(), &mut name).0 >= 0xC000_0000;
+    let (source, cloned) = if unbound {
+        match clone_unbound(s, &i) {
+            Some(h) => (h, true),
+            None => return fail(WSAEINVAL),
+        }
+    } else {
+        (s as Handle, false)
+    };
     // SAFETY: plain kernel32 calls on our own and the target's handles.
     let dup_handle = unsafe {
         let me = GetCurrentProcess();
@@ -347,9 +470,12 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
             (t, true)
         };
         let mut d: Handle = 0;
-        let ok = DuplicateHandle(me, s as Handle, target, &mut d, 0, 0, DUPLICATE_SAME_ACCESS);
+        let ok = DuplicateHandle(me, source, target, &mut d, 0, 0, DUPLICATE_SAME_ACCESS);
         if opened {
             crate::CloseHandle(target);
+        }
+        if cloned {
+            afd::close(source);
         }
         if ok == 0 {
             return fail(WSAEINVAL);
@@ -363,16 +489,64 @@ pub unsafe extern "system" fn WSADuplicateSocketW(s: Socket, pid: u32, info: *mu
     0
 }
 
+/// The sockets made from each `WSADuplicateSocketW` record of this process: (record handle,
+/// socket). Windows ends every socket made from one record when one of them is closed (they are
+/// handles to one socket whose last user ends it), and so do we.
+struct MadeTable {
+    locked: AtomicBool,
+    list: core::cell::UnsafeCell<Vec<(Socket, isize)>>,
+}
+
+// SAFETY: access to `list` is serialised by `locked`.
+unsafe impl Sync for MadeTable {}
+
+static MADE: MadeTable = MadeTable { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) };
+
+fn with_made<R>(f: impl FnOnce(&mut Vec<(Socket, isize)>) -> R) -> R {
+    while MADE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held.
+    let list = unsafe { &mut *MADE.list.get() };
+    let r = f(list);
+    MADE.locked.store(false, Ordering::Release);
+    r
+}
+
+/// `closesocket(s)` of a socket made from a record: the other sockets made from the same record,
+/// which end with it (to be closed by the caller).
+pub fn siblings_of(s: Socket) -> Vec<Socket> {
+    with_made(|t| {
+        let Some(record) = t.iter().find(|(k, _)| *k == s).map(|(_, r)| *r) else { return Vec::new() };
+        let sibs: Vec<Socket> = t.iter().filter(|(k, r)| *r == record && *k != s).map(|(k, _)| *k).collect();
+        t.retain(|(_, r)| *r != record);
+        sibs
+    })
+}
+
 /// `WSASocketW(FROM_PROTOCOL_INFO, ...)` with a record of [`WSADuplicateSocketW`]: the socket it names.
 pub unsafe fn from_protocol_info(info: *const u8) -> Result<Socket, u32> {
     // SAFETY: the caller's WSAPROTOCOL_INFOW (628 bytes).
     let b = unsafe { core::slice::from_raw_parts(info, dup::PROTOCOL_INFO_SIZE) };
     let d = dup::decode(b).ok_or(WSAEINVAL)?;
-    let s = d.handle as Socket;
-    match afd::info(s as Handle) {
-        Some(_) => Ok(s),
-        None => Err(WSAEINVAL),
+    let handle = d.handle as Handle;
+    if afd::info(handle).is_none() {
+        return Err(WSAEINVAL);
     }
+    // Each socket made from the record is a handle of its own to the duplicated socket (closing it
+    // leaves the record usable), and, as on Windows, blocking again.
+    let mut mine: Handle = 0;
+    // SAFETY: plain kernel32 call on our own handles.
+    let ok = unsafe {
+        let me = GetCurrentProcess();
+        DuplicateHandle(me, handle, me, &mut mine, 0, 1, DUPLICATE_SAME_ACCESS)
+    };
+    if ok == 0 {
+        return Err(WSAEINVAL);
+    }
+    let _ = afd::ioctl(mine, proto::SET_NONBLOCKING, &0u32.to_le_bytes(), &mut []);
+    with_made(|t| t.push((mine as Socket, handle)));
+    Ok(mine as Socket)
 }
 
 // ----- WSALookupService* --------------------------------------------------------------------

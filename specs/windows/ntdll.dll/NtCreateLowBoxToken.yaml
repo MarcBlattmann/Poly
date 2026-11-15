@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCreateLowBoxToken.yaml
+id: windows/api/ntdll.dll/NtCreateLowBoxToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The native call under CreateAppContainerToken (Chrome resolves it by name from ntdll.dll too). Not called directly by the tests: its arguments are not documented and were not probed. Everything its callers can see (the lowbox token's contents, access checks, child processes) is specified in the CreateAppContainerToken sheet.
+same_as: "windows/api/kernelbase.dll/CreateAppContainerToken"
+interface:
+  signature: "not specified (undocumented; no signature was inferred)"
+rules:
+  effects: "see the CreateAppContainerToken sheet"
+errors:
+  see_sheet: "the CreateAppContainerToken sheet"
+side_effects: "see the CreateAppContainerToken sheet"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  see the CreateAppContainerToken sheet
+not_covered: >
+  Everything: ntdll.dll exports the name; the arguments, statuses and handles of the native call were not observed.

@@ -214,6 +214,7 @@ impl Stack {
         src: IpAddr,
         dst: IpAddr,
         seg: &[u8],
+        meta: RxMeta,
     ) -> Option<bool> {
         let (h, data) = match udp::parse(seg) {
             Ok(x) => x,
@@ -257,7 +258,7 @@ impl Stack {
             return Some(false);
         };
         if let Some(Entry { sock: Sock::Dgram(s), .. }) = self.sockets[i].as_mut() {
-            s.deliver(from, data);
+            s.deliver(from, data, meta);
         }
         Some(true)
     }

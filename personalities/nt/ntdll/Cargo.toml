@@ -22,6 +22,8 @@ poly-seh = { path = "../../../crates/poly-seh" }
 poly-pe = { path = "../../../crates/poly-pe" }
 poly-ntobj = { path = "../../../crates/poly-ntobj" }
 poly-security = { path = "../../../crates/poly-security" }
+# The i686 build's compiler helpers (ADR 0186); empty for x64.
+poly-msvc32 = { path = "../msvc32" }
 
 [profile.release]
 panic = "abort"

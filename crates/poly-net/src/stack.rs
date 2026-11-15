@@ -15,7 +15,8 @@ use crate::neighbor::{NeighborCache, NeighborConfig, Pending};
 use crate::reassembly::{Reassembler, ReassemblyConfig, ReassemblyStats};
 use crate::siphash::SipHasher;
 use crate::socket::{
-    Datagram, DgramSocket, Domain, Protocol, Readiness, RecvFlags, RecvInfo, Shutdown, SockType, SocketHandle,
+    Datagram, DgramSocket, Domain, IFINDEX_DEVICE, IFINDEX_LOOPBACK, Protocol, Readiness, RecvFlags, RecvInfo, RxMeta,
+    Shutdown, SockType, SocketHandle,
 };
 use crate::tcp::seq::Seq;
 use crate::tcp::{IcmpError, Tcb, TcpConfig, TcpState, TcpStats};

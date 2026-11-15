@@ -152,6 +152,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),
         ("dhcpcsvc.dll", super::DHCPCSVC),
+        ("mswsock.dll", super::MSWSOCK),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
@@ -195,6 +196,25 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Ok(create::Installed::Written) => crate::kprintln!("nt: layout: advapi32.dll written to System32"),
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install advapi32.dll ({:#x})", e.0),
+        }
+    }
+    // The 32-bit modules go into SysWOW64, the System32 of a 32-bit program (ADR 0186; Learn:
+    // "File System Redirector").
+    for (name, bytes) in [
+        ("ntdll.dll", super::NTDLL32),
+        ("kernelbase.dll", super::KERNELBASE32),
+        ("kernel32.dll", super::KERNEL32_32),
+        ("win32u.dll", super::WIN32U32),
+        ("gdi32.dll", super::GDI32_32),
+        ("user32.dll", super::USER32_32),
+    ] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\SysWOW64", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to SysWOW64"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install the 32-bit {name} ({:#x})", e.0),
         }
     }
     let synced = sync::sync(&mut sys.registry.reg, &POLY_USER, super::registry::filetime_now());

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cmr_two",
+      "exe_sha256": "fb5f635335be28ac4c1e3c49da951b2d77bf627f6402ea103eb2862f1047a6f2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z3JvdXAgMTogMQpncm91cCAyOiAxCmJvdGggZ3JvdXBzOiBjb3VudCA4CiAgWzBdIG9rPTEgaWQ9MHhhIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdnMScgY2NoPTIKICBbMV0gb2s9MSBpZD0weGIgc3ViPTAgc3RhdGU9MHg4IHR5cGU9MHgyMDAgZGF0YT0weDAgdGV4dD0nZzEnIGNjaD0yCiAgWzJdIG9rPTEgaWQ9MHhjIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdnMScgY2NoPTIKICBbM10gb2s9MSBpZD0weDAgc3ViPTAgc3RhdGU9MHgzIHR5cGU9MHg4MDAgZGF0YT0weDAgdGV4dD0nJyBjY2g9MAogIFs0XSBvaz0xIGlkPTB4MTQgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J2cyJyBjY2g9MgogIFs1XSBvaz0xIGlkPTB4MTUgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J2cyJyBjY2g9MgogIFs2XSBvaz0xIGlkPTB4MTYgc3ViPTAgc3RhdGU9MHg4IHR5cGU9MHgyMDAgZGF0YT0weDAgdGV4dD0nZzInIGNjaD0yCiAgWzddIG9rPTEgaWQ9MHhmZmZmZmZmZiBzdWI9MSBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0ncycgY2NoPTEKaWRzIHRoYXQgbGl2ZSBpbiB0aGUgc3ViIG1lbnUsIGFza2VkIG9mIHA6IDEKc3ViIG1lbnU6IGNvdW50IDIKICBbMF0gb2s9MSBpZD0weDFlIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdzdWInIGNjaD0zCiAgWzFdIG9rPTEgaWQ9MHgxZiBzdWI9MCBzdGF0ZT0weDggdHlwZT0weDIwMCBkYXRhPTB4MCB0ZXh0PSdzdWInIGNjaD0zCnBvc2l0aW9ucyA4Li44ICh0aGUgcG9wdXAgaXRlbSkgY2hlY2sgODogMCBlcnI9MTQ1NgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "group 1: 1\ngroup 2: 1\nboth groups: count 8\n  [0] ok=1 id=0xa sub=0 state=0x0 type=0x0 data=0x0 text='g1' cch=2\n  [1] ok=1 id=0xb sub=0 state=0x8 type=0x200 data=0x0 text='g1' cch=2\n  [2] ok=1 id=0xc sub=0 state=0x0 type=0x0 data=0x0 text='g1' cch=2\n  [3] ok=1 id=0x0 sub=0 state=0x3 type=0x800 data=0x0 text='' cch=0\n  [4] ok=1 id=0x14 sub=0 state=0x0 type=0x0 data=0x0 text='g2' cch=2\n  [5] ok=1 id=0x15 sub=0 state=0x0 type=0x0 data=0x0 text='g2' cch=2\n  [6] ok=1 id=0x16 sub=0 state=0x8 type=0x200 data=0x0 text='g2' cch=2\n  [7] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='s' cch=1\nids that live in the sub menu, asked of p: 1\nsub menu: count 2\n  [0] ok=1 id=0x1e sub=0 state=0x0 type=0x0 data=0x0 text='sub' cch=3\n  [1] ok=1 id=0x1f sub=0 state=0x8 type=0x200 data=0x0 text='sub' cch=3\npositions 8..8 (the popup item) check 8: 0 err=1456\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

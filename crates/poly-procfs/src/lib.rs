@@ -11,7 +11,8 @@
 //!   loadavg,version,stat,mounts,filesystems,net,sysvipc/{msg,shm,sem}}`
 //!   and `/proc/sys/{kernel/{ostype,osrelease,version,hostname,
 //!   domainname,pid_max,msgmni,msgmax,msgmnb,shmmax,shmall,shmmni,sem,
-//!   random/{boot_id,uuid,entropy_avail,poolsize}},fs/{nr_open,
+//!   random/{boot_id,uuid,entropy_avail,poolsize}},vm/{mmap_min_addr,
+//!   max_map_count},fs/{nr_open,
 //!   mqueue/{queues_max,msg_max,msgsize_max,msg_default,
 //!   msgsize_default}}}`. `/proc/net` is a link to `self/net`: a process
 //!   sees the devices of its own network namespace there, and the
@@ -53,7 +54,8 @@ mod staticfs;
 
 pub use mqueuefs::{MqueueFs, MqueueSource, QueueEntry};
 pub use procfs::{
-    NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file, namespace_file_ino, process_dir,
+    MAX_MAP_COUNT, MMAP_MIN_ADDR, NR_OPEN, NS_KINDS, PID_MAX, PID_POS, ProcFs, copy_at, namespace_file,
+    namespace_file_ino, process_dir,
 };
 pub use source::{
     CpuFeatures, CpuInfo, CpuTimes, FdInfo, IdMapFile, IpcFile, KernelInfo, KernelName, MagicLink, MapEntry, MapName,

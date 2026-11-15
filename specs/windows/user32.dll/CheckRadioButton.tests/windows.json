@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "crb_click",
+      "exe_sha256": "97ef0ee9c595edbd11cb526b633b8647adb3a027bb48ba47ba59a6cbae43084b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q2hlY2tSYWRpb0J1dHRvbiBjaGVjayAxMDA2OiAwIDAgMQpDaGVja1JhZGlvQnV0dG9uIGNoZWNrIDEwMDQ6IDEgMCAwCkJNX0NMSUNLIDEwMDU6IDAgMSAwCmNoZWNrIGlkIC0xOiAwIDAgMApjaGVjayBpZCA5OTk5IChhYnNlbnQsIG91dHNpZGUgdGhlIHJhbmdlKTogMCAwIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CheckRadioButton check 1006: 0 0 1\nCheckRadioButton check 1004: 1 0 0\nBM_CLICK 1005: 0 1 0\ncheck id -1: 0 0 0\ncheck id 9999 (absent, outside the range): 0 0 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

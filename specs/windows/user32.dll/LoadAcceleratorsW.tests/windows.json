@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "ac_table",
+      "exe_sha256": "80cb486c8370bf3009abbb30abda36727d2a9777bd8690fd1236ac78ac8e7824",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TG9hZEFjY2VsZXJhdG9yc1coMzAwKTogd2luZG93CnJlc291cmNlIDMwMDogY291bnQgNQogICBbMF0gZmxhZ3MgMHgxIGtleSAweDcwIGNtZCAzMDMKICAgWzFdIGZsYWdzIDB4OSBrZXkgMHg0ZiBjbWQgMzAxCiAgIFsyXSBmbGFncyAweDAga2V5IDB4NDEgY21kIDMwNAogICBbM10gZmxhZ3MgMHg1IGtleSAweDc0IGNtZCAzMDUKICAgWzRdIGZsYWdzIDB4MTEga2V5IDB4ZCBjbWQgMzA2CkxvYWRBY2NlbGVyYXRvcnNXKCdBQ0NFTCcpOiB3aW5kb3cKcmVzb3VyY2UgQUNDRUw6IGNvdW50IDEKICAgWzBdIGZsYWdzIDB4MSBrZXkgMHg3MSBjbWQgNDAwCkNyZWF0ZUFjY2VsZXJhdG9yVGFibGVXOiB3aW5kb3cKY3JlYXRlZDogY291bnQgMgogICBbMF0gZmxhZ3MgMHgxIGtleSAweDcxIGNtZCA0MAogICBbMV0gZmxhZ3MgMHgwIGtleSAweDc4IGNtZCA0MQpDcmVhdGVBY2NlbGVyYXRvclRhYmxlVyB3aXRoIGNvdW50IDA6IDEgZXJyPTg3CkNyZWF0ZUFjY2VsZXJhdG9yVGFibGVXIHdpdGggYSBOVUxMIGFycmF5OiAxIGVycj0tMQpDb3B5QWNjZWxlcmF0b3JUYWJsZVcgd2l0aCByb29tIGZvciAxIG9mIDU6IDEKQ29weUFjY2VsZXJhdG9yVGFibGVXIHdpdGggYSBOVUxMIGFycmF5ICh0aGUgY291bnQpOiA1CkNvcHlBY2NlbGVyYXRvclRhYmxlVyB3aXRoIGEgTlVMTCBhcnJheSBhbmQgYSBzaXplOiA1CkNvcHlBY2NlbGVyYXRvclRhYmxlVyBvZiBhIG1hZGUtdXAgaGFuZGxlOiAwIGVycj0xNDAzCkYxIGtleSBkb3duICh0YWJsZSAzMDApOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAxCiAgICAgV01fQ09NTUFORCBpZCAzMDMgc291cmNlIDEgKGNvbnRyb2wgaGFuZGxlIG51bGwpCkYxIGtleSB1cDogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMApGMiBrZXkgZG93biAobm90IGluIHRoZSB0YWJsZSk6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKV01fQ0hBUiAnQScgKGEgY2hhcmFjdGVyIGFjY2VsZXJhdG9yKTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMQogICAgIFdNX0NPTU1BTkQgaWQgMzA0IHNvdXJjZSAxIChjb250cm9sIGhhbmRsZSBudWxsKQpXTV9DSEFSICdhJzogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMApXTV9LRVlET1dOICdBJyAoYSB2aXJ0dWFsIGtleSwgdGhlIHRhYmxlIGhhcyB0aGUgY2hhcmFjdGVyKTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMAonTycga2V5IGRvd24gd2l0aG91dCBDdHJsICh0aGUgZW50cnkgd2FudHMgQ3RybCk6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKRjUgd2l0aG91dCBTaGlmdCAodGhlIGVudHJ5IHdhbnRzIFNoaWZ0KTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMApBbHQrRW50ZXIgYXMgV01fU1lTS0VZRE9XTjogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMApGMSBhcyBXTV9TWVNLRVlET1dOOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAxCiAgICAgV01fQ09NTUFORCBpZCAzMDMgc291cmNlIDEgKGNvbnRyb2wgaGFuZGxlIG51bGwpCkYyICh0YWJsZSBtYWRlIGJ5IENyZWF0ZUFjY2VsZXJhdG9yVGFibGVXKTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMQogICAgIFdNX0NPTU1BTkQgaWQgNDAgc291cmNlIDEgKGNvbnRyb2wgaGFuZGxlIG51bGwpCldNX0NIQVIgJ3gnOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAxCiAgICAgV01fQ09NTUFORCBpZCA0MSBzb3VyY2UgMSAoY29udHJvbCBoYW5kbGUgbnVsbCkKV01fQ0hBUiAnWCc6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKYSBtb3VzZSBtZXNzYWdlOiBUcmFuc2xhdGVBY2NlbGVyYXRvclcgPSAwCmEgTlVMTCB0YWJsZTogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMAphIG1hZGUtdXAgdGFibGU6IFRyYW5zbGF0ZUFjY2VsZXJhdG9yVyA9IDAKYSBOVUxMIHdpbmRvdzogVHJhbnNsYXRlQWNjZWxlcmF0b3JXID0gMApEZXN0cm95QWNjZWxlcmF0b3JUYWJsZSBjcmVhdGVkOiAxCmRlc3Ryb3kgYWdhaW46IDAgZXJyPTE0MDMKTlVMTDogMCBlcnI9MTQwMwphYnNlbnQgbnVtYmVyOiAxIGVycj0xODE0CmFic2VudCBuYW1lOiAxIGVycj0xODE0Ck5VTEwgbW9kdWxlOiAwIGVycj0tMQptYWRlLXVwIG1vZHVsZTogMSBlcnI9MTgxMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "LoadAcceleratorsW(300): window\nresource 300: count 5\n   [0] flags 0x1 key 0x70 cmd 303\n   [1] flags 0x9 key 0x4f cmd 301\n   [2] flags 0x0 key 0x41 cmd 304\n   [3] flags 0x5 key 0x74 cmd 305\n   [4] flags 0x11 key 0xd cmd 306\nLoadAcceleratorsW('ACCEL'): window\nresource ACCEL: count 1\n   [0] flags 0x1 key 0x71 cmd 400\nCreateAcceleratorTableW: window\ncreated: count 2\n   [0] flags 0x1 key 0x71 cmd 40\n   [1] flags 0x0 key 0x78 cmd 41\nCreateAcceleratorTableW with count 0: 1 err=87\nCreateAcceleratorTableW with a NULL array: 1 err=-1\nCopyAcceleratorTableW with room for 1 of 5: 1\nCopyAcceleratorTableW with a NULL array (the count): 5\nCopyAcceleratorTableW with a NULL array and a size: 5\nCopyAcceleratorTableW of a made-up handle: 0 err=1403\nF1 key down (table 300): TranslateAcceleratorW = 1\n     WM_COMMAND id 303 source 1 (control handle null)\nF1 key up: TranslateAcceleratorW = 0\nF2 key down (not in the table): TranslateAcceleratorW = 0\nWM_CHAR 'A' (a character accelerator): TranslateAcceleratorW = 1\n     WM_COMMAND id 304 source 1 (control handle null)\nWM_CHAR 'a': TranslateAcceleratorW = 0\nWM_KEYDOWN 'A' (a virtual key, the table has the character): TranslateAcceleratorW = 0\n'O' key down without Ctrl (the entry wants Ctrl): TranslateAcceleratorW = 0\nF5 without Shift (the entry wants Shift): TranslateAcceleratorW = 0\nAlt+Enter as WM_SYSKEYDOWN: TranslateAcceleratorW = 0\nF1 as WM_SYSKEYDOWN: TranslateAcceleratorW = 1\n     WM_COMMAND id 303 source 1 (control handle null)\nF2 (table made by CreateAcceleratorTableW): TranslateAcceleratorW = 1\n     WM_COMMAND id 40 source 1 (control handle null)\nWM_CHAR 'x': TranslateAcceleratorW = 1\n     WM_COMMAND id 41 source 1 (control handle null)\nWM_CHAR 'X': TranslateAcceleratorW = 0\na mouse message: TranslateAcceleratorW = 0\na NULL table: TranslateAcceleratorW = 0\na made-up table: TranslateAcceleratorW = 0\na NULL window: TranslateAcceleratorW = 0\nDestroyAcceleratorTable created: 1\ndestroy again: 0 err=1403\nNULL: 0 err=1403\nabsent number: 1 err=1814\nabsent name: 1 err=1814\nNULL module: 0 err=-1\nmade-up module: 1 err=1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

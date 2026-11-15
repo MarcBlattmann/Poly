@@ -97,21 +97,71 @@ pub const IPPROTO_ICMP: i32 = 1;
 pub const IPPROTO_TCP: i32 = 6;
 pub const IPPROTO_UDP: i32 = 17;
 pub const IPPROTO_ICMPV6: i32 = 58;
+/// `IPPROTO_IPV6`, the level of control messages of IPv6 sockets
+/// (`linux/in6.h`; the same number as [`SOL_IPV6`]).
+pub const IPPROTO_IPV6: i32 = 41;
 
 pub const IP_TOS: i32 = 1;
 pub const IP_TTL: i32 = 2;
-/// `linux/in.h`.
+/// `linux/in.h`: the `IP_*` options of ip(7).
+pub const IP_RECVOPTS: i32 = 6;
+pub const IP_RETOPTS: i32 = 7;
+pub const IP_PKTINFO: i32 = 8;
+pub const IP_MTU_DISCOVER: i32 = 10;
 pub const IP_RECVERR: i32 = 11;
+pub const IP_RECVTTL: i32 = 12;
+pub const IP_RECVTOS: i32 = 13;
+pub const IP_MTU: i32 = 14;
+pub const IP_FREEBIND: i32 = 15;
+pub const IP_TRANSPARENT: i32 = 19;
+pub const IP_BIND_ADDRESS_NO_PORT: i32 = 24;
+pub const IP_MULTICAST_IF: i32 = 32;
+pub const IP_MULTICAST_TTL: i32 = 33;
+pub const IP_MULTICAST_LOOP: i32 = 34;
+pub const IP_ADD_MEMBERSHIP: i32 = 35;
+pub const IP_DROP_MEMBERSHIP: i32 = 36;
+/// `linux/in6.h`: the `IPV6_*` options of ipv6(7).
 pub const IPV6_UNICAST_HOPS: i32 = 16;
-/// `linux/in6.h`.
+pub const IPV6_MULTICAST_IF: i32 = 17;
+pub const IPV6_MULTICAST_HOPS: i32 = 18;
+pub const IPV6_MULTICAST_LOOP: i32 = 19;
+/// `IPV6_JOIN_GROUP`.
+pub const IPV6_ADD_MEMBERSHIP: i32 = 20;
+/// `IPV6_LEAVE_GROUP`.
+pub const IPV6_DROP_MEMBERSHIP: i32 = 21;
+pub const IPV6_MTU_DISCOVER: i32 = 23;
 pub const IPV6_RECVERR: i32 = 25;
 pub const IPV6_V6ONLY: i32 = 26;
+pub const IPV6_RECVPKTINFO: i32 = 49;
+pub const IPV6_PKTINFO: i32 = 50;
+pub const IPV6_RECVHOPLIMIT: i32 = 51;
+pub const IPV6_HOPLIMIT: i32 = 52;
+pub const IPV6_DONTFRAG: i32 = 62;
+pub const IPV6_RECVTCLASS: i32 = 66;
+pub const IPV6_TCLASS: i32 = 67;
+/// `sizeof(struct ip_mreq)`: group and interface address.
+pub const IP_MREQ_SIZE: usize = 8;
+/// `sizeof(struct ip_mreqn)`: group, local address and interface index.
+pub const IP_MREQN_SIZE: usize = 12;
+/// `sizeof(struct ipv6_mreq)`: group and interface index.
+pub const IPV6_MREQ_SIZE: usize = 20;
+/// `sizeof(struct in6_pktinfo)`: address and interface index.
+pub const IN6_PKTINFO_SIZE: usize = 20;
 
 pub const TCP_NODELAY: i32 = 1;
 pub const TCP_MAXSEG: i32 = 2;
 pub const TCP_KEEPIDLE: i32 = 4;
 pub const TCP_KEEPINTVL: i32 = 5;
 pub const TCP_KEEPCNT: i32 = 6;
+/// `linux/tcp.h`.
+pub const TCP_CORK: i32 = 3;
+pub const TCP_DEFER_ACCEPT: i32 = 9;
+pub const TCP_QUICKACK: i32 = 12;
+pub const TCP_CONGESTION: i32 = 13;
+pub const TCP_USER_TIMEOUT: i32 = 18;
+pub const TCP_FASTOPEN: i32 = 23;
+pub const TCP_NOTSENT_LOWAT: i32 = 25;
+pub const TCP_FASTOPEN_CONNECT: i32 = 30;
 
 pub const NETLINK_ROUTE: i32 = 0;
 pub const NETLINK_ADD_MEMBERSHIP: i32 = 1;

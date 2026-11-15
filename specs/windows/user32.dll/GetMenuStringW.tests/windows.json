@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gmsw_text",
+      "exe_sha256": "a94b691f824866a8e5343e5237cd09215489665fa544ecd37a533a8390153346",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnVsbCBidWZmZXI6IDExIGVycj0tMiB0ZXh0PSdIZWxsbyB3b3JsZCcgd3JpdHRlbj0xMgpleGFjdCBzaXplIDEyOiAxMSBlcnI9LTIgdGV4dD0nSGVsbG8gd29ybGQnIHdyaXR0ZW49MTIKc2l6ZSAxMSAodHJ1bmNhdGVzKTogMTAgZXJyPS0yIHRleHQ9J0hlbGxvIHdvcmwnIHdyaXR0ZW49MTEKc2l6ZSA2OiA1IGVycj0tMiB0ZXh0PSdIZWxsbycgd3JpdHRlbj02CnNpemUgMTogMCBlcnI9LTEgdGV4dD0nJyB3cml0dGVuPTEKc2l6ZSAwOiAxMSBlcnI9LTIgdGV4dD0nJyB3cml0dGVuPTAKc2l6ZSAtMTogMTEgZXJyPS0yIHRleHQ9Jycgd3JpdHRlbj0xCk5VTEwgYnVmZmVyIHNpemUgMDogMTEgZXJyPS0yIHRleHQ9Jycgd3JpdHRlbj0wCk5VTEwgYnVmZmVyLCBuTWF4IDA6IDExCmJ5IHBvc2l0aW9uIDA6IDExIGVycj0tMiB0ZXh0PSdIZWxsbyB3b3JsZCcgd3JpdHRlbj0xMgpzZXBhcmF0b3I6IDAgZXJyPS0xIHRleHQ9Jycgd3JpdHRlbj0xCnBvcHVwOiAxMSBlcnI9LTIgdGV4dD0nUG9wdXAgJlRleHQnIHdyaXR0ZW49MTIKY29tbWFuZCAyIGlzIHRoZSBzZXBhcmF0b3IncyBpZDogMCBlcnI9LTEgdGV4dD0nJyB3cml0dGVuPTEKb3duZXIgZHJhdzogMCBlcnI9LTEgdGV4dD0nJyB3cml0dGVuPTEKZW1wdHkgdGV4dDogMCBlcnI9LTEgdGV4dD0nJyB3cml0dGVuPTEKdGFiIHRleHQ6IDMgZXJyPS0yIHRleHQ9J0E/Qicgd3JpdHRlbj00CmFic2VudCBjb21tYW5kOiAwIGVycj0xNDU2IHRleHQ9Jycgd3JpdHRlbj0xCmFic2VudCBwb3NpdGlvbjogMCBlcnI9MTQ1NiB0ZXh0PScnIHdyaXR0ZW49MQpiYWQgbWVudTogMCBlcnI9ODcgdGV4dD0nJyB3cml0dGVuPTEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "full buffer: 11 err=-2 text='Hello world' written=12\nexact size 12: 11 err=-2 text='Hello world' written=12\nsize 11 (truncates): 10 err=-2 text='Hello worl' written=11\nsize 6: 5 err=-2 text='Hello' written=6\nsize 1: 0 err=-1 text='' written=1\nsize 0: 11 err=-2 text='' written=0\nsize -1: 11 err=-2 text='' written=1\nNULL buffer size 0: 11 err=-2 text='' written=0\nNULL buffer, nMax 0: 11\nby position 0: 11 err=-2 text='Hello world' written=12\nseparator: 0 err=-1 text='' written=1\npopup: 11 err=-2 text='Popup &Text' written=12\ncommand 2 is the separator's id: 0 err=-1 text='' written=1\nowner draw: 0 err=-1 text='' written=1\nempty text: 0 err=-1 text='' written=1\ntab text: 3 err=-2 text='A?B' written=4\nabsent command: 0 err=1456 text='' written=1\nabsent position: 0 err=1456 text='' written=1\nbad menu: 0 err=87 text='' written=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

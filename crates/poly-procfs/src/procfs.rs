@@ -38,6 +38,15 @@ pub const PID_MAX: u32 = 32768;
 /// (proc_sys_fs(5): 1048576 by default).
 pub const NR_OPEN: u64 = 1 << 20;
 
+/// The value of `/proc/sys/vm/mmap_min_addr` (proc_sys_vm(5)): the lowest
+/// address a mapping may have; the region map's own minimum, so what the
+/// file says is what `mmap` does.
+pub const MMAP_MIN_ADDR: u64 = poly_vm::USER_MIN_ADDR;
+
+/// The value of `/proc/sys/vm/max_map_count` (proc_sys_vm(5): 65530 by
+/// default): the regions a process may have; the region map's default limit.
+pub const MAX_MAP_COUNT: u64 = poly_vm::DEFAULT_MAX_MAP_COUNT as u64;
+
 /// What a file in the fixed tree holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum G {
@@ -62,6 +71,8 @@ enum G {
     EntropyAvail,
     Poolsize,
     NrOpen,
+    MmapMinAddr,
+    MaxMapCount,
     CapLastCap,
     InotifyWatches,
     InotifyInstances,
@@ -128,6 +139,9 @@ const GLOBALS: &[(&[u8], usize, G)] = &[
     (b"msgsize_max", 43, G::Ipc(IpcFile::MqMsgsizeMax)),         // 46
     (b"msg_default", 43, G::Ipc(IpcFile::MqMsgDefault)),         // 47
     (b"msgsize_default", 43, G::Ipc(IpcFile::MqMsgsizeDefault)), // 48
+    (b"vm", 9, G::Dir),                                          // 49
+    (b"mmap_min_addr", 49, G::MmapMinAddr),                      // 50
+    (b"max_map_count", 49, G::MaxMapCount),                      // 51
 ];
 
 /// `/proc/sys/kernel/cap_last_cap`: the highest capability number
@@ -641,6 +655,8 @@ impl ProcFs {
                 // value 4096."
                 G::Poolsize => format::line(b"4096"),
                 G::NrOpen => format::line(&decimal(NR_OPEN)),
+                G::MmapMinAddr => format::line(&decimal(MMAP_MIN_ADDR)),
+                G::MaxMapCount => format::line(&decimal(MAX_MAP_COUNT)),
                 G::CapLastCap => format::line(&decimal(u64::from(CAP_LAST_CAP))),
                 G::InotifyWatches => format::line(&decimal(u64::from(INOTIFY_MAX_USER_WATCHES))),
                 G::InotifyInstances => format::line(&decimal(u64::from(INOTIFY_MAX_USER_INSTANCES))),

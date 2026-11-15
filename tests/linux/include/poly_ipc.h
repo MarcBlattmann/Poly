@@ -375,6 +375,13 @@ static __attribute__((unused)) int mem_eq(const void *a, const void *b, u64 n) {
 #define TIOCSPTLCK 0x40045431
 #define TIOCGPTLCK 0x80045439
 #define TIOCGPTPEER 0x5441
+#define TIOCPKT 0x5420
+#define TIOCGPKT 0x80045438
+#define TIOCPKT_DATA 0
+#define TIOCPKT_FLUSHREAD 1
+#define TIOCPKT_FLUSHWRITE 2
+#define TIOCPKT_STOP 4
+#define TIOCPKT_START 8
 
 /* asm-generic/termbits.h: struct termios as TCGETS/TCSETS use it. */
 struct k_termios {

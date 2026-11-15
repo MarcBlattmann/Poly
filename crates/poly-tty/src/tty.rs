@@ -32,7 +32,7 @@
 use crate::ioctl::*;
 use crate::ldisc::{Effects, LineDiscipline, Read};
 use crate::sig::{SIGCONT, SIGHUP, SIGTTIN, SIGTTOU, SIGWINCH};
-use crate::termios::{TCIFLUSH, TCIOFF, TCIOFLUSH, TCION, TCOFLUSH, TCOOFF, TCOON, Termios, Winsize, cc, lflag};
+use crate::termios::{TCIFLUSH, TCIOFF, TCIOFLUSH, TCION, TCOFLUSH, TCOOFF, TCOON, Termios, Winsize, cc, iflag, lflag};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
@@ -133,6 +133,12 @@ pub trait Driver: Send + Sync {
     /// master waiting to write is woken).
     fn input_drained(&self) {}
 
+    /// Something happened a pty master in packet mode reports (`TIOCPKT_*`
+    /// bits, [`crate::ioctl`]): a queue was flushed, output stopped or
+    /// started, flow control or the attributes changed. Only a pty master
+    /// does anything with it.
+    fn packet_status(&self, _bits: u8) {}
+
     /// A request only some devices answer (a serial port's `TIOCGSERIAL`,
     /// a virtual console's `VT_GETSTATE`, see [`crate::hw`]): the bytes the
     /// request stores at its argument, or `None` (`ENOTTY`).
@@ -226,6 +232,12 @@ impl Ttys {
     fn is_detached(&self, pid: i32) -> bool {
         self.sessions.lock().detached.contains(&pid)
     }
+}
+
+/// Whether the attributes make `^S` / `^Q` stop and start output (what
+/// `TIOCPKT_DOSTOP` and `TIOCPKT_NOSTOP` report).
+fn flow_control(t: &Termios) -> bool {
+    t.has_i(iflag::IXON) && t.special(cc::VSTOP) == Some(0x13) && t.special(cc::VSTART) == Some(0x11)
 }
 
 /// A terminal (see the module documentation).
@@ -429,6 +441,12 @@ impl Tty {
         }
         if fx.flush_output {
             self.driver.flush();
+        }
+        if fx.output_stopped {
+            self.driver.packet_status(TIOCPKT_STOP);
+        }
+        if fx.output_started {
+            self.driver.packet_status(TIOCPKT_START);
         }
     }
 
@@ -677,8 +695,18 @@ impl Tty {
         let mut fx = Effects::default();
         {
             let mut st = self.state.lock();
+            let old = *st.ldisc.termios();
             st.ldisc.set_termios(new, flush, &mut fx);
             self.act_locked(&fx);
+            if flush {
+                self.driver.packet_status(TIOCPKT_FLUSHREAD);
+            }
+            if flow_control(&old) != flow_control(&new) {
+                self.driver.packet_status(if flow_control(&new) { TIOCPKT_DOSTOP } else { TIOCPKT_NOSTOP });
+            }
+            if old != new {
+                self.driver.packet_status(TIOCPKT_IOCTL);
+            }
         }
         self.act_unlocked(&fx, None);
         if flush {
@@ -708,9 +736,17 @@ impl Tty {
             let t = *st.ldisc.termios();
             match action {
                 TCOOFF => {
+                    if !st.ldisc.output_stopped() {
+                        self.driver.packet_status(TIOCPKT_STOP);
+                    }
                     st.ldisc.set_output_stopped(true);
                 }
-                TCOON => started = st.ldisc.set_output_stopped(false),
+                TCOON => {
+                    started = st.ldisc.set_output_stopped(false);
+                    if started {
+                        self.driver.packet_status(TIOCPKT_START);
+                    }
+                }
                 TCIOFF | TCION => {
                     let index = if action == TCIOFF { cc::VSTOP } else { cc::VSTART };
                     if let Some(c) = t.special(index) {
@@ -835,6 +871,9 @@ impl Tty {
                         self.flush_output();
                     }
                     _ => return Err(Errno::EINVAL),
+                }
+                if matches!(arg as u32, TCIFLUSH | TCIOFLUSH) {
+                    self.driver.packet_status(TIOCPKT_FLUSHREAD);
                 }
                 Ok(0)
             }

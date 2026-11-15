@@ -21,6 +21,7 @@ use crate::net::file::{InetSocket, errno as net_errno};
 use crate::sync::Mutex;
 use crate::thread::{self, WaitQueue};
 use crate::{net, time, user};
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -162,9 +163,9 @@ impl NtSocket for KernelSocket {
 
     fn recv(&self, buf: &mut [u8], peek: bool, wait: SockWait) -> Result<RecvInfo, Errno> {
         // A zero-length receive returns at once (nothing to wait for).
-        if buf.is_empty() {
+        if buf.is_empty() && self.inner.ty == SockType::Datagram {
             let from = self.peer_addr().or_else(|_| self.local_addr())?;
-            return Ok(RecvInfo { len: 0, full_len: 0, from });
+            return Ok(RecvInfo { len: 0, full_len: 0, from, meta: Default::default() });
         }
         self.wait_for(PollEvents::READABLE, wait, || self.inner.recv(buf, peek))
     }
@@ -172,6 +173,30 @@ impl NtSocket for KernelSocket {
     fn shutdown(&self, how: Shutdown) -> Result<(), Errno> {
         let h = self.inner.handle();
         net::call_and_wake(|s| s.shutdown(h, how))
+    }
+
+    fn disconnect(&self) -> Result<(), Errno> {
+        self.net(|s, h| s.disconnect(h))
+    }
+
+    fn abort(&self) {
+        let h = self.inner.handle();
+        let _ = net::call_and_wake(|s| s.reset_connection(h));
+    }
+
+    fn established(&self) -> bool {
+        if self.inner.ty == SockType::Datagram {
+            return self.peer_addr().is_ok();
+        }
+        self.net(|s, h| s.tcp_state(h)).is_ok_and(|st| {
+            !matches!(
+                st,
+                poly_net::TcpState::Closed
+                    | poly_net::TcpState::Listen
+                    | poly_net::TcpState::SynSent
+                    | poly_net::TcpState::SynReceived
+            )
+        })
     }
 
     fn local_addr(&self) -> Result<SocketAddr, Errno> {
@@ -183,6 +208,10 @@ impl NtSocket for KernelSocket {
     }
 
     fn readiness(&self) -> Readiness {
+        if self.released.load(Ordering::SeqCst) {
+            // A closed handle ends every wait on it.
+            return Readiness(Readiness::READABLE.0 | Readiness::HANGUP.0);
+        }
         self.net(|s, h| s.readiness(h)).unwrap_or_default()
     }
 
@@ -191,6 +220,10 @@ impl NtSocket for KernelSocket {
     }
 
     fn bytes_readable(&self) -> usize {
+        // Winsock's FIONREAD on a datagram socket is the total queued (Linux's is the next datagram).
+        if self.inner.ty == SockType::Datagram {
+            return self.net(|s, h| s.queued_bytes(h)).unwrap_or(0);
+        }
         self.net(|s, h| s.bytes_readable(h)).unwrap_or(0)
     }
 
@@ -223,6 +256,7 @@ impl NtSocket for KernelSocket {
             SockOption::KeepIdle(v) => self.net(|s, h| s.set_keepalive_params(h, Some(secs(v)), None, None)),
             SockOption::KeepIntvl(v) => self.net(|s, h| s.set_keepalive_params(h, None, Some(secs(v)), None)),
             SockOption::KeepCnt(v) => self.net(|s, h| s.set_keepalive_params(h, None, None, Some(v))),
+            SockOption::AbortOnReadShutdown(v) => net::call_and_wake(|s| s.set_rd_shut_aborts(self.inner.handle(), v)),
         }
     }
 
@@ -357,7 +391,7 @@ static KICKED: AtomicBool = AtomicBool::new(false);
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Queue an overlapped request for the worker (started on first use).
-pub(super) fn pend(io: PendIo) -> Result<(), PendIo> {
+pub(super) fn pend(io: PendIo) -> Result<(), Box<PendIo>> {
     if !STARTED.swap(true, Ordering::SeqCst) {
         match thread::spawn_named("nt-afd", worker_main, 0) {
             Ok(tid) => {
@@ -365,7 +399,7 @@ pub(super) fn pend(io: PendIo) -> Result<(), PendIo> {
             }
             Err(_) => {
                 STARTED.store(false, Ordering::SeqCst);
-                return Err(io);
+                return Err(Box::new(io));
             }
         }
     }
@@ -389,7 +423,7 @@ fn worker_main(_: usize) -> usize {
         let list = core::mem::take(&mut *PENDING.lock());
         let mut keep = Vec::new();
         let mut completed = false;
-        for io in list {
+        for mut io in list {
             if !with(|s| s.sys.io.irp(io.irp).is_some()) {
                 // Cancelled (closed, CancelIo, the thread ended).
                 continue;
@@ -397,7 +431,14 @@ fn worker_main(_: usize) -> usize {
             match io.attempt() {
                 None => keep.push(io),
                 Some((status, info, data)) => {
-                    with(|s| s.sys.io.complete(io.irp, status, info, data));
+                    // `AcceptEx` / `ConnectEx`: the endpoint gets its connection before the request completes.
+                    let placement = io.take_placement();
+                    with(|s| {
+                        if let Some(p) = placement {
+                            poly_personality_nt::afd::services::place(&mut s.sys, p);
+                        }
+                        s.sys.io.complete(io.irp, status, info, data)
+                    });
                     completed = true;
                 }
             }

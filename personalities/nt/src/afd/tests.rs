@@ -169,6 +169,20 @@ impl NtSocket for TestSock {
     fn peer_addr(&self) -> Result<SocketAddr, Errno> {
         self.net.call(|s| s.peer_addr(self.h))
     }
+    fn established(&self) -> bool {
+        if self.ty == SockType::Datagram {
+            return self.peer_addr().is_ok();
+        }
+        self.net.call(|s| s.tcp_state(self.h)).is_ok_and(|st| {
+            !matches!(
+                st,
+                poly_net::TcpState::Closed
+                    | poly_net::TcpState::Listen
+                    | poly_net::TcpState::SynSent
+                    | poly_net::TcpState::SynReceived
+            )
+        })
+    }
     fn readiness(&self) -> Readiness {
         self.net.call(|s| s.readiness(self.h)).unwrap_or_default()
     }
@@ -275,7 +289,10 @@ impl T {
                 self.f.mem.write_bytes(*addr, data).unwrap();
             }
             if c.iosb != 0 {
-                self.f.mem.write_bytes(c.iosb, &c.iosb_bytes()).unwrap();
+                {
+                    let w = c.iosb_write();
+                    self.f.mem.write_bytes(w.addr, w.bytes()).unwrap();
+                }
             }
             let _ = self.f.sys.io.finish(&mut self.f.sys.objects, &c);
         }
@@ -442,7 +459,8 @@ fn errors_the_personality_decides() {
     assert_eq!(werr::wsa_of_status(s.0), WSAEOPNOTSUPP);
     // send on an unconnected datagram socket without a destination.
     let (s, _) = t.send(u, b"x", None, 0);
-    assert_eq!(werr::wsa_of_status(s.0), WSAEDESTADDRREQ);
+    // Winsock: no destination on a datagram socket that never connected is WSAENOTCONN.
+    assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
     // recv on an unconnected stream socket.
     let (s, _, _) = t.recv(h2, 4, 0);
     assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
@@ -534,14 +552,17 @@ fn options() {
     // level's socket: WSAENOPROTOOPT.
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, SO_RCVTIMEO, &[1, 2]).0), WSAEFAULT);
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, 0x7777, &[0; 4]).0), WSAENOPROTOOPT);
-    assert_eq!(werr::wsa_of_status(set(&mut t, IPPROTO_IPV6, IPV6_V6ONLY, &[0; 4]).0), WSAENOPROTOOPT);
+    // IPV6_V6ONLY can be set (and read back) on any socket; it is kept as set.
+    assert_eq!(set(&mut t, IPPROTO_IPV6, IPV6_V6ONLY, &[0; 4]), STATUS_SUCCESS);
+    assert_eq!(get(&mut t, IPPROTO_IPV6, IPV6_V6ONLY).2, 0);
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, SO_TYPE, &[0; 4]).0), WSAENOPROTOOPT);
     assert_eq!(werr::wsa_of_status(get(&mut t, IPPROTO_TCP, 0x7777).0.0), WSAENOPROTOOPT);
     let u = t.socket(AF_INET6, SOCK_DGRAM);
     let (s, _, out) = t.ioctl(u, afd::GET_OPTION, &afd::option_header(IPPROTO_IPV6, IPV6_V6ONLY), 4);
+    // On a datagram socket the option is one byte (Windows' own).
     assert_eq!((s, out), (STATUS_SUCCESS, 1u32.to_le_bytes().to_vec()));
     let (s, _, _) = t.ioctl(u, afd::GET_OPTION, &afd::option_header(IPPROTO_TCP, TCP_NODELAY), 4);
-    assert_eq!(werr::wsa_of_status(s.0), WSAENOPROTOOPT);
+    assert_eq!(werr::wsa_of_status(s.0), WSAEINVAL);
 }
 
 #[test]
@@ -630,4 +651,104 @@ fn net_info() {
     // An output buffer too small: WSAEFAULT.
     let (s, _, _) = t.ioctl(h, afd::NET_INFO, &[], 8);
     assert_eq!(werr::wsa_of_status(s.0), WSAEFAULT);
+}
+
+/// Turn `IPV6_V6ONLY` off (or on) for an endpoint.
+fn v6only(t: &mut T, h: u64, on: bool) -> NtStatus {
+    let mut b = afd::option_header(IPPROTO_IPV6, IPV6_V6ONLY).to_vec();
+    b.extend_from_slice(&u32::from(on).to_le_bytes());
+    t.ioctl(h, afd::SET_OPTION, &b, 0).0
+}
+
+#[test]
+fn a_dual_stack_socket_connects_to_an_ipv4_mapped_address() {
+    let mut t = setup();
+    // An IPv4 listener.
+    let l = t.socket(AF_INET, SOCK_STREAM);
+    assert_eq!(t.ioctl(l, afd::BIND, &sa("127.0.0.1:0"), 0).0, STATUS_SUCCESS);
+    assert_eq!(t.ioctl(l, afd::LISTEN, &5u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    let port = t.name(l, false).unwrap().port();
+    let c = t.socket(AF_INET6, SOCK_STREAM);
+    // With IPV6_V6ONLY on (the default) an IPv4-mapped address is not one the socket can reach.
+    let mapped = sa(&alloc::format!("[::ffff:127.0.0.1]:{port}"));
+    assert_eq!(t.ioctl(c, afd::CONNECT, &mapped, 0).0, st(werr::STATUS_INVALID_ADDRESS_COMPONENT));
+    // A 16-byte AF_INET address on an AF_INET6 socket is a buffer that is too short.
+    let v4 = sa(&alloc::format!("127.0.0.1:{port}"));
+    assert_eq!(werr::wsa_of_status(t.ioctl(c, afd::CONNECT, &v4, 0).0.0), WSAEFAULT);
+    assert_eq!(v6only(&mut t, c, false), STATUS_SUCCESS);
+    assert_eq!(t.ioctl(c, afd::CONNECT, &mapped, 0).0, STATUS_SUCCESS);
+    // The socket reports IPv4-mapped addresses of 28 bytes from now on.
+    let peer = t.name(c, true).unwrap();
+    assert_eq!(peer, sa_of(&alloc::format!("[::ffff:127.0.0.1]:{port}")));
+    assert!(matches!(t.name(c, false).unwrap(), SocketAddr::V6(v) if v.ip().to_ipv4_mapped().is_some()));
+    // The IPv4 listener accepted it and sees an IPv4 client.
+    let (_, a) = t.open(afd::ENDPOINT);
+    let (s, info, out) = t.ioctl(l, afd::ACCEPT, &a.to_le_bytes(), addr::MAX_SIZE);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(info, 16);
+    assert!(addr::decode(&out[..16]).unwrap().is_ipv4());
+    assert_eq!(t.send(c, b"hi", None, 0), (STATUS_SUCCESS, 2));
+    let (s, data, _) = t.recv(a, 8, 0);
+    assert_eq!((s, &data[..]), (STATUS_SUCCESS, &b"hi"[..]));
+}
+
+fn sa_of(s: &str) -> SocketAddr {
+    s.parse().unwrap()
+}
+
+#[test]
+fn a_dual_stack_listener_takes_ipv4_and_ipv6_clients() {
+    let mut t = setup();
+    let l = t.socket(AF_INET6, SOCK_STREAM);
+    assert_eq!(v6only(&mut t, l, false), STATUS_SUCCESS);
+    assert_eq!(t.ioctl(l, afd::BIND, &sa("[::]:0"), 0).0, STATUS_SUCCESS);
+    assert_eq!(t.ioctl(l, afd::LISTEN, &5u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    let port = t.name(l, false).unwrap().port();
+    // An IPv4 client: the accepted socket's addresses are IPv4-mapped.
+    let c4 = t.socket(AF_INET, SOCK_STREAM);
+    assert_eq!(t.ioctl(c4, afd::CONNECT, &sa(&alloc::format!("127.0.0.1:{port}")), 0).0, STATUS_SUCCESS);
+    let (_, a4) = t.open(afd::ENDPOINT);
+    let (s, info, out) = t.ioctl(l, afd::ACCEPT, &a4.to_le_bytes(), addr::MAX_SIZE);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(info, 28);
+    let peer = addr::decode(&out[..28]).unwrap();
+    assert_eq!(peer.ip(), core::net::IpAddr::V6("::ffff:127.0.0.1".parse().unwrap()));
+    assert_eq!(t.name(a4, true).unwrap(), peer);
+    assert!(addr::unmap_v4(&t.name(a4, false).unwrap()).is_some());
+    // An IPv6 client.
+    let c6 = t.socket(AF_INET6, SOCK_STREAM);
+    assert_eq!(t.ioctl(c6, afd::CONNECT, &sa(&alloc::format!("[::1]:{port}")), 0).0, STATUS_SUCCESS);
+    let (_, a6) = t.open(afd::ENDPOINT);
+    let (s, info, out) = t.ioctl(l, afd::ACCEPT, &a6.to_le_bytes(), addr::MAX_SIZE);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(info, 28);
+    assert_eq!(addr::decode(&out[..28]).unwrap().ip(), core::net::IpAddr::V6(core::net::Ipv6Addr::LOCALHOST));
+    // With nothing pending a non-blocking accept is WSAEWOULDBLOCK, whichever half is looked at.
+    assert_eq!(t.ioctl(l, afd::SET_NONBLOCKING, &1u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    let (_, a) = t.open(afd::ENDPOINT);
+    let s = t.ioctl(l, afd::ACCEPT, &a.to_le_bytes(), addr::MAX_SIZE).0;
+    assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
+}
+
+#[test]
+fn a_connect_that_failed_keeps_its_error_and_the_socket_is_not_connected() {
+    let mut t = setup();
+    let c = t.socket(AF_INET, SOCK_STREAM);
+    assert_eq!(t.ioctl(c, afd::SET_NONBLOCKING, &1u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    let s = t.ioctl(c, afd::CONNECT, &sa("127.0.0.1:9"), 0).0;
+    assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
+    // Nobody listens: SO_ERROR reads the refusal, and again.
+    let get = |t: &mut T| {
+        let (s, _, out) = t.ioctl(c, afd::GET_OPTION, &afd::option_header(SOL_SOCKET, SO_ERROR), 8);
+        assert_eq!(s, STATUS_SUCCESS);
+        u32::from_le_bytes(out[..4].try_into().unwrap())
+    };
+    assert_eq!(get(&mut t), WSAECONNREFUSED);
+    assert_eq!(get(&mut t), WSAECONNREFUSED);
+    // Receiving and sending on it: not connected (and the error stays).
+    let (s, _, _) = t.recv(c, 4, 0);
+    assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
+    let (s, _) = t.send(c, b"x", None, 0);
+    assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
+    assert_eq!(get(&mut t), WSAECONNREFUSED);
 }

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gdt_trunc",
+      "exe_sha256": "2370f3d5212edfffdb92646181be01aad6381fd835fd7564198b80b08dc114fc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSAwOiAwIHVuaXRzIHdyaXR0ZW4gMCB0ZXh0ICcnCnNpemUgMTogMCB1bml0cyB3cml0dGVuIDEgdGV4dCAnJwpzaXplIDI6IDEgdW5pdHMgd3JpdHRlbiAyIHRleHQgJ2EnCnNpemUgMzogMiB1bml0cyB3cml0dGVuIDMgdGV4dCAnYWInCnNpemUgNjogNSB1bml0cyB3cml0dGVuIDYgdGV4dCAnYWJjZGUnCnNpemUgNzogNiB1bml0cyB3cml0dGVuIDcgdGV4dCAnYWJjZGVmJwpzaXplIDg6IDYgdW5pdHMgd3JpdHRlbiA3IHRleHQgJ2FiY2RlZicKYWJzZW50IGlkOiAwIGZpcnN0IHVuaXQgMHgwIHdyaXR0ZW4gMSBlcnIgMTQyMQozMDAgY2hhcmFjdGVyczogMzAwCjMwMCBjaGFyYWN0ZXJzIGludG8gMTAwOiA5OSBsYXN0IHVuaXQgMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size 0: 0 units written 0 text ''\nsize 1: 0 units written 1 text ''\nsize 2: 1 units written 2 text 'a'\nsize 3: 2 units written 3 text 'ab'\nsize 6: 5 units written 6 text 'abcde'\nsize 7: 6 units written 7 text 'abcdef'\nsize 8: 6 units written 7 text 'abcdef'\nabsent id: 0 first unit 0x0 written 1 err 1421\n300 characters: 300\n300 characters into 100: 99 last unit 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

@@ -325,6 +325,11 @@ pub const SYSTEM32_ON_DISK: &str = "poly/nt/c/Windows/System32";
 pub const S1_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s1.html";
 /// What the dumped DOM holds when the script ran.
 pub const DOM_EXPECT: &str = "<p id=\"p\">script-ran 42</p>";
+/// The spec's network page (stage 4), `specs/windows/apps/chrome/pages/s4.html`: two frames, one
+/// `http://example.com/`, one `https://www.iana.org/`; the paragraph says which loaded.
+pub const S4_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s4.html";
+/// What the dumped DOM holds when both frames loaded.
+pub const S4_EXPECT: &str = "<p id=\"r\">http=1 https=1</p>";
 /// The recorded results of the stages, with the SHA-256 of the page and of
 /// each stage's standard output.
 pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
@@ -332,7 +337,16 @@ pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
 /// The page's bytes with LF line ends whatever the checkout did to them
 /// (the recorded DOM depends on them).
 pub fn s1_page() -> Result<Vec<u8>> {
-    let path = crate::root().join(S1_PAGE_PATH);
+    lf_page(S1_PAGE_PATH)
+}
+
+/// The network page's bytes (stage 4), with LF line ends.
+pub fn s4_page() -> Result<Vec<u8>> {
+    lf_page(S4_PAGE_PATH)
+}
+
+fn lf_page(relative: &str) -> Result<Vec<u8>> {
+    let path = crate::root().join(relative);
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut out = Vec::with_capacity(bytes.len());
     for (i, &b) in bytes.iter().enumerate() {
@@ -376,7 +390,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 3] = [
+pub const STAGES: [Stage; 4] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -414,6 +428,23 @@ pub const STAGES: [Stage; 3] = [
         expect: "PROBE file C:\\Program Files\\Chrome\\chrome_elf.dll",
         seconds: 60,
     },
+    // The network stage, headless (the spec's `s4-headless`): the page loads an http and an https
+    // frame; the guest has QEMU's user networking.
+    Stage {
+        number: 4,
+        name: "headless dump-dom of the network page (http and https frames), no sandbox, no GPU",
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s4.html",
+        ],
+        expect: S4_EXPECT,
+        seconds: 300,
+    },
 ];
 
 /// The probe of stage 9 (`tests/windows/chrome_probe.rs`).
@@ -441,6 +472,8 @@ pub struct Debugging {
     /// The call tracer also writes its ring this many seconds after a process started
     /// (`--ring-at`): what a process that went quiet did last.
     pub ring_at: Option<u32>,
+    /// The kernel logs where the frames are every N seconds (`--mem[=N]`: `poly.nt.mem`, ADR 0188).
+    pub mem: Option<u32>,
 }
 
 static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
@@ -533,6 +566,7 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
     }
     tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
+    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
     for stage in &STAGES {
         let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
         tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
@@ -742,16 +776,16 @@ pub fn console_stream(log: &str) -> String {
 }
 
 /// Guest memory: Chrome's browser, GPU, network and renderer processes. Stage 1 starts about
-/// ten Chrome processes; in 4 GiB the kernel ran out of frames (its heap takes them from the
-/// same allocator: "memory allocation of 1232 bytes failed" in an exception's context) in about
-/// half the runs (ADR 0155 step 12).
-pub const MEMORY: &str = "8G";
+/// ten Chrome processes; they share `chrome.dll`'s clean pages since DLLs are image section views
+/// (ADR 0188): about 360 MiB of user pages at the most, where every process had its own 300 MB
+/// copy before and the 4 GiB guest ran out of frames (ADR 0155 steps 12 and 13).
+pub const MEMORY: &str = "4G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
 /// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
 /// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
-/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--memory=SIZE]
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--mem[=SECS]] [--memory=SIZE]
 /// [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
@@ -789,6 +823,10 @@ fn run(args: &[String]) -> Result {
             "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
             "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
             "--trace-first" => debugging.trace_first = true,
+            "--mem" => debugging.mem = Some(5),
+            m if m.starts_with("--mem=") => {
+                debugging.mem = Some(m["--mem=".len()..].parse().map_err(|e| format!("--mem: {e}"))?)
+            }
             "--trail-skip" => debugging.trail_skip = Some(it.next().ok_or("--trail-skip needs names")?.clone()),
             "--ring-at" => {
                 debugging.ring_at =
@@ -891,6 +929,9 @@ pub fn debugging_kernel_arguments(d: &Debugging) -> String {
     if let Some(skip) = &d.trail_skip {
         more.push_str(" poly.nt.trail.skip=");
         more.push_str(skip);
+    }
+    if let Some(n) = d.mem {
+        more.push_str(&format!(" poly.nt.mem={n}"));
     }
     more
 }
@@ -1009,7 +1050,9 @@ fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
     if st.program.is_some() {
         return None;
     }
-    let (want_bytes, want_sha) = match spec_stdout(&format!("s{}", st.number)) {
+    // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
+    let key = if st.number == 4 { "s4-headless".to_string() } else { format!("s{}", st.number) };
+    let (want_bytes, want_sha) = match spec_stdout(&key) {
         Ok(v) => v,
         Err(e) => return Some(e),
     };
@@ -1098,10 +1141,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 passes in most runs
-/// but not yet every time ([`S1_REQUIRED`]): until it does the group reports
-/// how far Chrome got and succeeds; `POLY_CHROME_REQUIRED=1` makes the
-/// outcome the group's result.
+/// downloads the 210 MB package; CI has none). Stage 1 must pass
+/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
+/// unless `POLY_CHROME_REQUIRED=1`.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
@@ -1145,9 +1187,9 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
 }
 
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
-/// pass. Stage 1 passes in about 8 of 10 runs (ADR 0155 step 12: the others end on a failed
-/// check in the browser, `chrome.dll+0xc62f809`, not found yet); `true` once it passes every time.
-pub const S1_REQUIRED: bool = false;
+/// pass. It passes every time since ADR 0155 step 13 (the failed check at
+/// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
+pub const S1_REQUIRED: bool = true;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
@@ -1266,6 +1308,8 @@ mod tests {
         assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
         let kernel = Debugging { trail: Some(128), ..ring };
         assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
+        let mem = Debugging { mem: Some(3), ..Debugging::default() };
+        assert_eq!(debugging_kernel_arguments(&mem), " poly.nt.mem=3");
     }
 
     #[test]
@@ -1320,11 +1364,32 @@ mod tests {
 
     #[test]
     fn stage_one_and_two_run_the_specs_page() {
-        for st in STAGES.iter().filter(|s| s.program.is_none()) {
+        for st in STAGES.iter().filter(|s| s.program.is_none() && s.number < 3) {
             assert!(st.args.contains(&"file:///C:/poly-test/s1.html"));
             assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
             assert!(st.expect.contains("script-ran 42"));
         }
+    }
+
+    #[test]
+    fn stage_four_runs_the_network_page_and_the_spec_records_its_output() {
+        let st = STAGES.iter().find(|s| s.number == 4).unwrap();
+        assert!(st.args.contains(&"file:///C:/poly-test/s4.html"));
+        assert!(st.args.contains(&"--no-sandbox"));
+        assert_eq!(st.expect, S4_EXPECT);
+        // The page the spec recorded the digest of, and the digest: 831 bytes.
+        let text = std::fs::read_to_string(crate::root().join(SPEC_RESULTS_PATH)).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(crate::sha256::hex(&s4_page().unwrap()), json["pages"]["s4.html"].as_str().unwrap());
+        assert_eq!(spec_stdout("s4-headless").unwrap().0, 831);
+        let mut s = Summary {
+            stdout_bytes: Some(831),
+            stdout_sha256: Some(spec_stdout("s4-headless").unwrap().1),
+            ..Summary::default()
+        };
+        assert_eq!(digest_note(st, &s), None);
+        s.stdout_bytes = Some(440);
+        assert!(digest_note(st, &s).unwrap().contains("the spec records 831 bytes"));
     }
 
     #[test]
