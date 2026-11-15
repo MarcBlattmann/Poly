@@ -366,7 +366,7 @@ pub unsafe extern "system" fn RtlInitializeCriticalSectionAndSpinCount(
     spin: u32,
 ) -> NtStatus {
     // SAFETY: as above.
-    unsafe { (*cs).init(u64::from(spin)) };
+    unsafe { (*cs).init(spin as usize) };
     SUCCESS
 }
 
@@ -377,7 +377,7 @@ pub unsafe extern "system" fn RtlInitializeCriticalSectionEx(
     _flags: u32,
 ) -> NtStatus {
     // SAFETY: as above.
-    unsafe { (*cs).init(u64::from(spin)) };
+    unsafe { (*cs).init(spin as usize) };
     SUCCESS
 }
 

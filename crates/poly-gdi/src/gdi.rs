@@ -21,6 +21,18 @@ use poly_font::GlyphCache;
 
 // Object types (`wingdi.h`).
 pub const OBJ_PEN: u32 = 1;
+/// `sizeof(BITMAP)` for pointers of `ptr` bytes: five `LONG`s and two `WORD`s (20 bytes), then
+/// `bmBits` at its alignment.
+pub const fn bitmap_size(ptr: usize) -> usize {
+    if ptr == 4 { 24 } else { 32 }
+}
+
+/// `sizeof(DIBSECTION)`: a `BITMAP`, a `BITMAPINFOHEADER` (40), `dsBitfields[3]` (12), `dshSection`
+/// (a handle, aligned) and `dsOffset` (a `DWORD`, padded to the alignment).
+pub const fn dibsection_size(ptr: usize) -> usize {
+    if ptr == 4 { 84 } else { 104 }
+}
+
 pub const OBJ_BRUSH: u32 = 2;
 pub const OBJ_DC: u32 = 3;
 pub const OBJ_PAL: u32 = 5;
@@ -1214,19 +1226,28 @@ impl Gdi {
     /// the buffer holds one (Learn: GetObject; DeleteObject.yaml
     /// `selected_bitmap`), and a font fills a larger buffer than `LOGFONTW`
     /// (observed: 128 bytes for a buffer of 128; the rest of
-    /// `ENUMLOGFONTEXW`, 348 bytes, zero here).
+    /// `ENUMLOGFONTEXW`, 348 bytes, zero here). The layouts are a 64-bit process's.
     pub fn object_bytes_for(&self, h: u64, size: usize) -> Option<Vec<u8>> {
-        let mut b = self.object_bytes(h)?;
+        self.object_bytes_for_width(h, size, 8)
+    }
+
+    /// [`Gdi::object_bytes_for`] for a process whose pointers are `ptr` bytes (4 or 8): `BITMAP`,
+    /// `LOGBRUSH` and `DIBSECTION` hold a pointer (`bmBits`, `lbHatch`, `dshSection`), so their
+    /// size and the offsets after it depend on the width (wingdi.h: `BITMAP` is 24 bytes in a
+    /// 32-bit process and 32 in a 64-bit one, `LOGBRUSH` 12 and 16, `DIBSECTION` 84 and 104).
+    pub fn object_bytes_for_width(&self, h: u64, size: usize, ptr: usize) -> Option<Vec<u8>> {
+        let mut b = self.object_bytes_width(h, ptr)?;
         match self.obj(h)? {
-            Obj::Bitmap { bmp, .. } if bmp.dib && size >= 104 => {
+            Obj::Bitmap { bmp, .. } if bmp.dib && size >= dibsection_size(ptr) => {
                 let height = bmp.height.unsigned_abs();
-                b.resize(104, 0);
-                b[32..36].copy_from_slice(&40u32.to_le_bytes());
-                b[36..40].copy_from_slice(&bmp.width.to_le_bytes());
-                b[40..44].copy_from_slice(&height.to_le_bytes());
-                b[44..46].copy_from_slice(&1u16.to_le_bytes());
-                b[46..48].copy_from_slice(&bmp.bpp.to_le_bytes());
-                b[52..56].copy_from_slice(&((bmp.stride as u32) * height).to_le_bytes());
+                let bih = bitmap_size(ptr);
+                b.resize(dibsection_size(ptr), 0);
+                b[bih..bih + 4].copy_from_slice(&40u32.to_le_bytes());
+                b[bih + 4..bih + 8].copy_from_slice(&bmp.width.to_le_bytes());
+                b[bih + 8..bih + 12].copy_from_slice(&height.to_le_bytes());
+                b[bih + 12..bih + 14].copy_from_slice(&1u16.to_le_bytes());
+                b[bih + 14..bih + 16].copy_from_slice(&bmp.bpp.to_le_bytes());
+                b[bih + 20..bih + 24].copy_from_slice(&((bmp.stride as u32) * height).to_le_bytes());
             }
             // DeleteObject.yaml `font_getobject`: min(size asked, 356) bytes.
             Obj::Font { .. } => b.resize(356, 0),
@@ -1247,29 +1268,36 @@ impl Gdi {
     }
 
     /// `GetObjectW`'s bytes for an object (`LOGBRUSH`, `BITMAP`, `LOGPEN`,
-    /// `LOGFONTW`).
+    /// `LOGFONTW`), in a 64-bit process's layouts.
     pub fn object_bytes(&self, h: u64) -> Option<Vec<u8>> {
+        self.object_bytes_width(h, 8)
+    }
+
+    /// [`Gdi::object_bytes`] for a process whose pointers are `ptr` bytes (4 or 8).
+    pub fn object_bytes_width(&self, h: u64, ptr: usize) -> Option<Vec<u8>> {
         Some(match self.obj(h)? {
             // A brush or pen deleted while selected answers nothing
             // (DeleteObject.yaml `selected_brush_pen`: GetObject 0).
             Obj::Brush { delete_pending: true, .. } | Obj::Pen { delete_pending: true, .. } => return None,
             Obj::Brush { dead: true, .. } => return None,
             Obj::Brush { style, color, hatch, .. } => {
-                let mut b = vec![0u8; 16];
+                let mut b = vec![0u8; 8 + ptr];
                 b[0..4].copy_from_slice(&style.to_le_bytes());
                 b[4..8].copy_from_slice(&color.to_le_bytes());
-                b[8..16].copy_from_slice(&hatch.to_le_bytes());
+                b[8..8 + ptr].copy_from_slice(&hatch.to_le_bytes()[..ptr]);
                 b
             }
             Obj::Bitmap { bmp, .. } => {
-                let mut b = vec![0u8; 32];
+                let mut b = vec![0u8; bitmap_size(ptr)];
                 b[4..8].copy_from_slice(&bmp.width.to_le_bytes());
                 b[8..12].copy_from_slice(&bmp.height.unsigned_abs().to_le_bytes());
                 b[12..16].copy_from_slice(&(bmp.width_bytes() as u32).to_le_bytes());
                 b[16..18].copy_from_slice(&1u16.to_le_bytes());
                 b[18..20].copy_from_slice(&bmp.bpp.to_le_bytes());
                 let bits = if bmp.dib { bmp.bits_address() } else { 0 };
-                b[24..32].copy_from_slice(&bits.to_le_bytes());
+                // `bmBits` follows the two WORDs, at the pointer's alignment.
+                let at = bitmap_size(ptr) - ptr;
+                b[at..at + ptr].copy_from_slice(&bits.to_le_bytes()[..ptr]);
                 b
             }
             Obj::Pen { style, width, color, .. } => {

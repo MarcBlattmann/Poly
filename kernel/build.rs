@@ -181,6 +181,7 @@ fn embed_wow64() {
         "gui32.exe",
         "sys32.exe",
         "safeseh32.exe",
+        "ansi32.exe",
     ]
     .iter()
     .map(|n| n.to_string())

@@ -98,6 +98,44 @@ pub extern "system" fn IsAppThemed() -> i32 {
     0
 }
 
+/// `BufferedPaintInit()`: "Initialize buffered painting for the current thread" (Learn, `uxtheme.h`):
+/// S_OK. Poly paints unthemed and unbuffered (a buffered paint cannot be made, below), but
+/// the VCL and others call this and un-init as part of their start-up and shut-down.
+#[unsafe(no_mangle)]
+pub extern "system" fn BufferedPaintInit() -> u32 {
+    0
+}
+
+/// `BufferedPaintUnInit()`: S_OK.
+#[unsafe(no_mangle)]
+pub extern "system" fn BufferedPaintUnInit() -> u32 {
+    0
+}
+
+/// `BeginBufferedPaint(hdcTarget, prcTarget, dwFormat, pPaintParams, phdc)`: NULL, with `*phdc` NULL
+/// too: Learn gives "NULL if ... failed" as the way to say no buffer could be made, and a caller
+/// then paints straight to the target.
+#[unsafe(no_mangle)]
+pub extern "system" fn BeginBufferedPaint(
+    _target: usize,
+    _rect: *const i32,
+    _format: u32,
+    _params: *const u8,
+    dc: *mut usize,
+) -> usize {
+    if !dc.is_null() {
+        // SAFETY: the caller's out variable.
+        unsafe { dc.write(0) };
+    }
+    0
+}
+
+/// `EndBufferedPaint(hBufferedPaint, fUpdateTarget)`: `E_HANDLE`, as no buffer was ever given out.
+#[unsafe(no_mangle)]
+pub extern "system" fn EndBufferedPaint(_buffer: usize, _update: i32) -> u32 {
+    E_HANDLE
+}
+
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn uxtheme_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {

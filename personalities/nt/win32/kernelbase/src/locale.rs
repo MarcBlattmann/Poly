@@ -136,6 +136,7 @@ pub unsafe extern "system" fn GetLocaleInfoW(lcid: u32, lctype: u32, buf: *mut u
     if !locale::is_valid_lcid(lcid, 0) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
+    let lctype = lctype & !locale::LOCALE_USE_CP_ACP;
     match locale::info(lctype & !locale::LOCALE_NOUSEROVERRIDE) {
         Some(locale::Info::Text(t)) => {
             if lctype & locale::LOCALE_RETURN_NUMBER != 0 {
@@ -166,12 +167,12 @@ pub unsafe extern "system" fn GetLocaleInfoW(lcid: u32, lctype: u32, buf: *mut u
     }
 }
 
-/// `GetStringTypeW`: `CT_CTYPE1` classification of each unit (Learn:
-/// "GetStringTypeW function", "Character Type 1 Flags"); the other
-/// information types are `ERROR_INVALID_PARAMETER` for now.
+/// `GetStringTypeW`: the classification of each unit for `CT_CTYPE1`, `CT_CTYPE2` and
+/// `CT_CTYPE3` (Learn: "GetStringTypeW function", "Character Type 1 Flags" and the two
+/// that follow); any other information type is `ERROR_INVALID_PARAMETER`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStringTypeW(info_type: u32, src: *const u16, cch: i32, out: *mut u16) -> i32 {
-    if src.is_null() || out.is_null() || cch == 0 || cch < -1 || info_type != locale::CT_CTYPE1 {
+    if src.is_null() || out.is_null() || cch == 0 || cch < -1 || !matches!(info_type, locale::CT_CTYPE1 | locale::CT_CTYPE2 | locale::CT_CTYPE3) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     let n = if cch == -1 {
@@ -182,7 +183,7 @@ pub unsafe extern "system" fn GetStringTypeW(info_type: u32, src: *const u16, cc
     };
     for i in 0..n {
         // SAFETY: `src` and `out` hold `n` units.
-        unsafe { out.add(i).write(locale::ctype1(src.add(i).read())) };
+        unsafe { out.add(i).write(locale::string_type(info_type, src.add(i).read()).unwrap_or(0)) };
     }
     TRUE
 }

@@ -14,7 +14,6 @@ poly_win32_rt::fail_exports!(
         CoFreeUnusedLibraries,
         CoGetContextToken,
         CoGetDefaultContext,
-        CoGetMalloc,
         CoGetMarshalSizeMax,
         CoGetObject,
         CoGetObjectContext,

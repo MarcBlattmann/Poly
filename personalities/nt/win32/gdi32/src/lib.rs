@@ -369,6 +369,9 @@ pub extern "system" fn GetCurrentObject(hdc: H, kind: u32) -> H {
     gdi(|g| g.current_object(hdc as u64, kind)) as H
 }
 
+/// The width of a pointer in this process (`BITMAP`, `LOGBRUSH` and `DIBSECTION` hold one).
+const PTR: usize = core::mem::size_of::<usize>();
+
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
     // A region has no description: 0 with ERROR_INVALID_HANDLE
@@ -378,12 +381,12 @@ pub unsafe extern "system" fn GetObjectW(h: H, size: i32, buf: *mut u8) -> i32 {
         return 0;
     }
     if buf.is_null() {
-        return gdi(|g| g.object_bytes(h as u64)).map_or(0, |b| b.len() as i32);
+        return gdi(|g| g.object_bytes_width(h as u64, PTR)).map_or(0, |b| b.len() as i32);
     }
     // The size is read as unsigned, so a negative one asks for more than any object has: a font gives
     // its 356 bytes (`GetObjectW.yaml`, rule larger_buffer: -1 returns 356).
     let want = if size < 0 && gdi(|g| g.is_font(h as u64)) { 356 } else { size.max(0) as usize };
-    let Some(bytes) = gdi(|g| g.object_bytes_for(h as u64, want)) else { return 0 };
+    let Some(bytes) = gdi(|g| g.object_bytes_for_width(h as u64, want, PTR)) else { return 0 };
     let n = bytes.len().min(want);
     // SAFETY: the caller's buffer holds `size` bytes.
     unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, n) };

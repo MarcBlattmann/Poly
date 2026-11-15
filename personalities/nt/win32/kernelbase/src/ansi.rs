@@ -114,3 +114,16 @@ pub unsafe extern "system" fn FreeEnvironmentStringsA(block: *mut u8) -> i32 {
     // SAFETY: a block `GetEnvironmentStrings` returned.
     unsafe { nt::RtlFreeHeap(process_heap(), 0, block) as i32 }
 }
+
+/// `OpenFileMappingA`: `OpenFileMappingW` with the name converted from the ANSI code page.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn OpenFileMappingA(access: u32, inherit: i32, name: *const u8) -> crate::nt::Handle {
+    if name.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, 0);
+    }
+    // SAFETY: a NUL-terminated name.
+    let mut wide = text::from_ansi(unsafe { core::slice::from_raw_parts(name, text::strlen(name)) });
+    wide.push(0);
+    // SAFETY: a NUL-terminated wide name.
+    unsafe { crate::mapping::OpenFileMappingW(access, inherit, wide.as_ptr()) }
+}

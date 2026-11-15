@@ -40,6 +40,7 @@ unsafe extern "system" {
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
     fn HeapReAlloc(heap: *mut u8, flags: u32, p: *mut u8, bytes: usize) -> *mut u8;
     fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
+    fn HeapSize(heap: *mut u8, flags: u32, p: *const u8) -> usize;
     fn TlsAlloc() -> u32;
     fn TlsFree(index: u32) -> i32;
     fn TlsGetValue(index: u32) -> *mut u8;
@@ -410,6 +411,129 @@ pub unsafe extern "system" fn RoActivateInstance(_class_id: HString, instance: *
     // SAFETY: the caller's out parameter.
     unsafe { *instance = core::ptr::null_mut() };
     REGDB_E_CLASSNOTREG
+}
+
+// ----- the task allocator (IMalloc) ----------------------------------------------------
+
+/// `IMalloc` (`objidl.h`): the interface `CoGetMalloc` and `SHGetMalloc` hand out; its methods
+/// are the task-memory functions above.
+#[repr(C)]
+struct Malloc {
+    vtbl: *const MallocVtbl,
+}
+
+#[repr(C)]
+struct MallocVtbl {
+    query_interface: unsafe extern "system" fn(*mut Malloc, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut Malloc) -> u32,
+    release: unsafe extern "system" fn(*mut Malloc) -> u32,
+    alloc: unsafe extern "system" fn(*mut Malloc, usize) -> *mut c_void,
+    realloc: unsafe extern "system" fn(*mut Malloc, *mut c_void, usize) -> *mut c_void,
+    free: unsafe extern "system" fn(*mut Malloc, *mut c_void),
+    get_size: unsafe extern "system" fn(*mut Malloc, *mut c_void) -> usize,
+    did_alloc: unsafe extern "system" fn(*mut Malloc, *mut c_void) -> i32,
+    heap_minimize: unsafe extern "system" fn(*mut Malloc),
+}
+
+// SAFETY: a table of function pointers.
+unsafe impl Sync for MallocVtbl {}
+// SAFETY: the object holds only the table's address and never changes.
+unsafe impl Sync for Malloc {}
+
+/// `IID_IMalloc` (`objidl.h`): {00000002-0000-0000-C000-000000000046}.
+const IID_IMALLOC: Guid = Guid { data1: 2, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+
+static MALLOC_VTBL: MallocVtbl = MallocVtbl {
+    query_interface: malloc_qi,
+    add_ref: malloc_add_ref,
+    release: malloc_release,
+    alloc: malloc_alloc,
+    realloc: malloc_realloc,
+    free: malloc_free,
+    get_size: malloc_get_size,
+    did_alloc: malloc_did_alloc,
+    heap_minimize: malloc_heap_minimize,
+};
+
+/// The one allocator object of the process: it never goes away, so the reference counts are
+/// those of a static (Learn: `IMalloc::Release`'s count is the object's own; callers only
+/// release what they were given).
+static TASK_MALLOC: Malloc = Malloc { vtbl: &MALLOC_VTBL };
+
+unsafe extern "system" fn malloc_qi(this: *mut Malloc, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's IID and out parameter.
+    unsafe {
+        if !iid.is_null() && (*iid == IID_IUNKNOWN || *iid == IID_IMALLOC) {
+            *out = this.cast();
+            S_OK
+        } else {
+            *out = core::ptr::null_mut();
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn malloc_add_ref(_this: *mut Malloc) -> u32 {
+    1
+}
+
+unsafe extern "system" fn malloc_release(_this: *mut Malloc) -> u32 {
+    1
+}
+
+unsafe extern "system" fn malloc_alloc(_this: *mut Malloc, cb: usize) -> *mut c_void {
+    // SAFETY: the process heap.
+    unsafe { CoTaskMemAlloc(cb) }
+}
+
+unsafe extern "system" fn malloc_realloc(_this: *mut Malloc, pv: *mut c_void, cb: usize) -> *mut c_void {
+    // SAFETY: the process heap, a block from this allocator.
+    unsafe { CoTaskMemRealloc(pv, cb) }
+}
+
+unsafe extern "system" fn malloc_free(_this: *mut Malloc, pv: *mut c_void) {
+    // SAFETY: a block from this allocator.
+    unsafe { CoTaskMemFree(pv) }
+}
+
+/// `IMalloc::GetSize`: the block's size, or -1 (`(SIZE_T)-1`) for a pointer that is no block (NULL too).
+unsafe extern "system" fn malloc_get_size(_this: *mut Malloc, pv: *mut c_void) -> usize {
+    if pv.is_null() {
+        return usize::MAX;
+    }
+    // SAFETY: the process heap.
+    unsafe { HeapSize(GetProcessHeap(), 0, pv.cast()) }
+}
+
+/// `IMalloc::DidAlloc`: 1 if the block is this allocator's, 0 if not, -1 if it cannot say (NULL).
+unsafe extern "system" fn malloc_did_alloc(_this: *mut Malloc, pv: *mut c_void) -> i32 {
+    if pv.is_null() {
+        return -1;
+    }
+    // SAFETY: the process heap.
+    i32::from(unsafe { HeapSize(GetProcessHeap(), 0, pv.cast()) } != usize::MAX)
+}
+
+unsafe extern "system" fn malloc_heap_minimize(_this: *mut Malloc) {}
+
+/// `CoGetMalloc(dwMemContext, ppMalloc)`: the task allocator (Learn: the context must be 1,
+/// `MEMCTX_TASK`; 2 (`MEMCTX_SHARED`) and 3 (`MEMCTX_MACSYSTEM`) are `E_INVALIDARG`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetMalloc(context: u32, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    if context != 1 {
+        // SAFETY: the caller's out parameter.
+        unsafe { *out = core::ptr::null_mut() };
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *out = (&raw const TASK_MALLOC).cast_mut().cast() };
+    S_OK
 }
 
 // ----- objects that do nothing ---------------------------------------------------------

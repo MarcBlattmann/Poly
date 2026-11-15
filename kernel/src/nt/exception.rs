@@ -286,6 +286,35 @@ pub(super) fn report_delivered(pid: ProcessId, tid: ThreadRef, record: &Exceptio
         crate::kprintln!("{line}");
     }
     drop(stack);
+    super::apitrace::dump_ring();
+    // What the registers and the faulting address point at: 32 bytes before and 32 after, so a
+    // report says what a pointer that ran off a buffer was reading and what it was writing to.
+    let mut points: Vec<(&str, u64)> = [
+        ("rax", ctx.gpr[0]),
+        ("rcx", ctx.gpr[1]),
+        ("rdx", ctx.gpr[2]),
+        ("rbx", ctx.gpr[3]),
+        ("rsi", ctx.gpr[6]),
+        ("rdi", ctx.gpr[7]),
+    ]
+    .into_iter()
+    .collect();
+    if let Some(&address) = record.parameters().get(1) {
+        points.push(("fault", address));
+    }
+    for (name, value) in points {
+        if value < 0x1_0000 {
+            continue;
+        }
+        let mut bytes = [0u8; 64];
+        if read(value.wrapping_sub(32), &mut bytes) {
+            let hex: alloc::string::String = bytes.iter().map(|b| alloc::format!("{b:02x}")).collect();
+            crate::kprintln!("nt-exc: pid {} tid {} memory at {name} {value:#x} -32..+32: {hex}", pid.0, tid.0);
+        } else if read(value, &mut bytes[..32]) {
+            let hex: alloc::string::String = bytes[..32].iter().map(|b| alloc::format!("{b:02x}")).collect();
+            crate::kprintln!("nt-exc: pid {} tid {} memory at {name} {value:#x} +0..+32: {hex}", pid.0, tid.0);
+        }
+    }
     if record.code == diag::STATUS_STACK_OVERFLOW {
         // What fills the stack: every value up to the stack's base (`NT_TIB.StackBase`,
         // TEB + 8) that points into a module, counted. Read a page at a time.

@@ -8,14 +8,11 @@ poly_win32_rt::fail_exports!(
     "uxtheme",
     hresult,
     [
-        BufferedPaintInit,
         BufferedPaintRenderAnimation,
         BufferedPaintSetAlpha,
         BufferedPaintStopAllAnimations,
-        BufferedPaintUnInit,
         EnableThemeDialogTexture,
         EndBufferedAnimation,
-        EndBufferedPaint,
         EndPanningFeedback,
         SetWindowTheme,
         SetWindowThemeAttribute,
@@ -28,7 +25,6 @@ poly_win32_rt::fail_exports!(
     value(0),
     [
         BeginBufferedAnimation,
-        BeginBufferedPaint,
         BeginPanningFeedback,
         GetThemeSysColor,
         IsThemeBackgroundPartiallyTransparent,

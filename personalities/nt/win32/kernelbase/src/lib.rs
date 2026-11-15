@@ -34,6 +34,7 @@ mod iocp;
 mod job;
 mod legacy;
 mod locale;
+mod localea;
 mod mapping;
 mod memory;
 mod misc;
@@ -95,5 +96,4 @@ mod delayed;
 #[cfg(target_arch = "x86_64")]
 mod apps;
 
-#[cfg(target_arch = "x86_64")]
 mod apps_impl;
