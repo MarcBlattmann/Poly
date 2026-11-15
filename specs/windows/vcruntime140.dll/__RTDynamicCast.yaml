@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/vcruntime140.dll/__RTDynamicCast # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\\\BuildTools) with /EHsc /GS- /Zl /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def and from the DLL's own export table, run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes,
+  offsets and constants read from Microsoft's STL and vcruntime headers that ship with the Build Tools
+  (Apache-2.0 with LLVM exception; owner decision 2026-11-15: spec agents may read them for layouts, sizes,
+  offsets, vtable order and member meaning; nothing of them is copied here); the compiler's own output for our
+  own probe programs (cl /FAs listings: the arguments of the calls the compiler writes, the RTTI records it
+  emits). No Microsoft binary was disassembled or debugged, no vcruntime or CRT source was read.
+summary: >
+  __RTDynamicCast(void* inptr, long VfDelta, void* SrcType, void* TargetType, int isReference) is what Visual
+  C++ calls for every dynamic_cast that is not to void* and not a plain upcast. inptr is the pointer or the
+  address of the reference's object; SrcType and TargetType are the type descriptors (`??_R0?AUA@@@8`, name
+  '.?AUA@@' at offset 16) of the STATIC source type and the target type; isReference is 1 for a cast to a
+  reference, 0 for a pointer; VfDelta is 0 in every call the compiler wrote for classes without virtual bases in
+  the source (the vbtable displacement of the source subobject otherwise). It finds the complete object through
+  the virtual table (vptr[-1] is the Complete Object Locator), searches the complete object's class hierarchy
+  for the target, and returns the address of the target subobject or null; for a reference cast that fails it
+  throws std::bad_cast instead of returning null. The compiler passes null pointers to it too (no inline test):
+  null in, null out.
+interface:
+  signature: "void* __cdecl-ish (x64): RCX = inptr, EDX = VfDelta, R8 = SrcType (TypeDescriptor*), R9 = TargetType (TypeDescriptor*), [RSP+32] = isReference (a 32-bit 0 or 1, written by `mov DWORD PTR [rsp+32], n`); returns RAX (the cast pointer or null)"
+  compiler_call_sites: "A* -> B*: `lea r9,??_R0?AUB@@@8; mov DWORD PTR [rsp+32],0; lea r8,??_R0?AUA@@@8; xor edx,edx; call __RTDynamicCast`; A& -> B&: the same with 1; a cast to a class with a virtual base is the same call. dynamic_cast<void*> is __RTCastToVoid, typeid(*p) is __RTtypeid (both tail-jumped to)"
+data_layouts:
+  locator: "the 8-byte slot before the virtual function table's first entry (vptr[-1]) holds a pointer to the Complete Object Locator (x64): u32 signature (1), u32 offset (the offset of this vptr's subobject inside the complete object: 0 for the primary vftable, 24 for the C in `D : B, C`), u32 cdOffset (0 in every class tested, the constructor displacement), rva pTypeDescriptor (of the complete type, e.g. '.?AUD@@'), rva pClassDescriptor, rva pSelf (the locator's own address minus the image base: the image base is pLocator - pSelf)"
+  class_hierarchy_descriptor: "u32 signature (0), u32 attributes (0x1 multiple inheritance, 0x2 virtual inheritance, 0x4 ambiguous: D : B, C with a doubled A has 0x5; VD : V1, V2 : virtual VA has 0x3; a single chain has 0), u32 numBaseClasses (the class itself first, then every base subobject in a depth-first order: D has 5: D, B, A, C, A), rva pBaseClassArray (numBaseClasses u32 rvas)"
+  base_class_descriptor: "u32 rva pTypeDescriptor, u32 numContainedBases (the number of bases below this one in the array: D has 4, B 1, A 0), PMD {i32 mdisp, i32 pdisp, i32 vdisp} (where the base lives in the complete object: mdisp the offset of the non-virtual part, pdisp the offset of the vbptr (-1: not through a virtual base), vdisp the offset in the vbtable of the displacement; VA in V1: mdisp 0, pdisp 0, vdisp 4), u32 attributes (0x01 not visible, 0x02 ambiguous (the A that occurs twice in D), 0x04 private/protected path, 0x08 private base, 0x10 virtual base, 0x20 non-polymorphic, 0x40 'has a class hierarchy descriptor pointer' (always set) -> observed 0x40, 0x42 ambiguous, 0x50 virtual), rva pClassDescriptor. Everything printed by rtti_locator_layout (values per class)"
+  type_descriptor: "8-byte pointer to type_info's virtual table (the program's own `??_7type_info@@6B@`), 8-byte spare (the cached undecorated name pointer __std_type_info_name fills in), the decorated name from offset 16 ('.H', '.?AUS@@', '.PEAH', '.?AVM@inner@ns@@')"
+  reading_the_records: "the observed records are in rtti_locator_layout's output: for D : B, C (A twice): chd attributes 0x5, 5 bases [D mdisp 0 attr 0x40, B mdisp 0 attr 0x40, A mdisp 0 attr 0x42, C mdisp 24 attr 0x40, A mdisp 24 attr 0x42]; the vptr of the C subobject gives a locator with offset 24; for E : Solo, D the D part is at 8 and its C at 32; for VD : V1, V2 : virtual VA: the VA subobject's vptr gives a locator with offset 40 (VA at 40) and the bases V1 (mdisp 0), VA (pdisp 0, vdisp 4, attr 0x50), V2 (mdisp 16), VA again"
+rules:
+  pointer_results: "results are compared as offsets from the complete object in the tests: B* -> D*, C* -> D*, A* (either of the two As of a D) -> D* all find the D; sideways B* -> C* gives the C subobject (offset 24 in D); an A* that points at the A inside B or inside C is cast to C* or B* successfully, because the search starts from the COMPLETE object and the target type C or B is unique in it (the ambiguity of A does not matter); a downcast to a type the complete object is not gives null; casting a pointer to its own static type or to the type it already is works"
+  offsets_and_virtual_bases: "through a non-zero base offset (E : Solo, D: D at 8), the answer adds or removes the offsets; through virtual bases (VD : V1, V2 : virtual VA) the vbtable is used: VA* -> V2* gives the V2 subobject (16 in VD), V1* -> V2* sideways, V2* -> V1* and V2* -> VD* work, V1* -> VA* gives the shared virtual base (40)"
+  access: "a downcast from a base that is private or protected (PrivB : private A, ProtB : protected A, or a public derived class of such a class) gives null: the path is not accessible"
+  references: "a cast to a reference that fails throws std::bad_cast; its what() is \"Bad dynamic_cast!\" and its dynamic type is exactly std::bad_cast; a cast to a reference that succeeds returns the subobject and throws nothing"
+  during_construction: "while an object of a class is being constructed or destroyed its dynamic type is that class (the vptr is the class's own), so a dynamic_cast to the most derived class gives null there and a cast to the class itself works: `Probe : A` and `ProbeDerived : Probe`: in Probe's constructor and destructor dynamic_cast<Probe*> works, from ProbeDerived's constructor body dynamic_cast<ProbeDerived*> works"
+  null_pointer: "null stays null (the compiler does not test for null: the runtime function does)"
+errors:
+  bad_cast: "reference cast failure: std::bad_cast thrown from inside the function (the exception object is built by the runtime, type descriptor '.?AVbad_cast@std@@', what() \"Bad dynamic_cast!\")"
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 8  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+building_tests: >
+  The tests are C++ with the line `// poly-cxx: compiler=msvc`: their executables were built on the oracle
+  machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, ucrtbase.dll and kernel32.dll only. rtti_locator_layout
+  reads the locator and descriptor records the compiler emitted for its own classes and prints them: it is a
+  layout test, not a call of the function.

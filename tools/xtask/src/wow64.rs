@@ -17,7 +17,12 @@ use std::path::{Path, PathBuf};
 /// The build's flags, part of the cache key.
 const RUSTFLAGS: &str = "-Clinker=rust-lld -Clinker-flavor=lld-link -Clink-arg=/NODEFAULTLIB";
 /// The test programs' extra flags.
-const PROGRAM_FLAGS: &str = "-Clink-arg=/ENTRY:mainCRTStartup -Clink-arg=/SUBSYSTEM:CONSOLE";
+///
+/// `/safeseh:no`: lld marks an x86 image `NO_SEH` when it has no safe handler table, and the
+/// system then refuses every frame handler in it (SafeSEH, ADR 0186). The test programs register
+/// their own frames, so they are linked as legacy images (no table, no flag), as a compiler
+/// that does not know `/SAFESEH` makes them; `safeseh32` asks for a table (`programs_build_rs`).
+const PROGRAM_FLAGS: &str = "-Clink-arg=/ENTRY:mainCRTStartup -Clink-arg=/SUBSYSTEM:CONSOLE -Clink-arg=/safeseh:no";
 /// The target.
 pub const TARGET: &str = "i686-pc-windows-msvc";
 /// The environment variable that gives the kernel's `build.rs` the directory.
@@ -26,9 +31,50 @@ pub const KERNEL_ENV: &str = "POLY_WOW64_DIR";
 const PROGRAMS_DIR: &str = "tests/windows/wow64";
 /// The modules (in the cache under these names).
 /// `win32u`, `gdi32` and `user32` are the 32-bit GUI (ADR 0186 stage 4).
-pub const MODULES: &[&str] = &["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
+pub const CORE_MODULES: &[&str] =
+    &["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
+/// The other system DLLs 32-bit programs import (ADR 0186 stage 3), built from the same crates
+/// as the x64 ones in the Win32 workspace (the package is the file name without `.dll`).
+pub const SYSTEM_MODULES: &[&str] = &[
+    "advapi32.dll",
+    "ole32.dll",
+    "oleaut32.dll",
+    "shell32.dll",
+    "shlwapi.dll",
+    "comctl32.dll",
+    "version.dll",
+    "winmm.dll",
+    "ws2_32.dll",
+    "imm32.dll",
+    "uxtheme.dll",
+    "dwmapi.dll",
+    "shcore.dll",
+    "secur32.dll",
+    "crypt32.dll",
+    "winhttp.dll",
+    "iphlpapi.dll",
+    "wtsapi32.dll",
+    "oleacc.dll",
+    "powrprof.dll",
+    "userenv.dll",
+    "bcrypt.dll",
+    "bcryptprimitives.dll",
+    "ncrypt.dll",
+    "netapi32.dll",
+    "setupapi.dll",
+    "propsys.dll",
+    "wininet.dll",
+    "wintrust.dll",
+    "cfgmgr32.dll",
+    "dbghelp.dll",
+];
+
+/// Every module of the set, in the cache under these names.
+pub fn modules() -> impl Iterator<Item = &'static str> {
+    CORE_MODULES.iter().chain(SYSTEM_MODULES).copied()
+}
 /// The test programs (`tests/windows/wow64/<name>.rs`).
-pub const PROGRAMS: &[&str] = &["hello32", "gui32"];
+pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32", "safeseh32"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 /// Exports the kernel and every 32-bit program need from the i686 `ntdll`.
@@ -47,7 +93,7 @@ const NTDLL_REQUIRED: &[&str] = &[
 
 /// Every file the cache holds.
 fn outputs() -> Vec<String> {
-    MODULES.iter().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect()
+    modules().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect()
 }
 
 /// `cargo xtask wow64 [--cache-key]`: make sure the cached modules are up to date (building
@@ -101,22 +147,86 @@ pub fn ensure() -> Result<PathBuf> {
     Ok(cached)
 }
 
+/// The crates of the Win32 workspace that are test programs: built for x64 only.
+const TEST_CRATES: &[&str] = &[
+    "a32test",
+    "b35test",
+    "contest",
+    "crtiotest",
+    "crtloctest",
+    "crttest",
+    "cryptest",
+    "httptest",
+    "k32test",
+    "s1test",
+    "wstest",
+];
+
+/// Every `raw-dylib` link of a module that is also built for i686 must say how its names are
+/// bound there (`import_name_type = "undecorated"`: a 32-bit `stdcall` import is `_Name@N`
+/// otherwise, which no DLL exports), or be the x64-only half of a `cfg_attr` pair. A new link
+/// without it would only fail when a 32-bit program loads the DLL.
+pub fn check_links(root: &Path) -> Result {
+    fn visit(dir: &Path, bad: &mut Vec<String>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        for e in rd.flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|n| n != "target") {
+                    visit(&path, bad);
+                }
+            } else if path.extension().is_some_and(|x| x == "rs") {
+                let Ok(text) = std::fs::read_to_string(&path) else { continue };
+                for (i, line) in text.lines().enumerate() {
+                    if line.contains("kind = \"raw-dylib\"")
+                        && !line.contains("import_name_type")
+                        && !line.contains("not(target_arch = \"x86\")")
+                        && !line.trim_start().starts_with("//")
+                    {
+                        bad.push(format!("{}:{}", path.display(), i + 1));
+                    }
+                }
+            }
+        }
+    }
+    let win32 = root.join("personalities/nt/win32");
+    let mut bad = Vec::new();
+    let Ok(rd) = std::fs::read_dir(&win32) else { return Ok(()) };
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if e.path().is_dir() && !TEST_CRATES.contains(&name.as_str()) {
+            visit(&e.path().join("src"), &mut bad);
+        }
+    }
+    if bad.is_empty() {
+        return Ok(());
+    }
+    bad.sort();
+    Err(format!(
+        "raw-dylib links without a 32-bit form (ADR 0186): write `#[cfg_attr(target_arch = \"x86\", link(name = \"dll\", kind = \"raw-dylib\", import_name_type = \"undecorated\"))]` and `#[cfg_attr(not(target_arch = \"x86\"), link(name = \"dll\", kind = \"raw-dylib\"))]`:
+  {}",
+        bad.join("
+  ")
+    ))
+}
+
 /// The hash of everything the modules are built from.
 fn cache_key(root: &Path) -> Result<u64> {
+    let mut start: Vec<String> =
+        ["ntdll", "win32/rt", "win32/kernelbase", "win32/kernel32", "win32/win32u", "win32/gdi32", "win32/user32"]
+            .iter()
+            .map(|d| format!("personalities/nt/{d}"))
+            .collect();
+    start.extend(SYSTEM_MODULES.iter().map(|m| format!("personalities/nt/win32/{}", m.trim_end_matches(".dll"))));
+    let start: Vec<&str> = start.iter().map(String::as_str).collect();
     let files = crate::ntdll::inputs_from(
         root,
-        &[
-            "personalities/nt/ntdll",
-            "personalities/nt/win32/rt",
-            "personalities/nt/win32/kernelbase",
-            "personalities/nt/win32/kernel32",
-            "personalities/nt/win32/win32u",
-            "personalities/nt/win32/gdi32",
-            "personalities/nt/win32/user32",
-        ],
+        &start,
         &[
             "tests/windows/wow64/hello32.rs",
             "tests/windows/wow64/gui32.rs",
+            "tests/windows/wow64/sys32.rs",
+            "tests/windows/wow64/safeseh32.rs",
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",
@@ -174,10 +284,18 @@ fn cargo_build(manifest: &Path, target_dir: &Path, flags: &str, packages: &[&str
     Ok(cmd)
 }
 
+/// The build script of the test programs' package: `safeseh32` is linked with `/safeseh` after
+/// the `/safeseh:no` of the others (the last of the two wins).
+const PROGRAMS_BUILD_RS: &str = "// Generated by `cargo xtask wow64` (ADR 0186).
+fn main() {
+    println!(\"cargo:rustc-link-arg-bin=safeseh32=/safeseh\");
+}
+";
+
 /// The test programs' package: one binary per source.
 fn programs_manifest(root: &Path) -> String {
     let mut s = String::from(
-        "# Generated by `cargo xtask wow64` (ADR 0186).\n[workspace]\n\n[package]\nname = \"poly-wow64-tests\"\nversion = \"0.0.1\"\nedition = \"2024\"\npublish = false\n\n[profile.release]\npanic = \"abort\"\nopt-level = \"s\"\n",
+        "# Generated by `cargo xtask wow64` (ADR 0186).\n[workspace]\n\n[package]\nname = \"poly-wow64-tests\"\nbuild = \"build.rs\"\nversion = \"0.0.1\"\nedition = \"2024\"\npublish = false\n\n[profile.release]\npanic = \"abort\"\nopt-level = \"s\"\n",
     );
     // The compiler's 32-bit helper routines, which a C runtime would bring.
     let helpers = root.join("personalities/nt/msvc32");
@@ -197,6 +315,7 @@ poly-msvc32 = {{ path = {:?} }}
 
 /// Build everything into `target`; the directory with the outputs.
 fn build(root: &Path, target: &Path) -> Result<PathBuf> {
+    check_links(root)?;
     let out = target.join("out");
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let ntdll_target = target.join("ntdll");
@@ -206,35 +325,29 @@ fn build(root: &Path, target: &Path) -> Result<PathBuf> {
         &mut cargo_build(&root.join("personalities/nt/ntdll/Cargo.toml"), &ntdll_target, &flags, &[])?,
     )?;
     let win32_target = target.join("win32");
+    let packages: Vec<&str> = ["kernelbase", "kernel32", "win32u", "gdi32", "user32"]
+        .into_iter()
+        .chain(SYSTEM_MODULES.iter().map(|m| m.trim_end_matches(".dll")))
+        .collect();
     step(
-        "build the i686 kernelbase.dll, kernel32.dll, win32u.dll, gdi32.dll and user32.dll",
-        &mut cargo_build(
-            &root.join("personalities/nt/win32/Cargo.toml"),
-            &win32_target,
-            RUSTFLAGS,
-            &["kernelbase", "kernel32", "win32u", "gdi32", "user32"],
-        )?,
+        "build the i686 Win32 modules (kernelbase, kernel32, the GUI and the other system DLLs)",
+        &mut cargo_build(&root.join("personalities/nt/win32/Cargo.toml"), &win32_target, RUSTFLAGS, &packages)?,
     )?;
     let programs = target.join("programs");
     std::fs::create_dir_all(&programs).map_err(|e| format!("{}: {e}", programs.display()))?;
     let manifest = programs.join("Cargo.toml");
     std::fs::write(&manifest, programs_manifest(root)).map_err(|e| format!("{}: {e}", manifest.display()))?;
+    let build_rs = programs.join("build.rs");
+    std::fs::write(&build_rs, PROGRAMS_BUILD_RS).map_err(|e| format!("{}: {e}", build_rs.display()))?;
     let programs_target = target.join("programs-target");
     step(
         "build the 32-bit test programs",
         &mut cargo_build(&manifest, &programs_target, &format!("{RUSTFLAGS} {PROGRAM_FLAGS}"), &[])?,
     )?;
     let rel = |t: &Path, f: &str| t.join(TARGET).join("release").join(f);
-    let copies = [
-        (rel(&ntdll_target, "ntdll.dll"), "ntdll.dll".to_string()),
-        (rel(&win32_target, "kernelbase.dll"), "kernelbase.dll".to_string()),
-        (rel(&win32_target, "kernel32.dll"), "kernel32.dll".to_string()),
-        (rel(&win32_target, "win32u.dll"), "win32u.dll".to_string()),
-        (rel(&win32_target, "gdi32.dll"), "gdi32.dll".to_string()),
-        (rel(&win32_target, "user32.dll"), "user32.dll".to_string()),
-    ]
-    .into_iter()
-    .chain(PROGRAMS.iter().map(|p| (rel(&programs_target, &format!("{p}.exe")), format!("{p}.exe"))));
+    let copies = std::iter::once((rel(&ntdll_target, "ntdll.dll"), "ntdll.dll".to_string()))
+        .chain(modules().filter(|m| *m != "ntdll.dll").map(|m| (rel(&win32_target, m), m.to_string())))
+        .chain(PROGRAMS.iter().map(|p| (rel(&programs_target, &format!("{p}.exe")), format!("{p}.exe"))));
     for (from, to) in copies {
         std::fs::copy(&from, out.join(&to)).map_err(|e| format!("{}: {e}", from.display()))?;
     }
@@ -320,12 +433,33 @@ fn verify(dir: &Path) -> Result {
             }
         }
     }
+    // The other system DLLs (stage 3) import only from the set (`kernelbase` too: the API-set
+    // contracts forward there) and export undecorated names (no `_Name@N`).
+    let set: Vec<&str> = modules().collect();
+    for m in SYSTEM_MODULES {
+        let bytes = read(&dir.join(m))?;
+        let pe = parse(m, &bytes)?;
+        for (dll, names) in imports(m, &pe)? {
+            if !set.contains(&dll.as_str()) {
+                return Err(format!("the i686 {m} imports {dll}, which is not one of our 32-bit modules"));
+            }
+            // An import by a decorated name (`_NtClose@4`) binds to nothing: raw-dylib links of
+            // 32-bit code need `import_name_type = "undecorated"`.
+            let bad: Vec<&String> = names.iter().filter(|n| n.contains('@')).collect();
+            if !bad.is_empty() {
+                return Err(format!("the i686 {m} imports decorated names from {dll}: {bad:?}"));
+            }
+        }
+        if let Some(bad) = export_names(m, &pe)?.into_iter().find(|n| n.contains('@')) {
+            return Err(format!("the i686 {m} exports the decorated name {bad}"));
+        }
+    }
     for p in PROGRAMS {
         let file = format!("{p}.exe");
         let bytes = read(&dir.join(&file))?;
         let pe = parse(&file, &bytes)?;
         for dll in imports(&file, &pe)?.keys() {
-            if !ours.contains(&dll.as_str()) {
+            if !set.contains(&dll.as_str()) {
                 return Err(format!("{file} imports {dll}"));
             }
         }
@@ -339,9 +473,9 @@ fn verify(dir: &Path) -> Result {
 /// otherwise only fail when a program starts ("process start failed (0xc0000139)").
 fn verify_imports(dir: &Path) -> Result {
     let files: Vec<String> =
-        MODULES.iter().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
+        modules().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
     let mut exports = std::collections::BTreeMap::new();
-    for m in MODULES {
+    for m in modules() {
         let bytes = read(&dir.join(m))?;
         exports.insert(m.to_string(), export_names(m, &parse(m, &bytes)?)?);
     }
@@ -362,6 +496,12 @@ fn verify_imports(dir: &Path) -> Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_raw_dylib_link_of_the_win32_modules_has_a_32_bit_form() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        check_links(&root).unwrap();
+    }
 
     #[test]
     fn the_programs_package_lists_every_program() {

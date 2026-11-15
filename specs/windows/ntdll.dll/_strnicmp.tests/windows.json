@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "ntdll_strnicmp",
+      "exe_sha256": "7e61714390f6f7699b3d47d1e474e482ccfdfb91dbe7fb5f2dde756bf0bb959c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhwb3J0ZWQ6IHRydWUgaW4gbnRkbGwncyBpbWFnZTogdHJ1ZSBwYWdlIGlzIGV4ZWN1dGFibGU6IHRydWUKX3N0cm5pY21wKCJrZXJuZWwzMi5kbGwiIDZiLCAiS0VSTkVMMzIuRExMIiA0YiwgMTMpID0gMApfc3RybmljbXAoImFiYyIgNjEsICJhYmQiIDYxLCAzKSA9IC0xCl9zdHJuaWNtcCgiYWIiIDYxLCAiYWJjIiA2MSwgNSkgPSAtOTkKX3N0cm5pY21wKCJbIiA1YiwgImEiIDYxLCAxKSA9IC02Cl9zdHJuaWNtcCgiYSIgNjEsICJ6IiA3YSwgMSkgPSAtMjUKbnVsbF9iOiAweGMwMDAwMDA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "exported: true in ntdll's image: true page is executable: true\n_strnicmp(\"kernel32.dll\" 6b, \"KERNEL32.DLL\" 4b, 13) = 0\n_strnicmp(\"abc\" 61, \"abd\" 61, 3) = -1\n_strnicmp(\"ab\" 61, \"abc\" 61, 5) = -99\n_strnicmp(\"[\" 5b, \"a\" 61, 1) = -6\n_strnicmp(\"a\" 61, \"z\" 7a, 1) = -25\nnull_b: 0xc0000005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    },
+    {
+      "name": "ntdll_strnicmp_c",
+      "exe_sha256": "a4ad5d9ef9a5a3e67687e0dd1a3847a6723688077f2a089dc787226cb7680045",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "X3N0cm5pY21wKCJLRVJORUwzMi5ETEwiIDRiLCAia2VybmVsMzIuZGxsIiA2YiwgMTIpID0gMApfc3RybmljbXAoImFiYyIgNjEsICJhYmQiIDYxLCAyKSA9IDAKX3N0cm5pY21wKCJhYmMiIDYxLCAiYWIiIDYxLCA1KSA9IDk5Cl9zdHJuaWNtcCgiXyIgNWYsICJBIiA0MSwgMSkgPSAtMgpfc3RybmljbXAoIjxoaWdoIGJ5dGU+IiBlOSwgIkUiIDQ1LCAxKSA9IDEzMgpudWxsX2E6IDB4YzAwMDAwMDUKbnVsbF9hX24wOiAweDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "_strnicmp(\"KERNEL32.DLL\" 4b, \"kernel32.dll\" 6b, 12) = 0\n_strnicmp(\"abc\" 61, \"abd\" 61, 2) = 0\n_strnicmp(\"abc\" 61, \"ab\" 61, 5) = 99\n_strnicmp(\"_\" 5f, \"A\" 41, 1) = -2\n_strnicmp(\"<high byte>\" e9, \"E\" 45, 1) = 132\nnull_a: 0xc0000005\nnull_a_n0: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 83
+    }
+  ]
+}

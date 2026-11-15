@@ -54,7 +54,40 @@ pub const SUPPORT_DIR: &str = "tests/windows/cxx";
 /// The DLLs whose import libraries are made from `SUPPORT_DIR/<stem>.def`.
 pub const IMPORT_DLLS: &[&str] = &["kernel32", "msvcrt", "vcruntime140", "ucrtbase"];
 /// The DLLs a C++ test program may import from (by name).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "msvcrt.dll", "vcruntime140.dll", "ucrtbase.dll"];
+pub const ALLOWED_DLLS: &[&str] = &[
+    "ntdll.dll",
+    "kernel32.dll",
+    "msvcrt.dll",
+    "vcruntime140.dll",
+    "ucrtbase.dll",
+    // Programs built by Microsoft's compiler (`compiler=msvc`, below): the handler of the compressed
+    // exception tables and the C++ library.
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
+];
+
+/// Which compiler built a test program (the `compiler=` word of its `poly-cxx:` line).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Compiler {
+    /// clang++, by `win build` (ADR 0098).
+    #[default]
+    Clang,
+    /// Microsoft's `cl.exe /EHsc` on the oracle machine (`tools/pipeline/windows/msvc-build.ps1`), whose
+    /// executable is checked in beside the source as `<name>.exe`: the container has no Microsoft
+    /// compiler, and what the compiler writes (FH4's exception tables, Microsoft's class layouts) is
+    /// the point of such a test. `win build` takes the executable as it is.
+    Msvc,
+}
+
+impl Compiler {
+    pub fn parse(s: &str) -> Result<Compiler> {
+        match s {
+            "clang" => Ok(Compiler::Clang),
+            "msvc" => Ok(Compiler::Msvc),
+            _ => Err(format!("compiler {s:?} is not clang or msvc")),
+        }
+    }
+}
 
 /// Which DLL a C++ test takes its C++ runtime from (ADR 0199).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -93,6 +126,8 @@ impl Runtime {
 }
 /// Compiler options a `poly-cxx:` line may add.
 pub const ALLOWED_CFLAGS: &[&str] = &["-fasync-exceptions", "-O0", "-O1", "-O2"];
+/// What `cl=` may add for `compiler=msvc` (read by `msvc-build.ps1`, which checks the same list).
+pub const ALLOWED_CL_FLAGS: &[&str] = &["/EHsc", "/EHa", "/EHs", "/O1", "/O2", "/Od", "/GR", "/GR-"];
 /// What clang emits as the FuncInfo magic number (0x19930522).
 const CLANG_MAGIC: u32 = 0x1993_0522;
 
@@ -104,6 +139,9 @@ pub struct Directives {
     pub ehflags: Option<u32>,
     pub cflags: Vec<String>,
     pub runtime: Option<Runtime>,
+    pub compiler: Compiler,
+    /// Options for Microsoft's compiler (`cl=/EHa,/O2`); `/EHsc /O1 /GS- /Zl` are the defaults.
+    pub cl_flags: Vec<String>,
 }
 
 impl Directives {
@@ -149,6 +187,18 @@ pub fn directives(source: &str) -> Result<Directives> {
                     d.magic = Some(m);
                 }
                 "ehflags" => d.ehflags = Some(number(value)?),
+                "compiler" => d.compiler = Compiler::parse(value).map_err(|e| format!("poly-cxx: {e}"))?,
+                "cl" => {
+                    for f in value.split(',') {
+                        if !ALLOWED_CL_FLAGS.contains(&f) {
+                            return Err(format!(
+                                "poly-cxx: cl flag {f:?} is not one of {}",
+                                ALLOWED_CL_FLAGS.join(" ")
+                            ));
+                        }
+                        d.cl_flags.push(f.into());
+                    }
+                }
                 "runtime" => d.runtime = Some(Runtime::parse(value).map_err(|e| format!("poly-cxx: {e}"))?),
                 "cflags" => {
                     for f in value.split(',') {
@@ -367,6 +417,15 @@ pub fn build_one(
 ) -> Result<PathBuf> {
     let text = util::read_string(source)?;
     let d = directives(&text).map_err(|e| format!("{}: {e}", source.display()))?;
+    if d.compiler == Compiler::Msvc {
+        let prebuilt = source.with_extension("exe");
+        let exe = work.join(format!("{name}.exe"));
+        let bytes = util::read(&prebuilt).map_err(|e| {
+            format!("{name}: compiler=msvc needs {} (built on the oracle machine): {e}", prebuilt.display())
+        })?;
+        util::write(&exe, bytes)?;
+        return Ok(exe);
+    }
     let runtime = runtime.or(d.runtime).unwrap_or_default();
     let libs = libraries_for(libs, runtime);
     let mut flags = clang_flags(repo);
@@ -445,6 +504,7 @@ mod tests {
             ehflags: Some(0),
             cflags: vec![],
             runtime: None,
+            ..Directives::default()
         };
         let out = rewrite_assembly(ASM, &d).unwrap();
         let lines: Vec<&str> = out.lines().collect();

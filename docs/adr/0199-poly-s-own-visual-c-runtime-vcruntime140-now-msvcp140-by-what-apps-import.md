@@ -260,3 +260,31 @@ The owner answered the five questions this ADR put, each as recommended:
   are `_Query_perf_frequency`/`_Query_perf_counter` and the `char` stream members, and
   `__CxxFrameHandler4`.
 - `win polycheck` boots one more time (the `vcruntime140` pass).
+
+## Update 2026-11-15: owner decisions 2 and 3 taken, spec round 1 (spec-vcrt-1)
+
+The owner said yes to spec agents reading Microsoft's STL headers (layouts, sizes, offsets, vtable
+order, member meaning, as facts in sheets, never code; implementers never see them) and to Microsoft's
+C++ Build Tools on the oracle (homeserver2: Visual Studio Build Tools 14.44.35207, cl 19.44.35230,
+Windows SDK 10.0.22621.0 in `C:\BuildTools`; the Visual C++ Redistributable 14.44.35211 in
+System32). Microsoft's vcruntime/CRT sources stay off limits: FH4 was learned from the compiler's
+output for our own programs. Round 1 delivered:
+
+- **Pipeline:** `// poly-cxx: compiler=msvc` tests, built on the oracle by
+  `tools/pipeline/windows/msvc-build.ps1`, executables checked in beside the sources and taken as they
+  are by `win build`; `tests split` keeps `.cpp` and `.exe` together; file names escape characters a
+  Windows file name cannot hold in decorated names (`%3F`). See `docs/AGENT_PIPELINE.md`.
+- **Sheets:** `vcruntime140_1.dll/__CxxFrameHandler4` (the FH4 table format, from the compiler's own
+  listings, decoded and checked on 88 functions), `vcruntime140.dll/{__RTDynamicCast, __RTtypeid,
+  __RTCastToVoid, __std_type_info_name, __std_type_info_hash, __std_type_info_compare}`, and
+  `msvcp140.dll` clusters: time, `_Mtx_*`, `_Cnd_*`, `_Thrd_*`, the `_X*` throw helpers,
+  `_Throw_Cpp_error`, `uncaught_exceptions`, `_Lockit`. Hand-offs to `impl-vcrt`.
+- **Findings an implementer needs:** `__type_info_root_node` must be 16-byte aligned (the first
+  `type_info::name()` call faults otherwise); `__std_type_info_hash` is FNV-1a-64 of the decorated
+  name without its dot, folded `h ^ (h >> 32)`; `_Mtx_trylock` blocks on `_Mtx_plain` mutexes that
+  lack `_Mtx_try`; `_Mtx_internal_imp_t::_Thread_id` is -1 when unowned; with `/EHsc`, calls to
+  `extern "C"` functions are not covered by try blocks.
+- Not done: the stream classes (`basic_ios`, `basic_streambuf`, `basic_ostream`, `ios_base`
+  members), `locale` basics, `_Query_*` siblings beyond the sheets, exceptions across a DLL built by
+  Microsoft's compiler (only ucrtbase/kernel32 callbacks), i686.
+

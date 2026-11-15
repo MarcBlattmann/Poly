@@ -21,7 +21,8 @@ use poly_winsock::error::{STATUS_PENDING, wsa_of_status};
 
 type Handle = isize;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtDeviceIoControlFile(
         handle: Handle,
@@ -37,7 +38,8 @@ unsafe extern "system" {
     ) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SetLastError(e: u32);
 }
@@ -184,7 +186,8 @@ pub unsafe extern "system" fn ConnectEx(
     unsafe { request(s, proto::CONNECT_EX, &req.encode(), ov, sent) }
 }
 
-#[link(name = "ws2_32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ws2_32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ws2_32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn shutdown(s: usize, how: i32) -> i32;
 }
