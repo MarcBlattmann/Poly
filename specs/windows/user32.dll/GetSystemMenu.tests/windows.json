@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "gsm_items",
+      "exe_sha256": "4fd467f37f8e3c8021243ad114bba7c09c96419c433fb09339c3e86b07682162",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FwdGlvbiwgc3lzbWVudSwgdGhpY2sgZnJhbWUsIGJvdGggYm94ZXMsIG5vcm1hbCAoaXRlbXM7IGcgPSBncmF5ZWQpOiByZXN0b3JlIG1vdmUgc2l6ZSBtaW5pbWl6ZSBtYXhpbWl6ZSBzZXAgY2xvc2UKbWF4aW1pemVkOiByZXN0b3JlIG1vdmUgc2l6ZSBtaW5pbWl6ZSBtYXhpbWl6ZSBzZXAgY2xvc2UKbWluaW1pemVkOiByZXN0b3JlIG1vdmUgc2l6ZSBtaW5pbWl6ZSBtYXhpbWl6ZSBzZXAgY2xvc2UKcmVzdG9yZWQ6IHJlc3RvcmUgbW92ZSBzaXplIG1pbmltaXplIG1heGltaXplIHNlcCBjbG9zZQpubyB0aGljayBmcmFtZTogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCm5vIG1heGltaXplIGJveDogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCm5vIG1pbmltaXplIGJveDogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCm5vIGJveGVzOiByZXN0b3JlIG1vdmUgc2l6ZSBtaW5pbWl6ZSBtYXhpbWl6ZSBzZXAgY2xvc2UKbm8gV1NfU1lTTUVOVTogbm8gbWVudQpwb3B1cCB3aXRoIFdTX1NZU01FTlUgb25seTogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCnBsYWluIHBvcHVwOiBubyBtZW51CmRpYWxvZyBmcmFtZTogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCnRvb2wgd2luZG93OiByZXN0b3JlIG1vdmUgc2l6ZSBtaW5pbWl6ZSBtYXhpbWl6ZSBzZXAgY2xvc2UKY2xhc3Mgc3R5bGUgQ1NfTk9DTE9TRTogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUKaGlkZGVuIHdpbmRvdzogcmVzdG9yZSBtb3ZlIHNpemUgbWluaW1pemUgbWF4aW1pemUgc2VwIGNsb3NlCmhhbmRsZTogbm90IE5VTEwgdHJ1ZSwgdGhlIHNhbWUgZXZlcnkgdGltZSB0cnVlLCBJc01lbnUgMSwgR2V0TWVudSh3aW5kb3cpIGlzIE5VTEwgdHJ1ZSwgYSBwb3B1cCBtZW51IG9mIGl0cyBvd246IElzTWVudShtKSBhZnRlciBhIHN1YiBxdWVyeSAxCmFmdGVyIGFwcGVuZGluZyBhIHNlcGFyYXRvciBhbmQgYW4gaXRlbTogMiBpdGVtcyBtb3JlLCBjbG9zZSBncmF5ZWQgdHJ1ZQpHZXRTeXN0ZW1NZW51KHdpbmRvdywgVFJVRSkgcmV0dXJucyBOVUxMOiB0cnVlLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQphZnRlciB0aGUgcmV2ZXJ0OiB0cnVlIGl0ZW1zIGFnYWluLCBjbG9zZSBub3QgZ3JheWVkIHRydWUsIHRoZSBvbGQgaGFuZGxlIHN0aWxsIGEgbWVudSAwCmEgY2hpbGQgd2luZG93IHdpdGggV1NfU1lTTUVOVTogbWVudSByZXR1cm5lZCwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKTlVMTCB3aW5kb3c6IE5VTEwgKGxhc3QgZXJyb3IgMTQwMCkKaW52YWxpZCBoYW5kbGU6IE5VTEwgKGxhc3QgZXJyb3IgMTQwMCkKTlVMTCB3aW5kb3cgd2l0aCByZXZlcnQ6IE5VTEwgKGxhc3QgZXJyb3IgMTQwMCkKdGhlIGRlc2t0b3Agd2luZG93OiBOVUxMCnRoZSBtZW51IG9mIGEgZGVzdHJveWVkIHdpbmRvdyBpcyBubyBtZW51IGFueSBtb3JlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caption, sysmenu, thick frame, both boxes, normal (items; g = grayed): restore move size minimize maximize sep close\nmaximized: restore move size minimize maximize sep close\nminimized: restore move size minimize maximize sep close\nrestored: restore move size minimize maximize sep close\nno thick frame: restore move size minimize maximize sep close\nno maximize box: restore move size minimize maximize sep close\nno minimize box: restore move size minimize maximize sep close\nno boxes: restore move size minimize maximize sep close\nno WS_SYSMENU: no menu\npopup with WS_SYSMENU only: restore move size minimize maximize sep close\nplain popup: no menu\ndialog frame: restore move size minimize maximize sep close\ntool window: restore move size minimize maximize sep close\nclass style CS_NOCLOSE: restore move size minimize maximize\nhidden window: restore move size minimize maximize sep close\nhandle: not NULL true, the same every time true, IsMenu 1, GetMenu(window) is NULL true, a popup menu of its own: IsMenu(m) after a sub query 1\nafter appending a separator and an item: 2 items more, close grayed true\nGetSystemMenu(window, TRUE) returns NULL: true, last error left alone true\nafter the revert: true items again, close not grayed true, the old handle still a menu 0\na child window with WS_SYSMENU: menu returned, last error left alone true\nNULL window: NULL (last error 1400)\ninvalid handle: NULL (last error 1400)\nNULL window with revert: NULL (last error 1400)\nthe desktop window: NULL\nthe menu of a destroyed window is no menu any more: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 272
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "dcgdi_color",
+      "exe_sha256": "1108c3536e48d76d7789d8c70cfd9c3b6fb70495021c034ba3edb2a2409662ee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWR2YW5jZWQgY29sb3I6IHJldHVybnMgMCwgc2l6ZSAzMiwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKYWR2YW5jZWQgY29sb3I6IGJpdHMgNCBhbmQgdXAgb2YgdGhlIHZhbHVlIGtlcHQgYXMgcGFzc2VkIHRydWUsIGJpdHMgMCB0byAzIChzdXBwb3J0ZWQsIGVuYWJsZWQsIHdpZGUgY29sb3IgZW5mb3JjZWQsIGZvcmNlIGRpc2FibGVkKSB3cml0dGVuOiAweDAsIGVuY29kaW5nIDAgKFJHQiksIGJpdHMgcGVyIGNoYW5uZWwgOAphZHZhbmNlZCBjb2xvciB3aXRoIHRoZSBzb3VyY2UgaWQ6IHJldHVybnMgMzEKU0RSIHdoaXRlIGxldmVsOiByZXR1cm5zIDAsIHNpemUgMjQsIGxldmVsIDEwMDAKc3VwcG9ydCB2aXJ0dWFsIHJlc29sdXRpb246IHJldHVybnMgMCwgZmllbGQgKGRpc2FibGVkIGZsYWcpIDAKc3VwcG9ydCB2aXJ0dWFsIHJlc29sdXRpb24gd2l0aCBoZWFkZXIgc2l6ZSAyODogcmV0dXJucyA4Nwp0YXJnZXQgcHJlZmVycmVkIG1vZGU6IHJldHVybnMgMCwgbm9uIGVtcHR5IHNpemUgdHJ1ZQphZHZhbmNlZCBjb2xvciBhc2tlZCB0d2ljZSBnaXZlcyB0aGUgc2FtZSBhbnN3ZXI6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "advanced color: returns 0, size 32, last error left alone true\nadvanced color: bits 4 and up of the value kept as passed true, bits 0 to 3 (supported, enabled, wide color enforced, force disabled) written: 0x0, encoding 0 (RGB), bits per channel 8\nadvanced color with the source id: returns 31\nSDR white level: returns 0, size 24, level 1000\nsupport virtual resolution: returns 0, field (disabled flag) 0\nsupport virtual resolution with header size 28: returns 87\ntarget preferred mode: returns 0, non empty size true\nadvanced color asked twice gives the same answer: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "dcgdi_names",
+      "exe_sha256": "15308cf9e91fb420e281e1b7f78f200fc8778f53b0770541287b9900de7aec71",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWN0aXZlIHBhdGhzOiByZXR1cm5zIDAsIGF0IGxlYXN0IG9uZSB0cnVlCnNvdXJjZSBuYW1lOiByZXR1cm5zIDAsIHNpemUgODQsIGhlYWRlciB1bmNoYW5nZWQgdHJ1ZSwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKc291cmNlIG5hbWU6IGJlZ2lucyB3aXRoIFxcLlxESVNQTEFZIHRydWUsIHRoZW4gdGhlIGRlY2ltYWwgbnVtYmVyIHRydWUgKHNvdXJjZSBpZCArIDEgdHJ1ZSksIG5vdGhpbmcgZWxzZSB0cnVlLCByZW1haW5kZXIgb2YgdGhlIGJ1ZmZlciB6ZXJvZWQgdHJ1ZQpzb3VyY2UgbmFtZSBlcXVhbHMgdGhlIGRldmljZSBuYW1lIG9mIHRoZSBwcmltYXJ5IG1vbml0b3IgZnJvbSBHZXRNb25pdG9ySW5mb1c6IHRydWUKdGFyZ2V0IG5hbWU6IHJldHVybnMgMCwgc2l6ZSA0MjAsIGxhc3QgZXJyb3IgbGVmdCBhbG9uZSB0cnVlCnRhcmdldCBuYW1lOiBvdXRwdXQgdGVjaG5vbG9neSBlcXVhbHMgdGhlIHBhdGgncyB0cnVlLCBmcmllbmRseSBuYW1lIHNob3J0ZXIgdGhhbiA2NCBjaGFyYWN0ZXJzIHRydWUsIGZsYWdzIHVzZSBvbmx5IHRoZSB0aHJlZSBkZWZpbmVkIGJpdHMgdHJ1ZQp0YXJnZXQgbmFtZTogZGV2aWNlIHBhdGggYmVnaW5zIHdpdGggXFw/XERJU1BMQVkjIHRydWUsIGVuZHMgd2l0aCAje2U2ZjA3YjVmLWVlOTctNGE5MC1iMDc2LTMzZjU3YmY0ZWFhN30gdHJ1ZSwgaG9sZHMgVUlEPHRhcmdldCBpZD4gdHJ1ZQp0YXJnZXQgbmFtZTogYW4gZW1wdHkgZnJpZW5kbHkgbmFtZSBnb2VzIHdpdGggZmxhZyBiaXQgMSAoZnJpZW5kbHlOYW1lRm9yY2VkKSBzZXQgdHJ1ZQp0YXJnZXQgbmFtZTogZWRpZCBpZHMgdmFsaWQgKGZsYWcgYml0IDIpIGFncmVlcyB3aXRoIG5vbiB6ZXJvIGVkaWQgaWRzIHRydWUKYWRhcHRlciBuYW1lOiByZXR1cm5zIDAsIHNpemUgMjc2LCBkZXZpY2UgcGF0aCBiZWdpbnMgd2l0aCBcXD9cIHRydWUsIGVuZHMgd2l0aCAjezViNDUyMDFkLWYyZjItNGYzYi04NWJiLTMwZmYxZjk1MzU5OX0gdHJ1ZQphZGFwdGVyIG5hbWUgd2l0aCBhbm90aGVyIGlkOiByZXR1cm5zIDAsIHRoZSBzYW1lIHBhdGggdHJ1ZQp0YXJnZXQgYmFzZSB0eXBlOiByZXR1cm5zIDAsIHNpemUgMjQsIGVxdWFscyB0aGUgcGF0aCdzIG91dHB1dCB0ZWNobm9sb2d5IHRydWUKdGhlIG91dHB1dCB0ZWNobm9sb2d5IGlzIG9uZSBvZiB0aGUgZG9jdW1lbnRlZCB2YWx1ZXMgKC0xLCAwIHRvIDE2LCAweDgwMDAwMDAwKTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "active paths: returns 0, at least one true\nsource name: returns 0, size 84, header unchanged true, last error left alone true\nsource name: begins with \\\\.\\DISPLAY true, then the decimal number true (source id + 1 true), nothing else true, remainder of the buffer zeroed true\nsource name equals the device name of the primary monitor from GetMonitorInfoW: true\ntarget name: returns 0, size 420, last error left alone true\ntarget name: output technology equals the path's true, friendly name shorter than 64 characters true, flags use only the three defined bits true\ntarget name: device path begins with \\\\?\\DISPLAY# true, ends with #{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7} true, holds UID<target id> true\ntarget name: an empty friendly name goes with flag bit 1 (friendlyNameForced) set true\ntarget name: edid ids valid (flag bit 2) agrees with non zero edid ids true\nadapter name: returns 0, size 276, device path begins with \\\\?\\ true, ends with #{5b45201d-f2f2-4f3b-85bb-30ff1f953599} true\nadapter name with another id: returns 0, the same path true\ntarget base type: returns 0, size 24, equals the path's output technology true\nthe output technology is one of the documented values (-1, 0 to 16, 0x80000000): true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}
