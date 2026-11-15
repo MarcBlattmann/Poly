@@ -400,7 +400,9 @@ mod tests {
         assert_eq!(d.file_symbol(), "%3F_Xbad_alloc@std@@YAXXZ");
         assert_eq!(d.spec_path(), Path::new("specs/windows/msvcp140.dll/%3F_Xbad_alloc@std@@YAXXZ.yaml"));
         assert_eq!(d.tests_dir(), Path::new("specs/windows/msvcp140.dll/%3F_Xbad_alloc@std@@YAXXZ.tests"));
-        let w = EntryId::parse("windows/api/msvcp140.dll/??6?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAAEAV01@H@Z").unwrap();
+        let w =
+            EntryId::parse("windows/api/msvcp140.dll/??6?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAAEAV01@H@Z")
+                .unwrap();
         assert!(!w.file_symbol().contains('?'));
         assert_eq!(EntryId::parse("windows/api/a.dll/100%").unwrap().file_symbol(), "100%25");
         assert!(EntryId::parse("linux/syscall/write").is_err());
