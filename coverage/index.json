@@ -21,6 +21,10 @@
       "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
       "revision": "ADR 0132"
     },
+    "windows-com-state": {
+      "description": "COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls)",
+      "revision": "Windows 11 25H2 build 26200.9974"
+    },
     "windows-export-probe": {
       "description": "Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b)",
       "revision": "Windows 11 25H2 build 26200.9974"

@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CLSID_StdGlobalInterfaceTable.yaml
+id: windows/api/ole32.dll/CLSID_StdGlobalInterfaceTable
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-com-ole-tls
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, with an object of their own that implements IUnknown only
+  and counts its references. Microsoft Learn: "IGlobalInterfaceTable interface (objidl.h)",
+  "IGlobalInterfaceTable::RegisterInterfaceInGlobal", "::GetInterfaceFromGlobal", "::RevokeInterfaceFromGlobal",
+  "CoCreateInstance", "CoWaitForMultipleHandles"; objidl.h (the interface's vtable order: QueryInterface, AddRef,
+  Release, RegisterInterfaceInGlobal, RevokeInterfaceFromGlobal, GetInterfaceFromGlobal; IID_IGlobalInterfaceTable
+  00000146-0000-0000-C000-000000000046; CLSID_StdGlobalInterfaceTable 00000323-0000-0000-C000-000000000046);
+  winerror.h (E_INVALIDARG 0x80070057, E_NOINTERFACE 0x80004002, REGDB_E_CLASSNOTREG 0x80040154,
+  CLASS_E_NOAGGREGATION 0x80040110, CO_E_NOTINITIALIZED 0x800401F0). Wine's tests were not read. The hunt
+  `fable-c62f809` expects Chrome's component updater to ask COM for this table right after its apartment check.
+summary: >
+  The process-wide global interface table. CoCreateInstance(CLSID_StdGlobalInterfaceTable, NULL, CLSCTX_INPROC_SERVER,
+  IID_IGlobalInterfaceTable) gives S_OK on an initialised thread of any apartment model, and every thread gets the same
+  table object. RegisterInterfaceInGlobal stores an interface pointer (one reference of the object is added) and returns
+  a cookie (non-zero, different for every registration, never reused); GetInterfaceFromGlobal gives back the object itself
+  in the registering apartment and a proxy in another one; RevokeInterfaceFromGlobal removes the registration and its
+  reference. A cookie that is not registered gives E_INVALIDARG (0x80070057) with a NULL output. A registration ends when
+  the apartment that made it calls its last CoUninitialize.
+interface:
+  signature: "HRESULT CoCreateInstance(REFCLSID, LPUNKNOWN outer, DWORD context, REFIID, LPVOID*); HRESULT IGlobalInterfaceTable::RegisterInterfaceInGlobal(IUnknown* object, REFIID iid, DWORD* cookie); HRESULT RevokeInterfaceFromGlobal(DWORD cookie); HRESULT GetInterfaceFromGlobal(DWORD cookie, REFIID iid, void** object)"
+chrome:
+  calls: "none yet: the browser's component updater asks for this class after its apartment check (hand-off fable-c62f809); the arguments it uses are not known"
+rules:
+  create: "on a thread with COM initialised (apartment threaded or multithreaded): context CLSCTX_INPROC_SERVER (1), CLSCTX_ALL (0x17) and 1|4 (5): S_OK with the interface; context 0, CLSCTX_LOCAL_SERVER (4) and CLSCTX_REMOTE_SERVER (0x10): REGDB_E_CLASSNOTREG 0x80040154, output NULL. Asking for IID_IUnknown: S_OK; for IID_IMarshal: E_NOINTERFACE 0x80004002, output NULL; with a non-NULL outer unknown: CLASS_E_NOAGGREGATION 0x80040110 and the outer object is not touched (its reference count stays). On a thread that never initialised COM: CO_E_NOTINITIALIZED 0x800401F0, output NULL."
+  singleton: "a second CoCreateInstance on the same thread gives the same interface pointer; the table created in a multithreaded thread is the same one as in an apartment-threaded thread of the same process (same interface pointer). The table has IUnknown and IGlobalInterfaceTable; QueryInterface(IMarshal) is E_NOINTERFACE."
+  register: "RegisterInterfaceInGlobal(object, IID_IUnknown, &cookie) is S_OK, the cookie is non-zero and the object's reference count goes up by 1 (observed 1 to 2). The same object registered again is S_OK with a different cookie and a count of 3. The interface id is not checked against the object at registration: IID_IMarshal for an object that has no IMarshal is S_OK with a non-zero cookie; GetInterfaceFromGlobal on that cookie then gives E_NOINTERFACE for IID_IMarshal and S_OK (the object) for IID_IUnknown. After revoking and registering again the new cookie equals none of the earlier ones."
+  get_same_apartment: "GetInterfaceFromGlobal(cookie, IID_IUnknown, &p) in the registering apartment is S_OK and p is the registered pointer itself (the object); one reference is added (3 to 4), released by the caller (back to 3); the registration stays and can be fetched again. For an interface the object does not have (IID_IMarshal): E_NOINTERFACE 0x80004002, the output is set to NULL and the reference count does not change."
+  revoke: "RevokeInterfaceFromGlobal(cookie) is S_OK and removes the reference the table held (3 to 2; after revoking both cookies back to 1). Afterwards GetInterfaceFromGlobal and RevokeInterfaceFromGlobal of that cookie are E_INVALIDARG 0x80070057 (the Get output is NULL); other cookies keep working."
+  bad_cookies: "cookies nobody registered: 0, 1, 0x1234 and 0xFFFFFFFF: both Get (output NULL) and Revoke give E_INVALIDARG 0x80070057."
+  across_apartments: "registered in an apartment-threaded thread and fetched in a multithreaded one (and the other way round, and between two apartment-threaded threads): GetInterfaceFromGlobal is S_OK and the interface returned is not the registered pointer (a proxy: its QueryInterface(IUnknown) is S_OK). While the registration exists the object's reference count is 2 (the table's), after the other apartment's proxy was released and the registration revoked it is 1. The registering apartment must be able to serve calls (the tests wait with CoWaitForMultipleHandles, flags COWAIT_DISPATCH_CALLS|COWAIT_DISPATCH_WINDOW_MESSAGES, in the apartment-threaded thread); the multithreaded side needs no pumping."
+  revoke_other_apartment: "a registration made in an apartment-threaded thread can be revoked from a multithreaded thread (S_OK); the registering thread's GetInterfaceFromGlobal of that cookie afterwards is E_INVALIDARG."
+  registrant_ends: "after the registering apartment-threaded thread called its last CoUninitialize (while another apartment-threaded thread of the process is still there), GetInterfaceFromGlobal of its cookie from that other thread is E_INVALIDARG 0x80070057, output NULL; while the registering thread was still alive and serving calls the same call was S_OK (proxy)."
+errors:
+  invalid_cookie: "E_INVALIDARG 0x80070057 (a cookie that is 0, never issued, revoked, or whose registering apartment is gone)"
+  no_interface: "E_NOINTERFACE 0x80004002 (an interface id the registered object does not support, or IID_IMarshal for the table)"
+  not_registered: "REGDB_E_CLASSNOTREG 0x80040154 (class contexts without in-process)"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  no_aggregation: "CLASS_E_NOAGGREGATION 0x80040110"
+side_effects: "the registered object gets one reference per registration; the table keeps it until the cookie is revoked or the registering apartment ends"
+threading: "the table is usable from every apartment of the process (free threaded); the interface pointers it returns belong to the apartment of the caller"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle in the same apartment; calls into another apartment wait until it serves them"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, objidl.h constants). The
+  objects of the tests are static structures with a three-slot vtable (QueryInterface, AddRef, Release) that count their
+  references. Observations are HRESULTs, booleans and reference counts, never addresses or cookie values. Every
+  scenario runs on its own threads and the parent prints their lines after joining them; waits are bounded (10 s).
+not_covered: >
+  Objects that implement IMarshal or other interfaces with a registered proxy (the tests marshal IUnknown only), the
+  neutral apartment, free-threaded-marshaler objects, registration from threads that have ended abnormally, the number
+  of cookies a table can hold, NULL pointers (not tested: Windows may crash), and what the table does when the process's
+  last apartment ends.
