@@ -133,7 +133,7 @@ pub trait NtSocket: Send + Sync + core::fmt::Debug {
     fn as_any(&self) -> &dyn core::any::Any;
 }
 
-//// An overlapped request the kernel finishes later
+/// An overlapped request the kernel finishes later
 /// ([`crate::kernel::NtKernel::socket_pend`]): the waiting request packet
 /// and what to do. The kernel completes it with
 /// [`crate::io::IoState::complete`] (a receive's data written to `buf`).
@@ -152,9 +152,17 @@ pub struct PendIo {
 /// An overlapped request's work.
 #[derive(Debug)]
 pub enum PendOp {
-    Recv { buf: u64, len: usize, peek: bool },
+    Recv {
+        buf: u64,
+        len: usize,
+        peek: bool,
+    },
     /// A send of `data` (a stream's: `done` bytes of it already went; the request completes when all did).
-    Send { data: Vec<u8>, to: Option<SocketAddr>, done: usize },
+    Send {
+        data: Vec<u8>,
+        to: Option<SocketAddr>,
+        done: usize,
+    },
     /// `AcceptEx`: the listener is the request's socket; `target` is the file object of the
     /// endpoint that takes the connection; the buffer is `recv_len` data bytes, then the local and
     /// the remote address in `local_len` and `remote_len` bytes each.
@@ -167,7 +175,12 @@ pub enum PendOp {
         conn: Option<(Arc<dyn NtSocket>, SocketAddr)>,
     },
     /// `ConnectEx`: connect the request's socket to `addr`, then send `data`.
-    Connect { target: u64, addr: SocketAddr, started: bool, data: Vec<u8> },
+    Connect {
+        target: u64,
+        addr: SocketAddr,
+        started: bool,
+        data: Vec<u8>,
+    },
 }
 
 /// What a finished `AcceptEx` or `ConnectEx` changes in an endpoint: the connection (for `AcceptEx`,

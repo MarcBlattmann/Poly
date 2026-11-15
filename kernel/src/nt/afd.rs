@@ -21,6 +21,7 @@ use crate::net::file::{InetSocket, errno as net_errno};
 use crate::sync::Mutex;
 use crate::thread::{self, WaitQueue};
 use crate::{net, time, user};
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -390,7 +391,7 @@ static KICKED: AtomicBool = AtomicBool::new(false);
 static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Queue an overlapped request for the worker (started on first use).
-pub(super) fn pend(io: PendIo) -> Result<(), PendIo> {
+pub(super) fn pend(io: PendIo) -> Result<(), Box<PendIo>> {
     if !STARTED.swap(true, Ordering::SeqCst) {
         match thread::spawn_named("nt-afd", worker_main, 0) {
             Ok(tid) => {
@@ -398,7 +399,7 @@ pub(super) fn pend(io: PendIo) -> Result<(), PendIo> {
             }
             Err(_) => {
                 STARTED.store(false, Ordering::SeqCst);
-                return Err(io);
+                return Err(Box::new(io));
             }
         }
     }

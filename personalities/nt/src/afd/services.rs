@@ -1231,7 +1231,9 @@ fn stack_set(sock: &Arc<dyn NtSocket>, fam_v4: bool, level: i32, name: i32, valu
             }
             sock.set_option(SockOption::NoDelay(on)).map_err(status_of)?;
         }
-        (IPPROTO_TCP, TCP_KEEPALIVE) if tcp => sock.set_option(SockOption::KeepIdle(int_of(value)?)).map_err(status_of)?,
+        (IPPROTO_TCP, TCP_KEEPALIVE) if tcp => {
+            sock.set_option(SockOption::KeepIdle(int_of(value)?)).map_err(status_of)?
+        }
         (IPPROTO_TCP, TCP_KEEPINTVL) if tcp => {
             sock.set_option(SockOption::KeepIntvl(int_of(value)?)).map_err(status_of)?
         }
@@ -1265,8 +1267,11 @@ fn set_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
         return Err(STATUS_INVALID_PARAMETER);
     }
     let stored_flag = |k: &mut K, level: i32, name: i32| -> bool {
-        k.with_state(|sys, _, _| endpoint(sys, cookie).map(|e| e.stored.get(&(level, name)).is_some_and(|v| v.first().is_some_and(|b| *b != 0))))
-            .unwrap_or(false)
+        k.with_state(|sys, _, _| {
+            endpoint(sys, cookie)
+                .map(|e| e.stored.get(&(level, name)).is_some_and(|v| v.first().is_some_and(|b| *b != 0)))
+        })
+        .unwrap_or(false)
     };
     // What is kept for reading back: BOOL options as one byte, the others as a DWORD.
     let mut keep: Option<Vec<u8>> = None;
@@ -1387,12 +1392,14 @@ fn get_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
         return Err(STATUS_INVALID_PARAMETER);
     }
     let (stored, timeouts, conn_error, connected) = k.with_state(|sys, _, _| {
-        endpoint(sys, cookie).map(|e| (e.stored.get(&(level, name)).cloned(), (e.rcv_timeout, e.snd_timeout), e.conn_error, e.connected))
+        endpoint(sys, cookie)
+            .map(|e| (e.stored.get(&(level, name)).cloned(), (e.rcv_timeout, e.snd_timeout), e.conn_error, e.connected))
     })?;
     let int = |v: u32| done(STATUS_SUCCESS, 4, v.to_le_bytes().to_vec());
     let byte = |v: bool| done(STATUS_SUCCESS, 1, alloc::vec![u8::from(v)]);
     let flag_of = |stored: &Option<Vec<u8>>| stored.as_ref().and_then(|v| v.first().copied()).is_some_and(|b| b != 0);
-    let int_of_stored = |stored: &Option<Vec<u8>>, default: u32| stored.as_ref().and_then(|v| afd::read_u32(v, 0)).unwrap_or(default);
+    let int_of_stored =
+        |stored: &Option<Vec<u8>>, default: u32| stored.as_ref().and_then(|v| afd::read_u32(v, 0)).unwrap_or(default);
     let from_stack = |q: OptQuery| sock.get_option(q).map_err(status_of);
     match (level, name) {
         (SOL_SOCKET, SO_TYPE) => int(s.ty as u32),

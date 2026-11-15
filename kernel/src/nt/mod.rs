@@ -816,7 +816,10 @@ impl NtKernel for Kernel {
         Ok(afd::poll_sockets(socks, wait))
     }
 
-    fn socket_pend(&mut self, io: poly_personality_nt::afd::PendIo) -> Result<(), poly_personality_nt::afd::PendIo> {
+    fn socket_pend(
+        &mut self,
+        io: poly_personality_nt::afd::PendIo,
+    ) -> Result<(), alloc::boxed::Box<poly_personality_nt::afd::PendIo>> {
         afd::pend(io)
     }
 

@@ -76,7 +76,11 @@ pub fn select_interest(read: bool, write: bool, except: bool) -> u32 {
 
 /// Whether a socket with the device's `revents` is in each `select` set.
 pub fn select_ready(revents: u32) -> (bool, bool, bool) {
-    (revents & RDNORM != 0 || (revents & HUP != 0 && revents & ERR == 0), revents & WRNORM != 0 && revents & ERR == 0, revents & ERR != 0)
+    (
+        revents & RDNORM != 0 || (revents & HUP != 0 && revents & ERR == 0),
+        revents & WRNORM != 0 && revents & ERR == 0,
+        revents & ERR != 0,
+    )
 }
 
 /// `WSAPoll`'s `events` as the device's interest: `POLLIN` asks for
