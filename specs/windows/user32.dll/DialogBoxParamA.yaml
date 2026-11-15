@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DialogBoxParamA.yaml
+id: windows/api/user32.dll/DialogBoxParamA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Runs a modal dialog from a template resource given by number or ANSI name; the same behaviour as DialogBoxParamW except that the dialog and its controls are ANSI windows and the dialog procedure gets strings as bytes.
+interface:
+  signature: "INT_PTR DialogBoxParamA(HINSTANCE hInstance, LPCSTR lpTemplateName, HWND hWndParent, DLGPROC lpDialogFunc, LPARAM dwInitParam)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  same_as_wide: "WM_SETFONT and WM_INITDIALOG (lParam as given), the window styles (0x84C800C4 and extended 0x10101 for the first template), the child ids, classes, styles and texts, the first tab stop as wParam of WM_INITDIALOG, the value of EndDialog coming back unchanged for 0, 1, -1, 0x7FFFFFFF, 0x100000000, -0x100000000, isize::MAX and isize::MIN, EndDialog from a posted message (105), WM_INITDIALOG returning TRUE or FALSE, a NULL module (the executable) and the names ('NAMEDDLG', 'nameddlg') all give the same observations as for DialogBoxParamW"
+  ansi_windows: "the dialog and every control have IsWindowUnicode 0; the texts of the template are converted to the ANSI code page when the control is created: the dialog title 'Mnemonics <U+00E9><U+4E2D>' reads as 'Mnemonics <E9>?' (also through GetWindowTextW as 'Mnemonics <U+00E9>?'), the control '&<U+00DC>ber:' as '&<DC>ber:'; the same template through DialogBoxParamW has a Unicode dialog whose texts keep U+4E2D"
+  dialog_procedure: "SendMessageA(WM_SETTEXT) and SendMessageW(WM_SETTEXT) both arrive as bytes in the ANSI dialog procedure ('Titl<E9> A', 'caf<E9>??<80>'); SetWindowTextA arrives as bytes; WM_USER+5 / +6 pass unchanged"
+errors:
+  template: "a missing number, a missing name and the number of a menu resource: -1 with ERROR_RESOURCE_NAME_NOT_FOUND (1814); a made-up module: -1 with 1812; an unknown control class: -1 with 1407; a bad parent: 0 with 1400"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

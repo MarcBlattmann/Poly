@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/ImageList_DrawEx.yaml
+id: windows/api/comctl32.dll/ImageList_DrawEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Draws an image like ImageList_Draw with a size and two colours: the image is stretched to dx by dy, rgbBk replaces the list's background colour and rgbFg is the colour of the blend styles.
+interface:
+  signature: "BOOL ImageList_DrawEx(HIMAGELIST himl, int i, HDC hdcDst, int x, int y, int dx, int dy, COLORREF rgbBk, COLORREF rgbFg, UINT fStyle)"
+rules:
+  size: "dx and dy of 0 draw the image's own size (the same pixels as ImageList_Draw); other values stretch the image: 4 x 4 gives 16 pixels, 4 x 0 gives 4 x 8 (32), 0 x 3 gives 8 x 3 (24), 16 x 16 fills a 16 x 16 square (clipped at the target), 100 x 100 fills the target; -1 x -1 draws nothing (result TRUE)"
+  background: "rgbBk CLR_NONE leaves masked pixels as they are (32 pixels changed) and ILD_TRANSPARENT does the same for an explicit colour; an explicit colour (yellow) fills the masked pixels with it (64 pixels); CLR_DEFAULT (0xFF000000) uses the list's background colour (dark blue 0x800000 in BGR gave #000080 for the masked pixels) and CLR_NONE ignores it"
+  blend: "with ILD_BLEND50 or ILD_BLEND25 rgbFg is the blend colour: cyan gives #00FFFF at the blended pixels (1,1) and (6,6) over the green image; CLR_DEFAULT gives the highlight colour #0078D4; CLR_NONE draws only the checkerboard of plain image pixels ((1,1) and (6,6) green, the pixels (6,1) and (1,6) stay the background); an rgbFg without a blend style changes nothing"
+  mask_and_image: "ILD_MASK draws the mask (white #FFFFFF where the mask is transparent when a background is given, black for the opaque pixels); ILD_IMAGE draws the colour data without the mask"
+  result: "TRUE; for a NULL list FALSE; a NULL device context returns TRUE"
+errors:
+  bad_index: "an index past the end and -1: FALSE, the last error is not changed"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  The screen DC and device-dependent bitmaps (the tests draw into a 32-bit DIB section, whose pixels are read back, no fonts are involved), alpha blending of 32-bit images with an alpha channel (the test images have alpha 0 or 0xFF and the results here are for the image data given), ILD_SCALE and ILD_DPISCALE, overlay images and drag images, the colour of ILD_SELECTED and ILD_FOCUS (the system highlight colour #0078D4 on the oracle, COLOR_HIGHLIGHT, is used for blending).
