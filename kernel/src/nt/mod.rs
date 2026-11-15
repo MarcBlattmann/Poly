@@ -117,6 +117,18 @@ pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"
 pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
 /// Our `uxtheme.dll` (ADR 0155, step 9): no visual style is active.
 pub static UXTHEME: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uxtheme.dll"));
+/// The DLLs Chrome's browser delay-loads once a page loads (ADR 0155, step 12): `setupapi`,
+/// `pdh`, `tbs`, `cfgmgr32`, `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid`, whose exports
+/// exist and fail.
+pub static SETUPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/setupapi.dll"));
+pub static PDH: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pdh.dll"));
+pub static TBS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/tbs.dll"));
+pub static CFGMGR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cfgmgr32.dll"));
+pub static WINTRUST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wintrust.dll"));
+pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"));
+pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
+pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
+pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -216,7 +228,7 @@ struct ThreadCtl {
     alertable: bool,
     /// The status a signaller recorded for its blocked wait, taken when the
     /// thread wakes.
-    completion: Option<NtStatus>,
+    completion: Option<(WaitId, NtStatus)>,
     /// `NtSuspendThread` count; the thread parks before user mode while > 0.
     suspend_count: u32,
     /// Its user context, saved while it is parked suspended (so another
@@ -299,8 +311,12 @@ static ONLY: Mutex<String> = Mutex::new(String::new());
 /// The command lines of NT processes, read from their PEB at their first system call while a
 /// diagnostic that names processes is on (`poly.nt.only`, `poly.nt.waits`).
 static COMMAND_LINES: Mutex<BTreeMap<u32, String>> = Mutex::new(BTreeMap::new());
+/// `poly.nt.trail.skip=<name>,<name>`: services the trail leaves out (`NtReadFile`), so a busy
+/// loop does not push the start-up out of it.
+static TRAIL_SKIP: Mutex<String> = Mutex::new(String::new());
 /// The trails of `poly.nt.trail`, by process.
-static TRAILS: Mutex<BTreeMap<u32, poly_personality_nt::trace::Trail>> = Mutex::new(BTreeMap::new());
+/// Kept per thread, `(pid, tid)`, so a busy thread does not push a quiet one's last calls out.
+static TRAILS: Mutex<BTreeMap<(u32, u32), poly_personality_nt::trace::Trail>> = Mutex::new(BTreeMap::new());
 
 /// `poly.nt.only` was given.
 static ONLY_SET: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -344,11 +360,12 @@ fn selected(pid: u32) -> bool {
     poly_personality_nt::trace::selects(lines.get(&pid).map(String::as_str), &only)
 }
 
-/// `poly.nt.trail`: write process `pid`'s last calls (an exception with `code` was handed to it).
-fn write_trail(pid: u32, code: u32) {
-    let calls = TRAILS.lock().get_mut(&pid).map(|t| t.take()).unwrap_or_default();
+/// `poly.nt.trail`: write thread `tid` of process `pid`'s last calls (an exception with `code`
+/// was handed to it).
+fn write_trail(pid: u32, tid: u32, code: u32) {
+    let calls = TRAILS.lock().get_mut(&(pid, tid)).map(|t| t.take()).unwrap_or_default();
     let line = COMMAND_LINES.lock().get(&pid).cloned().unwrap_or_default();
-    crate::kprintln!("nt-trail: p{pid} exception {code:#x}, its last {} calls: {line}", calls.len());
+    crate::kprintln!("nt-trail: p{pid} t{tid} exception {code:#x}, its last {} calls: {line}", calls.len());
     for c in calls {
         crate::kprintln!("nt-trail: {c}");
     }
@@ -385,11 +402,14 @@ fn waits_main(_: usize) -> usize {
                     for &o in &w.objects {
                         let kind = objects.object_type(o);
                         let name = objects.object_name(o).map(|n| alloc::string::String::from_utf16_lossy(&n));
+                        let held: Vec<String> =
+                            objects.holders(o).iter().map(|(p, h)| alloc::format!("p{}:{:#x}", p.0, h.0)).collect();
                         line.push_str(&alloc::format!(
-                            " [{:?} {} cookie {:#x}]",
+                            " [{:?} {} cookie {:#x} held {}]",
                             kind,
                             name.as_deref().unwrap_or("-"),
-                            objects.cookie(o).unwrap_or(0)
+                            objects.cookie(o).unwrap_or(0),
+                            held.join(",")
                         ));
                     }
                     line
@@ -399,6 +419,31 @@ fn waits_main(_: usize) -> usize {
         crate::kprintln!("nt-waits: {} blocked waits at {} ms", lines.len(), crate::time::now_ns() / 1_000_000);
         for l in lines {
             crate::kprintln!("{l}");
+        }
+        let io: Vec<String> = with(|s| {
+            let io = &s.sys.io;
+            let mut lines = io.np_debug_lines(&s.sys.objects);
+            lines.extend(io.port_debug_lines(&s.sys.objects));
+            lines.extend(s.sys.win32k.queue_debug_lines(&s.sys.objects));
+            lines.push(alloc::format!(
+                "requests waiting {:?}, completions queued {}",
+                io.pending_by_process(),
+                io.queued_completions()
+            ));
+            lines
+        });
+        for l in io {
+            crate::kprintln!("nt-waits: {l}");
+        }
+        // The trails of the selected processes (`poly.nt.trail` with `poly.nt.only`): what each did
+        // last before it went quiet. They are kept, not cleared.
+        let trails: Vec<((u32, u32), Vec<String>)> =
+            TRAILS.lock().iter().map(|(k, t)| (*k, t.lines().cloned().collect())).collect();
+        for ((pid, tid), lines) in trails {
+            crate::kprintln!("nt-waits: p{pid} t{tid} last {} calls:", lines.len());
+            for l in lines {
+                crate::kprintln!("nt-waits:   {l}");
+            }
         }
         let known: Vec<(u32, String)> = COMMAND_LINES.lock().iter().map(|(p, l)| (*p, l.clone())).collect();
         for (pid, line) in known {
@@ -419,6 +464,9 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
     if let Some(n) = trail_len(boot.has_flag(TRAIL_FLAG), boot.arg(TRAIL_FLAG)) {
         TRAIL_LEN.store(n, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: every process keeps its last {n} system calls for a breakpoint (poly.nt.trail)");
+    }
+    if let Some(skip) = boot.arg("poly.nt.trail.skip") {
+        *TRAIL_SKIP.lock() = String::from(skip);
     }
     if let Some(only) = boot.arg(ONLY_FLAG) {
         *ONLY.lock() = String::from(only);
@@ -463,7 +511,7 @@ pub fn take_exit_status(pid: u32) -> Option<u32> {
 
 fn note_exit_status(pid: u32, status: NtStatus, by_process: bool) {
     if by_process {
-        TRAILS.lock().remove(&pid);
+        TRAILS.lock().retain(|k, _| k.0 != pid);
     }
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!(
@@ -698,7 +746,7 @@ impl NtKernel for Kernel {
             && poly_personality_nt::trace::writes_trail(record.code)
             && selected(self.pid.0)
         {
-            write_trail(self.pid.0, record.code);
+            write_trail(self.pid.0, self.tid.0 as u32, record.code);
         }
         let words = EXCEPTIONS.load(core::sync::atomic::Ordering::Relaxed);
         if words != 0 {
@@ -799,9 +847,9 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         if trace != 0 && poly_personality_nt::trace::wanted(&call, status, trace == 2) {
             crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
         }
-        if trail != 0 {
+        if trail != 0 && !TRAIL_SKIP.lock().split(',').any(|n| n == call.name) {
             let line = poly_personality_nt::trace::render(process.pid, tid, &call, status);
-            TRAILS.lock().entry(process.pid).or_default().push(line, trail);
+            TRAILS.lock().entry((process.pid, tid)).or_default().push(line, trail);
         }
     }
     // Any wait a signalling call satisfied: wake those threads.
@@ -956,6 +1004,7 @@ fn start_params(
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
         proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
+        proc.image_name = s.sys.io.dos_file_name(&params.image_path);
         let mut b = MemBackend { memory, sections: &mut s.sections };
         // Its creator's inheritable handles, before any other (ADR 0089).
         let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);

@@ -261,6 +261,26 @@ pub unsafe extern "system" fn GetVersionExW(info: *mut u8) -> i32 {
     }
 }
 
+/// `GetVersionExA`: the same version as `GetVersionExW`, in the ANSI structures (148 and 156
+/// bytes); the string is empty.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetVersionExA(info: *mut u8) -> i32 {
+    if info.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's structure: its first DWORD is its size.
+    let size = unsafe { (info as *const u32).read_unaligned() } as usize;
+    if size != version::INFO_A && size != version::INFO_EX_A {
+        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
+    }
+    // SAFETY: `size` bytes of the caller's structure.
+    let buf = unsafe { core::slice::from_raw_parts_mut(info, size) };
+    match version::fill_info(buf, version::reported(compat()), true) {
+        Ok(()) => TRUE,
+        Err(e) => fail(e, FALSE),
+    }
+}
+
 /// The processor count (`NtQuerySystemInformation(SystemBasicInformation)`).
 pub(crate) fn processors() -> u32 {
     let mut info = [0u8; 64];

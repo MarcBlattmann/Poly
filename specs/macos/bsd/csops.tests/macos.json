@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "csops_blob",
+      "source_sha256": "f0c189b30fb63e34d8c3f79a71c0a99f4e2fa3b5b6d6f148b003fff9dfd8d234",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "34b56f10a8f4ec4d4b5564b5af89e7d88c59a71e042b19bddf9b0e933c49fba4",
+          "exit_code": 0,
+          "stdout": "ok CS_OPS_BLOB returns 0\nok it starts with the embedded-signature magic fa de 0c c0\nok its length (bytes 4..7, big endian) fits the buffer\nvalue signature blob length 279\nvalue operation 4 (pid path): errno 22\nvalue operation 5 (cdhash): errno 22\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "csops_status",
+      "source_sha256": "8e5dbb040f6e6d8091d85b4d96e6cc2d7b21cb150f497e37d1854db16f5d6e47",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2181d8dee997a799b93bea98196e033669cd5171b851faa871a09b22183e272e",
+          "exit_code": 0,
+          "stdout": "ok pid 0 (the caller): returns 0\nok the caller's own pid: the same flags\nok CS_VALID is set\nvalue code-signing flags 570556929\nok a forked child has the same flags\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

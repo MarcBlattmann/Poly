@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "kqueue_descriptor",
+      "source_sha256": "fe316fd692bc55b3df7f44021c9373213ee6ae397153f2c0103067b2f5f24141",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b452d163cb3d78843b1020a2237e601b3ab970843d997bb96d98d494f9a0e8cb",
+          "exit_code": 0,
+          "stdout": "ok read: ENXIO\nok lseek: ESPIPE\nvalue write: errno 6\nok fstat\nok mode 010000\nok dup2 of the queue\nok an event registered through one is reported through the copy\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kqueue_fork",
+      "source_sha256": "1cd75e09554d06a02ab52c3ed8fa91589754dff8ee56acd48f0f0c326a6b8b21",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6145315ecef18616d0720ab56553bffde9a47ceb2fab9b2de65cc185214b61e1",
+          "exit_code": 0,
+          "stdout": "ok the child exited\nvalue the child's kevent: events (0..3) or 100 + errno 109\nok the parent's queue still has its event\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

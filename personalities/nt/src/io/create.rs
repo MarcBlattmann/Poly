@@ -190,7 +190,11 @@ impl CreateHook<'_> {
             self.made = Some(cookie);
             return Ok(object);
         }
-        if remaining.split(|&c| c == u16::from(b'\\')).any(<[u16]>::is_empty) {
+        // A pipe's name may end with one backslash (observed on Windows,
+        // specs/windows/kernel32.dll/CreateNamedPipeA.yaml); an empty component anywhere else
+        // is no name.
+        let body = remaining.strip_suffix(&[u16::from(b'\\')]).unwrap_or(remaining);
+        if body.is_empty() || body.split(|&c| c == u16::from(b'\\')).any(<[u16]>::is_empty) {
             return Err(STATUS_OBJECT_NAME_INVALID);
         }
         let key = names::fold(remaining);

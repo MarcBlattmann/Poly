@@ -1,0 +1,27 @@
+# name|apt packages|seconds to wait for the window|command line (run as user poly)
+gnome-text-editor|gnome-text-editor|25|gnome-text-editor /tmp/hello.txt
+geany|geany|20|geany /tmp/hello.txt
+xfce4-terminal|xfce4-terminal|20|xfce4-terminal
+gnome-calculator|gnome-calculator|25|gnome-calculator
+transmission|transmission-gtk|25|transmission-gtk
+evince|evince|25|evince /tmp/hello.pdf
+thunar|thunar|20|thunar /tmp
+nautilus|nautilus|30|nautilus /tmp
+filezilla|filezilla|30|filezilla
+kcalc|kcalc qt6-wayland|40|kcalc
+kate|kate qt6-wayland|40|kate /tmp/hello.txt
+okular|okular qt6-wayland|40|okular /tmp/hello.pdf
+mpv|mpv|25|mpv --force-window --idle
+vlc|vlc vlc-plugin-qt qtwayland5 qt6-wayland|40|vlc
+audacity|audacity|40|audacity
+inkscape|inkscape|60|inkscape /tmp/hello.svg
+gimp|gimp|60|gimp
+libreoffice-writer|libreoffice-writer|90|libreoffice --writer /tmp/hello.txt
+firefox-esr|firefox-esr|90|firefox-esr
+thunderbird|thunderbird|90|thunderbird
+krita|krita qtwayland5 qt6-wayland|90|krita
+obs-studio|obs-studio qt6-wayland|60|obs
+blender|blender|90|blender
+lo-gtk3|libreoffice-writer libreoffice-gtk3|90|SAL_USE_VCLPLUGIN=gtk3 libreoffice --writer /tmp/hello.txt
+krita-wl|krita qtwayland5 qt6-wayland|90|krita -platform wayland
+vlc-qt|vlc vlc-plugin-qt qtwayland5 qt6-wayland|40|vlc

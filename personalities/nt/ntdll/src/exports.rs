@@ -304,6 +304,14 @@ pub unsafe extern "C" fn RtlGetVersion(info: *mut u8) -> NtStatus {
     unsafe { version::get_version(info) }
 }
 
+/// `RtlGetNtVersionNumbers(major, minor, build)`: the real version; the build has its high
+/// nibble set (`specs/windows/ntdll.dll/RtlGetNtVersionNumbers.yaml`). Git's bash calls it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGetNtVersionNumbers(major: *mut u32, minor: *mut u32, build: *mut u32) {
+    // SAFETY: the callers' out-pointers (null ones are skipped).
+    unsafe { version::get_nt_version_numbers(major, minor, build) }
+}
+
 // ----- critical sections ----------------------------------------------------
 
 #[unsafe(no_mangle)]

@@ -1,6 +1,6 @@
-//! The Windows version Poly reports through `RtlGetVersion`: Windows 10,
-//! build 19045, the same version the default registry reports
-//! (`poly_registry::defaults::BUILD`, ADR 0066).
+//! The Windows version Poly reports through `RtlGetVersion`: Windows 11,
+//! build 26200, the same version the default registry reports
+//! (`poly_registry::defaults::BUILD`, ADR 0066, ADR 0189).
 //!
 //! `RTL_OSVERSIONINFOW` and `RTL_OSVERSIONINFOEXW` are `wdm.h`'s layouts
 //! (`dwOSVersionInfoSize`, `dwMajorVersion`, `dwMinorVersion`,
@@ -14,7 +14,7 @@ use poly_ntobj::NtStatus;
 
 pub const MAJOR: u32 = 10;
 pub const MINOR: u32 = 0;
-pub const BUILD: u32 = 19045;
+pub const BUILD: u32 = 26200;
 /// `VER_PLATFORM_WIN32_NT` (`winnt.h`).
 pub const PLATFORM_WIN32_NT: u32 = 2;
 /// `VER_SUITE_SINGLEUSERTS` (`winnt.h`): one interactive session.
@@ -31,30 +31,67 @@ pub const INFO_EX_SIZE: u32 = 284;
 /// confirmed by the spec agent, ADR 0071).
 pub const STATUS_INVALID_PARAMETER: NtStatus = NtStatus(0xC000_000D);
 
+/// `STATUS_NO_MORE_ENTRIES`: what `RtlGetVersion` answers for a size field of 300 (after writing
+/// the extended layout; `specs/windows/ntdll.dll/RtlGetVersion.yaml`).
+pub const STATUS_NO_MORE_ENTRIES: NtStatus = NtStatus(0x8000_001A);
+
 /// `RtlGetVersion`: fill in `info`, whose first four bytes give its size.
 ///
+/// Unlike `GetVersionEx`, the size is not checked (observed on Windows,
+/// `specs/windows/ntdll.dll/RtlGetVersion.yaml`): the size 284 gets the extended layout, the size
+/// 300 the extended layout and `STATUS_NO_MORE_ENTRIES`, every other size, also 0, the basic
+/// layout. The basic layout is the version, the platform and the first unit of an empty service
+/// pack string; the extended one adds the service pack numbers (0.0), the suite mask (0) and the
+/// product type (workstation), but not `wReserved`.
+///
 /// # Safety
-/// `info` is valid for reading 4 bytes and for writing the size they give,
-/// if that is one of the two structures' sizes.
+/// `info` is valid for reading 4 bytes and for writing 22 bytes, and for 283 bytes when the size
+/// field says 284 or 300.
 pub unsafe fn get_version(info: *mut u8) -> NtStatus {
     // SAFETY: the caller's contract: the size field is readable.
     let size = unsafe { (info as *const u32).read_unaligned() };
-    if size != INFO_SIZE && size != INFO_EX_SIZE {
-        return STATUS_INVALID_PARAMETER;
-    }
     let mut out = [0u8; INFO_EX_SIZE as usize];
-    out[0..4].copy_from_slice(&size.to_le_bytes());
     out[4..8].copy_from_slice(&MAJOR.to_le_bytes());
     out[8..12].copy_from_slice(&MINOR.to_le_bytes());
     out[12..16].copy_from_slice(&BUILD.to_le_bytes());
     out[16..20].copy_from_slice(&PLATFORM_WIN32_NT.to_le_bytes());
-    // szCSDVersion[128] at 20: empty (no service pack).
-    // wServicePackMajor (276) and wServicePackMinor (278) stay 0.
-    out[280..282].copy_from_slice(&SUITE_SINGLEUSERTS.to_le_bytes());
+    // szCSDVersion[128] at 20: empty (no service pack); only its first unit is written.
+    let extended = size == INFO_EX_SIZE || size == EXTENDED_STATUS_SIZE;
+    // The extended fields: wServicePackMajor (276), wServicePackMinor (278) and wSuiteMask (280)
+    // are 0, wProductType (282) is VER_NT_WORKSTATION.
     out[282] = NT_WORKSTATION;
-    // SAFETY: the caller's contract: `size` bytes are writable.
-    unsafe { core::ptr::copy_nonoverlapping(out.as_ptr(), info, size as usize) };
-    NtStatus(0)
+    // SAFETY: the caller's contract: 22 bytes (283 for the extended layout) are writable.
+    unsafe {
+        core::ptr::copy_nonoverlapping(out.as_ptr().add(4), info.add(4), 18);
+        if extended {
+            core::ptr::copy_nonoverlapping(out.as_ptr().add(276), info.add(276), 7);
+        }
+    }
+    if size == EXTENDED_STATUS_SIZE { STATUS_NO_MORE_ENTRIES } else { NtStatus(0) }
+}
+
+/// The size field for which `RtlGetVersion` writes the extended layout and answers
+/// [`STATUS_NO_MORE_ENTRIES`].
+const EXTENDED_STATUS_SIZE: u32 = 300;
+
+/// `RtlGetNtVersionNumbers`: the major and minor version and the build number with the high
+/// nibble 0xF (a "free build" marker), each through its pointer (null ones are skipped).
+///
+/// # Safety
+/// Each pointer is null or valid for writing 4 bytes.
+pub unsafe fn get_nt_version_numbers(major: *mut u32, minor: *mut u32, build: *mut u32) {
+    // SAFETY: the caller's contract.
+    unsafe {
+        if !major.is_null() {
+            major.write_unaligned(MAJOR);
+        }
+        if !minor.is_null() {
+            minor.write_unaligned(MINOR);
+        }
+        if !build.is_null() {
+            build.write_unaligned(BUILD | 0xF000_0000);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -63,26 +100,45 @@ mod tests {
 
     #[test]
     fn both_forms() {
-        let mut ex = [0xEEu8; 300];
+        let mut ex = [0xAAu8; 300];
         ex[0..4].copy_from_slice(&INFO_EX_SIZE.to_le_bytes());
         // SAFETY: the buffer is larger than the structure.
         assert_eq!(unsafe { get_version(ex.as_mut_ptr()) }, NtStatus(0));
         assert_eq!(u32::from_le_bytes(ex[4..8].try_into().unwrap()), 10);
-        assert_eq!(u32::from_le_bytes(ex[12..16].try_into().unwrap()), 19045);
+        assert_eq!(u32::from_le_bytes(ex[12..16].try_into().unwrap()), 26200);
         assert_eq!(u32::from_le_bytes(ex[16..20].try_into().unwrap()), 2);
         assert_eq!(&ex[20..22], &[0, 0]);
-        assert_eq!(&ex[280..284], &[0x00, 0x01, 1, 0]);
-        assert_eq!(ex[284], 0xEE, "nothing past the structure");
+        // Only the first unit of the string is written; the extended fields, but not wReserved.
+        assert_eq!(&ex[22..24], &[0xAA, 0xAA]);
+        assert_eq!(&ex[276..284], &[0, 0, 0, 0, 0, 0, 1, 0xAA]);
+        assert_eq!(ex[284], 0xAA, "nothing past the structure");
 
-        let mut plain = [0xEEu8; 284];
-        plain[0..4].copy_from_slice(&INFO_SIZE.to_le_bytes());
+        // Any other size gets the basic layout, the size is not checked.
+        for size in [0u32, 148, 275, 276, 285] {
+            let mut b = [0xAAu8; 300];
+            b[0..4].copy_from_slice(&size.to_le_bytes());
+            // SAFETY: as above.
+            assert_eq!(unsafe { get_version(b.as_mut_ptr()) }, NtStatus(0), "{size}");
+            assert_eq!(&b[20..22], &[0, 0], "{size}");
+            assert_eq!(&b[22..], &[0xAA; 278][..], "{size}");
+        }
+        // 300 writes the extended layout and says STATUS_NO_MORE_ENTRIES.
+        let mut b = [0xAAu8; 304];
+        b[0..4].copy_from_slice(&300u32.to_le_bytes());
         // SAFETY: as above.
-        assert_eq!(unsafe { get_version(plain.as_mut_ptr()) }, NtStatus(0));
-        assert_eq!(plain[276], 0xEE);
+        assert_eq!(unsafe { get_version(b.as_mut_ptr()) }, STATUS_NO_MORE_ENTRIES);
+        assert_eq!(b[282], 1);
+    }
 
-        let mut bad = [0u8; 8];
-        bad[0] = 8;
-        // SAFETY: as above.
-        assert_eq!(unsafe { get_version(bad.as_mut_ptr()) }, STATUS_INVALID_PARAMETER);
+    #[test]
+    fn nt_version_numbers_carry_the_free_build_nibble() {
+        let (mut a, mut b, mut c, mut d) = (0u32, 0u32, 0u32, 0x1234_5678u32);
+        // SAFETY: valid locals.
+        unsafe { get_nt_version_numbers(&mut a, &mut b, &mut c) };
+        assert_eq!((a, b, c), (10, 0, 26200 | 0xF000_0000));
+        assert_eq!(d, 0x1234_5678);
+        // SAFETY: null pointers are skipped.
+        unsafe { get_nt_version_numbers(core::ptr::null_mut(), &mut d, core::ptr::null_mut()) };
+        assert_eq!(d, 0);
     }
 }

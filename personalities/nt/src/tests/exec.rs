@@ -309,7 +309,7 @@ fn kuser_shared_data_is_mapped_read_only_with_the_version() {
     let major = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_MAJOR_VERSION as u64, 4);
     assert_eq!(major, 10u32.to_le_bytes());
     let build = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_BUILD_NUMBER as u64, 4);
-    assert_eq!(build, 19045u32.to_le_bytes());
+    assert_eq!(build, 26200u32.to_le_bytes());
     // A second mapping is refused (the page is there).
     assert!(exec::map_user_shared_data(&mut f.proc, &mut f.mem, &facts).is_err());
 }

@@ -15,6 +15,7 @@ mod display;
 mod icons;
 mod layered;
 mod s3;
+mod strings;
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -868,6 +869,9 @@ fn set_long(hwnd: H, index: i32, size: u8, value: u64) -> u64 {
         };
         let mut done = u::StyleStruct { old, new: stored };
         u::send(&SYS, h, u::WM_STYLECHANGED, index as i64 as u64, &mut done as *mut _ as u64);
+        if index == GWL_STYLE && u::frame_style_changed(old, stored) {
+            u::style_frame_changed(&SYS, h);
+        }
         return u64::from(old);
     }
     match call(Request::SetLong { hwnd: hwnd as u64, index, size, value }) {

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "ioctl_fd_flags",
+      "source_sha256": "e9d0bcbd6e99c6d76ee5542610eca4eac8ea717b0f563599f43b98300e507017",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "744e8ec89776aa6eb7497a3f1122f7d3cf628d499b82e1f8e3b691548dd54755",
+          "exit_code": 0,
+          "stdout": "ok a new pipe end has no close-on-exec\nok FIOCLEX\nok close-on-exec is set\nok FIONCLEX\nok close-on-exec is clear\nok FIONBIO 1\nok O_NONBLOCK is set\nok FIONBIO 0\nok O_NONBLOCK is clear\nok an unknown request on a pipe: ENOTTY\nok an unknown request on a file: ENOTTY\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ioctl_tty",
+      "source_sha256": "8f8bbe56cace6db2d689a7c8d1694212408aafeb5e80ffac9bda1d69c54f9b07",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fc4592e3957ff2b5edf0bee5e98f402f29dd4a78678a403eb9866816fb526dda",
+          "exit_code": 0,
+          "stdout": "ok a regular file: ENOTTY\nok a pipe: ENOTTY\nok /dev/null: ENODEV\nok a directory: ENOTTY\nok a descriptor that is not open: EBADF\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

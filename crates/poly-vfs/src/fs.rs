@@ -48,6 +48,14 @@ pub trait FileSystem: Send + Sync {
     /// parent (the root's parent is the root itself); `.` is never asked.
     fn lookup(&self, dir: Ino, name: &[u8]) -> Result<Ino>;
 
+    /// The name `child` has in directory `dir`, if the file system knows it
+    /// without a scan; `None` (the default) has the VFS look for `child`'s
+    /// inode number in `dir`'s listing. FUSE answers it: its node ids are
+    /// not the inode numbers a listing gives.
+    fn name_of(&self, _dir: Ino, _child: Ino) -> Option<Vec<u8>> {
+        None
+    }
+
     fn getattr(&self, ino: Ino) -> Result<Attr>;
 
     /// The attributes of `ino` for a path walk that goes through it: its

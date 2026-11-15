@@ -1,6 +1,6 @@
 //! The version `GetVersion` / `GetVersionExW` report, and `SYSTEM_INFO`.
 //!
-//! The real version is [`poly_rtl::version`]'s (Windows 10, build 19045,
+//! The real version is [`poly_rtl::version`]'s (Windows 10, build 26200,
 //! as `RtlGetVersion` and the default registry report). Learn's
 //! `GetVersionExW` page ("Operating System Version", "Targeting your
 //! application for Windows"): from Windows 8.1 on, an application that is
@@ -48,26 +48,54 @@ pub fn get_version(v: (u32, u32, u32)) -> u32 {
     ((v.2 & 0x7FFF) << 16) | ((v.1 & 0xFF) << 8) | (v.0 & 0xFF)
 }
 
-/// Fill an `OSVERSIONINFOW` (276 bytes) or `OSVERSIONINFOEXW` (284 bytes,
-/// `winnt.h`) whose size field says which it is. Another size fails
-/// (Learn: "The function fails if you specify an invalid value for the
-/// dwOSVersionInfoSize member"; the error is `ERROR_INSUFFICIENT_BUFFER`,
-/// to be confirmed).
-pub fn fill(buf: &mut [u8], v: (u32, u32, u32)) -> Result<(), u32> {
-    let size = u32::from_le_bytes(buf.get(..4).ok_or(ERROR_INSUFFICIENT_BUFFER)?.try_into().unwrap());
-    if size != poly_rtl::version::INFO_SIZE && size != poly_rtl::version::INFO_EX_SIZE {
+/// `OSVERSIONINFOW`, `OSVERSIONINFOEXW`, `OSVERSIONINFOA` and `OSVERSIONINFOEXA` sizes (`winnt.h`).
+pub const INFO_W: usize = 276;
+pub const INFO_EX_W: usize = 284;
+pub const INFO_A: usize = 148;
+pub const INFO_EX_A: usize = 156;
+
+/// `VER_SUITE_SINGLEUSERTS | VER_SUITE_PERSONAL` (`winnt.h`): the suite mask of a Home edition,
+/// as `GetVersionEx` shows it (`specs/windows/kernel32.dll/GetVersionExW.yaml`).
+pub const SUITE_HOME: u16 = 0x0300;
+
+/// Fill an `OSVERSIONINFOW` (276 bytes) or `OSVERSIONINFOEXW` (284 bytes), or with
+/// `ansi` an `OSVERSIONINFOA` (148) or `OSVERSIONINFOEXA` (156), whose size field says which it
+/// is. Another size fails (Learn: "The function fails if you specify an invalid value for the
+/// dwOSVersionInfoSize member": `ERROR_INSUFFICIENT_BUFFER`, as observed on Windows).
+///
+/// What is written is what Windows writes (`GetVersionExA/W.yaml`): the four numbers and the first
+/// character of an empty service pack string (the rest of the string is left as it was), and for
+/// the extended form the service pack numbers (0.0), the suite mask ([`SUITE_HOME`]), the product
+/// type (workstation) and the reserved byte (0).
+pub fn fill_info(buf: &mut [u8], v: (u32, u32, u32), ansi: bool) -> Result<(), u32> {
+    let size = u32::from_le_bytes(buf.get(..4).ok_or(ERROR_INSUFFICIENT_BUFFER)?.try_into().unwrap()) as usize;
+    let (basic, extended, csd) = if ansi { (INFO_A, INFO_EX_A, 128) } else { (INFO_W, INFO_EX_W, 256) };
+    if size != basic && size != extended {
         return Err(ERROR_INSUFFICIENT_BUFFER);
     }
-    let size = size as usize;
     if buf.len() < size {
         return Err(ERROR_INSUFFICIENT_BUFFER);
     }
-    // SAFETY: `buf` holds `size` bytes, one of the two structures' sizes.
-    unsafe { poly_rtl::version::get_version(buf.as_mut_ptr()) };
     buf[4..8].copy_from_slice(&v.0.to_le_bytes());
     buf[8..12].copy_from_slice(&v.1.to_le_bytes());
     buf[12..16].copy_from_slice(&v.2.to_le_bytes());
+    buf[16..20].copy_from_slice(&poly_rtl::version::PLATFORM_WIN32_NT.to_le_bytes());
+    // szCSDVersion: an empty string; one character is written.
+    let unit = if ansi { 1 } else { 2 };
+    buf[20..20 + unit].fill(0);
+    if size == extended {
+        let at = 20 + csd;
+        buf[at..at + 4].fill(0); // wServicePackMajor, wServicePackMinor
+        buf[at + 4..at + 6].copy_from_slice(&SUITE_HOME.to_le_bytes());
+        buf[at + 6] = poly_rtl::version::NT_WORKSTATION;
+        buf[at + 7] = 0;
+    }
     Ok(())
+}
+
+/// [`fill_info`] for the wide structures (`GetVersionExW`).
+pub fn fill(buf: &mut [u8], v: (u32, u32, u32)) -> Result<(), u32> {
+    fill_info(buf, v, false)
 }
 
 /// What a manifest's text declares (UTF-8, or UTF-16 LE as some resource
@@ -158,9 +186,9 @@ mod tests {
 
     #[test]
     fn the_manifest_rule() {
-        assert_eq!(reported(Compat::Win10), (10, 0, 19045));
+        assert_eq!(reported(Compat::Win10), (10, 0, 26200));
         assert_eq!(reported(Compat::Legacy), (6, 2, 9200));
-        assert_eq!(get_version((10, 0, 19045)), (19045 << 16) | 10);
+        assert_eq!(get_version((10, 0, 26200)), (26200 << 16) | 10);
         assert_eq!(get_version((6, 2, 9200)), (9200 << 16) | (2 << 8) | 6);
         let m = br#"<compatibility><application><supportedOS Id="{8E0F7A12-BFB3-4FE8-B9A5-48FD50A15A9A}"/></application></compatibility>"#;
         assert_eq!(manifest_compat(m), Compat::Win10);
@@ -180,7 +208,7 @@ mod tests {
         assert_eq!(b[282], 1);
         let mut s = [0u8; 276];
         s[..4].copy_from_slice(&276u32.to_le_bytes());
-        assert!(fill(&mut s, (10, 0, 19045)).is_ok());
+        assert!(fill(&mut s, (10, 0, 26200)).is_ok());
         let mut bad = [0u8; 300];
         bad[..4].copy_from_slice(&300u32.to_le_bytes());
         assert_eq!(fill(&mut bad, (10, 0, 1)), Err(ERROR_INSUFFICIENT_BUFFER));
@@ -394,7 +422,7 @@ pub fn verify(actual: &Fields, wanted: &Fields, type_mask: u32, condition_mask: 
 mod verify_tests {
     use super::*;
 
-    const WIN10: (u32, u32, u32) = (10, 0, 19045);
+    const WIN10: (u32, u32, u32) = (10, 0, 26200);
 
     fn want(major: u32, minor: u32) -> Fields {
         Fields { major, minor, ..Fields::of(WIN10) }

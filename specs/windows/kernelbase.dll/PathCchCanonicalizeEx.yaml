@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/PathCchCanonicalizeEx.yaml
+id: windows/api/kernelbase.dll/PathCchCanonicalizeEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathCchCanonicalizeEx function (pathcch.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data). The same function is exported by api-ms-win-core-path-l1-1-0.dll (LibreOffice stops on it).
+summary: >
+  Canonicalizes a path into a destination of a stated size, with flags. The HRESULT form of PathCanonicalizeW: LibreOffice stops on the missing export.
+interface:
+  signature: "HRESULT PathCchCanonicalizeEx(PWSTR pszPathOut, size_t cchPathOut, PCWSTR pszPathIn, ULONG dwFlags)"
+  returns: "S_OK, or an error HRESULT with an empty destination"
+rules:
+  canonical: "with flags 0 the result is the canonical form of PathCanonicalizeW for the inputs of its tables (dot segments, `C:` -> `C:\\`, '' -> `\\`, `a\\..` -> `\\`, trailing dots, `\\\\?\\C:\\a` -> `C:\\a`, `\\\\?\\UNC\\s\\sh` -> `\\\\s\\sh`), as the visible tests of this entry show. Flag 0x1 (allow long paths) does not change a short result. Flag 0x8 (do not normalize segments) keeps what flag 0 would remove: `C:\\a\\b.` stays `C:\\a\\b.`. Flag 0x10 (ensure an extended-length path) puts `\\\\?\\` in front: `C:` -> `\\\\?\\C:`, `C:\\a\\` -> `\\\\?\\C:\\a\\`, `\\\\?\\UNC\\s\\sh` stays `\\\\?\\UNC\\s\\sh`. Flag 0x20 (ensure a trailing slash) adds a backslash: `\\\\?\\C:\\a` -> `C:\\a\\`, `\\\\?\\UNC\\s\\sh` -> `\\\\s\\sh\\`"
+  buffer: "cchPathOut counts units with the NUL: `C:\\abc` (6 units) fits in 7 and 8, fails in 1 and 6 with 0x8007007A (insufficient buffer) and an empty destination; 0 fails with E_INVALIDARG 0x80070057"
+  length: "without 0x1 a result of 260 units or more fails with 0x800700CE (255 to 259 work); with 0x1 it works and carries the `\\\\?\\` prefix (a 260-unit path comes back as 264 units, 300 as 304)"
+errors:
+  0x80070057: "cch 0"
+  0x8007007a: "insufficient buffer"
+  0x800700ce: "result too long without PATHCCH_ALLOW_LONG_PATHS"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  NULL pointers, flags other than the five tried, aliasing of source and destination.

@@ -53,10 +53,89 @@ pub fn from_ansi(bytes: &[u8]) -> Vec<u16> {
     bytes.iter().map(|&b| codepage::to_unicode(b)).collect()
 }
 
-/// UTF-16 to ANSI (code page 1252); a character the code page lacks
-/// becomes `?` (its default character).
+/// UTF-16 to ANSI (code page 1252); a character the code page lacks becomes the letter it is
+/// built on if it has one (a Latin letter with a diacritic: [`best_fit`]), else `?` (its default
+/// character). Every UTF-16 unit gives one byte, so a surrogate pair gives two `?`.
 pub fn to_ansi(units: &[u16]) -> Vec<u8> {
-    units.iter().map(|&c| codepage::from_unicode(c)).collect()
+    units
+        .iter()
+        .map(|&c| match codepage::from_unicode(c) {
+            codepage::DEFAULT_CHAR if c != u16::from(codepage::DEFAULT_CHAR) => {
+                best_fit(c).unwrap_or(codepage::DEFAULT_CHAR)
+            }
+            b => b,
+        })
+        .collect()
+}
+
+/// The ASCII letter a Latin Extended-A letter with a diacritic is built on (Unicode's canonical
+/// decompositions; `specs/windows/kernel32.dll/GetEnvironmentVariableA.yaml`: U+0100 becomes `A`,
+/// U+0101 `a`, while U+017F, a letter of its own, is `?`).
+pub fn best_fit(c: u16) -> Option<u8> {
+    const UPPER: &[(u16, u8)] = &[
+        (0x100, b'A'),
+        (0x102, b'A'),
+        (0x104, b'A'),
+        (0x106, b'C'),
+        (0x108, b'C'),
+        (0x10A, b'C'),
+        (0x10C, b'C'),
+        (0x10E, b'D'),
+        (0x112, b'E'),
+        (0x114, b'E'),
+        (0x116, b'E'),
+        (0x118, b'E'),
+        (0x11A, b'E'),
+        (0x11C, b'G'),
+        (0x11E, b'G'),
+        (0x120, b'G'),
+        (0x122, b'G'),
+        (0x124, b'H'),
+        (0x128, b'I'),
+        (0x12A, b'I'),
+        (0x12C, b'I'),
+        (0x12E, b'I'),
+        (0x134, b'J'),
+        (0x136, b'K'),
+        (0x139, b'L'),
+        (0x13B, b'L'),
+        (0x13D, b'L'),
+        (0x143, b'N'),
+        (0x145, b'N'),
+        (0x147, b'N'),
+        (0x14C, b'O'),
+        (0x14E, b'O'),
+        (0x150, b'O'),
+        (0x154, b'R'),
+        (0x156, b'R'),
+        (0x158, b'R'),
+        (0x15A, b'S'),
+        (0x15C, b'S'),
+        (0x15E, b'S'),
+        (0x162, b'T'),
+        (0x164, b'T'),
+        (0x168, b'U'),
+        (0x16A, b'U'),
+        (0x16C, b'U'),
+        (0x16E, b'U'),
+        (0x170, b'U'),
+        (0x172, b'U'),
+        (0x174, b'W'),
+        (0x176, b'Y'),
+        (0x179, b'Z'),
+        (0x17B, b'Z'),
+    ];
+    // Each capital's lower-case letter follows it (U+0139 and the like: the capital is odd, the
+    // small letter even; elsewhere the capital is even).
+    for &(up, letter) in UPPER {
+        if c == up {
+            return Some(letter);
+        }
+        if c == up + 1 {
+            return Some(letter.to_ascii_lowercase());
+        }
+    }
+    None
 }
 
 /// The length of a NUL-terminated string at `p`, at most `limit` units.

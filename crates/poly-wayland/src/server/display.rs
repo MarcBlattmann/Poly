@@ -3,9 +3,9 @@
 
 use super::{ClientId, Data, Res, Server, error};
 use crate::protocol::{
-    wl_compositor, wl_data_device_manager, wl_display, wl_output, wl_registry, wl_seat, wl_shm, wl_subcompositor,
-    wp_cursor_shape_manager_v1, wp_fractional_scale_manager_v1, wp_presentation, wp_viewporter, xdg_activation_v1,
-    xdg_wm_base, xwayland_shell_v1, zwp_linux_dmabuf_v1, zxdg_decoration_manager_v1,
+    org_kde_kwin_server_decoration_manager, wl_compositor, wl_data_device_manager, wl_display, wl_output, wl_registry,
+    wl_seat, wl_shm, wl_subcompositor, wp_cursor_shape_manager_v1, wp_fractional_scale_manager_v1, wp_presentation,
+    wp_viewporter, xdg_activation_v1, xdg_wm_base, xwayland_shell_v1, zwp_linux_dmabuf_v1, zxdg_decoration_manager_v1,
 };
 use crate::wire::ObjectId;
 use alloc::format;
@@ -64,6 +64,7 @@ impl Server {
             wl_seat::NAME => Data::Seat,
             xdg_wm_base::NAME => Data::WmBase,
             zxdg_decoration_manager_v1::NAME => Data::DecorationManager,
+            org_kde_kwin_server_decoration_manager::NAME => Data::KdeDecorationManager,
             wp_presentation::NAME => Data::Presentation,
             wl_subcompositor::NAME => Data::Subcompositor,
             wl_data_device_manager::NAME => Data::DataDeviceManager,
@@ -81,6 +82,7 @@ impl Server {
             wl_output::NAME => self.output_bound(c, id),
             wl_seat::NAME => self.seat_bound(c, id),
             wp_presentation::NAME => self.presentation_bound(c, id),
+            org_kde_kwin_server_decoration_manager::NAME => self.kde_decoration_manager_bound(c, id),
             zwp_linux_dmabuf_v1::NAME => self.dmabuf_bound(c, id),
             _ => {}
         }

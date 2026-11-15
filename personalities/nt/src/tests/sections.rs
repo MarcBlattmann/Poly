@@ -88,6 +88,29 @@ fn a_pagefile_section_mapped_twice_shares_its_pages() {
 }
 
 #[test]
+fn the_mapped_file_name_of_a_view_is_asked_by_address() {
+    // K32GetMappedFileNameW.yaml `not_a_file`: private memory is an invalid address (59), a view of a
+    // section without a file STATUS_FILE_INVALID (1006); the process handle is judged first.
+    let mut f = Fake::new();
+    let buf = f.alloc(2048);
+    let ret = f.alloc(8);
+    let class = 2u64;
+    let (_, private, _) = allocate(&mut f, 0, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    let ask = |f: &mut Fake, process: u64, addr: u64| {
+        f.call(Service::QueryVirtualMemory, &[process, addr, class, buf, 2048, ret])
+    };
+    assert_eq!(ask(&mut f, SELF, private), NtStatus(0xC000_0141));
+    assert_eq!(ask(&mut f, SELF, 0), NtStatus(0xC000_0141));
+    let (_, h) = create(&mut f, "", 0x2000, PAGE_READWRITE, SEC_COMMIT, 0);
+    let (_, view, _, _) = map(&mut f, h, 0, None, 0, PAGE_READWRITE);
+    assert_eq!(ask(&mut f, SELF, view), NtStatus(0xC000_0098));
+    assert_eq!(ask(&mut f, SELF, view + 0x1010), NtStatus(0xC000_0098));
+    assert_eq!(ask(&mut f, 0, view), STATUS_INVALID_HANDLE);
+    // A handle that is not a process (the section's).
+    assert_eq!(ask(&mut f, h, view), STATUS_OBJECT_TYPE_MISMATCH);
+}
+
+#[test]
 fn named_sections_and_offsets() {
     let mut f = Fake::new();
     let (s, h) = create(&mut f, SECTION, 0x3_0000, PAGE_READWRITE, SEC_COMMIT, 0);

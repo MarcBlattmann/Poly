@@ -17,7 +17,9 @@ fn have_mke2fs() -> bool {
 pub(super) fn image_size(tree: &RootTree) -> (u64, u64) {
     let (bytes, entries) = tree.totals();
     let used = bytes + entries * 4096;
-    let size = (used + used / 4 + (160 << 20)).div_ceil(4 << 20) * (4 << 20);
+    // POLY_ROOTDISK_SPARE_MB: more room than the boot tests need (the app survey installs big apps).
+    let spare = std::env::var("POLY_ROOTDISK_SPARE_MB").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(160);
+    let size = (used + used / 4 + (spare << 20)).div_ceil(4 << 20) * (4 << 20);
     let inodes = (entries * 2 + 16384).div_ceil(1024) * 1024;
     (size, inodes)
 }
