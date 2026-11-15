@@ -335,6 +335,14 @@ fn unicode<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64) -> Result<u64, NtSt
     Ok(wide)
 }
 
+/// Whether the calling thread switched file-system redirection off (`kernelbase`'s
+/// `Wow64DisableWow64FsRedirection`, the flag in its TEB: [`super::TEB_FS_REDIRECTION_OFF`]).
+fn fs_redirection_off<K: NtKernel>(k: &mut K) -> bool {
+    let thread = k.caller().thread;
+    let Some(teb) = k.with_state(|_, p, _| p.thread(thread).map(|t| t.teb)) else { return false };
+    read32(k, teb + super::TEB_FS_REDIRECTION_OFF).is_ok_and(|v| v != 0)
+}
+
 /// The 64-bit copy of the 32-bit `OBJECT_ATTRIBUTES` at `at` (`ntdef.h`: `Length`,
 /// `RootDirectory`, `ObjectName`, `Attributes`, `SecurityDescriptor`,
 /// `SecurityQualityOfService`; 24 bytes, 48 in 64 bits), with its name.
@@ -353,7 +361,7 @@ fn object_attributes<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64, file: boo
         let buffer = u64::from(read32(k, at + 4)?);
         abi::read(k, buffer, &mut chars)?;
         let path: Vec<u16> = chars.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        if let Some(to) = super::redirect_system32(&path) {
+        if let Some(to) = super::file_view(&path, fs_redirection_off(k)) {
             let bytes: Vec<u8> = to.iter().flat_map(|c| c.to_le_bytes()).collect();
             let length = u16::try_from(bytes.len()).map_err(|_| poly_ntobj::status::STATUS_OBJECT_NAME_INVALID)?;
             let buffer = s.alloc(bytes.len())?;

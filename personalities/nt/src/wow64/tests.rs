@@ -375,6 +375,58 @@ fn a_32_bit_process_opening_system32_gets_syswow64() {
 }
 
 #[test]
+fn lastgood_and_regedit_are_redirected_too() {
+    let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+    let r = |s: &str| redirect_system32(&w(s)).map(|v| std::string::String::from_utf16(&v).unwrap());
+    // Learn's table: %windir%\lastgood\system32 and %windir%\regedit.exe.
+    assert_eq!(r("C:\\Windows\\lastgood\\system32\\a.dll").as_deref(), Some("C:\\Windows\\lastgood\\SysWOW64\\a.dll"));
+    assert_eq!(r("c:\\WINDOWS\\LastGood\\System32").as_deref(), Some("c:\\WINDOWS\\LastGood\\SysWOW64"));
+    assert_eq!(r("C:\\Windows\\regedit.exe").as_deref(), Some("C:\\Windows\\SysWOW64\\regedit.exe"));
+    assert_eq!(r("C:\\Windows\\regedit.exe.bak"), None);
+    assert_eq!(r("C:\\Windows\\lastgood\\other"), None);
+}
+
+#[test]
+fn sysnative_names_the_real_system32_and_is_not_a_directory() {
+    let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+    let n = |s: &str| sysnative_to_system32(&w(s)).map(|v| std::string::String::from_utf16(&v).unwrap());
+    assert_eq!(n("C:\\Windows\\Sysnative\\notepad.exe").as_deref(), Some("C:\\Windows\\System32\\notepad.exe"));
+    assert_eq!(n("\\??\\c:\\windows\\SYSNATIVE").as_deref(), Some("\\??\\c:\\Windows\\System32"));
+    assert_eq!(n("C:\\Windows\\Sysnativex\\a"), None);
+    assert_eq!(n("C:\\Windows\\System32\\a"), None);
+    // `file_view` maps it with redirection on and off, and System32 only with it on.
+    let v = |s: &str, off: bool| file_view(&w(s), off).map(|v| std::string::String::from_utf16(&v).unwrap());
+    assert_eq!(v("C:\\Windows\\Sysnative\\a", false).as_deref(), Some("C:\\Windows\\System32\\a"));
+    assert_eq!(v("C:\\Windows\\Sysnative\\a", true).as_deref(), Some("C:\\Windows\\System32\\a"));
+    assert_eq!(v("C:\\Windows\\System32\\a", false).as_deref(), Some("C:\\Windows\\SysWOW64\\a"));
+    assert_eq!(v("C:\\Windows\\System32\\a", true), None);
+}
+
+#[test]
+fn a_thread_that_switched_redirection_off_reaches_the_real_system32() {
+    let mut c = Caller32::new();
+    let info = c.put(&[0u8; 40]);
+    let teb = c.f.proc.threads[0].teb;
+    let flag = teb + TEB_FS_REDIRECTION_OFF;
+    let system32 = "\\??\\C:\\Windows\\System32\\kernel32.dll";
+    // Off (the flag's value 1): the name stays, and Sysnative still maps to System32.
+    c.f.mem.write_bytes(flag, &1u32.to_le_bytes()).unwrap();
+    let oa = c.attrs(system32, 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+    let oa = c.attrs("\\??\\C:\\Windows\\Sysnative\\kernel32.dll", 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+    // Back on (zero, as in a new thread): redirected again.
+    c.f.mem.write_bytes(flag, &0u32.to_le_bytes()).unwrap();
+    let oa = c.attrs(system32, 0x40);
+    assert_eq!(
+        converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]),
+        "\\??\\C:\\Windows\\SysWOW64\\kernel32.dll"
+    );
+    let oa = c.attrs("\\??\\C:\\Windows\\Sysnative\\kernel32.dll", 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+}
+
+#[test]
 fn a_raised_exception_reaches_the_32_bit_dispatcher_with_x86_structures() {
     use crate::wow64::context::{CONTEXT32_SIZE, from_context32, to_record32};
     let mut c = Caller32::new();
