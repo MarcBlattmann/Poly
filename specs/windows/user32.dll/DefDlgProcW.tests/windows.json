@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "dfw_text",
+      "exe_sha256": "b4ab0b4964def4d59a269e7500820e1131adaad91677fc5b776e3e4d02021e3e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlhbG9nOiB3aW5kb3cgSXNXaW5kb3dVbmljb2RlIDEKdGl0bGU6IFcgJ093biBjbGFzcyBXJyBBICdPd24gY2xhc3MgVycKU2VuZE1lc3NhZ2VBKFdNX1NFVFRFWFQsIGhpZ2ggYnl0ZXMpID0gMQogIHRpdGxlOiBXICdjYWY8MDBlOT4gPDIwYWM+IDwwMDgxPiA8MDBmZj4nIEEgJ2NhZjxlOT4gPDgwPiA8ODE+IDxmZj4nClNlbmRNZXNzYWdlVyhXTV9TRVRURVhULCBtaXhlZCB0ZXh0KSA9IDEKICB0aXRsZTogVyAnY2FmPDAwZTk+PDRlMmQ+PDA0MTY+PDIwYWM+JyBBICdjYWY8ZTk+Pz88ODA+JwpTZXRXaW5kb3dUZXh0QSA9IDEKICB0aXRsZTogVyAnU1Q8MDBlOT4nClNlbmRNZXNzYWdlQShXTV9HRVRURVhULCA1MCkgPSAzCiAgYnl0ZXMgJ1NUPGU5PicKU2VuZE1lc3NhZ2VXKFdNX0dFVFRFWFQsIDUwKSA9IDMKICB1bml0cyAnU1Q8MDBlOT4nClNlbmRNZXNzYWdlQShXTV9HRVRURVhUTEVOR1RIKSA9IDMKICAgZGlhbG9nIHByb2NlZHVyZTogV01fU0VUVEVYVCB1bml0cyAnY2FmPDAwZTk+IDwyMGFjPiA8MDA4MT4gPDAwZmY+JwogICBkaWFsb2cgcHJvY2VkdXJlOiBXTV9HRVRURVhUIHdQYXJhbSAyMDAKICAgZGlhbG9nIHByb2NlZHVyZTogV01fR0VUVEVYVCB3UGFyYW0gMzAwCiAgIGRpYWxvZyBwcm9jZWR1cmU6IFdNX1NFVFRFWFQgdW5pdHMgJ2NhZjwwMGU5Pjw0ZTJkPjwwNDE2PjwyMGFjPicKICAgZGlhbG9nIHByb2NlZHVyZTogV01fR0VUVEVYVCB3UGFyYW0gMjAwCiAgIGRpYWxvZyBwcm9jZWR1cmU6IFdNX0dFVFRFWFQgd1BhcmFtIDMwMAogICBkaWFsb2cgcHJvY2VkdXJlOiBXTV9TRVRURVhUIHVuaXRzICdTVDwwMGU5PicKICAgZGlhbG9nIHByb2NlZHVyZTogV01fR0VUVEVYVCB3UGFyYW0gMjAwCiAgIGRpYWxvZyBwcm9jZWR1cmU6IFdNX0dFVFRFWFQgd1BhcmFtIDUwCiAgIGRpYWxvZyBwcm9jZWR1cmU6IFdNX0dFVFRFWFQgd1BhcmFtIDUwCiAgIGRpYWxvZyBwcm9jZWR1cmU6IFdNX0dFVFRFWFQgd1BhcmFtIDQKICBjb250cm9sIDMwMDEgSXNXaW5kb3dVbmljb2RlIDEgdGV4dCAnZmlyc3QnCiAgY29udHJvbCAzMDAyIElzV2luZG93VW5pY29kZSAxIHRleHQgJ3NlY29uZCcKICBjb250cm9sIDEgSXNXaW5kb3dVbmljb2RlIDEgdGV4dCAnT0snCiAgY29udHJvbCAyIElzV2luZG93VW5pY29kZSAxIHRleHQgJ0NhbmNlbCcKTlVMTCBkaWFsb2cgcHJvY2VkdXJlOiB3aW5kb3cKICBETV9HRVRERUZJRCAweDUzNGIwMDAxCiAgV01fQ0xPU0UgMAogIHN0aWxsIGEgd2luZG93OiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "dialog: window IsWindowUnicode 1\ntitle: W 'Own class W' A 'Own class W'\nSendMessageA(WM_SETTEXT, high bytes) = 1\n  title: W 'caf<00e9> <20ac> <0081> <00ff>' A 'caf<e9> <80> <81> <ff>'\nSendMessageW(WM_SETTEXT, mixed text) = 1\n  title: W 'caf<00e9><4e2d><0416><20ac>' A 'caf<e9>??<80>'\nSetWindowTextA = 1\n  title: W 'ST<00e9>'\nSendMessageA(WM_GETTEXT, 50) = 3\n  bytes 'ST<e9>'\nSendMessageW(WM_GETTEXT, 50) = 3\n  units 'ST<00e9>'\nSendMessageA(WM_GETTEXTLENGTH) = 3\n   dialog procedure: WM_SETTEXT units 'caf<00e9> <20ac> <0081> <00ff>'\n   dialog procedure: WM_GETTEXT wParam 200\n   dialog procedure: WM_GETTEXT wParam 300\n   dialog procedure: WM_SETTEXT units 'caf<00e9><4e2d><0416><20ac>'\n   dialog procedure: WM_GETTEXT wParam 200\n   dialog procedure: WM_GETTEXT wParam 300\n   dialog procedure: WM_SETTEXT units 'ST<00e9>'\n   dialog procedure: WM_GETTEXT wParam 200\n   dialog procedure: WM_GETTEXT wParam 50\n   dialog procedure: WM_GETTEXT wParam 50\n   dialog procedure: WM_GETTEXT wParam 4\n  control 3001 IsWindowUnicode 1 text 'first'\n  control 3002 IsWindowUnicode 1 text 'second'\n  control 1 IsWindowUnicode 1 text 'OK'\n  control 2 IsWindowUnicode 1 text 'Cancel'\nNULL dialog procedure: window\n  DM_GETDEFID 0x534b0001\n  WM_CLOSE 0\n  still a window: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetMenuStringA.yaml
+id: windows/api/user32.dll/GetMenuStringA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies the text of a menu item as ANSI bytes: the item's UTF-16 text is converted with the ANSI code page, the return value counts bytes without the NUL, cchMax is in bytes.
+interface:
+  signature: "int GetMenuStringA(HMENU hMenu, UINT uIDItem, LPSTR lpString, int cchMax, UINT flags)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  value: "'Open' returns 4; the item with high bytes returns 10 and the bytes it was made with; the text 'caf<U+00E9><U+4E2D><U+0416><U+20AC>' returns 7 and 'caf<E9>??<80>'; a popup item returns its text (5 for 'Popup'); a separator and an item with an empty text return 0 (last error not changed)"
+  truncation: "a size of 5 for 'Open' gives 4 and the full text, size 4 gives 3 ('Ope'), size 3 gives 2, size 1 gives 0 (only the NUL is written); size 0 returns the length (4) and writes nothing; size -1 returns 4 and writes the text; size 4 for the mixed text gives 3 bytes ('caf'); size 6 for the high-byte text gives 5 bytes"
+  null_buffer: "a NULL buffer with size 0 returns the length in bytes (4 for 'Open', 7 for the mixed text)"
+  lookup: "by position and by command id (MF_BYCOMMAND with the id 2 finds the item whose id is 2; with a position value 0 that is no command id: 0 with 1456)"
+  other_forms: "the text of an item made by InsertMenuItemA with MIIM_TYPE ('old<E9>style') comes back with 9 bytes; the long text of 149 characters returns 149 (the same as GetMenuStringW); a text with a tab and mnemonic returns 13 as GetMenuStringW does; owner-draw and bitmap items return 0"
+errors:
+  absent_item: "an id or position that does not exist: 0 with ERROR_MENU_ITEM_NOT_FOUND (1456)"
+  bad_menu: "a made-up menu handle: 0 with ERROR_INVALID_PARAMETER (87) (not 1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

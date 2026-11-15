@@ -20,6 +20,7 @@ extern crate alloc;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 use poly_crypto::HashAlg;
 use poly_win32_cryptrt::{self as rt, Handles, SpinLock};
 use poly_wincrypt::certstr::{self, NamePara};
@@ -59,6 +60,9 @@ struct Ctx {
     cert: Certificate,
     info_block: Vec<u8>,
     friendly: Option<Vec<u16>>,
+    /// Where an enumeration last returned this context (a collection may list a context twice:
+    /// the next call starts after this place, not after the first occurrence).
+    pos_hint: usize,
 }
 
 static CONTEXTS: Handles = Handles::new();
@@ -82,6 +86,7 @@ fn new_ctx(cert: Certificate, store: usize) -> usize {
         cert,
         info_block: block,
         friendly: None,
+        pos_hint: 0,
     };
     CONTEXTS.add(ctx)
 }
@@ -132,6 +137,9 @@ struct Store {
     /// Where added certificates are written (system stores).
     dir: Option<String>,
     readonly: bool,
+    /// A system store (`readonly` only refuses additions to those: a memory store accepts them
+    /// whatever its flags, as observed on Windows).
+    system: bool,
     /// A collection store (`CERT_STORE_PROV_COLLECTION`, ADR 0155): its contexts are those of its
     /// siblings, which it holds a reference to.
     collection: bool,
@@ -196,8 +204,16 @@ fn load_system(l: Location, name: &str) -> (Vec<Certificate>, Option<String>) {
     (certs, own)
 }
 
-fn new_store(certs: Vec<Certificate>, dir: Option<String>, readonly: bool) -> usize {
-    let h = STORES.add(Store { refs: 1, certs: Vec::new(), dir, readonly, collection: false, siblings: Vec::new() });
+fn new_store(certs: Vec<Certificate>, dir: Option<String>, readonly: bool, system: bool) -> usize {
+    let h = STORES.add(Store {
+        refs: 1,
+        certs: Vec::new(),
+        dir,
+        readonly,
+        system,
+        collection: false,
+        siblings: Vec::new(),
+    });
     let ctxs: Vec<usize> = certs.into_iter().map(|c| new_ctx(c, h)).collect();
     // SAFETY: just made.
     if let Some(s) = unsafe { store_obj(h) } {
@@ -225,8 +241,11 @@ pub unsafe extern "system" fn CertOpenStore(
         store::provider(None, unsafe { rt::ansi_str(provider) }.as_deref())
     };
     let readonly = flags & store::CERT_STORE_READONLY_FLAG != 0;
-    match prov {
-        Some(Provider::Memory) => new_store(Vec::new(), None, readonly),
+    // A successful open leaves the last error as it was (the file reads below must not change it), except
+    // where Windows sets one: a collection sets 0, a current-user system store leaves CRYPT_E_NOT_FOUND.
+    let before = rt::last_error();
+    let h = match prov {
+        Some(Provider::Memory) => new_store(Vec::new(), None, false, false),
         Some(Provider::SystemW | Provider::SystemA) => {
             let name = if prov == Some(Provider::SystemA) {
                 // SAFETY: a NUL-terminated name.
@@ -236,25 +255,48 @@ pub unsafe extern "system" fn CertOpenStore(
                 unsafe { rt::wide_str(para.cast()) }
             };
             let Some(name) = name else { return fail(E_INVALIDARG) };
-            if store::store_subdir(&name).is_none() {
+            if store::store_subdir(&name).is_none() || !store::has_location(flags) {
                 return fail(ERROR_FILE_NOT_FOUND);
             }
             if flags & store::CERT_STORE_DELETE_FLAG != 0 {
                 return fail(ERROR_NOT_SUPPORTED);
             }
-            let (certs, dir) = load_system(store::location(flags), &name);
-            new_store(certs, dir, readonly)
+            let location = store::location(flags);
+            if flags & store::CERT_STORE_OPEN_EXISTING_FLAG != 0 && !system_store_exists(location, &name) {
+                return fail(ERROR_FILE_NOT_FOUND);
+            }
+            let (certs, dir) = load_system(location, &name);
+            let h = new_store(certs, dir, readonly, true);
+            rt::set_last_error(before);
+            if location == Location::CurrentUser {
+                rt::set_last_error(CRYPT_E_NOT_FOUND);
+            }
+            return h;
         }
         Some(Provider::Collection) => {
-            let h = new_store(Vec::new(), None, readonly);
+            let h = new_store(Vec::new(), None, false, false);
             // SAFETY: just made.
             if let Some(s) = unsafe { store_obj(h) } {
                 s.collection = true;
             }
-            h
+            rt::set_last_error(0);
+            return h;
         }
-        None => fail(ERROR_FILE_NOT_FOUND),
+        None => return fail(ERROR_FILE_NOT_FOUND),
+    };
+    rt::set_last_error(before);
+    h
+}
+
+/// Whether a system store exists: one of the standard names, or a directory made by an earlier add (in
+/// the location, or for the current user in the machine's).
+fn system_store_exists(l: Location, name: &str) -> bool {
+    if store::is_standard_store(name) {
+        return true;
     }
+    let Some(sub) = store::store_subdir(name) else { return false };
+    let at = |l: Location| location_root(l).is_some_and(|r| rt::dir_exists(&alloc::format!("{r}\\{sub}")));
+    at(l) || (l == Location::CurrentUser && at(Location::LocalMachine))
 }
 
 /// The contexts a store shows, with the lock held: its own, and for a collection those of its siblings
@@ -310,9 +352,6 @@ pub extern "system" fn CertAddStoreToCollection(collection: usize, sibling: usiz
         if !c.collection || collection == sibling {
             return Err(E_INVALIDARG);
         }
-        if c.siblings.iter().any(|x| x.store == sibling) {
-            return Ok(());
-        }
         c.siblings.push(Sibling { store: sibling, flags, priority });
         // SAFETY: checked above.
         if let Some(s) = unsafe { store_obj(sibling) } {
@@ -341,16 +380,26 @@ pub extern "system" fn CertRemoveStoreFromCollection(collection: usize, sibling:
     }
 }
 
+/// The first `CERT_STORE_CTRL_NOTIFY_CHANGE` of the process leaves `CRYPT_E_NOT_FOUND` in the last error,
+/// the first `CERT_STORE_CTRL_AUTO_RESYNC`/`CANCEL_NOTIFY` a 0 (observed on Windows; later calls leave it).
+static NOTIFY_SEEN: AtomicBool = AtomicBool::new(false);
+static CANCEL_SEEN: AtomicBool = AtomicBool::new(false);
+
 /// `CertControlStore(hCertStore, dwFlags, dwCtrlType, pvCtrlPara)`: Poly's stores are files read when
 /// the store is opened and changed only through this module, so `CERT_STORE_CTRL_RESYNC`, `_COMMIT`
 /// and `_AUTO_RESYNC` succeed without anything to do. `CERT_STORE_CTRL_NOTIFY_CHANGE` hands back an
 /// event object (made when `*pvCtrlPara` is NULL) that is never set: nothing changes the files
-/// behind a program's back. `CERT_STORE_CTRL_CANCEL_NOTIFY` succeeds.
+/// behind a program's back; a NULL `pvCtrlPara` succeeds too. `CERT_STORE_CTRL_CANCEL_NOTIFY`
+/// succeeds. A memory store refuses every control, and every store an unknown one, with
+/// `ERROR_CALL_NOT_IMPLEMENTED`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CertControlStore(h: usize, _flags: u32, ctrl_type: u32, para: *mut isize) -> Bool {
     // SAFETY: only checked.
-    if unsafe { store_obj(h) }.is_none() {
+    let Some(s) = (unsafe { store_obj(h) }) else {
         return fail(ERROR_INVALID_HANDLE);
+    };
+    if !s.collection && !s.system {
+        return fail(ERROR_CALL_NOT_IMPLEMENTED);
     }
     const RESYNC: u32 = 1;
     const NOTIFY_CHANGE: u32 = 2;
@@ -359,23 +408,31 @@ pub unsafe extern "system" fn CertControlStore(h: usize, _flags: u32, ctrl_type:
     const CANCEL_NOTIFY: u32 = 5;
     match ctrl_type {
         NOTIFY_CHANGE => {
-            if para.is_null() {
-                return fail(E_INVALIDARG);
-            }
-            // SAFETY: the caller's HANDLE variable.
-            unsafe {
-                if para.read() == 0 {
-                    let ev = CreateEventW(core::ptr::null(), 1, 0, core::ptr::null());
-                    if ev == 0 {
-                        return fail(ERROR_NOT_ENOUGH_MEMORY);
+            if !para.is_null() {
+                // SAFETY: the caller's HANDLE variable.
+                unsafe {
+                    if para.read() == 0 {
+                        let ev = CreateEventW(core::ptr::null(), 1, 0, core::ptr::null());
+                        if ev == 0 {
+                            return fail(ERROR_NOT_ENOUGH_MEMORY);
+                        }
+                        para.write(ev);
                     }
-                    para.write(ev);
                 }
+            }
+            if !NOTIFY_SEEN.swap(true, Ordering::Relaxed) {
+                rt::set_last_error(CRYPT_E_NOT_FOUND);
             }
             TRUE
         }
-        RESYNC | COMMIT | AUTO_RESYNC | CANCEL_NOTIFY => TRUE,
-        _ => fail(E_INVALIDARG),
+        AUTO_RESYNC | CANCEL_NOTIFY => {
+            if !CANCEL_SEEN.swap(true, Ordering::Relaxed) {
+                rt::set_last_error(0);
+            }
+            TRUE
+        }
+        RESYNC | COMMIT => TRUE,
+        _ => fail(ERROR_CALL_NOT_IMPLEMENTED),
     }
 }
 
@@ -424,10 +481,10 @@ pub extern "system" fn CertDuplicateStore(h: usize) -> usize {
 
 /// `CertCloseStore`: the last close releases the store's references to
 /// its contexts (contexts the caller still holds stay valid).
-/// `CERT_CLOSE_STORE_CHECK_FLAG` is accepted; Poly never reports
-/// `CRYPT_E_PENDING_CLOSE`.
+/// `CERT_CLOSE_STORE_CHECK_FLAG` with a context still open closes the store all the same and
+/// fails with `CRYPT_E_PENDING_CLOSE`.
 #[unsafe(no_mangle)]
-pub extern "system" fn CertCloseStore(h: usize, _flags: u32) -> Bool {
+pub extern "system" fn CertCloseStore(h: usize, flags: u32) -> Bool {
     if h == 0 {
         return TRUE;
     }
@@ -436,15 +493,23 @@ pub extern "system" fn CertCloseStore(h: usize, _flags: u32) -> Bool {
         match unsafe { store_obj(h) } {
             Some(s) => {
                 s.refs -= 1;
-                Some(s.refs == 0)
+                let last = s.refs == 0;
+                // `CERT_CLOSE_STORE_CHECK_FLAG` (2): a context handed out and not freed yet.
+                let pending = last
+                    && flags & 2 != 0
+                    && s.certs.iter().any(|&c| {
+                        // SAFETY: under the lock.
+                        unsafe { ctx(c) }.is_some_and(|x| x.refs > 1)
+                    });
+                Some((last, pending))
             }
             None => None,
         }
     });
     match last {
         None => fail(ERROR_INVALID_HANDLE),
-        Some(false) => TRUE,
-        Some(true) => {
+        Some((false, _)) => TRUE,
+        Some((true, pending)) => {
             STORES.remove(h);
             // SAFETY: unregistered: ours alone now.
             let s = unsafe { Box::from_raw(h as *mut Store) };
@@ -454,7 +519,7 @@ pub extern "system" fn CertCloseStore(h: usize, _flags: u32) -> Bool {
             for sib in s.siblings {
                 CertCloseStore(sib.store, 0);
             }
-            TRUE
+            if pending { fail(CRYPT_E_PENDING_CLOSE) } else { TRUE }
         }
     }
 }
@@ -467,11 +532,26 @@ fn next_in_store(h: usize, prev: usize, pick: &dyn Fn(&Certificate) -> bool) -> 
         unsafe { store_obj(h) }?;
         // SAFETY: under the lock.
         let all = unsafe { visible(h, 0) };
-        let start = if prev == 0 { 0 } else { all.iter().position(|&c| c == prev).map_or(all.len(), |i| i + 1) };
-        all[start..].iter().copied().find(|&c| {
+        let start = if prev == 0 {
+            0
+        } else {
+            // SAFETY: under the lock.
+            let hint = unsafe { ctx(prev) }.map_or(usize::MAX, |x| x.pos_hint);
+            if all.get(hint) == Some(&prev) {
+                hint + 1
+            } else {
+                all.iter().position(|&c| c == prev).map_or(all.len(), |i| i + 1)
+            }
+        };
+        let at = (start..all.len()).find(|&i| {
             // SAFETY: a context the store holds.
-            unsafe { ctx(c) }.is_some_and(|x| pick(&x.cert))
-        })
+            unsafe { ctx(all[i]) }.is_some_and(|x| pick(&x.cert))
+        })?;
+        // SAFETY: as above.
+        if let Some(x) = unsafe { ctx(all[at]) } {
+            x.pos_hint = at;
+        }
+        Some(all[at])
     });
     if prev != 0 {
         ctx_release(prev);
@@ -575,7 +655,12 @@ pub unsafe extern "system" fn CertFindCertificateInStore(
         }
         return fail(E_INVALIDARG);
     };
-    next_in_store(h, prev, &|c| store::find_matches(c, &p))
+    let r = next_in_store(h, prev, &|c| store::find_matches(c, &p));
+    // The name-string finds leave a 0 in the last error when they find something (observed on Windows).
+    if r != 0 && matches!(p, FindPara::Str { .. }) {
+        rt::set_last_error(0);
+    }
+    r
 }
 
 /// Add a parsed certificate to a store with a disposition; the store's
@@ -586,11 +671,11 @@ fn add_to_store(h: usize, cert: Certificate, disposition: u32, out: *mut usize) 
         return fail(ERROR_INVALID_HANDLE);
     }
     // An addition to a collection lands in a sibling that allows it.
-    let Some(h) = add_target(h) else { return fail(ERROR_ACCESS_DENIED) };
+    let Some(h) = add_target(h) else { return fail(E_ACCESSDENIED) };
     // SAFETY: only read.
     let Some(s) = (unsafe { store_obj(h) }) else { return fail(ERROR_INVALID_HANDLE) };
-    if s.readonly {
-        return fail(ERROR_ACCESS_DENIED);
+    if s.readonly && s.system {
+        return fail(E_ACCESSDENIED);
     }
     let existing = LOCK.with(|_| {
         s.certs.iter().copied().find(|&c| {
@@ -629,11 +714,12 @@ fn add_to_store(h: usize, cert: Certificate, disposition: u32, out: *mut usize) 
                 rt::create_dirs(d);
                 let path = alloc::format!("{d}\\{}", store::cert_file_name(&cert));
                 if !rt::write_file(&path, &cert.encoded) {
-                    return fail(ERROR_ACCESS_DENIED);
+                    return fail(E_ACCESSDENIED);
                 }
             }
             let n = new_ctx(cert, h);
-            LOCK.with(|_| s.certs.push(n));
+            // The newest certificate is enumerated first (observed on Windows).
+            LOCK.with(|_| s.certs.insert(0, n));
             n
         }
     };
@@ -641,6 +727,7 @@ fn add_to_store(h: usize, cert: Certificate, disposition: u32, out: *mut usize) 
         // SAFETY: the caller's slot.
         unsafe { out.write(ctx_ref(result)) };
     }
+    rt::set_last_error(0);
     TRUE
 }
 
@@ -687,9 +774,9 @@ pub extern "system" fn CertDeleteCertificateFromStore(context: usize) -> Bool {
     let h = c.store;
     // SAFETY: only read.
     if let Some(s) = unsafe { store_obj(h) } {
-        if s.readonly {
+        if s.readonly && s.system {
             ctx_release(context);
-            return fail(ERROR_ACCESS_DENIED);
+            return fail(E_ACCESSDENIED);
         }
         let held = LOCK.with(|_| match s.certs.iter().position(|&x| x == context) {
             Some(i) => {
@@ -1534,7 +1621,13 @@ pub unsafe extern "system" fn CryptProtectData(
     out: *mut u8,
 ) -> Bool {
     if input.is_null() || out.is_null() {
-        return fail(E_INVALIDARG);
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: the caller's blob: a length without data is a bad argument.
+    if unsafe {
+        input.cast::<u32>().read_unaligned() != 0 && input.add(8).cast::<*const u8>().read_unaligned().is_null()
+    } {
+        return fail(ERROR_INVALID_PARAMETER);
     }
     let machine = flags & poly_wincrypt::dpapi::CRYPTPROTECT_LOCAL_MACHINE != 0;
     let Some(master) = master_key(machine) else { return fail(ERROR_ACCESS_DENIED) };
@@ -1552,7 +1645,12 @@ pub unsafe extern "system" fn CryptProtectData(
     let blob =
         unsafe { poly_wincrypt::dpapi::protect(&master, data_blob(input), &desc, data_blob(entropy), machine, &r) };
     // SAFETY: the caller's output blob.
-    if unsafe { set_blob(out, &blob) } { TRUE } else { fail(ERROR_NOT_ENOUGH_MEMORY) }
+    if unsafe { set_blob(out, &blob) } {
+        rt::set_last_error(0);
+        TRUE
+    } else {
+        fail(ERROR_NOT_ENOUGH_MEMORY)
+    }
 }
 
 /// `CryptUnprotectData`: the description is returned `LocalAlloc`ed.
@@ -1567,7 +1665,7 @@ pub unsafe extern "system" fn CryptUnprotectData(
     out: *mut u8,
 ) -> Bool {
     if input.is_null() || out.is_null() {
-        return fail(E_INVALIDARG);
+        return fail(ERROR_INVALID_PARAMETER);
     }
     // SAFETY: the caller's blob.
     let blob = unsafe { data_blob(input) };
@@ -1585,7 +1683,12 @@ pub unsafe extern "system" fn CryptUnprotectData(
         unsafe { description.write(rt::local_copy(&bytes).cast()) };
     }
     // SAFETY: the caller's output blob.
-    if unsafe { set_blob(out, &data) } { TRUE } else { fail(ERROR_NOT_ENOUGH_MEMORY) }
+    if unsafe { set_blob(out, &data) } {
+        rt::set_last_error(0);
+        TRUE
+    } else {
+        fail(ERROR_NOT_ENOUGH_MEMORY)
+    }
 }
 
 /// The key of `CRYPTPROTECTMEMORY_SAME_PROCESS`: random, made at first use, known to this process only.
@@ -1607,9 +1710,11 @@ fn process_key() -> Option<[u8; 32]> {
 /// `CryptProtectMemory` / `CryptUnprotectMemory`'s common part (`poly_wincrypt::dpapi::protect_memory`).
 unsafe fn protect_memory(data: *mut u8, len: u32, flags: u32, encrypt: bool) -> Bool {
     use poly_wincrypt::dpapi::*;
-    if data.is_null() && len != 0 {
-        return fail(ERROR_INVALID_PARAMETER);
+    if data.is_null() {
+        return fail(if len == 0 { ERROR_INVALID_PARAMETER } else { ERROR_NOACCESS });
     }
+    // Success leaves the last error alone (observed on Windows): the master key's file reads must not show.
+    let before = rt::last_error();
     let secret: Vec<u8> = if flags == CRYPTPROTECTMEMORY_SAME_PROCESS {
         match process_key() {
             Some(k) => k.to_vec(),
@@ -1624,7 +1729,10 @@ unsafe fn protect_memory(data: *mut u8, len: u32, flags: u32, encrypt: bool) -> 
     // SAFETY: the caller's buffer of `len` bytes.
     let buf = unsafe { rt::bytes_mut(data, len as usize) };
     match poly_wincrypt::dpapi::protect_memory(&secret, flags, buf, encrypt) {
-        Ok(()) => TRUE,
+        Ok(()) => {
+            rt::set_last_error(before);
+            TRUE
+        }
         Err(e) => fail(e),
     }
 }

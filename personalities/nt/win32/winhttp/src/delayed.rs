@@ -4,7 +4,7 @@
 //! failing call it copes with (the fault-injection table of the gap map). An implementation
 //! replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 
-poly_win32_rt::fail_exports!("winhttp", win32, [WinHttpGetProxyForUrl, WinHttpFreeProxyResult]);
+poly_win32_rt::fail_exports!("winhttp", win32, [WinHttpFreeProxyResult]);
 
 // These return a Win32 error code: `ERROR_CALL_NOT_IMPLEMENTED`.
 poly_win32_rt::fail_exports!(

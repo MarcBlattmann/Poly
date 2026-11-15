@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/VirtualAlloc.yaml
+id: windows/api/kernel32.dll/VirtualAlloc
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  The error codes of requests that cannot be met: reserving more than the address space (128 TB less the top 64 KB is the limit), committing more than the system could back (the commit limit: ERROR_COMMITMENT_LIMIT 1455, which Node's V8 checks for), and quota exhaustion under a job object memory limit. NtAllocateVirtualMemory gives the same causes as statuses.
+interface:
+  signature: "LPVOID VirtualAlloc(LPVOID addr, SIZE_T size, DWORD type, DWORD protect); NTSTATUS NtAllocateVirtualMemory(HANDLE, PVOID *base, ULONG_PTR zeroBits, PSIZE_T size, ULONG type, ULONG protect)"
+rules:
+  zero_size: "VirtualAlloc with size 0 (reserve or commit): NULL with ERROR_INVALID_PARAMETER (87); NtAllocateVirtualMemory size 0: STATUS_INVALID_PARAMETER (0xC000000D)."
+  reserve_ok: "a reserve (no commit) of 64 KB, 1 TB, 32 TB, 64 TB and 100 TB succeeds (reserving does not count against the commit limit)."
+  reserve_too_big: "reserve of 128 TB less 64 KB: NULL with ERROR_INVALID_ADDRESS (487); 128 TB, 256 TB, 2^63, 2^64 less a page and 2^64 - 1: NULL with ERROR_INVALID_PARAMETER (87); Nt: STATUS_INVALID_PARAMETER (0xC000000D) for 128 TB, 256 TB and 2^64 less a page, the size argument is left unchanged."
+  commit_too_big: "MEM_RESERVE|MEM_COMMIT of 4 TB, 16 TB, 64 TB and 100 TB: NULL with ERROR_COMMITMENT_LIMIT (1455); of 128 TB, 2^63 and 2^64 less a page: NULL with ERROR_INVALID_PARAMETER (87). NtAllocateVirtualMemory: STATUS_COMMITMENT_LIMIT (0xC000012D) for 4 TB and 64 TB, STATUS_INVALID_PARAMETER for 128 TB and the huge sizes; the size argument is unchanged on failure. (The sizes were chosen to be far above any machine's commit limit: a machine with more than 4 TB of RAM and page file would succeed.)"
+  commit_inside_reservation: "reserve 64 TB, then MEM_COMMIT 32 TB inside it: NULL with ERROR_COMMITMENT_LIMIT (1455), Nt: STATUS_COMMITMENT_LIMIT; committing 64 KB inside the same reservation succeeds."
+  job_memory_limit: "a process in a job object with JOB_OBJECT_LIMIT_PROCESS_MEMORY (and likewise JOB_OBJECT_LIMIT_JOB_MEMORY) of 64 MB: committing 16 MB and 32 MB succeed (48 MB in all); a further 32 MB (80 MB) fails with ERROR_COMMITMENT_LIMIT (1455) / Nt STATUS_COMMITMENT_LIMIT (0xC000012D), as does Nt commit of 256 MB; reserving 1 GB without commit succeeds; committing 128 MB inside that reservation fails with 1455, committing 8 MB (56 MB in all) succeeds; after freeing 32 MB a commit of 32 MB succeeds again (the quota counts committed bytes, not reserved ones)."
+  last_error: "the failing calls set the last error; success leaves it untouched."
+errors:
+  commit_limit: "ERROR_COMMITMENT_LIMIT 1455 / STATUS_COMMITMENT_LIMIT 0xC000012D"
+  invalid: "ERROR_INVALID_PARAMETER 87 / STATUS_INVALID_PARAMETER 0xC000000D"
+  beyond_user_space: "ERROR_INVALID_ADDRESS 487 for 128 TB less 64 KB"
+side_effects: "allocates address space; commits memory"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "microseconds; failing huge requests return at once"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Exhausting the real commit limit (tests never commit more than 64 MB), large pages, MEM_TOP_DOWN, AWE, file-mapping commits (CreateFileMapping gives other codes), PAGE_* protections.

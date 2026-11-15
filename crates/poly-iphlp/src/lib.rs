@@ -33,6 +33,7 @@
 extern crate alloc;
 
 pub mod adapters;
+pub mod dhcp;
 pub mod ifrow;
 pub mod oldapi;
 pub mod wire;

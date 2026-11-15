@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "runonce_begin",
+      "exe_sha256": "febf0a2b9f895a15c2135c28dcb3417b2529afde6489fb8dcfd5a261dc10f32e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hlY2sgb25seSBvbiBhIGZyZXNoIG9iamVjdDogc3RhdHVzIDB4YzAwMDAwMDEgY29udGV4dCBzbG90IDB4OTkKY29tcGxldGUgd2l0aCBjb250ZXh0IDB4ODAwOiAweDAKY2hlY2sgb25seSBhZnRlciBjb21wbGV0aW9uOiBzdGF0dXMgMHgwIGNvbnRleHQgMHg4MDAKYmVnaW4gd2l0aCBhIE5VTEwgY29udGV4dCBzbG90IGFmdGVyIGNvbXBsZXRpb246IDB4MAogIHdvcmQ6IDAKICBjb21wbGV0ZSB3aXRoIHRoZSBmYWlsZWQgZmxhZyBhbmQgYSBjb250ZXh0OiAweGMwMDAwMGYxCmJlZ2luOiAweDEwMwpjb21wbGV0ZSB3aXRoIGNvbnRleHQgMHgxOiAweGMwMDAwMGYxCiAgd29yZCBhZnRlciB0aGUgcmVmdXNhbHM6IDB4MgogIHdvcmQ6IDAKICBhZnRlciB0aGUgY29tcGxldGU6IDEgc3RhdHVzIDB4MCBjb250ZXh0IDB4YzAwCiAgZW5kZWQ6IDEKICBmaXJzdCBjb21wbGV0ZXMgd2l0aCBhc3luYyBmbGFnOiAweDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "check only on a fresh object: status 0xc0000001 context slot 0x99\ncomplete with context 0x800: 0x0\ncheck only after completion: status 0x0 context 0x800\nbegin with a NULL context slot after completion: 0x0\n  word: 0\n  complete with the failed flag and a context: 0xc00000f1\nbegin: 0x103\ncomplete with context 0x1: 0xc00000f1\n  word after the refusals: 0x2\n  word: 0\n  after the complete: 1 status 0x0 context 0xc00\n  ended: 1\n  first completes with async flag: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1291
+    },
+    {
+      "name": "runonce_begin_c",
+      "exe_sha256": "5e73d2d104b0a6720213ad9d9a56f82045d86855cef5e98b34dd1b6ad9039cd9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hlY2sgb25seSB3aGlsZSBpbml0aWFsaXNhdGlvbiBpcyBydW5uaW5nOiBzdGF0dXMgMHhjMDAwMDAwMSBjb250ZXh0IHNsb3QgMHg5OQpiZWdpbiBhZnRlciBjb21wbGV0aW9uOiBzdGF0dXMgMHgwIGNvbnRleHQgMHg4MDAKY29tcGxldGUgYWdhaW46IDB4YzAwMDAwMDEKY29tcGxldGUgd2l0aCB0aGUgZmFpbGVkIGZsYWc6IDB4MAogIGJlZ2luIGFnYWluOiAweDEwMwpiZWdpbiB3aXRoIGZsYWdzIDB4ODogMHhjMDAwMDBmMApjb21wbGV0ZSB3aXRoIGZsYWdzIDB4MTA6IDB4YzAwMDAwZjAKY29tcGxldGUgd2l0aCBjb250ZXh0IDB4NDA0OiAweDAKY29tcGxldGUgd2l0aG91dCBhIGJlZ2luOiAweGMwMDAwMDAxCmZpcnN0IGJlZ2luIDB4MTAzOyBhIHNlY29uZCB0aHJlYWQncyBiZWdpbiByZXR1cm5lZCBhZnRlciAzMDAgbXM6IDAKYWZ0ZXIgdGhlIGZpcnN0IGZhaWxlZDogdGhlIHNlY29uZCB0aHJlYWQncyBiZWdpbiBzdGF0dXMgMHgxMDMKYXN5bmMgYmVnaW4gMHgxMDM7IHNlY29uZCB0aHJlYWQncyBhc3luYyBiZWdpbiByZXR1cm5lZCB3aXRob3V0IHdhaXRpbmc6IDEgc3RhdHVzIDB4MTAzCiAgYmVnaW4gYWZ0ZXJ3YXJkczogc3RhdHVzIDB4MCBjb250ZXh0IDB4NDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "check only while initialisation is running: status 0xc0000001 context slot 0x99\nbegin after completion: status 0x0 context 0x800\ncomplete again: 0xc0000001\ncomplete with the failed flag: 0x0\n  begin again: 0x103\nbegin with flags 0x8: 0xc00000f0\ncomplete with flags 0x10: 0xc00000f0\ncomplete with context 0x404: 0x0\ncomplete without a begin: 0xc0000001\nfirst begin 0x103; a second thread's begin returned after 300 ms: 0\nafter the first failed: the second thread's begin status 0x103\nasync begin 0x103; second thread's async begin returned without waiting: 1 status 0x103\n  begin afterwards: status 0x0 context 0x400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1310
+    }
+  ]
+}
