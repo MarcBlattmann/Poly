@@ -72,6 +72,8 @@ fn embed_win32() {
         "secur32.dll",
         "dhcpcsvc.dll",
         "dnsapi.dll",
+        // ADR 0195.
+        "mswsock.dll",
         "dbghelp.dll",
         "b35test.exe",
         // ADR 0170.

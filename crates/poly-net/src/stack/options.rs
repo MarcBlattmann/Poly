@@ -14,6 +14,15 @@ impl Stack {
         }
     }
 
+    /// Everything queued for reading: a TCP socket's bytes, the sum of a datagram socket's
+    /// datagrams (Winsock's `FIONREAD`; [`bytes_readable`](Self::bytes_readable) is Linux's).
+    pub fn queued_bytes(&self, h: SocketHandle) -> Result<usize, Errno> {
+        match &self.entry_ref(h)?.sock {
+            Sock::Dgram(s) => Ok(s.rx.iter().map(|d| d.data.len()).sum()),
+            Sock::Tcp(_) => self.bytes_readable(h),
+        }
+    }
+
     /// Bytes queued for sending and not yet acknowledged (TCP) or not yet
     /// sent (datagrams): `SIOCOUTQ`.
     pub fn send_queued(&self, h: SocketHandle) -> Result<usize, Errno> {
@@ -123,6 +132,36 @@ impl Stack {
             }
             _ => self.close(h),
         }
+    }
+
+    /// Winsock's `shutdown(SD_RECEIVE)` (set before the shutdown itself): data that is queued or
+    /// arrives later resets the connection instead of being dropped; the next call fails with
+    /// `ECONNABORTED`.
+    pub fn set_rd_shut_aborts(&mut self, h: SocketHandle, on: bool) -> Result<(), Errno> {
+        let idx = h.index as usize;
+        if let Sock::Tcp(t) = &mut self.entry(h)?.sock {
+            t.rd_shut_aborts = on;
+            if on && t.recv_queued() > 0 {
+                t.abort();
+                t.error = Some(Errno::ECONNABORTED);
+                self.settle(idx);
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset the connection (send RST) and keep the socket: the next call reports `ECONNABORTED`.
+    pub fn reset_connection(&mut self, h: SocketHandle) -> Result<(), Errno> {
+        let idx = h.index as usize;
+        if let Sock::Tcp(t) = &mut self.entry(h)?.sock
+            && t.state != TcpState::Closed
+            && t.listen.is_none()
+        {
+            t.abort();
+            t.error = Some(Errno::ECONNABORTED);
+            self.settle(idx);
+        }
+        Ok(())
     }
 
     /// Take the pending error (`getsockopt(SO_ERROR)`).

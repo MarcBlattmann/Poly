@@ -174,6 +174,30 @@ impl NtSocket for KernelSocket {
         net::call_and_wake(|s| s.shutdown(h, how))
     }
 
+    fn disconnect(&self) -> Result<(), Errno> {
+        self.net(|s, h| s.disconnect(h))
+    }
+
+    fn abort(&self) {
+        let h = self.inner.handle();
+        let _ = net::call_and_wake(|s| s.reset_connection(h));
+    }
+
+    fn established(&self) -> bool {
+        if self.inner.ty == SockType::Datagram {
+            return self.peer_addr().is_ok();
+        }
+        self.net(|s, h| s.tcp_state(h)).is_ok_and(|st| {
+            !matches!(
+                st,
+                poly_net::TcpState::Closed
+                    | poly_net::TcpState::Listen
+                    | poly_net::TcpState::SynSent
+                    | poly_net::TcpState::SynReceived
+            )
+        })
+    }
+
     fn local_addr(&self) -> Result<SocketAddr, Errno> {
         self.net(|s, h| s.local_addr(h))
     }
@@ -183,6 +207,10 @@ impl NtSocket for KernelSocket {
     }
 
     fn readiness(&self) -> Readiness {
+        if self.released.load(Ordering::SeqCst) {
+            // A closed handle ends every wait on it.
+            return Readiness(Readiness::READABLE.0 | Readiness::HANGUP.0);
+        }
         self.net(|s, h| s.readiness(h)).unwrap_or_default()
     }
 
@@ -191,6 +219,10 @@ impl NtSocket for KernelSocket {
     }
 
     fn bytes_readable(&self) -> usize {
+        // Winsock's FIONREAD on a datagram socket is the total queued (Linux's is the next datagram).
+        if self.inner.ty == SockType::Datagram {
+            return self.net(|s, h| s.queued_bytes(h)).unwrap_or(0);
+        }
         self.net(|s, h| s.bytes_readable(h)).unwrap_or(0)
     }
 
@@ -223,6 +255,7 @@ impl NtSocket for KernelSocket {
             SockOption::KeepIdle(v) => self.net(|s, h| s.set_keepalive_params(h, Some(secs(v)), None, None)),
             SockOption::KeepIntvl(v) => self.net(|s, h| s.set_keepalive_params(h, None, Some(secs(v)), None)),
             SockOption::KeepCnt(v) => self.net(|s, h| s.set_keepalive_params(h, None, None, Some(v))),
+            SockOption::AbortOnReadShutdown(v) => net::call_and_wake(|s| s.set_rd_shut_aborts(self.inner.handle(), v)),
         }
     }
 
@@ -389,7 +422,7 @@ fn worker_main(_: usize) -> usize {
         let list = core::mem::take(&mut *PENDING.lock());
         let mut keep = Vec::new();
         let mut completed = false;
-        for io in list {
+        for mut io in list {
             if !with(|s| s.sys.io.irp(io.irp).is_some()) {
                 // Cancelled (closed, CancelIo, the thread ended).
                 continue;
@@ -397,7 +430,14 @@ fn worker_main(_: usize) -> usize {
             match io.attempt() {
                 None => keep.push(io),
                 Some((status, info, data)) => {
-                    with(|s| s.sys.io.complete(io.irp, status, info, data));
+                    // `AcceptEx` / `ConnectEx`: the endpoint gets its connection before the request completes.
+                    let placement = io.take_placement();
+                    with(|s| {
+                        if let Some(p) = placement {
+                            poly_personality_nt::afd::services::place(&mut s.sys, p);
+                        }
+                        s.sys.io.complete(io.irp, status, info, data)
+                    });
                     completed = true;
                 }
             }

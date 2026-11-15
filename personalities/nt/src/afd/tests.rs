@@ -442,7 +442,8 @@ fn errors_the_personality_decides() {
     assert_eq!(werr::wsa_of_status(s.0), WSAEOPNOTSUPP);
     // send on an unconnected datagram socket without a destination.
     let (s, _) = t.send(u, b"x", None, 0);
-    assert_eq!(werr::wsa_of_status(s.0), WSAEDESTADDRREQ);
+    // Winsock: no destination on a datagram socket that never connected is WSAENOTCONN.
+    assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
     // recv on an unconnected stream socket.
     let (s, _, _) = t.recv(h2, 4, 0);
     assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
@@ -534,14 +535,17 @@ fn options() {
     // level's socket: WSAENOPROTOOPT.
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, SO_RCVTIMEO, &[1, 2]).0), WSAEFAULT);
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, 0x7777, &[0; 4]).0), WSAENOPROTOOPT);
-    assert_eq!(werr::wsa_of_status(set(&mut t, IPPROTO_IPV6, IPV6_V6ONLY, &[0; 4]).0), WSAENOPROTOOPT);
+    // IPV6_V6ONLY can be set (and read back) on any socket; it is kept as set.
+    assert_eq!(set(&mut t, IPPROTO_IPV6, IPV6_V6ONLY, &[0; 4]), STATUS_SUCCESS);
+    assert_eq!(get(&mut t, IPPROTO_IPV6, IPV6_V6ONLY).2, 0);
     assert_eq!(werr::wsa_of_status(set(&mut t, SOL_SOCKET, SO_TYPE, &[0; 4]).0), WSAENOPROTOOPT);
     assert_eq!(werr::wsa_of_status(get(&mut t, IPPROTO_TCP, 0x7777).0.0), WSAENOPROTOOPT);
     let u = t.socket(AF_INET6, SOCK_DGRAM);
     let (s, _, out) = t.ioctl(u, afd::GET_OPTION, &afd::option_header(IPPROTO_IPV6, IPV6_V6ONLY), 4);
+    // On a datagram socket the option is one byte (Windows' own).
     assert_eq!((s, out), (STATUS_SUCCESS, 1u32.to_le_bytes().to_vec()));
     let (s, _, _) = t.ioctl(u, afd::GET_OPTION, &afd::option_header(IPPROTO_TCP, TCP_NODELAY), 4);
-    assert_eq!(werr::wsa_of_status(s.0), WSAENOPROTOOPT);
+    assert_eq!(werr::wsa_of_status(s.0), WSAEINVAL);
 }
 
 #[test]

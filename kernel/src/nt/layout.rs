@@ -152,6 +152,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),
         ("dhcpcsvc.dll", super::DHCPCSVC),
+        ("mswsock.dll", super::MSWSOCK),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
