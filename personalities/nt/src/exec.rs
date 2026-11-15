@@ -582,8 +582,18 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
 /// A page fault at `addr` that the kernel's memory map could not resolve:
 /// a guard page fires (and a stack grows: the thread's TEB gets its new
 /// `StackLimit`), or it is an access violation.
+///
+/// The stack that grows is the one the faulting thread's TEB names
+/// (`NT_TIB.StackBase`, `winnt.h`) as well as a stack Poly made: a program
+/// that runs a thread on memory it allocated itself and points the TEB at
+/// it (the MSYS2 runtime does, ADR 0194) gets the growth Learn's "Thread
+/// Stack Size" describes there too.
 pub fn access_fault(proc: &mut NtProcess, b: &mut dyn Backend, thread: ThreadRef, addr: u64) -> AccessFault {
-    let fault = proc.vm.access_fault(b, addr);
+    let stack_base = proc.thread(thread).and_then(|t| {
+        let mut v = [0u8; 8];
+        b.read(t.teb + TEB_STACK_BASE, &mut v).ok().map(|()| u64::from_le_bytes(v))
+    });
+    let fault = proc.vm.access_fault_in_stack(b, addr, stack_base);
     if let AccessFault::StackGrown { limit } = fault
         && let Some(t) = proc.thread(thread)
     {
