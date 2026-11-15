@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3b0da0f262c8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:44:14Z",
+  "tests": [
+    {
+      "name": "rtlver_basic",
+      "exe_sha256": "520dfeee24fe8590d4ca93bc1541cb9c238aa5ff6ba9934f026e4c6686765e9a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UnRsR2V0VmVyc2lvbiBzaXplIDAgLT4gMHgwOiB2ZXJzaW9uIDEwLjAsIGJ1aWxkIGF0IGxlYXN0IDIyMDAwLCBwbGF0Zm9ybSAyLCBjc2QgZmlyc3QgdW5pdCAwLCB3cml0dGVuIDE4IGJ5dGVzIGFmdGVyIHRoZSBzaXplClJ0bEdldFZlcnNpb24gc2l6ZSAxNDggLT4gMHgwOiB2ZXJzaW9uIDEwLjAsIGJ1aWxkIGF0IGxlYXN0IDIyMDAwLCBwbGF0Zm9ybSAyLCBjc2QgZmlyc3QgdW5pdCAwLCB3cml0dGVuIDE4IGJ5dGVzIGFmdGVyIHRoZSBzaXplClJ0bEdldFZlcnNpb24gc2l6ZSAyNzUgLT4gMHgwOiB2ZXJzaW9uIDEwLjAsIGJ1aWxkIGF0IGxlYXN0IDIyMDAwLCBwbGF0Zm9ybSAyLCBjc2QgZmlyc3QgdW5pdCAwLCB3cml0dGVuIDE4IGJ5dGVzIGFmdGVyIHRoZSBzaXplClJ0bEdldFZlcnNpb24gc2l6ZSAyNzYgLT4gMHgwOiB2ZXJzaW9uIDEwLjAsIGJ1aWxkIGF0IGxlYXN0IDIyMDAwLCBwbGF0Zm9ybSAyLCBjc2QgZmlyc3QgdW5pdCAwLCB3cml0dGVuIDE4IGJ5dGVzIGFmdGVyIHRoZSBzaXplClJ0bEdldFZlcnNpb24gc2l6ZSAyODQgLT4gMHgwOiB2ZXJzaW9uIDEwLjAsIGJ1aWxkIGF0IGxlYXN0IDIyMDAwLCBwbGF0Zm9ybSAyLCBjc2QgZmlyc3QgdW5pdCAwLCB3cml0dGVuIDI3OSBieXRlcyBhZnRlciB0aGUgc2l6ZQogIHNlcnZpY2UgcGFjayAwLjAsIHN1aXRlIDB4MCwgcHJvZHVjdCB0eXBlIDEsIHJlc2VydmVkIDE3MApSdGxHZXRWZXJzaW9uIHNpemUgMjg1IC0+IDB4MDogdmVyc2lvbiAxMC4wLCBidWlsZCBhdCBsZWFzdCAyMjAwMCwgcGxhdGZvcm0gMiwgY3NkIGZpcnN0IHVuaXQgMCwgd3JpdHRlbiAxOCBieXRlcyBhZnRlciB0aGUgc2l6ZQogIHNlcnZpY2UgcGFjayA0MzY5MC40MzY5MCwgc3VpdGUgMHgyMDAwLCBwcm9kdWN0IHR5cGUgMTcwLCByZXNlcnZlZCAxNzAKUnRsR2V0VmVyc2lvbiBzaXplIDMwMCAtPiAweDgwMDAwMDFhLCB3cml0dGVuIDI3OSBieXRlcyBhZnRlciB0aGUgc2l6ZQpSdGxHZXROdFZlcnNpb25OdW1iZXJzOiBtYWpvciAxMCwgbWlub3IgMCwgYnVpbGQgaGlnaCBuaWJibGUgMHhmLCBidWlsZCBsb3cgMjggYml0cyBhdCBsZWFzdCAyMjAwMDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RtlGetVersion size 0 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 18 bytes after the size\nRtlGetVersion size 148 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 18 bytes after the size\nRtlGetVersion size 275 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 18 bytes after the size\nRtlGetVersion size 276 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 18 bytes after the size\nRtlGetVersion size 284 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 279 bytes after the size\n  service pack 0.0, suite 0x0, product type 1, reserved 170\nRtlGetVersion size 285 -> 0x0: version 10.0, build at least 22000, platform 2, csd first unit 0, written 18 bytes after the size\n  service pack 43690.43690, suite 0x2000, product type 170, reserved 170\nRtlGetVersion size 300 -> 0x8000001a, written 279 bytes after the size\nRtlGetNtVersionNumbers: major 10, minor 0, build high nibble 0xf, build low 28 bits at least 22000: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

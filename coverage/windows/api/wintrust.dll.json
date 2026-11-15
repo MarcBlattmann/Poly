@@ -84,7 +84,7 @@
 {"symbol":"WTHelperGetFileHandle","src":["wine-spec"]},
 {"symbol":"WTHelperGetFileName","src":["wine-spec"]},
 {"symbol":"WTHelperGetKnownUsages","src":["wine-spec"],"seeds":["wine:wintrust/tests/softpub.c:test_get_known_usages"]},
-{"symbol":"WTHelperGetProvCertFromChain","src":["wine-spec"],"seeds":["wine:wintrust/tests/softpub.c:test_WTHelperGetProvCertFromChain"]},
+{"symbol":"WTHelperGetProvCertFromChain","status":"stub","src":["wine-spec"],"seeds":["wine:wintrust/tests/softpub.c:test_WTHelperGetProvCertFromChain"]},
 {"symbol":"WTHelperGetProvPrivateDataFromChain","src":["wine-spec"]},
 {"symbol":"WTHelperGetProvSignerFromChain","status":"stub","src":["wine-spec"]},
 {"symbol":"WTHelperIsInRootStore","src":["wine-spec"]},

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/PathCchSkipRoot.yaml
+id: windows/api/kernelbase.dll/PathCchSkipRoot
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathCchSkipRoot function (pathcch.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data). The same function is exported by api-ms-win-core-path-l1-1-0.dll.
+summary: >
+  Finds where the root of a path ends. Python (3 runs) stops on the missing export. HRESULT result; the pointer to the rest comes back through an out parameter.
+interface:
+  signature: "HRESULT PathCchSkipRoot(PCWSTR pszPath, PCWSTR *ppszRootEnd)"
+  returns: "S_OK with *ppszRootEnd set to the first character after the root; E_INVALIDARG (0x80070057) when the path has no root (the out pointer is not meaningful)"
+rules:
+  drive: "`C:` -> root end at offset 2 (the rest is ''); `C:\\a\\b` -> offset 3, rest `a\\b`; `C:\\\\a` -> offset 3, rest `\\a`; `C:a` -> offset 2, rest `a`; `C:/a` -> offset 2, rest `/a`; `C::\\a` -> offset 2, rest `:\\a`; the letter is one ASCII letter: `1:\\a`, `::\\a`, `CC:\\a` -> E_INVALIDARG"
+  rooted: "`\\` -> offset 1; `\\a` -> offset 1, rest `a`; relative paths (`a`, `a\\b`, '', `.`, `//s/sh/f`) -> E_INVALIDARG (see the relative test file)"
+  unc: "`\\\\` and `\\\\\\`: after them; `\\\\s` -> the end (offset 3); `\\\\s\\` -> offset 4; `\\\\s\\sh` -> the end (6); `\\\\s\\sh\\f\\g.txt` -> offset 7, rest `f\\g.txt`; `\\\\\\s\\sh` -> offset 5, rest `sh`; `\\\\s\\\\sh` -> offset 4, rest `\\sh`; `\\\\.\\C:\\a` -> offset 7, rest `a`; `\\\\server\\share\\dir\\` -> offset 15, rest `dir\\`"
+  long: "`\\\\?\\C:\\a` -> offset 7, rest `a` (`\\\\?\\C:` -> the end, offset 6); `\\\\?\\UNC\\` -> offset 8; `\\\\?\\UNC\\s\\sh\\f` -> offset 13, rest `f`; `\\\\?\\Volume{guid}\\a\\b` -> offset 49, rest `a\\b`; E_INVALIDARG for `\\\\?`, `\\\\?\\`, `\\\\?\\a`, `\\\\?\\a\\b`, `\\\\?\\UNC` (no backslash after it) and `\\\\?\\pipe\\x`; the NT prefix `\\??\\C:\\a\\b` -> offset 1 (rest `??\\C:\\a\\b`: the single leading backslash is the root)"
+errors:
+  e_invalidarg: "0x80070057 when the path has no root"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  NULL pointers; paths longer than 32,767 units.

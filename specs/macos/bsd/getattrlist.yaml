@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/getattrlist.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# getattrlist.tests/macos.json.
+id: macos/syscall/bsd/getattrlist
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 220,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 220, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. getattrlist(path,
+  attrlist, buffer, size, options) returns file attributes in a packed
+  buffer. attrlist is {u16 bitmapcount = 5, u16 reserved, u32 common,
+  volume, directory, file, fork} (<sys/attr.h>). The buffer starts with
+  the total length (u32); then the attributes in bitmap order, common
+  before file, each aligned to its size: ATTR_CMN_NAME (1) an
+  attrreference {i32 offset from itself, u32 length including the NUL} to
+  the name, stored after the fixed part; ATTR_CMN_OBJTYPE (8) a u32 (VREG
+  1, VDIR 2, VLNK 5); ATTR_FILE_DATALENGTH (0x200) an i64 size
+  (name+type+size for a 10-byte file: 32 bytes total, name length 5, size
+  at offset 16). With ATTR_CMN_RETURNED_ATTRS (0x80000000) the first
+  attribute is the set of returned attributes (5 u32: common 0x80000009
+  for RETURNED|NAME|OBJTYPE, the others 0) and the total is 40 for a
+  directory named "dir". A symbolic link is followed unless options has
+  FSOPT_NOFOLLOW (1): VREG through it, VLNK without. A buffer too small
+  gets the length the result would need in its first 4 bytes and as much
+  of the rest as fits, and the call returns 0 (a 4-byte buffer: only the
+  length, 20 for the name alone).
+returns:
+  success: "0, buffer filled (truncated to size)"
+errors:
+  missing: "ENOENT (2)"
+  not_a_directory: "ENOTDIR (20): a file used as a directory"
+  bad_bitmap: "EINVAL (22): bitmapcount 4 (a count of 6 is a value)"
+  bad_pointer: "EFAULT (14): attrlist, buffer or path at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

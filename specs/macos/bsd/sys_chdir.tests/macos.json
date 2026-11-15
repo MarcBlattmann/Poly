@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "chdir_errors",
+      "source_sha256": "ef4dd1f2ecec1c292cb54ec4c222e8355eac1909ec9478d1f4665080ee18d929",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a6d825f604ecad31078b2633e465c43af88967497339806e135553f5a67a6430",
+          "exit_code": 0,
+          "stdout": "ok a missing directory: ENOENT\nok the empty path: ENOENT\nok a file: ENOTDIR\nok a file as a directory: ENOTDIR\nok the path at address 8: EFAULT\nok a directory with mode 000: EACCES\nok the working directory is unchanged\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "chdir_fchdir",
+      "source_sha256": "0cb44e821d5035da993b8cdb2986f5e8d72c0e473cda039264b69831c2eda16a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7754d9cf5cebb8bee1ce6961d6dc7b349944938ef4d1a9894704099ab1a328e9",
+          "exit_code": 0,
+          "stdout": "ok fchdir to the open directory\nok inner is visible\nok a file's descriptor: ENOTDIR\nok a descriptor that is not open: EBADF\nok back one level, the directory descriptor still works\nok inner is visible again\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

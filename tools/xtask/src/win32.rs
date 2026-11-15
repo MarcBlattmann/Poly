@@ -94,6 +94,16 @@ pub const OUTPUTS: &[&str] = &[
     "mfplat.dll",
     "powrprof.dll",
     "uxtheme.dll",
+    // ADR 0155, step 12.
+    "setupapi.dll",
+    "pdh.dll",
+    "tbs.dll",
+    "cfgmgr32.dll",
+    "wintrust.dll",
+    "ncrypt.dll",
+    "propsys.dll",
+    "wevtapi.dll",
+    "hid.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -245,6 +255,15 @@ fn cache_key(root: &Path) -> Result<u64> {
             // The generated system DLLs (ADR 0155, step 10).
             "crates/poly-stubs",
             "crates/poly-ldr",
+            "personalities/nt/win32/setupapi",
+            "personalities/nt/win32/pdh",
+            "personalities/nt/win32/tbs",
+            "personalities/nt/win32/cfgmgr32",
+            "personalities/nt/win32/wintrust",
+            "personalities/nt/win32/ncrypt",
+            "personalities/nt/win32/propsys",
+            "personalities/nt/win32/wevtapi",
+            "personalities/nt/win32/hid",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

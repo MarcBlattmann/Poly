@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "winsta_process",
+      "exe_sha256": "3b630d9fe82e76f21efba4d4be7cf7a5c0a30a67e768de58e29a466f52b2321f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvY2VzcyBzdGF0aW9uIGhhbmRsZSBvcGVuZWQ9MSB0aHJlYWQgZGVza3RvcCBvcGVuZWQ9MQpHZXRQcm9jZXNzV2luZG93U3RhdGlvbiBub3cgbmFtZXMgdGhlIGFsdGVybmF0ZSBzdGF0aW9uPTEKdGhlIGNhbGxpbmcgdGhyZWFkIGtlZXBzIGl0cyBkZXNrdG9wPTEKU2V0UHJvY2Vzc1dpbmRvd1N0YXRpb24ob3JpZ2luYWwpOiByPTEgZXJyPXVuY2hhbmdlZApTZXRQcm9jZXNzV2luZG93U3RhdGlvbihOVUxMKTogcj0wIGVycj02ClNldFByb2Nlc3NXaW5kb3dTdGF0aW9uKGFuIGV2ZW50IGhhbmRsZSk6IHI9MCBlcnI9NgpDbG9zZVdpbmRvd1N0YXRpb24odGhlIHByb2Nlc3Mgc3RhdGlvbik6IHI9MCBlcnI9MTcwCmNsb3NlIGl0IGFnYWluOiByPTAgZXJyPTYKQ2xvc2VEZXNrdG9wKHRoYXQgZGVza3RvcCk6IHI9MSBlcnI9dW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "process station handle opened=1 thread desktop opened=1\nGetProcessWindowStation now names the alternate station=1\nthe calling thread keeps its desktop=1\nSetProcessWindowStation(original): r=1 err=unchanged\nSetProcessWindowStation(NULL): r=0 err=6\nSetProcessWindowStation(an event handle): r=0 err=6\nCloseWindowStation(the process station): r=0 err=170\nclose it again: r=0 err=6\nCloseDesktop(that desktop): r=1 err=unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "winsta_process_c",
+      "exe_sha256": "7fd0ccdb7e00210ac8e884d977fdacd9da771f9ffb32a0e76fb947e5107bc448",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0UHJvY2Vzc1dpbmRvd1N0YXRpb24oYWx0ZXJuYXRlKTogcj0xIGVycj11bmNoYW5nZWQKaXQgaXMgbm8gbG9uZ2VyIHRoZSBmaXJzdCBoYW5kbGU9MQp0aGUgZGVza3RvcCBvcGVucyBieSBuYW1lIHdoaWxlIHRoZSBhbHRlcm5hdGUgc3RhdGlvbiBpcyBjdXJyZW50OiBvcGVuZWQ9MSBlcnI9dW5jaGFuZ2VkCnRoZSBkZXNrdG9wIGlzIG5vdCBmb3VuZCBpbiB0aGUgb3JpZ2luYWwgc3RhdGlvbjogb3BlbmVkPTAgZXJyPTIKU2V0UHJvY2Vzc1dpbmRvd1N0YXRpb24oYSBkZXNrdG9wIGhhbmRsZSk6IHI9MCBlcnI9NgpTZXRQcm9jZXNzV2luZG93U3RhdGlvbihSRUFEQVRUUklCVVRFU3xDUkVBVEVERVNLVE9QKTogcj0xIGVycj11bmNoYW5nZWQKY2xvc2UgaXQgb25jZSBpdCBpcyBub3QgY3VycmVudDogcj0xIGVycj11bmNoYW5nZWQKQ2xvc2VXaW5kb3dTdGF0aW9uKGEgZGVza3RvcCBoYW5kbGUpOiByPTAgZXJyPTYKQ2xvc2VEZXNrdG9wKHRoZSBjYWxsaW5nIHRocmVhZCdzIGRlc2t0b3ApOiByPTAgZXJyPTE3MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessWindowStation(alternate): r=1 err=unchanged\nit is no longer the first handle=1\nthe desktop opens by name while the alternate station is current: opened=1 err=unchanged\nthe desktop is not found in the original station: opened=0 err=2\nSetProcessWindowStation(a desktop handle): r=0 err=6\nSetProcessWindowStation(READATTRIBUTES|CREATEDESKTOP): r=1 err=unchanged\nclose it once it is not current: r=1 err=unchanged\nCloseWindowStation(a desktop handle): r=0 err=6\nCloseDesktop(the calling thread's desktop): r=0 err=170\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

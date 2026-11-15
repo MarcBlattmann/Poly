@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/CreateDesktopW.yaml
+id: windows/api/user32.dll/CreateDesktopW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateWindowStationW", "CloseWindowStation", "OpenWindowStationW", "SetProcessWindowStation", "GetProcessWindowStation", "CreateDesktopW", "OpenDesktopW", "CloseDesktop", "GetThreadDesktop", "SetThreadDesktop", "GetUserObjectInformationW", "Window Station Security and Access Rights", "Desktop Security and Access Rights", "Mandatory Integrity Control"; winuser.h, winbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a named desktop in the process's window station and returns a handle with the access asked for; the same name again gives another handle to the same desktop. The broker creates one alternate desktop in its alternate station and starts each confined child on it with STARTUPINFO.lpDesktop = "station\desktop". A child whose station or desktop does not exist is created, then ends with exit code 0xC0000142 (STATUS_DLL_INIT_FAILED); a child that runs at Low or Untrusted integrity (the sandbox's tokens) also ends with 0xC0000142 unless both objects carry a DACL that gives it access and a mandatory label at its level or lower: "D:(A;;GA;;;WD)S:(ML;;;;;LW)" works, the creator's default security and a DACL without a label do not.
+interface:
+  signature: "HDESK CreateDesktopW(LPCWSTR name, LPCWSTR device, LPDEVMODEW mode, DWORD flags, ACCESS_MASK desired_access, LPSECURITY_ATTRIBUTES sa)"
+  access: "DESKTOP_READOBJECTS 0x1, CREATEWINDOW 0x2, CREATEMENU 0x4, HOOKCONTROL 0x8, JOURNALRECORD 0x10, JOURNALPLAYBACK 0x20, ENUMERATE 0x40, WRITEOBJECTS 0x80, SWITCHDESKTOP 0x100"
+  flags: "DF_ALLOWOTHERACCOUNTHOOK 1 is the only flag"
+chrome:
+  flow: "the broker makes an alternate window station and an alternate desktop for its targets in the browser process (CreateWindowStationW 2 calls, one of them fails with ERROR_ACCESS_DENIED; GetProcessWindowStation 2, SetProcessWindowStation 2 (switch to the new station to create the desktop there, then back), CreateDesktopW 1, GetThreadDesktop 2, GetUserObjectInformationW 44, CloseDesktop 1, CloseWindowStation 1) and starts every confined child with CreateProcessAsUserW (creation flags 0x8040C: CREATE_SUSPENDED|DETACHED_PROCESS|CREATE_UNICODE_ENVIRONMENT|EXTENDED_STARTUPINFO_PRESENT); by the sandbox's published design STARTUPINFO.lpDesktop names the alternate \"station\\desktop\". The arguments of the window station and desktop calls are not in the committed traces"
+  strings_next_to_it: "the broker's ConvertStringSecurityDescriptorToSecurityDescriptorW calls in stage 2 use D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0) and D:P(A;;0x1F0003;;;SY)(A;;0x1F0003;;;IU); which object each descriptor goes to is not in the traces. The first one, applied to the alternate station and desktop, makes the desktop's creation fail for the creator (the DACL grants SYSTEM and the AppContainer package group only: CreateDesktopW returns NULL here, see the test)"
+rules:
+  named_desktop: "CreateDesktopW(\"polydesk_one\", NULL, NULL, 0, GENERIC_ALL, NULL) in the (alternate) station returns a handle (last error untouched); UOI_NAME = the name, UOI_TYPE = \"Desktop\" (16 bytes with the NUL), UOI_FLAGS = 12 zero bytes"
+  same_name_again: "the same name again (even with a narrower access) returns a second handle, a different handle value; OpenWindowStationW-style lookup: OpenDesktopW(name, 0, FALSE, DESKTOP_READOBJECTS) finds it (name reads back), with DESKTOP_SWITCHDESKTOP too (the oracle account may), a missing name: NULL, error 2"
+  access_masks: "Chrome's narrow mask CREATEWINDOW|READOBJECTS|READ_CONTROL|WRITE_DAC|WRITE_OWNER, the full DESKTOP_ALL_ACCESS and MAXIMUM_ALLOWED give handles; access 0 gives NULL with error 8 (ERROR_NOT_ENOUGH_MEMORY)"
+  flags_and_device: "flags 1 works; flags 0x100: NULL, error 87; a non-NULL device name: NULL, error 87"
+  names: "a NULL name and an empty name: NULL with error 6 (ERROR_INVALID_HANDLE)"
+  station_handle_rights: "the call does not need CREATEDESKTOP on the handle the process was switched to (a handle opened with READATTRIBUTES only still creates)"
+  lifetime: "the desktop goes with its last handle: opening the name afterwards gives NULL, error 2"
+  child_lpdesktop: "STARTUPINFO.lpDesktop = \"polyws_child0\\polydesk_child0\": the child runs with that station and desktop as its own (exit code 0xf = both names equal the given ones and both handles open); a missing station, a missing desktop in an existing station, or a desktop name alone that is not in the process's own station: the process is created and ends with 0xC0000142; NULL or an empty string: the child gets the creator's own station and desktop (exit code 0xc: handles open, names not the alternate ones)"
+  low_integrity_child: "a child made with CreateProcessAsUserW from a restricted (DISABLE_MAX_PRIVILEGE) primary token lowered to Low integrity, CREATE_SUSPENDED|DETACHED_PROCESS|CREATE_UNICODE_ENVIRONMENT, lpDesktop = the alternate station\\desktop, then resumed: with objects made with the creator's default security: exit 0xC0000142; with D:(A;;GA;;;WD) (no label): 0xC0000142; with D:(A;;GA;;;WD)S:(ML;;;;;LW) on both: exit code 0xf; with D:(A;;GA;;;WD)S:(ML;;;;;S-1-16-0): 0xf; with D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0): CreateDesktopW itself returns NULL (the creator has no access under that DACL) and the child ends 0xC0000142. Without lowering the token (restricted only) every variant gives 0xf"
+errors:
+  access_zero: "ERROR_NOT_ENOUGH_MEMORY (8)"
+  bad_flags_or_device: "ERROR_INVALID_PARAMETER (87)"
+  null_or_empty_name: "ERROR_INVALID_HANDLE (6)"
+  open_missing: "ERROR_FILE_NOT_FOUND (2)"
+  child_cannot_attach: "the child's exit code 0xC0000142 (STATUS_DLL_INIT_FAILED)"
+side_effects: "creates a named kernel object in the current window station; a child started on it attaches to it"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The tests that start children report the child's exit code only (names and handle states are folded into it).
+not_covered: >
+  Desktops in the interactive session, DACL read-back, switching the visible desktop, windows on the alternate desktop, hooks (DESKTOP_HOOKCONTROL, journaling), heap size (UOI_HEAPSIZE depends on the machine and is not recorded).

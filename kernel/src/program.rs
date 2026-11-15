@@ -15,7 +15,6 @@
 //! a reason: Mach-O needs its personality's loader; `#!` scripts are left
 //! to `execve` (a program can run one).
 
-use crate::Box;
 use crate::boot_info::BootInfo;
 use crate::fs::cache::FileSource;
 use crate::process::{self, ExitStatus, Process};
@@ -23,6 +22,7 @@ use crate::user;
 use crate::user::exec::{self, ExecError, ExecParams};
 use crate::user::memory::PageSource;
 use crate::{fs, kprintln, qemu, testrun, thread};
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -81,7 +81,8 @@ pub enum Prepared {
     Linux { process: Arc<Process>, image: exec::Image },
     /// A PE executable: its process record and image (its headers parsed;
     /// its pages are read from the file as they are touched, ADR 0155),
-    /// started by `crate::nt`.
+    /// started by `crate::nt`. Boxed: the section record is several times
+    /// the size of the other variants.
     Nt { process: Arc<Process>, image: Box<poly_personality_nt::image::ImageSection>, launch: crate::nt::Launch },
     /// A native Poly program (ADR 0125): its process record and loaded
     /// image, started like a Linux ELF.

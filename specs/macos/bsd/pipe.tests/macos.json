@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "pipe_epipe",
+      "source_sha256": "ee994f377e88eaaf89d5d3688b332f2b3f04f6b98006044a94cd0fd3f2a0bb1b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0ae785d42d41f19cdee5198f6ab9efe9ef3506a8dde421c17d6e6e1152aaa3eb",
+          "exit_code": 0,
+          "stdout": "ok default action: the child is killed by SIGPIPE\nok SIGPIPE ignored: EPIPE\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pipe_properties",
+      "source_sha256": "da0c6eb8010437d6c4e2453f2b4877582f7fc1f075f15bf0dad318fab29c6e48",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2306e082a1abce9b7b7dcddff91cf499103895df5ee51a1a0023d20878942d9b",
+          "exit_code": 0,
+          "stdout": "ok fstat of the read end\nok a FIFO with mode 0660\nok size 0\nok an empty nonblocking read: EAGAIN\nok FIONREAD: 3 bytes waiting\nok a write larger than the pipe is short\nvalue pipe capacity (bytes taken by the second write, after 3 bytes) 65533\nok a full pipe: EAGAIN\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -60,7 +60,7 @@
 {"symbol":"GetSChannelInterface","src":["wine-spec"]},
 {"symbol":"NCryptCloseKeyProtector","src":["wine-spec"]},
 {"symbol":"NCryptCloseProtectionDescriptor","src":["wine-spec"]},
-{"symbol":"NCryptCreateClaim","src":["wine-spec"]},
+{"symbol":"NCryptCreateClaim","status":"stub","src":["wine-spec"]},
 {"symbol":"NCryptCreatePersistedKey","status":"stub","src":["wine-spec"],"seeds":["wine:ncrypt/tests/ncrypt.c:test_create_persisted_key","wine:ncrypt/tests/ncrypt.c:test_finalize_key","wine:ncrypt/tests/ncrypt.c:test_set_property","wine:ncrypt/tests/ncrypt.c:test_NCryptEncrypt","wine:ncrypt/tests/ncrypt.c:test_NCryptExportKey"]},
 {"symbol":"NCryptCreateProtectionDescriptor","src":["wine-spec"]},
 {"symbol":"NCryptDecrypt","status":"stub","src":["wine-spec"]},

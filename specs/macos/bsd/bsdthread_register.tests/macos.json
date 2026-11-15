@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "register_einval",
+      "source_sha256": "cd0975ed4f53ff3368dc7a7916a5c47b243602c35a2f96d6483ab3c55c0d326e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "825c963b43f1a0f4de423fc29d471f0e71b07b98731e0897a065211463d86389",
+          "exit_code": 0,
+          "stdout": "ok all arguments 0: EINVAL\nok nonzero entry points: EINVAL\nok with flags: EINVAL\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "register_in_child",
+      "source_sha256": "b5546b5a43943eb41383ca8ebf78037485b89726e7d7822ebd9c13f300c45cfe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d939a97c0d1eae57efa0fbb83f9eee3970de43cec0270eaae52ce0a80882f941",
+          "exit_code": 0,
+          "stdout": "ok the child: EINVAL\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

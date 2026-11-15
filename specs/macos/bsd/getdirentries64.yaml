@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/getdirentries64.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# getdirentries64.tests/macos.json.
+id: macos/syscall/bsd/getdirentries64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 344,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 =
+  344, arguments in x0..x5. On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. getdirentries64(fd, buf, bufsize, basep) fills buf with
+  directory records and returns the bytes used, 0 at the end. A record is
+  struct dirent with 64-bit inodes (<sys/dirent.h>): d_ino u64, d_seekoff
+  u64, d_reclen u16, d_namlen u16, d_type u8, then the name and a NUL;
+  d_reclen is a multiple of 8 (32 for names up to 10 bytes), d_seekoff was
+  0, d_type is DT_DIR (4) or DT_REG (8). "." and ".." come first, the
+  other names in no particular order (APFS: not sorted). An empty
+  directory reads 64 bytes. The buffer must take at least 64 bytes: 32 is
+  EINVAL; a 64-byte buffer returns two records per call. basep must be
+  writable: it gets 0 after the first call and 0x7fffffff once everything
+  was read, where lseek(fd, 0, SEEK_CUR) also says 0x7fffffff; lseek to 0
+  starts again with the same records.
+returns:
+  success: "bytes of records placed in buf"
+  end: "0"
+errors:
+  small_buffer: "EINVAL (22): bufsize 16 or 32"
+  not_a_directory: "EINVAL (22): a regular file's descriptor"
+  not_open: "EBADF (9): fd 99"
+  bad_buffer: "EFAULT (14): buf at address 8"
+  bad_basep: "EFAULT (14): basep NULL or at address 8"
+side_effects: "the directory offset moves"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

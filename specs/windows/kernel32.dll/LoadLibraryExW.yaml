@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/LoadLibraryExW.yaml
+id: windows/api/kernel32.dll/LoadLibraryExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CreateRestrictedToken", "SetThreadToken", "RevertToSelf", "CreateProcessAsUserW", "Mandatory Integrity Control", "Restricted Tokens", "Access Control Lists", "Registry Key Security and Access Rights", "LoadLibraryExW function (libloaderapi.h)", "Dynamic-Link Library Search Order"; libloaderapi.h, winnt.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Loads a library. In stage 2 the confined renderers call LoadLibraryExW("DWriteCore.dll") from the system directory after their token was lowered and get ERROR_ACCESS_DENIED (5), after which GetProcAddress of its export gives 127; Chrome goes on (the DOM is the same). The tests build the sandbox's token pair from public calls: the process token is a restricted primary token (CreateRestrictedToken with DISABLE_MAX_PRIVILEGE, Administrators and Users as deny-only, restricted to the Null SID S-1-0-0) lowered to Untrusted integrity (S-1-16-0); the main thread of the suspended child gets an impersonation token (restricted copy with no group disabled, restricted to Everyone, Users, RESTRICTED and the Null SID, same integrity) through SetThreadToken(&thread, token) before ResumeThread; the child calls RevertToSelf() after its start-up. The same questions are asked in the unrestricted parent for contrast. Observed: a target whose main thread has no impersonation token ends during start-up with exit code 0xC0000022; a token pair whose impersonation token has a higher integrity level than the process token ends with 0xC00000A5 (STATUS_BAD_IMPERSONATION_LEVEL); with the impersonation token (same or lower integrity than the process token) the target starts, loads a system library it has not loaded yet (winmm.dll), and after RevertToSelf cannot load another one that is not loaded (msctf.dll: 5).
+interface:
+  signature: "HMODULE LoadLibraryExW(LPCWSTR name, HANDLE file, DWORD flags)"
+chrome:
+  calls: "LoadLibraryExW 92 calls in stage 2; the failure is the DWriteCore.dll one in the renderers (and the browser's optimization_guide_internal.dll, absent, error 126, in every stage)"
+rules:
+  start_pairs: "Untrusted process token with an Untrusted impersonation token: the target starts and exits 0; with no impersonation token (SetThreadToken not called): exit 0xC0000022; Untrusted process token with a Low impersonation token: exit 0xC00000A5; Low process token with an Untrusted impersonation token: starts, exit 0; Low with Low: starts, exit 0; SetThreadToken on the suspended thread returns TRUE in every case"
+  impersonating: "kernel32.dll (already loaded): loaded; winmm.dll (not loaded yet): loaded, error 0; a library that does not exist: 126"
+  after_revert: "kernel32.dll (loaded): loaded; version.dll: not loaded, error 126; msctf.dll: not loaded, error 5; a library that does not exist: 126"
+  thread_token_at_start: "the target's own OpenThreadToken during the impersonation phase fails with 5"
+errors:
+  access_denied: "ERROR_ACCESS_DENIED (5) for a library file the token may not open"
+  not_found: "ERROR_MOD_NOT_FOUND (126)"
+  start_failures: "the target's exit code 0xC0000022 or 0xC00000A5 when the process cannot initialise"
+side_effects: "loads a library into the process"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The child reports through an inherited pipe; the parent prints the child's exit code.
+not_covered: >
+  DWriteCore.dll itself (whether it exists depends on the machine), unsigned libraries and the Microsoft-signed-only mitigation (see the UpdateProcThreadAttribute sheet), libraries loaded with a full path, LOAD_LIBRARY_* flags.

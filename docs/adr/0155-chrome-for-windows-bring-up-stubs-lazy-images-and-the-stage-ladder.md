@@ -739,6 +739,73 @@ Notepad++, WinMerge, KeePassXC, WinSCP, Sumatra PDF, XnView MP, Audacity, Node.j
   with its status; an image whose relocation table needs more than one heap block fails with
   `STATUS_NO_MEMORY` and the kernel goes on.
 
+## Addendum: stage 1 passes (`chrome-win-s12`, step 12)
+
+After step 11 every process of stage 1 lived, and about 12 s in the whole tree went quiet (the
+browser had just logged the start of its `--dump-dom` command). Found with Poly's own wait report,
+not with Chrome's code:
+
+1. **The wait report shows who holds what.** `poly.nt.waits` now lists, per blocked wait, the
+   processes and handle values that hold each object; per named-pipe instance the processes
+   holding each end, the unread bytes and messages and the reads waiting in each direction; the
+   completion ports that hold packets; the I/O requests waiting per process and the completions
+   not yet delivered; the win32k thread queues (posted messages, wake bits, the queue event's
+   state); and, with `poly.nt.trail`, each selected thread's last calls. The trail is kept per
+   thread (a busy thread no longer pushes a quiet one's calls out), `poly.nt.trail.skip=<names>`
+   leaves services out (`--trail-skip`), and `poly.nt.only` takes `a|b`. `ObjectManager::holders`
+   (diagnostics), `IoState::{np_debug_lines, port_debug_lines}`, `Wm::queue_debug_lines`.
+   A completion whose data or status block cannot be written into the requester is now logged.
+2. **`UnregisterWaitEx` signals its completion event** (Learn: "If the function succeeds, or if the
+   function fails with ERROR_IO_PENDING, the caller should always wait until the event is
+   signaled"). The browser's UI thread unregisters a wait it had registered on a child process
+   with an event it creates for the purpose, and waits for that event; Poly signalled the event
+   only when a callback was still running, so the UI thread waited forever (the report: thread 2
+   waits on an event only the browser holds; its trail: `NtCreateEvent`, `NtSetEvent` of the
+   wait's cancel event, `NtWaitForSingleObject` of the new event). Now the wait's thread signals
+   the event when it ends, and `UnregisterWaitEx` signals it itself when that thread had ended
+   already (a `WT_EXECUTEONLYONCE` wait that fired). `poly_kernelbase::waitreg::unregister`
+   (host test) and a `k32test` case.
+3. **Nine more delay-loaded DLLs** (the step 9 rule: the DLL must exist, its exports may fail).
+   With the UI thread free, the browser delay-loads `SETUPAPI.dll`, `pdh.dll` and `tbs.dll`, and
+   in some runs `ncrypt.dll` (`0xC06D007E` and a breakpoint without them). `setupapi`, `pdh`,
+   `tbs`, `cfgmgr32`, `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid` export every name
+   `chrome.dll` delay-loads from them and fail with the value each function's page or header
+   gives: `INVALID_HANDLE_VALUE`, `FALSE` or `NULL` with `ERROR_CALL_NOT_IMPLEMENTED` (`setupapi`,
+   the `wintrust` catalog functions, `wevtapi`, `HidD_*`), `PDH_NOT_IMPLEMENTED` (`pdh`),
+   `TBS_E_TPM_NOT_FOUND` (`tbs`: no TPM), `CR_CALL_NOT_IMPLEMENTED` (`cfgmgr32`),
+   `TRUST_E_PROVIDER_UNKNOWN` (`WinVerifyTrust`), `NTE_NOT_SUPPORTED` (`ncrypt`), `E_NOTIMPL`
+   (`propsys`), `HIDP_STATUS_NOT_IMPLEMENTED` (`HidP_*`). Coverage: `stub`. Still missing (none
+   reached): `bthprops.cpl`, `comdlg32`, `credui`, `cryptui`, `d3d11`, `d3d12`, `dcomp`, `dxgi`,
+   `esent`, `mf`, `mfreadwrite`, `mmdevapi`, `ndfapi`, `urlmon`, `winspool.drv`, `winusb`.
+4. **A satisfied wait is not a timeout.** The object manager retires a satisfied wait and queues
+   its wake; the waiting thread learns of it when the signaller drains the wakes after its call.
+   A waiter whose timeout (or APC) came in between cancelled a wait that no longer existed and
+   reported `STATUS_TIMEOUT` (or `STATUS_USER_APC`) although the object was taken (an auto-reset
+   event reset, a semaphore count, a mutant), and the late wake became the result of the thread's
+   next wait. Now the waiter takes a still-queued wake of its own wait first
+   (`ObjectManager::take_wake`, host test), and a recorded completion carries its wait's id so a
+   later wait never takes it.
+5. **Memory.** In the 4 GiB guest the kernel ran out of frames in about half of the stage 1 runs
+   once the browser got this far (about ten Chrome processes): "memory allocation of 1232 bytes
+   failed" (an exception's `CONTEXT`, the first allocation after the frames were gone; the kernel
+   heap takes its pages from the frame allocator). The stages now run with 8 GiB
+   (`chromewin::MEMORY`); why Poly needs that much more than Windows for the same processes is
+   open.
+6. **The summary reads the launcher's output whole.** The kernel's log lines land in the middle of
+   the launcher's console lines and the console wraps the SHA-256 line with a cursor move, so the
+   stage's digest was never found; `console_stream` cuts the kernel lines out first.
+
+**Stage 1 passes**: Chrome exits with 0 after about 50–70 s and prints the page's DOM, 440 bytes,
+SHA-256 `7b79f8b4…3807b`, the digest the spec recorded on Windows: 8 of the last 10 runs. The
+other two ended `0xffff7002`; with `poly.nt.exceptions` one of them showed a failed check (int3) on
+a browser thread at `chrome.dll+0xc62f809`, no text on the stack. `S1_REQUIRED` stays `false`
+until stage 1 passes every time.
+
+**Doc-derived, to be confirmed against Windows:** the failure values of the nine stub DLLs
+(`PDH_NOT_IMPLEMENTED`, `TBS_E_TPM_NOT_FOUND` with no TPM, `CR_CALL_NOT_IMPLEMENTED`,
+`TRUST_E_PROVIDER_UNKNOWN`, `NTE_NOT_SUPPORTED`, `HIDP_STATUS_NOT_IMPLEMENTED`), and that `UnregisterWaitEx` with an event signals it once the wait's
+thread is done even when it returns `TRUE`.
+
 ## Addendum: the DLLs and exports the popular Windows programs import (`win-apps-exports`, step 10)
 
 The survey (`windows-app-survey`) ran 19 popular Windows programs: none got a window, and many stopped
@@ -752,7 +819,7 @@ loader's own "failed" log lines.
   `ntdll`. Each logs `stub: dll!name` and fails as Learn documents: `FALSE`/`NULL`/0 with `ERROR_CALL_NOT_IMPLEMENTED`
   (the default of the Win32 API); `(HANDLE)-1` or `-1` for the functions whose failure value that is
   (`CreateFile2`, `DialogBoxParamW`, `ImageList_Add`, `GetMessageA` ...); `E_NOTIMPL` for COM, shell and theme
-  functions; `STATUS_NOT_IMPLEMENTED` for `Nt*` and the `NTSTATUS` functions of `ntdll`, `bcrypt` and `hid`;
+  functions; `STATUS_NOT_IMPLEMENTED` for `Nt*` and the `NTSTATUS` functions of `ntdll` and `bcrypt`;
   the function's own error value where it returns one directly (`ERROR_CALL_NOT_IMPLEMENTED` from `Reg*`, `Cred*`,
   `SH*Value`; `ERROR_NOT_SUPPORTED` from `iphlpapi` and `netapi32`; `MMSYSERR_NOTSUPPORTED` from `winmm`;
   `SEC_E_UNSUPPORTED_FUNCTION` from `secur32`; `WSAEOPNOTSUPP` and `SOCKET_ERROR` from `ws2_32`;
@@ -766,9 +833,9 @@ loader's own "failed" log lines.
   `msvcrt` forwards three accessors to `ucrtbase`. `ucrtbase` exports the "optimized" `_o_<name>` entry points
   as aliases of `<name>` (the same function; the names are from the import tables).
 - **The DLLs Poly lacks, generated.** `poly-stubs` (the crate of `polystub.dll`) got a `system` module that makes a
-  whole DLL from a table (`sysdlls.rs`, 73 DLLs, about 2,100 exports): `comdlg32`, `rpcrt4`, `mpr`, `ncrypt`,
-  `setupapi`, `hid`, `winspool.drv`, `msimg32`, `usp10`, `gdiplus`, `wldap32`, `wintrust`, `urlmon`, `propsys`,
-  `windowscodecs`, `xmllite`, `authz`, `msi`, `pdh`, `tdh`, `wevtapi`, `cabinet`, `httpapi`, the DirectX and Media
+  whole DLL from a table (`sysdlls.rs`, 65 DLLs, about 1,900 exports): `comdlg32`, `rpcrt4`, `mpr`,
+  `winspool.drv`, `msimg32`, `usp10`, `gdiplus`, `wldap32`, `urlmon`,
+  `windowscodecs`, `xmllite`, `authz`, `msi`, `tdh`, `cabinet`, `httpapi`, the DirectX and Media
   Foundation set (`d3d9`, `d3d11`, `d3d12`, `dxgi`, `dcomp`, `d2d1`, `dsound`, `mf`, `mfreadwrite`, `mfplay`, `evr`,
   `dxva2`, `mmdevapi`, `d3dcompiler_47`), `opengl32`, `mscoree`, `riched20`, `riched32`, `mlang`, `winsta`,
   `cryptbase`, `vulkan-1`, `icu` and the rest (the table is the list). No toolchain is involved: `xtask win32`
@@ -812,3 +879,12 @@ loader's own "failed" log lines.
   of them ordinals) are exports without an entry.
 - **Where the programs stop now** is in the hand-off `win-apps-exports.md`: the per-program table, run on the final
   head, and the ranked next blockers.
+- **After `chrome-win-s12` (step 12)** hand-wrote nine fail-only DLLs for Chrome (`setupapi`, `pdh`, `tbs`, `cfgmgr32`,
+  `wintrust`, `ncrypt`, `propsys`, `wevtapi`, `hid`), the generator no longer makes `setupapi`, `pdh`, `cfgmgr32`,
+  `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid`: one implementation per DLL, and Chrome stage 1 depends on their exact
+  failure values. The generator reproduces their kinds but not all of their values (`pdh` answers `0xC0000BD3`, `cfgmgr32`
+  `0x34`, `HidP_*` `0xC0110020`, none of which the generic table has), so theirs stay. The names the programs import
+  that those crates lacked are added to each crate as `src/apps.rs`, fail-only with the failure value of the crate's
+  own family (`pdh`, `cfgmgr32`: its value; `ncrypt`: `NTE_NOT_SUPPORTED`, `BCrypt*` a status; `HidP_*`: its status,
+  `HidD_*` FALSE; `propsys`: `E_NOTIMPL`; `setupapi`: FALSE, `(HANDLE)-1` for `SetupDiGetClassDevs*`; `wevtapi`: FALSE;
+  `wintrust`: FALSE).
