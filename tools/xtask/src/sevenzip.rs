@@ -219,6 +219,8 @@ pub fn fetch() -> Result<PathBuf> {
 pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("fetch-7zip") => fetch().map(|_| ()),
+        // MinGit for the `git-win` boot test (gitwin.rs, ADR 0194).
+        Some("fetch-git") => crate::gitwin::fetch().map(|_| ()),
         Some("imports") => crate::winimports::command(&args[1..]),
         Some("7zip-diff") => scenario_diff(&args[1..]),
         // The Windows API tracer (wintrace.rs, ADR 0090).
@@ -228,7 +230,7 @@ pub fn command(args: &[String]) -> Result {
         Some("chrome-trace") => crate::chrometrace::command(&args[1..]),
         // The traced scenario (sevenzip_trace.rs, ADR 0110).
         Some("7zip-trace") => crate::sevenzip_trace::command(&args[1..]),
-        _ => Err("usage: cargo xtask win <fetch-7zip | imports <exe | 7zip> [--markdown <file>] [--check] | \
+        _ => Err("usage: cargo xtask win <fetch-7zip | fetch-git | imports <exe | 7zip> [--markdown <file>] [--check] | \
                   chrome-trace [<poly.ptrace.jsonl>] [--stage s1] [--process browser] [--kit <kit.json>] [--all] | \n                  7zip-diff [--kernel <elf>] [--build-kernel] [--markdown <file>] [--target <poly.json>] | \
                   trace-kit <exe | 7zip> [--out <dir>] | trace-diff <a.jsonl> <b.jsonl> | \
                   7zip-trace <stage | record <windows.json>... | diff [--kernel <elf>] [--markdown <file>] [--check]>>"

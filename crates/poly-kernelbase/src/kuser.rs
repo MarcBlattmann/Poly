@@ -150,7 +150,7 @@ mod tests {
     fn the_version_fields_are_the_reported_version() {
         let p = page(&facts());
         assert_eq!((u32_at(&p, NT_MAJOR_VERSION), u32_at(&p, NT_MINOR_VERSION)), (10, 0));
-        assert_eq!(u32_at(&p, NT_BUILD_NUMBER), 19045);
+        assert_eq!(u32_at(&p, NT_BUILD_NUMBER), 26200);
         assert_eq!((u32_at(&p, NT_PRODUCT_TYPE), p[PRODUCT_TYPE_IS_VALID]), (1, 1));
         assert_eq!(u16::from_le_bytes([p[NATIVE_PROCESSOR_ARCHITECTURE], p[NATIVE_PROCESSOR_ARCHITECTURE + 1]]), 9);
         assert_eq!(u32_at(&p, SUITE_MASK), 0x100);

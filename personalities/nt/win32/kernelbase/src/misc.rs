@@ -263,6 +263,26 @@ pub unsafe extern "system" fn GetVersionExW(info: *mut u8) -> i32 {
     }
 }
 
+/// `GetVersionExA`: the same version as `GetVersionExW`, in the ANSI structures (148 and 156
+/// bytes); the string is empty.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetVersionExA(info: *mut u8) -> i32 {
+    if info.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's structure: its first DWORD is its size.
+    let size = unsafe { (info as *const u32).read_unaligned() } as usize;
+    if size != version::INFO_A && size != version::INFO_EX_A {
+        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
+    }
+    // SAFETY: `size` bytes of the caller's structure.
+    let buf = unsafe { core::slice::from_raw_parts_mut(info, size) };
+    match version::fill_info(buf, version::reported(compat()), true) {
+        Ok(()) => TRUE,
+        Err(e) => fail(e, FALSE),
+    }
+}
+
 /// The processor count (`NtQuerySystemInformation(SystemBasicInformation)`).
 /// `SystemBasicInformation`: 64 bytes with `NumberOfProcessors` at 56, or 44 with it at 40 and
 /// `MaximumUserModeAddress` at 32 in a 32-bit process (ADR 0186).
@@ -679,4 +699,17 @@ pub unsafe extern "system" fn AddVectoredExceptionHandler(first: u32, handler: *
 pub unsafe extern "system" fn RemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
     // SAFETY: as above.
     unsafe { nt::RtlRemoveVectoredExceptionHandler(handle) }
+}
+
+/// `AddVectoredContinueHandler`, `RemoveVectoredContinueHandler`: ntdll's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
+    // SAFETY: ntdll's export, which only records the pointer.
+    unsafe { nt::RtlAddVectoredContinueHandler(first, handler) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
+    // SAFETY: ntdll's export, which only compares the handle.
+    unsafe { nt::RtlRemoveVectoredContinueHandler(handle) }
 }

@@ -24,16 +24,48 @@ struct List {
 unsafe impl Sync for List {}
 
 static LIST: List = List { flag: AtomicBool::new(false), entries: UnsafeCell::new(Vec::new()) };
+/// The vectored continue handlers (`AddVectoredContinueHandler`): a list of their own.
+static CONTINUE: List = List { flag: AtomicBool::new(false), entries: UnsafeCell::new(Vec::new()) };
 static NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
 
-fn with<R>(f: impl FnOnce(&mut Vec<(u64, u64)>) -> R) -> R {
-    while LIST.flag.swap(true, Ordering::Acquire) {
+fn with_list<R>(list: &List, f: impl FnOnce(&mut Vec<(u64, u64)>) -> R) -> R {
+    while list.flag.swap(true, Ordering::Acquire) {
         core::hint::spin_loop();
     }
     // SAFETY: `flag` makes this the only accessor.
-    let r = f(unsafe { &mut *LIST.entries.get() });
-    LIST.flag.store(false, Ordering::Release);
+    let r = f(unsafe { &mut *list.entries.get() });
+    list.flag.store(false, Ordering::Release);
     r
+}
+
+fn with<R>(f: impl FnOnce(&mut Vec<(u64, u64)>) -> R) -> R {
+    with_list(&LIST, f)
+}
+
+/// Add `handler` to `list`, first (`first` non-zero) or last; returns a
+/// handle for the removal (an opaque non-null value, distinct for every call
+/// of either list).
+fn add(list: &List, first: u32, handler: *mut u8) -> *mut u8 {
+    if handler.is_null() {
+        return core::ptr::null_mut();
+    }
+    let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed) << 4;
+    with_list(list, |l| {
+        let e = (handle, handler as u64);
+        if first != 0 { l.insert(0, e) } else { l.push(e) }
+    });
+    handle as *mut u8
+}
+
+/// Remove the handler `handle` names from `list`: non-zero if it was there.
+fn remove(list: &List, handle: *mut u8) -> u32 {
+    with_list(list, |l| match l.iter().position(|&(h, _)| h == handle as u64) {
+        Some(i) => {
+            l.remove(i);
+            1
+        }
+        None => 0,
+    })
 }
 
 /// `RtlAddVectoredExceptionHandler(First, Handler)`: add `handler` first
@@ -41,28 +73,31 @@ fn with<R>(f: impl FnOnce(&mut Vec<(u64, u64)>) -> R) -> R {
 /// non-null value, distinct for every call).
 #[unsafe(no_mangle)]
 pub extern "system" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
-    if handler.is_null() {
-        return core::ptr::null_mut();
-    }
-    let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed) << 4;
-    with(|l| {
-        let e = (handle, handler as u64);
-        if first != 0 { l.insert(0, e) } else { l.push(e) }
-    });
-    handle as *mut u8
+    add(&LIST, first, handler)
 }
 
 /// `RtlRemoveVectoredExceptionHandler(Handle)`: non-zero if the handle was
 /// registered.
 #[unsafe(no_mangle)]
 pub extern "system" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
-    with(|l| match l.iter().position(|&(h, _)| h == handle as u64) {
-        Some(i) => {
-            l.remove(i);
-            1
-        }
-        None => 0,
-    })
+    remove(&LIST, handle)
+}
+
+/// `RtlAddVectoredContinueHandler(First, Handler)` (Learn:
+/// `AddVectoredContinueHandler`): registered first or last like an exception
+/// handler, in a list of its own. Learn does not say at which point of the
+/// dispatch continue handlers are called, so Poly keeps them registered and
+/// does not call them yet.
+#[unsafe(no_mangle)]
+pub extern "system" fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
+    add(&CONTINUE, first, handler)
+}
+
+/// `RtlRemoveVectoredContinueHandler(Handle)`: non-zero if the handle was a
+/// registered continue handler.
+#[unsafe(no_mangle)]
+pub extern "system" fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
+    remove(&CONTINUE, handle)
 }
 
 /// Call the vectored handlers on the exception at `record` / `context`

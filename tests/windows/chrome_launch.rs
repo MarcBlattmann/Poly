@@ -8,7 +8,8 @@
 //! `stage<N>.cmd` (N is the launcher's one argument): line 1 the program (a DOS path), line 2 its command line
 //! (the program quoted as `CreateProcessW` expects, then the arguments),
 //! line 3 the current directory (optional), line 4 the time to wait in
-//! seconds (optional, default 300). The program's standard output and
+//! seconds (optional, default 300), line 7 `next` to run `stage<N+1>.cmd`
+//! after this one (optional; lines 5 and 6 are below). The program's standard output and
 //! error go to `stdout.txt` and `stderr.txt` beside the launcher, standard
 //! input is an empty `stdin.txt`; afterwards the launcher prints them to
 //! its own standard output between marker lines, then
@@ -397,12 +398,12 @@ fn say_num(prefix: &str, v: u64, hex: bool) {
 }
 
 /// The lines of `stage.cmd`: (start, end) of each in `SPEC`.
-fn lines(spec: &[u8]) -> [(usize, usize); 6] {
-    let mut out = [(0, 0); 6];
+fn lines(spec: &[u8]) -> [(usize, usize); 7] {
+    let mut out = [(0, 0); 7];
     let (mut start, mut k) = (0, 0);
     for (i, &c) in spec.iter().enumerate() {
         if c == b'\n' {
-            if k < 6 {
+            if k < 7 {
                 let mut end = i;
                 if end > start && spec[end - 1] == b'\r' {
                     end -= 1;
@@ -413,7 +414,7 @@ fn lines(spec: &[u8]) -> [(usize, usize); 6] {
             start = i + 1;
         }
     }
-    if start < spec.len() && k < 6 {
+    if start < spec.len() && k < 7 {
         out[k] = (start, spec.len());
     }
     out
@@ -461,6 +462,14 @@ fn launch(t: &mut Test) {
             number = run;
         }
     }
+    // A stage whose line 7 is `next` is followed by the next one.
+    while run_stage(t, &dir, dir_len, number) {
+        number += 1;
+    }
+}
+
+/// Run `stage<number>.cmd`: true if it asks for the next stage to run after it.
+fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32) -> bool {
     let mut name = [0u8; 24];
     let n = {
         let base = b"stage";
@@ -481,10 +490,10 @@ fn launch(t: &mut Test) {
         name[5 + k..5 + k + 4].copy_from_slice(b".cmd");
         5 + k + 4
     };
-    let spec_path = beside(&dir, dir_len, core::str::from_utf8(&name[..n]).unwrap_or("stage1.cmd"));
+    let spec_path = beside(dir, dir_len, core::str::from_utf8(&name[..n]).unwrap_or("stage1.cmd"));
     let Some(h) = open(&spec_path, false, false) else {
         say(b"LAUNCH-EXIT driver-error no-stage-cmd\n");
-        return;
+        return false;
     };
     let spec = SPEC.0.get();
     let mut len = 0u32;
@@ -497,6 +506,9 @@ fn launch(t: &mut Test) {
     let spec: &[u8] = unsafe { core::slice::from_raw_parts(spec.cast::<u8>(), len as usize) };
     let l = lines(spec);
     let line = |k: usize| &spec[l[k].0..l[k].1];
+    // Line 7 (optional): `next` runs `stage<N+1>.cmd` after this one (a sequence of programs in
+    // one boot, `cargo xtask win-app run --then`).
+    let next = line(6) == b"next";
     let (app, cmdline, cwd) = (line(0), line(1), line(2));
     // Line 5 (optional): `NAME=VALUE` assignments separated by spaces, set in the launcher's
     // environment (which the program inherits) before it starts. Line 6 (optional): a file name
@@ -527,21 +539,21 @@ fn launch(t: &mut Test) {
     let mut cwd_w = [0u16; 1024];
     if app.len() >= 1024 || cmdline.len() >= 2048 || cwd.len() >= 1024 {
         say(b"LAUNCH-EXIT driver-error stage-too-long\n");
-        return;
+        return false;
     }
     widen(app, &mut app_w);
     widen(cmdline, &mut cmd_w);
     widen(cwd, &mut cwd_w);
 
     let (stdin_p, stdout_p, stderr_p) = (
-        beside(&dir, dir_len, "stdin.txt"),
-        beside(&dir, dir_len, "stdout.txt"),
-        beside(&dir, dir_len, "stderr.txt"),
+        beside(dir, dir_len, "stdin.txt"),
+        beside(dir, dir_len, "stdout.txt"),
+        beside(dir, dir_len, "stderr.txt"),
     );
     let (Some(si_h), Some(so_h), Some(se_h)) = (open(&stdin_p, true, true), open(&stdout_p, true, true), open(&stderr_p, true, true))
     else {
         say(b"LAUNCH-EXIT driver-error standard-handle-files\n");
-        return;
+        return false;
     };
     // SAFETY: zeroed is a valid STARTUPINFOW (integers and null pointers).
     let mut si: StartupInfoW = unsafe { core::mem::zeroed() };
@@ -579,7 +591,7 @@ fn launch(t: &mut Test) {
     if created == 0 {
         say_num("LAUNCH-EXIT spawn-error=", u64::from(create_error), false);
         t.check("spawned", false, i64::from(create_error));
-        return;
+        return false;
     }
     // SAFETY: the child's process handle.
     let waited = unsafe { WaitForSingleObject(pi.process, seconds.saturating_mul(1000)) };
@@ -656,4 +668,5 @@ fn launch(t: &mut Test) {
         say_num("LAUNCH-EXIT wait-failed=", u64::from(waited), true);
         t.check("exited", false, i64::from(waited));
     }
+    next
 }
