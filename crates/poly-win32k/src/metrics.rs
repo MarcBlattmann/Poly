@@ -39,6 +39,8 @@ pub const WS_EX_NOINHERITLAYOUT: u32 = 0x0010_0000;
 pub const WS_EX_LAYOUTRTL: u32 = 0x0040_0000;
 pub const WS_EX_STATICEDGE: u32 = 0x0002_0000;
 pub const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
+/// `winuser.h`.
+pub const WS_EX_NOREDIRECTIONBITMAP: u32 = 0x0020_0000;
 
 /// The screen of the session win32k reproduces (ADR 0131): the slice A
 /// oracle's SSH session (session 0: 1024x768, no visible desktop) unless
@@ -62,6 +64,11 @@ impl Display {
     /// The interactive session of the slice B oracle (GetSystemMetrics.yaml).
     pub const INTERACTIVE: Display =
         Display { width: 1920, height: 1080, work: Rect::new(0, 24, 1920, 1080), interactive: true };
+
+    /// The interactive session of the oracle after its taskbar moved (build 26200.9974: 48 pixels
+    /// high at the bottom; the sheets of the Chrome S3 round).
+    pub const INTERACTIVE_BOTTOM: Display =
+        Display { width: 1920, height: 1080, work: Rect::new(0, 0, 1920, 1032), interactive: true };
 
     /// An interactive desktop of `width` x `height` with a top bar of `bar`.
     pub const fn desktop(width: i32, height: i32, bar: i32) -> Display {
@@ -424,7 +431,9 @@ pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
 /// child's is `AdjustWindowRectEx`'s.
 pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
     let mut i = if style & WS_CHILD == 0 {
-        let (style, ex) = had_styles(style, ex);
+        // A sizing border says the style was chosen: the implicit caption is not added to a window that
+        // had its caption taken away (SetWindowLongW.yaml `chrome`: WS_THICKFRAME alone is 7 pixels).
+        let (style, ex) = if style & WS_THICKFRAME != 0 { (style, ex) } else { had_styles(style, ex) };
         let s = hidden_frame(style, ex) + if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
         let mut top = s;
         if has_caption(style) {
@@ -539,7 +548,12 @@ pub fn popup_window_edge(style: u32, ex: u32) -> bool {
 /// (SM_CXFRAME + SM_CXPADDEDBORDER - SM_CXDLGFRAME) with WS_THICKFRAME or a
 /// full caption. WS_EX_CLIENTEDGE and WS_EX_TOOLWINDOW do not change it.
 pub fn hidden_frame(style: u32, ex: u32) -> i32 {
-    let (style, ex) = had_styles(style, ex);
+    // (A sizing border says the style was chosen: no implicit caption, see `client_insets`.)
+    let (style, ex) = if style & WS_THICKFRAME != 0 && style & (WS_POPUP | WS_CHILD) == 0 {
+        (style, ex | WS_EX_WINDOWEDGE)
+    } else {
+        had_styles(style, ex)
+    };
     let edge = if ex & WS_EX_WINDOWEDGE != 0 {
         2
     } else if ex & WS_EX_STATICEDGE != 0 {

@@ -1,6 +1,9 @@
 # 0055: Microsoft's redistributable C++ and DirectX runtimes: run the apps' own copies
 
-**Status:** Accepted (owner decision, 2026-10-20). Resolves the ⚖️ item at the
+**Status:** Accepted (owner decision, 2026-10-20). For the Visual C++ 2015+ runtime
+(`vcruntime140*`, `msvcp140*`) the fallback below was taken up by
+[ADR 0199](0199-poly-s-own-visual-c-runtime-vcruntime140-now-msvcp140-by-what-apps-import.md)
+(owner decision, 2026-11-15); everything else here stands. Resolves the ⚖️ item at the
 start of Phase 5 in [ROADMAP.md](../ROADMAP.md). Adds the coverage status
 `app-provided` to the statuses of [0004](0004-coverage-map-format.md) (stored
 as in [0006](0006-coverage-map-one-file-per-component.md)).

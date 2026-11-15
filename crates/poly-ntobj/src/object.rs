@@ -55,10 +55,14 @@ pub enum ObjectType {
     IoCompletion,
     /// A job object (ADR 0169).
     Job,
+    /// A window station (ADR 0192).
+    WindowStation,
+    /// A desktop (ADR 0192).
+    Desktop,
 }
 
 impl ObjectType {
-    pub const ALL: [ObjectType; 15] = [
+    pub const ALL: [ObjectType; 17] = [
         ObjectType::Directory,
         ObjectType::SymbolicLink,
         ObjectType::Event,
@@ -74,6 +78,8 @@ impl ObjectType {
         ObjectType::Token,
         ObjectType::IoCompletion,
         ObjectType::Job,
+        ObjectType::WindowStation,
+        ObjectType::Desktop,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -93,6 +99,8 @@ impl ObjectType {
             ObjectType::Token => "Token",
             ObjectType::IoCompletion => "IoCompletion",
             ObjectType::Job => "Job",
+            ObjectType::WindowStation => "WindowStation",
+            ObjectType::Desktop => "Desktop",
         }
     }
 
@@ -109,6 +117,8 @@ impl ObjectType {
                 | ObjectType::Token
                 | ObjectType::IoCompletion
                 | ObjectType::Job
+                | ObjectType::WindowStation
+                | ObjectType::Desktop
         )
     }
 
@@ -196,6 +206,25 @@ impl ObjectType {
                 W | IO_COMPLETION_MODIFY_STATE,
                 X | SYNCHRONIZE,
                 IO_COMPLETION_ALL_ACCESS,
+            ),
+            // Learn, "Window Station Security and Access Rights" and "Desktop Security and Access
+            // Rights": the generic mappings.
+            ObjectType::WindowStation => (
+                R | WINSTA_ENUMDESKTOPS | WINSTA_ENUMERATE | WINSTA_READATTRIBUTES,
+                W | WINSTA_ACCESSCLIPBOARD | WINSTA_CREATEDESKTOP | WINSTA_WRITEATTRIBUTES,
+                X | WINSTA_ACCESSGLOBALATOMS | WINSTA_EXITWINDOWS | WINSTA_READSCREEN,
+                DELETE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | WINSTA_ALL,
+            ),
+            ObjectType::Desktop => (
+                R | DESKTOP_ENUMERATE | DESKTOP_READOBJECTS,
+                W | DESKTOP_CREATEMENU
+                    | DESKTOP_CREATEWINDOW
+                    | DESKTOP_HOOKCONTROL
+                    | DESKTOP_JOURNALPLAYBACK
+                    | DESKTOP_JOURNALRECORD
+                    | DESKTOP_WRITEOBJECTS,
+                X | DESKTOP_SWITCHDESKTOP,
+                DELETE | READ_CONTROL | WRITE_DAC | WRITE_OWNER | DESKTOP_ALL,
             ),
             ObjectType::Job => (
                 R | JOB_OBJECT_QUERY,

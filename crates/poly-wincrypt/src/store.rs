@@ -79,6 +79,35 @@ pub fn location(flags: u32) -> Location {
     }
 }
 
+/// Whether `CertOpenStore` flags name a system store location at all (no location bits: the
+/// open fails, as observed on Windows).
+pub fn has_location(flags: u32) -> bool {
+    flags & CERT_SYSTEM_STORE_LOCATION_MASK != 0
+}
+
+/// The system stores every Windows installation has (Learn, "System Store Locations"): opening one
+/// with `CERT_STORE_OPEN_EXISTING_FLAG` works even before anything was added to it, any other name
+/// only when its directory is there.
+pub fn is_standard_store(name: &str) -> bool {
+    const NAMES: [&str; 14] = [
+        "ROOT",
+        "CA",
+        "MY",
+        "TRUST",
+        "AUTHROOT",
+        "DISALLOWED",
+        "TRUSTEDPEOPLE",
+        "TRUSTEDPUBLISHER",
+        "TRUSTEDDEVICES",
+        "SMARTCARDROOT",
+        "REQUEST",
+        "ADDRESSBOOK",
+        "CERTIFICATEENROLLMENTREQUESTS",
+        "CERTIFICATEENROLLMENTAGENT",
+    ];
+    NAMES.iter().any(|n| n.eq_ignore_ascii_case(name))
+}
+
 /// The directory of a system store, relative to the location's root:
 /// `<root>\Poly\SystemCertificates\<NAME>` where the root is
 /// `%ProgramData%` for the machine and `%APPDATA%` for the user (ADR

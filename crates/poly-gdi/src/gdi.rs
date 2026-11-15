@@ -380,6 +380,8 @@ enum Obj {
     },
     Region(Region),
     Palette,
+    /// The stock colour space (`GetStockObject(20)`, `OBJ_COLORSPACE`).
+    ColorSpace,
 }
 
 /// Stock object indexes (`GetStockObject`, `wingdi.h`).
@@ -431,7 +433,9 @@ pub const DC_BRUSH: u32 = 18;
 pub const DC_PEN: u32 = 19;
 /// Poly's own index for the default 1x1 monochrome bitmap.
 const STOCK_BITMAP: u32 = 20;
-const STOCK_COUNT: u32 = 21;
+/// Poly's slot of the stock colour space (`GetStockObject(20)`; the bitmap is 21 in Windows' numbering).
+const STOCK_COLORSPACE: u32 = 21;
+const STOCK_COUNT: u32 = 22;
 
 /// Handles are `generation << 24 | index << 2`: a slot used again gets a
 /// new generation (1 to 127), so a deleted object's handle stays invalid
@@ -468,6 +472,9 @@ pub struct Gdi {
     /// the same HDC). Released, the handle names nothing meanwhile.
     parked: Option<(u64, usize)>,
     pub screen: Screen,
+    /// The region deleted last, which still answers `GetRgnBox`, `PtInRegion` and a second
+    /// `DeleteObject` until the next region is made (CreateRectRgnIndirect.yaml, crri_basic).
+    ghost_region: Option<(u32, Region)>,
     /// The font files and the rendered glyphs of outline fonts.
     text: TextState,
 }
@@ -550,6 +557,7 @@ impl Gdi {
             free: VecDeque::new(),
             parked: None,
             screen: Screen { width: 1024, height: 768 },
+            ghost_region: None,
             text: TextState {
                 files: RefCell::new(FontFiles::new()),
                 table: FontTable::new(),
@@ -570,7 +578,7 @@ impl Gdi {
         };
         let pen = |c: u32, style: u32| Obj::Pen {
             style,
-            width: 1,
+            width: 0,
             color: c,
             stock: true,
             delete_pending: false,
@@ -592,7 +600,7 @@ impl Gdi {
             brush(0, BS_NULL),            // NULL_BRUSH
             pen(0x00FF_FFFF, 0),          // WHITE_PEN
             pen(0, 0),                    // BLACK_PEN
-            pen(0, PS_NULL),              // NULL_PEN
+            Obj::Pen { style: PS_NULL, width: 1, color: 0, stock: true, delete_pending: false, kept: false }, // NULL_PEN
             Obj::Palette,                 // 9: unused
             font(Face::OemFixed),         // OEM_FIXED_FONT
             font(Face::AnsiFixed),        // ANSI_FIXED_FONT
@@ -605,6 +613,7 @@ impl Gdi {
             brush(0x00FF_FFFF, BS_SOLID), // DC_BRUSH
             pen(0, 0),                    // DC_PEN
             Obj::Bitmap { bmp: Bitmap::ddb(1, 1, 1), selected_in: 0, delete_pending: false, stock: true },
+            Obj::ColorSpace, // 20 in Windows' numbering
         ];
         for o in stock {
             g.objs.push(Some(o));
@@ -661,10 +670,14 @@ impl Gdi {
 
     /// `GetStockObject`.
     pub fn stock(&self, i: u32) -> u32 {
-        if i >= STOCK_COUNT - 1 || i == 9 {
-            return 0;
-        }
-        self.handle_of(1 + i as usize)
+        // Windows' 20 is the colour space and 21 the 1x1 bitmap; Poly keeps them the other way round.
+        let slot = match i {
+            20 => STOCK_COLORSPACE,
+            21 => STOCK_BITMAP,
+            9 | 22.. => return 0,
+            _ => i,
+        };
+        self.handle_of(1 + slot as usize)
     }
 
     fn obj(&self, h: u64) -> Option<&Obj> {
@@ -727,6 +740,24 @@ impl Gdi {
         let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
         self.add(Obj::Dc(Dc {
             kind: DcKind::Memory,
+            state,
+            saved: Vec::new(),
+            bitmap,
+            surface: None,
+            vis: None,
+            vis_origin: (0, 0),
+            sys_clip: None,
+        }))
+    }
+
+    /// `CreateDCW("DISPLAY")` / `CreateICW("DISPLAY")` (CreateDCW.yaml): a DC of
+    /// the whole screen that stays until `DeleteDC`, with the stock 1x1
+    /// bitmap selected (a `GetDC(NULL)` DC has none).
+    pub fn create_device_dc(&mut self) -> u32 {
+        let state = self.default_state();
+        let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
+        self.add(Obj::Dc(Dc {
+            kind: DcKind::Display { hwnd: 0, persistent: true },
             state,
             saved: Vec::new(),
             bitmap,
@@ -837,6 +868,9 @@ impl Gdi {
     /// The handles of deleted objects of type `ty` stop answering
     /// `GetObjectType` (their slots wait for reuse as before).
     fn forget_dead(&mut self, ty: u32) {
+        if ty == OBJ_REGION {
+            self.ghost_region = None;
+        }
         for o in self.objs.iter_mut() {
             if matches!(o, Some(Obj::Dead(t)) if *t == ty) {
                 *o = None;
@@ -895,7 +929,7 @@ impl Gdi {
         // deletion waited go now.
         for st in core::iter::once(&d.state).chain(d.saved.iter()) {
             for o in [st.brush, st.pen, st.font] {
-                self.finish_pending(u64::from(o));
+                self.finish_pending_ex(u64::from(o), true);
             }
         }
         if let Some(Obj::Bitmap { selected_in, .. }) = self.obj_mut(u64::from(d.bitmap)) {
@@ -914,11 +948,17 @@ impl Gdi {
     /// bitmap keep answering their type (DeleteObject.yaml `after_deselect`,
     /// `selected_bitmap`).
     fn finish_pending(&mut self, h: u64) {
+        self.finish_pending_ex(h, false);
+    }
+
+    /// As [`Gdi::finish_pending`]; `dc_gone`: a DC was deleted with the object selected, which makes a
+    /// pen read as no object at all (ddc_basic: types 0 0), where deselecting it leaves OBJ_PEN.
+    fn finish_pending_ex(&mut self, h: u64, dc_gone: bool) {
         let held = self.held(h);
         let Some(i) = self.index_of(h) else { return };
         let (pending, ty) = match &self.objs[i] {
             Some(Obj::Brush { delete_pending, dead, .. }) => (*delete_pending || *dead, 0),
-            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, OBJ_PEN),
+            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, if dc_gone { 0 } else { OBJ_PEN }),
             Some(Obj::Font { delete_pending, .. }) => (*delete_pending, OBJ_FONT),
             Some(Obj::Bitmap { delete_pending, selected_in, .. }) => (*delete_pending && *selected_in == 0, OBJ_BITMAP),
             _ => (false, 0),
@@ -992,7 +1032,9 @@ impl Gdi {
                 self.free_dc(h, true);
                 (true, 0)
             }
-            _ => (false, 0),
+            // A DC deleted before: nothing to report (DeleteDC.yaml `result`); no DC at all: 6.
+            Some(Obj::DeadDc) => (false, 0),
+            _ => (false, ERROR_INVALID_HANDLE),
         }
     }
 
@@ -1019,6 +1061,9 @@ impl Gdi {
             // had them stop answering (`handle_after_delete`).
             self.age_deleted_brushes(true);
         }
+        if matches!(self.ghost_region, Some((gh, _)) if u64::from(gh) == h) {
+            return true;
+        }
         let Some(i) = self.index_of(h) else { return false };
         let stock_slot = i <= STOCK_COUNT as usize;
         let Some(o) = self.objs[i].as_mut() else { return false };
@@ -1031,7 +1076,7 @@ impl Gdi {
             Obj::Brush { stock: true, .. } | Obj::Pen { stock: true, .. } | Obj::Font { stock: true, .. } => true,
             Obj::Brush { kept: true, .. } | Obj::Pen { kept: true, .. } => true,
             Obj::Bitmap { stock: true, .. } => true,
-            Obj::Palette if stock_slot => true,
+            Obj::Palette | Obj::ColorSpace if stock_slot => true,
             Obj::Brush { deleted, delete_pending, dead, kept, .. } => {
                 if *deleted || *delete_pending || *dead {
                     return false;
@@ -1078,8 +1123,10 @@ impl Gdi {
                 }
                 true
             }
-            Obj::Region(_) => {
+            Obj::Region(r) => {
+                let r = r.clone();
                 self.release(i, OBJ_REGION);
+                self.ghost_region = Some((h as u32, r));
                 true
             }
             Obj::Palette => {
@@ -1091,6 +1138,8 @@ impl Gdi {
                 self.release(i, OBJ_PAL);
                 true
             }
+            // Only the stock one exists; it is not deleted.
+            Obj::ColorSpace => false,
         }
     }
 
@@ -1113,6 +1162,7 @@ impl Gdi {
             Some(Obj::Font { .. }) => OBJ_FONT,
             Some(Obj::Region(_)) => OBJ_REGION,
             Some(Obj::Palette) => OBJ_PAL,
+            Some(Obj::ColorSpace) => 14,
             None => 0,
         }
     }
@@ -1535,6 +1585,11 @@ impl Gdi {
     // ----- regions (`CreateRectRgn.yaml`, `CombineRgn.yaml`, `GetRgnBox.yaml`, `PtInRegion.yaml`)
 
     /// The region behind a handle.
+    /// The region deleted last, while its handle still answers.
+    fn ghost(&self, h: u64) -> Option<&Region> {
+        self.ghost_region.as_ref().filter(|(gh, _)| u64::from(*gh) == h).map(|(_, r)| r)
+    }
+
     pub fn region(&self, h: u64) -> Option<&Region> {
         match self.obj(h) {
             Some(Obj::Region(r)) => Some(r),
@@ -1620,7 +1675,7 @@ impl Gdi {
 
     /// `GetRgnBox`: (kind, box); `None` when `h` is not a region.
     pub fn rgn_box(&self, h: u64) -> Option<(i32, Rect)> {
-        self.region(h).map(|r| (r.kind(), r.bounds()))
+        self.region(h).or_else(|| self.ghost(h)).map(|r| (r.kind(), r.bounds()))
     }
 
     /// `OffsetRgn`: the kind, or ERROR (0) when `h` is not a region or a
@@ -1666,7 +1721,7 @@ impl Gdi {
 
     /// `PtInRegion`: whether the point is in it, or the error.
     pub fn pt_in_region(&self, h: u64, x: i32, y: i32) -> Result<bool, u32> {
-        self.region(h).map(|r| r.contains_point(x, y)).ok_or(ERROR_INVALID_HANDLE)
+        self.region(h).or_else(|| self.ghost(h)).map(|r| r.contains_point(x, y)).ok_or(ERROR_INVALID_HANDLE)
     }
 
     /// `RectInRegion`: `None` when `h` is not a region (no error set).

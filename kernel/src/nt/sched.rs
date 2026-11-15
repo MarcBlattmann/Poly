@@ -473,6 +473,22 @@ fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {
     })
 }
 
+/// The kernel's thread behind NT thread `thread` of the calling process `pid` (`me` is the
+/// calling thread): for its scheduler affinity. A thread that has ended is
+/// `STATUS_THREAD_IS_TERMINATING`; one the process does not have `STATUS_INVALID_CID`.
+pub fn kernel_thread(pid: ProcessId, me: ThreadRef, thread: ThreadRef) -> Result<thread::ThreadId, NtStatus> {
+    if thread == me {
+        return Ok(thread::current());
+    }
+    let flags = find(owner_of(pid, thread))
+        .and_then(|p| p.thread_flags(thread.0 as u32))
+        .ok_or(poly_ntobj::status::STATUS_THREAD_IS_TERMINATING)?;
+    match flags.thread.load(Ordering::SeqCst) {
+        0 => Err(poly_ntobj::status::STATUS_THREAD_IS_TERMINATING),
+        bits => Ok(thread::ThreadId::from_bits(bits - 1)),
+    }
+}
+
 /// A thread's suspend count stops here (`MAXIMUM_SUSPEND_COUNT`, `winnt.h`).
 const MAXIMUM_SUSPEND_COUNT: u32 = 127;
 
@@ -571,17 +587,34 @@ pub fn get_context(self_tid: ThreadRef, thread: ThreadRef) -> Result<NtContext, 
     if thread == self_tid {
         return Ok(ctx_from_regs(&user::registers()));
     }
+    // The kernel thread behind the NT thread (its flags hold its id while it lives).
+    let kernel_thread = || {
+        let pid = with(|s| s.processes.iter().find(|(_, p)| p.thread(thread).is_some()).map(|(&id, _)| id))?;
+        let bits = find(pid)?.thread_flags(thread.0 as u32)?.thread.load(Ordering::SeqCst);
+        (bits != 0).then(|| thread::ThreadId::from_bits(bits - 1))
+    };
     let mut out = None;
     thread::wait_until(2, || {
         with(|s| {
-            if let Some(c) = s.ctl.get(&thread)
-                && let Some(ctx) = c.suspended_ctx
-            {
+            let Some(c) = s.ctl.get(&thread) else { return false };
+            if let Some(ctx) = c.suspended_ctx {
                 out = Some(ctx);
                 return true;
             }
             false
-        })
+        }) || {
+            // A suspended thread that is blocked in the kernel (a wait, a system call) parks
+            // only when that returns, which may be never: its user context is the one its
+            // entry into the kernel saved, read while it does not run (GetThreadContext answers
+            // at once for a suspended thread, Learn; Chrome's stack sampler suspends threads
+            // that wait in NtRemoveIoCompletion and NtWaitForMultipleObjects).
+            let suspended = with(|s| s.ctl.get(&thread).is_some_and(|c| c.suspend_count > 0));
+            if let Some(regs) = suspended.then(kernel_thread).flatten().and_then(thread::user_regs_of) {
+                out = Some(ctx_from_regs(&regs));
+                return true;
+            }
+            false
+        }
     });
     out.ok_or(STATUS_UNSUCCESSFUL)
 }

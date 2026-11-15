@@ -26,6 +26,8 @@ pub const RDW_NOINTERNALPAINT: u32 = 0x0010;
 pub const RDW_NOERASE: u32 = 0x0020;
 pub const RDW_NOCHILDREN: u32 = 0x0040;
 pub const RDW_ALLCHILDREN: u32 = 0x0080;
+/// Poly's own bit: the call is the program's (`InvalidateRect`, `RedrawWindow`), not the system's.
+pub const RDW_USER: u32 = 0x4000_0000;
 pub const RDW_UPDATENOW: u32 = 0x0100;
 pub const RDW_ERASENOW: u32 = 0x0200;
 pub const RDW_FRAME: u32 = 0x0400;
@@ -53,11 +55,23 @@ pub(super) struct Paint {
     /// erase's outcome (1 when the procedure returned 0); 0 for a window
     /// that was never erased (EndPaint.yaml ep_outside: a hidden window).
     pub ferase: bool,
+    /// A window with `WS_EX_NOREDIRECTIONBITMAP` was erased once: it is not erased again
+    /// (CreateWindowExW.yaml `noredirect`: one WM_ERASEBKGND after the first show, none after
+    /// `InvalidateRect(erase)`).
+    pub erased_once: bool,
 }
 
 impl Default for Paint {
     fn default() -> Self {
-        Paint { upd: Rgn::new(), erase: false, frame: false, frame_whole: false, internal: false, ferase: false }
+        Paint {
+            upd: Rgn::new(),
+            erase: false,
+            frame: false,
+            frame_whole: false,
+            internal: false,
+            ferase: false,
+            erased_once: false,
+        }
     }
 }
 
@@ -103,11 +117,15 @@ impl Wm {
         let had = self.needs_paint(h);
         let minimized = w.minimized;
         let clip_children = w.style & WS_CLIPCHILDREN != 0;
+        let no_redirect = w.ex_style & WS_EX_NOREDIRECTIONBITMAP != 0;
         let w = self.get_mut(u64::from(h)).expect("found");
         let p = &mut w.paint;
         if flags & RDW_INVALIDATE != 0 {
             p.upd = p.upd.union(&area);
-            if flags & RDW_ERASE != 0 && (!area.is_empty() || minimized) {
+            if flags & RDW_ERASE != 0
+                && (!area.is_empty() || minimized)
+                && !(no_redirect && p.erased_once && flags & RDW_USER != 0)
+            {
                 p.erase = true;
             }
             if flags & RDW_FRAME != 0 {
@@ -158,7 +176,12 @@ impl Wm {
                 let child_area = under.offset(-cr.left, -cr.top);
                 // Invalidated through its parent, a child also has its
                 // frame and erase pending (InvalidateRect.yaml ir_children).
-                let child_flags = if flags & RDW_INVALIDATE != 0 { flags | RDW_ERASE | RDW_FRAME } else { flags };
+                // (RedrawWindow with RDW_ALLCHILDREN and no RDW_ERASE erases none: bp_chrome_first_paint.)
+                let child_flags = if flags & RDW_INVALIDATE != 0 {
+                    flags | RDW_FRAME | if flags & RDW_ALLCHILDREN != 0 { 0 } else { RDW_ERASE }
+                } else {
+                    flags
+                };
                 self.redraw(c, Some(child_area), child_flags & !RDW_ALLCHILDREN | (flags & RDW_ALLCHILDREN), fx);
                 if flags & RDW_INVALIDATE != 0
                     && let Some(cwm) = self.get_mut(u64::from(c))
@@ -178,8 +201,8 @@ impl Wm {
     pub(super) fn clear_paint_tree(&mut self, h: u32) {
         let kids = match self.get_mut(u64::from(h)) {
             Some(w) => {
-                let ferase = w.paint.ferase;
-                w.paint = Paint { ferase, ..Paint::default() };
+                let (ferase, erased_once) = (w.paint.ferase, w.paint.erased_once);
+                w.paint = Paint { ferase, erased_once, ..Paint::default() };
                 w.children.clone()
             }
             None => return,
@@ -276,6 +299,7 @@ impl Wm {
         let p = &mut w.paint;
         if what & PAINTED_ERASE != 0 {
             p.erase = false;
+            p.erased_once = true;
         }
         if what & PAINTED_FRAME != 0 {
             p.frame = false;

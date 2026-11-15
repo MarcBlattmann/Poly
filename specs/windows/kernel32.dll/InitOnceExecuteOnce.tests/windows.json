@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "initonce_execute",
+      "exe_sha256": "f55ffb1395849dd900f2ba70f68b4eeb2673fab166d167e81b41728a4c288074",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d29yZCBhZnRlciBJbml0T25jZUluaXRpYWxpemU6IDAKY2FsbGJhY2sgcmV0dXJucyBGQUxTRTogMCBjYWxscyAxIGVycm9yIHVuY2hhbmdlZApiZWdpbjogMSBwZW5kaW5nIDEgZXJyb3IgdW5jaGFuZ2VkCmNoZWNrIG9ubHkgYWZ0ZXIgY29tcGxldGlvbjogMSBwZW5kaW5nIDAgZXJyb3IgdW5jaGFuZ2VkCmNvbXBsZXRlIHdpdGggZmxhZ3MgMHgxMDogMCBlcnJvciA4NwpiZWdpbiBhZnRlciBhIGZhaWxlZCBvbmU6IDEgcGVuZGluZyAxCiAgY29tcGxldGUgYXN5bmM6IDEKICBjYWxsYmFjayBydW5zIDEgY2FsbGVycyB3aXRoIHN1Y2Nlc3MgYW5kIGNvbnRleHQgNCB0aGF0IHNhdyBpdCBmaW5pc2hlZCA0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "word after InitOnceInitialize: 0\ncallback returns FALSE: 0 calls 1 error unchanged\nbegin: 1 pending 1 error unchanged\ncheck only after completion: 1 pending 0 error unchanged\ncomplete with flags 0x10: 0 error 87\nbegin after a failed one: 1 pending 1\n  complete async: 1\n  callback runs 1 callers with success and context 4 that saw it finished 4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 249
+    },
+    {
+      "name": "initonce_execute_b",
+      "exe_sha256": "ce14ff1640aa3c46a5add88f66c957417c58a7768e16398c3f4447cc2aad0e56",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW5pdE9uY2VFeGVjdXRlT25jZTogMSBjYWxscyAxIGNvbnRleHQgMHg0MDAgZXJyb3IgdW5jaGFuZ2VkCiAgYWdhaW46IDAgY2FsbHMgMiBlcnJvciB1bmNoYW5nZWQKY29tcGxldGU6IDEgZXJyb3IgdW5jaGFuZ2VkCmNvbXBsZXRlIGFnYWluOiAwIGVycm9yIDMxCmNvbXBsZXRlIHdpdGggY29udGV4dCAweDM6IDAgZXJyb3IgODcKY29tcGxldGUgd2l0aG91dCBhIGJlZ2luOiAwIGVycm9yIDMxCiAgY29tcGxldGUgYXN5bmMgYWdhaW46IDAgZXJyb3IgMzEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "InitOnceExecuteOnce: 1 calls 1 context 0x400 error unchanged\n  again: 0 calls 2 error unchanged\ncomplete: 1 error unchanged\ncomplete again: 0 error 31\ncomplete with context 0x3: 0 error 87\ncomplete without a begin: 0 error 31\n  complete async again: 0 error 31\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 259
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "srw_init",
+      "exe_sha256": "ddf89c5bf47ce900eaa2ce7659868d5c6525c888ea0f3878b20063718e0ba401",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d29yZHMgYWZ0ZXIgaW5pdGlhbGlzaW5nIGFsbC1vbmVzIG9iamVjdHM6IGxvY2sgMCBjb25kaXRpb24gdmFyaWFibGUgMCBydW4tb25jZSAwCiAgdHJ5IGV4Y2x1c2l2ZTogMQogIGFmdGVyIFJ0bFJ1bk9uY2VJbml0aWFsaXplOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "words after initialising all-ones objects: lock 0 condition variable 0 run-once 0\n  try exclusive: 1\n  after RtlRunOnceInitialize: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 99
+    },
+    {
+      "name": "srw_init_c",
+      "exe_sha256": "a53068335eb692dc197a078c5732addfa47982821b0d4316c30b48f47d470625",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d29yZCBvZiBhIGhlbGQgbG9jayBhZnRlciBSdGxJbml0aWFsaXplU1JXTG9jazogMApjb21wbGV0ZWQgcnVuLW9uY2Ugd29yZCBpcyBub24temVybzogMQpzbGVlcCBvbiB0aGUgaW5pdGlhbGlzZWQgdmFyaWFibGU6IDB4MTAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "word of a held lock after RtlInitializeSRWLock: 0\ncompleted run-once word is non-zero: 1\nsleep on the initialised variable: 0x102\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 94
+    }
+  ]
+}

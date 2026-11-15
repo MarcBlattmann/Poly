@@ -23,7 +23,12 @@ const LAYOUTS: [u32; 3] = [kbd::HKL, 0x040C_040C, 0x1007_0807];
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) -> i32 {
-    if n <= 0 || list.is_null() {
+    if n < 0 {
+        // ERROR_NOACCESS (GetKeyboardLayoutList.yaml `small_buffers`: a negative size).
+        super::set_last_error(998);
+        return 0;
+    }
+    if n == 0 || list.is_null() {
         return LAYOUTS.len() as i32;
     }
     let k = (n as usize).min(LAYOUTS.len());
@@ -41,35 +46,6 @@ pub extern "system" fn PrivateLayoutInstalled(hkl: usize) -> i32 {
 }
 
 // ----- small queries
-
-// ----- notifications that never fire
-
-static NEXT_NOTIFY: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0x0009_0000);
-
-fn notify_handle() -> usize {
-    NEXT_NOTIFY.fetch_add(8, core::sync::atomic::Ordering::Relaxed)
-}
-
-// ----- WinEvents: hooks are accepted, nothing is raised
-
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
-pub extern "system" fn SetWinEventHook(
-    _min: u32,
-    _max: u32,
-    _module: usize,
-    _proc: usize,
-    _pid: u32,
-    _tid: u32,
-    _flags: u32,
-) -> usize {
-    notify_handle()
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn UnhookWinEvent(_hook: usize) -> i32 {
-    1
-}
 
 // ----- display configuration: no adapter to describe
 
@@ -93,11 +69,6 @@ pub extern "system" fn QueryDisplayConfig(
 #[unsafe(no_mangle)]
 pub extern "system" fn DisplayConfigGetDeviceInfo(_packet: *mut u8) -> i32 {
     ERROR_NOT_SUPPORTED as i32
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn GetThreadDesktop(_tid: u32) -> usize {
-    0x0000_0030
 }
 
 #[allow(dead_code)]

@@ -33,7 +33,6 @@ poly_win32_rt::fail_exports!(
         CharUpperBuffW,
         ChildWindowFromPointEx,
         CloseGestureInfoHandle,
-        CloseWindow,
         CreateIcon,
         CreateIconFromResource,
         CreateIconFromResourceEx,

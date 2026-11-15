@@ -142,9 +142,15 @@ fn cache(slot: &AtomicIsize, h: Handle) -> Handle {
     }
 }
 
+/// `MAXIMUM_ALLOWED` (`winnt.h`).
+const MAXIMUM_ALLOWED: u32 = 0x0200_0000;
+
+/// A predefined key's handle has the rights its descriptor gives the caller's token (a token
+/// that may only read opens `HKEY_LOCAL_MACHINE` too: the subkeys are checked when they are
+/// opened, ADR 0192).
 fn open_absolute(path: &str) -> Result<Handle, NtStatus> {
     let units: Vec<u16> = path.encode_utf16().collect();
-    nt_open(0, &units, reg::KEY_ALL_ACCESS, 0)
+    nt_open(0, &units, MAXIMUM_ALLOWED, 0)
 }
 
 /// The handle of a predefined key (opened at first use).
@@ -330,7 +336,7 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     let mut last = 0;
     for (i, name) in parts.iter().enumerate() {
         let final_part = i + 1 == parts.len();
-        let access = if final_part { sam } else { reg::KEY_ALL_ACCESS };
+        let access = if final_part { sam } else { MAXIMUM_ALLOWED };
         let r = create_one(parent, name, access, if final_part { class } else { None }, options, inherit && final_part);
         if let Some(h) = opened.take() {
             close(h);

@@ -130,6 +130,17 @@ impl Content {
     }
 }
 
+/// Whether Poly frames a top-level window (ADR 0183 addendum "Windows apps"): it has a
+/// caption (`WS_CAPTION`), and its client area, as its `WM_NCCALCSIZE` answer placed it, leaves
+/// room for one above it. A window whose client area starts less than a caption's height
+/// (`SM_CYCAPTION`) below its top edge draws its own title bar in its client area (Chrome's
+/// `Chrome_WidgetWin_1`: `WS_OVERLAPPEDWINDOW`, client area from the window's top, keeping the
+/// 8-pixel side and bottom borders, `s3-windows.md`); Poly's frame around it would be a second
+/// one. Its surface is its client area as for every window.
+pub fn poly_frames(style: u32, window: crate::frame::Rect, client: crate::frame::Rect) -> bool {
+    style & WS_CAPTION == WS_CAPTION && client.top - window.top >= crate::metrics::CAPTION
+}
+
 /// The surfaces of top-level windows and their buffers.
 #[derive(Debug, Default)]
 pub struct Surfaces {
@@ -184,11 +195,24 @@ impl Surfaces {
             }
             let client = i.client;
             let shown = i.visible && !i.minimized && client.right > client.left && client.bottom > client.top;
+            let framed = poly_frames(i.style, i.window, client);
+            // The window changed its mind about its caption (a WM_NCCALCSIZE answer after
+            // SWP_FRAMECHANGED): its surface is made again with the new frame.
+            if shown
+                && let Some(&s) = self.windows.get(&h)
+                && i.style & WS_CAPTION == WS_CAPTION
+                && desktop.surface(s).is_some_and(|x| x.framed != framed)
+            {
+                self.windows.remove(&h);
+                desktop.destroy(s);
+            }
             let s = match self.windows.get(&h) {
                 Some(&s) => s,
                 None if shown => {
-                    let framed = i.style & WS_CAPTION == WS_CAPTION;
-                    let kind = if framed { SurfaceKind::TopLevel } else { SurfaceKind::Popup };
+                    // A captioned window that draws its own caption is still an application
+                    // window (a top level of the desktop), only without Poly's frame.
+                    let kind =
+                        if i.style & WS_CAPTION == WS_CAPTION { SurfaceKind::TopLevel } else { SurfaceKind::Popup };
                     let owner = self.windows.get(&i.owner).copied().unwrap_or(0);
                     let s = desktop.create(kind, owner, framed);
                     desktop.set_process(s, i.pid);
@@ -651,6 +675,55 @@ mod tests {
         s.sync(&wm, &mut d);
         assert_eq!(s.surface(h), None);
         assert_eq!(s.size(&d, h), None);
+    }
+
+    #[test]
+    fn a_window_that_draws_its_own_caption_gets_no_poly_frame() {
+        // The decision alone: Chrome's 900x500 window at 40,40 with its client area from the
+        // window's top (884x492, s3-windows.md), maximized (client 8 px below the top), and a
+        // plain captioned window (8 px border + 23 px caption).
+        let ovl = 0x16CF_0000;
+        assert!(!poly_frames(ovl, Rect::new(40, 40, 940, 540), Rect::new(48, 40, 932, 532)));
+        assert!(!poly_frames(ovl, Rect::new(-8, -8, 1288, 808), Rect::new(0, 0, 1280, 800)));
+        assert!(poly_frames(ovl, Rect::new(100, 50, 400, 250), Rect::new(108, 81, 392, 242)));
+        // No caption: never framed (a popup).
+        assert!(!poly_frames(0x9400_0000, Rect::new(0, 0, 10, 10), Rect::new(0, 0, 10, 10)));
+
+        // Through the surfaces: the window is a top level without Poly's frame, and gets it
+        // when a frame change gives it a caption area again.
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        records(&mut d);
+        let h = window(&mut wm, true);
+        let rel = |l, t, r, b| Some(Rect::new(l, t, r, b));
+        call(
+            &mut wm,
+            Request::SetRects { hwnd: h, window_rel: rel(100, 50, 400, 250), client_rel: rel(108, 50, 392, 242) },
+        );
+        s.sync(&wm, &mut d);
+        let id = s.surface(h).unwrap();
+        let r = records(&mut d);
+        assert!(matches!(
+            r[0],
+            ToCompositor::Create { surface, kind: SurfaceKind::TopLevel, framed: false, .. } if surface == id
+        ));
+        s.sync(&wm, &mut d);
+        assert!(records(&mut d).is_empty());
+        call(
+            &mut wm,
+            Request::SetRects { hwnd: h, window_rel: rel(100, 50, 400, 250), client_rel: rel(108, 81, 392, 242) },
+        );
+        s.sync(&wm, &mut d);
+        let again = s.surface(h).unwrap();
+        assert_ne!(again, id);
+        let r = records(&mut d);
+        assert!(r.contains(&ToCompositor::Destroy { surface: id }));
+        assert!(r.iter().any(|x| matches!(
+            x,
+            ToCompositor::Create { surface, kind: SurfaceKind::TopLevel, framed: true, .. } if *surface == again
+        )));
     }
 
     #[test]

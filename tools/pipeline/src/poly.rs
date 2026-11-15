@@ -488,6 +488,19 @@ impl Target {
         work: &Path,
         args: &str,
     ) -> Result<(runner::Finished, String, PathBuf)> {
+        self.boot_log_cpus(test, image, work, args, 2)
+    }
+
+    /// [`Target::boot_log`] with `cpus` processors. The Windows tests boot with 4: a recorded
+    /// test pins a thread to each of the first four processors the machine has.
+    pub(crate) fn boot_log_cpus(
+        &self,
+        test: &str,
+        image: &[u8],
+        work: &Path,
+        args: &str,
+        cpus: u32,
+    ) -> Result<(runner::Finished, String, PathBuf)> {
         if args.len() > CMDLINE_MAX {
             return Err(format!(
                 "the kernel command line for {test} is {} bytes, more than Poly keeps ({CMDLINE_MAX}): {args}",
@@ -502,7 +515,18 @@ impl Target {
         let (done, log) = loop {
             let mut cmd = Command::new("qemu-system-x86_64");
             cmd.args(["-accel", accel()?])
-                .args(["-machine", "q35", "-m", "256M", "-smp", "2", "-display", "none", "-serial", "stdio"])
+                .args([
+                    "-machine",
+                    "q35",
+                    "-m",
+                    "256M",
+                    "-smp",
+                    &cpus.to_string(),
+                    "-display",
+                    "none",
+                    "-serial",
+                    "stdio",
+                ])
                 .args(["-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
                 .arg("-kernel")
                 .arg(&self.kernel)

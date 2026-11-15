@@ -1,0 +1,19 @@
+[package]
+name = "vcruntime140"
+description = "Our vcruntime140.dll (ADR 0199): the Visual C++ runtime support library, C++ exceptions shared with msvcrt.dll"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "vcruntime140"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-cxxrt = { path = "../cxxrt" }
+poly-cxxeh = { path = "../../../../crates/poly-cxxeh" }
+
+[lints]
+workspace = true

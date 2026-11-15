@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "legacy_wait_b",
+      "exe_sha256": "dd08d2c04fe55410afbfdefc83bf64306396d65a74531136aaf6bf0385de6e6a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aW1lZCBvdXQgY2FsbGJhY2s6IDEgdGltZWQtb3V0IGZsYWcgMSBzaWduYWxsZWQgZmxhZyAwIGNvbnRleHQgb2sgMQppbmZpbml0ZSB3YWl0LCBub3Qgc2lnbmFsbGVkIGFmdGVyIDIwMCBtczogY2FsbGJhY2tzIDAKcmVwZWF0aW5nIDEwMCBtcyB0aW1lb3V0LCBhZnRlciA3MDAgbXM6IGJldHdlZW4gNCBhbmQgOCBjYWxsYmFja3MsIGFsbCB0aW1lb3V0czogMQpVbnJlZ2lzdGVyV2FpdCB3aGlsZSB0aGUgY2FsbGJhY2sgcnVuczogMCBlcnJvciA5OTcgY2FsbGJhY2sgc3RhdGUgMQogIGV2ZW50IHNpZ25hbGxlZCBhZnRlciB0aGUgY2FsbGJhY2s6IDAKUXVldWVVc2VyV29ya0l0ZW06IDEgcmFuIDEgb2ZmIHRoZSBtYWluIHRocmVhZCAxIGNvbnRleHQgMHg1MTUxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  timed out callback: 1 timed-out flag 1 signalled flag 0 context ok 1\ninfinite wait, not signalled after 200 ms: callbacks 0\nrepeating 100 ms timeout, after 700 ms: between 4 and 8 callbacks, all timeouts: 1\nUnregisterWait while the callback runs: 0 error 997 callback state 1\n  event signalled after the callback: 0\nQueueUserWorkItem: 1 ran 1 off the main thread 1 context 0x5151\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4431
+    },
+    {
+      "name": "legacy_wait_c",
+      "exe_sha256": "b1ddd22fc381db51de3ebdc5afb557e1904d8630f759b38345d4d5912e77e937",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBvbmNlIG9ubHk6IGNhbGxiYWNrcyAxCiAgc2lnbmFsbGVkOiBjYWxsYmFjayAxIHRpbWVkLW91dCBmbGFnIDAgc2lnbmFsbGVkIGZsYWcgMQogIG5vbmUgYWZ0ZXIgdW5yZWdpc3RlcmluZzogMQpVbnJlZ2lzdGVyV2FpdEV4KElOVkFMSURfSEFORExFX1ZBTFVFKSB3aGlsZSB0aGUgY2FsbGJhY2sgcnVuczogMSBjYWxsYmFjayBzdGF0ZSAyCk5VTEwgb2JqZWN0OiAwIGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  once only: callbacks 1\n  signalled: callback 1 timed-out flag 0 signalled flag 1\n  none after unregistering: 1\nUnregisterWaitEx(INVALID_HANDLE_VALUE) while the callback runs: 1 callback state 2\nNULL object: 0 error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4414
+    }
+  ]
+}

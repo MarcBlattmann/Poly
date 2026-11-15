@@ -131,6 +131,8 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
 pub const ADVAPI32_OWN: &[&str] = &[
     "RegDeleteKeyW",
     "RegDeleteKeyA",
+    // Poly caches no predefined key handle (sheet `RegDisablePredefinedCache`).
+    "RegDisablePredefinedCache",
     "ConvertSidToStringSidW",
     "ConvertSidToStringSidA",
     "ConvertStringSidToSidW",
