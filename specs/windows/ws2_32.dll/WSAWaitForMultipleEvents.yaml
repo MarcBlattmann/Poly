@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAWaitForMultipleEvents.yaml
+id: windows/api/ws2_32.dll/WSAWaitForMultipleEvents
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  The same observations as the WSACreateEvent entry of this DLL, whose tests call all five WSA event functions.
+summary: >
+  Waits for events: timeout 0 gives 258 when none is set, the lowest set index wins, wait-all needs every event, 0 or more than 64 events give 0xFFFFFFFF with error 87, an invalid handle 0xFFFFFFFF with error 6. No tests of its own.
+same_as: "windows/api/ws2_32.dll/WSACreateEvent"
+interface:
+  signature: "see the WSACreateEvent sheet"
+rules:
+  in_short: "Waits for events: timeout 0 gives 258 when none is set, the lowest set index wins, wait-all needs every event, 0 or more than 64 events give 0xFFFFFFFF with error 87, an invalid handle 0xFFFFFFFF with error 6."
+errors:
+  see_sheet: "the sheet of WSACreateEvent"
+side_effects: "changes a kernel event"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the WSACreateEvent sheet lists as not covered.

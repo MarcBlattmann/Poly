@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "mb_types",
+      "exe_sha256": "8fa1375fb6b4a1aa46fa053148ef66b6b5d0f79305a7e1c9e0dd812ab058d820",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TUJfT0s6IHJlc3VsdCAxCiAgICAgY29udHJvbHMgKCogPSBkZWZhdWx0IHB1c2ggYnV0dG9uKTogMiogNjU1MzUgOyBleCBzdHlsZSB0b3Btb3N0IDAKTUJfT0tDQU5DRUw6IHJlc3VsdCAyCiAgICAgY29udHJvbHMgKCogPSBkZWZhdWx0IHB1c2ggYnV0dG9uKTogMSogMiA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9BQk9SVFJFVFJZSUdOT1JFOiByZXN1bHQgMgogICAgIGNvbnRyb2xzICgqID0gZGVmYXVsdCBwdXNoIGJ1dHRvbik6IDMqIDQgNSA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9ZRVNOT0NBTkNFTDogcmVzdWx0IDIKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiA2KiA3IDIgNjU1MzUgOyBleCBzdHlsZSB0b3Btb3N0IDAKTUJfWUVTTk86IHJlc3VsdCAyCiAgICAgY29udHJvbHMgKCogPSBkZWZhdWx0IHB1c2ggYnV0dG9uKTogNiogNyA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9SRVRSWUNBTkNFTDogcmVzdWx0IDIKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiA0KiAyIDY1NTM1IDsgZXggc3R5bGUgdG9wbW9zdCAwCk1CX1lFU05PQ0FOQ0VMIHwgTUJfREVGQlVUVE9OMjogcmVzdWx0IDIKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiA2IDcqIDIgNjU1MzUgOyBleCBzdHlsZSB0b3Btb3N0IDAKTUJfWUVTTk9DQU5DRUwgfCBNQl9ERUZCVVRUT04zOiByZXN1bHQgMgogICAgIGNvbnRyb2xzICgqID0gZGVmYXVsdCBwdXNoIGJ1dHRvbik6IDYgNyAyKiA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9PSyB8IE1CX0lDT05FUlJPUjogcmVzdWx0IDEKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiAyKiAyMCA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9PSyB8IE1CX0lDT05RVUVTVElPTjogcmVzdWx0IDEKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiAyKiAyMCA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMApNQl9PSyB8IE1CX0lDT05XQVJOSU5HOiByZXN1bHQgMQogICAgIGNvbnRyb2xzICgqID0gZGVmYXVsdCBwdXNoIGJ1dHRvbik6IDIqIDIwIDY1NTM1IDsgZXggc3R5bGUgdG9wbW9zdCAwCk1CX09LIHwgTUJfSUNPTklORk9STUFUSU9OOiByZXN1bHQgMQogICAgIGNvbnRyb2xzICgqID0gZGVmYXVsdCBwdXNoIGJ1dHRvbik6IDIqIDIwIDY1NTM1IDsgZXggc3R5bGUgdG9wbW9zdCAwCk1CX09LIHwgTUJfU1lTVEVNTU9EQUw6IHJlc3VsdCAxCiAgICAgY29udHJvbHMgKCogPSBkZWZhdWx0IHB1c2ggYnV0dG9uKTogMiogNjU1MzUgOyBleCBzdHlsZSB0b3Btb3N0IDEKTUJfT0sgfCBNQl9TRVRGT1JFR1JPVU5EOiByZXN1bHQgMQogICAgIGNvbnRyb2xzICgqID0gZGVmYXVsdCBwdXNoIGJ1dHRvbik6IDIqIDY1NTM1IDsgZXggc3R5bGUgdG9wbW9zdCAwCk1CX09LIHwgTUJfVE9QTU9TVDogcmVzdWx0IDEKICAgICBjb250cm9scyAoKiA9IGRlZmF1bHQgcHVzaCBidXR0b24pOiAyKiA2NTUzNSA7IGV4IHN0eWxlIHRvcG1vc3QgMQp0eXBlIDB4MEZGRiAodW5kZWZpbmVkIGJ1dHRvbiB0eXBlIDE1KTogcmVzdWx0IDAKYSB0ZXh0IG9mIDEwOTkgY2hhcmFjdGVyczogcmVzdWx0IDEKTlVMTCB0ZXh0IGFuZCBjYXB0aW9uOiByZXN1bHQgMQpNZXNzYWdlQm94RXhXIE1CX09LQ0FOQ0VMOiByZXN1bHQgMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "MB_OK: result 1\n     controls (* = default push button): 2* 65535 ; ex style topmost 0\nMB_OKCANCEL: result 2\n     controls (* = default push button): 1* 2 65535 ; ex style topmost 0\nMB_ABORTRETRYIGNORE: result 2\n     controls (* = default push button): 3* 4 5 65535 ; ex style topmost 0\nMB_YESNOCANCEL: result 2\n     controls (* = default push button): 6* 7 2 65535 ; ex style topmost 0\nMB_YESNO: result 2\n     controls (* = default push button): 6* 7 65535 ; ex style topmost 0\nMB_RETRYCANCEL: result 2\n     controls (* = default push button): 4* 2 65535 ; ex style topmost 0\nMB_YESNOCANCEL | MB_DEFBUTTON2: result 2\n     controls (* = default push button): 6 7* 2 65535 ; ex style topmost 0\nMB_YESNOCANCEL | MB_DEFBUTTON3: result 2\n     controls (* = default push button): 6 7 2* 65535 ; ex style topmost 0\nMB_OK | MB_ICONERROR: result 1\n     controls (* = default push button): 2* 20 65535 ; ex style topmost 0\nMB_OK | MB_ICONQUESTION: result 1\n     controls (* = default push button): 2* 20 65535 ; ex style topmost 0\nMB_OK | MB_ICONWARNING: result 1\n     controls (* = default push button): 2* 20 65535 ; ex style topmost 0\nMB_OK | MB_ICONINFORMATION: result 1\n     controls (* = default push button): 2* 20 65535 ; ex style topmost 0\nMB_OK | MB_SYSTEMMODAL: result 1\n     controls (* = default push button): 2* 65535 ; ex style topmost 1\nMB_OK | MB_SETFOREGROUND: result 1\n     controls (* = default push button): 2* 65535 ; ex style topmost 0\nMB_OK | MB_TOPMOST: result 1\n     controls (* = default push button): 2* 65535 ; ex style topmost 1\ntype 0x0FFF (undefined button type 15): result 0\na text of 1099 characters: result 1\nNULL text and caption: result 1\nMessageBoxExW MB_OKCANCEL: result 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2012
+    }
+  ]
+}

@@ -398,6 +398,11 @@ fn current_thread_flags() -> Option<&'static ThreadFlags> {
     current().map(|(_, flags, _)| flags)
 }
 
+/// Record each thread's user RIP whenever an interrupt returns to it
+/// ([`ThreadFlags::last_user_rip`](crate::process::ThreadFlags)): off unless a diagnostic asks
+/// (`poly.nt.waits`).
+pub static SAMPLE_USER_RIP: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 /// The running thread is about to return to ring 3 after an interrupt or
 /// exception there, with interrupts off (called by the architecture on the
 /// way out; does nothing for kernel threads). Ends the thread if its process
@@ -405,6 +410,9 @@ fn current_thread_flags() -> Option<&'static ThreadFlags> {
 /// personality act on signals the thread was notified of.
 pub fn return_to_user() {
     let Some((process, flags, tid)) = current() else { return };
+    if SAMPLE_USER_RIP.load(Ordering::Relaxed) {
+        flags.last_user_rip.store(arch::user::user_regs().rip, Ordering::Relaxed);
+    }
     let notified = flags.notified.load(Ordering::SeqCst);
     let suspended = flags.suspended.load(Ordering::SeqCst);
     let rseq = flags.rseq_notify.load(Ordering::Relaxed);

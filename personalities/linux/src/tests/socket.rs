@@ -13,7 +13,9 @@ use crate::args::Args;
 use crate::errno::Errno;
 use crate::fileio::NewFd;
 use crate::net::abi::{self, MsgHdr, SockAddr, Ucred, UnixAddr};
-use crate::net::{Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType};
+use crate::net::{
+    Family, Kind, LinuxNet, Membership, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockOpt, SockType,
+};
 use crate::nr;
 use crate::sys::socket;
 use core::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
@@ -168,6 +170,14 @@ impl LinuxNet for FakeNet {
             OptName::Linger => OptValue::Linger { onoff: true, seconds: 7 },
             OptName::PeerCred => OptValue::Ucred(Ucred { pid: 5, uid: 6, gid: 7 }),
             OptName::SndBuf => OptValue::Int(4096),
+            // The options of ip(7), ipv6(7) and tcp(7): defaults, as a
+            // socket that never set them reports.
+            OptName::Stored(o) => OptValue::Int(o.default_value()),
+            OptName::Ipv6Tclass => OptValue::Int(0),
+            OptName::IpMtu => OptValue::Int(1500),
+            OptName::IpMulticastIf => OptValue::bytes(&[10, 0, 2, 15]),
+            OptName::Ipv6PktInfo => OptValue::bytes(&[0; 20]),
+            OptName::TcpCongestion => OptValue::bytes(b"cubic\0"),
             _ => return Err(Errno::ENOPROTOOPT),
         })
     }
@@ -799,4 +809,301 @@ fn interface_ioctls_act_on_the_sockets_network_namespace() {
     assert_eq!(u16::from_le_bytes([got[0], got[1]]), 0x49, "the initial lo is up");
     // Not a socket: the request is not an interface request to answer.
     assert_ne!(sys(&mut k, nr::IOCTL, &[1, u64::from(SIOCGIFFLAGS), S]), Ok(0));
+}
+
+// ---- IP, IPv6 and TCP options (ip(7), ipv6(7), tcp(7)) ----------------------
+
+/// setsockopt on `fd` with `val` as the argument.
+fn set_opt(k: &mut FakeKernel, fd: u64, level: i32, name: i32, val: &[u8]) -> Result<u64, Errno> {
+    k.poke(S, val);
+    sys(k, nr::SETSOCKOPT, &[fd, level as u64, name as u64, S, val.len() as u64])
+}
+
+/// getsockopt on `fd` with `room` bytes of room: the bytes it stored.
+fn get_opt(k: &mut FakeKernel, fd: u64, level: i32, name: i32, room: i32) -> Result<Vec<u8>, Errno> {
+    k.poke(S + 0x100, &room.to_le_bytes());
+    sys(k, nr::GETSOCKOPT, &[fd, level as u64, name as u64, S, S + 0x100])?;
+    Ok(k.peek(S, k.peek_u32(S + 0x100) as usize))
+}
+
+fn last_opt(k: &mut FakeKernel, fd: u64) -> SockOpt {
+    *net(k).socks[&(fd as i32)].opts.last().expect("an option was set")
+}
+
+#[test]
+fn ip_flag_and_range_options_are_decoded() {
+    use crate::net::StoredOpt::*;
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let int = |v: i32| v.to_le_bytes();
+    // Flags: IP_PKTINFO, IP_RECVTOS, IP_RECVTTL, IP_RECVOPTS, IP_RETOPTS, IP_FREEBIND,
+    // IP_TRANSPARENT, IP_BIND_ADDRESS_NO_PORT: any non-zero value is on.
+    for (name, opt) in [
+        (abi::IP_PKTINFO, IpPktInfo),
+        (abi::IP_RECVTOS, IpRecvTos),
+        (abi::IP_RECVTTL, IpRecvTtl),
+        (abi::IP_RECVOPTS, IpRecvOpts),
+        (abi::IP_RETOPTS, IpRetOpts),
+        (abi::IP_FREEBIND, IpFreebind),
+        (abi::IP_TRANSPARENT, IpTransparent),
+        (abi::IP_BIND_ADDRESS_NO_PORT, IpBindAddressNoPort),
+        (abi::IP_MULTICAST_LOOP, IpMulticastLoop),
+    ] {
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, name, &int(1)), Ok(0), "{opt:?}");
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(opt, 1));
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, name, &int(0)), Ok(0));
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(opt, 0));
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, name, &int(-3)), Ok(0));
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(opt, 1), "non-zero is on");
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, name, &[]), Err(Errno::EINVAL), "{opt:?}: no argument");
+    }
+    // ip(7): the IP_* int options also take an unsigned char.
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_TTL, &[200]), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(IpMulticastTtl, 200));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_TTL, &int(0)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(IpMulticastTtl, 0));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_TTL, &int(256)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_TTL, &int(-1)), Err(Errno::EINVAL));
+    // IP_MTU_DISCOVER: IP_PMTUDISC_DONT (0) to IP_PMTUDISC_OMIT (5).
+    for v in 0..=5 {
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MTU_DISCOVER, &int(v)), Ok(0));
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(IpMtuDiscover, v));
+    }
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MTU_DISCOVER, &int(6)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MTU_DISCOVER, &int(-1)), Err(Errno::EINVAL));
+    // IP_MTU is only read.
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MTU, &int(1500)), Err(Errno::ENOPROTOOPT));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, 200, &int(1)), Err(Errno::ENOPROTOOPT));
+}
+
+#[test]
+fn ipv6_options_are_decoded() {
+    use crate::net::StoredOpt::*;
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet6, SockType::Datagram) as u64;
+    let int = |v: i32| v.to_le_bytes();
+    for (name, opt) in [
+        (abi::IPV6_RECVPKTINFO, Ipv6RecvPktInfo),
+        (abi::IPV6_RECVTCLASS, Ipv6RecvTclass),
+        (abi::IPV6_RECVHOPLIMIT, Ipv6RecvHopLimit),
+        (abi::IPV6_DONTFRAG, Ipv6DontFrag),
+    ] {
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, name, &int(1)), Ok(0), "{opt:?}");
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(opt, 1));
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, name, &int(0)), Ok(0));
+        assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(opt, 0));
+        // ipv6(7): an int is required.
+        assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, name, &[1]), Err(Errno::EINVAL), "{opt:?}: one byte");
+    }
+    // IPV6_TCLASS: -1 is the default (0), 0..=255 as is.
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, &int(0xb8)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Ipv6Tclass(0xb8));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, &int(-1)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Ipv6Tclass(0));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, &int(256)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, &int(-2)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, &[1, 0]), Err(Errno::EINVAL));
+    // Multicast: interface index, hop limit (-1: 1), loopback (0 or 1).
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_IF, &int(2)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(Ipv6MulticastIf, 2));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_IF, &int(-5)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_HOPS, &int(-1)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(Ipv6MulticastHops, 1));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_HOPS, &int(32)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(Ipv6MulticastHops, 32));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_HOPS, &int(256)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_LOOP, &int(0)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(Ipv6MulticastLoop, 0));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MULTICAST_LOOP, &int(2)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MTU_DISCOVER, &int(2)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(Ipv6MtuDiscover, 2));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_MTU_DISCOVER, &int(9)), Err(Errno::EINVAL));
+    // IPV6_PKTINFO as an option: exactly a struct in6_pktinfo.
+    let mut pi = [0u8; 20];
+    pi[..16].copy_from_slice(&Ipv6Addr::LOCALHOST.octets());
+    pi[16..].copy_from_slice(&3u32.to_le_bytes());
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_PKTINFO, &pi), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Ipv6PktInfo { addr: Ipv6Addr::LOCALHOST, ifindex: 3 });
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_PKTINFO, &pi[..19]), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_PKTINFO, &int(1)), Err(Errno::EINVAL));
+}
+
+#[test]
+fn tcp_options_are_decoded() {
+    use crate::net::StoredOpt::*;
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet, SockType::Stream) as u64;
+    let int = |v: i32| v.to_le_bytes();
+    let t = abi::SOL_TCP;
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_FASTOPEN, &int(16)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpFastopen, 16));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_FASTOPEN, &int(-1)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_FASTOPEN_CONNECT, &int(1)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpFastopenConnect, 1));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_FASTOPEN_CONNECT, &int(2)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_QUICKACK, &int(0)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpQuickack, 0));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_CORK, &int(1)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpCork, 1));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_DEFER_ACCEPT, &int(5)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpDeferAccept, 5));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_DEFER_ACCEPT, &int(-1)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpDeferAccept, 0));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_USER_TIMEOUT, &int(10_000)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpUserTimeout, 10_000));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_USER_TIMEOUT, &int(-1)), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_NOTSENT_LOWAT, &int(16384)), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::Stored(TcpNotsentLowat, 16384));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_NOTSENT_LOWAT, &[1, 2]), Err(Errno::EINVAL), "short");
+    // TCP_CONGESTION: a name; an unknown one is ENOENT.
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_CONGESTION, b"reno"), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::TcpCongestion(crate::net::Congestion::Reno));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_CONGESTION, b"cubic\0"), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::TcpCongestion(crate::net::Congestion::Cubic));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_CONGESTION, b"nonesuch"), Err(Errno::ENOENT));
+    assert_eq!(set_opt(&mut k, fd, t, abi::TCP_CONGESTION, b""), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, t, 99, &int(1)), Err(Errno::ENOPROTOOPT));
+}
+
+#[test]
+fn multicast_options_take_the_structures_of_the_man_pages() {
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let group = [224, 0, 0, 251];
+    let ip = |b: [u8; 4]| Ipv4Addr::from(b);
+    let m = |g: [u8; 4], ifindex: u32, iface: [u8; 4]| Membership { group: ip(g).into(), ifindex, iface: ip(iface) };
+    // ip_mreq: 8 bytes, group and interface address.
+    let mut mreq = group.to_vec();
+    mreq.extend_from_slice(&[10, 0, 2, 15]);
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, &mreq), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::AddMembership(m(group, 0, [10, 0, 2, 15])));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_DROP_MEMBERSHIP, &mreq), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::DropMembership(m(group, 0, [10, 0, 2, 15])));
+    // ip_mreqn: 12 bytes, with the interface index.
+    let mut mreqn = group.to_vec();
+    mreqn.extend_from_slice(&[0; 4]);
+    mreqn.extend_from_slice(&2i32.to_le_bytes());
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, &mreqn), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::AddMembership(m(group, 2, [0; 4])));
+    // Short arguments, groups that are not multicast addresses.
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, &mreq[..7]), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, &[]), Err(Errno::EINVAL));
+    let mut bad = vec![10, 1, 2, 3];
+    bad.extend_from_slice(&[0; 4]);
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, &bad), Err(Errno::EINVAL));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_DROP_MEMBERSHIP, &bad), Err(Errno::EINVAL));
+    // IP_MULTICAST_IF: an in_addr, or an ip_mreqn (its imr_address and imr_ifindex).
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_IF, &[10, 0, 2, 15]), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::IpMulticastIf { addr: ip([10, 0, 2, 15]), ifindex: 0 });
+    let mut mreqn = vec![0; 4];
+    mreqn.extend_from_slice(&[192, 168, 1, 7]);
+    mreqn.extend_from_slice(&3i32.to_le_bytes());
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_IF, &mreqn), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::IpMulticastIf { addr: ip([192, 168, 1, 7]), ifindex: 3 });
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_IF, &[1, 2, 3]), Err(Errno::EINVAL));
+    // IPv6: struct ipv6_mreq, 20 bytes.
+    let mut mreq6 = "ff02::fb".parse::<Ipv6Addr>().unwrap().octets().to_vec();
+    mreq6.extend_from_slice(&2u32.to_le_bytes());
+    let g6 =
+        Membership { group: "ff02::fb".parse::<Ipv6Addr>().unwrap().into(), ifindex: 2, iface: Ipv4Addr::UNSPECIFIED };
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_ADD_MEMBERSHIP, &mreq6), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::AddMembership(g6));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_DROP_MEMBERSHIP, &mreq6), Ok(0));
+    assert_eq!(last_opt(&mut k, fd), SockOpt::DropMembership(g6));
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_ADD_MEMBERSHIP, &mreq6[..19]), Err(Errno::EINVAL));
+    let mut uni = Ipv6Addr::LOCALHOST.octets().to_vec();
+    uni.extend_from_slice(&0u32.to_le_bytes());
+    assert_eq!(set_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_ADD_MEMBERSHIP, &uni), Err(Errno::EINVAL));
+    // Memberships cannot be read back.
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IP, abi::IP_ADD_MEMBERSHIP, 12), Err(Errno::ENOPROTOOPT));
+}
+
+#[test]
+fn ip_options_are_encoded_by_getsockopt() {
+    use crate::net::StoredOpt::*;
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let ints = [
+        (abi::SOL_IP, abi::IP_PKTINFO, IpPktInfo),
+        (abi::SOL_IP, abi::IP_MULTICAST_TTL, IpMulticastTtl),
+        (abi::SOL_IP, abi::IP_MULTICAST_LOOP, IpMulticastLoop),
+        (abi::SOL_IP, abi::IP_MTU_DISCOVER, IpMtuDiscover),
+        (abi::SOL_IPV6, abi::IPV6_RECVTCLASS, Ipv6RecvTclass),
+        (abi::SOL_TCP, abi::TCP_FASTOPEN, TcpFastopen),
+        (abi::SOL_TCP, abi::TCP_USER_TIMEOUT, TcpUserTimeout),
+    ];
+    for (level, name, o) in ints {
+        // The fake answers with the default; an int, 4 bytes.
+        assert_eq!(get_opt(&mut k, fd, level, name, 4), Ok(o.default_value().to_le_bytes().to_vec()), "{o:?}");
+    }
+    // IP_MULTICAST_IF: an in_addr; TCP_CONGESTION: the name and its NUL
+    // (cut to the room the caller gave); IPV6_PKTINFO: 20 bytes.
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IP, abi::IP_MULTICAST_IF, 4), Ok(vec![10, 0, 2, 15]));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_TCP, abi::TCP_CONGESTION, 16), Ok(b"cubic\0".to_vec()));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_TCP, abi::TCP_CONGESTION, 3), Ok(b"cub".to_vec()));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_PKTINFO, 20).map(|b| b.len()), Ok(20));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IPV6, abi::IPV6_TCLASS, 4), Ok(vec![0; 4]));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IP, abi::IP_MTU, 4), Ok(1500i32.to_le_bytes().to_vec()));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_IP, 200, 4), Err(Errno::ENOPROTOOPT));
+    assert_eq!(get_opt(&mut k, fd, abi::SOL_TCP, 99, 4), Err(Errno::ENOPROTOOPT));
+    assert_eq!(socket::encode_value(OptValue::bytes(&[1, 2, 3])), [1, 2, 3]);
+}
+
+#[test]
+fn recvmsg_returns_the_ip_control_messages_the_socket_asked_for() {
+    use crate::net::ipopt::{PktInfo, RecvAnc};
+    let mut k = kernel();
+    let fd = net(&mut k).add(Family::Inet, SockType::Datagram) as u64;
+    let from = SockAddr::Inet(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 4000));
+    let dst = core::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let anc = RecvAnc { v6: false, pktinfo: Some(PktInfo { ifindex: 1, dst }), tos: Some(0xb8), ttl: Some(64) };
+    let answer = RecvMsg { from: Some(from.clone()), anc, ..RecvMsg::default() };
+    net(&mut k).recvs.push_back(Ok((b"ping".to_vec(), answer.clone())));
+    let iovs = [Iovec { base: S + 0x800, len: 16 }];
+    let room = abi::cmsg_space(12) + abi::cmsg_space(4) + abi::cmsg_space(1);
+    msghdr(&mut k, S, &iovs, (S + 0xa00, 110), (S + 0xb00, room as u64));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, 0]), Ok(4));
+    let m = MsgHdr::from_bytes(&k.peek(S, MsgHdr::SIZE).try_into().unwrap());
+    assert_eq!(m.flags, 0, "everything fit");
+    let msgs = abi::parse_cmsgs(&k.peek(S + 0xb00, m.controllen as usize)).unwrap();
+    let got: Vec<(i32, i32, Vec<u8>)> = msgs.into_iter().map(|c| (c.level, c.ty, c.data)).collect();
+    assert_eq!(
+        got,
+        [
+            (abi::IPPROTO_IP, abi::IP_PKTINFO, vec![1, 0, 0, 0, 127, 0, 0, 1, 127, 0, 0, 1]),
+            (abi::IPPROTO_IP, abi::IP_TTL, vec![64, 0, 0, 0]),
+            (abi::IPPROTO_IP, abi::IP_TOS, vec![0xb8]),
+        ]
+    );
+    assert_eq!(m.controllen as usize, room);
+    // A control buffer that holds the first message only: MSG_CTRUNC.
+    net(&mut k).recvs.push_back(Ok((b"ping".to_vec(), answer)));
+    msghdr(&mut k, S, &iovs, (S + 0xa00, 110), (S + 0xb00, abi::cmsg_space(12) as u64));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, 0]), Ok(4));
+    let m = MsgHdr::from_bytes(&k.peek(S, MsgHdr::SIZE).try_into().unwrap());
+    assert_eq!((m.flags, m.controllen as usize), (abi::MSG_CTRUNC, abi::cmsg_space(12)));
+    // IPv6: in6_pktinfo, hop limit and traffic class as ints, at level IPPROTO_IPV6.
+    let fd6 = net(&mut k).add(Family::Inet6, SockType::Datagram) as u64;
+    let six = Ipv6Addr::LOCALHOST;
+    let anc =
+        RecvAnc { v6: true, pktinfo: Some(PktInfo { ifindex: 2, dst: six.into() }), tos: Some(0x2e), ttl: Some(255) };
+    let from6 = SockAddr::Inet6(SocketAddrV6::new(six, 4001, 0, 0));
+    net(&mut k).recvs.push_back(Ok((b"p6".to_vec(), RecvMsg { from: Some(from6), anc, ..RecvMsg::default() })));
+    msghdr(&mut k, S, &iovs, (S + 0xa00, 110), (S + 0xb00, 128));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd6, S, 0]), Ok(2));
+    let m = MsgHdr::from_bytes(&k.peek(S, MsgHdr::SIZE).try_into().unwrap());
+    let msgs = abi::parse_cmsgs(&k.peek(S + 0xb00, m.controllen as usize)).unwrap();
+    let got: Vec<(i32, i32, usize)> = msgs.iter().map(|c| (c.level, c.ty, c.data.len())).collect();
+    assert_eq!(got, [(41, abi::IPV6_PKTINFO, 20), (41, abi::IPV6_HOPLIMIT, 4), (41, abi::IPV6_TCLASS, 4)]);
+    assert_eq!(msgs[1].data, 255i32.to_le_bytes());
+    assert_eq!(msgs[2].data, 0x2ei32.to_le_bytes());
+    let mut want = six.octets().to_vec();
+    want.extend_from_slice(&2u32.to_le_bytes());
+    assert_eq!(msgs[0].data, want);
+    // No options, no messages.
+    net(&mut k).recvs.push_back(Ok((b"x".to_vec(), RecvMsg::default())));
+    msghdr(&mut k, S, &iovs, (S + 0xa00, 110), (S + 0xb00, 128));
+    assert_eq!(sys(&mut k, nr::RECVMSG, &[fd, S, 0]), Ok(1));
+    let m = MsgHdr::from_bytes(&k.peek(S, MsgHdr::SIZE).try_into().unwrap());
+    assert_eq!((m.controllen, m.flags), (0, 0));
 }

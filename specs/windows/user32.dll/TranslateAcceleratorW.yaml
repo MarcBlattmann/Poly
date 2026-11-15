@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/TranslateAcceleratorW.yaml
+id: windows/api/user32.dll/TranslateAcceleratorW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Translates a key message into a WM_COMMAND to the window when it matches an entry of the table; returns nonzero if it did.
+interface:
+  signature: "int TranslateAcceleratorW(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg)"
+rules:
+  virtual_keys: "an entry with FVIRTKEY matches WM_KEYDOWN and WM_SYSKEYDOWN of that virtual key code (F1, 'A', 'B' with FNOINVERT; the key up does not) when the modifier flags agree with the key state: an entry needing Ctrl, Shift or Alt does not match when the key is not down (the tests cannot press keys); 0x61 (numpad 1) is not 'a'"
+  characters: "an entry without FVIRTKEY matches WM_CHAR and WM_SYSCHAR with that character, case-sensitive ('a' and 'A' are different entries); WM_KEYDOWN with the same code does not match it"
+  command: "the window gets WM_COMMAND with the command id in the low word and 1 in the high word (the accelerator source), lParam 0; the call returns 1"
+  first_match: "two entries for one key (the same virtual key twice): the first in table order wins (command 1, not 3)"
+  no_match: "a key not in the table, a mouse message, a NULL or made-up table or window handle: 0 and no message"
+  message: "the MSG is not changed"
+errors:
+  none: "no errors are reported"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Modifier combinations (keys cannot be pressed), disabled menu items that would be the target of the command (a command whose menu item is grayed is dropped by real programs through WM_INITMENU rules).

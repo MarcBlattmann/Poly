@@ -29,6 +29,7 @@
 //! (a host test compares them page by page).
 
 use crate::consts::*;
+use crate::imageshare::FileIdentity;
 use crate::protect::Protection;
 use crate::vm::{PAGE_SIZE, page_up};
 use alloc::sync::Arc;
@@ -82,6 +83,38 @@ pub trait ImageBytes: Send + Sync + core::fmt::Debug {
     fn held(&self) -> Option<&[u8]> {
         None
     }
+
+    /// The file these bytes are the image of, laid out at its preferred base, if they come from
+    /// one: every process that maps it may share its pages ([`crate::imageshare`], ADR 0188).
+    /// `None` for bytes of their own (a relocated view, an image the kernel was handed).
+    fn share_key(&self) -> Option<FileIdentity> {
+        None
+    }
+}
+
+/// [`Held`] bytes read from the file `key` names.
+#[derive(Clone, Debug)]
+pub struct HeldFile {
+    pub held: Held,
+    pub key: FileIdentity,
+}
+
+impl ImageBytes for HeldFile {
+    fn len(&self) -> u64 {
+        self.held.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> usize {
+        self.held.read_at(offset, buf)
+    }
+
+    fn held(&self) -> Option<&[u8]> {
+        self.held.held()
+    }
+
+    fn share_key(&self) -> Option<FileIdentity> {
+        Some(self.key)
+    }
 }
 
 /// An image laid out in memory.
@@ -117,6 +150,11 @@ pub trait ImageFile: Send + Sync + core::fmt::Debug {
     /// many (0 only at or past the end). Reads until `buf` is full or the
     /// file ends.
     fn read_at(&self, offset: u64, buf: &mut [u8]) -> usize;
+
+    /// What names the file's contents, if it is a file of a file system ([`crate::imageshare`]).
+    fn identity(&self) -> Option<FileIdentity> {
+        None
+    }
 }
 
 /// A file held in memory.
@@ -154,6 +192,12 @@ impl ImageFile for VfsFile {
             }
         }
         done
+    }
+
+    fn identity(&self) -> Option<FileIdentity> {
+        let st = self.0.stat().ok()?;
+        let dev = u64::from(st.dev.major) << 32 | u64::from(st.dev.minor);
+        Some(FileIdentity { dev, ino: st.ino, size: st.size, mtime_sec: st.mtime.sec, mtime_nsec: st.mtime.nsec })
     }
 }
 
@@ -378,11 +422,23 @@ impl ImageBytes for Lazy {
         }
         n
     }
+
+    fn share_key(&self) -> Option<FileIdentity> {
+        if self.fixups.is_some() {
+            return None;
+        }
+        self.file.identity()
+    }
 }
 
 impl ImageSection {
     /// Parse and lay out the image file `file`.
     pub fn from_file(file: &[u8]) -> Result<ImageSection, NtStatus> {
+        Self::laid_out(file, None)
+    }
+
+    /// [`ImageSection::from_file`] of the bytes of the file `key` names, if it names one.
+    fn laid_out(file: &[u8], key: Option<FileIdentity>) -> Result<ImageSection, NtStatus> {
         let bad = |_| STATUS_INVALID_IMAGE_FORMAT;
         let pe = Pe::parse(file).map_err(bad)?;
         let plan = Self::checked_plan(&pe, file.len() as u64)?;
@@ -396,7 +452,12 @@ impl ImageSection {
         let mut image = try_filled(size as usize, 0u8)?;
         plan.map_into(&mut image).map_err(bad)?;
         let pages = Self::page_protections(&plan, size)?;
-        Ok(ImageSection { image: Arc::new(Held(image.into())), info: *pe.info(), size, pages, lazy: None, name: None })
+        let held = Held(image.into());
+        let image: Arc<dyn ImageBytes> = match key {
+            Some(key) => Arc::new(HeldFile { held, key }),
+            None => Arc::new(held),
+        };
+        Ok(ImageSection { image, info: *pe.info(), size, pages, lazy: None, name: None })
     }
 
     /// Parse and lay out the image in `file`, reading only its headers when
@@ -407,7 +468,7 @@ impl ImageSection {
             let mut bytes = try_filled(len as usize, 0u8)?;
             let n = file.read_at(0, &mut bytes);
             bytes.truncate(n);
-            return Self::from_file(&bytes);
+            return Self::laid_out(&bytes, file.identity());
         }
         Self::lazy(file)
     }

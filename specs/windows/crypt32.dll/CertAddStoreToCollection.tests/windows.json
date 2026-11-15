@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "certaddstoretocollection_basic_b",
+      "exe_sha256": "f3e984473177e99d95919249f6c6d4c6e78354c125b2a3b52766916bbc711ad1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWRkIEItc3RvcmUgKGZsYWdzIDAsIHByaW9yaXR5IDApOiAxCmVudW1lcmF0aW9uIGFmdGVyIHRoZSBzZWNvbmQgYWRkOiBBQkEKYWRkIGEgY2VydGlmaWNhdGUgdG8gdGhlIGNvbGxlY3Rpb246IDEgbGFzdCBlcnJvciAwCmFkZCBhIGNlcnRpZmljYXRlIHRvIGEgY29sbGVjdGlvbiB3aG9zZSBvbmx5IHNpYmxpbmcgaGFzIG5vIEFERF9FTkFCTEUgZmxhZzogMCBsYXN0IGVycm9yIDB4ODAwNzAwMDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "add B-store (flags 0, priority 0): 1\nenumeration after the second add: ABA\nadd a certificate to the collection: 1 last error 0\nadd a certificate to a collection whose only sibling has no ADD_ENABLE flag: 0 last error 0x80070005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "certaddstoretocollection_basic_c",
+      "exe_sha256": "5208b63333661c4f992c8aee3c687af4687047568dc3033de7beb48e81d18131",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW51bWVyYXRpb24gb2YgdGhlIGNvbGxlY3Rpb246IEFCCmFkZCBpbnRvIGEgbWVtb3J5IHN0b3JlOiAwIGxhc3QgZXJyb3IgMHg4MDA3MDA1NwppdCBsYW5kZWQgaW4gc2libGluZyAxOiAtICBpbiBzaWJsaW5nIDI6IEEKYWZ0ZXIgcmVtb3ZpbmcgdGhlIEEtc3RvcmU6IEJBCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enumeration of the collection: AB\nadd into a memory store: 0 last error 0x80070057\nit landed in sibling 1: -  in sibling 2: A\nafter removing the A-store: BA\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
