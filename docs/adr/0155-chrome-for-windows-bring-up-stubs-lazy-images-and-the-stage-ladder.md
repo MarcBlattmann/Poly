@@ -805,3 +805,51 @@ until stage 1 passes every time.
 (`PDH_NOT_IMPLEMENTED`, `TBS_E_TPM_NOT_FOUND` with no TPM, `CR_CALL_NOT_IMPLEMENTED`,
 `TRUST_E_PROVIDER_UNKNOWN`, `NTE_NOT_SUPPORTED`, `HIDP_STATUS_NOT_IMPLEMENTED`), and that `UnregisterWaitEx` with an event signals it once the wait's
 thread is done even when it returns `TRUE`.
+
+## Addendum: stage 1 every time, in 4 GiB (`chrome-win-s13`, step 13)
+
+Step 12 left two problems: the kernel ran out of frames in the 4 GiB guest (so the stages ran
+with 8 GiB), and about one run in five failed: a browser thread broke with `int3` at
+`chrome.dll+0xc62f809` and Chrome ended with `0xffff7002`, or the launcher's 300 s ran out.
+
+1. **Memory: DLLs are image section views ([ADR 0188](0188-dlls-are-image-section-views-and-share-their-clean-pages.md)).**
+   A new report (`poly.nt.mem`, `chrome-win run --mem`) showed every Chrome process owning about
+   77,300 pages (302 MB, `chrome.dll`'s `SizeOfImage`) from its start: `ntdll`'s loader read each
+   DLL file whole and copied the image into private memory. DLLs are now mapped as `SEC_IMAGE`
+   views and relocated in place, and every view of the same image file shares the pages nobody
+   wrote. User pages went from 3.3 GiB (then the kernel panicked) to about 360 MiB; stage 1 takes
+   15-25 s instead of 50-70 s on a quiet machine. `chromewin::MEMORY` is 4 GiB again. A kernel
+   heap allocation that fails while an exception's `CONTEXT` is made now ends that process with
+   `STATUS_NO_MEMORY` instead of panicking the kernel.
+2. **The failures were one bug in Poly's `InterlockedPushEntrySList`.** With per-thread trails
+   carrying their time (and the counter values `NtQueryPerformanceCounter` returned), every
+   failing run showed a browser thread-pool worker that read `C:\poly-test\s1.html`
+   (`NtReadFile`) and then made no system call again. The wait report's new columns said why:
+   that thread used 100 % of a CPU in user mode, at `kernelbase.dll+0xdcfe` in every run (the
+   kernel records a thread's user RIP when an interrupt returns to it while the report is on).
+   That is Poly's own `InterlockedPushEntrySList`: it swapped the new low quadword into RBX by
+   hand around `LOCK CMPXCHG16B` but let the compiler choose the register for the `SETE` result;
+   the compiler chose BL, which the swap back overwrote, so the loop tested the caller's RBX. A
+   caller whose RBX ended in a zero byte looped for ever, and each pass linked its entry to itself.
+   Whether a call hung depended on what the caller had in RBX, hence one run in five. When the
+   worker spun long enough, another browser thread broke on a failed check (the `int3`, apparently
+   Chrome noticing the stuck work);
+   otherwise the launcher timed out. Now every operand is a fixed register other than RBX and the
+   flag is read after RBX is back; `k32test` calls push and pop with such an RBX (the old code
+   hangs it).
+3. **Diagnostics (off by default).** Trail lines end with ` @<µs>us` (and ` = <value>` for
+   `NtQueryPerformanceCounter`); at a breakpoint the other threads of the process show their calls
+   of the last 3 s; the wait report lists suspended threads (count, where they parked) and every
+   thread that used more than 100 ms of CPU with its user/system split and where it last was in
+   user mode (`module+offset`).
+
+With `poly.nt.waits` on, the kernel's lines can land inside the launcher's SHA-256 line and the
+summary misreads a correct digest; runs without that diagnostic are not affected.
+
+| Runs (4 GiB) | Tree | Passed | Failures |
+|---|---|---|---|
+| m1 | step 12 | 0/1 | kernel out of memory (3.3 GiB of user pages) |
+| m2, b1-b7 (71 runs) | + image views, diagnostics on | 53 | 11 failed checks (`int3`), 5 timeouts: each one examined (b2-b7) a browser thread spinning after reading the page, at `kernelbase.dll+0xdcfe` where sampled; 2 more printed the right DOM but `poly.nt.waits` garbled the digest line |
+| f1-f12 | + the `InterlockedPushEntrySList` fix, no diagnostics | **12/12** | none (11-39 s each) |
+
+**`S1_REQUIRED` is `true`**: the `chrome-win` boot test group now fails when stage 1 does not pass.

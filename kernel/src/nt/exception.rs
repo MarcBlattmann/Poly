@@ -158,17 +158,43 @@ pub fn fault(process: &Process, fault: &Fault) -> bool {
     // backtrace below this frame, reading user memory that can fault
     // again, and every frame of that path counts against the thread's
     // 16 KiB stack (ADR 0061, 0091).
-    let mut ctx = alloc::boxed::Box::new(current_context());
+    // The kernel's heap may be out of frames (it shares them with user memory): then the process
+    // ends with `STATUS_NO_MEMORY` instead of the whole kernel (ADR 0188).
+    let mut ctx: Vec<Context> = Vec::new();
+    if ctx.try_reserve_exact(1).is_err() {
+        drop((code, memory));
+        end_out_of_memory(ProcessId(process.pid), tid);
+    }
+    ctx.push(current_context());
     let mut k = Kernel::new(ProcessId(process.pid), tid, memory);
     {
         let cpu =
             CpuFault { vector: fault.vector, error_code: fault.error_code, address: fault.address, page, code: &code };
-        nt_exception::dispatch_fault(&mut k, &cpu, &mut ctx);
+        nt_exception::dispatch_fault(&mut k, &cpu, &mut ctx[0]);
     }
     drop(code);
     drop(ctx);
     finish(k);
     true
+}
+
+/// The kernel could not allocate what delivering an exception needs: end the calling thread's
+/// process with `STATUS_NO_MEMORY` (`ntstatus.h`). Nothing is allocated on the way.
+#[cold]
+#[inline(never)]
+fn end_out_of_memory(pid: ProcessId, tid: ThreadRef) -> ! {
+    const STATUS_NO_MEMORY: u32 = 0xC000_0017;
+    crate::kprintln!("nt: pid {} t{}: kernel out of memory delivering an exception; the process ends", pid.0, tid.0);
+    with(|s| {
+        if let Some(c) = s.ctl.get_mut(&tid) {
+            c.exit_status = Some(NtStatus(STATUS_NO_MEMORY));
+        }
+    });
+    let status = ExitStatus::Exited(STATUS_NO_MEMORY as u8);
+    if let Some(process) = user::current_process() {
+        process.group_exit(status);
+    }
+    user::end_thread(status, STATUS_NO_MEMORY as usize)
 }
 
 /// After a service or a fault, with the calling thread's [`Kernel`]: end
