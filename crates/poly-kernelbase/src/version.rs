@@ -30,6 +30,65 @@ pub enum Compat {
 pub const GUID_WIN10: &str = "{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}";
 /// `supportedOS Id` of Windows 8.1.
 pub const GUID_WIN81: &str = "{1f676c76-80e1-4239-95bb-83d0f6d0da78}";
+/// `supportedOS Id` of Windows 8 (Learn, "Application manifests").
+pub const GUID_WIN8: &str = "{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}";
+
+/// Whether a manifest declares Windows 8 or a later version (`supportedOS`
+/// of 8, 8.1 or 10): what layered child windows need (Learn, "Layered
+/// Windows": Windows 8 supports `WS_EX_LAYERED` for child windows).
+pub fn declares_win8(text: &[u8]) -> bool {
+    manifest_compat(text) != Compat::Legacy
+        || lower_ascii(text).windows(GUID_WIN8.len()).any(|w| w == GUID_WIN8.as_bytes())
+}
+
+/// The manifest of the image mapped at `base` (its resource directory is
+/// data directory 2 of the optional header, PE format).
+///
+/// # Safety
+/// `base` is 0 or the base of an image mapped in this process.
+pub unsafe fn image_manifest(base: u64) -> Option<alloc::vec::Vec<u8>> {
+    if base == 0 {
+        return None;
+    }
+    // SAFETY: a mapped image's headers and its resource section are
+    // readable; RVAs are bounded by the sizes the headers give.
+    unsafe {
+        let nt_off = ((base + 0x3C) as *const u32).read() as u64;
+        let opt = base + nt_off + 24;
+        // PE32+ (0x20B): the data directories start at optional header + 112, their count at 108;
+        // PE32 (0x10B, a 32-bit image): at 96 and 92. The resource table is entry 2.
+        let dirs: u64 = match (opt as *const u16).read() {
+            0x20B => 112,
+            0x10B => 96,
+            _ => return None,
+        };
+        let count = ((opt + dirs - 4) as *const u32).read();
+        if count < 3 {
+            return None;
+        }
+        let rva = ((opt + dirs + 16) as *const u32).read() as u64;
+        let size = ((opt + dirs + 20) as *const u32).read() as usize;
+        let image_size = ((opt + 56) as *const u32).read() as u64;
+        if rva == 0 || rva + size as u64 > image_size {
+            return None;
+        }
+        let rsrc = core::slice::from_raw_parts((base + rva) as *const u8, size);
+        let (data, len) = find_manifest(rsrc)?;
+        if u64::from(data) + u64::from(len) > image_size {
+            return None;
+        }
+        Some(core::slice::from_raw_parts((base + u64::from(data)) as *const u8, len as usize).to_vec())
+    }
+}
+
+/// A manifest's text in lower-case ASCII (UTF-16 LE read as its low bytes).
+fn lower_ascii(text: &[u8]) -> alloc::vec::Vec<u8> {
+    if text.len() >= 2 && (text[1] == 0 || text.starts_with(&[0xFF, 0xFE])) {
+        text.chunks(2).map(|c| c[0].to_ascii_lowercase()).collect()
+    } else {
+        text.iter().map(|c| c.to_ascii_lowercase()).collect()
+    }
+}
 
 /// `(major, minor, build)` reported to a program with `compat`.
 pub fn reported(compat: Compat) -> (u32, u32, u32) {
@@ -101,11 +160,7 @@ pub fn fill(buf: &mut [u8], v: (u32, u32, u32)) -> Result<(), u32> {
 /// What a manifest's text declares (UTF-8, or UTF-16 LE as some resource
 /// compilers write it). GUIDs are compared without case.
 pub fn manifest_compat(text: &[u8]) -> Compat {
-    let ascii: alloc::vec::Vec<u8> = if text.len() >= 2 && (text[1] == 0 || text.starts_with(&[0xFF, 0xFE])) {
-        text.chunks(2).map(|c| c[0].to_ascii_lowercase()).collect()
-    } else {
-        text.iter().map(|c| c.to_ascii_lowercase()).collect()
-    };
+    let ascii = lower_ascii(text);
     let has = |g: &str| ascii.windows(g.len()).any(|w| w == g.as_bytes());
     if has(GUID_WIN10) {
         Compat::Win10
@@ -230,6 +285,11 @@ mod tests {
         let m81: Vec<u8> = GUID_WIN81.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
         assert_eq!(manifest_compat(&m81), Compat::Win81);
         assert_eq!(manifest_compat(b"<assembly/>"), Compat::Legacy);
+        let m8 = br#"<supportedOS Id="{4A2F28E3-53B9-4441-BA9C-D69D4A4A6E38}"/>"#;
+        assert_eq!(manifest_compat(m8), Compat::Legacy, "8 reports as legacy");
+        assert!(declares_win8(m8));
+        assert!(declares_win8(m));
+        assert!(!declares_win8(b"<assembly/>"));
     }
 
     #[test]

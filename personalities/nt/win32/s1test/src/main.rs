@@ -362,7 +362,8 @@ unsafe fn com() {
     // The model can change once the thread is balanced.
     check_hr(CoInitializeEx(core::ptr::null_mut(), 2), S_OK);
     check_hr(CoGetApartmentType(&mut kind, &mut qual), S_OK);
-    check_eq(kind as usize, 0); // APTTYPE_STA
+    // The first apartment-threaded apartment of a process is the main one (the `CoInitializeEx` sheet).
+    check_eq(kind as usize, 3); // APTTYPE_MAINSTA
     check_hr(OleInitialize(core::ptr::null_mut()), S_FALSE);
     OleUninitialize();
 

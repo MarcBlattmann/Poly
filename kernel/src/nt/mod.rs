@@ -147,6 +147,12 @@ pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"
 pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
 pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
+/// `dxgi`: a factory with one software adapter (the S3 hunt, ADR 0155).
+pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
+/// `d3d11`: a software device whose swap chains present through GDI (the S3 hunt, ADR 0155).
+pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
+/// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
+pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
@@ -855,6 +861,25 @@ impl NtKernel for Kernel {
         sched::resume(self.pid, &self.memory, thread)
     }
 
+    fn current_processor(&mut self) -> u32 {
+        crate::thread::this_cpu() as u32
+    }
+
+    fn thread_affinity(&mut self, thread: ThreadRef) -> Result<u64, NtStatus> {
+        let id = sched::kernel_thread(self.pid, self.tid, thread)?;
+        let mask = crate::thread::affinity(id).ok_or(poly_ntobj::status::STATUS_INVALID_CID)?;
+        Ok(mask.intersection(crate::thread::online_cpus()).bits())
+    }
+
+    fn set_thread_affinity(&mut self, thread: ThreadRef, mask: u64) -> Result<(), NtStatus> {
+        let id = sched::kernel_thread(self.pid, self.tid, thread)?;
+        let cpus = crate::thread::CpuSet::from_bits(mask).intersection(crate::thread::online_cpus());
+        if cpus.is_empty() {
+            return Err(poly_ntobj::status::STATUS_INVALID_PARAMETER);
+        }
+        crate::thread::set_affinity(id, cpus).map_err(|_| poly_ntobj::status::STATUS_INVALID_PARAMETER)
+    }
+
     fn suspend_process(&mut self, pid: ProcessId) -> Result<(), NtStatus> {
         sched::suspend_process(pid)
     }
@@ -1188,7 +1213,11 @@ struct HandlesFor {
     inherit_only: Option<Vec<poly_ntobj::Handle>>,
     jobs: Vec<u64>,
     join_creator_jobs: bool,
-    dynamic_code_blocked: bool,
+    mitigation: poly_personality_nt::MitigationState,
+    /// The station and desktop it starts on (ADR 0192).
+    desktop: poly_personality_nt::winsta::Start,
+    /// Its creator's error mode (`SetErrorMode`), which it starts with.
+    error_mode: u32,
     /// The descriptors of its process and first thread objects (`lpProcessAttributes`,
     /// `lpThreadAttributes`), applied once the creator's handles are open.
     process_security: Option<Vec<u8>>,
@@ -1229,7 +1258,16 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
-        proc.dynamic_code_blocked = handles.is_some_and(|h| h.dynamic_code_blocked);
+        if let Some(h) = handles {
+            proc.set_mitigation(h.mitigation);
+            s.sys.winsta.begin(pid, h.desktop.clone());
+        }
+        match handles.map_or(0, |h| h.error_mode) {
+            0 => {}
+            mode => {
+                s.sys.proc_attrs.insert(pid, poly_personality_nt::procattrs::ProcAttrs::new(mode));
+            }
+        }
         proc.image_name = s.sys.io.dos_file_name(&params.image_path);
         let mut b = MemBackend { memory, sections: &mut s.sections };
         // Its creator's inheritable handles, before any other (ADR 0089).
@@ -1362,7 +1400,9 @@ fn create_process(
         inherit_only: req.inherit_only,
         jobs: req.jobs,
         join_creator_jobs: req.join_creator_jobs,
-        dynamic_code_blocked: req.dynamic_code_blocked,
+        mitigation: req.mitigation,
+        desktop: req.desktop,
+        error_mode: req.error_mode,
         process_security: req.process_security,
         thread_security: req.thread_security,
     };

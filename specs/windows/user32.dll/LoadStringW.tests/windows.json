@@ -11,7 +11,7 @@
   "started": "2026-11-14T20:54:12Z",
   "tests": [
     {
-      "name": "ls_basic",
+      "name": "lsw_basic",
       "exe_sha256": "944212203c12fe1aef8a26dd5c577a1e1cd74ced24ce0b100121eabafd30bed4",
       "status": "ran",
       "exit_code": 0,
