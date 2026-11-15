@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "scb_values",
+      "exe_sha256": "7be9a23357211b2134173ae5f90d99572663cae5e90bda34eb0a6351504f8f84",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGJsaW5rIHRpbWUgYXQgdGhlIHN0YXJ0IGlzIDUwMDogMQpTZXRDYXJldEJsaW5rVGltZSgyNTApOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUoMTAwMCk6IDAgZXJyPTE0NTkKICBHZXRDYXJldEJsaW5rVGltZSA9IDUwMApTZXRDYXJldEJsaW5rVGltZSgxKTogMCBlcnI9MTQ1OQogIEdldENhcmV0QmxpbmtUaW1lID0gNTAwClNldENhcmV0QmxpbmtUaW1lKDIpOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUoMTApOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUoOTkpOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUoMTAwKTogMCBlcnI9MTQ1OQogIEdldENhcmV0QmxpbmtUaW1lID0gNTAwClNldENhcmV0QmxpbmtUaW1lKDUwMCk6IDAgZXJyPTE0NTkKICBHZXRDYXJldEJsaW5rVGltZSA9IDUwMApTZXRDYXJldEJsaW5rVGltZSg2MDAwMCk6IDAgZXJyPTE0NTkKICBHZXRDYXJldEJsaW5rVGltZSA9IDUwMApTZXRDYXJldEJsaW5rVGltZSgyMTQ3NDgzNjQ3KTogMCBlcnI9MTQ1OQogIEdldENhcmV0QmxpbmtUaW1lID0gNTAwClNldENhcmV0QmxpbmtUaW1lKDIxNDc0ODM2NDgpOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUoNDI5NDk2NzI5NCk6IDAgZXJyPTE0NTkKICBHZXRDYXJldEJsaW5rVGltZSA9IDUwMApTZXRDYXJldEJsaW5rVGltZSg0Mjk0OTY3Mjk1KTogMCBlcnI9MTQ1OQogIEdldENhcmV0QmxpbmtUaW1lID0gNTAwClNldENhcmV0QmxpbmtUaW1lKDApOiAwIGVycj0xNDU5CiAgR2V0Q2FyZXRCbGlua1RpbWUgPSA1MDAKU2V0Q2FyZXRCbGlua1RpbWUob3JpZyk6IDAgZXJyPTE0NTkKcmVzdG9yZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the blink time at the start is 500: 1\nSetCaretBlinkTime(250): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(1000): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(1): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(2): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(10): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(99): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(100): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(500): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(60000): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(2147483647): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(2147483648): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(4294967294): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(4294967295): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(0): 0 err=1459\n  GetCaretBlinkTime = 500\nSetCaretBlinkTime(orig): 0 err=1459\nrestored: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

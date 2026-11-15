@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "udn_lifetime",
+      "exe_sha256": "e11e1ac8e1b9917aefd8482f8beea793ffa536b9dc523671452347e9c1962cb9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgdGhlIHdpbmRvdyB3YXMgZGVzdHJveWVkOiByZXR1cm5zIDEsIGxhc3QgZXJyb3Igc2V0IHRvIDAgdHJ1ZQphbmQgYWdhaW46IHJldHVybnMgMCwgbGFzdCBlcnJvciA2CnVucmVnaXN0ZXJpbmcgaW5zaWRlIHRoZSB3aW5kb3cgcHJvY2VkdXJlIG9mIGEgV01fREVWSUNFQ0hBTkdFOiByZXR1cm5zIDEKdGhlIGhhbmRsZSBpcyB0aGVuIGdvbmU6IHRydWUKdGhlIHJlZ2lzdGVyaW5nIHRocmVhZCBoYXMgZW5kZWQ7IHRoZSBoYW5kbGUgaXQgZ290IGlzIG5vdCBOVUxMOiB0cnVlCnVucmVnaXN0ZXJlZCBmcm9tIGEgdGhpcmQgdGhyZWFkIGFmdGVyIHRoZSBmaXJzdCBvbmUgZW5kZWQ6IHJldHVybnMgMQphbmQgYSBzZWNvbmQgdGltZSBmcm9tIHRoaXMgb25lOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after the window was destroyed: returns 1, last error set to 0 true\nand again: returns 0, last error 6\nunregistering inside the window procedure of a WM_DEVICECHANGE: returns 1\nthe handle is then gone: true\nthe registering thread has ended; the handle it got is not NULL: true\nunregistered from a third thread after the first one ended: returns 1\nand a second time from this one: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    }
+  ]
+}

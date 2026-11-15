@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "imia_same",
+      "exe_sha256": "185db7410ef584786220e32a9d979dee37e3811dead4453b18a31e163a9d7544",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TUZUX0JJVE1BUCB0aHJvdWdoIE1JSU1fVFlQRTogQSAxIFcgMQpBTlNJIDogb2sgMSBpZCAweDEgc3RhdGUgMHhiIHR5cGUgMHgwIGRhdGEgMHgwIGNjaCA1IHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJ3BsYWluJwp3aWRlIDogb2sgMSBpZCAweDEgc3RhdGUgMHhiIHR5cGUgMHgwIGRhdGEgMHgwIGNjaCA1IHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJ3BsYWluJwpBTlNJIDogb2sgMSBpZCAweDIgc3RhdGUgMHgxMDAwIHR5cGUgMHgyMDAgZGF0YSAweDAgY2NoIDUgc3ViIDAgY2hlY2ttYXJrcyAwLzAgdGV4dCAncmFkaW8nCndpZGUgOiBvayAxIGlkIDB4MiBzdGF0ZSAweDEwMDAgdHlwZSAweDIwMCBkYXRhIDB4MCBjY2ggNSBzdWIgMCBjaGVja21hcmtzIDAvMCB0ZXh0ICdyYWRpbycKQU5TSSA6IG9rIDEgaWQgMHgzIHN0YXRlIDB4MCB0eXBlIDB4MCBkYXRhIDB4NGQgY2NoIDUgc3ViIDAgY2hlY2ttYXJrcyAxLzEgdGV4dCAnbWFya3MnCndpZGUgOiBvayAxIGlkIDB4MyBzdGF0ZSAweDAgdHlwZSAweDAgZGF0YSAweDRkIGNjaCA1IHN1YiAwIGNoZWNrbWFya3MgMS8xIHRleHQgJ21hcmtzJwpBTlNJIDogb2sgMSBpZCAweDQgc3RhdGUgMHgwIHR5cGUgMHgwIGRhdGEgMHgwIGNjaCAwIHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJycKd2lkZSA6IG9rIDEgaWQgMHg0IHN0YXRlIDB4MCB0eXBlIDB4MCBkYXRhIDB4MCBjY2ggMCBzdWIgMCBjaGVja21hcmtzIDAvMCB0ZXh0ICcnCkFOU0kgOiBvayAxIGlkIDB4NSBzdGF0ZSAweDAgdHlwZSAweDQgZGF0YSAweDAgY2NoIDAgc3ViIDAgY2hlY2ttYXJrcyAwLzAgdGV4dCAnJwp3aWRlIDogb2sgMSBpZCAweDUgc3RhdGUgMHgwIHR5cGUgMHg0IGRhdGEgMHgwIGNjaCAwIHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJycKQU5TSSA6IG9rIDEgaWQgMHg2IHN0YXRlIDB4MCB0eXBlIDB4MTAwIGRhdGEgMHgwIGNjaCAwIHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJycKd2lkZSA6IG9rIDEgaWQgMHg2IHN0YXRlIDB4MCB0eXBlIDB4MTAwIGRhdGEgMHgwIGNjaCAwIHN1YiAwIGNoZWNrbWFya3MgMC8wIHRleHQgJycKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "MFT_BITMAP through MIIM_TYPE: A 1 W 1\nANSI : ok 1 id 0x1 state 0xb type 0x0 data 0x0 cch 5 sub 0 checkmarks 0/0 text 'plain'\nwide : ok 1 id 0x1 state 0xb type 0x0 data 0x0 cch 5 sub 0 checkmarks 0/0 text 'plain'\nANSI : ok 1 id 0x2 state 0x1000 type 0x200 data 0x0 cch 5 sub 0 checkmarks 0/0 text 'radio'\nwide : ok 1 id 0x2 state 0x1000 type 0x200 data 0x0 cch 5 sub 0 checkmarks 0/0 text 'radio'\nANSI : ok 1 id 0x3 state 0x0 type 0x0 data 0x4d cch 5 sub 0 checkmarks 1/1 text 'marks'\nwide : ok 1 id 0x3 state 0x0 type 0x0 data 0x4d cch 5 sub 0 checkmarks 1/1 text 'marks'\nANSI : ok 1 id 0x4 state 0x0 type 0x0 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nwide : ok 1 id 0x4 state 0x0 type 0x0 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nANSI : ok 1 id 0x5 state 0x0 type 0x4 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nwide : ok 1 id 0x5 state 0x0 type 0x4 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nANSI : ok 1 id 0x6 state 0x0 type 0x100 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nwide : ok 1 id 0x6 state 0x0 type 0x100 data 0x0 cch 0 sub 0 checkmarks 0/0 text ''\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

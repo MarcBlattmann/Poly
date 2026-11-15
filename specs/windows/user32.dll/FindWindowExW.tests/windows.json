@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "fwe_class",
+      "exe_sha256": "0eb77825b826b2e564a53b647c40168637599b558f68b3ac31b358bfed344cd3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBjbGFzcyB0aGF0IGRvZXMgbm90IGV4aXN0OiBOVUxMLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQpjbGFzcyAjMzI3NjkgKGEgdG9wLWxldmVsIHNlYXJjaCBkb2VzIG5vdCBsaXN0IHRoZSBkZXNrdG9wIGl0c2VsZik6IE5VTEwKdGhlIEJ1dHRvbiBjaGlsZCBieSBjbGFzczogdHJ1ZQp0aGUgQnV0dG9uIGNoaWxkIGJ5IGl0cyB0ZXh0OiB0cnVlCmNsYXNzIEJVVFRPTiBhbmQgdGV4dCBwdXNoIG1lIChjYXNlIGlnbm9yZWQpOiB0cnVlCmEgY2hpbGQgb2YgcCBpcyBub3QgZm91bmQgZnJvbSB0aGUgdG9wIGxldmVsOiB0cnVlCmEgY2xhc3MgbmFtZSBvZiAyOTkgY2hhcmFjdGVyczogTlVMTCAobGFzdCBlcnJvciA1NzAwNSkKYSBjbGFzcyBuYW1lIG9mIDI1NiBjaGFyYWN0ZXJzOiBOVUxMCmEgd2luZG93IG9mIGFub3RoZXIgdGhyZWFkIG9mIHRoZSBwcm9jZXNzIGlzIGZvdW5kOiB0cnVlCmFmdGVyIGl0cyB0aHJlYWQgZW5kZWQgdGhlIHdpbmRvdyBpcyBnb25lOiB0cnVlCkZ3eFBsYWluIHdpbmRvd3MgZnJvbSB0aGUgdG9wOiB0b3Btb3N0IG5vcm1hbDIgbm9ybWFsICh0aGUgdG9wbW9zdCBvbmUgZmlyc3QsIHRoZSBuZXdlc3Qgbm9ybWFsIG9uZSBuZXh0KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a class that does not exist: NULL, last error left alone true\nclass #32769 (a top-level search does not list the desktop itself): NULL\nthe Button child by class: true\nthe Button child by its text: true\nclass BUTTON and text push me (case ignored): true\na child of p is not found from the top level: true\na class name of 299 characters: NULL (last error 57005)\na class name of 256 characters: NULL\na window of another thread of the process is found: true\nafter its thread ended the window is gone: true\nFwxPlain windows from the top: topmost normal2 normal (the topmost one first, the newest normal one next)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 555
+    }
+  ]
+}

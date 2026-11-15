@@ -20,6 +20,7 @@ summary: >
 interface:
   signature: "HWND GetWindow(HWND hwnd, UINT cmd)"
 rules:
+  ime_windows: "the thread's default IME window (class IME) and its text-services window (class MSCTFIME UI) are in the z order walk (GetTopWindow, GW_HWNDNEXT, GW_HWNDPREV) directly above the thread's active window and above that window's owned windows, below topmost windows, the MSCTFIME UI window above the IME window; they are owned (GW_OWNER) by the active window: before any window of the thread is active the owner is the first window created (the holder) and they are at the bottom of the thread's windows (main, holder, ime); when the main window is shown and active they move to just above it (ctf ime main holder); when it is minimized it goes to the bottom and they stay directly above it (holder ctf ime main) with the owner still main; when it is restored they are above it again; when the active window is destroyed their owner is NULL, they are hidden and stay above the holder and ime is now above ctf (ime ctf holder). Test: gw_ime_zorder."
   siblings: "for children E (created first) and F of B: GetWindow(B, GW_CHILD) is E and E is above F: GW_HWNDFIRST of either is E, GW_HWNDLAST F, E next F, F prev E, E prev NULL, F next NULL; a lone child G: first = last = G, next = prev = NULL"
   top_level: "the top-level windows are listed with GetTopWindow(NULL) and GW_HWNDNEXT in z order from the top; a window that was created hidden after others lies above the earlier ones (the owned popup D above its owner A: H D A C B); GW_HWNDFIRST and GW_HWNDLAST of a top-level window give windows of other processes (the topmost and the bottom-most of the desktop)"
   owner: "GW_OWNER of an owned popup is its owner; of an unowned top-level window and of a child NULL (children have no owner: the call gives NULL, not the parent)"
@@ -37,7 +38,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its

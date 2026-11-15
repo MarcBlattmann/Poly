@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetCaretPos.yaml
+id: windows/api/user32.dll/SetCaretPos
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Moves the thread's caret to a position in the client coordinates of its window; the position is kept as given. It works while the caret is hidden and does not show it.
+interface:
+  signature: "BOOL SetCaretPos(int X, int Y)"
+rules:
+  position: "the position is stored as given, without clipping: (10, 20), (0, 0), (-5, -7), (1000, 2000), (32767, 32767), (-32768, 32767), (65536, 65537), (0x7FFFFFFF, INT_MIN); GetCaretPos returns the same numbers and rcCaret of GetGUIThreadInfo is (x, y, x + width, y + height) (the right edge of a caret at 0x7FFFFFFF wraps to a negative number)"
+  visibility: "a hidden caret stays hidden and a shown caret stays shown"
+  kept: "the position survives CreateCaret (the next caret starts at it) and DestroyCaret"
+  no_return_of_old: "TRUE"
+errors:
+  no_caret: "no caret (never created, destroyed, destroyed with its window, or another thread's): FALSE with ERROR_ACCESS_DENIED (5), the stored position is not changed"
+side_effects: "none beyond the rules above"
+threading: "a caret belongs to the input queue of the thread that created it; every call but GetCaretPos acts on the calling thread's own caret; the tests make a second thread and call the caret functions there; every thread has a position of its own: SetCaretPos(77, 88) in a thread without a caret fails and a thread that set (111, 222) does not change the first thread's position"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Blinking itself (the caret is inverted every GetCaretBlinkTime milliseconds) and the caret's pixels: the session of the tests has no visible desktop; what a caret is observed by here is GetGUIThreadInfo (hwndCaret, rcCaret and the GUI_CARETBLINKING flag, which is set while the caret is shown). The behaviour of the caret in the interactive session (which window shows it when focus moves between processes), SetCaretBlinkTime (see its sheet).

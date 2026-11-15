@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "cat_threads",
+      "exe_sha256": "79b38316c8db56ae40df0bb4d1737c9f5a0aa3b9294913778a502216e79d2d8f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgU1RBIHRocmVhZDogdHlwZSAzICgzIGlzIHRoZSBtYWluIFNUQSksIGNvbnN0YW50IG92ZXIgMTAwIGNhbGxzIHRydWUKc2Vjb25kIFNUQSB0aHJlYWQgd2hpbGUgdGhlIGZpcnN0IGxpdmVzOiB0eXBlIDAgKDAgaXMgYW4gU1RBKSwgY29uc3RhbnQgdHJ1ZQpNVEEgdGhyZWFkOiB0eXBlIDEgKDEgaXMgdGhlIE1UQSksIGNvbnN0YW50IHRydWUKdGhpcyB0aHJlYWQsIHdoaWNoIG5ldmVyIGluaXRpYWxpemVkLCB3aGlsZSBhbiBNVEEgZXhpc3RzOiByZXR1cm5zIDB4MCwgdHlwZSAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first STA thread: type 3 (3 is the main STA), constant over 100 calls true\nsecond STA thread while the first lives: type 0 (0 is an STA), constant true\nMTA thread: type 1 (1 is the MTA), constant true\nthis thread, which never initialized, while an MTA exists: returns 0x0, type 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 229
+    }
+  ]
+}

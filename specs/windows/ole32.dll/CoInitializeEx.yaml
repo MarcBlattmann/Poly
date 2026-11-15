@@ -34,8 +34,8 @@ timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2
-  held_out: 1
+  visible: 3
+  held_out: 2
 building_tests: >
   Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
 not_covered: >

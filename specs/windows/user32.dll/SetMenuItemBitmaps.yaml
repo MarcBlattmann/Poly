@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetMenuItemBitmaps.yaml
+id: windows/api/user32.dll/SetMenuItemBitmaps
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives an item two bitmaps to show as its check mark, one for the unchecked and one for the checked state; NULL for one of them or both clears it. The menu keeps the handles (it does not copy or free the bitmaps).
+interface:
+  signature: "BOOL SetMenuItemBitmaps(HMENU hMenu, UINT uPosition, UINT uFlags, HBITMAP hBitmapUnchecked, HBITMAP hBitmapChecked)"
+rules:
+  set: "by position (MF_BYPOSITION) and by command (MF_BYCOMMAND) both set the pair; GetMenuItemInfoW with MIIM_CHECKMARKS gives the same handles back as hbmpChecked and hbmpUnchecked (the arguments are given unchecked first, then checked); a NULL for one keeps the other (only the checked bitmap, or only the unchecked one, can be set); NULL, NULL clears both; the same bitmap for both is accepted"
+  state: "the item's state and type are not changed (an item that was checked stays checked: state 8; the separator state 0x803 stays); CheckMenuItem afterwards works and keeps the bitmaps; SetMenuItemInfoW with a checked bitmap only clears the unchecked one"
+  any_item: "every kind of item accepts it (a string item, a separator, a popup item, a checked item): TRUE and the pair is read back"
+  lifetime: "the bitmaps are not freed with DestroyMenu or when the item is removed (GetObjectType still OBJ_BITMAP); GetMenuCheckMarkDimensions is positive"
+  invalid_handles: "made-up bitmap handles: FALSE and the item has no bitmaps"
+errors:
+  absent_item: "a position or command that does not exist, and the invalid flag 0x8000: FALSE with ERROR_MENU_ITEM_NOT_FOUND (1456)"
+  bad_menu: "a made-up menu and NULL: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+  bad_bitmap: "made-up bitmap handles: FALSE with ERROR_INVALID_PARAMETER (87)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  How the check mark is drawn (needs a visible menu), the size the bitmaps must have (GetMenuCheckMarkDimensions) when drawing, MF_USECHECKBITMAPS in the type of an item.

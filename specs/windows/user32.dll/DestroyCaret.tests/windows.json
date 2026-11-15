@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "crt_destroy_basic",
+      "exe_sha256": "d5b367515525f23b9a29f1616078a8b94d42940879314ddeeec8853a11f430bc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGVzdHJveUNhcmV0IHdpdGhvdXQgYSBjYXJldDogMCBlcnI9NQpDcmVhdGVDYXJldCAzIHggMTQ6IDEKU2V0Q2FyZXRQb3MoMjAsIDMwKTogMQpjYXJldCBiZWZvcmUgRGVzdHJveUNhcmV0OiBHZXRHVUlUaHJlYWRJbmZvIDEgY2FyZXQgd2luZG93IG91cnMgcmVjdCAoMjAsMzAsMjMsNDQpIGNhcmV0LWJsaW5raW5nIDAKRGVzdHJveUNhcmV0OiAxCmFmdGVyIERlc3Ryb3lDYXJldDogR2V0R1VJVGhyZWFkSW5mbyAxIGNhcmV0IHdpbmRvdyBudWxsIHJlY3QgKDAsMCwwLDApIGNhcmV0LWJsaW5raW5nIDAKR2V0Q2FyZXRQb3MgYWZ0ZXIgRGVzdHJveUNhcmV0OiBHZXRDYXJldFBvcyA9IDEgZXJyPS0yIHBvaW50ICgyMCwzMCkKU2V0Q2FyZXRQb3MgYWZ0ZXIgRGVzdHJveUNhcmV0OiAwIGVycj01ClNob3dDYXJldCBhZnRlciBEZXN0cm95Q2FyZXQ6IDAgZXJyPTUKSGlkZUNhcmV0IGFmdGVyIERlc3Ryb3lDYXJldDogMCBlcnI9NQpEZXN0cm95Q2FyZXQgYSBzZWNvbmQgdGltZTogMCBlcnI9NQpDcmVhdGVDYXJldCAzIHggMTQgYWdhaW46IDEKcG9zaXRpb24gb2YgdGhlIG5ldyBjYXJldDogR2V0Q2FyZXRQb3MgPSAxIGVycj0tMiBwb2ludCAoMjAsMzApCkRlc3Ryb3lXaW5kb3cgb2YgdGhlIG93bmVyOiAxCmFmdGVyIERlc3Ryb3lXaW5kb3c6IEdldEdVSVRocmVhZEluZm8gMSBjYXJldCB3aW5kb3cgbnVsbCByZWN0ICgwLDAsMCwwKSBjYXJldC1ibGlua2luZyAwCkdldENhcmV0UG9zIGFmdGVyIERlc3Ryb3lXaW5kb3c6IEdldENhcmV0UG9zID0gMSBlcnI9LTIgcG9pbnQgKDIwLDMwKQpEZXN0cm95Q2FyZXQgYWZ0ZXIgRGVzdHJveVdpbmRvdzogMCBlcnI9NQpDcmVhdGVDYXJldCBpbiBhOiAxCkRlc3Ryb3lXaW5kb3coYik6IDEKY2FyZXQgc3RpbGwgaW4gYTogR2V0R1VJVGhyZWFkSW5mbyAxIGNhcmV0IHdpbmRvdyBvdXJzIHJlY3QgKDIwLDMwLDIyLDM4KSBjYXJldC1ibGlua2luZyAwCkRlc3Ryb3lDYXJldDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DestroyCaret without a caret: 0 err=5\nCreateCaret 3 x 14: 1\nSetCaretPos(20, 30): 1\ncaret before DestroyCaret: GetGUIThreadInfo 1 caret window ours rect (20,30,23,44) caret-blinking 0\nDestroyCaret: 1\nafter DestroyCaret: GetGUIThreadInfo 1 caret window null rect (0,0,0,0) caret-blinking 0\nGetCaretPos after DestroyCaret: GetCaretPos = 1 err=-2 point (20,30)\nSetCaretPos after DestroyCaret: 0 err=5\nShowCaret after DestroyCaret: 0 err=5\nHideCaret after DestroyCaret: 0 err=5\nDestroyCaret a second time: 0 err=5\nCreateCaret 3 x 14 again: 1\nposition of the new caret: GetCaretPos = 1 err=-2 point (20,30)\nDestroyWindow of the owner: 1\nafter DestroyWindow: GetGUIThreadInfo 1 caret window null rect (0,0,0,0) caret-blinking 0\nGetCaretPos after DestroyWindow: GetCaretPos = 1 err=-2 point (20,30)\nDestroyCaret after DestroyWindow: 0 err=5\nCreateCaret in a: 1\nDestroyWindow(b): 1\ncaret still in a: GetGUIThreadInfo 1 caret window ours rect (20,30,22,38) caret-blinking 0\nDestroyCaret: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

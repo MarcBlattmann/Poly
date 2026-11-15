@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/DisplayConfigGetDeviceInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Asks for one piece of information about a display source, target or adapter through a packet whose header
+  names the type, the exact size of the structure, the adapter LUID and the id. Returns the error code (0
+  ERROR_SUCCESS), the last error is not set (except 87 with the result 31 for sizes below the header).
+  Chrome's browser calls it 13 times in a run (S3): the names of targets and sources, the advanced color info.
+interface:
+  signature: "LONG DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *requestPacket)"
+rules:
+  header_size: "header.size has to be exactly the size of the structure of the type: source name 84, target name 420, adapter name 276, target base type 24, advanced color info 32, SDR white level 24, support virtual resolution 24, target preferred mode 80 (8-byte aligned: it holds a 64-bit pixel rate); any other size returns 87, a size below the header (20) returns 31 (ERROR_GEN_FAILURE) with the last error set to 87"
+  types: "supported: GET_SOURCE_NAME 1, GET_TARGET_NAME 2, GET_TARGET_PREFERRED_MODE 3, GET_ADAPTER_NAME 4, GET_TARGET_BASE_TYPE 6, GET_SUPPORT_VIRTUAL_RESOLUTION 7, GET_ADVANCED_COLOR_INFO 9, GET_SDR_WHITE_LEVEL 11; 0, the set types 5, 8 and 10, 12, 13, 15, 99 and 0xFFFFFFFF return 87"
+  source_name: "the GDI device name of the source as UTF-16 in view_gdi_device_name[32]: the text is the prefix of two backslashes, a dot and a backslash (the GDI device namespace) followed by DISPLAY and the decimal number source id plus 1 and nothing else (DISPLAY1 for source 0), equal to the device name GetMonitorInfoW gives for that monitor; the rest of the buffer is zero; the header is left as it was; a wrong adapter, an unknown source id or a target id used for a source request returns 31"
+  target_name: "monitor_friendly_device_name (64 characters) and monitor_device_path (128 characters): the path starts with two backslashes, a question mark, a backslash and DISPLAY# and ends with #{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7} (the monitor interface class) and holds UID<target id># before it; outputTechnology equals the path's; flags bit 0 friendlyNameFromEdid, bit 1 friendlyNameForced, bit 2 edidIdsValid; a monitor without EDID has an empty friendly name with the 'forced' bit and zero EDID ids on the oracle; the target id of the request must be a target id (a source id or an unknown id returns 87)"
+  adapter_name: "adapter_device_path[128]: starts with two backslashes, a question mark and a backslash and ends with #{5b45201d-f2f2-4f3b-85bb-30ff1f953599}; the request id is ignored (0 and 99 give the same answer); an unknown adapter LUID returns 87"
+  target_base_type: "the connector type equals the path's output technology"
+  advanced_color: "writes only the low four bits of the value (supported, enabled, wide color enforced, force disabled: all 0 on the oracle's SDR monitor, bits above are left as the caller set them), colorEncoding 0 (RGB) and bitsPerColorChannel 8; with a source id instead of the target id it returns 31"
+  sdr_white_level: "SDRWhiteLevel 1000 (80 nits) for an SDR monitor"
+  support_virtual_resolution: "writes 0 in the 32-bit word that follows the header (virtual resolution not disabled); header size 20 or 28 returns 87"
+  preferred_mode: "width and height of the target's preferred mode are not 0 (1024x768 for the generic monitor of the oracle), only with the header size 80"
+  last_error: "not set by the call, except for the 31/87 case above"
+errors:
+  invalid_parameter: "87: wrong size, unknown or SET type, unknown id or adapter for names and color"
+  gen_failure: "31: unknown adapter, source or target for a source name or advanced color request; sizes below the header"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Monitors with EDID names, HDR monitors (advanced color bits), the SET requests, virtual resolution support
+  on other monitors.

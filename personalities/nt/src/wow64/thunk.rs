@@ -827,7 +827,7 @@ impl<K: NtKernel> NtKernel for Thunked<'_, K> {
         self.k.socket_poll(socks, wait)
     }
 
-    fn socket_pend(&mut self, io: crate::afd::PendIo) -> Result<(), crate::afd::PendIo> {
+    fn socket_pend(&mut self, io: crate::afd::PendIo) -> Result<(), alloc::boxed::Box<crate::afd::PendIo>> {
         self.k.socket_pend(io)
     }
 

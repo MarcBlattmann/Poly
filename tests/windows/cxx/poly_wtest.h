@@ -89,12 +89,20 @@ struct PolyExceptionPointers {
 
 // ----- msvcrt.dll: the C++ runtime functions a test names itself ----------------------
 
+typedef void (*poly_terminate_handler)();
+#ifdef POLY_CXX_RUNTIME_VCRUNTIME140
+// ADR 0199: the C++ runtime is vcruntime140.dll, whose terminate() is the
+// Universal C runtime's: ucrtbase.dll exports set_terminate and terminate
+// under their C names (Learn: set_terminate, terminate).
+extern "C" __declspec(dllimport) poly_terminate_handler set_terminate(poly_terminate_handler handler);
+extern "C" __declspec(dllimport) __declspec(noreturn) void terminate();
+#else
 // Learn: set_terminate (<eh.h>); the C++ name msvcrt.dll exports,
 // ?set_terminate@@YAP6AXXZP6AXXZ@Z, is this declaration's.
-typedef void (*poly_terminate_handler)();
 __declspec(dllimport) poly_terminate_handler set_terminate(poly_terminate_handler handler);
 // Learn: terminate (<eh.h>, CRT); ?terminate@@YAXXZ.
 __declspec(dllimport) __declspec(noreturn) void terminate();
+#endif
 
 // What the compiler's code refers to without a declaration in the source:
 //

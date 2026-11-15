@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/InitOnceExecuteOnce.yaml
+id: windows/api/kernel32.dll/InitOnceExecuteOnce
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  kernel32's one-time initialisation with a callback: TRUE when the initialisation is done (by this call or an earlier one), FALSE when the callback returned FALSE. The BOOL form of RtlRunOnceExecuteOnce, without error codes for a failing callback.
+interface:
+  signature: "BOOL InitOnceExecuteOnce(PINIT_ONCE once, PINIT_ONCE_FN fn, PVOID param, LPVOID *context); BOOL CALLBACK fn(PINIT_ONCE once, PVOID param, PVOID *context)"
+rules:
+  first_call: "TRUE, the callback ran once, the caller's context out is what the callback stored (0x400); the last error is not touched."
+  later_calls: "TRUE without calling the callback, the context handed out again."
+  callback_fails: "a callback returning FALSE: the call returns FALSE and the last error is NOT set (a value set before the call survives); the object stays unstarted, the next call runs the callback again (calls 1, 2)."
+  threads: "four threads calling at once (callback sleeps 200 ms): the callback ran once; all four returned TRUE with the context, each after the callback had finished."
+  begin_complete: "InitOnceBeginInitialize(once, flags, &pending, &ctx): first call TRUE with *pending TRUE (initialise now); after InitOnceComplete(once, 0, ctx) TRUE with pending FALSE and the context; check-only (INIT_ONCE_CHECK_ONLY 1) on an unstarted object: FALSE with ERROR_GEN_FAILURE (31), pending untouched; on a completed one TRUE; flags 0x10: FALSE 87; InitOnceComplete again, or without a begin: FALSE 31; with flags 0x10: FALSE 87; with a context whose low two bits are set: FALSE 87; INIT_ONCE_INIT_FAILED (4): TRUE and the next begin is pending again; INIT_ONCE_ASYNC (2): two begins by one thread both TRUE with pending TRUE; the first InitOnceComplete(async) TRUE, the second FALSE with 31."
+  init: "InitOnceInitialize writes the word 0 (INIT_ONCE_STATIC_INIT is the same)."
+errors:
+  callback_failed: "FALSE, last error untouched"
+  state_errors: "ERROR_GEN_FAILURE (31) for check-only on a fresh object and for completing out of turn"
+  bad_args: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "runs the callback"
+threading: "any thread; callers wait for a running initialisation"
+ordering: []
+timing:
+  typical: "the callback's own time"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  The ntdll sheets list further cases (second-thread takeover after a failed initialisation, async completers).

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQueryInformationProcess.yaml
+id: windows/api/ntdll.dll/NtQueryInformationProcess
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Queries the current process (or a handle with the right to query): the classes programs use, with their exact length rules. Class 24 (ProcessSessionInformation, 4 bytes: the session id) is what the MSYS2 runtime asks for at start-up; Poly answers STATUS_INVALID_INFO_CLASS today.
+interface:
+  signature: "NTSTATUS NtQueryInformationProcess(HANDLE process, PROCESSINFOCLASS class, PVOID info, ULONG length, PULONG returnLength)"
+rules:
+  basic_information: "class 0 with 48 bytes: success, returned length 48; exit status 0x103 (STILL_ACTIVE), PEB pointer non-zero, UniqueProcessId equals the process id, InheritedFromUniqueProcessId non-zero, BasePriority 8; length 64 is accepted too (returned length 64); lengths 0, 8, 47 and 49 give STATUS_INFO_LENGTH_MISMATCH (0xC0000004) and the returned length is left unchanged."
+  session: "class 24 with exactly 4 bytes: success, returned length 4, the value is the process's session id (equal to ProcessIdToSessionId); any other length (0, 1, 3, 5, 8): 0xC0000004 with the returned length unchanged."
+  classes_that_work: "success with exact lengths: 2 IoCounters 48, 4 Times 32, 7 DebugPort 8 (value 0), 12 DefaultHardErrorMode 4, 18 PriorityClass 2, 20 HandleCount 4 (at least 4), 21 AffinityMask-sized 8, 22 4, 26 Wow64Information 8 (value 0 for a 64-bit process), 29 BreakOnTermination 4, 31 DebugFlags 4 (value 1), 33 IoPriority 4, 34 ExecuteFlags 4, 36 4, 37 ImageInformation 64; 27 ImageFileName with a 512-byte buffer: success, a UNICODE_STRING whose buffer lies inside the same buffer and ends in '.exe', returned length covers the string."
+  other_statuses: "class 30 DebugObjectHandle: 0xC0000353 (STATUS_PORT_NOT_SET) with returned length 8; classes 1 (40 bytes), 3 (128 and 144 bytes): 0xC0000004; classes 5, 6, 8, 9: 0xC0000003 (STATUS_INVALID_INFO_CLASS); class 32: 0xC000000D; classes 127 and 65535: 0xC0000003. The returned length is untouched whenever the status is an error other than 0xC0000353."
+  access: "a process handle with PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x400): classes 0, 24 and 27 succeed; a handle with only SYNCHRONIZE: 0xC0000022 (STATUS_ACCESS_DENIED)."
+  bad_arguments: "NULL handle: 0xC0000008 (STATUS_INVALID_HANDLE); the thread pseudo-handle: 0xC0000024 (STATUS_OBJECT_TYPE_MISMATCH); NULL buffer: 0xC0000005; a NULL returned-length pointer is accepted (0)."
+errors:
+  length: "0xC0000004 STATUS_INFO_LENGTH_MISMATCH"
+  bad_class: "0xC0000003 STATUS_INVALID_INFO_CLASS"
+  no_right: "0xC0000022 STATUS_ACCESS_DENIED"
+  bad_handle: "0xC0000008 / 0xC0000024"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Classes above 37 except where listed, other processes' handles, classes that need privileges, 32-bit processes.

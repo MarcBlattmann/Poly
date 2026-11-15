@@ -153,6 +153,9 @@ pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
 pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
 /// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
 pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
+/// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
+pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
+pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -187,6 +190,8 @@ pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.
 pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
 pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
 pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+/// `AcceptEx`, `ConnectEx` and the other Winsock extensions (ADR 0195).
+pub static MSWSOCK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mswsock.dll"));
 pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
 pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
 
@@ -1023,7 +1028,10 @@ impl NtKernel for Kernel {
         Ok(afd::poll_sockets(socks, wait))
     }
 
-    fn socket_pend(&mut self, io: poly_personality_nt::afd::PendIo) -> Result<(), poly_personality_nt::afd::PendIo> {
+    fn socket_pend(
+        &mut self,
+        io: poly_personality_nt::afd::PendIo,
+    ) -> Result<(), alloc::boxed::Box<poly_personality_nt::afd::PendIo>> {
         afd::pend(io)
     }
 

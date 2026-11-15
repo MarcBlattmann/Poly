@@ -19,6 +19,7 @@ summary: >
 interface:
   signature: "BOOL EnumThreadWindows(DWORD thread, WNDENUMPROC proc, LPARAM lparam)"
 rules:
+  ime_windows: "EnumWindows and EnumThreadWindows do not list in the order of the z order walk for the IME windows: every window of the classes IME and MSCTFIME UI (of every process: all the IME windows of the desktop) is listed after all the other windows, keeping their order among themselves; the others are in z order. So where the walk says ctf ime main holder the enumeration says main holder ctf ime, minimized holder main ctf ime, and after the main window was destroyed holder ime ctf (the walk: ime ctf holder). The rule follows the class: a window of the class MSCTFIME UI created by a test is listed with that group (the class IME cannot be created by a program). Test: ew_ime_last (EnumWindows) and etw_ime_last (EnumThreadWindows)."
   order_and_set: "windows of the thread, top of the z order first: the three top-level windows C (owned popup of A), A, B (hidden) and the thread's IME windows (MSCTFIME UI above IME) are listed: 'C A B~ ctf ime'; children (D) are not; the lParam is passed to every call"
   stop: "proc returning 0 after two windows: the function returns 0 and no more calls; a normal enumeration returns 1"
   destroy_during: "destroying a window of the thread (B) from the first callback: the enumeration goes on, B is not reported after it is gone, the function returns 1 and the last error is ERROR_INVALID_WINDOW_HANDLE (1400)"
@@ -32,7 +33,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
