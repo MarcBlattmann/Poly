@@ -191,6 +191,8 @@ struct Module {
     record: u64,
     /// The loader allocated its memory (else the kernel mapped it).
     owned: bool,
+    /// A view [`Process::open_image`] mapped: unmapped with the module.
+    view: bool,
     exception: (u32, u32),
     time_date_stamp: u32,
     protections: Vec<(u32, u32, u32)>,
@@ -248,7 +250,7 @@ impl Sym {
 
 enum Found {
     Loaded(ModuleId),
-    File(Vec<u16>, Vec<u8>),
+    File(Vec<u16>, crate::ImageFile),
 }
 
 fn bad(_: poly_pe::Error) -> NtStatus {
@@ -556,6 +558,7 @@ impl Loader {
             thread_calls: true,
             record: 0,
             owned: false,
+            view: false,
             exception,
             time_date_stamp: info.file_header.time_date_stamp,
             protections: Vec::new(),
@@ -622,8 +625,8 @@ impl Loader {
         }
         let candidates = if path::has_path(&n) { vec![n] } else { path::candidates(&n, &self.dirs, search_path) };
         for c in candidates {
-            if let Ok(bytes) = p.read_file(&path::nt_path(&c)) {
-                return Ok(Found::File(c, bytes));
+            if let Ok(file) = p.open_image(&path::nt_path(&c)) {
+                return Ok(Found::File(c, file));
             }
         }
         Err(STATUS_DLL_NOT_FOUND)
@@ -634,8 +637,73 @@ impl Loader {
     fn dependency(&mut self, p: &mut dyn Process, name: &[u16], op: &mut LoadOp) -> Result<ModuleId, NtStatus> {
         match self.locate(p, name, None)? {
             Found::Loaded(id) => Ok(id),
-            Found::File(path, bytes) => self.map_new(p, &path, &bytes, op),
+            Found::File(path, file) => self.map_file(p, &path, file, op),
         }
+    }
+
+    /// Map (if the process did not) and bind a DLL file [`Process::open_image`] found.
+    fn map_file(
+        &mut self,
+        p: &mut dyn Process,
+        path: &[u16],
+        file: crate::ImageFile,
+        op: &mut LoadOp,
+    ) -> Result<ModuleId, NtStatus> {
+        match file {
+            crate::ImageFile::Bytes(bytes) => self.map_new(p, path, &bytes, op),
+            crate::ImageFile::Mapped { base, size, relocate } => {
+                let r = self.map_view(p, path, base, size, relocate, op);
+                // A view no module took is unmapped here (a module's goes with it).
+                if r.is_err() && self.by_base(base).is_none() {
+                    p.unmap_image(base);
+                }
+                r
+            }
+        }
+    }
+
+    /// Bind a DLL the kernel mapped as an image view at `base` (ADR 0188): the same as
+    /// [`map_new`](Self::map_new) once the bytes are in place, the relocations applied in the
+    /// view if the kernel could not put it at its preferred base (copy on write: only the pages
+    /// with relocations become the process's own).
+    fn map_view(
+        &mut self,
+        p: &mut dyn Process,
+        path: &[u16],
+        base: u64,
+        size: u64,
+        relocate: bool,
+        op: &mut LoadOp,
+    ) -> Result<ModuleId, NtStatus> {
+        let info = {
+            let head = p.memory(base, PAGE_SIZE as usize)?;
+            *Pe::parse_mapped(head).map_err(bad)?.info()
+        };
+        if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
+            return Err(STATUS_INVALID_IMAGE_FORMAT);
+        }
+        let preferred = info.image_base();
+        // Writable while it is bound (copy on write in a view); `apply_protections` restores.
+        p.protect(base, size, page::READWRITE)?;
+        if relocate {
+            poly_pe::relocate(p.memory(base, size as usize)?, &info, base).map_err(bad)?;
+        }
+        let mut m = Loader::describe(p.memory(base, size as usize)?, base, path)?;
+        m.view = true;
+        m.preferred = preferred;
+        m.state = State::Loading;
+        let id = self.insert(p, m)?;
+        op.new.push(id);
+        self.bind(p, id, op)?;
+        let img = p.memory(base, size as usize)?;
+        let prot = image_protections(img)?;
+        self.mm(id).protections = prot;
+        self.assign_tls(p, id)?;
+        self.apply_protections(p, id)?;
+        self.mm(id).state = State::Ready;
+        op.new.retain(|&x| x != id);
+        op.new.push(id);
+        Ok(id)
     }
 
     /// `from` holds a reference on `to` (`None`: a caller of `LdrLoadDll`).
@@ -1066,7 +1134,7 @@ impl Loader {
         let mut op = LoadOp::default();
         let id = match self.locate(p, name, search_path)? {
             Found::Loaded(id) => id,
-            Found::File(path, bytes) => match self.map_new(p, &path, &bytes, &mut op) {
+            Found::File(path, file) => match self.map_file(p, &path, file, &mut op) {
                 Ok(id) => id,
                 Err(e) => {
                     self.rollback(p, &op);
@@ -1165,6 +1233,8 @@ impl Loader {
             }
             if m.owned {
                 p.free(m.base);
+            } else if m.view {
+                p.unmap_image(m.base);
             }
             self.load_order.retain(|&x| x != id);
             self.init_order.retain(|&x| x != id);

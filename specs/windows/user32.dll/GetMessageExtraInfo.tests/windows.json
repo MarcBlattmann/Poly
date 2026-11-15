@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gmei_basic",
+      "exe_sha256": "45825ad34c0b22fe395ebf19a716d5b31f06b3e34977d35d7e6ebff9c55d416a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgY2FsbDogemVybz0xClNldE1lc3NhZ2VFeHRyYUluZm8oMHgxMjM0KSByZXR1cm5zIHRoZSBwcmV2aW91cyB2YWx1ZTogemVybz0xIChsYXN0IGVycm9yIDApCkdldE1lc3NhZ2VFeHRyYUluZm8gbm93OiAweDEyMzQKYWdhaW46IDB4MTIzNApTZXRNZXNzYWdlRXh0cmFJbmZvKDB4NTVBQSkgcmV0dXJucyAweDEyMzQKU2V0TWVzc2FnZUV4dHJhSW5mbygweDgwMDAwMDAwKSByZXR1cm5zIDB4NTVhYSwgcmVhZHMgYmFjayAweDgwMDAwMDAwClNldE1lc3NhZ2VFeHRyYUluZm8oMHgxMjM0NTY3ODkpIHJldHVybnMgMHg4MDAwMDAwMCwgcmVhZHMgYmFjayAweDEyMzQ1Njc4OQpTZXRNZXNzYWdlRXh0cmFJbmZvKC0xKSByZXR1cm5zIDB4MTIzNDU2Nzg5LCByZWFkcyBiYWNrIDB4ZmZmZmZmZmZmZmZmZmZmZgpTZXRNZXNzYWdlRXh0cmFJbmZvKDApIHJldHVybnMgMHhmZmZmZmZmZmZmZmZmZmZmLCByZWFkcyBiYWNrIDB4MAo9PSBhbm90aGVyIHRocmVhZAp0aHJlYWQgY3JlYXRlZDogMQogIGl0cyBmaXJzdCB2YWx1ZTogMHgwCiAgaXRzIFNldE1lc3NhZ2VFeHRyYUluZm8oMHg3Nzc3KSByZXR1cm5lZDogMHgwCiAgdGhpcyB0aHJlYWQncyB2YWx1ZSBhZnRlcndhcmRzOiAweDQzMjEKPT0gbWVzc2FnZXMKb2sgcmVnaXN0ZXJlZAogIHBvc3RlZCB3aXRoIDB4NDI0MiBzZXQsIHRoZW4gMHg3Nzc3IHNldDsgdmFsdWUgYmVmb3JlIHRha2luZyB0aGUgbWVzc2FnZTogMHg3Nzc3CiAgdGhlIGhhbmRsZXIgc2F3IDB4MCAobWVzc2FnZXMgaGFuZGxlZDogMSkKICBhZnRlciB0aGUgbWVzc2FnZTogMHgwCiAgYSBzZW50IG1lc3NhZ2Ugd2l0aCAweDk5OTkgc2V0OiB0aGUgaGFuZGxlciBzYXcgMHg5OTk5CiAgYWZ0ZXIgaXQ6IDB4OTk5OQpyZXNldCB0byAwOiAweDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first call: zero=1\nSetMessageExtraInfo(0x1234) returns the previous value: zero=1 (last error 0)\nGetMessageExtraInfo now: 0x1234\nagain: 0x1234\nSetMessageExtraInfo(0x55AA) returns 0x1234\nSetMessageExtraInfo(0x80000000) returns 0x55aa, reads back 0x80000000\nSetMessageExtraInfo(0x123456789) returns 0x80000000, reads back 0x123456789\nSetMessageExtraInfo(-1) returns 0x123456789, reads back 0xffffffffffffffff\nSetMessageExtraInfo(0) returns 0xffffffffffffffff, reads back 0x0\n== another thread\nthread created: 1\n  its first value: 0x0\n  its SetMessageExtraInfo(0x7777) returned: 0x0\n  this thread's value afterwards: 0x4321\n== messages\nok registered\n  posted with 0x4242 set, then 0x7777 set; value before taking the message: 0x7777\n  the handler saw 0x0 (messages handled: 1)\n  after the message: 0x0\n  a sent message with 0x9999 set: the handler saw 0x9999\n  after it: 0x9999\nreset to 0: 0x0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 207
+    }
+  ]
+}

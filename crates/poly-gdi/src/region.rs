@@ -14,6 +14,8 @@
 
 use alloc::vec::Vec;
 
+use crate::rgnshape;
+
 /// `CombineRgn` modes (`wingdi.h`).
 pub const RGN_AND: i32 = 1;
 pub const RGN_OR: i32 = 2;
@@ -107,52 +109,49 @@ impl Region {
         rects.iter().fold(Region::new(), |acc, r| acc.union(&Region::from_rect(*r)))
     }
 
-    /// `CreateRoundRectRgn` (Learn): the rectangle `l, t, r, b` with its
-    /// corners rounded by an ellipse `ew` wide and `eh` high. Like GDI's
-    /// regions of ellipses it is one pixel narrower and shorter than the
-    /// rectangle given (0,0,80,50 with a 20-pixel corner has the box
-    /// 0,0,79,49; `GetWindowRgnBox.yaml` `boxes`). A row's inset is where
-    /// the corner ellipse starts covering the pixel centres of that row.
-    pub fn round_rect(l: i32, t: i32, r: i32, b: i32, ew: i32, eh: i32) -> Region {
+    /// `CreateEllipticRgn` (`CreateEllipticRgn.yaml`): the elliptic region of
+    /// the rectangle `l, t, r, b`. Only its size matters: the region of
+    /// `0, 0, |r-l|, |b-t|` moved to the lesser corner; one
+    /// run of pixels per row, from [`crate::rgnshape`]. `None` when a
+    /// coordinate is outside `-2^27 .. 2^27-1` (`ERROR_INVALID_PARAMETER`).
+    pub fn ellipse(l: i32, t: i32, r: i32, b: i32) -> Option<Region> {
+        Region::from_shape(l, t, r, b, rgnshape::ellipse_rows)
+    }
+
+    /// `CreateRoundRectRgn` (`CreateRoundRectRgn.yaml`): the rectangle
+    /// `l, t, r, b` with corners `ew` wide and `eh` high, built like the
+    /// ellipse ([`Region::ellipse`]; a corner as large as the rectangle
+    /// gives the ellipse). `None` when a coordinate is outside
+    /// `-2^27 .. 2^27-1`; the corner sizes have no limit.
+    pub fn round_rect(l: i32, t: i32, r: i32, b: i32, ew: i32, eh: i32) -> Option<Region> {
+        Region::from_shape(l, t, r, b, |w, h| rgnshape::round_rect_rows(w, h, i64::from(ew), i64::from(eh)))
+    }
+
+    /// The rows `shape(W, H)` makes, moved to the corner of the rectangle.
+    fn from_shape(
+        l: i32,
+        t: i32,
+        r: i32,
+        b: i32,
+        shape: impl FnOnce(i64, i64) -> Vec<(i64, i64, i64)>,
+    ) -> Option<Region> {
+        const LIMIT: i64 = 1 << 27;
+        if [l, t, r, b].iter().any(|&c| !(-LIMIT..LIMIT).contains(&i64::from(c))) {
+            return None;
+        }
         let n = Rect::new(l, t, r, b).normalized();
-        let (w, h) = (i64::from(n.right) - i64::from(n.left) - 1, i64::from(n.bottom) - i64::from(n.top) - 1);
-        if w <= 0 || h <= 0 {
-            return Region::new();
-        }
-        // The corner ellipse is at most as large as the region.
-        let (cw, ch) = (i64::from(ew).abs().min(w), i64::from(eh).abs().min(h));
-        let inset = |k: i64| -> i64 {
-            if cw == 0 || ch == 0 || 2 * k + 1 >= ch {
-                return 0;
-            }
-            // Pixel centre (i + 1/2, k + 1/2) inside the ellipse of
-            // diameters cw, ch that touches the corner: in doubled units
-            // (2i+1-cw)^2 * ch^2 + (2k+1-ch)^2 * cw^2 <= cw^2 * ch^2.
-            let dy = 2 * k + 1 - ch;
-            let limit = cw * cw * ch * ch - dy * dy * cw * cw;
-            let mut i = 0;
-            while 2 * i + 1 < cw && (2 * i + 1 - cw) * (2 * i + 1 - cw) * ch * ch > limit {
-                i += 1;
-            }
-            i
-        };
+        let (w, h) = (i64::from(n.right) - i64::from(n.left), i64::from(n.bottom) - i64::from(n.top));
         let mut rects: Vec<Rect> = Vec::new();
-        for y in 0..h {
-            let i = inset(y.min(h - 1 - y));
-            let (x0, x1) = (i64::from(n.left) + i, i64::from(n.left) + w - i);
-            let top = (i64::from(n.top) + y) as i32;
-            if x1 <= x0 {
-                continue;
-            }
-            // Rows with the same span make one band.
+        for (y, x0, x1) in shape(w, h) {
+            // At most 2^28 + 2^27 in magnitude: fits an i32.
+            let (top, left, right) = (n.top + y as i32, n.left + x0 as i32, n.left + x1 as i32);
+            // One run per row: equal runs of consecutive rows make one band.
             match rects.last_mut() {
-                Some(last) if last.bottom == top && i64::from(last.left) == x0 && i64::from(last.right) == x1 => {
-                    last.bottom = top + 1
-                }
-                _ => rects.push(Rect::new(x0 as i32, top, x1 as i32, top + 1)),
+                Some(last) if last.bottom == top && last.left == left && last.right == right => last.bottom = top + 1,
+                _ => rects.push(Rect::new(left, top, right, top + 1)),
             }
         }
-        Region { rects }
+        Some(Region { rects })
     }
 
     /// The rectangles in band order (`GetRegionData`'s order).
@@ -307,39 +306,6 @@ impl Region {
 mod tests {
     use super::*;
     use alloc::vec;
-
-    /// GetWindowRgnBox.yaml `boxes`: a round rectangle 0,0,80,50 with a
-    /// 20-pixel corner is complex and has the box 0,0,79,49.
-    #[test]
-    fn round_rectangles_are_one_pixel_smaller_with_cut_corners() {
-        let g = Region::round_rect(0, 0, 80, 50, 20, 20);
-        assert_eq!(g.kind(), COMPLEXREGION);
-        assert_eq!(g.bounds(), Rect::new(0, 0, 79, 49));
-        // The corners are cut, the middle of every side is in.
-        for (x, y) in [(0, 0), (78, 0), (0, 48), (78, 48), (79, 24), (40, 49)] {
-            assert!(!g.contains_point(x, y), "{x},{y}");
-        }
-        for (x, y) in [(40, 0), (0, 24), (78, 24), (40, 48), (10, 10), (68, 38)] {
-            assert!(g.contains_point(x, y), "{x},{y}");
-        }
-        // Symmetric, and in canonical band form (equal to the union of its rows).
-        for y in 0..49 {
-            for x in 0..79 {
-                assert_eq!(g.contains_point(x, y), g.contains_point(78 - x, y));
-                assert_eq!(g.contains_point(x, y), g.contains_point(x, 48 - y));
-            }
-        }
-        assert_eq!(Region::from_rects(g.rects()), g);
-        // No corner ellipse: the plain (smaller) rectangle; nothing for an empty one.
-        assert_eq!(Region::round_rect(5, 5, 20, 15, 0, 0), Region::from_rect(Rect::new(5, 5, 19, 14)));
-        assert!(Region::round_rect(5, 5, 6, 30, 4, 4).is_empty());
-        // Swapped corners are put in order; a huge corner ellipse is the
-        // region's own ellipse.
-        assert_eq!(Region::round_rect(80, 50, 0, 0, 20, 20), g);
-        let e = Region::round_rect(0, 0, 60, 40, 500, 500);
-        assert_eq!(e.bounds(), Rect::new(0, 0, 59, 39));
-        assert!(e.contains_point(30, 20) && !e.contains_point(0, 0));
-    }
 
     fn r(l: i32, t: i32, rr: i32, b: i32) -> Rect {
         Rect::new(l, t, rr, b)

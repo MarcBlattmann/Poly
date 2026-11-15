@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "il_add_a",
+      "exe_sha256": "f794e7d12baa9e0617ac7a7314b0a4d16b041acf594fe798ce0f713c74cc0f09",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkIGEgc3RyaXAgb2YgMzogMApjb3VudDogMwpBZGQgYSAxMHg0IGJpdG1hcCAoMi41IGltYWdlcyk6IDMKY291bnQ6IDUKQWRkIGEgMXgxIGJpdG1hcDogLTEKY291bnQ6IDUKQWRkIHdpdGggYSBtYXNrIGJpdG1hcCBvZiB0aGUgc2FtZSBzaXplOiA1CmNvdW50OiA4CkFkZCBvZiBhIE5VTEwgYml0bWFwOiAtMQpBZGQgb2YgYSBtYWRlLXVwIGJpdG1hcCBoYW5kbGU6IC0xCmNvdW50OiA4CkFkZCB0byBhIGxpc3Qgd2l0aG91dCBJTENfTUFTSywgd2l0aCBhIG1hc2sgYml0bWFwOiAwCmNvdW50OiAzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Add a strip of 3: 0\ncount: 3\nAdd a 10x4 bitmap (2.5 images): 3\ncount: 5\nAdd a 1x1 bitmap: -1\ncount: 5\nAdd with a mask bitmap of the same size: 5\ncount: 8\nAdd of a NULL bitmap: -1\nAdd of a made-up bitmap handle: -1\ncount: 8\nAdd to a list without ILC_MASK, with a mask bitmap: 0\ncount: 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

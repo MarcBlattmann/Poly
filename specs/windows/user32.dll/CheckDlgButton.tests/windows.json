@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cdb_buttons",
+      "exe_sha256": "81865d099ca18c364bab02898e31d7e3ae748229703c00c7becc75820cb6b852",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IGNoZWNrIDAgcmFkaW9zIDAgMCAwIHRyaSAwIChCTV9HRVRTVEFURSB0cmkgMHgwKQpjaGVjayBib3ggY2hlY2tlZDogMQphZnRlcjogY2hlY2sgMSByYWRpb3MgMCAwIDAgdHJpIDAgKEJNX0dFVFNUQVRFIHRyaSAweDApCnVuY2hlY2tlZDogMQp0cmktc3RhdGUgaW5kZXRlcm1pbmF0ZTogMQp0cmk6IGNoZWNrIDAgcmFkaW9zIDAgMCAwIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpjaGVjayBib3ggc2V0IHRvIGluZGV0ZXJtaW5hdGUgKG5vdCBhIHRyaS1zdGF0ZSBib3gpOiAxCmFmdGVyOiBjaGVjayAxIHJhZGlvcyAwIDAgMCB0cmkgMiAoQk1fR0VUU1RBVEUgdHJpIDB4MikKdmFsdWUgMzogMQphZnRlciAzOiBjaGVjayAxIHJhZGlvcyAwIDAgMCB0cmkgMiAoQk1fR0VUU1RBVEUgdHJpIDB4MikKdmFsdWUgMHgxMDE6IDEKYWZ0ZXIgMHgxMDE6IGNoZWNrIDEgcmFkaW9zIDAgMCAwIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpyYWRpbyBjaGVja2VkIGRpcmVjdGx5OiAxCnJhZGlvIDIgdmlhIENoZWNrRGxnQnV0dG9uOiBjaGVjayAxIHJhZGlvcyAwIDEgMCB0cmkgMiAoQk1fR0VUU1RBVEUgdHJpIDB4MikKQ2hlY2tSYWRpb0J1dHRvbiAxMDA0Li4xMDA2IGNoZWNrIDEwMDY6IDEKYWZ0ZXI6IGNoZWNrIDEgcmFkaW9zIDAgMCAxIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpDaGVja1JhZGlvQnV0dG9uIGNoZWNrIDEwMDQ6IDEKYWZ0ZXI6IGNoZWNrIDEgcmFkaW9zIDEgMCAwIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpDaGVja1JhZGlvQnV0dG9uIGNoZWNrIG91dHNpZGUgdGhlIHJhbmdlICgxMDAzKTogMQphZnRlcjogY2hlY2sgMSByYWRpb3MgMCAwIDAgdHJpIDIgKEJNX0dFVFNUQVRFIHRyaSAweDIpCkNoZWNrUmFkaW9CdXR0b24gcmFuZ2UgMTAwNC4uMTAwNSBjaGVjayAxMDA2OiAxCmFmdGVyOiBjaGVjayAxIHJhZGlvcyAwIDAgMCB0cmkgMiAoQk1fR0VUU1RBVEUgdHJpIDB4MikKQ2hlY2tSYWRpb0J1dHRvbiByZXZlcnNlZCByYW5nZSAxMDA2Li4xMDA0IGNoZWNrIDEwMDU6IDEKYWZ0ZXI6IGNoZWNrIDEgcmFkaW9zIDAgMCAwIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpDaGVja1JhZGlvQnV0dG9uIGNoZWNrIC0xICh1bmNoZWNrIGFsbCk6IDEKYWZ0ZXI6IGNoZWNrIDEgcmFkaW9zIDAgMCAwIHRyaSAyIChCTV9HRVRTVEFURSB0cmkgMHgyKQpDaGVja1JhZGlvQnV0dG9uIGNoZWNrIDA6IDEKQ2hlY2tSYWRpb0J1dHRvbiBhYnNlbnQgY2hlY2sgaWQ6IDEKQ2hlY2tSYWRpb0J1dHRvbiBhYnNlbnQgcmFuZ2U6IDEKQ2hlY2tEbGdCdXR0b24gb24gYSBzdGF0aWM6IDEKSXNEbGdCdXR0b25DaGVja2VkIG9uIGEgc3RhdGljOiAwIGVycj0tMQpJc0RsZ0J1dHRvbkNoZWNrZWQgb24gdGhlIGVkaXQ6IDAgZXJyPS0xCkNoZWNrRGxnQnV0dG9uIGFic2VudCBpZDogMCBlcnI9MTQyMQpJc0RsZ0J1dHRvbkNoZWNrZWQgYWJzZW50IGlkOiAwIGVycj0xNDIxCkNoZWNrRGxnQnV0dG9uIG9uIGEgcHVzaCBidXR0b246IDEKSXNEbGdCdXR0b25DaGVja2VkIG9uIGEgcHVzaCBidXR0b246IDAgZXJyPS0xCkNoZWNrRGxnQnV0dG9uIG9uIGEgYmFkIGRpYWxvZzogMCBlcnI9MTQwMApJc0RsZ0J1dHRvbkNoZWNrZWQgb24gYSBiYWQgZGlhbG9nOiAwIGVycj0xNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: check 0 radios 0 0 0 tri 0 (BM_GETSTATE tri 0x0)\ncheck box checked: 1\nafter: check 1 radios 0 0 0 tri 0 (BM_GETSTATE tri 0x0)\nunchecked: 1\ntri-state indeterminate: 1\ntri: check 0 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\ncheck box set to indeterminate (not a tri-state box): 1\nafter: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nvalue 3: 1\nafter 3: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nvalue 0x101: 1\nafter 0x101: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nradio checked directly: 1\nradio 2 via CheckDlgButton: check 1 radios 0 1 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton 1004..1006 check 1006: 1\nafter: check 1 radios 0 0 1 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton check 1004: 1\nafter: check 1 radios 1 0 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton check outside the range (1003): 1\nafter: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton range 1004..1005 check 1006: 1\nafter: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton reversed range 1006..1004 check 1005: 1\nafter: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton check -1 (uncheck all): 1\nafter: check 1 radios 0 0 0 tri 2 (BM_GETSTATE tri 0x2)\nCheckRadioButton check 0: 1\nCheckRadioButton absent check id: 1\nCheckRadioButton absent range: 1\nCheckDlgButton on a static: 1\nIsDlgButtonChecked on a static: 0 err=-1\nIsDlgButtonChecked on the edit: 0 err=-1\nCheckDlgButton absent id: 0 err=1421\nIsDlgButtonChecked absent id: 0 err=1421\nCheckDlgButton on a push button: 1\nIsDlgButtonChecked on a push button: 0 err=-1\nCheckDlgButton on a bad dialog: 0 err=1400\nIsDlgButtonChecked on a bad dialog: 0 err=1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

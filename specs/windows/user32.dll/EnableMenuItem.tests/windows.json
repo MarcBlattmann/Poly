@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "emi_enable",
+      "exe_sha256": "172c5ba3f54497d4ddec6be4b03671597f7bd3971c0430f67512469d664f89b3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z3JheSAxICh3YXMgZW5hYmxlZCk6IDAgZXJyPS0xCnN0YXRlIG9mIDE6IDB4MQpncmF5IDEgYWdhaW46IDEKZGlzYWJsZSAxICh3YXMgZ3JheWVkKTogMQpzdGF0ZSBvZiAxOiAweDIKZW5hYmxlIDEgKHdhcyBkaXNhYmxlZCk6IDIKc3RhdGUgb2YgMTogMHgwCmVuYWJsZSAxIGFnYWluOiAwIGVycj0tMQpncmF5IGFuZCBkaXNhYmxlIHRvZ2V0aGVyOiAwIGVycj0tMQpzdGF0ZSBvZiAxOiAweDMKZW5hYmxlIGJ5IHBvc2l0aW9uIDA6IDMKZ3JheSB0aGUgY2hlY2tlZCBpdGVtOiAwIGVycj0tMQpzdGF0ZSBvZiB0aGUgY2hlY2tlZCBpdGVtOiAweDkKZW5hYmxlIGl0IGFnYWluOiAxCnN0YXRlIG9mIHRoZSBjaGVja2VkIGl0ZW06IDB4OApncmF5IHRoZSBzZXBhcmF0b3IgYnkgcG9zaXRpb246IDMKZW5hYmxlIHRoZSBzZXBhcmF0b3IgYnkgcG9zaXRpb246IDEKc3RhdGUgb2YgdGhlIHNlcGFyYXRvcjogMHg4MDAKZ3JheSB0aGUgcG9wdXAgaXRlbTogMCBlcnI9LTEKc3RhdGUgb2YgdGhlIHBvcHVwIGl0ZW06IDB4MTExCmdyYXkgaWQgMzAwIChpbiB0aGUgc3ViIG1lbnUpOiAwIGVycj0tMQpzdGF0ZSBpbiB0aGUgc3ViIG1lbnU6IDB4MQpjaGVjayBiaXQgaXMgaWdub3JlZDogTUZfQ0hFQ0tFRCB3aXRoIE1GX0dSQVlFRDogMCBlcnI9LTEKc3RhdGUgb2YgMTogMHgxCmFic2VudCBjb21tYW5kOiAtMSBlcnI9LTEKYWJzZW50IHBvc2l0aW9uOiAtMSBlcnI9LTEKYmFkIG1lbnU6IC0xIGVycj0xNDAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "gray 1 (was enabled): 0 err=-1\nstate of 1: 0x1\ngray 1 again: 1\ndisable 1 (was grayed): 1\nstate of 1: 0x2\nenable 1 (was disabled): 2\nstate of 1: 0x0\nenable 1 again: 0 err=-1\ngray and disable together: 0 err=-1\nstate of 1: 0x3\nenable by position 0: 3\ngray the checked item: 0 err=-1\nstate of the checked item: 0x9\nenable it again: 1\nstate of the checked item: 0x8\ngray the separator by position: 3\nenable the separator by position: 1\nstate of the separator: 0x800\ngray the popup item: 0 err=-1\nstate of the popup item: 0x111\ngray id 300 (in the sub menu): 0 err=-1\nstate in the sub menu: 0x1\ncheck bit is ignored: MF_CHECKED with MF_GRAYED: 0 err=-1\nstate of 1: 0x1\nabsent command: -1 err=-1\nabsent position: -1 err=-1\nbad menu: -1 err=1401\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

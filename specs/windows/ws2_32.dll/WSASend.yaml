@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSASend.yaml
+id: windows/api/ws2_32.dll/WSASend
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "connect function (winsock2.h)", "WSAEventSelect function", "WSAEnumNetworkEvents function", "recv function", "WSASend function", "sendto function", "WSARecv function", "WSAGetOverlappedResult function", "AcceptEx function (mswsock.h)", "Winsock Error Codes", "I/O Completion Ports"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sends data. Chrome calls it 60 times in a run with one buffer, flags 0, an OVERLAPPED (non-NULL, its hEvent is a WSACreateEvent event) and no completion routine, on a non-blocking socket that has a WSAEventSelect: the call returns 0 with the byte count in lpNumberOfBytesSent (the send completed at once); Chrome then calls WSAResetEvent on that event. The tests give the same call on blocking and non-blocking sockets, what the OVERLAPPED holds afterwards, the argument errors, and the behaviour when the peer does not read (WSAEWOULDBLOCK for a plain send on a non-blocking socket, WSA_IO_PENDING for an overlapped one).
+interface:
+  signature: "int WSASend(SOCKET s, LPWSABUF bufs, DWORD count, LPDWORD sent, DWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE routine)"
+  result: "0 (completed, *sent set), or SOCKET_ERROR with WSA_IO_PENDING (997) for an overlapped request in progress"
+chrome:
+  calls: "WSASend 60 calls, all returning 0 (18 in one network service run): (1 buffer, flags 0, overlapped non-NULL, routine NULL)"
+rules:
+  overlapped_event: "on a blocking socket, with an OVERLAPPED whose hEvent is set: returns 0, *sent = 11 for 11 bytes, Internal is 0 (STATUS_SUCCESS) and InternalHigh 11 (preset garbage in both is overwritten), the event IS signalled, WSAGetOverlappedResult(wait FALSE) returns TRUE with 11 bytes and flags 0; the same without hEvent and on a socket that has an event selected (Chrome's case)"
+  no_overlapped: "OVERLAPPED NULL: returns 0, *sent = 3; two buffers: *sent = 6 and the peer receives the bytes in order; a zero-length buffer: 0 with *sent = 0"
+  arguments: "0 buffers: -1/WSAEINVAL (10022); a NULL buffer pointer with length 3: -1/WSAEFAULT (10014); a NULL sent-count without an OVERLAPPED: -1/WSAEFAULT; a NULL sent-count with an OVERLAPPED is accepted (0, Internal 0, InternalHigh 3); a non-socket: -1/WSAENOTSOCK"
+  after_shutdown: "after shutdown(SD_SEND): -1/WSAESHUTDOWN (10058)"
+  full_plain: "plain send on a non-blocking socket whose peer does not read: accepts more than 16 KiB, then returns -1/WSAEWOULDBLOCK, again for one more byte; after the peer reads everything that was accepted a send works again"
+  full_overlapped: "an overlapped WSASend (event-selected socket) into the same condition returns -1/WSA_IO_PENDING (997) instead of WSAEWOULDBLOCK; Internal is 0x103 (STATUS_PENDING); WSAGetOverlappedResult(wait FALSE) is FALSE/WSA_IO_INCOMPLETE and the event is not signalled; once the peer reads, the event is signalled, the result is TRUE with the whole buffer transferred and Internal 0; the sender's FD_WRITE is then recorded"
+errors:
+  pending: "WSA_IO_PENDING 997"
+  inval: "WSAEINVAL 10022"
+  fault: "WSAEFAULT 10014"
+  shutdown: "WSAESHUTDOWN 10058"
+side_effects: "queues data on the connection; completes the OVERLAPPED (event, completion port packet when associated)"
+threading: "any thread; a pending OVERLAPPED and its buffers must stay alive until completion"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Completion routines (alertable waits), MSG_OOB, MSG_PARTIAL, sending on UDP with WSASend, WSASend on a socket associated with a completion port (see the WSARecv sheet for the packet rules).

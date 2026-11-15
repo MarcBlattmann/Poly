@@ -57,7 +57,7 @@ static WORKERS: Mutex<BTreeMap<u32, Arc<Worker>>> = Mutex::new(BTreeMap::new());
 /// NT lock and never while holding it.
 static DRAINING: Mutex<()> = Mutex::new(());
 
-/// Put the VFS into the NT namespace (`\Device\PolyFs<N>`, `\??\C:`,
+/// Put the VFS into the NT namespace (`\Device\HarddiskVolume<N>`, `\??\C:`,
 /// `\??\Z:`, `\Device\PolyPipe`). Called once, when the NT state is made.
 pub(super) fn attach(sys: &mut NtSystem) {
     let vfs = crate::fs::vfs();
@@ -77,6 +77,11 @@ pub(super) fn register(pid: u32, memory: &Arc<Memory>) {
 /// control-handler threads in it, ADR 0080).
 pub(super) fn memory_of(pid: u32) -> Option<Arc<Memory>> {
     MEMORY.lock().get(&pid).and_then(Weak::upgrade)
+}
+
+/// Every running NT process's memory, by process id (`poly.nt.mem`).
+pub(super) fn memories() -> alloc::vec::Vec<(u32, Arc<Memory>)> {
+    MEMORY.lock().iter().filter_map(|(pid, m)| Some((*pid, m.upgrade()?))).collect()
 }
 
 /// NT process `pid` has ended.

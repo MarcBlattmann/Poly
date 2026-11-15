@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6b55edb62ca7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:54:12Z",
+  "tests": [
+    {
+      "name": "ern_module",
+      "exe_sha256": "e1953566a641c04cdb010f8e2d3f81ebe3620e7e18cecd623cb5aa07afac6a58",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGF0YWZpbGU6IGZpbGUgd3JpdHRlbiAxLCBMb2FkTGlicmFyeUV4VyhmbGFncyAweDIpIC0+IGEgbW9kdWxlCmNhbGxiYWNrIGdvdCB0aGUgc2FtZSBtb2R1bGUgaGFuZGxlOiAxLCB0aGUgcGFyYW1ldGVyIDB4MTIzNDU2Nzg5YWJjOyB0aGUgY2FsbCByZXR1cm5lZCAwCmV4ZTogdHlwZSAjOTk6IHJldHVybmVkIDAsIGVycm9yIDE4MTIsIGNhbGxiYWNrcyAwCmV4ZTogdHlwZSAiTk9UWVBFIjogcmV0dXJuZWQgMCwgZXJyb3IgMTgxMiwgY2FsbGJhY2tzIDAKTlVMTCBtb2R1bGU6IHR5cGUgIzk5OiByZXR1cm5lZCAwLCBlcnJvciAxODEyLCBjYWxsYmFja3MgMApOVUxMIG1vZHVsZTogdHlwZSAiTk9UWVBFIjogcmV0dXJuZWQgMCwgZXJyb3IgMTgxMiwgY2FsbGJhY2tzIDAKYm9ndXMgbW9kdWxlOiB0eXBlICM5OTogcmV0dXJuZWQgMCwgZXJyb3IgMTgxMiwgY2FsbGJhY2tzIDAKYm9ndXMgbW9kdWxlOiB0eXBlICJOT1RZUEUiOiByZXR1cm5lZCAwLCBlcnJvciAxODEyLCBjYWxsYmFja3MgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "datafile: file written 1, LoadLibraryExW(flags 0x2) -> a module\ncallback got the same module handle: 1, the parameter 0x123456789abc; the call returned 0\nexe: type #99: returned 0, error 1812, callbacks 0\nexe: type \"NOTYPE\": returned 0, error 1812, callbacks 0\nNULL module: type #99: returned 0, error 1812, callbacks 0\nNULL module: type \"NOTYPE\": returned 0, error 1812, callbacks 0\nbogus module: type #99: returned 0, error 1812, callbacks 0\nbogus module: type \"NOTYPE\": returned 0, error 1812, callbacks 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

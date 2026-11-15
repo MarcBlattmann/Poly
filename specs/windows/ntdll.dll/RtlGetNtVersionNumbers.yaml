@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlGetNtVersionNumbers.yaml
+id: windows/api/ntdll.dll/RtlGetNtVersionNumbers
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (each test run at least twice, identical output). Microsoft Learn: "(undocumented export; its name and the three out parameters are known from the export list and from callers)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the real major, minor and build number of the system through three pointers. Git's bash (MSYS2) calls it at start-up and stops on the missing export. The build number is returned with its high nibble set to 0xF (a 'free build' marker).
+interface:
+  signature: "void RtlGetNtVersionNumbers(DWORD *major, DWORD *minor, DWORD *build)"
+rules:
+  values: "major 10, minor 0, build = <build number> | 0xF0000000: the high nibble is 0xF, the low 28 bits are the build number (26200 on the oracle; the test only checks 'at least 22000')"
+  only_three: "nothing else is written (a fourth word next to the three is untouched); calling it twice gives the same"
+  not_lying: "the numbers are the real ones even in a process whose GetVersionExW answers 6.2.9200"
+errors:
+  none: "no result"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075); they import ntdll.dll and kernel32.dll.
+not_covered: >
+  NULL pointers (the function writes through them), the meaning of the high nibble on a checked build.

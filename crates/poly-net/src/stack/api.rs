@@ -275,7 +275,7 @@ impl Stack {
             return Err(Errno::EAGAIN);
         }
         s.tx_bytes += data.len();
-        s.tx.push_back(Datagram { addr: dst, data: data.to_vec() });
+        s.tx.push_back(Datagram { addr: dst, data: data.to_vec(), meta: RxMeta::default() });
         Ok(data.len())
     }
 
@@ -289,7 +289,7 @@ impl Stack {
         match &mut self.entry(h)?.sock {
             Sock::Tcp(t) => {
                 let n = t.recv(buf, flags.peek)?;
-                Ok(RecvInfo { len: n, full_len: n, from: t.remote })
+                Ok(RecvInfo { len: n, full_len: n, from: t.remote, meta: RxMeta::default() })
             }
             Sock::Dgram(s) => s.recv(buf, flags),
         }

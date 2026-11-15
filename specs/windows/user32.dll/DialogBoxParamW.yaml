@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DialogBoxParamW.yaml
+id: windows/api/user32.dll/DialogBoxParamW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Creates a modal dialog from an RT_DIALOG resource (old DLGTEMPLATE or extended DLGTEMPLATEEX), runs its message loop and returns the value given to EndDialog. The dialog procedure gets WM_SETFONT (when the template has a font) and WM_INITDIALOG (lParam is dwInitParam) before the dialog is shown.
+interface:
+  signature: "INT_PTR DialogBoxParamW(HINSTANCE hInstance, LPCWSTR lpTemplateName, HWND hWndParent, DLGPROC lpDialogFunc, LPARAM dwInitParam)"
+rules:
+  window: "a top-level window of class \"#32770\", owned (not parented) by hWndParent: GW_OWNER, GetParent and GWLP_HWNDPARENT are the owner, GetAncestor(GA_ROOT) is the dialog itself; the window styles are the template's plus WS_CLIPSIBLINGS (0x4000000) and DS_3DLOOK (4) (0x84C800C4 for the first template: WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_SETFONT); the extended styles WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CONTROLPARENT (0x10101); the title is the template's caption; the dialog is not visible in the session of the tests until it is shown"
+  controls: "created in template order: children of the dialog with the class of the template (Static, Edit, Button, ListBox for the atoms 0x82, 0x81, 0x80, 0x83), the ids of the template (also 0xFFFF, 0x12345 and ids shared by two controls), the template's text and styles (a WS_BORDER on an edit control is not kept in the style); controls exist (GetDlgItem finds them) when WM_INITDIALOG arrives"
+  message_order: "WM_SETFONT (only with DS_SETFONT), then WM_INITDIALOG, later WM_DESTROY and WM_NCDESTROY when the dialog ends"
+  initdialog: "wParam is the first control with WS_TABSTOP (the edit control 1002 of the first template; 5 for a template whose only control is the static 5 with no tab stop: the first control; 0 for a dialog without controls); lParam is dwInitParam unchanged (0x1234, -5)"
+  result: "the value given to EndDialog comes back unchanged as an INT_PTR: 0, 1, -1, 0x7FFFFFFF, 0x100000000, -0x100000000, the maximum and minimum of the type; a procedure that returns TRUE or FALSE from WM_INITDIALOG makes no difference to it; EndDialog from a posted message later works the same"
+  owner: "the owner is disabled while the dialog runs and enabled again when the call returns (an owner that was already disabled is enabled afterwards too); messages posted to the owner while the dialog runs are dispatched; a child window as hWndParent makes its top-level ancestor the owner (the dialog's owner is the top-level window, the child's own enabled state does not change); no owner when hWndParent is NULL"
+  names: "the template name is a number or a string, matched without regard to case; NULL module means the executable"
+errors:
+  template_not_found: "-1 with ERROR_RESOURCE_NAME_NOT_FOUND (1814) for a missing number or name and for a number that is another resource type; -1 with 1812 for a made-up module handle"
+  unknown_control_class: "-1 with ERROR_CANNOT_FIND_WND_CLASS (1407)"
+  bad_parent: "0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Dialogs that are shown and used with input, DS_CENTER and positioning (nothing is visible in session 0), fonts and dialog units to pixels, DS_ABSALIGN, menus and class names in templates (a template with a menu was not run), WM_ENTERIDLE.

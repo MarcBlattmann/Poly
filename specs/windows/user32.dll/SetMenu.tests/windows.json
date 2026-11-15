@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "sm_bar",
+      "exe_sha256": "b71286a1a78599323de4374e72ea7ee01d8e1982ebea15c11606b1d4766a5221",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2lkdGggdW5jaGFuZ2VkIDEgY2xpZW50IGhlaWdodCBzaHJhbmsgMQp0aGUgYmFyIHRha2VzIGJldHdlZW4gMTUgYW5kIDQwIHBpeGVscyAob25lIHJvdyk6IDEKYWZ0ZXIgU2V0TWVudShOVUxMKTogdGhlIGNsaWVudCBhcmVhIGlzIGFzIGJlZm9yZTogMQphbiBlbXB0eSBiYXI6IGNsaWVudCBoZWlnaHQgaXMgdGhlIHNhbWUgYXMgd2l0aCBubyBiYXIKQWRqdXN0V2luZG93UmVjdCB3aXRoIGEgbWVudSBpcyB0cnVlIHB4IHRhbGxlcgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "width unchanged 1 client height shrank 1\nthe bar takes between 15 and 40 pixels (one row): 1\nafter SetMenu(NULL): the client area is as before: 1\nan empty bar: client height is the same as with no bar\nAdjustWindowRect with a menu is true px taller\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "sm_window",
+      "exe_sha256": "e33b44895a1adac475092445f518b2295d9eb39e8072f3488071037a1e714d51",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0TWVudSBvZiBhIG5ldyB3aW5kb3cgbnVsbDogMQpTZXRNZW51OiAxCkdldE1lbnUgaXMgbTogMQpEcmF3TWVudUJhcjogMQpTZXRNZW51IE5VTEw6IDEKR2V0TWVudSBudWxsIGFmdGVyIGRldGFjaCAxIG0gdmFsaWQgMSBwIHZhbGlkIDEKU2V0TWVudSBhZ2FpbjogMQphZnRlciBEZXN0cm95V2luZG93OiBtIHZhbGlkIDAgcCB2YWxpZCAwClNldE1lbnUgb24gYSBjaGlsZDogMCBlcnI9MTQzNgpHZXRNZW51IG9mIHRoZSBjaGlsZCBudWxsOiAwClNldE1lbnUgYmFkIHdpbmRvdzogMCBlcnI9MTQwMApTZXRNZW51IGJhZCBtZW51OiAwIGVycj0xNDAxCkdldE1lbnUgYmFkIHdpbmRvdzogMSBlcnI9MTQwMApHZXRNZW51IE5VTEwgd2luZG93OiAxIGVycj0xNDAwCm0yIHZhbGlkIGFmdGVyIHRoZSBwYXJlbnQgd2luZG93IGRpZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetMenu of a new window null: 1\nSetMenu: 1\nGetMenu is m: 1\nDrawMenuBar: 1\nSetMenu NULL: 1\nGetMenu null after detach 1 m valid 1 p valid 1\nSetMenu again: 1\nafter DestroyWindow: m valid 0 p valid 0\nSetMenu on a child: 0 err=1436\nGetMenu of the child null: 0\nSetMenu bad window: 0 err=1400\nSetMenu bad menu: 0 err=1401\nGetMenu bad window: 1 err=1400\nGetMenu NULL window: 1 err=1400\nm2 valid after the parent window died: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

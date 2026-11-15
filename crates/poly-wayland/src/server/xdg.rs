@@ -493,11 +493,12 @@ impl Server {
     }
 
     /// The area a maximized window's frame may fill, and its bounds inside
-    /// (all of it for a window that draws its own frame).
+    /// (all of it for a window that draws its own frame); never negative,
+    /// also on an output smaller than the frame ([`configure_size`]).
     fn work_area(&self, client_side: bool) -> (i32, i32) {
         let a = self.scene.work_area();
         let (x, y) = frame_insets(client_side);
-        (a.width - 2 * x, a.height - y - x)
+        configure_size((a.width - 2 * x, a.height - y - x))
     }
 
     /// `configure_bounds`, `wm_capabilities` (once), the decoration mode if
@@ -536,13 +537,14 @@ impl Server {
             // Tiled (ADR 0117): the bounds the frame leaves.
             tile = Some(outer);
             let (x, y) = frame_insets(client_side);
-            (outer.width - 2 * x, outer.height - y - x)
+            configure_size((outer.width - 2 * x, outer.height - y - x))
         } else if t.maximized || t.fullscreen || t.tile.is_some() {
             // Going back to floating: the size it had.
             t.floating.unwrap_or((0, 0))
         } else {
             t.resize_size.unwrap_or((0, 0))
         };
+        let size = configure_size(size);
         if t.resizing {
             states.push(xdg_toplevel::State::RESIZING.0);
         }
@@ -1012,6 +1014,14 @@ impl Server {
 /// 32-bit values in the host's byte order, as `array` arguments carry them.
 pub(super) fn u32_array(values: &[u32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_ne_bytes()).collect()
+}
+
+/// A size for `xdg_toplevel.configure` or `configure_bounds`: xdg-shell.xml
+/// gives 0 a meaning (the client decides; the bounds are unknown) and none to
+/// a negative value, so a size the frame or a small output would make
+/// negative is sent as 0.
+pub(super) fn configure_size((width, height): (i32, i32)) -> (i32, i32) {
+    (width.max(0), height.max(0))
 }
 
 /// How far a window's content sits inside its frame: left (and right and

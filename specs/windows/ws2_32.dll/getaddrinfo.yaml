@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.yaml
+id: windows/api/ws2_32.dll/getaddrinfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "getaddrinfo function (ws2tcpip.h)", "addrinfo structure", "freeaddrinfo", "Winsock Error Codes"; winsock2.h, ws2tcpip.h, ws2def.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Resolves a host and service name into a list of socket addresses. Chrome calls it from its host-resolver worker with AF_UNSPEC and SOCK_STREAM hints and frees the list with freeaddrinfo. The tests are offline: numeric hosts, "localhost", NULL nodes, service names and numbers, and refused hints. Results here: a numeric host gives exactly one entry; asking for socket type 0 does NOT expand into TCP, UDP and raw entries (one entry, socket type 0); the error code is the return value, the WSA last error and the Win32 last error at once; a successful call sets the last error to 0 (an earlier value is overwritten); hints are only partly validated (unknown flag bits and a protocol that does not match the socket type are accepted).
+interface:
+  signature: "INT getaddrinfo(PCSTR node, PCSTR service, const ADDRINFOA *hints, PADDRINFOA *result); void freeaddrinfo(PADDRINFOA)"
+  result: "0 on success, otherwise the error code itself (also in WSAGetLastError and GetLastError); *result is untouched (NULL) on failure"
+chrome:
+  calls: "getaddrinfo 7 to 9 calls per run in the network service (17 over all stages in the committed trace), each followed by freeaddrinfo: getaddrinfo(name, NULL, &hints, &res) with hints {ai_flags 0 (AI_DNS_ONLY 0x10 for the name \"wpad\"), ai_family AF_UNSPEC, ai_socktype SOCK_STREAM, ai_protocol 0}; names seen: wpad, example.com, www.iana.org, clients2.google.com, update.googleapis.com, www.google.com. The one failure of the committed trace is 11001 (WSAHOST_NOT_FOUND)"
+rules:
+  numeric_ipv4: "node \"127.0.0.1\", hints {0, AF_UNSPEC, SOCK_STREAM, 0}: 0 and one entry: ai_flags 0x4 (AI_NUMERICHOST, set by the system for a literal even though the hints had 0), ai_family 2, ai_socktype 1, ai_protocol 0, ai_addrlen 16, ai_canonname NULL, address 127.0.0.1 port 0; with service \"80\" and AI_NUMERICHOST|AI_NUMERICSERV: port 80 in network byte order"
+  numeric_ipv6: "node \"::1\" service \"8080\", AI_NUMERICHOST, AF_UNSPEC: one entry, family 23, ai_addrlen 28, ::1 port 8080; \"::ffff:127.0.0.1\" with AF_INET6: the mapped address as it is"
+  family_mismatch: "an IPv4 literal asked for as AF_INET6 (with or without AI_V4MAPPED) and an IPv6 literal asked for as AF_INET: 11001 (WSAHOST_NOT_FOUND), no list"
+  socktype_zero: "hints.ai_socktype 0 with a numeric host: one entry with ai_socktype 0 (not three); with ai_protocol IPPROTO_UDP and socktype 0: one entry, ai_socktype 0, ai_protocol 17; SOCK_DGRAM: one entry, ai_socktype 2, ai_protocol 0; without hints: one entry, ai_socktype 0"
+  null_node: "NULL node with service \"80\": without AI_PASSIVE the loopback address (127.0.0.1 or ::1 by family), with AI_PASSIVE the wildcard (0.0.0.0 or ::), ai_flags 0; NULL node and NULL service: 11001"
+  services: "service \"http\": port 80; \"65536\": the port wraps to 0 and the call succeeds; \"0\": port 0; \"http\" with AI_NUMERICSERV: 11001; an unknown name: 10109 (WSATYPE_NOT_FOUND)"
+  numeric_host_checks: "AI_NUMERICHOST with a host name, with \"999.1.1.1\" or with an empty string: 11001"
+  localhost: "\"localhost\" with AF_INET, SOCK_STREAM: one entry, 127.0.0.1, ai_flags 0; with AF_UNSPEC and each of flags 0, AI_DNS_ONLY, AI_ADDRCONFIG, AI_ALL|AI_V4MAPPED: success, every entry a loopback address, 127.0.0.1 among them (the order and whether ::1 is returned depend on the machine and are not recorded); \"LOCALHOST\" and \"localhost.\" resolve too; AI_CANONNAME sets ai_canonname on the first entry only"
+  canonname: "AI_CANONNAME with a numeric host: the first entry's canonical name is the literal \"127.0.0.1\"; AI_CANONNAME with a NULL node: 10022 (WSAEINVAL); with AI_PASSIVE too and a numeric host: success"
+  hints_checks: "family 99: 10047 (WSAEAFNOSUPPORT); socket type 99: 10044 (WSAESOCKTNOSUPPORT); NOT refused: socket type 3 (raw), a protocol that does not match the type (stream with UDP, datagram with TCP), flag bit 0x40000000; hints with ai_addrlen, ai_canonname, ai_addr or ai_next non-zero: 11003 (WSANO_RECOVERY)"
+  error_places: "on failure the return value, WSAGetLastError and GetLastError are equal (11001, 10109, 10047, 10044, 10022, 11003)"
+  last_error_on_success: "WSASetLastError(12345) before a successful call: WSAGetLastError() is 0 afterwards (and GetLastError() 0)"
+  free: "freeaddrinfo(NULL) returns without harm; two calls give two independent lists"
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+  service: "WSATYPE_NOT_FOUND (10109)"
+  family: "WSAEAFNOSUPPORT (10047)"
+  socktype: "WSAESOCKTNOSUPPORT (10044)"
+  flags: "WSAEINVAL (10022)"
+  reserved_hints: "WSANO_RECOVERY (11003)"
+side_effects: "allocates the result list (freed with freeaddrinfo); a name that is not numeric may query the machine's resolver (none of the tests does so for a name outside the hosts file)"
+threading: "may be called from any thread; the system resolver is used from Chrome's worker threads"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Names that need DNS (the answers are the network's), AI_FQDN, AI_SECURE, AI_RETURN_PREFERRED_NAMES and the other newer flag bits, the order of the addresses of a name (RFC 6724 sorting depends on the machine's addresses), IDN names, link-local scope ids, services that are in the services file but not in the tests' list.

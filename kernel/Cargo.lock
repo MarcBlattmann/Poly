@@ -300,6 +300,7 @@ name = "poly-procfs"
 version = "0.0.1"
 dependencies = [
  "poly-vfs",
+ "poly-vm",
 ]
 
 [[package]]

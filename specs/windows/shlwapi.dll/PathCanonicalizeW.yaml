@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/PathCanonicalizeW.yaml
+id: windows/api/shlwapi.dll/PathCanonicalizeW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathCanonicalizeW function (shlwapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data). The limit rows come from the pcn_limit test.
+summary: >
+  Writes the canonical form of a path into a separate buffer: dot segments resolved, a drive without a backslash gets one, the `\\?\` prefix of a drive or UNC path dropped, trailing dots removed. 4 packages import it; the other path functions of this batch (PathCombineW, PathAppendW) end in the same canonicalization.
+interface:
+  signature: "BOOL PathCanonicalizeW(LPWSTR pszBuf, LPCWSTR pszPath)"
+  returns: "TRUE on success; FALSE and an empty destination when the result would be MAX_PATH (260) units or more"
+  buffer: "pszBuf must hold MAX_PATH units; the function does not take a size. The source is not changed"
+rules:
+  empty_and_drive: "an empty source gives `\\`; a drive letter and a colon alone gives it a backslash (`C:` -> `C:\\`); a drive-relative path stays (`C:a` -> `C:a`, `C:a\\b` -> `C:a\\b`)"
+  dot_segments: "a segment `.` is dropped together with the backslash before it (`a\\.\\b` -> `a\\b`, `C:\\a\\.` -> `C:\\a`, `.\\a` -> `a`, `.` -> `\\`); a segment `..` drops the segment before it and its backslash (`C:\\a\\..\\b` -> `C:\\b`, `C:\\a\\b\\..` -> `C:\\a`), and never goes above the root: `C:\\..` -> `C:\\`, `C:\\..\\a` -> `C:\\a`, `C:\\a\\..` -> `C:\\`. A relative path that is consumed completely gives `\\` (`a\\..` -> `\\`, `a\\..\\b` -> `\\b`), and leading dots of a relative path are dropped (`..\\a` -> `a`, `.\\a` -> `a`). On a UNC path `..` can remove the share and the server (`\\\\s\\sh\\..` -> `\\\\s`, `\\\\s\\..\\f` -> `\\\\f`; `\\\\s\\sh\\.` -> `\\\\s\\sh`) and the device dot goes too (`\\\\.\\C:` -> `\\\\C:`, `\\\\.\\C:\\a` -> `\\\\C:\\a`, `\\\\.` -> `\\\\`, `\\\\.\\pipe\\x` -> `\\\\pipe\\x`)"
+  trailing_dots: "trailing dots of the last segment are removed: `C:\\a\\b.` -> `C:\\a\\b`, `C:\\a\\b..` -> `C:\\a\\b`, `a\\b.` -> `a\\b`. Trailing spaces are kept (`C:\\a\\b ` stays)"
+  kept: "doubled backslashes are kept (`C:\\\\a`, `C:\\a\\\\b`, `a\\\\b`, `\\\\s\\\\sh`), forward slashes are not separators and stay (`C:/a`, `a/b/c`), letter case is kept, a trailing backslash is kept (`C:\\a\\`, `a\\b\\c.txt\\`), spaces inside are kept, a path that needs no change is copied as it is"
+  long_prefix: "`\\\\?\\X:...` loses the prefix and is then treated as `X:...` (`\\\\?\\C:` -> `C:\\`, `\\\\?\\C:\\a` -> `C:\\a`, `\\\\?\\c:\\a` -> `c:\\a`, `\\\\?\\C:\\a\\..\\b` -> `C:\\b`); `\\\\?\\UNC\\s\\sh\\f` becomes `\\\\s\\sh\\f` (also `unc` in any case; `\\\\?\\UNC\\` -> `\\\\`, `\\\\?\\UNC\\s` -> `\\\\s`); `\\\\?\\UNC` alone (no backslash after it), `\\\\?\\Volume{guid}\\...`, `\\\\?\\a\\b`, `\\\\?\\pipe\\x`, `\\\\?\\` and the NT prefix `\\??\\...` are copied unchanged"
+  limit: "a source whose result is 259 units or fewer works (also with 255 to 259 units); a path of 260 units or more (260, 261, 270) fails: FALSE, the last error ERROR_FILENAME_EXCED_RANGE (206) and the destination starts with a NUL. A source of 262 units with dot segments that would bring it under the limit also fails (the length of the source decides)"
+  case_unicode: "no case mapping and no Unicode handling beyond the above"
+errors:
+  error_filename_exced_range: "206 with FALSE: the result would be 260 units or longer"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  NULL pointers, destinations smaller than MAX_PATH, `\\?\` long paths of 260 units or more (they fail here too), the A function.

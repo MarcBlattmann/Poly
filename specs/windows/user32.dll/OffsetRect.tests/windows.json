@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "or_chrome",
+      "exe_sha256": "f586ed56007fc648041f477a20553d0327108db98b95d47876ef35b48ccfb452",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xpZW50IG9yaWdpbiByZWxhdGl2ZSB0byB0aGUgd2luZG93OiA4LDAKY2xpZW50IHJlY3RhbmdsZSBtb3ZlZCBieSB0aGUgb3JpZ2luOiA0OCw0MCw2NzIsNDMyIChyaWdodC1sZWZ0IDYyNCwgYm90dG9tLXRvcCAzOTIpCndpbmRvdyByZWN0YW5nbGUgbW92ZWQgdG8gMCwwOiAwLDAsNjQwLDQwMAptb3ZlZCBiYWNrIGVxdWFscyB0aGUgd2luZG93IHJlY3RhbmdsZTogMQp0aGUgY2hpbGQncyByZWN0YW5nbGUgcmVsYXRpdmUgdG8gdGhlIHBhcmVudCdzIGNsaWVudCBhcmVhLCBieSBPZmZzZXRSZWN0IGFuZCBieSBNYXBXaW5kb3dQb2ludHM6IDAsMTAwLDYyNCwzOTIgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "client origin relative to the window: 8,0\nclient rectangle moved by the origin: 48,40,672,432 (right-left 624, bottom-top 392)\nwindow rectangle moved to 0,0: 0,0,640,400\nmoved back equals the window rectangle: 1\nthe child's rectangle relative to the parent's client area, by OffsetRect and by MapWindowPoints: 0,100,624,392 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 270
+    }
+  ]
+}

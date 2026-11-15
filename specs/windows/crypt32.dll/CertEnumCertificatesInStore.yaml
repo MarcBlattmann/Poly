@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/crypt32.dll/CertEnumCertificatesInStore.yaml
+id: windows/api/crypt32.dll/CertEnumCertificatesInStore
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "CertOpenStore function (wincrypt.h)", "Certificate Store Provider Types", "CertAddStoreToCollection", "CertCloseStore", "CertControlStore", "CertFindCertificateInStore", "CertEnumCertificatesInStore", "Collection and Sibling Certificate Stores", "System Store Locations"; wincrypt.h, winerror.h and winnt.h for constants and layouts. The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Enumerates the certificates of a store. Chrome's own enumerations are not in the S4 trace; the entry is specified because the stores are read through it and by CertFindCertificateInStore with CERT_FIND_ANY. Observed: a memory store enumerates the certificate added last first; duplicates; the end of an enumeration gives NULL with last error 0x80092004; an empty store gives NULL with the same error; a collection enumerates its siblings in order; deleting a certificate during enumeration.
+interface:
+  signature: "PCCERT_CONTEXT CertEnumCertificatesInStore(HCERTSTORE store, PCCERT_CONTEXT prev)"
+  result: "the next context (the previous one is freed by the call) or NULL"
+chrome:
+  calls: "not called directly in S4 (reached through CertFindCertificateInStore); the stores are collections of read-only system stores"
+rules:
+  empty: "empty memory store: NULL, last error 0x80092004"
+  order: "certificates added A then B: enumerated B, A; added B then A: A, B (the newest first)"
+  duplicates: "CertAddEncodedCertificateToStore of the same certificate: ADD_ALWAYS gives a second entry (AA); ADD_NEW fails with last error 0x80092005 (CRYPT_E_EXISTS), FALSE; ADD_USE_EXISTING returns TRUE with the existing context and adds nothing visible beyond the entries already there; ADD_REPLACE_EXISTING keeps one entry (A)"
+  bad_certificate: "a truncated encoded certificate: FALSE, last error 0x80093102 (CRYPT_E_ASN1_EOD, the ASN.1 end-of-data error)"
+  end: "past the last certificate: NULL, last error 0x80092004"
+  contexts: "CertDuplicateCertificateContext returns the same context pointer (reference count); CertDeleteCertificateFromStore removes the entry (the enumeration then shows one certificate)"
+  collection: "a collection of the B-store then the A-store enumerates BA"
+  system_store: "enumerating a read-only system store terminates (counts and contents are machine dependent and not recorded)"
+errors:
+  end_of_enumeration: "CRYPT_E_NOT_FOUND (0x80092004)"
+  exists: "CRYPT_E_EXISTS (0x80092005)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING.
+not_covered: >
+  Enumeration while another thread changes the store, context properties.

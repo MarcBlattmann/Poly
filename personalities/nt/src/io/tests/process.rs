@@ -6,7 +6,7 @@ use super::*;
 
 /// Parameters for `exe` built in the fake's scratch memory, as
 /// `kernelbase` builds them for `NtCreateUserProcess`.
-fn parameters_in(t: &mut T, exe: &str, cmd: &str, cwd: &str) -> (u64, crate::params::Parameters) {
+pub(super) fn parameters_in(t: &mut T, exe: &str, cmd: &str, cwd: &str) -> (u64, crate::params::Parameters) {
     let p = crate::params::Parameters {
         image_path: exe.encode_utf16().collect(),
         command_line: cmd.encode_utf16().collect(),
@@ -21,7 +21,7 @@ fn parameters_in(t: &mut T, exe: &str, cmd: &str, cwd: &str) -> (u64, crate::par
     (at, p)
 }
 
-fn create_process(t: &mut T, params: u64, thread_flags: u32) -> (NtStatus, u64, u64) {
+pub(super) fn create_process(t: &mut T, params: u64, thread_flags: u32) -> (NtStatus, u64, u64) {
     let (ph, th) = (t.f.alloc(8), t.f.alloc(8));
     let s = t.f.call(Service::CreateUserProcess, &[ph, th, 0, 0, 0, 0, 0, u64::from(thread_flags), params, 0, 0]);
     (s, t.f.u64_at(ph), t.f.u64_at(th))
