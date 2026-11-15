@@ -636,7 +636,7 @@
 {"symbol":"LoadMenuW","status":"claimed","claimed_by":"spec-win-apps-2","src":["wine-spec"]},
 {"symbol":"LoadRemoteFonts","src":["wine-spec"]},
 {"symbol":"LoadStringA","status":"claimed","claimed_by":"spec-win-apps-3","src":["wine-spec"],"seeds":["wine:user32/tests/resource.c:test_LoadStringA"]},
-{"symbol":"LoadStringW","status":"stub","src":["wine-spec"],"seeds":["wine:user32/tests/resource.c:test_LoadStringW"]},
+{"symbol":"LoadStringW","status":"claimed","claimed_by":"impl-win-apps","src":["wine-spec"],"seeds":["wine:user32/tests/resource.c:test_LoadStringW"]},
 {"symbol":"LockSetForegroundWindow","src":["wine-spec"]},
 {"symbol":"LockWindowStation","src":["wine-spec"]},
 {"symbol":"LockWindowUpdate","status":"stub","src":["wine-spec"],"seeds":["wine:user32/tests/win.c:test_LockWindowUpdate"]},

@@ -107,6 +107,7 @@ impl CreateHook<'_> {
                 Some(Device::Console) => return self.open_console(om, r, None),
                 Some(Device::Afd) => return self.open_endpoint(om, r.remaining),
                 Some(Device::NamedPipe) => return self.open_named_pipe(om, r),
+                Some(Device::Null) => return self.open_null(om, r.remaining),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
@@ -169,6 +170,22 @@ impl CreateHook<'_> {
         Ok(object)
     }
 
+    /// `\Device\Null` (`NUL`): the device itself, whatever the disposition; it has no names below it.
+    fn open_null(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {
+        if self.params.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        if !remaining.is_empty() {
+            return Err(STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+        self.information = FILE_OPENED;
+        let cookie = self.io.cookie();
+        let object = new_file_object(om, cookie, self.thread)?;
+        self.io.files.insert(cookie, self.record(object, Target::Null, FileType::CharDevice));
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
     /// `\Device\NamedPipe\<name>`: a server end made by
     /// `NtCreateNamedPipeFile`, or a client's open of a pipe a server made
     /// (ADR 0169, [`super::npfs`]); the device itself opens as the pipe
@@ -190,7 +207,11 @@ impl CreateHook<'_> {
             self.made = Some(cookie);
             return Ok(object);
         }
-        if remaining.split(|&c| c == u16::from(b'\\')).any(<[u16]>::is_empty) {
+        // A pipe's name may end with one backslash (observed on Windows,
+        // specs/windows/kernel32.dll/CreateNamedPipeA.yaml); an empty component anywhere else
+        // is no name.
+        let body = remaining.strip_suffix(&[u16::from(b'\\')]).unwrap_or(remaining);
+        if body.is_empty() || body.split(|&c| c == u16::from(b'\\')).any(<[u16]>::is_empty) {
             return Err(STATUS_OBJECT_NAME_INVALID);
         }
         let key = names::fold(remaining);

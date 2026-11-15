@@ -1192,6 +1192,7 @@ fn start_params(
         let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);
         let creator = console::FromCreator {
             given: params.given_std_handles(),
+            inherited: if handles.is_some() { params.inherited_std_handles() } else { [0; 3] },
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());

@@ -16,6 +16,7 @@ mod display;
 mod icons;
 mod layered;
 mod s3;
+mod strings;
 
 use alloc::vec;
 use alloc::vec::Vec;

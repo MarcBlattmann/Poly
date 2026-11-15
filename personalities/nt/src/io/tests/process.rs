@@ -1,6 +1,7 @@
 //! Tests: processes and file mappings over NT file I/O (ADR 0079).
 
 use super::*;
+use crate::consts::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE};
 
 // ----- processes and file mappings over NT file I/O (ADR 0079) -----------------
 
@@ -281,4 +282,57 @@ fn data_sections_of_files_map_their_contents_and_grow_them() {
     for h in [sec, sec2, sec3, ro, e, h] {
         t.close(h);
     }
+}
+
+#[test]
+fn a_parent_reads_writes_queries_and_allocates_in_its_child() {
+    let mut t = setup();
+    t.vfs_create(b"/nt/c/app.exe", &crate::tests::test_exe(false));
+    let (params, _) = parameters_in(&mut t, "C:\\app.exe", "app.exe", "C:\\");
+    let (s, ph, _) = create_process(&mut t, params, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let peb = t.f.children.last().unwrap().0.peb;
+    // NtAllocateVirtualMemory in the child (VirtualAllocEx).
+    let (base_p, size_p) = (t.f.put_u64(0x6_0000_0000), t.f.put_u64(0x2000));
+    let s = t.f.call(Service::AllocateVirtualMemory, &[ph, base_p, 0, size_p, u64::from(MEM_RESERVE | MEM_COMMIT), 4]);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(t.f.u64_at(base_p), 0x6_0000_0000);
+    // NtWriteVirtualMemory across a page boundary, then NtReadVirtualMemory back.
+    let data = t.f.put(b"cygheap!");
+    let done = t.f.alloc(8);
+    let s = t.f.call(Service::WriteVirtualMemory, &[ph, 0x6_0000_0FFC, data, 8, done]);
+    assert_eq!((s, t.f.u64_at(done)), (STATUS_SUCCESS, 8));
+    let (child, mem) = t.f.children.last().unwrap();
+    let mut got = [0u8; 8];
+    mem.read(0x6_0000_0FFC, &mut got).unwrap();
+    assert_eq!(&got, b"cygheap!");
+    assert_eq!(child.vm.query(0x6_0000_0000).unwrap().region_size, 0x2000);
+    let back = t.f.alloc(8);
+    let s = t.f.call(Service::ReadVirtualMemory, &[ph, 0x6_0000_0FFC, back, 8, done]);
+    assert_eq!((s, t.f.bytes_at(back, 8)), (STATUS_SUCCESS, b"cygheap!".to_vec()));
+    // The child's PEB is readable too.
+    assert_eq!(t.f.call(Service::ReadVirtualMemory, &[ph, peb, back, 8, 0]), STATUS_SUCCESS);
+    // A read that runs off the allocation stops there: STATUS_PARTIAL_COPY and the bytes done.
+    let big = t.f.alloc(0x3000);
+    let s = t.f.call(Service::ReadVirtualMemory, &[ph, 0x6_0000_1000, big, 0x3000, done]);
+    assert_eq!((s, t.f.u64_at(done)), (crate::memory::STATUS_PARTIAL_COPY, 0x1000));
+    // NtQueryVirtualMemory and NtProtectVirtualMemory of the child.
+    let info = t.f.alloc(48);
+    let s = t.f.call(Service::QueryVirtualMemory, &[ph, 0x6_0000_1000, 0, info, 48, 0]);
+    assert_eq!((s, t.f.u64_at(info + 24)), (STATUS_SUCCESS, 0x1000));
+    let (b2, s2, old) = (t.f.put_u64(0x6_0000_0000), t.f.put_u64(0x1000), t.f.alloc(4));
+    assert_eq!(t.f.call(Service::ProtectVirtualMemory, &[ph, b2, s2, 2, old]), STATUS_SUCCESS);
+    assert_eq!(t.f.u32_at(old), 4);
+    // Read-only now: a write is a partial copy of nothing.
+    let s = t.f.call(Service::WriteVirtualMemory, &[ph, 0x6_0000_0000, data, 8, done]);
+    assert_eq!((s, t.f.u64_at(done)), (crate::memory::STATUS_PARTIAL_COPY, 0));
+    // NtFreeVirtualMemory in the child.
+    let (b3, s3) = (t.f.put_u64(0x6_0000_0000), t.f.put_u64(0));
+    assert_eq!(t.f.call(Service::FreeVirtualMemory, &[ph, b3, s3, u64::from(MEM_RELEASE)]), STATUS_SUCCESS);
+    // A handle without PROCESS_VM_READ is refused.
+    let limited = t.f.alloc(8);
+    let s = t.f.call(Service::DuplicateObject, &[u64::MAX, ph, u64::MAX, limited, 0x1000, 0, 0]);
+    assert_eq!(s, STATUS_SUCCESS);
+    let limited = t.f.u64_at(limited);
+    assert_eq!(t.f.call(Service::ReadVirtualMemory, &[limited, peb, back, 8, 0]), STATUS_ACCESS_DENIED);
 }
