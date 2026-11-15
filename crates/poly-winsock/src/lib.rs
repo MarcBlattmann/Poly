@@ -43,6 +43,7 @@ pub mod dup;
 pub mod error;
 pub mod events;
 pub mod exports;
+pub mod known;
 pub mod poll;
 pub mod resolve;
 pub mod text;

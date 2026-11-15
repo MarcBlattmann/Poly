@@ -334,6 +334,7 @@ impl IoState {
         immediate: bool,
     ) {
         let Some(irp) = self.irps.remove(&id) else { return };
+        self.accept_targets.remove(&id);
         if self.np_end(irp.file).is_some() {
             self.np_forget_irp(irp.file, id);
         }

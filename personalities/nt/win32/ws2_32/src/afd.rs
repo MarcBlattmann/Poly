@@ -4,6 +4,7 @@
 use crate::Handle;
 use core::sync::atomic::{AtomicIsize, Ordering};
 use poly_winsock::afd;
+use poly_winsock::known::Known;
 use poly_winsock::error::{STATUS_PENDING, STATUS_SUCCESS};
 
 #[link(name = "ntdll", kind = "raw-dylib")]
@@ -88,6 +89,58 @@ const OBJ_CASE_INSENSITIVE: u32 = 0x40;
 /// `WSA_FLAG_NO_HANDLE_INHERIT` says not).
 const OBJ_INHERIT: u32 = 0x02;
 
+/// The sockets this process made that `closesocket` has not closed (a `CloseHandle` leaves them).
+struct KnownSockets {
+    locked: core::sync::atomic::AtomicBool,
+    list: core::cell::UnsafeCell<Known>,
+}
+
+// SAFETY: access to `list` is serialised by `locked`.
+unsafe impl Sync for KnownSockets {}
+
+static KNOWN: KnownSockets = KnownSockets {
+    locked: core::sync::atomic::AtomicBool::new(false),
+    list: core::cell::UnsafeCell::new(Known::new()),
+};
+
+fn with_known<R>(f: impl FnOnce(&mut Known) -> R) -> R {
+    while KNOWN.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held.
+    let r = f(unsafe { &mut *KNOWN.list.get() });
+    KNOWN.locked.store(false, Ordering::Release);
+    r
+}
+
+/// `closesocket` of a value that is no socket any more: it was a socket of this process whose
+/// handle was closed some other way (the sheet of `WSASocketW`, rule `handle`). True once.
+pub fn forget_orphan(h: Handle) -> bool {
+    with_known(|k| k.take(h as usize))
+}
+
+/// `SO_ERROR` takes the stack's pending error and keeps it on the endpoint in two steps: two
+/// threads reading it at once (the event helper and the program) must not interleave, or the one
+/// that comes second reads 0 while the first has not stored the error yet (a refused connect
+/// seen as `FD_CONNECT`, then `SO_ERROR` 0).
+static SO_ERROR_LOCK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+pub struct SoErrorGuard;
+
+/// Wait for and take the `SO_ERROR` lock.
+pub fn so_error_guard() -> SoErrorGuard {
+    while SO_ERROR_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    SoErrorGuard
+}
+
+impl Drop for SoErrorGuard {
+    fn drop(&mut self) {
+        SO_ERROR_LOCK.store(false, Ordering::Release);
+    }
+}
+
 /// Is `h` an event object (`NtQueryEvent(EventBasicInformation)` answers)?
 pub fn is_event(h: Handle) -> bool {
     let mut info = [0u8; 8];
@@ -129,11 +182,15 @@ pub fn open_endpoint(inherit: bool) -> Result<Handle, u32> {
     if s != STATUS_SUCCESS {
         return Err(s);
     }
+    with_known(|k| k.add(h as usize));
     Ok(h)
 }
 
 /// Close a handle.
 pub fn close(h: Handle) {
+    with_known(|k| {
+        k.take(h as usize);
+    });
     // SAFETY: closing a handle has no memory preconditions.
     unsafe { NtClose(h) };
 }

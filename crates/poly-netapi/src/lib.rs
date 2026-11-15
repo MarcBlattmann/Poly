@@ -83,15 +83,17 @@ pub mod name_format {
 
 /// The user's name in `format` (`GetUserNameExW`): the SAM-compatible name is
 /// `COMPUTER\poly`, the display name the account name; the formats that need a
-/// directory (distinguished, canonical, user principal, ... names) are
+/// directory (distinguished, canonical, user principal, ... names) and `NameUnknown` (0) are
 /// `ERROR_NONE_MAPPED`, as for a local account on a computer that is not in a domain; a
-/// format outside the enumeration is `ERROR_INVALID_PARAMETER`.
+/// format outside the enumeration is `ERROR_INVALID_PARAMETER`
+/// (specs/windows/secur32.dll/GetUserNameExW.yaml, rule `formats`).
 pub fn user_name_ex(format: u32, host: &str) -> Result<String, u32> {
     use name_format::*;
     match format {
         NAME_SAM_COMPATIBLE => Ok(alloc::format!("{}\\{USER_NAME}", computer_name(host))),
         NAME_DISPLAY => Ok(String::from(USER_NAME)),
-        NAME_FULLY_QUALIFIED_DN
+        NAME_UNKNOWN
+        | NAME_FULLY_QUALIFIED_DN
         | NAME_UNIQUE_ID
         | NAME_CANONICAL
         | NAME_USER_PRINCIPAL
@@ -379,7 +381,7 @@ mod tests {
         assert_eq!(user_name_ex(name_format::NAME_DISPLAY, "poly").as_deref(), Ok("poly"));
         assert_eq!(user_name_ex(name_format::NAME_USER_PRINCIPAL, "poly"), Err(ERROR_NONE_MAPPED));
         assert_eq!(user_name_ex(name_format::NAME_FULLY_QUALIFIED_DN, "poly"), Err(ERROR_NONE_MAPPED));
-        assert_eq!(user_name_ex(name_format::NAME_UNKNOWN, "poly"), Err(ERROR_INVALID_PARAMETER));
+        assert_eq!(user_name_ex(name_format::NAME_UNKNOWN, "poly"), Err(ERROR_NONE_MAPPED));
         assert_eq!(user_name_ex(99, "poly"), Err(ERROR_INVALID_PARAMETER));
     }
 
