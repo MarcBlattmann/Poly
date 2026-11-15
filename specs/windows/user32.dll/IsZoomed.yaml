@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/IsZoomed
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Returns 1 when the window has WS_MAXIMIZE, else 0. Chrome's browser calls it about 1160 times a run (S3),
+  every answer 0.
+interface:
+  signature: "BOOL IsZoomed(HWND hwnd)"
+rules:
+  commands: "SW_SHOWMAXIMIZED (also of a hidden window, which becomes visible), SC_MAXIMIZE as WM_SYSCOMMAND (sent or posted) make IsZoomed 1; SW_RESTORE, SC_RESTORE and SW_SHOWNORMAL make it 0; a window created with WS_MAXIMIZE | WS_VISIBLE answers 1"
+  minimized_while_maximized: "SW_MINIMIZE of a maximized window: IsZoomed 0 and IsIconic 1; SW_RESTORE then gives IsZoomed 1 again (it restores to maximized), a second SW_RESTORE 0"
+  style_bit: "WS_MAXIMIZE set with SetWindowLongPtrW(GWL_STYLE) makes the call answer 1 at once and clears IsIconic when it was set (nothing moves)"
+  window_kinds: "overlapped, caption-only (with WS_MAXIMIZEBOX), caption with WS_THICKFRAME but no WS_MAXIMIZEBOX, popup and tool window all answer 1 after SW_SHOWMAXIMIZED and 0 after SW_RESTORE; the maximized rectangles relative to the work area (oracle: taskbar 48 px at the bottom): an overlapped or caption-only window is 16 px wider and 16 px taller than the work area (the 8 px frame outside on every side; client area as wide as the work area, 23 px less tall), a popup is as wide as the work area and 48 px taller (it covers the taskbar: the whole screen), the caption window without WS_MAXIMIZEBOX and the tool window are 16 wider and 64 taller than the work area; SW_MINIMIZE while maximized gives the iconic rectangle (160x28) and SW_RESTORE the maximized one again"
+  children: "a child shown with SW_SHOWMAXIMIZED answers 1; the parent's state does not count"
+  chrome: "Chrome's top-level window: 0 when created, shown, moved and resized; 1 after WM_SYSCOMMAND SC_MAXIMIZE (sent and posted, the window's WM_SIZE sees SIZE_MAXIMIZED), 0 after SC_RESTORE; the child and the holder always 0"
+errors:
+  null_or_bad: "NULL and a made-up handle: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

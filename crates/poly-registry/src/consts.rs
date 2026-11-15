@@ -82,6 +82,9 @@ pub const KEY_WOW64_32KEY: u32 = 0x0200;
 /// `KEY_WOW64_RES`: the two view-selection bits, which are not access
 /// rights and are taken off before the access check.
 pub const KEY_WOW64_RES: u32 = 0x0300;
+/// The key the 32-bit view of `HKLM\SOFTWARE` lives in (Learn: "Registry Redirector":
+/// "`HKEY_LOCAL_MACHINE\Software` is redirected to `HKEY_LOCAL_MACHINE\Software\Wow6432Node`").
+pub const WOW6432_NODE: &str = "Wow6432Node";
 pub use poly_ntobj::access::{KEY_ALL_ACCESS, KEY_EXECUTE, KEY_READ, KEY_WRITE};
 /// `DELETE` (`winnt.h`), needed by `NtDeleteKey`.
 pub const DELETE: u32 = 0x0001_0000;

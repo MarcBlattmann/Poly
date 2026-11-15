@@ -80,7 +80,7 @@ fn dynamic_entry(pc: u64) -> Result<Option<FunctionEntry>, UnwindError> {
 /// sorted `RUNTIME_FUNCTION` entries for code at `BaseAddress` (their RVAs are relative to it);
 /// the caller keeps the array. TRUE on success.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAddFunctionTable(table: *const u8, count: u32, base: u64) -> u8 {
+pub unsafe extern "system" fn RtlAddFunctionTable(table: *const u8, count: u32, base: u64) -> u8 {
     if table.is_null() || count == 0 {
         return 0;
     }
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn RtlAddFunctionTable(table: *const u8, count: u32, base:
 
 /// `RtlDeleteFunctionTable(FunctionTable)` (Learn): TRUE if the table was registered.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlDeleteFunctionTable(table: *const u8) -> u8 {
+pub unsafe extern "system" fn RtlDeleteFunctionTable(table: *const u8) -> u8 {
     u8::from(with_dynamic(|r| r.delete(table as u64, false)))
 }
 
@@ -107,7 +107,7 @@ pub unsafe extern "C" fn RtlDeleteFunctionTable(table: *const u8) -> u8 {
 /// `STATUS_INVALID_PARAMETER` or `STATUS_NO_MEMORY` (when every slot is taken; Poly's
 /// choices, to be confirmed by the spec agent).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAddGrowableFunctionTable(
+pub unsafe extern "system" fn RtlAddGrowableFunctionTable(
     handle: *mut u64,
     table: *const u8,
     count: u32,
@@ -133,13 +133,13 @@ pub unsafe extern "C" fn RtlAddGrowableFunctionTable(
 
 /// `RtlGrowFunctionTable(DynamicTable, NewEntryCount)` (Learn).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlGrowFunctionTable(handle: u64, count: u32) {
+pub unsafe extern "system" fn RtlGrowFunctionTable(handle: u64, count: u32) {
     with_dynamic(|r| r.grow(handle, count));
 }
 
 /// `RtlDeleteGrowableFunctionTable(DynamicTable)` (Learn).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlDeleteGrowableFunctionTable(handle: u64) {
+pub unsafe extern "system" fn RtlDeleteGrowableFunctionTable(handle: u64) {
     with_dynamic(|r| r.delete(handle, true));
 }
 
@@ -222,7 +222,7 @@ impl Handlers for CallHandlers {
 /// `RtlLookupFunctionEntry(ControlPc, ImageBase*, HistoryTable*)`: the
 /// `RUNTIME_FUNCTION` covering `pc`, with its image base.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlLookupFunctionEntry(pc: u64, image_base: *mut u64, _history: *mut u8) -> *const u8 {
+pub unsafe extern "system" fn RtlLookupFunctionEntry(pc: u64, image_base: *mut u64, _history: *mut u8) -> *const u8 {
     match Proc.function_entry(pc) {
         Ok(Some(fe)) => {
             if !image_base.is_null() {
@@ -244,7 +244,7 @@ pub unsafe extern "C" fn RtlLookupFunctionEntry(pc: u64, image_base: *mut u64, _
 /// `RtlVirtualUnwind`: unwind one frame, updating `*context` to the
 /// caller's and returning the handler address (0 for none).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlVirtualUnwind(
+pub unsafe extern "system" fn RtlVirtualUnwind(
     handler_type: u32,
     image_base: u64,
     control_pc: u64,
@@ -299,7 +299,7 @@ const EXCEPTION_CONTINUE_EXECUTION: i32 = -1;
 /// `UnhandledExceptionFilter` here when a program sets a top-level filter
 /// (ADR 0099).
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlSetUnhandledExceptionFilter(filter: u64) {
+pub extern "system" fn RtlSetUnhandledExceptionFilter(filter: u64) {
     UNHANDLED_FILTER.store(filter, core::sync::atomic::Ordering::Release);
 }
 
@@ -311,7 +311,7 @@ pub extern "C" fn RtlSetUnhandledExceptionFilter(filter: u64) {
 /// `NtContinue`, otherwise it goes second-chance through `NtRaiseException`
 /// (the kernel then ends the process with the code).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_ptr: *mut u8) -> ! {
+pub unsafe extern "system" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_ptr: *mut u8) -> ! {
     // SAFETY: the kernel wrote a valid record and context below our RSP.
     if unsafe { crate::veh::call_handlers(record_ptr, context_ptr) } {
         // SAFETY: resume the context a vectored handler fixed up.
@@ -367,7 +367,7 @@ pub unsafe extern "C" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_
 /// termination handlers, then resume there with `return_value` via
 /// `NtContinue`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUnwindEx(
+pub unsafe extern "system" fn RtlUnwindEx(
     target_frame: u64,
     target_ip: u64,
     record: *mut u8,
@@ -541,7 +541,7 @@ struct ContextBuf([u8; CONTEXT_SIZE]);
 /// continues execution resumes there: the call returns.
 #[unsafe(no_mangle)]
 #[inline(never)]
-pub unsafe extern "C" fn RtlRaiseException(record: *mut u8) {
+pub unsafe extern "system" fn RtlRaiseException(record: *mut u8) {
     let mut buf = ContextBuf([0; CONTEXT_SIZE]);
     // SAFETY: an aligned CONTEXT buffer.
     unsafe { RtlCaptureContext(buf.0.as_mut_ptr()) };
@@ -654,7 +654,7 @@ impl poly_seh::scope::ScopeCalls for ScopeCaller {
 /// DispatcherContext)`: the C compiler's language-specific handler for
 /// `__try` blocks; the decisions are `poly_seh::scope`'s.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __C_specific_handler(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
+pub unsafe extern "system" fn __C_specific_handler(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
     // SAFETY: the dispatcher's DISPATCHER_CONTEXT (`winnt.h`): ControlPc 0,
     // ImageBase 8, TargetIp 0x20, HandlerData 0x38, ScopeIndex 0x48; the
     // record's ExceptionFlags at 4.
@@ -704,7 +704,7 @@ KiUserApcDispatcher:
 
 /// `RtlPcToFileHeader`: the base of the image containing `pc`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlPcToFileHeader(pc: *mut u8, base: *mut *mut u8) -> *mut u8 {
+pub unsafe extern "system" fn RtlPcToFileHeader(pc: *mut u8, base: *mut *mut u8) -> *mut u8 {
     let b = with_loader(|l, _| l.find(pc as u64)).map_or(0, |m| m.base);
     if !base.is_null() {
         // SAFETY: a valid out-pointer.
@@ -716,7 +716,7 @@ pub unsafe extern "C" fn RtlPcToFileHeader(pc: *mut u8, base: *mut *mut u8) -> *
 /// `RtlImageNtHeader`: the `IMAGE_NT_HEADERS` of a mapped image (the `MZ`
 /// then `e_lfanew` then the `PE\0\0` signature).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlImageNtHeader(base: *mut u8) -> *mut u8 {
+pub unsafe extern "system" fn RtlImageNtHeader(base: *mut u8) -> *mut u8 {
     if base.is_null() {
         return core::ptr::null_mut();
     }

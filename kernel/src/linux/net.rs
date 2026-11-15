@@ -46,6 +46,7 @@ use core::time::Duration;
 use poly_personality_linux::LinuxKernel;
 use poly_personality_linux::errno::Errno;
 use poly_personality_linux::fileio::NewFd;
+use poly_personality_linux::net::ipopt::{self, Scope};
 use poly_personality_linux::net::netlink::Interfaces;
 use poly_personality_linux::net::{
     Family, Kind, LinuxNet, OptName, OptValue, RecvMsg, RecvReq, SendMsg, Shutdown, SockAddr, SockOpt, SockType, Ucred,
@@ -364,10 +365,19 @@ impl Thread<'_> {
                 }
             }
         }
+        // IP_PKTINFO, IP_RECVTOS, IP_RECVTTL and their IPv6 kin: what the
+        // datagram arrived with, as the socket's options ask.
+        let anc = if stream {
+            Default::default()
+        } else {
+            let m = first.meta;
+            s.state().ip.recv_anc(m.dst, m.ifindex, m.tos, m.ttl)
+        };
         Ok(RecvMsg {
             len,
             full_len: if stream { len } else { first.full_len },
             from: (!stream).then(|| inet_addr(first.from)),
+            anc,
             ..RecvMsg::default()
         })
     }
@@ -780,6 +790,7 @@ impl LinuxNet for Thread<'_> {
                     rights,
                     rights_truncated: truncated,
                     creds: got.creds.map(|c| Ucred { pid: c.pid, uid: c.uid, gid: c.gid }),
+                    anc: Default::default(),
                 })
             }
             Sock::Netlink(n) => {
@@ -924,6 +935,19 @@ impl LinuxNet for Thread<'_> {
     }
 }
 
+/// Whether an option of `scope` applies to Internet socket `s` (IP options
+/// to `AF_INET` ones, IPv6 options to `AF_INET6`, TCP options to TCP).
+fn scope_ok(s: &InetSocket, scope: Scope) -> bool {
+    match scope {
+        Scope::V4 => s.domain == Domain::Inet,
+        Scope::V6 => s.domain == Domain::Inet6,
+        Scope::Tcp => s.protocol == Protocol::Tcp,
+    }
+}
+
+/// setsockopt(2) on an Internet socket: `ENOPROTOOPT` for an option its
+/// family or protocol does not have. Options the stack does not act on
+/// ([`ipopt`]) are stored and reported back.
 fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {
     let tcp = s.protocol == Protocol::Tcp;
     let v4 = s.domain == Domain::Inet;
@@ -978,6 +1002,16 @@ fn inet_setsockopt(s: &InetSocket, opt: SockOpt) -> Result<(), Errno> {
             let (ttl, _) = s.with(|st, h| st.ip_options(h)).map_err(nerr)?;
             s.with(|st, h| st.set_ip_options(h, ttl, tos)).map_err(nerr)?;
         }
+        SockOpt::Stored(o, v) if scope_ok(s, o.scope()) => s.update(|st| st.ip.set(o, v)),
+        SockOpt::Ipv6Tclass(tc) if !v4 => {
+            let (ttl, _) = s.with(|st, h| st.ip_options(h)).map_err(nerr)?;
+            s.with(|st, h| st.set_ip_options(h, ttl, tc)).map_err(nerr)?;
+        }
+        SockOpt::IpMulticastIf { addr, ifindex } if v4 => s.update(|st| st.ip.multicast_if = (addr, ifindex)),
+        SockOpt::AddMembership(m) if m.group.is_ipv4() == v4 => s.memberships(|l| ipopt::join(l, m))?,
+        SockOpt::DropMembership(m) if m.group.is_ipv4() == v4 => s.memberships(|l| ipopt::leave(l, &m))?,
+        SockOpt::Ipv6PktInfo { addr, ifindex } if !v4 => s.update(|st| st.ip.pktinfo6 = (addr, ifindex)),
+        SockOpt::TcpCongestion(c) if tcp => s.update(|st| st.ip.congestion = c),
         SockOpt::Ipv6V6Only(v) if !v4 => s.update(|st| st.v6only = v),
         SockOpt::IpRecvErr(v) if v4 => s.update(|st| st.recverr = v),
         SockOpt::Ipv6RecvErr(v) if !v4 => s.update(|st| st.recverr = v),
@@ -1043,6 +1077,25 @@ fn inet_getsockopt(s: &InetSocket, name: OptName) -> Result<OptValue, Errno> {
             OptValue::Int(i32::from(ttl.unwrap_or_else(|| s.with(|x, _| x.default_ttl()))))
         }
         OptName::IpTos if v4 => OptValue::Int(i32::from(s.with(|x, h| x.ip_options(h)).map_err(nerr)?.1)),
+        OptName::Stored(o) if scope_ok(s, o.scope()) => OptValue::Int(st.ip.get(o)),
+        OptName::Ipv6Tclass if !v4 => OptValue::Int(i32::from(s.with(|x, h| x.ip_options(h)).map_err(nerr)?.1)),
+        OptName::IpMulticastIf if v4 => OptValue::bytes(&st.ip.multicast_if.0.octets()),
+        OptName::IpMtu if v4 => {
+            OptValue::Int(s.with(|x, h| x.path_mtu_to_peer(h)).map_err(nerr)?.min(i32::MAX as usize) as i32)
+        }
+        OptName::Ipv6PktInfo if !v4 => {
+            let (addr, ifindex) = st.ip.pktinfo6;
+            let mut b = [0u8; 20];
+            b[..16].copy_from_slice(&addr.octets());
+            b[16..].copy_from_slice(&ifindex.to_le_bytes());
+            OptValue::bytes(&b)
+        }
+        OptName::TcpCongestion if tcp => {
+            let name = st.ip.congestion.name();
+            let mut b = [0u8; 20];
+            b[..name.len()].copy_from_slice(name.as_bytes());
+            OptValue::bytes(&b[..name.len() + 1])
+        }
         OptName::Ipv6V6Only if !v4 => bool_opt(st.v6only),
         OptName::IpRecvErr if v4 => bool_opt(st.recverr),
         OptName::Ipv6RecvErr if !v4 => bool_opt(st.recverr),

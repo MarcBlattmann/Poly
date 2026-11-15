@@ -170,7 +170,9 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     if params_at == 0 || process_out == 0 || thread_out == 0 {
         return Err(STATUS_INVALID_PARAMETER);
     }
-    let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
+    // The block is in the caller's own layout (a 32-bit parent's has 4-byte pointers, ADR 0186).
+    let layout = k.with_state(|_, p, _| p.layout());
+    let params = crate::params::read_for(&layout, params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
     let name = image_nt_name(&params.image_path)?;
     let attrs =
         abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
@@ -392,6 +394,16 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     if class as u32 == PROCESS_TIMES {
         return query_process_times(k, h, buf, length, ret);
+    }
+    if class as u32 == PROCESS_WOW64_INFORMATION {
+        let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
+        let peb32 = |p: &crate::system::NtProcess| if p.wow64 { p.peb } else { 0 };
+        let own = k.with_state(|_, proc, _| (proc.pid == pid).then(|| peb32(proc)));
+        let value = match own {
+            Some(v) => v,
+            None => k.with_process(pid, |_, p, _| peb32(p)).unwrap_or(0),
+        };
+        return write_info(k, buf, length, ret, &value.to_le_bytes());
     }
     if class as u32 != PROCESS_BASIC_INFORMATION {
         return Err(STATUS_INVALID_INFO_CLASS);

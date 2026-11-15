@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "uwe_callback",
+      "exe_sha256": "1bb9063b1097eb6fa1722906c7fc3bdde8bc11e05b7288072d35a6afd3bd86ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gYSBob29rIHJlbW92ZXMgaXRzZWxmIGluIGl0cyBjYWxsYmFjawogIGZpcnN0IFVuaG9va1dpbkV2ZW50IGluIHRoZSBjYWxsYmFjayA9IDEgKGxhc3QgZXJyb3IgMCksIHNlY29uZCA9IDAKICBjYWxsYmFja3Mgb2YgdGhlIHJlbW92aW5nIGhvb2s6IDEgb2YgMyBxdWV1ZWQ7IG9mIHRoZSBjb250cm9sIGhvb2s6IDMKICAgIFtjXSAweGEwMDAgd2luPUEgb2JqPS00IGNoaWxkPTAgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFthXSAweGEwMDAgd2luPUEgb2JqPS00IGNoaWxkPTAgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFtjXSAweGEwMDEgd2luPUEgb2JqPS00IGNoaWxkPTEgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFtjXSAweGEwMDIgd2luPUEgb2JqPS00IGNoaWxkPTIgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICBhIHNlY29uZCByb3VuZCBvZiB0aHJlZSBldmVudHM6IHJlbW92aW5nIGhvb2sgMCBjb250cm9sIGhvb2sgMwogIFVuaG9va1dpbkV2ZW50KGEpIGZyb20gdGhlIHRlc3QgYWZ0ZXJ3YXJkczogMAo9PSBhIGhvb2sgcmVtb3ZlcyBhbm90aGVyIGhvb2sgaW4gaXRzIGNhbGxiYWNrCiAgVW5ob29rV2luRXZlbnQoeSkgaW4geCdzIGNhbGxiYWNrID0gMSAobGFzdCBlcnJvciA2KQogIGNhbGxiYWNrczogeCAzIHkgMSB6IDMKICAgIFt6XSAweGEwMDAgd2luPUEgb2JqPS00IGNoaWxkPTAgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt5XSAweGEwMDAgd2luPUEgb2JqPS00IGNoaWxkPTAgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt4XSAweGEwMDAgd2luPUEgb2JqPS00IGNoaWxkPTAgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt6XSAweGEwMDEgd2luPUEgb2JqPS00IGNoaWxkPTEgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt4XSAweGEwMDEgd2luPUEgb2JqPS00IGNoaWxkPTEgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt6XSAweGEwMDIgd2luPUEgb2JqPS00IGNoaWxkPTIgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICAgIFt4XSAweGEwMDIgd2luPUEgb2JqPS00IGNoaWxkPTIgZXZlbnQgdGhyZWFkIG91cnMgY2FsbGJhY2sgdGhyZWFkIG91cnMKICBVbmhvb2tXaW5FdmVudCh5KSBhZnRlcndhcmRzOiAwCj09IHJlbW92YWwgZnJvbSBhbm90aGVyIHRocmVhZAogIHdvcmtlciBmaW5pc2hlZDogMTsgVW5ob29rV2luRXZlbnQoaCkgZnJvbSBpdCA9IDAgKGxhc3QgZXJyb3IgNikKICB0aGUgaG9vayBzdGlsbCBkZWxpdmVycyBhZnRlcndhcmRzOiAzIG9mIDMgZXZlbnRzCiAgVW5ob29rV2luRXZlbnQoaCkgZnJvbSB0aGUgaW5zdGFsbGluZyB0aHJlYWQ6IDEKICBhZnRlciB0aGF0OiAwIGNhbGxiYWNrcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== a hook removes itself in its callback\n  first UnhookWinEvent in the callback = 1 (last error 0), second = 0\n  callbacks of the removing hook: 1 of 3 queued; of the control hook: 3\n    [c] 0xa000 win=A obj=-4 child=0 event thread ours callback thread ours\n    [a] 0xa000 win=A obj=-4 child=0 event thread ours callback thread ours\n    [c] 0xa001 win=A obj=-4 child=1 event thread ours callback thread ours\n    [c] 0xa002 win=A obj=-4 child=2 event thread ours callback thread ours\n  a second round of three events: removing hook 0 control hook 3\n  UnhookWinEvent(a) from the test afterwards: 0\n== a hook removes another hook in its callback\n  UnhookWinEvent(y) in x's callback = 1 (last error 6)\n  callbacks: x 3 y 1 z 3\n    [z] 0xa000 win=A obj=-4 child=0 event thread ours callback thread ours\n    [y] 0xa000 win=A obj=-4 child=0 event thread ours callback thread ours\n    [x] 0xa000 win=A obj=-4 child=0 event thread ours callback thread ours\n    [z] 0xa001 win=A obj=-4 child=1 event thread ours callback thread ours\n    [x] 0xa001 win=A obj=-4 child=1 event thread ours callback thread ours\n    [z] 0xa002 win=A obj=-4 child=2 event thread ours callback thread ours\n    [x] 0xa002 win=A obj=-4 child=2 event thread ours callback thread ours\n  UnhookWinEvent(y) afterwards: 0\n== removal from another thread\n  worker finished: 1; UnhookWinEvent(h) from it = 0 (last error 6)\n  the hook still delivers afterwards: 3 of 3 events\n  UnhookWinEvent(h) from the installing thread: 1\n  after that: 0 callbacks\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 453
+    },
+    {
+      "name": "uwe_chrome",
+      "exe_sha256": "660e9b6f3250d8b25164cb8dda8690d1477447384f8a255c00eb671617d6299a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93cyBidWlsdCBhbmQgc2hvd247IGNhbGxiYWNrcyB3ZXJlIHJlY29yZGVkOiAxCj09IG9uZSBldmVudCBvZiBldmVyeSByYW5nZSBpcyBub3RpZmllZCBhZnRlciBlYWNoIHJlbW92YWwgKHdpbmRvdyBtYWluLCBPQkpJRF9DTElFTlQpCiAgY2FsbGJhY2tzIHBlciBob29rIGFmdGVyIDAgcmVtb3ZhbHM6IGE9MSBiPTEgYz0xIGQ9MSBlPTEgZj0xIGc9MSBoPTEgaT0xIGo9MSBrPTEgCnJlbW92aW5nIGhvb2sgYTogMSAobGFzdCBlcnJvciAwKQogIGNhbGxiYWNrcyBwZXIgaG9vayBhZnRlciAxIHJlbW92YWxzOiBhPTAgYj0xIGM9MSBkPTEgZT0xIGY9MSBnPTEgaD0xIGk9MSBqPTEgaz0xIApyZW1vdmluZyBob29rIGI6IDEgKGxhc3QgZXJyb3IgMCkKICBjYWxsYmFja3MgcGVyIGhvb2sgYWZ0ZXIgMiByZW1vdmFsczogYT0wIGI9MCBjPTEgZD0xIGU9MSBmPTEgZz0xIGg9MSBpPTEgaj0xIGs9MSAKcmVtb3ZpbmcgaG9vayBjOiAxIChsYXN0IGVycm9yIDApCiAgY2FsbGJhY2tzIHBlciBob29rIGFmdGVyIDMgcmVtb3ZhbHM6IGE9MCBiPTAgYz0wIGQ9MSBlPTEgZj0xIGc9MSBoPTEgaT0xIGo9MSBrPTEgCnJlbW92aW5nIGhvb2sgZDogMSAobGFzdCBlcnJvciAwKQogIGNhbGxiYWNrcyBwZXIgaG9vayBhZnRlciA0IHJlbW92YWxzOiBhPTAgYj0wIGM9MCBkPTAgZT0xIGY9MSBnPTEgaD0xIGk9MSBqPTEgaz0xIApyZW1vdmluZyBob29rIGU6IDEgKGxhc3QgZXJyb3IgMCkKICBjYWxsYmFja3MgcGVyIGhvb2sgYWZ0ZXIgNSByZW1vdmFsczogYT0wIGI9MCBjPTAgZD0wIGU9MCBmPTEgZz0xIGg9MSBpPTEgaj0xIGs9MSAKcmVtb3ZpbmcgaG9vayBmOiAxIChsYXN0IGVycm9yIDApCiAgY2FsbGJhY2tzIHBlciBob29rIGFmdGVyIDYgcmVtb3ZhbHM6IGE9MCBiPTAgYz0wIGQ9MCBlPTAgZj0wIGc9MSBoPTEgaT0xIGo9MSBrPTEgCnJlbW92aW5nIGhvb2sgZzogMSAobGFzdCBlcnJvciAwKQogIGNhbGxiYWNrcyBwZXIgaG9vayBhZnRlciA3IHJlbW92YWxzOiBhPTAgYj0wIGM9MCBkPTAgZT0wIGY9MCBnPTAgaD0xIGk9MSBqPTEgaz0xIApyZW1vdmluZyBob29rIGg6IDEgKGxhc3QgZXJyb3IgMCkKICBjYWxsYmFja3MgcGVyIGhvb2sgYWZ0ZXIgOCByZW1vdmFsczogYT0wIGI9MCBjPTAgZD0wIGU9MCBmPTAgZz0wIGg9MCBpPTEgaj0xIGs9MSAKcmVtb3ZpbmcgaG9vayBpOiAxIChsYXN0IGVycm9yIDApCiAgY2FsbGJhY2tzIHBlciBob29rIGFmdGVyIDkgcmVtb3ZhbHM6IGE9MCBiPTAgYz0wIGQ9MCBlPTAgZj0wIGc9MCBoPTAgaT0wIGo9MSBrPTEgCnJlbW92aW5nIGhvb2sgajogMSAobGFzdCBlcnJvciAwKQogIGNhbGxiYWNrcyBwZXIgaG9vayBhZnRlciAxMCByZW1vdmFsczogYT0wIGI9MCBjPTAgZD0wIGU9MCBmPTAgZz0wIGg9MCBpPTAgaj0wIGs9MSAKcmVtb3ZpbmcgaG9vayBrOiAxIChsYXN0IGVycm9yIDApCiAgY2FsbGJhY2tzIHBlciBob29rIGFmdGVyIDExIHJlbW92YWxzOiBhPTAgYj0wIGM9MCBkPTAgZT0wIGY9MCBnPTAgaD0wIGk9MCBqPTAgaz0wIAo9PSB0aGUgd2luZG93cyBhcmUgZGVzdHJveWVkLCB0aGUgaGFuZGxlcyBhcmUgcmVtb3ZlZCBhIHNlY29uZCB0aW1lCiAgY2FsbGJhY2tzIGFmdGVyIHRoZSBkZXN0cnVjdGlvbiAobm8gaG9va3MgbGVmdCk6IDAKICByZW1vdmVkIGEgc2Vjb25kIHRpbWU6IDAgKGxhc3QgZXJyb3Igb2YgdGhlIGxhc3QgY2FsbCA2KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "windows built and shown; callbacks were recorded: 1\n== one event of every range is notified after each removal (window main, OBJID_CLIENT)\n  callbacks per hook after 0 removals: a=1 b=1 c=1 d=1 e=1 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook a: 1 (last error 0)\n  callbacks per hook after 1 removals: a=0 b=1 c=1 d=1 e=1 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook b: 1 (last error 0)\n  callbacks per hook after 2 removals: a=0 b=0 c=1 d=1 e=1 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook c: 1 (last error 0)\n  callbacks per hook after 3 removals: a=0 b=0 c=0 d=1 e=1 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook d: 1 (last error 0)\n  callbacks per hook after 4 removals: a=0 b=0 c=0 d=0 e=1 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook e: 1 (last error 0)\n  callbacks per hook after 5 removals: a=0 b=0 c=0 d=0 e=0 f=1 g=1 h=1 i=1 j=1 k=1 \nremoving hook f: 1 (last error 0)\n  callbacks per hook after 6 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=1 h=1 i=1 j=1 k=1 \nremoving hook g: 1 (last error 0)\n  callbacks per hook after 7 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=0 h=1 i=1 j=1 k=1 \nremoving hook h: 1 (last error 0)\n  callbacks per hook after 8 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=0 h=0 i=1 j=1 k=1 \nremoving hook i: 1 (last error 0)\n  callbacks per hook after 9 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=0 h=0 i=0 j=1 k=1 \nremoving hook j: 1 (last error 0)\n  callbacks per hook after 10 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=0 h=0 i=0 j=0 k=1 \nremoving hook k: 1 (last error 0)\n  callbacks per hook after 11 removals: a=0 b=0 c=0 d=0 e=0 f=0 g=0 h=0 i=0 j=0 k=0 \n== the windows are destroyed, the handles are removed a second time\n  callbacks after the destruction (no hooks left): 0\n  removed a second time: 0 (last error of the last call 6)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 881
+    }
+  ]
+}

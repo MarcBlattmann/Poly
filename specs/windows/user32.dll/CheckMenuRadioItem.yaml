@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/CheckMenuRadioItem.yaml
+id: windows/api/user32.dll/CheckMenuRadioItem
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Checks one item of a range with a radio mark and unchecks the others of the range; the range and the item are positions (MF_BYPOSITION) or ids (MF_BYCOMMAND).
+interface:
+  signature: "BOOL CheckMenuRadioItem(HMENU hMenu, UINT idFirst, UINT idLast, UINT idCheck, UINT uFlags)"
+rules:
+  effect: "the item idCheck gets state MF_CHECKED and type MFT_RADIOCHECK (0x200); every other item of the range loses the check bit; the type of those stays as it was (an item that was checked as a radio item before keeps type 0x200, the others keep 0); items outside the range, separators included, are not changed"
+  range_by_position: "positions idFirst..idLast; a range that runs past the end (1..99) is clipped to the existing items and still returns TRUE; an item position that does not exist (as idCheck or as both ends) gives FALSE with 1456"
+  range_by_command: "the first and the last id are looked up with the rules of the by-command search of the other menu functions (sub menus included): in a menu whose sub menu holds ids 30 and 31 the range 30..31 asked of the parent checks item 31 in the sub menu; ids that are not found: FALSE with 1456"
+  check_outside: "idCheck outside the range: FALSE, no error code, but the other items of the range are unchecked (the radio mark disappears)"
+  reversed_range: "idFirst > idLast: FALSE with 1456, nothing changed"
+  two_groups: "two ranges in one menu keep one checked item each; an id that is only in a sub menu cannot be used through the parent"
+  separators_and_popups: "a separator or popup item in the range loses nothing and gains nothing (a separator keeps type 0x800 and state 3)"
+  return_value: "TRUE when the range was applied"
+errors:
+  invalid_menu: "NULL or made-up menu: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Drawing of the radio mark.

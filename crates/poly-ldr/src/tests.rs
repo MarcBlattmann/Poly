@@ -25,7 +25,13 @@ struct Fake {
     regions: BTreeMap<u64, Region>,
     next_any: u64,
     next_heap: u64,
+    /// Where the loader's heap starts: what `images` and `heap_blocks` split at.
+    heap_from: u64,
     tried: Vec<String>,
+    /// `open_image` maps DLLs as the kernel maps an image section view (ADR 0188).
+    views: bool,
+    /// Views `unmap_image` unmapped.
+    unmapped: Vec<u64>,
 }
 
 fn s(v: &[u16]) -> String {
@@ -34,7 +40,12 @@ fn s(v: &[u16]) -> String {
 
 impl Fake {
     fn new() -> Fake {
-        Fake { next_any: 0x7_0000_0000, next_heap: 0x10_0000_0000, ..Fake::default() }
+        Fake { next_any: 0x7_0000_0000, next_heap: 0x10_0000_0000, heap_from: 0x10_0000_0000, ..Fake::default() }
+    }
+
+    /// An address space of a 32-bit process: everything below 4 GiB.
+    fn new32() -> Fake {
+        Fake { next_any: 0x6000_0000, next_heap: 0x8000_0000, heap_from: 0x8000_0000, ..Fake::default() }
     }
 
     fn file(&mut self, dos_path: &str, bytes: Vec<u8>) {
@@ -69,15 +80,36 @@ impl Fake {
     }
 
     fn images(&self) -> usize {
-        self.regions.keys().filter(|&&b| b < 0x10_0000_0000).count()
+        self.regions.keys().filter(|&&b| b < self.heap_from).count()
     }
 
     fn heap_blocks(&self) -> usize {
-        self.regions.keys().filter(|&&b| b >= 0x10_0000_0000).count()
+        self.regions.keys().filter(|&&b| b >= self.heap_from).count()
     }
 }
 
 impl Process for Fake {
+    fn open_image(&mut self, nt_path: &[u16]) -> Result<ImageFile, NtStatus> {
+        let bytes = self.read_file(nt_path)?;
+        if !self.views {
+            return Ok(ImageFile::Bytes(bytes));
+        }
+        // The kernel: at the preferred base if free, else anywhere, not relocated; read-only.
+        let pe = poly_pe::Pe::parse(&bytes).unwrap();
+        let plan = pe.load_plan().unwrap();
+        let size = u64::from(plan.size_of_image).div_ceil(PAGE_SIZE) * PAGE_SIZE;
+        let relocate = self.overlaps(plan.image_base, size);
+        let base = self.allocate(if relocate { None } else { Some(plan.image_base) }, size).unwrap();
+        plan.map_into(&mut self.regions.get_mut(&base).unwrap().data).unwrap();
+        self.protect(base, size, page::READONLY).unwrap();
+        Ok(ImageFile::Mapped { base, size, relocate })
+    }
+
+    fn unmap_image(&mut self, base: u64) {
+        assert!(self.regions.remove(&base).is_some(), "unmapped {base:#x}, which is not a view");
+        self.unmapped.push(base);
+    }
+
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
         let key = s(nt_path).to_lowercase();
         self.tried.push(key.clone());
@@ -221,7 +253,7 @@ fn world(exe_image: &[u8]) -> World {
     p.insert(PEB, 0x1000);
     p.insert(TEB, 0x2000);
     p.insert(TEB2, 0x2000);
-    let mut l = Loader::new(Config { dirs: dirs() });
+    let mut l = Loader::new(Config { dirs: dirs(), ..Config::default() });
     l.init_ldr_data(&mut p, PEB).unwrap();
     let eb = p.map_image(exe_image);
     let nb = p.map_image(&ntdll_image());
@@ -862,3 +894,49 @@ fn peb_ldr_data_says_how_big_it_is_and_that_it_is_initialised() {
     assert_eq!(read_u32(&mut w.p, ldr).unwrap(), 0x58, "Length is sizeof(PEB_LDR_DATA)");
     assert_eq!(w.p.memory(ldr + 4, 1).unwrap(), &[1], "Initialized");
 }
+
+/// A DLL the kernel mapped as an image view (ADR 0188) loads like one the loader laid out: at its
+/// base, or relocated in place when the kernel put it elsewhere; bound, protected, and unmapped
+/// with the module (never freed as an allocation).
+#[test]
+fn dlls_mapped_as_image_views_load_like_copied_ones() {
+    let mut d = dll("v.dll", EXE_BASE, named(&[("Get", 0x1010)]), vec![imports("lib.dll", &[Sym::name("Lib")])]);
+    let mut data = vec![0u8; 16];
+    data[..8].copy_from_slice(&(EXE_BASE + 0x1010).to_le_bytes());
+    d.sections.push(Section::new(".data", data, crate::builder::DATA));
+    d.relocations.push(0x2000);
+    let lib = dll("lib.dll", 0x1_8000_0000, named(&[("Lib", 0x1010)]), vec![]);
+    let mut w = world(&exe(vec![]).write());
+    w.p.views = true;
+    w.l.process_init(&mut w.p, w.exe, TEB).unwrap();
+    w.p.file("C:\\app\\v.dll", d.write());
+    w.p.file("C:\\app\\lib.dll", lib.write());
+    let (_, base, _) = w.l.load(&mut w.p, &wide("v"), None).unwrap();
+    // The executable sits at v.dll's base: the view moved, the loader relocated it.
+    assert_ne!(base, EXE_BASE);
+    assert_eq!(read_u64(&mut w.p, base + 0x2000).unwrap(), base + 0x1010, "the pointer moved with the image");
+    // lib.dll went to its preferred base and was not touched.
+    let lb = base_of(&w, "lib.dll");
+    assert_eq!(lb, 0x1_8000_0000);
+    // The import is bound and the protections are the sections' again.
+    let iat_rva = u64::from(d.layout().iat[0][0]);
+    assert_eq!(read_u64(&mut w.p, base + iat_rva).unwrap(), lb + 0x1010);
+    assert_eq!(w.p.prot_at(base + 0x1000), page::EXECUTE_READ);
+    assert_eq!(w.l.get_procedure(&mut w.p, base, Some(b"Get"), 0).unwrap().0, base + 0x1010);
+    // Unloading unmaps both views.
+    let u = w.l.unload(base).unwrap();
+    w.l.finish_unload(&mut w.p, u);
+    let mut gone = w.p.unmapped.clone();
+    gone.sort();
+    let mut want = vec![base, lb];
+    want.sort();
+    assert_eq!(gone, want);
+    // A view that cannot be bound (a missing import) goes again.
+    let bad = dll("bad.dll", 0x1_9000_0000, vec![], vec![imports("nowhere.dll", &[Sym::name("X")])]);
+    w.p.file("C:\\app\\bad.dll", bad.write());
+    w.p.unmapped.clear();
+    assert_eq!(w.l.load(&mut w.p, &wide("bad"), None).unwrap_err(), STATUS_DLL_NOT_FOUND);
+    assert_eq!(w.p.unmapped, [0x1_9000_0000]);
+}
+
+mod x86;

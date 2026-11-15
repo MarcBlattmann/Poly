@@ -75,6 +75,10 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
+    /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
+    pub ntdll32: &'static [u8],
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -112,6 +116,7 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            ntdll32: &[],
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -244,9 +249,18 @@ pub struct NtProcess {
     /// The file its executable was started from, as `(device name, path below the volume)`
     /// (set by the kernel before the process starts).
     pub image_name: Option<(Vec<u16>, Vec<u16>)>,
+    /// A 32-bit process (WOW64, ADR 0186): its executable is a PE32 image, it runs Poly's i686
+    /// `ntdll`, its address space ends at 2 or 4 GiB, its PEB, TEBs and parameters have the
+    /// 32-bit layout and its system calls go through [`crate::wow64`].
+    pub wow64: bool,
 }
 
 impl NtProcess {
+    /// Where its PEB, TEBs and parameters keep their fields.
+    pub fn layout(&self) -> poly_rtl::layout::Layout {
+        if self.wow64 { poly_rtl::layout::X86 } else { poly_rtl::layout::X64 }
+    }
+
     pub fn new(pid: ProcessId) -> NtProcess {
         NtProcess {
             pid,
@@ -266,6 +280,7 @@ impl NtProcess {
             exception_dispatcher: 0,
             win32k_disabled: false,
             image_name: None,
+            wow64: false,
         }
     }
 

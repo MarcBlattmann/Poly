@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "tue_basic",
+      "exe_sha256": "6999c86a82105d7820bd3e73e14f192ea9682e1ff289075f3d071127defc92c1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gbGV0dGVycywgbm8gbW9kaWZpZXIKICBwOiByZXQ9MSAncCcKICBvOiByZXQ9MSAnbycKICBsOiByZXQ9MSAnbCcKICB5OiByZXQ9MSAneScKICBBOiByZXQ9MSAnYScKPT0gbGV0dGVycyB3aXRoIFNoaWZ0IChWS19TSElGVCAweDgwKQogIHA6IHJldD0xICdQJwogIG86IHJldD0xICdPJwogIGw6IHJldD0xICdMJwogIHk6IHJldD0xICdZJwogIEE6IHJldD0xICdBJwo9PSBsZXR0ZXJzIHdpdGggb25seSBWS19MU0hJRlQgMHg4MAogIHA6IHJldD0xICdwJwogIG86IHJldD0xICdvJwogIGw6IHJldD0xICdsJwogIHk6IHJldD0xICd5JwogIEE6IHJldD0xICdhJwo9PSBsZXR0ZXJzIHdpdGggQ2Fwc0xvY2sgdG9nZ2xlZCAoVktfQ0FQSVRBTCA9IDEpLCBhbmQgd2l0aCBTaGlmdCB0b28KICBwOiByZXQ9MSAnUCcKICAgIHdpdGggU2hpZnQ6IHJldD0xICdwJwogIG86IHJldD0xICdPJwogICAgd2l0aCBTaGlmdDogcmV0PTEgJ28nCiAgbDogcmV0PTEgJ0wnCiAgICB3aXRoIFNoaWZ0OiByZXQ9MSAnbCcKICB5OiByZXQ9MSAnWScKICAgIHdpdGggU2hpZnQ6IHJldD0xICd5JwogIEE6IHJldD0xICdBJwogICAgd2l0aCBTaGlmdDogcmV0PTEgJ2EnCj09IGxldHRlcnMgd2l0aCBDdHJsIChWS19DT05UUk9MIDB4ODApLCB3aXRoIEFsdCAoVktfTUVOVSAweDgwKQogIHA6IHJldD0xIFUrMDAxMAogICAgd2l0aCBBbHQ6IHJldD0xICdwJwogIG86IHJldD0xIFUrMDAwRgogICAgd2l0aCBBbHQ6IHJldD0xICdvJwogIGw6IHJldD0xIFUrMDAwQwogICAgd2l0aCBBbHQ6IHJldD0xICdsJwogIHk6IHJldD0xIFUrMDAxOQogICAgd2l0aCBBbHQ6IHJldD0xICd5JwogIEE6IHJldD0xIFUrMDAwMQogICAgd2l0aCBBbHQ6IHJldD0xICdhJwo9PSBkaWdpdHMgdW5zaGlmdGVkLCBhbmQgd2l0aCBTaGlmdCBhcyBhIGNsYXNzCiAgMDogcmV0PTEgJzAnCiAgICB3aXRoIFNoaWZ0OiByZXQ9MSBBU0NJST0xCiAgMTogcmV0PTEgJzEnCiAgICB3aXRoIFNoaWZ0OiByZXQ9MSBBU0NJST0xCiAgNTogcmV0PTEgJzUnCiAgICB3aXRoIFNoaWZ0OiByZXQ9MSBBU0NJST0xCiAgOTogcmV0PTEgJzknCiAgICB3aXRoIFNoaWZ0OiByZXQ9MSBBU0NJST0xCj09IGtleXMgd2l0aCBhIGNoYXJhY3RlciBvZiB0aGVpciBvd24KICBTcGFjZTogcmV0PTEgJyAnCiAgUmV0dXJuOiByZXQ9MSBVKzAwMEQKICBUYWI6IHJldD0xIFUrMDAwOQogIEJhY2s6IHJldD0xIFUrMDAwOAogIEVzY2FwZTogcmV0PTEgVSswMDFCCiAgRGVsZXRlOiByZXQ9MCBidWZmZXJbMF0gTlVMCj09IGtleXMgd2l0aG91dCBhIGNoYXJhY3RlcgogIFNoaWZ0OiByZXQ9MCBidWZmZXJbMF0gTlVMCiAgQ29udHJvbDogcmV0PTAgYnVmZmVyWzBdIE5VTAogIEYxOiByZXQ9MCBidWZmZXJbMF0gTlVMCiAgTGVmdDogcmV0PTAgYnVmZmVyWzBdIE5VTAogIENhcHNMb2NrOiByZXQ9MCBidWZmZXJbMF0gTlVMCiAgTFdpbjogcmV0PTAgYnVmZmVyWzBdIE5VTAo9PSBudW1wYWQ6IE51bXBhZDUsIEFkZCwgTXVsdGlwbHksIERpdmlkZTsgTnVtcGFkNSB3aXRoIE51bUxvY2sgdG9nZ2xlZAogIE51bXBhZDU6IHJldD0xICc1JwogIEFkZDogcmV0PTEgJysnCiAgTXVsdGlwbHk6IHJldD0xICcqJwogIERpdmlkZTogcmV0PTEgJy8nCiAgTnVtcGFkNSB3aXRoIE51bUxvY2s6IHJldD0xICc1JwogIExlZnQgd2l0aCBOdW1Mb2NrOiByZXQ9MCBidWZmZXJbMF0gTlVMCj09IGZsYWdzIDAsIDEsIDQgb24gcCBhbmQgb24gUmV0dXJuCiAgcCBmbGFncyAwOiByZXQ9MSAncCcKICBwIGZsYWdzIDE6IHJldD0xICdwJwogIHAgZmxhZ3MgNDogcmV0PTEgJ3AnCiAgUmV0dXJuIGZsYWdzIDA6IHJldD0xIFUrMDAwRAogIFJldHVybiBmbGFncyAxOiByZXQ9MSBVKzAwMEQKICBSZXR1cm4gZmxhZ3MgNDogcmV0PTEgVSswMDBECj09IGJ1ZmZlciBzaXplcyBmb3IgcCBhbmQgUmV0dXJuCiAgcCBzaXplIDA6IHJldD0wIGJ1ZmZlclswXSBOVUwKICBwIHNpemUgMTogcmV0PTEgJ3AnCiAgcCBzaXplIDI6IHJldD0xICdwJwogIHAgc2l6ZSA0OiByZXQ9MSAncCcKICBwIHNpemUgODogcmV0PTEgJ3AnCiAgUmV0dXJuIHNpemUgMDogcmV0PTAgYnVmZmVyWzBdIE5VTAogIFJldHVybiBzaXplIDE6IHJldD0xIFUrMDAwRAogIFJldHVybiBzaXplIDI6IHJldD0xIFUrMDAwRAogIFJldHVybiBzaXplIDQ6IHJldD0xIFUrMDAwRAogIFJldHVybiBzaXplIDg6IHJldD0xIFUrMDAwRAo9PSBzY2FuIGNvZGVzIGZvciBwCiAgc2NhbiBjb2RlIG9mIHA6IHJldD0xICdwJwogIHNjYW4gY29kZSAwOiByZXQ9MSAncCcKICBzY2FuIGNvZGUgd2l0aCBiaXQgNyAodXApOiByZXQ9MSAncCcKICBzY2FuIGNvZGUgd2l0aCBiaXQgMTUgKHVwKTogcmV0PTAgYnVmZmVyWzBdIE5VTAo9PSB2aXJ0dWFsIGtleXMgb3V0IG9mIHJhbmdlCiAgMDogcmV0PTAgYnVmZmVyWzBdIE5VTAogIDB4RkY6IHJldD0wIGJ1ZmZlclswXSBOVUwKICAweDEwMDogcmV0PTAgYnVmZmVyWzBdIE5VTAogIDB4RkZGRkZGRkY6IHJldD0wIGJ1ZmZlclswXSBOVUwKPT0gbGF5b3V0cwogIE5VTEwgbGF5b3V0OiByZXQ9MSAncCcKICBtYWRlLXVwIGxheW91dCAweDEyMzQ1Njc4OiByZXQ9MCBidWZmZXJbMF0gTlVMCiAgdGhlIHRocmVhZCdzIGxheW91dCBhZ2FpbjogcmV0PTEgJ3AnCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== letters, no modifier\n  p: ret=1 'p'\n  o: ret=1 'o'\n  l: ret=1 'l'\n  y: ret=1 'y'\n  A: ret=1 'a'\n== letters with Shift (VK_SHIFT 0x80)\n  p: ret=1 'P'\n  o: ret=1 'O'\n  l: ret=1 'L'\n  y: ret=1 'Y'\n  A: ret=1 'A'\n== letters with only VK_LSHIFT 0x80\n  p: ret=1 'p'\n  o: ret=1 'o'\n  l: ret=1 'l'\n  y: ret=1 'y'\n  A: ret=1 'a'\n== letters with CapsLock toggled (VK_CAPITAL = 1), and with Shift too\n  p: ret=1 'P'\n    with Shift: ret=1 'p'\n  o: ret=1 'O'\n    with Shift: ret=1 'o'\n  l: ret=1 'L'\n    with Shift: ret=1 'l'\n  y: ret=1 'Y'\n    with Shift: ret=1 'y'\n  A: ret=1 'A'\n    with Shift: ret=1 'a'\n== letters with Ctrl (VK_CONTROL 0x80), with Alt (VK_MENU 0x80)\n  p: ret=1 U+0010\n    with Alt: ret=1 'p'\n  o: ret=1 U+000F\n    with Alt: ret=1 'o'\n  l: ret=1 U+000C\n    with Alt: ret=1 'l'\n  y: ret=1 U+0019\n    with Alt: ret=1 'y'\n  A: ret=1 U+0001\n    with Alt: ret=1 'a'\n== digits unshifted, and with Shift as a class\n  0: ret=1 '0'\n    with Shift: ret=1 ASCII=1\n  1: ret=1 '1'\n    with Shift: ret=1 ASCII=1\n  5: ret=1 '5'\n    with Shift: ret=1 ASCII=1\n  9: ret=1 '9'\n    with Shift: ret=1 ASCII=1\n== keys with a character of their own\n  Space: ret=1 ' '\n  Return: ret=1 U+000D\n  Tab: ret=1 U+0009\n  Back: ret=1 U+0008\n  Escape: ret=1 U+001B\n  Delete: ret=0 buffer[0] NUL\n== keys without a character\n  Shift: ret=0 buffer[0] NUL\n  Control: ret=0 buffer[0] NUL\n  F1: ret=0 buffer[0] NUL\n  Left: ret=0 buffer[0] NUL\n  CapsLock: ret=0 buffer[0] NUL\n  LWin: ret=0 buffer[0] NUL\n== numpad: Numpad5, Add, Multiply, Divide; Numpad5 with NumLock toggled\n  Numpad5: ret=1 '5'\n  Add: ret=1 '+'\n  Multiply: ret=1 '*'\n  Divide: ret=1 '/'\n  Numpad5 with NumLock: ret=1 '5'\n  Left with NumLock: ret=0 buffer[0] NUL\n== flags 0, 1, 4 on p and on Return\n  p flags 0: ret=1 'p'\n  p flags 1: ret=1 'p'\n  p flags 4: ret=1 'p'\n  Return flags 0: ret=1 U+000D\n  Return flags 1: ret=1 U+000D\n  Return flags 4: ret=1 U+000D\n== buffer sizes for p and Return\n  p size 0: ret=0 buffer[0] NUL\n  p size 1: ret=1 'p'\n  p size 2: ret=1 'p'\n  p size 4: ret=1 'p'\n  p size 8: ret=1 'p'\n  Return size 0: ret=0 buffer[0] NUL\n  Return size 1: ret=1 U+000D\n  Return size 2: ret=1 U+000D\n  Return size 4: ret=1 U+000D\n  Return size 8: ret=1 U+000D\n== scan codes for p\n  scan code of p: ret=1 'p'\n  scan code 0: ret=1 'p'\n  scan code with bit 7 (up): ret=1 'p'\n  scan code with bit 15 (up): ret=0 buffer[0] NUL\n== virtual keys out of range\n  0: ret=0 buffer[0] NUL\n  0xFF: ret=0 buffer[0] NUL\n  0x100: ret=0 buffer[0] NUL\n  0xFFFFFFFF: ret=0 buffer[0] NUL\n== layouts\n  NULL layout: ret=1 'p'\n  made-up layout 0x12345678: ret=0 buffer[0] NUL\n  the thread's layout again: ret=1 'p'\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "tue_dead",
+      "exe_sha256": "6b747f3216cdfa3741b2af2cba883f42549d1d74d1513f35bcde8ac6689edf70",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBkZWFkIGtleSB3YXMgZm91bmQ6IDEKcmVzdWx0cyBvZiAyIG9yIG1vcmU6IDAKZmlyc3QgZGVhZCBrZXk6IHdpdGggc3RhdGUgIm5vIG1vZGlmaWVyIjogcmV0PS0xIGNoYXI9J14nCnNlY29uZCBhbmQgdGhpcmQgY2FsbDogcmV0PS0xIGFuZCAtMSwgc2FtZSBjaGFyYWN0ZXI6IDEKYnVmZmVyIG9mIDA6IHJldD0wIGZpcnN0IHdyaXR0ZW4KYnVmZmVyIG9mIDE6IHJldD0tMSBmaXJzdCB3cml0dGVuCmJ1ZmZlciBvZiAyOiByZXQ9LTEgZmlyc3Qgd3JpdHRlbgphIHJpZ2h0IGFmdGVyIHRoZSBkZWFkIGtleTogcmV0PTEgJ2EnLCB0aGUgc2FtZSBhcyBiZWZvcmU6IDEKU3BhY2UgcmlnaHQgYWZ0ZXIgdGhlIGRlYWQga2V5OiByZXQ9MSAnICcsIHRoZSBzYW1lIGFzIGJlZm9yZTogMQphIGFmdGVyIHRoZSB3aG9sZSBzY2FuOiByZXQ9MSAnYScsIHRoZSBzYW1lIGFzIGJlZm9yZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a dead key was found: 1\nresults of 2 or more: 0\nfirst dead key: with state \"no modifier\": ret=-1 char='^'\nsecond and third call: ret=-1 and -1, same character: 1\nbuffer of 0: ret=0 first written\nbuffer of 1: ret=-1 first written\nbuffer of 2: ret=-1 first written\na right after the dead key: ret=1 'a', the same as before: 1\nSpace right after the dead key: ret=1 ' ', the same as before: 1\na after the whole scan: ret=1 'a', the same as before: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

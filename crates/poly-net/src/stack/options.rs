@@ -64,6 +64,17 @@ impl Stack {
         })
     }
 
+    /// `IP_MTU` (ip(7)): the path MTU towards the peer of a connected
+    /// socket; `ENOTCONN` for one that is not.
+    pub fn path_mtu_to_peer(&self, h: SocketHandle) -> Result<usize, Errno> {
+        let peer = match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) if t.state != TcpState::Closed && t.state != TcpState::Listen => Some(t.remote),
+            Sock::Dgram(s) => s.remote,
+            Sock::Tcp(_) => None,
+        };
+        peer.map(|p| self.path_mtu(p.ip())).ok_or(Errno::ENOTCONN)
+    }
+
     /// `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, `TCP_KEEPCNT`: the keepalive
     /// timing of one TCP socket (`None` leaves a value alone). A running
     /// keepalive timer starts over with the new idle time.

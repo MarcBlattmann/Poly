@@ -243,6 +243,10 @@ unsafe fn files() {
         check(nl2 > 0 && fin[0] == u16::from(b'\\') && fin[1] != u16::from(b'\\'));
         check(GetFinalPathNameByHandleW(h, fin.as_mut_ptr(), 400, 3) == 0);
         check_error(87);
+        // VOLUME_NAME_NT: \Device\HarddiskVolume<N>\... (ADR 0185).
+        let nt = GetFinalPathNameByHandleW(h, fin.as_mut_ptr(), 400, 2) as usize;
+        check(nt > 24 && ascii_eq(&fin[..22], b"\\Device\\HarddiskVolume") && fin[22] >= u16::from(b'1'));
+        check(ends_with_ascii(&fin[..nt], b"\\k32c2\\a.dat"));
 
         // SetFileInformationByHandle: end of file, then the I/O priority.
         let mut eof = [0u8; 8];

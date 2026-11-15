@@ -28,8 +28,8 @@ use poly_kernelbase::process::{self as p, CREATE_SUSPENDED, CREATE_UNICODE_ENVIR
 /// `EXTENDED_STARTUPINFO_PRESENT`, `CREATE_BREAKAWAY_FROM_JOB` (`winbase.h`).
 const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
 const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
-/// `sizeof(STARTUPINFOEXW)`: the `STARTUPINFO` and `lpAttributeList` (8 bytes).
-const STARTUPINFOEX_SIZE: usize = STARTUPINFO_SIZE + 8;
+/// `sizeof(STARTUPINFOEXW)`: the `STARTUPINFO` and `lpAttributeList` (a pointer).
+const STARTUPINFOEX_SIZE: usize = p::SI_NATIVE.size + core::mem::size_of::<usize>();
 /// `HANDLE_FLAG_INHERIT` (`winbase.h`).
 const HANDLE_FLAG_INHERIT: u32 = 1;
 
@@ -49,7 +49,7 @@ unsafe fn attribute_list(si: *const u8, flags: u32) -> Result<*const u8, u32> {
         return Err(ERROR_INVALID_PARAMETER);
     }
     // SAFETY: `cb` covers `lpAttributeList`.
-    Ok(unsafe { (si.add(STARTUPINFO_SIZE) as *const *const u8).read_unaligned() })
+    Ok(unsafe { (si.add(p::SI_NATIVE.size) as *const *const u8).read_unaligned() })
 }
 
 /// `FILE_ATTRIBUTE_DIRECTORY` (`winnt.h`).
@@ -148,25 +148,6 @@ fn basic_information(process: Handle) -> Result<[u8; 48], u32> {
     if st.is_success() { Ok(info) } else { Err(from_status(st)) }
 }
 
-/// The `lpSecurityDescriptor` of a `SECURITY_ATTRIBUTES` (offset 8), or null.
-///
-/// # Safety
-/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
-pub(crate) unsafe fn descriptor_of(sa: *const u8) -> *const u8 {
-    // SAFETY: the caller's structure when non-null.
-    if sa.is_null() { core::ptr::null() } else { unsafe { (sa.add(8) as *const *const u8).read_unaligned() } }
-}
-
-/// `SECURITY_ATTRIBUTES.bInheritHandle` (offset 16 on x64,
-/// `minwinbase.h`).
-///
-/// # Safety
-/// `sa` is null or a `SECURITY_ATTRIBUTES`.
-unsafe fn inherits(sa: *const u8) -> bool {
-    // SAFETY: the caller's structure when non-null.
-    !sa.is_null() && unsafe { (sa.add(16) as *const i32).read_unaligned() } != 0
-}
-
 /// The caller's `STARTUPINFOW` or `STARTUPINFOA` (the same layout,
 /// `processthreadsapi.h`): its fixed part, its strings (`string` reads one
 /// as UTF-16) and its `lpReserved2` bytes. Null: none given.
@@ -177,21 +158,22 @@ unsafe fn startup_from(si: *const u8, string: &dyn Fn(*const u8) -> Option<Vec<u
     if si.is_null() {
         return None;
     }
+    let sl = p::SI_NATIVE;
     let mut raw = [0u8; STARTUPINFO_SIZE];
     // SAFETY: the caller's structure (Learn: `cb` is its size, which is
-    // this one's).
-    unsafe { core::ptr::copy_nonoverlapping(si, raw.as_mut_ptr(), STARTUPINFO_SIZE) };
-    let ptr = |o: usize| u64::from_le_bytes(raw[o..o + 8].try_into().unwrap()) as *const u8;
-    let n = usize::from(u16::from_le_bytes([raw[p::SI_CB_RESERVED2], raw[p::SI_CB_RESERVED2 + 1]]));
-    let reserved2 = if n > 0 && !ptr(p::SI_RESERVED2).is_null() {
+    // this process's `STARTUPINFO` size: 104 bytes, 68 in a 32-bit process).
+    unsafe { core::ptr::copy_nonoverlapping(si, raw.as_mut_ptr(), sl.size) };
+    let raw = &raw[..sl.size];
+    let ptr = |o: usize| sl.pointer(raw, o) as usize as *const u8;
+    let n = usize::from(u16::from_le_bytes([raw[sl.cb_reserved2], raw[sl.cb_reserved2 + 1]]));
+    let reserved2 = if n > 0 && !ptr(sl.reserved2).is_null() {
         // SAFETY: `cbReserved2` bytes at `lpReserved2` (Learn).
-        unsafe { core::slice::from_raw_parts(ptr(p::SI_RESERVED2), n) }.to_vec()
+        unsafe { core::slice::from_raw_parts(ptr(sl.reserved2), n) }.to_vec()
     } else {
         Vec::new()
     };
-    let (desktop, title, reserved) =
-        (string(ptr(p::SI_DESKTOP)), string(ptr(p::SI_TITLE)), string(ptr(p::SI_RESERVED)));
-    Some(p::Startup::from_raw(&raw, desktop, title, reserved, reserved2))
+    let (desktop, title, reserved) = (string(ptr(sl.desktop)), string(ptr(sl.title)), string(ptr(sl.reserved)));
+    Some(p::Startup::from_raw_in(&sl, raw, desktop, title, reserved, reserved2))
 }
 
 /// A UTF-16 string argument, copied.
@@ -228,10 +210,10 @@ pub unsafe extern "system" fn CreateProcessW(
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: wide_arg(application),
@@ -273,10 +255,10 @@ pub unsafe extern "system" fn CreateProcessAsUserW(
     unsafe {
         let startup = startup_from(startup_info, &wide_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: wide_arg(application),
@@ -316,10 +298,10 @@ pub unsafe extern "system" fn CreateProcessA(
     unsafe {
         let startup = startup_from(startup_info, &ansi_string);
         let attributes = (
-            inherits(process_attributes),
-            inherits(thread_attributes),
-            descriptor_of(process_attributes),
-            descriptor_of(thread_attributes),
+            sa_inherits(process_attributes),
+            sa_inherits(thread_attributes),
+            sa_descriptor(process_attributes),
+            sa_descriptor(thread_attributes),
         );
         let request = Request {
             app: app.as_deref(),
@@ -412,13 +394,13 @@ unsafe fn create(
     };
     // The parameters, laid out where they will stay during the call.
     let child = p::Child { image: &image, command_line: &line, env: &env, current: &cwd, startup };
-    let size = match p::child_parameters(0, &child) {
+    let size = match p::child_parameters_in(&poly_rtl::layout::NATIVE, 0, &child) {
         Ok(b) => b.len(),
         Err(e) => return fail(e, FALSE),
     };
     let mut buf: Vec<u8> = alloc::vec![0u8; size];
     let base = buf.as_mut_ptr() as u64;
-    match p::child_parameters(base, &child) {
+    match p::child_parameters_in(&poly_rtl::layout::NATIVE, base, &child) {
         Ok(b) => buf.copy_from_slice(&b),
         Err(e) => return fail(e, FALSE),
     }
@@ -512,21 +494,22 @@ unsafe fn create(
     if attributes.1 {
         make_inheritable(th);
     }
-    let pid = basic_information(ph).map_or(0, |i| u64::from_le_bytes(i[32..40].try_into().unwrap()) as u32);
+    let pid = basic_information(ph).map_or(0, |i| crate::base::id_in(&i, crate::base::PBI_UNIQUE_PROCESS_ID));
     let mut ti = [0u8; 48];
     // SAFETY: valid pointers.
     let q = unsafe {
         nt::NtQueryInformationThread(th, THREAD_BASIC_INFORMATION, ti.as_mut_ptr(), 48, core::ptr::null_mut())
     };
-    let tid = if q.is_success() { u64::from_le_bytes(ti[24..32].try_into().unwrap()) as u32 } else { 0 };
+    let tid = if q.is_success() { crate::base::id_in(&ti, crate::base::TBI_UNIQUE_THREAD) } else { 0 };
     // PROCESS_INFORMATION (`processthreadsapi.h`): hProcess, hThread,
-    // dwProcessId, dwThreadId.
-    // SAFETY: the caller's 24-byte structure.
+    // dwProcessId, dwThreadId (24 bytes, 16 in a 32-bit process).
+    let hs = core::mem::size_of::<Handle>();
+    // SAFETY: the caller's structure.
     unsafe {
         (information as *mut Handle).write_unaligned(ph);
-        (information.add(8) as *mut Handle).write_unaligned(th);
-        (information.add(16) as *mut u32).write_unaligned(pid);
-        (information.add(20) as *mut u32).write_unaligned(tid);
+        (information.add(hs) as *mut Handle).write_unaligned(th);
+        (information.add(2 * hs) as *mut u32).write_unaligned(pid);
+        (information.add(2 * hs + 4) as *mut u32).write_unaligned(tid);
     }
     TRUE
 }
@@ -548,7 +531,7 @@ pub unsafe extern "system" fn GetExitCodeProcess(process: Handle, code: *mut u32
 #[unsafe(no_mangle)]
 pub extern "system" fn GetProcessId(process: Handle) -> u32 {
     match basic_information(process) {
-        Ok(info) => u64::from_le_bytes(info[32..40].try_into().unwrap()) as u32,
+        Ok(info) => crate::base::id_in(&info, crate::base::PBI_UNIQUE_PROCESS_ID),
         Err(e) => fail(e, 0),
     }
 }

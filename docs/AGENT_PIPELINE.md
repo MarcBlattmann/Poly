@@ -371,7 +371,7 @@ an outline font of the height asked, as on any Windows.
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
-(`shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
+(`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
 `kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
@@ -419,6 +419,21 @@ interactive run at a time may use the machine.
 ```sh
 POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2     --tests-dir specs/windows/user32.dll/InvalidateRect.tests --runner-arg -Interactive [--record]
 ```
+
+**Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
+accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that
+needs the resources of its own executable carries them as data: the resource directory
+(the PE format of Learn's "PE Format"; the templates in the formats of "Resource File
+Formats") is written in the test's source as a `core::arch::global_asm!` block in the
+sections `.rsrc$01` (directories) and `.rsrc$02` (data, each blob with an image-relative
+`.rva` entry), so the test stays one `.rs` file and `win build` needs no resource
+compiler (the section is kept by the linker as it is). These tests run in the SSH session
+(session 0): windows, menus, modal dialogs and message boxes work there without being
+visible, input never arrives, so a test ends a modal loop itself (`EndDialog` from
+`WM_INITDIALOG`, a posted message, or a window timer that calls `EndMenu` or finds the
+`#32770` window of a message box with `EnumThreadWindows`). Common controls are those of
+version 5.82 (no manifest); `comdlg32` is in `ALLOWED_DLLS` and the common dialogs are
+ended by a hook that posts IDCANCEL.
 
 **C++ tests** ([ADR 0098](adr/0098-cpp-windows-tests-and-the-cpp-exception-spec.md)):
 a test may also be one `.cpp` file, for what Rust cannot do (C++

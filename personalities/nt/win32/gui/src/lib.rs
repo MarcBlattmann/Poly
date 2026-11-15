@@ -18,7 +18,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// `ERROR_CALL_NOT_IMPLEMENTED` (`winerror.h`).
 pub const ERROR_CALL_NOT_IMPLEMENTED: u32 = 120;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;

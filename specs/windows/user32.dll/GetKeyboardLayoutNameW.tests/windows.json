@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gkln_basic",
+      "exe_sha256": "a3f6244d39f9c33f9ed1010347e8cae397f3a864ac8648daf868ca7cb4ac9835",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0S2V5Ym9hcmRMYXlvdXROYW1lVyA9IDEgKGxhc3QgZXJyb3IgMHhiZWVmKQpsZW5ndGggb2YgdGhlIG5hbWU6IDgKdGhlIG5pbnRoIGNoYXJhY3RlciBpcyBOVUw6IDEKdGhlIGNoYXJhY3RlcnMgYWZ0ZXIgdGhlIG5pbnRoIGFyZSB1bnRvdWNoZWQ6IDEKZXZlcnkgY2hhcmFjdGVyIGlzIDAtOSBvciBBLUY6IDEKZXZlcnkgY2hhcmFjdGVyIGlzIEFTQ0lJOiAxCmxhc3QgZm91ciBkaWdpdHMgZXF1YWwgdGhlIGxvdyB3b3JkIG9mIHRoZSBsYXlvdXQ6IDAKYSBzZWNvbmQgY2FsbCBnaXZlcyB0aGUgc2FtZSBuYW1lOiAxCmEgYnVmZmVyIG9mIGV4YWN0bHkgbmluZSBjaGFyYWN0ZXJzIChhIHRlbnRoIGlzIGEgc2VudGluZWwpOiAxLCBuYW1lIGVxdWFsOiAxLCB0ZW50aCB1bnRvdWNoZWQ6IDEKMzIgZnVydGhlciBjYWxscyBhbGwgZXF1YWw6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetKeyboardLayoutNameW = 1 (last error 0xbeef)\nlength of the name: 8\nthe ninth character is NUL: 1\nthe characters after the ninth are untouched: 1\nevery character is 0-9 or A-F: 1\nevery character is ASCII: 1\nlast four digits equal the low word of the layout: 0\na second call gives the same name: 1\na buffer of exactly nine characters (a tenth is a sentinel): 1, name equal: 1, tenth untouched: 1\n32 further calls all equal: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "gkln_null",
+      "exe_sha256": "0a5452142fd9c5cd2aa82387ac922e0e2cac5e65012fa431e0f206767d863d12",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSByZWFsIGNhbGwgZmlyc3Q6IDEsIGEgaGV4YWRlY2ltYWwgbmFtZTogMQpOVUxMIGJ1ZmZlcjogcmV0dXJucyAwIChsYXN0IGVycm9yIDk5OCkKYSByZWFsIGNhbGwgYWZ0ZXJ3YXJkczogMSwgdGhlIHNhbWUgbmFtZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a real call first: 1, a hexadecimal name: 1\nNULL buffer: returns 0 (last error 998)\na real call afterwards: 1, the same name: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}
