@@ -169,7 +169,7 @@ answer changes while the window is shown (a `SWP_FRAMECHANGED` that brings the c
 takes it away), its surface is made again with the new frame. The compositor logs
 `frame: own` for such a window.
 
-**Consequences.** Chrome has one title bar, its own, as on Windows (`chrome-win-s3-hunt-after-a.png`).
+**Consequences.** Chrome has one title bar, its own, as on Windows (`chrome-win-s3-hunt-one-title-bar.png`).
 Its caption buttons and tab strip are drawn by Chrome; moving and resizing it through its own
 non-client hit testing (`WM_NCHITTEST` → `HTCAPTION`, `HTLEFT`, ...) needs win32k to start the
 compositor's interactive move (`Desktop::begin_move` exists and is not called yet): open, listed
