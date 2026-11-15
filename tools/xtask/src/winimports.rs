@@ -217,6 +217,16 @@ pub fn ordinals_of(bytes: &[u8]) -> Result<BTreeMap<u16, String>> {
             out.insert(o, String::from_utf8_lossy(name).into_owned());
         }
     }
+    // Exports by ordinal only (the generated system DLLs, ADR 0155 step 10) are `#<ordinal>`.
+    let named: Vec<u32> =
+        exports.names().filter_map(|n| n.ok().and_then(|(name, _)| exports.ordinal_of(name).ok().flatten())).collect();
+    for f in exports.functions().flatten() {
+        if let Ok(o) = u16::try_from(f.ordinal)
+            && !named.contains(&f.ordinal)
+        {
+            out.insert(o, format!("#{o}"));
+        }
+    }
     Ok(out)
 }
 
@@ -240,6 +250,13 @@ pub fn exports_of(bytes: &[u8]) -> Result<BTreeMap<String, Target>> {
             None => continue,
         };
         out.insert(String::from_utf8_lossy(name).into_owned(), target);
+    }
+    let named: Vec<u32> =
+        exports.names().filter_map(|n| n.ok().and_then(|(name, _)| exports.ordinal_of(name).ok().flatten())).collect();
+    for f in exports.functions().flatten() {
+        if !named.contains(&f.ordinal) && matches!(f.target, ExportTarget::Rva(_)) {
+            out.insert(format!("#{}", f.ordinal), Target::Code);
+        }
     }
     Ok(out)
 }
@@ -389,6 +406,28 @@ pub fn load_ours() -> Result<Ours> {
     ours.dlls.insert("ntdll.dll".into(), exports_of(&bytes)?);
     let dir = crate::win32::ensure()?;
     for f in crate::win32::OUTPUTS.iter().filter(|f| f.ends_with(".dll")) {
+        let path = dir.join(f);
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        ours.dlls.insert(f.to_string(), exports_of(&bytes)?);
+        ours.ordinals.insert(f.to_string(), ordinals_of(&bytes)?);
+    }
+    // The generated system DLLs (ADR 0155, step 10).
+    let list = std::fs::read_to_string(dir.join(crate::win32::STUB_LIST)).unwrap_or_default();
+    for f in list.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let path = dir.join(f);
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        ours.dlls.insert(f.to_string(), exports_of(&bytes)?);
+        ours.ordinals.insert(f.to_string(), ordinals_of(&bytes)?);
+    }
+    Ok(ours)
+}
+
+/// What a 32-bit program can bind to: the exports of Poly's i686 modules (`cargo xtask wow64`,
+/// ADR 0186), the only DLLs in `SysWOW64`.
+pub fn load_ours_x86() -> Result<Ours> {
+    let mut ours = Ours::default();
+    let dir = crate::wow64::ensure()?;
+    for f in crate::wow64::MODULES {
         let path = dir.join(f);
         let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         ours.dlls.insert(f.to_string(), exports_of(&bytes)?);

@@ -25,9 +25,10 @@ pub const KERNEL_ENV: &str = "POLY_WOW64_DIR";
 /// The 32-bit test programs' sources (each also listed in [`cache_key`]).
 const PROGRAMS_DIR: &str = "tests/windows/wow64";
 /// The modules (in the cache under these names).
-pub const MODULES: &[&str] = &["ntdll.dll", "kernelbase.dll", "kernel32.dll"];
+/// `win32u`, `gdi32` and `user32` are the 32-bit GUI (ADR 0186 stage 4).
+pub const MODULES: &[&str] = &["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
 /// The test programs (`tests/windows/wow64/<name>.rs`).
-pub const PROGRAMS: &[&str] = &["hello32"];
+pub const PROGRAMS: &[&str] = &["hello32", "gui32"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 /// Exports the kernel and every 32-bit program need from the i686 `ntdll`.
@@ -109,9 +110,13 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/rt",
             "personalities/nt/win32/kernelbase",
             "personalities/nt/win32/kernel32",
+            "personalities/nt/win32/win32u",
+            "personalities/nt/win32/gdi32",
+            "personalities/nt/win32/user32",
         ],
         &[
             "tests/windows/wow64/hello32.rs",
+            "tests/windows/wow64/gui32.rs",
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",
@@ -202,12 +207,12 @@ fn build(root: &Path, target: &Path) -> Result<PathBuf> {
     )?;
     let win32_target = target.join("win32");
     step(
-        "build the i686 kernelbase.dll and kernel32.dll",
+        "build the i686 kernelbase.dll, kernel32.dll, win32u.dll, gdi32.dll and user32.dll",
         &mut cargo_build(
             &root.join("personalities/nt/win32/Cargo.toml"),
             &win32_target,
             RUSTFLAGS,
-            &["kernelbase", "kernel32"],
+            &["kernelbase", "kernel32", "win32u", "gdi32", "user32"],
         )?,
     )?;
     let programs = target.join("programs");
@@ -224,6 +229,9 @@ fn build(root: &Path, target: &Path) -> Result<PathBuf> {
         (rel(&ntdll_target, "ntdll.dll"), "ntdll.dll".to_string()),
         (rel(&win32_target, "kernelbase.dll"), "kernelbase.dll".to_string()),
         (rel(&win32_target, "kernel32.dll"), "kernel32.dll".to_string()),
+        (rel(&win32_target, "win32u.dll"), "win32u.dll".to_string()),
+        (rel(&win32_target, "gdi32.dll"), "gdi32.dll".to_string()),
+        (rel(&win32_target, "user32.dll"), "user32.dll".to_string()),
     ]
     .into_iter()
     .chain(PROGRAMS.iter().map(|p| (rel(&programs_target, &format!("{p}.exe")), format!("{p}.exe"))));
@@ -310,12 +318,23 @@ fn verify(dir: &Path) -> Result {
             }
         }
     }
+    // The GUI modules import only from each other and the modules above.
+    let ours = ["ntdll.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
+    for m in ["win32u.dll", "gdi32.dll", "user32.dll"] {
+        let bytes = read(&dir.join(m))?;
+        let pe = parse(m, &bytes)?;
+        for dll in imports(m, &pe)?.keys() {
+            if !ours.contains(&dll.as_str()) {
+                return Err(format!("the i686 {m} imports {dll}"));
+            }
+        }
+    }
     for p in PROGRAMS {
         let file = format!("{p}.exe");
         let bytes = read(&dir.join(&file))?;
         let pe = parse(&file, &bytes)?;
         for dll in imports(&file, &pe)?.keys() {
-            if dll != "kernel32.dll" && dll != "ntdll.dll" {
+            if !ours.contains(&dll.as_str()) {
                 return Err(format!("{file} imports {dll}"));
             }
         }

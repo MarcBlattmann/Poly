@@ -99,3 +99,6 @@ pub extern "system" fn winmm_main(_module: *mut u8, reason: u32, _reserved: *mut
     }
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

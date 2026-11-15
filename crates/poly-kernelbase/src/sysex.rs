@@ -374,7 +374,8 @@ pub const MEM_EXTENDED_PARAMETER_IMAGE_MACHINE: u8 = 6;
 /// in the first 8 bytes, the union in the second.
 pub const MEM_EXTENDED_PARAMETER_SIZE: usize = 16;
 /// `sizeof(MEM_ADDRESS_REQUIREMENTS)`: `LowestStartingAddress`,
-/// `HighestEndingAddress`, `Alignment`.
+/// `HighestEndingAddress`, `Alignment`, one pointer each: 24 bytes in a 64-bit process, 12 in a
+/// 32-bit one. This is the room for the larger.
 pub const MEM_ADDRESS_REQUIREMENTS_SIZE: usize = 24;
 
 /// The allocation granularity: Learn: an alignment below it is rounded up.
@@ -404,6 +405,19 @@ pub fn alloc_request(
     count: usize,
     read_requirements: &dyn Fn(u64) -> Option<[u8; MEM_ADDRESS_REQUIREMENTS_SIZE]>,
 ) -> Result<AllocRequest, u32> {
+    alloc_request_in(8, raw, count, read_requirements)
+}
+
+/// [`alloc_request`] for a process whose pointers are `ptr_size` bytes (ADR 0186): the union of
+/// a `MEM_EXTENDED_PARAMETER` (at 8, 8 bytes in both widths: `MEM_EXTENDED_PARAMETER` is 16 bytes
+/// either way) holds the pointer in its low `ptr_size` bytes, and `read_requirements` returns
+/// the `MEM_ADDRESS_REQUIREMENTS` laid out with pointer-sized fields (zero padded to 24 bytes).
+pub fn alloc_request_in(
+    ptr_size: usize,
+    raw: &[u8],
+    count: usize,
+    read_requirements: &dyn Fn(u64) -> Option<[u8; MEM_ADDRESS_REQUIREMENTS_SIZE]>,
+) -> Result<AllocRequest, u32> {
     let mut req = AllocRequest::default();
     if count == 0 {
         return Ok(req);
@@ -413,14 +427,20 @@ pub fn alloc_request(
     }
     for i in 0..count {
         let p = &raw[i * MEM_EXTENDED_PARAMETER_SIZE..][..MEM_EXTENDED_PARAMETER_SIZE];
-        let value = u64::from_le_bytes(p[8..16].try_into().unwrap());
+        let mut value_bytes = [0u8; 8];
+        value_bytes[..ptr_size].copy_from_slice(&p[8..8 + ptr_size]);
+        let value = u64::from_le_bytes(value_bytes);
         match p[0] {
             MEM_EXTENDED_PARAMETER_ADDRESS_REQUIREMENTS => {
                 let r = read_requirements(value).ok_or(ERROR_INVALID_PARAMETER)?;
-                let get = |at: usize| u64::from_le_bytes(r[at..at + 8].try_into().unwrap()) as usize;
+                let get = |at: usize| {
+                    let mut b = [0u8; 8];
+                    b[..ptr_size].copy_from_slice(&r[at..at + ptr_size]);
+                    u64::from_le_bytes(b) as usize
+                };
                 req.lowest = get(0);
-                req.highest = get(8);
-                req.alignment = get(16);
+                req.highest = get(ptr_size);
+                req.alignment = get(2 * ptr_size);
                 if req.alignment != 0 && !req.alignment.is_power_of_two() {
                     return Err(ERROR_INVALID_PARAMETER);
                 }
@@ -624,5 +644,22 @@ mod tests {
         assert_eq!(alloc_request(&param(2, 1), 1, &none), Ok(AllocRequest::default()));
         assert_eq!(alloc_request(&param(5, 1), 1, &none), Ok(AllocRequest::default()));
         assert_eq!(alloc_request(&raw, 2, &read), Err(ERROR_INVALID_PARAMETER), "short array");
+    }
+
+    #[test]
+    fn extended_parameters_32_bit() {
+        // A 32-bit process: the pointer is the low 4 bytes of the union (the high 4 are not read),
+        // the requirements are three 4-byte fields.
+        let mut raw = param(MEM_EXTENDED_PARAMETER_ADDRESS_REQUIREMENTS, 77);
+        raw[12..16].copy_from_slice(&0xDEAD_BEEFu32.to_le_bytes());
+        let mut r = [0u8; 24];
+        r[0..4].copy_from_slice(&0x1000_0000u32.to_le_bytes());
+        r[4..8].copy_from_slice(&0x1FFF_FFFFu32.to_le_bytes());
+        r[8..12].copy_from_slice(&0x20_0000u32.to_le_bytes());
+        let read = move |p: u64| (p == 77).then_some(r);
+        let req = alloc_request_in(4, &raw, 1, &read).unwrap();
+        assert_eq!(req, AllocRequest { lowest: 0x1000_0000, highest: 0x1FFF_FFFF, alignment: 0x20_0000 });
+        // The same bytes read as 64-bit fields are not that request.
+        assert_ne!(alloc_request(&raw, 1, &read), Ok(req));
     }
 }

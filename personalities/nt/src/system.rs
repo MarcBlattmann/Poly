@@ -86,7 +86,6 @@ pub struct NtSystem {
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
     /// defaults.
     pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
-
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],

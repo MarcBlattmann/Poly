@@ -269,7 +269,8 @@ fn mapped_filename<K: NtKernel>(
             .with_process(pid, |sys, proc, _| mapped_file_of(sys, proc, addr))
             .ok_or(STATUS_PROCESS_IS_TERMINATING)??,
     };
-    let a = crate::objects::file_name_answer(&device, path.as_deref(), length as usize, buf);
+    let us = abi::caller_unicode_size(k);
+    let a = crate::objects::file_name_answer(&device, path.as_deref(), length as usize, buf, us);
     abi::write_opt_u32(k, ret, a.return_length)?;
     abi::write(k, buf, &a.bytes)?;
     Ok(a.status)
@@ -487,9 +488,7 @@ pub fn flush<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, len)?;
     if iosb != 0 {
-        let mut b = [0u8; 16];
-        b[8..16].copy_from_slice(&len.to_le_bytes());
-        abi::write(k, iosb, &b)?;
+        crate::io::services::write_iosb(k, iosb, STATUS_SUCCESS, len)?;
     }
     Ok(STATUS_SUCCESS)
 }

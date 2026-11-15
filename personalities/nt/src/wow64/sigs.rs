@@ -8,24 +8,28 @@
 //!
 //! | Kind | Argument | Widened to |
 //! |---|---|---|
-//! | `V` | `ULONG`, `BOOLEAN`, `ACCESS_MASK`, a class, `SIZE_T`/`ULONG_PTR`/`PVOID` *values* | zero extended |
+//! | `V` | `ULONG`, `BOOLEAN`, `ACCESS_MASK`, a class, `SIZE_T`/`ULONG_PTR`/`PVOID` *values*, a 32-bit code address (an APC routine, a start routine: the kernel calls it in compatibility mode) | zero extended |
 //! | `H` | `HANDLE` | sign extended (`NtCurrentProcess()` is -1 in both widths) |
-//! | `P` | a pointer to data laid out the same in both widths (buffers, `ULONG*`, `LARGE_INTEGER*`, self-relative descriptors) | zero extended |
+//! | `P` | a pointer to data laid out the same in both widths (buffers, `ULONG*`, `LARGE_INTEGER*`, self-relative descriptors), or to data the service lays out in the caller's own width (`NtQueryDirectoryObject`'s entries, `NtCreateUserProcess`'s parameter block, the token and object information classes) | zero extended |
 //! | `OH` | `HANDLE*` (out) | a 64-bit copy; the low 32 bits written back |
 //! | `OS` | `SIZE_T*`, `PVOID*`, `ULONG_PTR*` (in and out) | a 64-bit copy, zero extended; the low 32 bits written back |
 //! | `OA` | `OBJECT_ATTRIBUTES*` (in), with its name | a 64-bit copy |
 //! | `US` | `UNICODE_STRING*` (in) | a 64-bit copy |
 //! | `UO` | `UNICODE_STRING*` (in and out: the service fills the buffer and sets `Length`) | a 64-bit copy; `Length` and `MaximumLength` written back |
-//! | `IO` | `IO_STATUS_BLOCK*` (out) | a 64-bit copy; `Status` and `Information` written back |
+//! | `IO` | `IO_STATUS_BLOCK*` (out, now or when an asynchronous request completes) | the caller's address marked `IOSB32`: the 8-byte block is written there |
+//! | `IR` | `IO_STATUS_BLOCK*` naming a request to cancel | marked like `IO`, not read |
 //! | `CI` | `CLIENT_ID*` (in) | a 64-bit copy |
 //! | `HA` | a `HANDLE` array whose count is the first argument (`NtWaitForMultipleObjects`) | a 64-bit copy |
 //! | `CX` | `CONTEXT*` (in): the x86 `CONTEXT` ([`super::context`]) | a 64-bit `CONTEXT` |
+//! | `CO` | `CONTEXT*` (in and out, `NtGetContextThread`) | a 64-bit `CONTEXT`; the groups asked for written back in the x86 layout |
+//! | `CE` | `FILE_IO_COMPLETION_INFORMATION*` (out), counted by the next argument | 32-byte entries; written back as 16-byte ones |
 //! | `ER` | `EXCEPTION_RECORD*` (in) | a 64-bit `EXCEPTION_RECORD` |
-//! | `X` | a structure (or a 32-bit code address the kernel would call) not converted yet: a null pointer passes, anything else makes the call `STATUS_NOT_IMPLEMENTED` | — |
+//! | `X` | a structure not converted yet: a null pointer passes, anything else makes the call `STATUS_NOT_IMPLEMENTED` | — |
 
 use super::thunk::Arg;
 use super::thunk::Arg::*;
 use crate::services::Service;
+use poly_win32k::services::Win32kService;
 
 /// The 32-bit signatures, one row per service.
 pub const SIGNATURES: &[(Service, &[Arg])] = &[
@@ -36,7 +40,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::SetInformationObject, &[H, V, P, V]),
     (Service::CreateDirectoryObject, &[OH, V, OA]),
     (Service::OpenDirectoryObject, &[OH, V, OA]),
-    (Service::QueryDirectoryObject, &[H, X, V, V, V, P, P]),
+    (Service::QueryDirectoryObject, &[H, P, V, V, V, P, P]),
     (Service::CreateSymbolicLinkObject, &[OH, V, OA, US]),
     (Service::OpenSymbolicLinkObject, &[OH, V, OA]),
     (Service::QuerySymbolicLinkObject, &[H, UO, P]),
@@ -57,13 +61,13 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::QuerySemaphore, &[H, V, P, V, P]),
     (Service::CreateTimer, &[OH, V, OA, V]),
     (Service::OpenTimer, &[OH, V, OA]),
-    (Service::SetTimer, &[H, P, X, V, V, V, P]),
+    (Service::SetTimer, &[H, P, V, V, V, V, P]),
     (Service::CancelTimer, &[H, P]),
     (Service::QueryTimer, &[H, V, P, V, P]),
     (Service::WaitForSingleObject, &[H, V, P]),
     (Service::WaitForMultipleObjects, &[V, HA, V, V, P]),
     (Service::SignalAndWaitForSingleObject, &[H, H, V, P]),
-    (Service::QueueApcThread, &[H, X, V, V, V]),
+    (Service::QueueApcThread, &[H, V, V, V, V]),
     (Service::TestAlert, &[]),
     (Service::DelayExecution, &[V, P]),
     (Service::YieldExecution, &[]),
@@ -88,23 +92,23 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::QueryInformationThread, &[H, V, P, V, P]),
     (Service::SuspendThread, &[H, P]),
     (Service::ResumeThread, &[H, P]),
-    (Service::GetContextThread, &[H, X]),
-    (Service::SetContextThread, &[H, X]),
-    (Service::CreateUserProcess, &[OH, OH, V, V, OA, OA, V, V, X, X, X]),
+    (Service::GetContextThread, &[H, CO]),
+    (Service::SetContextThread, &[H, CX]),
+    (Service::CreateUserProcess, &[OH, OH, V, V, OA, OA, V, V, P, V, P]),
     (Service::CreateFile, &[OH, V, OA, IO, P, V, V, V, V, P, V]),
     (Service::OpenFile, &[OH, V, OA, IO, V, V]),
-    (Service::ReadFile, &[H, H, X, V, IO, P, V, P, P]),
-    (Service::WriteFile, &[H, H, X, V, IO, P, V, P, P]),
+    (Service::ReadFile, &[H, H, V, V, IO, P, V, P, P]),
+    (Service::WriteFile, &[H, H, V, V, IO, P, V, P, P]),
     (Service::QueryInformationFile, &[H, IO, P, V, V]),
     (Service::SetInformationFile, &[H, IO, P, V, V]),
-    (Service::QueryDirectoryFile, &[H, H, X, V, IO, P, V, V, V, US, V]),
+    (Service::QueryDirectoryFile, &[H, H, V, V, IO, P, V, V, V, US, V]),
     (Service::QueryVolumeInformationFile, &[H, IO, P, V, V]),
     (Service::FlushBuffersFile, &[H, IO]),
-    (Service::LockFile, &[H, H, X, V, IO, P, P, V, V, V]),
+    (Service::LockFile, &[H, H, V, V, IO, P, P, V, V, V]),
     (Service::UnlockFile, &[H, IO, P, P, V]),
     (Service::DeleteFile, &[OA]),
     (Service::CancelIoFile, &[H, IO]),
-    (Service::CancelIoFileEx, &[H, X, IO]),
+    (Service::CancelIoFileEx, &[H, IR, IO]),
     (Service::QueryAttributesFile, &[OA, P]),
     (Service::QueryFullAttributesFile, &[OA, P]),
     (Service::PolyTrace, &[V, V, V]),
@@ -121,14 +125,14 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::QueryValueKey, &[H, US, V, P, V, P]),
     (Service::SetValueKey, &[H, US, V, V, P, V]),
     (Service::FlushKey, &[H]),
-    (Service::NotifyChangeKey, &[H, H, X, V, IO, V, V, P, V, V]),
+    (Service::NotifyChangeKey, &[H, H, V, V, IO, V, V, P, V, V]),
     (Service::SetInformationKey, &[H, V, P, V]),
     (Service::RaiseException, &[ER, CX, V]),
     (Service::Continue, &[CX, V]),
     (Service::QuerySystemTime, &[P]),
     (Service::QueryPerformanceCounter, &[P, P]),
     (Service::QuerySystemInformation, &[V, P, V, P]),
-    (Service::DeviceIoControlFile, &[H, H, X, V, IO, V, P, V, P, V]),
+    (Service::DeviceIoControlFile, &[H, H, V, V, IO, V, P, V, P, V]),
     (Service::OpenProcessToken, &[H, V, OH]),
     (Service::OpenProcessTokenEx, &[H, V, V, OH]),
     (Service::OpenThreadToken, &[H, V, V, OH]),
@@ -147,13 +151,13 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::QuerySecurityObject, &[H, V, P, V, P]),
     (Service::SetSecurityObject, &[H, V, P]),
     (Service::SetInformationThread, &[H, V, P, V]),
-    (Service::FsControlFile, &[H, H, X, V, IO, V, P, V, P, V]),
+    (Service::FsControlFile, &[H, H, V, V, IO, V, P, V, P, V]),
     (Service::CreateNamedPipeFile, &[OH, V, OA, IO, V, V, V, V, V, V, V, V, V, P]),
-    (Service::CancelSynchronousIoFile, &[H, X, IO]),
+    (Service::CancelSynchronousIoFile, &[H, IR, IO]),
     (Service::CreateIoCompletion, &[OH, V, OA, V]),
     (Service::SetIoCompletion, &[H, V, V, V, V]),
     (Service::RemoveIoCompletion, &[H, OS, OS, IO, P]),
-    (Service::RemoveIoCompletionEx, &[H, X, V, P, P, V]),
+    (Service::RemoveIoCompletionEx, &[H, CE, V, P, P, V]),
     (Service::QueryIoCompletion, &[H, V, P, V, P]),
     (Service::CreateJobObject, &[OH, V, OA]),
     (Service::OpenJobObject, &[OH, V, OA]),
@@ -166,9 +170,26 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::UnmapViewOfSectionEx, &[H, V, V]),
     (Service::SuspendProcess, &[H]),
     (Service::ResumeProcess, &[H]),
+    (Service::GetCurrentProcessorNumber, &[]),
 ];
 
 /// The 32-bit signature of `service`, if it has one.
 pub fn signature(service: Service) -> Option<&'static [Arg]> {
     SIGNATURES.iter().find(|(s, _)| *s == service).map(|(_, a)| *a)
+}
+
+/// The 32-bit signatures of the win32k services (table 1, `poly_win32k::services`; ADR 0186
+/// stage 4). `win32u`'s i686 `build.rs` reads these rows for its stubs' `ret N`. The window
+/// manager's requests travel as `poly_win32k::wire` records of fixed-width fields, so a 32-bit
+/// `user32` sends the same bytes as a 64-bit one: only the reply length is pointer-sized.
+pub const WIN32K_SIGNATURES: &[(Win32kService, &[Arg])] = &[
+    // PolyUserCall(request, request_length, reply, reply_capacity, reply_length*)
+    (Win32kService::Call, &[P, V, P, V, OS]),
+    // PolyUserCommitSurface(hwnd, pixels, width, height, stride)
+    (Win32kService::CommitSurface, &[V, P, V, V, V]),
+];
+
+/// The 32-bit signature of win32k service `service`.
+pub fn win32k_signature(service: Win32kService) -> Option<&'static [Arg]> {
+    WIN32K_SIGNATURES.iter().find(|(s, _)| *s == service).map(|(_, a)| *a)
 }

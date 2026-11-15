@@ -69,6 +69,7 @@
 extern crate alloc;
 
 pub mod advapi;
+pub mod apps;
 pub mod cpu;
 pub mod env;
 pub mod errmode;
@@ -110,6 +111,7 @@ pub mod verinfo;
 pub mod version;
 pub mod waitreg;
 pub mod winmm;
+pub mod wow64;
 
 pub use poly_ntobj::NtStatus;
 

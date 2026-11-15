@@ -11,6 +11,7 @@
 extern crate alloc;
 
 mod clipboard;
+mod cstructs;
 mod display;
 mod icons;
 mod layered;
@@ -30,18 +31,21 @@ use poly_win32k::wire;
 
 mod headless;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RtlUpcaseUnicodeChar(c: u16) -> u16;
 }
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
-    fn PolyUserCommitSurface(hwnd: u64, pixels: u64, width: u64, height: u64, stride: u64) -> u32;
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
+    fn PolyUserCommitSurface(hwnd: usize, pixels: usize, width: usize, height: usize, stride: usize) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetCurrentThreadId() -> u32;
     fn GetTickCount() -> u32;
@@ -51,7 +55,8 @@ unsafe extern "system" {
     fn Sleep(ms: u32);
 }
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyGdiCreateDisplayDC(hwnd: usize, persistent: i32) -> usize;
     fn PolyGdiReleaseDisplayDC(hdc: usize) -> i32;
@@ -140,11 +145,9 @@ impl Env for Sys {
         );
         let mut out = vec![0u8; 4096];
         loop {
-            let mut len = 0u64;
+            let mut len = 0usize;
             // SAFETY: the buffers are ours and sized as passed.
-            let s = unsafe {
-                PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len)
-            };
+            let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
             if s == STATUS_BUFFER_TOO_SMALL && retry && len as usize > out.len() {
                 out = vec![0u8; len as usize];
                 continue;
@@ -358,31 +361,30 @@ pub unsafe extern "system" fn RegisterClassExW(wc: *const u8) -> u16 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    // SAFETY: a WNDCLASSEXW (winuser.h, 80 bytes on x64).
+    // SAFETY: a WNDCLASSEXW (winuser.h: 80 bytes on x64, 48 in a 32-bit process).
     unsafe {
-        let r32 = |o: usize| (wc.add(o) as *const u32).read_unaligned();
-        let r64 = |o: usize| (wc.add(o) as *const u64).read_unaligned();
-        if r32(0) != 80 {
+        if (wc as *const u32).read_unaligned() as usize != core::mem::size_of::<cstructs::WndClassEx>() {
             set_last_error(ERROR_INVALID_PARAMETER);
             return 0;
         }
-        let name = r64(64) as *const u16;
+        let c = (wc as *const cstructs::WndClassEx).read_unaligned();
+        let name = c.class_name as *const u16;
         if (name as usize) < 0x1_0000 {
             set_last_error(ERROR_INVALID_PARAMETER);
             return 0;
         }
         register(ClassSpec {
             name: wide(name, -1),
-            style: r32(4),
-            wndproc: r64(8),
-            cls_extra: r32(16) as i32,
-            wnd_extra: r32(20) as i32,
-            instance: r64(24),
-            icon: r64(32),
-            cursor: r64(40),
-            brush: r64(48),
-            menu_name: r64(56),
-            icon_sm: r64(72),
+            style: c.style,
+            wndproc: c.wndproc as u64,
+            cls_extra: c.cls_extra,
+            wnd_extra: c.wnd_extra,
+            instance: c.instance as u64,
+            icon: c.icon as u64,
+            cursor: c.cursor as u64,
+            brush: c.brush as u64,
+            menu_name: c.menu_name as u64,
+            icon_sm: c.icon_sm as u64,
             unicode: true,
         })
     }
@@ -394,26 +396,25 @@ pub unsafe extern "system" fn RegisterClassW(wc: *const u8) -> u16 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    // SAFETY: a WNDCLASSW (72 bytes on x64).
+    // SAFETY: a WNDCLASSW (72 bytes on x64, 40 in a 32-bit process).
     unsafe {
-        let r32 = |o: usize| (wc.add(o) as *const u32).read_unaligned();
-        let r64 = |o: usize| (wc.add(o) as *const u64).read_unaligned();
-        let name = r64(64) as *const u16;
+        let c = (wc as *const cstructs::WndClass).read_unaligned();
+        let name = c.class_name as *const u16;
         if (name as usize) < 0x1_0000 {
             set_last_error(ERROR_INVALID_PARAMETER);
             return 0;
         }
         register(ClassSpec {
             name: wide(name, -1),
-            style: r32(0),
-            wndproc: r64(8),
-            cls_extra: r32(16) as i32,
-            wnd_extra: r32(20) as i32,
-            instance: r64(24),
-            icon: r64(32),
-            cursor: r64(40),
-            brush: r64(48),
-            menu_name: r64(56),
+            style: c.style,
+            wndproc: c.wndproc as u64,
+            cls_extra: c.cls_extra,
+            wnd_extra: c.wnd_extra,
+            instance: c.instance as u64,
+            icon: c.icon as u64,
+            cursor: c.cursor as u64,
+            brush: c.brush as u64,
+            menu_name: c.menu_name as u64,
             icon_sm: 0,
             unicode: true,
         })
@@ -448,21 +449,26 @@ pub unsafe extern "system" fn GetClassInfoExW(instance: H, name: *const u16, wc:
     let class = unsafe { class_ref(name) };
     match call(Request::ClassInfo { class, instance: instance as u64 }) {
         Reply::Class { info } => {
-            // SAFETY: the caller's WNDCLASSEXW.
+            let wndproc = if info.wndproc == 0 { DefWindowProcW as *const () as usize } else { info.wndproc as usize };
+            let c = cstructs::WndClassEx {
+                size: core::mem::size_of::<cstructs::WndClassEx>() as u32,
+                style: info.style,
+                wndproc,
+                cls_extra: info.cls_extra,
+                wnd_extra: info.wnd_extra,
+                instance: info.instance as usize,
+                icon: info.icon as usize,
+                cursor: info.cursor as usize,
+                brush: info.brush as usize,
+                menu_name: info.menu_name as usize,
+                class_name: name as usize,
+                icon_sm: info.icon_sm as usize,
+            };
+            // SAFETY: the caller's WNDCLASSEXW; its cbSize is left as the caller set it.
             unsafe {
-                let w32 = |o: usize, v: u32| (wc.add(o) as *mut u32).write_unaligned(v);
-                let w64 = |o: usize, v: u64| (wc.add(o) as *mut u64).write_unaligned(v);
-                w32(4, info.style);
-                w64(8, if info.wndproc == 0 { DefWindowProcW as *const () as u64 } else { info.wndproc });
-                w32(16, info.cls_extra as u32);
-                w32(20, info.wnd_extra as u32);
-                w64(24, info.instance);
-                w64(32, info.icon);
-                w64(40, info.cursor);
-                w64(48, info.brush);
-                w64(56, info.menu_name);
-                w64(64, name as u64);
-                w64(72, info.icon_sm);
+                let size = (wc as *const u32).read_unaligned();
+                (wc as *mut cstructs::WndClassEx).write_unaligned(c);
+                (wc as *mut u32).write_unaligned(size);
             }
             i32::from(info.atom)
         }
@@ -549,7 +555,8 @@ pub unsafe extern "system" fn CreateWindowExW(
     u::create_window(&SYS, spec, name as u64, param as u64) as H
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
 }
@@ -1554,7 +1561,7 @@ fn commit_surface(hwnd: H) {
         return;
     }
     // SAFETY: win32u's stub; the kernel reads `height` rows of the DIB.
-    unsafe { PolyUserCommitSurface(hwnd as u64, s[0], s[1], s[2], s[1] * 4) };
+    unsafe { PolyUserCommitSurface(hwnd as usize, s[0] as usize, s[1] as usize, s[2] as usize, s[1] as usize * 4) };
 }
 
 /// `WindowFromDC` (BeginPaint.yaml `erase_sent`): the window a DC from
@@ -2023,7 +2030,8 @@ pub extern "system" fn AttachThreadInput(attach: u32, to: u32, on: i32) -> i32 {
 }
 
 /// `GUITHREADINFO` (winuser.h): cbSize, flags, hwndActive, hwndFocus,
-/// hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret, rcCaret (72 bytes).
+/// hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret, rcCaret (72 bytes, 48 in a 32-bit
+/// process).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
     if gti.is_null() {
@@ -2033,14 +2041,15 @@ pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
     let s = if tid == 0 || tid != SYS.tid() { u::focus::thread_input(&SYS, tid) } else { u::focus::input(&SYS) };
     // SAFETY: the caller's GUITHREADINFO (cbSize first).
     unsafe {
-        core::ptr::write_unaligned(gti.add(4) as *mut u32, 0);
-        core::ptr::write_unaligned(gti.add(8) as *mut u64, u64::from(s.active));
-        core::ptr::write_unaligned(gti.add(16) as *mut u64, u64::from(s.focus));
-        core::ptr::write_unaligned(gti.add(24) as *mut u64, u64::from(s.capture));
-        core::ptr::write_unaligned(gti.add(32) as *mut u64, 0);
-        core::ptr::write_unaligned(gti.add(40) as *mut u64, 0);
-        core::ptr::write_unaligned(gti.add(48) as *mut u64, 0);
-        core::ptr::write_bytes(gti.add(56), 0, 16);
+        let size = (gti as *const u32).read_unaligned();
+        let info = cstructs::GuiThreadInfo {
+            size,
+            active: s.active as usize,
+            focus: s.focus as usize,
+            capture: s.capture as usize,
+            ..Default::default()
+        };
+        (gti as *mut cstructs::GuiThreadInfo).write_unaligned(info);
     }
     1
 }
@@ -2156,15 +2165,27 @@ pub unsafe extern "system" fn GetClassInfoW(instance: H, name: *const u16, wc: *
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    let mut ex = [0u8; 80];
+    let mut ex = [0u8; core::mem::size_of::<cstructs::WndClassEx>()];
     // SAFETY: our WNDCLASSEXW; the caller's name.
     let r = unsafe { GetClassInfoExW(instance, name, ex.as_mut_ptr()) };
     if r != 0 {
         // WNDCLASSW is WNDCLASSEXW without cbSize and hIconSm.
-        // SAFETY: the caller's WNDCLASSW (72 bytes).
-        unsafe { core::ptr::copy_nonoverlapping(ex.as_ptr().add(4), wc, 4) };
-        // SAFETY: as above.
-        unsafe { core::ptr::copy_nonoverlapping(ex.as_ptr().add(8), wc.add(8), 64) };
+        // SAFETY: our WNDCLASSEXW.
+        let e = unsafe { (ex.as_ptr() as *const cstructs::WndClassEx).read_unaligned() };
+        let c = cstructs::WndClass {
+            style: e.style,
+            wndproc: e.wndproc,
+            cls_extra: e.cls_extra,
+            wnd_extra: e.wnd_extra,
+            instance: e.instance,
+            icon: e.icon,
+            cursor: e.cursor,
+            brush: e.brush,
+            menu_name: e.menu_name,
+            class_name: e.class_name,
+        };
+        // SAFETY: the caller's WNDCLASSW.
+        unsafe { (wc as *mut cstructs::WndClass).write_unaligned(c) };
     }
     r
 }
@@ -2509,15 +2530,9 @@ pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
         return 0;
     }
     // SAFETY: the caller's TRACKMOUSEEVENT.
-    let (size, flags, hwnd, hover) = unsafe {
-        (
-            core::ptr::read_unaligned(tme as *const u32),
-            core::ptr::read_unaligned(tme.add(4) as *const u32),
-            core::ptr::read_unaligned(tme.add(8) as *const u64),
-            core::ptr::read_unaligned(tme.add(16) as *const u32),
-        )
-    };
-    if size != 24 {
+    let t = unsafe { (tme as *const cstructs::TrackMouseEvent).read_unaligned() };
+    let (size, flags, hwnd, hover) = (t.size, t.flags, t.hwnd as u64, t.hover);
+    if size as usize != core::mem::size_of::<cstructs::TrackMouseEvent>() {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
@@ -2528,9 +2543,13 @@ pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
         };
         // SAFETY: as above.
         unsafe {
-            core::ptr::write_unaligned(tme.add(4) as *mut u32, (v & 0xFFFF) as u32);
-            core::ptr::write_unaligned(tme.add(8) as *mut u64, v >> 32);
-            core::ptr::write_unaligned(tme.add(16) as *mut u32, ((v >> 16) & 0xFFFF) as u32);
+            let t = cstructs::TrackMouseEvent {
+                size,
+                flags: (v & 0xFFFF) as u32,
+                hwnd: (v >> 32) as usize,
+                hover: ((v >> 16) & 0xFFFF) as u32,
+            };
+            (tme as *mut cstructs::TrackMouseEvent).write_unaligned(t);
         }
         return 1;
     }
@@ -2648,10 +2667,9 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
     if reason == DLL_PROCESS_ATTACH {
         let bytes = wire::encode(&Request::Winsta { op: poly_win32k::winsta::WinstaOp::Connect {} });
         let mut out = [0u8; 256];
-        let mut len = 0u64;
+        let mut len = 0usize;
         // SAFETY: the buffers are ours and sized as passed.
-        let s =
-            unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+        let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
         // `STATUS_ACCESS_DENIED`: the lockdown. A named station and desktop the process may not
         // use: the connection is refused too.
         if s == 0xC000_0022 {
@@ -2668,3 +2686,6 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

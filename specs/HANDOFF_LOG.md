@@ -1129,3 +1129,4 @@ happened, why, and what limits the risk.
 | 2026-11-15 00:41:11 | windows/api/iphlpapi.dll/CancelIPChangeNotify | d8e47f4ceeb05debe39595a7c2f8afecb2234822 | spec-chrome-win-s4 | impl-chrome-s4 | `specs/windows/iphlpapi.dll/CancelIPChangeNotify.yaml` sha256:385e810ea7c991239c4e04f25295658217228460f3edc58278b366382f576e10 |
 | 2026-11-15 00:41:28 | windows/api/dhcpcsvc.dll/DhcpRequestParams | d8e47f4ceeb05debe39595a7c2f8afecb2234822 | spec-chrome-win-s4 | impl-chrome-s4 | `specs/windows/dhcpcsvc.dll/DhcpRequestParams.yaml` sha256:699048c7eac533d14829006469956b58d3cd90516a7e8254615141c9a65cdca4 |
 | 2026-11-15 00:41:46 | windows/api/dhcpcsvc.dll/DhcpCApiCleanup | d8e47f4ceeb05debe39595a7c2f8afecb2234822 | spec-chrome-win-s4 | impl-chrome-s4 | `specs/windows/dhcpcsvc.dll/DhcpCApiCleanup.yaml` sha256:ba3bc2ec10192dcd2e87c087bc72f1e896dc023cc4c1c48a97c31f7c034e7707 |
+

@@ -1176,3 +1176,17 @@ pub extern "system" fn ole32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+/// `IsEqualGUID(rguid1, rguid2)`: whether two GUIDs are equal (Learn: `guiddef.h`; the logic is
+/// `poly_kernelbase::apps::guid_eq`). Doc-derived, ADR 0155 addendum, step 10.
+///
+/// # Safety
+/// Both point to 16 readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn IsEqualGUID(a: *const [u8; 16], b: *const [u8; 16]) -> i32 {
+    // SAFETY: the caller's contract.
+    i32::from(poly_kernelbase::apps::guid_eq(unsafe { &*a }, unsafe { &*b }))
+}

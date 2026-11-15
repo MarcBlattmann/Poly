@@ -561,3 +561,13 @@ v_exports! {
 }
 
 mod positional;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+/// `ceilf` (C99; the classic runtime exports it too): exact, so `poly_crt::math` (host-tested).
+/// Doc-derived (Learn: "ceil, ceilf, ceill"), ADR 0155 addendum, step 10.
+#[unsafe(no_mangle)]
+pub extern "C" fn ceilf(x: f32) -> f32 {
+    poly_crt::math::ceil(f64::from(x)) as f32
+}

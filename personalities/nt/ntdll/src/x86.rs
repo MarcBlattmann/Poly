@@ -56,8 +56,14 @@ _poly_call_handler:
     pop  ebp
     ret
 
+    /* A user APC (Poly's own frame, `poly_personality_nt::wow64::apc_frame`): ESP points at
+       the routine and its three arguments. Call `routine(arg1, arg2, arg3)` (stdcall), then
+       PolyResumeApc, which restores the interrupted context and never returns here. */
     .globl _KiUserApcDispatcher
 _KiUserApcDispatcher:
+    pop  eax
+    call eax
+    call "_PolyResumeApc@0"
     int3
 
     .globl "_RtlCaptureContext@4"

@@ -171,7 +171,9 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     if params_at == 0 || process_out == 0 || thread_out == 0 {
         return Err(STATUS_INVALID_PARAMETER);
     }
-    let params = crate::params::read(params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
+    // The block is in the caller's own layout (a 32-bit parent's has 4-byte pointers, ADR 0186).
+    let layout = k.with_state(|_, p, _| p.layout());
+    let params = crate::params::read_for(&layout, params_at, &mut |addr, buf| abi::read(k, addr, buf))?;
     let name = image_nt_name(&params.image_path)?;
     let attrs =
         abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };

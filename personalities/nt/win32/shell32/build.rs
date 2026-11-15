@@ -2,6 +2,14 @@
 //! other Win32 modules (ADR 0079).
 
 fn main() {
+    // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
+    // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
+    if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
+        for ordinal in APPS_ORDINALS {
+            println!("cargo:rustc-link-arg=/EXPORT:ord_{ordinal},@{ordinal}");
+        }
+    }
+    // END generated
     println!("cargo:rustc-link-arg=/ENTRY:shell32_main");
     // Three functions programs bind by ordinal (the pairs are the export table's; ADR 0155, step
     // 9): lld-link keeps the first `/EXPORT` of a name, so the ordinal wins over rustc's own.
@@ -9,3 +17,28 @@ fn main() {
         println!("cargo:rustc-link-arg=/EXPORT:{name},@{ordinal}");
     }
 }
+
+// BEGIN generated consts
+#[rustfmt::skip]
+const APPS_ORDINALS: &[u32] = &[
+    2,
+    4,
+    6,
+    16,
+    17,
+    18,
+    19,
+    25,
+    51,
+    102,
+    153,
+    162,
+    165,
+    195,
+    644,
+    645,
+    701,
+    716,
+    727,
+];
+// END generated consts

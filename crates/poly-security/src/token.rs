@@ -25,7 +25,9 @@ use crate::acl::{self, AclPtr};
 use crate::err::SecErr;
 use crate::sd::{self, Parts};
 use crate::sid::{self, Sid, rid};
-use crate::status::{NtStatus, STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_INFO_CLASS, STATUS_SUCCESS};
+use crate::status::{
+    NtStatus, STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_INFO_CLASS, STATUS_NOT_IMPLEMENTED, STATUS_SUCCESS,
+};
 use alloc::vec::Vec;
 
 /// `STATUS_NO_SUCH_LOGON_SESSION` (`ntstatus.h`).
@@ -146,9 +148,15 @@ pub fn set_rights(class: u32) -> u32 {
 /// are a pointer (8 bytes or more), the mandatory label 16 or more, the
 /// origin exactly 8, the `DWORD` classes exactly 4.
 pub fn set_length_ok(class: u32, length: usize) -> bool {
+    set_length_ok_width(class, length, 8)
+}
+
+/// [`set_length_ok`] for a caller with `w`-byte pointers (4 in a 32-bit process, ADR 0186: the
+/// pointer classes take 4 bytes or more, the mandatory label 8).
+pub fn set_length_ok_width(class: u32, length: usize, w: usize) -> bool {
     match class {
-        class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP | class::TOKEN_DEFAULT_DACL => length >= 8,
-        class::TOKEN_INTEGRITY_LEVEL => length >= 16,
+        class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP | class::TOKEN_DEFAULT_DACL => length >= w,
+        class::TOKEN_INTEGRITY_LEVEL => length >= 2 * w,
         class::TOKEN_ORIGIN => length == 8,
         _ => length == 4,
     }
@@ -833,30 +841,38 @@ impl Token {
     /// The structure of `class` for a buffer at address `base`, or the
     /// status for a class that cannot be answered.
     pub fn query(&self, class: u32, base: u64) -> Result<Vec<u8>, NtStatus> {
+        self.query_width(class, base, 8)
+    }
+
+    /// [`Token::query`] for a caller whose pointers are `w` bytes (8, or 4 in a 32-bit process,
+    /// ADR 0186): `SID_AND_ATTRIBUTES` is 8 bytes there, `TOKEN_GROUPS` has no padding after its
+    /// count, and every pointer is 4 bytes. `TOKEN_ACCESS_INFORMATION` has the 64-bit layout
+    /// only (`STATUS_NOT_IMPLEMENTED` for 4).
+    pub fn query_width(&self, class: u32, base: u64, w: usize) -> Result<Vec<u8>, NtStatus> {
         use class::*;
         let mut out = Vec::new();
         match class {
-            TOKEN_USER => sid_and_attributes(&mut out, base, &[(&self.user, self.user_attrs)]),
-            TOKEN_GROUPS => token_groups(&mut out, base, self.groups.iter().map(|(s, a)| (s, *a))),
-            TOKEN_RESTRICTED_SIDS => token_groups(&mut out, base, self.restricted.iter().map(|(s, a)| (s, *a))),
-            TOKEN_LOGON_SID => token_groups(&mut out, base, self.logon_sid().into_iter().map(|(s, a)| (s, *a))),
+            TOKEN_USER => sid_and_attributes(&mut out, base, w, &[(&self.user, self.user_attrs)]),
+            TOKEN_GROUPS => token_groups(&mut out, base, w, self.groups.iter().map(|(s, a)| (s, *a))),
+            TOKEN_RESTRICTED_SIDS => token_groups(&mut out, base, w, self.restricted.iter().map(|(s, a)| (s, *a))),
+            TOKEN_LOGON_SID => token_groups(&mut out, base, w, self.logon_sid().into_iter().map(|(s, a)| (s, *a))),
             TOKEN_CAPABILITIES => match &self.app_container {
-                Some(a) => token_groups(&mut out, base, a.capabilities.iter().map(|(s, at)| (s, *at))),
+                Some(a) => token_groups(&mut out, base, w, a.capabilities.iter().map(|(s, at)| (s, *at))),
                 None => {
-                    token_groups(&mut out, base, core::iter::empty());
-                    out.resize(24, 0);
+                    token_groups(&mut out, base, w, core::iter::empty());
+                    out.resize(3 * w, 0);
                 }
             },
             TOKEN_DEVICE_GROUPS => {
-                token_groups(&mut out, base, core::iter::empty());
-                out.resize(24, 0);
+                token_groups(&mut out, base, w, core::iter::empty());
+                out.resize(3 * w, 0);
             }
             TOKEN_PRIVILEGES => out = token_privileges(&self.privileges),
-            TOKEN_OWNER => pointer_then(&mut out, base, &self.owner.to_bytes()),
-            TOKEN_PRIMARY_GROUP => pointer_then(&mut out, base, &self.primary_group.to_bytes()),
+            TOKEN_OWNER => pointer_then(&mut out, base, w, &self.owner.to_bytes()),
+            TOKEN_PRIMARY_GROUP => pointer_then(&mut out, base, w, &self.primary_group.to_bytes()),
             TOKEN_DEFAULT_DACL => match &self.default_dacl {
-                Some(a) => pointer_then(&mut out, base, a),
-                None => out.extend_from_slice(&0u64.to_le_bytes()),
+                Some(a) => pointer_then(&mut out, base, w, a),
+                None => out.resize(w, 0),
             },
             TOKEN_SOURCE => {
                 out.extend_from_slice(b"Poly\0\0\0\0");
@@ -890,24 +906,25 @@ impl Token {
             }
             TOKEN_SESSION_ID => u32s(&mut out, &[self.session]),
             TOKEN_GROUPS_AND_PRIVILEGES => {
-                // Header (56 bytes), the user and groups, the restricting SIDs, the privileges.
+                // Header (56 bytes, 44 in 32 bits), the user and groups, the restricting SIDs,
+                // the privileges.
                 let mut all: Vec<(&Sid, u32)> = alloc::vec![(&self.user, self.user_attrs)];
                 all.extend(self.groups.iter().map(|(s, a)| (s, *a)));
                 let rs: Vec<(&Sid, u32)> = self.restricted.iter().map(|(s, a)| (s, *a)).collect();
                 let sid_len: usize = all.iter().map(|(s, _)| s.len()).sum();
                 let res_len: usize = rs.iter().map(|(s, _)| s.len()).sum();
-                let a_off = 56usize;
-                let r_off = a_off + 16 * all.len() + sid_len;
-                let p_off = r_off + 16 * rs.len() + res_len;
+                let a_off = 3 * (8 + w) + 8;
+                let r_off = a_off + 2 * w * all.len() + sid_len;
+                let p_off = r_off + 2 * w * rs.len() + res_len;
                 u32s(&mut out, &[all.len() as u32, sid_len as u32]);
-                out.extend_from_slice(&(base + a_off as u64).to_le_bytes());
+                pointer(&mut out, base + a_off as u64, w);
                 u32s(&mut out, &[rs.len() as u32, res_len as u32]);
-                out.extend_from_slice(&(base + r_off as u64).to_le_bytes());
+                pointer(&mut out, base + r_off as u64, w);
                 u32s(&mut out, &[self.privileges.len() as u32, 12 * self.privileges.len() as u32]);
-                out.extend_from_slice(&(base + p_off as u64).to_le_bytes());
+                pointer(&mut out, base + p_off as u64, w);
                 out.extend_from_slice(&self.authentication_id.to_le_bytes());
-                sid_and_attributes(&mut out, base, &all);
-                sid_and_attributes(&mut out, base, &rs);
+                sid_and_attributes(&mut out, base, w, &all);
+                sid_and_attributes(&mut out, base, w, &rs);
                 for &(l, a) in &self.privileges {
                     u32s(&mut out, &[l, 0, a]);
                 }
@@ -919,12 +936,13 @@ impl Token {
             TOKEN_LINKED_TOKEN => return Err(STATUS_NO_SUCH_LOGON_SESSION),
             TOKEN_ELEVATION => u32s(&mut out, &[u32::from(self.elevated)]),
             TOKEN_HAS_RESTRICTIONS => out.push(u8::from(self.has_restrictions())),
+            TOKEN_ACCESS_INFORMATION if w != 8 => return Err(STATUS_NOT_IMPLEMENTED),
             TOKEN_ACCESS_INFORMATION => self.access_information(base, &mut out),
             TOKEN_VIRTUALIZATION_ALLOWED => u32s(&mut out, &[u32::from(self.flags & F_VIRT_ALLOWED != 0)]),
             TOKEN_VIRTUALIZATION_ENABLED => u32s(&mut out, &[u32::from(self.flags & F_VIRT_ENABLED != 0)]),
             TOKEN_INTEGRITY_LEVEL => {
                 let label = sid::mandatory(self.integrity_rid());
-                sid_and_attributes(&mut out, base, &[(&label, SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED)]);
+                sid_and_attributes(&mut out, base, w, &[(&label, SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED)]);
             }
             TOKEN_UI_ACCESS => u32s(&mut out, &[u32::from(self.flags & F_UI_ACCESS != 0)]),
             TOKEN_MANDATORY_POLICY => u32s(&mut out, &[self.mandatory_policy]),
@@ -932,15 +950,17 @@ impl Token {
             TOKEN_APP_CONTAINER_NUMBER => u32s(&mut out, &[self.app_container.as_ref().map_or(0, |a| a.number)]),
             TOKEN_PRIVATE_NAME_SPACE | TOKEN_IS_APP_SILO => u32s(&mut out, &[0]),
             TOKEN_APP_CONTAINER_SID => match &self.app_container {
-                Some(a) => pointer_then(&mut out, base, &a.sid.to_bytes()),
-                None => out.extend_from_slice(&0u64.to_le_bytes()),
+                Some(a) => pointer_then(&mut out, base, w, &a.sid.to_bytes()),
+                None => out.resize(w, 0),
             },
+            // `CLAIM_SECURITY_ATTRIBUTES_INFORMATION`: two `WORD`s, a `DWORD`, a pointer.
             TOKEN_USER_CLAIM_ATTRIBUTES | TOKEN_DEVICE_CLAIM_ATTRIBUTES | TOKEN_SECURITY_ATTRIBUTES => {
-                out.extend_from_slice(&[0; 16])
+                out.resize(8 + w, 0)
             }
             TOKEN_IS_RESTRICTED => u32s(&mut out, &[u32::from(self.is_restricted())]),
-            TOKEN_PROCESS_TRUST_LEVEL => out.extend_from_slice(&0u64.to_le_bytes()),
-            TOKEN_SINGLETON_ATTRIBUTES | TOKEN_BNO_ISOLATION => out.resize(16, 0),
+            TOKEN_PROCESS_TRUST_LEVEL => out.resize(w, 0),
+            // A pointer and a flag (`TOKEN_BNO_ISOLATION_INFORMATION`).
+            TOKEN_SINGLETON_ATTRIBUTES | TOKEN_BNO_ISOLATION => out.resize(2 * w, 0),
             _ => return Err(STATUS_INVALID_INFO_CLASS),
         }
         Ok(out)
@@ -1028,21 +1048,28 @@ fn u32s(out: &mut Vec<u8>, v: &[u32]) {
     }
 }
 
+/// A `w`-byte pointer.
+fn pointer(out: &mut Vec<u8>, v: u64, w: usize) {
+    out.extend_from_slice(&v.to_le_bytes()[..w]);
+}
+
 /// A pointer to the bytes that follow it (`TOKEN_OWNER`, ...).
-fn pointer_then(out: &mut Vec<u8>, base: u64, data: &[u8]) {
-    out.extend_from_slice(&(base + 8).to_le_bytes());
+fn pointer_then(out: &mut Vec<u8>, base: u64, w: usize, data: &[u8]) {
+    pointer(out, base + (out.len() + w) as u64, w);
     out.extend_from_slice(data);
 }
 
-/// `SID_AND_ATTRIBUTES[n]` (16 bytes each: pointer, attributes, padding)
-/// at the current end of `out`, then the SIDs; the pointers are relative to
-/// `base`, the address of the whole structure's first byte.
-fn sid_and_attributes(out: &mut Vec<u8>, base: u64, entries: &[(&Sid, u32)]) {
+/// `SID_AND_ATTRIBUTES[n]` (16 bytes each: pointer, attributes, padding;
+/// 8 with 4-byte pointers) at the current end of `out`, then the SIDs; the
+/// pointers are relative to `base`, the address of the whole structure's
+/// first byte.
+fn sid_and_attributes(out: &mut Vec<u8>, base: u64, w: usize, entries: &[(&Sid, u32)]) {
     let start = out.len();
-    let mut sid_at = start + 16 * entries.len();
+    let mut sid_at = start + 2 * w * entries.len();
     for (s, a) in entries {
-        out.extend_from_slice(&(base + sid_at as u64).to_le_bytes());
-        u32s(out, &[*a, 0]);
+        pointer(out, base + sid_at as u64, w);
+        u32s(out, &[*a]);
+        out.resize(out.len() + (w - 4), 0);
         sid_at += s.len();
     }
     for (s, _) in entries {
@@ -1050,11 +1077,12 @@ fn sid_and_attributes(out: &mut Vec<u8>, base: u64, entries: &[(&Sid, u32)]) {
     }
 }
 
-/// `TOKEN_GROUPS`: `GroupCount`, padding to 8, the array, the SIDs.
-fn token_groups<'a>(out: &mut Vec<u8>, base: u64, groups: impl Iterator<Item = (&'a Sid, u32)>) {
+/// `TOKEN_GROUPS`: `GroupCount`, padding to the pointer size, the array, the SIDs.
+fn token_groups<'a>(out: &mut Vec<u8>, base: u64, w: usize, groups: impl Iterator<Item = (&'a Sid, u32)>) {
     let groups: Vec<(&Sid, u32)> = groups.collect();
-    u32s(out, &[groups.len() as u32, 0]);
-    sid_and_attributes(out, base, &groups);
+    u32s(out, &[groups.len() as u32]);
+    out.resize(out.len() + (w - 4), 0);
+    sid_and_attributes(out, base, w, &groups);
 }
 
 /// The status and what to copy for a buffer of `length` bytes (`ReturnLength`
@@ -1404,5 +1432,29 @@ mod tests {
         // The privileges pointer lands inside the buffer.
         let p = u64::from_le_bytes(b[16..24].try_into().unwrap()) - 0x1000;
         assert!((88..b.len() as u64).contains(&p));
+    }
+
+    #[test]
+    fn a_32_bit_caller_gets_4_byte_pointers_and_8_byte_sid_and_attributes() {
+        let t = Token::poly_user();
+        let base = 0x0040_0000u64;
+        let user = t.query_width(class::TOKEN_USER, base, 4).unwrap();
+        // SID_AND_ATTRIBUTES: the SID right after the 8-byte entry.
+        assert_eq!(u64::from(u32_at(&user, 0)), base + 8);
+        assert_eq!(&user[8..], &t.user.to_bytes()[..]);
+        let groups = t.query_width(class::TOKEN_GROUPS, base, 4).unwrap();
+        let n = u32_at(&groups, 0) as usize;
+        assert_eq!(n, t.groups.len());
+        // The array right after the count, then the SIDs.
+        assert_eq!(u64::from(u32_at(&groups, 4)), base + 4 + 8 * n as u64);
+        assert_eq!(u32_at(&groups, 8), t.groups[0].1);
+        let owner = t.query_width(class::TOKEN_OWNER, base, 4).unwrap();
+        assert_eq!((u64::from(u32_at(&owner, 0)), owner.len()), (base + 4, 4 + t.owner.len()));
+        let gp = t.query_width(class::TOKEN_GROUPS_AND_PRIVILEGES, base, 4).unwrap();
+        assert_eq!(u64::from(u32_at(&gp, 8)), base + 44);
+        assert_eq!(t.query_width(class::TOKEN_ACCESS_INFORMATION, base, 4), Err(STATUS_NOT_IMPLEMENTED));
+        // Classes without pointers are the same in both widths.
+        assert_eq!(t.query_width(class::TOKEN_STATISTICS, 0, 4), t.query(class::TOKEN_STATISTICS, 0));
+        assert!(set_length_ok_width(class::TOKEN_OWNER, 4, 4) && !set_length_ok(class::TOKEN_OWNER, 4));
     }
 }
