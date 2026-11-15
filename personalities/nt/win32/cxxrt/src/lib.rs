@@ -44,7 +44,8 @@ use poly_cxxeh::tables::Func;
 use poly_cxxeh::throw::{CatchObject, Exception, ThrowInfo, catch_object};
 use poly_cxxeh::{Bad, BadAddress, Memory};
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RaiseException(code: u32, flags: u32, count: u32, args: *const usize);
     fn RtlPcToFileHeader(pc: *const u8, base: *mut *mut u8) -> *mut u8;
@@ -56,7 +57,8 @@ unsafe extern "system" {
     fn SetLastError(e: u32);
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RtlUnwindEx(frame: u64, target: u64, record: *mut u8, value: u64, context: *mut u8, history: *mut u8) -> !;
 }

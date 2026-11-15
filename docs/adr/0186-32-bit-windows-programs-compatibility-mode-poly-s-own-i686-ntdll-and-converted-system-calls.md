@@ -411,3 +411,103 @@ Inputs as above (Learn, the SDK headers' `_X86_` and 32-bit layouts), nothing el
   common-control functions of the DLLs that are still x64-only (`advapi32`, `ole32`, `oleaut32`,
   `shell32`, `comctl32`, `comdlg32`, ...). The next step is building those for i686 as this stage
   did for `user32` and `gdi32`.
+
+## Addendum: stage 3 — the other system DLLs, SafeSEH, and where WinSCP stands (`nt-wow64-3`)
+
+### i686 builds of the other system DLLs
+
+`cargo xtask wow64` now also builds `advapi32`, `ole32`, `oleaut32`, `shell32`, `shlwapi`,
+`comctl32`, `version`, `winmm`, `ws2_32`, `imm32`, `uxtheme`, `dwmapi`, `shcore`, `secur32`,
+`crypt32`, `winhttp`, `wininet`, `iphlpapi`, `wtsapi32`, `oleacc`, `powrprof`, `userenv`, `bcrypt`,
+`bcryptprimitives`, `ncrypt`, `netapi32`, `setupapi`, `propsys`, `wintrust`, `cfgmgr32` and `dbghelp`
+(`wow64::SYSTEM_MODULES`) from the sources of the x64 ones. The kernel's `build.rs` embeds every
+`*.dll` of the directory (`WOW64_DLLS`, generated), the layout installs them in `SysWOW64`, and
+`verify` checks the set (imports only between our modules, no decorated names, every imported name
+exported). What the x64 sources assumed:
+
+- **Imports.** A `raw-dylib` link of 32-bit code binds `_Name@N` unless it says
+  `import_name_type = "undecorated"`: no DLL exports that, so the load failed with
+  `0xC0000139`. Every link of the Win32 workspace now has the two `cfg_attr` forms, `cargo xtask
+  ci lint` checks it (`wow64::check_links`), and the build repeats the check, so a new link
+  without a 32-bit form fails with a file and line, not in a guest.
+- **Layouts.** Found by `sys32.exe` (below) and fixed by pointer width, with host tests for both
+  widths: `TOKEN_USER` (`GetUserNameW` skipped 16 bytes of header), the `SAFEARRAY` descriptor
+  (`pvData` at 12 and `rgsabound` at 16, not 16 and 24), `CommandLineToArgvW`'s block (4-byte
+  pointers), `URL_COMPONENTS` (60 bytes), the PEB read of `wtsapi32` (`fs:[0x30]`).
+- **Not done**: the x64-only pieces of these DLLs that are not on a tested path (`inet`'s and
+  `netrt`'s structures beyond `URL_COMPONENTS`, `dwrite`, `crypt32`'s certificate structures) have
+  not been run in 32 bits.
+
+`tests/windows/wow64/sys32.rs` (`nt_wow64_32_bit_program_uses_the_system_dlls`) runs 11 checks
+through these DLLs in a 32-bit program: the registry, a token and its SID, COM and GUIDs, `BSTR`,
+`VARIANT` and `SAFEARRAY`, `CommandLineToArgvW` and `SHGetFolderPathW`, `shlwapi` paths, a version
+resource (`VS_FIXEDFILEINFO`), `timeGetTime` and `InitCommonControlsEx`, a TCP connection over the
+loopback interface (the AFD structures in 32 bits), `BCryptGenRandom` and SHA-256, and
+`GetUserNameExW`.
+
+### The 32-bit `polystub.dll` returns when it knows the signature
+
+`poly_stubs::x86_signatures.txt` lists, from the prototypes on Learn, how many 4-byte stack slots
+the arguments of a missing function take (about 290 functions that WinSCP, 7-Zip, PuTTY and
+Process Explorer import and Poly lacks). A function in the table gets a stub that logs
+`stub: dll!name`, fails the way the x64 stub does (0 and `ERROR_CALL_NOT_IMPLEMENTED`,
+`E_NOTIMPL`, `STATUS_NOT_IMPLEMENTED`) and returns with the right `ret 4n` (a plain `ret` for the
+`cdecl` `wsprintfA`); any other still ends the process. A program therefore runs past its first
+missing function, and a run lists every stub it reached (`stub calls reached`), which is what
+makes WinSCP's remaining list readable. A wrong count would corrupt the stack, so an entry is
+added from the function's page when a program reaches it, not guessed.
+
+### Start-up calls and ANSI forms
+
+`GetThreadLocale`/`SetThreadLocale` (one locale), `GetUser/SystemDefaultUILanguage`,
+`GetThreadUILanguage`, `SetThreadPreferredUILanguages`, `SetHandleCount` (returns its argument),
+`MulDiv` (`poly_kernelbase::muldiv`, halves away from zero), `GetEnvironmentStrings(A)`,
+`FreeEnvironmentStringsA`, `GetModuleFileNameA`, `GetCurrentDirectoryA`; the i686 `kernel32` also
+forwards `RtlUnwind` to `ntdll`. `poly.nt.trace` reads the calls of 32-bit threads (arguments at
+`EDX`, 4-byte `UNICODE_STRING`/`OBJECT_ATTRIBUTES`), so a 32-bit program's file and registry names
+show in the trace like a 64-bit one's.
+
+### SafeSEH (stage 4 of the staged plan, "SafeSEH checks")
+
+Learn ("/SAFESEH (Image has Safe Exception Handlers)", "PE Format: The Load Configuration
+Structure"): a 32-bit image linked with `/SAFESEH` carries `SEHandlerTable` (the VA of a sorted
+table of RVAs) and `SEHandlerCount` in its load configuration, and the system calls no other
+handler of that image; `IMAGE_DLLCHARACTERISTICS_NO_SEH` says the image has none at all.
+`poly_pe::handler_is_safe` decides from a mapped image: a handler in a table is safe, one not in
+it is not (an empty table allows none), `NO_SEH` allows none, an image without a table (linked
+without `/SAFESEH`, as Borland's linker and old Visual C++ do) allows any of its code, and code
+outside every image (a thunk made at run time) is not judged. The i686 `ntdll`'s dispatcher asks
+before it calls a frame's handler; a refused handler raises `STATUS_INVALID_EXCEPTION_HANDLER`
+(`0xC00001A5`, non-continuable, naming the first exception), which ends the process.
+
+lld marks an x86 image `NO_SEH` when it has no safe handler table, so the test programs, which
+register their own frames, are linked `/safeseh:no` (legacy images); `safeseh32.exe` is linked
+`/safeseh` with a `.safeseh` handler and checks both ways
+(`nt_wow64_safe_exception_handlers_are_checked`): the listed handler continues, the unlisted one
+is refused with `0xC00001A5`.
+
+### The C runtime (stage 3 of the staged plan): not started
+
+`poly-win32-crt`, `ucrtbase` and `msvcrt` do not build for i686 and need more than layout fixes:
+`setjmp`/`longjmp` (x64 `RtlUnwindEx`, `gs:[8]`; x86 has its own `_JUMP_BUFFER` and unwinds the
+`fs:[0]` chain), `LegacyInfo` (size and offsets asserted for 64 bits), `FILE`/`_iobuf` and
+`va_list` (the formatter reads 8-byte slots; x86 slots are 4 bytes, 8 for `double` and 64-bit
+integers), start-up (`__argc`, `_environ`), and `_except_handler3/4` with `_global_unwind2` on the
+frame dispatcher. None of WinSCP, Inno Setup or NSIS needs it (Borland's runtime and NSIS's own
+code import `kernel32` directly); Visual C++ programs built with `/MD` do, together with
+`vcruntime140` (ADR 0199, which shares its C++ exception code with the 64-bit one).
+
+### WinSCP 6.7.1
+
+With the i686 DLLs, the GUI branch's menus, dialogs and `MessageBox` (not yet in `main` at the
+time of writing, `impl-win-apps-gui`), the signature table and the start-up calls above, WinSCP
+runs its Borland start-up: the runtime shows its own message box (the first window of a 32-bit
+program that is not ours) while `GetEnvironmentStrings` was a stub, then gets through the
+runtime's initialisation, the `Variants`/locale/registry probes, window-class registration and a
+probe for `Msctf.dll`, and ends in a read past the end of a buffer in its own code
+(`WinSCP.exe+0x3a90ca`, address `0x1811000`). It shows no main window yet. The next stoppers, in
+the order the run reaches them: that crash (an unterminated or mis-sized value some call returned:
+the `A` forms of `Char*Buff`, `GetLocaleInfoA`, `GetStringTypeA` and `LCMapStringA` are the
+candidates: they are stubs that return 0), the `oleaut32` ordinals the Delphi `Variants` unit
+probes (`VariantChangeTypeEx`, `VarNeg`), then the comctl32 controls (`SysListView32`,
+`SysTreeView32`, toolbars, status bars) that its forms create.

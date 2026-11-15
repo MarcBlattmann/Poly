@@ -42,7 +42,8 @@ const CONTEXT_SIZE: usize = 0x4D0;
 /// `sizeof(EXCEPTION_RECORD)` on x64 (`winnt.h`).
 const RECORD_SIZE: usize = 0x98;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RtlCaptureContext(context: *mut u8);
     fn RtlUnwindEx(frame: u64, target: u64, record: *mut u8, value: u64, context: *mut u8, history: *mut u8);

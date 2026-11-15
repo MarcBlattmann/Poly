@@ -35,7 +35,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use poly_cxxeh::typeinfo::{self, TextCopy};
 use poly_win32_cxxrt as cxxrt;
 
-#[link(name = "ucrtbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ucrtbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ucrtbase", kind = "raw-dylib"))]
 unsafe extern "C" {
     #[link_name = "terminate"]
     fn ucrt_terminate() -> !;
@@ -44,7 +45,8 @@ unsafe extern "C" {
     fn strlen(s: *const u8) -> usize;
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RtlUnwind(frame: *mut u8, target: *mut u8, record: *mut u8, value: *mut u8);
 }
