@@ -1354,11 +1354,32 @@ mod tests {
 
     #[test]
     fn stage_one_and_two_run_the_specs_page() {
-        for st in STAGES.iter().filter(|s| s.program.is_none()) {
+        for st in STAGES.iter().filter(|s| s.program.is_none() && s.number < 3) {
             assert!(st.args.contains(&"file:///C:/poly-test/s1.html"));
             assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
             assert!(st.expect.contains("script-ran 42"));
         }
+    }
+
+    #[test]
+    fn stage_four_runs_the_network_page_and_the_spec_records_its_output() {
+        let st = STAGES.iter().find(|s| s.number == 4).unwrap();
+        assert!(st.args.contains(&"file:///C:/poly-test/s4.html"));
+        assert!(st.args.contains(&"--no-sandbox"));
+        assert_eq!(st.expect, S4_EXPECT);
+        // The page the spec recorded the digest of, and the digest: 831 bytes.
+        let text = std::fs::read_to_string(crate::root().join(SPEC_RESULTS_PATH)).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(crate::sha256::hex(&s4_page().unwrap()), json["pages"]["s4.html"].as_str().unwrap());
+        assert_eq!(spec_stdout("s4-headless").unwrap().0, 831);
+        let mut s = Summary {
+            stdout_bytes: Some(831),
+            stdout_sha256: Some(spec_stdout("s4-headless").unwrap().1),
+            ..Summary::default()
+        };
+        assert_eq!(digest_note(st, &s), None);
+        s.stdout_bytes = Some(440);
+        assert!(digest_note(st, &s).unwrap().contains("the spec records 831 bytes"));
     }
 
     #[test]
