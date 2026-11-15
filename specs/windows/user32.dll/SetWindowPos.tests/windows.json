@@ -26,6 +26,7 @@
     },
     {
       "name": "swp_chrome_resize",
+      "session": "interactive-bottom",
       "exe_sha256": "d45ce74bed6c5d707479552986e946aad5d9802ca0ba9ef1a479e5c43cb204d0",
       "status": "ran",
       "exit_code": 0,
