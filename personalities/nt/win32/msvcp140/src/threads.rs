@@ -11,7 +11,8 @@ use core::sync::atomic::{AtomicI32, Ordering};
 use poly_msvcp::mutex::{self, NO_OWNER, Step, ThrdResult};
 use poly_msvcp::time;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn QueryPerformanceCounter(value: *mut i64) -> i32;
     fn QueryPerformanceFrequency(value: *mut i64) -> i32;

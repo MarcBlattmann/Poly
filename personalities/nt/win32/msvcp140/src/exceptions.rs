@@ -37,7 +37,8 @@ struct SystemError {
 const _: () = assert!(core::mem::size_of::<Exception>() == 24);
 const _: () = assert!(core::mem::size_of::<SystemError>() == SYSTEM_ERROR_SIZE as usize);
 
-#[link(name = "vcruntime140", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "vcruntime140", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "vcruntime140", kind = "raw-dylib"))]
 unsafe extern "C" {
     fn _CxxThrowException(object: *mut u8, throw_info: *const u8) -> !;
     fn __uncaught_exceptions() -> i32;
@@ -45,7 +46,8 @@ unsafe extern "C" {
     fn __std_exception_destroy(data: *mut Data);
 }
 
-#[link(name = "ucrtbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ucrtbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ucrtbase", kind = "raw-dylib"))]
 unsafe extern "C" {
     fn free(p: *mut u8);
 }
