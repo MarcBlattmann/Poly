@@ -112,7 +112,7 @@
 {"symbol":"StrongNameTokenFromPublicKey","src":["wine-spec"]},
 {"symbol":"TranslateSecurityAttributes","src":["wine-spec"]},
 {"symbol":"UpdateError","src":["wine-spec"]},
-{"symbol":"_CorDllMain","src":["wine-spec"]},
+{"symbol":"_CorDllMain","status":"stub","src":["wine-spec"]},
 {"symbol":"_CorExeMain","src":["wine-spec"]},
 {"symbol":"_CorExeMain2","src":["wine-spec"]},
 {"symbol":"_CorImageUnloading","src":["wine-spec"]},
