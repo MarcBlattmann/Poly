@@ -16,8 +16,8 @@ mod display;
 mod icons;
 mod layered;
 mod s3;
-mod winsta;
 mod strings;
+mod winsta;
 
 use alloc::vec;
 use alloc::vec::Vec;
