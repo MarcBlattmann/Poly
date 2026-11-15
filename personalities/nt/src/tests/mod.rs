@@ -387,6 +387,15 @@ impl NtKernel for Fake {
         }
     }
 
+    fn with_process<R>(
+        &mut self,
+        pid: ProcessId,
+        f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        let (child, mem) = self.children.iter_mut().find(|(p, _)| p.pid == pid)?;
+        Some(f(&mut self.sys, child, mem))
+    }
+
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
         crate::exec::thread_exit(&mut self.sys, &mut self.proc, &mut self.mem, thread, status);
         Ok(())

@@ -250,6 +250,20 @@ unsafe extern "system" {
         length: usize,
         returned: *mut usize,
     ) -> NtStatus;
+    pub fn NtReadVirtualMemory(
+        process: Handle,
+        base: *const u8,
+        buf: *mut u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
+    pub fn NtWriteVirtualMemory(
+        process: Handle,
+        base: *mut u8,
+        buf: *const u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
 
     pub fn NtCreateSection(
         handle: *mut Handle,

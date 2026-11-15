@@ -287,6 +287,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
         AllocateLocallyUniqueId => security::allocate_locally_unique_id(k, regs),
+        ReadVirtualMemory => memory::read_virtual(k, regs),
+        WriteVirtualMemory => memory::write_virtual(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
         QuerySection => memory::query_section(k, regs),
         UnmapViewOfSectionEx => memory::unmap_view_ex(k, regs),
