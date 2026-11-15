@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CLSID_BackgroundCopyManager.yaml
+id: windows/api/ole32.dll/CLSID_BackgroundCopyManager
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the BITS service there is configured demand start and was stopped when queried after the runs (it starts when the class is created and stops itself when idle)"
+  observed_by: spec-com-ole-tls
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "BITS Reference" (CLSID_BackgroundCopyManager
+  4991D34B-80A1-4291-83B6-3328366B9097 and IID_IBackgroundCopyManager 5CE34C0D-0DC9-4C1F-897C-DAA1B78CEE7C, bits.h),
+  "CoCreateInstance", "CoGetClassObject", "CLSCTX"; winerror.h (REGDB_E_CLASSNOTREG 0x80040154, E_NOINTERFACE 0x80004002,
+  CLASS_E_NOAGGREGATION 0x80040110, CO_E_NOTINITIALIZED 0x800401F0). Wine's tests were not read. The tests only create
+  the manager object and release it; they make no transfer job.
+summary: >
+  What Windows answers when a program creates the Background Intelligent Transfer Service's manager object, which
+  Chrome's component updater does for its downloads (hand-off fable-c62f809). On the oracle, with the service
+  installed (demand start), CoCreateInstance(CLSID_BackgroundCopyManager, NULL, CLSCTX_ALL, IID_IBackgroundCopyManager)
+  returns S_OK with a new object on every call, in an apartment-threaded and a multithreaded thread, in session 0 as an
+  administrator; the class is a local server, so CLSCTX_LOCAL_SERVER (4) and 1|4 work and CLSCTX_INPROC_SERVER (1),
+  CLSCTX_REMOTE_SERVER (0x10) and context 0 give REGDB_E_CLASSNOTREG 0x80040154. A class nothing registers gives the
+  same 0x80040154 in every context (the answer for BITS where its class is not registered). What Windows answers where
+  the service itself is missing or disabled was not observed (see not_covered).
+interface:
+  signature: "HRESULT CoCreateInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD context, REFIID iid, LPVOID* object); HRESULT CoGetClassObject(REFCLSID, DWORD, COSERVERINFO*, REFIID, LPVOID*)"
+chrome:
+  calls: "the browser's component updater creates this class on its COM thread in DoStartDownload (hand-off fable-c62f809), after the apartment check of TEB.ReservedForOle and a request for the global interface table; the context and interface it passes are not known"
+rules:
+  bits_present: "CLSCTX_ALL (0x17), CLSCTX_LOCAL_SERVER (4) and 5: S_OK, interface returned. CLSCTX_INPROC_SERVER (1), CLSCTX_REMOTE_SERVER (0x10) and 0: REGDB_E_CLASSNOTREG 0x80040154, output NULL. Two creations give two different interface pointers. QueryInterface of the object: IUnknown S_OK, IMarshal S_OK, IGlobalInterfaceTable E_NOINTERFACE. The same results in an apartment-threaded (flags 6) and a multithreaded (flags 4) thread."
+  interfaces: "IID_IUnknown: S_OK; IID_IGlobalInterfaceTable (not supported): E_NOINTERFACE 0x80004002, output NULL; with a non-NULL outer unknown (an object of the test): CLASS_E_NOAGGREGATION 0x80040110 and the outer object's reference count is unchanged."
+  thread_states: "on a thread that never initialised COM: CO_E_NOTINITIALIZED 0x800401F0 (output NULL); the failing call gives the thread a TEB.ReservedForOle block with value 0x1 (see that sheet). On a thread that never initialised COM while another thread holds the multithreaded apartment (implicit MTA): S_OK, the thread's TEB.ReservedForOle then holds value 0x3. After the thread's CoUninitialize: CO_E_NOTINITIALIZED 0x800401F0 again."
+  unregistered: "a class id nothing registers: REGDB_E_CLASSNOTREG 0x80040154 for CLSCTX_ALL, LOCAL_SERVER, INPROC_SERVER, REMOTE_SERVER and context 0, output NULL; CoGetClassObject for the same class in the contexts 0x17, 4 and 1: 0x80040154, output NULL; the all-zero class id: 0x80040154."
+  poly_answer: "to answer as Windows does where BITS is not there at all, give REGDB_E_CLASSNOTREG (0x80040154), the answer for a class that is not registered, with the output pointer set to NULL, for CoCreateInstance and CoGetClassObject of CLSID_BackgroundCopyManager in every context; the sheet does not say whether Chrome then falls back to its normal downloader (not observable here, Chrome was not run)."
+errors:
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  no_aggregation: "CLASS_E_NOAGGREGATION 0x80040110"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+side_effects: "the first successful creation starts the service on a machine where it is stopped (demand start); the tests release every object at once"
+threading: "may be called from any initialised thread; also from a thread in the implicit MTA"
+ordering: []
+timing:
+  typical: "a few milliseconds when the service has to start, then well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, bits.h and objbase.h
+  constants). Observations are HRESULTs and booleans, never addresses. Scenarios run on their own threads; the parent
+  prints their lines after joining them; waits are bounded (10 s).
+not_covered: >
+  A machine where the BITS service is disabled, deleted or cannot start (the oracle was not reconfigured: stopping or
+  disabling a Windows service is the owner's decision; run `sc config bits start= disabled` and the creation test again
+  there if that answer is needed, then `sc config bits start= demand`), another token (a restricted, low-integrity or
+  AppContainer process), the interface methods (CreateJob and the rest: no job is made), Chrome's own fall-back, and
+  the other BITS classes (CLSID_BackgroundCopyManager1_5 and later versions).
