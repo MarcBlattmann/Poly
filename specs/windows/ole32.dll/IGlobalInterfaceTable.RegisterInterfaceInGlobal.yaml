@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/IGlobalInterfaceTable.RegisterInterfaceInGlobal.yaml
+id: windows/api/ole32.dll/IGlobalInterfaceTable.RegisterInterfaceInGlobal
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-com-ole-tls
+  date: 2026-11-15
+sources: >
+  The same observations as the sheet it points to; its tests call this function.
+summary: >
+  Stores an interface pointer in the process-wide table and returns a cookie. No tests of its own; the rules are the register and across_apartments rules of the class sheet.
+same_as: "windows/api/ole32.dll/CLSID_StdGlobalInterfaceTable"
+interface:
+  signature: "HRESULT IGlobalInterfaceTable::RegisterInterfaceInGlobal(IUnknown* object, REFIID iid, DWORD* cookie)"
+rules:
+  see_sheet: "the register, get_same_apartment, across_apartments and registrant_ends rules of CLSID_StdGlobalInterfaceTable: S_OK, a non-zero cookie that is different for each registration and never reused, one reference added to the object, no check of the interface id at registration"
+errors:
+  see_sheet: "the errors of the sheet it points to"
+side_effects: "see the sheet it points to"
+threading: "see the sheet it points to"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  see the sheet it points to
+not_covered: >
+  Everything that sheet lists as not covered.

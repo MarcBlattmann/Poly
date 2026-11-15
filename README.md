@@ -123,7 +123,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,210 | 633 | 3,640 | 3,145 | 53,496 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,216 | 633 | 3,640 | 3,153 | 53,494 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -137,6 +137,7 @@ Seeded from (names only):
 - `ms-learn-commctrl`: Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
+- `windows-com-state`: COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls) @ `Windows 11 25H2 build 26200.9974`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
 - `wine-spec`: Wine .spec export lists (wine-mirror/wine dlls/*/*.spec) @ `840a939ee526137639665ff5f587224d6a36403f`
 - `xnu-mach-traps`: XNU osfmk/kern/syscall_sw.c mach_trap_table @ `f6217f891ac0bb64f3d375211650a4c1ff8ca1ea`
