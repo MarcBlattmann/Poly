@@ -24,6 +24,7 @@ interface:
 rules:
   codes: "0 -> errc::device_or_resource_busy (value 16, what \"device or resource busy: device or resource busy\"); 1 -> invalid_argument (22); 2 -> no_such_process (3); 3 -> not_enough_memory (12); 4 -> operation_not_permitted (1); 5 -> resource_deadlock_would_occur (36); 6 -> resource_unavailable_try_again (11); each what() is \"<text>: <text>\" with <text> = the errc name with spaces (\"resource unavailable try again\"); e.code().category() == std::generic_category()"
   type: "the exception is exactly std::system_error (a std::runtime_error, a std::exception)"
+  category: "the category object inside the thrown error_code is created by the library and is a DIFFERENT object from the program's own std::generic_category(), but compares equal to it: std::error_category::operator== compares the 64-bit identity word stored at offset 8 of the object (after the virtual table pointer), not the address; the identity word of the generic category is 3 (iostream 5, system 7). The test msvcp_throw_cpp_error checks `e.code().category() == std::generic_category()`. The layout of error_category, its virtual table order, the three words and the other category functions are in the sheet of ?_Winerror_message@std@@YAKKPEADK@Z (spec-vcrt-2), and the test error_library_categories there checks this identity too."
 errors:
   throws: "std::system_error"
 side_effects: "none beyond the results above"

@@ -288,3 +288,29 @@ output for our own programs. Round 1 delivered:
   members), `locale` basics, `_Query_*` siblings beyond the sheets, exceptions across a DLL built by
   Microsoft's compiler (only ucrtbase/kernel32 callbacks), i686.
 
+
+## Update 2026-11-16: spec round 2 (spec-vcrt-2): `std::pmr` defaults, streams, locale, error categories
+
+Sheets, MSVC-built tests and hand-offs to `impl-vcrt` for what KeePassXC needs after Qt's start-up:
+
+- **`msvcp140_1.dll`:** the default resource (`_Aligned_get_default_resource` and the set/unaligned family:
+  one shared pointer, "not set" reads as the new/delete resource of the caller's kind), the two
+  new/delete resources, `null_memory_resource`; the `memory_resource` layout (one vtable pointer; slots
+  destructor, `do_allocate`, `do_deallocate`, `do_is_equal`).
+- **`msvcp140.dll`:** `ios_base`, `basic_ios<char>`, `basic_streambuf<char>`, `basic_ostream<char>`,
+  `basic_istream<char>`/`basic_iostream<char>` (layouts with the virtual base, the hidden
+  "construct the virtual base" constructor argument, the vbase destructor, every member's behaviour),
+  `cin`/`cout`/`cerr`/`clog` with `ios_base::Init`, `locale` (classic and global, `_Locimp`, `facet`,
+  `id`), `_Locinfo`, `ctype<char>`, `num_put<char>` and `num_get<char>` (with the `numpunct<char>` layout
+  they read), and the error-category pieces `_Syserror_map`, `_Winerror_map`, `_Winerror_message`,
+  `_Throw_C_error`, `_XGetLastError` and the identity words of the standard categories (3 generic,
+  5 iostream, 7 system), which settle the spec gap of `_Throw_Cpp_error`.
+- **Findings an implementer needs:** Microsoft's compiler lays out overloaded virtual functions of one
+  name in reverse order of declaration (`do_put`, `do_get`, `ctype<char>::do_*`, `error_category::equivalent`);
+  `_Facet_Register`, `__std_system_error_allocate_message` and the `<iostream>` static `Init` object are
+  not exports of the DLL (static library); the classic locale has no facet vector (facets are made lazily
+  by the program); `ctype<char>` objects made from a `_Locinfo` own a heap copy of the table (`_Delfl` 1);
+  `error_category` equality compares the identity word at offset 8, not the address.
+- **Pipeline:** `cl=/MD` (with `/Od`) is allowed for MSVC-built tests, so that the members of the DLL's classes
+  are called through the DLL; `msvcp140_1.dll` may be imported; `poly_wtest.h` defines `_fltused`; the
+  `.def` files gained the few kernel32/ucrtbase names the tests use.
