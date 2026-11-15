@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_typeid_dynamic",
+      "exe_sha256": "698f7c66e9e00ce09fa456377698891d2c92881887509d59332590bd551d68fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdHlwZWlkIG9mICpwYSBpcyBCCm9rIHR5cGVpZCBvZiAqcGMgaXMgQywgbm90IEEKb2sgdHlwZWlkIG9mIGEgcmVmZXJlbmNlIHRvIHRoZSBiYXNlIGlzIHRoZSBkeW5hbWljIHR5cGUKb2sgdHlwZWlkIG9mIHRoZSBwb2ludGVyIGl0c2VsZiBpcyBzdGF0aWMKb2sgdGhyb3VnaCBhIHZpcnR1YWwgYmFzZQpvayB0aHJvdWdoIHRoZSBzZWNvbmQgYnJhbmNoCm9rIG5vbi1wb2x5bW9ycGhpYzogc3RhdGljIHR5cGUKc3VtbWFyeSA3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok typeid of *pa is B\nok typeid of *pc is C, not A\nok typeid of a reference to the base is the dynamic type\nok typeid of the pointer itself is static\nok through a virtual base\nok through the second branch\nok non-polymorphic: static type\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "rtti_typeid_equality",
+      "exe_sha256": "ee81fcd13ab24aae7ef1e238a9b5d31b83befcd28f772bd4f0e2155e57584fdf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY3YgYW5kIHJlZmVyZW5jZXMgYXJlIGlnbm9yZWQKb2sgcG9pbnRlcnMgYXJlIG5vdCBpZ25vcmVkCm9rIHBvaW50ZXIgY29uc3RuZXNzIG1hdHRlcnMgb25lIGxldmVsIGRvd24Kc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok cv and references are ignored\nok pointers are not ignored\nok pointer constness matters one level down\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

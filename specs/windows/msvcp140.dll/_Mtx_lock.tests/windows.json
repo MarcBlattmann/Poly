@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_mtx_plain",
+      "exe_sha256": "8d6dc1d508b04e90b24afaaea6b2023759d6d7a4be43d3e151e90c20ec047976",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2l6ZW9mKF9NdHhfaW50ZXJuYWxfaW1wX3QpCm9rIG9mZnNldG9mIF9UaHJlYWRfaWQKb2sgb2Zmc2V0b2YgX0NvdW50Cm9rIF9NdHhfaW5pdCBzdWNjZWVkcwpvayB0aGUgbXV0ZXggb2JqZWN0IGlzIHJldHVybmVkCm9rIHRoZSB0eXBlIGlzIHN0b3JlZApvayBub3Qgb3duZWQ6IHRocmVhZCBpZCAtMQpvayBub3Qgb3duZWQ6IGNvdW50IDAKb2sgX010eF9jdXJyZW50X293bnMgYmVmb3JlIGxvY2tpbmcKb2sgX010eF9sb2NrIHN1Y2NlZWRzCm9rIHRoZSBvd25lciBpcyB0aGlzIHRocmVhZApvayB0aGUgY291bnQgaXMgMQpvayBfTXR4X2N1cnJlbnRfb3ducyB3aGlsZSBsb2NrZWQKb2sgX010eF91bmxvY2sgc3VjY2VlZHMKb2sgdW5sb2NrZWQ6IHRocmVhZCBpZCAtMSBhZ2FpbgpvayB1bmxvY2tlZDogY291bnQgMApvayBfTXR4X2N1cnJlbnRfb3ducyBhZnRlciB1bmxvY2tpbmcKb2sgdHJ5bG9jayBvbiBhIGZyZWUgbXV0ZXggc3VjY2VlZHMKb2sgYW5kIG93bnMgaXQKb2sgdGhlIGNvdW50IGlzIDEKb2sgdW5sb2NrCm9rIGEgc2Vjb25kIG11dGV4Cm9rIGl0cyB0eXBlCnN1bW1hcnkgMjMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok sizeof(_Mtx_internal_imp_t)\nok offsetof _Thread_id\nok offsetof _Count\nok _Mtx_init succeeds\nok the mutex object is returned\nok the type is stored\nok not owned: thread id -1\nok not owned: count 0\nok _Mtx_current_owns before locking\nok _Mtx_lock succeeds\nok the owner is this thread\nok the count is 1\nok _Mtx_current_owns while locked\nok _Mtx_unlock succeeds\nok unlocked: thread id -1 again\nok unlocked: count 0\nok _Mtx_current_owns after unlocking\nok trylock on a free mutex succeeds\nok and owns it\nok the count is 1\nok unlock\nok a second mutex\nok its type\nsummary 23 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "msvcp_mtx_recursive",
+      "exe_sha256": "d8e651db0b3ef7dfbbb26f8fb7d58aab4bfd73f868fc52a7452003510b9ca4b7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5pdCByZWN1cnNpdmUKb2sgdHlwZQpvayBsb2NrIDEKb2sgbG9jayAyCm9rIGNvdW50IDIKb2sgdHJ5bG9jayBzdWNjZWVkcyBmb3IgdGhlIG93bmVyCm9rIGNvdW50IDMKb2sgb3duZXIKb2sgdW5sb2NrIHRvIDIKb2sgY291bnQgMiBhZ2FpbgpvayBzdGlsbCBvd25lZCBieSB0aGlzIHRocmVhZApvayB1bmxvY2sgdG8gMQpvayBvd25lciBzdGlsbCBzZXQgYXQgY291bnQgMQpvayB1bmxvY2sgdG8gMApvayBvd25lciBjbGVhcmVkICh0aHJlYWQgaWQgLTEpCm9rIGNvdW50IDAKb2sgbm90IG93bmVkCnN1bW1hcnkgMTcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok init recursive\nok type\nok lock 1\nok lock 2\nok count 2\nok trylock succeeds for the owner\nok count 3\nok owner\nok unlock to 2\nok count 2 again\nok still owned by this thread\nok unlock to 1\nok owner still set at count 1\nok unlock to 0\nok owner cleared (thread id -1)\nok count 0\nok not owned\nsummary 17 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "msvcp_mtx_threads",
+      "exe_sha256": "40e812b76e4bb95b50b84e7cd6b277ca38d0302a28465c1e03a078e9bfdb8532",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5pdApvayB0aHJlYWQgY3JlYXRlZApvayBhbm90aGVyIHRocmVhZCdzIHRyeWxvY2sgaXMgYnVzeQpvayBpdCBkb2VzIG5vdCBvd24gdGhlIG11dGV4Cm9rIGl0cyBsb2NrIGlzIHN0aWxsIGJsb2NrZWQgd2hpbGUgd2UgaG9sZCB0aGUgbXV0ZXgKb2sgd2Ugc3RpbGwgb3duIGl0Cm9rIHRoZSB0aHJlYWQgZW5kcwpvayBpdCBnb3QgdGhlIGxvY2sgYWZ0ZXIgdGhlIHVubG9jawpvayBhbmQgcmVsZWFzZWQgaXQKc3VtbWFyeSA5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok init\nok thread created\nok another thread's trylock is busy\nok it does not own the mutex\nok its lock is still blocked while we hold the mutex\nok we still own it\nok the thread ends\nok it got the lock after the unlock\nok and released it\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 126
+    }
+  ]
+}

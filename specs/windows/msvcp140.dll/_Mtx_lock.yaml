@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msvcp140.dll/_Mtx_lock # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\\\BuildTools) with /EHsc /GS- /Zl /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def and from the DLL's own export table, run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes,
+  offsets and constants read from Microsoft's STL and vcruntime headers that ship with the Build Tools
+  (Apache-2.0 with LLVM exception; owner decision 2026-11-15: spec agents may read them for layouts, sizes,
+  offsets, vtable order and member meaning; nothing of them is copied here); the compiler's own output for our
+  own probe programs (cl /FAs listings: the arguments of the calls the compiler writes, the RTTI records it
+  emits). No Microsoft binary was disassembled or debugged, no vcruntime or CRT source was read.
+summary: >
+  The C mutex functions of msvcp140.dll (std::mutex's older ABI and the C11-style interface): _Mtx_init(_Mtx_t*,
+  int type), _Mtx_destroy, _Mtx_lock, _Mtx_trylock, _Mtx_unlock, _Mtx_current_owns, (and
+  _Mtx_init_in_situ/_Mtx_destroy_in_situ for caller-provided storage; _Mtx_timedlock is specified by nothing
+  here). The object _Mtx_t points to has the layout of <xthreads.h>'s _Mtx_internal_imp_t (80 bytes): the
+  caller's inline code and these functions share it. This sheet covers the family; its tests build the mutex
+  through _Mtx_init (the DLL allocates it).
+interface:
+  types: "_Mtx_t = _Mtx_internal_imp_t*; enum _Thrd_result : int { _Success 0, _Nomem 1, _Timedout 2, _Busy 3, _Error 4 }; mutex types _Mtx_plain 0x01, _Mtx_try 0x02, _Mtx_timed 0x04, _Mtx_recursive 0x100"
+  layout: "_Mtx_internal_imp_t on x64: int _Type at 0; the critical section storage (64 bytes: a vptr slot kept for ABI at 8, the SRWLOCK at 16) from 8; long _Thread_id at 72; int _Count at 76; sizeof 80, alignof 8"
+  signatures: "_Thrd_result _Mtx_init(_Mtx_t*, int type) (allocates and zeroes: _Nomem when out of memory); void _Mtx_destroy(_Mtx_t); _Thrd_result _Mtx_lock(_Mtx_t); _Thrd_result _Mtx_trylock(_Mtx_t); _Thrd_result _Mtx_unlock(_Mtx_t); int _Mtx_current_owns(_Mtx_t); all __cdecl"
+rules:
+  initial_state: "after _Mtx_init the type is stored in _Type, _Thread_id is -1 (not 0: 'nobody') and _Count is 0; _Mtx_current_owns is 0"
+  lock_unlock: "_Mtx_lock returns _Success; _Thread_id becomes the calling thread's id (GetCurrentThreadId), _Count 1, _Mtx_current_owns 1; _Mtx_unlock returns _Success and restores _Thread_id -1, _Count 0"
+  recursive: "a mutex of type _Mtx_recursive | _Mtx_plain: lock three times (lock, lock, trylock) gives _Count 3, owner still this thread; each unlock lowers the count; the owner is cleared (-1) only at 0"
+  trylock_kinds: "_Mtx_trylock from another thread on a mutex locked by someone else: for the types _Mtx_try, _Mtx_timed, _Mtx_plain|_Mtx_try, _Mtx_plain|_Mtx_timed, _Mtx_recursive|_Mtx_try and type 0 it returns _Busy (3) at once; for _Mtx_plain alone and _Mtx_recursive|_Mtx_plain it BLOCKS like _Mtx_lock until the owner unlocks, then returns _Success (msvcp_mtx_trylock_kinds); on a free mutex it succeeds and takes it (_Count 1)"
+  trylock_by_owner: "on a non-recursive _Mtx_plain|_Mtx_try mutex already owned by the calling thread, _Mtx_trylock returns _Busy and changes nothing (count 1, owner unchanged)"
+  between_threads: "a second thread's _Mtx_lock blocks until the owner unlocks and then takes it (count back to 0 after its unlock); _Mtx_current_owns is per thread (0 in the other thread)"
+errors:
+  nomem: "_Mtx_init returns _Nomem (1) when the allocation fails (not observable)"
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
+building_tests: >
+  The tests are C++ with the line `// poly-cxx: compiler=msvc`: their executables were built on the oracle
+  machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, ucrtbase.dll and kernel32.dll only.

@@ -8,3 +8,10 @@ EXPORTS
     terminate
     malloc
     free
+    qsort_s
+    abort
+    _exit
+    qsort
+    bsearch_s
+    strlen
+    _invoke_watson
