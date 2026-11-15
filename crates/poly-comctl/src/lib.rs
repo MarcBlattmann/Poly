@@ -9,6 +9,8 @@
 
 extern crate alloc;
 
+pub mod toolbar;
+
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -82,7 +84,7 @@ pub mod class {
         Some(match *n {
             "ToolbarWindow32" => Make { add_style: CCS_TOP, text: Some(""), size: Size::TopBar(28), ..plain() },
             "ReBarWindow32" => Make { add_style: CCS_TOP, text: Some(""), size: Size::TopBar(0), ..plain() },
-            "msctls_statusbar32" => Make { size: Size::BottomBar(23), ..plain() },
+            "msctls_statusbar32" => Make { size: Size::BottomBar(22), ..plain() },
             "SysTabControl32" => Make { add_style: WS_CLIPSIBLINGS, ..plain() },
             "msctls_updown32" => Make { size: Size::ScrollWidth, ..plain() },
             "tooltips_class32" => {

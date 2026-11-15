@@ -7,7 +7,8 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use poly_comctl::{Column, ListView, Progress, StatusBar, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
+use crate::{statusbar, toolbar};
+use poly_comctl::{Column, ListView, Progress, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
 use poly_win32_gui::SpinLock;
 
 #[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -61,7 +62,8 @@ const CCS_NOPARENTALIGN: u32 = 0x0008;
 /// What a window of each class keeps.
 enum Model {
     Plain,
-    Status(StatusBar),
+    /// A class with a module of its own (`statusbar`, `toolbar`, ...): its state is kept there.
+    Ext(Ext),
     Progress(Progress),
     Track(Trackbar),
     UpDown(UpDown),
@@ -72,6 +74,12 @@ enum Model {
     Count(i32),
     /// The rebar's bands.
     Rebar(i32),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ext {
+    Status,
+    Toolbar,
 }
 
 static CTLS: SpinLock<BTreeMap<usize, Model>> = SpinLock::new(BTreeMap::new());
@@ -104,14 +112,15 @@ pub fn register_all() {
 
 fn model_for(name: &str) -> Model {
     match name.to_ascii_lowercase().as_str() {
-        "msctls_statusbar32" => Model::Status(StatusBar::default()),
+        "msctls_statusbar32" => Model::Ext(Ext::Status),
+        "toolbarwindow32" => Model::Ext(Ext::Toolbar),
         "msctls_progress32" => Model::Progress(Progress::default()),
         "msctls_trackbar32" => Model::Track(Trackbar::default()),
         "msctls_updown32" => Model::UpDown(UpDown::default()),
         "systabcontrol32" => Model::Tabs(Tabs::default()),
         "syslistview32" => Model::List(ListView::default()),
         "systreeview32" => Model::Tree(TreeView::default()),
-        "sysheader32" | "toolbarwindow32" => Model::Count(0),
+        "sysheader32" => Model::Count(0),
         "rebarwindow32" => Model::Rebar(0),
         _ => Model::Plain,
     }
@@ -182,13 +191,56 @@ fn today() -> Vec<u16> {
     alloc::format!("{}.{}.{}", st[3], st[1], st[0]).encode_utf16().collect()
 }
 
+fn ext_of(hwnd: usize) -> Option<Ext> {
+    CTLS.with(|m| match m.get(&hwnd) {
+        Some(Model::Ext(e)) => Some(*e),
+        _ => None,
+    })
+}
+
+/// Where the window text of a `CREATESTRUCTW` is: after four pointers and five integers.
+fn create_name_offset() -> usize {
+    let p = core::mem::size_of::<usize>();
+    (4 * p + 20).next_multiple_of(p)
+}
+
+fn ext_created(ext: Ext, hwnd: usize, l: isize) {
+    // SAFETY: the structure is the CREATESTRUCTW of the message.
+    let text = unsafe { wide_at(rd::<usize>(l as usize, create_name_offset())) };
+    match ext {
+        Ext::Status => {
+            let mut z = text;
+            z.push(0);
+            statusbar::proc(hwnd, 0x40B, 0, z.as_ptr() as isize);
+        }
+        Ext::Toolbar => {}
+    }
+}
+
+fn ext_proc(ext: Ext, hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
+    match ext {
+        Ext::Status => statusbar::proc(hwnd, msg, w, l),
+        Ext::Toolbar => toolbar::proc(hwnd, msg, w, l),
+    }
+}
+
 /// The window procedure of every common control class.
 pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
+    if !matches!(msg, WM_NCCREATE | WM_CREATE | WM_NCDESTROY)
+        && let Some(ext) = ext_of(hwnd)
+    {
+        return ext_proc(ext, hwnd, msg, w, l);
+    }
     match msg {
         WM_NCCREATE => {
             let name = class_name(hwnd);
             let make = class::make(&name);
             CTLS.with(|m| m.insert(hwnd, model_for(&name)));
+            match ext_of(hwnd) {
+                Some(Ext::Status) => statusbar::on_create(hwnd, Vec::new()),
+                Some(Ext::Toolbar) => toolbar::on_create(hwnd),
+                None => {}
+            }
             if let Some(mk) = make {
                 // SAFETY: plain window calls on the window being made.
                 unsafe {
@@ -217,17 +269,18 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
             if let Some(mk) = class::make(&name) {
                 size_on_create(hwnd, mk.size);
             }
-            // The status bar's first part has the text the window was made with.
-            // SAFETY: the structure is the CREATESTRUCTW of the message (name at offset 72).
-            let text = unsafe { wide_at(rd::<usize>(l as usize, 56)) };
-            CTLS.with(|m| {
-                if let Some(Model::Status(s)) = m.get_mut(&hwnd) {
-                    s.set_text(0, 0, &text);
-                }
-            });
+            if let Some(ext) = ext_of(hwnd) {
+                // The status bar's first part has the text the window was made with.
+                ext_created(ext, hwnd, l);
+            }
             0
         }
         WM_NCDESTROY => {
+            match ext_of(hwnd) {
+                Some(Ext::Status) => statusbar::on_destroy(hwnd),
+                Some(Ext::Toolbar) => toolbar::on_destroy(hwnd),
+                None => {}
+            }
             CTLS.with(|m| m.remove(&hwnd));
             // SAFETY: the default procedure.
             unsafe { DefWindowProcW(hwnd, msg, w, l) }
@@ -289,7 +342,6 @@ fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
     // SAFETY: the pointers in the messages are the caller's structures (commctrl.h).
     unsafe {
         match model {
-            Model::Status(s) => status(s, msg, w, l),
             Model::Progress(p) => progress(p, msg, w, l),
             Model::Track(t) => track(t, msg, w, l),
             Model::UpDown(u) => updown(u, msg, w, l),
@@ -298,88 +350,9 @@ fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
             Model::Tree(t) => tree(t, msg, w, l),
             Model::Count(n) => count(n, msg, w, l),
             Model::Rebar(n) => rebar(n, msg, w),
-            Model::Plain => None,
+            Model::Plain | Model::Ext(_) => None,
         }
     }
-}
-
-unsafe fn status(s: &mut StatusBar, msg: u32, w: usize, l: isize) -> Option<isize> {
-    const SB_SETTEXTA: u32 = 0x401;
-    const SB_GETTEXTA: u32 = 0x402;
-    const SB_GETTEXTLENGTHA: u32 = 0x403;
-    const SB_SETPARTS: u32 = 0x404;
-    const SB_GETPARTS: u32 = 0x406;
-    const SB_SIMPLE: u32 = 0x409;
-    const SB_SETTEXTW: u32 = 0x40B;
-    const SB_GETTEXTLENGTHW: u32 = 0x40C;
-    const SB_GETTEXTW: u32 = 0x40D;
-    const SB_ISSIMPLE: u32 = 0x40E;
-    let text_len = |s: &StatusBar, part: usize| -> isize {
-        s.text(part).map_or(0, |(t, ty)| (t.len() as u32 | ty << 16) as isize)
-    };
-    Some(match msg {
-        SB_SETPARTS => {
-            let n = w.min(256);
-            let mut edges = Vec::with_capacity(n);
-            for i in 0..n {
-                // SAFETY: `w` integers.
-                edges.push(unsafe { rd::<i32>(l as usize, 4 * i) });
-            }
-            isize::from(l != 0 && s.set_parts(&edges))
-        }
-        SB_GETPARTS => {
-            if l != 0 {
-                for (i, e) in s.edges.iter().enumerate().take(w) {
-                    // SAFETY: `w` integers.
-                    unsafe { wr(l as usize, 4 * i, *e) };
-                }
-            }
-            s.edges.len() as isize
-        }
-        SB_SETTEXTA | SB_SETTEXTW => {
-            // SAFETY: a NUL-terminated string.
-            let t =
-                if msg == SB_SETTEXTW { unsafe { wide_at(l as usize) } } else { unsafe { wide_of_ansi(l as usize) } };
-            isize::from(s.set_text(w & 0xFF, (w as u32) & !0xFF, &t))
-        }
-        SB_GETTEXTLENGTHA | SB_GETTEXTLENGTHW => text_len(s, w & 0xFF),
-        SB_GETTEXTA | SB_GETTEXTW => {
-            let part = w & 0xFF;
-            let Some((t, ty)) = s.text(part).cloned() else { return Some(0) };
-            if l != 0 {
-                if msg == SB_GETTEXTW {
-                    // SAFETY: the caller's buffer holds the text.
-                    unsafe { put(l as usize, t.len() + 1, &t) };
-                } else {
-                    let a = poly_kernelbase::text::to_ansi(&t);
-                    // SAFETY: the caller's buffer holds the text.
-                    unsafe {
-                        core::ptr::copy_nonoverlapping(a.as_ptr(), l as *mut u8, a.len());
-                        *(l as *mut u8).add(a.len()) = 0;
-                    }
-                }
-            }
-            (t.len() as u32 | ty << 16) as isize
-        }
-        SB_SIMPLE => {
-            s.simple = w != 0;
-            1
-        }
-        SB_ISSIMPLE => isize::from(s.simple),
-        WM_SETTEXT => {
-            // SAFETY: a NUL-terminated string.
-            let t = unsafe { wide_at(l as usize) };
-            s.set_text(0, 0, &t);
-            return None;
-        }
-        WM_GETTEXT => {
-            let t = s.text(0).map(|x| x.0.clone()).unwrap_or_default();
-            // SAFETY: the caller's buffer of `w` units.
-            unsafe { put(l as usize, w, &t) as isize }
-        }
-        WM_GETTEXTLENGTH => s.text(0).map_or(0, |x| x.0.len() as isize),
-        _ => return None,
-    })
 }
 
 unsafe fn progress(p: &mut Progress, msg: u32, w: usize, l: isize) -> Option<isize> {
@@ -856,14 +829,14 @@ pub unsafe extern "system" fn CreateToolbarEx(
     style: u32,
     id: usize,
     n_bitmaps: i32,
-    _bm_inst: usize,
-    _bm_id: usize,
+    bm_inst: usize,
+    bm_id: usize,
     buttons: usize,
     n_buttons: i32,
     _dx_button: i32,
     _dy_button: i32,
-    _dx_bitmap: i32,
-    _dy_bitmap: i32,
+    dx_bitmap: i32,
+    dy_bitmap: i32,
     struct_size: u32,
 ) -> usize {
     register_all();
@@ -888,8 +861,13 @@ pub unsafe extern "system" fn CreateToolbarEx(
             return 0;
         }
         SendMessageW(h, 0x41E, struct_size as usize, 0);
+        // The buttons are as big as the bitmaps ask (the sizes given for the buttons are not used).
+        if dx_bitmap > 0 && dy_bitmap > 0 {
+            SendMessageW(h, 0x420, 0, ((dx_bitmap as u32 & 0xFFFF) | (dy_bitmap as u32) << 16) as i32 as isize);
+        }
         if n_bitmaps > 0 {
-            SendMessageW(h, 0x413, n_bitmaps as usize, 0);
+            let add = [bm_inst, bm_id];
+            SendMessageW(h, 0x413, n_bitmaps as usize, add.as_ptr() as isize);
         }
         if n_buttons > 0 && buttons != 0 {
             SendMessageW(h, 0x414, n_buttons as usize, buttons as isize);

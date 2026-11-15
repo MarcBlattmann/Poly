@@ -9,8 +9,11 @@
 
 extern crate alloc;
 
+mod cc;
 mod controls;
 mod imagelist;
+mod statusbar;
+mod toolbar;
 
 use poly_win32_gui as _;
 use poly_win32_rt as _;
