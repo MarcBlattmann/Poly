@@ -32,15 +32,18 @@
 //! `ntdll!RtlSetLastWin32Error(120)`. Built with `poly_ldr::builder` (the
 //! PE format specification), no toolchain involved.
 //!
-//! **The 32-bit `polystub.dll`** ([`build_x86`], ADR 0186) cannot return: a 32-bit Win32 function
-//! is `stdcall` and pops its own arguments, and how many a missing function takes is not known
-//! (its import names no count). Returning with the wrong `ret N` would corrupt the caller's stack
-//! silently, so a 32-bit stub logs `stub: dll!name` and ends the process with
-//! `STATUS_NOT_IMPLEMENTED`: the load still succeeds, and the first missing function the program
-//! really calls is named. Each stub is `push length; push text; jmp common` (16 bytes; the text's
-//! address is relocated with the image), and the common routine calls
-//! `ntdll!PolyDebugPrint(text, length)` and `ntdll!NtTerminateProcess(-1, STATUS_NOT_IMPLEMENTED)`
-//! through the import address table.
+//! **The 32-bit `polystub.dll`** ([`build_x86`], ADR 0186) cannot always return: a 32-bit Win32
+//! function is `stdcall` and pops its own arguments, and how many a missing function takes is
+//! not known from its import (a name, no count). Returning with the wrong `ret N` would corrupt
+//! the caller's stack silently. So a function whose signature is in the table
+//! (`x86_signatures.txt`, from the prototypes on Learn: [`x86_signature`]) gets a stub that logs
+//! `stub: dll!name`, fails the way the x64 stub does (the table above) and returns with the
+//! right `ret 4n`; any other logs and ends the process with `STATUS_NOT_IMPLEMENTED`: the load
+//! still succeeds, and the first unknown function the program really calls is named. An
+//! ending stub is `push length; push text; jmp common` (16 bytes; the text's address is
+//! relocated with the image), and the common routine calls `ntdll!PolyDebugPrint(text, length)`
+//! and `ntdll!NtTerminateProcess(-1, STATUS_NOT_IMPLEMENTED)` through the import address table;
+//! a returning stub is 32 bytes with the same calls inline.
 
 #![no_std]
 
@@ -247,23 +250,69 @@ pub fn build(wants: &[Want]) -> Vec<u8> {
     b.write()
 }
 
+/// What the 32-bit stub of a function with a known signature does on return.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Signature {
+    /// The 4-byte stack slots the arguments take (`stdcall`: the stub pops them).
+    pub slots: u8,
+    /// A `cdecl` function: the caller pops, the stub is a plain `ret`.
+    pub cdecl: bool,
+}
+
+/// The table of known 32-bit signatures (`x86_signatures.txt`): `dll!name slots [cdecl]`.
+static X86_SIGNATURES: &str = include_str!("x86_signatures.txt");
+
+/// The signature of `symbol` of `dll` (as an import names it), when the table has it.
+pub fn x86_signature(dll: &str, symbol: &str) -> Option<Signature> {
+    let d = dll.to_ascii_lowercase();
+    let d = d.strip_suffix(".dll").unwrap_or(&d);
+    X86_SIGNATURES.lines().filter_map(parse_signature).find(|(k, _)| k.0 == d && k.1 == symbol).map(|(_, s)| s)
+}
+
+/// One line of the table: `((dll, name), signature)`.
+fn parse_signature(line: &str) -> Option<((&str, &str), Signature)> {
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let mut parts = line.split_whitespace();
+    let (dll, name) = parts.next()?.split_once('!')?;
+    let slots = parts.next()?.parse().ok()?;
+    Some(((dll, name), Signature { slots, cdecl: parts.next() == Some("cdecl") }))
+}
+
 /// `polystub.dll` for a 32-bit process (see the module documentation): one stub per `(dll, symbol)`
-/// of `wants`, each logging its name and ending the process.
+/// of `wants`. A function with a known signature ([`x86_signature`]) is failed the way the x64
+/// stub fails it and returned from, popping its arguments; any other logs its name and ends the
+/// process.
 pub fn build_x86(wants: &[Want]) -> Vec<u8> {
-    const STUB32: usize = 16;
+    /// A stub that ends the process: `push length; push text; jmp common`.
+    const ENDING: usize = 16;
+    /// A returning stub: the log call, the failure and the `ret`.
+    const RETURNING: usize = 32;
     const FIRST32: usize = 0x20;
-    let mut by_key: BTreeMap<String, String> = BTreeMap::new();
+    struct Stub {
+        shown: String,
+        kind: Kind,
+        signature: Option<Signature>,
+    }
+    let mut by_key: BTreeMap<String, Stub> = BTreeMap::new();
     for w in wants {
         let (key, shown) = stub_text(&w.dll, &w.symbol);
-        by_key.entry(key).or_insert(shown);
+        by_key.entry(key).or_insert_with(|| Stub {
+            shown,
+            kind: w.kind.unwrap_or_else(|| default_kind(&w.dll)),
+            signature: x86_signature(&w.dll, &w.symbol),
+        });
     }
     let n = by_key.len();
-    let strings_at = FIRST32 + STUB32 * n;
+    let size_of = |s: &Stub| if s.signature.is_some() { RETURNING } else { ENDING };
+    let strings_at = FIRST32 + by_key.values().map(size_of).sum::<usize>();
     let mut strings: Vec<u8> = Vec::new();
     let mut spans: Vec<(usize, usize)> = Vec::new();
-    for shown in by_key.values() {
-        spans.push((strings_at + strings.len(), shown.len()));
-        strings.extend_from_slice(shown.as_bytes());
+    for stub in by_key.values() {
+        spans.push((strings_at + strings.len(), stub.shown.len()));
+        strings.extend_from_slice(stub.shown.as_bytes());
     }
     let text_len = strings_at + strings.len();
     let generated = TEXT_RVA + (text_len as u32).div_ceil(0x1000) * 0x1000 + 0x1000;
@@ -273,20 +322,25 @@ pub fn build_x86(wants: &[Want]) -> Vec<u8> {
         exports,
         imports: alloc::vec![Import {
             dll: "ntdll.dll".to_string(),
-            symbols: alloc::vec![Sym::name("PolyDebugPrint"), Sym::name("NtTerminateProcess")],
+            symbols: alloc::vec![
+                Sym::name("PolyDebugPrint"),
+                Sym::name("NtTerminateProcess"),
+                Sym::name("RtlSetLastWin32Error")
+            ],
             ..Import::default()
         }],
         relocations,
         generated_rva: Some(generated),
         ..PeBuilder::x86()
     };
-    // Where the import address table's two slots are (the same for any text of this length).
+    // Where the import address table's slots are (the same for any text of this length).
     let layout = builder(alloc::vec![0xCC; text_len], Vec::new(), Vec::new()).layout();
     let base = PeBuilder::x86().image_base as u32;
-    let (iat_print, iat_end) = (base + layout.iat[0][0], base + layout.iat[0][1]);
+    let (iat_print, iat_end, iat_error) = (base + layout.iat[0][0], base + layout.iat[0][1], base + layout.iat[0][2]);
     let mut relocations = Vec::new();
-    // The common routine: the stub left [text, length] on the stack above the caller's return
-    // address; PolyDebugPrint (stdcall) takes them, then the process ends.
+    // The common routine of the stubs that end the process: they left [text, length] on the
+    // stack above the caller's return address; PolyDebugPrint (stdcall) takes them, then the
+    // process ends.
     let mut text: Vec<u8> = Vec::with_capacity(text_len);
     text.extend_from_slice(&[0xFF, 0x15]); // call [PolyDebugPrint]
     relocations.push(TEXT_RVA + text.len() as u32);
@@ -301,17 +355,47 @@ pub fn build_x86(wants: &[Want]) -> Vec<u8> {
     assert!(text.len() <= FIRST32);
     text.resize(FIRST32, 0xCC);
     let mut exports = Vec::with_capacity(n);
-    for (i, key) in by_key.keys().enumerate() {
-        let at = FIRST32 + STUB32 * i;
+    for (i, (key, stub)) in by_key.iter().enumerate() {
+        let at = text.len();
         let (str_at, len) = spans[i];
+        let text_address = base + TEXT_RVA + str_at as u32;
         text.push(0x68); // push length
         text.extend_from_slice(&(len as u32).to_le_bytes());
         text.push(0x68); // push text
         relocations.push(TEXT_RVA + text.len() as u32);
-        text.extend_from_slice(&(base + TEXT_RVA + str_at as u32).to_le_bytes());
-        text.push(0xE9); // jmp common
-        text.extend_from_slice(&(-((at + 15) as i32)).to_le_bytes());
-        text.push(0xCC);
+        text.extend_from_slice(&text_address.to_le_bytes());
+        match stub.signature {
+            None => {
+                text.push(0xE9); // jmp common
+                text.extend_from_slice(&(-((at + 15) as i32)).to_le_bytes());
+            }
+            Some(sig) => {
+                text.extend_from_slice(&[0xFF, 0x15]); // call [PolyDebugPrint] (pops both)
+                relocations.push(TEXT_RVA + text.len() as u32);
+                text.extend_from_slice(&iat_print.to_le_bytes());
+                match stub.kind {
+                    Kind::Win32 => {
+                        text.extend_from_slice(&[0x6A, ERROR_CALL_NOT_IMPLEMENTED as u8]); // push 120
+                        text.extend_from_slice(&[0xFF, 0x15]); // call [RtlSetLastWin32Error]
+                        relocations.push(TEXT_RVA + text.len() as u32);
+                        text.extend_from_slice(&iat_error.to_le_bytes());
+                        text.extend_from_slice(&[0x31, 0xC0]); // xor eax,eax
+                    }
+                    Kind::Hresult | Kind::Status => {
+                        text.push(0xB8); // mov eax,E_NOTIMPL / STATUS_NOT_IMPLEMENTED
+                        let value = if stub.kind == Kind::Hresult { E_NOTIMPL } else { STATUS_NOT_IMPLEMENTED };
+                        text.extend_from_slice(&value.to_le_bytes());
+                    }
+                }
+                if sig.cdecl || sig.slots == 0 {
+                    text.push(0xC3); // ret
+                } else {
+                    text.push(0xC2); // ret 4n
+                    text.extend_from_slice(&(u16::from(sig.slots) * 4).to_le_bytes());
+                }
+            }
+        }
+        text.resize(at + size_of(stub), 0xCC);
         exports.push(Export {
             name: Some(key.clone()),
             ordinal: i as u32 + 1,
@@ -435,5 +519,64 @@ mod tests {
         assert_eq!(&bytes[img(0x1000)..img(0x1000) + 2], &[0xFF, 0x15]);
         assert_eq!(bytes[img(0x1000) + 6], 0x68);
         assert_eq!(le32(&bytes, img(0x1000) + 7) as u32, STATUS_NOT_IMPLEMENTED);
+    }
+
+    #[test]
+    fn the_signature_table_is_well_formed() {
+        let mut seen = alloc::collections::BTreeSet::new();
+        for line in X86_SIGNATURES.lines() {
+            let t = line.trim();
+            if t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            let ((dll, name), sig) = parse_signature(line).unwrap_or_else(|| panic!("bad line: {line}"));
+            assert_eq!(dll, dll.to_ascii_lowercase(), "{line}: the DLL is lower case, without .dll");
+            assert!(!name.is_empty() && sig.slots <= 12, "{line}");
+            assert!(seen.insert((dll, name)), "{line}: twice");
+        }
+        assert!(seen.len() > 250);
+        assert_eq!(x86_signature("USER32.DLL", "AppendMenuW"), Some(Signature { slots: 4, cdecl: false }));
+        assert_eq!(x86_signature("user32", "wsprintfA"), Some(Signature { slots: 0, cdecl: true }));
+        assert_eq!(x86_signature("user32.dll", "NoSuchFunction"), None);
+    }
+
+    #[test]
+    fn a_32_bit_stub_with_a_signature_fails_and_pops_its_arguments() {
+        let bytes = build_x86(&[
+            want("user32.dll", "AppendMenuW"),
+            want("ole32.dll", "OleGetClipboard"),
+            want("user32.dll", "wsprintfA"),
+            want("msi.dll", "#12"),
+        ]);
+        let pe = poly_pe::Pe::parse(&bytes).unwrap();
+        let ex = pe.exports().unwrap().unwrap();
+        let stub_at = |name: &[u8]| {
+            let Some(ExportTarget::Rva(rva)) = ex.by_name(name).unwrap() else { panic!() };
+            img(rva)
+        };
+        // Sorted by key: msi$#12 (ending, 16 bytes), ole32$OleGetClipboard, user32$AppendMenuW,
+        // user32$wsprintfA (returning, 32 bytes each).
+        let ole = stub_at(b"ole32$OleGetClipboard");
+        let append = stub_at(b"user32$AppendMenuW");
+        let wsprintf = stub_at(b"user32$wsprintfA");
+        assert_eq!(stub_at(b"msi$#12"), img(0x1000) + 0x20);
+        assert_eq!(ole, img(0x1000) + 0x30);
+        assert_eq!(append, ole + 32);
+        assert_eq!(wsprintf, append + 32);
+        // push length; push text; call [PolyDebugPrint]; ...
+        assert_eq!(bytes[append], 0x68);
+        assert_eq!(le32(&bytes, append + 1), "stub: user32!AppendMenuW".len() as i32);
+        assert_eq!(&bytes[append + 10..append + 12], &[0xFF, 0x15]);
+        // Win32: push 120; call [RtlSetLastWin32Error]; xor eax,eax; ret 16.
+        assert_eq!(&bytes[append + 16..append + 18], &[0x6A, 120]);
+        assert_eq!(&bytes[append + 18..append + 20], &[0xFF, 0x15]);
+        assert_eq!(&bytes[append + 24..append + 26], &[0x31, 0xC0]);
+        assert_eq!(&bytes[append + 26..append + 29], &[0xC2, 16, 0]);
+        // HRESULT: mov eax,E_NOTIMPL; ret 4.
+        assert_eq!(bytes[ole + 16], 0xB8);
+        assert_eq!(le32(&bytes, ole + 17) as u32, E_NOTIMPL);
+        assert_eq!(&bytes[ole + 21..ole + 24], &[0xC2, 4, 0]);
+        // cdecl: a plain ret.
+        assert_eq!(bytes[wsprintf + 26], 0xC3);
     }
 }
