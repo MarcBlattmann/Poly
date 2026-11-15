@@ -276,16 +276,19 @@ pub fn start_process_from(
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
-    start_process_listed(sys, proc, b, file, ntdll, file_object, thread, inherit_from, None)
+    let image = ImageSection::from_file(file)?;
+    start_process_listed(sys, proc, b, image, ntdll, file_object, thread, inherit_from, None)
 }
 
-/// [`start_process_from`] inheriting only the handles of `only` (ADR 0169).
+/// [`start_process_from`] for an executable already laid out as an image
+/// section (a big one reads its pages from its file as they are touched,
+/// ADR 0155), inheriting only the handles of `only` (ADR 0169).
 #[allow(clippy::too_many_arguments)] // what a new process is made of
 pub fn start_process_listed(
     sys: &mut NtSystem,
     proc: &mut NtProcess,
     b: &mut dyn Backend,
-    file: &[u8],
+    image: ImageSection,
     ntdll: &[u8],
     file_object: Option<ObjectId>,
     thread: ThreadRef,
@@ -300,7 +303,6 @@ pub fn start_process_listed(
     proc.object = Some(pid_object);
     om.set_process_object(proc.pid, pid_object)?;
 
-    let image = ImageSection::from_file(file)?;
     let ntdll = ImageSection::from_file(ntdll)?;
     let entries = NtdllEntries::of(&ntdll)?;
     let (entry_rva, reserve, commit) = (
@@ -378,13 +380,13 @@ pub fn start_child(
     sys: &mut NtSystem,
     proc: &mut NtProcess,
     b: &mut dyn Backend,
-    file: &[u8],
+    image: ImageSection,
     ntdll: &[u8],
     params: &crate::params::Parameters,
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
-    let ps = start_process_from(sys, proc, b, file, ntdll, None, thread, inherit_from)?;
+    let ps = start_process_listed(sys, proc, b, image, ntdll, None, thread, inherit_from, None)?;
     crate::params::write(proc, b, ps.peb, params)?;
     Ok(ps)
 }

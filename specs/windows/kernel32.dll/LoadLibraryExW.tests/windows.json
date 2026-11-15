@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "lockdown_start_b",
+      "exe_sha256": "e8048814c7d0a99f716ea17ede7c0caa5be0e6a210d3af30e4c46372c1392a1e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQ6IHRhcmdldCwgc3RhcnRpbmc6IG5vIHRocmVhZCB0b2tlbiAoT3BlblRocmVhZFRva2VuIGVycm9yIDUpCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IExvYWRMaWJyYXJ5RXhXKG5vX3N1Y2hfbGlicmFyeS5kbGwsIDB4MCkgbG9hZGVkPTAgZXJyb3I9MTI2IChhbHJlYWR5IGxvYWRlZDogMCkKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBMb2FkTGlicmFyeUV4Vyh2ZXJzaW9uLmRsbCwgMHgwKSBsb2FkZWQ9MCBlcnJvcj0xMjYgKGFscmVhZHkgbG9hZGVkOiAwKQpVbnRydXN0ZWQgcHJvY2VzcyB0b2tlbiwgVW50cnVzdGVkIGltcGVyc29uYXRpb24gdG9rZW46IHRhcmdldCBleGl0IGNvZGUgMHgwClVudHJ1c3RlZCBwcm9jZXNzIHRva2VuLCBMb3cgaW1wZXJzb25hdGlvbiB0b2tlbjogU2V0VGhyZWFkVG9rZW4gcmVzdWx0IDEKY2hpbGQ6IHRhcmdldCwgc3RhcnRpbmc6IG5vIHRocmVhZCB0b2tlbiAoT3BlblRocmVhZFRva2VuIGVycm9yIDUpCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IExvYWRMaWJyYXJ5RXhXKG5vX3N1Y2hfbGlicmFyeS5kbGwsIDB4MCkgbG9hZGVkPTAgZXJyb3I9MTI2IChhbHJlYWR5IGxvYWRlZDogMCkKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBMb2FkTGlicmFyeUV4Vyh2ZXJzaW9uLmRsbCwgMHgwKSBsb2FkZWQ9MCBlcnJvcj0xMjYgKGFscmVhZHkgbG9hZGVkOiAwKQpMb3cgcHJvY2VzcyB0b2tlbiwgVW50cnVzdGVkIGltcGVyc29uYXRpb24gdG9rZW46IHRhcmdldCBleGl0IGNvZGUgMHgwCmNoaWxkOiB0YXJnZXQsIGltcGVyc29uYXRpbmc6IExvYWRMaWJyYXJ5RXhXKGtlcm5lbDMyLmRsbCwgMHgwKSBsb2FkZWQ9MSBlcnJvcj11bmNoYW5nZWQgKGFscmVhZHkgbG9hZGVkOiAxKQpjaGlsZDogdGFyZ2V0OiBSZXZlcnRUb1NlbGYgPSAxCmNoaWxkOiB0YXJnZXQsIGFmdGVyIFJldmVydFRvU2VsZjogTG9hZExpYnJhcnlFeFcobXNjdGYuZGxsLCAweDApIGxvYWRlZD0wIGVycm9yPTUgKGFscmVhZHkgbG9hZGVkOiAwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child: target, starting: no thread token (OpenThreadToken error 5)\nchild: target, impersonating: LoadLibraryExW(no_such_library.dll, 0x0) loaded=0 error=126 (already loaded: 0)\nchild: target, after RevertToSelf: LoadLibraryExW(version.dll, 0x0) loaded=0 error=126 (already loaded: 0)\nUntrusted process token, Untrusted impersonation token: target exit code 0x0\nUntrusted process token, Low impersonation token: SetThreadToken result 1\nchild: target, starting: no thread token (OpenThreadToken error 5)\nchild: target, impersonating: LoadLibraryExW(no_such_library.dll, 0x0) loaded=0 error=126 (already loaded: 0)\nchild: target, after RevertToSelf: LoadLibraryExW(version.dll, 0x0) loaded=0 error=126 (already loaded: 0)\nLow process token, Untrusted impersonation token: target exit code 0x0\nchild: target, impersonating: LoadLibraryExW(kernel32.dll, 0x0) loaded=1 error=unchanged (already loaded: 1)\nchild: target: RevertToSelf = 1\nchild: target, after RevertToSelf: LoadLibraryExW(msctf.dll, 0x0) loaded=0 error=5 (already loaded: 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 114
+    },
+    {
+      "name": "lockdown_start_c",
+      "exe_sha256": "63d09fadba2462c21799ea6363999ad5e27e27210d9e9e3d6763590e933c547b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogTG9hZExpYnJhcnlFeFcoa2VybmVsMzIuZGxsLCAweDApIGxvYWRlZD0xIGVycm9yPXVuY2hhbmdlZCAoYWxyZWFkeSBsb2FkZWQ6IDEpCmNoaWxkOiB0YXJnZXQ6IFJldmVydFRvU2VsZiA9IDEKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBMb2FkTGlicmFyeUV4Vyhtc2N0Zi5kbGwsIDB4MCkgbG9hZGVkPTAgZXJyb3I9NSAoYWxyZWFkeSBsb2FkZWQ6IDApClVudHJ1c3RlZCBwcm9jZXNzIHRva2VuLCBubyBpbXBlcnNvbmF0aW9uIHRva2VuOiBTZXRUaHJlYWRUb2tlbiByZXN1bHQgLTEKVW50cnVzdGVkIHByb2Nlc3MgdG9rZW4sIExvdyBpbXBlcnNvbmF0aW9uIHRva2VuOiB0YXJnZXQgZXhpdCBjb2RlIDB4YzAwMDAwYTUKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogTG9hZExpYnJhcnlFeFcoa2VybmVsMzIuZGxsLCAweDApIGxvYWRlZD0xIGVycm9yPXVuY2hhbmdlZCAoYWxyZWFkeSBsb2FkZWQ6IDEpCmNoaWxkOiB0YXJnZXQ6IFJldmVydFRvU2VsZiA9IDEKY2hpbGQ6IHRhcmdldCwgYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiBMb2FkTGlicmFyeUV4Vyhtc2N0Zi5kbGwsIDB4MCkgbG9hZGVkPTAgZXJyb3I9NSAoYWxyZWFkeSBsb2FkZWQ6IDApCkxvdyBwcm9jZXNzIHRva2VuLCBMb3cgaW1wZXJzb25hdGlvbiB0b2tlbjogU2V0VGhyZWFkVG9rZW4gcmVzdWx0IDEKY2hpbGQ6IHRhcmdldCwgaW1wZXJzb25hdGluZzogTG9hZExpYnJhcnlFeFcod2lubW0uZGxsLCAweDApIGxvYWRlZD0xIGVycm9yPTAgKGFscmVhZHkgbG9hZGVkOiAwKQpjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IExvYWRMaWJyYXJ5RXhXKGtlcm5lbDMyLmRsbCwgMHgwKSBsb2FkZWQ9MSBlcnJvcj11bmNoYW5nZWQgKGFscmVhZHkgbG9hZGVkOiAxKQpjaGlsZDogdGFyZ2V0LCBhZnRlciBSZXZlcnRUb1NlbGY6IExvYWRMaWJyYXJ5RXhXKG5vX3N1Y2hfbGlicmFyeS5kbGwsIDB4MCkgbG9hZGVkPTAgZXJyb3I9MTI2IChhbHJlYWR5IGxvYWRlZDogMCkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child: target, impersonating: LoadLibraryExW(kernel32.dll, 0x0) loaded=1 error=unchanged (already loaded: 1)\nchild: target: RevertToSelf = 1\nchild: target, after RevertToSelf: LoadLibraryExW(msctf.dll, 0x0) loaded=0 error=5 (already loaded: 0)\nUntrusted process token, no impersonation token: SetThreadToken result -1\nUntrusted process token, Low impersonation token: target exit code 0xc00000a5\nchild: target, impersonating: LoadLibraryExW(kernel32.dll, 0x0) loaded=1 error=unchanged (already loaded: 1)\nchild: target: RevertToSelf = 1\nchild: target, after RevertToSelf: LoadLibraryExW(msctf.dll, 0x0) loaded=0 error=5 (already loaded: 0)\nLow process token, Low impersonation token: SetThreadToken result 1\nchild: target, impersonating: LoadLibraryExW(winmm.dll, 0x0) loaded=1 error=0 (already loaded: 0)\nchild: target, after RevertToSelf: LoadLibraryExW(kernel32.dll, 0x0) loaded=1 error=unchanged (already loaded: 1)\nchild: target, after RevertToSelf: LoadLibraryExW(no_such_library.dll, 0x0) loaded=0 error=126 (already loaded: 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 119
+    }
+  ]
+}

@@ -179,7 +179,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         &attrs,
         FILE_EXECUTE | FILE_READ_DATA | SYNCHRONIZE,
         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        |sys, cookie| sys.io.read_all(cookie),
+        |sys, cookie| crate::image::ImageSection::from_reader(sys.io.image_file(cookie)?),
     )?;
     let all = |a: u32, all: u32| if a == 0 { all } else { a };
     // Poly's own flag: CreateInfo is a handle to the primary token to give it.

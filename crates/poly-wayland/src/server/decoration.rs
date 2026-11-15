@@ -101,9 +101,8 @@ impl Server {
 
     pub(super) fn kde_decoration_manager_bound(&mut self, c: ClientId, manager: ObjectId) {
         self.client(c).kde_decoration = true;
-        // The mode for a client that does not ask (ADR 0183: not `server`,
-        // GTK 3.24 then sometimes computes a window 1.4 million pixels tall
-        // under Poly and crashes).
+        // The mode for a client that does not ask: Poly's frame (ADR 0183).
+        // Sent before anything else of the manager, as the protocol says.
         let mode = frame_policy::KDE_DEFAULT.wire();
         self.client(c).send(manager, org_kde_kwin_server_decoration_manager::Event::DefaultMode { mode });
         // A toplevel that already exists made no object: the client's own.
