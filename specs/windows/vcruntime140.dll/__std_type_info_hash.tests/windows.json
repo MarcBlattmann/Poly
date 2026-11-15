@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_hash_values",
+      "exe_sha256": "685ca8e1defddc14fc87c75122b3231d01aff5b52022dcfb3780699ce5dd41bc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgaGFzaF9jb2RlIGludCAweGFmNjQwNTRjMjk2NjM3N2IKdmFsdWUgaGFzaF9jb2RlIFMgMHhkYWQxMDJmODE5OGQzYjIxCnZhbHVlIGhhc2hfY29kZSBuczo6TiAweDE5Y2JiOGZmNzM3ODc3MjYKdmFsdWUgaGFzaF9jb2RlIFRwbDxpbnQ+IDB4NGUwOGVmZDVkYmZlNzM4NApvayBlcXVhbCB0eXBlcyBoYXZlIGVxdWFsIGhhc2hlcwpvayBkaWZmZXJlbnQgdHlwZXMgaGF2ZSBkaWZmZXJlbnQgaGFzaGVzCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value hash_code int 0xaf64054c2966377b\nvalue hash_code S 0xdad102f8198d3b21\nvalue hash_code ns::N 0x19cbb8ff73787726\nvalue hash_code Tpl<int> 0x4e08efd5dbfe7384\nok equal types have equal hashes\nok different types have different hashes\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

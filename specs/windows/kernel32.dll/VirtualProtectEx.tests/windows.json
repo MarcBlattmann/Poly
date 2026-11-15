@@ -1,0 +1,98 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "vpe_acg",
+      "exe_sha256": "27d75df752abb3a7e3792f47159eff3e3ee5eaac7d552f8f9623ca96806c4cde",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcG9saWN5OiBWaXJ0dWFsQWxsb2NFeCBQQUdFX0VYRUNVVEVfUkVBRFdSSVRFOiBub24tbnVsbD10cnVlIGVycm9yPQpubyBwb2xpY3k6IGltYWdlIGNvZGUgdG8gUEFHRV9XUklURUNPUFk6IG9rPXRydWUgb2xkPTB4MjAgZXJyb3I9MApubyBwb2xpY3k6IHN0dWIgcGFnZSB0eXBlPU1FTV9JTUFHRSBzdGF0ZT0weDEwMDAgcHJvdGVjdD0weDIwIGFsbG9jcHJvdGVjdD0weDgwCnByb2hpYml0IGR5bmFtaWMgY29kZTogVmlydHVhbEFsbG9jRXggUEFHRV9FWEVDVVRFX1JFQURXUklURTogbm9uLW51bGw9dHJ1ZSBlcnJvcj0KcHJvaGliaXQgZHluYW1pYyBjb2RlOiBpbWFnZSBjb2RlIHRvIFBBR0VfV1JJVEVDT1BZOiBvaz10cnVlIG9sZD0weDIwIGVycm9yPTAKcHJvaGliaXQgZHluYW1pYyBjb2RlOiBzdHViIHBhZ2UgdHlwZT1NRU1fSU1BR0Ugc3RhdGU9MHgxMDAwIHByb3RlY3Q9MHgyMCBhbGxvY3Byb3RlY3Q9MHg4MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no policy: VirtualAllocEx PAGE_EXECUTE_READWRITE: non-null=true error=\nno policy: image code to PAGE_WRITECOPY: ok=true old=0x20 error=0\nno policy: stub page type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nprohibit dynamic code: VirtualAllocEx PAGE_EXECUTE_READWRITE: non-null=true error=\nprohibit dynamic code: image code to PAGE_WRITECOPY: ok=true old=0x20 error=0\nprohibit dynamic code: stub page type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    },
+    {
+      "name": "vpe_acg_b",
+      "exe_sha256": "20c80ff7724f47cd3cf1fdf7c03ce59b3ee8d73a0a6cc7928ad522fcea8c44e3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcG9saWN5OiBWaXJ0dWFsQWxsb2NFeCBQQUdFX1JFQURXUklURTogbm9uLW51bGw9dHJ1ZQpubyBwb2xpY3k6IHdyaXRlIDE2IGJ5dGVzOiBvaz10cnVlIGNvcGllZD0xNiBlcnJvcj0wCm5vIHBvbGljeTogV3JpdGVQcm9jZXNzTWVtb3J5IHRvIHRoZSBvdGhlciBzdHViIHdpdGhvdXQgY2hhbmdpbmcgaXQgZmlyc3Q6IG9rPXRydWUgY29waWVkPTE2IGVycm9yPTAKcHJvaGliaXQgZHluYW1pYyBjb2RlOiBWaXJ0dWFsQWxsb2NFeCBQQUdFX1JFQURXUklURTogbm9uLW51bGw9dHJ1ZQpwcm9oaWJpdCBkeW5hbWljIGNvZGU6IHdyaXRlIDE2IGJ5dGVzOiBvaz10cnVlIGNvcGllZD0xNiBlcnJvcj0wCnByb2hpYml0IGR5bmFtaWMgY29kZTogV3JpdGVQcm9jZXNzTWVtb3J5IHRvIHRoZSBvdGhlciBzdHViIHdpdGhvdXQgY2hhbmdpbmcgaXQgZmlyc3Q6IG9rPXRydWUgY29waWVkPTE2IGVycm9yPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no policy: VirtualAllocEx PAGE_READWRITE: non-null=true\nno policy: write 16 bytes: ok=true copied=16 error=0\nno policy: WriteProcessMemory to the other stub without changing it first: ok=true copied=16 error=0\nprohibit dynamic code: VirtualAllocEx PAGE_READWRITE: non-null=true\nprohibit dynamic code: write 16 bytes: ok=true copied=16 error=0\nprohibit dynamic code: WriteProcessMemory to the other stub without changing it first: ok=true copied=16 error=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    },
+    {
+      "name": "vpe_acg_c",
+      "exe_sha256": "5f322961cd3c235797f39020556a51c55ae12c3d9c7c8cabfa4ca0ca0c0b9e02",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcG9saWN5OiBwcml2YXRlIHBhZ2UgdG8gUEFHRV9FWEVDVVRFX1JFQUQ6IG9rPXRydWUgb2xkPTB4NCBlcnJvcj0wCm5vIHBvbGljeTogYmFjayB0byBQQUdFX0VYRUNVVEVfUkVBRDogb2s9dHJ1ZSBvbGQ9MHg0IGVycm9yPTAKbm8gcG9saWN5OiBjaGlsZCByYW46IGV4aXQgY29kZSA4MjAwCnByb2hpYml0IGR5bmFtaWMgY29kZTogcHJpdmF0ZSBwYWdlIHRvIFBBR0VfRVhFQ1VURV9SRUFEOiBvaz10cnVlIG9sZD0weDQgZXJyb3I9MApwcm9oaWJpdCBkeW5hbWljIGNvZGU6IGJhY2sgdG8gUEFHRV9FWEVDVVRFX1JFQUQ6IG9rPXRydWUgb2xkPTB4NCBlcnJvcj0wCnByb2hpYml0IGR5bmFtaWMgY29kZTogY2hpbGQgcmFuOiBleGl0IGNvZGUgODIwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no policy: private page to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nno policy: back to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nno policy: child ran: exit code 8200\nprohibit dynamic code: private page to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nprohibit dynamic code: back to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nprohibit dynamic code: child ran: exit code 8200\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    },
+    {
+      "name": "vpe_patch_c",
+      "exe_sha256": "8690d3c0e841a60b55db3c7d53f84124dff042ba21dd2c24df7b874c0d759c57",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVzZXJ2ZSA2NCBLaUIgUEFHRV9OT0FDQ0VTUzogbm9uLW51bGw9dHJ1ZSA2NEtpQi1hbGlnbmVkPXRydWUKY29tbWl0dGVkIHBhZ2U6IHR5cGU9TUVNX1BSSVZBVEUgc3RhdGU9MHgxMDAwIHByb3RlY3Q9MHg0MCBhbGxvY3Byb3RlY3Q9MHgxIHNpemU9MHgxMDAwClZpcnR1YWxQcm90ZWN0RXgoc3R1YiwgMTYsIFBBR0VfV1JJVEVDT1BZKTogb2s9dHJ1ZSBvbGQ9MHgyMCBlcnJvcj0wCnN0dWIgcGFnZSBhZnRlciB0aGUgd3JpdGU6IHR5cGU9TUVNX0lNQUdFIHN0YXRlPTB4MTAwMCBwcm90ZWN0PTB4NCBhbGxvY3Byb3RlY3Q9MHg4MApjaGlsZCdzIHN0dWIgbm93OiBjb3BpZWQ9MzIgZmlyc3QgMTYgPSB0aGUgcGF0Y2g6IHRydWUgbGFzdCAxNiB1bmNoYW5nZWQ6IHRydWUKRmx1c2hJbnN0cnVjdGlvbkNhY2hlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "reserve 64 KiB PAGE_NOACCESS: non-null=true 64KiB-aligned=true\ncommitted page: type=MEM_PRIVATE state=0x1000 protect=0x40 allocprotect=0x1 size=0x1000\nVirtualProtectEx(stub, 16, PAGE_WRITECOPY): ok=true old=0x20 error=0\nstub page after the write: type=MEM_IMAGE state=0x1000 protect=0x4 allocprotect=0x80\nchild's stub now: copied=32 first 16 = the patch: true last 16 unchanged: true\nFlushInstructionCache: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "vpe_rules",
+      "exe_sha256": "cab617b8f5b40db53ce31e9f330643098a0c2b057598079a89ce7698cbdd7b38",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgY29kZSBQQUdFX1JFQURXUklURTogb2s9dHJ1ZSBvbGQ9MHgyMCBlcnJvcj0wIHRoZW4gcHJvdGVjdD0weDggdHlwZT0weDEwMDAwMDAKaW1hZ2UgY29kZSBQQUdFX0VYRUNVVEVfV1JJVEVDT1BZOiBvaz10cnVlIG9sZD0weDgwIGVycm9yPTAgdGhlbiBwcm90ZWN0PTB4ODAgdHlwZT0weDEwMDAwMDAKaW1hZ2UgY29kZSBQQUdFX0VYRUNVVEVfUkVBRCBhZ2Fpbjogb2s9dHJ1ZSBvbGQ9MHgxIGVycm9yPTAgdGhlbiBwcm90ZWN0PTB4MjAgdHlwZT0weDEwMDAwMDAKc2l6ZSAwOiBvaz1mYWxzZSBvbGQ9MHhlZWVlIGVycm9yPTg3CmFmdGVyIHRoZSBOVUxMIG9sZCBwb2ludGVyIHRoZSBwYWdlIGlzIDB4MjAKcHJpdmF0ZSBwYWdlIFBBR0VfV1JJVEVDT1BZOiBvaz1mYWxzZSBvbGQ9MHgxIGVycm9yPTg3IHRoZW4gcHJvdGVjdD0weDIwIHR5cGU9MHgyMDAwMApwcm90ZWN0aW9uIDA6IG9rPWZhbHNlIG9sZD0weGVlZWUgZXJyb3I9ODcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image code PAGE_READWRITE: ok=true old=0x20 error=0 then protect=0x8 type=0x1000000\nimage code PAGE_EXECUTE_WRITECOPY: ok=true old=0x80 error=0 then protect=0x80 type=0x1000000\nimage code PAGE_EXECUTE_READ again: ok=true old=0x1 error=0 then protect=0x20 type=0x1000000\nsize 0: ok=false old=0xeeee error=87\nafter the NULL old pointer the page is 0x20\nprivate page PAGE_WRITECOPY: ok=false old=0x1 error=87 then protect=0x20 type=0x20000\nprotection 0: ok=false old=0xeeee error=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    },
+    {
+      "name": "vpe_rules_b",
+      "exe_sha256": "32abe4a6f9f6d8c7e1b76904960d76c86b97b569f15386450695366075c2d4ae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgY29kZSBiYWNrIHRvIFBBR0VfRVhFQ1VURV9SRUFEOiBvaz10cnVlIG9sZD0weDggZXJyb3I9MCB0aGVuIHByb3RlY3Q9MHgyMCB0eXBlPTB4MTAwMDAwMAppbWFnZSBjb2RlIFBBR0VfUkVBRE9OTFk6IG9rPXRydWUgb2xkPTB4ODAgZXJyb3I9MCB0aGVuIHByb3RlY3Q9MHgyIHR5cGU9MHgxMDAwMDAwCjE2IGJ5dGVzIGFjcm9zcyBhIHBhZ2UgYm91bmRhcnkgdG8gUEFHRV9XUklURUNPUFk6IG9rPXRydWUgb2xkPTB4MjAgZmlyc3QgcGFnZSAweDggc2Vjb25kIHBhZ2UgMHg4CmFmdGVyIHNpemUgMCB0aGUgcGFnZSBpcyAweDIwCnJlc2VydmVkLCBub3QgY29tbWl0dGVkOiBvaz1mYWxzZSBvbGQ9MHgxIGVycm9yPTQ4Nwpwcml2YXRlIHBhZ2UgUEFHRV9FWEVDVVRFX1dSSVRFQ09QWTogb2s9ZmFsc2Ugb2xkPTB4MSBlcnJvcj04NyB0aGVuIHByb3RlY3Q9MHgyMCB0eXBlPTB4MjAwMDAKdHdvIHByb3RlY3Rpb25zIGF0IG9uY2U6IG9rPWZhbHNlIG9sZD0weGVlZWUgZXJyb3I9ODcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image code back to PAGE_EXECUTE_READ: ok=true old=0x8 error=0 then protect=0x20 type=0x1000000\nimage code PAGE_READONLY: ok=true old=0x80 error=0 then protect=0x2 type=0x1000000\n16 bytes across a page boundary to PAGE_WRITECOPY: ok=true old=0x20 first page 0x8 second page 0x8\nafter size 0 the page is 0x20\nreserved, not committed: ok=false old=0x1 error=487\nprivate page PAGE_EXECUTE_WRITECOPY: ok=false old=0x1 error=87 then protect=0x20 type=0x20000\ntwo protections at once: ok=false old=0xeeee error=87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

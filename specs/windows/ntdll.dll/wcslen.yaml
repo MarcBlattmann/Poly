@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/wcslen.yaml
+id: windows/api/ntdll.dll/wcslen
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: strlen, wcslen, _mbslen, _mbslen_l, _mbstrlen, _mbstrlen_l (the C run-time page; ntdll's export has the same name and prototype). ntdll's export names (export table). Chrome on Poly (specs/windows/apps/chrome/s2-interception.md). No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  ntdll.dll exports the C run-time function wcslen as code of its own (the address lies in ntdll's image, on an executable page): the number of 16-bit units before the first 0 unit. Chrome's sandboxed processes resolve it from ntdll by name (with _strnicmp and strlen; see the _strnicmp sheet).
+interface:
+  signature: "size_t __cdecl wcslen(const wchar_t *s)"
+  result: "the count of 16-bit units before the first 0 unit"
+rules:
+  export: "GetProcAddress(GetModuleHandle(\"ntdll.dll\"), \"wcslen\") is not NULL; VirtualQuery of the address: MEM_IMAGE, allocation base = ntdll's module handle, an executable protection"
+  counts: "L\"\" 0; L\"kernel32.dll\" 12; 2999 units then 0 gives 2999; U+00E9, U+4E2D, the surrogate pair D83D DE00 and U+FFFF give 5 (units, not characters: a surrogate pair counts 2); L\"ab\\0cd\" 2"
+  alignment: "a string at an odd address (not 2-byte aligned) is read as 16-bit units from that address: L\"abc\" there gives 3"
+  null: "a NULL pointer: an access violation (the process ends with 0xC0000005)"
+errors:
+  none: "no error value; no last error"
+side_effects: none
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a microsecond for short strings"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations. The function is resolved with GetProcAddress on ntdll.dll and called through a C prototype. Each test exists in three files that make the same calls; each file writes every third observation line. The NULL case runs in a child process (the test's own image started again with --child null); its exit code is the low 32 bits of the result or the fault status.
+not_covered: >
+  Strings that run into an unreadable page.

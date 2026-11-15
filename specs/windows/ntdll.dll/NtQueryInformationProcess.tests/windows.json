@@ -6,9 +6,9 @@
     "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "e9565857a6d3",
+  "bundle": "a1cf84e98d3a",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T13:30:27Z",
+  "started": "2026-11-15T17:48:34Z",
   "tests": [
     {
       "name": "nqip_classes",
@@ -37,6 +37,34 @@
       "error": null,
       "stable": true,
       "ms": 62
+    },
+    {
+      "name": "pbi_peb_b",
+      "exe_sha256": "7fa00357d3f64c66d4be8b1d66aa7ca663acf7eff38b82eed143be75b3f8db89",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VsZiwgbGVuZ3RoIDQ3OiBzdGF0dXM9MHhjMDAwMDAwNCByZXR1cm4gbGVuZ3RoPTAKc3VzcGVuZGVkIGNoaWxkOiBzdGF0dXM9MHgwIGxlbmd0aD00OCBQRUIgbm9uLW51bGw9dHJ1ZSBwaWQgPSBpdHMgaWQ9dHJ1ZSBwYXJlbnQgPSB0aGlzIHByb2Nlc3M9dHJ1ZQp3cml0ZSAwIGludG8gdGhlIGNoaWxkJ3Mgc2xvdDogb2s9dHJ1ZSBjb3BpZWQ9OApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "self, length 47: status=0xc0000004 return length=0\nsuspended child: status=0x0 length=48 PEB non-null=true pid = its id=true parent = this process=true\nwrite 0 into the child's slot: ok=true copied=8\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    },
+    {
+      "name": "pbi_peb_c",
+      "exe_sha256": "7cf55448d0cab8930a50cf23d9602bfd08fee537f4e58951c4184152ad10cd06",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VsZjogc2xvdCBub24tbnVsbD10cnVlIHR5cGU9TUVNX1BSSVZBVEUgc3RhdGU9MHgxMDAwIHByb3RlY3Q9MHg0IGFsbG9jcHJvdGVjdD0weDQgcmVnaW9uIHNpemU9MHgyMDAwIHN0YXJ0cyBhdCB0aGUgcG9pbnRlcj10cnVlIGFsbG9jYXRpb24gYmFzZSA9IHBvaW50ZXI9dHJ1ZQpzdXNwZW5kZWQgY2hpbGQ6IHNsb3Qgbm9uLW51bGw9dHJ1ZSB0eXBlPU1FTV9QUklWQVRFIHN0YXRlPTB4MTAwMCBwcm90ZWN0PTB4NCBhbGxvY3Byb3RlY3Q9MHg0IHJlZ2lvbiBzaXplPTB4MjAwMCBzdGFydHMgYXQgdGhlIHBvaW50ZXI9dHJ1ZSBhbGxvY2F0aW9uIGJhc2UgPSBwb2ludGVyPXRydWUKY2hpbGQ6IHNsb3QgMCBhdCBzdGFydD10cnVlIGxvYWRlZCB2ZXJzaW9uLmRsbD10cnVlIHN0aWxsIDAgYWZ0ZXI9dHJ1ZSBleGl0IGNvZGU9NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "self: slot non-null=true type=MEM_PRIVATE state=0x1000 protect=0x4 allocprotect=0x4 region size=0x2000 starts at the pointer=true allocation base = pointer=true\nsuspended child: slot non-null=true type=MEM_PRIVATE state=0x1000 protect=0x4 allocprotect=0x4 region size=0x2000 starts at the pointer=true allocation base = pointer=true\nchild: slot 0 at start=true loaded version.dll=true still 0 after=true exit code=7\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
     }
   ]
 }

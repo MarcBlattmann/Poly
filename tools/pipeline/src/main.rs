@@ -904,7 +904,8 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
             util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         windows::check_split_files(&files)?;
         if let Some(r) = &results {
-            let names: Vec<String> = files.iter().map(|f| windows::test_name(f)).collect();
+            let names: Vec<String> =
+                files.iter().filter(|f| !f.ends_with(".exe")).map(|f| windows::test_name(f)).collect();
             windows::split_results(r, &names, &[])?;
         }
     }
@@ -921,7 +922,9 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
     };
     let s = store::split_tests(repo, &heldout, &req)?;
     if let Some(r) = &results {
-        let names = |files: &[String]| files.iter().map(|f| windows::test_name(f)).collect::<Vec<_>>();
+        let names = |files: &[String]| {
+            files.iter().filter(|f| !f.ends_with(".exe")).map(|f| windows::test_name(f)).collect::<Vec<_>>()
+        };
         let (visible, held) = windows::split_results(r, &names(&s.visible), &names(&s.held_out))?;
         let v = repo.join(entry.tests_dir()).join(windows::RECORDED_RESULTS);
         let h = entry.heldout_dir(&heldout).join(windows::RECORDED_RESULTS);
