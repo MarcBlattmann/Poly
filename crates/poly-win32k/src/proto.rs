@@ -173,6 +173,9 @@ crate::wire_struct! {
         /// Not a layered window, or one that has had its attributes (or
         /// `UpdateLayeredWindow`) set: it paints.
         pub lay_ready: bool,
+        /// The height of the menu bar that is drawn above the client area
+        /// (it is part of the window's surface; 0: none).
+        pub menu_bar: i32,
     }
 }
 
@@ -355,6 +358,9 @@ crate::wire_enum! {
         /// `height` pixels (`B, G, R, A`, top-down) from the window's top-left
         /// (`width` 0: none): an `Ok`.
         110 => LayeredContent { hwnd: u32, width: u32, height: u32, pixels: Vec<u8> },
+        /// The height of the menu bar `user32` draws above the window's client
+        /// area, inside its surface (0: none): an `Ok`.
+        111 => MenuBar { hwnd: u32, height: i32 },
     }
 }
 

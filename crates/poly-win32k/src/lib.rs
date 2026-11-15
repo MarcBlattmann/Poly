@@ -58,6 +58,7 @@ pub mod icofile;
 pub mod ime;
 pub mod kbd;
 pub mod link;
+pub mod menu;
 pub mod metrics;
 pub mod props;
 pub mod proto;
