@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/LdrRegisterDllNotification.yaml
+id: windows/api/ntdll.dll/LdrRegisterDllNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "LdrRegisterDllNotification function", "LdrUnregisterDllNotification function", "DLL_NOTIFICATION_DATA", "LDR_DLL_NOTIFICATION_FUNCTION"; winternl.h for the layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Registers a callback that the loader calls after a library is loaded (reason 1) or before/after it is unloaded (reason 2) in the process. Chrome's browser resolves ntdll!LdrRegisterDllNotification by name (S2 trace; the loader log of the Poly run shows the lookup) before its sandbox start-up. The callback gets the reason, a data structure {flags, full name, base name, base address, size of image} and the context pointer the registration passed; the call happens on the thread that loads or unloads, and only for real loads: a library that is already loaded is only counted, data-file loads give none, nor does a load that fails.
+interface:
+  signature: "NTSTATUS NTAPI LdrRegisterDllNotification(ULONG flags, PLDR_DLL_NOTIFICATION_FUNCTION callback, PVOID context, PVOID *cookie); NTSTATUS NTAPI LdrUnregisterDllNotification(PVOID cookie); VOID NTAPI callback(ULONG reason, const LDR_DLL_NOTIFICATION_DATA *data, PVOID context)"
+  result: "STATUS_SUCCESS (0), STATUS_INVALID_PARAMETER (0xC000000D), STATUS_DLL_NOT_FOUND (0xC0000135) for a cookie that is not registered"
+chrome:
+  calls: "1 GetProcAddress of ntdll.dll!LdrRegisterDllNotification in the browser; S2 on Poly resolves it with LdrGetProcedureAddress and goes on to the next failure"
+rules:
+  register: "flags 0, a callback, any context, a cookie pointer: STATUS_SUCCESS and a non-NULL cookie in *cookie; two registrations give two different cookies; the cookie output is written only on success"
+  load: "LoadLibraryW of a library that is not loaded yet (winmm.dll) calls the callback with reason 1: flags 0, FullDllName a full path ending with the base name, BaseDllName the file name, DllBase equal to the module handle LoadLibraryW returns, SizeOfImage non-zero, the context pointer of the registration; the callback runs on the loading thread; the libraries it needs that were not loaded yet are notified too (their own reason 1 calls); LoadLibraryW of the same library again: no notification (the count only goes up); a failing LoadLibraryW (missing file, error 126): none; LoadLibraryExW with LOAD_LIBRARY_AS_DATAFILE (version.dll) or LOAD_LIBRARY_AS_IMAGE_RESOURCE (msctf.dll): none, also not on FreeLibrary"
+  unload: "FreeLibrary that lowers the count but leaves the library loaded: none; the FreeLibrary that unloads it: reason 2 with the same names, base and context, on the calling thread"
+  several: "two registrations are both called, in the order of their registration (first the first)"
+  unregister: "LdrUnregisterDllNotification(cookie) = STATUS_SUCCESS; afterwards that callback is not called any more (the other one is); unregistering the same cookie again, NULL or a made-up value: 0xC0000135"
+  arguments: "flags 1, 2 or 0x80000000: 0xC000000D and the cookie is not written; a NULL callback: 0xC000000D; a NULL cookie pointer: 0xC000000D (no fault)"
+errors:
+  invalid_parameter: "0xC000000D"
+  not_found: "0xC0000135 from the unregister call"
+side_effects: "the callback is called while the loader lock is held (the tests only copy data in it)"
+threading: "the callback runs on the thread that loads or unloads the library"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The callback records the events in a static table; cases that may fault (NULL cookie) run in a child process whose exit code is the status.
+not_covered: >
+  LDR_DLL_NOTIFICATION_DATA of a library loaded by the loader at process start (before any registration), notifications during DllMain and the exact order against DLL_PROCESS_ATTACH, registering from inside a callback, behaviour with the loader lock, the process-exit notifications, a very large number of registrations, a callback that registers or unregisters, remote processes.
