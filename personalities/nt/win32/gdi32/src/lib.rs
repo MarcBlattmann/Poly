@@ -1575,7 +1575,14 @@ pub extern "system" fn PolyGdiAttachSurfaceRows(hdc: H, width: u32, total: u32, 
 /// As [`PolyGdiAttachSurfaceRows`] for the surface of window `surface_hwnd`: a child window's DC
 /// draws into its top-level window's surface (with [`PolyGdiSetDisplayBase`] at the child's place).
 #[unsafe(no_mangle)]
-pub extern "system" fn PolyGdiAttachSurfaceRowsTo(hdc: H, surface_hwnd: H, width: u32, total: u32, skip: u32, rows: u32) -> i32 {
+pub extern "system" fn PolyGdiAttachSurfaceRowsTo(
+    hdc: H,
+    surface_hwnd: H,
+    width: u32,
+    total: u32,
+    skip: u32,
+    rows: u32,
+) -> i32 {
     if gdi(|g| g.display_hwnd(hdc as u64)).is_none() {
         return 0;
     }

@@ -17,11 +17,11 @@ mod display;
 mod dlg;
 mod icons;
 mod layered;
-mod msgbox;
-mod paintctl;
 mod menu;
 mod menuansi;
 mod menutrack;
+mod msgbox;
+mod paintctl;
 mod s3;
 mod strings;
 
@@ -81,7 +81,8 @@ unsafe extern "system" {
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
     fn PolyGdiSetDisplayBase(hdc: usize, x: i32, y: i32) -> i32;
     fn PolyGdiAttachSurfaceRows(hdc: usize, width: u32, total: u32, skip: u32, rows: u32) -> i32;
-    fn PolyGdiAttachSurfaceRowsTo(hdc: usize, surface_hwnd: usize, width: u32, total: u32, skip: u32, rows: u32) -> i32;
+    fn PolyGdiAttachSurfaceRowsTo(hdc: usize, surface_hwnd: usize, width: u32, total: u32, skip: u32, rows: u32)
+    -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
