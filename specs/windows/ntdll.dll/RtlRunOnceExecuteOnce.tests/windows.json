@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "runonce_execute",
+      "exe_sha256": "001f860fe0307b3b56d8104fb6cf35349e50d3bca3b6b72e42b6a0de6d0b36a7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d29yZCBhZnRlciBSdGxSdW5PbmNlSW5pdGlhbGl6ZTogMApzZWNvbmQgY2FsbDogc3RhdHVzIDB4MCBjYWxscyAxIGNvbnRleHQgaGFuZGVkIG91dCAweDQwMAogIHdvcmQ6IDAKY29udGV4dCB2YWx1ZSAwOiBzdGF0dXMgMHgwIGNvbnRleHQgb3V0IDAKY2FsbGJhY2sgc3RvcmVzIGNvbnRleHQgICAgICAgIDM6IDB4YzAwMDAwZjEKY2FsbGJhY2sgc3RvcmVzIGNvbnRleHQgICAgICA0MDQ6IDB4NjAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "word after RtlRunOnceInitialize: 0\nsecond call: status 0x0 calls 1 context handed out 0x400\n  word: 0\ncontext value 0: status 0x0 context out 0\ncallback stores context        3: 0xc00000f1\ncallback stores context      404: 0x60000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 115
+    },
+    {
+      "name": "runonce_execute_b",
+      "exe_sha256": "63369dcf954a9f7ae9a4140d0a5c5cfd65d258bc97132ef2225a22dcb5ab662a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgY2FsbDogc3RhdHVzIDB4MCBjYWxscyAxIHBhcmFtIDB4MTIzNCBzYW1lIG9iamVjdCAxIGN0eCBzbG90IGdpdmVuIDEgY29udGV4dCAweDQwMAp0aGlyZCBjYWxsLCBubyBjb250ZXh0IHNsb3Q6IHN0YXR1cyAweDAgY2FsbHMgMQogIGFnYWluLCBzdGlsbCBmYWlsaW5nOiBzdGF0dXMgMHhjMDAwMDAwMSBjYWxscyAyCmNhbGxiYWNrIHN0b3JlcyBjb250ZXh0ICAgICAgICAxOiAweGMwMDAwMGYxCmNhbGxiYWNrIHN0b3JlcyBjb250ZXh0ICAgICAgICA0OiAweDYwMDAwMDAwCmNhbGxiYWNrIHN0b3JlcyBjb250ZXh0IDdmZmZmZmZmOiAweGMwMDAwMGYxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first call: status 0x0 calls 1 param 0x1234 same object 1 ctx slot given 1 context 0x400\nthird call, no context slot: status 0x0 calls 1\n  again, still failing: status 0xc0000001 calls 2\ncallback stores context        1: 0xc00000f1\ncallback stores context        4: 0x60000000\ncallback stores context 7fffffff: 0xc00000f1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 98
+    },
+    {
+      "name": "runonce_execute_c",
+      "exe_sha256": "4fd32dc0dac3c83565c34de92b9621d0f34981383295e46244fad71eb8765700",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB3b3JkIGFmdGVyIGNvbXBsZXRpb246IDB4NDAyCmNhbGxiYWNrIHJldHVybnMgRkFMU0U6IHN0YXR1cyAweGMwMDAwMDAxIGNhbGxzIDEgY29udGV4dCBzbG90IDB4NDAwCiAgdGhlbiBzdWNjZWVkaW5nOiBzdGF0dXMgMHgwIGNhbGxzIDMgY29udGV4dCAweDgwMApjYWxsYmFjayBzdG9yZXMgY29udGV4dCAgICAgICAgMjogMHhjMDAwMDBmMQpjYWxsYmFjayBzdG9yZXMgY29udGV4dCAgICAgIDQwMTogMHhjMDAwMDBmMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  word after completion: 0x402\ncallback returns FALSE: status 0xc0000001 calls 1 context slot 0x400\n  then succeeding: status 0x0 calls 3 context 0x800\ncallback stores context        2: 0xc00000f1\ncallback stores context      401: 0xc00000f1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    },
+    {
+      "name": "runonce_threads_b",
+      "exe_sha256": "620d7ffec7287080ec5c4737293d5098b22c9327792bf8c74618497d91c7daa2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGJhY2sgcnVuczogMQpjYWxsZXJzIHRoYXQgZ290IHRoZSBjb250ZXh0OiA0CmNhbGxiYWNrIHJ1bnM6IDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "callback runs: 1\ncallers that got the context: 4\ncallback runs: 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 685
+    }
+  ]
+}

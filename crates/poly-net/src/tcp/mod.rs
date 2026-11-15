@@ -272,6 +272,9 @@ pub(crate) struct Tcb {
     /// The connection got as far as SYN-SENT or SYN-RECEIVED at some point.
     pub was_connected: bool,
     pub rd_shut: bool,
+    /// Data that arrives after the receiving side was shut down resets the connection (Winsock's
+    /// `shutdown(SD_RECEIVE)`); the default is to acknowledge and drop it (POSIX).
+    pub rd_shut_aborts: bool,
     pub wr_shut: bool,
     /// The user closed the socket; the connection finishes on its own.
     pub orphan: bool,
@@ -374,6 +377,7 @@ impl Tcb {
             soft_error: None,
             was_connected: false,
             rd_shut: false,
+            rd_shut_aborts: false,
             wr_shut: false,
             orphan: false,
             rst_pending: false,

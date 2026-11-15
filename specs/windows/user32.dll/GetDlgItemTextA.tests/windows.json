@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "gda_dialog",
+      "exe_sha256": "e2b65ba8f9de3b4d1e432e139e30c003643cf68c0d3f186cd79c6b294ff3427d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QU5TSSBjb2RlIHBhZ2UgMTI1MgplZGl0IGluaXRpYWwgdGV4dDogNyBlcnI9LTIgYnl0ZXMgJ2luaXRpYWwnIHdyaXR0ZW49OApzdGF0aWM6IDYgZXJyPS0yIGJ5dGVzICcmTmFtZTonIHdyaXR0ZW49NwpidXR0b246IDYgZXJyPS0yIGJ5dGVzICcmQ2hlY2snIHdyaXR0ZW49NwpsaXN0IGJveCAobm8gdGV4dCk6IDAgZXJyPS0xIGJ5dGVzICcnIHdyaXR0ZW49MQpkaWFsb2cgdGl0bGUgYXMgaXRlbSAwOiAwIGVycj0xNDIxIGJ5dGVzICcnIHdyaXR0ZW49MQplZGl0IHdpdGggVSswMEU5IFUrNEUyRCBVKzA0MTYgVSsyMEFDOiA3IGVycj0tMiBieXRlcyAnY2FmPGU5Pj8/PDgwPicgd3JpdHRlbj04CiAgc2l6ZSA1IChjdXRzIGFmdGVyIDQgYnl0ZXMpOiA0IGVycj0tMiBieXRlcyAnY2FmPGU5Picgd3JpdHRlbj01CiAgc2l6ZSA0OiAzIGVycj0tMiBieXRlcyAnY2FmJyB3cml0dGVuPTQKICBzaXplIDE6IDAgZXJyPTAgYnl0ZXMgJycgd3JpdHRlbj0xCiAgc2l6ZSAwOiAwIGVycj0tMSBieXRlcyAnJyB3cml0dGVuPTAKICBzaXplIC0xOiAwIGVycj0wIGJ5dGVzICcnIHdyaXR0ZW49MQplZGl0IHNldCBmcm9tIEFOU0kgYnl0ZXM6IDEwIGVycj0tMiBieXRlcyAnY2FmPGU5PiA8ODA+IDw4MT4gPGZmPicgd3JpdHRlbj0xMQogIHNpemUgNjogNSBlcnI9LTIgYnl0ZXMgJ2NhZjxlOT4gJyB3cml0dGVuPTYKMzAwIGNoYXJhY3RlcnMsIHNpemUgNDAwOiAzMDAgZXJyPS0yIGJ5dGVzICd6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6CjMwMCBjaGFyYWN0ZXJzLCBzaXplIDEwMDogOTkgZXJyPS0yIGJ5dGVzICd6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enonIHdyaXR0ZW49MTAwCmVtcHR5OiAwIGVycj0wIGJ5dGVzICcnIHdyaXR0ZW49MQphYnNlbnQgaWQ6IDAgZXJyPTE0MjEgYnl0ZXMgJycgd3JpdHRlbj0xCmJhZCBkaWFsb2c6IDAgZXJyPTE0MDAgYnl0ZXMgJycgd3JpdHRlbj0xCkdldERsZ0l0ZW1UZXh0QSBOVUxMIGJ1ZmZlciwgc2l6ZSAwOiAwIGVycj0tMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ANSI code page 1252\nedit initial text: 7 err=-2 bytes 'initial' written=8\nstatic: 6 err=-2 bytes '&Name:' written=7\nbutton: 6 err=-2 bytes '&Check' written=7\nlist box (no text): 0 err=-1 bytes '' written=1\ndialog title as item 0: 0 err=1421 bytes '' written=1\nedit with U+00E9 U+4E2D U+0416 U+20AC: 7 err=-2 bytes 'caf<e9>??<80>' written=8\n  size 5 (cuts after 4 bytes): 4 err=-2 bytes 'caf<e9>' written=5\n  size 4: 3 err=-2 bytes 'caf' written=4\n  size 1: 0 err=0 bytes '' written=1\n  size 0: 0 err=-1 bytes '' written=0\n  size -1: 0 err=0 bytes '' written=1\nedit set from ANSI bytes: 10 err=-2 bytes 'caf<e9> <80> <81> <ff>' written=11\n  size 6: 5 err=-2 bytes 'caf<e9> ' written=6\n300 characters, size 400: 300 err=-2 bytes 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\n300 characters, size 100: 99 err=-2 bytes 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz' written=100\nempty: 0 err=0 bytes '' written=1\nabsent id: 0 err=1421 bytes '' written=1\nbad dialog: 0 err=1400 bytes '' written=1\nGetDlgItemTextA NULL buffer, size 0: 0 err=-1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}
