@@ -15,6 +15,30 @@ unsafe extern "system" {
     fn DeleteDC(hdc: usize) -> i32;
     fn SelectObject(hdc: usize, obj: usize) -> usize;
     fn GetStockObject(index: i32) -> usize;
+    fn CreateFontW(
+        h: i32,
+        w: i32,
+        e: i32,
+        o: i32,
+        weight: i32,
+        italic: u32,
+        u: u32,
+        s: u32,
+        cs: u32,
+        op: u32,
+        cp: u32,
+        q: u32,
+        pf: u32,
+        face: *const u16,
+    ) -> usize;
+    fn DeleteObject(h: usize) -> i32;
+}
+
+/// The message font: Segoe UI at 9 points (the dialog font of Windows 11).
+fn message_font() -> usize {
+    let face: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
+    // SAFETY: a NUL-terminated face name.
+    unsafe { CreateFontW(-12, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, face.as_ptr()) }
 }
 
 const MB_TYPEMASK: u32 = 0xF;
@@ -75,11 +99,15 @@ fn text_size(text: &[u16], max_w: i32) -> (i32, i32) {
         if dc == 0 {
             return (max_w.min(200), 16);
         }
-        SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT));
+        let font = message_font();
+        SelectObject(dc, if font != 0 { font } else { GetStockObject(DEFAULT_GUI_FONT) });
         let mut r = [0, 0, max_w, 0];
         // DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX
         super::DrawTextW(dc, text.as_ptr(), text.len() as i32, r.as_mut_ptr(), 0x400 | 0x10 | 0x800);
         DeleteDC(dc);
+        if font != 0 {
+            DeleteObject(font);
+        }
         (r[2] - r[0], (r[3] - r[1]).max(16))
     }
 }
@@ -89,12 +117,6 @@ static LAST_DEFAULT: super::SpinLock<Vec<(u32, u32)>> = super::SpinLock::new(Vec
 unsafe extern "system" fn box_proc(h: H, msg: u32, w: usize, _l: isize) -> isize {
     match msg {
         super::dlg::WM_INITDIALOG => {
-            // SAFETY: a stock font.
-            let font = unsafe { GetStockObject(DEFAULT_GUI_FONT) };
-            for c in ctl::children_of(h) {
-                send(c, ctl::WM_SETFONT, font, 0);
-            }
-            send(h, ctl::WM_SETFONT, font, 0);
             let def = LAST_DEFAULT.with(|v| v.iter().find(|x| x.0 == 0).map_or(0, |x| x.1));
             // The default button gets the focus (and says so with DM_SETDEFID).
             if def != 0 {
@@ -205,7 +227,7 @@ pub fn message_box(owner: H, text: &[u16], caption: &[u16], ty: u32) -> i32 {
     }
     let tpl = DlgTemplate {
         ex: false,
-        style: WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME,
+        style: WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | DS_MODALFRAME,
         ex_style: ex,
         help_id: 0,
         x: 0,
@@ -215,7 +237,13 @@ pub fn message_box(owner: H, text: &[u16], caption: &[u16], ty: u32) -> i32 {
         menu: SzOrd::None,
         class: SzOrd::None,
         title: caption.to_vec(),
-        font: None,
+        font: Some(poly_win32k::dlg::DlgFont {
+            points: 9,
+            weight: 400,
+            italic: false,
+            charset: 1,
+            face: utf16("Segoe UI"),
+        }),
         items,
     };
     // The default button's id for the dialog procedure (one box runs at a time per thread).

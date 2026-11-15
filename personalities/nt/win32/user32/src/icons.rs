@@ -709,7 +709,6 @@ fn load_module_bitmap(module: usize, name: *const u16, cx: i32, cy: i32, flags: 
     bitmap_from_bgra(img.w, img.h, &img.bgra, flags & LR_MONOCHROME != 0)
 }
 
-
 /// The icon or cursor a group resource (`RT_GROUP_ICON` 14, `RT_GROUP_CURSOR` 12) names, as the bytes
 /// of an `.ico` / `.cur` file (each image is its own `RT_ICON` 3 / `RT_CURSOR` 1 resource; a
 /// cursor's starts with its hotspot).
