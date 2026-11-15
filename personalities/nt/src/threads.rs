@@ -241,6 +241,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         thread_security,
     };
     let created = k.create_process(req)?;
+    k.with_state(|sys, _, _| sys.process_parents.insert(created.client.process, caller.process));
     return_handle(k, process_out, created.process)?;
     return_handle(k, thread_out, created.thread)?;
     Ok(STATUS_SUCCESS)
@@ -515,10 +516,18 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         Some(p) => p,
         None => k.with_process(pid, |_, proc, _| proc.peb).unwrap_or(0),
     };
+    let parent = k.with_state(|sys, _, _| sys.process_parents.get(&pid).copied());
     let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
     b[0..4].copy_from_slice(&exit.0.to_le_bytes());
     b[8..16].copy_from_slice(&peb.to_le_bytes());
+    // `BasePriority`: the normal priority class's base priority, 8 (the sheet's `basic_child`).
+    b[24..28].copy_from_slice(&8u32.to_le_bytes());
     b[32..40].copy_from_slice(&u64::from(pid.0).to_le_bytes());
+    b[40..48].copy_from_slice(&parent.map_or(0, |p| u64::from(p.0)).to_le_bytes());
+    // A buffer that is too small is refused and `ReturnLength` is not written (the sheet).
+    if (length as usize) < b.len() {
+        return Ok(STATUS_INFO_LENGTH_MISMATCH);
+    }
     write_info(k, buf, length, ret, &b)
 }
 

@@ -238,6 +238,7 @@ fn map_image(
         attributes: SEC_IMAGE,
         backing,
         kind: SectionKind::Image { image: alloc::boxed::Box::new(image), file: file_object },
+        chosen_base: None,
     });
     let new = NewObject::Opaque { kind: ObjectType::Section, cookie: key, signaled: None, parse: false };
     let section_object = match sys.objects.new_object(new, thread) {

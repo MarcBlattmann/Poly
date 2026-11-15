@@ -69,13 +69,23 @@ fn executable(protect: u32) -> bool {
     protect & 0xF0 != 0
 }
 
+/// Whether `process` names the caller's own process: the prohibit-dynamic-code mitigation binds
+/// the process itself, not what another process does to its memory from outside (the sheets of
+/// `VirtualAllocEx` and `VirtualProtectEx`; the sandbox's broker makes executable memory in its
+/// targets).
+fn is_own<K: NtKernel>(k: &mut K, process: u64) -> bool {
+    let caller = k.caller();
+    k.with_state(|sys, proc, _| matches!(target_of(sys, proc, &caller, Handle(process), 0), Ok(Target::Own)))
+}
+
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
 pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
+    let own = is_own(k, process);
     let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
-        if proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
+        if own && proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
         let r = proc.vm.allocate(b, base, size, zero_bits, alloc_type as u32, protect as u32)?;
@@ -113,11 +123,12 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
         return Err(STATUS_ACCESS_VIOLATION);
     }
     let new = new as u32;
+    let own = is_own(k, process);
     let (base, size, old) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
         // What the mitigation lets be executable are the views of image sections (Learn,
         // "Process Mitigation Policies": modules are mapped, not made): the loader's own
         // modules, nothing a program makes out of private memory (ADR 0196).
-        if proc.dynamic_code_blocked && executable(new) && !proc.vm.is_image_view(base, size) {
+        if own && proc.dynamic_code_blocked && executable(new) && !proc.vm.is_image_view(base, size) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
         proc.vm.protect(b, base, size, new)
@@ -225,8 +236,12 @@ pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
         // Only writable pages: `WriteProcessMemory` (kernelbase) changes a code page's protection
         // for the copy and puts it back (the sheet: `NtWriteVirtualMemory` of an execute-read page
         // is `STATUS_PARTIAL_COPY`).
-        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, _, b| {
-            Ok(page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok()))
+        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, proc, b| {
+            let put = page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok());
+            // A copy-on-write page that was written is a private page of its own now: it reports
+            // `PAGE_READWRITE` (the sheet of `VirtualProtectEx`).
+            proc.vm.mark_written(at, put as u64);
+            Ok(put)
         })?;
         done += put;
         if put < n {

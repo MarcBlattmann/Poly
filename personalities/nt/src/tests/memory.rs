@@ -219,6 +219,33 @@ fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
 }
 
 #[test]
+fn prohibit_dynamic_code_binds_the_process_not_what_another_does_to_its_memory() {
+    // The sandbox's broker makes executable memory in its targets (the sheets of `VirtualAllocEx`
+    // and `VirtualProtectEx`): the policy of the target does not stop it from outside.
+    let mut f = Fake::new();
+    let h = other_process(&mut f);
+    f.children[0].0.set_mitigation(poly_kernelbase::mitigation::State::new().with_creation_words(1 << 36, 0));
+    assert!(f.children[0].0.dynamic_code_blocked);
+    let (b, s) = (f.put_u64(0), f.put_u64(0x1000));
+    let kinds = u64::from(MEM_RESERVE | MEM_COMMIT);
+    assert_eq!(
+        f.call(Service::AllocateVirtualMemory, &[h, b, 0, s, kinds, u64::from(PAGE_EXECUTE_READWRITE)]),
+        STATUS_SUCCESS
+    );
+    let base = f.u64_at(b);
+    let (pb, ps, old) = (f.put_u64(base), f.put_u64(0x1000), f.alloc(4));
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[h, pb, ps, u64::from(PAGE_EXECUTE_READ), old]), STATUS_SUCCESS);
+    // And the same in the caller's own process is refused once it has the policy.
+    f.proc.set_mitigation(poly_kernelbase::mitigation::State::new().with_creation_words(1 << 36, 0));
+    let (b2, s2) = (f.put_u64(0), f.put_u64(0x1000));
+    let blocked = NtStatus(0xC000_0604);
+    assert_eq!(
+        f.call(Service::AllocateVirtualMemory, &[SELF, b2, 0, s2, kinds, u64::from(PAGE_EXECUTE_READWRITE)]),
+        blocked
+    );
+}
+
+#[test]
 fn prohibit_dynamic_code_blocks_executable_private_memory() {
     let mut f = Fake::new();
     let (st, base, _) = allocate(&mut f, 0, 0x2000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);

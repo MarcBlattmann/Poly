@@ -39,6 +39,11 @@ pub struct Section {
     /// The kernel's id for the pages ([`Backend::create_section`]).
     pub backing: u64,
     pub kind: SectionKind,
+    /// For an image: the base its first view got in some process. Every view of the section goes
+    /// there, relocated, where that is free, and is `STATUS_IMAGE_NOT_AT_BASE` (not relocated)
+    /// where it is not (the sheet of `NtMapViewOfSection`: why an image is at the same address in
+    /// every process of a boot).
+    pub chosen_base: Option<u64>,
 }
 
 impl Section {
@@ -86,6 +91,9 @@ pub struct NtSystem {
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
     /// defaults.
     pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
+    /// Who created each process (`InheritedFromUniqueProcessId` of `ProcessBasicInformation`), kept
+    /// while the process object exists.
+    pub process_parents: BTreeMap<ProcessId, ProcessId>,
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],
@@ -143,6 +151,7 @@ impl NtSystem {
             lowbox_sids: Vec::new(),
             winsta: crate::winsta::WinSta::default(),
             proc_attrs: BTreeMap::new(),
+            process_parents: BTreeMap::new(),
             ntdll32: &[],
             sections: BTreeMap::new(),
             next_key: 1,
@@ -209,6 +218,7 @@ impl NtSystem {
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
                     self.proc_attrs.remove(&ProcessId(d.cookie as u32));
+                    self.process_parents.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),

@@ -466,6 +466,14 @@ pub fn load_library_datafile(name: &[u16], flags: u32) -> *mut u8 {
         cur.push(u16::from(b'\\'));
         cur.extend_from_slice(name);
         candidates.push(cur);
+        // Then the system directories, as the standard search order of `LoadLibraryEx` (Learn):
+        // `version.dll` as a data file is the one in `System32` (the sheet of
+        // `LdrRegisterDllNotification` loads it so).
+        for dir in ["C:\\Windows\\System32\\", "C:\\Windows\\"] {
+            let mut p: Vec<u16> = dir.encode_utf16().collect();
+            p.extend_from_slice(name);
+            candidates.push(p);
+        }
     }
     let mut last = core::ptr::null_mut();
     for c in candidates {
