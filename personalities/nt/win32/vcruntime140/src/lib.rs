@@ -86,6 +86,16 @@ pub unsafe extern "C" fn __CxxFrameHandler3(record: *mut u8, frame: u64, context
     unsafe { cxxrt::frame_handler(record, frame, context, dc) }
 }
 
+/// `__CxxFrameHandler4`: the handler of Visual C++'s compressed ("FH4") tables. Windows has it
+/// in `vcruntime140_1.dll`; Poly's `vcruntime140_1.dll` forwards its export here, so that one
+/// copy of the per-thread state (catch blocks in progress, the current exception, the count of
+/// uncaught exceptions) serves both handlers and `_CxxThrowException` (ADR 0199).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __CxxFrameHandler4(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
+    // SAFETY: the dispatcher's arguments.
+    unsafe { cxxrt::frame_handler4(record, frame, context, dc) }
+}
+
 /// `__CxxFrameHandler2`: an older name of the same handler.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __CxxFrameHandler2(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
