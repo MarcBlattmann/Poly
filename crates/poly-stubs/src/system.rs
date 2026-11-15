@@ -1,6 +1,6 @@
 //! System DLLs Poly does not implement yet, generated (ADR 0155, step 10).
 //!
-//! The Windows applications of the survey import DLLs Poly lacks (`comdlg32`, `rpcrt4`, `setupapi`,
+//! The Windows applications of the survey import DLLs Poly lacks (`rpcrt4`, `setupapi`,
 //! the Direct3D family ...), and a missing DLL ends a program before its first line, however little
 //! of it the program uses. Each DLL in [`crate::sysdlls::SYSTEM_DLLS`] is made here, from its table,
 //! with the PE builder (no toolchain): it exports the names the programs import (and, for a

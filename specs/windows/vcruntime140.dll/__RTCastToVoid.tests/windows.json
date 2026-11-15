@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_cast_to_void_multiple",
+      "exe_sha256": "979d4b719b8c3e55fc9e21c7a3d14f1c8b0a08be16b6ea4a4947f12663c776d4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgRSBmcm9tIGl0cyBECm9rIEUgZnJvbSB0aGUgQiBpbiBECm9rIEUgZnJvbSB0aGUgQyBpbiBECm9rIEUgZnJvbSBTb2xvCm9rIEUgZnJvbSB0aGUgQSBpbiBCCm9rIEUgZnJvbSB0aGUgQSBpbiBDCnZhbHVlIG9mZnNldCBvZiBEIGluIEUgMTYKdmFsdWUgb2Zmc2V0IG9mIEMgaW4gRCAyNApzdW1tYXJ5IDYgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok E from its D\nok E from the B in D\nok E from the C in D\nok E from Solo\nok E from the A in B\nok E from the A in C\nvalue offset of D in E 16\nvalue offset of C in D 24\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "rtti_cast_to_void_null",
+      "exe_sha256": "d73e43e97e1d611691e01263c47dd6f02cfc4244cf7cf5af607675c1831e8464",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbnVsbCBzdGF5cyBudWxsCm9rIGEgcGxhaW4gb2JqZWN0Cm9rIGNvbnN0IHN0YXlzIGNvbnN0IHZvaWQqCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok null stays null\nok a plain object\nok const stays const void*\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

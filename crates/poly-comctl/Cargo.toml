@@ -1,0 +1,11 @@
+[package]
+name = "poly-comctl"
+description = "The state and basic messages of comctl32's common controls (status bar, progress bar, trackbar, up-down, tab, list view, tree view): no_std with alloc, host-tested, the DLL decodes the messages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

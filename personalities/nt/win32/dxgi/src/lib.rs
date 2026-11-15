@@ -56,7 +56,6 @@ const IID_IDXGIADAPTER1: Guid = guid(0x29038f61, 0x3839, 0x4626, [0x91, 0xfd, 0x
 const IID_IDXGIOUTPUT: Guid = guid(0xae02eedb, 0xc735, 0x4690, [0x8d, 0x52, 0x5a, 0x8d, 0xc2, 0x02, 0x13, 0xaa]);
 
 #[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
-
 #[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetSystemMetrics(index: i32) -> i32;
@@ -64,7 +63,6 @@ unsafe extern "system" {
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
-
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn Sleep(ms: u32);
@@ -86,7 +84,6 @@ fn d3d11_export(name: &core::ffi::CStr) -> usize {
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
-
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;

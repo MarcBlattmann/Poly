@@ -54,7 +54,6 @@ pub const IID_IDXGISWAPCHAIN: Guid = guid(0x310d36a0, 0xd2e7, 0x4c0a, 0xaa04, 0x
 pub const IID_IDXGISWAPCHAIN1: Guid = guid(0x790a45f7, 0x0d42, 0x4876, 0x983a, 0x0a55cfe6f4aa);
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
-
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;

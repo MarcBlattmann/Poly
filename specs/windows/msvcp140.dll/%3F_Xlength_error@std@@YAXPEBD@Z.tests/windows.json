@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_xlength_error",
+      "exe_sha256": "667434c42c070796c1cb9457d460368eec4202858d5d3f090193e5fbab7119cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgd2hhdCgpIGlzIHRoZSB0ZXh0IHBhc3NlZCBpbgpvayB0aGUgZHluYW1pYyB0eXBlIGlzIGV4YWN0bHkgc3RkOjpsZW5ndGhfZXJyb3IKb2sgY2F1Z2h0IGFzIHN0ZDo6bGVuZ3RoX2Vycm9yCm9rIHdoYXQoKSB0aHJvdWdoIHN0ZDo6bG9naWNfZXJyb3IKb2sgY2F1Z2h0IGFzIGl0cyBiYXNlIHN0ZDo6bG9naWNfZXJyb3IKb2sgd2hhdCgpIHRocm91Z2ggc3RkOjpleGNlcHRpb24Kb2sgY2F1Z2h0IGFzIGl0cyBiYXNlIHN0ZDo6ZXhjZXB0aW9uCm9rIGNhdWdodCBieSBjYXRjaCguLi4pCm9rIHRoZSBtZXNzYWdlIHdhcyBjb3BpZWQKb2sgcmV0aHJvd24Kc3VtbWFyeSAxMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok what() is the text passed in\nok the dynamic type is exactly std::length_error\nok caught as std::length_error\nok what() through std::logic_error\nok caught as its base std::logic_error\nok what() through std::exception\nok caught as its base std::exception\nok caught by catch(...)\nok the message was copied\nok rethrown\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

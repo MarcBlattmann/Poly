@@ -647,7 +647,6 @@ unsafe extern "system" fn clear_render_target_view(_: *mut c_void, rtv: *mut c_v
 // ----- IDXGIDevice1
 
 #[cfg_attr(target_arch = "x86", link(name = "dxgi", kind = "raw-dylib", import_name_type = "undecorated"))]
-
 #[cfg_attr(not(target_arch = "x86"), link(name = "dxgi", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateDXGIFactory1(riid: *const c_void, out: *mut *mut c_void) -> HRESULT;

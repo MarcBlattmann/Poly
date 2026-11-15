@@ -87,6 +87,7 @@ fn embed_win32() {
         "shlwapi.dll",
         "wtsapi32.dll",
         "comctl32.dll",
+        "comdlg32.dll",
         "oleacc.dll",
         "uiautomationcore.dll",
         "mfplat.dll",

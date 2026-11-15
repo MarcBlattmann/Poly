@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/VirtualAllocEx.yaml
+id: windows/api/kernel32.dll/VirtualAllocEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: VirtualAllocEx, VirtualFreeEx, VirtualQueryEx, MEMORY_BASIC_INFORMATION, Memory Protection Constants. Constants from winnt.h and winerror.h. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Reserves and commits memory in another process (PROCESS_VM_OPERATION). Reservations are 64 KiB aligned; a commit inside a reservation is rounded to whole pages (the address down, the end up) and returns the rounded start; VirtualQueryEx then reports the reservation as separate regions of equal state and protection, all with the reservation's allocation base and allocation protection. Chrome's broker lays out room for code copies in each target this way (64 KiB PAGE_NOACCESS reservation, one PAGE_EXECUTE_READWRITE page committed at +0x7000).
+interface:
+  signature: "LPVOID VirtualAllocEx(HANDLE process, LPVOID address, SIZE_T size, DWORD type, DWORD protect)"
+  result: "the start of the reserved or committed range, NULL on failure (last error set)"
+chrome:
+  calls: "VirtualAllocEx(target, NULL, 96..104, MEM_COMMIT, PAGE_READWRITE); VirtualAllocEx(target, NULL, 64 KiB, MEM_RESERVE, PAGE_NOACCESS); VirtualAllocEx(target, reservation + 0x7000.., 4 KiB, MEM_COMMIT, PAGE_EXECUTE_READWRITE) (seen on Poly, ADR 0196 section 8)"
+rules:
+  reserve: "MEM_RESERVE 0x10000 PAGE_NOACCESS: non-NULL, 64 KiB aligned"
+  commit_inside: "MEM_COMMIT at reservation + 0x7000, 0x1000 bytes, PAGE_EXECUTE_READWRITE returns exactly reservation + 0x7000; at + 0x9010 for 0x20 bytes returns + 0x9000 (the page start); at + 0xaff0 for 0x20 bytes returns + 0xa000 and commits both pages + 0xa000 and + 0xb000"
+  regions: "VirtualQueryEx walks the reservation as: +0x0 size 0x7000 MEM_RESERVE protect 0; +0x7000 size 0x1000 MEM_COMMIT PAGE_EXECUTE_READWRITE; +0x8000 size 0x1000 MEM_RESERVE; +0x9000 size 0x3000 MEM_COMMIT PAGE_READWRITE (the three committed read-write pages are one region); +0xc000 size 0x4000 MEM_RESERVE; every region has type MEM_PRIVATE, allocation protection PAGE_NOACCESS (the reservation's) and the reservation's start as allocation base"
+  refusals: "MEM_RESERVE again inside the reservation: NULL, ERROR_INVALID_ADDRESS (487); MEM_COMMIT where nothing is reserved (a released range): NULL, 487; size 0: NULL, ERROR_INVALID_PARAMETER (87); protection 0: 87; two protections (PAGE_READWRITE | PAGE_EXECUTE): 87; PAGE_WRITECOPY for private memory: 87"
+  run_copy: "32 bytes written (WriteProcessMemory) into the committed PAGE_EXECUTE_READWRITE page and that page's address written into the child's data: the resumed child calls it and it runs"
+  free: "VirtualFreeEx(reservation, 0, MEM_RELEASE): TRUE, the range is then MEM_FREE (0x10000); VirtualFreeEx with MEM_RELEASE and a non-zero size: FALSE, 87"
+errors:
+  invalid_address: "ERROR_INVALID_ADDRESS (487)"
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "reserves and commits address space in the target"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations. A test starts its own image again with CreateProcessW(CREATE_SUSPENDED) and --child run, changes its address space from outside and then resumes it; the child's exit code tells whether it ran the copy (see the VirtualProtectEx sheet). Each test exists in three files that make the same calls; each file writes every third observation line. Observations are offsets from the reservation, sizes, states, protections and error codes, never absolute addresses.
+not_covered: >
+  MEM_RESET, MEM_TOP_DOWN, MEM_LARGE_PAGES, a requested base outside any reservation (fixed-address reservations), NUMA (VirtualAllocExNuma), placeholders (VirtualAlloc2), WOW64 targets.

@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_names_classes",
+      "exe_sha256": "7cebb55574b125f58981751fe5fff358ed3e696ab6eec511d5bfe1ac1e34ea54",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgbmFtZSBTICJzdHJ1Y3QgUyIKdmFsdWUgbmFtZSBLICJjbGFzcyBLIgp2YWx1ZSBuYW1lIFUgInVuaW9uIFUiCnZhbHVlIG5hbWUgRW4gImVudW0gRW4iCnZhbHVlIG5hbWUgRUMgImVudW0gRUMiCnZhbHVlIG5hbWUgUyogInN0cnVjdCBTICogX19wdHI2NCIKdmFsdWUgbmFtZSBjb25zdCBTJiAic3RydWN0IFMiCnZhbHVlIG5hbWUgUyYmICJzdHJ1Y3QgUyIKdmFsdWUgbmFtZSBuczo6TiAic3RydWN0IG5zOjpOIgp2YWx1ZSBuYW1lIG5zOjppbm5lcjo6TSAiY2xhc3MgbnM6OmlubmVyOjpNIgp2YWx1ZSBuYW1lIFRwbDxpbnQ+ICJzdHJ1Y3QgVHBsPGludD4iCnZhbHVlIG5hbWUgVHBsPFMqPiAic3RydWN0IFRwbDxzdHJ1Y3QgUyAqIF9fcHRyNjQ+Igp2YWx1ZSBuYW1lIFRwbDxuczo6Tj4gInN0cnVjdCBUcGw8c3RydWN0IG5zOjpOPiIKdmFsdWUgbmFtZSBCYXNlICJzdHJ1Y3QgQmFzZSIKdmFsdWUgbmFtZSBpbnQgUzo6KiAiaW50IFM6OiogX19wdHI2NCIKdmFsdWUgbmFtZSB2b2lkIChTOjoqKShpbnQpICJ2b2lkIChfX2NkZWNsIFM6OiopKGludCkgX19wdHI2NCIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value name S \"struct S\"\nvalue name K \"class K\"\nvalue name U \"union U\"\nvalue name En \"enum En\"\nvalue name EC \"enum EC\"\nvalue name S* \"struct S * __ptr64\"\nvalue name const S& \"struct S\"\nvalue name S&& \"struct S\"\nvalue name ns::N \"struct ns::N\"\nvalue name ns::inner::M \"class ns::inner::M\"\nvalue name Tpl<int> \"struct Tpl<int>\"\nvalue name Tpl<S*> \"struct Tpl<struct S * __ptr64>\"\nvalue name Tpl<ns::N> \"struct Tpl<struct ns::N>\"\nvalue name Base \"struct Base\"\nvalue name int S::* \"int S::* __ptr64\"\nvalue name void (S::*)(int) \"void (__cdecl S::*)(int) __ptr64\"\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "rtti_names_pointers",
+      "exe_sha256": "81dd8f8551c69346a0727b1bf778f52bfdb8dbaa874d587c92b074b03eedfc2d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgbmFtZSBpbnQqICJpbnQgKiBfX3B0cjY0Igp2YWx1ZSBuYW1lIGNvbnN0IGludCogImludCBjb25zdCAqIF9fcHRyNjQiCnZhbHVlIG5hbWUgaW50KiBjb25zdCAiaW50ICogX19wdHI2NCIKdmFsdWUgbmFtZSBpbnQqKiAiaW50ICogX19wdHI2NCAqIF9fcHRyNjQiCnZhbHVlIG5hbWUgdm9pZCogInZvaWQgKiBfX3B0cjY0Igp2YWx1ZSBuYW1lIGNoYXIqICJjaGFyICogX19wdHI2NCIKdmFsdWUgbmFtZSBjb25zdCBjaGFyKiAiY2hhciBjb25zdCAqIF9fcHRyNjQiCnZhbHVlIG5hbWUgaW50WzRdICJpbnQgWzRdIgp2YWx1ZSBuYW1lIGludCgqKVs0XSAiaW50ICgqIF9fcHRyNjQpWzRdIgp2YWx1ZSBuYW1lIGludCgqKShpbnQsIGNoYXIpICJpbnQgKF9fY2RlY2wqKShpbnQsY2hhcikiCnZhbHVlIG5hbWUgdm9pZCgqKSgpICJ2b2lkIChfX2NkZWNsKikodm9pZCkiCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value name int* \"int * __ptr64\"\nvalue name const int* \"int const * __ptr64\"\nvalue name int* const \"int * __ptr64\"\nvalue name int** \"int * __ptr64 * __ptr64\"\nvalue name void* \"void * __ptr64\"\nvalue name char* \"char * __ptr64\"\nvalue name const char* \"char const * __ptr64\"\nvalue name int[4] \"int [4]\"\nvalue name int(*)[4] \"int (* __ptr64)[4]\"\nvalue name int(*)(int, char) \"int (__cdecl*)(int,char)\"\nvalue name void(*)() \"void (__cdecl*)(void)\"\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "rtti_names_raw_cache",
+      "exe_sha256": "480a583c89a89f5a12c9706bc198ddce9e24804b15e2ad3960681b5ea0a182d6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgcmF3ICBpbnQgIi5IIgp2YWx1ZSByYXcgIGludCogIi5QRUFIIgp2YWx1ZSByYXcgIFMgIi4/QVVTQEAiCnZhbHVlIHJhdyAgbnM6OmlubmVyOjpNICIuP0FWTUBpbm5lckBuc0BAIgp2YWx1ZSByYXcgIFRwbDxpbnQ+ICIuP0FVPyRUcGxASEBAIgp2YWx1ZSByYXcgIHVuc2lnbmVkIGxvbmcgbG9uZyAiLl9LIgp2YWx1ZSByYXcgIGNvbnN0IGNoYXIqICIuUEVCRCIKb2sgbmFtZSgpIHJldHVybnMgdGhlIHNhbWUgYnVmZmVyIGVhY2ggdGltZQpvayByYXdfbmFtZSgpIHN0YXJ0cyB3aXRoIHRoZSB0eXBlIGRlc2NyaXB0b3IncyBkZWNvcmF0ZWQgbmFtZQpzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value raw  int \".H\"\nvalue raw  int* \".PEAH\"\nvalue raw  S \".?AUS@@\"\nvalue raw  ns::inner::M \".?AVM@inner@ns@@\"\nvalue raw  Tpl<int> \".?AU?$Tpl@H@@\"\nvalue raw  unsigned long long \"._K\"\nvalue raw  const char* \".PEBD\"\nok name() returns the same buffer each time\nok raw_name() starts with the type descriptor's decorated name\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
