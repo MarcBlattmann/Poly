@@ -89,7 +89,7 @@ start downloads about 230 MB once. More commands are in
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 108 of 167 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 0.9%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 1.0%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -115,7 +115,7 @@ start downloads about 230 MB once. More commands are in
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 0.9% | n/a | 0 / 0 |
+| Windows | 1.0% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -123,7 +123,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,212 | 565 | 3,660 | 3,196 | 53,495 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,206 | 633 | 3,660 | 3,120 | 53,497 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -136,7 +136,6 @@ Seeded from (names only):
 - `macos-sdk`: macOS SDK .tbd stubs (exported symbols and Objective-C classes) @ `macOS SDK 27.0 (26A425)`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
-- `windows-com-state`: COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls) @ `Windows 11 25H2 build 26200.9974`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
 - `wine-spec`: Wine .spec export lists (wine-mirror/wine dlls/*/*.spec) @ `840a939ee526137639665ff5f587224d6a36403f`
 - `xnu-mach-traps`: XNU osfmk/kern/syscall_sw.c mach_trap_table @ `f6217f891ac0bb64f3d375211650a4c1ff8ca1ea`

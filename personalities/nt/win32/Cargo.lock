@@ -54,7 +54,19 @@ dependencies = [
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
+ "poly-comctl",
+ "poly-imagelist",
  "poly-kernelbase",
+ "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "comdlg32"
+version = "0.0.1"
+dependencies = [
+ "poly-comdlg",
+ "poly-win32-gui",
  "poly-win32-rt",
 ]
 
@@ -318,6 +330,14 @@ name = "poly-com"
 version = "0.0.1"
 
 [[package]]
+name = "poly-comctl"
+version = "0.0.1"
+
+[[package]]
+name = "poly-comdlg"
+version = "0.0.1"
+
+[[package]]
 name = "poly-console"
 version = "0.0.1"
 
@@ -369,6 +389,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-http"
+version = "0.0.1"
+
+[[package]]
+name = "poly-imagelist"
 version = "0.0.1"
 
 [[package]]
