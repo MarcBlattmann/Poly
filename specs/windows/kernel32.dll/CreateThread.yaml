@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateThread.yaml
+id: windows/api/kernel32.dll/CreateThread
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateThread, GetProcAddress, the PE format (export directory, export address table, forwarder RVAs, section characteristics). The export table and section headers of kernel32.dll were read as data (names, RVAs, section flags), as the PE format describes them; no code bytes. Chrome on Poly (specs/windows/apps/chrome/s2-interception.md). No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  This sheet covers one property of the export only: kernel32.dll's export CreateThread is code in kernel32 itself, not a forwarder. Its export-table entry is an RVA outside the export directory, in kernel32's code section (IMAGE_SCN_CNT_CODE, IMAGE_SCN_MEM_EXECUTE), on a PAGE_EXECUTE_READ page of kernel32's image; GetProcAddress returns exactly that address; calling the address creates a thread that runs. Chrome's sandboxed processes take CreateThread's address from kernel32's export table themselves and call it: where the entry is a forwarder, they jump into the forwarder's text and fault (DEP).
+interface:
+  signature: "HANDLE CreateThread(LPSECURITY_ATTRIBUTES attributes, SIZE_T stack, LPTHREAD_START_ROUTINE start, LPVOID parameter, DWORD flags, LPDWORD thread_id)"
+  result: "a thread handle"
+chrome:
+  calls: "on Poly, with ntdll's _strnicmp/strlen/wcslen present, every sandboxed child faulted executing kernel32.dll + the RVA of CreateThread's export entry, which on Poly is the forwarder text \"api-ms-win-core-processthreads-l1-1-0.CreateThread\" (called from chrome.exe + 0x311167, below chrome.exe + 0x300c85); with CreateThread as code in kernel32 they ran on"
+rules:
+  export_is_code: "walking kernel32's export directory (from its in-memory PE headers) by name finds CreateThread; its RVA is not inside the export directory (not a forwarder); the section holding it has IMAGE_SCN_MEM_EXECUTE and IMAGE_SCN_CNT_CODE; VirtualQuery of base + RVA: MEM_IMAGE, allocation base = kernel32's module handle, PAGE_EXECUTE_READ (0x20)"
+  same_as_getprocaddress: "GetProcAddress(kernel32, \"CreateThread\") returns base + that RVA (the same address)"
+  callable: "calling base + RVA with (NULL, 0, a thread function, 77, 0, &id): a handle, a non-zero thread id, the thread runs with parameter 77 and the wait for its handle ends with WAIT_OBJECT_0"
+errors:
+  none: "not observed here (the function's own error behaviour is not part of this sheet)"
+side_effects: "creates a thread"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "the thread starts within a few milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations. The test reads kernel32's PE headers and export directory in its own process as data (as the PE format describes them) to find the export's RVA and its section's characteristics. Each test exists in three files that make the same calls; each file writes every third observation line. Observations are booleans, protections and the wait result, never addresses.
+not_covered: >
+  CreateThread's own behaviour (stack sizes, flags, security attributes, errors). Which of kernel32's other exports are code and which are forwarders: on this oracle 211 of kernel32's exports are forwarders (77 to NTDLL, 52 to kernelbase, the rest to api-ms-win-* contracts); the export names chrome.exe contains that Windows has as code and Poly forwards are listed in specs/windows/apps/chrome/s2-interception.md (only CreateThread is known to matter).

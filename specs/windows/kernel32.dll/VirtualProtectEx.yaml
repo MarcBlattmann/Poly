@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/VirtualProtectEx.yaml
+id: windows/api/kernel32.dll/VirtualProtectEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: VirtualProtectEx, VirtualProtect, VirtualQueryEx, Memory Protection Constants, WriteProcessMemory, VirtualAllocEx, FlushInstructionCache, UpdateProcThreadAttribute (PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON). Constants from winnt.h, winbase.h and winerror.h. What Chrome's broker does to its targets: the calls seen on Poly (ADR 0196 section 8, specs/windows/apps/chrome/s2-interception.md). The code the tests rewrite is the test's own (two 32-byte stubs on pages of their own in its executable); no Microsoft code was read, copied or changed. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Changes the protection of pages of another process (PROCESS_VM_OPERATION) and returns the old protection of the first page. On an image's code page (PAGE_EXECUTE_READ) it takes PAGE_WRITECOPY, which a later write turns into a private PAGE_READWRITE page that stays MEM_IMAGE; PAGE_READWRITE asked for on an image page is reported as PAGE_WRITECOPY, PAGE_EXECUTE_READWRITE as PAGE_EXECUTE_WRITECOPY. The whole 16-byte rewrite a sandbox broker makes in a suspended target (copy of 32 bytes into a page it commits, PAGE_WRITECOPY, write, PAGE_EXECUTE_READ, a pointer into the target's data) works, the target then runs both the rewritten code and the copy, and the caller's own copy of the image is not changed. A target created with the prohibit-dynamic-code mitigation does not stop any of this when it is done from outside.
+interface:
+  signature: "BOOL VirtualProtectEx(HANDLE process, LPVOID address, SIZE_T size, DWORD new_protect, PDWORD old_protect)"
+  result: "TRUE and *old_protect = the protection the first page had"
+chrome:
+  calls: "per patched ntdll function of a target: ReadProcessMemory(32 bytes), WriteProcessMemory(thunk page, 32 bytes), VirtualProtectEx(function, 16, PAGE_WRITECOPY), WriteProcessMemory(function, 16), VirtualProtectEx(function, 16, PAGE_EXECUTE_READ); the thunk page is VirtualAllocEx(MEM_RESERVE 64 KiB PAGE_NOACCESS) + VirtualAllocEx(MEM_COMMIT 4 KiB at +0x7000.. PAGE_EXECUTE_READWRITE)"
+rules:
+  broker_sequence: "suspended child of the test's own image: ReadProcessMemory(stub, 32) copies 32 bytes equal to the caller's own (the image is at the same address in both processes); the stub page is MEM_IMAGE, MEM_COMMIT, PAGE_EXECUTE_READ, allocation protection PAGE_EXECUTE_WRITECOPY. VirtualProtectEx(stub, 16, PAGE_WRITECOPY): TRUE, old 0x20; the page is then PAGE_WRITECOPY (0x08), region size 0x1000 (one page: the range is rounded to whole pages). WriteProcessMemory(stub, 16): TRUE, 16; the page is then PAGE_READWRITE (0x04), still MEM_IMAGE with allocation protection 0x80. VirtualProtectEx(stub, 16, PAGE_EXECUTE_READ): TRUE, old 0x04; then PAGE_EXECUTE_READ, MEM_IMAGE. Reading back: the first 16 bytes are the new ones, bytes 16..31 unchanged, the next page's stub unchanged. After writing the copy's address into the child's data (8 bytes) and FlushInstructionCache (TRUE) the resumed child runs the rewritten stub (its new result) and the copy (the old result); the caller's own stub still gives the old result"
+  image_page_protections: "on an image code page of a suspended child, one after the other: PAGE_READWRITE: TRUE, old 0x20, then reported 0x08 (PAGE_WRITECOPY); PAGE_EXECUTE_READ: old 0x08, then 0x20; PAGE_EXECUTE_READWRITE: old 0x20, then reported 0x80 (PAGE_EXECUTE_WRITECOPY); PAGE_EXECUTE_WRITECOPY: old 0x80, then 0x80; PAGE_READONLY: old 0x80, then 0x02; PAGE_NOACCESS: old 0x02, then 0x01; PAGE_EXECUTE_READ: old 0x01, then 0x20; the region stays MEM_IMAGE throughout"
+  page_boundary: "16 bytes starting 8 bytes before a page boundary change both pages (both report PAGE_WRITECOPY); the old protection returned is the first page's"
+  private_pages: "a private page committed PAGE_READWRITE takes PAGE_EXECUTE_READ (old 0x04, then 0x20, MEM_PRIVATE); PAGE_WRITECOPY and PAGE_EXECUTE_WRITECOPY on private memory fail with ERROR_INVALID_PARAMETER (87), *old_protect is written as PAGE_NOACCESS (0x01), the page keeps its protection"
+  errors_seen: "size 0: FALSE, 87, nothing changes; a NULL old-protection pointer: FALSE, ERROR_NOACCESS (998) and the page keeps its protection; reserved, uncommitted memory: FALSE, ERROR_INVALID_ADDRESS (487) (and *old_protect is written: PAGE_NOACCESS 0x01); a range covering a committed page and a reserved one: FALSE, 487 (old written 0x01); protection 0: FALSE, 87 (old not written); two protections at once (PAGE_READWRITE | PAGE_READONLY): FALSE, 87 (old not written); a handle opened with PROCESS_QUERY_INFORMATION | PROCESS_VM_READ only: FALSE, ERROR_ACCESS_DENIED (5)"
+  prohibit_dynamic_code: "a child created suspended with PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON (attribute 0x20007): from the parent, VirtualAllocEx PAGE_EXECUTE_READWRITE succeeds, VirtualProtectEx of a private page to PAGE_EXECUTE_READ succeeds (old 0x04), the image-page rewrite (PAGE_WRITECOPY old 0x20, write 16, PAGE_EXECUTE_READ old 0x04) succeeds, WriteProcessMemory to another image code page without changing it first succeeds; the child then runs the rewritten code (the same exit code as a child without the policy). The policy limits what the process does to itself, not what another process with PROCESS_VM_OPERATION does to it"
+errors:
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+  invalid_address: "ERROR_INVALID_ADDRESS (487)"
+  no_access: "ERROR_NOACCESS (998)"
+  access_denied: "ERROR_ACCESS_DENIED (5)"
+side_effects: "changes page protections in the target; a write to a PAGE_WRITECOPY image page makes a private copy of that page for the target only"
+threading: "may be called from any thread; the tests change only suspended children"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6
+  held_out: 3
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, winnt.h/winbase.h/winerror.h constants). A test starts its own image again with CreateProcessW(CREATE_SUSPENDED) and --child run (optionally with a mitigation policy through STARTUPINFOEXW and UpdateProcThreadAttribute), changes the child from outside and then resumes it; the child's exit code is 100 * (result of the first stub) + (result of the copy, 0 if none) + 1000 * (result of the second stub) / 9. The stubs are the test's own 32-byte functions (mov eax, 7 / mov eax, 9; ret; filler) on pages of their own; the 16 bytes written are mov eax, 42; ret and filler. Each test exists in three files that make the same calls; each file writes every third observation line. Observations are booleans, protections, sizes, error codes and exit codes, never addresses.
+not_covered: >
+  Other processes' DLL code pages (the tests rewrite only their own executable's pages), guard pages, PAGE_TARGETS_* flags, large pages, a target that is running while its code is changed, protected processes, WOW64 targets.
