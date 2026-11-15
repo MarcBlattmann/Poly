@@ -194,11 +194,15 @@ fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
     let back = f.alloc(16);
     assert_eq!(f.call(Service::ReadVirtualMemory, &[h, base + 0x10, back, 16, done]), STATUS_SUCCESS);
     assert_eq!(f.mem.bytes_at(back, 16), b"hello, container");
-    // A page that is read-only is written anyway (the copy of `WriteProcessMemory`), and keeps its protection.
+    // A page that is read-only is not written (`NtWriteVirtualMemory` writes only writable pages: the
+    // sheet of `WriteProcessMemory`; kernelbase changes a code page's protection for its copy).
     let (b, s, old) = (f.put_u64(base), f.put_u64(0x1000), f.alloc(4));
     assert_eq!(f.call(Service::ProtectVirtualMemory, &[h, b, s, u64::from(PAGE_READONLY), old]), STATUS_SUCCESS);
-    assert_eq!(f.call(Service::WriteVirtualMemory, &[h, base + 0x20, data, 4, done]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::WriteVirtualMemory, &[h, base + 0x20, data, 4, done]), NtStatus(0x8000_000D));
+    assert_eq!(f.u64_at(done), 0);
     assert_eq!(f.children[0].0.vm.query(base).unwrap().protect, PAGE_READONLY);
+    let (b, s, old) = (f.put_u64(base), f.put_u64(0x1000), f.alloc(4));
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[h, b, s, u64::from(PAGE_READWRITE), old]), STATUS_SUCCESS);
     // Past the committed pages the copy stops with `STATUS_PARTIAL_COPY` and says how much it did.
     let partial = NtStatus(0x8000_000D);
     assert_eq!(f.call(Service::ReadVirtualMemory, &[h, base + 0x1FF8, back, 16, done]), partial);

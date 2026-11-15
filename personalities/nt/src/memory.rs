@@ -188,7 +188,9 @@ pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
         let at = base.wrapping_add(done as u64);
         let got = on_process(k, process, PROCESS_VM_READ, |_, proc, b| {
             Ok(page_steps(at, n, |addr, r| {
-                proc.vm.query(addr).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0)
+                proc.vm
+                    .query(addr)
+                    .is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0)
                     && b.read(addr, &mut chunk[r]).is_ok()
             }))
         })?;
@@ -220,14 +222,11 @@ pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
         chunk.resize(n, 0);
         abi::read(k, buf + done as u64, &mut chunk)?;
         let at = base.wrapping_add(done as u64);
-        // Pages that are committed are written whatever their protection says (Learn: the
-        // function changes it for the copy and puts it back; the broker patches `ntdll`'s
-        // execute-only stubs this way), so the write is forced.
-        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, proc, b| {
-            Ok(page_steps(at, n, |addr, r| {
-                proc.vm.query(addr).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & PAGE_NOACCESS == 0)
-                    && b.write_forced(addr, &chunk[r]).is_ok()
-            }))
+        // Only writable pages: `WriteProcessMemory` (kernelbase) changes a code page's protection
+        // for the copy and puts it back (the sheet: `NtWriteVirtualMemory` of an execute-read page
+        // is `STATUS_PARTIAL_COPY`).
+        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, _, b| {
+            Ok(page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok()))
         })?;
         done += put;
         if put < n {

@@ -83,12 +83,6 @@ pub trait Backend {
         Err(poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
-    /// [`write`](Self::write) into pages whatever their protection says, as a debugger writes
-    /// (`NtWriteVirtualMemory`, ADR 0196); the pages keep it.
-    fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
-        self.write(addr, data)
-    }
-
     /// Make the pages of a new section; returns the kernel's id for them.
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus>;
 

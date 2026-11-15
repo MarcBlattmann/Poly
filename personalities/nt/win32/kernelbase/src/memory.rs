@@ -314,27 +314,89 @@ unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done
 /// stops at the first page it cannot read or write (`STATUS_PARTIAL_COPY`,
 /// `ERROR_PARTIAL_COPY`).
 ///
+/// A write that stops at a page that is committed but only executable or execute-read (an image's
+/// code, a stub the broker patches) is made to work as `WriteProcessMemory` does (the sheet): the
+/// page gets a writable protection for the copy and its old one back after it. `PAGE_READONLY`
+/// and `PAGE_NOACCESS` pages are `ERROR_NOACCESS` (nothing written); a copy that has written
+/// something and then meets memory it cannot write is `ERROR_PARTIAL_COPY`.
+///
 /// # Safety
 /// `buf` holds `size` bytes; `done` is null or writable.
 unsafe fn copy_other(process: isize, base: usize, buf: *mut u8, size: usize, done: *mut usize, write: bool) -> i32 {
-    let mut n = 0usize;
-    // SAFETY: the caller's buffer of `size` bytes and a local count.
-    let st = unsafe {
-        if write {
-            nt::NtWriteVirtualMemory(process as nt::Handle, base as *mut u8, buf, size, &mut n)
-        } else {
-            nt::NtReadVirtualMemory(process as nt::Handle, base as *const u8, buf, size, &mut n)
+    let mut copied = 0usize;
+    let mut result = TRUE;
+    while copied < size {
+        let mut n = 0usize;
+        let at = base.wrapping_add(copied);
+        // SAFETY: the caller's buffer of `size` bytes and a local count.
+        let st = unsafe {
+            if write {
+                nt::NtWriteVirtualMemory(process as nt::Handle, at as *mut u8, buf.add(copied), size - copied, &mut n)
+            } else {
+                nt::NtReadVirtualMemory(process as nt::Handle, at as *const u8, buf.add(copied), size - copied, &mut n)
+            }
+        };
+        copied += n;
+        if st.is_success() {
+            break;
         }
-    };
+        if st.0 != 0x8000_000D || !write {
+            // Not a partial copy (access denied, bad handle), or a read: as it is.
+            if !done.is_null() {
+                // SAFETY: the caller's out parameter.
+                unsafe { *done = copied };
+            }
+            return if st.0 == 0x8000_000D { fail(ERROR_PARTIAL_COPY, FALSE) } else { fail_status(st, FALSE) };
+        }
+        // STATUS_PARTIAL_COPY on a write: look at the page that stopped it.
+        let at = base.wrapping_add(copied);
+        let mut info = crate::base::MemoryBasicInformation::default();
+        // SAFETY: a MEMORY_BASIC_INFORMATION buffer of this build's layout.
+        let q = unsafe {
+            VirtualQueryEx(
+                process as nt::Handle,
+                at as *const u8,
+                (&mut info as *mut crate::base::MemoryBasicInformation).cast(),
+                core::mem::size_of::<crate::base::MemoryBasicInformation>(),
+            )
+        };
+        let code_page = q != 0
+            && info.state == MEM_COMMIT
+            && info.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0
+            && !protect_writable(info.protect)
+            && info.protect & (PAGE_EXECUTE | 0x20) != 0;
+        if !code_page {
+            result = fail(if copied == 0 { ERROR_NOACCESS } else { ERROR_PARTIAL_COPY }, FALSE);
+            break;
+        }
+        // The rest of the region that is not writable, one piece.
+        let piece = (size - copied).min(info.base_address + info.region_size - at);
+        // A page of an image is copy-on-write (it gets a private copy); private memory is made read/write.
+        let temp = if info.ty == 0x0100_0000 { PAGE_EXECUTE_WRITECOPY } else { PAGE_EXECUTE_READWRITE };
+        let mut old = 0u32;
+        // SAFETY: valid pointers; the kernel checks the arguments.
+        if unsafe { VirtualProtectEx(process as nt::Handle, at as *mut u8, piece, temp, &mut old) } == FALSE {
+            result = FALSE;
+            break;
+        }
+        let mut put = 0usize;
+        // SAFETY: the caller's buffer holds `size` bytes.
+        let st =
+            unsafe { nt::NtWriteVirtualMemory(process as nt::Handle, at as *mut u8, buf.add(copied), piece, &mut put) };
+        let mut ignored = 0u32;
+        // SAFETY: as above: the protection the page had comes back.
+        unsafe { VirtualProtectEx(process as nt::Handle, at as *mut u8, piece, old, &mut ignored) };
+        copied += put;
+        if !st.is_success() {
+            result = if st.0 == 0x8000_000D { fail(ERROR_PARTIAL_COPY, FALSE) } else { fail_status(st, FALSE) };
+            break;
+        }
+    }
     if !done.is_null() {
         // SAFETY: the caller's out parameter.
-        unsafe { *done = n };
+        unsafe { *done = copied };
     }
-    if st.0 == 0x8000_000D {
-        // STATUS_PARTIAL_COPY (`ntstatus.h`).
-        return fail(ERROR_PARTIAL_COPY, FALSE);
-    }
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    if result == TRUE && copied < size { fail(ERROR_PARTIAL_COPY, FALSE) } else { result }
 }
 
 /// `ReadProcessMemory`.
