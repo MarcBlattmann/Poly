@@ -119,6 +119,10 @@ name = "poly-com"
 version = "0.0.1"
 
 [[package]]
+name = "poly-comdlg"
+version = "0.0.1"
+
+[[package]]
 name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
@@ -270,6 +274,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-http"
+version = "0.0.1"
+
+[[package]]
+name = "poly-imagelist"
 version = "0.0.1"
 
 [[package]]

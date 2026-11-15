@@ -1502,21 +1502,21 @@ static SURFACES: SpinLock<Vec<SurfaceDib>> = SpinLock::new(Vec::new());
 /// nowhere. 1 on success.
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> i32 {
-    let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
-    if width == 0 || height == 0 {
-        gdi(|g| g.set_surface(hdc as u64, None));
-        return 1;
-    }
-    let hwnd = hwnd as H;
+    PolyGdiAttachSurfaceRows(hdc, width, height, 0, height)
+}
+
+/// Window `hwnd`'s surface DIB of `width` x `height`, made or remade for a new size
+/// (its handle, its pixels).
+fn surface_dib(hwnd: H, width: u32, height: u32) -> Option<(u64, usize)> {
     let current = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied());
-    let bitmap = match current {
-        Some((_, b, _, w, h)) if (w, h) == (width, height) => b,
+    match current {
+        Some((_, b, mem, w, h)) if (w, h) == (width, height) => Some((b, mem)),
         old => {
             let len = width as usize * height as usize * 4;
             // SAFETY: fresh zeroed pages.
             let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len, MEM_COMMIT_RESERVE, PAGE_READWRITE) };
             if mem.is_null() {
-                return 0;
+                return None;
             }
             // White, as the compositor shows a surface before it is drawn.
             // SAFETY: `len` bytes just allocated.
@@ -1542,11 +1542,81 @@ pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> 
                 s.retain(|e| e.0 != hwnd);
                 s.push((hwnd, b, mem as usize, width, height));
             });
+            // The views onto the old pixels go with them.
+            let views = VIEWS.with(|v| {
+                let (gone, keep): (Vec<_>, Vec<_>) = v.drain(..).partition(|e| e.0 == hwnd);
+                *v = keep;
+                gone
+            });
+            for (_, _, _, _, vb) in views {
+                DeleteObject(vb as H);
+            }
             if let Some((_, ob, _, _, _)) = old {
                 // DCs still pointing at it draw nowhere until attached again.
                 DeleteObject(ob as H);
             }
-            b
+            Some((b, mem as usize))
+        }
+    }
+}
+
+/// Views of a surface DIB onto some of its rows (a window's client area below
+/// its menu bar): (hwnd, first row, rows, view bitmap).
+type SurfaceView = (H, u32, u32, usize, u64);
+static VIEWS: SpinLock<Vec<SurfaceView>> = SpinLock::new(Vec::new());
+
+/// As [`PolyGdiAttachSurface`] for a surface of `width` x `total` rows, the DC
+/// drawing on the `rows` rows from row `skip` (the rows above are the window's
+/// menu bar, drawn with a DC of their own).
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurfaceRows(hdc: H, width: u32, total: u32, skip: u32, rows: u32) -> i32 {
+    let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
+    attach_rows(hdc, hwnd as H, width, total, skip, rows)
+}
+
+/// As [`PolyGdiAttachSurfaceRows`] for the surface of window `surface_hwnd`: a child window's DC
+/// draws into its top-level window's surface (with [`PolyGdiSetDisplayBase`] at the child's place).
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurfaceRowsTo(
+    hdc: H,
+    surface_hwnd: H,
+    width: u32,
+    total: u32,
+    skip: u32,
+    rows: u32,
+) -> i32 {
+    if gdi(|g| g.display_hwnd(hdc as u64)).is_none() {
+        return 0;
+    }
+    attach_rows(hdc, surface_hwnd, width, total, skip, rows)
+}
+
+/// Where a child window's client (or window) origin is in the surface its DC draws into.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiSetDisplayBase(hdc: H, x: i32, y: i32) -> i32 {
+    i32::from(gdi(|g| g.set_display_base(hdc as u64, (x, y))))
+}
+
+fn attach_rows(hdc: H, hwnd: H, width: u32, total: u32, skip: u32, rows: u32) -> i32 {
+    if width == 0 || total == 0 || rows == 0 || skip.saturating_add(rows) > total {
+        gdi(|g| g.set_surface(hdc as u64, None));
+        return 1;
+    }
+    let Some((full, mem)) = surface_dib(hwnd, width, total) else { return 0 };
+    let bitmap = if skip == 0 && rows == total {
+        full
+    } else {
+        let found = VIEWS.with(|v| v.iter().find(|e| e.0 == hwnd && e.1 == skip && e.2 == rows).map(|e| e.4));
+        match found {
+            Some(b) => b,
+            None => {
+                let at = mem + skip as usize * width as usize * 4;
+                let len = rows as usize * width as usize * 4;
+                let b = gdi(|g| g.create_dib(width as i32, -(rows as i32), 32, Vec::new(), at as u64, len));
+                let b = u64::from(b);
+                VIEWS.with(|v| v.push((hwnd, skip, rows, mem, b)));
+                b
+            }
         }
     };
     gdi(|g| g.set_surface(hdc as u64, Some(bitmap as u32)));

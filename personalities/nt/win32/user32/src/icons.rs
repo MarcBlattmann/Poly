@@ -17,6 +17,14 @@ use poly_win32k::user::Env;
 #[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
+    fn CreateDIBSection(
+        hdc: usize,
+        info: *const u8,
+        usage: u32,
+        bits: *mut *mut u8,
+        section: usize,
+        offset: u32,
+    ) -> usize;
     fn GetObjectType(h: usize) -> u32;
     fn GetPixel(hdc: usize, x: i32, y: i32) -> u32;
     fn SetPixelV(hdc: usize, x: i32, y: i32, color: u32) -> i32;
@@ -512,8 +520,7 @@ fn resource_id(name: *const u16) -> Option<u16> {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadIconW(instance: H, name: *const u16) -> usize {
     if instance != 0 {
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        return load_module_icon(instance, name, 1, 0, 0, LR_DEFAULTSIZE);
     }
     match resource_id(name) {
         Some(id @ 32512..=32518) => ICON_BASE + usize::from(id - 32512),
@@ -610,8 +617,14 @@ pub unsafe extern "system" fn LoadImageW(
         return load_file(name, kind, cx, cy, flags);
     }
     if instance != 0 {
-        set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
-        return 0;
+        if kind == 0 {
+            return load_module_bitmap(instance, name, cx, cy, flags);
+        }
+        let h = load_module_icon(instance, name, kind, cx, cy, flags);
+        if h == 0 && poly_win32_gui::last_error() == 0 {
+            set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
+        }
+        return h;
     }
     if name.is_null() {
         set_last_error(ERROR_RESOURCE_TYPE_NOT_FOUND);
@@ -644,6 +657,149 @@ pub unsafe extern "system" fn LoadImageW(
             }
         },
     }
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn FindResourceW(module: usize, name: *const u16, ty: *const u16) -> usize;
+    fn LoadResource(module: usize, res: usize) -> usize;
+    fn LockResource(data: usize) -> *const u8;
+    fn SizeofResource(module: usize, res: usize) -> u32;
+}
+
+const LR_CREATEDIBSECTION: u32 = 0x2000;
+
+/// The bytes of the `RT_BITMAP` resource `name` of `module` (a DIB without a file header).
+fn bitmap_resource(module: usize, name: *const u16) -> Option<Vec<u8>> {
+    resource_bytes(module, name, 2)
+}
+
+/// The bytes of resource `name` of type `ty` (`RT_*` number) of `module`.
+fn resource_bytes(module: usize, name: *const u16, ty: usize) -> Option<Vec<u8>> {
+    // SAFETY: arguments of the kernel32 resource functions.
+    unsafe {
+        let r = FindResourceW(module, name, ty as *const u16);
+        if r == 0 {
+            return None;
+        }
+        let data = LoadResource(module, r);
+        let p = LockResource(data);
+        if p.is_null() {
+            return None;
+        }
+        Some(core::slice::from_raw_parts(p, SizeofResource(module, r) as usize).to_vec())
+    }
+}
+
+/// `LoadImageW(hInstance, name, IMAGE_BITMAP, ...)` for a bitmap resource of a module
+/// (`LoadBitmapW.yaml`): a device-dependent bitmap of the screen's format (32 bits), a DIB
+/// section with `LR_CREATEDIBSECTION`, stretched when a size is given, 1 bit with
+/// `LR_MONOCHROME`.
+fn load_module_bitmap(module: usize, name: *const u16, cx: i32, cy: i32, flags: u32) -> usize {
+    let Some(dib) = bitmap_resource(module, name) else { return 0 };
+    if flags & LR_CREATEDIBSECTION != 0 {
+        let Some(info) = poly_win32k::dib::info(&dib) else { return 0 };
+        let mut bits: *mut u8 = core::ptr::null_mut();
+        // SAFETY: the DIB's header (and palette) is the BITMAPINFO.
+        let hbm = unsafe { CreateDIBSection(0, dib.as_ptr(), 0, &mut bits, 0, 0) };
+        if hbm != 0 && !bits.is_null() {
+            let n = info.stride() * info.rows();
+            let off = info.bits_at;
+            if dib.len() >= off + n {
+                // SAFETY: the section has `n` bytes of pixels.
+                unsafe { core::ptr::copy_nonoverlapping(dib.as_ptr().add(off), bits, n) };
+            }
+        }
+        return hbm;
+    }
+    let Some((w, h, px)) = poly_win32k::dib::to_bgra(&dib) else { return 0 };
+    let src = Image { w, h, bgra: px, and: alloc::vec![0; (w * h) as usize], alpha: false, hot: (0, 0) };
+    let img = if cx > 0 && cy > 0 && (cx != w || cy != h) { icofile::scale(&src, cx, cy) } else { src };
+    bitmap_from_bgra(img.w, img.h, &img.bgra, flags & LR_MONOCHROME != 0)
+}
+
+/// The icon or cursor a group resource (`RT_GROUP_ICON` 14, `RT_GROUP_CURSOR` 12) names, as the bytes
+/// of an `.ico` / `.cur` file (each image is its own `RT_ICON` 3 / `RT_CURSOR` 1 resource; a
+/// cursor's starts with its hotspot).
+fn group_to_ico(module: usize, group: &[u8], cursor: bool) -> Option<Vec<u8>> {
+    let count = usize::from(u16::from_le_bytes([*group.get(4)?, *group.get(5)?]));
+    let mut images: Vec<(Vec<u8>, [u8; 8])> = Vec::new();
+    for k in 0..count {
+        let e = group.get(6 + 14 * k..6 + 14 * k + 14)?;
+        let id = u16::from_le_bytes([e[12], e[13]]);
+        let data = resource_bytes(module, id as usize as *const u16, if cursor { 1 } else { 3 })?;
+        // The fields of the directory entry from byte 0 to 7: width, height, colours, reserved,
+        // planes (hotspot x for a cursor), bit count (hotspot y).
+        let mut head = [0u8; 8];
+        let (img, hot) = if cursor {
+            if data.len() < 4 {
+                return None;
+            }
+            (data[4..].to_vec(), Some((data[0], data[1], data[2], data[3])))
+        } else {
+            (data, None)
+        };
+        if cursor {
+            // width and height are u16 in the group; the height counts the AND mask too.
+            head[0] = e[0];
+            head[1] = (u16::from_le_bytes([e[2], e[3]]) / 2).min(255) as u8;
+            let h = hot?;
+            head[4] = h.0;
+            head[5] = h.1;
+            head[6] = h.2;
+            head[7] = h.3;
+        } else {
+            head.copy_from_slice(&[e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]]);
+        }
+        images.push((img, head));
+    }
+    let mut out = alloc::vec![0, 0, if cursor { 2 } else { 1 }, 0];
+    out.extend_from_slice(&(count as u16).to_le_bytes());
+    let mut off = 6 + 16 * count;
+    for (img, head) in &images {
+        out.extend_from_slice(head);
+        out.extend_from_slice(&(img.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(off as u32).to_le_bytes());
+        off += img.len();
+    }
+    for (img, _) in &images {
+        out.extend_from_slice(img);
+    }
+    Some(out)
+}
+
+/// `LoadImageW` / `LoadIconW` / `LoadCursorW` of an icon (`kind` 1) or a cursor (2) of a module.
+pub fn load_module_icon(module: usize, name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize {
+    let cursor = kind == 2;
+    let Some(group) = resource_bytes(module, name, if cursor { 12 } else { 14 }) else { return 0 };
+    let Some(bytes) = group_to_ico(module, &group, cursor) else { return 0 };
+    let (w, h) = if flags & LR_DEFAULTSIZE != 0 && cx == 0 { (32, 32) } else { (cx, cy) };
+    icon_from_ico(&bytes, kind, w, h)
+}
+
+fn icon_from_ico(bytes: &[u8], kind: u32, w: i32, h: i32) -> usize {
+    let Some((_ftype, images)) = icofile::parse(bytes) else { return 0 };
+    let pick = icofile::pick(&images, (if w > 0 { w } else { 0 }, if h > 0 { h } else { 0 }));
+    let want = if w > 0 && h > 0 { (w, h) } else { (pick.w, pick.h) };
+    let img = icofile::scale(pick, want.0, want.1);
+    if kind == 2 {
+        let mut c = img;
+        let src_hot = pick.hot;
+        c.hot = (
+            (i64::from(src_hot.0) * i64::from(c.w) / i64::from(pick.w.max(1))) as i32,
+            (i64::from(src_hot.1) * i64::from(c.h) / i64::from(pick.h.max(1))) as i32,
+        );
+        obj_from_image(c, true, false)
+    } else {
+        obj_from_image(img, false, true)
+    }
+}
+
+/// `LoadBitmapW(hInstance, name)`: `LoadImageW` of a bitmap with no flags.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LoadBitmapW(instance: H, name: *const u16) -> usize {
+    // SAFETY: a resource id or a NUL-terminated name.
+    unsafe { LoadImageW(instance, name, 0, 0, 0, 0) }
 }
 
 fn load_file(name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize {

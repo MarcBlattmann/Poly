@@ -1,6 +1,6 @@
 [package]
 name = "comctl32"
-description = "Our comctl32.dll (ADR 0155, step 9): InitCommonControlsEx; the control classes are not there yet"
+description = "Our comctl32.dll (ADR 0155, step 9): InitCommonControlsEx, DllGetVersion and the image lists; the control classes are not there yet"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 poly-win32-rt = { path = "../rt" }
+poly-win32-gui = { path = "../gui" }
+poly-imagelist = { path = "../../../../crates/poly-imagelist" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 
 [lints]
