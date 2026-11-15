@@ -126,7 +126,10 @@ pub fn keep_quiet(modules: &[ModuleInfo]) {
 pub fn notify(reason: u32, modules: &[ModuleInfo]) {
     // Modules that came in quietly go quietly (their base is forgotten with them).
     let quiet: Vec<&ModuleInfo> = if reason == REASON_UNLOADED {
-        modules.iter().filter(|m| with_quiet(|q| q.iter().position(|&b| b == m.base).map(|i| q.remove(i)).is_some())).collect()
+        modules
+            .iter()
+            .filter(|m| with_quiet(|q| q.iter().position(|&b| b == m.base).map(|i| q.remove(i)).is_some()))
+            .collect()
     } else {
         Vec::new()
     };

@@ -69,7 +69,12 @@ pub unsafe extern "system" fn VirtualProtectEx(
 
 /// `VirtualQueryEx`: the bytes of `MEMORY_BASIC_INFORMATION` written, or 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn VirtualQueryEx(process: isize, address: *const u8, info: *mut u8, length: usize) -> usize {
+pub unsafe extern "system" fn VirtualQueryEx(
+    process: isize,
+    address: *const u8,
+    info: *mut u8,
+    length: usize,
+) -> usize {
     let mut returned = 0usize;
     // SAFETY: the caller's buffer of `length` bytes.
     let st = unsafe { nt::NtQueryVirtualMemory(process, address, 0, info, length, &mut returned) };
@@ -239,7 +244,7 @@ pub unsafe extern "system" fn LocalSize(mem: *mut u8) -> usize {
 unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done: *mut usize, write: bool) -> i32 {
     if process != nt::CURRENT_PROCESS as isize {
         // SAFETY: plain calls; `process` is only looked at.
-        let id = unsafe { crate::spawn::GetProcessId(process as _) };
+        let id = crate::spawn::GetProcessId(process as _);
         if id == 0 {
             // Not a process handle: GetProcessId set the error (ERROR_INVALID_HANDLE).
             return FALSE;

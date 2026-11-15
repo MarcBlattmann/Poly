@@ -488,7 +488,10 @@ unsafe fn create(
         // of that token, else of the creator's own.
         // SAFETY: the caller's structure, which the list's contract keeps valid.
         match unsafe {
-            crate::appcontainer::start_in_container(r.token.unwrap_or(0), sc as *const crate::appcontainer::SecurityCapabilities)
+            crate::appcontainer::start_in_container(
+                r.token.unwrap_or(0),
+                sc as *const crate::appcontainer::SecurityCapabilities,
+            )
         } {
             Ok(h) => lowbox = Some(h),
             Err(e) => return fail(e, FALSE),

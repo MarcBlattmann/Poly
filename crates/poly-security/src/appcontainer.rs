@@ -194,9 +194,15 @@ mod tests {
 
     #[test]
     fn package_sids_are_the_sheets() {
-        assert_eq!(text(&package_sid(&w("poly.test"))), "S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046");
+        assert_eq!(
+            text(&package_sid(&w("poly.test"))),
+            "S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046"
+        );
         assert_eq!(package_sid(&w("POLY.TEST")), package_sid(&w("poly.test")));
-        assert_eq!(text(&package_sid(&w("a"))), "S-1-15-2-3937069567-81109666-199193729-4036909440-616594969-3159470276-4124008600");
+        assert_eq!(
+            text(&package_sid(&w("a"))),
+            "S-1-15-2-3937069567-81109666-199193729-4036909440-616594969-3159470276-4124008600"
+        );
         assert!(is_package_sid(&package_sid(&w("x"))));
         assert!(!is_package_sid(&all_application_packages()));
     }
@@ -218,13 +224,16 @@ mod tests {
             "S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681"
         );
         assert_eq!(c.len(), 48);
-        assert_eq!(text(&g), "S-1-5-32-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681");
+        assert_eq!(
+            text(&g),
+            "S-1-5-32-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681"
+        );
         // The empty name, an odd one, and one that is not well known although it looks so.
         assert_eq!(
             text(&capability_sids(&[]).1),
             "S-1-15-3-1024-1120186595-337443992-3371498394-616132505-3829509671-1284741988-463050148-1438143096"
         );
-        assert_eq!(text(&capability_sids(&w("internetExplorer")).1).starts_with("S-1-15-3-1024-"), true);
+        assert!(text(&capability_sids(&w("internetExplorer")).1).starts_with("S-1-15-3-1024-"));
         assert!(is_capability_sid(&capability_sids(&w("contacts")).1));
         assert!(!is_capability_sid(&all_application_packages()));
     }
@@ -252,6 +261,10 @@ mod tests {
             named_object_path(&s),
             "AppContainerNamedObjects\\S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046"
         );
-        assert!(mapping_key(&s).ends_with("\\Mappings\\S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046"));
+        assert!(
+            mapping_key(&s).ends_with(
+                "\\Mappings\\S-1-15-2-9258283-302506695-126040754-1514063749-3755156841-3572502495-4003830046"
+            )
+        );
     }
 }

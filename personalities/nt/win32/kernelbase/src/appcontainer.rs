@@ -10,7 +10,7 @@
 
 use crate::base::*;
 use crate::nt::Handle;
-use crate::registry::{RegCloseKey, RegCreateKeyExW, RegDeleteKeyExW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW};
+use crate::registry::{RegCloseKey, RegCreateKeyExW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW};
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
 use poly_security::appcontainer as ac;
@@ -129,8 +129,7 @@ pub unsafe extern "system" fn AppContainerRegisterSid(sid: *const u8, moniker: *
         return hresult(ac::E_INVALIDARG);
     }
     if let Ok(k) = open_mapping(&sid, KEY_READ) {
-        // SAFETY: a key we opened.
-        unsafe { RegCloseKey(k) };
+        RegCloseKey(k);
         return hresult(ac::E_ALREADY_EXISTS);
     }
     let path = z_str(&ac::mapping_key(&sid));
@@ -161,8 +160,7 @@ pub unsafe extern "system" fn AppContainerRegisterSid(sid: *const u8, moniker: *
         0 => set("DisplayName", display),
         e => e,
     };
-    // SAFETY: the key we created.
-    unsafe { RegCloseKey(key) };
+    RegCloseKey(key);
     hr(e)
 }
 
@@ -184,8 +182,7 @@ pub unsafe extern "system" fn AppContainerLookupMoniker(sid: *const u8, out: *mu
         Err(e) => return hr(e),
     };
     let name = string_value(key, "Moniker");
-    // SAFETY: the key we opened.
-    unsafe { RegCloseKey(key) };
+    RegCloseKey(key);
     let Some(name) = name else { return hresult(ac::E_FILE_NOT_FOUND) };
     if name.len() > ac::MAX_NAME {
         return hresult(ac::E_MONIKER_TOO_LONG);
@@ -202,21 +199,6 @@ pub unsafe extern "system" fn AppContainerLookupMoniker(sid: *const u8, out: *mu
         out.write(p);
     }
     S_OK
-}
-
-/// Remove a container's mapping (`DeleteAppContainerProfile` of the name it derives from).
-/// Nothing to remove is no failure.
-pub fn unregister_sid(sid: &Sid) {
-    let parent = z_str(ac::MAPPINGS_KEY);
-    let name = z_str(&poly_security::sddl::to_string(sid));
-    let mut key = 0isize;
-    // SAFETY: NUL-terminated paths and local variables.
-    unsafe {
-        if RegOpenKeyExW(HKEY_CURRENT_USER, parent.as_ptr(), 0, KEY_ALL_ACCESS | KEY_WOW64_64, &mut key) == 0 {
-            RegDeleteKeyExW(key, name.as_ptr(), KEY_WOW64_64, 0);
-            RegCloseKey(key);
-        }
-    }
 }
 
 /// `DeriveCapabilitySidsFromName(name, &groups, &nGroups, &capabilities, &nCapabilities)`
@@ -362,8 +344,7 @@ pub(crate) unsafe fn start_in_container(source: Handle, sc: *const SecurityCapab
     let Some(sid) = (unsafe { sid_at(sc.app_container_sid) }) else { return Err(ERROR_INVALID_PARAMETER) };
     if ac::is_package_sid(&sid) {
         match open_mapping(&sid, KEY_READ) {
-            // SAFETY: a key we opened.
-            Ok(k) => unsafe { RegCloseKey(k) },
+            Ok(k) => RegCloseKey(k),
             Err(_) => return Err(ERROR_FILE_NOT_FOUND),
         };
     }

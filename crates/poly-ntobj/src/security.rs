@@ -74,7 +74,8 @@ pub enum DefaultSd {
 }
 
 const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)(A;OICI;FRFX;;;AC)(A;OICI;FRFX;;;S-1-15-2-2)";
-const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;S-1-15-2-2)";
+const KEY_SDDL: &str =
+    "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;S-1-15-2-2)";
 
 fn sddl(s: &str) -> Vec<u8> {
     let w: Vec<u16> = s.encode_utf16().collect();

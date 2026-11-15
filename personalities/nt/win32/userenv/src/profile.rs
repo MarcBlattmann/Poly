@@ -71,7 +71,11 @@ fn local_app_data() -> String {
     let mut buf = [0u16; 400];
     // SAFETY: a local buffer of the size given.
     let n = unsafe { GetEnvironmentVariableW(name.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) } as usize;
-    if n > 0 && n < buf.len() { String::from_utf16_lossy(&buf[..n]) } else { String::from("C:\\Users\\poly\\AppData\\Local") }
+    if n > 0 && n < buf.len() {
+        String::from_utf16_lossy(&buf[..n])
+    } else {
+        String::from("C:\\Users\\poly\\AppData\\Local")
+    }
 }
 
 fn exists(path: &str) -> bool {

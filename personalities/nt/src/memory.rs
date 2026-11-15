@@ -158,10 +158,8 @@ pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
         let end = base.checked_add(size).ok_or(STATUS_ACCESS_VIOLATION)?;
         while at < end {
             let piece = (crate::vm::PAGE_SIZE - at % crate::vm::PAGE_SIZE).min(end - at);
-            let readable = proc
-                .vm
-                .query(at)
-                .is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0);
+            let readable =
+                proc.vm.query(at).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0);
             match readable.then(|| b.read(at, piece)) {
                 Some(Ok(bytes)) => got.extend_from_slice(&bytes),
                 _ => return Ok((got, STATUS_PARTIAL_COPY)),
