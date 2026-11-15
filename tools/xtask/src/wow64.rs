@@ -474,9 +474,9 @@ fn verify(dir: &Path) -> Result {
 /// otherwise only fail when a program starts ("process start failed (0xc0000139)").
 fn verify_imports(dir: &Path) -> Result {
     let files: Vec<String> =
-        MODULES.iter().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
+        modules().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
     let mut exports = std::collections::BTreeMap::new();
-    for m in MODULES {
+    for m in modules() {
         let bytes = read(&dir.join(m))?;
         exports.insert(m.to_string(), export_names(m, &parse(m, &bytes)?)?);
     }
