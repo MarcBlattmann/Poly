@@ -16,6 +16,7 @@ use poly_win32k::user::Env;
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
+    fn CreateDIBSection(hdc: usize, info: *const u8, usage: u32, bits: *mut *mut u8, section: usize, offset: u32) -> usize;
     fn GetObjectType(h: usize) -> u32;
     fn GetPixel(hdc: usize, x: i32, y: i32) -> u32;
     fn SetPixelV(hdc: usize, x: i32, y: i32, color: u32) -> i32;
@@ -601,6 +602,9 @@ pub unsafe extern "system" fn LoadImageW(
         return load_file(name, kind, cx, cy, flags);
     }
     if instance != 0 {
+        if kind == 0 {
+            return load_module_bitmap(instance, name, cx, cy, flags);
+        }
         set_last_error(ERROR_RESOURCE_DATA_NOT_FOUND);
         return 0;
     }
@@ -635,6 +639,67 @@ pub unsafe extern "system" fn LoadImageW(
             }
         },
     }
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn FindResourceW(module: usize, name: *const u16, ty: *const u16) -> usize;
+    fn LoadResource(module: usize, res: usize) -> usize;
+    fn LockResource(data: usize) -> *const u8;
+    fn SizeofResource(module: usize, res: usize) -> u32;
+}
+
+const LR_CREATEDIBSECTION: u32 = 0x2000;
+
+/// The bytes of the `RT_BITMAP` resource `name` of `module` (a DIB without a file header).
+fn bitmap_resource(module: usize, name: *const u16) -> Option<Vec<u8>> {
+    // SAFETY: arguments of the kernel32 resource functions; RT_BITMAP is 2.
+    unsafe {
+        let r = FindResourceW(module, name, 2usize as *const u16);
+        if r == 0 {
+            return None;
+        }
+        let data = LoadResource(module, r);
+        let p = LockResource(data);
+        if p.is_null() {
+            return None;
+        }
+        Some(core::slice::from_raw_parts(p, SizeofResource(module, r) as usize).to_vec())
+    }
+}
+
+/// `LoadImageW(hInstance, name, IMAGE_BITMAP, ...)` for a bitmap resource of a module
+/// (`LoadBitmapW.yaml`): a device-dependent bitmap of the screen's format (32 bits), a DIB
+/// section with `LR_CREATEDIBSECTION`, stretched when a size is given, 1 bit with
+/// `LR_MONOCHROME`.
+fn load_module_bitmap(module: usize, name: *const u16, cx: i32, cy: i32, flags: u32) -> usize {
+    let Some(dib) = bitmap_resource(module, name) else { return 0 };
+    if flags & LR_CREATEDIBSECTION != 0 {
+        let Some(info) = poly_win32k::dib::info(&dib) else { return 0 };
+        let mut bits: *mut u8 = core::ptr::null_mut();
+        // SAFETY: the DIB's header (and palette) is the BITMAPINFO.
+        let hbm = unsafe { CreateDIBSection(0, dib.as_ptr(), 0, &mut bits, 0, 0) };
+        if hbm != 0 && !bits.is_null() {
+            let n = info.stride() * info.rows();
+            let off = info.bits_at;
+            if dib.len() >= off + n {
+                // SAFETY: the section has `n` bytes of pixels.
+                unsafe { core::ptr::copy_nonoverlapping(dib.as_ptr().add(off), bits, n) };
+            }
+        }
+        return hbm;
+    }
+    let Some((w, h, px)) = poly_win32k::dib::to_bgra(&dib) else { return 0 };
+    let src = Image { w, h, bgra: px, and: alloc::vec![0; (w * h) as usize], alpha: false, hot: (0, 0) };
+    let img = if cx > 0 && cy > 0 && (cx != w || cy != h) { icofile::scale(&src, cx, cy) } else { src };
+    bitmap_from_bgra(img.w, img.h, &img.bgra, flags & LR_MONOCHROME != 0)
+}
+
+/// `LoadBitmapW(hInstance, name)`: `LoadImageW` of a bitmap with no flags.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LoadBitmapW(instance: H, name: *const u16) -> usize {
+    // SAFETY: a resource id or a NUL-terminated name.
+    unsafe { LoadImageW(instance, name, 0, 0, 0, 0) }
 }
 
 fn load_file(name: *const u16, kind: u32, cx: i32, cy: i32, flags: u32) -> usize {

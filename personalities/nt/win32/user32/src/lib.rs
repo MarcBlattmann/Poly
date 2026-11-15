@@ -10,10 +10,15 @@
 
 extern crate alloc;
 
+mod acc;
 mod clipboard;
+mod ctl;
+mod dlg;
 mod display;
 mod icons;
 mod layered;
+mod msgbox;
+mod paintctl;
 mod s3;
 mod strings;
 
@@ -157,6 +162,10 @@ impl Env for Sys {
     }
 
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
+        if proc_ != 0 && proc_ <= poly_win32k::dlg::sysproc::MAX {
+            // A system class's procedure (`Button`, `Edit`, `#32770`, ...).
+            return ctl::builtin(proc_, hwnd as H, msg, w as usize, l as isize) as u64;
+        }
         if proc_ == 0 {
             return u::def_window_proc(self, u64::from(hwnd), msg, w, l);
         }
@@ -552,6 +561,22 @@ pub unsafe extern "system" fn CreateWindowExW(
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
+}
+
+/// The bitmap resource `ord` of `inst` (a static control's `SS_BITMAP`).
+pub(crate) fn load_bitmap_ordinal(inst: usize, ord: u16) -> usize {
+    // SAFETY: a resource id as the name.
+    unsafe { icons::LoadBitmapW(inst, ord as usize as *const u16) }
+}
+
+/// The menu resource `ord` of `inst` (0 until menus are loaded here).
+pub(crate) fn load_menu_ordinal(_inst: usize, _ord: u16) -> usize {
+    0
+}
+
+/// The menu resource `name` of `inst`.
+pub(crate) fn load_menu_name(_inst: usize, _name: *const u16) -> usize {
+    0
 }
 
 /// The class of a thread's default IME window.

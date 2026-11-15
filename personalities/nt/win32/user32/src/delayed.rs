@@ -54,7 +54,6 @@ poly_win32_rt::fail_exports!(
         SetThreadDesktop,
         TrackPopupMenu,
         UnregisterHotKey,
-        MessageBoxW,
         UnregisterClassA
     ]
 );

@@ -376,7 +376,21 @@ impl Wm {
         // The system classes: found by every process (Learn: "About Window
         // Classes", system classes; `RegisterClassExW.yaml`: "Button" style
         // 0x8b, 8 extra bytes).
-        for (name, style, extra) in [("Button", 0x8b, 8), ("Static", 0x88, 0), ("Edit", 0x88, 6), ("#32769", 0x08, 0)] {
+        // The procedures are `dlg::sysproc` numbers `user32` runs; the desktop's (last) has none.
+        // Styles and extra bytes of the classes `Button` and the desktop are observed
+        // (`RegisterClassExW.yaml`); the others are `CS_DBLCLKS | CS_PARENTDC`-like guesses
+        // that no sheet contradicts.
+        for (name, style, extra, wndproc) in [
+            ("Button", 0x8b, 8, crate::dlg::sysproc::BUTTON),
+            ("Static", 0x88, 0, crate::dlg::sysproc::STATIC),
+            ("Edit", 0x88, 6, crate::dlg::sysproc::EDIT),
+            ("ListBox", 0x88, 8, crate::dlg::sysproc::LISTBOX),
+            ("ComboBox", 0x88, 8, crate::dlg::sysproc::COMBOBOX),
+            ("ScrollBar", 0x08, 8, crate::dlg::sysproc::SCROLLBAR),
+            ("ComboLBox", 0x808, 8, crate::dlg::sysproc::COMBOLBOX),
+            ("#32770", 0x808, 30, crate::dlg::sysproc::DIALOG),
+            ("#32769", 0x08, 0, 0),
+        ] {
             let name: Vec<u16> = name.encode_utf16().collect();
             let atom = wm.atom_for(&name);
             wm.classes.push(Some(Class {
@@ -384,7 +398,7 @@ impl Wm {
                 atom,
                 name,
                 style,
-                wndproc: 0,
+                wndproc,
                 cls_extra: 0,
                 wnd_extra: extra,
                 instance: 0,
