@@ -296,9 +296,18 @@ fn verify(dir: &Path) -> Result {
     }
     let k32 = read(&dir.join("kernel32.dll"))?;
     let k32 = parse("kernel32.dll", &k32)?;
-    for dll in imports("kernel32.dll", &k32)?.keys() {
+    let kb_exports = export_names("kernelbase.dll", &kb)?;
+    for (dll, names) in imports("kernel32.dll", &k32)? {
         if dll != "kernelbase.dll" && dll != "ntdll.dll" {
             return Err(format!("the i686 kernel32.dll imports {dll}"));
+        }
+        // What kernel32 imports from kernelbase has to be exported under that very name (an
+        // import declared without `import_name_type = "undecorated"` asks for `_Name@N`).
+        if dll == "kernelbase.dll" {
+            let missing: Vec<&String> = names.iter().filter(|n| !kb_exports.contains(*n)).collect();
+            if !missing.is_empty() {
+                return Err(format!("the i686 kernel32.dll imports what kernelbase.dll lacks: {missing:?}"));
+            }
         }
     }
     for p in PROGRAMS {
