@@ -551,7 +551,7 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     // Poly's own class 0x1001 is class 0 for a handle with any query right (`GetThreadId`,
     // `GetExitCodeThread`: Learn asks `THREAD_QUERY_LIMITED_INFORMATION` of them).
-    let (class, length, limited_ok) = if class as u32 == 0x1001 { (0, length as u32, true) } else { (class as u32, length as u32, false) };
+    let (class, length) = if class as u32 == 0x1001 { (0, length as u32) } else { (class as u32, length as u32) };
     if Handle(h) == Handle::CURRENT_PROCESS {
         return Err(STATUS_OBJECT_TYPE_MISMATCH);
     }
@@ -560,15 +560,11 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
     let t = |k: &mut K, rights: &[u32]| thread_of_any(k, Handle(h), rights);
     const QUERY: u32 = THREAD_QUERY_INFORMATION;
     const LIMITED: u32 = THREAD_QUERY_LIMITED_INFORMATION;
-    const SUSPEND: u32 = THREAD_SUSPEND_RESUME;
     match class {
         THREAD_BASIC_INFORMATION | 9 | 1 | 0x1000 => {
             let rights: &[u32] = match class {
-                THREAD_BASIC_INFORMATION if limited_ok => &[QUERY, LIMITED, SUSPEND],
-                THREAD_BASIC_INFORMATION => &[QUERY, SUSPEND],
-                // The oracle gave the start address to `THREAD_SUSPEND_RESUME` and full access, not to
-                // `THREAD_QUERY_INFORMATION`.
-                9 => &[SUSPEND],
+                THREAD_BASIC_INFORMATION => &[QUERY, LIMITED],
+                9 => &[QUERY],
                 1 => &[QUERY, LIMITED],
                 _ => &[QUERY, LIMITED],
             };
