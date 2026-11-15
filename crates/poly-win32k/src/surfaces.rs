@@ -290,10 +290,13 @@ impl Surfaces {
             let px = match content {
                 Some(c) => c.at(x - i.window.left, y - i.window.top),
                 None if i.client.contains(x, y)
-                    || (x >= i.client.left && x < i.client.right && y >= i.client.top - i.menu_bar && y < i.client.top) =>
+                    || (x >= i.client.left
+                        && x < i.client.right
+                        && y >= i.client.top - i.menu_bar
+                        && y < i.client.top) =>
                 {
                     self.client_pixel(desktop, h, x - i.client.left, y - i.client.top + i.menu_bar)
-                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, 255])
+                        .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, 255])
                 }
                 None => None,
             };

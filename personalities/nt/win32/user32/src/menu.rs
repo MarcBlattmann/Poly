@@ -10,9 +10,7 @@ use super::{H, SYS, call, info};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use poly_win32_gui::{SpinLock, set_last_error, wide};
-use poly_win32k::menu::{
-    self as mn, Info, InfoIn, Item, MENUINFO_SIZE, MII_SIZE, MII_SIZE_SHORT, Menus, Sel,
-};
+use poly_win32k::menu::{self as mn, Info, InfoIn, Item, MENUINFO_SIZE, MII_SIZE, MII_SIZE_SHORT, Menus, Sel};
 use poly_win32k::metrics;
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::user as u;
@@ -159,7 +157,9 @@ pub unsafe extern "system" fn ModifyMenuW(menu: H, pos: u32, flags: u32, id: usi
 
 fn remove(menu: H, pos: u32, flags: u32, destroy: bool) -> i32 {
     let h = h32(menu);
-    match with(|m| if m.is_menu(h) { m.remove_item(h, Sel::of(pos, flags), destroy) } else { Err(ERROR_INVALID_MENU_HANDLE) }) {
+    match with(|m| {
+        if m.is_menu(h) { m.remove_item(h, Sel::of(pos, flags), destroy) } else { Err(ERROR_INVALID_MENU_HANDLE) }
+    }) {
         Ok(found) => i32::from(found),
         Err(e) => fail(e, 0),
     }

@@ -516,7 +516,7 @@ impl Menus {
                 return not_found;
             }
             let Some((mc, ic)) = self.find_cmd(h, check, 0) else { return not_found };
-            (m1, i1, i2, Some(ic).filter(|_| mc == m1))
+            (m1, i1, i2, (mc == m1).then_some(ic))
         };
         let menu = self.map.get_mut(&m).expect("found");
         for i in lo..=hi {
@@ -748,7 +748,8 @@ impl Menus {
     fn build(&mut self, items: &[TItem], popup: bool) -> u32 {
         let h = self.create(popup);
         for t in items {
-            let mut it = Item { id: t.id, ftype: t.ftype, state: t.state, text: Some(t.text.clone()), ..Item::default() };
+            let mut it =
+                Item { id: t.id, ftype: t.ftype, state: t.state, text: Some(t.text.clone()), ..Item::default() };
             if let Some(sub) = &t.sub {
                 let s = self.build(sub, true);
                 it.sub = s;
@@ -982,7 +983,13 @@ pub fn popup_layout(items: &[Item], m: &Metrics, width_of: &dyn Fn(&[u16]) -> i3
 /// A menu bar's layout in a client width: the cells of the items on one row
 /// (items that do not fit wrap to another row). Returns the cells and the
 /// number of rows.
-pub fn bar_layout(items: &[Item], row: i32, pad_x: i32, width: i32, width_of: &dyn Fn(&[u16]) -> i32) -> (Vec<Cell>, i32) {
+pub fn bar_layout(
+    items: &[Item],
+    row: i32,
+    pad_x: i32,
+    width: i32,
+    width_of: &dyn Fn(&[u16]) -> i32,
+) -> (Vec<Cell>, i32) {
     let mut cells = Vec::with_capacity(items.len());
     let (mut x, mut y, mut rows) = (0, 0, 1);
     for it in items {
@@ -1267,7 +1274,7 @@ mod tests {
                 b.extend(c.to_le_bytes());
             }
             b.extend([0, 0]);
-            while b.len() % 4 != 0 {
+            while !b.len().is_multiple_of(4) {
                 b.push(0);
             }
         };
@@ -1296,10 +1303,8 @@ mod tests {
 
     #[test]
     fn layouts() {
-        let items: Vec<Item> = ["File", "Edit", "Help"]
-            .iter()
-            .map(|t| Item { text: Some(w(t)), ..Item::default() })
-            .collect();
+        let items: Vec<Item> =
+            ["File", "Edit", "Help"].iter().map(|t| Item { text: Some(w(t)), ..Item::default() }).collect();
         let (cells, rows) = bar_layout(&items, 20, 8, 300, &|t| 7 * t.len() as i32);
         assert_eq!(rows, 1);
         assert_eq!(cells[0].left, 0);

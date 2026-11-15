@@ -225,7 +225,7 @@ impl Pen {
         if let Some(at) = mnemonic_index(raw) {
             let x0 = l + self.width(&text[..at]);
             let x1 = x0 + self.width(&text[at..=at]);
-            let y = (t + b) / 2 + 7;
+            let y = (t + b) / 2 + 5;
             self.fill(x0, y.min(b - 1), x1, y.min(b - 1) + 1, color);
         }
     }
@@ -289,9 +289,7 @@ fn bar_view(hwnd: H) -> Option<BarView> {
     let menu = i.id as u32;
     let items = items_of(menu);
     let width = i.client.width();
-    let (cells, _rows) = with_measure(|p| {
-        mn::bar_layout(&items, i.menu_bar - 2, BAR_PAD, width, &|t| p.width(t))
-    });
+    let (cells, _rows) = with_measure(|p| mn::bar_layout(&items, i.menu_bar - 2, BAR_PAD, width, &|t| p.width(t)));
     Some(BarView {
         menu,
         items,
@@ -908,7 +906,8 @@ impl Tracker {
                 if down && let Some(i) = item {
                     self.activate_down(d, i);
                 }
-            } else if up && self.armed
+            } else if up
+                && self.armed
                 && let Some(i) = item
             {
                 self.activate(d, i);
