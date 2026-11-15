@@ -98,12 +98,44 @@ which the mitigation lets be (Learn, "Process Mitigation Policies"), and since 0
 makes no image section (the loader's fallback that reads the whole file) cannot be loaded into such a process, and private memory
 can never become executable in it.
 
+### 8. What the broker does to a target it starts (found by running S2)
+
+With the container in place Chrome's broker started its children (`CreateProcessAsUserW` with a restricted token **and**
+`PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES`: the container is made of the given token) and then prepared them
+from the outside. That needed:
+
+- **Memory of another process.** `NtAllocateVirtualMemory`, `NtFreeVirtualMemory`, `NtProtectVirtualMemory` and
+  `NtQueryVirtualMemory` take a process handle (`PROCESS_VM_OPERATION` / `PROCESS_QUERY_INFORMATION`): the kernel runs them on that process's
+  address-space model (`NtKernel::with_process`). New services `NtReadVirtualMemory` (0x04B, `PROCESS_VM_READ`) and
+  `NtWriteVirtualMemory` (0x04C, `PROCESS_VM_WRITE`: committed pages are written whatever their protection says, a page that is not committed
+  ends the copy with `STATUS_PARTIAL_COPY`, the bytes done are reported); the `Backend` gets `read` and `write_forced`. `kernelbase` exports
+  `VirtualAllocEx`, `VirtualFreeEx`, `VirtualProtectEx`, `VirtualQueryEx` (kernel32 forwards them) and `ReadProcessMemory` /
+  `WriteProcessMemory` of another process go through the new services.
+- **`ProcessBasicInformation` of another process** reports its `PebBaseAddress` (the broker writes into its target's PEB).
+- **ntdll's system-call stubs have 32-byte slots and `mov r10, rcx` is spelled `4C 8B D1`.** The broker patches the first 16 bytes of
+  the stubs of some `Nt*` functions in its target (it reads 32 bytes of each, copies them to a page it allocated in the target, makes
+  16 bytes writable, writes, makes them executable again). With stubs 11 bytes apart the first patch destroyed the start of the next
+  stub and the broker ended the target (`SetLastError(183)`, `TerminateProcess`); with the old spelling of `mov r10, rcx` (`49 89 CA`) it did
+  not accept even the first. No sheet says what it looks for: this is what black-box runs of Chrome on Poly showed (`4C 8B D1` is
+  the other encoding of the same instruction in the Intel SDM, and 32 is the number of bytes the broker reads); the exact shape
+  of the stubs of Windows is not copied (no spec says it).
+- **`OpenMutexW`** (the sheets' tests use it), **`CreateFileW` with a `SECURITY_ATTRIBUTES`** (its descriptor is now the new file's
+  descriptor, kept as if it had been set: `ObjectManager::set_creation_security`), **default file and key descriptors that give
+  `ALL APPLICATION PACKAGES` and `ALL RESTRICTED APPLICATION PACKAGES` read and execute** (a container loads the system DLLs; Poly's
+  volumes keep no descriptors per tree, so a container reads what Everyone reads, where Windows' `C:\Windows` gives it that and user
+  files do not), and a **container's token object** carries the container's SID in its descriptor (the process may open its own token).
+- `LoadLibraryExW` passes `LOAD_LIBRARY_AS_DATAFILE` / `AS_IMAGE_RESOURCE` to `LdrLoadDll`'s flags: such a load is not told to the
+  observers of loads (`dllnotify::keep_quiet`). `winmm.dll` opens the multimedia-driver key through `advapi32.dll`, so loading it
+  loads (and tells about) a dependency, as the sheet's test expects.
+
 ## To be confirmed by the spec agent
 
 - `NtCreateLowBoxToken`'s own arguments, the handle list, LPAC containers (`ALL RESTRICTED APPLICATION PACKAGES` as the only
   application-package principal) and child containers with a parent.
 - `IsManagementRegistrationAllowed`'s answer; `IsSandboxedProcess`, which the browser resolves by name and no DLL exports.
 - A container's `Local\` namespace in an interactive session (`\Sessions\n\AppContainerNamedObjects\<SID>`), and the object directory's access rules.
+- What the broker checks in its target's ntdll stubs (it reads 32 bytes at `NtMapViewOfSection`, `NtQueryInformationThread`, `NtQueryInformationProcess`,
+  `NtOpenThreadToken`, `NtCreateNamedPipeFile`, `NtQueryInformationToken`, `NtOpenThreadTokenEx` and patches 16): the exact bytes.
 - A mapping that exists without a profile folder (Poly: `CreateAppContainerProfile` accepts it, as the sheet saw).
 
 ## Consequences

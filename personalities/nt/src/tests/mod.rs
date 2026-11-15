@@ -8,6 +8,7 @@ extern crate std;
 mod bigimage;
 mod exceptions;
 mod exec;
+mod lowbox;
 mod memory;
 mod objects;
 mod registry;
@@ -184,6 +185,21 @@ impl Backend for Mem {
 
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
         self.write_bytes(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    }
+
+    fn read(&mut self, addr: u64, len: u64) -> Result<Vec<u8>, NtStatus> {
+        let mut buf = vec![0u8; len as usize];
+        Mem::read(self, addr, &mut buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)?;
+        Ok(buf)
+    }
+
+    fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
+        for (i, b) in data.iter().enumerate() {
+            let a = addr + i as u64;
+            let page = self.pages.get(&(a & !(PAGE_SIZE - 1))).ok_or(poly_ntobj::status::STATUS_ACCESS_VIOLATION)?;
+            page.frame.borrow_mut()[(a % PAGE_SIZE) as usize] = *b;
+        }
+        Ok(())
     }
 
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
@@ -413,6 +429,15 @@ impl NtKernel for Fake {
         let prev = *c;
         *c = c.saturating_sub(1);
         Ok(prev)
+    }
+
+    fn with_process<R>(
+        &mut self,
+        pid: poly_ntobj::ProcessId,
+        f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        let (proc, mem) = self.children.iter_mut().find(|(p, _)| p.pid == pid)?;
+        Some(f(&mut self.sys, proc, mem))
     }
 
     fn suspend_process(&mut self, pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {

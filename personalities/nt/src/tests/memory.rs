@@ -155,6 +155,62 @@ fn argument_errors() {
     assert_eq!(allocate(&mut f, b, 0x1000, MEM_RESET | MEM_COMMIT, rw).0, STATUS_INVALID_PARAMETER_5);
 }
 
+/// A process handle to a process of the fake kernel's `children`, with its memory.
+fn other_process(f: &mut Fake) -> u64 {
+    use poly_ntobj::{NewObject, ObjectType};
+    let pid = poly_ntobj::ProcessId(90);
+    f.children.push((crate::system::NtProcess::new(pid), Mem::default()));
+    let caller = f.caller();
+    let new = NewObject::Opaque { kind: ObjectType::Process, cookie: u64::from(pid.0), signaled: None, parse: false };
+    let id = f.sys.objects.new_object(new, TID).unwrap();
+    let h = f.sys.objects.open_by_pointer(&caller, id, 0x1F_FFFF, 0).unwrap();
+    f.sys.objects.dereference(id).unwrap();
+    h.0
+}
+
+#[test]
+fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
+    let mut f = Fake::new();
+    let h = other_process(&mut f);
+    // `VirtualAllocEx`: the pages are the other process's, not the caller's.
+    let (st, base, size) = {
+        let b = f.put_u64(0);
+        let s = f.put_u64(0x2000);
+        let st = f.call(Service::AllocateVirtualMemory, &[h, b, 0, s, u64::from(MEM_RESERVE | MEM_COMMIT), u64::from(PAGE_READWRITE)]);
+        (st, f.u64_at(b), f.u64_at(s))
+    };
+    assert_eq!((st, size), (STATUS_SUCCESS, 0x2000));
+    assert!(f.proc.vm.query(base).unwrap().state != MEM_COMMIT, "not in the caller's memory");
+    assert!(f.children[0].0.vm.query(base).unwrap().state == MEM_COMMIT);
+    // `WriteProcessMemory` and `ReadProcessMemory`.
+    let data = f.alloc(16);
+    f.mem.write_bytes(data, b"hello, container").unwrap();
+    let done = f.put_u64(0);
+    assert_eq!(f.call(Service::WriteVirtualMemory, &[h, base + 0x10, data, 16, done]), STATUS_SUCCESS);
+    assert_eq!(f.u64_at(done), 16);
+    let back = f.alloc(16);
+    assert_eq!(f.call(Service::ReadVirtualMemory, &[h, base + 0x10, back, 16, done]), STATUS_SUCCESS);
+    assert_eq!(f.mem.bytes_at(back, 16), b"hello, container");
+    // A page that is read-only is written anyway (the copy of `WriteProcessMemory`), and keeps its protection.
+    let (b, s, old) = (f.put_u64(base), f.put_u64(0x1000), f.alloc(4));
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[h, b, s, u64::from(PAGE_READONLY), old]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::WriteVirtualMemory, &[h, base + 0x20, data, 4, done]), STATUS_SUCCESS);
+    assert_eq!(f.children[0].0.vm.query(base).unwrap().protect, PAGE_READONLY);
+    // Past the committed pages the copy stops with `STATUS_PARTIAL_COPY` and says how much it did.
+    let partial = NtStatus(0x8000_000D);
+    assert_eq!(f.call(Service::ReadVirtualMemory, &[h, base + 0x1FF8, back, 16, done]), partial);
+    assert_eq!(f.u64_at(done), 8);
+    assert_eq!(f.call(Service::WriteVirtualMemory, &[h, base + 0x1FF8, data, 16, done]), partial);
+    assert_eq!(f.u64_at(done), 8);
+    // Querying and freeing.
+    let info = f.alloc(48);
+    assert_eq!(f.call(Service::QueryVirtualMemory, &[h, base, 0, info, 48, 0]), STATUS_SUCCESS);
+    assert_eq!(f.u64_at(info), base);
+    let (b, s) = (f.put_u64(base), f.put_u64(0));
+    assert_eq!(f.call(Service::FreeVirtualMemory, &[h, b, s, u64::from(MEM_RELEASE)]), STATUS_SUCCESS);
+    assert!(f.children[0].0.vm.query(base).unwrap().state != MEM_COMMIT);
+}
+
 #[test]
 fn prohibit_dynamic_code_blocks_executable_private_memory() {
     let mut f = Fake::new();
