@@ -71,27 +71,27 @@ pub unsafe extern "system" fn GetProcessTimes(
 /// `ERROR_NOACCESS` (`winerror.h`).
 const ERROR_NOACCESS: u32 = 998;
 
-/// `sizeof(STARTUPINFOW)` on x64 (`processthreadsapi.h`).
-const STARTUPINFOW_SIZE: usize = 104;
-
 /// `GetStartupInfoW`: Learn: "the STARTUPINFO structure that was specified
 /// when the calling process was created": `CreateProcessW` keeps it in
 /// the child's parameters (ADR 0089, `poly_kernelbase::process::
 /// startup_info`). A process the kernel started gets `cb` and zeros: no
 /// `STARTF_*` flags, so the standard handles come from `GetStdHandle`.
+/// The structure is this process's own size (104 bytes, 68 in a 32-bit
+/// process, ADR 0186).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStartupInfoW(info: *mut u8) {
+    use poly_kernelbase::process::{PARAMETERS_SIZE, SI_NATIVE, startup_info_in};
     let pp = parameters();
-    let b = if pp == 0 {
-        poly_kernelbase::process::startup_info(&[])
+    let header: &[u8] = if pp == 0 {
+        &[]
     } else {
         // SAFETY: the process parameters are one mapped allocation of at
         // least the structure's size (ADR 0073, 0079).
-        let header = unsafe { core::slice::from_raw_parts(pp as *const u8, poly_kernelbase::process::PARAMETERS_SIZE) };
-        poly_kernelbase::process::startup_info(header)
+        unsafe { core::slice::from_raw_parts(pp as *const u8, PARAMETERS_SIZE) }
     };
+    let b = startup_info_in(&poly_rtl::layout::NATIVE, &SI_NATIVE, header);
     // SAFETY: the caller's STARTUPINFOW.
-    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, STARTUPINFOW_SIZE) };
+    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, b.len()) };
 }
 
 /// This process's affinity mask as `SetProcessAffinityMask` set it (0:

@@ -362,7 +362,7 @@ pub fn notify_change_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
         // Another thread of this process wrote the block already.
         None if waited == STATUS_WAIT_0 => {
             let mut b = [0u8; 4];
-            abi::read(k, iosb, &mut b)?;
+            abi::read(k, crate::io::irp::iosb_address(iosb), &mut b)?;
             Ok(NtStatus(u32::from_le_bytes(b)))
         }
         None => Ok(waited),

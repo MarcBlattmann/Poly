@@ -9,10 +9,11 @@
 //! services from `RSP + 0x28 + 8 * (n - 4)` (the x64 convention, `crate::abi`), so the call's
 //! RSP points at the window's start and those slots are the window's first bytes.
 //!
-//! A service that keeps an address for later (an asynchronous request's `IO_STATUS_BLOCK`, an
-//! APC routine) would keep a window address that means nothing after the call: such arguments
-//! are `X` in the table, or (the status block) only correct for calls that finish in the call,
-//! which is every call on a synchronous handle. ADR 0186 lists this as a later stage.
+//! A service that keeps an address for later must not keep a window address: an
+//! `IO_STATUS_BLOCK` is therefore not copied but passed as the caller's own address marked
+//! [`crate::io::irp::IOSB32`], which every status-block write decodes (an asynchronous request
+//! keeps it and writes the 8-byte 32-bit block when it completes); an APC routine is a 32-bit
+//! code address the kernel calls in compatibility mode (`super::apc_frame`).
 
 use super::sigs;
 use crate::kernel::{Apc, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault};
@@ -44,14 +45,20 @@ pub enum Arg {
     US,
     /// `UNICODE_STRING*`, in and out.
     UO,
-    /// `IO_STATUS_BLOCK*`.
+    /// `IO_STATUS_BLOCK*`: the caller's address, marked [`crate::io::irp::IOSB32`].
     IO,
+    /// An `IO_STATUS_BLOCK*` naming a request to cancel: marked like [`Arg::IO`], not read.
+    IR,
     /// `CLIENT_ID*`.
     CI,
     /// A `HANDLE` array counted by the first argument.
     HA,
     /// `CONTEXT*` (in).
     CX,
+    /// `CONTEXT*` (in and out: `NtGetContextThread`).
+    CO,
+    /// `FILE_IO_COMPLETION_INFORMATION*` (out), as many as the next argument counts.
+    CE,
     /// `EXCEPTION_RECORD*` (in).
     ER,
     /// Not converted yet: must be null.
@@ -119,11 +126,19 @@ impl Scratch {
 enum Back {
     /// The low 32 bits of the 8 bytes at `wide`, to `narrow`.
     Low32 { narrow: u64, wide: u64 },
-    /// An `IO_STATUS_BLOCK`: `Status` and `Information`.
-    Iosb { narrow: u64, wide: u64 },
     /// A `UNICODE_STRING`'s `Length` and `MaximumLength`.
     Lengths { narrow: u64, wide: u64 },
+    /// The groups `flags` names of the 64-bit `CONTEXT` at `wide`, into the x86 one at `narrow`
+    /// (on success).
+    Context { narrow: u64, wide: u64, flags: u32 },
+    /// `FILE_IO_COMPLETION_INFORMATION` entries (64-bit: 32 bytes each, `KeyContext`,
+    /// `ApcContext`, `IoStatusBlock`; 32-bit: 16), as many as the `ULONG` at `removed` says.
+    Entries { narrow: u64, wide: u64, removed: u64, max: usize },
 }
+
+/// The most completion entries one 32-bit `NtRemoveIoCompletionEx` takes (the window's room);
+/// removing fewer than asked is what the call may do anyway.
+const MAX_ENTRIES: usize = 1024;
 
 /// An information class whose output has pointer-sized fields: the 64-bit size the service
 /// writes, the 32-bit size the caller gets, and the conversion.
@@ -334,7 +349,10 @@ const FILE_SERVICES: &[Service] = &[
 ];
 
 /// Read and widen the arguments of a call to `service` whose 32-bit arguments start at `at`.
-fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Result<Prepared, NtStatus> {
+/// Not inlined: its locals (an x86 `CONTEXT`, a 64-bit one) must not stay on the kernel stack
+/// while the service runs (`NtCreateUserProcess` goes deep).
+#[inline(never)]
+fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Option<Service>, sig: &[Arg]) -> Result<Prepared, NtStatus> {
     let mut narrow = Vec::with_capacity(sig.len());
     for i in 0..sig.len() {
         narrow.push(read32(k, at + 4 * i as u64)?);
@@ -358,18 +376,8 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 backs.push(Back::Low32 { narrow: p, wide });
                 wide
             }
-            Arg::IO => {
-                let mut b = [0u8; 8];
-                abi::read(k, p, &mut b)?;
-                let wide = s.alloc(16)?;
-                let mut w = [0u8; 16];
-                w[..4].copy_from_slice(&b[..4]);
-                w[8..12].copy_from_slice(&b[4..8]);
-                s.put(wide, &w);
-                backs.push(Back::Iosb { narrow: p, wide });
-                wide
-            }
-            Arg::OA => object_attributes(k, &mut s, p, FILE_SERVICES.contains(&service))?,
+            Arg::IO | Arg::IR => p | crate::io::irp::IOSB32,
+            Arg::OA => object_attributes(k, &mut s, p, service.is_some_and(|sv| FILE_SERVICES.contains(&sv)))?,
             Arg::US => unicode(k, &mut s, p)?,
             Arg::UO => {
                 let wide = unicode(k, &mut s, p)?;
@@ -383,12 +391,25 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 s.put(wide + 8, &u64::from(thread).to_le_bytes());
                 wide
             }
-            Arg::CX => {
+            Arg::CX | Arg::CO => {
                 let mut b = alloc::vec![0u8; super::context::CONTEXT32_SIZE];
                 abi::read(k, p, &mut b)?;
                 let bytes = super::context::from_context32(&b).to_bytes();
                 let wide = s.alloc(bytes.len())?;
                 s.put(wide, &bytes);
+                if kind == Arg::CO {
+                    let flags = u32::from_le_bytes(b[..4].try_into().expect("4 bytes"));
+                    backs.push(Back::Context { narrow: p, wide, flags });
+                }
+                wide
+            }
+            Arg::CE => {
+                // The count is the next argument, the number removed the one after it.
+                let i = args.len();
+                let count = (narrow.get(i + 1).copied().unwrap_or(0) as usize).min(MAX_ENTRIES);
+                let wide = s.alloc(32 * count.max(1))?;
+                let removed = u64::from(narrow.get(i + 2).copied().unwrap_or(0));
+                backs.push(Back::Entries { narrow: p, wide, removed, max: count });
                 wide
             }
             Arg::ER => {
@@ -418,7 +439,7 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
     // An information class with pointer-sized fields: the service writes the 64-bit form into
     // the window, the caller gets the 32-bit one.
     let mut info = None;
-    if let Some(spec) = INFO.iter().find(|s| s.service == service)
+    if let Some(spec) = INFO.iter().find(|s| Some(s.service) == service)
         && let Some(class) = spec.classes.iter().find(|c| c.class == narrow[spec.class])
     {
         let (buffer, length, returned) =
@@ -467,21 +488,36 @@ pub fn dispatch32<K: NtKernel>(
     run: impl FnOnce(&mut Thunked<'_, K>, &mut SyscallRegs) -> Outcome,
 ) -> Outcome {
     let number = regs.rax as u32;
-    let found = Service::from_number(number).and_then(|s| sigs::signature(s).map(|sig| (s, sig)));
+    let (table, index) = crate::decode(number);
+    let found = if table == crate::Table::Win32k {
+        poly_win32k::services::Win32kService::from_number(number)
+            .and_then(sigs::win32k_signature)
+            .map(|sig| (None, sig))
+    } else {
+        Service::from_number(number).and_then(|s| sigs::signature(s).map(|sig| (Some(s), sig)))
+    };
     let Some((service, sig)) = found else {
-        let (table, index) = crate::decode(number);
         regs.rax = u64::from(crate::STATUS_NOT_IMPLEMENTED);
         return Outcome::Unimplemented { table: table.name(), number: u64::from(index) };
     };
     let end = k.with_state(|_, p, _| p.vm.end());
     let facts = Facts { end };
-    let (args, backs, info, scratch) = match prepare(k, regs.rdx & 0xFFFF_FFFF, service, sig) {
+    let (mut args, backs, info, scratch) = match prepare(k, regs.rdx & 0xFFFF_FFFF, service, sig) {
         Ok(Prepared::Call { args, backs, info, scratch }) => (args, backs, info, scratch),
         Ok(Prepared::Done(status)) | Err(status) => {
             regs.rax = u64::from(status.0);
             return Outcome::Handled;
         }
     };
+    // The entries' count: no more than the window holds.
+    for b in &backs {
+        if let Back::Entries { max, .. } = b
+            && let Some(i) = sig.iter().position(|a| *a == Arg::CE)
+            && let Some(count) = args.get_mut(i + 1)
+        {
+            *count = (*count).min(*max as u64);
+        }
+    }
     let mut wide = SyscallRegs {
         rax: u64::from(number),
         rdi: 0,
@@ -508,6 +544,7 @@ pub fn dispatch32<K: NtKernel>(
     outcome
 }
 
+#[inline(never)]
 fn write_back<K: NtKernel>(
     k: &mut K,
     s: &Scratch,
@@ -519,13 +556,30 @@ fn write_back<K: NtKernel>(
     for b in backs {
         match *b {
             Back::Low32 { narrow, wide } => abi::write_u32(k, narrow, s.u64_at(wide) as u32)?,
-            Back::Iosb { narrow, wide } => {
-                let mut n = [0u8; 8];
-                n[..4].copy_from_slice(&s.get(wide, 4)[..4]);
-                n[4..].copy_from_slice(&s.get(wide + 8, 4)[..4]);
-                abi::write(k, narrow, &n)?;
-            }
             Back::Lengths { narrow, wide } => abi::write(k, narrow, &s.get(wide, 4)[..4])?,
+            Back::Context { narrow, wide, flags } if status.is_success() => {
+                let Some(ctx) = poly_seh::Context::from_bytes(s.get(wide, poly_seh::context::CONTEXT_SIZE)) else {
+                    continue;
+                };
+                let mut b = alloc::vec![0u8; super::context::CONTEXT32_SIZE];
+                abi::read(k, narrow, &mut b)?;
+                super::context::merge_context32(&mut b, &ctx, flags);
+                abi::write(k, narrow, &b)?;
+            }
+            Back::Context { .. } => {}
+            Back::Entries { narrow, wide, removed, max } if status.is_success() && removed != 0 => {
+                let n = (abi::read_u32(k, removed)? as usize).min(max);
+                let mut out = alloc::vec![0u8; 16 * n];
+                for i in 0..n {
+                    let e = s.get(wide + 32 * i as u64, 32);
+                    // KeyContext, ApcContext, then the block's Status and Information.
+                    for (j, at) in [0usize, 8, 16, 24].into_iter().enumerate() {
+                        out[16 * i + 4 * j..16 * i + 4 * j + 4].copy_from_slice(&e[at..at + 4]);
+                    }
+                }
+                abi::write(k, narrow, &out)?;
+            }
+            Back::Entries { .. } => {}
         }
     }
     if let Some(i) = info {

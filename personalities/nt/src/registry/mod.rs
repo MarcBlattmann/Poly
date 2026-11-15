@@ -207,10 +207,8 @@ pub fn finish<K: NtKernel>(k: &mut K) {
     }
     for c in &mine {
         // IO_STATUS_BLOCK (wdm.h): Status (in a union with a pointer) at 0,
-        // Information at 8. Nothing is returned in Information.
-        let mut block = [0u8; 16];
-        block[..4].copy_from_slice(&c.status.0.to_le_bytes());
-        let _ = crate::abi::write(k, c.iosb, &block);
+        // Information at 8 (4 for a 32-bit caller). Nothing is returned in Information.
+        let _ = crate::io::services::write_iosb(k, c.iosb, c.status, 0);
     }
     k.with_state(|sys, _, b| {
         for c in &mine {

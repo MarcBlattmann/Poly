@@ -160,7 +160,8 @@ pub(super) fn drain() {
                 let _ = m.write(*addr, data);
             }
             if c.iosb != 0 {
-                let _ = m.write(c.iosb, &c.iosb_bytes());
+                let w = c.iosb_write();
+                let _ = m.write(w.addr, w.bytes());
             }
         }
         drop(memory);

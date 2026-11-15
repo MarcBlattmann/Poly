@@ -182,8 +182,8 @@ pub unsafe extern "system" fn LocalSize(mem: *mut u8) -> usize {
 /// there is no cross-process memory service yet.
 unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done: *mut usize, write: bool) -> i32 {
     if process != nt::CURRENT_PROCESS as isize {
-        // SAFETY: plain calls; `process` is only looked at.
-        let id = unsafe { crate::spawn::GetProcessId(process as _) };
+        // `process` is only looked at.
+        let id = crate::spawn::GetProcessId(process as _);
         if id == 0 {
             // Not a process handle: GetProcessId set the error (ERROR_INVALID_HANDLE).
             return FALSE;

@@ -119,7 +119,16 @@ fn embed_wow64() {
             "cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)"
         );
     }
-    for name in ["ntdll.dll", "kernelbase.dll", "kernel32.dll", "hello32.exe"] {
+    for name in [
+        "ntdll.dll",
+        "kernelbase.dll",
+        "kernel32.dll",
+        "win32u.dll",
+        "gdi32.dll",
+        "user32.dll",
+        "hello32.exe",
+        "gui32.exe",
+    ] {
         let to = out.join(format!("wow64-{name}"));
         match &dir {
             Some(d) => {

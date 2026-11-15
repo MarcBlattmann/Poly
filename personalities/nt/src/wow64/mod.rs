@@ -61,6 +61,28 @@ pub fn start_esp(b: &mut dyn Backend, top: u64, args: [u64; 3]) -> Result<u64, N
     Ok(esp)
 }
 
+/// How a user APC starts in a 32-bit thread (Poly's own convention, both sides ours, like the
+/// x64 one of ADR 0065): the routine and its three arguments are written below the interrupted
+/// ESP (4-byte aligned) and the thread continues at the i686 `ntdll`'s `KiUserApcDispatcher` with
+/// ESP at the routine. The dispatcher pops it and calls `routine(arg1, arg2, arg3)` (`stdcall`,
+/// `PKNORMAL_ROUTINE`; a routine taking fewer arguments leaves the rest, which `PolyResumeApc`
+/// discards with the whole frame), then `PolyResumeApc`, which restores the interrupted context.
+/// The new ESP and the 16 bytes to write there; `None` when they would leave the 32-bit space.
+pub fn apc_frame(esp: u64, apc: &crate::kernel::Apc) -> Option<(u64, [u8; 16])> {
+    if esp >= 1 << 32 {
+        return None;
+    }
+    let at = (esp & !3).checked_sub(16)?;
+    if at < crate::vm::LOWEST_ADDRESS {
+        return None;
+    }
+    let mut frame = [0u8; 16];
+    for (i, v) in [apc.routine, apc.arg1, apc.arg2, apc.arg3].into_iter().enumerate() {
+        frame[4 * i..4 * i + 4].copy_from_slice(&(v as u32).to_le_bytes());
+    }
+    Some((at, frame))
+}
+
 /// The file-system redirection of a 32-bit process (Learn: "File System Redirector"): a path
 /// under `%windir%\System32` names the same path under `%windir%\SysWOW64`, except the
 /// subdirectories Learn exempts (`catroot`, `catroot2`, `driverstore`, `drivers\etc`,
