@@ -149,6 +149,10 @@ pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dl
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
 /// `dxgi`: a factory with one software adapter (the S3 hunt, ADR 0155).
 pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
+/// `d3d11`: a software device whose swap chains present through GDI (the S3 hunt, ADR 0155).
+pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
+/// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
+pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.

@@ -105,6 +105,8 @@ pub const OUTPUTS: &[&str] = &[
     "wevtapi.dll",
     "hid.dll",
     "dxgi.dll",
+    "d3d11.dll",
+    "dcomp.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -266,6 +268,8 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/wevtapi",
             "personalities/nt/win32/hid",
             "personalities/nt/win32/dxgi",
+            "personalities/nt/win32/d3d11",
+            "personalities/nt/win32/dcomp",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

@@ -101,6 +101,8 @@ fn embed_win32() {
         "wevtapi.dll",
         "hid.dll",
         "dxgi.dll",
+        "d3d11.dll",
+        "dcomp.dll",
     ] {
         match &dir {
             Some(d) => {

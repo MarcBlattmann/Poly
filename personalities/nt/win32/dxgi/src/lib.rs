@@ -64,6 +64,21 @@ unsafe extern "system" {
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn Sleep(ms: u32);
+    fn LoadLibraryW(name: *const u16) -> usize;
+    fn GetProcAddress(module: usize, name: *const u8) -> usize;
+}
+
+/// `d3d11.dll`'s private export `name` (its swap chains present its textures): loaded when a
+/// swap chain is first made, so the two DLLs do not import each other.
+fn d3d11_export(name: &core::ffi::CStr) -> usize {
+    let dll: [u16; 10] = [100, 51, 100, 49, 49, 46, 100, 108, 108, 0];
+    // SAFETY: a NUL-terminated name.
+    let module = unsafe { LoadLibraryW(dll.as_ptr()) };
+    if module == 0 {
+        return 0;
+    }
+    // SAFETY: a loaded module and a NUL-terminated name.
+    unsafe { GetProcAddress(module, name.as_ptr() as *const u8) }
 }
 
 #[link(name = "ntdll", kind = "raw-dylib")]
@@ -256,17 +271,28 @@ unsafe extern "system" fn is_windowed_stereo_enabled(_: *mut c_void) -> i32 {
     0
 }
 
+/// `CreateSwapChainForHwnd(pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput,
+/// ppSwapChain)`: a swap chain of a `d3d11.dll` device presenting into the window.
 unsafe extern "system" fn create_swap_chain_for_hwnd(
     _: *mut c_void,
-    _: *mut c_void,
-    _: usize,
-    _: *const c_void,
+    device: *mut c_void,
+    hwnd: usize,
+    desc: *const c_void,
     _: *const c_void,
     _: *mut c_void,
     out: *mut *mut c_void,
 ) -> HRESULT {
-    // SAFETY: the caller's output pointer or null.
-    unsafe { create_swap_chain(core::ptr::null_mut(), core::ptr::null_mut(), core::ptr::null_mut(), out) }
+    let f = d3d11_export(c"PolyD3D11CreateSwapChain");
+    if f == 0 || device.is_null() || desc.is_null() {
+        if !out.is_null() {
+            // SAFETY: the caller's output pointer.
+            unsafe { *out = core::ptr::null_mut() };
+        }
+        return DXGI_ERROR_UNSUPPORTED;
+    }
+    type Make = unsafe extern "system" fn(*mut c_void, usize, *const c_void, *mut *mut c_void) -> HRESULT;
+    // SAFETY: d3d11.dll's export of that signature.
+    unsafe { core::mem::transmute::<usize, Make>(f)(device, hwnd, desc, out) }
 }
 
 unsafe extern "system" fn create_swap_chain_for_core_window(
@@ -281,15 +307,17 @@ unsafe extern "system" fn create_swap_chain_for_core_window(
     unsafe { create_swap_chain(core::ptr::null_mut(), core::ptr::null_mut(), core::ptr::null_mut(), out) }
 }
 
+/// `CreateSwapChainForComposition(pDevice, pDesc, pRestrictToOutput, ppSwapChain)`: a swap chain
+/// of a `d3d11.dll` device without a window; DirectComposition (`dcomp.dll`) shows it in one.
 unsafe extern "system" fn create_swap_chain_for_composition(
-    _: *mut c_void,
-    _: *mut c_void,
-    _: *const c_void,
+    this: *mut c_void,
+    device: *mut c_void,
+    desc: *const c_void,
     _: *mut c_void,
     out: *mut *mut c_void,
 ) -> HRESULT {
-    // SAFETY: the caller's output pointer or null.
-    unsafe { create_swap_chain(core::ptr::null_mut(), core::ptr::null_mut(), core::ptr::null_mut(), out) }
+    // SAFETY: as CreateSwapChainForHwnd without a window.
+    unsafe { create_swap_chain_for_hwnd(this, device, 0, desc, core::ptr::null(), core::ptr::null_mut(), out) }
 }
 
 /// `GetSharedResourceAdapterLuid`: no shared resources exist.
@@ -348,12 +376,19 @@ unsafe extern "system" fn get_window_association(_: *mut c_void, out: *mut usize
     S_OK
 }
 
-unsafe extern "system" fn create_swap_chain(_: *mut c_void, _: *mut c_void, _: *mut c_void, out: *mut *mut c_void) -> HRESULT {
+/// `CreateSwapChain(pDevice, pDesc, ppSwapChain)`: a swap chain of a `d3d11.dll` device.
+unsafe extern "system" fn create_swap_chain(_: *mut c_void, device: *mut c_void, desc: *mut c_void, out: *mut *mut c_void) -> HRESULT {
     if !out.is_null() {
         // SAFETY: the caller's output pointer.
         unsafe { *out = core::ptr::null_mut() };
     }
-    DXGI_ERROR_UNSUPPORTED
+    let f = d3d11_export(c"PolyD3D11CreateSwapChainLegacy");
+    if f == 0 || device.is_null() || desc.is_null() {
+        return DXGI_ERROR_UNSUPPORTED;
+    }
+    type Make = unsafe extern "system" fn(*mut c_void, *const c_void, *mut *mut c_void) -> HRESULT;
+    // SAFETY: d3d11.dll's export of that signature.
+    unsafe { core::mem::transmute::<usize, Make>(f)(device, desc, out) }
 }
 
 unsafe extern "system" fn create_software_adapter(_: *mut c_void, _: usize, out: *mut *mut c_void) -> HRESULT {
