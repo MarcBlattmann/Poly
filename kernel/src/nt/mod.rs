@@ -284,6 +284,9 @@ static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 /// `poly.win32k.session=interactive`: win32k reproduces the interactive
 /// desktop session of the slice B oracle instead of session 0 (ADR 0131).
 static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// `poly.win32k.session=interactive-bottom`: the same, with the taskbar at the bottom (the oracle
+/// from build 26200.9974 on).
+static TASKBAR_BOTTOM: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
@@ -489,6 +492,10 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
+    } else if boot.arg(SESSION_ARG) == Some("interactive-bottom") {
+        INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
+        TASKBAR_BOTTOM.store(true, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080, taskbar at the bottom)");
     }
 }
 
@@ -558,7 +565,12 @@ fn make_state(slot: &mut Option<NtState>) {
     // File I/O: the VFS's volumes and drive letters (ADR 0067).
     io::attach(&mut state.sys);
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
-        state.sys.win32k.wm.set_display(poly_win32k::metrics::Display::INTERACTIVE);
+        let display = if TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed) {
+            poly_win32k::metrics::Display::INTERACTIVE_BOTTOM
+        } else {
+            poly_win32k::metrics::Display::INTERACTIVE
+        };
+        state.sys.win32k.wm.set_display(display);
     }
     *slot = Some(state);
 }

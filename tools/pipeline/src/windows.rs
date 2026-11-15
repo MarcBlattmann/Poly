@@ -368,7 +368,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
             exe_sha256: sha256::hex(&bytes),
             size: bytes.len() as u64,
             imports,
-            session: session_of(&src.path),
+            session: session_of(&src.path, &src.name),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -377,12 +377,26 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     Ok(m)
 }
 
-/// The session a test's reference was recorded in: `system.session` of
-/// the `windows.json` in the source's directory, if there is one.
-fn session_of(source: &Path) -> Option<String> {
+/// The session a test's reference was recorded in: the test's own `session` in the
+/// `windows.json` in the source's directory (a directory can hold tests recorded in both
+/// kinds of session), else that file's `system.session`, if there is one.
+fn session_of(source: &Path, name: &str) -> Option<String> {
     let reference = source.parent()?.join("windows.json");
     let bytes = std::fs::read(reference).ok()?;
-    RunFile::parse(&bytes).ok()?.system.session
+    let own = serde_json::from_slice::<serde_json::Value>(&bytes).ok().and_then(|v| {
+        let t = v.get("tests")?.as_array()?.iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some(name))?;
+        Some(t.get("session")?.as_str()?.to_string())
+    });
+    let session = own.or_else(|| RunFile::parse(&bytes).ok()?.system.session);
+    // From build 26200.9974 the oracle's taskbar is at the bottom (48 pixels): work area 0,0,1920,1032.
+    let bottom = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|v| v.get("system")?.get("build")?.as_str()?.rsplit('.').next()?.parse::<u32>().ok())
+        .is_some_and(|minor| minor >= 9974);
+    match session.as_deref() {
+        Some("interactive") if bottom => Some("interactive-bottom".to_string()),
+        _ => session,
+    }
 }
 
 /// The kernel arguments for a test recorded in `session` (ADR 0131):
@@ -391,6 +405,7 @@ fn session_of(source: &Path) -> Option<String> {
 pub fn session_kernel_args(session: Option<&str>) -> &'static str {
     match session {
         Some("interactive") => " poly.win32k.session=interactive",
+        Some("interactive-bottom") => " poly.win32k.session=interactive-bottom",
         _ => "",
     }
 }

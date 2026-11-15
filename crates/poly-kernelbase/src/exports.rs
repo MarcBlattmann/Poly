@@ -474,6 +474,11 @@ pub const USER32_EXPORTS: &[&str] = &["CharUpperW", "CharPrevExA"];
 /// functions and (second slice) the `lstr*` string functions, whose Learn
 /// pages name no API set.
 pub const KERNEL32_OWN: &[&str] = &[
+    // The global atom table (Learn names no API set for these pages).
+    "GlobalAddAtomW",
+    "GlobalFindAtomW",
+    "GlobalDeleteAtom",
+    "GlobalGetAtomNameW",
     "GlobalAlloc",
     "GlobalFree",
     "GlobalSize",

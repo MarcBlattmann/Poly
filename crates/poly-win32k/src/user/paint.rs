@@ -429,6 +429,24 @@ pub fn shown_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     }
     if !child || parent.is_some_and(|p| p.style & WS_CLIPCHILDREN != 0) {
         erase_now(env, i.hwnd);
+        erase_children(env, i.hwnd);
+    }
+}
+
+/// The children of `hwnd` that became visible with it get their frame and erase at once too, when
+/// `hwnd` clips them (ShowWindow.yaml `chrome_show`: the child's WM_NCPAINT and WM_ERASEBKGND follow
+/// the top-level window's, inside the call).
+fn erase_children<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    let Some(p) = info(env, u64::from(hwnd)) else { return };
+    if p.style & WS_CLIPCHILDREN == 0 {
+        return;
+    }
+    let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) else { return };
+    for c in children {
+        if info(env, u64::from(c)).is_some_and(|ci| ci.visible) {
+            erase_now(env, c);
+            erase_children(env, c);
+        }
     }
 }
 

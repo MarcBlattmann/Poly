@@ -40,11 +40,11 @@ pub const SET_CAPTURE_QUIET: u8 = 16;
 pub const SET_FG_GRANT: u8 = 32;
 
 /// The keeper's key: a thread of no process of ours.
-pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FFF0);
+pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FF50);
 /// The key of the other process's plain window (on the oracle a console
 /// window): what a minimize hands the foreground to (GetActiveWindow.yaml
 /// `next_active`).
-pub(super) const CONSOLE: Key = (0xFFFF_FFF1, 0xFFFF_FFF1);
+pub(super) const CONSOLE: Key = (0xFFFF_FFF1, 0xFFFF_FF51);
 
 /// Whether a thread is one of the stand-ins for other processes' threads.
 pub(super) fn foreign(key: Key) -> bool {

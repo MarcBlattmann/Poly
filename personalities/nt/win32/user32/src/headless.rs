@@ -22,7 +22,22 @@ static PROP_SETS: AtomicUsize = AtomicUsize::new(0);
 /// The key `lpString` names: an atom below 0x10000, else the string.
 unsafe fn prop_key(raw: *const u16) -> Option<Key> {
     // SAFETY: a NUL-terminated name when not an atom.
-    Key::from_raw(raw as usize, || unsafe { wide(raw, -1) })
+    Key::from_raw_atoms(raw as usize, || unsafe { wide(raw, -1) }, atom_name)
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, size: i32) -> u32;
+}
+
+/// The string of a global atom made from one (`GlobalAddAtomW`).
+fn atom_name(atom: u16) -> Option<Vec<u16>> {
+    let mut buf = [0u16; 256];
+    let err = poly_win32_gui::last_error();
+    // SAFETY: a buffer of 256 characters.
+    let n = unsafe { GlobalGetAtomNameW(atom, buf.as_mut_ptr(), 256) } as usize;
+    set_last_error(err);
+    (n != 0).then(|| buf[..n].to_vec())
 }
 
 /// Drop the properties of windows that no longer exist.
@@ -64,6 +79,10 @@ pub unsafe extern "system" fn SetPropW(hwnd: H, name: *const u16, data: usize) -
 pub unsafe extern "system" fn GetPropW(hwnd: H, name: *const u16) -> usize {
     // SAFETY: the caller's name.
     let Some(key) = (unsafe { prop_key(name) }) else { return 0 };
+    if info(hwnd).is_none() {
+        // A destroyed window has no properties any more (sprop_chrome).
+        return bad_window();
+    }
     PROPS.with(|p| p.get(hwnd as u64, &key))
 }
 
@@ -153,7 +172,8 @@ unsafe fn put_wide(dst: *mut u8, capacity: usize, s: &str) {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetKeyboardLayoutNameW(buf: *mut u16) -> i32 {
     if buf.is_null() {
-        set_last_error(ERROR_INVALID_PARAMETER);
+        // ERROR_NOACCESS (GetKeyboardLayoutNameW.yaml `name`).
+        set_last_error(998);
         return 0;
     }
     // SAFETY: the caller's buffer of KL_NAMELENGTH (9) characters.
@@ -239,9 +259,7 @@ pub extern "system" fn SetWindowDisplayAffinity(hwnd: H, affinity: u32) -> i32 {
     }
 }
 
-/// `NotifyWinEvent`: there are no event hooks to tell.
-#[unsafe(no_mangle)]
-pub extern "system" fn NotifyWinEvent(_event: u32, _hwnd: H, _object: i32, _child: i32) {}
+
 
 // ----- notification registrations (device, power, suspend and resume)
 
