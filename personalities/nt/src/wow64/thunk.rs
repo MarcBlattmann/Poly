@@ -484,7 +484,8 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Option<Service>, sig: &[Arg
         args.push(wide);
     }
     // An input class with pointer-sized fields: the service reads a 64-bit copy.
-    if service == Some(Service::SetInformationFile) && narrow[2] != 0 {
+    let converted = |class: u32| SET_FILE_RENAME_CLASSES.contains(&class) || class == FILE_COMPLETION_INFORMATION;
+    if service == Some(Service::SetInformationFile) && narrow[2] != 0 && converted(narrow[4]) {
         let length = (narrow[3] as usize).min(0x1_0000);
         let mut b = alloc::vec![0u8; length];
         abi::read(k, u64::from(narrow[2]), &mut b)?;

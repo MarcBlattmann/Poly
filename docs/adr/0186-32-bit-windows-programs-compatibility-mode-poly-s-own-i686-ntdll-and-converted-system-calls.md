@@ -314,3 +314,88 @@ native call with `PROCESSOR_ARCHITECTURE_AMD64`. No change was needed.
    32-bit view of the full path, which Learn calls "unexpected behavior").
 10. Whether a created key below a shared key whose parents exist only in the other location
     works (Poly: the parents must exist at the shared location).
+
+## Addendum: stage 1 completed — every conversion the plan listed (`nt-wow64-2`)
+
+Inputs as above (Learn, the SDK headers' `_X86_` and 32-bit layouts), nothing else.
+
+- **Status blocks of requests that finish later.** A 32-bit caller's `IO_STATUS_BLOCK*` is no
+  longer copied into the scratch window: the thunk passes the caller's own address with bit 62 set
+  (`io::irp::IOSB32`, not a canonical address, so a write that forgot to decode it faults instead of
+  landing elsewhere). Every status-block write decodes it (`io::irp::iosb_write`: the 16-byte block,
+  or the 8-byte one — `Status`, a 4-byte `Information` — at the caller's address): the services'
+  `write_iosb`, the kernel's completion drain, the registry's change notifications,
+  `NtFlushVirtualMemory`. The request keeps the marked value, so an asynchronous `ReadFile` or
+  `WriteFile` writes the 32-bit `OVERLAPPED.Internal`/`InternalHigh` when it completes; an APC
+  routine gets the plain address; `NtCancelIoFileEx`/`NtCancelSynchronousIoFile` name the request
+  by the same marked value (kind `IR`).
+- **APCs in 32-bit code.** The routine (a 32-bit code address, kind `V`) and its three arguments are
+  written below the interrupted ESP (`wow64::apc_frame`, Poly's own frame) and the thread continues
+  at the i686 `ntdll`'s `KiUserApcDispatcher`, which pops the routine, calls it (`stdcall`) and then
+  `PolyResumeApc`, which restores the interrupted context as for a 64-bit thread (a routine that
+  takes fewer arguments leaves the rest; the restore drops them). `QueueUserAPC`, timer APCs and
+  I/O completion routines all take this path; a wait that returns `STATUS_USER_APC` runs every
+  queued APC as before.
+- **I/O completion entries.** `NtRemoveIoCompletion`'s outputs were already pointer-sized slots;
+  `NtRemoveIoCompletionEx`'s `FILE_IO_COMPLETION_INFORMATION` array (kind `CE`) is run against
+  32-byte entries in the window and written back as 16-byte ones (at most 1024 per call).
+- **`NtGetContextThread` / `NtSetContextThread`.** `CX` (in) and `CO` (in and out): the x86
+  `CONTEXT` becomes a 64-bit one for the service; `NtGetContextThread` writes back only the groups
+  its x86 `ContextFlags` names (`wow64::context::merge_context32`), the others stay the caller's.
+- **`NtCreateUserProcess` from a 32-bit parent.** The parameter block is read in the caller's own
+  layout (`params::read_for` with `poly_rtl::layout::X86`: 4-byte pointers, 8-byte strings); the
+  attribute list is Poly's own all-64-bit format and the token handle a value. The child is 32-bit
+  or 64-bit by its image, and its parameters are written in its own layout, so a 32-bit parent
+  starts a 64-bit child and back. `kernelbase` builds the block (`child_parameters_in`) and reads
+  `STARTUPINFO` (`SiLayout`: 104 bytes x64, 68 in 32 bits, `GetStartupInfoW/A`) in the process's own
+  layout; `PROCESS_INFORMATION` and `SECURITY_ATTRIBUTES` are pointer-sized. Every other
+  structure `kernelbase` reads or writes in the caller's memory with pointer-sized fields is laid
+  out in the process's own width too (`MEMORY_BASIC_INFORMATION`, the affinity masks,
+  `FormatMessage`'s argument slots, `OVERLAPPED_ENTRY`, `FILE_RENAME_INFO`, the token groups,
+  `MEM_EXTENDED_PARAMETER`, ...; `nt-wow64-2c`).
+- **Information classes laid out in the caller's width** (kind `P`; the service asks the caller's
+  layout): `NtQueryDirectoryObject` (`OBJECT_DIRECTORY_INFORMATION`: two 8-byte strings),
+  `NtQueryObject` `ObjectNameInformation` / `ObjectTypeInformation`, `NtQueryVirtualMemory`
+  `MemoryMappedFilenameInformation` (8-byte `UNICODE_STRING` headers), `NtQueryInformationToken`
+  (`Token::query_width`: 4-byte pointers, 8-byte `SID_AND_ATTRIBUTES`, `TOKEN_GROUPS` without
+  padding; `TokenAccessInformation` is `STATUS_NOT_IMPLEMENTED` for a 32-bit caller),
+  `NtSetInformationToken` (the owner, primary group, default DACL and label pointers). The key
+  information classes have no pointer-sized fields: unchanged. `NtSetInformationFile`'s
+  `FileRenameInformation`, `FileLinkInformation` (and their `Ex` forms) and
+  `FileCompletionInformation` are widened from the 32-bit layout by the thunk.
+- **Kernel stack.** A 32-bit `NtCreateUserProcess` overflowed the 16 KiB kernel stack (the thunk's
+  inlined helpers held an x86 and a 64-bit `CONTEXT` while the deep process creation ran):
+  `prepare` and `write_back` are kept out of line.
+- **Tests.** Host (`wow64::tests`, table-driven where the signature table allows): contexts both
+  ways, APC frame and routine, completion packets and `Ex` entries, the marked status block,
+  directory entries, `TOKEN_USER` and `ObjectNameInformation`, the rename/link/completion inputs, a
+  32-bit parameter block and `STARTUPINFO` round trip (`params`, `poly-kernelbase`). Boot:
+  `hello32.exe` gained `apc` (two `QueueUserAPC`s in an alertable `SleepEx`), `iocp` (overlapped
+  `WriteFile`/`ReadFile` on a completion port) and `child` (itself as a 32-bit child checking its
+  68-byte `STARTUPINFOW`, and the 64-bit `k32test.exe --child4`).
+
+## Addendum: stage 4 started — 32-bit GUI (`nt-wow64-2`)
+
+- **No callbacks from the kernel are needed.** Poly's `user32` calls window procedures itself (ADR
+  0128: the window manager is reached through `PolyUserCall` with `poly_win32k::wire` records and
+  blocking happens in `user32`), so a 32-bit window procedure is called by the i686 `user32` in the
+  same process. Table 1 has two services; `wow64::sigs::WIN32K_SIGNATURES` gives their 32-bit
+  rows (`PolyUserCall`: the reply length is a `SIZE_T*`; `PolyUserCommitSurface`), which also give
+  `win32u`'s i686 stubs (`int 0xF4`, `ret 20`). The wire records are fixed-width, so a 32-bit
+  `user32` sends the 64-bit one's bytes.
+- **i686 `win32u`, `gdi32`, `user32`** are built by `cargo xtask wow64` from the same sources and
+  installed in `SysWOW64`. What had a 64-bit layout baked in: the stubs' `u64` arguments (now
+  pointer-sized), `poly_win32k`'s `CREATESTRUCTW`, `WINDOWPOS`, `MSG` and `PAINTSTRUCT` mirrors
+  (pointer-sized fields are `usize`), `user32`'s `WNDCLASS(EX)W`, `GUITHREADINFO`,
+  `TRACKMOUSEEVENT`, `ICONINFO`, `CURSORINFO`, `HIGHCONTRASTW` (`user32::cstructs`, with size
+  assertions for both widths).
+- **Painting needs a display.** The window manager invalidates and paints only on an interactive
+  display (a headless kernel test sends no `WM_PAINT`, for 64-bit programs too), so the boot test
+  calls `BeginPaint` itself and fills a memory DC; `gui32 --show --paint` checks `WM_PAINT` on
+  Poly's desktop (`cargo xtask win-app run --mode desktop`).
+- **Tests.** Host: a 32-bit `PolyUserCall` round trip. Boot: `gui32.exe`
+  (`nt_wow64_32_bit_window_program_paints_and_gets_messages`): `RegisterClassExW` (48-byte class),
+  `CreateWindowExW` with its 32-bit window procedure seeing `WM_CREATE` and its `lpParam`,
+  `GetWindowTextW`, `GetClientRect`, `BeginPaint` (the 64-byte `PAINTSTRUCT`), `FillRect` and
+  `GetPixel` on a memory DC, `SendMessageW`, `PostMessageW`, `GetMessageW`/`DispatchMessageW`,
+  `DestroyWindow`, `PostQuitMessage`.
