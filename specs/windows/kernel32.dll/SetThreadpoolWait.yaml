@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetThreadpoolWait.yaml
+id: windows/api/kernel32.dll/SetThreadpoolWait
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  Arms a thread pool wait object on a handle with an optional timeout (relative FILETIME): when the handle is signalled or the timeout passes the callback runs once (it is one-shot and must be set again) with WAIT_OBJECT_0 (0) or WAIT_TIMEOUT (258). A NULL handle cancels. SetThreadpoolWaitEx reports whether the wait was set.
+interface:
+  signature: "void SetThreadpoolWait(PTP_WAIT wait, HANDLE h, PFILETIME timeout); BOOL SetThreadpoolWaitEx(PTP_WAIT, HANDLE, PFILETIME, PVOID reserved); PTP_WAIT CreateThreadpoolWait(PTP_WAIT_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON); void CALLBACK cb(PTP_CALLBACK_INSTANCE, PVOID, PTP_WAIT, TP_WAIT_RESULT result)"
+rules:
+  signalled: "the callback got result 0 (WAIT_OBJECT_0) and the creation context after the event was set; not before (no callback after 200 ms unsignalled); a signalled event at the time of the call calls back at once; waiting on a thread handle gives result 0 when the thread ends."
+  timeout: "a 100 ms relative timeout on an unsignalled event: result 258 (WAIT_TIMEOUT) after at least 80 ms, one callback; a signal before a 5 s timeout: result 0."
+  one_shot: "a manual-reset event left signalled does not call again (the wait must be set again); the event stays signalled."
+  auto_reset: "an auto-reset event is consumed by the wait (a zero-timeout wait afterwards: 258)."
+  cancel_replace: "a NULL handle cancels (set, then NULL, then signalled: no callback); setting on event B replaces an earlier setting on A (A signalled: no callback; B signalled: result 0)."
+  rearm: "a callback that calls SetThreadpoolWait again on the same (still signalled) event is called again: three callbacks when it re-armed twice."
+  ex_result: "SetThreadpoolWaitEx: FALSE for an unset wait, TRUE for a set one; cancelling with a NULL handle: TRUE for a set wait, FALSE for an unset one."
+errors:
+  none: "none provoked"
+side_effects: "the callback runs on a pool thread"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "milliseconds after the signal"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Abandoned mutexes, waits on handles that are closed while waiting, many waits sharing a wait thread.

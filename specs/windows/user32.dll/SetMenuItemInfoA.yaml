@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetMenuItemInfoA.yaml
+id: windows/api/user32.dll/SetMenuItemInfoA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Changes an item through a MENUITEMINFOA. Text set with MIIM_STRING or MIIM_TYPE is converted from the ANSI code page; GetMenuItemInfoA returns text as ANSI bytes with cch in bytes. The other fields work as in SetMenuItemInfoW.
+interface:
+  signature: "BOOL SetMenuItemInfoA(HMENU hmenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOA lpmii)"
+rules:
+  conversion: "code page: the oracle's ANSI code page (CP_ACP) is 1252 and its OEM code page 850, the display language English; every conversion below is recorded with 1252. Bytes 0x00-0x7F are the same in every ANSI code page; the results for bytes above 0x7F depend on the code page: 0x80 is U+20AC (euro), 0x81 U+0081 (kept, not assigned in 1252), 0xA0-0xFF are U+00A0-U+00FF (0xE9 is U+00E9, 0xFF U+00FF); a character with no form in the code page (U+4E2D, U+0416) becomes '?' (0x3F)"
+  set_text: "MIIM_STRING with the test string gives the text 'caf<U+00E9> <U+20AC> <U+0081> <U+00FF>'; MIIM_TYPE with MFT_STRING and 'typed<E9>' the same way; an empty string and a NULL string both give an empty text (TRUE); by command id (fByPosition FALSE) the text, the state (MFS_GRAYED 3) and a new id (99) are all changed"
+  get_text: "GetMenuItemInfoA(MIIM_STRING): with a buffer and cch 100 the text is copied and cch becomes the length in bytes (10); cch 5 copies 4 bytes and a NUL and sets cch to 4; cch 1 copies only the NUL and sets cch to 0; cch 0 with a buffer copies nothing and sets cch to the full length (10); a NULL buffer also gives the full length (10), whatever cch was; for a text with U+4E2D, U+0416 and U+20AC cch is 7 and the bytes 'caf<E9>??<80>' (4 gives 3 bytes); MIIM_TYPE returns the type 0 (string) and cch 6 for 'typed<E9>'"
+  fields: "state, id and data are set (state 0xB, id 111, data 0xFEED); replacing a popup with MIIM_SUBMENU destroys the old popup (IsMenu FALSE) and the new one is returned by GetSubMenu; MFT_RADIOCHECK reads back as type 0x200; MFT_OWNERDRAW with data 0x99 reads back as type 0x100 and data 0x99"
+errors:
+  mask_conflict: "MIIM_TYPE together with MIIM_STRING: FALSE with ERROR_INVALID_PARAMETER (87)"
+  bad_structure: "cbSize 4: FALSE with 87"
+  bad_item: "position 9 and command 777 that do not exist: FALSE with ERROR_MENU_ITEM_NOT_FOUND (1456); a made-up menu: FALSE with 1401"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416).

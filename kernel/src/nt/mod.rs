@@ -149,6 +149,15 @@ pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dl
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
 /// Our `mdmregistration.dll` (ADR 0196): a device that is not enrolled.
 pub static MDMREGISTRATION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mdmregistration.dll"));
+/// `dxgi`: a factory with one software adapter (the S3 hunt, ADR 0155).
+pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
+/// `d3d11`: a software device whose swap chains present through GDI (the S3 hunt, ADR 0155).
+pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
+/// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
+pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
+/// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
+pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
+pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -183,6 +192,8 @@ pub static IPHLPAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/iphlpapi.
 pub static NETAPI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/netapi32.dll"));
 pub static SECUR32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/secur32.dll"));
 pub static DHCPCSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dhcpcsvc.dll"));
+/// `AcceptEx`, `ConnectEx` and the other Winsock extensions (ADR 0195).
+pub static MSWSOCK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mswsock.dll"));
 pub static DNSAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dnsapi.dll"));
 pub static DBGHELP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dbghelp.dll"));
 
@@ -296,6 +307,9 @@ struct NtState {
     /// reading never goes down, and an ended process keeps at least what was read while it ran
     /// (its last thread's time is only counted once that thread is gone).
     peak: BTreeMap<ProcessId, [u64; 2]>,
+    /// The most pages of its own a live process held when its memory counters were read
+    /// (`PeakPagefileUsage`).
+    private_peak: BTreeMap<ProcessId, u64>,
 }
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
@@ -303,6 +317,9 @@ static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 /// `poly.win32k.session=interactive`: win32k reproduces the interactive
 /// desktop session of the slice B oracle instead of session 0 (ADR 0131).
 static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// `poly.win32k.session=interactive-bottom`: the same, with the taskbar at the bottom (the oracle
+/// from build 26200.9974 on).
+static TASKBAR_BOTTOM: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
@@ -656,6 +673,10 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
+    } else if boot.arg(SESSION_ARG) == Some("interactive-bottom") {
+        INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
+        TASKBAR_BOTTOM.store(true, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080, taskbar at the bottom)");
     }
 }
 
@@ -718,6 +739,7 @@ fn make_state(slot: &mut Option<NtState>) {
         created: BTreeMap::new(),
         finished: BTreeMap::new(),
         peak: BTreeMap::new(),
+        private_peak: BTreeMap::new(),
     };
     // The i686 ntdll every 32-bit process maps (ADR 0186).
     state.sys.ntdll32 = NTDLL32;
@@ -727,7 +749,12 @@ fn make_state(slot: &mut Option<NtState>) {
     // File I/O: the VFS's volumes and drive letters (ADR 0067).
     io::attach(&mut state.sys);
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
-        state.sys.win32k.wm.set_display(poly_win32k::metrics::Display::INTERACTIVE);
+        let display = if TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed) {
+            poly_win32k::metrics::Display::INTERACTIVE_BOTTOM
+        } else {
+            poly_win32k::metrics::Display::INTERACTIVE
+        };
+        state.sys.win32k.wm.set_display(display);
     }
     *slot = Some(state);
 }
@@ -981,6 +1008,26 @@ impl NtKernel for Kernel {
         Some([created, seen[0], seen[1]])
     }
 
+    fn memory_counters(&self, pid: ProcessId) -> Option<poly_personality_nt::threads::VmCounters> {
+        let memory = io::memory_of(pid.0)?;
+        let (resident, cached, shared) = memory.page_counts();
+        let private = resident.saturating_sub(cached + shared);
+        let (faults, peak_resident) = crate::process::find(pid.0).map_or((0, 0), |p| p.cpu.memory_counts());
+        let peak_private = with(|s| {
+            let p = s.private_peak.entry(pid).or_insert(0);
+            *p = (*p).max(private);
+            *p
+        });
+        Some(poly_personality_nt::threads::VmCounters { faults, resident, peak_resident, private, peak_private })
+    }
+
+    fn thread_times(&self, pid: ProcessId, thread: ThreadRef) -> Option<[u64; 3]> {
+        // The thread's own start is not kept: its process's creation time stands in for it.
+        let created = with(|s| s.created.get(&pid).copied())?;
+        let cpu = crate::cputime::thread(pid.0, thread.0 as u32)?;
+        Some([created, cpu.system_ns / 100, cpu.user_ns / 100])
+    }
+
     fn save_hive(&mut self, file: &str, data: &[u8]) -> Result<(), NtStatus> {
         registry::save(file, data)
     }
@@ -1002,7 +1049,10 @@ impl NtKernel for Kernel {
         Ok(afd::poll_sockets(socks, wait))
     }
 
-    fn socket_pend(&mut self, io: poly_personality_nt::afd::PendIo) -> Result<(), poly_personality_nt::afd::PendIo> {
+    fn socket_pend(
+        &mut self,
+        io: poly_personality_nt::afd::PendIo,
+    ) -> Result<(), alloc::boxed::Box<poly_personality_nt::afd::PendIo>> {
         afd::pend(io)
     }
 
@@ -1226,6 +1276,7 @@ fn start_params(
         let inherit_from = handles.filter(|h| h.inherit_handles).map(|h| h.caller.process);
         let creator = console::FromCreator {
             given: params.given_std_handles(),
+            inherited: if handles.is_some() { params.inherited_std_handles() } else { [0; 3] },
             console: handles.and_then(|h| s.sys.io.console_of_process(h.caller.process)),
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());

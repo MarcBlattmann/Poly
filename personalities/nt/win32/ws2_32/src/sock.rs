@@ -81,12 +81,18 @@ fn ret_socket(r: Result<Socket, u32>) -> Socket {
     })
 }
 
+/// A call that made a socket: success leaves the last error 0 (as Windows' do).
+fn made(s: Socket) -> Socket {
+    set_error(0);
+    s
+}
+
 // ----- socket, bind, listen, accept, connect, shutdown, closesocket
 
-fn new_socket(af: i32, ty: i32, protocol: i32) -> Result<Socket, u32> {
+fn new_socket(af: i32, ty: i32, protocol: i32, inherit: bool) -> Result<Socket, u32> {
     check_started()?;
     let req = proto::check_socket(af, ty, protocol)?;
-    let h = afd::open_endpoint().map_err(|s| if s == 0xC000_0002 { WSAENETDOWN } else { WSAEMFILE })?;
+    let h = afd::open_endpoint(inherit).map_err(|s| if s == 0xC000_0002 { WSAENETDOWN } else { WSAEMFILE })?;
     let (status, _) = afd::ioctl(h, proto::SOCKET, &req.encode(), &mut []);
     if is_error(status) {
         afd::close(h);
@@ -101,23 +107,45 @@ fn new_socket(af: i32, ty: i32, protocol: i32) -> Result<Socket, u32> {
 /// `socket`.
 #[unsafe(no_mangle)]
 pub extern "system" fn socket(af: i32, ty: i32, protocol: i32) -> Socket {
-    ret_socket(new_socket(af, ty, protocol))
+    match new_socket(af, ty, protocol, true) {
+        Ok(s) => made(s),
+        Err(e) => ret_socket(Err(e)),
+    }
 }
 
 /// `WSASocketW`: `lpProtocolInfo` is only taken as the record `WSADuplicateSocketW` made (a socket
 /// handed over by another process, ADR 0155; any other record is `WSAEINVAL`); the group is not
 /// supported; `WSA_FLAG_OVERLAPPED` is how every Poly socket works anyway.
 #[unsafe(no_mangle)]
-pub extern "system" fn WSASocketW(af: i32, ty: i32, protocol: i32, info: *const u8, _g: u32, _flags: u32) -> Socket {
-    if !info.is_null() {
-        if let Err(e) = check_started() {
-            set_error(e);
-            return INVALID_SOCKET;
-        }
-        // SAFETY: the caller's WSAPROTOCOL_INFOW.
-        return ret_socket(unsafe { crate::events::from_protocol_info(info) });
+pub extern "system" fn WSASocketW(af: i32, ty: i32, protocol: i32, info: *const u8, group: u32, flags: u32) -> Socket {
+    /// `WSA_FLAG_*` (`winsock2.h`): overlapped, the multipoint ones, access system security, no
+    /// handle inherit, registered I/O.
+    const KNOWN_FLAGS: u32 = 0x1 | 0x2 | 0x4 | 0x8 | 0x10 | 0x40 | 0x80 | 0x100;
+    if let Err(e) = check_started() {
+        set_error(e);
+        return INVALID_SOCKET;
     }
-    socket(af, ty, protocol)
+    if flags & !KNOWN_FLAGS != 0 {
+        return ret_socket(Err(WSAEPROTOTYPE));
+    }
+    if group != 0 {
+        return ret_socket(Err(WSAEINVAL));
+    }
+    if !info.is_null() {
+        // SAFETY: the caller's WSAPROTOCOL_INFOW.
+        return match unsafe { crate::events::from_protocol_info(info) } {
+            Ok(s) => made(s),
+            Err(e) => ret_socket(Err(e)),
+        };
+    }
+    if af == -1 && ty == -1 && protocol == -1 {
+        // `FROM_PROTOCOL_INFO` with no record to take them from.
+        return ret_socket(Err(WSAESOCKTNOSUPPORT));
+    }
+    match new_socket(af, ty, protocol, flags & WSA_FLAG_NO_HANDLE_INHERIT == 0) {
+        Ok(s) => made(s),
+        Err(e) => ret_socket(Err(e)),
+    }
 }
 
 /// `WSASocketA`.
@@ -142,7 +170,7 @@ pub extern "system" fn listen(s: Socket, backlog: i32) -> i32 {
 fn accept_into(s: Socket, peer: &mut [u8; addr::MAX_SIZE]) -> Result<(Socket, usize), u32> {
     check_started()?;
     crate::events::after_accept(s);
-    let new = afd::open_endpoint().map_err(|_| WSAEMFILE)?;
+    let new = afd::open_endpoint(true).map_err(|_| WSAEMFILE)?;
     match call(s, proto::ACCEPT, &(new as u64).to_le_bytes(), peer) {
         Ok(n) => Ok((new as Socket, n)),
         Err(e) => {
@@ -200,7 +228,11 @@ pub unsafe extern "system" fn WSAConnect(
 /// `shutdown`.
 #[unsafe(no_mangle)]
 pub extern "system" fn shutdown(s: Socket, how: i32) -> i32 {
-    ret(call(s, proto::SHUTDOWN, &(how as u32).to_le_bytes(), &mut []).map(|_| 0))
+    let r = call(s, proto::SHUTDOWN, &(how as u32).to_le_bytes(), &mut []).map(|_| 0);
+    if r.is_ok() {
+        crate::events::local_shutdown(s, how == SD_RECEIVE || how == SD_BOTH);
+    }
+    ret(r)
 }
 
 /// `closesocket`: `WSAENOTSOCK` for a handle that is not a socket.
@@ -219,6 +251,11 @@ pub extern "system" fn closesocket(s: Socket) -> i32 {
     }
     crate::events::forget(s);
     afd::close(handle(s));
+    // Sockets made from one `WSADuplicateSocketW` record end together.
+    for sib in crate::events::siblings_of(s) {
+        crate::events::forget(sib);
+        afd::close(handle(sib));
+    }
     0
 }
 
@@ -226,6 +263,11 @@ pub extern "system" fn closesocket(s: Socket) -> i32 {
 
 fn name_of(s: Socket, peer: bool, out: *mut u8, len: *mut i32) -> i32 {
     let mut b = [0u8; addr::MAX_SIZE];
+    // SAFETY: the caller's length, if there is one.
+    if len.is_null() || unsafe { *len } < 0 {
+        // Learn ("getsockname"): a missing or negative length is invalid before anything else.
+        return fail(WSAEFAULT);
+    }
     ret(call(s, proto::NAME, &u32::from(peer).to_le_bytes(), &mut b).and_then(|n| {
         if out.is_null() {
             return Err(WSAEFAULT);
@@ -247,10 +289,13 @@ pub extern "system" fn getpeername(s: Socket, out: *mut u8, len: *mut i32) -> i3
     name_of(s, true, out, len)
 }
 
-/// `setsockopt`.
+/// `setsockopt`: a negative length is `WSAENOBUFS`; the value's own rules are the device's.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn setsockopt(s: Socket, level: i32, name: i32, value: *const u8, len: i32) -> i32 {
-    if len < 0 || (value.is_null() && len > 0) {
+    if len < 0 {
+        return fail(WSAENOBUFS);
+    }
+    if value.is_null() && len > 0 {
         return fail(WSAEFAULT);
     }
     let mut b = proto::option_header(level, name).to_vec();
@@ -261,31 +306,46 @@ pub unsafe extern "system" fn setsockopt(s: Socket, level: i32, name: i32, value
     ret(call(s, proto::SET_OPTION, &b, &mut []).map(|_| 0))
 }
 
-/// `getsockopt`: the value and its length; `WSAEFAULT` when `*len` is
-/// smaller than the value (a BOOL may be read into one byte).
+/// `getsockopt`: the value in its own size (a BOOL of some options is one byte, `SO_PROTOCOL_INFOW`
+/// 628) and its length; a buffer shorter than the value is `WSAEFAULT` with the length as given;
+/// an unknown level or option sets the length to 0; a 4-byte value read into a longer buffer
+/// zeroes the next 4 bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn getsockopt(s: Socket, level: i32, name: i32, value: *mut u8, len: *mut i32) -> i32 {
     if value.is_null() || len.is_null() {
         return fail(WSAEFAULT);
     }
-    let mut out = [0u8; 16];
-    ret(call(s, proto::GET_OPTION, &proto::option_header(level, name), &mut out).and_then(|n| {
-        // SAFETY: the caller's buffer and length.
-        unsafe {
-            let have = *len;
-            if have <= 0 {
-                return Err(WSAEFAULT);
+    let mut out = [0u8; 640];
+    match call(s, proto::GET_OPTION, &proto::option_header(level, name), &mut out) {
+        Ok(n) => {
+            // SAFETY: the caller's buffer and length.
+            unsafe {
+                let have = *len;
+                if have <= 0 || (have as usize) < n {
+                    return fail(WSAEFAULT);
+                }
+                core::ptr::copy_nonoverlapping(out.as_ptr(), value, n);
+                if n == 4 && have >= 8 {
+                    core::ptr::write_bytes(value.add(4), 0, 4);
+                }
+                *len = n as i32;
             }
-            let put = if (have as usize) < n { if have == 1 && n == 4 { 1 } else { return Err(WSAEFAULT) } } else { n };
-            core::ptr::copy_nonoverlapping(out.as_ptr(), value, put);
-            *len = put as i32;
+            0
         }
-        Ok(0)
-    }))
+        Err(e) => {
+            if e == WSAEINVAL || e == WSAENOPROTOOPT && !proto::option_known(level, name) {
+                // The length of an option that does not exist is 0.
+                // SAFETY: the caller's length (checked non-null).
+                unsafe { *len = 0 };
+            }
+            fail(e)
+        }
+    }
 }
 
-/// `ioctlsocket`: `FIONBIO`, `FIONREAD`, `SIOCATMARK` (always true:
-/// Poly's stack has no out-of-band data); anything else `WSAEINVAL`.
+/// `ioctlsocket`: `FIONBIO` (refused with `WSAEINVAL` while an event selection is active),
+/// `FIONREAD`, `SIOCATMARK` (always true: Poly's stack has no out-of-band data); any other
+/// command `WSAEOPNOTSUPP`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ioctlsocket(s: Socket, cmd: i32, arg: *mut u32) -> i32 {
     if arg.is_null() {
@@ -294,7 +354,14 @@ pub unsafe extern "system" fn ioctlsocket(s: Socket, cmd: i32, arg: *mut u32) ->
     // SAFETY: the caller's argument.
     let r = unsafe {
         match cmd as u32 {
-            FIONBIO => call(s, proto::SET_NONBLOCKING, &u32::from(*arg != 0).to_le_bytes(), &mut []).map(|_| 0),
+            FIONBIO => {
+                if *arg == 0 && crate::events::is_selected(s) {
+                    // Learn ("WSAEventSelect"): the socket stays non-blocking while selected.
+                    check_started().and(Err(WSAEINVAL))
+                } else {
+                    call(s, proto::SET_NONBLOCKING, &u32::from(*arg != 0).to_le_bytes(), &mut []).map(|_| 0)
+                }
+            }
             FIONREAD => {
                 let mut b = [0u8; 4];
                 call(s, proto::READABLE, &[], &mut b).map(|_| {
@@ -306,15 +373,23 @@ pub unsafe extern "system" fn ioctlsocket(s: Socket, cmd: i32, arg: *mut u32) ->
                 *arg = 1;
                 0
             }),
-            _ => Err(WSAEINVAL),
+            _ => check_started().and(Err(WSAEOPNOTSUPP)),
         }
     };
     ret(r)
 }
 
-/// `WSAIoctl`: the `ioctlsocket` codes; extension functions
-/// (`SIO_GET_EXTENSION_FUNCTION_POINTER`: `AcceptEx`, `ConnectEx`, ...)
-/// are not there yet (`WSAEINVAL`), nor overlapped control codes.
+/// `SIO_KEEPALIVE_VALS`, `SIO_UDP_CONNRESET`, `SIO_UDP_NETRESET`, `SIO_BASE_HANDLE` (`mstcpip.h`,
+/// `mswsock.h`, `ws2def.h`).
+const SIO_KEEPALIVE_VALS: u32 = 0x9800_0004;
+const SIO_UDP_CONNRESET: u32 = 0x9800_000C;
+const SIO_UDP_NETRESET: u32 = 0x9800_000F;
+const SIO_BASE_HANDLE: u32 = 0x4800_0022;
+
+/// `WSAIoctl`: the `ioctlsocket` codes; `SIO_KEEPALIVE_VALS` (TCP: `SO_KEEPALIVE` on for `onoff` 1,
+/// the idle time and interval in milliseconds, kept in seconds), `SIO_UDP_CONNRESET` and
+/// `SIO_UDP_NETRESET` (datagram sockets: accepted), `SIO_BASE_HANDLE`, and
+/// `SIO_GET_EXTENSION_FUNCTION_POINTER` ([`crate::ext`]). Overlapped control codes are not there.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WSAIoctl(
     s: Socket,
@@ -324,9 +399,22 @@ pub unsafe extern "system" fn WSAIoctl(
     output: *mut u8,
     output_len: u32,
     returned: *mut u32,
-    _overlapped: *mut u8,
+    overlapped: *mut u8,
     _routine: *const u8,
 ) -> i32 {
+    if let Err(e) = check_started() {
+        return fail(e);
+    }
+    let Some(info) = afd::info(handle(s)) else { return fail(WSAENOTSOCK) };
+    let bytes = |n: u32| {
+        if !returned.is_null() {
+            // SAFETY: the caller's count.
+            unsafe { *returned = n };
+        }
+    };
+    // Every code but the ones a program may call without a count writes it (with no OVERLAPPED
+    // the count is mandatory).
+    let needs_count = overlapped.is_null() && returned.is_null();
     match code {
         FIONBIO => {
             if input.is_null() || input_len < 4 {
@@ -347,16 +435,79 @@ pub unsafe extern "system" fn WSAIoctl(
             let r = unsafe { ioctlsocket(s, code as i32, &mut v) };
             if r == 0 {
                 // SAFETY: four bytes of the caller's output.
-                unsafe {
-                    core::ptr::copy_nonoverlapping((&raw const v).cast::<u8>(), output, 4);
-                    if !returned.is_null() {
-                        *returned = 4;
-                    }
-                }
+                unsafe { core::ptr::copy_nonoverlapping((&raw const v).cast::<u8>(), output, 4) };
+                bytes(4);
             }
             r
         }
-        _ => fail(WSAEINVAL),
+        SIO_KEEPALIVE_VALS => {
+            if input.is_null() || input_len < 12 || needs_count {
+                return fail(WSAEFAULT);
+            }
+            if info.ty != SOCK_STREAM {
+                return fail(WSAEOPNOTSUPP);
+            }
+            // SAFETY: twelve bytes of the caller's `tcp_keepalive`: onoff, time, interval.
+            let (onoff, time, interval) = unsafe {
+                (
+                    core::ptr::read_unaligned(input.cast::<u32>()),
+                    core::ptr::read_unaligned(input.add(4).cast::<u32>()),
+                    core::ptr::read_unaligned(input.add(8).cast::<u32>()),
+                )
+            };
+            let on = onoff == 1;
+            // SAFETY: values on the stack.
+            let mut r = unsafe { setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, [u8::from(on)].as_ptr(), 1) };
+            if r == 0 && on {
+                for (name, ms) in [(TCP_KEEPALIVE, time), (TCP_KEEPINTVL, interval)] {
+                    if ms > 0 && r == 0 {
+                        let secs = (ms / 1000).max(1);
+                        // SAFETY: a value on the stack.
+                        r = unsafe { setsockopt(s, IPPROTO_TCP, name, secs.to_le_bytes().as_ptr(), 4) };
+                    }
+                }
+            }
+            if r == 0 {
+                bytes(0);
+            }
+            r
+        }
+        SIO_UDP_CONNRESET | SIO_UDP_NETRESET => {
+            if input.is_null() || input_len < 1 || needs_count {
+                return fail(WSAEFAULT);
+            }
+            if info.ty != SOCK_DGRAM {
+                return fail(WSAEINVAL);
+            }
+            bytes(0);
+            0
+        }
+        SIO_BASE_HANDLE => {
+            if output.is_null() || output_len < 8 || needs_count {
+                return fail(WSAEFAULT);
+            }
+            // SAFETY: eight bytes of the caller's output.
+            unsafe { core::ptr::write_unaligned(output.cast::<usize>(), s) };
+            bytes(8);
+            0
+        }
+        SIO_GET_EXTENSION_FUNCTION_POINTER => {
+            if input.is_null() || input_len < 16 || output.is_null() || output_len < 8 || needs_count {
+                return fail(WSAEFAULT);
+            }
+            // SAFETY: sixteen bytes of the caller's GUID.
+            let guid = unsafe { core::slice::from_raw_parts(input, 16) };
+            match crate::ext::pointer(guid) {
+                Some(f) => {
+                    // SAFETY: eight bytes of the caller's output.
+                    unsafe { core::ptr::write_unaligned(output.cast::<usize>(), f) };
+                    bytes(8);
+                    0
+                }
+                None => fail(WSAEINVAL),
+            }
+        }
+        _ => fail(WSAEOPNOTSUPP),
     }
 }
 
@@ -383,7 +534,11 @@ fn check_send_flags(flags: i32) -> Result<(), u32> {
 }
 
 fn recv_flags(flags: i32) -> Result<u32, u32> {
-    if flags & MSG_OOB != 0 || flags & !(MSG_PEEK | MSG_WAITALL | MSG_PUSH_IMMEDIATE) != 0 {
+    if flags & MSG_OOB != 0 {
+        // There is never urgent data: Learn ("recv"): `WSAEWOULDBLOCK` for a non-blocking read of it.
+        return Err(WSAEWOULDBLOCK);
+    }
+    if flags & !(MSG_PEEK | MSG_WAITALL | MSG_PUSH_IMMEDIATE) != 0 {
         return Err(WSAEOPNOTSUPP);
     }
     let mut f = 0;
@@ -402,7 +557,10 @@ fn do_send(s: Socket, buf: *const u8, len: usize, flags: i32, to: Option<&[u8]>)
         return Err(WSAEFAULT);
     }
     let req = send_req(0, buf, len, to)?;
-    let r = call(s, proto::SEND, &req.encode(), &mut []);
+    check_started()?;
+    let (status, info) = afd::ioctl(handle(s), proto::SEND, &req.encode(), &mut []);
+    // A datagram that is too long completes with a warning status: still an error for the program.
+    let r = if is_error(status) || status == STATUS_BUFFER_OVERFLOW { Err(wsa_of_status(status)) } else { Ok(info) };
     if r == Err(WSAEWOULDBLOCK) {
         crate::events::after_send_blocked(s);
     }
@@ -414,6 +572,13 @@ fn do_send(s: Socket, buf: *const u8, len: usize, flags: i32, to: Option<&[u8]>)
 fn do_recv(s: Socket, buf: *mut u8, len: usize, flags: u32) -> Result<(usize, proto::RecvReply), u32> {
     check_started()?;
     if buf.is_null() && len > 0 {
+        // Windows looks at the connection first: a peek of nothing tells whether there is one.
+        let probe = proto::RecvReq { flags: proto::FLAG_PEEK, buf: 0, len: 0 };
+        let mut out = [0u8; proto::RecvReply::SIZE];
+        let (status, _) = afd::ioctl(handle(s), proto::RECV, &probe.encode(), &mut out);
+        if is_error(status) && wsa_of_status(status) != WSAEWOULDBLOCK {
+            return Err(wsa_of_status(status));
+        }
         return Err(WSAEFAULT);
     }
     let req = proto::RecvReq { flags, buf: buf as u64, len: len as u64 };
@@ -488,6 +653,15 @@ pub unsafe extern "system" fn recvfrom(
     fromlen: *mut i32,
 ) -> i32 {
     if len < 0 || (!from.is_null() && fromlen.is_null()) {
+        return fail(WSAEFAULT);
+    }
+    if !from.is_null()
+        && let Some(info) = afd::info(handle(s))
+        && let Some(need) = addr::size_of_family(info.family)
+        // SAFETY: the caller's length (checked non-null above).
+        && unsafe { *fromlen } < need as i32
+    {
+        // Learn ("recvfrom"): too small an address buffer is WSAEFAULT, and the datagram stays queued.
         return fail(WSAEFAULT);
     }
     let r = recv_flags(flags).and_then(|f| do_recv(s, buf, len as usize, f)).and_then(|(n, reply)| {
@@ -574,7 +748,8 @@ unsafe fn overlapped(
         (*ov).internal_high = 0;
         let (apc, ctx) = match routine {
             Some(r) => (completion_apc as *const u8, r as *const u8),
-            None => (core::ptr::null(), core::ptr::null()),
+            // A completion port's packet carries the OVERLAPPED (the request's context), as on Windows.
+            None => (core::ptr::null(), ov.cast_const().cast::<u8>()),
         };
         let status = afd::ioctl_overlapped(handle(s), (*ov).event, apc, ctx, ov.cast(), code, input, output);
         if status == STATUS_PENDING {
@@ -584,7 +759,9 @@ unsafe fn overlapped(
             return Err(wsa_of_status(status));
         }
         if status == STATUS_BUFFER_OVERFLOW {
-            return Err(WSAEMSGSIZE);
+            // Windows reports a datagram that did not fit as pending, with `WSAEMSGSIZE` in the
+            // result (`WSAGetOverlappedResult`): the request is complete, the status says so.
+            return Ok(None);
         }
         Ok(Some((*ov).internal_high))
     }
@@ -616,6 +793,12 @@ unsafe fn wsa_send(
     ov: *mut Overlapped,
     routine: Option<CompletionRoutine>,
 ) -> i32 {
+    if n == 0 {
+        return fail(WSAEINVAL);
+    }
+    if sent.is_null() && ov.is_null() {
+        return fail(WSAEFAULT);
+    }
     let bufs = match buffers(bufs, n).and_then(|b| check_send_flags(flags as i32).map(|()| b)) {
         Ok(b) => b,
         Err(e) => return fail(e),
@@ -626,7 +809,13 @@ unsafe fn wsa_send(
             Err(e) => return fail(e),
         };
         // SAFETY: the caller's OVERLAPPED.
-        return unsafe { finish_wsa(overlapped(s, proto::SEND, &req.encode(), &mut [], ov, routine), sent) };
+        let r = unsafe { overlapped(s, proto::SEND, &req.encode(), &mut [], ov, routine) };
+        if matches!(r, Ok(None)) {
+            // Pending: FD_WRITE is recorded when sending is possible again.
+            crate::events::after_send_blocked(s);
+        }
+        // SAFETY: the caller's count.
+        return unsafe { finish_wsa(r, sent) };
     }
     let mut total = 0usize;
     for b in bufs {
@@ -803,6 +992,11 @@ pub unsafe extern "system" fn WSAGetOverlappedResult(
         set_error(WSAEFAULT);
         return 0;
     }
+    if afd::info(handle(s)).is_none() {
+        // A socket that was closed has no result to ask for.
+        set_error(WSAENOTSOCK);
+        return 0;
+    }
     // SAFETY: the caller's OVERLAPPED and outputs.
     unsafe {
         if (*ov).internal as u32 == STATUS_PENDING {
@@ -817,7 +1011,6 @@ pub unsafe extern "system" fn WSAGetOverlappedResult(
         }
         let status = (*ov).internal as u32;
         *transferred = (*ov).internal_high as u32;
-        *flags = 0;
         if is_error(status) {
             set_error(wsa_of_status(status));
             return 0;
@@ -826,6 +1019,7 @@ pub unsafe extern "system" fn WSAGetOverlappedResult(
             set_error(WSAEMSGSIZE);
             return 0;
         }
+        *flags = 0;
     }
     1
 }
@@ -980,13 +1174,19 @@ pub unsafe extern "system" fn WSAPoll(fds: *mut u8, n: u32, timeout: i32) -> i32
         Err(e) => return fail(e),
     };
     let mut count = 0;
+    let mut invalid = false;
     for ((i, events), dev) in map.into_iter().zip(revents) {
         let r = poll::wsapoll_revents(events, dev);
         if r != 0 {
             count += 1;
         }
+        invalid |= r & POLLNVAL != 0;
         // SAFETY: the caller's entry.
         unsafe { core::ptr::write_unaligned(fds.add(i * WSAPOLLFD_SIZE + 10).cast::<i16>(), r) };
+    }
+    if invalid {
+        // Learn ("WSAPoll"): a descriptor that is not a socket fails the call, `revents` says which.
+        return fail(WSAENOTSOCK);
     }
     count
 }

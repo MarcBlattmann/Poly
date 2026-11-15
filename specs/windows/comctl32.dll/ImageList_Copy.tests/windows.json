@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "ilc_move",
+      "exe_sha256": "40f3ebcf3a4a1bb294859238b06463e6241902f4144a29f283c620cae733b03e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IGNvdW50IDQsIGNlbnRyZSBwaXhlbHM6ICNmZjAwMDAgIzAwZmYwMCAjMDAwMGZmICNmZmZmMDAKQ29weShkc3QgMCwgc3JjIDIsIElMQ0ZfTU9WRSk6IDEKYWZ0ZXI6IGNvdW50IDQsIGNlbnRyZSBwaXhlbHM6ICMwMDAwZmYgIzAwZmYwMCAjMDAwMGZmICNmZmZmMDAKQ29weShkc3QgMSwgc3JjIDMsIElMQ0ZfU1dBUCk6IDEKYWZ0ZXI6IGNvdW50IDQsIGNlbnRyZSBwaXhlbHM6ICNmZjAwMDAgI2ZmZmYwMCAjMDAwMGZmICMwMGZmMDAKQ29weShkc3QgMCwgc3JjIDAsIElMQ0ZfTU9WRSkgKHNhbWUgaW5kZXgpOiAxCkNvcHkoZHN0IDIsIHNyYyAyLCBJTENGX1NXQVApIChzYW1lIGluZGV4KTogMQphZnRlcjogY291bnQgNCwgY2VudHJlIHBpeGVsczogI2ZmMDAwMCAjZmZmZjAwICMwMDAwZmYgIzAwZmYwMApkc3QgNCAocGFzdCB0aGUgZW5kKTogcmVzdWx0IDAgZXJyPS0xCiAgbGlzdDogY291bnQgNCwgY2VudHJlIHBpeGVsczogI2ZmMDAwMCAjMDBmZjAwICMwMDAwZmYgI2ZmZmYwMApzcmMgNCAocGFzdCB0aGUgZW5kKTogcmVzdWx0IDAgZXJyPS0xCiAgbGlzdDogY291bnQgNCwgY2VudHJlIHBpeGVsczogI2ZmMDAwMCAjMDBmZjAwICMwMDAwZmYgI2ZmZmYwMApkc3QgLTE6IHJlc3VsdCAwIGVycj0tMQogIGxpc3Q6IGNvdW50IDQsIGNlbnRyZSBwaXhlbHM6ICNmZjAwMDAgIzAwZmYwMCAjMDAwMGZmICNmZmZmMDAKc3JjIC0xOiByZXN1bHQgMCBlcnI9LTEKICBsaXN0OiBjb3VudCA0LCBjZW50cmUgcGl4ZWxzOiAjZmYwMDAwICMwMGZmMDAgIzAwMDBmZiAjZmZmZjAwCmZsYWdzIDIgKHVuZGVmaW5lZCk6IHJlc3VsdCAwIGVycj0tMQogIGxpc3Q6IGNvdW50IDQsIGNlbnRyZSBwaXhlbHM6ICNmZjAwMDAgIzAwZmYwMCAjMDAwMGZmICNmZmZmMDAKZmxhZ3MgMHhGRkZGOiByZXN1bHQgMCBlcnI9LTEKICBsaXN0OiBjb3VudCA0LCBjZW50cmUgcGl4ZWxzOiAjZmYwMDAwICMwMGZmMDAgIzAwMDBmZiAjZmZmZjAwCnN3YXAgd2l0aCBkc3QgOTogcmVzdWx0IDAgZXJyPS0xCiAgbGlzdDogY291bnQgNCwgY2VudHJlIHBpeGVsczogI2ZmMDAwMCAjMDBmZjAwICMwMDAwZmYgI2ZmZmYwMApDb3B5IHdpdGggYSBOVUxMIGRlc3RpbmF0aW9uIGxpc3Q6IDAKQ29weSB3aXRoIGEgTlVMTCBzb3VyY2UgbGlzdDogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nCopy(dst 0, src 2, ILCF_MOVE): 1\nafter: count 4, centre pixels: #0000ff #00ff00 #0000ff #ffff00\nCopy(dst 1, src 3, ILCF_SWAP): 1\nafter: count 4, centre pixels: #ff0000 #ffff00 #0000ff #00ff00\nCopy(dst 0, src 0, ILCF_MOVE) (same index): 1\nCopy(dst 2, src 2, ILCF_SWAP) (same index): 1\nafter: count 4, centre pixels: #ff0000 #ffff00 #0000ff #00ff00\ndst 4 (past the end): result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nsrc 4 (past the end): result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\ndst -1: result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nsrc -1: result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nflags 2 (undefined): result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nflags 0xFFFF: result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nswap with dst 9: result 0 err=-1\n  list: count 4, centre pixels: #ff0000 #00ff00 #0000ff #ffff00\nCopy with a NULL destination list: 0\nCopy with a NULL source list: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

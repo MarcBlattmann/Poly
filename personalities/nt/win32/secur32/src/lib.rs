@@ -48,6 +48,18 @@ pub unsafe extern "system" fn GetUserNameExW(format: u32, buffer: *mut u16, size
             1
         }
         Err((e, need)) => {
+            // A buffer that is too short still receives the start of the text, ended by a NUL
+            // (observed on Windows: the buffer is not left untouched).
+            if !buffer.is_null() && capacity > 0 {
+                // SAFETY: the caller's buffer holds `capacity` characters.
+                unsafe {
+                    let keep = (capacity as usize - 1).min(name.encode_utf16().count());
+                    for (i, c) in name.encode_utf16().take(keep).enumerate() {
+                        buffer.add(i).write(c);
+                    }
+                    buffer.add(keep).write(0);
+                }
+            }
             // SAFETY: checked non-null.
             unsafe { size.write(need) };
             rt::set_error(e);

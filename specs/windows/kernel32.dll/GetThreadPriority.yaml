@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetThreadPriority.yaml
+id: windows/api/kernel32.dll/GetThreadPriority
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Thread and process priorities (the MSYS2 runtime reads both at start-up and sets its main thread's priority back to what it read): GetThreadPriority, SetThreadPriority, GetPriorityClass, SetPriorityClass with the defaults, the round trips, the values refused and the rights each call needs.
+interface:
+  signature: "int GetThreadPriority(HANDLE); BOOL SetThreadPriority(HANDLE, int); DWORD GetPriorityClass(HANDLE); BOOL SetPriorityClass(HANDLE, DWORD)"
+rules:
+  defaults: "a new thread: priority 0 (THREAD_PRIORITY_NORMAL); the process: 0x20 (NORMAL_PRIORITY_CLASS); NtQueryInformationThread class 0 shows Priority 8 and BasePriority 0."
+  round_trip: "SetThreadPriority with -2, -1, 0, 1, 2, -15 (IDLE) and 15 (TIME_CRITICAL) returns TRUE and GetThreadPriority returns the same value; the BasePriority field of the thread information is the same except -16 for IDLE and 16 for TIME_CRITICAL."
+  clamping: "SetThreadPriority(-16) returns TRUE and reads back -15; SetThreadPriority(16) returns TRUE and reads back 15; the values 3, -3, 14, -14 and 0x7fffffff return FALSE with ERROR_INVALID_PARAMETER (87) and leave the priority as it was."
+  bad_handles: "GetThreadPriority with NULL, INVALID_HANDLE_VALUE or the process pseudo-handle returns THREAD_PRIORITY_ERROR_RETURN (0x7fffffff) with ERROR_INVALID_HANDLE (6); SetThreadPriority(NULL): FALSE with 6; GetPriorityClass(NULL) and GetPriorityClass(thread pseudo-handle): 0 with 6."
+  rights: "GetThreadPriority needs THREAD_QUERY_INFORMATION or THREAD_QUERY_LIMITED_INFORMATION (the other masks: 0x7fffffff with ERROR_ACCESS_DENIED 5); SetThreadPriority needs THREAD_SET_INFORMATION or THREAD_SET_LIMITED_INFORMATION (the other masks: FALSE with 5); SYNCHRONIZE alone neither."
+  other_thread: "a worker's priority set through its own handle (-1) reads back -1."
+  priority_class: "SetPriorityClass with IDLE (0x40), BELOW_NORMAL (0x4000), ABOVE_NORMAL (0x8000), NORMAL (0x20) and HIGH (0x80) returns TRUE and GetPriorityClass returns it; the value 0 returns FALSE with 87 and leaves the class; the threads' priority and BasePriority stay 0 whatever the class; GetPriorityClass needs PROCESS_QUERY_LIMITED_INFORMATION (0x1000: works; SYNCHRONIZE alone: 0 with ERROR_ACCESS_DENIED), SetPriorityClass with only PROCESS_QUERY_LIMITED_INFORMATION: FALSE with 5."
+  boost: "GetThreadPriorityBoost on the current thread: TRUE with boosting enabled (disabled = FALSE)."
+errors:
+  bad_handle: "ERROR_INVALID_HANDLE (6), GetThreadPriority returns 0x7fffffff"
+  no_right: "ERROR_ACCESS_DENIED (5)"
+  bad_value: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "changes scheduling"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  REALTIME_PRIORITY_CLASS and the background-mode values (they depend on the caller's privileges), scheduling effects, other processes.

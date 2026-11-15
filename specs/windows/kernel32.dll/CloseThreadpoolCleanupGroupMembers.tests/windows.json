@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_cleanup_b",
+      "exe_sha256": "9f8d96333079ad2d434fc9c7fda6d1c5b2b4f8e2239986c791f8089523d5d708",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z3JvdXAgY2xvc2Ugd2l0aG91dCBjYW5jZWw6IGNhbGxiYWNrcyBkb25lIDQgY2FuY2VsIGNhbGxiYWNrcyAxIHdpdGggdGhlIGNsZWFudXAgY29udGV4dCAxCnRoZSBvYmplY3Qgb3V0c2lkZSB0aGUgZ3JvdXAgc3RpbGwgd29ya3MgYWZ0ZXIgdGhlIGdyb3VwIHdhcyBjbG9zZWQ6IGNhbGxiYWNrcyAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "group close without cancel: callbacks done 4 cancel callbacks 1 with the cleanup context 1\nthe object outside the group still works after the group was closed: callbacks 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 393
+    },
+    {
+      "name": "tp_cleanup_c",
+      "exe_sha256": "e7dc3f3ad2d2489e9155728d7134cd04bdf939aaaaa2a45381931ceb8761dcb9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z3JvdXAgY2xvc2Ugd2l0aCBjYW5jZWw6IGNhbGxiYWNrcyB0aGF0IHJhbiAxICh0aGUgcnVubmluZyBvbmUgZmluaXNoZWQ6IDEpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "group close with cancel: callbacks that ran 1 (the running one finished: 1)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 396
+    }
+  ]
+}

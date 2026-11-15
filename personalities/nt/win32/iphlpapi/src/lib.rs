@@ -19,11 +19,11 @@ use rt::Handle;
 
 const TRUE: i32 = 1;
 const FALSE: i32 = 0;
-/// `ERROR_NOT_FOUND`, `ERROR_NETWORK_UNREACHABLE` (`winerror.h`).
-const ERROR_NOT_FOUND: u32 = 1168;
+/// `ERROR_NETWORK_UNREACHABLE` (`winerror.h`).
 const ERROR_NETWORK_UNREACHABLE: u32 = 1231;
-/// `STATUS_CANCELLED` (`ntstatus.h`).
+/// `STATUS_CANCELLED`, `STATUS_PENDING` (`ntstatus.h`).
 const STATUS_CANCELLED: usize = 0xC000_0120;
+const STATUS_PENDING: usize = 0x103;
 /// `OVERLAPPED` (`minwinbase.h`): `hEvent` is at 24.
 const OVERLAPPED_INTERNAL: usize = 0;
 const OVERLAPPED_EVENT: usize = 24;
@@ -45,7 +45,9 @@ pub unsafe extern "system" fn GetAdaptersAddresses(
     addresses: *mut u8,
     size: *mut u32,
 ) -> u32 {
-    if size.is_null() || !reserved.is_null() {
+    // A non-NULL `reserved` is not refused (observed on Windows).
+    let _ = reserved;
+    if size.is_null() {
         return ip::ERROR_INVALID_PARAMETER;
     }
     // SAFETY: checked non-null.
@@ -85,6 +87,29 @@ pub unsafe extern "system" fn GetAdaptersInfo(info: *mut u8, size: *mut u32) -> 
                 // SAFETY: checked non-null.
                 unsafe { size.write(need) };
             }
+            e
+        }
+    }
+}
+
+/// `GetNetworkParams(pFixedInfo, pOutBufLen)` (Learn): the host name and
+/// DNS servers; a NULL buffer is a short one.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetNetworkParams(info: *mut u8, size: *mut u32) -> u32 {
+    if size.is_null() {
+        return ip::ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: checked non-null.
+    let capacity = if info.is_null() { 0 } else { unsafe { size.read() } };
+    match oldapi::network_params_call(&rt::host_name(), &rt::interfaces(), info as u64, capacity) {
+        Ok(bytes) => {
+            // SAFETY: `capacity` covered `bytes`.
+            unsafe { copy_out(&bytes, info) };
+            ip::NO_ERROR
+        }
+        Err((e, need)) => {
+            // SAFETY: checked non-null.
+            unsafe { size.write(need) };
             e
         }
     }
@@ -290,6 +315,8 @@ pub unsafe extern "system" fn NotifyAddrChange(handle: *mut Handle, overlapped: 
     }
     // SAFETY: the caller's OVERLAPPED.
     let event = unsafe { core::ptr::read_unaligned(overlapped.add(OVERLAPPED_EVENT).cast::<Handle>()) };
+    // SAFETY: the caller's OVERLAPPED: the request is pending (`STATUS_PENDING` in `Internal`).
+    unsafe { core::ptr::write_unaligned(overlapped.add(OVERLAPPED_INTERNAL).cast::<usize>(), STATUS_PENDING) };
     if !handle.is_null() {
         // SAFETY: the caller's variable. Windows hands back a handle for the request; the
         // overlapped's event (or 1) identifies it here.
@@ -302,8 +329,8 @@ pub unsafe extern "system" fn NotifyAddrChange(handle: *mut Handle, overlapped: 
 /// `CancelIPChangeNotify(OVERLAPPED*)`: the request is completed as cancelled and its event set.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CancelIPChangeNotify(overlapped: *mut u8) -> i32 {
+    // A NULL, unknown or already cancelled OVERLAPPED: FALSE, the last error is not set (observed on Windows).
     if overlapped.is_null() {
-        rt::set_error(ip::ERROR_INVALID_PARAMETER);
         return FALSE;
     }
     let found = with_pending(|l| match l.iter().position(|&p| p == overlapped as usize) {
@@ -314,7 +341,6 @@ pub unsafe extern "system" fn CancelIPChangeNotify(overlapped: *mut u8) -> i32 {
         None => false,
     });
     if !found {
-        rt::set_error(ERROR_NOT_FOUND);
         return FALSE;
     }
     // SAFETY: the caller's OVERLAPPED, still valid while the request was pending (Learn).

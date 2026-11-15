@@ -1,10 +1,12 @@
 //! The memory, section and process services: arguments in, the model of
 //! [`crate::vm`] and [`crate::section`] asked, results out.
 //!
-//! Every memory service names a process: the caller's own (`NtCurrentProcess()`, or a handle
-//! to its own process object with the right access) or, for allocating, freeing, protecting,
-//! querying, reading and writing, another process (ADR 0196). A null handle is
-//! `STATUS_INVALID_HANDLE`.
+//! Every memory service names a process: `NtCurrentProcess()`, or a handle
+//! to a process object with the right access, the caller's own or another
+//! one (ADR 0169 for views, ADR 0194 for allocation, protection, queries and
+//! `NtReadVirtualMemory` / `NtWriteVirtualMemory`, which `ReadProcessMemory`
+//! and `WriteProcessMemory` are; ADR 0196 for the image-view exemption of
+//! prohibit-dynamic-code). A null handle is `STATUS_INVALID_HANDLE`.
 
 use crate::abi;
 use crate::consts::*;
@@ -41,15 +43,21 @@ fn target_of(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, acces
     Ok(Target::Other(poly_ntobj::ProcessId(sys.objects.cookie(id).ok_or(STATUS_INVALID_HANDLE)? as u32)))
 }
 
-fn own_process(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, access: u32) -> Result<()> {
-    if h == Handle::CURRENT_PROCESS {
-        return Ok(());
+/// Run `f` on the state and address space of the process `h` names (with
+/// `access`): the caller's own, or another one's. A process that has gone
+/// is `STATUS_PROCESS_IS_TERMINATING`.
+fn on_process<K: NtKernel, R>(
+    k: &mut K,
+    h: u64,
+    access: u32,
+    f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn crate::backend::Backend) -> Result<R>,
+) -> Result<R> {
+    let caller = k.caller();
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(h), access))?;
+    match target {
+        Target::Own => k.with_state(f),
+        Target::Other(pid) => k.with_process(pid, f).ok_or(STATUS_PROCESS_IS_TERMINATING)?,
     }
-    if h == Handle::NULL {
-        return Err(STATUS_INVALID_HANDLE);
-    }
-    let id = sys.objects.object_by_handle(caller, h, access, Some(ObjectType::Process))?;
-    if proc.object == Some(id) { Ok(()) } else { Err(STATUS_NOT_IMPLEMENTED) }
 }
 
 /// `STATUS_DYNAMIC_CODE_BLOCKED` (`ntstatus.h`): a process with the
@@ -59,23 +67,6 @@ const STATUS_DYNAMIC_CODE_BLOCKED: NtStatus = NtStatus(0xC000_0604);
 /// Whether a `PAGE_*` protection allows execution.
 fn executable(protect: u32) -> bool {
     protect & 0xF0 != 0
-}
-
-/// Run `f` on the address space `process` names with `access`: the caller's own, or another
-/// process's (`VirtualAllocEx` and its relatives, ADR 0196; the sandbox's broker prepares the
-/// memory of a target this way).
-fn on_process<K: NtKernel, R>(
-    k: &mut K,
-    process: u64,
-    access: u32,
-    f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn crate::backend::Backend) -> Result<R>,
-) -> Result<R> {
-    let caller = k.caller();
-    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(process), access))?;
-    match target {
-        Target::Own => k.with_state(f),
-        Target::Other(pid) => k.with_process(pid, f).ok_or(STATUS_PROCESS_IS_TERMINATING)?,
-    }
 }
 
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
@@ -137,77 +128,6 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     Ok(STATUS_SUCCESS)
 }
 
-/// `STATUS_PARTIAL_COPY` (`ntstatus.h`).
-const STATUS_PARTIAL_COPY: NtStatus = NtStatus(0x8000_000D);
-
-/// The longest piece `NtReadVirtualMemory` / `NtWriteVirtualMemory` copy at once.
-const MAX_COPY: u64 = 16 << 20;
-
-/// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
-/// NumberOfBytesRead*)` (`ReadProcessMemory`): the memory of a process (needs
-/// `PROCESS_VM_READ`) into the caller's buffer. A range that is not all readable is
-/// `STATUS_PARTIAL_COPY` with the bytes done before the first page that is not.
-pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [process, base, buffer, size, done_ptr] = abi::args::<K, 5>(k, regs)?;
-    if size > MAX_COPY {
-        return Err(STATUS_INVALID_PARAMETER);
-    }
-    let (data, status) = on_process(k, process, PROCESS_VM_READ, |_, proc, b| {
-        let mut got: Vec<u8> = Vec::new();
-        let mut at = base;
-        let end = base.checked_add(size).ok_or(STATUS_ACCESS_VIOLATION)?;
-        while at < end {
-            let piece = (crate::vm::PAGE_SIZE - at % crate::vm::PAGE_SIZE).min(end - at);
-            let readable =
-                proc.vm.query(at).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0);
-            match readable.then(|| b.read(at, piece)) {
-                Some(Ok(bytes)) => got.extend_from_slice(&bytes),
-                _ => return Ok((got, STATUS_PARTIAL_COPY)),
-            }
-            at += piece;
-        }
-        Ok((got, STATUS_SUCCESS))
-    })?;
-    abi::write(k, buffer, &data)?;
-    if done_ptr != 0 {
-        abi::write_u64(k, done_ptr, data.len() as u64)?;
-    }
-    if status == STATUS_SUCCESS { Ok(STATUS_SUCCESS) } else { Err(status) }
-}
-
-/// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
-/// NumberOfBytesWritten*)` (`WriteProcessMemory`): the caller's bytes into a process's memory
-/// (needs `PROCESS_VM_WRITE`). Pages that are committed are written whatever their protection
-/// says (Learn: the function changes it for the copy and puts it back); the first one that is
-/// not ends the copy with `STATUS_PARTIAL_COPY`.
-pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [process, base, buffer, size, done_ptr] = abi::args::<K, 5>(k, regs)?;
-    if size > MAX_COPY {
-        return Err(STATUS_INVALID_PARAMETER);
-    }
-    let mut data = alloc::vec![0u8; size as usize];
-    abi::read(k, buffer, &mut data)?;
-    let (done, status) = on_process(k, process, PROCESS_VM_WRITE, |_, proc, b| {
-        let mut at = base;
-        let mut done = 0usize;
-        let end = base.checked_add(size).ok_or(STATUS_ACCESS_VIOLATION)?;
-        while at < end {
-            let piece = (crate::vm::PAGE_SIZE - at % crate::vm::PAGE_SIZE).min(end - at);
-            let committed = proc.vm.query(at).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & PAGE_NOACCESS == 0);
-            if !committed || b.write_forced(at, &data[done..done + piece as usize]).is_err() {
-                return Ok((done, STATUS_PARTIAL_COPY));
-            }
-            at += piece;
-            done += piece as usize;
-        }
-        Ok((done, STATUS_SUCCESS))
-    })?;
-    if done_ptr != 0 {
-        abi::write_u64(k, done_ptr, done as u64)?;
-    }
-    if status == STATUS_SUCCESS { Ok(STATUS_SUCCESS) } else { Err(status) }
-}
-
 /// `NtQueryVirtualMemory(MemoryBasicInformation)`; other classes are
 /// `STATUS_INVALID_INFO_CLASS`, a buffer smaller than
 /// `MEMORY_BASIC_INFORMATION` `STATUS_INFO_LENGTH_MISMATCH` (to be
@@ -229,6 +149,96 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;
     }
     Ok(STATUS_SUCCESS)
+}
+
+/// `STATUS_PARTIAL_COPY` (`ntstatus.h`): `ReadProcessMemory` / `WriteProcessMemory`'s
+/// `ERROR_PARTIAL_COPY`.
+pub const STATUS_PARTIAL_COPY: NtStatus = NtStatus(0x8000_000D);
+/// How much one step of a cross-process copy holds in the kernel.
+const COPY_CHUNK: usize = 0x1_0000;
+
+/// Copy page by page with `step` (a read from or a write to the target process) until a page
+/// fails: the bytes done.
+fn page_steps(at: u64, n: usize, mut step: impl FnMut(u64, core::ops::Range<usize>) -> bool) -> usize {
+    let mut done = 0usize;
+    while done < n {
+        let here = at.wrapping_add(done as u64);
+        let page_end = (here | (crate::vm::PAGE_SIZE - 1)).wrapping_add(1);
+        let m = (page_end.wrapping_sub(here) as usize).min(n - done);
+        if !step(here, done..done + m) {
+            break;
+        }
+        done += m;
+    }
+    done
+}
+
+/// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
+/// NumberOfBytesRead*)`, `ReadProcessMemory` (Learn: the handle needs `PROCESS_VM_READ`; "the
+/// entire area to be read must be accessible": a part that is not ends the copy, which is
+/// `STATUS_PARTIAL_COPY` with the bytes done so far).
+pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buf, len, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    let mut done = 0usize;
+    let mut status = STATUS_SUCCESS;
+    let mut chunk = Vec::new();
+    while done < len as usize {
+        let n = (len as usize - done).min(COPY_CHUNK);
+        chunk.resize(n, 0);
+        let at = base.wrapping_add(done as u64);
+        let got = on_process(k, process, PROCESS_VM_READ, |_, proc, b| {
+            Ok(page_steps(at, n, |addr, r| {
+                proc.vm.query(addr).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0)
+                    && b.read(addr, &mut chunk[r]).is_ok()
+            }))
+        })?;
+        if got > 0 {
+            abi::write(k, buf + done as u64, &chunk[..got])?;
+        }
+        done += got;
+        if got < n {
+            status = STATUS_PARTIAL_COPY;
+            break;
+        }
+    }
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, done as u64)?;
+    }
+    Ok(status)
+}
+
+/// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
+/// NumberOfBytesWritten*)`, `WriteProcessMemory` (Learn: the handle needs `PROCESS_VM_WRITE` and
+/// `PROCESS_VM_OPERATION`; a part that cannot be written ends the copy, `STATUS_PARTIAL_COPY`).
+pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buf, len, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    let mut done = 0usize;
+    let mut status = STATUS_SUCCESS;
+    let mut chunk = Vec::new();
+    while done < len as usize {
+        let n = (len as usize - done).min(COPY_CHUNK);
+        chunk.resize(n, 0);
+        abi::read(k, buf + done as u64, &mut chunk)?;
+        let at = base.wrapping_add(done as u64);
+        // Pages that are committed are written whatever their protection says (Learn: the
+        // function changes it for the copy and puts it back; the broker patches `ntdll`'s
+        // execute-only stubs this way), so the write is forced.
+        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, proc, b| {
+            Ok(page_steps(at, n, |addr, r| {
+                proc.vm.query(addr).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & PAGE_NOACCESS == 0)
+                    && b.write_forced(addr, &chunk[r]).is_ok()
+            }))
+        })?;
+        done += put;
+        if put < n {
+            status = STATUS_PARTIAL_COPY;
+            break;
+        }
+    }
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, done as u64)?;
+    }
+    Ok(status)
 }
 
 /// `MemoryMappedFilenameInformation` (`MEMORY_INFORMATION_CLASS`, `ntddk.h`): the name of the file
@@ -469,9 +479,7 @@ pub fn flush<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, iosb] = abi::args::<K, 4>(k, regs)?;
     let addr = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, len) = k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, len) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, _| {
         let a = proc.vm.allocation(addr).filter(|a| a.view().is_some()).ok_or(STATUS_NOT_MAPPED_VIEW)?;
         let start = addr & !(crate::vm::PAGE_SIZE - 1);
         let end = if size == 0 {

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_wait",
+      "exe_sha256": "a57e8c832fda678f9f2303ce3be1d3987847dace0238367fb3cfdf198a82ce42",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlVGhyZWFkcG9vbFdhaXQgcmV0dXJuZWQgYW4gb2JqZWN0OiAxCiAgbWFudWFsLXJlc2V0IGV2ZW50IHN0aWxsIHNpZ25hbGxlZCBhbmQgdGhlIHdhaXQgaXMgb25lIHNob3Q6IGNhbGxiYWNrcyAxCnNldCB3aXRoIGEgMTAwIG1zIHRpbWVvdXQ6IHJlc3VsdCAyNTgKc2lnbmFsbGVkIGJlZm9yZSBhIDUgcyB0aW1lb3V0OiByZXN1bHQgMApzZXQsIHRoZW4gc2V0IHdpdGggYSBOVUxMIGhhbmRsZSwgdGhlbiBzaWduYWxsZWQ6IGNhbGxiYWNrcyAwCmNhbGxiYWNrIHJlLWFybXMgaXRzZWxmIHR3aWNlIHdpdGggdGhlIGV2ZW50IGxlZnQgc2lnbmFsbGVkOiBjYWxsYmFja3MgMwogIGNhbmNlbGxpbmcgYSBzZXQgd2FpdDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateThreadpoolWait returned an object: 1\n  manual-reset event still signalled and the wait is one shot: callbacks 1\nset with a 100 ms timeout: result 258\nsignalled before a 5 s timeout: result 0\nset, then set with a NULL handle, then signalled: callbacks 0\ncallback re-arms itself twice with the event left signalled: callbacks 3\n  cancelling a set wait: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1962
+    },
+    {
+      "name": "tp_wait_c",
+      "exe_sha256": "903e486d612582d2db841c3bf98e93ba53d62f86c18b48ca40ae9a69d33332d2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBhZnRlciBTZXRFdmVudDogY2FsbGJhY2sgcmVzdWx0IDAgY29udGV4dCBvayAxCnNldCBvbiBhbiBhbHJlYWR5IHNpZ25hbGxlZCBldmVudDogcmVzdWx0IDAKICBjYWxsYmFja3MgMQogIHRoZSBldmVudCB3YXMgY29uc3VtZWQ6IDI1OAogIEIgc2lnbmFsbGVkOiByZXN1bHQgMAogIG9uIGEgc2V0IHdhaXQ6IDEKd2FpdCBvbiBhIHRocmVhZCB0aGF0IGVuZHM6IHJlc3VsdCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  after SetEvent: callback result 0 context ok 1\nset on an already signalled event: result 0\n  callbacks 1\n  the event was consumed: 258\n  B signalled: result 0\n  on a set wait: 1\nwait on a thread that ends: result 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1968
+    }
+  ]
+}

@@ -183,14 +183,12 @@ impl Backend for Mem {
         Ok(())
     }
 
-    fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
-        self.write_bytes(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        Mem::read(self, addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
-    fn read(&mut self, addr: u64, len: u64) -> Result<Vec<u8>, NtStatus> {
-        let mut buf = vec![0u8; len as usize];
-        Mem::read(self, addr, &mut buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)?;
-        Ok(buf)
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
+        self.write_bytes(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
     fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
@@ -410,6 +408,15 @@ impl NtKernel for Fake {
                 Err(e)
             }
         }
+    }
+
+    fn with_process<R>(
+        &mut self,
+        pid: ProcessId,
+        f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        let (child, mem) = self.children.iter_mut().find(|(p, _)| p.pid == pid)?;
+        Some(f(&mut self.sys, child, mem))
     }
 
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {

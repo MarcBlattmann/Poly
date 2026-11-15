@@ -165,7 +165,12 @@ pub enum Device {
     Afd,
     /// `\Device\NamedPipe`, reached as `\??\pipe` ([`npfs`], ADR 0169).
     NamedPipe,
+    /// `\Device\Null`, reached as `\??\NUL` (the reserved name `NUL`).
+    Null,
 }
+
+/// The null device's name in the object namespace.
+pub const NULL_DEVICE: &str = "\\Device\\Null";
 
 /// A file object's target on a volume.
 #[derive(Debug)]
@@ -203,6 +208,9 @@ pub enum Target {
     /// The named pipe device itself (`\Device\NamedPipe` without a final
     /// backslash): the same uses as the root, but it has no file name.
     PipeDevice,
+    /// The null device (`NUL`): what is written is dropped, a read is at the
+    /// end of the file.
+    Null,
 }
 
 /// The kernel's data for one file object.
@@ -515,6 +523,18 @@ impl IoState {
         )?;
         self.devices.insert(cookie, Device::NamedPipe);
         add_named(om, &kernel, &wide("\\??\\pipe"), NewObject::SymbolicLink { target: &np })?;
+        // The null device, which the reserved name `NUL` (Learn: "Naming Files, Paths, and
+        // Namespaces") reaches as `\\.\NUL`, i.e. `\??\NUL`.
+        let cookie = self.cookie();
+        let null = wide(NULL_DEVICE);
+        add_named(
+            om,
+            &kernel,
+            &null,
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
+        self.devices.insert(cookie, Device::Null);
+        add_named(om, &kernel, &wide("\\??\\NUL"), NewObject::SymbolicLink { target: &null })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
@@ -619,14 +639,21 @@ impl IoState {
         // (Learn: "ReadFile": "the write handle has been closed"), the others
         // are cancelled.
         let status = if self.np_end(cookie).is_some() { STATUS_PIPE_BROKEN } else { STATUS_CANCELLED };
-        self.cancel_where_status(|irp| irp.file == cookie, self.np_end(cookie).is_none(), status);
+        if self.files.get(&cookie).is_some_and(|r| matches!(r.target, Target::Socket(_))) {
+            // A receive or send pending on a socket that is closed ends as an aborted connection
+            // (Winsock: `WSAECONNABORTED`), a pending accept or connect is cancelled; the newest
+            // request first, as Windows completes them.
+            self.cancel_socket_requests(cookie);
+        } else {
+            self.cancel_where_status(|irp| irp.file == cookie, self.np_end(cookie).is_none(), status);
+        }
         let rec = self.files.remove(&cookie).expect("checked");
         if let Some(port) = rec.port {
             self.released.push(port.object);
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot | Target::PipeDevice => {}
+            Target::PipeRoot | Target::PipeDevice | Target::Null => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),

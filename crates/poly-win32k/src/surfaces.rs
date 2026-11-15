@@ -85,6 +85,17 @@ impl Buffer {
         true
     }
 
+    /// Row `y` from column `x` on: as much of `src` (4 bytes a pixel) as fits.
+    fn write_span(&mut self, x: u32, y: u32, src: &[u8]) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        let n = (src.len() / 4).min((self.width - x) as usize) * 4;
+        let band = &mut self.bands[(y / self.rows_per_band) as usize];
+        let at = ((y % self.rows_per_band) as usize * self.width as usize + x as usize) * 4;
+        band[at..at + n].copy_from_slice(&src[..n]);
+    }
+
     /// The pixel (`B, G, R, x`) at (`x`, `y`), inside the buffer.
     fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
@@ -108,6 +119,18 @@ impl Buffer {
     }
 }
 
+/// Where a child window's picture goes ([`Surfaces::child_area`]): the top-level window, the
+/// child's client area in its surface, and the surface's size.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChildArea {
+    pub top: u32,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub surface: (u32, u32),
+}
+
 /// The largest content `UpdateLayeredWindow` may leave here (bytes).
 pub const MAX_CONTENT: usize = 1 << 20;
 
@@ -128,6 +151,17 @@ impl Content {
         let at = (y as usize * self.width as usize + x as usize) * 4;
         self.bytes.get(at..at + 4).map(|p| [p[0], p[1], p[2], p[3]])
     }
+}
+
+/// Whether Poly frames a top-level window (ADR 0183 addendum "Windows apps"): it has a
+/// caption (`WS_CAPTION`), and its client area, as its `WM_NCCALCSIZE` answer placed it, leaves
+/// room for one above it. A window whose client area starts less than a caption's height
+/// (`SM_CYCAPTION`) below its top edge draws its own title bar in its client area (Chrome's
+/// `Chrome_WidgetWin_1`: `WS_OVERLAPPEDWINDOW`, client area from the window's top, keeping the
+/// 8-pixel side and bottom borders, `s3-windows.md`); Poly's frame around it would be a second
+/// one. Its surface is its client area as for every window.
+pub fn poly_frames(style: u32, window: crate::frame::Rect, client: crate::frame::Rect) -> bool {
+    style & WS_CAPTION == WS_CAPTION && client.top - window.top >= crate::metrics::CAPTION
 }
 
 /// The surfaces of top-level windows and their buffers.
@@ -184,11 +218,24 @@ impl Surfaces {
             }
             let client = i.client;
             let shown = i.visible && !i.minimized && client.right > client.left && client.bottom > client.top;
+            let framed = poly_frames(i.style, i.window, client);
+            // The window changed its mind about its caption (a WM_NCCALCSIZE answer after
+            // SWP_FRAMECHANGED): its surface is made again with the new frame.
+            if shown
+                && let Some(&s) = self.windows.get(&h)
+                && i.style & WS_CAPTION == WS_CAPTION
+                && desktop.surface(s).is_some_and(|x| x.framed != framed)
+            {
+                self.windows.remove(&h);
+                desktop.destroy(s);
+            }
             let s = match self.windows.get(&h) {
                 Some(&s) => s,
                 None if shown => {
-                    let framed = i.style & WS_CAPTION == WS_CAPTION;
-                    let kind = if framed { SurfaceKind::TopLevel } else { SurfaceKind::Popup };
+                    // A captioned window that draws its own caption is still an application
+                    // window (a top level of the desktop), only without Poly's frame.
+                    let kind =
+                        if i.style & WS_CAPTION == WS_CAPTION { SurfaceKind::TopLevel } else { SurfaceKind::Popup };
                     let owner = self.windows.get(&i.owner).copied().unwrap_or(0);
                     let s = desktop.create(kind, owner, framed);
                     desktop.set_process(s, i.pid);
@@ -342,6 +389,73 @@ impl Surfaces {
         self.buffers.contains_key(&b.id).then_some((b.width, b.height))
     }
 
+    /// Where child window `hwnd`'s picture goes: its top-level window's surface (Windows: a child
+    /// draws into its top-level window), at the child's client area, which may lie partly outside
+    /// it. `None` for a window that is not a child of a window with a surface. Its DCs draw into a
+    /// bitmap of the child's client size (`size` of a child), which its process commits here, also
+    /// when the top-level window is another process's (Chrome's GPU process draws into a child of
+    /// the browser's window).
+    pub fn child_area(&self, wm: &Wm, desktop: &Desktop, hwnd: u32) -> Option<ChildArea> {
+        let i = wm.info(hwnd)?;
+        if i.style & crate::metrics::WS_CHILD == 0 {
+            return None;
+        }
+        let mut top = i.parent;
+        let mut t = wm.info(top)?;
+        while t.style & crate::metrics::WS_CHILD != 0 {
+            top = t.parent;
+            t = wm.info(top)?;
+        }
+        let (sw, sh) = self.size(desktop, top)?;
+        Some(ChildArea {
+            top,
+            x: i.client.left - t.client.left,
+            y: i.client.top - t.client.top,
+            width: i.client.width().max(0) as u32,
+            height: i.client.height().max(0) as u32,
+            surface: (sw, sh),
+        })
+    }
+
+    /// Rows `row ..` of a child's picture (`area.width` pixels of 4 bytes each, row after row)
+    /// into its top-level window's surface, clipped to it. False when the surface is gone or
+    /// changed size.
+    pub fn write_child_rows(&mut self, desktop: &Desktop, area: &ChildArea, row: u32, pixels: &[u8]) -> bool {
+        let Some(s) = self.surface(area.top) else { return false };
+        let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
+        let Some(b) = self.buffers.get_mut(&info.id) else { return false };
+        if (b.width, b.height) != area.surface || area.width == 0 {
+            return false;
+        }
+        let stride = area.width as usize * 4;
+        for (i, src) in pixels.chunks(stride).enumerate() {
+            let y = area.y + row as i32 + i as i32;
+            if y < 0 {
+                continue;
+            }
+            let (x, src) = if area.x < 0 {
+                let skip = (area.x.unsigned_abs() as usize * 4).min(src.len());
+                (0, &src[skip..])
+            } else {
+                (area.x as u32, src)
+            };
+            b.write_span(x, y as u32, src);
+        }
+        true
+    }
+
+    /// The child's rows are written: its area of the top-level surface is damaged.
+    pub fn child_committed(&mut self, desktop: &mut Desktop, area: &ChildArea) -> bool {
+        let Some(s) = self.surface(area.top) else { return false };
+        let (sw, sh) = (area.surface.0 as i32, area.surface.1 as i32);
+        let (l, t) = (area.x.clamp(0, sw), area.y.clamp(0, sh));
+        let (r, b) = ((area.x + area.width as i32).clamp(0, sw), (area.y + area.height as i32).clamp(0, sh));
+        if r > l && b > t {
+            desktop.damage(s, l as u32, t as u32, (r - l) as u32, (b - t) as u32);
+        }
+        true
+    }
+
     /// The app drew window `hwnd`'s surface: `pixels` are `width` x
     /// `height`, 4 bytes each, row after row. False when the size is not
     /// the buffer's (the window was resized since; the app asks again).
@@ -488,6 +602,47 @@ mod tests {
     const BLUE: u32 = 0x00FF_0000;
     const RED: u32 = 0x0000_00FF;
     const GREEN: u32 = 0x0000_FF00;
+
+    /// A child draws into its top-level window's surface where it is, clipped to it (Chrome's
+    /// GPU process presents into a child of the browser's window).
+    #[test]
+    fn a_child_window_draws_into_its_top_level_surface() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let top = popup(&mut wm, &mut d, &mut s, 100, 100, 0, BLUE);
+        let child = |wm: &mut Wm, x: i32, y: i32, w: i32, h: i32| {
+            let spec = CreateSpec {
+                class: ClassRef::Name { name: "Pop".encode_utf16().collect() },
+                style: 0x5000_0000,
+                parent: u64::from(top),
+                ..CreateSpec::default()
+            };
+            let Reply::Created { created } = call(wm, Request::CreateWindow { spec }) else { panic!() };
+            let r = Some(Rect::new(x, y, x + w, y + h));
+            call(wm, Request::SetRects { hwnd: created.hwnd, window_rel: r, client_rel: r });
+            created.hwnd
+        };
+        let c = child(&mut wm, 10, 5, 20, 10);
+        let area = s.child_area(&wm, &d, c).expect("a child of a window with a surface");
+        assert_eq!((area.top, area.x, area.y, area.width, area.height), (top, 10, 5, 20, 10));
+        let red: Vec<u8> = (0..20 * 10).flat_map(|_| [0, 0, 0xFF, 0xFF]).collect();
+        assert!(s.write_child_rows(&d, &area, 0, &red));
+        assert!(s.child_committed(&mut d, &area));
+        assert_eq!(s.screen_pixel(&wm, &d, 110, 105), RED);
+        assert_eq!(s.screen_pixel(&wm, &d, 129, 114), RED);
+        assert_eq!(s.screen_pixel(&wm, &d, 109, 105), BLUE);
+        assert_eq!(s.screen_pixel(&wm, &d, 130, 105), BLUE);
+        // Partly outside: only what is inside the 40x30 surface is written.
+        let c2 = child(&mut wm, 30, 25, 20, 10);
+        let a2 = s.child_area(&wm, &d, c2).unwrap();
+        let green: Vec<u8> = (0..20 * 10).flat_map(|_| [0, 0xFF, 0, 0xFF]).collect();
+        assert!(s.write_child_rows(&d, &a2, 0, &green));
+        assert_eq!(s.screen_pixel(&wm, &d, 139, 129), GREEN);
+        // A top-level window is no child.
+        assert_eq!(s.child_area(&wm, &d, top), None);
+    }
 
     /// SetWindowRgn.yaml `shape_hit_test`, `window_coordinates`, `shapes`,
     /// `removal`: only the part of a window inside its region is on the
@@ -642,6 +797,55 @@ mod tests {
         s.sync(&wm, &mut d);
         assert_eq!(s.surface(h), None);
         assert_eq!(s.size(&d, h), None);
+    }
+
+    #[test]
+    fn a_window_that_draws_its_own_caption_gets_no_poly_frame() {
+        // The decision alone: Chrome's 900x500 window at 40,40 with its client area from the
+        // window's top (884x492, s3-windows.md), maximized (client 8 px below the top), and a
+        // plain captioned window (8 px border + 23 px caption).
+        let ovl = 0x16CF_0000;
+        assert!(!poly_frames(ovl, Rect::new(40, 40, 940, 540), Rect::new(48, 40, 932, 532)));
+        assert!(!poly_frames(ovl, Rect::new(-8, -8, 1288, 808), Rect::new(0, 0, 1280, 800)));
+        assert!(poly_frames(ovl, Rect::new(100, 50, 400, 250), Rect::new(108, 81, 392, 242)));
+        // No caption: never framed (a popup).
+        assert!(!poly_frames(0x9400_0000, Rect::new(0, 0, 10, 10), Rect::new(0, 0, 10, 10)));
+
+        // Through the surfaces: the window is a top level without Poly's frame, and gets it
+        // when a frame change gives it a caption area again.
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        records(&mut d);
+        let h = window(&mut wm, true);
+        let rel = |l, t, r, b| Some(Rect::new(l, t, r, b));
+        call(
+            &mut wm,
+            Request::SetRects { hwnd: h, window_rel: rel(100, 50, 400, 250), client_rel: rel(108, 50, 392, 242) },
+        );
+        s.sync(&wm, &mut d);
+        let id = s.surface(h).unwrap();
+        let r = records(&mut d);
+        assert!(matches!(
+            r[0],
+            ToCompositor::Create { surface, kind: SurfaceKind::TopLevel, framed: false, .. } if surface == id
+        ));
+        s.sync(&wm, &mut d);
+        assert!(records(&mut d).is_empty());
+        call(
+            &mut wm,
+            Request::SetRects { hwnd: h, window_rel: rel(100, 50, 400, 250), client_rel: rel(108, 81, 392, 242) },
+        );
+        s.sync(&wm, &mut d);
+        let again = s.surface(h).unwrap();
+        assert_ne!(again, id);
+        let r = records(&mut d);
+        assert!(r.contains(&ToCompositor::Destroy { surface: id }));
+        assert!(r.iter().any(|x| matches!(
+            x,
+            ToCompositor::Create { surface, kind: SurfaceKind::TopLevel, framed: true, .. } if *surface == again
+        )));
     }
 
     #[test]

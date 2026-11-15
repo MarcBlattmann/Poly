@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_instance",
+      "exe_sha256": "d428cd68c37fd5c627e6cf3927b28da533071992d2acc6eeb799f92763441e48",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q2FsbGJhY2tNYXlSdW5Mb25nIG9uIHRoZSBkZWZhdWx0IHBvb2w6IDEKUmVsZWFzZVNlbWFwaG9yZVdoZW5DYWxsYmFja1JldHVybnMoMik6IGNvdW50IGluc2lkZSB0aGUgY2FsbGJhY2sgd2FzIHplcm86IDEgdGhyZWUgemVyby13YWl0cyBhZnRlcndhcmRzOiAwIDAgMjU4CiAgYWZ0ZXIgaXQgcmV0dXJuZWQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CallbackMayRunLong on the default pool: 1\nReleaseSemaphoreWhenCallbackReturns(2): count inside the callback was zero: 1 three zero-waits afterwards: 0 0 258\n  after it returned: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 930
+    },
+    {
+      "name": "tp_instance_c",
+      "exe_sha256": "fca698374c6920e60dd39f8cd5b3b96ef7d7429939ec5c2ac6e1c31d26c6fd7e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBzZWVuIGZyb20gaW5zaWRlIHRoZSBjYWxsYmFjazogMjU4IGFmdGVyIHRoZSBjYWxsYmFjayByZXR1cm5lZDogMApMZWF2ZUNyaXRpY2FsU2VjdGlvbldoZW5DYWxsYmFja1JldHVybnM6IGFub3RoZXIgdGhyZWFkIGVudGVycyBiZWZvcmUgdGhlIGNhbGxiYWNrIHJldHVybmVkOiAwClRyeVN1Ym1pdFRocmVhZHBvb2xDYWxsYmFjazogMSByYW46IDEgY29udGV4dCAweDEzNTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  seen from inside the callback: 258 after the callback returned: 0\nLeaveCriticalSectionWhenCallbackReturns: another thread enters before the callback returned: 0\nTrySubmitThreadpoolCallback: 1 ran: 1 context 0x1357\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 914
+    }
+  ]
+}

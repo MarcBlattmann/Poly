@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "gwda_basic",
+      "exe_sha256": "9cf56a75514614886c584ebe1eb1d64151644823667791c88d2f19deca7cf92b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBuZXcgd2luZG93OiByZXR1cm5zIDEsIGFmZmluaXR5IDAsIGxhc3QgZXJyb3IgbGVmdCBhbG9uZSB0cnVlCmFza2VkIGFnYWluOiByZXR1cm5zIDEsIGFmZmluaXR5IDAKU2V0IFdEQV9NT05JVE9SOiByZXR1cm5zIDEsIEdldCByZXR1cm5zIDEgd2l0aCAweDEsIGxhc3QgZXJyb3IgbGVmdCBhbG9uZSB0cnVlClNldCBXREFfRVhDTFVERUZST01DQVBUVVJFOiByZXR1cm5zIDEsIEdldCByZXR1cm5zIDEgd2l0aCAweDExLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQpTZXQgV0RBX05PTkU6IHJldHVybnMgMSwgR2V0IHJldHVybnMgMSB3aXRoIDB4MCwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKU2V0IDI6IHJldHVybnMgMCwgbGFzdCBlcnJvciA4NywgR2V0IHRoZW4gZ2l2ZXMgMHgwClNldCAweDExIGFnYWluOiByZXR1cm5zIDEsIGxhc3QgZXJyb3IgMCwgR2V0IHRoZW4gZ2l2ZXMgMHgxMQpjaGlsZCB3aW5kb3c6IEdldCByZXR1cm5zIDAsIGFmZmluaXR5IDB4YWEsIGxhc3QgZXJyb3IgODcKY2hpbGQgd2luZG93OiBTZXQgcmV0dXJucyAwLCBsYXN0IGVycm9yIDg3Ck5VTEwgd2luZG93OiByZXR1cm5zIDAsIG91dHB1dCBsZWZ0IGFsb25lIHRydWUsIGxhc3QgZXJyb3IgMTQwMAppbnZhbGlkIGhhbmRsZTogcmV0dXJucyAwLCBsYXN0IGVycm9yIDE0MDAKZGVzdHJveWVkIHdpbmRvdzogcmV0dXJucyAwLCBsYXN0IGVycm9yIDE0MDAKTlVMTCBvdXRwdXQgcG9pbnRlcjogcmV0dXJucyAwLCBsYXN0IGVycm9yIDk5OAp0aGUgZGVza3RvcCB3aW5kb3c6IHJldHVybnMgMCwgYWZmaW5pdHkgMHhhYQpmcm9tIGFub3RoZXIgdGhyZWFkIG9mIHRoZSBwcm9jZXNzOiBHZXQgd29ya3MgdHJ1ZSwgU2V0IG9mIGEgd2luZG93IG9mIHRoZSBtYWluIHRocmVhZCBmYWlscyBmYWxzZQphZmZpbml0eSBhZnRlciBtaW5pbWl6ZSBhbmQgaGlkZTogMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a new window: returns 1, affinity 0, last error left alone true\nasked again: returns 1, affinity 0\nSet WDA_MONITOR: returns 1, Get returns 1 with 0x1, last error left alone true\nSet WDA_EXCLUDEFROMCAPTURE: returns 1, Get returns 1 with 0x11, last error left alone true\nSet WDA_NONE: returns 1, Get returns 1 with 0x0, last error left alone true\nSet 2: returns 0, last error 87, Get then gives 0x0\nSet 0x11 again: returns 1, last error 0, Get then gives 0x11\nchild window: Get returns 0, affinity 0xaa, last error 87\nchild window: Set returns 0, last error 87\nNULL window: returns 0, output left alone true, last error 1400\ninvalid handle: returns 0, last error 1400\ndestroyed window: returns 0, last error 1400\nNULL output pointer: returns 0, last error 998\nthe desktop window: returns 0, affinity 0xaa\nfrom another thread of the process: Get works true, Set of a window of the main thread fails false\naffinity after minimize and hide: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 117
+    }
+  ]
+}

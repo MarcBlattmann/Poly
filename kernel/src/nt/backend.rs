@@ -186,10 +186,8 @@ impl Backend for MemBackend<'_> {
         self.memory.write(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
-    fn read(&mut self, addr: u64, len: u64) -> Result<Vec<u8>, NtStatus> {
-        let mut buf = alloc::vec![0u8; len as usize];
-        self.memory.read(addr, &mut buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)?;
-        Ok(buf)
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        self.memory.read(addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
     fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "mwme_objects",
+      "exe_sha256": "06fd7b6de6a5098b5629da6d2f9770e945fdbf27247e6e337057e9acbeaa5544",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gb2JqZWN0cywgZW1wdHkgcXVldWUsIHRpbWVvdXQgMDogMHgxMDIsIGxhc3QgZXJyb3IgbGVmdCBhbG9uZSB0cnVlCm5vIG9iamVjdHMsIGVtcHR5IHF1ZXVlLCB0aW1lb3V0IDE1MDogMHgxMDIsIHRvb2sgYXQgbGVhc3QgMTQwIG1zIHRydWUsIGxlc3MgdGhhbiBhIHNlY29uZCB0cnVlCnRocmVlIHVuc2lnbmFsZWQgZXZlbnRzLCB0aW1lb3V0IDA6IDB4MTAyCmUyIHNpZ25hbGVkOiAweDEgKGluZGV4IDEpCmUxIGFuZCBlMiBzaWduYWxlZDogMHgwICh0aGUgbG93ZXN0IGluZGV4KQplMyAoYXV0by1yZXNldCkgc2lnbmFsZWQ6IDB4MiwgdGhlbiAweDEwMiAoY29uc3VtZWQgYnkgdGhlIHdhaXQpCldBSVRBTEwgd2l0aCBvbmx5IGUxIHNpZ25hbGVkOiAweDEwMgpXQUlUQUxMIHdpdGggYWxsIHNpZ25hbGVkOiAweDEwMgppbnB1dCBtYXNrIDAsIGUxIHNpZ25hbGVkOiAweDAKaW5wdXQgbWFzayAwLCBub3RoaW5nIHNpZ25hbGVkOiAweDEwMgpTZXRFdmVudCBmcm9tIGFub3RoZXIgdGhyZWFkIGFmdGVyIDEyMCBtcyBlbmRzIGEgNSBzIHdhaXQ6IDB4MCwgdG9vayBiZXR3ZWVuIDEwMCBtcyBhbmQgMiBzIHRydWUKYW4gaW52YWxpZCBoYW5kbGU6IDB4ZmZmZmZmZmYsIGxhc3QgZXJyb3IgNgphIE5VTEwgaGFuZGxlOiAweGZmZmZmZmZmLCBsYXN0IGVycm9yIDYKNjIgaGFuZGxlcyAoZTEgdW5zaWduYWxlZCk6IDB4MTAyLCBsYXN0IGVycm9yIDAKNjMgaGFuZGxlcyAoZTEgdW5zaWduYWxlZCk6IDB4MTAyLCBsYXN0IGVycm9yIDAKNjQgaGFuZGxlcyAoZTEgdW5zaWduYWxlZCk6IDB4ZmZmZmZmZmYsIGxhc3QgZXJyb3IgODcKNjUgaGFuZGxlcyAoZTEgdW5zaWduYWxlZCk6IDB4ZmZmZmZmZmYsIGxhc3QgZXJyb3IgODcKYW4gdW5rbm93biBmbGFnIDB4ODA6IDB4ZmZmZmZmZmYsIGxhc3QgZXJyb3IgODcKYW4gdW5rbm93biBtYXNrIGJpdCAweDgwMDA6IDB4MTAyLCBsYXN0IGVycm9yIDAKYSBtdXRleCBhYmFuZG9uZWQgYnkgYW4gZXhpdGVkIHRocmVhZCAoaW5kZXggMSk6IDB4ODEgKFdBSVRfQUJBTkRPTkVEXzAgKyAxIGlzIDB4ODEpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no objects, empty queue, timeout 0: 0x102, last error left alone true\nno objects, empty queue, timeout 150: 0x102, took at least 140 ms true, less than a second true\nthree unsignaled events, timeout 0: 0x102\ne2 signaled: 0x1 (index 1)\ne1 and e2 signaled: 0x0 (the lowest index)\ne3 (auto-reset) signaled: 0x2, then 0x102 (consumed by the wait)\nWAITALL with only e1 signaled: 0x102\nWAITALL with all signaled: 0x102\ninput mask 0, e1 signaled: 0x0\ninput mask 0, nothing signaled: 0x102\nSetEvent from another thread after 120 ms ends a 5 s wait: 0x0, took between 100 ms and 2 s true\nan invalid handle: 0xffffffff, last error 6\na NULL handle: 0xffffffff, last error 6\n62 handles (e1 unsignaled): 0x102, last error 0\n63 handles (e1 unsignaled): 0x102, last error 0\n64 handles (e1 unsignaled): 0xffffffff, last error 87\n65 handles (e1 unsignaled): 0xffffffff, last error 87\nan unknown flag 0x80: 0xffffffff, last error 87\nan unknown mask bit 0x8000: 0x102, last error 0\na mutex abandoned by an exited thread (index 1): 0x81 (WAIT_ABANDONED_0 + 1 is 0x81)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 348
+    }
+  ]
+}

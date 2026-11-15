@@ -332,3 +332,42 @@ pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: us
     set_last_error(error.unwrap_or(0));
     ret
 }
+
+/// `ERROR_PARTIAL_COPY` (`winerror.h`): another process's headers cannot be read here.
+const ERROR_PARTIAL_COPY: u32 = 299;
+
+/// `K32GetModuleInformation(hProcess, hModule, lpmodinfo, cb)` (`GetModuleInformation` of PSAPI
+/// version 2, Learn): the base, size and entry point of one of this process's loaded modules,
+/// from the loader's list and the module's own PE headers (`hModule` NULL: the program). A
+/// module the loader does not know is `ERROR_INVALID_HANDLE`; another process's modules are not
+/// readable from here yet (`ERROR_PARTIAL_COPY`).
+///
+/// # Safety
+/// `info` holds `cb` writable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn K32GetModuleInformation(process: Handle, module: usize, info: *mut u8, cb: u32) -> i32 {
+    let Some(own) = is_self(process) else { return FALSE };
+    if !own {
+        return fail(ERROR_PARTIAL_COPY, FALSE);
+    }
+    let spans = module_spans();
+    let found = if module == 0 { spans.first() } else { spans.iter().find(|s| s.0 == module as u64) };
+    let Some(&(base, size, _)) = found else { return fail(ERROR_INVALID_HANDLE, FALSE) };
+    // SAFETY: a loaded module's headers are mapped readable for its whole first page.
+    let header = unsafe { core::slice::from_raw_parts(base as usize as *const u8, 0x1000) };
+    let entry = match procinfo::entry_point_rva(header) {
+        Some(0) | None => 0,
+        Some(rva) => base + u64::from(rva),
+    };
+    match procinfo::module_info(base, size as u32, entry, cb, core::mem::size_of::<usize>()) {
+        Ok(b) => {
+            if info.is_null() {
+                return fail(ERROR_INVALID_PARAMETER, FALSE);
+            }
+            // SAFETY: `b` is at most `cb` bytes, the caller's structure.
+            unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, b.len()) };
+            TRUE
+        }
+        Err(e) => fail(e, FALSE),
+    }
+}

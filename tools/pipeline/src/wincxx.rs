@@ -15,6 +15,17 @@
 //! Poly. No Microsoft header, library or SDK is involved: the import
 //! libraries come from our `.def` files of exported names.
 //!
+//! **The C++ runtime (ADR 0199).** A test may instead take its C++ runtime
+//! from `vcruntime140.dll` (`_CxxThrowException`, the frame handlers, the
+//! memory functions) with `terminate`/`set_terminate` from `ucrtbase.dll`,
+//! as a program of Visual C++ 2015 or later does: `runtime=vcruntime140` on
+//! its `poly-cxx:` line, or for a whole build (`win build --cxx-runtime
+//! vcruntime140`, and `win polycheck`'s second pass over the `msvcrt.dll`
+//! C++ entries). The import libraries are then listed in that order before
+//! `kernel32` and `msvcrt` (the first that has a name provides it), and the
+//! header is compiled with `POLY_CXX_RUNTIME_VCRUNTIME140`. A build for
+//! `msvcrt` is what it always was, byte for byte.
+//!
 //! **The `poly-cxx:` line.** clang emits the x64 C++ exception tables of
 //! the newest form (`__CxxFrameHandler3`, FuncInfo magic `0x19930522`, EH
 //! flags 1 for `/EHs`). Programs built by older compilers name
@@ -41,11 +52,82 @@ use std::process::Command;
 /// The support header and `.def` files, relative to the repository root.
 pub const SUPPORT_DIR: &str = "tests/windows/cxx";
 /// The DLLs whose import libraries are made from `SUPPORT_DIR/<stem>.def`.
-pub const IMPORT_DLLS: &[&str] = &["kernel32", "msvcrt"];
+pub const IMPORT_DLLS: &[&str] = &["kernel32", "msvcrt", "vcruntime140", "ucrtbase"];
 /// The DLLs a C++ test program may import from (by name).
-pub const ALLOWED_DLLS: &[&str] = &["ntdll.dll", "kernel32.dll", "msvcrt.dll"];
+pub const ALLOWED_DLLS: &[&str] = &[
+    "ntdll.dll",
+    "kernel32.dll",
+    "msvcrt.dll",
+    "vcruntime140.dll",
+    "ucrtbase.dll",
+    // Programs built by Microsoft's compiler (`compiler=msvc`, below): the handler of the compressed
+    // exception tables and the C++ library.
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
+];
+
+/// Which compiler built a test program (the `compiler=` word of its `poly-cxx:` line).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Compiler {
+    /// clang++, by `win build` (ADR 0098).
+    #[default]
+    Clang,
+    /// Microsoft's `cl.exe /EHsc` on the oracle machine (`tools/pipeline/windows/msvc-build.ps1`), whose
+    /// executable is checked in beside the source as `<name>.exe`: the container has no Microsoft
+    /// compiler, and what the compiler writes (FH4's exception tables, Microsoft's class layouts) is
+    /// the point of such a test. `win build` takes the executable as it is.
+    Msvc,
+}
+
+impl Compiler {
+    pub fn parse(s: &str) -> Result<Compiler> {
+        match s {
+            "clang" => Ok(Compiler::Clang),
+            "msvc" => Ok(Compiler::Msvc),
+            _ => Err(format!("compiler {s:?} is not clang or msvc")),
+        }
+    }
+}
+
+/// Which DLL a C++ test takes its C++ runtime from (ADR 0199).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Runtime {
+    /// `msvcrt.dll` (ADR 0098).
+    #[default]
+    Msvcrt,
+    /// `vcruntime140.dll`, with `ucrtbase.dll`'s `terminate`.
+    Vcruntime140,
+}
+
+impl Runtime {
+    pub fn parse(s: &str) -> Result<Runtime> {
+        match s {
+            "msvcrt" => Ok(Runtime::Msvcrt),
+            "vcruntime140" => Ok(Runtime::Vcruntime140),
+            _ => Err(format!("C++ runtime {s:?} is not msvcrt or vcruntime140")),
+        }
+    }
+
+    /// The import libraries (stems of [`IMPORT_DLLS`]) a test links, in order.
+    pub fn libraries(self) -> &'static [&'static str] {
+        match self {
+            Runtime::Msvcrt => &["kernel32", "msvcrt"],
+            Runtime::Vcruntime140 => &["vcruntime140", "ucrtbase", "kernel32", "msvcrt"],
+        }
+    }
+
+    /// The compiler's extra options.
+    fn defines(self) -> &'static [&'static str] {
+        match self {
+            Runtime::Msvcrt => &[],
+            Runtime::Vcruntime140 => &["-DPOLY_CXX_RUNTIME_VCRUNTIME140"],
+        }
+    }
+}
 /// Compiler options a `poly-cxx:` line may add.
 pub const ALLOWED_CFLAGS: &[&str] = &["-fasync-exceptions", "-O0", "-O1", "-O2"];
+/// What `cl=` may add for `compiler=msvc` (read by `msvc-build.ps1`, which checks the same list).
+pub const ALLOWED_CL_FLAGS: &[&str] = &["/EHsc", "/EHa", "/EHs", "/O1", "/O2", "/Od", "/GR", "/GR-"];
 /// What clang emits as the FuncInfo magic number (0x19930522).
 const CLANG_MAGIC: u32 = 0x1993_0522;
 
@@ -56,6 +138,10 @@ pub struct Directives {
     pub magic: Option<u32>,
     pub ehflags: Option<u32>,
     pub cflags: Vec<String>,
+    pub runtime: Option<Runtime>,
+    pub compiler: Compiler,
+    /// Options for Microsoft's compiler (`cl=/EHa,/O2`); `/EHsc /O1 /GS- /Zl` are the defaults.
+    pub cl_flags: Vec<String>,
 }
 
 impl Directives {
@@ -101,6 +187,19 @@ pub fn directives(source: &str) -> Result<Directives> {
                     d.magic = Some(m);
                 }
                 "ehflags" => d.ehflags = Some(number(value)?),
+                "compiler" => d.compiler = Compiler::parse(value).map_err(|e| format!("poly-cxx: {e}"))?,
+                "cl" => {
+                    for f in value.split(',') {
+                        if !ALLOWED_CL_FLAGS.contains(&f) {
+                            return Err(format!(
+                                "poly-cxx: cl flag {f:?} is not one of {}",
+                                ALLOWED_CL_FLAGS.join(" ")
+                            ));
+                        }
+                        d.cl_flags.push(f.into());
+                    }
+                }
+                "runtime" => d.runtime = Some(Runtime::parse(value).map_err(|e| format!("poly-cxx: {e}"))?),
                 "cflags" => {
                     for f in value.split(',') {
                         if !ALLOWED_CFLAGS.contains(&f) {
@@ -295,7 +394,18 @@ pub fn import_libraries(repo: &Path, tools: &Tools, work: &Path) -> Result<Vec<P
     Ok(libs)
 }
 
-/// Build `source` into `work/<name>.exe`; returns its path.
+/// The import libraries of `runtime`, in its order, from those
+/// [`import_libraries`] made (`<stem>.lib`).
+pub fn libraries_for(libs: &[PathBuf], runtime: Runtime) -> Vec<PathBuf> {
+    runtime
+        .libraries()
+        .iter()
+        .filter_map(|stem| libs.iter().find(|l| l.file_stem().is_some_and(|f| f == *stem)).cloned())
+        .collect()
+}
+
+/// Build `source` into `work/<name>.exe`; returns its path. `runtime`, if
+/// given, overrides the test's own `runtime=` (msvcrt by default).
 pub fn build_one(
     repo: &Path,
     tools: &Tools,
@@ -303,10 +413,23 @@ pub fn build_one(
     name: &str,
     source: &Path,
     work: &Path,
+    runtime: Option<Runtime>,
 ) -> Result<PathBuf> {
     let text = util::read_string(source)?;
     let d = directives(&text).map_err(|e| format!("{}: {e}", source.display()))?;
+    if d.compiler == Compiler::Msvc {
+        let prebuilt = source.with_extension("exe");
+        let exe = work.join(format!("{name}.exe"));
+        let bytes = util::read(&prebuilt).map_err(|e| {
+            format!("{name}: compiler=msvc needs {} (built on the oracle machine): {e}", prebuilt.display())
+        })?;
+        util::write(&exe, bytes)?;
+        return Ok(exe);
+    }
+    let runtime = runtime.or(d.runtime).unwrap_or_default();
+    let libs = libraries_for(libs, runtime);
     let mut flags = clang_flags(repo);
+    flags.extend(runtime.defines().iter().map(|s| s.to_string()));
     flags.extend(d.cflags.iter().cloned());
     let obj = work.join(format!("{name}.obj"));
     if d.rewrites() {
@@ -320,7 +443,7 @@ pub fn build_one(
         run(Command::new(&tools.clang).args(&flags).arg("-c").arg("-o").arg(&obj).arg(source))?;
     }
     let exe = work.join(format!("{name}.exe"));
-    run(Command::new(&tools.lld_link).args(LINK_FLAGS).arg(format!("/OUT:{}", exe.display())).arg(&obj).args(libs))?;
+    run(Command::new(&tools.lld_link).args(LINK_FLAGS).arg(format!("/OUT:{}", exe.display())).arg(&obj).args(&libs))?;
     Ok(exe)
 }
 
@@ -346,6 +469,25 @@ mod tests {
         assert!(directives("// poly-cxx: what=1\n").is_err());
         assert!(directives("// poly-cxx: magic\n").is_err());
         assert!(directives("// poly-cxx: magic=0x19930521\n// poly-cxx: ehflags=0\n").is_err());
+        let r = directives("// poly-cxx: runtime=vcruntime140\n").unwrap();
+        assert_eq!(r.runtime, Some(Runtime::Vcruntime140));
+        assert!(!r.rewrites());
+        assert!(directives("// poly-cxx: runtime=msvcp140\n").is_err());
+    }
+
+    #[test]
+    fn runtimes_choose_their_libraries() {
+        let libs: Vec<PathBuf> = IMPORT_DLLS.iter().map(|d| PathBuf::from(format!("/w/{d}.lib"))).collect();
+        let names = |r| libraries_for(&libs, r).iter().map(|l| l.display().to_string()).collect::<Vec<_>>();
+        assert_eq!(names(Runtime::Msvcrt), ["/w/kernel32.lib", "/w/msvcrt.lib"], "msvcrt builds stay as they were");
+        assert_eq!(
+            names(Runtime::Vcruntime140),
+            ["/w/vcruntime140.lib", "/w/ucrtbase.lib", "/w/kernel32.lib", "/w/msvcrt.lib"]
+        );
+        assert_eq!(Runtime::Vcruntime140.defines(), ["-DPOLY_CXX_RUNTIME_VCRUNTIME140"]);
+        for d in IMPORT_DLLS {
+            assert!(ALLOWED_DLLS.contains(&format!("{d}.dll").as_str()), "{d}");
+        }
     }
 
     const ASM: &str = "\t.seh_handler __CxxFrameHandler3, @unwind, @except\n\
@@ -361,6 +503,8 @@ mod tests {
             magic: Some(0x1993_0520),
             ehflags: Some(0),
             cflags: vec![],
+            runtime: None,
+            ..Directives::default()
         };
         let out = rewrite_assembly(ASM, &d).unwrap();
         let lines: Vec<&str> = out.lines().collect();

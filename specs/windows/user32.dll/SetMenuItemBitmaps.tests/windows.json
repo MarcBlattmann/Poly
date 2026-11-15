@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "smib_basic",
+      "exe_sha256": "4615c8cac227869fccfd8958ddae95c3f85437c403886faed12313252a4dde88",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiBvayAxIGNoZWNrZWQ6IG5vbmUgdW5jaGVja2VkOiBub25lIHN0YXRlIDB4MApTZXRNZW51SXRlbUJpdG1hcHMgYnkgcG9zaXRpb24gMCwgYm90aDogMQppdGVtIDA6IG9rIDEgY2hlY2tlZDogdGhlIGNoZWNrZWQgYml0bWFwIHVuY2hlY2tlZDogdGhlIHVuY2hlY2tlZCBiaXRtYXAgc3RhdGUgMHgwClNldE1lbnVJdGVtQml0bWFwcyBieSBjb21tYW5kIDIsIG9ubHkgdGhlIGNoZWNrZWQ6IDEKaXRlbSAxOiBvayAxIGNoZWNrZWQ6IHRoZSBjaGVja2VkIGJpdG1hcCB1bmNoZWNrZWQ6IG5vbmUgc3RhdGUgMHgwClNldE1lbnVJdGVtQml0bWFwcyBieSBjb21tYW5kIDMsIG9ubHkgdGhlIHVuY2hlY2tlZDogMQppdGVtIDI6IG9rIDEgY2hlY2tlZDogbm9uZSB1bmNoZWNrZWQ6IHRoZSB1bmNoZWNrZWQgYml0bWFwIHN0YXRlIDB4OApTZXRNZW51SXRlbUJpdG1hcHMgaXRlbSAwIGFnYWluIHdpdGggTlVMTCwgTlVMTCAoY2xlYXJzKTogMQppdGVtIDAgYWZ0ZXIgY2xlYXJpbmc6IG9rIDEgY2hlY2tlZDogbm9uZSB1bmNoZWNrZWQ6IG5vbmUgc3RhdGUgMHgwClNldE1lbnVJdGVtQml0bWFwcyB3aXRoIHRoZSBzYW1lIGJpdG1hcCBmb3IgYm90aDogMQppdGVtIDA6IG9rIDEgY2hlY2tlZDogdGhlIHVuY2hlY2tlZCBiaXRtYXAgdW5jaGVja2VkOiB0aGUgdW5jaGVja2VkIGJpdG1hcCBzdGF0ZSAweDAKR2V0TWVudVN0YXRlIGl0ZW0gMCAweDAKYml0bWFwIHR5cGUgYmVmb3JlIERlc3Ryb3lNZW51IDcKYml0bWFwIHR5cGUgYWZ0ZXIgRGVzdHJveU1lbnUgNyAodGhlIG1lbnUgZG9lcyBub3QgZnJlZSB0aGVtKQpwb3NpdGlvbiA1IChhYnNlbnQpOiAwIGVycj0xNDU2CmNvbW1hbmQgOTkgKGFic2VudCk6IDAgZXJyPTE0NTYKYmFkIG1lbnU6IDAgZXJyPTE0MDEKTlVMTCBtZW51OiAwIGVycj0xNDAxCm1hZGUtdXAgYml0bWFwIGhhbmRsZXM6IDAgZXJyPTg3Cml0ZW0gd2l0aCBtYWRlLXVwIGJpdG1hcHM6IG9rIDEgY2hlY2tlZDogbm9uZSB1bmNoZWNrZWQ6IG5vbmUgc3RhdGUgMHgwCmZsYWdzIDB4ODAwMCAoaW52YWxpZCk6IDAgZXJyPTE0NTYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: ok 1 checked: none unchecked: none state 0x0\nSetMenuItemBitmaps by position 0, both: 1\nitem 0: ok 1 checked: the checked bitmap unchecked: the unchecked bitmap state 0x0\nSetMenuItemBitmaps by command 2, only the checked: 1\nitem 1: ok 1 checked: the checked bitmap unchecked: none state 0x0\nSetMenuItemBitmaps by command 3, only the unchecked: 1\nitem 2: ok 1 checked: none unchecked: the unchecked bitmap state 0x8\nSetMenuItemBitmaps item 0 again with NULL, NULL (clears): 1\nitem 0 after clearing: ok 1 checked: none unchecked: none state 0x0\nSetMenuItemBitmaps with the same bitmap for both: 1\nitem 0: ok 1 checked: the unchecked bitmap unchecked: the unchecked bitmap state 0x0\nGetMenuState item 0 0x0\nbitmap type before DestroyMenu 7\nbitmap type after DestroyMenu 7 (the menu does not free them)\nposition 5 (absent): 0 err=1456\ncommand 99 (absent): 0 err=1456\nbad menu: 0 err=1401\nNULL menu: 0 err=1401\nmade-up bitmap handles: 0 err=87\nitem with made-up bitmaps: ok 1 checked: none unchecked: none state 0x0\nflags 0x8000 (invalid): 0 err=1456\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

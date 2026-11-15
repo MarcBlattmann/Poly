@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/RegisterClassW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Registers a window class from a WNDCLASSW (the structure without a small icon). Chrome's crash handler
+  process calls it for the window it uses for messages (S3, once to twice per run).
+interface:
+  signature: "ATOM RegisterClassW(const WNDCLASSW *lpWndClass)"
+rules:
+  atom: "returns an atom of the registered string range (0xC000 to 0xFFFF), different for every class; the last error is not touched on success; RegisterClassExW and RegisterClassW share one namespace of names"
+  duplicates: "a name registered again, in other case or the name of a class registered with RegisterClassExW returns 0 with ERROR_CLASS_ALREADY_EXISTS 1410; the name of a system class (Button) is accepted as a class of the process (it returns an atom and shadows the system class until UnregisterClassW)"
+  names: "NULL name returns 0 with 87; an empty name 0 with ERROR_INVALID_NAME 123; a name of 255 characters is accepted, of 256 returns 0 with 87; an integer atom as the name (0x1234) is accepted and returns the atom itself"
+  window_proc: "a NULL window procedure is accepted (an atom is returned)"
+  extra_bytes: "class or window extra bytes of -1 return 0 with 87; 4096, 40 and 1000 are accepted"
+  instance: "hInstance NULL is accepted"
+  read_back: "GetClassInfoExW gives the style, the procedure and the extra bytes back; the small icon is NULL, no background and no menu when none was given; styles CS_HREDRAW|CS_VREDRAW, CS_DBLCLKS, CS_OWNDC, CS_GLOBALCLASS (found with a NULL instance), CS_DROPSHADOW and CS_SAVEBITS are kept as given"
+  windows: "a window of the class is created and its procedure sees WM_NCCREATE and WM_CREATE; GetClassNameW gives the registered name; UnregisterClassW with a live window returns 0 with ERROR_CLASS_HAS_WINDOWS 1412, after DestroyWindow it returns 1 and the name can be registered again; unregistering twice returns 1 then 0 with ERROR_CLASS_DOES_NOT_EXIST 1411"
+  crash_handler_sequence: "register, create a hidden window (also message-only), post WM_USER messages that arrive in order at the procedure, WM_USER sent returns the procedure's value, destroy (WM_DESTROY), unregister: all return as described; the same again with the same name works; a registered message (RegisterWindowMessageW) is in 0xC000..0xFFFF"
+errors:
+  class_already_exists: "1410"
+  invalid_parameter: "87: NULL name, name of 256 characters, negative extra bytes"
+  invalid_name: "123: empty name"
+  class_has_windows: "1412 (UnregisterClassW)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Icons and cursors loading, class brushes, menus by name, the A-version.

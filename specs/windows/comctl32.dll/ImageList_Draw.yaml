@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/ImageList_Draw.yaml
+id: windows/api/comctl32.dll/ImageList_Draw
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Draws an image of the list into a device context at a position: an image of a list with a mask is drawn with its mask (the masked pixels are not changed), an image of a list without a mask is drawn as a whole.
+interface:
+  signature: "BOOL ImageList_Draw(HIMAGELIST himl, int i, HDC hdcDst, int x, int y, UINT fStyle)"
+rules:
+  masked_image: "an 8x8 image whose mask has the left four pixels set (transparent) drawn at (4, 2) over a magenta background with ILD_NORMAL or ILD_TRANSPARENT changes only the right four columns (ink box (8,2)-(12,10), 32 pixels, the right pixels red); with ILD_MASK those pixels become black (the mask drawn); with ILD_IMAGE (0x20) the whole image is drawn without the mask (64 pixels, the masked pixels black)"
+  full_image: "a fully opaque image changes all 64 pixels; an image whose mask is fully transparent changes none (also with ILD_TRANSPARENT)"
+  blend: "ILD_BLEND25 (2) and ILD_BLEND50 (4, = ILD_SELECTED) blend the drawn pixels with the system highlight colour (#0078D4 on the oracle): in the list with a mask (6,6) is #0078D4 while (6,1) stays red; in the list without a mask #0078D4 appears at the image's pixels (1,1) and (6,6), a checkerboard of the blend colour; ILD_FOCUS = ILD_BLEND25; with ILD_MASK the blend flags change nothing"
+  background: "the list's background colour (ImageList_SetBkColor, CLR_NONE by default for ILC_MASK and also for a list without a mask: GetBkColor 0xFFFFFFFF) shows through the masked pixels of ILD_NORMAL (an explicit colour fills them: yellow with 64 pixels changed); ILD_TRANSPARENT ignores it (32 pixels)"
+  depth: "an ILC_COLOR24 | ILC_MASK list with a mask whose right four pixels are set draws the left four columns (ink box (4,2)-(8,10), 32 pixels)"
+  result: "TRUE for a drawn image, also when the image is clipped (at (-4,-4): 16 pixels, at (12,8): 16 pixels, completely outside: 0 pixels but TRUE)"
+  unknown_styles: "style bits that mean nothing here (0x8000, ILD_ROP, ILD_PRESERVEALPHA, ILD_OVERLAYMASK without an overlay) draw the same as ILD_NORMAL; ILD_TRANSPARENT | ILD_MASK is ILD_MASK"
+errors:
+  bad_index: "an index past the end, -1 and 1000: FALSE, nothing drawn, the last error is not changed"
+  bad_handles: "a NULL list and a destroyed list: FALSE; a NULL device context: TRUE with ERROR_INVALID_HANDLE (6) set; a made-up device context and a DC with a 4x4 monochrome bitmap: TRUE"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  The screen DC and device-dependent bitmaps (the tests draw into a 32-bit DIB section, whose pixels are read back, no fonts are involved), alpha blending of 32-bit images with an alpha channel (the test images have alpha 0 or 0xFF and the results here are for the image data given), ILD_SCALE and ILD_DPISCALE, overlay images and drag images, the colour of ILD_SELECTED and ILD_FOCUS (the system highlight colour #0078D4 on the oracle, COLOR_HIGHLIGHT, is used for blending).

@@ -858,6 +858,14 @@ impl VirtualMemory {
     /// [`AccessFault`]. A guard page loses its guard status first and is
     /// mapped with its protection.
     pub fn access_fault(&mut self, b: &mut dyn Backend, addr: u64) -> AccessFault {
+        self.access_fault_in_stack(b, addr, None)
+    }
+
+    /// [`access_fault`](Self::access_fault) for a thread whose TEB says its
+    /// stack ends at `stack_base` (`NT_TIB.StackBase`): a guard page below it,
+    /// in the allocation that holds the stack, grows that stack as a stack
+    /// Poly made does.
+    pub fn access_fault_in_stack(&mut self, b: &mut dyn Backend, addr: u64, stack_base: Option<u64>) -> AccessFault {
         let page = page_down(addr);
         let Some(a) = self.allocation_mut(page) else {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
@@ -872,7 +880,8 @@ impl VirtualMemory {
         let unguarded = p.without_guard();
         a.pages.fill(i..i + 1, PageState::Committed(unguarded));
         let shared = a.shared();
-        let (stack, base) = (a.stack, a.base);
+        let teb_stack = stack_base.is_some_and(|top| addr < top && top > a.base && a.contains(top - 1));
+        let (stack, base) = (a.stack || teb_stack, a.base);
         b.protect(page, PAGE_SIZE, unguarded.hw(shared));
         if !stack {
             return AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION);

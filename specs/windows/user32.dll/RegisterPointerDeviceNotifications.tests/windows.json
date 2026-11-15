@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "rpdn_basic",
+      "exe_sha256": "c6415faa946211f001a3cd6b66f0b54a26545a8d1e60c77f4cb91c4e23d623d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dywgbm90aWZ5UmFuZ2UgRkFMU0U6IHJldHVybnMgMSwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKdyBhZ2FpbiwgRkFMU0U6IHJldHVybnMgMCwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKdyBhZ2FpbiwgVFJVRTogcmV0dXJucyAwLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQp3MiwgVFJVRTogcmV0dXJucyAxLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQp3MiBhZ2FpbiwgRkFMU0U6IHJldHVybnMgMCwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKdzIgYWdhaW4sIFRSVUU6IHJldHVybnMgMCwgbGFzdCBlcnJvciBsZWZ0IGFsb25lIHRydWUKZnJvbSBhbm90aGVyIHRocmVhZCwgd2luZG93IGFscmVhZHkgcmVnaXN0ZXJlZDogcmV0dXJucyAwLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQpmcm9tIGFub3RoZXIgdGhyZWFkLCBmcmVzaCB3aW5kb3cgb2YgdGhpcyB0aHJlYWQ6IHJldHVybnMgMQphIGRlc3Ryb3llZCB3aW5kb3c6IHJldHVybnMgMCwgbGFzdCBlcnJvciAxNDAwCmEgbmV3IHdpbmRvdyAocG9zc2libHkgd2l0aCB0aGUgaGFuZGxlIG9mIHRoZSBkZXN0cm95ZWQgb25lKTogcmV0dXJucyAxCmEgY2hpbGQgd2luZG93OiAxLCBhIG1lc3NhZ2Utb25seSB3aW5kb3c6IDEsIGEgcG9wdXA6IDEKTlVMTDogcmV0dXJucyAwLCBsYXN0IGVycm9yIDE0MDAKYW4gaW52YWxpZCBoYW5kbGU6IHJldHVybnMgMCwgbGFzdCBlcnJvciAxNDAwCnBvaW50ZXItZGV2aWNlIG1lc3NhZ2VzIHRoYXQgYXJyaXZlZDogMCAobm9uZSB3aXRob3V0IHBvaW50ZXIgZGV2aWNlcykKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "w, notifyRange FALSE: returns 1, last error left alone true\nw again, FALSE: returns 0, last error left alone true\nw again, TRUE: returns 0, last error left alone true\nw2, TRUE: returns 1, last error left alone true\nw2 again, FALSE: returns 0, last error left alone true\nw2 again, TRUE: returns 0, last error left alone true\nfrom another thread, window already registered: returns 0, last error left alone true\nfrom another thread, fresh window of this thread: returns 1\na destroyed window: returns 0, last error 1400\na new window (possibly with the handle of the destroyed one): returns 1\na child window: 1, a message-only window: 1, a popup: 1\nNULL: returns 0, last error 1400\nan invalid handle: returns 0, last error 1400\npointer-device messages that arrived: 0 (none without pointer devices)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 271
+    }
+  ]
+}

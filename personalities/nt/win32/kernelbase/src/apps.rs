@@ -70,7 +70,6 @@ poly_win32_rt::fail_exports!(
         GetNumaProcessorNode,
         GetSystemMetadataPathForPackage,
         GetTempPathA,
-        GetThreadContext,
         GetTimeFormatEx,
         GetTimeFormatW,
         GetVolumeInformationW,
@@ -86,8 +85,6 @@ poly_win32_rt::fail_exports!(
         LockFile,
         OpenSemaphoreW,
         PathAllocCombine,
-        PathCchCanonicalize,
-        PathCchCombine,
         PathCchRemoveBackslash,
         PathCchRemoveExtension,
         PathCchRemoveFileSpec,
@@ -111,20 +108,4 @@ poly_win32_rt::fail_exports!(
 
 // The real versions are written by the implementer track `impl-win-apps` (branch `impl-win-apps`, spec-win-apps-1): when it
 // merges, delete these names (and the group when it is empty).
-poly_win32_rt::fail_exports!(
-    "kernelbase",
-    win32,
-    [
-        FindResourceExW,
-        FindResourceW,
-        GetEnvironmentVariableA,
-        LoadResource,
-        LoadStringA,
-        LoadStringW,
-        LockResource,
-        PathCchCanonicalizeEx,
-        PathCchCombineEx,
-        PathCchSkipRoot,
-        SizeofResource,
-    ]
-);
+poly_win32_rt::fail_exports!("kernelbase", win32, [LoadStringA, LoadStringW,]);

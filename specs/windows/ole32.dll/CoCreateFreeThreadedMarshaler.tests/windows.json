@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "ccftm_aggregate",
+      "exe_sha256": "736b56b8e96fbfe0ee3993aa210907bf2a2d28a7ad3853da2401a83820f5192a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2l0aCBhbiBvdXRlciB1bmtub3duOiAweDAsIGlubmVyIG9iamVjdCB0cnVlLCB0aGUgb3V0ZXIgd2FzIGNhbGxlZCAwIHRpbWUocykKUXVlcnlJbnRlcmZhY2UoSU1hcnNoYWwpIG9uIHRoZSBpbm5lciB1bmtub3duOiAweDAsIGFuIG9iamVjdCB0cnVlLCB0aGUgb3V0ZXIgd2FzIGNhbGxlZCAxIHRpbWUocykKUXVlcnlJbnRlcmZhY2UoSVVua25vd24pIG9uIHRoZSBpbm5lciB1bmtub3duOiAweDAsIHRoZSBzYW1lIHBvaW50ZXIgYXMgdGhlIGlubmVyIHRydWUKUXVlcnlJbnRlcmZhY2UoSURyb3BUYXJnZXQpOiAweDgwMDA0MDAyLCByZXN1bHQgTlVMTCB0cnVlCnJlZmVyZW5jZXMgbGVmdCBhZnRlciByZWxlYXNpbmcgbSwgdSBhbmQgdGhlIGlubmVyOiAxIDEgMCwgdGhlIG91dGVyIHdhcyBjYWxsZWQgMiB0aW1lKHMpIGluIGFsbAp0d28gYWdncmVnYXRpb25zIG1ha2UgZGlmZmVyZW50IGlubmVyIG9iamVjdHM6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "with an outer unknown: 0x0, inner object true, the outer was called 0 time(s)\nQueryInterface(IMarshal) on the inner unknown: 0x0, an object true, the outer was called 1 time(s)\nQueryInterface(IUnknown) on the inner unknown: 0x0, the same pointer as the inner true\nQueryInterface(IDropTarget): 0x80004002, result NULL true\nreferences left after releasing m, u and the inner: 1 1 0, the outer was called 2 time(s) in all\ntwo aggregations make different inner objects: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

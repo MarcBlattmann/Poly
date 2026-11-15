@@ -255,6 +255,19 @@ pub fn user_regs() -> UserRegs {
     regs
 }
 
+/// The user registers in the trap frame at the top of the kernel stack that ends at `top`,
+/// if the frame holds an entry from ring 3: what another thread's last system call, interrupt
+/// or fault from user mode saved. The caller makes sure that thread is not running (its frame
+/// does not change then: only the thread itself rewrites it, before it returns to ring 3).
+pub fn regs_at(top: u64) -> Option<UserRegs> {
+    let frame = (top - core::mem::size_of::<UserRegs>() as u64) as *const UserRegs;
+    // SAFETY: `top` is the end of a kernel stack the thread table owns (mapped while its
+    // thread exists, which the caller's lock keeps); the slot below it is where every entry
+    // from ring 3 writes its trap frame, and holds plain integers otherwise.
+    let regs = unsafe { frame.read() };
+    regs.in_user_mode().then_some(regs)
+}
+
 /// Replace the running user thread's registers for its return to ring 3
 /// (see [`user_regs`]). CS and SS stay the user selectors and RFLAGS is
 /// sanitised (interrupts on, nothing privileged); a non-canonical RIP makes

@@ -372,7 +372,7 @@ an outline font of the height asked, as on any Windows.
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
 (`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
-`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
+`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`, and `ucrtbase` for the C runtime entries; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
@@ -446,6 +446,24 @@ and links it with `lld-link` against import libraries made by
 A line `// poly-cxx: handler=__CxxFrameHandler magic=0x19930520
 ehflags=0 cflags=-fasync-exceptions` rewrites clang's exception tables the
 way older compilers write them (see `tools/pipeline/src/wincxx.rs`).
+
+**Tests built by Microsoft's compiler** (ADR 0199, spec-vcrt-1): what Visual C++ writes
+(`__CxxFrameHandler4`'s compressed tables, RTTI records, the layouts of `msvcp140`'s classes) cannot
+come from clang, and the container has no Microsoft compiler. A `.cpp` test with the line
+`// poly-cxx: compiler=msvc [cl=/EHa,/O2]` is built on the oracle machine (Visual Studio Build
+Tools in `C:\BuildTools`, the Visual C++ Redistributable installed in System32) by
+`tools/pipeline/windows/msvc-build.ps1` (`cl /EHsc /GS- /Zl /O1`, `link /NODEFAULTLIB
+/ENTRY:mainCRTStartup /Brepro`, import libraries made from `tests/windows/cxx/*.def` and, for
+`msvcp140`, from the DLL's own export table; `poly_wtest.h` takes `terminate`/`set_terminate` from
+`<eh.h>` and defines its own `??_7type_info@@6B@`), and the resulting `<name>.exe` is checked in
+beside `<name>.cpp` (a test artefact of about 10 KB; the pipeline's "no binary file" review rule
+has this one exception, by owner decision 2026-11-15). `win build` takes that executable as it is
+(it must import only from `ntdll`, `kernel32`, `msvcrt`, `vcruntime140`, `vcruntime140_1`,
+`ucrtbase`, `msvcp140`); `tests split` keeps a `.exe` with its `.cpp`, visible or held out
+together; `win remote`, `win diff`, `win poly` and `polycheck` need nothing else, so the same file
+runs on Windows and on Poly. A symbol that is a Visual C++ decorated name (`?_Xbad_alloc@std@@YAXXZ`)
+has file names with its `?` written `%3F` (any of `<>:"|?*%` is written `%XX`;
+`EntryId::file_symbol`), the entry id stays the export name.
 
 **Splitting a Windows entry's tests**: `pipeline tests split <entry> <dir>
 --spec-agent A --windows-results <results.json from the PC>` accepts only

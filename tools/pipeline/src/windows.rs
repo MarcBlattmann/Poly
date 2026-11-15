@@ -81,6 +81,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -323,6 +324,17 @@ fn rel(repo: &Path, path: &Path) -> String {
 /// compiles `core` for the target (about half a minute), later ones only
 /// the tests.
 pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Result<Manifest> {
+    build_runtime(repo, out, extra, only, None)
+}
+
+/// [`build`] with every C++ test taking its runtime from `runtime` (ADR 0199) when given.
+pub fn build_runtime(
+    repo: &Path,
+    out: &Path,
+    extra: &[PathBuf],
+    only: &[String],
+    runtime: Option<wincxx::Runtime>,
+) -> Result<Manifest> {
     let mut srcs = sources(repo, extra)?;
     if !only.is_empty() {
         for name in only {
@@ -363,7 +375,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     for src in &srcs {
         let exe = format!("{}.exe", src.name);
         let (built, allowed) = if src.is_cpp() {
-            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir)?, wincxx::ALLOWED_DLLS)
+            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir, runtime)?, wincxx::ALLOWED_DLLS)
         } else {
             (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
         };
@@ -378,7 +390,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
             exe_sha256: sha256::hex(&bytes),
             size: bytes.len() as u64,
             imports,
-            session: session_of(&src.path),
+            session: session_of(&src.path, &src.name),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -387,12 +399,26 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     Ok(m)
 }
 
-/// The session a test's reference was recorded in: `system.session` of
-/// the `windows.json` in the source's directory, if there is one.
-fn session_of(source: &Path) -> Option<String> {
+/// The session a test's reference was recorded in: the test's own `session` in the
+/// `windows.json` in the source's directory (a directory can hold tests recorded in both
+/// kinds of session), else that file's `system.session`, if there is one.
+fn session_of(source: &Path, name: &str) -> Option<String> {
     let reference = source.parent()?.join("windows.json");
     let bytes = std::fs::read(reference).ok()?;
-    RunFile::parse(&bytes).ok()?.system.session
+    let own = serde_json::from_slice::<serde_json::Value>(&bytes).ok().and_then(|v| {
+        let t = v.get("tests")?.as_array()?.iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some(name))?;
+        Some(t.get("session")?.as_str()?.to_string())
+    });
+    let session = own.or_else(|| RunFile::parse(&bytes).ok()?.system.session);
+    // From build 26200.9974 the oracle's taskbar is at the bottom (48 pixels): work area 0,0,1920,1032.
+    let bottom = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|v| v.get("system")?.get("build")?.as_str()?.rsplit('.').next()?.parse::<u32>().ok())
+        .is_some_and(|minor| minor >= 9974);
+    match session.as_deref() {
+        Some("interactive") if bottom => Some("interactive-bottom".to_string()),
+        _ => session,
+    }
 }
 
 /// The kernel arguments for a test recorded in `session` (ADR 0131):
@@ -401,6 +427,7 @@ fn session_of(source: &Path) -> Option<String> {
 pub fn session_kernel_args(session: Option<&str>) -> &'static str {
     match session {
         Some("interactive") => " poly.win32k.session=interactive",
+        Some("interactive-bottom") => " poly.win32k.session=interactive-bottom",
         _ => "",
     }
 }
@@ -1165,10 +1192,13 @@ pub fn check_split_files(files: &[String]) -> Result<()> {
     for f in files {
         let path = Path::new(f);
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-        if f.contains(['/', '\\']) || !is_test_source(path) || !valid_name(&stem) {
+        // `<name>.exe` is allowed beside `<name>.cpp`: a test built by Microsoft's compiler
+        // (`poly-cxx: compiler=msvc`, `wincxx::Compiler::Msvc`).
+        let prebuilt = path.extension().is_some_and(|x| x == "exe") && files.contains(&format!("{stem}.cpp"));
+        if f.contains(['/', '\\']) || !(is_test_source(path) || prebuilt) || !valid_name(&stem) {
             return Err(format!(
-                "{f}: a Windows entry's generated tests are .rs or .cpp files named in lower-case letters, digits \
-                 and _, directly in the directory"
+                "{f}: a Windows entry's generated tests are .rs or .cpp files (and the .exe of a compiler=msvc \
+                 .cpp) named in lower-case letters, digits and _, directly in the directory"
             ));
         }
     }
@@ -1371,6 +1401,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
+        let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
+        assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
@@ -1388,6 +1421,10 @@ mod tests {
     #[test]
     fn windows_split_checks_files_and_divides_results() {
         assert!(check_split_files(&["a_b.cpp".into(), "c.rs".into()]).is_ok());
+        // The executable of a compiler=msvc test goes with its source (only then).
+        assert!(check_split_files(&["a_b.cpp".into(), "a_b.exe".into()]).is_ok());
+        assert!(check_split_files(&["a_b.exe".into()]).is_err());
+        assert!(check_split_files(&["c.rs".into(), "c.exe".into()]).is_err());
         for bad in ["x.h", "sub/a.cpp", "Bad.cpp", "a-b.rs", "windows.json"] {
             assert!(check_split_files(&[bad.into()]).is_err(), "{bad}");
         }

@@ -11,6 +11,19 @@
   "started": "2026-11-14T20:17:03Z",
   "tests": [
     {
+      "name": "cie_modes",
+      "exe_sha256": "97626ea3c7a11b4abbd80ad2f52841ee0fdc0e905c1a041bb4205f3e5903ddd1",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "Q09JTklUX0FQQVJUTUVOVFRIUkVBREVEOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCkNPSU5JVF9NVUxUSVRIUkVBREVEOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MSwgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCkFQQVJUTUVOVFRIUkVBREVEIHwgRElTQUJMRV9PTEUxRERFOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCk1VTFRJVEhSRUFERUQgfCBESVNBQkxFX09MRTFEREUgfCBTUEVFRF9PVkVSX01FTU9SWTogZmlyc3QgMHgwLCBhcGFydG1lbnQgdHlwZSAweDEsIGFnYWluIDB4MSwgb3RoZXIgbW9kZWwgMHg4MDAxMDEwNiwgYWZ0ZXIgdHdvIHVuaW5pdGlhbGl6ZSAweGZmZmYwMWYwLCBhZnRlciB0aGUgdGhpcmQgMHhmZmZmMDFmMApBUEFSVE1FTlRUSFJFQURFRCB8IFNQRUVEX09WRVJfTUVNT1JZOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCnJlc2VydmVkIHBhcmFtZXRlciBub3QgTlVMTDogMHg4MDA3MDA1NywgYXBhcnRtZW50IGFmdGVyd2FyZHMgMHhmZmZmMDFmMCAoMHhmZmZmLi4gbWVhbnMgbm90IGluaXRpYWxpemVkOiBsb3cgYml0cyBvZiB0aGUgSFJFU1VMVCkKZmxhZ3MgMSwgMywgMHgxMCwgMHgyMCwgMHgxMDAsIDB4RkZGRkZGRkYgaW4gdHVybiAoSFJFU1VMVCBhbmQsIHdoZW4gaXQgd29ya2VkLCB0aGUgYXBhcnRtZW50IHR5cGUpOiAweDgwMDcwMDU3IDB4ODAwNzAwNTcgMHg4MDA3MDA1NyAweDgwMDcwMDU3IDB4ODAwNzAwNTcgMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "COINIT_APARTMENTTHREADED: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nCOINIT_MULTITHREADED: first 0x0, apartment type 0x1, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nAPARTMENTTHREADED | DISABLE_OLE1DDE: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nMULTITHREADED | DISABLE_OLE1DDE | SPEED_OVER_MEMORY: first 0x0, apartment type 0x1, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nAPARTMENTTHREADED | SPEED_OVER_MEMORY: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nreserved parameter not NULL: 0x80070057, apartment afterwards 0xffff01f0 (0xffff.. means not initialized: low bits of the HRESULT)\nflags 1, 3, 0x10, 0x20, 0x100, 0xFFFFFFFF in turn (HRESULT and, when it worked, the apartment type): 0x80070057 0x80070057 0x80070057 0x80070057 0x80070057 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    },
+    {
       "name": "com_apartments",
       "exe_sha256": "a5275bb11b3445fcb65943e9a781622ca307ad8f034e9875142174bfb4dfeaf4",
       "status": "ran",

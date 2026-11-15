@@ -235,20 +235,6 @@ unsafe extern "system" {
         kind: u32,
         protect: u32,
     ) -> NtStatus;
-    pub fn NtReadVirtualMemory(
-        process: Handle,
-        base: *const u8,
-        buffer: *mut u8,
-        size: usize,
-        done: *mut usize,
-    ) -> NtStatus;
-    pub fn NtWriteVirtualMemory(
-        process: Handle,
-        base: *mut u8,
-        buffer: *const u8,
-        size: usize,
-        done: *mut usize,
-    ) -> NtStatus;
     pub fn NtFreeVirtualMemory(process: Handle, base: *mut *mut u8, size: *mut usize, kind: u32) -> NtStatus;
     pub fn NtProtectVirtualMemory(
         process: Handle,
@@ -264,6 +250,20 @@ unsafe extern "system" {
         info: *mut u8,
         length: usize,
         returned: *mut usize,
+    ) -> NtStatus;
+    pub fn NtReadVirtualMemory(
+        process: Handle,
+        base: *const u8,
+        buf: *mut u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
+    pub fn NtWriteVirtualMemory(
+        process: Handle,
+        base: *mut u8,
+        buf: *const u8,
+        len: usize,
+        done: *mut usize,
     ) -> NtStatus;
 
     pub fn NtCreateSection(
@@ -333,6 +333,9 @@ unsafe extern "system" {
     ) -> NtStatus;
     pub fn NtSuspendThread(handle: Handle, previous: *mut u32) -> NtStatus;
     pub fn NtResumeThread(handle: Handle, previous: *mut u32) -> NtStatus;
+    pub fn NtTerminateThread(handle: Handle, status: u32) -> NtStatus;
+    pub fn NtGetContextThread(handle: Handle, context: *mut u8) -> NtStatus;
+    pub fn NtSetContextThread(handle: Handle, context: *const u8) -> NtStatus;
     pub fn NtOpenEvent(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn NtOpenMutant(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn RtlRaiseException(record: *const u8);
@@ -353,6 +356,8 @@ unsafe extern "system" {
     pub fn NtQueryPerformanceCounter(counter: *mut i64, frequency: *mut i64) -> NtStatus;
     pub fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8;
     pub fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32;
+    pub fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8;
+    pub fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32;
     pub fn NtQuerySystemInformation(class: u32, info: *mut u8, length: u32, returned: *mut u32) -> NtStatus;
 
     pub fn RtlNtStatusToDosError(status: NtStatus) -> u32;

@@ -77,6 +77,8 @@ pub const OUTPUTS: &[&str] = &[
     "secur32.dll",
     "dhcpcsvc.dll",
     "dnsapi.dll",
+    // ADR 0195.
+    "mswsock.dll",
     "dbghelp.dll",
     "b35test.exe",
     // ADR 0170.
@@ -105,6 +107,12 @@ pub const OUTPUTS: &[&str] = &[
     "wevtapi.dll",
     "hid.dll",
     "mdmregistration.dll",
+    "dxgi.dll",
+    "d3d11.dll",
+    "dcomp.dll",
+    // ADR 0199.
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -234,6 +242,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/netapi32",
             "personalities/nt/win32/secur32",
             "personalities/nt/win32/dhcpcsvc",
+            "personalities/nt/win32/mswsock",
             "personalities/nt/win32/dnsapi",
             "personalities/nt/win32/dbghelp",
             "personalities/nt/win32/b35test",
@@ -266,6 +275,12 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/wevtapi",
             "personalities/nt/win32/hid",
             "personalities/nt/win32/mdmregistration",
+            "personalities/nt/win32/dxgi",
+            "personalities/nt/win32/d3d11",
+            "personalities/nt/win32/dcomp",
+            // ADR 0199.
+            "personalities/nt/win32/vcruntime140",
+            "personalities/nt/win32/vcruntime140_1",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -400,6 +415,7 @@ fn verify(dir: &Path) -> Result {
     verify_ole32(dir)?;
     verify_crypto(dir)?;
     verify_ws2_32(dir)?;
+    verify_mswsock(dir)?;
     verify_gui(dir)
 }
 
@@ -477,6 +493,21 @@ fn verify_crypto(dir: &Path) -> Result {
         }
     }
     verify_exe(dir, "cryptest.exe", &["bcrypt.dll", "crypt32.dll", "kernel32.dll"])
+}
+
+/// `mswsock.dll` exports `AcceptEx`, `GetAcceptExSockaddrs`, `ConnectEx` and `DisconnectEx` by name,
+/// as code (ADR 0195).
+fn verify_mswsock(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    let bytes = read(&dir.join("mswsock.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("mswsock exports: {e:?}"))?.ok_or("mswsock: no exports")?;
+    for name in ["AcceptEx", "GetAcceptExSockaddrs", "ConnectEx", "DisconnectEx", "TransmitFile"] {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("mswsock.dll lacks {name}"));
+        }
+    }
+    Ok(())
 }
 
 /// `ws2_32` exports every function of `poly_winsock::exports` by name, as

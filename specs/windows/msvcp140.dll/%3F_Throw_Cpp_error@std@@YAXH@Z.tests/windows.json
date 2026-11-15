@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "msvcp_throw_cpp_error",
+      "exe_sha256": "70c3732f2e3f9f95e1f7862249fa374c045a92fb33f0dae7aeb2d2632e5e8332",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgX1Rocm93X0NwcF9lcnJvciAwIHZhbHVlPTE2IGdlbmVyaWM9MSB3aGF0PWRldmljZSBvciByZXNvdXJjZSBidXN5OiBkZXZpY2Ugb3IgcmVzb3VyY2UgYnVzeQpvayB0aGUgZXJyb3IgdmFsdWUgb2YgdGhlIGNvZGUKb2sgdGhlIGNhdGVnb3J5IGlzIGdlbmVyaWMKb2sgYSBzeXN0ZW1fZXJyb3Igd2FzIHRocm93bgp2YWx1ZSBfVGhyb3dfQ3BwX2Vycm9yIDEgdmFsdWU9MjIgZ2VuZXJpYz0xIHdoYXQ9aW52YWxpZCBhcmd1bWVudDogaW52YWxpZCBhcmd1bWVudApvayB0aGUgZXJyb3IgdmFsdWUgb2YgdGhlIGNvZGUKb2sgdGhlIGNhdGVnb3J5IGlzIGdlbmVyaWMKb2sgYSBzeXN0ZW1fZXJyb3Igd2FzIHRocm93bgp2YWx1ZSBfVGhyb3dfQ3BwX2Vycm9yIDIgdmFsdWU9MyBnZW5lcmljPTEgd2hhdD1ubyBzdWNoIHByb2Nlc3M6IG5vIHN1Y2ggcHJvY2VzcwpvayB0aGUgZXJyb3IgdmFsdWUgb2YgdGhlIGNvZGUKb2sgdGhlIGNhdGVnb3J5IGlzIGdlbmVyaWMKb2sgYSBzeXN0ZW1fZXJyb3Igd2FzIHRocm93bgp2YWx1ZSBfVGhyb3dfQ3BwX2Vycm9yIDMgdmFsdWU9MTIgZ2VuZXJpYz0xIHdoYXQ9bm90IGVub3VnaCBtZW1vcnk6IG5vdCBlbm91Z2ggbWVtb3J5Cm9rIHRoZSBlcnJvciB2YWx1ZSBvZiB0aGUgY29kZQpvayB0aGUgY2F0ZWdvcnkgaXMgZ2VuZXJpYwpvayBhIHN5c3RlbV9lcnJvciB3YXMgdGhyb3duCnZhbHVlIF9UaHJvd19DcHBfZXJyb3IgNCB2YWx1ZT0xIGdlbmVyaWM9MSB3aGF0PW9wZXJhdGlvbiBub3QgcGVybWl0dGVkOiBvcGVyYXRpb24gbm90IHBlcm1pdHRlZApvayB0aGUgZXJyb3IgdmFsdWUgb2YgdGhlIGNvZGUKb2sgdGhlIGNhdGVnb3J5IGlzIGdlbmVyaWMKb2sgYSBzeXN0ZW1fZXJyb3Igd2FzIHRocm93bgp2YWx1ZSBfVGhyb3dfQ3BwX2Vycm9yIDUgdmFsdWU9MzYgZ2VuZXJpYz0xIHdoYXQ9cmVzb3VyY2UgZGVhZGxvY2sgd291bGQgb2NjdXI6IHJlc291cmNlIGRlYWRsb2NrIHdvdWxkIG9jY3VyCm9rIHRoZSBlcnJvciB2YWx1ZSBvZiB0aGUgY29kZQpvayB0aGUgY2F0ZWdvcnkgaXMgZ2VuZXJpYwpvayBhIHN5c3RlbV9lcnJvciB3YXMgdGhyb3duCnZhbHVlIF9UaHJvd19DcHBfZXJyb3IgNiB2YWx1ZT0xMSBnZW5lcmljPTEgd2hhdD1yZXNvdXJjZSB1bmF2YWlsYWJsZSB0cnkgYWdhaW46IHJlc291cmNlIHVuYXZhaWxhYmxlIHRyeSBhZ2FpbgpvayB0aGUgZXJyb3IgdmFsdWUgb2YgdGhlIGNvZGUKb2sgdGhlIGNhdGVnb3J5IGlzIGdlbmVyaWMKb2sgYSBzeXN0ZW1fZXJyb3Igd2FzIHRocm93bgpzdW1tYXJ5IDIxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value _Throw_Cpp_error 0 value=16 generic=1 what=device or resource busy: device or resource busy\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 1 value=22 generic=1 what=invalid argument: invalid argument\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 2 value=3 generic=1 what=no such process: no such process\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 3 value=12 generic=1 what=not enough memory: not enough memory\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 4 value=1 generic=1 what=operation not permitted: operation not permitted\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 5 value=36 generic=1 what=resource deadlock would occur: resource deadlock would occur\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nvalue _Throw_Cpp_error 6 value=11 generic=1 what=resource unavailable try again: resource unavailable try again\nok the error value of the code\nok the category is generic\nok a system_error was thrown\nsummary 21 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

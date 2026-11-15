@@ -18,8 +18,11 @@
 //!     `type:TEXT`, `key:QCODE`, `chord:ctrl+s`, `click:X,Y`, `dclick:X,Y`, `rclick:X,Y`.
 //!     Without steps: `launch`, `sleep:20`, `shot:window`, `sleep:20`, `shot:later`.
 //!   - Options: `--name N` (default: the program's file stem), `--args "..."` (the program's
-//!     command line after its name), `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
-//!     limit), `--exceptions[=N]`, `--trace`, `--release`, `--out DIR` (log, summary and
+//!     command line after its name), `--then "..."` (repeatable: run the program again with
+//!     these arguments after the previous run, in the same boot and on the same disk),
+//!     `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
+//!     limit), `--exceptions[=N]`, `--trace`, `--kernel "OPTIONS"` (more kernel options, such as
+//!     `poly.nt.waits=10 poly.nt.trail`), `--release`, `--out DIR` (log, summary and
 //!     screenshots; default `target/win-app/<name>-out`), `--memory=SIZE`, `--cpus=N`.
 
 use crate::chromewin::{Module, walk};
@@ -84,6 +87,11 @@ fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
 }
 
+/// Every value of an option that may be given more than once.
+fn flags(args: &[String], name: &str) -> Vec<String> {
+    args.windows(2).filter(|w| w[0] == name).map(|w| w[1].clone()).collect()
+}
+
 fn imports(args: &[String]) -> Result {
     let dir = PathBuf::from(flag(args, "--dir").ok_or("--dir DIR is needed")?);
     let mods = modules(&dir)?;
@@ -144,12 +152,18 @@ struct Opts {
     exe: String,
     name: String,
     args: String,
+    /// The runs, in order, in one boot: the program and its arguments (`--args`), then the same
+    /// program again for each `--then "ARGS"` (or other programs of the directory, for the
+    /// boot tests: [`run_sequence`]). Paths are relative to the directory, with `/`.
+    runs: Vec<(String, String)>,
     cwd: String,
     desktop: bool,
     seconds: u64,
     timeout: u64,
     exceptions: Option<String>,
     trace: bool,
+    /// More kernel options (`--kernel "poly.nt.waits=10 poly.nt.trail"`): the other diagnostics.
+    kernel: String,
     release: bool,
     out: PathBuf,
     #[cfg_attr(not(unix), allow(dead_code))]
@@ -187,6 +201,10 @@ fn parse(args: &[String]) -> Result<Opts> {
         out: flag(args, "--out")
             .map_or_else(|| root().join("target/win-app").join(format!("{name}-out")), PathBuf::from),
         dir,
+        runs: core::iter::once(flag(args, "--args").unwrap_or_default())
+            .chain(flags(args, "--then"))
+            .map(|a| (exe.clone(), a))
+            .collect(),
         exe,
         args: flag(args, "--args").unwrap_or_default(),
         cwd: flag(args, "--dir-cwd").unwrap_or_default(),
@@ -201,6 +219,7 @@ fn parse(args: &[String]) -> Result<Opts> {
             }
         }),
         trace: args.iter().any(|a| a == "--trace"),
+        kernel: flag(args, "--kernel").unwrap_or_default(),
         release: args.iter().any(|a| a == "--release"),
         name,
         steps,
@@ -224,8 +243,18 @@ fn disk(o: &Opts) -> Result<PathBuf> {
     } else {
         o.cwd.clone()
     };
-    let cmdline = format!("\"{exe_dos}\" {}", o.args).trim_end().to_string();
-    let stage = format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n", o.seconds);
+    // One stage per run; each but the last asks the launcher for the next one (line 7).
+    let stages: Vec<String> = o
+        .runs
+        .iter()
+        .enumerate()
+        .map(|(i, (exe, args))| {
+            let exe_dos = format!("{APPS_DOS}\\{}\\{}", o.name, exe.replace('/', "\\"));
+            let cmdline = format!("\"{exe_dos}\" {args}").trim_end().to_string();
+            let next = if i + 1 < o.runs.len() { "next" } else { "" };
+            format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n\n\n{next}\n", o.seconds)
+        })
+        .collect();
     let mut tree = crate::rootdisk::RootTree::default();
     for d in ["poly", "poly/nt", "poly/nt/registry", "poly/nt/c", APPS_ON_DISK] {
         tree.dir(d, 0o755);
@@ -236,11 +265,18 @@ fn disk(o: &Opts) -> Result<PathBuf> {
         let mode = if low.ends_with(".exe") || low.ends_with(".dll") { 0o755 } else { 0o644 };
         tree.host_file(&format!("{APPS_ON_DISK}/{}/{rel}", o.name), mode, &path, crate::hostfs::mtime(&meta));
     }
-    tree.file("poly/nt/c/poly-test/stage1.cmd", 0o644, stage.as_bytes());
+    for (i, stage) in stages.iter().enumerate() {
+        tree.file(&format!("poly/nt/c/poly-test/stage{}.cmd", i + 1), 0o644, stage.as_bytes());
+    }
     tree.file(&format!("poly/nt/c/poly-test/{}.exe", crate::chromewin::LAUNCHER), 0o755, &launcher);
     // A 32-bit program's loader searches SysWOW64, its System32 (ADR 0186).
     let system = if x86 { "poly/nt/c/Windows/SysWOW64" } else { crate::chromewin::SYSTEM32_ON_DISK };
     tree.file(&format!("{system}/{}", poly_stubs::STUB_DLL), 0o755, &stubs);
+    // Poly's fonts in `C:\Windows\Fonts` (ADR 0181), as `chrome-win`'s disk has them: without a
+    // face, Chrome's UI font set-up starts over until the browser's stack is full (ADR 0155
+    // addenda "step 9" and "S3 hunt").
+    crate::fonts::fetch_dejavu()?;
+    crate::fonts::add_to_root(&mut tree)?;
     let started = Instant::now();
     crate::rootdisk::write_image_poly_ext2(&tree, &image)?;
     eprintln!("==> disk {} ({} entries, {:.0?})", image.display(), tree.entries.len(), started.elapsed());
@@ -255,6 +291,10 @@ fn kernel_arguments(o: &Opts) -> String {
     if let Some(v) = &o.exceptions {
         more.push_str(" poly.nt.exceptions");
         more.push_str(v);
+    }
+    for option in o.kernel.split_whitespace() {
+        more.push(' ');
+        more.push_str(option);
     }
     more
 }
@@ -290,6 +330,45 @@ fn run(args: &[String]) -> Result {
     println!("{report}");
     eprintln!("==> log {}, summary {}", log.display(), path.display());
     Ok(())
+}
+
+/// Boot `kernel` with the program directory `dir` as `C:\apps\<name>` and run `runs` (a
+/// program of the directory, relative with `/`, and its arguments) one after another in `cwd`
+/// (a DOS path), each for at most `seconds`: the serial log, cleaned, also written to `log`. For
+/// boot tests of downloaded apps (`gitwin.rs`).
+pub fn run_sequence(
+    kernel: &Path,
+    dir: &Path,
+    name: &str,
+    cwd: &str,
+    runs: &[(&str, &str)],
+    seconds: u64,
+    log: &Path,
+) -> Result<String> {
+    let (exe, args) = *runs.first().ok_or("nothing to run")?;
+    let o = Opts {
+        dir: dir.to_path_buf(),
+        exe: exe.to_string(),
+        name: name.to_string(),
+        args: args.to_string(),
+        runs: runs.iter().map(|&(e, a)| (e.to_string(), a.to_string())).collect(),
+        cwd: cwd.to_string(),
+        desktop: false,
+        seconds,
+        timeout: 120 + seconds * runs.len() as u64,
+        exceptions: Some(String::new()),
+        trace: false,
+        kernel: String::new(),
+        release: false,
+        out: log.parent().map_or_else(|| root().join("target"), Path::to_path_buf),
+        steps: Vec::new(),
+        rest: Vec::new(),
+    };
+    let image = disk(&o)?;
+    let _ = std::fs::remove_file(log);
+    let res = crate::resources::Resources::from_args(&[])?;
+    let text = run_console(&o, kernel, &image, log, &res, &kernel_arguments(&o))?;
+    Ok(clean(&text))
 }
 
 /// The serial log without the terminal's escape sequences (a cursor move starts a new line).
@@ -345,6 +424,14 @@ fn report(o: &Opts, s: &crate::chromewin::Summary, text: &str) -> String {
     let mut r = String::new();
     let _ = writeln!(r, "program: {}\\{}\\{} {}", APPS_DOS, o.name, o.exe, o.args);
     let _ = writeln!(r, "launcher: {}", s.exit.as_deref().unwrap_or("(no LAUNCH-EXIT line)"));
+    for (i, (exe, args)) in o.runs.iter().enumerate().skip(1) {
+        let _ = writeln!(r, "then {}: {exe} {args}", i + 1);
+    }
+    if o.runs.len() > 1 {
+        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT")) {
+            let _ = writeln!(r, "  {}", l.trim());
+        }
+    }
     for which in ["stdout", "stderr"] {
         let lines = program_output(text, which);
         let _ = writeln!(r, "{which} ({} lines):", lines.len());
@@ -429,6 +516,17 @@ fn run_console(
     Ok(std::fs::read(log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default())
 }
 
+/// The desktop file that starts the program. `%` begins a field code in `Exec` (the Desktop
+/// Entry Specification, "The Exec key"); a literal one is written `%%`, so a URL's `%20`
+/// reaches the program as it was given.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn desktop_file(name: &str, exe: &str, args: &str) -> String {
+    let a = args.replace('%', "%%");
+    format!(
+        "[Desktop Entry]\nType=Application\nName=Winapp {name}\nComment=Windows program under test\nExec={exe} {a}\nKeywords=winapp;{name};\n"
+    )
+}
+
 /// A desktop run: the compositor is init, a desktop file starts the program, QMP drives it.
 #[cfg(unix)]
 fn run_desktop(
@@ -440,11 +538,7 @@ fn run_desktop(
     more: &str,
 ) -> Result<String> {
     let dos = format!("/mnt/root/{APPS_ON_DISK}/{}/{}", o.name, o.exe);
-    let file = format!(
-        "[Desktop Entry]\nType=Application\nName=Winapp {n}\nComment=Windows program under test\nExec={dos} {a}\nKeywords=winapp;{n};\n",
-        n = o.name,
-        a = o.args
-    );
+    let file = desktop_file(&o.name, &dos, &o.args);
     let extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
     let initrd = crate::desktop::image_with("poly-win-app-initramfs.cpio", false, extra)?;
     let socket = std::env::temp_dir().join(format!("poly-win-app-qmp-{}.sock", std::process::id()));
@@ -493,6 +587,8 @@ enum Step {
     Click(i32, i32),
     DClick(i32, i32),
     RClick(i32, i32),
+    /// Press the left button at the first point, move to the second in steps, release.
+    Drag(i32, i32, i32, i32),
 }
 
 impl Step {
@@ -524,6 +620,15 @@ impl Step {
             "rclick" => {
                 let (x, y) = xy()?;
                 Step::RClick(x, y)
+            }
+            "drag" => {
+                let v: Vec<i32> = arg
+                    .split('|')
+                    .map(|p| p.trim().parse())
+                    .collect::<core::result::Result<_, _>>()
+                    .map_err(|_| format!("step {s:?}: X1|Y1|X2|Y2"))?;
+                let [x1, y1, x2, y2] = v[..] else { return Err(format!("step {s:?}: X1|Y1|X2|Y2")) };
+                Step::Drag(x1, y1, x2, y2)
             }
             _ => return Err(format!("step {s:?}: no such step (click takes X|Y because steps are comma separated)")),
         })
@@ -663,6 +768,16 @@ impl Driver {
             Step::Click(x, y) => self.click(*x, *y, "left", 1)?,
             Step::DClick(x, y) => self.click(*x, *y, "left", 2)?,
             Step::RClick(x, y) => self.click(*x, *y, "right", 1)?,
+            Step::Drag(x1, y1, x2, y2) => {
+                self.at(*x1, *y1)?;
+                self.events(&[Self::btn(true, "left")])?;
+                std::thread::sleep(Duration::from_millis(400));
+                for i in 1..=8 {
+                    self.at(x1 + (x2 - x1) * i / 8, y1 + (y2 - y1) * i / 8)?;
+                }
+                self.events(&[Self::btn(false, "left")])?;
+                std::thread::sleep(Duration::from_millis(200));
+            }
         }
         Ok(())
     }
@@ -694,10 +809,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_percent_in_the_arguments_is_not_a_field_code() {
+        let f = desktop_file("chrome", "/mnt/root/c.exe", "data:text/html,<b>a%20b</b>");
+        assert!(f.contains("\nExec=/mnt/root/c.exe data:text/html,<b>a%%20b</b>\n"), "{f}");
+    }
+
+    #[test]
     fn steps_parse() {
         assert_eq!(Step::parse("launch"), Ok(Step::Launch));
         assert_eq!(Step::parse("sleep:5"), Ok(Step::Sleep(5)));
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
+        assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
+        assert!(Step::parse("drag:1|2|3").is_err());
         assert_eq!(Step::parse("chord:ctrl+s"), Ok(Step::Chord(vec!["ctrl".into(), "s".into()])));
         assert!(Step::parse("fly").is_err());
     }

@@ -46,10 +46,10 @@ pub fn flags(revents: u32) -> (bool, bool, bool, bool) {
 }
 
 /// What the event-select helper asks the device to watch: data and writability only while an event
-/// can be recorded for them (else the call would return at once and spin), always the end of the
-/// connection and errors.
-pub fn events_interest(read: bool, write: bool) -> u32 {
-    let mut e = HUP | ERR;
+/// can be recorded for them (else the call would return at once and spin), the end of the
+/// connection and errors until the end was recorded.
+pub fn events_interest(read: bool, write: bool, end: bool) -> u32 {
+    let mut e = if end { HUP | ERR } else { 0 };
     if read {
         e |= RDNORM;
     }
@@ -76,7 +76,11 @@ pub fn select_interest(read: bool, write: bool, except: bool) -> u32 {
 
 /// Whether a socket with the device's `revents` is in each `select` set.
 pub fn select_ready(revents: u32) -> (bool, bool, bool) {
-    (revents & (RDNORM | HUP) != 0, revents & WRNORM != 0 && revents & ERR == 0, revents & ERR != 0)
+    (
+        revents & RDNORM != 0 || (revents & HUP != 0 && revents & ERR == 0),
+        revents & WRNORM != 0 && revents & ERR == 0,
+        revents & ERR != 0,
+    )
 }
 
 /// `WSAPoll`'s `events` as the device's interest: `POLLIN` asks for
@@ -92,8 +96,15 @@ pub fn wsapoll_interest(events: i16) -> Result<u32, u32> {
     Ok(u32::from(events as u16) & (RDNORM | WRNORM))
 }
 
+/// A device bit (outside `WSAPoll`'s 16): the socket's connect failed. Windows reports such a
+/// socket (with its error and hang-up) to a poll for writing only.
+pub const CONNECT_FAILED: u32 = 0x8000_0000;
+
 /// The `revents` `WSAPoll` reports for the device's bits.
 pub fn wsapoll_revents(events: i16, device: u32) -> i16 {
+    if device & CONNECT_FAILED != 0 && events & POLLWRNORM == 0 {
+        return (device & NVAL) as u16 as i16;
+    }
     let want = u32::from(events as u16) | ERR | HUP | NVAL;
     (device & want) as u16 as i16
 }
@@ -113,8 +124,10 @@ mod tests {
         assert_eq!(i, 0x0100 | 0x0002 | 0x0010 | 0x0001);
         assert_eq!(select_ready(from_readiness(true, false, false, false)), (true, false, false));
         assert_eq!(select_ready(from_readiness(false, true, false, false)), (false, true, false));
-        // A refused non-blocking connect: except, not write.
-        assert_eq!(select_ready(from_readiness(false, true, true, true)), (true, false, true));
+        // A refused non-blocking connect: except only (not read, not write).
+        assert_eq!(select_ready(from_readiness(false, true, true, true)), (false, false, true));
+        // The end of a connection: readable.
+        assert_eq!(select_ready(from_readiness(false, false, false, true)), (true, false, false));
         assert_eq!(select_ready(0), (false, false, false));
     }
 
@@ -128,5 +141,9 @@ mod tests {
         assert_eq!(wsapoll_revents(POLLIN, dev), POLLRDNORM | POLLHUP);
         assert_eq!(wsapoll_revents(POLLOUT, dev), POLLWRNORM | POLLHUP);
         assert_eq!(wsapoll_revents(0, nval()), POLLNVAL);
+        // A failed connect: reported to a poll for writing, with its error and hang-up; not to one for reading.
+        let failed = from_readiness(false, true, true, true) | CONNECT_FAILED;
+        assert_eq!(wsapoll_revents(POLLOUT, failed), POLLWRNORM | POLLERR | POLLHUP);
+        assert_eq!(wsapoll_revents(POLLIN, failed), 0);
     }
 }

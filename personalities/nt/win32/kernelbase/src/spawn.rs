@@ -393,7 +393,11 @@ unsafe fn create(
         None => current_dir(),
     };
     // The parameters, laid out where they will stay during the call.
-    let child = p::Child { image: &image, command_line: &line, env: &env, current: &cwd, startup };
+    // The creator's own standard handles, when the child inherits them (ADR 0194).
+    let startup_flags = startup.map_or(0, p::Startup::flags);
+    let inherited_std = p::inherits_std_handles(startup_flags, r.inherit_handles, flags)
+        .then(|| crate::process::std_handles().map(|h| h as u64));
+    let child = p::Child { image: &image, command_line: &line, env: &env, current: &cwd, startup, inherited_std };
     let size = match p::child_parameters_in(&poly_rtl::layout::NATIVE, 0, &child) {
         Ok(b) => b.len(),
         Err(e) => return fail(e, FALSE),

@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "50b9a4f9a7cb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T18:00:34Z",
+  "tests": [
+    {
+      "name": "rtti_dyncast_access",
+      "exe_sha256": "20b3069553c37195a5d40ac111a31e8946742feb7d92f5c47a4d005b2edb30c2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZG93bmNhc3QgZnJvbSBhIHByaXZhdGUgYmFzZSBpcyBub3QgYWxsb3dlZDogbnVsbApvayBkb3duY2FzdCBmcm9tIGEgcHJvdGVjdGVkIGJhc2UgaXMgbm90IGFsbG93ZWQ6IG51bGwKb2sgYSBwdWJsaWMgZGVyaXZlZCBjbGFzcyBvZiBhIHByaXZhdGUtYmFzZSBjbGFzczogdGhlIHByaXZhdGUgQSBpcyBub3QgYSBwYXRoCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok downcast from a private base is not allowed: null\nok downcast from a protected base is not allowed: null\nok a public derived class of a private-base class: the private A is not a path\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "rtti_dyncast_down_side",
+      "exe_sha256": "9f3b33507867aae51bdd4fba573026aaff39c5a0f4aa9d16cb7de2e69e329759",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZG93bmNhc3QgQiogLT4gRCoKb2sgZG93bmNhc3QgQyogLT4gRCoKb2sgZG93bmNhc3QgQSogKHRoZSBvbmUgaW4gQikgLT4gRCoKb2sgZG93bmNhc3QgQSogKHRoZSBvbmUgaW4gQykgLT4gRCoKb2sgc2lkZXdheXMgQiogLT4gQyoKb2sgc2lkZXdheXMgQyogLT4gQioKb2sgZnJvbSB0aGUgQSBpbiBCIHRvIEM6IGZvdW5kIGZyb20gdGhlIGNvbXBsZXRlIG9iamVjdCwgdGhvdWdoIEEgaXMgYW1iaWd1b3VzIGluIEQKb2sgQSogLT4gQiogc3VjY2VlZHMgZnJvbSB0aGUgQSBpbnNpZGUgQgpvayBmcm9tIHRoZSBBIGluIEMgdG8gQjogZm91bmQgZnJvbSB0aGUgY29tcGxldGUgb2JqZWN0Cm9rIG51bGwgcG9pbnRlciBzdGF5cyBudWxsCm9rIGRvd25jYXN0IHRvIGEgdHlwZSB0aGUgb2JqZWN0IGlzIG5vdApvayB0byBpdHMgb3duIHR5cGUKb2sgdG8gdGhlIHNhbWUgcG9pbnRlciB0eXBlCnN1bW1hcnkgMTMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok downcast B* -> D*\nok downcast C* -> D*\nok downcast A* (the one in B) -> D*\nok downcast A* (the one in C) -> D*\nok sideways B* -> C*\nok sideways C* -> B*\nok from the A in B to C: found from the complete object, though A is ambiguous in D\nok A* -> B* succeeds from the A inside B\nok from the A in C to B: found from the complete object\nok null pointer stays null\nok downcast to a type the object is not\nok to its own type\nok to the same pointer type\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "rtti_dyncast_offset_base",
+      "exe_sha256": "01c9137c10c0d3bbd429a46be602a04a6b6519b12dc7e11425796329e5fea659",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgRTogRCBpcyBub3QgYXQgb2Zmc2V0IDAKb2sgRTogQSAoaW4gQikgLT4gRSoKb2sgRTogU29sbyogLT4gRCogc2lkZXdheXMKb2sgRTogQyogLT4gU29sbyogc2lkZXdheXMKb2sgRTogU29sbyogLT4gQyogc2lkZXdheXMKdmFsdWUgb2Zmc2V0IG9mIEQgaW4gRSA4CnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok E: D is not at offset 0\nok E: A (in B) -> E*\nok E: Solo* -> D* sideways\nok E: C* -> Solo* sideways\nok E: Solo* -> C* sideways\nvalue offset of D in E 8\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "rtti_dyncast_virtual",
+      "exe_sha256": "b03f270579a3298032d120ccde839e5c906fae1552e03c36e65d8aa04c0d3b8a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdmlydHVhbCBiYXNlIFZBKiAtPiBWRCoKb2sgVkEqIC0+IFYxKgpvayBWQSogLT4gVjIqCm9rIFYxKiAtPiBWMiogc2lkZXdheXMgdGhyb3VnaCB0aGUgdmlydHVhbCBiYXNlCm9rIFYyKiAtPiBWMSoKb2sgVjEqIC0+IFZBKiB1cGNhc3QgKHZpcnR1YWwpCm9rIFYyKiAtPiBWRCoKdmFsdWUgb2Zmc2V0IG9mIFYyIGluIFZEIDE2CnZhbHVlIG9mZnNldCBvZiBWQSBpbiBWRCA0MApzdW1tYXJ5IDcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok virtual base VA* -> VD*\nok VA* -> V1*\nok VA* -> V2*\nok V1* -> V2* sideways through the virtual base\nok V2* -> V1*\nok V1* -> VA* upcast (virtual)\nok V2* -> VD*\nvalue offset of V2 in VD 16\nvalue offset of VA in VD 40\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

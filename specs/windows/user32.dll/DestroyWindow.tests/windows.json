@@ -12,6 +12,7 @@
   "tests": [
     {
       "name": "dw_chrome_close",
+      "session": "interactive-bottom",
       "exe_sha256": "290d7c8983987d330b93fc5a5d406144e0714accd2f3a7e4b2dad1caadad848e",
       "status": "ran",
       "exit_code": 0,
@@ -36,6 +37,19 @@
       "error": null,
       "stable": true,
       "ms": 59
+    },
+    {
+      "name": "dw_ime_after",
+      "exe_sha256": "a0b58e91749e68c068bda20c445794e1acfc0ed8bd86b5500f103a9b50fc9568",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "YnVpbHQ6IElNRSB3aW5kb3cgb3duZXIgaGlkLCBhY3RpdmUgbnVsbDsgd2FsayBbbWFpbn4gaGlkfiBpbWV+XTsgRW51bVRocmVhZFdpbmRvd3MgW21haW5+IGhpZH4gaW1lfl0Kc2hvd24gYW5kIGFjdGl2ZTogSU1FIHdpbmRvdyBvd25lciBtYWluLCBhY3RpdmUgbWFpbjsgd2FsayBbY3RmfiBpbWV+IG1haW4gaGlkfl07IEVudW1UaHJlYWRXaW5kb3dzIFttYWluIGhpZH4gY3RmfiBpbWV+XQptaW5pbWl6ZWQ6IElNRSB3aW5kb3cgb3duZXIgbWFpbiwgYWN0aXZlIG51bGw7IHdhbGsgW2hpZH4gY3RmfiBpbWV+IG1haW5dOyBFbnVtVGhyZWFkV2luZG93cyBbaGlkfiBtYWluIGN0Zn4gaW1lfl0KcmVzdG9yZWQ6IElNRSB3aW5kb3cgb3duZXIgbWFpbiwgYWN0aXZlIG1haW47IHdhbGsgW2N0Zn4gaW1lfiBtYWluIGhpZH5dOyBFbnVtVGhyZWFkV2luZG93cyBbbWFpbiBoaWR+IGN0Zn4gaW1lfl0KdG9wLWxldmVsIGRlc3Ryb3llZDogSU1FIHdpbmRvdyBvd25lciBudWxsLCBhY3RpdmUgbnVsbDsgd2FsayBbaW1lfiBjdGZ+IGhpZH5dOyBFbnVtVGhyZWFkV2luZG93cyBbaGlkfiBpbWV+IGN0Zn5dCihhZnRlciB0aGUgdG9wLWxldmVsIHdpbmRvdyBpcyBkZXN0cm95ZWQgdGhlIElNRSB3aW5kb3cgaGFzIG5vIG93bmVyLCBpbWUgaXMgYWJvdmUgY3RmIGluIHRoZSB3YWxrKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: IME window owner hid, active null; walk [main~ hid~ ime~]; EnumThreadWindows [main~ hid~ ime~]\nshown and active: IME window owner main, active main; walk [ctf~ ime~ main hid~]; EnumThreadWindows [main hid~ ctf~ ime~]\nminimized: IME window owner main, active null; walk [hid~ ctf~ ime~ main]; EnumThreadWindows [hid~ main ctf~ ime~]\nrestored: IME window owner main, active main; walk [ctf~ ime~ main hid~]; EnumThreadWindows [main hid~ ctf~ ime~]\ntop-level destroyed: IME window owner null, active null; walk [ime~ ctf~ hid~]; EnumThreadWindows [hid~ ime~ ctf~]\n(after the top-level window is destroyed the IME window has no owner, ime is above ctf in the walk)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 917
     },
     {
       "name": "dw_order",

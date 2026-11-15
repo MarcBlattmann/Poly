@@ -1,0 +1,116 @@
+PathCchSkipRoot "C:" -> 0x0, rest at +2 ""
+PathCchSkipRoot "C:\" -> 0x0, rest at +3 ""
+PathCchSkipRoot "C:\\" -> 0x0, rest at +3 "\"
+PathCchSkipRoot "C:\a" -> 0x0, rest at +3 "a"
+PathCchSkipRoot "C:\a\" -> 0x0, rest at +3 "a\"
+PathCchSkipRoot "C:\a\b" -> 0x0, rest at +3 "a\b"
+PathCchSkipRoot "C:\a\b\" -> 0x0, rest at +3 "a\b\"
+PathCchSkipRoot "C:\a\b.txt" -> 0x0, rest at +3 "a\b.txt"
+PathCchSkipRoot "C:\a\\b" -> 0x0, rest at +3 "a\\b"
+PathCchSkipRoot "C:\\a" -> 0x0, rest at +3 "\a"
+PathCchSkipRoot "C:a" -> 0x0, rest at +2 "a"
+PathCchSkipRoot "C:a\b" -> 0x0, rest at +2 "a\b"
+PathCchSkipRoot "C:a\" -> 0x0, rest at +2 "a\"
+PathCchSkipRoot "c:\a" -> 0x0, rest at +3 "a"
+PathCchSkipRoot "c:\A\B" -> 0x0, rest at +3 "A\B"
+PathCchSkipRoot "1:\a" -> 0x80070057
+PathCchSkipRoot "::\a" -> 0x80070057
+PathCchSkipRoot "C:/" -> 0x0, rest at +2 "/"
+PathCchSkipRoot "C:/a" -> 0x0, rest at +2 "/a"
+PathCchSkipRoot "C:/a/b" -> 0x0, rest at +2 "/a/b"
+PathCchSkipRoot "C:/a\b" -> 0x0, rest at +2 "/a\b"
+PathCchSkipRoot "C:\a/b" -> 0x0, rest at +3 "a/b"
+PathCchSkipRoot "CC:\a" -> 0x80070057
+PathCchSkipRoot "C::\a" -> 0x0, rest at +2 ":\a"
+PathCchSkipRoot "C:\." -> 0x0, rest at +3 "."
+PathCchSkipRoot "C:\.." -> 0x0, rest at +3 ".."
+PathCchSkipRoot "C:\a\." -> 0x0, rest at +3 "a\."
+PathCchSkipRoot "C:\a\.." -> 0x0, rest at +3 "a\.."
+PathCchSkipRoot "C:\a\..\b" -> 0x0, rest at +3 "a\..\b"
+PathCchSkipRoot "C:\a\.\b" -> 0x0, rest at +3 "a\.\b"
+PathCchSkipRoot "C:\a\b\.." -> 0x0, rest at +3 "a\b\.."
+PathCchSkipRoot "C:\..\a" -> 0x0, rest at +3 "..\a"
+PathCchSkipRoot "C:\a b\c d" -> 0x0, rest at +3 "a b\c d"
+PathCchSkipRoot "C:\a\b " -> 0x0, rest at +3 "a\b "
+PathCchSkipRoot "C:\a\b." -> 0x0, rest at +3 "a\b."
+PathCchSkipRoot "C:\a\b.." -> 0x0, rest at +3 "a\b.."
+PathCchSkipRoot "" -> 0x80070057
+PathCchSkipRoot "a" -> 0x80070057
+PathCchSkipRoot "a\" -> 0x80070057
+PathCchSkipRoot "a\b" -> 0x80070057
+PathCchSkipRoot "a\b\" -> 0x80070057
+PathCchSkipRoot "a\b\c.txt" -> 0x80070057
+PathCchSkipRoot "a\b\c.txt\" -> 0x80070057
+PathCchSkipRoot "a\\b" -> 0x80070057
+PathCchSkipRoot "a\\\b\" -> 0x80070057
+PathCchSkipRoot "\" -> 0x0, rest at +1 ""
+PathCchSkipRoot "\\" -> 0x0, rest at +2 ""
+PathCchSkipRoot "\a" -> 0x0, rest at +1 "a"
+PathCchSkipRoot "\a\b" -> 0x0, rest at +1 "a\b"
+PathCchSkipRoot "\a\b\" -> 0x0, rest at +1 "a\b\"
+PathCchSkipRoot "\a\\b" -> 0x0, rest at +1 "a\\b"
+PathCchSkipRoot "." -> 0x80070057
+PathCchSkipRoot ".." -> 0x80070057
+PathCchSkipRoot "a\." -> 0x80070057
+PathCchSkipRoot "a\.." -> 0x80070057
+PathCchSkipRoot "a\.\b" -> 0x80070057
+PathCchSkipRoot "a\..\b" -> 0x80070057
+PathCchSkipRoot ".\a" -> 0x80070057
+PathCchSkipRoot "..\a" -> 0x80070057
+PathCchSkipRoot "a b" -> 0x80070057
+PathCchSkipRoot "a b\c d" -> 0x80070057
+PathCchSkipRoot " a" -> 0x80070057
+PathCchSkipRoot "a " -> 0x80070057
+PathCchSkipRoot " " -> 0x80070057
+PathCchSkipRoot "a\ \b" -> 0x80070057
+PathCchSkipRoot "a.b" -> 0x80070057
+PathCchSkipRoot "a.b\c.d" -> 0x80070057
+PathCchSkipRoot ".txt" -> 0x80070057
+PathCchSkipRoot "a\.txt" -> 0x80070057
+PathCchSkipRoot "a\b." -> 0x80070057
+PathCchSkipRoot "a\b.." -> 0x80070057
+PathCchSkipRoot "a/b" -> 0x80070057
+PathCchSkipRoot "a/b/c" -> 0x80070057
+PathCchSkipRoot "a/b\c" -> 0x80070057
+PathCchSkipRoot "a\b/c" -> 0x80070057
+PathCchSkipRoot "\\" -> 0x0, rest at +2 ""
+PathCchSkipRoot "\\\" -> 0x0, rest at +3 ""
+PathCchSkipRoot "\\s" -> 0x0, rest at +3 ""
+PathCchSkipRoot "\\s\" -> 0x0, rest at +4 ""
+PathCchSkipRoot "\\s\\" -> 0x0, rest at +4 "\"
+PathCchSkipRoot "\\s\sh" -> 0x0, rest at +6 ""
+PathCchSkipRoot "\\s\sh\" -> 0x0, rest at +7 ""
+PathCchSkipRoot "\\s\sh\\" -> 0x0, rest at +7 "\"
+PathCchSkipRoot "\\s\sh\f" -> 0x0, rest at +7 "f"
+PathCchSkipRoot "\\s\sh\f\" -> 0x0, rest at +7 "f\"
+PathCchSkipRoot "\\s\sh\f\g.txt" -> 0x0, rest at +7 "f\g.txt"
+PathCchSkipRoot "\\s\sh\f\g\" -> 0x0, rest at +7 "f\g\"
+PathCchSkipRoot "\\s\sh\f\\g" -> 0x0, rest at +7 "f\\g"
+PathCchSkipRoot "\\\s\sh" -> 0x0, rest at +5 "sh"
+PathCchSkipRoot "\\s\\sh" -> 0x0, rest at +4 "\sh"
+PathCchSkipRoot "\\s\sh\." -> 0x0, rest at +7 "."
+PathCchSkipRoot "\\s\sh\.." -> 0x0, rest at +7 ".."
+PathCchSkipRoot "\\s\.\f" -> 0x0, rest at +6 "f"
+PathCchSkipRoot "\\s\..\f" -> 0x0, rest at +7 "f"
+PathCchSkipRoot "\\." -> 0x0, rest at +3 ""
+PathCchSkipRoot "\\.\" -> 0x0, rest at +4 ""
+PathCchSkipRoot "\\.\C:" -> 0x0, rest at +6 ""
+PathCchSkipRoot "\\.\C:\a" -> 0x0, rest at +7 "a"
+PathCchSkipRoot "\\.\pipe\x" -> 0x0, rest at +9 "x"
+PathCchSkipRoot "\\?" -> 0x80070057
+PathCchSkipRoot "\\?\" -> 0x80070057
+PathCchSkipRoot "//s/sh/f" -> 0x80070057
+PathCchSkipRoot "/\s\sh" -> 0x80070057
+PathCchSkipRoot "\\server\share\dir\file.txt" -> 0x0, rest at +15 "dir\file.txt"
+PathCchSkipRoot "\\server\share\dir\" -> 0x0, rest at +15 "dir\"
+PathCchSkipRoot "\\server\share" -> 0x0, rest at +14 ""
+PathCchSkipRoot "\\server\share\" -> 0x0, rest at +15 ""
+PathCchSkipRoot "\\server" -> 0x0, rest at +8 ""
+PathCchSkipRoot "\\ab" -> 0x0, rest at +4 ""
+PathCchSkipRoot "\\abc" -> 0x0, rest at +5 ""
+PathCchSkipRoot "\\abcd" -> 0x0, rest at +6 ""
+PathCchSkipRoot "\\abcdefgh" -> 0x0, rest at +10 ""
+PathCchSkipRoot "\\a\b" -> 0x0, rest at +5 ""
+PathCchSkipRoot "\\ab\cd" -> 0x0, rest at +7 ""
+PathCchSkipRoot "\\abc\def\g" -> 0x0, rest at +10 "g"
+PathCchSkipRoot "\\\a" -> 0x0, rest at +4 ""

@@ -76,14 +76,15 @@ pub trait Backend {
     /// committed and writable): the TEB and PEB of a new process.
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus>;
 
-    /// Read `len` bytes of the process's memory at `addr` (committed, readable pages): another
-    /// process's memory for `NtReadVirtualMemory` (ADR 0196).
-    fn read(&mut self, _addr: u64, _len: u64) -> Result<Vec<u8>, NtStatus> {
-        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    /// Read the process's memory at `addr` (committed, readable pages: a
+    /// thread's TEB, another process's memory for `NtReadVirtualMemory`). A backend that cannot
+    /// read answers `STATUS_ACCESS_VIOLATION`.
+    fn read(&mut self, _addr: u64, _buf: &mut [u8]) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
     /// [`write`](Self::write) into pages whatever their protection says, as a debugger writes
-    /// (`NtWriteVirtualMemory`); the pages keep it.
+    /// (`NtWriteVirtualMemory`, ADR 0196); the pages keep it.
     fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
         self.write(addr, data)
     }

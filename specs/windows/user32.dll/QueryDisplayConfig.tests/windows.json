@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "qdc_layout",
+      "exe_sha256": "a78885f9bf7bd9e78e96387ac69333e8fb9086648b535e55f251d5e8678e5c65",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W3BsYWluXSByZXR1cm5zIDAsIHBhdGhzIDEgb3IgbW9yZSwgbW9kZXMgcGVyIHBhdGggMgpbcGxhaW5dIHBhdGggMDogZmxhZ3MgMHgxLCBzb3VyY2Ugc3RhdHVzIDB4MSwgdGFyZ2V0IHN0YXR1cyAweDEsIHRhcmdldCBhdmFpbGFibGUgMQpbcGxhaW5dIHBhdGggMDogcm90YXRpb24gMSwgc2NhbGluZyAxLCBzY2FuIGxpbmUgb3JkZXJpbmcgMSwgYWRhcHRlciBvZiBzb3VyY2UgYW5kIHRhcmdldCBlcXVhbCB0cnVlCltwbGFpbl0gcGF0aCAwOiBzb3VyY2UgbW9kZSBpcyB0eXBlIDEgd2l0aCBpZCBlcXVhbCB0byB0aGUgc291cmNlIGlkIHRydWUgYW5kIHRoZSBhZGFwdGVyIG9mIHRoZSBwYXRoIHRydWUKW3BsYWluXSBwYXRoIDA6IHRhcmdldCBtb2RlIGlzIHR5cGUgMiB3aXRoIGlkIGVxdWFsIHRvIHRoZSB0YXJnZXQgaWQgdHJ1ZSBhbmQgdGhlIGFkYXB0ZXIgb2YgdGhlIHBhdGggdHJ1ZQpbcGxhaW5dIHBhdGggMDogc291cmNlIG1vZGUgc2l6ZSBpcyB0aGUgcHJpbWFyeSBtb25pdG9yJ3MgdHJ1ZSAod2hlbiBhdCAwLDA6IHRydWUpLCBwaXhlbCBmb3JtYXQgNApbcGxhaW5dIHBhdGggMDogdGFyZ2V0IGFjdGl2ZSBzaXplIGVxdWFscyB0aGUgc291cmNlIG1vZGUncyB0cnVlLCB0b3RhbCBzaXplIGF0IGxlYXN0IHRoZSBhY3RpdmUgc2l6ZSB0cnVlLCBzdGFuZGFyZCAyNTUsIHNjYW4gbGluZSBvcmRlcmluZyAxCltwbGFpbl0gcGF0aCAwOiB0aGUgcGF0aCdzIHJlZnJlc2ggcmF0ZSBlcXVhbHMgdGhlIHRhcmdldCBtb2RlJ3MgdmVydGljYWwgc3luYyB0cnVlLCB0aGUgcmF0ZSBpcyBiZXR3ZWVuIDI0IGFuZCA1MDAgSHogdHJ1ZSwgcGl4ZWwgcmF0ZSBub24gemVybyB0cnVlCltwbGFpbl0gbW9kZSB0eXBlcyBpbiBvcmRlcjogMiAxCltWSVJUVUFMX01PREVfQVdBUkVdIHJldHVybnMgMCwgcGF0aHMgMSBvciBtb3JlLCBtb2RlcyBwZXIgcGF0aCAzCltWSVJUVUFMX01PREVfQVdBUkVdIHBhdGggMDogZmxhZ3MgMHg5LCBzb3VyY2Ugc3RhdHVzIDB4MSwgdGFyZ2V0IHN0YXR1cyAweDEsIHRhcmdldCBhdmFpbGFibGUgMQpbVklSVFVBTF9NT0RFX0FXQVJFXSBwYXRoIDA6IHJvdGF0aW9uIDEsIHNjYWxpbmcgMSwgc2NhbiBsaW5lIG9yZGVyaW5nIDEsIGFkYXB0ZXIgb2Ygc291cmNlIGFuZCB0YXJnZXQgZXF1YWwgdHJ1ZQpbVklSVFVBTF9NT0RFX0FXQVJFXSBwYXRoIDA6IGNsb25lIGdyb3VwIDB4ZmZmZiwgc291cmNlIG1vZGUgaW5kZXggaW4gdGhlIGhpZ2ggaGFsZiB0cnVlLCB0YXJnZXQgaW5kZXggaW4gdGhlIGhpZ2ggaGFsZiB0cnVlLCBkZXNrdG9wIGltYWdlIGluZGV4IGluIHRoZSBsb3cgaGFsZiB0cnVlCltWSVJUVUFMX01PREVfQVdBUkVdIHBhdGggMDogc291cmNlIG1vZGUgaXMgdHlwZSAxIHdpdGggaWQgZXF1YWwgdG8gdGhlIHNvdXJjZSBpZCB0cnVlIGFuZCB0aGUgYWRhcHRlciBvZiB0aGUgcGF0aCB0cnVlCltWSVJUVUFMX01PREVfQVdBUkVdIHBhdGggMDogdGFyZ2V0IG1vZGUgaXMgdHlwZSAyIHdpdGggaWQgZXF1YWwgdG8gdGhlIHRhcmdldCBpZCB0cnVlIGFuZCB0aGUgYWRhcHRlciBvZiB0aGUgcGF0aCB0cnVlCltWSVJUVUFMX01PREVfQVdBUkVdIHBhdGggMDogc291cmNlIG1vZGUgc2l6ZSBpcyB0aGUgcHJpbWFyeSBtb25pdG9yJ3MgdHJ1ZSAod2hlbiBhdCAwLDA6IHRydWUpLCBwaXhlbCBmb3JtYXQgNApbVklSVFVBTF9NT0RFX0FXQVJFXSBwYXRoIDA6IHRhcmdldCBhY3RpdmUgc2l6ZSBlcXVhbHMgdGhlIHNvdXJjZSBtb2RlJ3MgdHJ1ZSwgdG90YWwgc2l6ZSBhdCBsZWFzdCB0aGUgYWN0aXZlIHNpemUgdHJ1ZSwgc3RhbmRhcmQgMjU1LCBzY2FuIGxpbmUgb3JkZXJpbmcgMQpbVklSVFVBTF9NT0RFX0FXQVJFXSBwYXRoIDA6IHRoZSBwYXRoJ3MgcmVmcmVzaCByYXRlIGVxdWFscyB0aGUgdGFyZ2V0IG1vZGUncyB2ZXJ0aWNhbCBzeW5jIHRydWUsIHRoZSByYXRlIGlzIGJldHdlZW4gMjQgYW5kIDUwMCBIeiB0cnVlLCBwaXhlbCByYXRlIG5vbiB6ZXJvIHRydWUKW1ZJUlRVQUxfTU9ERV9BV0FSRV0gcGF0aCAwOiBkZXNrdG9wIGltYWdlIG1vZGUgaXMgdHlwZSAzIHdpdGggaWQgZXF1YWwgdG8gdGhlIHRhcmdldCBpZCB0cnVlLCBwYXRoIHNvdXJjZSBzaXplIHRydWUgYnkgdHJ1ZSBlcXVhbHMgdGhlIHNvdXJjZSBtb2RlIHRydWUsIHJlZ2lvbiAwLDAsdHJ1ZSx0cnVlIGNsaXAgMCwwLHRydWUsdHJ1ZQpbVklSVFVBTF9NT0RFX0FXQVJFXSBtb2RlIHR5cGVzIGluIG9yZGVyOiAyIDEgMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[plain] returns 0, paths 1 or more, modes per path 2\n[plain] path 0: flags 0x1, source status 0x1, target status 0x1, target available 1\n[plain] path 0: rotation 1, scaling 1, scan line ordering 1, adapter of source and target equal true\n[plain] path 0: source mode is type 1 with id equal to the source id true and the adapter of the path true\n[plain] path 0: target mode is type 2 with id equal to the target id true and the adapter of the path true\n[plain] path 0: source mode size is the primary monitor's true (when at 0,0: true), pixel format 4\n[plain] path 0: target active size equals the source mode's true, total size at least the active size true, standard 255, scan line ordering 1\n[plain] path 0: the path's refresh rate equals the target mode's vertical sync true, the rate is between 24 and 500 Hz true, pixel rate non zero true\n[plain] mode types in order: 2 1\n[VIRTUAL_MODE_AWARE] returns 0, paths 1 or more, modes per path 3\n[VIRTUAL_MODE_AWARE] path 0: flags 0x9, source status 0x1, target status 0x1, target available 1\n[VIRTUAL_MODE_AWARE] path 0: rotation 1, scaling 1, scan line ordering 1, adapter of source and target equal true\n[VIRTUAL_MODE_AWARE] path 0: clone group 0xffff, source mode index in the high half true, target index in the high half true, desktop image index in the low half true\n[VIRTUAL_MODE_AWARE] path 0: source mode is type 1 with id equal to the source id true and the adapter of the path true\n[VIRTUAL_MODE_AWARE] path 0: target mode is type 2 with id equal to the target id true and the adapter of the path true\n[VIRTUAL_MODE_AWARE] path 0: source mode size is the primary monitor's true (when at 0,0: true), pixel format 4\n[VIRTUAL_MODE_AWARE] path 0: target active size equals the source mode's true, total size at least the active size true, standard 255, scan line ordering 1\n[VIRTUAL_MODE_AWARE] path 0: the path's refresh rate equals the target mode's vertical sync true, the rate is between 24 and 500 Hz true, pixel rate non zero true\n[VIRTUAL_MODE_AWARE] path 0: desktop image mode is type 3 with id equal to the target id true, path source size true by true equals the source mode true, region 0,0,true,true clip 0,0,true,true\n[VIRTUAL_MODE_AWARE] mode types in order: 2 1 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

@@ -37,6 +37,43 @@ pub extern "system" fn SuspendThread(thread: Handle) -> u32 {
     if st.is_success() { previous } else { fail_status(st, u32::MAX) }
 }
 
+/// `TerminateThread` (Learn): the thread ends with `dwExitCode`; the handle
+/// needs `THREAD_TERMINATE`. A null handle is `ERROR_INVALID_HANDLE` (not
+/// `NtTerminateThread`'s current thread; to be confirmed by the spec agent).
+#[unsafe(no_mangle)]
+pub extern "system" fn TerminateThread(thread: Handle, code: u32) -> i32 {
+    if thread == 0 {
+        return fail(ERROR_INVALID_HANDLE, FALSE);
+    }
+    // SAFETY: a plain call; the kernel checks the handle.
+    let st = unsafe { nt::NtTerminateThread(thread, code) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `GetThreadContext` (Learn): the groups `ContextFlags` names, read from
+/// the thread (`THREAD_GET_CONTEXT`).
+///
+/// # Safety
+/// `context` is a writable `CONTEXT` (`winnt.h`, 1232 bytes, 16-aligned).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetThreadContext(thread: Handle, context: *mut u8) -> i32 {
+    // SAFETY: the caller's CONTEXT.
+    let st = unsafe { nt::NtGetContextThread(thread, context) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `SetThreadContext` (Learn): the groups `ContextFlags` names, written to
+/// the thread (`THREAD_SET_CONTEXT`).
+///
+/// # Safety
+/// `context` is a readable `CONTEXT`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetThreadContext(thread: Handle, context: *const u8) -> i32 {
+    // SAFETY: the caller's CONTEXT.
+    let st = unsafe { nt::NtSetContextThread(thread, context) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
 /// `ProcessTimes` (`ntddk.h`'s `PROCESSINFOCLASS`): `KERNEL_USER_TIMES`,
 /// four `LARGE_INTEGER`s: creation, exit, kernel and user time.
 const PROCESS_TIMES: u32 = 4;

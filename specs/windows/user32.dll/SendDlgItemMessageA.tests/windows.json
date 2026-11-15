@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "sdma_controls",
+      "exe_sha256": "b39bba970f7bd3f3d920224142f55193c4413666fff153445777e60c8e8d044d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QU5TSSBjb2RlIHBhZ2UgMTI1MgpXTV9TRVRURVhUIGVkaXQgd2l0aCBBTlNJIGJ5dGVzOiAxCiAgdGhlIGVkaXQncyB0ZXh0IGFzIFVURi0xNjogJ2NhZjwwMGU5PiA8MjBhYz4gPDAwODE+IDwwMGZmPicKV01fR0VUVEVYVCBzaXplIDEwMDogMTAKICBieXRlcyAnY2FmPGU5PiA8ODA+IDw4MT4gPGZmPicKV01fR0VUVEVYVCBzaXplIDU6IDQKICBieXRlcyAnY2FmPGU5PicKV01fR0VUVEVYVExFTkdUSCBvZiBhIHRleHQgd2l0aCBVKzAwRTkgVSs0RTJEIFUrMDQxNiBVKzIwQUM6IDcKV01fR0VUVEVYVCBvZiB0aGF0IHRleHQ6IDcKICBieXRlcyAnY2FmPGU5Pj8/PDgwPicKRU1fU0VUU0VMIGFsbDogMQpFTV9SRVBMQUNFU0VMIHdpdGggYW4gQU5TSSB0ZXh0OiAxCiAgdGhlIGVkaXQncyB0ZXh0IGFzIFVURi0xNjogJ3JlcGw8MDBlOT4nCkVNX0dFVExJTkUgMDogNQogIGxpbmUgYnl0ZXMgJ3JlcGw8ZTk+JwpMQl9BRERTVFJJTkcgJ2JldGEnOiAwIGVycj0tMQpMQl9BRERTVFJJTkcgd2l0aCBoaWdoIGJ5dGVzOiAxCkxCX0lOU0VSVFNUUklORyBhdCAwOiAwIGVycj0tMQpMQl9HRVRDT1VOVDogMwpMQl9HRVRURVhUIDA6IDUKICA1IGJ5dGVzICdmaXJzdCcKTEJfR0VUVEVYVExFTiAwOiA1CkxCX0dFVFRFWFQgMTogNAogIDQgYnl0ZXMgJ2JldGEnCkxCX0dFVFRFWFRMRU4gMTogNApMQl9HRVRURVhUIDI6IDYKICA2IGJ5dGVzICdhbHBoYTxlOT4nCkxCX0dFVFRFWFRMRU4gMjogNgpMQl9GSU5EU1RSSU5HIGZyb20gLTEgJ2FsJzogMgpMQl9GSU5EU1RSSU5HRVhBQ1QgJ2JldGEnOiAxCkxCX1NFTEVDVFNUUklORyAnYmUnOiAxCkxCX0dFVENVUlNFTDogMQpCTV9TRVRDSEVDSyBvbiB0aGUgY2hlY2sgYm94OiAwIGVycj0tMQpCTV9HRVRDSEVDSzogMQpXTV9HRVRURVhUTEVOR1RIIG9uIGFuIGFic2VudCBpZDogMCBlcnI9MTQyMQpiYWQgZGlhbG9nIGhhbmRsZTogMCBlcnI9MTQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ANSI code page 1252\nWM_SETTEXT edit with ANSI bytes: 1\n  the edit's text as UTF-16: 'caf<00e9> <20ac> <0081> <00ff>'\nWM_GETTEXT size 100: 10\n  bytes 'caf<e9> <80> <81> <ff>'\nWM_GETTEXT size 5: 4\n  bytes 'caf<e9>'\nWM_GETTEXTLENGTH of a text with U+00E9 U+4E2D U+0416 U+20AC: 7\nWM_GETTEXT of that text: 7\n  bytes 'caf<e9>??<80>'\nEM_SETSEL all: 1\nEM_REPLACESEL with an ANSI text: 1\n  the edit's text as UTF-16: 'repl<00e9>'\nEM_GETLINE 0: 5\n  line bytes 'repl<e9>'\nLB_ADDSTRING 'beta': 0 err=-1\nLB_ADDSTRING with high bytes: 1\nLB_INSERTSTRING at 0: 0 err=-1\nLB_GETCOUNT: 3\nLB_GETTEXT 0: 5\n  5 bytes 'first'\nLB_GETTEXTLEN 0: 5\nLB_GETTEXT 1: 4\n  4 bytes 'beta'\nLB_GETTEXTLEN 1: 4\nLB_GETTEXT 2: 6\n  6 bytes 'alpha<e9>'\nLB_GETTEXTLEN 2: 6\nLB_FINDSTRING from -1 'al': 2\nLB_FINDSTRINGEXACT 'beta': 1\nLB_SELECTSTRING 'be': 1\nLB_GETCURSEL: 1\nBM_SETCHECK on the check box: 0 err=-1\nBM_GETCHECK: 1\nWM_GETTEXTLENGTH on an absent id: 0 err=1421\nbad dialog handle: 0 err=1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}

@@ -351,6 +351,21 @@ pub trait NtKernel {
         None
     }
 
+    /// Process `pid`'s memory as `NtQueryInformationProcess(ProcessVmCounters)` reports it:
+    /// [`VmCounters`]; `None` when the kernel does not know the process (all zero then).
+    fn memory_counters(&self, pid: poly_ntobj::ProcessId) -> Option<crate::threads::VmCounters> {
+        let _ = pid;
+        None
+    }
+
+    /// Thread `thread` of process `pid`: its creation time (a `FILETIME`) and the kernel and
+    /// user CPU time it used (100 ns units), for `NtQueryInformationThread(ThreadTimes)`;
+    /// `None` when the kernel does not know it (all zero then).
+    fn thread_times(&self, pid: poly_ntobj::ProcessId, thread: ThreadRef) -> Option<[u64; 3]> {
+        let _ = (pid, thread);
+        None
+    }
+
     /// Write hive file `file` (a name like `SOFTWARE`, no directory) with
     /// `data` and return once it is on disk (`NtFlushKey`, ADR 0066). A
     /// kernel with nowhere to keep it succeeds without writing.
@@ -387,8 +402,8 @@ pub trait NtKernel {
     /// worker retries it when the socket is ready and completes its
     /// request packet. A kernel without one gives it back, and the
     /// personality runs it in the calling thread.
-    fn socket_pend(&mut self, io: crate::afd::PendIo) -> Result<(), crate::afd::PendIo> {
-        Err(io)
+    fn socket_pend(&mut self, io: crate::afd::PendIo) -> Result<(), alloc::boxed::Box<crate::afd::PendIo>> {
+        Err(alloc::boxed::Box::new(io))
     }
 
     /// The DNS servers and the host name `ws2_32` uses

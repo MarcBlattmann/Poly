@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "138f0876d79e",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:26:08Z",
+  "tests": [
+    {
+      "name": "priority_calls",
+      "exe_sha256": "b0280b6ec6b61a48cfaacd67bfdbcb0efeb9d7b6f3f12b55b089c919a2444fc7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCB0aHJlYWQgcHJpb3JpdHk6IDAKU2V0VGhyZWFkUHJpb3JpdHkoTE9XRVNUIC0yKTogMSBlcnJvciB1bmNoYW5nZWQgcmVhZCBiYWNrIC0yIGJhc2UgcHJpb3JpdHkgLTIKU2V0VGhyZWFkUHJpb3JpdHkoQUJPVkVfTk9STUFMIDEpOiAxIGVycm9yIHVuY2hhbmdlZCByZWFkIGJhY2sgMSBiYXNlIHByaW9yaXR5IDEKU2V0VGhyZWFkUHJpb3JpdHkoVElNRV9DUklUSUNBTCAxNSk6IDEgZXJyb3IgdW5jaGFuZ2VkIHJlYWQgYmFjayAxNSBiYXNlIHByaW9yaXR5IDE2ClNldFRocmVhZFByaW9yaXR5KC0xNCk6IDAgZXJyb3IgODcgcmVhZCBiYWNrIDAgYmFzZSBwcmlvcml0eSAwClNldFRocmVhZFByaW9yaXR5KDE2KTogMSBlcnJvciB1bmNoYW5nZWQgcmVhZCBiYWNrIDE1IGJhc2UgcHJpb3JpdHkgMTYKR2V0VGhyZWFkUHJpb3JpdHkoTlVMTCk6IDB4N2ZmZmZmZmYgZXJyb3IgNgpTZXRUaHJlYWRQcmlvcml0eShOVUxMKTogMCBlcnJvciA2CmhhbmRsZSB3aXRoIFRIUkVBRF9RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBnZXQgMHgwIGVycm9yIHVuY2hhbmdlZDsgc2V0IDE6IDAgZXJyb3IgNQpoYW5kbGUgd2l0aCBUSFJFQURfU0VUX0lORk9STUFUSU9OOiBnZXQgMHg3ZmZmZmZmZiBlcnJvciA1OyBzZXQgMTogMSBlcnJvciB1bmNoYW5nZWQKICByZWFkOiAtMQpTZXRQcmlvcml0eUNsYXNzKEFCT1ZFX05PUk1BTCAweDgwMDApOiAxIGVycm9yIHVuY2hhbmdlZCByZWFkIGJhY2sgMHg4MDAwIHRocmVhZCBwcmlvcml0eSAwIGJhc2UgcHJpb3JpdHkgMApTZXRQcmlvcml0eUNsYXNzKE5PUk1BTCBhZ2Fpbik6IDEgZXJyb3IgdW5jaGFuZ2VkIHJlYWQgYmFjayAweDIwIHRocmVhZCBwcmlvcml0eSAwIGJhc2UgcHJpb3JpdHkgMApTZXRQcmlvcml0eUNsYXNzIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiAwIGVycm9yIDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default thread priority: 0\nSetThreadPriority(LOWEST -2): 1 error unchanged read back -2 base priority -2\nSetThreadPriority(ABOVE_NORMAL 1): 1 error unchanged read back 1 base priority 1\nSetThreadPriority(TIME_CRITICAL 15): 1 error unchanged read back 15 base priority 16\nSetThreadPriority(-14): 0 error 87 read back 0 base priority 0\nSetThreadPriority(16): 1 error unchanged read back 15 base priority 16\nGetThreadPriority(NULL): 0x7fffffff error 6\nSetThreadPriority(NULL): 0 error 6\nhandle with THREAD_QUERY_LIMITED_INFORMATION: get 0x0 error unchanged; set 1: 0 error 5\nhandle with THREAD_SET_INFORMATION: get 0x7fffffff error 5; set 1: 1 error unchanged\n  read: -1\nSetPriorityClass(ABOVE_NORMAL 0x8000): 1 error unchanged read back 0x8000 thread priority 0 base priority 0\nSetPriorityClass(NORMAL again): 1 error unchanged read back 0x20 thread priority 0 base priority 0\nSetPriorityClass with PROCESS_QUERY_LIMITED_INFORMATION: 0 error 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 178
+    },
+    {
+      "name": "priority_calls_c",
+      "exe_sha256": "557dee5105f82312ec9108244448039837dd6738a1380655b38ad9ddf096104c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBiYXNlIHByaW9yaXR5IGZpZWxkIG9mIE50UXVlcnlJbmZvcm1hdGlvblRocmVhZCBmb3IgdGhpcyB0aHJlYWQ6IDAKU2V0VGhyZWFkUHJpb3JpdHkoTk9STUFMIDApOiAxIGVycm9yIHVuY2hhbmdlZCByZWFkIGJhY2sgMCBiYXNlIHByaW9yaXR5IDAKU2V0VGhyZWFkUHJpb3JpdHkoSURMRSAtMTUpOiAxIGVycm9yIHVuY2hhbmdlZCByZWFkIGJhY2sgLTE1IGJhc2UgcHJpb3JpdHkgLTE2ClNldFRocmVhZFByaW9yaXR5KC0zKTogMCBlcnJvciA4NyByZWFkIGJhY2sgMCBiYXNlIHByaW9yaXR5IDAKU2V0VGhyZWFkUHJpb3JpdHkoLTE2KTogMSBlcnJvciB1bmNoYW5nZWQgcmVhZCBiYWNrIC0xNSBiYXNlIHByaW9yaXR5IC0xNgpiYWNrIHRvIG5vcm1hbDogMApHZXRUaHJlYWRQcmlvcml0eShwcm9jZXNzIHBzZXVkby1oYW5kbGUpOiAweDdmZmZmZmZmIGVycm9yIDYKR2V0UHJpb3JpdHlDbGFzcyh0aHJlYWQgcHNldWRvLWhhbmRsZSk6IDAgZXJyb3IgNgpoYW5kbGUgd2l0aCBUSFJFQURfUVVFUllfSU5GT1JNQVRJT046IGdldCAweDAgZXJyb3IgdW5jaGFuZ2VkOyBzZXQgMTogMCBlcnJvciA1CndvcmtlciBwcmlvcml0eSBzZXQgdGhyb3VnaCBpdHMgb3duIGZ1bGwgaGFuZGxlOiAxClNldFByaW9yaXR5Q2xhc3MoQkVMT1dfTk9STUFMIDB4NDAwMCk6IDEgZXJyb3IgdW5jaGFuZ2VkIHJlYWQgYmFjayAweDQwMDAgdGhyZWFkIHByaW9yaXR5IDAgYmFzZSBwcmlvcml0eSAwClNldFByaW9yaXR5Q2xhc3MoSElHSCAweDgwKTogMSBlcnJvciB1bmNoYW5nZWQgcmVhZCBiYWNrIDB4ODAgdGhyZWFkIHByaW9yaXR5IDAgYmFzZSBwcmlvcml0eSAwCkdldFByaW9yaXR5Q2xhc3Mgd2l0aCBQUk9DRVNTX1FVRVJZX0xJTUlURURfSU5GT1JNQVRJT046IDB4MjAgZXJyb3IgdW5jaGFuZ2VkCkdldFRocmVhZFByaW9yaXR5Qm9vc3Q6IDEgZGlzYWJsZWQgMCBlcnJvciB1bmNoYW5nZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  base priority field of NtQueryInformationThread for this thread: 0\nSetThreadPriority(NORMAL 0): 1 error unchanged read back 0 base priority 0\nSetThreadPriority(IDLE -15): 1 error unchanged read back -15 base priority -16\nSetThreadPriority(-3): 0 error 87 read back 0 base priority 0\nSetThreadPriority(-16): 1 error unchanged read back -15 base priority -16\nback to normal: 0\nGetThreadPriority(process pseudo-handle): 0x7fffffff error 6\nGetPriorityClass(thread pseudo-handle): 0 error 6\nhandle with THREAD_QUERY_INFORMATION: get 0x0 error unchanged; set 1: 0 error 5\nworker priority set through its own full handle: 1\nSetPriorityClass(BELOW_NORMAL 0x4000): 1 error unchanged read back 0x4000 thread priority 0 base priority 0\nSetPriorityClass(HIGH 0x80): 1 error unchanged read back 0x80 thread priority 0 base priority 0\nGetPriorityClass with PROCESS_QUERY_LIMITED_INFORMATION: 0x20 error unchanged\nGetThreadPriorityBoost: 1 disabled 0 error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 164
+    }
+  ]
+}

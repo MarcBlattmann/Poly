@@ -33,6 +33,7 @@ extern crate std;
 mod bitfont;
 pub mod bitmap;
 pub mod builtin;
+pub mod device;
 pub mod font;
 pub mod fontmap;
 pub mod fonttab;
@@ -42,6 +43,7 @@ pub mod region;
 mod rgnshape;
 mod sysfont;
 pub mod text;
+pub mod xform;
 
 #[cfg(test)]
 mod testfonts;

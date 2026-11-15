@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DefDlgProcW.yaml
+id: windows/api/user32.dll/DefDlgProcW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The default window procedure of a dialog class registered with DLGWINDOWEXTRA (30) extra bytes, wide form: the dialog procedure (given to CreateDialogParam) is called first, then the default handling; strings reach the dialog procedure as UTF-16.
+interface:
+  signature: "LRESULT DefDlgProcW(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)"
+rules:
+  window_class: "a template whose class name is a class of the test (cbWndExtra 30, registered with RegisterClassExW, procedure calls DefDlgProcW) gives a window of that class: IsWindowUnicode is 1 for the dialog and for all its controls"
+  creation_order: "the class procedure gets WM_SETFONT, then WM_INITDIALOG (the dialog procedure's WM_INITDIALOG gets lParam 77); the focus is on the first tab stop (3001) afterwards; DM_GETDEFID 0x534B0001"
+  focus: "WM_SETFOCUS leaves the focus on the first control; WM_NEXTDLGCTL (0,0) goes to the next tab stop, (1,0) to the previous one, (handle, 1) to that control; DM_SETDEFID(2) returns 1 and DM_GETDEFID 0x534B0002; DM_SETDEFID(0x7777) also returns 1 (0x534B7777)"
+  close: "WM_CLOSE reaches the class and dialog procedures, returns 0 and posts WM_COMMAND (IDCANCEL, from control 2); the window stays; WM_COMMAND IDOK reaches both procedures; WM_DESTROY and WM_NCDESTROY too"
+  text_messages: "WM_SETTEXT (from SendMessageA with 'caf<E9> <80> <81> <FF>' and from SendMessageW with 'caf<U+00E9><U+4E2D><U+0416><U+20AC>') reaches the dialog procedure as UTF-16 units and sets the title ('caf<U+00E9><U+4E2D><U+0416><U+20AC>' as UTF-16, 'caf<E9>??<80>' read as ANSI); WM_GETTEXT arrives with the buffer size in units (200 for GetWindowTextW's 200 units, 50, 4)"
+  no_procedure: "a NULL dialog procedure still makes the window; DM_GETDEFID 0x534B0001; WM_CLOSE returns 0 and the window stays"
+errors:
+  none: "DefDlgProc has no failure result of its own"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Messages that need the keyboard, mouse or activation (WM_ACTIVATE, WM_ENABLE and notifications of the controls at creation vary between runs and were left out of the tests), a class with a menu or the default font handling.

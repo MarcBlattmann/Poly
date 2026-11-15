@@ -255,89 +255,126 @@ pub extern "system" fn GetActiveProcessorCount(group: u16) -> u32 {
     }
 }
 
-#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
-unsafe extern "system" {
-    fn CreateFileW(
-        name: *const u16,
-        access: u32,
-        share: u32,
-        security: *const u8,
-        disposition: u32,
-        flags: u32,
-        template: isize,
-    ) -> isize;
-    fn ReadFile(file: isize, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut u8) -> i32;
-    fn WriteFile(file: isize, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut u8) -> i32;
-    fn CloseHandle(handle: isize) -> i32;
-}
-
-/// `CopyFileW(lpExistingFileName, lpNewFileName, bFailIfExists)` (Learn names no API set:
-/// `kernel32`'s own): the bytes of the file are written to the new one, which is made (`CREATE_NEW`
-/// when `bFailIfExists`, so an existing file is `ERROR_FILE_EXISTS`) or replaced. Attributes and
-/// streams are not copied.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CopyFileW(existing: *const u16, new: *const u16, fail_if_exists: i32) -> i32 {
-    const GENERIC_READ: u32 = 0x8000_0000;
-    const GENERIC_WRITE: u32 = 0x4000_0000;
-    const FILE_SHARE_READ: u32 = 1;
-    const CREATE_NEW: u32 = 1;
-    const CREATE_ALWAYS: u32 = 2;
-    const OPEN_EXISTING: u32 = 3;
-    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
-    // SAFETY: the caller's NUL-terminated names; handles are closed on every path.
-    unsafe {
-        let src = CreateFileW(existing, GENERIC_READ, FILE_SHARE_READ, core::ptr::null(), OPEN_EXISTING, 0, 0);
-        if src == -1 {
-            return 0;
-        }
-        let disposition = if fail_if_exists != 0 { CREATE_NEW } else { CREATE_ALWAYS };
-        let dst = CreateFileW(new, GENERIC_WRITE, 0, core::ptr::null(), disposition, FILE_ATTRIBUTE_NORMAL, 0);
-        if dst == -1 {
-            let e = poly_kernelbase_last_error();
-            CloseHandle(src);
-            SetLastError(e);
-            return 0;
-        }
-        let mut buf = alloc::vec![0u8; 64 * 1024];
-        let mut ok = 1;
-        loop {
-            let mut got = 0u32;
-            if ReadFile(src, buf.as_mut_ptr(), buf.len() as u32, &mut got, core::ptr::null_mut()) == 0 {
-                ok = 0;
-                break;
-            }
-            if got == 0 {
-                break;
-            }
-            let mut put = 0u32;
-            if WriteFile(dst, buf.as_ptr(), got, &mut put, core::ptr::null_mut()) == 0 || put != got {
-                ok = 0;
-                break;
-            }
-        }
-        let e = poly_kernelbase_last_error();
-        CloseHandle(src);
-        CloseHandle(dst);
-        if ok == 0 {
-            SetLastError(e);
-        }
-        ok
-    }
-}
-
-#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
-unsafe extern "system" {
-    #[link_name = "GetLastError"]
-    fn poly_kernelbase_last_error() -> u32;
-}
-
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
 
+// ----- the global atom table (poly_kernelbase::atoms)
+
+struct AtomTable {
+    locked: core::sync::atomic::AtomicBool,
+    table: core::cell::UnsafeCell<poly_kernelbase::atoms::Atoms>,
+}
+
+// SAFETY: the table is reached only with `locked` held.
+unsafe impl Sync for AtomTable {}
+
+static ATOMS: AtomTable = AtomTable {
+    locked: core::sync::atomic::AtomicBool::new(false),
+    table: core::cell::UnsafeCell::new(poly_kernelbase::atoms::Atoms::new()),
+};
+
+fn with_atoms<R>(f: impl FnOnce(&mut poly_kernelbase::atoms::Atoms) -> R) -> R {
+    use core::sync::atomic::Ordering;
+    while ATOMS.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held, so this is the only reference.
+    let r = f(unsafe { &mut *ATOMS.table.get() });
+    ATOMS.locked.store(false, Ordering::Release);
+    r
+}
+
+/// The atom a `LPCWSTR` that is `MAKEINTATOM` names (1..=0xBFFF), else the string.
+unsafe fn atom_arg(p: *const u16) -> Result<alloc::vec::Vec<u16>, u16> {
+    if (p as usize) >> 16 == 0 {
+        return Err(p as usize as u16);
+    }
+    let mut v = alloc::vec::Vec::new();
+    let mut q = p;
+    // SAFETY: a NUL-terminated string (the caller's promise); stops one past the longest name.
+    unsafe {
+        while *q != 0 && v.len() <= poly_kernelbase::atoms::MAX_NAME {
+            v.push(*q);
+            q = q.add(1);
+        }
+    }
+    Ok(v)
+}
+
+/// `GlobalAddAtomW`: the atom, 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalAddAtomW(name: *const u16) -> u16 {
+    // SAFETY: as `atom_arg`.
+    match unsafe { atom_arg(name) } {
+        Err(a) if (1..poly_kernelbase::atoms::FIRST_STRING_ATOM).contains(&a) => a,
+        Err(_) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_PARAMETER) };
+            0
+        }
+        Ok(n) => with_atoms(|t| t.add(&n)).unwrap_or_else(|e| {
+            // SAFETY: as above.
+            unsafe { SetLastError(e) };
+            0
+        }),
+    }
+}
+
+/// `GlobalFindAtomW`: the atom of a name, 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalFindAtomW(name: *const u16) -> u16 {
+    // SAFETY: as `atom_arg`.
+    match unsafe { atom_arg(name) } {
+        Err(a) if (1..poly_kernelbase::atoms::FIRST_STRING_ATOM).contains(&a) => a,
+        Err(_) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_PARAMETER) };
+            0
+        }
+        Ok(n) => with_atoms(|t| t.find(&n)).unwrap_or_else(|e| {
+            // SAFETY: as above.
+            unsafe { SetLastError(e) };
+            0
+        }),
+    }
+}
+
+/// `GlobalDeleteAtom`: 0 on success, the atom on failure.
+#[unsafe(no_mangle)]
+pub extern "system" fn GlobalDeleteAtom(atom: u16) -> u16 {
+    match with_atoms(|t| t.delete(atom)) {
+        Ok(()) => 0,
+        Err(e) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(e) };
+            atom
+        }
+    }
+}
+
+/// `GlobalGetAtomNameW`: the length of the name written (without the NUL), 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, size: i32) -> u32 {
+    let Some(name) = with_atoms(|t| t.name(atom)) else {
+        // SAFETY: a kernelbase export without preconditions.
+        unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_HANDLE) };
+        return 0;
+    };
+    if buffer.is_null() || size <= 0 {
+        // SAFETY: as above.
+        unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INSUFFICIENT_BUFFER) };
+        return 0;
+    }
+    let n = name.len().min(size as usize - 1);
+    // SAFETY: the caller's buffer of `size` characters.
+    unsafe {
+        core::ptr::copy_nonoverlapping(name.as_ptr(), buffer, n);
+        *buffer.add(n) = 0;
+    }
+    n as u32
+}
 #[cfg(target_arch = "x86_64")]
 mod apps;
