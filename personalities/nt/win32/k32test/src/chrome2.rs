@@ -49,6 +49,7 @@ unsafe extern "system" {
     fn CreateFileMappingW(f: Handle, sa: *const u8, prot: u32, hi: u32, lo: u32, n: *const u16) -> Handle;
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
     fn SetEvent(h: Handle) -> i32;
+    fn ResetEvent(h: Handle) -> i32;
     fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
     fn RegisterWaitForSingleObject(
         out: *mut Handle,
@@ -542,6 +543,21 @@ unsafe fn waits() {
         check(FIRED_TIMEOUT.load(Ordering::SeqCst) == 1);
         check(WaitForSingleObject(done, 300) == 0x102);
         check(UnregisterWait(wait) != 0);
+
+        // A completion event is signaled once the wait is unregistered, also when no callback
+        // runs (Learn: after success the caller waits for it; Chrome's browser does, ADR 0155
+        // step 12): a wait that never fired, and a once-only wait whose thread has ended.
+        let completion = CreateEventW(np(), 1, 0, np());
+        check(RegisterWaitForSingleObject(&mut wait, never, on_wait, done as *mut u8, INFINITE, 0) != 0);
+        check(UnregisterWaitEx(wait, completion) != 0);
+        check(WaitForSingleObject(completion, 10_000) == 0);
+        check(ResetEvent(completion) != 0);
+        check(RegisterWaitForSingleObject(&mut wait, never, on_wait, done as *mut u8, 50, 8) != 0);
+        check(WaitForSingleObject(done, 10_000) == 0);
+        check(WaitForSingleObject(done, 300) == 0x102);
+        check(UnregisterWaitEx(wait, completion) != 0);
+        check(WaitForSingleObject(completion, 10_000) == 0);
+        check(CloseHandle(completion) != 0);
 
         // Arguments.
         check(RegisterWaitForSingleObject(&mut wait, never, on_wait, np::<u8>() as *mut u8, 50, 0x400) == 0);

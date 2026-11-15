@@ -444,6 +444,34 @@ kernel_test! {
     }
 }
 
+// ---- regular files -------------------------------------------------------------
+
+kernel_test! {
+    fn pread_of_a_regular_file_is_whole_up_to_its_end() -> TestResult {
+        // read(2): a regular file gives fewer bytes than asked only at its
+        // end. squashfuse took a pread cut at 64 KiB for an I/O error, so
+        // every exec from an AppImage's FUSE mount failed with EIO.
+        run_threads("pread of a regular file", &[|p| {
+            const LEN: u64 = 300 * 1024;
+            check!(1, poke(DATA, b"pread-big\0"));
+            let Ok(fd) = sys(p, nr::MEMFD_CREATE, &[DATA, 0]) else { return 2 };
+            let src = anon_map(p, LEN);
+            let dst = anon_map(p, LEN);
+            check!(3, src != 0 && dst != 0);
+            let data: Vec<u8> = (0..LEN).map(|i| (i * 7 + i / 251) as u8).collect();
+            check!(4, poke(src, &data));
+            check!(5, sys(p, nr::PWRITE64, &[fd, src, LEN, 0]) == Ok(LEN));
+            check!(6, sys(p, nr::PREAD64, &[fd, dst, 0x4240f, 0x1000]) == Ok(0x4240f));
+            let mut back = vec![0u8; 0x4240f];
+            check!(7, user::copy_from_user(&mut back, dst).is_ok());
+            check!(8, back[..] == data[0x1000..0x1000 + 0x4240f]);
+            check!(9, sys(p, nr::PREAD64, &[fd, dst, LEN, 100 * 1024]) == Ok(LEN - 100 * 1024));
+            check!(10, sys(p, nr::LSEEK, &[fd, 0, 1]) == Ok(0), "pread moved the offset");
+            0
+        }])
+    }
+}
+
 // ---- poll, select, epoll -------------------------------------------------------
 
 /// Store a `struct epoll_event` (12 bytes, packed) at `at`.

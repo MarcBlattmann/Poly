@@ -311,6 +311,8 @@ pub const DISK_FILE: &str = "poly-chrome-win-disk.img";
 /// Where Chrome is on the disk, and as the DOS path programs see.
 pub const APP_ON_DISK: &str = "poly/nt/c/Program Files/Chrome";
 pub const APP_DOS: &str = "C:\\Program Files\\Chrome";
+/// Changes when what the disk carries of Poly's fonts changes (the disk is made again).
+const FONTS_STAMP: &str = "fonts-0181-dejavu";
 /// The test directory on the disk (`C:\poly-test`): the launcher, the
 /// stages, the pages.
 pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
@@ -417,19 +419,57 @@ pub const STAGES: [Stage; 3] = [
 /// The probe of stage 9 (`tests/windows/chrome_probe.rs`).
 pub const PROBE: &str = "chrome_probe";
 
+/// What a debugging run changes in the stage files (`chrome-win run --chrome-arg A --launch-seconds N`):
+/// more arguments for Chrome (its own logging, `--enable-logging=stderr --v=1`) and a shorter wait,
+/// so the launcher prints Chrome's standard error before QEMU is stopped. Empty for every other run.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Debugging {
+    pub chrome_args: Vec<String>,
+    pub seconds: Option<u32>,
+    /// The call tracer (`--kit`) and the kernel's NT call trail log only processes whose
+    /// command line contains this (`--trace-only`).
+    pub trace_only: Option<String>,
+    /// The call tracer keeps the last N calls and writes them at a breakpoint (`--trace-ring`).
+    pub trace_ring: Option<u32>,
+    /// The kernel keeps every process's last N NT calls for a breakpoint (`--trail`).
+    pub trail: Option<u32>,
+    /// NT services the trail leaves out, comma separated (`--trail-skip`).
+    pub trail_skip: Option<String>,
+    /// The call tracer writes each function's first call with each outcome only
+    /// (`--trace-first`: `POLYTRACE_FIRST`).
+    pub trace_first: bool,
+    /// The call tracer also writes its ring this many seconds after a process started
+    /// (`--ring-at`): what a process that went quiet did last.
+    pub ring_at: Option<u32>,
+}
+
+static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
+
 /// `stage<N>.cmd` for the launcher: the program, its command line, its
 /// directory, the seconds to wait (see `tests/windows/chrome_launch.rs`).
 pub fn stage_cmd(stage: &Stage) -> String {
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    stage_cmd_with(stage, &debugging)
+}
+
+/// [`stage_cmd`] with a run's [`Debugging`] changes (Chrome's own arguments only: a probe gets none).
+pub fn stage_cmd_with(stage: &Stage, debugging: &Debugging) -> String {
     let exe = match stage.program {
         Some(p) => format!("C:\\poly-test\\{p}.exe"),
         None => format!("{APP_DOS}\\chrome.exe"),
     };
     let mut cmdline = format!("\"{exe}\"");
-    for a in stage.args {
+    let extra: &[String] = if stage.program.is_none() { &debugging.chrome_args } else { &[] };
+    // Chrome's switches go before the page (its last argument).
+    let (page, switches) = match stage.args.split_last() {
+        Some((last, rest)) if stage.program.is_none() => (Some(*last), rest),
+        _ => (None, stage.args),
+    };
+    for a in switches.iter().copied().chain(extra.iter().map(String::as_str)).chain(page) {
         cmdline.push(' ');
         cmdline.push_str(a);
     }
-    format!("{exe}\n{cmdline}\n{APP_DOS}\n{}\n", stage.seconds)
+    format!("{exe}\n{cmdline}\n{APP_DOS}\n{}\n", debugging.seconds.unwrap_or(stage.seconds))
 }
 
 /// The kit's trace file, written by `polytrace.dll` in Chrome's directory.
@@ -438,8 +478,30 @@ pub const TRACE_FILE: &str = "polytrace.jsonl";
 /// [`stage_cmd`] for a run with the Poly-side call tracer: the logger writes every record when
 /// its call returns (`POLYTRACE_SYNC`, so a process that dies leaves its trace) and the launcher
 /// sends the trace file to the kernel log afterwards.
+///
+/// A debugging run can trace only some processes (`--trace-only TEXT`: `POLYTRACE_ONLY`, a
+/// process whose command line contains the text) and keep only their last calls, written when
+/// they meet a breakpoint (`--trace-ring N`: `POLYTRACE_RING`, ADR 0155 step 11).
 pub fn stage_cmd_traced(stage: &Stage) -> String {
-    format!("{}POLYTRACE_SYNC=1\n{TRACE_FILE}\n", stage_cmd(stage))
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    format!("{}{}\n{TRACE_FILE}\n", stage_cmd(stage), trace_env(&debugging))
+}
+
+/// The launcher's environment line for the call tracer (see [`stage_cmd_traced`]).
+pub fn trace_env(debugging: &Debugging) -> String {
+    let mut env = match debugging.trace_ring {
+        _ if debugging.trace_first => "POLYTRACE_FIRST=1".to_string(),
+        Some(n) => format!("POLYTRACE_RING={n}"),
+        None => "POLYTRACE_SYNC=1".to_string(),
+    };
+    if let Some(at) = debugging.ring_at {
+        env.push_str(&format!(" POLYTRACE_RING_AT={at}"));
+    }
+    if let Some(only) = &debugging.trace_only {
+        env.push_str(" POLYTRACE_ONLY=");
+        env.push_str(only);
+    }
+    env
 }
 
 /// The tree of the disk: Chrome, the launcher, the stages, the test
@@ -478,6 +540,11 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
     tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
     tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
     tree.file(&format!("{SYSTEM32_ON_DISK}/{}", poly_stubs::STUB_DLL), 0o755, polystub);
+    // Poly's fonts (ADR 0181): Windows programs get DirectWrite's system collection and GDI's faces from
+    // `C:\Windows\Fonts`. Without them Chrome's UI font set-up found no face and started over until its
+    // stack was full (stage 1, ADR 0155 addendum 9).
+    crate::fonts::fetch_dejavu()?;
+    crate::fonts::add_to_root(&mut tree)?;
     Ok(tree)
 }
 
@@ -543,8 +610,16 @@ pub fn disk_with(fresh: bool, kit: Option<&Path>) -> Result<PathBuf> {
             kit_bytes.extend_from_slice(&std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?);
         }
     }
-    let print =
-        fingerprint(&[VERSION.as_bytes(), &launcher, &stubs, stages.as_bytes(), &s1_page()?, &probe, &kit_bytes]);
+    let print = fingerprint(&[
+        VERSION.as_bytes(),
+        &launcher,
+        &stubs,
+        stages.as_bytes(),
+        &s1_page()?,
+        &probe,
+        &kit_bytes,
+        FONTS_STAMP.as_bytes(),
+    ]);
     if !fresh && image.exists() && std::fs::read_to_string(&stamp).is_ok_and(|s| s.trim() == print) {
         return Ok(image);
     }
@@ -620,17 +695,64 @@ impl Summary {
                 s.expected = true;
             }
         }
+        // The launcher's markers again, from its console output alone: the kernel's own log
+        // lines can land in the middle of a marker, and the console wraps long lines with cursor
+        // moves (a SHA-256 line is 85 columns), so the lines above may have missed them.
+        let stream = console_stream(log);
+        let after = |marker: &str| stream.find(marker).map(|at| &stream[at + marker.len()..]);
+        if let Some(rest) = after("LAUNCH-EXIT code=0x") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).collect();
+            if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                s.code = Some(code);
+                s.exit = Some(format!("code=0x{hex}"));
+            }
+        }
+        if s.stdout_bytes.is_none()
+            && let Some(rest) = after("LAUNCH-DIGEST stdout bytes=")
+        {
+            s.stdout_bytes = rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok();
+        }
+        if let Some(rest) = after("LAUNCH-SHA256 stdout ") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).take(64).collect();
+            if hex.len() == 64 {
+                s.stdout_sha256 = Some(hex);
+            }
+        }
+        if !expect.is_empty() && stream.contains(expect) {
+            s.expected = true;
+        }
         s
     }
 }
 
-/// Guest memory: Chrome's browser, GPU, network and renderer processes.
-pub const MEMORY: &str = "4G";
+/// The launcher's console output in a serial log as one stream: the kernel's own log lines
+/// (`nt: pid ...`, `nt-waits: ...`, written whole and ending in a line break, possibly in the
+/// middle of a console line) cut out, then the escape sequences (the console's cursor moves,
+/// with which it also wraps long lines) and the line breaks removed.
+pub fn console_stream(log: &str) -> String {
+    const KERNEL: [&str; 6] = ["nt: pid ", "nt-waits: ", "nt-trace: ", "nt-trail: ", "nt-exc: ", "ptrace"];
+    let mut kept = String::with_capacity(log.len());
+    let mut rest = log;
+    while let Some(at) = KERNEL.iter().filter_map(|k| rest.find(k)).min() {
+        kept.push_str(&rest[..at]);
+        rest = rest[at..].find('\n').map_or("", |nl| &rest[at + nl + 1..]);
+    }
+    kept.push_str(rest);
+    crate::console::strip_ansi(&kept).chars().filter(|&c| c != '\n').collect()
+}
+
+/// Guest memory: Chrome's browser, GPU, network and renderer processes. Stage 1 starts about
+/// ten Chrome processes; in 4 GiB the kernel ran out of frames (its heap takes them from the
+/// same allocator: "memory allocation of 1232 bytes failed" in an exception's context) in about
+/// half the runs (ADR 0155 step 12).
+pub const MEMORY: &str = "8G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
-/// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--release]
-/// [--fresh-disk] [--timeout SECS] [--memory=SIZE] [--cpus=N]`: boot a
+/// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
+/// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--memory=SIZE]
+/// [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
 /// every host (no QMP). `--exceptions` asks the kernel to log every exception
@@ -640,6 +762,8 @@ fn run(args: &[String]) -> Result {
     let (mut stage, mut trace, mut release, mut fresh, mut timeout) = (1u32, false, false, false, 900u64);
     let mut kit_names: Vec<String> = Vec::new();
     let mut exceptions: Option<String> = None;
+    let mut waits: Option<String> = None;
+    let mut debugging = Debugging::default();
     let mut rest: Vec<String> = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -648,6 +772,8 @@ fn run(args: &[String]) -> Result {
                 stage = it.next().ok_or("--stage needs a number")?.parse().map_err(|e| format!("--stage: {e}"))?
             }
             "--trace" => trace = true,
+            "--waits" => waits = Some(String::new()),
+            w if w.starts_with("--waits=") => waits = Some(w["--waits".len()..].to_string()),
             "--exceptions" => exceptions = Some(String::new()),
             e if e.starts_with("--exceptions=") => exceptions = Some(e["--exceptions".len()..].to_string()),
             "--kit" => {
@@ -660,6 +786,34 @@ fn run(args: &[String]) -> Result {
             }
             "--release" => release = true,
             "--fresh-disk" => fresh = true,
+            "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
+            "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
+            "--trace-first" => debugging.trace_first = true,
+            "--trail-skip" => debugging.trail_skip = Some(it.next().ok_or("--trail-skip needs names")?.clone()),
+            "--ring-at" => {
+                debugging.ring_at =
+                    Some(it.next().ok_or("--ring-at needs seconds")?.parse().map_err(|e| format!("--ring-at: {e}"))?)
+            }
+            "--trail" => {
+                debugging.trail =
+                    Some(it.next().ok_or("--trail needs a number")?.parse().map_err(|e| format!("--trail: {e}"))?)
+            }
+            "--trace-ring" => {
+                debugging.trace_ring = Some(
+                    it.next()
+                        .ok_or("--trace-ring needs a number")?
+                        .parse()
+                        .map_err(|e| format!("--trace-ring: {e}"))?,
+                )
+            }
+            "--launch-seconds" => {
+                debugging.seconds = Some(
+                    it.next()
+                        .ok_or("--launch-seconds needs seconds")?
+                        .parse()
+                        .map_err(|e| format!("--launch-seconds: {e}"))?,
+                )
+            }
             "--timeout" => {
                 timeout = it.next().ok_or("--timeout needs seconds")?.parse().map_err(|e| format!("--timeout: {e}"))?
             }
@@ -671,10 +825,17 @@ fn run(args: &[String]) -> Result {
         .find(|s| s.number == stage)
         .ok_or_else(|| format!("no stage {stage} yet (stages: 1..={})", STAGES.len()))?;
     eprintln!("==> stage {}: {}", st.number, st.name);
+    if debugging != Debugging::default() {
+        eprintln!(
+            "==> debugging run: Chrome also gets {:?}, the launcher waits {:?} s",
+            debugging.chrome_args, debugging.seconds
+        );
+    }
+    *DEBUGGING.lock().map_err(|e| e.to_string())? = Some(debugging);
     fetch()?;
     let kernel = crate::build_kernel(release)?;
     let kit = if kit_names.is_empty() { None } else { Some(build_kit(&kit_names)?) };
-    let outcome = boot_stage(&kernel, st, &Options { trace, exceptions, fresh, timeout, rest, kit })?;
+    let outcome = boot_stage(&kernel, st, &Options { trace, exceptions, waits, fresh, timeout, rest, kit })?;
     outcome.report(st);
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
@@ -700,7 +861,7 @@ pub fn build_kit(names: &[String]) -> Result<PathBuf> {
 }
 
 /// The kernel arguments a stage's debugging options add (each with its leading space).
-fn kernel_arguments(trace: bool, exceptions: Option<&str>) -> String {
+fn kernel_arguments(trace: bool, exceptions: Option<&str>, waits: Option<&str>) -> String {
     let mut more = String::new();
     if trace {
         more.push_str(" poly.nt.trace");
@@ -708,6 +869,28 @@ fn kernel_arguments(trace: bool, exceptions: Option<&str>) -> String {
     if let Some(value) = exceptions {
         more.push_str(" poly.nt.exceptions");
         more.push_str(value);
+    }
+    if let Some(value) = waits {
+        more.push_str(" poly.nt.waits");
+        more.push_str(value);
+    }
+    more
+}
+
+/// The kernel arguments of a debugging run: `poly.nt.only` for `--trace-only` (the NT call
+/// trace and trail of the matching processes only) and `poly.nt.trail=N` for `--trail N`.
+pub fn debugging_kernel_arguments(d: &Debugging) -> String {
+    let mut more = String::new();
+    if let Some(only) = &d.trace_only {
+        more.push_str(" poly.nt.only=");
+        more.push_str(only);
+    }
+    if let Some(n) = d.trail {
+        more.push_str(&format!(" poly.nt.trail={n}"));
+    }
+    if let Some(skip) = &d.trail_skip {
+        more.push_str(" poly.nt.trail.skip=");
+        more.push_str(skip);
     }
     more
 }
@@ -720,6 +903,9 @@ pub struct Options {
     /// (`poly.nt.exceptions`): `Some("")` for the default stack dump, `Some("=N")` for N
     /// quadwords.
     pub exceptions: Option<String>,
+    /// Ask the kernel to log the blocked NT waits every N seconds (`poly.nt.waits`, ADR 0181):
+    /// `Some("")` for every 30 s, `Some("=N")` for every N.
+    pub waits: Option<String>,
     /// Make the disk again.
     pub fresh: bool,
     /// Seconds before QEMU is stopped.
@@ -849,7 +1035,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     let _ = std::fs::remove_file(&log);
     let res = crate::resources::Resources::from_args(&o.rest)?;
     eprintln!("{}", res.describe(MEMORY, CPUS));
-    let more = kernel_arguments(o.trace, o.exceptions.as_deref());
+    let mut more = kernel_arguments(o.trace, o.exceptions.as_deref(), o.waits.as_deref());
+    let debugging = DEBUGGING.lock().map(|d| d.clone().unwrap_or_default()).unwrap_or_default();
+    more.push_str(&debugging_kernel_arguments(&debugging));
     // The kernel mounts the disk and runs the launcher (NT programs are the
     // first program's business, a Linux shell cannot exec one): no
     // initramfs. The launcher's path has no space; Chrome's does not matter.
@@ -910,10 +1098,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 does not pass yet
-/// ([`S1_REQUIRED`]): until it does the group reports how far Chrome got
-/// and succeeds, so `cargo xtask ci` on a machine with the cache keeps
-/// passing for everyone else's changes; `POLY_CHROME_REQUIRED=1` makes the
+/// downloads the 210 MB package; CI has none). Stage 1 passes in most runs
+/// but not yet every time ([`S1_REQUIRED`]): until it does the group reports
+/// how far Chrome got and succeeds; `POLY_CHROME_REQUIRED=1` makes the
 /// outcome the group's result.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
@@ -930,7 +1117,15 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     let outcome = boot_stage(
         kernel,
         st,
-        &Options { trace: false, exceptions: None, fresh: false, timeout: 600, rest: Vec::new(), kit: None },
+        &Options {
+            trace: false,
+            exceptions: None,
+            waits: None,
+            fresh: false,
+            timeout: 600,
+            rest: Vec::new(),
+            kit: None,
+        },
     )?;
     outcome.report(st);
     let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
@@ -950,7 +1145,8 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
 }
 
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
-/// pass. Set to `true` by the change that makes stage 1 pass.
+/// pass. Stage 1 passes in about 8 of 10 runs (ADR 0155 step 12: the others end on a failed
+/// check in the browser, `chrome.dll+0xc62f809`, not found yet); `true` once it passes every time.
 pub const S1_REQUIRED: bool = false;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
@@ -961,7 +1157,7 @@ pub fn command(args: &[String]) -> Result {
         Some("disk") => disk(args.iter().any(|a| a == "--fresh-disk")).map(|p| println!("{}", p.display())),
         Some("run") => run(&args[1..]),
         _ => Err("usage: cargo xtask chrome-win <fetch | imports [--markdown FILE] | disk [--fresh-disk] | \
-                  run [--stage N] [--trace] [--exceptions[=N]] [--kit FILES] [--release] [--timeout SECS]>"
+                  run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--kit FILES] [--release] [--timeout SECS]>"
             .into()),
     }
 }
@@ -970,10 +1166,11 @@ pub fn command(args: &[String]) -> Result {
 mod tests {
     #[test]
     fn debugging_options_become_kernel_arguments() {
-        assert_eq!(kernel_arguments(false, None), "");
-        assert_eq!(kernel_arguments(true, None), " poly.nt.trace");
-        assert_eq!(kernel_arguments(false, Some("")), " poly.nt.exceptions");
-        assert_eq!(kernel_arguments(true, Some("=1536")), " poly.nt.trace poly.nt.exceptions=1536");
+        assert_eq!(kernel_arguments(false, None, None), "");
+        assert_eq!(kernel_arguments(true, None, None), " poly.nt.trace");
+        assert_eq!(kernel_arguments(false, Some(""), None), " poly.nt.exceptions");
+        assert_eq!(kernel_arguments(false, None, Some("=20")), " poly.nt.waits=20");
+        assert_eq!(kernel_arguments(true, Some("=1536"), None), " poly.nt.trace poly.nt.exceptions=1536");
     }
 
     #[test]
@@ -1055,6 +1252,20 @@ mod tests {
         assert_eq!(lines[3], "300");
         // The sandbox stage is the same without the flag.
         assert!(!stage_cmd(&STAGES[1]).contains("--no-sandbox"));
+        // A debugging run's switches go before the page; its wait replaces the stage's.
+        let d = Debugging { chrome_args: vec!["--v=1".into()], seconds: Some(40), ..Debugging::default() };
+        let cmd = stage_cmd_with(&STAGES[0], &d);
+        let lines: Vec<&str> = cmd.lines().collect();
+        assert!(lines[1].ends_with("--dump-dom --v=1 file:///C:/poly-test/s1.html"), "{cmd}");
+        assert_eq!(lines[3], "40");
+        // A probe gets no Chrome switches.
+        assert!(!stage_cmd_with(&STAGES[2], &d).contains("--v=1"));
+        // The tracer's environment: every call written, or a filtered ring.
+        assert_eq!(trace_env(&Debugging::default()), "POLYTRACE_SYNC=1");
+        let ring = Debugging { trace_only: Some("--type=renderer".into()), trace_ring: Some(500), ..d };
+        assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
+        let kernel = Debugging { trail: Some(128), ..ring };
+        assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
     }
 
     #[test]
@@ -1073,6 +1284,21 @@ mod tests {
         );
         assert!(ok.expected && ok.code == Some(0));
         assert_eq!((ok.stdout_bytes, ok.stdout_sha256.as_deref()), (Some(440), Some("abc123")));
+        // The kernel's lines inside the console's, and the console's own wrap (ADR 0155 step 12:
+        // the first stage 1 run that printed the DOM).
+        let mixed = "LAUNCH-BEGIN stdout\x1b[3;1H<p id=\"p\">script-ran 42</p>\x1b[18;1HLAUNCH-END stdout\x1b[19;1H\
+                     LAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 nt: pid 3: stub: kernel32!GetThreadPriority\r\n\
+                     stdout 7b79f8b475nt: pid 3: ldr: LdrLoadDll(x) failed (0xc0000135)\r\n\
+                     542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea1\x1b[21;1H3807b\x1b[22;1H\
+                     LAUNCH-EXIT code=0nt-waits: p3 ends a thread status 0x0\r\nx0\x1b[23;1H\n";
+        let m = Summary::parse(mixed, DOM_EXPECT);
+        assert_eq!(m.stdout_bytes, Some(440));
+        assert_eq!(
+            m.stdout_sha256.as_deref(),
+            Some("7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b")
+        );
+        assert_eq!((m.code, m.expected), (Some(0), true));
+        assert!(m.loader.iter().any(|l| l.contains("LdrLoadDll(x)")));
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);

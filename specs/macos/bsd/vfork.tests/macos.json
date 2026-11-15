@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "vfork_parent_unaffected",
+      "source_sha256": "377c4d17b1a2438d581f9a9bd66c384ad81f7e50e0d9510121eee63a66e77879",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "19a805f9bb3e0eff35c2d3aa971420400a1328ed695997d6e3b21ef05e7efb0f",
+          "exit_code": 0,
+          "stdout": "ok the child was killed by SIGSYS\nok the parent's memory is untouched\nok and the parent still has no children\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "vfork_sigsys",
+      "source_sha256": "a1f5a3139ee4f3c5f92df4da07cf057b0b553d240d0d41af1179fc33e061264b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7c9272aa6e36b4ddd011702794cd06b0e50a75d26eedb109c631bc9cf3fe6c05",
+          "exit_code": 0,
+          "stdout": "ok the caller is killed by SIGSYS\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

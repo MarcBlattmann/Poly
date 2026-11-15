@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/mmap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mmap.tests/macos.json.
+id: macos/syscall/bsd/mmap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 197,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 =
+  197, arguments in x0..x5. On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. mmap(addr, len, prot, flags, fd, offset) returns the
+  address of a new mapping. The page size is hw.pagesize: 16384 for arm64
+  processes (4096 expected for x86_64 under Rosetta, not observed).
+  Anonymous memory is page aligned and zero filled; a length of 1 maps a
+  whole page; MAP_ANON needs neither MAP_PRIVATE nor MAP_SHARED, and
+  MAP_ANON ignores fd (0 works) and the offset. A length of 0 succeeds and
+  returns 0, even with an address hint (but a file mapping of length 0
+  with a bad fd is still EBADF). File mappings show the file and zeros
+  after its end within the page; mapping at an offset past the end of the
+  file succeeds. An offset that is not page aligned is accepted: the
+  returned address is that many bytes into a page (offset 3: address mod
+  page size is 3) and shows the file from that offset. A MAP_SHARED store
+  reaches the file (a read sees it); a MAP_PRIVATE store does not.
+  MAP_FIXED at an aligned address replaces what was there with a fresh
+  zero page. Flag values are those of <sys/mman.h> (MAP_SHARED 1,
+  MAP_PRIVATE 2, MAP_FIXED 0x10, MAP_ANON 0x1000).
+returns:
+  success: "the mapping's address (page aligned, or offset % page size into a page for an unaligned file offset)"
+  length_zero: "0 with no error"
+errors:
+  no_file: "EBADF (9): no MAP_ANON and fd -1 or a descriptor that is not open"
+  unaligned_fixed: "EINVAL (22): MAP_FIXED at an address that is not page aligned"
+  negative_length: "EINVAL (22): length -4096"
+  directory: "EINVAL (22): a directory's descriptor"
+  too_long: "ENOMEM (12): length 2^62"
+  access: "EACCES (13): PROT_READ of a write-only descriptor; PROT_WRITE with MAP_SHARED of a read-only descriptor (MAP_PRIVATE is allowed)"
+  device: "ENODEV (19): /dev/null"
+side_effects: "a new mapping; MAP_SHARED stores change the file"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

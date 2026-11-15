@@ -251,7 +251,7 @@
 {"symbol":"NtUnlockFile","src":["wine-spec"],"seeds":["wine:kernel32/tests/file.c:test_LockFile"]},
 {"symbol":"NtUnlockVirtualMemory","src":["wine-spec"]},
 {"symbol":"NtUnmapViewOfSection","src":["wine-spec"],"seeds":["wine:ntdll/tests/wow64.c:test_image_mappings","wine:ntdll/tests/virtual.c:test_query_region_information","wine:ntdll/tests/info.c:test_mapprotection","wine:ntdll/tests/virtual.c:test_query_image_information","wine:ntdll/tests/virtual.c:test_NtMapViewOfSection","wine:ntdll/tests/virtual.c:test_NtMapViewOfSectionEx","wine:ntdll/tests/wow64.c:test_notifications","wine:ntdll/tests/wow64.c:test_cross_process_notifications"]},
-{"symbol":"NtUnmapViewOfSectionEx","src":["wine-spec"]},
+{"symbol":"NtUnmapViewOfSectionEx","status":"claimed","claimed_by":"impl-chrome-s11","src":["wine-spec"]},
 {"symbol":"NtWaitForAlertByThreadId","src":["wine-spec"],"seeds":["wine:ntdll/tests/sync.c:test_tid_alert","wine:ntdll/tests/sync.c:tid_wait_alert_thread","wine:ntdll/tests/sync.c:tid_alert_thread"]},
 {"symbol":"NtWaitForDebugEvent","src":["wine-spec"]},
 {"symbol":"NtWaitForKeyedEvent","src":["wine-spec"],"seeds":["wine:ntdll/tests/sync.c:test_keyed_events","wine:ntdll/tests/sync.c:keyed_event_thread"]},

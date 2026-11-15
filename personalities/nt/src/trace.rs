@@ -24,6 +24,66 @@ use poly_abi::SyscallRegs;
 /// the noisy services.
 pub const FLAG: &str = "poly.nt.trace";
 
+/// `poly.nt.only=<text>`: the trace and the trail are kept only for processes whose command line
+/// contains `text` (Chrome's `--type=renderer`, ADR 0155 step 11).
+pub const ONLY_FLAG: &str = "poly.nt.only";
+
+/// `poly.nt.trail[=N]`: every process keeps its last N system calls (all of them, the noisy ones
+/// too) and they are written when an exception that is a breakpoint or an error is handed to it
+/// (`nt-trail:` lines, oldest first): the calls before a failed check, without a serial line per
+/// call. N is [`TRAIL_DEFAULT`] without a value.
+pub const TRAIL_FLAG: &str = "poly.nt.trail";
+pub const TRAIL_DEFAULT: usize = 64;
+/// The most calls a trail keeps.
+pub const TRAIL_MAX: usize = 4096;
+
+/// The trail length `poly.nt.trail` asks for: `None` without the flag.
+pub fn trail_len(flag_present: bool, value: Option<&str>) -> Option<usize> {
+    match value {
+        Some(v) => v.parse::<usize>().ok().filter(|&n| n > 0).map(|n| n.min(TRAIL_MAX)),
+        None => flag_present.then_some(TRAIL_DEFAULT),
+    }
+}
+
+/// Whether a process with `command_line` is traced when `poly.nt.only` is `only` (empty: every
+/// process; `a|b`: a command line with either text). A process whose command line is not known
+/// yet is not.
+pub fn selects(command_line: Option<&str>, only: &str) -> bool {
+    only.is_empty() || command_line.is_some_and(|c| only.split('|').any(|o| !o.is_empty() && c.contains(o)))
+}
+
+/// Whether an exception with `code` makes the trail be written: a breakpoint
+/// (`STATUS_BREAKPOINT`, a failed check's `int3`) or an error status (`0xC...`).
+pub fn writes_trail(code: u32) -> bool {
+    code == 0x8000_0003 || code >= 0xC000_0000
+}
+
+/// The last calls of one process (see [`TRAIL_FLAG`]).
+#[derive(Clone, Debug, Default)]
+pub struct Trail {
+    lines: alloc::collections::VecDeque<String>,
+}
+
+impl Trail {
+    /// Keep `line`, forgetting the oldest beyond `cap`.
+    pub fn push(&mut self, line: String, cap: usize) {
+        while self.lines.len() >= cap.max(1) {
+            self.lines.pop_front();
+        }
+        self.lines.push_back(line);
+    }
+
+    /// The kept calls, oldest first; the trail starts over.
+    pub fn take(&mut self) -> alloc::vec::Vec<String> {
+        self.lines.drain(..).collect()
+    }
+
+    /// The kept calls, oldest first; they stay (a periodic report, `poly.nt.waits`).
+    pub fn lines(&self) -> impl Iterator<Item = &String> {
+        self.lines.iter()
+    }
+}
+
 /// Where a service takes a name, and in what form.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NameKind {
@@ -214,6 +274,35 @@ mod tests {
         let open = call(Some(Service::OpenKey), "NtOpenKey", None);
         assert!(wanted(&open, 0, false));
         assert!(wanted(&call(None, "nt#0x3fff", None), 0xC000_0002, false));
+    }
+
+    #[test]
+    fn the_trail_keeps_the_last_calls_and_starts_over() {
+        let mut t = Trail::default();
+        for i in 0..5 {
+            t.push(format!("call {i}"), 3);
+        }
+        assert_eq!(t.lines().cloned().collect::<alloc::vec::Vec<_>>(), ["call 2", "call 3", "call 4"]);
+        assert_eq!(t.take(), ["call 2", "call 3", "call 4"]);
+        assert!(t.take().is_empty());
+        assert_eq!(trail_len(true, None), Some(TRAIL_DEFAULT));
+        assert_eq!(trail_len(false, Some("200")), Some(200));
+        assert_eq!(trail_len(false, Some("999999")), Some(TRAIL_MAX));
+        assert_eq!(trail_len(false, Some("0")), None);
+        assert_eq!(trail_len(false, None), None);
+        assert!(writes_trail(0x8000_0003) && writes_trail(0xC000_0005));
+        assert!(!writes_trail(0x406D_1388) && !writes_trail(0xE06D_7363 & 0x7FFF_FFFF));
+    }
+
+    #[test]
+    fn only_names_processes_by_their_command_line() {
+        let renderer = Some("\"C:\\Program Files\\Chrome\\chrome.exe\" --type=renderer --lang=en-US");
+        assert!(selects(renderer, "--type=renderer"));
+        assert!(!selects(Some("chrome.exe --type=gpu-process"), "--type=renderer"));
+        assert!(!selects(None, "--type=renderer"));
+        assert!(selects(None, ""));
+        assert!(selects(Some("chrome.exe --dump-dom x"), "--type=renderer|--dump-dom"));
+        assert!(!selects(Some("chrome.exe --type=gpu-process"), "--type=renderer|--dump-dom"));
     }
 
     #[test]

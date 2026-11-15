@@ -95,6 +95,28 @@ fn read_copies_file_data_to_user_memory() {
 }
 
 #[test]
+fn a_message_read_takes_a_buffer_for_the_message_that_waits() {
+    // /dev/fuse: a request is read whole. The read's buffer is as large as
+    // the request that waits, not as the largest one; a request that came
+    // while the read waited (none did when it started) and does not fit
+    // is read with a larger buffer.
+    let mut k = FakeKernel::new();
+    let len = 200 * 1024;
+    k.map_range(0x100_0000, len, RW);
+    let msg: Vec<u8> = (0..100_000).map(|i| (i % 253) as u8).collect();
+    let f = k.file_mut(0);
+    f.message = true;
+    f.input = msg.clone();
+    f.pieces = std::vec![0];
+    assert_eq!(sys(&mut k, nr::READ, &[0, 0x100_0000, len]), Ok(100_000));
+    assert_eq!(k.peek(0x100_0000, 100_000), msg);
+    // A caller's buffer that is too small for the message: EINVAL.
+    k.file_mut(0).input = msg.clone();
+    assert_eq!(sys(&mut k, nr::READ, &[0, 0x100_0000, 50_000]), Err(Errno::EINVAL));
+    assert_eq!(k.file(0).input.len(), 100_000, "the message stays");
+}
+
+#[test]
 fn read_errors() {
     let mut k = FakeKernel::new();
     k.file_mut(0).input = b"abc".to_vec();

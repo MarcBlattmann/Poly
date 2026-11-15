@@ -66,8 +66,8 @@ pub use security::{DefaultSd, ObjectSecurity, path_key};
 pub use services::ObjectBasicInformation;
 pub use status::{NtStatus, Result};
 pub use wait::{
-    EventInfo, MAXIMUM_WAIT_OBJECTS, MutantInfo, SemaphoreInfo, ThreadRef, Timeout, WaitCancel, WaitId, WaitOutcome,
-    WaitType, Wake,
+    EventInfo, MAXIMUM_WAIT_OBJECTS, MutantInfo, SemaphoreInfo, ThreadRef, Timeout, WaitCancel, WaitDescription,
+    WaitId, WaitOutcome, WaitType, Wake,
 };
 
 /// A process, as the kernel names it. Each has its own handle table.

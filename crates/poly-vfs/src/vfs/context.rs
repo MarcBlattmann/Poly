@@ -154,6 +154,9 @@ impl Vfs {
                 return Ok(n.clone());
             }
         }
+        if let Some(name) = mount.sb.fs.name_of(dir, child) {
+            return Ok(name);
+        }
         let mut found = None;
         mount.sb.fs.readdir(dir, 0, &mut |e| {
             if e.ino == child && e.name != b"." && e.name != b".." {

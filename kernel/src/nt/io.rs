@@ -156,11 +156,21 @@ pub(super) fn drain() {
     while let Some(c) = with(|s| s.sys.io.pop_completion()) {
         let memory = MEMORY.lock().get(&c.process.0).and_then(Weak::upgrade);
         if let Some(m) = &memory {
-            if let Some((addr, data)) = &c.data {
-                let _ = m.write(*addr, data);
+            if let Some((addr, data)) = &c.data
+                && m.write(*addr, data).is_err()
+            {
+                crate::kprintln!(
+                    "nt: p{}: a completion's {} bytes could not be written at {addr:#x}",
+                    c.process.0,
+                    data.len()
+                );
             }
-            if c.iosb != 0 {
-                let _ = m.write(c.iosb, &c.iosb_bytes());
+            if c.iosb != 0 && m.write(c.iosb, &c.iosb_bytes()).is_err() {
+                crate::kprintln!(
+                    "nt: p{}: a completion's status block could not be written at {:#x}",
+                    c.process.0,
+                    c.iosb
+                );
             }
         }
         drop(memory);

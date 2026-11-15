@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/stat64.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# stat64.tests/macos.json.
+id: macos/syscall/bsd/stat64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 338,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 338, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. stat64(path, buf)
+  fills struct stat64 (144 bytes, see the fstat64 sheet) for the file path
+  names, following symbolic links. A file created with mode 0666 under
+  umask 022 is S_IFREG|0644, one link, the caller's uid and gid. On APFS a
+  directory has one link per entry plus 2 and 32 bytes per entry plus 64
+  (the working directory with two entries: 4 links, size 128; an empty
+  one: 2 links, size 64). A trailing slash on a directory path is fine. A
+  link to a file shows the file (also through a link to a link), a link to
+  a directory the directory. /dev/null is S_IFCHR|0666 with st_rdev
+  0x3000002; "/" is a directory owned by root.
+returns:
+  success: "0, buf filled"
+errors:
+  missing: "ENOENT (2): a missing file, the empty path, a dangling symbolic link"
+  not_a_directory: "ENOTDIR (20): a file used as a directory; a file with a trailing slash"
+  loop: "ELOOP (62): a loop of symbolic links"
+  name_too_long: "ENAMETOOLONG (63): a component of 299 bytes"
+  bad_pointer: "EFAULT (14): path or buffer at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

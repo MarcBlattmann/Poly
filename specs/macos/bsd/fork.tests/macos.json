@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "fork_basic",
+      "source_sha256": "e9c97378243a6292e99e495c1179f7f09d5761b38ca70f8f71db30008b323896",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0249feed565330870d681fc59354400789a452a7de94cc8c1ff14d589c1994e0",
+          "exit_code": 0,
+          "stdout": "ok fork succeeds in the parent\nok the parent's second register is 0\nok the child's pid is positive and not the parent's\nok the child: result is its own pid, not the parent's; its ppid is the parent\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "fork_memory_fds",
+      "source_sha256": "61fe702b3472f7202b1e6946e0337ac446ddec4b1bc4202810d5e9bc145f3d02",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8cd7179309025535c3b478c4ad2be4a6841c8f9deefb43d557c1a2899d06cd95",
+          "exit_code": 0,
+          "stdout": "ok the child read the first two bytes\nok the parent's memory is unchanged\nok the offset is shared: the parent reads \"cd\"\nok the pipe carries the child's bytes\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

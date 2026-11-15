@@ -626,3 +626,147 @@ follow their sheets now). In particular, to be confirmed:
   `E_INVALIDARG`). `VarBstrCmp`: the result for a failed comparison and for `lcid` 0.
 * `NtSuspendProcess` / `NtResumeProcess`: the statuses for a handle without
   `PROCESS_SUSPEND_RESUME` (Poly: `STATUS_ACCESS_DENIED`) and for a process that has ended.
+
+## Addendum: the renderer's start-up, placeholders, dynamic function tables (`chrome-win-s11`, step 11)
+
+After step 10 (ADR 0181) the browser stayed up, but each of its three or four renderers ended
+about 16 s in on a breakpoint inside `ChromeMain`. Watching only the renderers made the reasons
+readable, one per run; nothing here comes from reading Chrome's code.
+
+1. **Tools: trace only some processes, keep only their last calls.** The call tracer
+   (`polytrace-sync`) and the kernel learn three things, all off by default:
+   * `POLYTRACE_ONLY=<text>` (`chrome-win run --trace-only TEXT`): the logger traces only a process
+     whose command line contains the text (`--type=renderer`); in the others it opens no file and
+     every thunk calls straight through, so the browser's stack sampler can no longer stop a
+     thread inside the logger (the step 8 reason `chrome.dll` could not be in the kit).
+   * `POLYTRACE_RING=N` (`--trace-ring N`): keep the last N records in memory, without a lock, and
+     write them when the process meets a breakpoint or an error exception (a vectored handler that
+     lets the exception go on), or N seconds after start with `POLYTRACE_RING_AT` (`--ring-at`).
+   * `POLYTRACE_FIRST=1` (`--trace-first`): write a record only the first time a function returns
+     with a given outcome (zero or not, and the last error it set): which functions a process
+     reaches and how they answer, in a few hundred records, the shape of the Windows reference's
+     per-function rows (`traces/s1.trace.json`).
+   * Kernel: `poly.nt.only=<text>` limits `poly.nt.trace` and the new `poly.nt.trail[=N]` (each
+     process keeps its last N NT calls, all services, written as `nt-trail:` lines when a
+     breakpoint or error exception is handed to it) to processes whose command line has the
+     text; `poly.nt.waits` lines now name the process (`p<pid>`) and list the command lines.
+     (`--trace-only` sets `poly.nt.only` too; `--trail N`.) The ring and selection logic is
+     `poly_personality_nt::trace` (`Trail`, `selects`, `trail_len`), host-tested.
+   * `chrome-win run --chrome-arg ARG` adds a switch to Chrome's command line and
+     `--launch-seconds N` shortens the launcher's wait, so a debugging run prints Chrome's
+     standard error before QEMU is stopped. The launcher's environment line takes several
+     `NAME=VALUE` words.
+2. **Placeholders** (Learn: "VirtualAlloc2", "VirtualFree", "MapViewOfFile3", "UnmapViewOfFile2").
+   The renderer's first stop: `VirtualFree(0x1e000000000, 64 GiB, MEM_RELEASE |
+   MEM_PRESERVE_PLACEHOLDER)` failed with error 87 (`kernelbase` accepted only `MEM_RELEASE` or
+   `MEM_DECOMMIT`), then V8's check fired; the text on the stack was `v8-sandbox`. V8 reserves its
+   sandbox as one placeholder and splits it. `kernelbase` had treated a placeholder as an ordinary
+   reservation, which cannot be split. Now the kernel's address-space model has placeholders
+   (`poly_personality_nt::vm::Placeholder`): `MEM_RESERVE | MEM_RESERVE_PLACEHOLDER` makes one
+   (`PAGE_NOACCESS` only, nothing can be committed in it); `MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER`
+   splits off part of one at 64 KiB boundaries, or frees a private allocation that replaced one
+   back to it; `MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS` joins neighbouring placeholders named by
+   exactly their whole range; `MEM_RESERVE | MEM_REPLACE_PLACEHOLDER` (private memory) and
+   `NtMapViewOfSection` with `MEM_REPLACE_PLACEHOLDER` (a data view) take exactly one placeholder's
+   range; the new service `NtUnmapViewOfSectionEx` (0x04A; Learn `ZwUnmapViewOfSectionEx`) with
+   `MEM_PRESERVE_PLACEHOLDER` leaves a placeholder where the view was. `VirtualAlloc2`,
+   `VirtualFree`, `MapViewOfFile3` and `UnmapViewOfFile2` pass the types through; `VirtualAlloc`
+   refuses the placeholder types (Learn: they are `VirtualAlloc2`'s). Host test:
+   `vm::tests::placeholders_split_replace_preserve_and_coalesce`.
+3. **Function tables of code made at run time** (Learn: "RtlAddFunctionTable",
+   "RtlDeleteFunctionTable", "RtlAddGrowableFunctionTable", "RtlGrowFunctionTable",
+   "RtlDeleteGrowableFunctionTable"). The second stop: the renderer looked up
+   `ntdll!RtlAddGrowableFunctionTable`, got NULL (Poly's `ntdll` had none of these), and called
+   it: `0xC0000005` executing address 0. `poly_seh::dynamic::Registry` holds up to 256 tables
+   (host-tested); `ntdll` exports the five functions and its function-entry lookup
+   (`RtlLookupFunctionEntry`, exception dispatch, unwinding) searches the registered tables for an
+   address in no image. `kernel32` forwards `RtlAddFunctionTable` and `RtlDeleteFunctionTable`.
+4. **`CreateSemaphoreA`, `CreateEventA`, `CreateMutexA`** (Learn: the ANSI forms). With the
+   renderers alive, the first-call trace showed `CreateSemaphoreA(NULL, 0, 0x7FFFFFFF, NULL)` =
+   NULL with error 120 in every renderer (it was a stub), where Windows' renderers always got a
+   handle. They are now the W functions with the name converted from the ANSI code page.
+
+**Where stage 1 stands.** The renderers no longer die; the browser, the crash handler, the GPU,
+network and storage processes and three renderers start, and everything then goes quiet: the
+browser logs `AddKeepAlive(Default, kHeadlessCommand)` about 12 s in and nothing else, the page's
+renderer wakes every ~100 ms and goes back to sleep, and the launcher's 300 s timeout ends the run
+without the DOM. The first-call comparison against `traces/s1.trace.json` finds no single call
+that fails on Poly and not on Windows before that point; what still differs is in the hand-off
+`chrome-win-s11.md`.
+
+**Doc-derived, to be confirmed against Windows:** the statuses of every placeholder failure
+(a split off granule boundaries, a range past the placeholder, a replacement of a range that is
+not exactly one placeholder, coalescing a range that is not whole placeholders, committing in a
+placeholder); that a split naming the whole placeholder (or size 0) succeeds and changes nothing;
+that `UnmapViewOfFile2(MEM_PRESERVE_PLACEHOLDER)` of a view that replaced no placeholder leaves one
+(Poly) rather than failing; `RtlAddGrowableFunctionTable`'s status for a full table
+(`STATUS_NO_MEMORY`) and for a NULL handle pointer (`STATUS_INVALID_PARAMETER`); that
+`RtlGrowFunctionTable` ignores a count below the current one or above the maximum; which of two
+overlapping tables wins (Poly: the first registered).
+
+## Addendum: stage 1 passes (`chrome-win-s12`, step 12)
+
+After step 11 every process of stage 1 lived, and about 12 s in the whole tree went quiet (the
+browser had just logged the start of its `--dump-dom` command). Found with Poly's own wait report,
+not with Chrome's code:
+
+1. **The wait report shows who holds what.** `poly.nt.waits` now lists, per blocked wait, the
+   processes and handle values that hold each object; per named-pipe instance the processes
+   holding each end, the unread bytes and messages and the reads waiting in each direction; the
+   completion ports that hold packets; the I/O requests waiting per process and the completions
+   not yet delivered; the win32k thread queues (posted messages, wake bits, the queue event's
+   state); and, with `poly.nt.trail`, each selected thread's last calls. The trail is kept per
+   thread (a busy thread no longer pushes a quiet one's calls out), `poly.nt.trail.skip=<names>`
+   leaves services out (`--trail-skip`), and `poly.nt.only` takes `a|b`. `ObjectManager::holders`
+   (diagnostics), `IoState::{np_debug_lines, port_debug_lines}`, `Wm::queue_debug_lines`.
+   A completion whose data or status block cannot be written into the requester is now logged.
+2. **`UnregisterWaitEx` signals its completion event** (Learn: "If the function succeeds, or if the
+   function fails with ERROR_IO_PENDING, the caller should always wait until the event is
+   signaled"). The browser's UI thread unregisters a wait it had registered on a child process
+   with an event it creates for the purpose, and waits for that event; Poly signalled the event
+   only when a callback was still running, so the UI thread waited forever (the report: thread 2
+   waits on an event only the browser holds; its trail: `NtCreateEvent`, `NtSetEvent` of the
+   wait's cancel event, `NtWaitForSingleObject` of the new event). Now the wait's thread signals
+   the event when it ends, and `UnregisterWaitEx` signals it itself when that thread had ended
+   already (a `WT_EXECUTEONLYONCE` wait that fired). `poly_kernelbase::waitreg::unregister`
+   (host test) and a `k32test` case.
+3. **Nine more delay-loaded DLLs** (the step 9 rule: the DLL must exist, its exports may fail).
+   With the UI thread free, the browser delay-loads `SETUPAPI.dll`, `pdh.dll` and `tbs.dll`, and
+   in some runs `ncrypt.dll` (`0xC06D007E` and a breakpoint without them). `setupapi`, `pdh`,
+   `tbs`, `cfgmgr32`, `wintrust`, `ncrypt`, `propsys`, `wevtapi` and `hid` export every name
+   `chrome.dll` delay-loads from them and fail with the value each function's page or header
+   gives: `INVALID_HANDLE_VALUE`, `FALSE` or `NULL` with `ERROR_CALL_NOT_IMPLEMENTED` (`setupapi`,
+   the `wintrust` catalog functions, `wevtapi`, `HidD_*`), `PDH_NOT_IMPLEMENTED` (`pdh`),
+   `TBS_E_TPM_NOT_FOUND` (`tbs`: no TPM), `CR_CALL_NOT_IMPLEMENTED` (`cfgmgr32`),
+   `TRUST_E_PROVIDER_UNKNOWN` (`WinVerifyTrust`), `NTE_NOT_SUPPORTED` (`ncrypt`), `E_NOTIMPL`
+   (`propsys`), `HIDP_STATUS_NOT_IMPLEMENTED` (`HidP_*`). Coverage: `stub`. Still missing (none
+   reached): `bthprops.cpl`, `comdlg32`, `credui`, `cryptui`, `d3d11`, `d3d12`, `dcomp`, `dxgi`,
+   `esent`, `mf`, `mfreadwrite`, `mmdevapi`, `ndfapi`, `urlmon`, `winspool.drv`, `winusb`.
+4. **A satisfied wait is not a timeout.** The object manager retires a satisfied wait and queues
+   its wake; the waiting thread learns of it when the signaller drains the wakes after its call.
+   A waiter whose timeout (or APC) came in between cancelled a wait that no longer existed and
+   reported `STATUS_TIMEOUT` (or `STATUS_USER_APC`) although the object was taken (an auto-reset
+   event reset, a semaphore count, a mutant), and the late wake became the result of the thread's
+   next wait. Now the waiter takes a still-queued wake of its own wait first
+   (`ObjectManager::take_wake`, host test), and a recorded completion carries its wait's id so a
+   later wait never takes it.
+5. **Memory.** In the 4 GiB guest the kernel ran out of frames in about half of the stage 1 runs
+   once the browser got this far (about ten Chrome processes): "memory allocation of 1232 bytes
+   failed" (an exception's `CONTEXT`, the first allocation after the frames were gone; the kernel
+   heap takes its pages from the frame allocator). The stages now run with 8 GiB
+   (`chromewin::MEMORY`); why Poly needs that much more than Windows for the same processes is
+   open.
+6. **The summary reads the launcher's output whole.** The kernel's log lines land in the middle of
+   the launcher's console lines and the console wraps the SHA-256 line with a cursor move, so the
+   stage's digest was never found; `console_stream` cuts the kernel lines out first.
+
+**Stage 1 passes**: Chrome exits with 0 after about 50–70 s and prints the page's DOM, 440 bytes,
+SHA-256 `7b79f8b4…3807b`, the digest the spec recorded on Windows: 8 of the last 10 runs. The
+other two ended `0xffff7002`; with `poly.nt.exceptions` one of them showed a failed check (int3) on
+a browser thread at `chrome.dll+0xc62f809`, no text on the stack. `S1_REQUIRED` stays `false`
+until stage 1 passes every time.
+
+**Doc-derived, to be confirmed against Windows:** the failure values of the nine stub DLLs
+(`PDH_NOT_IMPLEMENTED`, `TBS_E_TPM_NOT_FOUND` with no TPM, `CR_CALL_NOT_IMPLEMENTED`,
+`TRUST_E_PROVIDER_UNKNOWN`, `NTE_NOT_SUPPORTED`, `HIDP_STATUS_NOT_IMPLEMENTED`), and that `UnregisterWaitEx` with an event signals it once the wait's
+thread is done even when it returns `TRUE`.

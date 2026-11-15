@@ -252,7 +252,7 @@ fn caption_button_width(dpi: u32) -> i32 {
 /// `dpi_table_2`) and what was observed there for the two metrics no
 /// formula was found for: `SM_CXMIN` (= `SM_CXMINTRACK`) and
 /// `SM_CXMENUCHECK` (= `SM_CYMENUCHECK`).
-const OBSERVED: [(u32, i32, i32); 40] = [
+const OBSERVED: [(u32, i32, i32); 43] = [
     (1, 93, 21),
     (12, 45, 3),
     (24, 50, 3),
@@ -293,6 +293,11 @@ const OBSERVED: [(u32, i32, i32); 40] = [
     (600, 788, 99),
     (800, 1044, 133),
     (1000, 1306, 165),
+    // GetSystemMetricsForDpi.yaml `dpi_validity` (gsmfd_dpi_range): DPI 0x5678 (0x12345678 modulo 65536),
+    // 0xFFFE and 0xFFFF.
+    (22136, 27084, 3679),
+    (65534, 79764, 10895),
+    (65535, 79764, 10895),
 ];
 
 /// A metric of [`OBSERVED`] (`pick` chooses the column) at `dpi`: the
@@ -314,12 +319,29 @@ fn observed(dpi: u32, pick: fn(&(u32, i32, i32)) -> i32) -> i32 {
     y.clamp(0, i64::from(i32::MAX)) as i32
 }
 
-/// The DPI `GetSystemMetricsForDpi` works with for its `dpi` argument:
-/// 0, 0x10000 and 0xFFFFFFFF are refused (ERROR_INVALID_PARAMETER), every
-/// other value above 0xFFFF counts as 0xFFFF (0x7FFFFFFF answers like
-/// 0xFFFF; `GetSystemMetricsForDpi.yaml` `bad_dpi`, `odd_dpis`).
-pub fn metric_dpi(dpi: u32) -> Option<u32> {
-    if dpi == 0 || dpi == 0x10000 || dpi == u32::MAX { None } else { Some(dpi.min(0xFFFF)) }
+/// The 32 metrics that scale with the DPI (`GetSystemMetricsForDpi.yaml`
+/// `dpi_validity`, class S); the other defined ones keep their value at every
+/// DPI.
+pub fn scales_with_dpi(index: i32) -> bool {
+    matches!(index, 2..=4 | 9..=15 | 20 | 21 | 28..=35 | 38 | 39 | 49..=55 | 71 | 72 | 92)
+}
+
+/// The DPI `GetSystemMetricsForDpi` works with for `index` and its `dpi`
+/// argument (`GetSystemMetricsForDpi.yaml` `dpi_validity`): 0 and every
+/// DPI of 0x80000000 and more are refused (ERROR_INVALID_PARAMETER) for every
+/// index; a metric that scales takes the DPI modulo 65536 and refuses the
+/// multiples of 65536 (remainder 0); one that does not accepts every DPI from
+/// 1 to 0x7FFFFFFF (its value does not depend on it).
+pub fn metric_dpi(index: i32, dpi: u32) -> Option<u32> {
+    if dpi == 0 || dpi >= 0x8000_0000 {
+        return None;
+    }
+    if scales_with_dpi(index) {
+        let r = dpi & 0xFFFF;
+        (r != 0).then_some(r)
+    } else {
+        Some(dpi.min(0xFFFF))
+    }
 }
 
 /// `GetSystemMetricsForDpi(index, dpi)` (GetSystemMetrics.yaml
@@ -338,7 +360,7 @@ pub fn system_metric_for_dpi(index: i32, dpi: u32, d: &Display) -> Option<i32> {
         13 | 14 => cursor_for_dpi(dpi),
         15 => menu_for_dpi(dpi),
         28 | 34 => observed(dpi, |r| r.1),
-        29 | 35 => caption_for_dpi(dpi).saturating_add(2 * (frame_for_dpi(dpi) + scale(4, dpi).min(i32::MAX / 4))),
+        29 | 35 => caption_for_dpi(dpi).saturating_add(2 * (frame_for_dpi(dpi) + padded_for_dpi(dpi))),
         30 => caption_button_width(dpi),
         31 | 52 | 53 => caption_for_dpi(dpi) - 1,
         32 | 33 => frame_for_dpi(dpi),
@@ -722,7 +744,7 @@ mod tests {
     #[test]
     fn system_metrics_for_dpi_have_every_value_of_the_sheet() {
         let d = Display::INTERACTIVE;
-        let f = |index: i32, dpi: u32| system_metric_for_dpi(index, metric_dpi(dpi).unwrap(), &d).unwrap();
+        let f = |index: i32, dpi: u32| system_metric_for_dpi(index, metric_dpi(index, dpi).unwrap(), &d).unwrap();
         let dpis = [96u32, 120, 144, 168, 192, 240, 288, 384];
         let table: [(&[i32], [i32; 8]); 16] = [
             (&[2, 3, 9, 10, 20, 21], [17, 21, 26, 30, 34, 43, 51, 68]),
@@ -837,12 +859,36 @@ mod tests {
         odd(13, &[(1, 32), (24, 32), (95, 32), (100, 32), (130, 32), (1000, 128), (4000, 128), (0xFFFF, 128)]);
         odd(92, &[(1, 0), (24, 1), (48, 2), (72, 3), (95, 4), (1000, 42), (4000, 100)]);
         odd(32, &[(1, 3), (2, 3), (24, 3), (48, 4), (72, 4), (95, 4), (1000, 13), (4000, 45), (0xFFFF, 686)]);
+        // gsmfd_dpi_range: the DPI modulo 65536 (0x12345678 answers as 0x5678).
+        odd(28, &[(1, 93), (0xFFFF, 79764), (0x7FFF_FFFF, 79764), (0x1234_5678, 27084)]);
+        odd(29, &[(1, 30), (0xFFFF, 16591), (0x1234_5678, 5742)]);
+        odd(71, &[(1, 21), (0xFFFF, 10895), (0x1234_5678, 3679)]);
+        odd(2, &[(1, 8), (0xFFFF, 11605), (0x1_0001, 8), (0x1234_5678, 3920)]);
         // DPIs that are refused; indices that are none.
-        for bad in [0u32, 0x10000, 0xFFFF_FFFF] {
-            assert_eq!(metric_dpi(bad), None);
+        // GetSystemMetricsForDpi.yaml `dpi_validity`: 0 and 0x80000000 and more fail for
+        // every index; a metric that scales takes the DPI modulo 65536 (a multiple
+        // of it fails); the others accept 1..0x7FFFFFFF.
+        for index in [0, 2, 4, 30, 45, 87, 92] {
+            for bad in [0u32, 0x8000_0000, 0x8000_0001, 0xFFFF_FFFE, 0xFFFF_FFFF] {
+                assert_eq!(metric_dpi(index, bad), None, "{index} {bad:#x}");
+            }
         }
-        assert_eq!(metric_dpi(0xFFFF), Some(0xFFFF));
-        assert_eq!(metric_dpi(0x7FFF_FFFF), Some(0xFFFF));
+        for index in (0..100).filter(|&i| scales_with_dpi(i)) {
+            for bad in [0x10000u32, 0x20000, 0x30000, 0x10_0000, 0x7FFF_0000] {
+                assert_eq!(metric_dpi(index, bad), None, "{index} {bad:#x}");
+            }
+            assert_eq!(metric_dpi(index, 0x1_0001), Some(1));
+            assert_eq!(metric_dpi(index, 0x1_FFFF), Some(0xFFFF));
+            assert_eq!(metric_dpi(index, 0xF_FFFF), Some(0xFFFF));
+            assert_eq!(metric_dpi(index, 0x7FFF_FFFF), Some(0xFFFF));
+            assert_eq!(metric_dpi(index, 0x1234_5678), Some(0x5678));
+        }
+        for index in (0..100).filter(|&i| !scales_with_dpi(i)) {
+            for ok in [1u32, 0x10000, 0x20000, 0x7FFF_0000, 0x7FFF_FFFF] {
+                assert!(metric_dpi(index, ok).is_some(), "{index} {ok:#x}");
+            }
+        }
+        assert_eq!((0..100).filter(|&i| scales_with_dpi(i)).count(), 32);
         for bad in [-1, -100, 100, 1000, 0xFFF, 0x1001, 0x7FFF_FFFF, i32::MIN] {
             assert_eq!(system_metric_for_dpi(bad, 96, &d), None, "{bad}");
         }

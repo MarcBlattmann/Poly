@@ -1802,6 +1802,31 @@ fn stock_fonts_have_the_face_names_of_the_sheet() {
 }
 
 #[test]
+fn get_object_of_a_stock_font_has_a_face_name() {
+    // GetObjectW.yaml `stock_fonts`: OBJ_FONT, 92 bytes, a non-empty face name; the other fields are the
+    // font's metrics. The name is the one GetTextFaceW reports for it.
+    let mut g = Gdi::new();
+    let dc = u64::from(g.create_compatible_dc(0));
+    for stock in [10, 11, 12, 13, 14, 16, 17] {
+        let h = u64::from(g.stock(stock));
+        assert_eq!(g.object_type(h), OBJ_FONT, "stock font {stock}");
+        let bytes = g.object_bytes(h).expect("a font");
+        assert_eq!(bytes.len(), 92, "stock font {stock}");
+        assert_eq!(g.object_bytes_for(h, 356).expect("a font").len(), 356);
+        let name: Vec<u16> =
+            bytes[28..92].chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+        assert!(!name.is_empty(), "stock font {stock}: empty face name");
+        g.select_object(dc, h).unwrap();
+        assert_eq!(g.text_face(dc).unwrap(), name, "stock font {stock}");
+        let tm = crate::font::Face::OemFixed.metrics();
+        if stock == 10 {
+            assert_eq!(i32::from_le_bytes(bytes[0..4].try_into().unwrap()), tm.height);
+            assert_eq!(bytes[23], 255, "OEM_CHARSET");
+        }
+    }
+}
+
+#[test]
 fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
     use crate::text::*;
     let mut g = Gdi::new();
@@ -1859,4 +1884,5 @@ fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
     assert_eq!(ell(&mut g, "AB\nAAAA\\BBBB\\AAAA\\BBB.AB", 100, 60, DT_PATH_ELLIPSIS), "AB\nAA...\\BBB.AB");
 }
 
+mod sheets_last_line;
 mod sheets_text;
