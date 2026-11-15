@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/CreateToolbarEx.yaml
+id: windows/api/comctl32.dll/CreateToolbarEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. The programs have no manifest, so they get the common controls of version 5.82 from the system directory (classic look, no visual styles); controls are drawn into memory bitmaps with WM_PRINT (PRF_CLIENT | PRF_ERASEBKGND | PRF_CHILDREN) and only system colours are compared, never text or glyph pixels. Microsoft Learn: "Common Controls", the control reference pages and their message and notification lists; commctrl.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Makes a toolbar window (class ToolbarWindow32), sets the structure size, adds the bitmap (a handle when hBMInst is NULL) and the buttons and sets the button and bitmap sizes in one call. 7-Zip's file manager makes its toolbars with it (its first stopper on Poly was a crash in the stub).
+interface:
+  signature: "HWND CreateToolbarEx(HWND hwnd, DWORD ws, UINT wID, int nBitmaps, HINSTANCE hBMInst, UINT_PTR wBMID, LPCTBBUTTON lpButtons, int iNumButtons, int dxButton, int dyButton, int dxBitmap, int dyBitmap, UINT uStructSize)"
+rules:
+  window: "returns the toolbar window; class 'ToolbarWindow32', the control id wID, the style ws with CCS_TOP (0x1) added when no CCS_ position is given: WS_CHILD | WS_VISIBLE gives 0x50000001, CCS_BOTTOM | TBSTYLE_FLAT gives 0x50000803 (no CCS_TOP added), style 0 gives 0x40000001 (WS_CHILD and CCS_TOP are added, WS_VISIBLE is not)"
+  buttons: "the buttons are added with TB_ADDBUTTONS (count 4: bitmap, command, state and style as given; a separator keeps style 1 and reads bitmap 8); the bitmap is added with TB_ADDBITMAP(nBitmaps, ...): the buttons then use image indexes 0, 1, 2 as given; the toolbar is as wide as the parent (400) and 28 high"
+  sizes: "dxButton x dyButton and dxBitmap x dyBitmap set the button and bitmap sizes: 16 x 15 buttons and bitmaps give TB_GETBUTTONSIZE 0x150017 (23 x 21) and rectangles (0, 2, 23, 23), (23, 2, 31, 23), (31, 2, 54, 23), (54, 2, 77, 23); 24 x 22 gives 0x1c001f (31 x 28) and rectangles (0, 0, 31, 28), (31, 0, 39, 28), (39, 0, 70, 28), (70, 0, 101, 28); a toolbar made with no bitmap, no buttons and zero sizes has the default size 0x160017 (23 x 22) and no buttons"
+  struct_size: "uStructSize 0 leaves the toolbar without buttons (count 0); a size of 12 makes a toolbar whose four buttons are read with a 12 byte stride (the first button as given, the others garbage: commands 0, 0, 256); the size of TBBUTTON (32) works as in the first rows"
+  null_parent: "a NULL parent (with WS_CHILD): NULL is returned and nothing is made"
+errors:
+  null_parent: "NULL parent: returns NULL"
+side_effects: "creates a window and an image list"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Version 6 controls (what PuTTY and 7-Zip get through their manifests: themed painting, extra messages, LVS_EX styles beyond the basic ones), mouse input (a mouse button message sent to these controls starts a loop that waits for the real mouse and never ends in session 0, so the tests send keys and use hit tests), drag and drop, label editing, tool tips, owner draw and custom draw (NM_CUSTOMDRAW), icon and tile views, groups, sorting, and anything that needs a real font (text pixels, text extents of the system font). Resource bitmaps (hBMInst and a resource id), the standard bitmaps (HINST_COMMCTRL), IDB_ images and strings.

@@ -107,7 +107,13 @@ pub fn duplicate_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<Nt
             if sys.process_exits.contains_key(&from) || to.is_some_and(|t| sys.process_exits.contains_key(&t)) {
                 return Err(STATUS_PROCESS_IS_TERMINATING);
             }
-            // Without a `TargetHandle` pointer nothing is made: only the source closes.
+            // Without a `TargetHandle` pointer nothing is made: only the source closes,
+            // unless source and target are the same process: then nothing happens at all
+            // (specs/windows/ntdll.dll/NtDuplicateObject.yaml, `close_source`).
+            if out == 0 && to == Some(from) && options as u32 & poly_ntobj::DUPLICATE_CLOSE_SOURCE != 0 {
+                sys.objects.nt_duplicate_object_discarded(&caller, from, Handle(src))?;
+                return Ok(None);
+            }
             let to = if out == 0 { None } else { to };
             sys.objects.nt_duplicate_object(
                 &caller,

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetScrollRange.yaml
+id: windows/api/user32.dll/GetScrollRange
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Reads the range of a window's scroll bar or scroll bar control: the minimum and maximum last set by SetScrollInfo, SetScrollRange or SBM_SETRANGE.
+interface:
+  signature: "BOOL GetScrollRange(HWND hWnd, int nBar, LPINT lpMinPos, LPINT lpMaxPos)"
+rules:
+  defaults: "a window with WS_VSCROLL or WS_HSCROLL: 0..100; a window without the styles: TRUE with 0..0; a scroll bar control: 0..0 (as SB_CTL, and also through SB_VERT or SB_HORZ of the control's window); SB_CTL on an ordinary window: TRUE with the caller's numbers untouched"
+  set_values: "what SetScrollInfo, SetScrollRange or SBM_SETRANGE stored: 3..77, -20..20, 10..30 for a control; the other bar is not affected"
+  hidden_bar: "a bar hidden because its page covers its range still returns the range"
+  result: "TRUE for success"
+  sbm_getrange: "SBM_GETRANGE (wParam, lParam pointers to ints) gives the same range through the message and returns the range packed (high word 30, low word 10 for 10..30)"
+errors:
+  bad_bar: "bar 4, -1 and SB_BOTH: FALSE with ERROR_INVALID_PARAMETER (87), the outputs untouched"
+  bad_window: "a NULL or made-up window: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Dragging the thumb and clicking the arrows (WM_HSCROLL / WM_VSCROLL generation, SIF_TRACKPOS during a drag) and the drawn bar: they need real mouse input; GetScrollBarInfo; scroll bars of a window made right to left; DPI scaling of the bar sizes. NULL output pointers crash the call and are not tested.

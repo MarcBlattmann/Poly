@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/EnableScrollBar.yaml
+id: windows/api/user32.dll/EnableScrollBar
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Enables or disables one or both arrows of a window's scroll bar (ESB_ENABLE_BOTH 0, ESB_DISABLE_LTUP 1, ESB_DISABLE_RTDN 2, ESB_DISABLE_BOTH 3) or of a scroll bar control. Returns TRUE when the state changed, FALSE when it already was as asked.
+interface:
+  signature: "BOOL EnableScrollBar(HWND hWnd, UINT wSBflags, UINT wArrows)"
+rules:
+  result: "TRUE if the arrows' state changed, FALSE (with the last error unchanged) if the bar was already in that state: disable both twice: TRUE then FALSE; enable both twice: TRUE then FALSE; disable the top arrow, then the bottom one (1 then 2): TRUE, TRUE; the same flags again: FALSE"
+  extra_bits: "wArrows above 3 are accepted and only the low two bits count: 4 enables both (TRUE after both were disabled) and 0xFFFF disables both (TRUE), 0xFFFFFFFF behaves the same"
+  both_bars: "SB_BOTH (3) with ESB_ENABLE_BOTH and ESB_DISABLE_BOTH works on both bars (TRUE, TRUE for a change); SB_CTL (2) on an ordinary window returns FALSE"
+  window_without_bar: "a window without scroll bars: TRUE, nothing is created (no style bit); the state is remembered"
+  range_unchanged: "the range, page and position do not change; after SetScrollInfo with a different range the arrow that was disabled stays disabled (disabling it again returns FALSE)"
+  no_scroll: "a bar that is shown only because of SIF_DISABLENOSCROLL (page covers the range) can be enabled (TRUE) and disabled (TRUE)"
+  control: "on a scroll bar control EnableScrollBar(SB_CTL, ESB_DISABLE_BOTH) returns 8 (not TRUE: the result of the control's SBM_ENABLE_ARROWS handling) and the control becomes disabled (IsWindowEnabled 0); the second call returns 0, ESB_ENABLE_BOTH returns 1 and enables it again; SBM_ENABLE_ARROWS 3 returns 1 then 0; 0 returns 1; 7 returns 1"
+errors:
+  bad_bar: "bar 4 and 0x7FFFFFFF: FALSE with ERROR_INVALID_PARAMETER (87)"
+  bad_window: "a NULL, made-up or destroyed window: FALSE with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Dragging the thumb and clicking the arrows (WM_HSCROLL / WM_VSCROLL generation, SIF_TRACKPOS during a drag) and the drawn bar: they need real mouse input; GetScrollBarInfo; scroll bars of a window made right to left; DPI scaling of the bar sizes. How a disabled arrow looks and that it ignores clicks.

@@ -508,6 +508,15 @@ pub fn option_header(level: i32, name: i32) -> [u8; 8] {
     b
 }
 
+/// Set in the level of a [`GET_OPTION`] that the event helper makes on its own account: reading
+/// `SO_ERROR` that way does not count as the program having read the failure of a connect.
+pub const INTERNAL_LOOK: i32 = 0x4000_0000;
+
+/// [`option_header`] for a look the helper makes ([`INTERNAL_LOOK`]).
+pub fn internal_option_header(level: i32, name: i32) -> [u8; 8] {
+    option_header(level | INTERNAL_LOOK, name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,6 +580,7 @@ mod tests {
         let i = Info { family: 2, ty: 1, protocol: 6, listening: 1, nonblocking: 0 };
         assert_eq!(Info::decode(&i.encode()), Some(i));
         assert_eq!(read_u32(&option_header(0xffff, 4), 4), Some(4));
+        assert_eq!(read_u32(&internal_option_header(0xffff, 4), 0), Some(0x4000_ffff));
     }
 
     #[test]

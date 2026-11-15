@@ -35,6 +35,42 @@ pub const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x8000;
 pub const PROCESS_MODE_BACKGROUND_BEGIN: u32 = 0x0010_0000;
 pub const PROCESS_MODE_BACKGROUND_END: u32 = 0x0020_0000;
 
+/// The priority class a job's limit structure shows through `QueryInformationJobObject`
+/// (`JOBOBJECT_BASIC_LIMIT_INFORMATION.PriorityClass`): `NtQueryInformationJobObject` keeps
+/// the kernel's classes 1 to 6 (idle, normal, high, real-time, below normal, above normal) and
+/// reads 0 for a job without a priority limit; `kernel32` shows the `winbase.h` class of the
+/// limit and `NORMAL_PRIORITY_CLASS` for a job that has none
+/// (specs/windows/kernel32.dll/QueryInformationJobObject.yaml, `default_priority_class`).
+pub fn job_priority_to_win32(limit_flags: u32, nt_class: u32) -> u32 {
+    const JOB_OBJECT_LIMIT_PRIORITY_CLASS: u32 = 0x20;
+    if limit_flags & JOB_OBJECT_LIMIT_PRIORITY_CLASS == 0 {
+        return NORMAL_PRIORITY_CLASS;
+    }
+    match nt_class {
+        1 => IDLE_PRIORITY_CLASS,
+        2 => NORMAL_PRIORITY_CLASS,
+        3 => HIGH_PRIORITY_CLASS,
+        4 => REALTIME_PRIORITY_CLASS,
+        5 => BELOW_NORMAL_PRIORITY_CLASS,
+        6 => ABOVE_NORMAL_PRIORITY_CLASS,
+        other => other,
+    }
+}
+
+/// The inverse for `SetInformationJobObject`: a `winbase.h` priority class becomes the
+/// kernel's 1 to 6; any other value is passed on for the kernel to judge.
+pub fn job_priority_to_nt(win32_class: u32) -> u32 {
+    match win32_class {
+        IDLE_PRIORITY_CLASS => 1,
+        NORMAL_PRIORITY_CLASS => 2,
+        HIGH_PRIORITY_CLASS => 3,
+        REALTIME_PRIORITY_CLASS => 4,
+        BELOW_NORMAL_PRIORITY_CLASS => 5,
+        ABOVE_NORMAL_PRIORITY_CLASS => 6,
+        other => other,
+    }
+}
+
 /// `winerror.h`.
 pub const ERROR_THREAD_MODE_ALREADY_BACKGROUND: u32 = 400;
 pub const ERROR_THREAD_MODE_NOT_BACKGROUND: u32 = 401;
@@ -318,6 +354,27 @@ mod tests {
         p.set_class(HIGH_PRIORITY_CLASS, true).unwrap();
         assert!(p.process_boost());
         assert_eq!(p.class(), HIGH_PRIORITY_CLASS);
+    }
+
+    #[test]
+    fn job_priority_classes_map_between_kernel32_and_the_kernel() {
+        // No priority limit: kernel32 reads NORMAL whatever the kernel holds.
+        assert_eq!(job_priority_to_win32(0x8, 0), NORMAL_PRIORITY_CLASS);
+        assert_eq!(job_priority_to_win32(0, 0), NORMAL_PRIORITY_CLASS);
+        for (win32, nt) in [
+            (IDLE_PRIORITY_CLASS, 1),
+            (NORMAL_PRIORITY_CLASS, 2),
+            (HIGH_PRIORITY_CLASS, 3),
+            (REALTIME_PRIORITY_CLASS, 4),
+            (BELOW_NORMAL_PRIORITY_CLASS, 5),
+            (ABOVE_NORMAL_PRIORITY_CLASS, 6),
+        ] {
+            assert_eq!(job_priority_to_nt(win32), nt);
+            assert_eq!(job_priority_to_win32(0x20, nt), win32);
+        }
+        // Other values go to the kernel as they are (it refuses 7 and above).
+        assert_eq!(job_priority_to_nt(7), 7);
+        assert_eq!(job_priority_to_nt(0x1234), 0x1234);
     }
 
     #[test]
