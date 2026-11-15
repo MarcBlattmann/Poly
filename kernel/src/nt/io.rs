@@ -170,12 +170,15 @@ pub(super) fn drain() {
                     data.len()
                 );
             }
-            if c.iosb != 0 && m.write(c.iosb, &c.iosb_bytes()).is_err() {
-                crate::kprintln!(
-                    "nt: p{}: a completion's status block could not be written at {:#x}",
-                    c.process.0,
-                    c.iosb
-                );
+            if c.iosb != 0 {
+                let w = c.iosb_write();
+                if m.write(w.addr, w.bytes()).is_err() {
+                    crate::kprintln!(
+                        "nt: p{}: a completion's status block could not be written at {:#x}",
+                        c.process.0,
+                        w.addr
+                    );
+                }
             }
         }
         drop(memory);

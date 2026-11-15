@@ -218,7 +218,7 @@ fn device_name(path: &[u16]) -> Option<Vec<u16>> {
     if h == INVALID_HANDLE_VALUE {
         return None;
     }
-    let mut buf = alloc::vec![0u8; 16 + 2 * 1024];
+    let mut buf = alloc::vec![0u8; 2 * core::mem::size_of::<usize>() + 2 * 1024];
     let mut ret = 0u32;
     // SAFETY: a buffer of the stated length.
     let st = unsafe {
@@ -229,9 +229,10 @@ fn device_name(path: &[u16]) -> Option<Vec<u16>> {
     if !st.is_success() {
         return None;
     }
-    // A UNICODE_STRING (Length at 0) followed by its characters at offset 16.
-    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - 16);
-    Some(buf[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
+    // A UNICODE_STRING (Length at 0) followed by its characters: at offset 16, 8 in a 32-bit process.
+    const HEADER: usize = 2 * core::mem::size_of::<usize>();
+    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - HEADER);
+    Some(buf[HEADER..HEADER + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
 }
 
 /// The last user-mode address (`MM_HIGHEST_USER_ADDRESS` of x64 Windows).
@@ -248,7 +249,7 @@ const STATUS_FILE_INVALID: u32 = 0xC000_0098;
 /// `K32GetMappedFileNameW` reports: 1006 for a view of a section without a file, 59 for an
 /// address nothing is mapped at (private memory, freed or unmapped memory).
 fn mapped_view_name(process: Handle, address: u64) -> Result<Vec<u16>, u32> {
-    let mut buf = alloc::vec![0u8; 16 + 2 * 1024];
+    let mut buf = alloc::vec![0u8; 2 * core::mem::size_of::<usize>() + 2 * 1024];
     let mut ret = 0usize;
     // SAFETY: a buffer of the stated length.
     let st = unsafe {
@@ -267,16 +268,19 @@ fn mapped_view_name(process: Handle, address: u64) -> Result<Vec<u16>, u32> {
     if !st.is_success() {
         return Err(ERROR_UNEXP_NET_ERR);
     }
-    // A UNICODE_STRING (Length at 0) followed by its characters at offset 16.
-    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - 16);
-    Ok(buf[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
+    // A UNICODE_STRING (Length at 0) followed by its characters: at offset 16 in a 64-bit process,
+    // 8 in a 32-bit one (the kernel lays the answer out in the caller's width).
+    const HEADER: usize = 2 * core::mem::size_of::<usize>();
+    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - HEADER);
+    Ok(buf[HEADER..HEADER + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
 }
 
 /// `K32GetMappedFileNameW(hProcess, lpv, lpFilename, nSize)` (`GetMappedFileNameW` of PSAPI
 /// version 2): the device-form name of the file mapped at `lpv` in this process or, with a
 /// handle that has `PROCESS_QUERY_LIMITED_INFORMATION`, in another one.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: u64, name: *mut u16, size: u32) -> u32 {
+pub unsafe extern "system" fn K32GetMappedFileNameW(process: Handle, address: usize, name: *mut u16, size: u32) -> u32 {
+    let address = address as u64;
     if name.is_null() {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }

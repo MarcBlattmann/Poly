@@ -92,6 +92,11 @@ pub struct Layout {
 
 /// Where `ntdll` keeps its own per-thread data in a TEB (ADR 0071), in both widths.
 pub const TEB_POLY: u64 = 0x1840;
+/// Where a 32-bit thread's "WOW64 file-system redirection is off" flag lives in its TEB (a `u32`,
+/// zero in a new thread: redirection on): the last bytes of the two pages Poly allocates for a
+/// TEB, far above [`TEB_POLY`]'s data. `kernelbase` writes it (`Wow64DisableWow64FsRedirection`),
+/// the NT personality reads it before it redirects a file name (ADR 0186, stage 2).
+pub const TEB_FS_REDIRECTION_OFF: u64 = 0x1FF0;
 /// Bytes kept for `RTL_USER_PROCESS_PARAMETERS` before its strings.
 pub const PARAMETERS_SIZE: u64 = 0x400;
 /// Bytes of the `STARTUPINFO` fields copied into the parameters (`cb` .. `cbReserved2`).
