@@ -303,6 +303,10 @@ pub struct IoState {
     /// object manager drops them ([`crate::NtSystem::reap`]).
     pub(crate) released: Vec<ObjectId>,
     pub(crate) irps: BTreeMap<u64, Irp>,
+    /// The pending `AcceptEx` requests and the socket (file object) each one is to put its
+    /// connection in: closing that socket ends the request (`ERROR_OPERATION_ABORTED`), so it
+    /// does not take a connection meant for a later one.
+    pub accept_targets: BTreeMap<u64, u64>,
     pub(crate) queues: BTreeMap<u32, VecDeque<u64>>,
     pub(crate) kicks: BTreeSet<u32>,
     pub(crate) completions: VecDeque<Completion>,
@@ -433,6 +437,7 @@ impl IoState {
             consoles: crate::console::Consoles::default(),
             next_cookie: COOKIE_BASE,
             next_irp: 1,
+            accept_targets: BTreeMap::new(),
         }
     }
 
@@ -635,6 +640,11 @@ impl IoState {
     pub fn file_closed(&mut self, cookie: u64) {
         let Some(rec) = self.files.get(&cookie) else { return };
         let _ = rec;
+        // The `AcceptEx` requests that were to fill this socket end.
+        let waiting: Vec<u64> = self.accept_targets.iter().filter(|(_, t)| **t == cookie).map(|(i, _)| *i).collect();
+        for id in waiting {
+            self.complete(id, STATUS_CANCELLED, 0, None);
+        }
         // A named pipe end closing fails what waits on it as a broken pipe
         // (Learn: "ReadFile": "the write handle has been closed"), the others
         // are cancelled.
