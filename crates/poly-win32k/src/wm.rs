@@ -2325,6 +2325,26 @@ mod tests {
     }
 
     #[test]
+    fn the_surface_holds_the_menu_bar_above_the_client_area() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        assert!(matches!(wm.handle(A, Request::MenuBar { hwnd, height: 20 }, &mut Effects::default()), Reply::Ok {}));
+        assert_eq!(wm.info(hwnd).unwrap().menu_bar, 20);
+        // The compositor sizes the surface; the client area is what is below the bar.
+        let surface = Rect::new(200, 300, 584, 581);
+        assert!(wm.configure_from_desktop(hwnd, surface, FrameMetrics::POLY));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, Rect::new(200, 320, 584, 581));
+        assert_eq!(info.window, Rect::new(199, 275, 585, 582));
+        // A window that is gone has no bar to set.
+        assert!(matches!(
+            wm.handle(A, Request::MenuBar { hwnd: 0x7777, height: 20 }, &mut Effects::default()),
+            Reply::Error { .. }
+        ));
+    }
+
+    #[test]
     fn desktop_moves_update_win32_geometry_and_close_is_posted_to_its_thread() {
         let mut wm = Wm::new();
         reg(&mut wm, "C");

@@ -51,7 +51,7 @@ pub(crate) fn is_menu(menu: H) -> bool {
     h != 0 && with(|m| m.is_menu(h))
 }
 
-fn fail<T>(code: u32, v: T) -> T {
+pub(crate) fn fail<T>(code: u32, v: T) -> T {
     set_last_error(code);
     v
 }
@@ -98,7 +98,7 @@ unsafe fn flag_text(flags: u32, item: *const u16) -> Option<Vec<u16>> {
     }
 }
 
-unsafe fn insert_impl(menu: H, sel: Sel, flags: u32, id: usize, item: *const u16) -> i32 {
+pub(crate) unsafe fn insert_impl(menu: H, sel: Sel, flags: u32, id: usize, item: *const u16) -> i32 {
     // SAFETY: lpNewItem is a string when the flags say so.
     let text = unsafe { flag_text(flags, item) };
     let h = h32(menu);
@@ -297,7 +297,7 @@ unsafe fn wr64(p: *mut u8, o: usize, v: u64) {
 /// A `MENUITEMINFOW` read (`winuser.h`: cbSize 0, fMask 4, fType 8, fState 12, wID 16,
 /// hSubMenu 24, hbmpChecked 32, hbmpUnchecked 40, dwItemData 48, dwTypeData 56, cch 64,
 /// hbmpItem 72).
-unsafe fn read_info(p: *const u8) -> Result<InfoIn, u32> {
+pub(crate) unsafe fn read_info(p: *const u8, ansi: bool) -> Result<InfoIn, u32> {
     if p.is_null() {
         return Err(ERROR_INVALID_PARAMETER);
     }
@@ -309,7 +309,7 @@ unsafe fn read_info(p: *const u8) -> Result<InfoIn, u32> {
         }
         let mask = rd32(p, 4);
         let ftype = rd32(p, 8);
-        let type_data = rd64(p, 56) as *const u16;
+        let type_data = rd64(p, 56) as usize;
         let string_type = ftype & (mn::MFT_BITMAP | mn::MFT_OWNERDRAW | mn::MFT_SEPARATOR) == 0;
         let wants_text = mask & mn::MIIM_STRING != 0 || (mask & mn::MIIM_TYPE != 0 && string_type);
         Ok(InfoIn {
@@ -321,20 +321,43 @@ unsafe fn read_info(p: *const u8) -> Result<InfoIn, u32> {
             hbm_checked: rd64(p, 32) as usize,
             hbm_unchecked: rd64(p, 40) as usize,
             data: rd64(p, 48) as usize,
-            text: if wants_text && !type_data.is_null() { Some(wide(type_data, -1)) } else { None },
+            text: if wants_text && type_data != 0 { Some(read_text(type_data, ansi)) } else { None },
             hbm_item: if size == MII_SIZE { rd64(p, 72) as usize } else { 0 },
         })
     }
 }
 
+/// A NUL-terminated string at `p`: UTF-16, or ANSI widened (Windows-1252's Latin-1 range).
+pub(crate) unsafe fn read_text(p: usize, ansi: bool) -> Vec<u16> {
+    if !ansi {
+        // SAFETY: the caller's string.
+        return unsafe { wide(p as *const u16, -1) };
+    }
+    let mut v = Vec::new();
+    let mut q = p as *const u8;
+    // SAFETY: the caller's NUL-terminated string.
+    unsafe {
+        while *q != 0 {
+            v.push(u16::from(*q));
+            q = q.add(1);
+        }
+    }
+    v
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InsertMenuItemW(menu: H, item: u32, by_pos: i32, p: *const u8) -> i32 {
+    // SAFETY: as the caller's.
+    unsafe { insert_info(menu, item, by_pos, p, false) }
+}
+
+pub(crate) unsafe fn insert_info(menu: H, item: u32, by_pos: i32, p: *const u8, ansi: bool) -> i32 {
     let h = h32(menu);
     if !with(|m| m.is_menu(h)) {
         return fail(ERROR_INVALID_MENU_HANDLE, 0);
     }
     // SAFETY: the caller's structure.
-    let info = match unsafe { read_info(p) } {
+    let info = match unsafe { read_info(p, ansi) } {
         Ok(i) => i,
         Err(e) => return fail(e, 0),
     };
@@ -347,12 +370,17 @@ pub unsafe extern "system" fn InsertMenuItemW(menu: H, item: u32, by_pos: i32, p
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SetMenuItemInfoW(menu: H, item: u32, by_pos: i32, p: *const u8) -> i32 {
+    // SAFETY: as the caller's.
+    unsafe { set_info_impl(menu, item, by_pos, p, false) }
+}
+
+pub(crate) unsafe fn set_info_impl(menu: H, item: u32, by_pos: i32, p: *const u8, ansi: bool) -> i32 {
     let h = h32(menu);
     if !with(|m| m.is_menu(h)) {
         return fail(ERROR_INVALID_MENU_HANDLE, 0);
     }
     // SAFETY: the caller's structure.
-    let info = match unsafe { read_info(p) } {
+    let info = match unsafe { read_info(p, ansi) } {
         Ok(i) => i,
         Err(e) => return fail(e, 0),
     };
@@ -362,6 +390,33 @@ pub unsafe extern "system" fn SetMenuItemInfoW(menu: H, item: u32, by_pos: i32, 
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetMenuItemInfoW(menu: H, item: u32, by_pos: i32, p: *mut u8) -> i32 {
+    // SAFETY: as the caller's.
+    unsafe { get_info_impl(menu, item, by_pos, p, false) }
+}
+
+/// Copy `text` as ANSI (characters above Latin-1 become `?`): as [`copy_text`].
+pub(crate) unsafe fn copy_text_a(text: &[u16], buf: *mut u8, max: i32) -> i32 {
+    let n = text.len();
+    if buf.is_null() || max == 0 {
+        return n as i32;
+    }
+    if max < 0 {
+        // SAFETY: a buffer the caller gave (a negative size writes the NUL only).
+        unsafe { *buf = 0 };
+        return n as i32;
+    }
+    let k = n.min(max as usize - 1);
+    // SAFETY: room for `max` bytes.
+    unsafe {
+        for (i, c) in text.iter().take(k).enumerate() {
+            *buf.add(i) = if *c < 0x100 { *c as u8 } else { b'?' };
+        }
+        *buf.add(k) = 0;
+    }
+    k as i32
+}
+
+pub(crate) unsafe fn get_info_impl(menu: H, item: u32, by_pos: i32, p: *mut u8, ansi: bool) -> i32 {
     if p.is_null() {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
@@ -400,14 +455,15 @@ pub unsafe extern "system" fn GetMenuItemInfoW(menu: H, item: u32, by_pos: i32, 
             wr64(p, 72, it.hbm_item as u64);
         }
         if mask & (mn::MIIM_STRING | mn::MIIM_TYPE) != 0 {
-            let buf = rd64(p, 56) as *mut u16;
+            let buf = rd64(p, 56) as usize;
             let cap = rd32(p, 64) as i32;
             let text = it.string();
-            if buf.is_null() {
+            if buf == 0 {
                 wr32(p, 64, text.len() as u32);
             } else {
                 // A buffer of 0 units gets nothing written; cch is the length then.
-                let n = copy_text(text, buf, cap);
+                let n =
+                    if ansi { copy_text_a(text, buf as *mut u8, cap) } else { copy_text(text, buf as *mut u16, cap) };
                 wr32(p, 64, n as u32);
             }
         }
@@ -493,7 +549,7 @@ pub extern "system" fn SetMenuDefaultItem(menu: H, item: u32, by_pos: u32) -> i3
 // ----- resources
 
 /// The bytes of a menu resource of `module` (0: the executable), if it has one.
-unsafe fn menu_resource(module: usize, name: *const u16) -> Option<&'static [u8]> {
+pub(crate) unsafe fn menu_resource(module: usize, name: *const u16) -> Option<&'static [u8]> {
     let module = if module == 0 {
         // SAFETY: NULL names the executable.
         unsafe { GetModuleHandleW(core::ptr::null()) }

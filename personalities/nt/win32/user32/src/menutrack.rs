@@ -277,7 +277,6 @@ struct BarView {
     origin: (i32, i32),
     width: i32,
     height: i32,
-    hwnd: H,
     total: u32,
 }
 
@@ -297,7 +296,6 @@ fn bar_view(hwnd: H) -> Option<BarView> {
         origin: (i.client.left, i.client.top - i.menu_bar),
         width,
         height: i.menu_bar,
-        hwnd,
         total: (i.client.height() + i.menu_bar) as u32,
     })
 }
@@ -332,8 +330,7 @@ fn paint_bar(hwnd: H, hot: Option<usize>, open: bool) {
         let color = if it.state & mn::MFS_GRAYED != 0 { TEXT_DIM } else { TEXT };
         p.label(it.string(), c.left + BAR_PAD, c.top + 1, c.right - BAR_PAD, c.bottom + 1, color);
     }
-    // SAFETY: our gdi32 checks the handle.
-    unsafe { super::ReleaseDC(hwnd, dc) };
+    super::ReleaseDC(hwnd, dc);
 }
 
 /// Draw the menu bar of window `hwnd` (a window that has none draws nothing).
@@ -385,7 +382,7 @@ fn register_class() {
     let spec = ClassSpec {
         name: CLASS.encode_utf16().take(CLASS.len() - 1).collect(),
         style: 0x0008, // CS_DBLCLKS
-        wndproc: popup_proc as usize as u64,
+        wndproc: popup_proc as *const () as usize as u64,
         cls_extra: 0,
         wnd_extra: 0,
         instance: 0,
@@ -437,8 +434,7 @@ fn draw_popup(hwnd: H) {
             p.text(accel, c.left, c.top, c.right - METRICS.pad_x, c.bottom, if gray { TEXT_DIM } else { ACCEL }, true);
         }
     }
-    // SAFETY: the window's own DC.
-    unsafe { super::ReleaseDC(hwnd, dc) };
+    super::ReleaseDC(hwnd, dc);
 }
 
 /// A check mark (or, for a radio item, a dot) centred at x + 6, `mid`.
@@ -498,10 +494,6 @@ struct BarState {
 }
 
 impl Tracker {
-    fn sys_bit(&self, menu: u32) -> u32 {
-        u32::from(menu::system_menu_of(self.owner as u32) == menu) << 16
-    }
-
     /// Open `menu` as a popup at screen point (`x`, `y`); `pos` is the item of the menu
     /// above that opens it.
     fn open_level(&mut self, menu: u32, x: i32, y: i32, pos: u32, align: u32) -> bool {
@@ -1233,5 +1225,23 @@ pub(crate) fn set_bar_height(hwnd: H, height: i32) {
     let Some(i) = info(hwnd) else { return };
     if i.menu_bar != height {
         call(Request::MenuBar { hwnd: i.hwnd, height });
+    }
+}
+
+/// The screen rectangle of item `pos` of `menu` when it is window `hwnd`'s menu bar.
+pub(crate) fn bar_item_rect(hwnd: H, menu: u32, pos: usize) -> Option<[i32; 4]> {
+    let v = bar_view(hwnd)?;
+    if v.menu != menu {
+        return None;
+    }
+    let c = v.cells.get(pos)?;
+    Some([v.origin.0 + c.left, v.origin.1 + c.top + 1, v.origin.0 + c.right, v.origin.1 + c.bottom + 1])
+}
+
+/// The item of `menu` (window `hwnd`'s menu bar) at screen point (`x`, `y`); -1 for none.
+pub(crate) fn bar_item_at(hwnd: H, menu: u32, x: i32, y: i32) -> i32 {
+    match bar_view(hwnd) {
+        Some(v) if v.menu == menu => bar_hit(&v, x, y).map_or(-1, |i| i as i32),
+        _ => -1,
     }
 }

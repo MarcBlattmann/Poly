@@ -15,6 +15,7 @@ mod display;
 mod icons;
 mod layered;
 mod menu;
+mod menuansi;
 mod menutrack;
 mod s3;
 mod strings;
@@ -563,21 +564,16 @@ pub unsafe extern "system" fn CreateWindowExW(
     let mut menu = menu;
     if style & 0x4000_0000 == 0 {
         // A top-level window's menu: the handle given, else a copy of the class's menu.
-        match call(Request::ClassInfo { class: class.clone(), instance: instance as u64 }) {
-            Reply::Class { info } => {
-                if menu != 0 {
-                    if !menu::is_menu(menu) {
-                        set_last_error(menu::ERROR_INVALID_MENU_HANDLE);
-                        return 0;
-                    }
-                } else if info.menu_name != 0 {
-                    menu = menu::class_menu(info.instance as usize, info.menu_name);
-                }
+        if menu != 0 {
+            if !menu::is_menu(menu) {
+                set_last_error(menu::ERROR_INVALID_MENU_HANDLE);
+                return 0;
             }
-            _ => {
-                // The kernel names the error (an unknown class).
-                menu = 0;
-            }
+        } else if let Reply::Class { info } =
+            call(Request::ClassInfo { class: class.clone(), instance: instance as u64 })
+            && info.menu_name != 0
+        {
+            menu = menu::class_menu(info.instance as usize, info.menu_name);
         }
     }
     let spec = CreateSpec {
