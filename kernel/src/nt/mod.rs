@@ -147,6 +147,9 @@ pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"
 pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
 pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
+/// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
+pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
+pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
