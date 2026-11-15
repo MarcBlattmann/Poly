@@ -2158,25 +2158,44 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
                 }
                 step("clippy (changed host packages)", cmd.args(["--all-targets", "--", "-D", "warnings"]))?;
             }
-            if !plan.xtask_windows {
-                return Ok(());
-            }
             // xtask itself on Windows, so building and booting work on a Windows
             // host too (hostfs.rs has the stand-ins for what needs Linux).
-            step(
-                "clippy (xtask for Windows)",
-                cargo().current_dir(root()).args([
-                    "clippy",
-                    "--package",
-                    "xtask",
-                    "--all-targets",
-                    "--target",
-                    "x86_64-pc-windows-msvc",
-                    "--",
-                    "-D",
-                    "warnings",
-                ]),
-            )
+            if plan.xtask_windows {
+                step(
+                    "clippy (xtask for Windows)",
+                    cargo().current_dir(root()).args([
+                        "clippy",
+                        "--package",
+                        "xtask",
+                        "--all-targets",
+                        "--target",
+                        "x86_64-pc-windows-msvc",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ]),
+                )?;
+            }
+            // The pipeline tool (`cargo xtask pipeline ...`) too: what needs Linux
+            // (the tracer, the diff runner's reference runs, the app trees) is
+            // behind `cfg(unix)` and reports that at run time (ADR 0124).
+            if plan.pipeline_windows {
+                step(
+                    "clippy (pipeline for Windows)",
+                    cargo().current_dir(root()).args([
+                        "clippy",
+                        "--package",
+                        "poly-pipeline",
+                        "--all-targets",
+                        "--target",
+                        "x86_64-pc-windows-msvc",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ]),
+                )?;
+            }
+            Ok(())
         });
         let kernel = s.spawn(|| -> Result {
             if !plan.kernel {

@@ -867,7 +867,7 @@
 {"symbol":"K32GetDeviceDriverFileNameA","src":["wine-spec"]},
 {"symbol":"K32GetDeviceDriverFileNameW","src":["wine-spec"]},
 {"symbol":"K32GetMappedFileNameA","status":"stub","src":["wine-spec"]},
-{"symbol":"K32GetMappedFileNameW","status":"claimed","claimed_by":"impl-chrome-s9","src":["wine-spec"]},
+{"symbol":"K32GetMappedFileNameW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"K32GetModuleBaseNameA","status":"stub","src":["wine-spec"]},
 {"symbol":"K32GetModuleBaseNameW","status":"stub","src":["wine-spec"]},
 {"symbol":"K32GetModuleFileNameExA","src":["wine-spec"]},

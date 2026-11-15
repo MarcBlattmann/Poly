@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsarecv_iocp_basic",
+      "exe_sha256": "cc8f19584b909089b23c90dcf99d461ee9af3a7389328767e544eea9e216a169",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXNzb2NpYXRlIHRoZSBzb2NrZXQgd2l0aCBhIHBvcnQgMQpJbnRlcm5hbCB3aGlsZSBwZW5kaW5nIDB4MTAzCmFmdGVyIHRoZSBwZWVyIHNlbnQgNSBieXRlczogb2sgYnl0ZXMgNSBrZXkgNyBvdi1tYXRjaGVzIDEKbm8gc2Vjb25kIHBhY2tldDogRkFMU0UgZXJyIDI1OCBvdiBOVUxMClNldEZpbGVDb21wbGV0aW9uTm90aWZpY2F0aW9uTW9kZXMoU0tJUF9PTl9TVUNDRVNTfFNLSVBfU0VUX0VWRU5UKSAxCldTQVJlY3Ygd2l0aCBubyBkYXRhIC0xL1dTQV9JT19QRU5ESU5HCml0cyBwYWNrZXQgd2l0aGluIDEwMCBtczogRkFMU0UgZXJyIDI1OCBvdiBOVUxMCldTQVJlY3YoTVNHX1BFRUspIHdpdGggZGF0YSB3YWl0aW5nIDAgZ290IDEgZmxhZ3MgMAp0d28gYnVmZmVycyAwIGdvdCAxMCBmaXJzdCBbNDgsIDQ5LCA1MCwgNTFdIHNlY29uZCBbNTIsIDUzLCA1NCwgNTUsIDU2LCA1N10Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "associate the socket with a port 1\nInternal while pending 0x103\nafter the peer sent 5 bytes: ok bytes 5 key 7 ov-matches 1\nno second packet: FALSE err 258 ov NULL\nSetFileCompletionNotificationModes(SKIP_ON_SUCCESS|SKIP_SET_EVENT) 1\nWSARecv with no data -1/WSA_IO_PENDING\nits packet within 100 ms: FALSE err 258 ov NULL\nWSARecv(MSG_PEEK) with data waiting 0 got 1 flags 0\ntwo buffers 0 got 10 first [48, 49, 50, 51] second [52, 53, 54, 55, 56, 57]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2611
+    },
+    {
+      "name": "wsarecv_iocp_basic_c",
+      "exe_sha256": "0f1bf820f328b1330daa4439b3b0d7b4c37cb9e530eebce74e875e4adf7d3f46",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBUmVjdiB3aXRoIG5vIGRhdGEgLTEvV1NBX0lPX1BFTkRJTkcgZ290IDY1NTM1IGZsYWdzIDAKV1NBR2V0T3ZlcmxhcHBlZFJlc3VsdCB3aGlsZSBwZW5kaW5nIEZBTFNFL1dTQV9JT19JTkNPTVBMRVRFCldTQUdldE92ZXJsYXBwZWRSZXN1bHQgVFJVRSBieXRlcyA1IGZsYWdzIDAKaXRzIHBhY2tldDogb2sgYnl0ZXMgMyBrZXkgNyBvdi1tYXRjaGVzIDEKaXRzIHBhY2tldDogRkFMU0UgZXJyIDI1OCBvdiBOVUxMCnplcm8tYnl0ZSBXU0FSZWN2IHdpdGggbm8gZGF0YSAtMS9XU0FfSU9fUEVORElORwp0aGUgYnl0ZSBpcyBzdGlsbCB0aGVyZSAoMCwgMSkKc3RpbGwgdGhlcmUgKDAsIDEpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSARecv with no data -1/WSA_IO_PENDING got 65535 flags 0\nWSAGetOverlappedResult while pending FALSE/WSA_IO_INCOMPLETE\nWSAGetOverlappedResult TRUE bytes 5 flags 0\nits packet: ok bytes 3 key 7 ov-matches 1\nits packet: FALSE err 258 ov NULL\nzero-byte WSARecv with no data -1/WSA_IO_PENDING\nthe byte is still there (0, 1)\nstill there (0, 1)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2613
+    },
+    {
+      "name": "wsarecv_iocp_cancel",
+      "exe_sha256": "1a6e116328a1f0ed9f1dc5bdf08d7c8aade60c8d0686ebf8bdd73eadfdcc47e4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGVuZGluZyByZWNlaXZlIC0xL1dTQV9JT19QRU5ESU5HCkludGVybmFsIDB4YzAwMDAyNDEgSW50ZXJuYWxIaWdoIDAKSW50ZXJuYWwgMHgwIEludGVybmFsSGlnaCAwCldTQUdldE92ZXJsYXBwZWRSZXN1bHQgRkFMU0UvV1NBRUNPTk5SRVNFVCBieXRlcyAwCml0cyBlcnJvciAxMTY4CkludGVybmFsIDB4YzAwMDAxMjAKV1NBUmVjdiBhZnRlciB0aGUgY2FuY2VsIDAKZXZlbnQgc2lnbmFsbGVkIGJ5IGNsb3Nlc29ja2V0IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "pending receive -1/WSA_IO_PENDING\nInternal 0xc0000241 InternalHigh 0\nInternal 0x0 InternalHigh 0\nWSAGetOverlappedResult FALSE/WSAECONNRESET bytes 0\nits error 1168\nInternal 0xc0000120\nWSARecv after the cancel 0\nevent signalled by closesocket 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 670
+    },
+    {
+      "name": "wsarecv_iocp_cancel_b",
+      "exe_sha256": "47ca8999dfbaafcffdcc719247c5c3c88ad2d8ead3b523eb466ac8a87b50c140",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xvc2Vzb2NrZXQgMApubyBtb3JlIHBhY2tldHM6IEZBTFNFIGVyciAyNTggb3YgTlVMTApwZWVyIHJlc2V0OiBGQUxTRSBlcnIgNjQgYnl0ZXMgMCBrZXkgMTMgb3YtbWF0Y2hlcyAxCmFub3RoZXIgV1NBUmVjdiBhZnRlciB0aGUgcmVzZXQgLTEvV1NBRUNPTk5SRVNFVApDYW5jZWxJb0V4KHRoZSByZXF1ZXN0KSAxCkNhbmNlbElvRXgoTlVMTCkgY2FuY2VscyBib3RoIDEKZGF0YSBhcnJpdmVzOiBvayBieXRlcyA1IGtleSAxNCBvdi1tYXRjaGVzIDEKV1NBR2V0T3ZlcmxhcHBlZFJlc3VsdCBvbiB0aGUgY2xvc2VkIHNvY2tldCBGQUxTRS9XU0FFTk9UU09DSwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "closesocket 0\nno more packets: FALSE err 258 ov NULL\npeer reset: FALSE err 64 bytes 0 key 13 ov-matches 1\nanother WSARecv after the reset -1/WSAECONNRESET\nCancelIoEx(the request) 1\nCancelIoEx(NULL) cancels both 1\ndata arrives: ok bytes 5 key 14 ov-matches 1\nWSAGetOverlappedResult on the closed socket FALSE/WSAENOTSOCK\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 655
+    }
+  ]
+}

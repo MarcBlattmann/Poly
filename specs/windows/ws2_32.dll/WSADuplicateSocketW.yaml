@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSADuplicateSocketW.yaml
+id: windows/api/ws2_32.dll/WSADuplicateSocketW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSADuplicateSocketW function (winsock2.h)", "WSAPROTOCOL_INFOW structure", "WSASocketW function"; winsock2.h, ws2tcpip.h, ws2def.h and winerror.h for constants and layouts. The record's layout offsets used by the tests are from the WSAPROTOCOL_INFOW definition in winsock2.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The sandbox broker's way to give a socket to the network service: the browser creates a TCP socket (AF_INET6, WSA_FLAG_OVERLAPPED, IPV6_V6ONLY 0, non-blocking), calls WSADuplicateSocketW(socket, networkServicePid, &record) (record = WSAPROTOCOL_INFOW, 628 bytes), CLOSES the original at once and sends the record to the network service, which calls WSASocketW(-1, -1, -1, &record, 0, WSA_FLAG_OVERLAPPED) and ioctlsocket(FIONBIO) and connects it. The tests do this between two processes: the duplicate of an unbound socket is an independent socket that is NOT non-blocking (connect on it returns 0 at once although the original had FIONBIO 1); a listening socket keeps listening after the original is closed (a client connecting afterwards is accepted by the target); a connected socket keeps its connection (data flows both ways). Two sockets made from the same record in one process share state (a bind through one shows on the other, and closing one DOES end the other's use: its local port reads 0 afterwards). Explicit family, type and protocol next to a record are ignored.
+interface:
+  signature: "int WSADuplicateSocketW(SOCKET s, DWORD pid, LPWSAPROTOCOL_INFOW info); SOCKET WSASocketW(-1, -1, -1, &info, 0, flags)"
+  result: "0, or -1 with WSAGetLastError"
+chrome:
+  calls: "WSADuplicateSocketW 2 calls in the browser during stage 4 (7 in the window stages), WSASocketW(-1, -1, -1, &record, 0, 1) 8 times in the network service (one per brokered socket); the browser calls WSASocketW(23, 1, 6, NULL, 0, 1), setsockopt(IPPROTO_IPV6, IPV6_V6ONLY, 0), ioctlsocket(FIONBIO, 1), WSADuplicateSocketW(s, pid, record), closesocket(s) in that order; the first brokered connections go to the 'wpad' host's address, port 80"
+rules:
+  record_fields: "the record (628 bytes) of a TCP IPv4 socket has dwServiceFlags1 0x20066, iAddressFamily 2, iSocketType 1, iProtocol 6, szProtocol \"MSAFD Tcpip [TCP/IP]\"; UDP IPv4: 0x20609, 2, 2, 17, \"MSAFD Tcpip [UDP/IP]\"; TCP IPv6: 0x20066, 23, 1, 6, \"MSAFD Tcpip [TCP/IPv6]\"; UDP IPv6: 0x20609, 23, 2, 17, \"MSAFD Tcpip [UDP/IPv6]\" (offsets: flags1 0, family 76, type 88, protocol 92, text 116 as UTF-16). Catalog ids, provider ids and the reserved field are not recorded"
+  refusals: "pid 0, pid 0xFFFFFFFF and a pid no process has: -1 with 10022 (WSAEINVAL); a closed socket, INVALID_SOCKET and an event handle: -1 with 10038 (WSAENOTSOCK)"
+  unbound_child: "unbound non-blocking TCP socket duplicated for a child, original closed (result 0 and 0): the child's WSASocketW from the record succeeds; connect on it returns 0 immediately (blocking!), send works and the parent's listener receives the bytes"
+  listening_child: "a listening socket (bound to loopback port 0) duplicated and the original closed: SO_ACCEPTCONN is 1 in the child, a client that connects to the port afterwards connects (0), the child's accept returns a socket and receives the client's bytes"
+  connected_child: "a connected client socket duplicated and closed in the parent: the child's getpeername gives the listener's loopback address and port; its send reaches the parent's accepted socket and the parent's reply reaches the child"
+  same_record_twice: "WSASocketW from the same record twice in one process: both succeed; bind through the first makes the second's getsockname show the same port; after closesocket of the first the second's getsockname fails (port reads 0): both are handles to one socket whose last user ends it"
+  original_open: "the original left open in the parent while the child binds its duplicate: the parent's original does NOT show the child's bind (port 0) but stays usable (SO_TYPE 1)"
+  same_process: "a duplicate for the own pid made into a socket: succeeds; a bind through it does not show on the original (port 0); closing it leaves the original usable"
+  explicit_arguments: "WSASocketW with a record and an explicit family, type or protocol (equal or different: AF_INET6, SOCK_DGRAM, UDP, zeros, family -1 only, protocol -1): all succeed, the record decides"
+  bad_records: "a record of 628 zero bytes or of 0xFF bytes: INVALID_SOCKET with 10022; a record whose family field was edited to 23: still succeeds (the other fields decide)"
+  second_duplicate: "a second duplicate of the same socket gives a record that is not equal to the first (the content differs per duplicate) and works"
+  blocking_mode: "the duplicate of a non-blocking socket (FIONBIO 1) is blocking: connect on it to a listening loopback socket returns 0, not -1/10035"
+errors:
+  bad_pid: "WSAEINVAL (10022)"
+  not_a_socket: "WSAENOTSOCK (10038)"
+  bad_record: "WSAEINVAL (10022)"
+side_effects: "keeps the socket alive until a target has made its own handle or the processes end"
+threading: "may be called from any thread"
+ordering: ["WSADuplicateSocketW(s, pid) before closesocket(s); the record is read by the target after the original was closed"]
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The two-process tests use a child (the test's own image with --child), an inherited anonymous pipe for the 628-byte record and a second one for the child's report; sockets of these tests are created with WSA_FLAG_NO_HANDLE_INHERIT so that the child inherits nothing.
+not_covered: >
+  A record handed to a process in another session or with another token, the WSA_FLAG_NO_HANDLE_INHERIT flag in the target, overlapped I/O pending at the time of the duplication, a record used after its target process ended, the NULL record pointer (not tested), catalog entries of other providers.

@@ -551,12 +551,23 @@ pub fn merge_recording(
 /// posix_spawn and execve say for an x86_64 program without Rosetta 2.
 pub const EBADARCH: i32 = 86;
 
+/// The signal that ended a process, if one did (Unix only; the macOS
+/// runner needs a Mac, but the tool builds on every host).
+#[cfg(unix)]
+fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
+    std::os::unix::process::ExitStatusExt::signal(&status)
+}
+
+#[cfg(not(unix))]
+fn signal_of(_status: std::process::ExitStatus) -> Option<i32> {
+    None
+}
+
 /// Run `exe` once in a fresh, empty `scratch` directory (its current
 /// directory), with an empty environment, stdin at end of file and a
 /// timeout.
 pub fn run_once(exe: &Path, scratch: &Path, timeout: Duration) -> Observation {
     use std::io::Read;
-    use std::os::unix::process::ExitStatusExt;
     use std::process::Stdio;
     let fail = |status: &str, reason: String| Observation {
         status: status.into(),
@@ -619,9 +630,14 @@ pub fn run_once(exe: &Path, scratch: &Path, timeout: Duration) -> Observation {
     let stderr = err_reader.join().unwrap_or_default();
     let _ = std::fs::remove_dir_all(scratch);
     match status {
-        Some(s) => {
-            Observation { status: "ran".into(), exit_code: s.code(), signal: s.signal(), stdout, stderr, reason: None }
-        }
+        Some(s) => Observation {
+            status: "ran".into(),
+            exit_code: s.code(),
+            signal: signal_of(s),
+            stdout,
+            stderr,
+            reason: None,
+        },
         None => Observation {
             status: "timeout".into(),
             exit_code: None,

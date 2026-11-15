@@ -32,6 +32,7 @@ pub mod opcode {
     pub const SET_INPUT_FOCUS: u8 = 42;
     pub const GET_INPUT_FOCUS: u8 = 43;
     pub const QUERY_EXTENSION: u8 = 98;
+    pub const CHANGE_HOSTS: u8 = 109;
     pub const KILL_CLIENT: u8 = 113;
 }
 
@@ -194,6 +195,15 @@ pub enum Request<'a> {
     KillClient {
         resource: Xid,
     },
+    /// `ChangeHosts`: add (`insert`) or remove an address of the server's
+    /// access list. `family` is the protocol's host family (5: "server
+    /// interpreted", whose address is `type\0value`, as `localuser\0poly`:
+    /// Xsecurity(7)).
+    ChangeHosts {
+        insert: bool,
+        family: u8,
+        address: &'a [u8],
+    },
     /// An extension's request: its major opcode (from `QueryExtension`),
     /// the minor opcode in the data byte, and the fields after the header.
     Extension {
@@ -260,6 +270,7 @@ impl Request<'_> {
             Request::GetInputFocus => GET_INPUT_FOCUS,
             Request::QueryExtension { .. } => QUERY_EXTENSION,
             Request::KillClient { .. } => KILL_CLIENT,
+            Request::ChangeHosts { .. } => CHANGE_HOSTS,
             Request::Extension { major, .. } => *major,
         }
     }
@@ -355,6 +366,15 @@ impl Request<'_> {
             Request::KillClient { resource } => {
                 w.u8(op).u8(0).u16(0).u32(*resource);
             }
+            Request::ChangeHosts { insert, family, address } => {
+                w.u8(op)
+                    .u8(if *insert { 0 } else { 1 })
+                    .u16(0)
+                    .u8(*family)
+                    .u8(0)
+                    .u16(address.len() as u16)
+                    .padded(address);
+            }
             Request::Extension { minor, body, .. } => {
                 w.u8(op).u8(*minor).u16(0).padded(body);
             }
@@ -438,6 +458,17 @@ mod tests {
         let mut v = Vec::new();
         r.encode(&mut v);
         v
+    }
+
+    #[test]
+    fn change_hosts_names_a_server_interpreted_address() {
+        let b = bytes(&Request::ChangeHosts { insert: true, family: 5, address: b"localuser\0poly" });
+        // 4 header bytes, family and address length, 14 bytes padded to 16.
+        assert_eq!(b.len(), 24);
+        assert_eq!(&b[..8], [109, 0, 6, 0, 5, 0, 14, 0]);
+        assert_eq!(&b[8..22], b"localuser\0poly");
+        assert_eq!(&b[22..], [0, 0]);
+        assert_eq!(bytes(&Request::ChangeHosts { insert: false, family: 5, address: b"x" })[1], 1, "Delete");
     }
 
     #[test]

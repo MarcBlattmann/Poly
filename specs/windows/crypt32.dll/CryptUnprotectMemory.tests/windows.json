@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "cryptunprotectmemory_child",
+      "exe_sha256": "cec6c36bea51f15df48802971acec84c303864700ac2913573873cf48475e65a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFyZW50IHByb3RlY3QgZmxhZyAwOiAxCnBhcmVudCB1bnByb3RlY3QgZmxhZyAwOiAxIHJlc3RvcmVkIDEKY2hpbGQgZXhpdCBjb2RlIDAKY2hpbGQ6IGNoaWxkIHVucHJvdGVjdCBmbGFnIDI6IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQgcmVzdG9yZWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "parent protect flag 0: 1\nparent unprotect flag 0: 1 restored 1\nchild exit code 0\nchild: child unprotect flag 2: 1 last error unchanged restored 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "cryptunprotectmemory_child_c",
+      "exe_sha256": "c22fff20f3544b37419b7845d816dd022e3f08b1fc88519efdf9465793e8e2c1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgZXhpdCBjb2RlIDAKY2hpbGQ6IGNoaWxkIHVucHJvdGVjdCBmbGFnIDE6IDEgbGFzdCBlcnJvciB1bmNoYW5nZWQgcmVzdG9yZWQgMQpwYXJlbnQgcHJvdGVjdCBmbGFnIDI6IDEKcGFyZW50IHVucHJvdGVjdCBmbGFnIDI6IDEgcmVzdG9yZWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child exit code 0\nchild: child unprotect flag 1: 1 last error unchanged restored 1\nparent protect flag 2: 1\nparent unprotect flag 2: 1 restored 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    }
+  ]
+}

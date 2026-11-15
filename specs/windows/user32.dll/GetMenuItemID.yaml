@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetMenuItemID.yaml
+id: windows/api/user32.dll/GetMenuItemID
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The command id of the item at a position, or 0xFFFFFFFF (-1) for a popup item and for an invalid position.
+interface:
+  signature: "UINT GetMenuItemID(HMENU hMenu, int nPos)"
+rules:
+  ids: "the id given to AppendMenuW/InsertMenuItemW as a full 32-bit value (0, 0xFFFF, 0x10000, 0x12345678 and 0xFFFFFFFF read back as given; 0x100000007 as 7); a separator returns the id it was appended with (0 if none); an owner-draw item its id"
+  popup_item: "-1 for an item that holds a popup (also if SetMenuItemInfoW later gave the item an id: the item is still a popup item)"
+  changes: "the ids follow insertions and deletions by position; ModifyMenuW to a popup gives -1 and back to a string gives the new id; SetMenuItemInfoW(MIIM_ID) changes it"
+errors:
+  position: "a position past the end, -1 or 0x7FFFFFFF: 0xFFFFFFFF with error 87 (ERROR_INVALID_PARAMETER)"
+  invalid_menu: "NULL or made-up menu: 0xFFFFFFFF with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  none known

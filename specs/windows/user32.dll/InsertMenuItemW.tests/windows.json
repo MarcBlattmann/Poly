@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "imi_insert",
+      "exe_sha256": "4bdd3328ee944cff17275be83fed3a048ed85d9d959138dbe0745978af9596c8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5zZXJ0IHN0cmluZyBhdCBwb3NpdGlvbiAwOiAxCmluc2VydCB3aXRoIE1JSU1fSUQgb25seSAobm8gdHlwZSwgbm8gdGV4dCk6IDEKaW5zZXJ0IHdpdGggTUlJTV9TVFJJTkcgb25seTogMQppbnNlcnQgc2VwYXJhdG9yOiAxCmluc2VydCByYWRpbyBkZWZhdWx0IGl0ZW06IDEKaW5zZXJ0IHdpdGggZGF0YTogMQppbnNlcnQgcG9wdXA6IDEKaW5zZXJ0IHBvcHVwIHdpdGggYW4gaWQ6IDEKaW5zZXJ0IGJlZm9yZSBjb21tYW5kIDE0OiAxCmluc2VydCBiZWZvcmUgYW4gYWJzZW50IGNvbW1hbmQ6IDEKaW5zZXJ0IGF0IHBvc2l0aW9uIC0xOiAxCmluc2VydCBhdCBwb3NpdGlvbiA5OTogMQpyZXN1bHQ6IGNvdW50IDEyCiAgWzBdIG9rPTEgaWQ9MHhiIHN1Yj0wIHN0YXRlPTB4OCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdGaXJzdCcgY2NoPTUKICBbMV0gb2s9MSBpZD0weGMgc3ViPTAgc3RhdGU9MHgzIHR5cGU9MHg4MDAgZGF0YT0weDAgdGV4dD0nJyBjY2g9MAogIFsyXSBvaz0xIGlkPTB4MCBzdWI9MCBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0nTm9JZCcgY2NoPTQKICBbM10gb2s9MSBpZD0weGQgc3ViPTAgc3RhdGU9MHgzIHR5cGU9MHg4MDAgZGF0YT0weDAgdGV4dD0nJyBjY2g9MAogIFs0XSBvaz0xIGlkPTB4MTEgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J0JlZm9yZVJhZGlvJyBjY2g9MTEKICBbNV0gb2s9MSBpZD0weGUgc3ViPTAgc3RhdGU9MHgxMDA4IHR5cGU9MHgyMDAgZGF0YT0weDAgdGV4dD0nUmFkaW8nIGNjaD01CiAgWzZdIG9rPTEgaWQ9MHhmIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4YWJjZGVmIHRleHQ9J1dpdGhEYXRhJyBjY2g9OAogIFs3XSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J1BvcHVwJyBjY2g9NQogIFs4XSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J1BvcHVwSWQnIGNjaD03CiAgWzldIG9rPTEgaWQ9MHgxMSBzdWI9MCBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0nQmVmb3JlUmFkaW8nIGNjaD0xMQogIFsxMF0gb2s9MSBpZD0weDExIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdCZWZvcmVSYWRpbycgY2NoPTExCiAgWzExXSBvaz0xIGlkPTB4MTEgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J0JlZm9yZVJhZGlvJyBjY2g9MTEKY2JTaXplIDA6IDAgZXJyPTg3CmNiU2l6ZSA4MCAodGhlIGZ1bGwgc2l6ZSk6IDEKY2JTaXplIDQ6IDAgZXJyPTg3CmNiU2l6ZSA0ODogMCBlcnI9ODcKY2JTaXplIDcyOiAxCmNiU2l6ZSAxMDA6IDAgZXJyPTg3CmJhZCBtZW51OiAwIGVycj0xNDAxCk5VTEwgaW5mbzogMCBlcnI9ODcKcG9wdXAgd2l0aCBhbiBpbnZhbGlkIHN1YiBtZW51IGhhbmRsZTogMCBlcnI9ODcKY291bnQgYWZ0ZXIgdGhlIGVycm9ycyAxNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "insert string at position 0: 1\ninsert with MIIM_ID only (no type, no text): 1\ninsert with MIIM_STRING only: 1\ninsert separator: 1\ninsert radio default item: 1\ninsert with data: 1\ninsert popup: 1\ninsert popup with an id: 1\ninsert before command 14: 1\ninsert before an absent command: 1\ninsert at position -1: 1\ninsert at position 99: 1\nresult: count 12\n  [0] ok=1 id=0xb sub=0 state=0x8 type=0x0 data=0x0 text='First' cch=5\n  [1] ok=1 id=0xc sub=0 state=0x3 type=0x800 data=0x0 text='' cch=0\n  [2] ok=1 id=0x0 sub=0 state=0x0 type=0x0 data=0x0 text='NoId' cch=4\n  [3] ok=1 id=0xd sub=0 state=0x3 type=0x800 data=0x0 text='' cch=0\n  [4] ok=1 id=0x11 sub=0 state=0x0 type=0x0 data=0x0 text='BeforeRadio' cch=11\n  [5] ok=1 id=0xe sub=0 state=0x1008 type=0x200 data=0x0 text='Radio' cch=5\n  [6] ok=1 id=0xf sub=0 state=0x0 type=0x0 data=0xabcdef text='WithData' cch=8\n  [7] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='Popup' cch=5\n  [8] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='PopupId' cch=7\n  [9] ok=1 id=0x11 sub=0 state=0x0 type=0x0 data=0x0 text='BeforeRadio' cch=11\n  [10] ok=1 id=0x11 sub=0 state=0x0 type=0x0 data=0x0 text='BeforeRadio' cch=11\n  [11] ok=1 id=0x11 sub=0 state=0x0 type=0x0 data=0x0 text='BeforeRadio' cch=11\ncbSize 0: 0 err=87\ncbSize 80 (the full size): 1\ncbSize 4: 0 err=87\ncbSize 48: 0 err=87\ncbSize 72: 1\ncbSize 100: 0 err=87\nbad menu: 0 err=1401\nNULL info: 0 err=87\npopup with an invalid sub menu handle: 0 err=87\ncount after the errors 14\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

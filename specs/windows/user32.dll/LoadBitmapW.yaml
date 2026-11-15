@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadBitmapW.yaml
+id: windows/api/user32.dll/LoadBitmapW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads a bitmap resource as a device-dependent bitmap compatible with the screen: each call makes a new bitmap the caller must delete.
+interface:
+  signature: "HBITMAP LoadBitmapW(HINSTANCE hInstance, LPCWSTR lpBitmapName)"
+rules:
+  format: "GetObject gives a 32-byte BITMAP: the width and height of the resource, 1 plane, the colour depth of the screen (32 here), width_bytes from that depth (16 for 4 pixels), no pixel pointer; the pixels are the resource's (read through a memory DC: the red/blue checker pattern is exact)"
+  names: "a number or a name (case-insensitive); a number that is not a bitmap (the icon group 500) is not found"
+  new_each_time: "two loads give two handles; deleting one leaves the other; a bitmap selected into a DC can be deleted (DeleteObject returns TRUE), a second DeleteObject returns FALSE"
+  getobject_sizes: "GetObject with a buffer of 32 or more bytes gives 32; with less than 32 bytes it gives 0 (nothing is copied); a NULL buffer gives 32"
+  null_module: "NULL looks for the system bitmaps (OBM_ ids), so the executable's resources are not found (1814)"
+  load_image: "LoadImageW(IMAGE_BITMAP) gives the same bitmap; LR_CREATEDIBSECTION gives a DIB section with the resource's depth (24 bits here) and a pointer to its bits; given sizes stretch it (8x6); LR_MONOCHROME gives a 1-bit bitmap"
+errors:
+  not_found: "NULL with 1814; made-up module: 1812"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Colour depths other than 32, palettes, the OBM_ system bitmaps.

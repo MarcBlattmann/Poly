@@ -86,6 +86,27 @@ pub(super) extern "system" fn resumed_worker(_p: *mut u8) -> u32 {
 #[repr(C, align(16))]
 struct Aligned<const N: usize>([u8; N]);
 
+// `call_with_rbx(f, a, b, rbx)`: call `f(a, b)` with RBX set to `rbx` (a caller's callee-saved
+// register holds anything), RBX restored after. Rust code cannot choose RBX itself.
+core::arch::global_asm!(
+    ".globl k32test_call_with_rbx",
+    "k32test_call_with_rbx:",
+    "push rbx",
+    "sub rsp, 0x20",
+    "mov rax, rcx",
+    "mov rcx, rdx",
+    "mov rdx, r8",
+    "mov rbx, r9",
+    "call rax",
+    "add rsp, 0x20",
+    "pop rbx",
+    "ret",
+);
+
+unsafe extern "system" {
+    fn k32test_call_with_rbx(f: usize, a: *mut u64, b: *mut u64, rbx: u64) -> *mut u64;
+}
+
 pub(super) unsafe fn seven_zip_imports() {
     // SAFETY: valid arguments throughout.
     unsafe {
@@ -104,6 +125,19 @@ pub(super) unsafe fn seven_zip_imports() {
         check(InterlockedPopEntrySList(h) == b && QueryDepthSList(h) == 1);
         check(InterlockedFlushSList(h) == a && QueryDepthSList(h) == 0);
         check(InterlockedPopEntrySList(h).is_null());
+        // The same with RBX ending in a zero byte in the caller (ADR 0155 step 13): the push read
+        // that byte for its exchange's result, so it looped for ever and linked its entry to
+        // itself.
+        for rbx in [0x1234_5600u64, 0, 0xffff_ffff_ffff_ff00] {
+            let push = InterlockedPushEntrySList as *const () as usize;
+            let pop = InterlockedPopEntrySList as *const () as usize;
+            InitializeSListHead(h);
+            check(k32test_call_with_rbx(push, h, a, rbx).is_null());
+            check(k32test_call_with_rbx(push, h, b, rbx) == a && QueryDepthSList(h) == 2);
+            check(*b == a as u64 && *a == 0);
+            check(k32test_call_with_rbx(pop, h, core::ptr::null_mut(), rbx) == b);
+            check(k32test_call_with_rbx(pop, h, core::ptr::null_mut(), rbx) == a && QueryDepthSList(h) == 0);
+        }
 
         // RtlCaptureContext through kernel32's forwarder to ntdll: the
         // caller's stack and code, every group of registers.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "shutdown_how",
+      "exe_sha256": "ff7b7183d2f87ae95b968160333cc8b3271450a4c98ab495c579dd4b5bc1fc83",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0RfU0VORCBvbiBhIGZyZXNoIFRDUCBzb2NrZXQ6IC0xL1dTQUVOT1RDT05OClNEX1NFTkQgb24gYSBmcmVzaCBVRFAgc29ja2V0OiAwCklOVkFMSURfU09DS0VUOiAtMS9XU0FFTk9UU09DSwpTRF9TRU5EOiAwCnNlbmQgYWZ0ZXIgU0RfU0VORCAtMS9XU0FFU0hVVERPV04KcGVlciBTRF9TRU5EOiAwClNEX1JFQ0VJVkU6IDAKc2VuZCBzdGlsbCB3b3JrcyAtMQpwZWVyIHJlY3YgYWZ0ZXIgU0RfQk9USCAwClNEX1NFTkQgYWZ0ZXIgdGhlIHBlZXIgY2xvc2VkOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SD_SEND on a fresh TCP socket: -1/WSAENOTCONN\nSD_SEND on a fresh UDP socket: 0\nINVALID_SOCKET: -1/WSAENOTSOCK\nSD_SEND: 0\nsend after SD_SEND -1/WSAESHUTDOWN\npeer SD_SEND: 0\nSD_RECEIVE: 0\nsend still works -1\npeer recv after SD_BOTH 0\nSD_SEND after the peer closed: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 269
+    },
+    {
+      "name": "shutdown_how_c",
+      "exe_sha256": "a261f1896ead8a4bc36d65079cde651861b3fd871083ecbe46fbb6cda87b2666",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0RfQk9USCBvbiBhIGZyZXNoIFRDUCBzb2NrZXQ6IC0xL1dTQUVOT1RDT05OCm5vdCBhIHNvY2tldDogLTEvV1NBRU5PVFNPQ0sKaW52YWxpZCBob3cgLTE6IC0xL1dTQUVJTlZBTApwZWVyIHJlY3YgYWZ0ZXIgU0RfU0VORCAwCnJlY3YgYWZ0ZXIgU0RfU0VORCA0IGRhdGEgWzk4LCA5NywgOTksIDEwN10KZ2V0cGVlcm5hbWUgc3RpbGwgd29ya3MgMApyZWN2IGFmdGVyIFNEX1JFQ0VJVkUgd2l0aCBkYXRhIHNlbnQgYnkgdGhlIHBlZXIgLTEvV1NBRUNPTk5BQk9SVEVEClNEX0JPVEg6IDAKY2xvc2Vzb2NrZXQgYWZ0ZXIgU0RfQk9USCAwCmNsaWVudCByZWN2IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SD_BOTH on a fresh TCP socket: -1/WSAENOTCONN\nnot a socket: -1/WSAENOTSOCK\ninvalid how -1: -1/WSAEINVAL\npeer recv after SD_SEND 0\nrecv after SD_SEND 4 data [98, 97, 99, 107]\ngetpeername still works 0\nrecv after SD_RECEIVE with data sent by the peer -1/WSAECONNABORTED\nSD_BOTH: 0\nclosesocket after SD_BOTH 0\nclient recv 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 277
+    }
+  ]
+}

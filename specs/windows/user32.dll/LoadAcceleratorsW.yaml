@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadAcceleratorsW.yaml
+id: windows/api/user32.dll/LoadAcceleratorsW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads an RT_ACCELERATOR resource as an accelerator table handle.
+interface:
+  signature: "HACCEL LoadAcceleratorsW(HINSTANCE hInstance, LPCWSTR lpTableName)"
+rules:
+  entries: "CopyAcceleratorTableW reads the entries back in resource order with the flags as written (FVIRTKEY 1, FNOINVERT 2, FSHIFT 4, FCONTROL 8, FALT 0x10; the end mark 0x80 is not returned): F1 flags 1 key 0x70 cmd 303; Ctrl+O flags 9; the character 'A' flags 0 key 0x41; Shift+F5 flags 5; Alt+Enter flags 0x11"
+  handles: "two loads of one resource give the same handle (the table is shared); destroying it with DestroyAcceleratorTable (TRUE) does not prevent loading the resource again"
+  names: "by number or name (case-insensitive); NULL module is the executable"
+  copy: "CopyAcceleratorTableW with a NULL array returns the entry count (5) whatever the size; with room for fewer entries it copies that many and returns the number copied; with a count of 5 or 6 it copies 5"
+errors:
+  not_found: "NULL with 1814, a made-up module 1812"
+  copy_bad_handle: "CopyAcceleratorTableW of a made-up handle: 0 with ERROR_INVALID_ACCEL_HANDLE (1403)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  none known

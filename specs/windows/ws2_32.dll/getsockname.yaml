@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getsockname.yaml
+id: windows/api/ws2_32.dll/getsockname
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Chrome calls getsockname on every connected socket, UDP and TCP (14 to 86 calls per run, result 0, length 28 for IPv6) and at the end before shutdown. Observed: an unbound socket (TCP, UDP, IPv4 and IPv6) fails with WSAEINVAL (10022), the buffer is not written and the length is left as given; after bind to 127.0.0.1:0 it returns the address with a system-chosen non-zero port, family 2, length 16, sin_zero zeroed; bound to 0.0.0.0 the address is zero with a port; a connected loopback client reports 127.0.0.1 and a non-zero port; an accepted socket reports the listener's port; a connected UDP socket reports 127.0.0.1; after the peer closed the answer is unchanged; IPv6 bound to [::1]: length 28, flow and scope zero; a dual-stack socket connected to ::ffff:127.0.0.1 reports itself as ::ffff:127.0.0.1 (family 23, length 28) and the IPv4 accepted side sees an IPv4 peer 127.0.0.1. On a bound socket a length that is too small (15, 8, 0), a negative length, a NULL length pointer and a NULL buffer are all WSAEFAULT with nothing written and the length left as given (a NULL length pointer: nothing); a length of 64 is accepted and becomes 16; closed or non-socket: WSAENOTSOCK.
+interface:
+  signature: "int getsockname(SOCKET s, struct sockaddr *name, int *namelen)"
+  result: "0 or SOCKET_ERROR; *namelen is set to the size written"
+chrome:
+  calls: "getsockname (#6) (s, &sockaddr_in6, &len=28) 14 to 86 calls per run, result 0, after FD_CONNECT, after connect of a UDP socket and before shutdown"
+rules:
+  unbound: "unbound TCP, UDP and IPv6 sockets: -1/WSAEINVAL for every length given (16, 64, 8, 15, 0, 28, 27); the length argument is not changed and nothing is written; length -1 and a NULL length pointer: -1/WSAEFAULT; NULL buffer: -1/WSAEINVAL; not a socket: -1/WSAENOTSOCK"
+  bound: "bound to 127.0.0.1:0: 0, family 2, length 16, port non-zero, address 127.0.0.1, sin_zero zero; bound to 0.0.0.0:0: port non-zero, address 0.0.0.0"
+  lengths_bound: "bound socket: length 64 -> 0 and the length becomes 16; lengths 15, 8, 0 and -1, a NULL length pointer and a NULL buffer: -1/WSAEFAULT, nothing written, the length unchanged"
+  connected: "loopback client: 127.0.0.1 and a non-zero port; accepted socket: the listener's port; client after the peer closed: unchanged (0, 16, family 2); after closesocket: -1/WSAENOTSOCK"
+  udp: "a connected UDP socket reports 127.0.0.1 and a non-zero port"
+  ipv6: "bound to [::1]:0: 0, length 28, address ::1, flow 0, scope 0; dual-stack client connected to ::ffff:127.0.0.1: family 23, length 28, local address ::ffff:127.0.0.1; its getpeername gives ::ffff:127.0.0.1 and the listener's port; the accepted IPv4 socket's peer is family 2, 127.0.0.1"
+errors:
+  unbound: "WSAEINVAL 10022"
+  buffer: "WSAEFAULT 10014"
+  socket: "WSAENOTSOCK 10038"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  non-loopback local addresses (machine dependent), getsockname after SO_REUSEADDR binds, sockets in the WSAEventSelect states other than connected.

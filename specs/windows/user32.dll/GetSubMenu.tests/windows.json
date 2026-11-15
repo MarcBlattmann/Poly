@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gsm_nav",
+      "exe_sha256": "30617f0d5228e87dc7202046317d943df7ca1e7b5167baf1f5fdfbdf02bb17c3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmFyWzBdIGlzIGEgcGxhaW4gaXRlbTogbnVsbCAxCmJhclsxXSBpcyBhOiAxCmFbMF0gaXMgYjogMQpiWzBdIChzdHJpbmcpIG51bGw6IDEKYlsxXSBpcyBjOiAxCmNbMF0gKHN0cmluZykgbnVsbDogMQpwb3NpdGlvbiAtMTogMSBlcnI9LTEKcG9zaXRpb24gMiAocGFzdCB0aGUgZW5kKTogMSBlcnI9LTEKcG9zaXRpb24gMHg3RkZGRkZGRjogMSBlcnI9LTEKTlVMTCBtZW51OiAxIGVycj0xNDAxCm1hZGUtdXAgbWVudTogMSBlcnI9MTQwMQpiYXJbMV0gYWZ0ZXIgTW9kaWZ5TWVudVcgdG8gYSBzdHJpbmc6IG51bGwgMDsgYSB2YWxpZCAxCmJhclsyXSBpcyBhIGFnYWluOiAxCmJhclsyXSBhZnRlciBSZW1vdmVNZW51OiBudWxsIDEKR2V0U3ViTWVudShHZXRNZW51KHcpLCAyKSBpcyBhOiAxCmFsbCBnb25lOiAwIDAgMCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bar[0] is a plain item: null 1\nbar[1] is a: 1\na[0] is b: 1\nb[0] (string) null: 1\nb[1] is c: 1\nc[0] (string) null: 1\nposition -1: 1 err=-1\nposition 2 (past the end): 1 err=-1\nposition 0x7FFFFFFF: 1 err=-1\nNULL menu: 1 err=1401\nmade-up menu: 1 err=1401\nbar[1] after ModifyMenuW to a string: null 0; a valid 1\nbar[2] is a again: 1\nbar[2] after RemoveMenu: null 1\nGetSubMenu(GetMenu(w), 2) is a: 1\nall gone: 0 0 0 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

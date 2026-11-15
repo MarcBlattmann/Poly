@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/closesocket.yaml
+id: windows/api/ws2_32.dll/closesocket
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Closes a socket; Chrome calls it for every socket it ends (13 to 51 calls per run, result 0), after shutdown(SD_SEND) on TCP. Observed: closing after a send is graceful (the peer receives the data, then 0 forever); sending to a peer that closed succeeds the first time and fails later with WSAECONNABORTED (10053) and so does recv; with SO_LINGER {1,0} the peer gets WSAECONNRESET (10054) on every recv instead of the data; closesocket of a listener while another thread is blocked in accept: 0, and the accept returns INVALID_SOCKET with WSAEINTR (10004); closesocket of a socket while another thread is blocked in recv: 0, the recv returns -1 with WSAECONNABORTED (10053), and the peer sees WSAECONNRESET. Closing an event-selected socket leaves the event valid (WSACloseEvent TRUE) and WSAEnumNetworkEvents on the closed socket is WSAENOTSOCK. 0, a small number, INVALID_SOCKET and an event handle are all -1/WSAENOTSOCK, and closesocket on an event handle does not close it.
+interface:
+  signature: "int closesocket(SOCKET s)"
+  result: "0 or SOCKET_ERROR"
+chrome:
+  calls: "closesocket (#3) 9 to 51 calls per run, always result 0, after shutdown(s, SD_SEND) and before WSACloseEvent of its events"
+rules:
+  graceful: "send then closesocket: closesocket 0, the peer's recv returns the data, then 0, then 0 again"
+  send_to_closed: "first send to a closed peer: returns the length; after 200 ms the next send is -1/WSAECONNABORTED and recv is -1/WSAECONNABORTED"
+  linger_zero: "SO_LINGER {1,0} then closesocket: 0; the peer's recv is -1/WSAECONNRESET and stays so; data sent before is not delivered"
+  under_accept: "a thread blocked in accept(listener): closesocket from another thread returns 0; the thread ends within 5 s with INVALID_SOCKET and error WSAEINTR (10004)"
+  under_recv: "a thread blocked in recv: closesocket returns 0; recv returns -1 with WSAECONNABORTED (10053); the peer's recv is -1/WSAECONNRESET"
+  event_selected: "closesocket of a socket with WSAEventSelect: 0; WSAEnumNetworkEvents on it afterwards: -1/WSAENOTSOCK; WSACloseEvent of the event: TRUE"
+  not_sockets: "closesocket(0), closesocket(0x1234), closesocket(INVALID_SOCKET): -1/WSAENOTSOCK; closesocket(an event handle): -1/WSAENOTSOCK and the event is still valid; a second closesocket of a closed socket: -1/WSAENOTSOCK"
+errors:
+  socket: "WSAENOTSOCK 10038"
+  not_started: "WSANOTINITIALISED 10093"
+side_effects: "ends the connection (FIN, or RST with SO_LINGER {1,0}); wakes blocked calls of other threads"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  SO_LINGER with a non-zero timeout on a blocking close, closing with unsent data that the peer does not read, closing sockets with pending overlapped I/O (see the WSARecv and WSASend sheets).

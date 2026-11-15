@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/setsockopt.yaml
+id: windows/api/ws2_32.dll/setsockopt
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Sets a socket option. Chrome calls it 44 to 91 times per run: (IPPROTO_IPV6=41, IPV6_V6ONLY=27, &0, 4) and (IPPROTO_TCP=6, TCP_NODELAY=1, &1, 4) on TCP sockets, (SOL_SOCKET=0xFFFF, SO_RANDOMIZE_PORT=0x3005, &1, 4) on every socket before connect, (SOL_SOCKET, SO_RCVBUF=0x1002 and SO_SNDBUF=0x1001, &0x100000, 4) and (41, IPV6_ECN=50, &1, 4) on UDP sockets; all return 0. Observed rules the options follow: values are stored exactly (SO_RCVBUF/SO_SNDBUF of 0x100000, 65536, 12345, 0, -1 and 0x7fffffff read back unchanged on TCP and UDP), boolean options keep only nonzero (IPV6_V6ONLY 5 reads 1, IPV6_ECN 3 and 4 read 1), IPV6_V6ONLY cannot change after bind (WSAEINVAL), SO_RANDOMIZE_PORT is refused on an already-bound TCP socket (WSAEINVAL), SO_REUSEADDR and SO_EXCLUSIVEADDRUSE exclude each other (the second set is WSAEINVAL), SO_TYPE and SO_ACCEPTCONN cannot be set (WSAENOPROTOOPT), SO_ERROR can be set (a later read returns it), SO_LINGER takes {onoff, linger} (4 bytes) and reads back as set.
+interface:
+  signature: "int setsockopt(SOCKET s, int level, int optname, const char *optval, int optlen)"
+  result: "0, or SOCKET_ERROR with the WSA error"
+chrome:
+  calls: "setsockopt (#21) 24 to 91 calls per run: (s,41,27,&0,4) 43x, (s,6,1,&1,4) 37x, (s,0xFFFF,0x3005,&1,4) 49x, (s,0xFFFF,0x1002,&0x100000,4) 8x, (s,0xFFFF,0x1001,&0x100000,4) 8x, (s,41,50,&1,4) 8x; all result 0"
+rules:
+  v6only: "tcp6: set 0 -> 0 reads 0; set 1 -> reads 1; set 5 -> reads 1; udp6: set 0 ok; on an IPv4 socket the option can be set (0) and reads back what was set; on a bound tcp6 socket setting 1 fails with WSAEINVAL and the value stays"
+  nodelay: "tcp4 TCP_NODELAY 1, 0 and 7 -> 0; reads 1, 0, 1; a one-byte value works; on a UDP socket: WSAEINVAL"
+  randomize_port: "SO_RANDOMIZE_PORT 1 before bind: 0 on tcp4, udp4, udp6; on a TCP IPv6 socket that was already bound: WSAEINVAL; tcp4 reads back 1"
+  buffers: "SO_RCVBUF and SO_SNDBUF: set 0x100000 -> 0 and reads 0x100000 (tcp4 and udp4); 65536, 12345, 0, -1, 0x7fffffff all read back unchanged"
+  ecn: "udp6 IPV6_ECN 1 -> 0 reads 1; 0 reads 0; 3 and 4 read 1; on a TCP IPv6 socket: WSAEINVAL; on an IPv4 UDP socket the same number 50 at level IPPROTO_IP (0) is accepted and reads 1"
+  keepalive: "SO_KEEPALIVE 1 and 0 on tcp4 -> 0"
+  reuse_exclusive: "SO_REUSEADDR 1 then SO_EXCLUSIVEADDRUSE 1: WSAEINVAL (SO_EXCLUSIVEADDRUSE reads 0); on a fresh socket SO_EXCLUSIVEADDRUSE 1 then SO_REUSEADDR 1: WSAEINVAL"
+  broadcast: "SO_BROADCAST 1 on UDP -> 0 reads 1; on a stream socket WSAENOPROTOOPT 10042"
+  read_only: "SO_TYPE and SO_ACCEPTCONN set: WSAENOPROTOOPT; SO_ERROR set to 5 -> 0 and a later read returns 5"
+  rcvtimeo: "SO_RCVTIMEO is a DWORD in milliseconds, 250 reads 250"
+  linger: "default {0,0}; {1,5} reads back {1,5}; {5,70000 as u16 = 4464} reads {5,4464}; length 2 -> WSAEFAULT; on a UDP socket WSAENOPROTOOPT"
+  so_error_after_refusal: "a non-blocking connect to a closed loopback port: WSAEWOULDBLOCK, then the event is signalled; SO_ERROR reads 10061 and still reads 10061 when read again (it is not cleared); WSAEnumNetworkEvents reports CONNECT with error 10061"
+  level_option: "level 999: WSAEINVAL; unknown option at SOL_SOCKET or IPPROTO_TCP: WSAENOPROTOOPT; not a socket and INVALID_SOCKET: WSAENOTSOCK; closed socket: WSAENOTSOCK"
+  lengths: "for a boolean-style option (SO_KEEPALIVE): lengths 1, 2, 3, 8 are accepted (0); 0 and NULL value: WSAEFAULT; -1: WSAENOBUFS (10055); SO_RCVBUF with length 2: WSAEFAULT; TCP_NODELAY with length 2 is accepted"
+errors:
+  level: "WSAEINVAL 10022"
+  option: "WSAENOPROTOOPT 10042"
+  socket: "WSAENOTSOCK 10038"
+  buffer: "WSAEFAULT 10014"
+  length: "WSAENOBUFS 10055 for a negative length"
+side_effects: "changes the option of the socket"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  options of multicast and membership, IP_TOS and IP_TTL setters, SO_SNDTIMEO, TCP_KEEPIDLE as setters, what the options do to traffic (only read back).

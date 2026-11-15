@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "certfindcertificateinstore_hash_name_b",
+      "exe_sha256": "358e3f0517f425aa3621b42f5c41cc1827fc35f39647360b7f99fae19867b639",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3lzdGVtIGNvbGxlY3Rpb24sIFNIQTEgaGFzaCB0aGF0IGlzIG5vdCB0aGVyZSwgcm91bmQgMTogZm91bmQgMCBsYXN0IGVycm9yIDB4ODAwOTIwMDQKU0hBMSBoYXNoIG9mIEI6IGZvdW5kIEIKMTAtYnl0ZSBoYXNoOiBmb3VuZCAtIGxhc3QgZXJyb3IgMHg4MDA5MjAwNApDRVJUX0ZJTkRfRVhJU1RJTkcgd2l0aCB0aGUgZmlyc3QgY2VydGlmaWNhdGU6IGZvdW5kIEIKQ0VSVF9GSU5EX0FOWSBjaGFpbjogQiBBIC0gbGFzdCBlcnJvciBhZnRlciB0aGUgZW5kIDB4ODAwOTIwMDQKZW1wdHkgc3RvcmUsIENFUlRfRklORF9BTlk6IGZvdW5kIDAgbGFzdCBlcnJvciAweDgwMDkyMDA0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "system collection, SHA1 hash that is not there, round 1: found 0 last error 0x80092004\nSHA1 hash of B: found B\n10-byte hash: found - last error 0x80092004\nCERT_FIND_EXISTING with the first certificate: found B\nCERT_FIND_ANY chain: B A - last error after the end 0x80092004\nempty store, CERT_FIND_ANY: found 0 last error 0x80092004\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "certfindcertificateinstore_hash_name_c",
+      "exe_sha256": "8576d77709df2d475c197220c591a8917a81f6e8ec02eb9ff9b151b5cf14d4cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3lzdGVtIGNvbGxlY3Rpb24sIFNIQTEgaGFzaCB0aGF0IGlzIG5vdCB0aGVyZSwgcm91bmQgMjogZm91bmQgMCBsYXN0IGVycm9yIDB4ODAwOTIwMDQKU0hBMSBoYXNoIHRoYXQgaXMgbm90IHRoZXJlOiBmb3VuZCAtIGxhc3QgZXJyb3IgMHg4MDA5MjAwNApzdWJqZWN0IG5hbWUgYmxvYiBvZiB0aGUgZmlyc3QgY2VydGlmaWNhdGU6IGZvdW5kIEIKc3ViamVjdCBzdHJpbmcgJ3BvbHkgdGVzdCBiJzogZm91bmQgQiBsYXN0IGVycm9yIDAKZW5jb2RpbmcgdHlwZSAwOiBmb3VuZCBBIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "system collection, SHA1 hash that is not there, round 2: found 0 last error 0x80092004\nSHA1 hash that is not there: found - last error 0x80092004\nsubject name blob of the first certificate: found B\nsubject string 'poly test b': found B last error 0\nencoding type 0: found A last error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

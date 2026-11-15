@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "sdm_err",
+      "exe_sha256": "931fdcd3e168fa216c492d923a4467f9ad719d4fe241a0a7023128a1b3ef0a24",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V01fVVNFUisxIHRvIHRoZSBlZGl0OiAwIGVycj0tMQptZXNzYWdlIDB4RkZGRiB0byBhIGJ1dHRvbjogMCBlcnI9LTEKV01fR0VURk9OVCBvZiB0aGUgZWRpdCBpcyBub3QgTlVMTDogMQpXTV9HRVRURVhUIHdpdGggYSBzaG9ydCBidWZmZXIgKHNpemUgMyk6IDIKV01fU0VUVEVYVCB0aGVuIFdNX0dFVFRFWFRMRU5HVEg6IDMKV01fRU5BQkxFIGZhbHNlIHRvIGEgYnV0dG9uOiAwIGVycj0tMQp0aGUgYnV0dG9uIGlzIGVuYWJsZWQgMSAoV01fRU5BQkxFIGRvZXMgbm90IGNoYW5nZSB0aGUgc3RhdGUpCldNX0NMT1NFIHRvIGEgY29udHJvbCAoZGVzdHJveXMgbm90aGluZyk6IDAgZXJyPS0xCnRoZSBjb250cm9sIGV4aXN0cyAwCldNX0RFU1RST1kgdG8gYSBidXR0b246IDAgZXJyPTE0MjEKaWQgMHhGRkZGRkZGRjogMCBlcnI9MTQyMQphIHdpbmRvdyB0aGF0IGlzIG5vdCBhIGRpYWxvZyAodGhlIGRlc2t0b3ApOiAwIGVycj0xNDIxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WM_USER+1 to the edit: 0 err=-1\nmessage 0xFFFF to a button: 0 err=-1\nWM_GETFONT of the edit is not NULL: 1\nWM_GETTEXT with a short buffer (size 3): 2\nWM_SETTEXT then WM_GETTEXTLENGTH: 3\nWM_ENABLE false to a button: 0 err=-1\nthe button is enabled 1 (WM_ENABLE does not change the state)\nWM_CLOSE to a control (destroys nothing): 0 err=-1\nthe control exists 0\nWM_DESTROY to a button: 0 err=1421\nid 0xFFFFFFFF: 0 err=1421\na window that is not a dialog (the desktop): 0 err=1421\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

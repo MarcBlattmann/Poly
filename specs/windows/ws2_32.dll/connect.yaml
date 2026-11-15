@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/connect.yaml
+id: windows/api/ws2_32.dll/connect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "connect function (winsock2.h)", "WSAEventSelect function", "WSAEnumNetworkEvents function", "recv function", "WSASend function", "sendto function", "WSARecv function", "WSAGetOverlappedResult function", "AcceptEx function (mswsock.h)", "Winsock Error Codes", "I/O Completion Ports"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Connects a socket. Chrome's network service makes every TCP connection like this (39 sockets in five traced runs, 7 to 9 per run): socket (WSASocketW, WSA_FLAG_OVERLAPPED) or a socket the browser made and duplicated (WSASocketW with a WSAPROTOCOL_INFOW), FIONBIO 1, TCP_NODELAY, SIO_KEEPALIVE_VALS, two WSACreateEvent, WSAEventSelect(s, ev, FD_CONNECT), SO_RANDOMIZE_PORT 1, connect (WSAEWOULDBLOCK), then WSAEnumNetworkEvents (FD_CONNECT, error 0), getsockname, recv(MSG_PEEK) three times (WSAEWOULDBLOCK), WSASend with an OVERLAPPED whose event is the second event (returns 0), WSAResetEvent, WSAEventSelect(s, ev, FD_READ|FD_CLOSE) with the same first event, recv(4096 or 17408) until WSAEWOULDBLOCK, more WSASend, getsockname, shutdown(SD_SEND), closesocket, WSACloseEvent twice. The tests give the results of connect on loopback in every state Chrome and its tests meet: a socket that WSAEventSelect made non-blocking returns -1 with WSAEWOULDBLOCK (10035) and FD_CONNECT follows with the result of the connection in the error slot of the event record; a blocking socket to a port nobody listens on fails with WSAECONNREFUSED (10061) (the refusal takes a moment: Windows retries); a connect that is still pending answers WSAEALREADY (10037), a connected socket WSAEISCONN (10056). UDP connect completes at once and can be repeated.
+interface:
+  signature: "int connect(SOCKET s, const sockaddr* name, int namelen)"
+  result: "0, or SOCKET_ERROR with WSAGetLastError"
+chrome:
+  calls: "connect 29 calls over all stages (13 in one network service run): sockaddr_in6 (28 bytes) every time here because this PC has global IPv6; 37 returned -1/WSAEWOULDBLOCK (10035) (TCP) and 12 returned 0 (UDP: the IPv6 reachability probe and the QUIC sockets); the committed trace also shows 10051 (WSAENETUNREACH, a UDP probe on a machine without an IPv6 route, machine dependent, not recorded). AF_INET sockets and sockaddr_in (16 bytes) follow the same sequence on a machine without IPv6"
+rules:
+  non_blocking: "after WSAEventSelect(s, ev, FD_CONNECT) (no ioctlsocket needed) connect to a listening loopback port returns -1/WSAEWOULDBLOCK; the event is signalled within 5 s; WSAEnumNetworkEvents gives events FD_CONNECT only with iErrorCode[FD_CONNECT_BIT] 0 and resets the event; getpeername then gives the listener's address (family 2, length 16), getsockname a non-zero port"
+  connected: "a second connect on the connected socket: -1/WSAEISCONN (10056); connect on an accepted socket: WSAEISCONN; connect on a listening socket: -1/WSAEINVAL (10022)"
+  after_connect_events: "WSAEventSelect(s, ev, FD_READ|FD_CLOSE) with the same event after the connect gives no event while nothing is readable; when the peer sends, events FD_READ (error 0); when the peer then closes, FD_CLOSE (error 0) and recv returns 0"
+  refused_blocking: "connect to a closed loopback port on a blocking socket: -1/WSAECONNREFUSED (10061); SO_ERROR afterwards reads 0; connect again: -1/WSAECONNREFUSED"
+  refused_non_blocking: "-1/WSAEWOULDBLOCK, a second connect while pending: -1/WSAEALREADY (10037), then FD_CONNECT with iErrorCode[FD_CONNECT_BIT] = 10061 (the other slots stay untouched); SO_ERROR reads 10061 and still reads 10061 the second time (it is not cleared by reading); recv on the failed socket and send: -1/WSAENOTCONN (10057); the failed socket can connect again (to a live listener: -1/WSAEWOULDBLOCK, non-blocking)"
+  after_shutdown: "after shutdown(SD_BOTH) of a connected socket a connect gives -1/WSAEISCONN"
+  bad_arguments: "namelen 15 for a sockaddr_in, namelen 0, a NULL name: -1/WSAEFAULT (10014); an AF_INET6 address (28 bytes) on an AF_INET socket, AF_UNSPEC, family 99: -1/WSAEAFNOSUPPORT (10047); 0.0.0.0 and port 0: -1/WSAEADDRNOTAVAIL (10049); a longer namelen than the structure (32) is accepted and connects; INVALID_SOCKET and a non-socket value: -1/WSAENOTSOCK (10038); after the listener closed: -1/WSAECONNREFUSED"
+  dual_stack: "IPV6_V6ONLY of a new AF_INET6 socket reads 1; set to 0 (as Chrome does) the socket connects to ::ffff:127.0.0.1 (v4-mapped, 28 bytes) to an IPv4 listener: the blocking call returns 0, getpeername and getsockname report AF_INET6 v4-mapped addresses of length 28, the listener accepts; with V6ONLY 1 the same connect fails with -1/WSAEADDRNOTAVAIL; a 16-byte AF_INET address on an AF_INET6 socket: -1/WSAEFAULT; an AF_INET client connects to a dual-stack listener bound to [::] and the accepted socket's peer and local addresses are v4-mapped AF_INET6 (length 28); a dual-stack client connects to ::1"
+  udp: "UDP connect returns 0 at once; getpeername then works (before: -1/WSAENOTCONN) and send works (before connect: -1/WSAENOTCONN); connecting again to another address is allowed (the peer changes); a datagram from a socket that is not the peer is dropped (never queued; a recv on the connected socket gives WSAEWOULDBLOCK); connect with an AF_UNSPEC address returns 0, afterwards getpeername gives -1/WSAENOTCONN and sendto with an address works; connect to port 0 returns 0; connect binds the socket (port non-zero) and a later bind fails with -1/WSAEINVAL; after sending to a closed UDP port the next recv returns -1/WSAECONNRESET once, then WSAEWOULDBLOCK"
+errors:
+  would_block: "WSAEWOULDBLOCK 10035"
+  refused: "WSAECONNREFUSED 10061"
+  already: "WSAEALREADY 10037"
+  isconn: "WSAEISCONN 10056"
+  inval: "WSAEINVAL 10022"
+  fault: "WSAEFAULT 10014"
+  af: "WSAEAFNOSUPPORT 10047"
+  addr: "WSAEADDRNOTAVAIL 10049"
+  notsock: "WSAENOTSOCK 10038"
+side_effects: "starts a connection; binds an unbound socket to a local port"
+threading: "any thread; blocking connect blocks the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 10
+  held_out: 5
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). IPv6 observations (dual-stack) are printed only when an AF_INET6 socket can be created; the lines of that file differ on a machine without IPv6.
+not_covered: >
+  Connects to non-loopback addresses (timeouts, WSAENETUNREACH 10051, WSAETIMEDOUT 10060), SO_CONDITIONAL_ACCEPT, WSAConnect with QoS, connect on SOCK_RAW, connect with a scope id.

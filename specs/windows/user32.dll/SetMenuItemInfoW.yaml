@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetMenuItemInfoW.yaml
+id: windows/api/user32.dll/SetMenuItemInfoW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Changes the fields of an item named in fMask; fields not in the mask stay.
+interface:
+  signature: "BOOL SetMenuItemInfoW(HMENU hMenu, UINT item, BOOL fByPosition, LPCMENUITEMINFOW lpmii)"
+rules:
+  text: "MIIM_STRING gives a new text (longer or shorter than before) and keeps id, state and type"
+  id: "MIIM_ID changes the id, found afterwards by the new id"
+  state: "MIIM_STATE replaces the whole state: MFS_CHECKED alone leaves a grayed item enabled (previous bits are not kept); MFS_DEFAULT | MFS_HILITE gives 0x1080"
+  data: "MIIM_DATA sets the item data"
+  type: "MIIM_FTYPE with MFT_RADIOCHECK gives type 0x200 and keeps text and id; MFT_SEPARATOR makes it a separator (state 3, text still readable); MFT_STRING with MIIM_STRING makes it a string item again"
+  submenu: "MIIM_SUBMENU attaches a popup to an item (the item becomes a popup item, GetSubMenu returns it) and replaces a previous one: the replaced popup is destroyed (IsMenu 0), unlike ModifyMenuW; MIIM_SUBMENU with NULL detaches it (the popup is destroyed)"
+  popup_item: "MIIM_STRING and MIIM_ID on a popup item are accepted; GetMenuItemID of a popup item stays -1"
+  old_style: "MIIM_TYPE with MFT_STRING and a text sets type and text together"
+  cbsize: "cbSize 72 and 80 are accepted; 0, 4 and 48 and 100 give FALSE with 87; a NULL structure: FALSE with 87"
+errors:
+  item_not_found: "FALSE with ERROR_MENU_ITEM_NOT_FOUND (1456)"
+  invalid_menu: "NULL or made-up menu: FALSE with ERROR_INVALID_MENU_HANDLE (1401)"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  MIIM_BITMAP.

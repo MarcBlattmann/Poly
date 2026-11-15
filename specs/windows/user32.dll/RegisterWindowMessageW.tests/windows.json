@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "rwm_basic",
+      "exe_sha256": "9029afd8c5561cfb29f10d984a9a598c418f1b5459c8561d12beb76b672da6cc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAphIG5ldyBuYW1lOiBpbiB0aGUgcmFuZ2UgMHhDMDAwLi4weEZGRkY6IDEgKGxhc3QgZXJyb3IgMCkKdGhlIHNhbWUgbmFtZSBhZ2Fpbjogc2FtZSBpZCAxCnVwcGVyIGNhc2U6IHNhbWUgaWQgMQphbm90aGVyIG5hbWU6IGRpZmZlcmVudCBpZCAxIGluIHJhbmdlIDEKZnJvbSBhbm90aGVyIHRocmVhZDogc2FtZSBpZCAxClRhc2tiYXJDcmVhdGVkOiBpbiByYW5nZSAxIHR3aWNlIHRoZSBzYW1lIDEKMjU1IGNoYXJhY3RlcnM6IGlkIGluIHJhbmdlIDEgKGxhc3QgZXJyb3IgMCkKMjU2IGNoYXJhY3RlcnM6IGlkIGluIHJhbmdlIDAgKGxhc3QgZXJyb3IgMjM0KQozMDAgY2hhcmFjdGVyczogaWQgaW4gcmFuZ2UgMCAobGFzdCBlcnJvciAyMzQpCnRoZSBlbXB0eSBzdHJpbmc6IDAgKGxhc3QgZXJyb3IgMCkKTlVMTDogMCAobGFzdCBlcnJvciA4NykKIiMxMjM0IjogaW4gcmFuZ2UgMCAobGFzdCBlcnJvciAwKQpTZW5kTWVzc2FnZVcgd2l0aCB0aGUgaWQ6IHJlc3VsdCA3NywgdGhlIHdpbmRvdyBzYXcgdGhlIGlkIDEKUG9zdE1lc3NhZ2VXIHdpdGggYW5vdGhlciBpZDogMSwgdGhlIHdpbmRvdyBzYXcgaXQ6IDEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\na new name: in the range 0xC000..0xFFFF: 1 (last error 0)\nthe same name again: same id 1\nupper case: same id 1\nanother name: different id 1 in range 1\nfrom another thread: same id 1\nTaskbarCreated: in range 1 twice the same 1\n255 characters: id in range 1 (last error 0)\n256 characters: id in range 0 (last error 234)\n300 characters: id in range 0 (last error 234)\nthe empty string: 0 (last error 0)\nNULL: 0 (last error 87)\n\"#1234\": in range 0 (last error 0)\nSendMessageW with the id: result 77, the window saw the id 1\nPostMessageW with another id: 1, the window saw it: 1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 208
+    }
+  ]
+}

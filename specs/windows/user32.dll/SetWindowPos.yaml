@@ -2,10 +2,10 @@
 # Path: specs/<os>/<component>/<symbol>.yaml
 id: windows/api/user32.dll/SetWindowPos
 oracle:
-  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the tests added by spec-chrome-win-s3 were run on build 26200.9974 (the same machine after a Windows update; its taskbar is then 48 pixels high at the bottom)"
   machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
-  observed_by: spec-win-gui-a
-  date: 2026-11-02
+  observed_by: spec-win-gui-a, spec-chrome-win-s3
+  date: 2026-11-02, 2026-11-14
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -35,6 +35,7 @@ rules:
   minmax: "WS_OVERLAPPEDWINDOW: WM_GETMINMAXINFO after WM_WINDOWPOSCHANGING; the size is clamped to the min/max track size the procedure returns (150x120..250x220 asked: 50x50 -> 150x120, 400x400 -> 250x220); a frameless popup gets no WM_GETMINMAXINFO"
   zorder: "new children go below their siblings (GW_CHILD = the first created); HWND_BOTTOM / HWND_TOP of a window already there sends only CHANGING(0x13); moving C after A in A B C gives A C B with CHANGING(0x13) and CHANGED(0x181b), no WM_MOVE/WM_SIZE"
   return: "1"
+  chrome_resize: "Moving and resizing Chrome's top-level window (test swp_chrome_resize; its procedure moves the child with the client area and puts the child under the holder while minimized): SetWindowPos(60,60, 500x360, SWP_NOZORDER | SWP_SHOWWINDOW) on the shown window sends WM_WINDOWPOSCHANGING (flags 0x44), WM_GETMINMAXINFO, WM_NCCALCSIZE(TRUE, new 60,60,560,420, old 40,40,680,440), WM_NCPAINT, WM_ERASEBKGND, WM_WINDOWPOSCHANGED (0x4), WM_MOVE, WM_SIZE (the client area follows: Chrome's window procedure keeps the top edge), then the child gets WM_WINDOWPOSCHANGING (0x14), WM_NCCALCSIZE(TRUE), WM_WINDOWPOSCHANGED (0x1016) and WM_SIZE; a size-only call (SWP_NOMOVE) sends the same without WM_MOVE (flags 0x16, WM_WINDOWPOSCHANGED 0x1016); a move-only call (SWP_NOSIZE) sends WM_WINDOWPOSCHANGING (0x15), WM_WINDOWPOSCHANGED (0x815) and WM_MOVE only, no WM_NCCALCSIZE and no WM_SIZE, and the child moves with the parent without messages of its own; ShowWindow(SW_MINIMIZE) returns a nonzero value (24 on the oracle: the previous state is not normalised) and sends WM_KILLFOCUS, WM_WINDOWPOSCHANGING (pos -32000,-32000 size 160x28 flags 0x8170), WM_GETMINMAXINFO, WM_NCCALCSIZE, WM_WINDOWPOSCHANGED (0x8130), WM_MOVE, WM_SIZE(SIZE_MINIMIZED), then (from Chrome's handler) the child's WM_SHOWWINDOW(0), WM_WINDOWPOSCHANGING, WM_WINDOWPOSCHANGED, WM_CHILDACTIVATE, WM_MOVE, WM_SHOWWINDOW(1) for its move under the holder, then WM_NCACTIVATE(0), WM_ACTIVATE(WA_INACTIVE, minimized bit), WM_ACTIVATEAPP(0); the window ends up iconic (style 0x36cf0000) with placement show 2 and ptMinPosition -32000,-32000, the thread has no foreground, active or focus window; SW_RESTORE sends the matching messages the other way (WM_ACTIVATEAPP(1), WM_NCACTIVATE(1), WM_ACTIVATE, WM_SETFOCUS, WM_NCPAINT, WM_ERASEBKGND, WM_WINDOWPOSCHANGED 0x8120, WM_MOVE, WM_SIZE(SIZE_RESTORED), then the child moves back with WM_SHOWWINDOW(0)/(1) around it)"
 errors:
   bad_handle: "0, ERROR_INVALID_WINDOW_HANDLE (1400)"
 side_effects: "none beyond the rules above"
@@ -44,7 +45,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
