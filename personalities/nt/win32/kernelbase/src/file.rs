@@ -49,10 +49,8 @@ pub unsafe extern "system" fn CreateFileW(
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
     let mut oa = nt_name.attributes();
-    // SECURITY_ATTRIBUTES.bInheritHandle (minwinbase.h: nLength, then the
-    // descriptor pointer at 8, the BOOL at 16).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() && unsafe { (security.add(16) as *const i32).read() } != 0 {
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;
     }
     let mut h: Handle = 0;
@@ -508,7 +506,8 @@ pub unsafe extern "system" fn MoveFileExW(from: *const u16, to: *const u16, flag
         Ok(h) => h,
         Err(e) => return fail(e, FALSE),
     };
-    let info = file::rename_information(flags & MOVEFILE_REPLACE_EXISTING != 0, &target);
+    let info =
+        file::rename_information_in(core::mem::size_of::<usize>(), flags & MOVEFILE_REPLACE_EXISTING != 0, &target);
     let r = set_info(h, FILE_RENAME_INFORMATION, &info);
     close(h);
     match r {

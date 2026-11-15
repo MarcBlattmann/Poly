@@ -122,9 +122,8 @@ pub unsafe extern "system" fn CreateNamedPipeW(
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
     let mut oa = nt_name.attributes();
-    // SECURITY_ATTRIBUTES.bInheritHandle (minwinbase.h: at 16 on x64).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() && unsafe { (security.add(16) as *const i32).read_unaligned() } != 0 {
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;
     }
     let mut h: Handle = 0;

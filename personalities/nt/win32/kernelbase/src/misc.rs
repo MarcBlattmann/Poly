@@ -212,17 +212,19 @@ fn manifest_of(base: u64) -> Option<Vec<u8>> {
     unsafe {
         let nt_off = ((base + 0x3C) as *const u32).read() as u64;
         let opt = base + nt_off + 24;
-        if (opt as *const u16).read() != 0x20B {
-            return None;
-        }
-        // PE32+: the data directories start at optional header + 112; the
-        // resource table is entry 2.
-        let count = ((opt + 108) as *const u32).read();
+        // PE32+ (0x20B): the data directories start at optional header + 112, their count at 108;
+        // PE32 (0x10B, a 32-bit image): at 96 and 92. The resource table is entry 2.
+        let dirs: u64 = match (opt as *const u16).read() {
+            0x20B => 112,
+            0x10B => 96,
+            _ => return None,
+        };
+        let count = ((opt + dirs - 4) as *const u32).read();
         if count < 3 {
             return None;
         }
-        let rva = ((opt + 112 + 16) as *const u32).read() as u64;
-        let size = ((opt + 112 + 20) as *const u32).read() as usize;
+        let rva = ((opt + dirs + 16) as *const u32).read() as u64;
+        let size = ((opt + dirs + 20) as *const u32).read() as usize;
         let image_size = ((opt + 56) as *const u32).read() as u64;
         if rva == 0 || rva + size as u64 > image_size {
             return None;
@@ -313,10 +315,10 @@ unsafe fn system_info(out: *mut u8, native: bool) {
 
 // ----- FormatMessageW / FormatMessageA -------------------------------------------------------
 
-/// The insert arguments: a `va_list` (on x64 a pointer to 8-byte slots) or,
-/// with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of `DWORD_PTR` — the same
-/// layout here.
-struct Slots(*const u64);
+/// The insert arguments: a `va_list` (a pointer to pointer-sized slots: 8 bytes in a 64-bit
+/// process, 4 in a 32-bit one) or, with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of
+/// `DWORD_PTR` — the same layout here.
+struct Slots(*const usize);
 
 impl message::Args for Slots {
     fn slot(&self, index: usize) -> Option<u64> {
@@ -324,7 +326,7 @@ impl message::Args for Slots {
             return None;
         }
         // SAFETY: the caller promised an argument for every insert.
-        Some(unsafe { self.0.add(index - 1).read_unaligned() })
+        Some(unsafe { self.0.add(index - 1).read_unaligned() } as u64)
     }
     fn wide(&self, address: u64) -> Vec<u16> {
         // SAFETY: a wide string insert is a NUL-terminated string.
@@ -382,7 +384,7 @@ unsafe fn format_message(
     string: Option<&[u16]>,
     id: u32,
     lang: u32,
-    args: *const u64,
+    args: *const usize,
     ansi: bool,
 ) -> Result<Vec<u16>, u32> {
     let ignore = flags & FORMAT_MESSAGE_IGNORE_INSERTS != 0;
@@ -395,7 +397,7 @@ unsafe fn format_message(
         Some(Slots(args))
     } else {
         // SAFETY: a `va_list*`: the address of the slot pointer.
-        Some(Slots(unsafe { (args as *const *const u64).read() }))
+        Some(Slots(unsafe { (args as *const *const usize).read_unaligned() }))
     };
     let a = slots.as_ref().map(|s| s as &dyn message::Args);
     if flags & FORMAT_MESSAGE_FROM_STRING != 0 {
@@ -481,7 +483,7 @@ pub unsafe extern "system" fn FormatMessageW(
     lang: u32,
     buffer: *mut u16,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { wide_arg(source as *const u16) } } else { None };
@@ -504,7 +506,7 @@ pub unsafe extern "system" fn FormatMessageA(
     lang: u32,
     buffer: *mut u8,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's ANSI string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { ansi_arg(source) } } else { None };

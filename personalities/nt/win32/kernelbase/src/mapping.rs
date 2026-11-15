@@ -40,13 +40,8 @@ pub unsafe extern "system" fn CreateFileMappingW(
     let nt_name = unsafe { wide_arg(name) }.and_then(object_name);
     let us = nt_name.as_deref().map(UnicodeString::new);
     let mut attrs = if us.is_some() { nt::OBJ_OPENIF } else { 0 };
-    // SECURITY_ATTRIBUTES (minwinbase.h): lpSecurityDescriptor at 8, bInheritHandle at 16.
-    // SAFETY: the caller's structure when non-null.
-    let (descriptor, inherit) = if security.is_null() {
-        (core::ptr::null(), false)
-    } else {
-        unsafe { ((security.add(8) as *const *const u8).read(), (security.add(16) as *const i32).read() != 0) }
-    };
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    let (descriptor, inherit) = unsafe { (crate::base::sa_descriptor(security), crate::base::sa_inherits(security)) };
     if inherit {
         attrs |= nt::OBJ_INHERIT;
     }

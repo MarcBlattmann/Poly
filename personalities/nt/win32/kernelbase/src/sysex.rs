@@ -171,8 +171,11 @@ fn read_requirements(ptr: u64) -> Option<[u8; sysex::MEM_ADDRESS_REQUIREMENTS_SI
     if ptr == 0 {
         return None;
     }
+    // MEM_ADDRESS_REQUIREMENTS: three pointer-sized fields (24 bytes, 12 in a 32-bit process).
+    let mut out = [0u8; sysex::MEM_ADDRESS_REQUIREMENTS_SIZE];
     // SAFETY: the caller promised a MEM_ADDRESS_REQUIREMENTS here.
-    Some(unsafe { (ptr as *const [u8; sysex::MEM_ADDRESS_REQUIREMENTS_SIZE]).read_unaligned() })
+    unsafe { core::ptr::copy_nonoverlapping(ptr as *const u8, out.as_mut_ptr(), 3 * core::mem::size_of::<usize>()) };
+    Some(out)
 }
 
 /// The request of the `count` extended parameters at `params`.
@@ -189,7 +192,7 @@ unsafe fn request_of(params: *const u8, count: u32) -> Result<AllocRequest, u32>
         // SAFETY: the caller's array.
         unsafe { core::slice::from_raw_parts(params, count as usize * sysex::MEM_EXTENDED_PARAMETER_SIZE) }
     };
-    sysex::alloc_request(raw, count as usize, &read_requirements)
+    sysex::alloc_request_in(core::mem::size_of::<usize>(), raw, count as usize, &read_requirements)
 }
 
 /// Find where `size` bytes obeying `req` fit and `take` them: `take(at)`
