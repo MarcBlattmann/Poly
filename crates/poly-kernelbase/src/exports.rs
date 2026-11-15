@@ -327,6 +327,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProductInfo", "api-ms-win-core-sysinfo-l1-2-0"),
     ("AddVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("RemoveVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("AddVectoredContinueHandler", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("RemoveVectoredContinueHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("GetStringTypeW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringEx", "api-ms-win-core-string-l1-1-0"),

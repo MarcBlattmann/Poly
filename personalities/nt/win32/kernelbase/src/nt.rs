@@ -333,6 +333,8 @@ unsafe extern "system" {
     pub fn NtQueryPerformanceCounter(counter: *mut i64, frequency: *mut i64) -> NtStatus;
     pub fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8;
     pub fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32;
+    pub fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8;
+    pub fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32;
     pub fn NtQuerySystemInformation(class: u32, info: *mut u8, length: u32, returned: *mut u32) -> NtStatus;
 
     pub fn RtlNtStatusToDosError(status: NtStatus) -> u32;
