@@ -85,7 +85,7 @@
 {"symbol":"UiaRaiseAutomationEvent","status":"stub","src":["wine-spec"],"seeds":["wine:uiautomationcore/tests/uiautomation.c:test_UiaRaiseAutomationEvent_args","wine:uiautomationcore/tests/uiautomation.c:test_IUIAutomationFocusChangedEventHandler","wine:uiautomationcore/tests/uiautomation.c:test_IUIAutomationEventHandler","wine:uiautomationcore/tests/uiautomation.c:test_UiaAddEvent","wine:uiautomationcore/tests/uiautomation.c:uia_com_event_handler_test_thread"]},
 {"symbol":"UiaRaiseAutomationPropertyChangedEvent","status":"stub","src":["wine-spec"]},
 {"symbol":"UiaRaiseChangesEvent","src":["wine-spec"]},
-{"symbol":"UiaRaiseNotificationEvent","src":["wine-spec"]},
+{"symbol":"UiaRaiseNotificationEvent","status":"stub","src":["wine-spec"]},
 {"symbol":"UiaRaiseStructureChangedEvent","status":"stub","src":["wine-spec"]},
 {"symbol":"UiaRaiseTextEditTextChangedEvent","src":["wine-spec"]},
 {"symbol":"UiaRegisterProviderCallback","src":["wine-spec"],"seeds":["wine:uiautomationcore/tests/uiautomation.c:test_UiaRegisterProviderCallback","wine:uiautomationcore/tests/uiautomation.c:test_GetFocusedElement","wine:uiautomationcore/tests/uiautomation.c:test_GetRootElement","wine:uiautomationcore/tests/uiautomation.c:test_UiaHasServerSideProvider","wine:uiautomationcore/tests/uiautomation.c:test_CUIAutomation_event_handlers","wine:uiautomationcore/tests/uiautomation.c:test_UiaGetRootNode","wine:uiautomationcore/tests/uiautomation.c:test_UiaNavigate","wine:uiautomationcore/tests/uiautomation.c:test_UiaAddEvent_client_proc"]},

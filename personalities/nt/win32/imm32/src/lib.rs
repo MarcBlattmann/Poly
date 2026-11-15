@@ -438,3 +438,6 @@ pub extern "system" fn ImmGetDefaultIMEWnd(hwnd: usize) -> usize {
 pub extern "system" fn imm32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
