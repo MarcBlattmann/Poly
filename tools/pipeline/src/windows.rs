@@ -1355,8 +1355,11 @@ mod tests {
         // Chrome's first-stage DLLs (spec-chrome-win-5).
         let shell = image(&[("SHELL32.dll", &["SHGetKnownFolderPath"]), ("SHLWAPI.dll", &["PathMatchSpecW"])], 3);
         assert_eq!(check_image(&shell).unwrap()["shell32.dll"], ["SHGetKnownFolderPath"]);
-        let other = image(&[("winhttp.dll", &["WinHttpOpen"])], 3);
-        assert!(check_image(&other).unwrap_err().contains("winhttp.dll"));
+        // Chrome's network stage (spec-chrome-win-s4).
+        let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
+        assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
+        assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());
