@@ -6,10 +6,11 @@ oracle:
   machine: "homeserver2 (real hardware), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station), two runs each with identical output, each run in a fresh scratch directory; tests that need a second process start their own image again with CreateProcessW and a --child argument"
   observed_by: spec-win-ipc
   date: 2026-11-09
+  images: "the image_* rules and test image_views were observed by spec-chrome-win-s2c on 2026-11-15 on the same machine at build 26200.9974 (SSH logon session as the local administrator \"server\" with its elevated token, two runs each with identical output)"
 sources: >
-  Observations of our own test programs on the machine above. Microsoft Learn: ZwMapViewOfSection, MapViewOfFile function, VirtualQuery function, Memory Protection Constants. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
+  Observations of our own test programs on the machine above (image sections: copies of the test's own executable, some with edited PE headers; no Microsoft image was mapped by the tests). Chrome's sandboxed processes on Windows, read from outside as data (module bases and sizes, specs/windows/apps/chrome/s2-interception.md). Microsoft Learn: the PE format (ImageBase, SizeOfImage, DllCharacteristics, IMAGE_FILE_RELOCS_STRIPPED), ZwMapViewOfSection, MapViewOfFile function, VirtualQuery function, Memory Protection Constants. Constants and layouts from winbase.h, winerror.h, fileapi.h, ioapiset.h, namedpipeapi.h, minwinbase.h and winnt.h. Wine's tests were not read for the values here.
 summary: >
-  Maps a section (or part of it) into a process. The view is committed, aligned to 64 KiB, sized in pages, shared with every other view of the section, and described by VirtualQuery as MEM_MAPPED. Protection cannot exceed what the section and the handle's rights allow; copy-on-write views keep their writes private. Another process can be the target if the caller has PROCESS_VM_OPERATION.
+  Maps a section (or part of it) into a process. The view is committed, aligned to 64 KiB, sized in pages, shared with every other view of the section, and described by VirtualQuery as MEM_MAPPED. Protection cannot exceed what the section and the handle's rights allow; copy-on-write views keep their writes private. Another process can be the target if the caller has PROCESS_VM_OPERATION. An image section (SEC_IMAGE) is mapped whole at the base the section chose (the same base in every process where it is free): STATUS_SUCCESS, already relocated there; a second view where that base is taken gets STATUS_IMAGE_NOT_AT_BASE (0x40000003) and is not relocated.
 interface:
   signature: "NTSTATUS NtMapViewOfSection(HANDLE section, HANDLE process, PVOID *baseAddress, ULONG_PTR zeroBits, SIZE_T commitSize, PLARGE_INTEGER sectionOffset, PSIZE_T viewSize, SECTION_INHERIT inherit, ULONG allocationType, ULONG win32Protect)"
 rules:
@@ -21,6 +22,13 @@ rules:
   copy_on_write: "a PAGE_WRITECOPY view reads the shared bytes until it writes; its writes stay private (the shared view does not see them) and the page no longer follows later shared writes; VirtualQuery then reports PAGE_READWRITE for the copied page."
   handle_rights: "a section handle with SECTION_MAP_READ only: PAGE_READWRITE views fail with STATUS_ACCESS_DENIED, PAGE_READONLY views work; with only SYNCHRONIZE even a read-only view fails with STATUS_ACCESS_DENIED."
   other_process: "mapping into a child needs PROCESS_VM_OPERATION on the process handle (without: STATUS_ACCESS_DENIED, base NULL); the view appears in the child at a 64 KiB aligned base with the size asked, MEM_COMMIT, MEM_MAPPED, PAGE_READWRITE and the section's current bytes; the child's writes into it are visible to the parent's views."
+  image_first_view: "an image section (NtCreateSection with SEC_IMAGE, PAGE_READONLY, on a file opened for read and execute; status STATUS_SUCCESS) mapped with base NULL, view size 0, no offset, ViewShare, PAGE_READWRITE into the caller: STATUS_SUCCESS, a 64 KiB aligned base, view size = SizeOfImage rounded up to whole pages, and the ImageBase field of the view's PE header equals the view's base. True for an executable built with DYNAMIC_BASE (the base is chosen by the system, not the file's ImageBase), for a copy with DYNAMIC_BASE cleared and ImageBase 0x654300000 (mapped exactly there) and for that copy with IMAGE_FILE_RELOCS_STRIPPED also set (mapped there)"
+  image_pages: "VirtualQuery of an image view: the header page MEM_IMAGE, MEM_COMMIT, PAGE_READONLY, allocation protection PAGE_EXECUTE_WRITECOPY (0x80), region size 0x1000, allocation base = the view's base; the first page of each section: .text (code, execute+read) PAGE_EXECUTE_READ 0x20, .rdata 0x02, .data (read+write) PAGE_WRITECOPY 0x08, .pdata 0x02, .reloc 0x02, all MEM_IMAGE, MEM_COMMIT"
+  image_second_view: "a second view of the same image section in the same process: STATUS_IMAGE_NOT_AT_BASE (0x40000003), a different base, the same view size; its PE header's ImageBase is NOT its base (the view is not relocated: the caller has to apply the relocations). The same for the fixed-base copy and for the copy whose relocations are marked stripped (no STATUS_CONFLICTING_ADDRESSES: the view is made anyway)"
+  image_other_process: "a view of the same image section in a suspended child (another process, the handle CreateProcessW returned): STATUS_SUCCESS at the same base as the caller's first view, the same size, MEM_IMAGE, PAGE_READONLY header page with allocation protection 0x80. This is why an image is at the same address in every process of a boot (Chrome's broker relies on it: chrome.exe, chrome_elf.dll and chrome.dll were at the same addresses in the browser and all its children)"
+  image_offset: "an image view with a section offset of 0x10000: STATUS_INVALID_VIEW_SIZE (0xC000001F)"
+  image_unmap: "NtUnmapViewOfSection of each view (in the caller and in the child): STATUS_SUCCESS; the range is then MEM_FREE (0x10000); unmapping the same base again: STATUS_NOT_MAPPED_VIEW (0xC0000019)"
+  chrome_elf: "in Chrome's sandboxed children on Windows chrome_elf.dll is mapped at the same base as in the browser with size 0x2f0000 (= its SizeOfImage): the first view of its section in that process, which the image_first_view rule gives STATUS_SUCCESS (Poly's patched NtMapViewOfSection returned 0 for it, which matches)"
   kernel32: "MapViewOfFile on an event handle fails with ERROR_INVALID_HANDLE, NtMapViewOfSection with STATUS_OBJECT_TYPE_MISMATCH (0xC0000024)."
 errors:
   alignment: "STATUS_MAPPED_ALIGNMENT (0xC0000220)"
@@ -29,6 +37,8 @@ errors:
   bad_protection: "STATUS_INVALID_PAGE_PROTECTION (0xC0000045)"
   no_right: "STATUS_ACCESS_DENIED (0xC0000022)"
   not_a_section: "STATUS_OBJECT_TYPE_MISMATCH (0xC0000024)"
+  image_not_at_base: "STATUS_IMAGE_NOT_AT_BASE (0x40000003, a success status: NT_SUCCESS is true)"
+  not_mapped: "STATUS_NOT_MAPPED_VIEW (0xC0000019)"
 side_effects: "reserves and commits address space in the target process"
 threading: "handles and objects may be used from any thread; see the rules for per-thread behaviour"
 ordering: []
@@ -36,9 +46,9 @@ timing:
   typical: "well under a millisecond per call on the oracle, except where the call waits"
   guarantees: none
 tests:
-  visible: 1
-  held_out: 1
+  visible: 3
+  held_out: 2
 building_tests: >
-  Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
+  The image tests copy the test's own executable into the scratch directory (CopyFileW) and edit the copies' PE headers (ImageBase, DllCharacteristics, Characteristics) before making sections of them; observations are statuses and booleans (aligned, same base, same size, header ImageBase equals the base), never addresses. Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
 not_covered: >
-  Image sections (SEC_IMAGE), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.
+  Image sections beyond the image_* rules (images that cannot be mapped, 32-bit images, views with a commit size or a requested base, an image whose chosen base is taken in the target process), large pages, section offsets in the megabytes, physical memory, sections of other users' processes, security descriptors.

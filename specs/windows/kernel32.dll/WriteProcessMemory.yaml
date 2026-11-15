@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/WriteProcessMemory.yaml
+id: windows/api/kernel32.dll/WriteProcessMemory
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2c
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: WriteProcessMemory, ReadProcessMemory, VirtualAllocEx, VirtualQueryEx, Memory Protection Constants; NtWriteVirtualMemory's statuses are compared beside it (ntstatus.h). Constants from winnt.h, winerror.h and ntstatus.h. The code the tests rewrite is the test's own; no Microsoft code was read, copied or changed. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Copies bytes into another process (PROCESS_VM_WRITE and PROCESS_VM_OPERATION). Unlike NtWriteVirtualMemory, which writes only into writable pages, WriteProcessMemory also writes into an image's code page (PAGE_EXECUTE_READ) and into a private PAGE_EXECUTE_READ page without the caller changing the protection, and leaves the page reporting its old protection afterwards; it refuses PAGE_READONLY and PAGE_NOACCESS pages (ERROR_NOACCESS). A copy that runs into memory that is not committed stops there: FALSE, ERROR_PARTIAL_COPY (299), with the bytes done reported.
+interface:
+  signature: "BOOL WriteProcessMemory(HANDLE process, LPVOID address, LPCVOID buffer, SIZE_T size, SIZE_T *written)"
+  result: "TRUE and *written = size"
+chrome:
+  calls: "the broker writes into each target before it runs: a 96..104-byte block into a page it committed, 8 bytes at PEB + 0x2d8, 32-byte copies of ntdll functions into its thunk page and 16 bytes over each of 7 ntdll functions (after VirtualProtectEx PAGE_WRITECOPY); see the VirtualProtectEx sheet and specs/windows/apps/chrome/s2-interception.md"
+rules:
+  image_code_page: "a suspended child's image code page (MEM_IMAGE, PAGE_EXECUTE_READ, allocation protection 0x80): WriteProcessMemory of 16 bytes without VirtualProtectEx first: TRUE, 16; the page then reports MEM_IMAGE, PAGE_EXECUTE_READ, allocation protection 0x80 (as before); the child's bytes are the new ones and the resumed child runs them"
+  nt_write_image_code: "NtWriteVirtualMemory of 16 bytes into another image code page of the same child: STATUS_PARTIAL_COPY (0x8000000D), 0 bytes written, the page unchanged (PAGE_EXECUTE_READ, the old bytes run)"
+  private_pages: "private pages committed with each protection, 4 bytes written: PAGE_READONLY: NtWriteVirtualMemory 0x8000000D, 0 bytes; WriteProcessMemory FALSE, ERROR_NOACCESS (998), 0 bytes, protection unchanged, the bytes stay 0. PAGE_NOACCESS: the same (998; reading it back fails too). PAGE_EXECUTE_READ: NtWriteVirtualMemory 0x8000000D, 0 bytes; WriteProcessMemory TRUE, 4, the page still reports PAGE_EXECUTE_READ, the bytes are written. PAGE_READWRITE: both write (STATUS_SUCCESS, 4; TRUE, 4)"
+  partial: "16 bytes starting 8 bytes before the end of a committed read-write page whose next page is reserved only: FALSE, ERROR_PARTIAL_COPY (299), *written = 8; NtWriteVirtualMemory: STATUS_PARTIAL_COPY, 8"
+  edge_cases: "0 bytes: TRUE, *written 0; address 0x10: FALSE, ERROR_NOACCESS (998), 0; a handle with PROCESS_VM_OPERATION | PROCESS_VM_READ but not PROCESS_VM_WRITE: FALSE, ERROR_ACCESS_DENIED (5), 0"
+errors:
+  no_access: "ERROR_NOACCESS (998)"
+  partial_copy: "ERROR_PARTIAL_COPY (299) / STATUS_PARTIAL_COPY (0x8000000D)"
+  access_denied: "ERROR_ACCESS_DENIED (5)"
+side_effects: "writes the target's memory; a write to an image page gives the target a private copy of that page"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations. A test starts its own image again with CreateProcessW(CREATE_SUSPENDED) and --child run, writes into it and resumes it; the child's exit code tells which of the test's own stubs were rewritten (see the VirtualProtectEx sheet). Each test exists in three files that make the same calls; each file writes every third observation line. Observations are booleans, counts, statuses, protections and error codes, never addresses.
+not_covered: >
+  Writes into DLL code pages of other modules, guard pages, writes larger than a page, a running target, WOW64 targets, protected processes.

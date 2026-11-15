@@ -7,7 +7,8 @@ use poly_winsock::afd;
 use poly_winsock::error::{STATUS_PENDING, STATUS_SUCCESS};
 use poly_winsock::known::Known;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtCreateFile(
         handle: *mut Handle,

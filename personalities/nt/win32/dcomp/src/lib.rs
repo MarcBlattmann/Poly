@@ -55,12 +55,14 @@ const IID_TARGET: Guid = guid(0xeacdd04c, 0x117e, 0x4e17, 0x88f4, 0xd1b12b0e3d89
 const IID_VISUAL: Guid = guid(0x4d93059d, 0x097b, 0x4651, 0x9a60, 0xf0f25116e2f3);
 const IID_VISUAL2: Guid = guid(0xE8DE1639, 0x4331, 0x4B26, 0xBC5F, 0x6A321D347A85);
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LoadLibraryW(name: *const u16) -> usize;
     fn GetProcAddress(module: usize, name: *const u8) -> usize;
