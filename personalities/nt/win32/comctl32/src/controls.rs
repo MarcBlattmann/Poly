@@ -10,7 +10,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use poly_comctl::{Column, ListView, Progress, StatusBar, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
 use poly_win32_gui::SpinLock;
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RegisterClassExW(wc: *const u8) -> u16;
     fn DefWindowProcW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
@@ -40,7 +41,8 @@ unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> usize;
     fn GetLocalTime(st: *mut u16);
