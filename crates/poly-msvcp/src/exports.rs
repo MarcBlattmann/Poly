@@ -45,7 +45,7 @@ pub fn is_plain(name: &str) -> bool {
 
 /// The Rust source of the fail-only exports of `names` for the DLL `dll`: one
 /// `#[unsafe(export_name = ...)]` function or static each. The statics are of the type
-/// `crate::Zeroed<N>` the DLL defines (an interior-mutable zeroed block, so it is writable; `Zeroed::ZERO`).
+/// `crate::Zeroed<N>` the DLL defines (an interior-mutable zeroed block, so it is writable; `Zeroed::new()`).
 /// Panics on a name that [`is_plain`] refuses.
 pub fn stubs_rust(dll: &str, names: &[&str]) -> String {
     let mut s = String::new();
@@ -54,7 +54,7 @@ pub fn stubs_rust(dll: &str, names: &[&str]) -> String {
         if is_data(name) {
             let _ = writeln!(
                 s,
-                "#[unsafe(export_name = \"{name}\")]\npub static POLY_DATA_{i}: crate::Zeroed<{}> = crate::Zeroed::ZERO;",
+                "#[unsafe(export_name = \"{name}\")]\npub static POLY_DATA_{i}: crate::Zeroed<{}> = crate::Zeroed::new();",
                 data_size(name)
             );
         } else {
@@ -101,7 +101,7 @@ mod tests {
             src.contains("#[unsafe(export_name = \"_Mtx_timedlock\")]\npub extern \"system\" fn poly_stub_0() -> u64")
         );
         assert!(src.contains("\"stub: msvcp140!_Mtx_timedlock\""));
-        assert!(src.contains("pub static POLY_DATA_1: crate::Zeroed<64> = crate::Zeroed::ZERO;"));
+        assert!(src.contains("pub static POLY_DATA_1: crate::Zeroed<64> = crate::Zeroed::new();"));
         assert!(!is_plain("a\"b") && !is_plain("") && !is_plain("a b"));
     }
 }

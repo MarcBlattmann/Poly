@@ -96,7 +96,7 @@ pub unsafe extern "C" fn poly_msvcp_exception_dtor(this: *mut u8, flags: u32) ->
 pub unsafe extern "C" fn poly_msvcp_exception_what(this: *const u8) -> *const u8 {
     // SAFETY: an exception object of this DLL's classes.
     let what = unsafe { (*this.cast::<Exception>()).data.what };
-    if what.is_null() { b"Unknown exception\0".as_ptr() } else { what }
+    if what.is_null() { c"Unknown exception".as_ptr().cast() } else { what }
 }
 
 /// The ThrowInfo's destructor: give back the text the object owns.
