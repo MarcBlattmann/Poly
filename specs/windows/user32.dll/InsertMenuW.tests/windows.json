@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "ipm_positions",
+      "exe_sha256": "9dfcc838a785c36731c3e1db9c30c172171456e941d099793009f9b3a4601fd3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5zZXJ0IGF0IDA6IDEKaW5zZXJ0IGF0IDI6IDEKaW5zZXJ0IGF0IC0xOiAxCmluc2VydCBhdCA5OSAocGFzdCB0aGUgZW5kKTogMQppbnNlcnQgYmVmb3JlIGlkIDI6IDEKaW5zZXJ0IGJlZm9yZSBpZCA3NzcgKGFic2VudCk6IDEKaW5zZXJ0IHdpdGggZmxhZ3MgMCAoYnkgY29tbWFuZCwgc3RyaW5nKTogMQppbnNlcnQgc2VwYXJhdG9yIGJ5IHBvc2l0aW9uOiAxCmFmdGVyIGluc2VydHM6IGNvdW50IDEwCiAgWzBdIG9rPTEgaWQ9MHhhIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdmaXJzdCcgY2NoPTUKICBbMV0gb2s9MSBpZD0weDAgc3ViPTAgc3RhdGU9MHgzIHR5cGU9MHg4MDAgZGF0YT0weDAgdGV4dD0nJyBjY2g9MAogIFsyXSBvaz0xIGlkPTB4MTAgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J3plcm9mbGFncycgY2NoPTkKICBbM10gb2s9MSBpZD0weDEgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J29uZScgY2NoPTMKICBbNF0gb2s9MSBpZD0weGIgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J21pZCcgY2NoPTMKICBbNV0gb2s9MSBpZD0weGUgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J2JlZm9yZTInIGNjaD03CiAgWzZdIG9rPTEgaWQ9MHgyIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSd0d28nIGNjaD0zCiAgWzddIG9rPTEgaWQ9MHhjIHN1Yj0wIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdsYXN0JyBjY2g9NAogIFs4XSBvaz0xIGlkPTB4ZCBzdWI9MCBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0ncGFzdCcgY2NoPTQKICBbOV0gb2s9MSBpZD0weGYgc3ViPTAgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J2Fic2VudCcgY2NoPTYKaW5zZXJ0IGJlZm9yZSBpZCA1MCAoaW4gdGhlIHN1YiBtZW51KSwgYXNrZWQgb2YgcDogMQpwIGNvdW50IDExIHMgY291bnQgMgpiYWQgbWVudTogMCBlcnI9MTQwMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "insert at 0: 1\ninsert at 2: 1\ninsert at -1: 1\ninsert at 99 (past the end): 1\ninsert before id 2: 1\ninsert before id 777 (absent): 1\ninsert with flags 0 (by command, string): 1\ninsert separator by position: 1\nafter inserts: count 10\n  [0] ok=1 id=0xa sub=0 state=0x0 type=0x0 data=0x0 text='first' cch=5\n  [1] ok=1 id=0x0 sub=0 state=0x3 type=0x800 data=0x0 text='' cch=0\n  [2] ok=1 id=0x10 sub=0 state=0x0 type=0x0 data=0x0 text='zeroflags' cch=9\n  [3] ok=1 id=0x1 sub=0 state=0x0 type=0x0 data=0x0 text='one' cch=3\n  [4] ok=1 id=0xb sub=0 state=0x0 type=0x0 data=0x0 text='mid' cch=3\n  [5] ok=1 id=0xe sub=0 state=0x0 type=0x0 data=0x0 text='before2' cch=7\n  [6] ok=1 id=0x2 sub=0 state=0x0 type=0x0 data=0x0 text='two' cch=3\n  [7] ok=1 id=0xc sub=0 state=0x0 type=0x0 data=0x0 text='last' cch=4\n  [8] ok=1 id=0xd sub=0 state=0x0 type=0x0 data=0x0 text='past' cch=4\n  [9] ok=1 id=0xf sub=0 state=0x0 type=0x0 data=0x0 text='absent' cch=6\ninsert before id 50 (in the sub menu), asked of p: 1\np count 11 s count 2\nbad menu: 0 err=1401\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

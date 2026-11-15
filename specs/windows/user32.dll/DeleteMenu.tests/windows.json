@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "dm_bar",
+      "exe_sha256": "e36bfb6ce1b601c24ee1a689c4fb5664d9f3ce7b3d88f4b668555d8ce0fcd1f0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVsZXRlIEIgYnkgcG9zaXRpb246IDEKY291bnQgMiBiIHZhbGlkIDAKZGVsZXRlIGJ5IGNvbW1hbmQgOTogMQpkZWxldGUgdGhlIGxhc3QgKEEpOiAxCmNvdW50IDAgYSB2YWxpZCAwIGJhciB2YWxpZCAxIEdldE1lbnUgaXMgdGhlIGJhciAxCkRyYXdNZW51QmFyIGFmdGVyOiAxCmRlbGV0ZSBmcm9tIHRoZSBlbXB0eSBiYXI6IDAgZXJyPS0xCmFmdGVyIHRoZSB3aW5kb3c6IGJhciB2YWxpZCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "delete B by position: 1\ncount 2 b valid 0\ndelete by command 9: 1\ndelete the last (A): 1\ncount 0 a valid 0 bar valid 1 GetMenu is the bar 1\nDrawMenuBar after: 1\ndelete from the empty bar: 0 err=-1\nafter the window: bar valid 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

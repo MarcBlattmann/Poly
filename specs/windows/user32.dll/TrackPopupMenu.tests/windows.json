@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "tpm_msgs",
+      "exe_sha256": "6c07e1f2310ce9e61ca2609bfdb4598207c592c01c9060da4f97699f2e56f0a3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90aWZ5aW5nOiByZXN1bHQgMAogICAgIFdNX0VOVEVSTUVOVUxPT1AgaXMgcG9wdXAgMQogICAgIFdNX0lOSVRNRU5VIGZvciB0aGUgbWVudSAxCiAgICAgV01fSU5JVE1FTlVQT1BVUCBmb3IgdGhlIG1lbnUgMSBwb3NpdGlvbiAwIHN5c3RlbSBtZW51IDAKICAgICB0aW1lcjogRW5kTWVudSAxCiAgICAgV01fVU5JTklUTUVOVVBPUFVQIGZvciB0aGUgbWVudSAxCiAgICAgV01fTUVOVVNFTEVDVCBpdGVtIDAgZmxhZ3MgMHhmZmZmIG1lbnUgbm9uZQogICAgIFdNX0VYSVRNRU5VTE9PUCBpcyBwb3B1cCAxClRQTV9OT05PVElGWTogcmVzdWx0IDAKICAgICB0aW1lcjogRW5kTWVudSAxCiAgICAgV01fTUVOVVNFTEVDVCBpdGVtIDAgZmxhZ3MgMHhmZmZmIG1lbnUgbm9uZQp0aGUgc2FtZSBtZW51IGFnYWluOiByZXN1bHQgMAogICAgIFdNX0VOVEVSTUVOVUxPT1AgaXMgcG9wdXAgMQogICAgIFdNX0lOSVRNRU5VIGZvciB0aGUgbWVudSAxCiAgICAgV01fSU5JVE1FTlVQT1BVUCBmb3IgdGhlIG1lbnUgMSBwb3NpdGlvbiAwIHN5c3RlbSBtZW51IDAKICAgICB0aW1lcjogRW5kTWVudSAxCiAgICAgV01fVU5JTklUTUVOVVBPUFVQIGZvciB0aGUgbWVudSAxCiAgICAgV01fTUVOVVNFTEVDVCBpdGVtIDAgZmxhZ3MgMHhmZmZmIG1lbnUgbm9uZQogICAgIFdNX0VYSVRNRU5VTE9PUCBpcyBwb3B1cCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "notifying: result 0\n     WM_ENTERMENULOOP is popup 1\n     WM_INITMENU for the menu 1\n     WM_INITMENUPOPUP for the menu 1 position 0 system menu 0\n     timer: EndMenu 1\n     WM_UNINITMENUPOPUP for the menu 1\n     WM_MENUSELECT item 0 flags 0xffff menu none\n     WM_EXITMENULOOP is popup 1\nTPM_NONOTIFY: result 0\n     timer: EndMenu 1\n     WM_MENUSELECT item 0 flags 0xffff menu none\nthe same menu again: result 0\n     WM_ENTERMENULOOP is popup 1\n     WM_INITMENU for the menu 1\n     WM_INITMENUPOPUP for the menu 1 position 0 system menu 0\n     timer: EndMenu 1\n     WM_UNINITMENUPOPUP for the menu 1\n     WM_MENUSELECT item 0 flags 0xffff menu none\n     WM_EXITMENULOOP is popup 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 565
+    }
+  ]
+}

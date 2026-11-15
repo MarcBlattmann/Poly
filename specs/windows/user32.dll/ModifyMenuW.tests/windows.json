@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "mod_popup",
+      "exe_sha256": "32a66c5012380e59ebe1d7b31472e564a601ac05dc204b68d7e0be0ed5a1eb88",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hhbmdlIGEgY29tbWFuZCBpdGVtIGludG8gYSBwb3B1cCBpdGVtOiAxCmFmdGVyOiBjb3VudCAyCiAgWzBdIG9rPTEgaWQ9MHhmZmZmZmZmZiBzdWI9MSBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0nbm93IGEgcG9wdXAnIGNjaD0xMQogIFsxXSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgwIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J3N1YicgY2NoPTMKb3duZXIgZHJhdyBpdGVtOiAxCmFmdGVyIG93bmVyIGRyYXc6IGNvdW50IDIKICBbMF0gb2s9MSBpZD0weGZmZmZmZmZmIHN1Yj0xIHN0YXRlPTB4MCB0eXBlPTB4MCBkYXRhPTB4MCB0ZXh0PSdub3cgYSBwb3B1cCcgY2NoPTExCiAgWzFdIG9rPTEgaWQ9MHhmZmZmZmZmZiBzdWI9MSBzdGF0ZT0weDAgdHlwZT0weDEwMCBkYXRhPTB4OTkgdGV4dD0nc3ViJyBjY2g9MwpjaGFuZ2UgaWQgNTAgaW4gdGhlIHN1YiBtZW51IHRocm91Z2ggcDogMQpzdWIgbWVudTogY291bnQgMQogIFswXSBvaz0xIGlkPTB4MzMgc3ViPTAgc3RhdGU9MHgxIHR5cGU9MHgwIGRhdGE9MHgwIHRleHQ9J3JlbmFtZWQgZGVlcCcgY2NoPTEyCnBvcHVwIGl0ZW0gd2l0aCBhbiBpbnZhbGlkIGhhbmRsZTogMQphZnRlciB0aGUgYmFkIG9uZTogY291bnQgMgogIFswXSBvaz0xIGlkPTB4YmFkMGJhZCBzdWI9MCBzdGF0ZT0weDAgdHlwZT0weDAgZGF0YT0weDAgdGV4dD0nYmFkJyBjY2g9MwogIFsxXSBvaz0xIGlkPTB4ZmZmZmZmZmYgc3ViPTEgc3RhdGU9MHgwIHR5cGU9MHgxMDAgZGF0YT0weDk5IHRleHQ9J3N1YicgY2NoPTMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "change a command item into a popup item: 1\nafter: count 2\n  [0] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='now a popup' cch=11\n  [1] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='sub' cch=3\nowner draw item: 1\nafter owner draw: count 2\n  [0] ok=1 id=0xffffffff sub=1 state=0x0 type=0x0 data=0x0 text='now a popup' cch=11\n  [1] ok=1 id=0xffffffff sub=1 state=0x0 type=0x100 data=0x99 text='sub' cch=3\nchange id 50 in the sub menu through p: 1\nsub menu: count 1\n  [0] ok=1 id=0x33 sub=0 state=0x1 type=0x0 data=0x0 text='renamed deep' cch=12\npopup item with an invalid handle: 1\nafter the bad one: count 2\n  [0] ok=1 id=0xbad0bad sub=0 state=0x0 type=0x0 data=0x0 text='bad' cch=3\n  [1] ok=1 id=0xffffffff sub=1 state=0x0 type=0x100 data=0x99 text='sub' cch=3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

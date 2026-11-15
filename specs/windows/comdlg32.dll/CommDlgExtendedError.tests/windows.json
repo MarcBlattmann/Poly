@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cde_reset",
+      "exe_sha256": "c89decfad374e3ea3d11470ce01f9e48b7aed6e1834e7d555bb7806c729e9ede",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FuY2VsbGVkIG9wZW46IDAgdGhlbiAweDAKb3BlbiB3aXRoIGEgd3Jvbmcgc2l6ZTogMCB0aGVuIDB4MQpjYW5jZWxsZWQgY29sb3VyIGRpYWxvZyAocmVzZXRzKTogMCB0aGVuIDB4MApjb2xvdXIgZGlhbG9nIHdpdGggYSB3cm9uZyBzaXplOiAwIHRoZW4gMHgxCmZvbnQgZGlhbG9nIHdpdGggYSB3cm9uZyBzaXplOiAwIHRoZW4gMHgxCmNhbmNlbGxlZCBmb250IGRpYWxvZzogMCB0aGVuIDB4MApmb250IGRpYWxvZyB3aXRoIENGX0VOQUJMRUhPT0sgYW5kIG5vIGhvb2s6IDAgdGhlbiAweGIKc2F2ZSB3aXRoIHRoZSB3cm9uZyBzaXplIGxlZnQgb3ZlciBmcm9tIGJlZm9yZTogMCB0aGVuIDB4MQp0aGUgY29kZSBpcyBub3QgY2xlYXJlZCBieSByZWFkaW5nOiAweDEgMHgxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "cancelled open: 0 then 0x0\nopen with a wrong size: 0 then 0x1\ncancelled colour dialog (resets): 0 then 0x0\ncolour dialog with a wrong size: 0 then 0x1\nfont dialog with a wrong size: 0 then 0x1\ncancelled font dialog: 0 then 0x0\nfont dialog with CF_ENABLEHOOK and no hook: 0 then 0xb\nsave with the wrong size left over from before: 0 then 0x1\nthe code is not cleared by reading: 0x1 0x1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 338
+    }
+  ]
+}
