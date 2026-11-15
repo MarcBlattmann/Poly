@@ -5,6 +5,7 @@
 
 use crate::nt;
 use core::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(target_arch = "x86_64")]
 use poly_kernelbase::slist::Header;
 
 // ----- RaiseException --------------------------------------------------------------
@@ -16,9 +17,13 @@ const EXCEPTION_MAXIMUM_PARAMETERS: usize = 15;
 /// `RaiseException` raises carries it (observed on Windows 11 25H2:
 /// `_CxxThrowException.yaml`, `record_flags`).
 const EXCEPTION_SOFTWARE_ORIGINATE: u32 = 0x80;
-/// `sizeof(EXCEPTION_RECORD)` on x64 (`winnt.h`): code, flags, the nested
-/// record, the address, the parameter count and 15 parameters.
-const EXCEPTION_RECORD_SIZE: usize = 152;
+/// `EXCEPTION_RECORD` (`winnt.h`): code, flags, the nested record, the address, the parameter
+/// count and 15 parameters (pointer-sized): 152 bytes on x64, 80 in a 32-bit process (ADR 0186).
+const PTR: usize = core::mem::size_of::<usize>();
+const RECORD_COUNT: usize = 8 + 2 * PTR;
+const RECORD_PARAMETERS: usize = (RECORD_COUNT + 4).next_multiple_of(PTR);
+const EXCEPTION_RECORD_SIZE: usize = RECORD_PARAMETERS + EXCEPTION_MAXIMUM_PARAMETERS * PTR;
+const _: () = assert!(EXCEPTION_RECORD_SIZE == if PTR == 8 { 152 } else { 80 });
 
 /// `RaiseException`: an `EXCEPTION_RECORD` with the code, the
 /// `EXCEPTION_NONCONTINUABLE` flag if given, and up to
@@ -33,11 +38,12 @@ pub unsafe extern "system" fn RaiseException(code: u32, flags: u32, count: u32, 
     let flags = (flags & EXCEPTION_NONCONTINUABLE) | EXCEPTION_SOFTWARE_ORIGINATE;
     r[4..8].copy_from_slice(&flags.to_le_bytes());
     let n = if args.is_null() { 0 } else { (count as usize).min(EXCEPTION_MAXIMUM_PARAMETERS) };
-    r[24..28].copy_from_slice(&(n as u32).to_le_bytes());
+    r[RECORD_COUNT..RECORD_COUNT + 4].copy_from_slice(&(n as u32).to_le_bytes());
     for i in 0..n {
         // SAFETY: the caller's array of `count` arguments.
-        let v = unsafe { args.add(i).read_unaligned() } as u64;
-        r[32 + i * 8..40 + i * 8].copy_from_slice(&v.to_le_bytes());
+        let v = unsafe { args.add(i).read_unaligned() };
+        let at = RECORD_PARAMETERS + i * PTR;
+        r[at..at + PTR].copy_from_slice(&v.to_le_bytes());
     }
     // SAFETY: a valid record.
     unsafe { nt::RtlRaiseException(r.as_ptr()) };
@@ -52,7 +58,8 @@ static TOP_FILTER: AtomicUsize = AtomicUsize::new(0);
 const EXCEPTION_EXECUTE_HANDLER: i32 = 1;
 const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RtlSetUnhandledExceptionFilter(filter: usize);
 }
@@ -99,21 +106,25 @@ pub unsafe extern "system" fn UnhandledExceptionFilter(pointers: *mut u8) -> i32
 ///
 /// # Safety
 /// `p` is a valid, 16-byte aligned `SLIST_HEADER`.
+#[cfg(target_arch = "x86_64")]
 unsafe fn exchange(p: *mut u64, old: (u64, u64), new: (u64, u64)) -> Result<(), (u64, u64)> {
     let (mut lo, mut hi) = old;
     let ok: u8;
-    // SAFETY: the caller's contract; RBX cannot be an asm operand, so the
-    // new low quadword travels in another register and is swapped in and
-    // back around the instruction.
+    // SAFETY: the caller's contract. RBX cannot be an asm operand, so the new low quadword
+    // travels in R9 and is swapped into RBX and back around the instruction. The compiler does not
+    // know the asm uses RBX, so it may hand out RBX (BL) for an operand it picks: every operand
+    // here is a fixed register other than RBX, and the result is read after RBX is back (XCHG
+    // leaves the flags alone). With `ok` in BL, the swap back overwrote it and the loop tested the
+    // caller's RBX instead: a push looped forever, re-linking its entry to itself (ADR 0155 step 13).
     unsafe {
         core::arch::asm!(
-            "xchg {new_lo}, rbx",
-            "lock cmpxchg16b [{p}]",
-            "sete {ok}",
-            "xchg {new_lo}, rbx",
-            p = in(reg) p,
-            new_lo = inout(reg) new.0 => _,
-            ok = out(reg_byte) ok,
+            "xchg r9, rbx",
+            "lock cmpxchg16b [r8]",
+            "xchg r9, rbx",
+            "sete r10b",
+            in("r8") p,
+            inout("r9") new.0 => _,
+            out("r10b") ok,
             inout("rax") lo,
             inout("rdx") hi,
             in("rcx") new.1,
@@ -128,12 +139,14 @@ unsafe fn exchange(p: *mut u64, old: (u64, u64), new: (u64, u64)) -> Result<(), 
 ///
 /// # Safety
 /// `p` is a valid `SLIST_HEADER`.
+#[cfg(target_arch = "x86_64")]
 unsafe fn load(p: *mut u64) -> (u64, u64) {
     // SAFETY: the caller's contract.
     unsafe { (core::ptr::read_volatile(p), core::ptr::read_volatile(p.add(1))) }
 }
 
 /// `InitializeSListHead`.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitializeSListHead(head: *mut u64) {
     // SAFETY: the caller's SLIST_HEADER.
@@ -144,6 +157,7 @@ pub unsafe extern "system" fn InitializeSListHead(head: *mut u64) {
 }
 
 /// `InterlockedPushEntrySList`: the previous first entry.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InterlockedPushEntrySList(head: *mut u64, entry: *mut u64) -> *mut u64 {
     // SAFETY: the caller's header and 16-byte aligned entry.
@@ -161,6 +175,7 @@ pub unsafe extern "system" fn InterlockedPushEntrySList(head: *mut u64, entry: *
 }
 
 /// `InterlockedPopEntrySList`: the first entry, or NULL.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InterlockedPopEntrySList(head: *mut u64) -> *mut u64 {
     // SAFETY: the caller's header; its entries are valid while listed.
@@ -182,6 +197,7 @@ pub unsafe extern "system" fn InterlockedPopEntrySList(head: *mut u64) -> *mut u
 }
 
 /// `InterlockedFlushSList`: every entry, as a list, or NULL.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InterlockedFlushSList(head: *mut u64) -> *mut u64 {
     // SAFETY: the caller's header.
@@ -201,8 +217,104 @@ pub unsafe extern "system" fn InterlockedFlushSList(head: *mut u64) -> *mut u64 
 }
 
 /// `QueryDepthSList`.
+#[cfg(target_arch = "x86_64")]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn QueryDepthSList(head: *mut u64) -> u16 {
     // SAFETY: the caller's header.
     unsafe { core::ptr::read_volatile(head) as u16 }
+}
+
+/// The interlocked lists of a 32-bit process (ADR 0186): the 32-bit `SLIST_HEADER` of `winnt.h`
+/// is 8 bytes, 8-byte aligned, `Next` (the first entry) in the low four, then `Depth` and
+/// `Sequence` (16 bits each); every change replaces all 8 bytes at once (`CMPXCHG8B`, which a
+/// 64-bit atomic is on i686), the sequence growing with each.
+#[cfg(target_arch = "x86")]
+mod slist32 {
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    fn parts(w: u64) -> (u32, u16, u16) {
+        (w as u32, (w >> 32) as u16, (w >> 48) as u16)
+    }
+
+    fn word(next: u32, depth: u16, sequence: u16) -> u64 {
+        u64::from(next) | u64::from(depth) << 32 | u64::from(sequence) << 48
+    }
+
+    /// # Safety
+    /// `head` is a valid, 8-byte aligned `SLIST_HEADER`.
+    unsafe fn header<'a>(head: *mut u64) -> &'a AtomicU64 {
+        // SAFETY: the caller's contract.
+        unsafe { AtomicU64::from_ptr(head) }
+    }
+
+    /// `InitializeSListHead`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "system" fn InitializeSListHead(head: *mut u64) {
+        // SAFETY: the caller's header.
+        unsafe { header(head) }.store(0, Ordering::Release);
+    }
+
+    /// `InterlockedPushEntrySList`: the previous first entry.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "system" fn InterlockedPushEntrySList(head: *mut u64, entry: *mut u32) -> *mut u32 {
+        // SAFETY: the caller's header and entry.
+        let h = unsafe { header(head) };
+        let mut cur = h.load(Ordering::Acquire);
+        loop {
+            let (next, depth, sequence) = parts(cur);
+            // SAFETY: the entry's `Next`.
+            unsafe { entry.write_volatile(next) };
+            let new = word(entry as u32, depth.wrapping_add(1), sequence.wrapping_add(1));
+            match h.compare_exchange(cur, new, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return next as *mut u32,
+                Err(now) => cur = now,
+            }
+        }
+    }
+
+    /// `InterlockedPopEntrySList`: the first entry, or NULL.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "system" fn InterlockedPopEntrySList(head: *mut u64) -> *mut u32 {
+        // SAFETY: the caller's header; its entries are valid while listed.
+        let h = unsafe { header(head) };
+        let mut cur = h.load(Ordering::Acquire);
+        loop {
+            let (next, depth, sequence) = parts(cur);
+            if next == 0 {
+                return core::ptr::null_mut();
+            }
+            // SAFETY: a listed entry.
+            let following = unsafe { (next as *const u32).read_volatile() };
+            let new = word(following, depth.wrapping_sub(1), sequence.wrapping_add(1));
+            match h.compare_exchange(cur, new, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return next as *mut u32,
+                Err(now) => cur = now,
+            }
+        }
+    }
+
+    /// `InterlockedFlushSList`: every entry, as a list, or NULL.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "system" fn InterlockedFlushSList(head: *mut u64) -> *mut u32 {
+        // SAFETY: the caller's header.
+        let h = unsafe { header(head) };
+        let mut cur = h.load(Ordering::Acquire);
+        loop {
+            let (next, _, sequence) = parts(cur);
+            if next == 0 {
+                return core::ptr::null_mut();
+            }
+            match h.compare_exchange(cur, word(0, 0, sequence.wrapping_add(1)), Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return next as *mut u32,
+                Err(now) => cur = now,
+            }
+        }
+    }
+
+    /// `QueryDepthSList`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "system" fn QueryDepthSList(head: *mut u64) -> u16 {
+        // SAFETY: the caller's header.
+        parts(unsafe { header(head) }.load(Ordering::Acquire)).1
+    }
 }

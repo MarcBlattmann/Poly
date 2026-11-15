@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "certopenstore_memory_collection",
+      "exe_sha256": "ece04f9b26cfca1000748d8974d3d18b8432b33a2d6c3712d2baa2fbd0b5abd3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29sbGVjdGlvbiwgYWxsIGFyZ3VtZW50cyB6ZXJvOiBzdG9yZSAxIGxhc3QgZXJyb3IgMAplbXB0eSBtZW1vcnkgc3RvcmUgZW51bWVyYXRlcyBub3RoaW5nIDEKbWVtb3J5IHN0b3JlIHdpdGggUkVBRE9OTFk6IHN0b3JlIDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKcHJvdmlkZXIgMDogc3RvcmUgMCBsYXN0IGVycm9yIDIKZG9uZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "collection, all arguments zero: store 1 last error 0\nempty memory store enumerates nothing 1\nmemory store with READONLY: store 1 last error unchanged\nprovider 0: store 0 last error 2\ndone\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "certopenstore_memory_collection_b",
+      "exe_sha256": "94b96ea03565a45548138a514bbcfe12fccf634cf7e806cd8f6fcb4279dfe4cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zml2ZSBjb2xsZWN0aW9uIHN0b3JlcyBhcmUgZml2ZSBkaWZmZXJlbnQgaGFuZGxlcyAxCm1lbW9yeSBzdG9yZSB3aXRoIENSRUFURV9ORVcgYW5kIGFuIGVuY29kaW5nIHR5cGU6IHN0b3JlIDEgbGFzdCBlcnJvciB1bmNoYW5nZWQKYWRkaW5nIHRvIHRoZSBSRUFET05MWSBtZW1vcnkgc3RvcmU6IDEgbGFzdCBlcnJvciAwCnByb3ZpZGVyIDEwMDA6IHN0b3JlIDAgbGFzdCBlcnJvciAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "five collection stores are five different handles 1\nmemory store with CREATE_NEW and an encoding type: store 1 last error unchanged\nadding to the READONLY memory store: 1 last error 0\nprovider 1000: store 0 last error 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "certopenstore_system_readonly_b",
+      "exe_sha256": "e02ee42e47622b91ca893ffdc5b63877c2f81426db1c30d558dfdaefc9903e1d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U1lTVEVNX1cgUk9PVCBsb2NhbCBtYWNoaW5lOiBvcGVuZWQgMQpTWVNURU1fUkVHSVNUUllfVyBDQSBsb2NhbCBtYWNoaW5lOiBvcGVuZWQgMQpTWVNURU1fVyBDQSBjdXJyZW50IHVzZXI6IG9wZW5lZCAxClNZU1RFTV9SRUdJU1RSWV9XIFRydXN0ZWRQZW9wbGUgY3VycmVudCB1c2VyOiBvcGVuZWQgMQpTWVNURU1fVyBEaXNhbGxvd2VkIGxvY2FsIG1hY2hpbmU6IG9wZW5lZCAxClNZU1RFTV9SRUdJU1RSWV9XIG1hZGUtdXAgbmFtZSBsb2NhbCBtYWNoaW5lOiBvcGVuZWQgMCBsYXN0IGVycm9yIDIKU1lTVEVNX1cgbWFkZS11cCBuYW1lIGN1cnJlbnQgdXNlcjogb3BlbmVkIDAgbGFzdCBlcnJvciAyCmFkZGluZyBhIGNlcnRpZmljYXRlIHRvIGEgcmVhZC1vbmx5IHN5c3RlbSBzdG9yZTogMCBsYXN0IGVycm9yIDB4ODAwNzAwMDUKcm91bmQgMjogY3VycmVudC11c2VyIFJPT1Qgb3BlbmVkIDEgbGFzdCBlcnJvciAweDgwMDkyMDA0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SYSTEM_W ROOT local machine: opened 1\nSYSTEM_REGISTRY_W CA local machine: opened 1\nSYSTEM_W CA current user: opened 1\nSYSTEM_REGISTRY_W TrustedPeople current user: opened 1\nSYSTEM_W Disallowed local machine: opened 1\nSYSTEM_REGISTRY_W made-up name local machine: opened 0 last error 2\nSYSTEM_W made-up name current user: opened 0 last error 2\nadding a certificate to a read-only system store: 0 last error 0x80070005\nround 2: current-user ROOT opened 1 last error 0x80092004\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    },
+    {
+      "name": "certopenstore_system_readonly_c",
+      "exe_sha256": "78c0aca3644c0fc8b1b1a6510fa2e894d6e670c469a53ec19896949542622fb3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U1lTVEVNX1JFR0lTVFJZX1cgUk9PVCBjdXJyZW50IHVzZXI6IG9wZW5lZCAxClNZU1RFTV9XIENBIGxvY2FsIG1hY2hpbmU6IG9wZW5lZCAxClNZU1RFTV9SRUdJU1RSWV9XIFRydXN0ZWRQZW9wbGUgbG9jYWwgbWFjaGluZTogb3BlbmVkIDEKU1lTVEVNX1cgVHJ1c3RlZFBlb3BsZSBjdXJyZW50IHVzZXI6IG9wZW5lZCAxClNZU1RFTV9SRUdJU1RSWV9XIERpc2FsbG93ZWQgY3VycmVudCB1c2VyOiBvcGVuZWQgMQpTWVNURU1fUkVHSVNUUllfVyBtYWRlLXVwIG5hbWUgY3VycmVudCB1c2VyOiBvcGVuZWQgMCBsYXN0IGVycm9yIDIKU1lTVEVNX1cgUk9PVCB3aXRoIG5vIGxvY2F0aW9uOiBvcGVuZWQgMApyb3VuZCAwOiBjdXJyZW50LXVzZXIgUk9PVCBvcGVuZWQgMSBsYXN0IGVycm9yIDB4ODAwOTIwMDQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SYSTEM_REGISTRY_W ROOT current user: opened 1\nSYSTEM_W CA local machine: opened 1\nSYSTEM_REGISTRY_W TrustedPeople local machine: opened 1\nSYSTEM_W TrustedPeople current user: opened 1\nSYSTEM_REGISTRY_W Disallowed current user: opened 1\nSYSTEM_REGISTRY_W made-up name current user: opened 0 last error 2\nSYSTEM_W ROOT with no location: opened 0\nround 0: current-user ROOT opened 1 last error 0x80092004\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

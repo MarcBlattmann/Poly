@@ -14,6 +14,12 @@ fn main() {
     let table = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../crates/poly-win32k/src/services.rs");
     println!("cargo:rerun-if-changed={}", table.display());
     let text = std::fs::read_to_string(&table).expect("read poly-win32k's services.rs");
+    // The i686 stubs (ADR 0186): `int 0xF4` with EAX = the number and EDX = the arguments,
+    // `stdcall` (`ret 4n`, n from the 32-bit signature table, `wow64/sigs.rs`).
+    let x86 = std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86");
+    let sigs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src/wow64/sigs.rs");
+    println!("cargo:rerun-if-changed={}", sigs.display());
+    let counts = if x86 { arg_counts(&std::fs::read_to_string(&sigs).expect("read sigs.rs")) } else { Vec::new() };
     let mut asm = String::from(".text\n");
     let mut seen: Vec<String> = Vec::new();
     for (num, name) in parse(&text) {
@@ -21,7 +27,18 @@ fn main() {
         assert!(num >> 12 == 1, "{name}: {num:#x} is not in table 1");
         assert!(!seen.contains(&name), "duplicate service name {name}");
         seen.push(name.clone());
-        writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
+        if x86 {
+            let variant = variant_of(&text, &name);
+            let Some(&(_, n)) = counts.iter().find(|(v, _)| *v == variant) else {
+                panic!("{name} has no row in wow64/sigs.rs's WIN32K_SIGNATURES");
+            };
+            let label = format!("_{name}@{}", 4 * n);
+            writeln!(asm, ".globl \"{label}\"\n\"{label}\":").unwrap();
+            writeln!(asm, "    mov eax, {num}\n    lea edx, [esp + 4]\n    int 0xF4\n    ret {}\n", 4 * n).unwrap();
+        } else {
+            writeln!(asm, ".globl {name}\n{name}:\n    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n")
+                .unwrap();
+        }
         println!("cargo:rustc-link-arg=/EXPORT:{name}");
     }
     assert!(!seen.is_empty(), "no win32k services found");
@@ -49,6 +66,32 @@ fn parse(text: &str) -> Vec<(u32, String)> {
         if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric()) {
             out.push((num, name.to_string()));
         }
+    }
+    out
+}
+
+/// The `Win32kService` variant whose row names `name` (`(Win32kService::X, 0x..., "Name")`).
+fn variant_of(text: &str, name: &str) -> String {
+    let quoted = format!("\"{name}\"");
+    let at = text.find(&quoted).expect("the row");
+    let row_start = text[..at].rfind("(Win32kService::").expect("the row's start") + "(Win32kService::".len();
+    let rest = &text[row_start..];
+    rest[..rest.find(',').expect("a comma")].trim().to_string()
+}
+
+/// `(variant, argument count)` of every `(Win32kService::X, &[kinds])` row of `wow64/sigs.rs`.
+fn arg_counts(text: &str) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("(Win32kService::") {
+        let row = &rest[start + "(Win32kService::".len()..];
+        let Some(comma) = row.find(',') else { break };
+        let variant = row[..comma].trim().to_string();
+        let after = row[comma + 1..].trim_start();
+        rest = &row[comma..];
+        let Some(list) = after.strip_prefix("&[") else { continue };
+        let Some(end) = list.find(']') else { break };
+        out.push((variant, list[..end].split(',').filter(|i| !i.trim().is_empty()).count()));
     }
     out
 }

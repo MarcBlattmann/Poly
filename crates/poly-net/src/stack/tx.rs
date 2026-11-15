@@ -140,7 +140,7 @@ impl Stack {
                     return Err(Errno::EMSGSIZE);
                 }
                 let h = ipv6::Ipv6Header {
-                    traffic_class: 0,
+                    traffic_class: self.pkt_tos,
                     flow_label: 0,
                     payload_len: payload.len(),
                     next_header: protocol,
@@ -206,7 +206,7 @@ impl Stack {
                     return Err(Errno::EMSGSIZE);
                 }
                 let h = ipv6::Ipv6Header {
-                    traffic_class: 0,
+                    traffic_class: self.pkt_tos,
                     flow_label: 0,
                     payload_len: payload.len(),
                     next_header: protocol,

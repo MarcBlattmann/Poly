@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getaddrinfow_numeric",
+      "exe_sha256": "19e9e80f6f8700ff1560e03d013d0c58e8eee74260b5f5c97ca28961341ffeb3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTI3LjAuMC4xOiByZXQ9MCB3c2E9MCBnbGU9MAogIFswXSBmbGFncz0weDQgZmFtaWx5PTIgdHlwZT0xIHByb3RvPTAgYWRkcmxlbj0xNiBjYW5vbj1OVUxMIEFGX0lORVQgMTI3LjAuMC4xIHBvcnQgODAKbG9jYWxob3N0IEFGX0lORVQ6IHJldD0wIHdzYT0wIGdsZT0wCiAgWzBdIGZsYWdzPTB4MCBmYW1pbHk9MiB0eXBlPTEgcHJvdG89MCBhZGRybGVuPTE2IGNhbm9uPU5VTEwgQUZfSU5FVCAwLjAuMC4wIHBvcnQgODA4MApmYW1pbHkgOTk6IHJldD0xMDA0NyB3c2E9MTAwNDcgZ2xlPTEwMDQ3Cm5vIGhpbnRzOiByZXQ9MCB3c2E9MCBnbGU9MApGcmVlQWRkckluZm9XKE5VTEwpIHJldHVybmVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "127.0.0.1: ret=0 wsa=0 gle=0\n  [0] flags=0x4 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 127.0.0.1 port 80\nlocalhost AF_INET: ret=0 wsa=0 gle=0\n  [0] flags=0x0 family=2 type=1 proto=0 addrlen=16 canon=NULL AF_INET 0.0.0.0 port 8080\nfamily 99: ret=10047 wsa=10047 gle=10047\nno hints: ret=0 wsa=0 gle=0\nFreeAddrInfoW(NULL) returned\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "getaddrinfow_numeric_c",
+      "exe_sha256": "c736da941ece4d6ad7f4b1181bf328d0b377bb1ded49d014877022e555718052",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTI3LjAuMC4xIDgwIE5VTUVSSUNIT1NUfE5VTUVSSUNTRVJWOiByZXQ9MCB3c2E9MCBnbGU9MAogIFswXSBmbGFncz0weDQgZmFtaWx5PTIzIHR5cGU9MSBwcm90bz0wIGFkZHJsZW49MjggY2Fub249TlVMTCBBRl9JTkVUNiA6OjEgcG9ydCA4MApOVUxMIG5vZGUgUEFTU0lWRTogcmV0PTAgd3NhPTAgZ2xlPTAKbmFtZSB3aXRoIE5VTUVSSUNIT1NUOiByZXQ9MTEwMDEgd3NhPTExMDAxIGdsZT0xMTAwMQp1bmtub3duIHNlcnZpY2U6IHJldD0xMDEwOSB3c2E9MTAxMDkgZ2xlPTEwMTA5Cm5vbi1BU0NJSSBudW1lcmljIGhvc3Q6IHJldD0xMTAwMSB3c2E9MTEwMDEgZ2xlPTExMDAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "127.0.0.1 80 NUMERICHOST|NUMERICSERV: ret=0 wsa=0 gle=0\n  [0] flags=0x4 family=23 type=1 proto=0 addrlen=28 canon=NULL AF_INET6 ::1 port 80\nNULL node PASSIVE: ret=0 wsa=0 gle=0\nname with NUMERICHOST: ret=11001 wsa=11001 gle=11001\nunknown service: ret=10109 wsa=10109 gle=10109\nnon-ASCII numeric host: ret=11001 wsa=11001 gle=11001\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

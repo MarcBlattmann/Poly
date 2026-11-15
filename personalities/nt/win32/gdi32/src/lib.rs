@@ -18,12 +18,14 @@ use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, last_error, set_last_error, wide};
 use poly_win32_rt as _;
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
@@ -923,9 +925,9 @@ fn display_size() -> Option<(i32, i32)> {
     use poly_win32k::proto::{Reply, Request};
     let req = poly_win32k::wire::encode(&Request::Desktop {});
     let mut out = [0u8; 256];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return None;
     }
@@ -1059,9 +1061,9 @@ fn screen_pixel(x: i32, y: i32) -> u32 {
     use poly_win32k::proto::{Reply, Request};
     let bytes = poly_win32k::wire::encode(&Request::ScreenPixel { x, y });
     let mut out = [0u8; 64];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return 0xFFFF_FFFF;
     }

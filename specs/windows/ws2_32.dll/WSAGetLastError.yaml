@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAGetLastError.yaml
+id: windows/api/ws2_32.dll/WSAGetLastError
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Winsock's per-thread error is the Win32 last-error value itself: SetLastError(5) is read back by WSAGetLastError() and WSASetLastError(10061) by GetLastError(); each thread has its own. A failed Winsock call leaves its WSA code in both (closesocket of a non-socket: 10038; WSASocketW with family 99: 10047; connect to a closed loopback port: 10061). A successful call does not clear the value: after WSASetLastError(4321) a successful WSASocketW and getsockopt still read 4321, WSACreateEvent and WSACloseEvent do not touch the Win32 value either. A failed call in another thread changes only that thread. The value is stored as a 32-bit number: -1 and 0x12345678 read back exactly. Chrome calls WSAGetLastError right after almost every socket call (638 calls in S4, 273 of them 0) and WSASetLastError is not called.
+interface:
+  signature: "int WSAGetLastError(void); void WSASetLastError(int error)"
+chrome:
+  calls: "WSAGetLastError (#111) up to 638 calls per process (157 to 161 in the network service), read right after connect (10035), recv (10035), WSASend and WSAIoctl"
+rules:
+  same_storage: "SetLastError(5) -> WSAGetLastError() 5; WSASetLastError(10061) -> GetLastError() 10061; WSASetLastError(0) -> GetLastError() 0; WSASetLastError(-1) -> GetLastError() 0xFFFFFFFF; WSASetLastError(0x12345678) reads back 0x12345678"
+  reads: "reading does not change the value (two reads give the same)"
+  failed_calls: "closesocket(0x1234): -1, GetLastError 10038 and WSAGetLastError 10038; WSASocketW(af 99): INVALID_SOCKET, both 10047; connect to a port nobody listens on (loopback): -1, 10061 in both"
+  success_keeps: "after WSASetLastError(4321) a successful WSASocketW, a successful getsockopt and WSACreateEvent/WSACloseEvent leave 4321; a failing getsockname on an unbound socket then sets 10022"
+  threads: "a thread does not see another thread's value (a new thread's first read is not the creator's 777); a failed closesocket in the new thread gives 10038 in both of that thread's views; the creating thread still reads 777"
+errors:
+  none: "the call itself cannot fail"
+side_effects: "none"
+threading: "the value belongs to the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  the value of a brand-new thread before any call (it is whatever the thread start left; not recorded), WSAGetLastError after WSACleanup, WSA_IO_PENDING sequences (see the WSASend and WSARecv sheets).

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getsockname_basic_b",
+      "exe_sha256": "d1e11b4b59036baffc1c29714a458f0daf4b2efaf9677c6678b1c254987c35f9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGVuZ3RoIDY0OiAtMS9XU0FFSU5WQUwgbGVuZ3RoIG5vdyA2NCBmYW1pbHkgLTEgYnl0ZXMgd3JpdHRlbiAwCmxlbmd0aCAwOiAtMS9XU0FFSU5WQUwgbGVuZ3RoIG5vdyAwIGZhbWlseSAtMSBieXRlcyB3cml0dGVuIDAKTlVMTCBidWZmZXIsIGxlbmd0aCAxNjogLTEvV1NBRUlOVkFMIGxlbmd0aCBub3cgMTYgZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMAogIHBvcnQgYXNzaWduZWQgMSBhZGRyZXNzIFsxMjcsIDAsIDAsIDFdCmJvdW5kLCBsZW5ndGggMTU6IC0xL1dTQUVGQVVMVCBsZW5ndGggbm93IDE1IGZhbWlseSAtMSBieXRlcyB3cml0dGVuIDAKYm91bmQsIGxlbmd0aCAtMTogLTEvV1NBRUZBVUxUIGxlbmd0aCBub3cgLTEgZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMApib3VuZCB0byAwLjAuMC4wOjA6IHBvcnQgYXNzaWduZWQgMSBhZGRyZXNzIFswLCAwLCAwLCAwXQpjbGllbnQgYWZ0ZXIgdGhlIHBlZXIgY2xvc2VkOiAwIGxlbmd0aCBub3cgMTYgZmFtaWx5IDIgYnl0ZXMgd3JpdHRlbiAxNgpVRFAgY29ubmVjdCB0byBhIGxvb3BiYWNrIHBvcnQgMApJUHY2IHNvY2tldCB3aXRoIGxlbmd0aCAxNjogLTEvV1NBRUlOVkFMIGxlbmd0aCBub3cgMTYgZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMApkdWFsLXN0YWNrIGNsaWVudCBjb25uZWN0ZWQgdG8gOjpmZmZmOjEyNy4wLjAuMTogMCBsZW4gMjggZmFtaWx5IDIzIGxvY2FsIGlzIHY0LW1hcHBlZCBsb29wYmFjayAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "length 64: -1/WSAEINVAL length now 64 family -1 bytes written 0\nlength 0: -1/WSAEINVAL length now 0 family -1 bytes written 0\nNULL buffer, length 16: -1/WSAEINVAL length now 16 family -1 bytes written 0\n  port assigned 1 address [127, 0, 0, 1]\nbound, length 15: -1/WSAEFAULT length now 15 family -1 bytes written 0\nbound, length -1: -1/WSAEFAULT length now -1 family -1 bytes written 0\nbound to 0.0.0.0:0: port assigned 1 address [0, 0, 0, 0]\nclient after the peer closed: 0 length now 16 family 2 bytes written 16\nUDP connect to a loopback port 0\nIPv6 socket with length 16: -1/WSAEINVAL length now 16 family -1 bytes written 0\ndual-stack client connected to ::ffff:127.0.0.1: 0 len 28 family 23 local is v4-mapped loopback 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 167
+    },
+    {
+      "name": "getsockname_basic_c",
+      "exe_sha256": "826a3d19f8eff64120e872f5cb78963e7d8cc3a0ad5c8827974974393eeb9309",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGVuZ3RoIDg6IC0xL1dTQUVJTlZBTCBsZW5ndGggbm93IDggZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMApsZW5ndGggLTE6IC0xL1dTQUVGQVVMVCBsZW5ndGggbm93IC0xIGZhbWlseSAtMSBieXRlcyB3cml0dGVuIDAKbm90IGEgc29ja2V0OiAtMS9XU0FFTk9UU09DSyBsZW5ndGggbm93IDE2IGZhbWlseSAtMSBieXRlcyB3cml0dGVuIDAKICBzaW5femVybyBbMCwgMCwgMCwgMCwgMCwgMCwgMCwgMF0KYm91bmQsIGxlbmd0aCA4OiAtMS9XU0FFRkFVTFQgbGVuZ3RoIG5vdyA4IGZhbWlseSAtMSBieXRlcyB3cml0dGVuIDAKYm91bmQsIE5VTEwgbGVuZ3RoIHBvaW50ZXI6IC0xL1dTQUVGQVVMVCBsZW5ndGggbm93IDAgZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMApjb25uZWN0ZWQgY2xpZW50OiAwIGFkZHJlc3MgWzEyNywgMCwgMCwgMV0gcG9ydCBub256ZXJvIDEKYWZ0ZXIgY2xvc2Vzb2NrZXQ6IC0xL1dTQUVOT1RTT0NLIGxlbmd0aCBub3cgMTYgZmFtaWx5IC0xIGJ5dGVzIHdyaXR0ZW4gMApjb25uZWN0ZWQgVURQIHNvY2tldDogMCBhZGRyZXNzIFsxMjcsIDAsIDAsIDFdIHBvcnQgbm9uemVybyAxCklQdjYgc29ja2V0IHdpdGggbGVuZ3RoIDI3OiAtMS9XU0FFSU5WQUwgbGVuZ3RoIG5vdyAyNyBmYW1pbHkgLTEgYnl0ZXMgd3JpdHRlbiAwCiAgcGVlcjogMCBsZW4gMjggZmFtaWx5IDIzIHY0LW1hcHBlZCBsb29wYmFjayAxIHBvcnQgaXMgdGhlIGxpc3RlbmVyJ3MgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "length 8: -1/WSAEINVAL length now 8 family -1 bytes written 0\nlength -1: -1/WSAEFAULT length now -1 family -1 bytes written 0\nnot a socket: -1/WSAENOTSOCK length now 16 family -1 bytes written 0\n  sin_zero [0, 0, 0, 0, 0, 0, 0, 0]\nbound, length 8: -1/WSAEFAULT length now 8 family -1 bytes written 0\nbound, NULL length pointer: -1/WSAEFAULT length now 0 family -1 bytes written 0\nconnected client: 0 address [127, 0, 0, 1] port nonzero 1\nafter closesocket: -1/WSAENOTSOCK length now 16 family -1 bytes written 0\nconnected UDP socket: 0 address [127, 0, 0, 1] port nonzero 1\nIPv6 socket with length 27: -1/WSAEINVAL length now 27 family -1 bytes written 0\n  peer: 0 len 28 family 23 v4-mapped loopback 1 port is the listener's 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 164
+    }
+  ]
+}

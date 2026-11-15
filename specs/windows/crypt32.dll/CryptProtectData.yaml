@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/crypt32.dll/CryptProtectData.yaml
+id: windows/api/crypt32.dll/CryptProtectData
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "CryptProtectMemory", "CryptUnprotectMemory", "CryptProtectData", "CryptUnprotectData", "Cryptographic Functions (DPAPI)"; wincrypt.h, winerror.h and winnt.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  DPAPI encryption. Chrome's OS-crypt layer calls CryptProtectData once, for the key it stores, with no description, no entropy, no prompt and flags 0, and CryptUnprotectData once the same way: TRUE. Observed: the output is longer than the input, is not the plaintext, is a LocalAlloc block and starts with the bytes 01 00 00 00 d0 8c 9d df (the DPAPI provider version and GUID prefix); the same input protected twice gives different blobs; flags UI_FORBIDDEN (1), LOCAL_MACHINE (4), 5, AUDIT (0x10), VERIFY_PROTECTION (0x40) and an unknown 0x1000 are all accepted and round trip; zero bytes protect (TRUE) and unprotect to length 0; a NULL data pointer with length 16 and a NULL input blob pointer: FALSE, 87.
+interface:
+  signature: "BOOL CryptProtectData(DATA_BLOB *in, LPCWSTR description, DATA_BLOB *entropy, PVOID reserved, CRYPTPROTECT_PROMPTSTRUCT *prompt, DWORD flags, DATA_BLOB *out)"
+  result: "TRUE or FALSE; out.pbData is a LocalAlloc block the caller frees with LocalFree"
+chrome:
+  calls: "1 call in the browser: (&in, NULL, NULL, NULL, NULL, 0, &out) -> TRUE"
+rules:
+  chrome_form: "32 bytes: TRUE, last error 0, output longer than the input and different from it"
+  header: "the output starts with 01 00 00 00 d0 8c 9d df"
+  allocation: "LocalSize of the output is at least its length; LocalFree of it returns NULL"
+  randomised: "two calls with the same input give different outputs"
+  flags: "1, 4, 5, 0x10, 0x40 and 0x1000: TRUE and the blob unprotects"
+  empty: "zero bytes in: TRUE; unprotecting that blob gives TRUE and a length of 0"
+  bad_arguments: "NULL data pointer with a non-zero length and a NULL input blob pointer: FALSE, last error 87"
+  description: "a description (\"poly description\") is stored; CryptUnprotectData returns it through its description pointer"
+errors:
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  The blob's length (varies), the machine-key flag's effect across logons, the prompt structure (UI), the master key store.

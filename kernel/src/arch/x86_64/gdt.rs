@@ -23,6 +23,16 @@ pub const KERNEL_DATA: u16 = 0x10;
 pub const USER_DATA: u16 = 0x18 | 3;
 pub const USER_CODE: u16 = 0x20 | 3;
 pub const TSS: u16 = 0x28;
+/// User code, 32-bit (compatibility mode, ADR 0186): a 32-bit Windows
+/// program's threads run with this CS. After the TSS's two slots, so the
+/// `syscall`/`sysret` layout above stays as it is.
+pub const USER_CODE32: u16 = 0x38 | 3;
+
+/// The code selector a user thread returns to ring 3 with: 32-bit
+/// (compatibility mode) or 64-bit.
+pub fn user_code(compat: bool) -> u16 {
+    if compat { USER_CODE32 } else { USER_CODE }
+}
 
 /// IST slot used for double faults, so they get a known-good stack even
 /// when the fault was caused by a stack overflow.
@@ -109,7 +119,7 @@ pub fn set_kernel_stack(top: u64) {
 #[repr(C, align(16))]
 #[derive(Debug)]
 pub struct CpuTables {
-    gdt: [u64; 7],
+    gdt: [u64; 8],
     tss: TaskStateSegment,
 }
 
@@ -124,6 +134,9 @@ impl CpuTables {
                 0x00af_fa00_0000_ffff, // user code, 64-bit
                 0,                     // TSS low (filled in by `load`)
                 0,                     // TSS high
+                // User code, 32-bit: base 0, limit 4 GiB (G), default
+                // operand size 32 (D), L clear, DPL 3 (SDM Vol. 3A, 3.4.5).
+                0x00cf_fa00_0000_ffff,
             ],
             tss: TaskStateSegment {
                 _reserved0: 0,
@@ -203,7 +216,7 @@ unsafe fn load(tables: *mut CpuTables, df_top: u64, nmi_top: u64, area: &'static
         | (((base >> 24) & 0xff) << 56);
     t.gdt[6] = base >> 32;
     area.tss.store(&raw mut t.tss, Ordering::Release);
-    let ptr = DescriptorTablePointer { limit: (size_of::<[u64; 7]>() - 1) as u16, base: (&raw const t.gdt) as u64 };
+    let ptr = DescriptorTablePointer { limit: (size_of::<[u64; 8]>() - 1) as u16, base: (&raw const t.gdt) as u64 };
     // SAFETY: a valid GDT with the selectors below, kept alive forever;
     // reloading CS, the data segments and TR to it changes nothing else
     // (GS is not reloaded, so its base stays).
@@ -220,11 +233,18 @@ unsafe fn load(tables: *mut CpuTables, df_top: u64, nmi_top: u64, area: &'static
             tmp = lateout(reg) _,
             options(preserves_flags),
         );
+        asm!("mov ss, {0:x}", in(reg) KERNEL_DATA, options(nostack, preserves_flags));
+        // DS, ES and FS hold the user data segment (DPL 3), for 32-bit
+        // threads (ADR 0186): in compatibility mode a memory access through
+        // a null selector is a #GP, and IRETQ to ring 3 nulls a selector
+        // whose DPL is below 3. 64-bit code ignores DS and ES, and FS's
+        // base is IA32_FS_BASE, which loading FS here (before any thread
+        // sets it) only zeroes. Nothing loads these three again.
         asm!(
             "mov ds, {0:x}",
             "mov es, {0:x}",
-            "mov ss, {0:x}",
-            in(reg) KERNEL_DATA,
+            "mov fs, {0:x}",
+            in(reg) USER_DATA,
             options(nostack, preserves_flags),
         );
         asm!("ltr {0:x}", in(reg) TSS, options(nostack, preserves_flags));

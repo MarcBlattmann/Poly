@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cdp_modeless",
+      "exe_sha256": "bab3ca6ee942fc8a30a092fa18a06699defbf0d429047a8acb5c00b3384316c8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRGlhbG9nUGFyYW1XOiB3aW5kb3cgZXJyPTAKICBXTV9JTklURElBTE9HIHBhcmFtIDMxCklzV2luZG93IDEgdmlzaWJsZSAwIGVuYWJsZWQgMSBJc0RpYWxvZ01lc3NhZ2Ugb24gYSBtZXNzYWdlIG5vdCBmb3IgaXQ6IDAKY2xhc3MgJyMzMjc3MCcKR2V0RGxnSXRlbSgxMDAyKSBpcyBhIGNoaWxkOiAxCkRNX0dFVERFRklEOiAweDUzNGIwMDAxClNob3dXaW5kb3coU1dfU0hPVykgcHJldmlvdXMgc3RhdGUgMAp2aXNpYmxlIGFmdGVyIFNob3dXaW5kb3cgMApFbmREaWFsb2cgb24gYSBtb2RlbGVzcyBkaWFsb2c6IDEKYWZ0ZXIgRW5kRGlhbG9nOiBJc1dpbmRvdyAxIHZpc2libGUgMApEZXN0cm95V2luZG93OiAxCiAgV01fREVTVFJPWQogIFdNX05DREVTVFJPWQpJc1dpbmRvdyBhZnRlciBEZXN0cm95V2luZG93IDAKdHdvIGRpYWxvZ3M6IHdpbmRvdyB3aW5kb3cgZGlzdGluY3QgMQptaXNzaW5nIHRlbXBsYXRlOiAxIGVycj0xODE0CnVua25vd24gY29udHJvbCBjbGFzczogMSBlcnI9MTQwNwptYWRlLXVwIG1vZHVsZTogMSBlcnI9MTgxMgpiYWQgcGFyZW50OiAxIGVycj0xNDAwCk5VTEwgZGlhbG9nIHByb2NlZHVyZTogd2luZG93IGNsYXNzLXByb2MgaXMgdGhlIGRlZmF1bHQgZGlhbG9nIHByb2M6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateDialogParamW: window err=0\n  WM_INITDIALOG param 31\nIsWindow 1 visible 0 enabled 1 IsDialogMessage on a message not for it: 0\nclass '#32770'\nGetDlgItem(1002) is a child: 1\nDM_GETDEFID: 0x534b0001\nShowWindow(SW_SHOW) previous state 0\nvisible after ShowWindow 0\nEndDialog on a modeless dialog: 1\nafter EndDialog: IsWindow 1 visible 0\nDestroyWindow: 1\n  WM_DESTROY\n  WM_NCDESTROY\nIsWindow after DestroyWindow 0\ntwo dialogs: window window distinct 1\nmissing template: 1 err=1814\nunknown control class: 1 err=1407\nmade-up module: 1 err=1812\nbad parent: 1 err=1400\nNULL dialog procedure: window class-proc is the default dialog proc: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 83
+    }
+  ]
+}

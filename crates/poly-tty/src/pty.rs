@@ -14,8 +14,11 @@
 //!   slave file is closed again, reads fail with `EIO` and poll reports
 //!   `POLLHUP`. Its ioctls: `TIOCGPTN` (the pty number), `TIOCSPTLCK` /
 //!   `TIOCGPTLCK` (the slave lock, which `unlockpt` clears), `TIOCSIG`,
-//!   and the slave's attributes and window size (a change sends
-//!   `SIGWINCH` to the slave's foreground group).
+//!   `TIOCPKT` / `TIOCGPKT` (packet mode: every read starts with a status
+//!   byte, 0 before data, or the `TIOCPKT_*` bits of what happened on the
+//!   slave side as a read of that one byte), and the slave's attributes
+//!   and window size (a change sends `SIGWINCH` to the slave's foreground
+//!   group).
 //! - **The slave** is a [`Tty`] whose driver is the master's buffer;
 //!   opening `/dev/pts/<n>` fails with `EIO` while it is locked (a new
 //!   pair is locked until `unlockpt`). It is owned by the opener of the
@@ -35,7 +38,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::format;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use poly_vfs::lock::{Lock, RawSpinLock};
 use poly_vfs::poll::Registration;
 use poly_vfs::{Blocker, CharDevice, DeviceId, Errno, OpenFlags, PollEvents, Result, Vfs, WaitQueue, Woke};
@@ -97,6 +100,8 @@ impl Ptys {
             buf: Lock::new(VecDeque::new()),
             queue: Arc::new(WaitQueue::new()),
             slave_open: AtomicBool::new(false),
+            packet: AtomicBool::new(false),
+            status: AtomicU8::new(0),
         });
         let slave = Tty::new(
             &self.ttys,
@@ -201,6 +206,10 @@ struct MasterSide {
     queue: Arc<WaitQueue>,
     /// The slave is open.
     slave_open: AtomicBool,
+    /// Packet mode (`TIOCPKT`).
+    packet: AtomicBool,
+    /// `TIOCPKT_*` bits waiting to be read, merged into one status byte.
+    status: AtomicU8,
 }
 
 impl Driver for MasterSide {
@@ -226,6 +235,14 @@ impl Driver for MasterSide {
 
     fn flush(&self) {
         self.buf.lock().clear();
+        self.packet_status(TIOCPKT_FLUSHWRITE);
+    }
+
+    fn packet_status(&self, bits: u8) {
+        if self.packet.load(Ordering::SeqCst) {
+            self.status.fetch_or(bits, Ordering::SeqCst);
+            self.queue.notify(PollEvents::READABLE);
+        }
     }
 
     fn opened(&self, open: bool) {
@@ -361,17 +378,44 @@ impl CharDevice for PtyMaster {
         let mut blocker = None;
         let mut registered = None;
         loop {
-            let n = {
-                let mut b = self.pair.master.buf.lock();
-                let n = b.len().min(buf.len());
-                for (dst, src) in buf.iter_mut().zip(b.drain(..n)) {
-                    *dst = src;
+            if self.pair.master.packet.load(Ordering::SeqCst) {
+                // Packet mode: a pending status goes first, as a read of
+                // its own; data follows a zero status byte.
+                let status = self.pair.master.status.swap(0, Ordering::SeqCst);
+                if status != 0 {
+                    buf[0] = status;
+                    return Ok(1);
                 }
-                n
-            };
-            if n > 0 {
-                self.pair.slave.output_room();
-                return Ok(n);
+                let n = {
+                    let mut b = self.pair.master.buf.lock();
+                    if b.is_empty() {
+                        0
+                    } else {
+                        let n = b.len().min(buf.len() - 1);
+                        buf[0] = TIOCPKT_DATA;
+                        for (dst, src) in buf[1..].iter_mut().zip(b.drain(..n)) {
+                            *dst = src;
+                        }
+                        n + 1
+                    }
+                };
+                if n > 0 {
+                    self.pair.slave.output_room();
+                    return Ok(n);
+                }
+            } else {
+                let n = {
+                    let mut b = self.pair.master.buf.lock();
+                    let n = b.len().min(buf.len());
+                    for (dst, src) in buf.iter_mut().zip(b.drain(..n)) {
+                        *dst = src;
+                    }
+                    n
+                };
+                if n > 0 {
+                    self.pair.slave.output_room();
+                    return Ok(n);
+                }
             }
             if self.pair.slave_gone() {
                 return Err(Errno::EIO);
@@ -405,7 +449,7 @@ impl CharDevice for PtyMaster {
 
     fn poll(&self) -> PollEvents {
         let mut ev = PollEvents::NONE;
-        if !self.pair.master.buf.lock().is_empty() {
+        if !self.pair.master.buf.lock().is_empty() || self.pair.master.status.load(Ordering::SeqCst) != 0 {
             ev = ev | PollEvents::READABLE;
         }
         if self.pair.slave_gone() {
@@ -431,6 +475,15 @@ impl CharDevice for PtyMaster {
                 Ok(0)
             }
             TIOCGPTLCK => self.put_int(arg, i32::from(self.pair.locked())),
+            TIOCPKT => {
+                let on = self.get_int(arg)? != 0;
+                self.pair.master.packet.store(on, Ordering::SeqCst);
+                if !on {
+                    self.pair.master.status.store(0, Ordering::SeqCst);
+                }
+                Ok(0)
+            }
+            TIOCGPKT => self.put_int(arg, i32::from(self.pair.master.packet.load(Ordering::SeqCst))),
             TIOCGPGRP => match slave.session() {
                 (Some(_), Some(pgrp)) => self.put_int(arg, pgrp),
                 _ => Err(Errno::ENOTTY),

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getusernameexw_sam",
+      "exe_sha256": "10c62ba79e2fa3656b0e272de77cc565099968f4ef4658c98ce8db706acb4b94",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBidWZmZXIsIHNpemUgMDogcmVzdWx0IDAgZXJyb3IgMjM0IHNpemUtcG9zaXRpdmUgMQp0aGUgdGV4dCBoYXMgZXhhY3RseSBvbmUgYmFja3NsYXNoIDEgd2l0aCBzb21ldGhpbmcgYmVmb3JlIGl0IDEgYW5kIGFmdGVyIGl0IDEKYnVmZmVyIG9uZSB1bml0IHNob3J0OiByZXN1bHQgMCBlcnJvciAyMzQgc2l6ZS1hc2tlZC1mb3ItdGV4dCtOVUwgMSBidWZmZXIgdW50b3VjaGVkIDAKZm9ybWF0IC0xOiByZXN1bHQgMCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL buffer, size 0: result 0 error 234 size-positive 1\nthe text has exactly one backslash 1 with something before it 1 and after it 1\nbuffer one unit short: result 0 error 234 size-asked-for-text+NUL 1 buffer untouched 0\nformat -1: result 0 error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "getusernameexw_sam_c",
+      "exe_sha256": "4363b09b175189a34ffd18cd4216302af6dd5c9a2029215ec0f3044b6d983c6c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvbiBzdWNjZXNzIGlzIHRoZSB0ZXh0IGxlbmd0aCB3aXRob3V0IHRoZSBOVUw6IDEKYnVmZmVyIG9mIHRleHQrTlVMOiByZXN1bHQgMSBzaXplIDEgdGV4dCBpbnRhY3QgMQpmb3JtYXQgOTk6IHJlc3VsdCAwIGVycm9yIDg3CmEgc2Vjb25kIGNhbGwgZ2l2ZXMgdGhlIHNhbWUgdGV4dCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size on success is the text length without the NUL: 1\nbuffer of text+NUL: result 1 size 1 text intact 1\nformat 99: result 0 error 87\na second call gives the same text 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

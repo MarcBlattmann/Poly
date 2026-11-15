@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comdlg32.dll/ChooseFontW.yaml
+id: windows/api/comdlg32.dll/ChooseFontW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The font dialog; failing before it is shown (structure and flag checks) or ended by Cancel through a hook.
+interface:
+  signature: "BOOL ChooseFontW(LPCHOOSEFONTW lpcf)"
+rules:
+  structure: "CHOOSEFONTW is 104 bytes and LOGFONTW 92 bytes on x64"
+  error_codes: "lStructSize 0: FALSE with CDERR_STRUCTSIZE (1); CF_ENABLEHOOK without a hook: CDERR_NOHOOK (0xB); CF_LIMITSIZE with a minimum above the maximum: CFERR_MAXLESSTHANMIN (0x2002); no font type flag at all is not an error on the oracle (the dialog is shown and cancelled: FALSE, 0)"
+  cancelled: "with CF_ENABLEHOOK and a hook that posts IDCANCEL: FALSE, extended error 0, the LOGFONT (height -12, weight 400 as given with CF_INITTOLOGFONTSTRUCT) unchanged"
+errors:
+  codes: "see error_codes"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Choosing a font, the list of fonts (machine dependent), CF_EFFECTS and colours.

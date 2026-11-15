@@ -1,0 +1,98 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsaeventselect_close_args",
+      "exe_sha256": "182cffa60e5eab3fc69c9ab3e6f05b4cb1016e03b7eb854fc480b69042e29208",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGVlciBjbG9zZWQ6IHNpZ25hbGxlZCAxCnNpZ25hbGxlZCBhZ2FpbiAwCnJlY3YgMwplbnVtIENMT1NFPVdTQUVDT05OQUJPUlRFRCBbc2xvdHMgbGVmdCBhbG9uZTogOV0Kc2VuZCAtMS9XU0FFQ09OTlJFU0VUCmV2ZW50IGhhbmRsZSB0aGF0IGlzIG5vdCBhbiBldmVudCAtMS9XU0FFTk9UU09DSwptYXNrIDAgd2l0aCBhbiBldmVudCAwCklOVkFMSURfU09DS0VUIC0xL1dTQUVOT1RTT0NLCnNlbGVjdCB3aXRoIHRoZSBvbGQgZXZlbnQgYWdhaW4gMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "peer closed: signalled 1\nsignalled again 0\nrecv 3\nenum CLOSE=WSAECONNABORTED [slots left alone: 9]\nsend -1/WSAECONNRESET\nevent handle that is not an event -1/WSAENOTSOCK\nmask 0 with an event 0\nINVALID_SOCKET -1/WSAENOTSOCK\nselect with the old event again 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 683
+    },
+    {
+      "name": "wsaeventselect_close_args_b",
+      "exe_sha256": "046ada1f6316dfcb9e3855a1faf3567343536c1a3c8a3f90eaf465babcd0b5af",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW51bSBDTE9TRT0wIFtzbG90cyBsZWZ0IGFsb25lOiA5XQpkYXRhIGFuZCBzaHV0ZG93bihTRF9TRU5EKTogc2lnbmFsbGVkIDEKcmVjdiBhZ2FpbiAwCnJlY3YgLTEvV1NBRUNPTk5SRVNFVAphZnRlciB0aGUgbG9jYWwgc2h1dGRvd246IHNpZ25hbGxlZCAwCnVua25vd24gbWFzayBiaXRzIDB4ODAwMCAtMS9XU0FFSU5WQUwKcmVjdiB3aXRob3V0IGRhdGEgYWZ0ZXIgbWFzayAwIChub24tYmxvY2tpbmcpIC0xL1dTQUVXT1VMREJMT0NLCmNsb3NlZCBzb2NrZXQgLTEvV1NBRU5PVFNPQ0sKc2lnbmFsbGVkIG9uIHRoZSBuZXcgZXZlbnQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enum CLOSE=0 [slots left alone: 9]\ndata and shutdown(SD_SEND): signalled 1\nrecv again 0\nrecv -1/WSAECONNRESET\nafter the local shutdown: signalled 0\nunknown mask bits 0x8000 -1/WSAEINVAL\nrecv without data after mask 0 (non-blocking) -1/WSAEWOULDBLOCK\nclosed socket -1/WSAENOTSOCK\nsignalled on the new event 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 686
+    },
+    {
+      "name": "wsaeventselect_close_args_c",
+      "exe_sha256": "7704841b5646da3ab8e05c56dce7b188ae787a0aa2f89db98b0280d02ef1aa99",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVjdiAwCmVudW0gUkVBRD0wIENMT1NFPTAgW3Nsb3RzIGxlZnQgYWxvbmU6IDhdCnJlc2V0OiBzaWduYWxsZWQgMQpyZWN2IGFnYWluIC0xL1dTQUVDT05OUkVTRVQKTlVMTCBldmVudCB3aXRoIGEgbWFzayAtMS9XU0FFSU5WQUwKbWFzayBGRF9RT1N8RkRfUk9VVElOR19JTlRFUkZBQ0VfQ0hBTkdFfEZEX0FERFJFU1NfTElTVF9DSEFOR0UgMApub3QgYSBzb2NrZXQgLTEvV1NBRU5PVFNPQ0sKc2VsZWN0IG9uIHRoZSBwZWVyIHdpdGggdGhlIHNhbWUgZXZlbnQgMApzaWduYWxsZWQgb24gdGhlIHJlcGxhY2VkIGV2ZW50IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "recv 0\nenum READ=0 CLOSE=0 [slots left alone: 8]\nreset: signalled 1\nrecv again -1/WSAECONNRESET\nNULL event with a mask -1/WSAEINVAL\nmask FD_QOS|FD_ROUTING_INTERFACE_CHANGE|FD_ADDRESS_LIST_CHANGE 0\nnot a socket -1/WSAENOTSOCK\nselect on the peer with the same event 0\nsignalled on the replaced event 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 684
+    },
+    {
+      "name": "wsaeventselect_listener_connect_b",
+      "exe_sha256": "8b10ea3e19d0a52c62e85316d5926083343ca16b8766572a9428d2c9c858ac51",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2lnbmFsbGVkIHdpdGggbm8gY29ubmVjdGlvbiBwZW5kaW5nIDAKc2lnbmFsbGVkIHJpZ2h0IGFmdGVyIHRoZSBlbnVtIGNhbGwgMAplbnVtIDAgQUNDRVBUPTAgW3Nsb3RzIGxlZnQgYWxvbmU6IDldCmFjY2VwdCB3aXRoIG5vdGhpbmcgcGVuZGluZyAtMS9XU0FFV09VTERCTE9DSwphY2NlcHQgYWZ0ZXIgdGhlIGNhbmNlbCAoc3RpbGwgbm9uLWJsb2NraW5nKSAtMS9XU0FFV09VTERCTE9DSwpzaWduYWxsZWQgYmVmb3JlIGNvbm5lY3QgMAplbnVtIDAgV1JJVEU9MCBDT05ORUNUPTAgW3Nsb3RzIGxlZnQgYWxvbmU6IDhdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "signalled with no connection pending 0\nsignalled right after the enum call 0\nenum 0 ACCEPT=0 [slots left alone: 9]\naccept with nothing pending -1/WSAEWOULDBLOCK\naccept after the cancel (still non-blocking) -1/WSAEWOULDBLOCK\nsignalled before connect 0\nenum 0 WRITE=0 CONNECT=0 [slots left alone: 8]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 819
+    },
+    {
+      "name": "wsaeventselect_read_rearm_b",
+      "exe_sha256": "285bfe48c7eee9b6d50b7ebca279d05c96fa392a2de67253308d4ec3f5c3a0cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2lnbmFsbGVkIGF0IG9uY2UgMQpzaWduYWxsZWQgYnkgMTAgYnl0ZXMgMQplbnVtIFJFQUQ9MCBbc2xvdHMgbGVmdCBhbG9uZTogOV0KZW51bSBSRUFEPTAgW3Nsb3RzIGxlZnQgYWxvbmU6IDldCnNpZ25hbGxlZCBhZnRlciBkcmFpbmluZyAwCmV2ZW50IGFmdGVyIHRoYXQgKG5vdCByZXNldCBieSByZWN2KSAxCnJlLXNlbGVjdCBGRF9SRUFEfEZEX0NMT1NFIHdpdGggZGF0YSB1bnJlYWQgMApzZWxlY3QgRkRfQ0xPU0Ugb25seSAwCnNpZ25hbGxlZCBieSB0aGUgbmV3IG1hc2sgMQpzaWduYWxsZWQgYWdhaW4gd2l0aCBub3RoaW5nIGJsb2NrZWQgMApwZWVyIHJlY2VpdmVkIGFsbCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "signalled at once 1\nsignalled by 10 bytes 1\nenum READ=0 [slots left alone: 9]\nenum READ=0 [slots left alone: 9]\nsignalled after draining 0\nevent after that (not reset by recv) 1\nre-select FD_READ|FD_CLOSE with data unread 0\nselect FD_CLOSE only 0\nsignalled by the new mask 1\nsignalled again with nothing blocked 0\npeer received all 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3942
+    },
+    {
+      "name": "wsaeventselect_read_rearm_c",
+      "exe_sha256": "e7b167d03ba979be3ed0cfeb258fc897d6d65ff31a98a75038a196a0c2a051e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW51bSAwIFdSSVRFPTAgW3Nsb3RzIGxlZnQgYWxvbmU6IDldCmVudW0gUkVBRD0wIFtzbG90cyBsZWZ0IGFsb25lOiA5XQpyZWN2IDQgNApzaWduYWxsZWQgYWZ0ZXIgYSBwZWVrIDEKc2lnbmFsbGVkIDEKZW51bSAtIFtzbG90cyBsZWZ0IGFsb25lOiAxMF0Kc2lnbmFsbGVkIGJ5IHRoZSByZS1zZWxlY3QgMApzaWduYWxsZWQgYnkgZGF0YSB3aXRob3V0IEZEX1JFQUQgaW4gdGhlIG1hc2sgMApzZWxlY3QgRkRfV1JJVEUgMApzZW5kIGZpbGxlZCB0aGUgYnVmZmVycyBhbmQgcmV0dXJuZWQgV1NBRVdPVUxEQkxPQ0sgMQpGRF9XUklURSBwb3N0ZWQgYWZ0ZXIgdGhlIHBlZXIgcmVhZCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enum 0 WRITE=0 [slots left alone: 9]\nenum READ=0 [slots left alone: 9]\nrecv 4 4\nsignalled after a peek 1\nsignalled 1\nenum - [slots left alone: 10]\nsignalled by the re-select 0\nsignalled by data without FD_READ in the mask 0\nselect FD_WRITE 0\nsend filled the buffers and returned WSAEWOULDBLOCK 1\nFD_WRITE posted after the peer read 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3943
+    }
+  ]
+}

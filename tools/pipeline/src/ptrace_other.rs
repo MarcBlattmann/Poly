@@ -1,28 +1,37 @@
 //! The tracer on systems other than Linux. The real one (`ptrace.rs`) is
 //! ptrace(2) with Linux's options, mount and user namespaces; none of that
-//! exists on macOS, where the pipeline runs for the macOS oracle (ADR 0182).
-//! The tool still builds there: tracing, the diff runner's reference runs
-//! and app tests report that they need Linux.
+//! exists on macOS, where the pipeline runs for the macOS oracle (ADR 0182),
+//! or on Windows (ADR 0124). The tool still builds there: tracing, the diff
+//! runner's reference runs and app tests report that they need Linux.
 
 use crate::trace::Trace;
-use crate::util::Result;
+use crate::util::{self, Result};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const NEEDS_LINUX: &str = "the system call tracer needs Linux (ptrace and namespaces); this host is not Linux";
+fn needs_linux() -> String {
+    util::needs_linux("trace (the system call tracer: ptrace and namespaces)")
+}
 
 /// The running system, e.g. `darwin 27.0.0`.
 pub fn host_system() -> String {
-    let release = std::process::Command::new("uname")
-        .arg("-r")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    format!("{} {release}", std::env::consts::OS)
+    // Windows has no uname; `cmd /c ver` would need parsing, and a Windows
+    // host never records a reference run, so the system name is enough.
+    let release = if cfg!(unix) {
+        std::process::Command::new("uname")
+            .arg("-r")
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    format!("{} {release}", std::env::consts::OS).trim_end().to_string()
 }
 
 /// Mark every descriptor from 3 up close-on-exec (see `ptrace.rs`): one by
 /// one, up to the descriptor limit. Only async-signal-safe calls.
+#[cfg(unix)]
 pub(crate) fn cloexec_from_3() {
     // SAFETY: `lim` is a valid rlimit for getrlimit to fill.
     let mut lim: libc::rlimit = unsafe { std::mem::zeroed() };
@@ -40,7 +49,7 @@ pub(crate) fn cloexec_from_3() {
 }
 
 pub fn trace(_program: &Path, _test: &str, _timeout: Duration) -> Result<Trace> {
-    Err(NEEDS_LINUX.into())
+    Err(needs_linux())
 }
 
 pub fn trace_in(
@@ -50,5 +59,5 @@ pub fn trace_in(
     _test: &str,
     _timeout: Duration,
 ) -> Result<Trace> {
-    Err(NEEDS_LINUX.into())
+    Err(needs_linux())
 }

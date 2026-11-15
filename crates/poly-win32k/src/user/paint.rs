@@ -31,11 +31,11 @@ impl Pending {
     }
 }
 
-/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64.
+/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64, 64 in a 32-bit process (ADR 0186).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PaintStruct {
-    pub hdc: u64,
+    pub hdc: usize,
     pub erase: i32,
     pub paint: CRect,
     pub restore: i32,
@@ -155,7 +155,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         // A hidden window: a DC with nothing to paint, no message; fErase
         // is the window's state (`hidden`).
         let dc = env.paint_dc(h, Some(&[]));
-        ps.hdc = dc;
+        ps.hdc = dc as usize;
         ps.erase = i32::from(p.ferase);
         return dc;
     }
@@ -172,7 +172,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         if i.minimized {
             flush_frames_below(env, h);
         }
-        ps.hdc = dc;
+        ps.hdc = dc as usize;
         ps.erase = i32::from(!p.erase && p.ferase);
         return dc;
     }
@@ -184,7 +184,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         p.ferase
     };
     painted(env, h, PAINTED_VALIDATE, if p.erase { if erase { 1 } else { 2 } } else { 0 });
-    ps.hdc = dc;
+    ps.hdc = dc as usize;
     ps.erase = i32::from(erase);
     // rcPaint is cut to what is on the screen; the update region was not
     // (`offscreen`).
@@ -217,7 +217,7 @@ pub fn end_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &PaintStruct) -> bool 
         return false;
     };
     if ps.hdc != 0 {
-        env.release_dc(i.hwnd, ps.hdc);
+        env.release_dc(i.hwnd, ps.hdc as u64);
     }
     true
 }

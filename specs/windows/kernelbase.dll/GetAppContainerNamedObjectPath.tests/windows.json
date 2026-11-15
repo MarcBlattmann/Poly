@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "15bb70091a8b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T11:00:14Z",
+  "tests": [
+    {
+      "name": "gacnop_path_b",
+      "exe_sha256": "f1f8b382631c02de45e2c5a1a3b13db915d5da058e764af1ddfc614e4184ff91",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgbGVuZ3RoIGlzIHRoZSBudW1iZXIgb2YgY2hhcmFjdGVycyB3aXRoIHRoZSBOVUw6IHRydWUKbGVuZ3RoIG90aGVyOiBvayBmYWxzZSwgbmVlZGVkIDEwOCwgZXJyb3IgMTIyLCB0ZXh0IGxlbmd0aCAwCmxlbmd0aCA9IG5lZWRlZDogb2sgdHJ1ZSwgbmVlZGVkIDEwOCwgZXJyb3IgMCwgdGV4dCBsZW5ndGggMTA3CkFwcENvbnRhaW5lciB0b2tlbiwgTlVMTCBTSUQ6IG9rIHRydWUsIGxlbmd0aCAxMDgsIHNhbWUgcGF0aCBhcyBmb3IgdGhlIFNJRCB0cnVlCmltcGVyc29uYXRpb24gY29weSBvZiB0aGUgdG9rZW46IG9rIHRydWUsIHNhbWUgcGF0aCB0cnVlCk5VTEwgdG9rZW4gYW5kIE5VTEwgU0lEICh0aGlzIHByb2Nlc3MgaXMgbm8gY29udGFpbmVyKTogb2sgZmFsc2UsIGVycm9yIDQyNTAKU0lEIGEgY2FwYWJpbGl0eSBTSUQ6IG9rIGZhbHNlLCBlcnJvciA0MjUwCmV4cG9ydGVkIGJ5IGtlcm5lbDMyLmRsbCB0cnVlIGFuZCBrZXJuZWxiYXNlLmRsbCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the length is the number of characters with the NUL: true\nlength other: ok false, needed 108, error 122, text length 0\nlength = needed: ok true, needed 108, error 0, text length 107\nAppContainer token, NULL SID: ok true, length 108, same path as for the SID true\nimpersonation copy of the token: ok true, same path true\nNULL token and NULL SID (this process is no container): ok false, error 4250\nSID a capability SID: ok false, error 4250\nexported by kernel32.dll true and kernelbase.dll true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "gacnop_path_c",
+      "exe_sha256": "5ef3b2e038c708e30a677e4077312ae1c9ef6ec38ef94244648ba75d7bcf13e2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgcGF0aCBpcyBgQXBwQ29udGFpbmVyTmFtZWRPYmplY3RzXGAgYW5kIHRoZSBTSUQgdGV4dDogdHJ1ZQpsZW5ndGggb3RoZXI6IG9rIGZhbHNlLCBuZWVkZWQgMTA4LCBlcnJvciAxMjIsIHRleHQgbGVuZ3RoIDAKbGVuZ3RoIG90aGVyOiBvayB0cnVlLCBuZWVkZWQgMTA4LCBlcnJvciAwLCB0ZXh0IGxlbmd0aCAxMDcKQXBwQ29udGFpbmVyIHRva2VuIGFuZCBTSUQgdG9nZXRoZXI6IG9rIGZhbHNlLCBlcnJvciA4NwpvcmRpbmFyeSB0b2tlbiwgTlVMTCBTSUQ6IG9rIGZhbHNlLCBlcnJvciA0MjUwClNJRCBBZG1pbmlzdHJhdG9yczogb2sgZmFsc2UsIGVycm9yIDQyNTAKU0lEIDkgc3ViLWF1dGhvcml0aWVzOiBvayBmYWxzZSwgZXJyb3IgNDI1MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the path is `AppContainerNamedObjects\\` and the SID text: true\nlength other: ok false, needed 108, error 122, text length 0\nlength other: ok true, needed 108, error 0, text length 107\nAppContainer token and SID together: ok false, error 87\nordinary token, NULL SID: ok false, error 4250\nSID Administrators: ok false, error 4250\nSID 9 sub-authorities: ok false, error 4250\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSASocketW.yaml
+id: windows/api/ws2_32.dll/WSASocketW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER", "WSAPROTOCOL_INFO", "Handle Inheritance"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a socket. Chrome's network service calls WSASocketW(AF_INET6=23, SOCK_STREAM=1, IPPROTO_TCP=6, NULL, 0, WSA_FLAG_OVERLAPPED=1) for every TCP connection and WSASocketW(23, SOCK_DGRAM=2, IPPROTO_UDP=17, NULL, 0, 1) for UDP (including the IPv6 probe), then sets IPV6_V6ONLY to 0 (the default on an IPv6 socket is 1), and also WSASocketW(-1, -1, -1, &WSAPROTOCOL_INFOW, 0, 1) for the sockets the browser made and duplicated (see WSADuplicateSocketW). Observed matrix (family, type, protocol -> result): IPv4 and IPv6 stream with protocol 0 or 6 and datagram with 0 or 17 are made; stream with 17 and datagram with 6 (and IPv6 stream with 17): WSAEPROTONOSUPPORT (10043); IPv4 type 4, 5 or 99: WSAESOCKTNOSUPPORT (10044); IPv4 stream with protocol 99 or 1: 10043; type 0 with protocol 6/17 picks stream/datagram, type 0 with protocol 0 is made as stream; family 0 (AF_UNSPEC) needs a protocol (0,1,6 and 0,2,17 are made as IPv4, 0,1,0 and 0,0,0 give WSAEINVAL (10022)); AF_UNIX (1) stream is made and AF_UNIX datagram is WSAEAFNOSUPPORT (10047); family 99, -1 and 65535: 10047. The socket's value is a multiple of 4 and a kernel handle: GetFileType says FILE_TYPE_PIPE (3), CloseHandle works on it and closesocket still returns 0 afterwards, DuplicateHandle makes a second handle to the same socket that outlives the original (the peer sees no end of stream while one handle is open) and is not inheritable. Handle inheritance: the handle is inheritable (flag 1) unless WSA_FLAG_NO_HANDLE_INHERIT (0x80) is set. Overlapped use: a socket made with WSA_FLAG_OVERLAPPED and one made by socket() both return -1/WSA_IO_PENDING (997) from WSARecv with an OVERLAPPED and no data, signal the OVERLAPPED's event when data comes, and WSAGetOverlappedResult then gives the byte count; on a socket made with flags 0 an overlapped WSARecv with data already waiting completes at once with 0.
+interface:
+  signature: "SOCKET WSASocketW(int af, int type, int protocol, LPWSAPROTOCOL_INFOW info, GROUP g, DWORD flags)"
+  result: "a socket, or INVALID_SOCKET with the WSA error from WSAGetLastError"
+chrome:
+  calls: "WSASocketW 29 to 49 calls per run: (23,1,6,NULL,0,1) 31 times, (23,2,17,NULL,0,1) 12 times, (-1,-1,-1,&info,0,1) 8 times; browser: (23,1,6,NULL,0,1) twice for sockets it duplicates for the network service"
+rules:
+  made: "AF_INET and AF_INET6 stream with protocol 0 or 6; datagram with 0 or 17; type 0 with protocol 0 (stream), 6 (stream) or 17 (datagram); AF_UNSPEC with (stream,6) and (datagram,17); AF_UNIX stream; SO_TYPE of each reads the type made; an unbound socket's getsockname fails with 10022"
+  protocol_mismatch: "(2,1,17), (2,2,6), (23,1,17), (2,1,99), (2,1,1): WSAEPROTONOSUPPORT 10043"
+  type_refused: "(2,4,0), (2,5,0), (2,99,0): WSAESOCKTNOSUPPORT 10044"
+  family_refused: "(0,1,0) and (0,0,0): WSAEINVAL 10022; (1,2,0) AF_UNIX datagram, (99,..), (-1,..), (65535,..): WSAEAFNOSUPPORT 10047"
+  protocol_info_null: "(-1,-1,-1) with a NULL protocol info: WSAESOCKTNOSUPPORT 10044"
+  flags_and_group: "unknown flag bits (0x10000000): refused with WSAEPROTOTYPE 10041; a non-zero group with no group semantics (5): WSAEINVAL 10022"
+  raw: "a raw socket (type 3) is made or refused with WSAEACCES (10013) depending on privilege (not recorded which)"
+  ipv6_default: "IPV6_V6ONLY of a new IPv6 TCP socket reads 1 (4 bytes); of a new IPv6 UDP socket reads 1 in a single byte"
+  dual_stack: "after IPV6_V6ONLY 0 an IPv6 TCP socket connects to ::ffff:127.0.0.1 and an IPv4 listener accepts it; an IPv4 socket connecting to ::1 (length 28 or 16) fails with WSAEAFNOSUPPORT 10047"
+  inherit: "WSASocketW flags 0 and WSA_FLAG_OVERLAPPED and socket(): GetHandleInformation flags 1; with WSA_FLAG_NO_HANDLE_INHERIT (alone or with OVERLAPPED): 0"
+  handle: "socket values are multiples of 4; GetFileType 3; CloseHandle(socket) returns TRUE with error 0 and a following closesocket still returns 0; a second closesocket is -1/WSAENOTSOCK; closesocket(INVALID_SOCKET) and closesocket(0): -1/WSAENOTSOCK"
+  duplicate_handle: "DuplicateHandle(self, socket, self, &new, 0, FALSE, DUPLICATE_SAME_ACCESS) returns TRUE; the copy has handle flags 0, sends data the peer receives, answers getsockname after the original was closed; the peer's recv gets the data and then WSAEWOULDBLOCK (non-blocking) until the last handle is closed and then 0"
+  overlapped_pending: "WSARecv(c, &buf, 1, &n, &flags, &ov(hEvent=ev), NULL) with no data: -1/WSA_IO_PENDING on WSASocketW(OVERLAPPED) and on socket(); after the peer sends 3 bytes the event is signalled and WSAGetOverlappedResult(wait FALSE) gives TRUE, 3 bytes, flags 0"
+  flags_zero_overlapped: "a socket made with flags 0: WSARecv with an OVERLAPPED and data already waiting returns 0 at once with the bytes received (and the OVERLAPPED's event is signalled)"
+errors:
+  not_started: "WSANOTINITIALISED 10093"
+  protocol: "WSAEPROTONOSUPPORT 10043"
+  type: "WSAESOCKTNOSUPPORT 10044"
+  family: "WSAEAFNOSUPPORT 10047"
+  invalid: "WSAEINVAL 10022"
+  flags: "WSAEPROTOTYPE 10041"
+side_effects: "creates a kernel object; sockets are inheritable by default"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  WSASocketW(FROM_PROTOCOL_INFO) from a real WSAPROTOCOL_INFOW (see the WSADuplicateSocketW sheet), raw and AF_BTH/AF_IRDA families, whether a child process really inherits the socket, the group id semantics, address-family availability that depends on the machine (IPv6 is present on the oracle).
