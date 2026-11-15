@@ -628,6 +628,24 @@ cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
 
+## On a Windows host
+
+The pipeline tool builds and its tests pass on a Windows host with the same
+`cargo xtask pipeline ...` commands (ADR 0124); `ci lint` checks it with
+`clippy --target x86_64-pc-windows-msvc` next to xtask. What is Linux by
+nature is behind `cfg(unix)` and says so at run time instead of failing to
+build:
+
+| Command | On a Windows host |
+|---|---|
+| `spec`, `tests`, `handoff`, `initramfs`, `win ...` | work (`win build` cross-builds the Windows test programs; `win remote` needs ssh) |
+| `build`, `trace`, `diff`, `polyrun` | exit 1: `` `pipeline <cmd>` needs a Linux host (ADR 0124); run it through polyd `` |
+| `selfcheck`, `polycheck` | skip themselves with the same reason (exit 0), like without a C compiler |
+| `mac ...` | need a Mac, as before |
+
+Repository paths the tool records (spec sheets, visible tests, hand-off
+log, manifests) always use `/`, whatever the host.
+
 ## Safety rules
 
 Reviewers check these on every agent PR; a violation stops the entry
