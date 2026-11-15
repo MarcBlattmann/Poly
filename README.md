@@ -123,7 +123,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,206 | 542 | 3,667 | 3,164 | 53,537 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,210 | 542 | 3,647 | 3,189 | 53,536 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 741,217 | 0 | 0 | 0 | 741,217 | 0 | 0 |
 
@@ -134,6 +134,7 @@ Seeded from (names only):
 - `chrome-win-trace`: Calls Chrome for Testing 157.0.8103.38 (win64) made on real Windows, recorded with the API tracer (specs/windows/apps/chrome) @ `157.0.8103.38`
 - `linux-syscall-tbl`: Linux arch/x86/entry/syscalls/syscall_64.tbl @ `f47d223627f80cb7a1eb14c585fe6cb35de5e984`
 - `macos-sdk`: macOS SDK .tbd stubs (exported symbols and Objective-C classes) @ `macOS SDK 27.0 (26A425)`
+- `ms-learn-commctrl`: Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
