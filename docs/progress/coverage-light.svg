@@ -79,6 +79,7 @@
 </g>
 <g><title>425 smaller libraries: 0 / 15,405 done (0.0%)</title>
 <rect x="322.3" y="335.7" width="73.2" height="77.3" fill="#e6eaef"/>
+<rect x="322.3" y="335.7" width="0.0" height="77.3" fill="#218bff"/>
 <rect x="321.3" y="334.7" width="75.2" height="79.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="327.3" y="349.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">425 smalle…</text>
 <text x="327.3" y="363.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
@@ -782,6 +783,7 @@
 </g>
 <g><title>BSD syscalls: 0 / 455 done (0.0%)</title>
 <rect x="873.3" y="289.2" width="10.7" height="11.8" fill="#e6eaef"/>
+<rect x="873.3" y="289.2" width="0.9" height="11.8" fill="#218bff"/>
 <rect x="872.3" y="288.2" width="12.7" height="13.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>AppIntentsTypeSupport: 0 / 447 done (0.0%)</title>
@@ -1282,7 +1284,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.8%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">448 / 58,736 entries · 73,276 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">450 / 58,736 entries · 73,276 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 16,439 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="157.5" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2da44e"/>
@@ -1294,7 +1296,7 @@
 <g><title>349 smaller libraries: 1 / 2,804 done (0.0%)</title>
 <rect x="175.5" y="469.0" width="67.1" height="84.6" fill="#e6eaef"/>
 <rect x="175.5" y="469.0" width="0.0" height="84.6" fill="#2da44e"/>
-<rect x="175.6" y="469.0" width="0.2" height="84.6" fill="#d4a72c"/>
+<rect x="175.6" y="469.0" width="0.3" height="84.6" fill="#d4a72c"/>
 <rect x="175.8" y="469.0" width="0.0" height="84.6" fill="#218bff"/>
 <rect x="174.5" y="468.0" width="69.1" height="86.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="180.5" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">349 small…</text>
@@ -1354,11 +1356,11 @@
 <rect x="303.4" y="541.1" width="42.2" height="53.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="556.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 119 / 993 done (12.0%)</title>
+<g><title>user32: 121 / 993 done (12.2%)</title>
 <rect x="304.4" y="595.7" width="40.2" height="48.2" fill="#e6eaef"/>
-<rect x="304.4" y="595.7" width="4.8" height="48.2" fill="#2da44e"/>
+<rect x="304.4" y="595.7" width="4.9" height="48.2" fill="#2da44e"/>
 <rect x="309.3" y="595.7" width="2.3" height="48.2" fill="#d4a72c"/>
-<rect x="311.6" y="595.7" width="0.3" height="48.2" fill="#218bff"/>
+<rect x="311.6" y="595.7" width="0.2" height="48.2" fill="#218bff"/>
 <rect x="303.4" y="594.7" width="42.2" height="50.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="309.4" y="609.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
@@ -1376,6 +1378,7 @@
 </g>
 <g><title>setupapi: 0 / 617 done (0.0%)</title>
 <rect x="346.6" y="509.1" width="31.5" height="37.3" fill="#e6eaef"/>
+<rect x="346.6" y="509.1" width="0.5" height="37.3" fill="#d4a72c"/>
 <rect x="345.6" y="508.1" width="33.5" height="39.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>advapi32: 85 / 589 done (14.4%)</title>
@@ -1476,6 +1479,7 @@
 </g>
 <g><title>cfgmgr32: 0 / 276 done (0.0%)</title>
 <rect x="487.4" y="498.7" width="23.0" height="21.6" fill="#e6eaef"/>
+<rect x="487.4" y="498.7" width="0.3" height="21.6" fill="#d4a72c"/>
 <rect x="486.4" y="497.7" width="25.0" height="23.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ndis.sys: 0 / 276 done (0.0%)</title>
@@ -1516,6 +1520,7 @@
 </g>
 <g><title>propsys: 0 / 208 done (0.0%)</title>
 <rect x="406.8" y="646.5" width="18.9" height="19.2" fill="#e6eaef"/>
+<rect x="406.8" y="646.5" width="0.4" height="19.2" fill="#d4a72c"/>
 <rect x="405.8" y="645.5" width="20.9" height="21.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>sechost: 0 / 208 done (0.0%)</title>
@@ -1599,6 +1604,7 @@
 </g>
 <g><title>pdh: 0 / 163 done (0.0%)</title>
 <rect x="483.8" y="542.9" width="16.5" height="16.8" fill="#e6eaef"/>
+<rect x="483.8" y="542.9" width="0.6" height="16.8" fill="#d4a72c"/>
 <rect x="482.8" y="541.9" width="18.5" height="18.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>chakra: 0 / 160 done (0.0%)</title>
@@ -1624,6 +1630,7 @@
 </g>
 <g><title>ncrypt: 0 / 138 done (0.0%)</title>
 <rect x="446.3" y="561.8" width="15.6" height="14.7" fill="#e6eaef"/>
+<rect x="446.3" y="561.8" width="1.5" height="14.7" fill="#d4a72c"/>
 <rect x="445.3" y="560.8" width="17.6" height="16.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ws2_32: 0 / 136 done (0.0%)</title>
@@ -1654,6 +1661,7 @@
 </g>
 <g><title>wintrust: 0 / 127 done (0.0%)</title>
 <rect x="446.3" y="673.6" width="15.6" height="13.4" fill="#e6eaef"/>
+<rect x="446.3" y="673.6" width="1.2" height="13.4" fill="#d4a72c"/>
 <rect x="445.3" y="672.6" width="17.6" height="15.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>uxtheme: 0 / 123 done (0.0%)</title>
@@ -1951,6 +1959,7 @@
 </g>
 <g><title>wevtapi: 0 / 46 done (0.0%)</title>
 <rect x="523.7" y="624.3" width="8.6" height="7.3" fill="#e6eaef"/>
+<rect x="523.7" y="624.3" width="0.9" height="7.3" fill="#d4a72c"/>
 <rect x="522.7" y="623.3" width="10.6" height="9.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>d3d11: 0 / 45 done (0.0%)</title>
@@ -1982,6 +1991,7 @@
 </g>
 <g><title>hid: 0 / 44 done (0.0%)</title>
 <rect x="523.7" y="643.0" width="8.2" height="7.2" fill="#e6eaef"/>
+<rect x="523.7" y="643.0" width="2.2" height="7.2" fill="#d4a72c"/>
 <rect x="522.7" y="642.0" width="10.2" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ktmw32: 0 / 44 done (0.0%)</title>

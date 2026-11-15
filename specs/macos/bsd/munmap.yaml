@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/munmap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# munmap.tests/macos.json.
+id: macos/syscall/bsd/munmap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 73,
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 =
+  73, arguments in x0..x5. On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. munmap(addr, len) removes the pages covering [addr, addr + len):
+  the length is rounded up to whole pages (1 byte removes a page, a page
+  and 1 byte remove two) and the neighbouring pages stay. Afterwards
+  mprotect(2) of an unmapped page is ENOMEM, and MAP_FIXED can map the
+  address again. Unmapping a range that is not mapped returns 0, also
+  address 0. A length that runs past the end of the address space (2^62)
+  returns 0 and removes nothing; so does an address above user space.
+returns:
+  success: "0"
+errors:
+  unaligned: "EINVAL (22): an address that is not page aligned"
+  length_zero: "EINVAL (22): length 0"
+  negative_length: "EINVAL (22): a negative length"
+side_effects: "the pages are unmapped"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

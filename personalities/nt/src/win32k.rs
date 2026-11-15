@@ -153,6 +153,17 @@ impl Win32k {
         self.surfaces.rows(buffer, row, rows)
     }
 
+    /// The window manager's thread queues for a wait report (`poly.nt.waits`), each with the
+    /// state of the event the thread registered (`set` / `clear` / `none`).
+    pub fn queue_debug_lines(&self, objects: &poly_ntobj::ObjectManager) -> alloc::vec::Vec<alloc::string::String> {
+        let mut lines = self.wm.queue_debug_lines();
+        for (k, (id, handle)) in &self.events {
+            let state = objects.event_info(*id).map_or("gone", |e| if e.signaled { "set" } else { "clear" });
+            lines.push(alloc::format!("queue event p{} t{} handle {handle:#x} {state}", k.0, k.1));
+        }
+        lines
+    }
+
     fn wake(&self, objects: &mut poly_ntobj::ObjectManager, fx: &Effects) {
         for k in &fx.wake {
             if let Some(&(id, _)) = self.events.get(k) {
