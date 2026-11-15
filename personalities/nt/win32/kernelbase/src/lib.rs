@@ -23,6 +23,7 @@ mod ansi;
 mod attrlist;
 mod base;
 mod console;
+mod everyday;
 mod except;
 mod file;
 mod fileex;

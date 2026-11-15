@@ -106,6 +106,7 @@ pub mod tz;
 pub mod uilang;
 pub mod verinfo;
 pub mod version;
+pub mod muldiv;
 pub mod waitreg;
 pub mod winmm;
 pub mod wow64;
