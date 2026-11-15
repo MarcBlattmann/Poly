@@ -309,7 +309,7 @@ pub fn builtin(id: u64, h: H, msg: u32, w: usize, l: isize) -> isize {
         dlg::sysproc::LISTBOX | dlg::sysproc::COMBOLBOX => listbox(h, msg, w, l),
         dlg::sysproc::DIALOG => super::dlg::dialog_proc(h, msg, w, l),
         dlg::sysproc::COMBOBOX => combobox(h, msg, w, l),
-        dlg::sysproc::SCROLLBAR => other(h, msg, w, l),
+        dlg::sysproc::SCROLLBAR => super::scroll::control_proc(h, msg, w, l),
         dlg::sysproc::MENU => def(h, msg, w, l),
         _ => def(h, msg, w, l),
     }
@@ -347,7 +347,7 @@ fn forget(h: H) {
 
 // ---- other classes: text and default behaviour
 
-fn other(h: H, msg: u32, w: usize, l: isize) -> isize {
+pub fn other(h: H, msg: u32, w: usize, l: isize) -> isize {
     let mut out = 0;
     if font_msg(h, msg, w, l, &mut out) {
         return out;

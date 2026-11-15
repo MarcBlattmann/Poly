@@ -59,7 +59,6 @@ poly_win32_rt::fail_exports!(
         GetMetaFileBitsEx,
         GetNearestPaletteIndex,
         GetObjectA,
-        GetOutlineTextMetricsA,
         GetPaletteEntries,
         GetPolyFillMode,
         GetSystemPaletteEntries,

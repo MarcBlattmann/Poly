@@ -118,6 +118,25 @@ pub unsafe extern "system" fn RegisterWindowMessageW(name: *const u16) -> u32 {
     }
 }
 
+/// `RegisterWindowMessageA`: the name through the ANSI code page, then as the wide form.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegisterWindowMessageA(name: *const u8) -> u32 {
+    if name.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: a NUL-terminated name.
+    let n = unsafe { ansi::wide_of_a(name) };
+    match call(Request::RegisterMessage { name: n }) {
+        Reply::Atom { atom } => u32::from(atom),
+        Reply::Error { code } => {
+            set_last_error(code);
+            0
+        }
+        _ => 0,
+    }
+}
+
 // ----- enumeration
 
 /// `EnumThreadWindows`: the thread's top-level and message-only windows,

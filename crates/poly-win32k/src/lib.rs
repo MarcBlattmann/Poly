@@ -66,6 +66,7 @@ pub mod metrics;
 pub mod props;
 pub mod proto;
 pub mod rgn;
+pub mod scroll;
 pub mod services;
 pub mod spi;
 pub mod surfaces;

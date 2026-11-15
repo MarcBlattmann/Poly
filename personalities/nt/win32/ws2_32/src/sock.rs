@@ -172,7 +172,10 @@ fn accept_into(s: Socket, peer: &mut [u8; addr::MAX_SIZE]) -> Result<(Socket, us
     crate::events::after_accept(s);
     let new = afd::open_endpoint(true).map_err(|_| WSAEMFILE)?;
     match call(s, proto::ACCEPT, &(new as u64).to_le_bytes(), peer) {
-        Ok(n) => Ok((new as Socket, n)),
+        Ok(n) => {
+            crate::events::accepted_into(s, new as Socket);
+            Ok((new as Socket, n))
+        }
         Err(e) => {
             afd::close(new);
             Err(e)

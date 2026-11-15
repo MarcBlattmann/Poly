@@ -29,6 +29,7 @@ mod menutrack;
 mod msgbox;
 mod paintctl;
 mod s3;
+mod scroll;
 mod strings;
 mod winsta;
 
@@ -180,6 +181,8 @@ impl Env for Sys {
     }
 
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
+        // WM_NCDESTROY: the window's scroll bars go with it, whoever handles the message.
+        let _gone = scroll::Forget(hwnd as H, msg == 0x0082);
         if proc_ != 0 && proc_ <= poly_win32k::dlg::sysproc::MAX {
             // A dialog window takes either form itself (an ANSI dialog hands its procedure bytes).
             if proc_ == poly_win32k::dlg::sysproc::DIALOG {

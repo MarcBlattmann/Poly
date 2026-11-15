@@ -87,6 +87,11 @@ pub struct Registration {
     /// The look at the socket that was folded in last (a number from a counter that is taken
     /// before the look): an older look, finished later by another thread, is not folded in.
     pub last_look: u64,
+    /// `WSAAsyncSelect`: the window and message number the events are posted to (the window 0 is
+    /// the event-object mode of `WSAEventSelect`). A window message is one event: data arriving
+    /// while earlier data is unread does not make another `FD_READ`.
+    pub window: usize,
+    pub message: u32,
     /// Events recorded and not yet taken by `WSAEnumNetworkEvents`.
     pub pending: u32,
     pub errors: [u32; FD_MAX_EVENTS],
@@ -120,9 +125,18 @@ impl Registration {
             failed: false,
             seen_bytes: 0,
             last_look: 0,
+            window: 0,
+            message: 0,
             pending: 0,
             errors: [0; FD_MAX_EVENTS],
         }
+    }
+
+    /// `WSAAsyncSelect` made this registration: the events go to `message` of `window`.
+    pub fn post_to(&mut self, window: usize, message: u32) {
+        self.window = window;
+        self.message = message;
+        self.event = 0;
     }
 
     /// `WSAEventSelect` again on the same socket: a new mask and event. Only an event that is new
@@ -140,6 +154,8 @@ impl Registration {
         }
         self.mask = mask;
         self.event = event;
+        self.window = 0;
+        self.message = 0;
         self.pending &= mask;
         for (i, e) in self.errors.iter_mut().enumerate() {
             if mask & (1 << i) == 0 {
@@ -269,7 +285,7 @@ impl Registration {
         let arrival = i.bytes > self.seen_bytes;
         self.seen_bytes = i.bytes;
         let has_data = i.bytes > 0 || (i.readable && !i.hangup);
-        if has_data && (self.armed_read || arrival) && self.record(FD_READ, 0) {
+        if has_data && (self.armed_read || (arrival && self.window == 0)) && self.record(FD_READ, 0) {
             self.armed_read = false;
         }
         if i.hangup && connected && !self.close_reported && !self.local_rd_shut {
@@ -281,6 +297,17 @@ impl Registration {
         }
     }
 
+    /// The events pending as window messages, in the order Winsock posts them (the accept and the
+    /// connection first, the data, the end last), with their error codes; the record is cleared.
+    pub fn take_messages(&mut self) -> alloc::vec::Vec<(u32, u32)> {
+        let (events, errors) = self.take();
+        [FD_ACCEPT, FD_CONNECT, FD_READ, FD_WRITE, FD_OOB, FD_CLOSE]
+            .into_iter()
+            .filter(|e| events & e != 0)
+            .map(|e| (e, errors[bit(e)]))
+            .collect()
+    }
+
     /// `WSAEnumNetworkEvents`: the events recorded since the last call with their error codes; the
     /// record is cleared.
     pub fn take(&mut self) -> (u32, [u32; FD_MAX_EVENTS]) {
@@ -289,6 +316,11 @@ impl Registration {
         self.errors = [0; FD_MAX_EVENTS];
         r
     }
+}
+
+/// `WSAAsyncSelect`'s argument check: a mask may only name the `FD_*` bits (0x3FF at most).
+pub fn check_async(mask: u32) -> Result<(), u32> {
+    if mask & !FD_ALL_EVENTS != 0 { Err(crate::consts::WSAEINVAL) } else { Ok(()) }
 }
 
 /// `WSAEventSelect`'s argument checks: a non-zero mask needs an event object, a mask may only name
@@ -366,6 +398,33 @@ mod tests {
         r.after_recv();
         assert!(!r.step(&poll(false, true)));
         assert!(r.step(&data(2)));
+    }
+
+    #[test]
+    fn window_messages_are_one_event_each_in_winsocks_order() {
+        let mut r = Registration::new(FD_READ | FD_WRITE | FD_CONNECT | FD_CLOSE, 0, false, false);
+        r.post_to(0x1234, 0x8002);
+        r.connecting();
+        // The connection is made: FD_CONNECT first, then the writable socket's FD_WRITE.
+        assert!(r.step(&poll(false, true)));
+        assert_eq!(r.take_messages(), [(FD_CONNECT, 0), (FD_WRITE, 0)]);
+        // Data arrives: one FD_READ; more data while it is unread is not another one.
+        assert!(r.step(&data(10)));
+        assert_eq!(r.take_messages(), [(FD_READ, 0)]);
+        assert!(!r.step(&data(20)));
+        // A recv that leaves data (4 of 20): one more.
+        r.after_recv();
+        assert!(r.step(&data(16)));
+        assert_eq!(r.take_messages(), [(FD_READ, 0)]);
+    }
+
+    #[test]
+    fn async_select_names_only_the_defined_events() {
+        assert_eq!(check_async(0), Ok(()));
+        assert_eq!(check_async(0x3FF), Ok(()));
+        for bad in [0x400, 0x800, 0x7FF, 0x401, 0x10000, 0x7FFF_FFFF, 0xFFFF_FFFF] {
+            assert_eq!(check_async(bad), Err(WSAEINVAL));
+        }
     }
 
     #[test]

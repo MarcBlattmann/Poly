@@ -376,6 +376,101 @@ impl Outline {
     }
 }
 
+/// `GetOutlineTextMetrics`'s numbers for an outline font at its size
+/// (`specs/windows/gdi32.dll/GetOutlineTextMetricsA.yaml`): the font's design values scaled to
+/// the size and rounded to the nearest pixel (halves away from zero).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Otm {
+    pub tm: TextMetric,
+    pub panose: [u8; 10],
+    pub fs_selection: u16,
+    pub fs_type: u16,
+    pub slope_rise: i32,
+    pub slope_run: i32,
+    /// In tenths of a degree.
+    pub italic_angle: i32,
+    pub em_square: i32,
+    pub ascent: i32,
+    pub descent: i32,
+    pub line_gap: i32,
+    pub cap_em_height: i32,
+    pub x_height: i32,
+    /// Left, top, right, bottom.
+    pub font_box: [i32; 4],
+    pub mac_ascent: i32,
+    pub mac_descent: i32,
+    pub mac_line_gap: i32,
+    pub min_ppem: i32,
+    pub subscript_size: (i32, i32),
+    pub subscript_offset: (i32, i32),
+    pub superscript_size: (i32, i32),
+    pub superscript_offset: (i32, i32),
+    pub strikeout_size: i32,
+    pub strikeout_position: i32,
+    pub underscore_size: i32,
+    pub underscore_position: i32,
+}
+
+impl Outline {
+    /// The outline metrics of `font`, the file this logical font is drawn from.
+    pub fn otm(&self, font: &Font<'_>) -> Otm {
+        let upem = i64::from(self.upem);
+        let v = font.otm_values();
+        let gm = font.gdi_metrics();
+        let away = |r: Ratio, units: i64| {
+            let p = r.px(units.abs(), upem);
+            if units < 0 { -p } else { p }
+        };
+        let y = |units: i64| away(self.ey, units);
+        let x = |units: i64| away(self.ex, units);
+        let i = |n: i16| i64::from(n);
+        let (typo_a, typo_d, typo_g) = if v.has_os2 && (v.typo_ascender != 0 || v.typo_descender != 0) {
+            (i(v.typo_ascender), i(v.typo_descender), i(v.typo_line_gap))
+        } else {
+            (i(gm.hhea_ascent), i(gm.hhea_descent), i(gm.line_gap))
+        };
+        // The italic slope: upright is 1 over 0; a leaning font gives the tangent of its angle
+        // as a ratio of 1000.
+        let (slope_rise, slope_run) = if v.italic_angle_tenths == 0 {
+            (1, 0)
+        } else {
+            let (s, c) = sin_cos(-v.italic_angle_tenths);
+            (1000, round_f(1000.0 * s / c))
+        };
+        // Observed (the sheet records the mapping as unexplained): at every size the cap height
+        // was the x-height of the OS/2 table and the x height half of it.
+        let x_units = i(v.x_height);
+        Otm {
+            tm: self.tm,
+            panose: v.panose,
+            fs_selection: v.fs_selection,
+            fs_type: v.fs_type,
+            slope_rise,
+            slope_run,
+            italic_angle: v.italic_angle_tenths,
+            em_square: self.upem,
+            ascent: y(typo_a),
+            descent: y(typo_d),
+            line_gap: y(typo_g),
+            cap_em_height: y(x_units),
+            x_height: y(x_units / 2),
+            font_box: [x(i(v.head_box[0])), y(i(v.head_box[3])), x(i(v.head_box[2])), y(i(v.head_box[1]))],
+            mac_ascent: y(i(gm.hhea_ascent)),
+            mac_descent: y(i(gm.hhea_descent)),
+            mac_line_gap: y(i(gm.line_gap)),
+            min_ppem: i32::from(v.lowest_rec_ppem),
+            subscript_size: (x(i(v.subscript[0])), y(i(v.subscript[1]))),
+            subscript_offset: (x(i(v.subscript[2])), y(i(v.subscript[3]))),
+            superscript_size: (x(i(v.superscript[0])), y(i(v.superscript[1]))),
+            superscript_offset: (x(i(v.superscript[2])), y(i(v.superscript[3]))),
+            strikeout_size: y(i(gm.strikeout_size)),
+            strikeout_position: y(i(gm.strikeout_position)),
+            underscore_size: y(i(gm.underline_thickness)),
+            underscore_position: y(i(gm.underline_position)),
+        }
+    }
+}
+
 /// The slant of a synthesised italic (the tangent of the angle).
 const SLANT: f32 = 0.2;
 

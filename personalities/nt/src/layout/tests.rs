@@ -134,7 +134,7 @@ fn creation_makes_every_folder_once() {
     let (vr, root) = setup();
     let first = create(&vr, &root, &POLY_USER);
     assert!(first.conflicts.is_empty(), "{:?}", first.conflicts);
-    assert_eq!(first.created.len(), FOLDERS.len() + 4, "the intermediate Microsoft\\Windows folders count too");
+    assert_eq!(first.created.len(), FOLDERS.len() + 7, "the intermediate Microsoft, Windows and Burn folders count too");
     for f in FOLDERS {
         let p = alloc::format!("/nt/c/{}", f.below_drive(&POLY_USER).replace('\\', "/"));
         assert!(exists(&vr, &p), "{p}");

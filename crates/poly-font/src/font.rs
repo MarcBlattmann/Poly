@@ -148,6 +148,33 @@ pub struct GdiMetrics {
     pub has_os2: bool,
 }
 
+/// What `GetOutlineTextMetrics` reports of a font besides [`GdiMetrics`]: the design values of
+/// `OS/2`, `post` and `head`, in font units (`specs/windows/gdi32.dll/GetOutlineTextMetricsA.yaml`).
+/// Fields of a table the font lacks are 0.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OtmValues {
+    pub fs_selection: u16,
+    pub fs_type: u16,
+    pub panose: [u8; 10],
+    /// `ySubscriptXSize`, `ySubscriptYSize`, `ySubscriptXOffset`, `ySubscriptYOffset`.
+    pub subscript: [i16; 4],
+    /// `ySuperscriptXSize`, `ySuperscriptYSize`, `ySuperscriptXOffset`, `ySuperscriptYOffset`.
+    pub superscript: [i16; 4],
+    pub typo_ascender: i16,
+    pub typo_descender: i16,
+    pub typo_line_gap: i16,
+    /// `sxHeight` and `sCapHeight` (a version 2 or later `OS/2` table).
+    pub x_height: i16,
+    pub cap_height: i16,
+    /// `post.italicAngle` in tenths of a degree.
+    pub italic_angle_tenths: i32,
+    /// `head.lowestRecPPEM`.
+    pub lowest_rec_ppem: u16,
+    /// `head`'s `xMin`, `yMin`, `xMax`, `yMax`.
+    pub head_box: [i16; 4],
+    pub has_os2: bool,
+}
+
 /// Name IDs of the `name` table used here.
 pub mod name_id {
     pub const COPYRIGHT: u16 = 0;
@@ -377,6 +404,40 @@ impl<'a> Font<'a> {
             m.underline_thickness = i16_at(post, 10).unwrap_or(0);
         }
         m
+    }
+
+    /// The design values `GetOutlineTextMetrics` adds to [`Font::gdi_metrics`].
+    pub fn otm_values(&self) -> OtmValues {
+        let mut v = OtmValues {
+            lowest_rec_ppem: u16_at(self.tables.head, 46).unwrap_or(0),
+            head_box: self.head_bbox,
+            ..OtmValues::default()
+        };
+        if let Some(os2) = self.tables.os2 {
+            v.has_os2 = true;
+            let version = u16_at(os2, 0).unwrap_or(0);
+            v.fs_type = u16_at(os2, 8).unwrap_or(0);
+            let at = |o: usize| i16_at(os2, o).unwrap_or(0);
+            v.subscript = [at(10), at(12), at(14), at(16)];
+            v.superscript = [at(18), at(20), at(22), at(24)];
+            if let Some(p) = os2.get(32..42) {
+                v.panose.copy_from_slice(p);
+            }
+            v.fs_selection = u16_at(os2, 62).unwrap_or(0);
+            v.typo_ascender = at(68);
+            v.typo_descender = at(70);
+            v.typo_line_gap = at(72);
+            if version >= 2 {
+                v.x_height = at(86);
+                v.cap_height = at(88);
+            }
+        }
+        if let Some(post) = self.tables.post {
+            // `post.italicAngle` is a 16.16 fixed number.
+            let fixed = u32_at(post, 4).unwrap_or(0) as i32;
+            v.italic_angle_tenths = ((i64::from(fixed) * 10) >> 16) as i32;
+        }
+        v
     }
 
     /// The lowest and the highest code point of the Basic Multilingual

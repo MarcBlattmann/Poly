@@ -35,6 +35,7 @@ unsafe extern "system" {
     fn GetCurrentProcess() -> Handle;
     fn GetCurrentProcessId() -> u32;
     fn GetModuleHandleW(name: *const u16) -> Handle;
+    fn LoadLibraryW(name: *const u16) -> Handle;
     fn GetProcAddress(module: Handle, name: *const u8) -> usize;
     fn DuplicateHandle(
         source_process: Handle,
@@ -78,6 +79,7 @@ fn with_table<R>(f: impl FnOnce(&mut Vec<(Socket, Registration)>) -> R) -> R {
     let r = f(list);
     COUNT.store(list.len(), Ordering::Release);
     TABLE.locked.store(false, Ordering::Release);
+    flush_posts();
     r
 }
 
@@ -121,6 +123,24 @@ pub fn after_accept(s: Socket) {
     hook(s, Registration::after_accept);
 }
 
+/// `accept` on `s` made socket `new`: a socket selected with `WSAAsyncSelect` hands its window,
+/// message and events on, and the new socket is non-blocking (`WSAAsyncSelect.yaml` `accept`).
+pub fn accepted_into(s: Socket, new: Socket) {
+    if COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let found = with_table(|t| find(t, s).filter(|r| r.window != 0).map(|r| (r.mask, r.window, r.message)));
+    let Some((mask, window, message)) = found else { return };
+    let mut nb = [0u8; 0];
+    afd::ioctl(new as Handle, proto::SET_NONBLOCKING, &1u32.to_le_bytes(), &mut nb);
+    with_table(|t| {
+        let mut r = Registration::new(mask, 0, false, true);
+        r.post_to(window, message);
+        t.push((new, r));
+    });
+    let _ = start_helper();
+}
+
 /// A non-blocking `connect` on `s` is under way.
 pub fn connecting(s: Socket) {
     hook(s, Registration::connecting);
@@ -130,7 +150,7 @@ pub fn connecting(s: Socket) {
 pub fn connected(s: Socket) {
     hook(s, |r| {
         r.connected();
-        signal(r);
+        signal(s, r);
     });
 }
 
@@ -155,12 +175,85 @@ pub fn forget(s: Socket) {
     with_table(|t| t.retain(|(k, _)| *k != s));
 }
 
-/// Set the event of a registration that has something pending (with the table locked).
-fn signal(r: &Registration) {
-    if r.pending != 0 && r.event != 0 {
+/// Set the event of a registration that has something pending (with the table locked), or queue
+/// its window messages (`WSAAsyncSelect`): they are posted when the table is unlocked again.
+fn signal(s: Socket, r: &mut Registration) {
+    if r.pending == 0 {
+        return;
+    }
+    if r.window != 0 {
+        let (window, message) = (r.window, r.message);
+        let batch = r.take_messages();
+        OUTBOX.with(|o| {
+            for (event, error) in batch {
+                o.push((window, message, s, event | (error << 16)));
+            }
+        });
+    } else if r.event != 0 {
         // SAFETY: the program's event handle; a bad one fails harmlessly.
         unsafe { crate::SetEvent(r.event) };
     }
+}
+
+/// The window messages `signal` queued: window, message, socket (`wParam`) and `lParam`.
+static OUTBOX: SpinList = SpinList::new();
+
+/// A list behind a spin lock.
+struct SpinList {
+    locked: AtomicBool,
+    list: core::cell::UnsafeCell<Vec<(usize, u32, Socket, u32)>>,
+}
+
+// SAFETY: access to `list` is serialised by `locked`.
+unsafe impl Sync for SpinList {}
+
+impl SpinList {
+    const fn new() -> SpinList {
+        SpinList { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) }
+    }
+
+    fn with<R>(&self, f: impl FnOnce(&mut Vec<(usize, u32, Socket, u32)>) -> R) -> R {
+        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            core::hint::spin_loop();
+        }
+        // SAFETY: the lock is held.
+        let r = f(unsafe { &mut *self.list.get() });
+        self.locked.store(false, Ordering::Release);
+        r
+    }
+}
+
+/// Post the window messages that are queued (with no table lock held: `PostMessageW` is user32's).
+fn flush_posts() {
+    let batch: Vec<_> = OUTBOX.with(core::mem::take);
+    if batch.is_empty() {
+        return;
+    }
+    let Some(post) = user32_fn::<PostMessage>(b"PostMessageW\0") else { return };
+    for (window, message, s, lparam) in batch {
+        // SAFETY: user32's documented call; a window that is gone makes it fail, which is the
+        // lost notification the sheet describes.
+        unsafe { post(window, message, s, lparam as isize) };
+    }
+}
+
+type PostMessage = unsafe extern "system" fn(usize, u32, usize, isize) -> i32;
+type IsWindow = unsafe extern "system" fn(usize) -> i32;
+
+/// A function of `user32.dll`, looked up when first needed: a static import would make every
+/// Winsock program load the GUI, and only `WSAAsyncSelect` needs it.
+fn user32_fn<F: Copy>(name: &[u8]) -> Option<F> {
+    const { assert!(core::mem::size_of::<F>() == core::mem::size_of::<usize>()) };
+    let user32: [u16; 11] = [b'u', b's', b'e', b'r', b'3', b'2', b'.', b'd', b'l', b'l', 0].map(u16::from);
+    // SAFETY: a NUL-terminated name; the module stays loaded.
+    let m = unsafe { LoadLibraryW(user32.as_ptr()) };
+    if m == 0 {
+        return None;
+    }
+    // SAFETY: a NUL-terminated name.
+    let p = unsafe { GetProcAddress(m, name.as_ptr()) };
+    // SAFETY: the export has the signature `F` says (the caller names both).
+    (p != 0).then(|| unsafe { core::mem::transmute_copy::<usize, F>(&p) })
 }
 
 // ----- the helper thread ------------------------------------------------------------------
@@ -212,7 +305,7 @@ fn observe(s: Socket, r: u32, look: u64) -> bool {
             let before = reg.pending;
             if reg.step(&inputs) {
                 moved = reg.pending != before;
-                signal(reg);
+                signal(s, reg);
             }
         }
     });
@@ -335,6 +428,58 @@ pub extern "system" fn WSAEventSelect(s: Socket, event: Handle, mask: i32) -> i3
     with_table(|t| match find(t, s) {
         Some(r) => r.reselect(mask, event),
         None => t.push((s, Registration::new(mask, event, listening, connected))),
+    });
+    match start_helper() {
+        Ok(()) => 0,
+        Err(e) => fail(e),
+    }
+}
+
+/// `WSAAsyncSelect(s, hWnd, wMsg, lEvent)`: the `FD_*` events are posted to `hWnd` as `wMsg`
+/// (`wParam` the socket, the low word of `lParam` the event, the high word its error code) and the
+/// socket becomes non-blocking; a zero `lEvent` ends the association.
+#[unsafe(no_mangle)]
+pub extern "system" fn WSAAsyncSelect(s: Socket, window: usize, message: u32, mask: i32) -> i32 {
+    if let Err(e) = check_started() {
+        return fail(e);
+    }
+    let mask = mask as u32;
+    let Some(info) = afd::info(s as Handle) else { return fail(WSAENOTSOCK) };
+    let valid = window != 0
+        && user32_fn::<IsWindow>(b"IsWindow\0").is_some_and(|f| {
+            // SAFETY: user32's documented call.
+            unsafe { f(window) != 0 }
+        });
+    if !valid {
+        return fail(WSAEINVAL);
+    }
+    if let Err(e) = ev::check_async(mask) {
+        return fail(e);
+    }
+    if mask == 0 {
+        with_table(|t| t.retain(|(k, _)| *k != s));
+        return 0;
+    }
+    let mut nb = [0u8; 0];
+    let (status, _) = afd::ioctl(s as Handle, proto::SET_NONBLOCKING, &1u32.to_le_bytes(), &mut nb);
+    if status >= 0xC000_0000 {
+        return fail(WSAENOTSOCK);
+    }
+    let listening = info.listening != 0;
+    let mut peer = [0u8; poly_winsock::addr::MAX_SIZE];
+    let connected = info.ty == SOCK_STREAM
+        && !listening
+        && afd::ioctl(s as Handle, proto::NAME, &1u32.to_le_bytes(), &mut peer).0 < 0xC000_0000;
+    with_table(|t| match find(t, s) {
+        Some(r) => {
+            r.reselect(mask, 0);
+            r.post_to(window, message);
+        }
+        None => {
+            let mut r = Registration::new(mask, 0, listening, connected);
+            r.post_to(window, message);
+            t.push((s, r));
+        }
     });
     match start_helper() {
         Ok(()) => 0,

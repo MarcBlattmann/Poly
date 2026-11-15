@@ -246,8 +246,14 @@ pub extern "system" fn GetDialogBaseUnits() -> i32 {
 /// `MapDialogRect`: dialog units to pixels with the dialog's font.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MapDialogRect(hdlg: H, rect: *mut i32) -> i32 {
-    if rect.is_null() || info(hdlg).is_none() {
+    // A dialog window works; a child window (a dialog's control) is "not a dialog window" (1420),
+    // any other window is as good as none (1400) (`MapDialogRect.yaml` `errors`).
+    let Some(i) = (if rect.is_null() { None } else { info(hdlg) }) else {
         set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    };
+    if !is_dialog(hdlg) {
+        set_last_error(if i.style & WS_CHILD != 0 { ERROR_WINDOW_NOT_DIALOG } else { ERROR_INVALID_WINDOW_HANDLE });
         return 0;
     }
     let (ux, uy) = dlg_state(hdlg, |d| d.units);

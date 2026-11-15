@@ -2669,6 +2669,27 @@ impl Gdi {
         Some(self.font_sel(dc).metrics())
     }
 
+    /// `GetOutlineTextMetricsA`'s source: `None` for a DC that is none, `Some(None)` when the
+    /// selected font is not drawn from a font file; else the metrics and the font's family, face,
+    /// style and full names.
+    pub fn outline_text_metrics(&self, dc: u64) -> Option<Option<(crate::outline::Otm, [Vec<u16>; 4])>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let (Some(o), Some(data)) = (sel.outline, sel.data.as_deref()) else { return Some(None) };
+        let Ok(font) = poly_font::Font::parse(data) else { return Some(None) };
+        let name = |id: u16| -> Vec<u16> { font.name(id).map(|s| s.encode_utf16().collect()).unwrap_or_default() };
+        let (family, style, full) = (name(1), name(2), name(4));
+        let face = if style.is_empty() || style == "Regular".encode_utf16().collect::<Vec<u16>>() {
+            family.clone()
+        } else {
+            let mut f = family.clone();
+            f.push(u16::from(b' '));
+            f.extend_from_slice(&style);
+            f
+        };
+        Some(Some((o.otm(&font), [family, face, style, full])))
+    }
+
     /// `GetTextExtentPoint32W`.
     pub fn text_extent(&self, dc: u64, text: &[u16]) -> Option<(i32, i32)> {
         self.dc(dc)?;

@@ -1410,25 +1410,133 @@ pub unsafe extern "system" fn GetTextMetricsW(hdc: H, tm: *mut u8) -> i32 {
 pub unsafe extern "system" fn GetTextMetricsA(hdc: H, tm: *mut u8) -> i32 {
     match gdi(|g| g.text_metrics(hdc as u64)) {
         Some(m) => {
-            let w = m.to_bytes();
-            let mut a = [0u8; 56];
-            a[..44].copy_from_slice(&w[..44]);
-            let byte = |c: u16| if c > 0xFF { 0xFF } else { c as u8 };
-            a[44] = byte(m.first_char);
-            a[45] = byte(m.last_char);
-            a[46] = byte(m.default_char);
-            a[47] = byte(m.break_char);
-            a[48] = m.italic;
-            a[49] = m.underlined;
-            a[50] = m.struck_out;
-            a[51] = m.pitch_and_family;
-            a[52] = m.char_set;
+            let a = tm_a_bytes(&m);
             // SAFETY: the caller's TEXTMETRICA (56 bytes).
             unsafe { core::ptr::copy_nonoverlapping(a.as_ptr(), tm, a.len()) };
             1
         }
         None => 0,
     }
+}
+
+/// The 56 bytes of a `TEXTMETRICA` (`wingdi.h`): the integer fields as `TEXTMETRICW`'s, then the
+/// character fields as bytes.
+fn tm_a_bytes(m: &poly_gdi::font::TextMetric) -> [u8; 56] {
+    let w = m.to_bytes();
+    let mut a = [0u8; 56];
+    a[..44].copy_from_slice(&w[..44]);
+    let byte = |c: u16| if c > 0xFF { 0xFF } else { c as u8 };
+    a[44] = byte(m.first_char);
+    a[45] = byte(m.last_char);
+    a[46] = byte(m.default_char);
+    a[47] = byte(m.break_char);
+    a[48] = m.italic;
+    a[49] = m.underlined;
+    a[50] = m.struck_out;
+    a[51] = m.pitch_and_family;
+    a[52] = m.char_set;
+    a
+}
+
+/// `GetOutlineTextMetricsA` (`GetOutlineTextMetricsA.yaml`): `OUTLINETEXTMETRICA` (`wingdi.h`) and
+/// then the family, face, style and full names as NUL-terminated strings; the four name members
+/// hold their offsets from the start of the structure. The result is the size needed for a NULL
+/// buffer, the bytes copied for a buffer too small for the fixed part (the first `cb` bytes), 0
+/// with `ERROR_INSUFFICIENT_BUFFER` for one too small for the names, else the size needed.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetOutlineTextMetricsA(hdc: H, cb: u32, potm: *mut u8) -> u32 {
+    const ERROR_INSUFFICIENT_BUFFER_1003: u32 = 1003;
+    let Some(found) = gdi(|g| g.outline_text_metrics(hdc as u64)) else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    };
+    let Some((m, names)) = found else { return 0 };
+    let ptr = core::mem::size_of::<usize>();
+    // The members end at 196; the four pointers follow, aligned to the pointer size.
+    let fixed = (196 + ptr - 1) / ptr * ptr + 4 * ptr;
+    let strings: [Vec<u8>; 4] = core::array::from_fn(|k| {
+        let mut s: Vec<u8> = names[k].iter().map(|&c| if c < 0x80 { c as u8 } else { b'?' }).collect();
+        s.push(0);
+        s
+    });
+    let needed = fixed + strings.iter().map(Vec::len).sum::<usize>();
+    if potm.is_null() {
+        return needed as u32;
+    }
+    if cb == 0 {
+        return 0;
+    }
+    let mut b = alloc::vec![0u8; needed];
+    let put32 = |b: &mut [u8], at: usize, v: i32| b[at..at + 4].copy_from_slice(&v.to_le_bytes());
+    put32(&mut b, 0, needed as i32);
+    // TEXTMETRICA at 4 (56 bytes).
+    let tm = tm_a_bytes(&m.tm);
+    b[4..60].copy_from_slice(&tm);
+    b[61..71].copy_from_slice(&m.panose);
+    let fields: [(usize, i32); 17] = [
+        (72, i32::from(m.fs_selection)),
+        (76, i32::from(m.fs_type)),
+        (80, m.slope_rise),
+        (84, m.slope_run),
+        (88, m.italic_angle),
+        (92, m.em_square),
+        (96, m.ascent),
+        (100, m.descent),
+        (104, m.line_gap),
+        (108, m.cap_em_height),
+        (112, m.x_height),
+        (116, m.font_box[0]),
+        (120, m.font_box[1]),
+        (124, m.font_box[2]),
+        (128, m.font_box[3]),
+        (132, m.mac_ascent),
+        (136, m.mac_descent),
+    ];
+    for (at, v) in fields {
+        put32(&mut b, at, v);
+    }
+    let rest: [(usize, i32); 14] = [
+        (140, m.mac_line_gap),
+        (144, m.min_ppem),
+        (148, m.subscript_size.0),
+        (152, m.subscript_size.1),
+        (156, m.subscript_offset.0),
+        (160, m.subscript_offset.1),
+        (164, m.superscript_size.0),
+        (168, m.superscript_size.1),
+        (172, m.superscript_offset.0),
+        (176, m.superscript_offset.1),
+        (180, m.strikeout_size),
+        (184, m.strikeout_position),
+        (188, m.underscore_size),
+        (192, m.underscore_position),
+    ];
+    for (at, v) in rest {
+        put32(&mut b, at, v);
+    }
+    let first_ptr = (196 + ptr - 1) / ptr * ptr;
+    let mut at = fixed;
+    for (k, s) in strings.iter().enumerate() {
+        let slot = first_ptr + k * ptr;
+        b[slot..slot + 4].copy_from_slice(&(at as u32).to_le_bytes());
+        b[at..at + s.len()].copy_from_slice(s);
+        at += s.len();
+    }
+    let cb = cb as usize;
+    if cb < fixed {
+        // SAFETY: the caller's buffer holds `cb` bytes.
+        unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), potm, cb) };
+        return cb as u32;
+    }
+    if cb < needed {
+        // SAFETY: the caller's buffer holds at least the fixed part.
+        unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), potm, fixed) };
+        set_last_error(ERROR_INSUFFICIENT_BUFFER_1003);
+        return 0;
+    }
+    // SAFETY: the caller's buffer holds `needed` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), potm, needed) };
+    needed as u32
 }
 
 /// `GetTextFaceW`: the name (with its NUL) copied up to `count` units; the

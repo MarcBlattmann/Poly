@@ -15,6 +15,9 @@
 
 extern crate alloc;
 
+mod fileinfo;
+mod folders;
+
 use alloc::vec::Vec;
 use poly_kernelbase::shell;
 use poly_win32_rt as _;
@@ -123,47 +126,6 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
         num_args.write(args.len() as i32);
     }
     block.cast()
-}
-
-/// `SHGetFolderPathW`: the path of a `CSIDL` folder (no trailing backslash) in the caller's
-/// `MAX_PATH` buffer. `hwnd`, the token (the current user) and `SHGFP_TYPE_*` (current and
-/// default paths are the same on Poly) do not change the result.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn SHGetFolderPathW(
-    _hwnd: *mut u8,
-    folder: i32,
-    _token: *mut u8,
-    _flags: u32,
-    path: *mut u16,
-) -> u32 {
-    if path.is_null() {
-        return shell::E_INVALIDARG;
-    }
-    let f = match shell::folder(folder as u32) {
-        Ok(f) => f,
-        Err(e) => return e,
-    };
-    let mut name = [0u16; 32];
-    for (to, c) in name.iter_mut().zip(f.variable.encode_utf16()) {
-        *to = c;
-    }
-    let mut out = [0u16; MAX_PATH];
-    // SAFETY: `name` is NUL-terminated (shorter than 32); `out` holds MAX_PATH characters.
-    let n = unsafe { GetEnvironmentVariableW(name.as_ptr(), out.as_mut_ptr(), MAX_PATH as u32) } as usize;
-    let suffix = f.suffix.encode_utf16().count();
-    if n == 0 || n + suffix >= MAX_PATH {
-        return shell::E_FAIL;
-    }
-    for (to, c) in out[n..].iter_mut().zip(f.suffix.encode_utf16()) {
-        *to = c;
-    }
-    if folder as u32 & shell::CSIDL_FLAG_CREATE != 0 {
-        // SAFETY: `out` is NUL-terminated. An existing folder is fine.
-        unsafe { CreateDirectoryW(out.as_ptr(), core::ptr::null()) };
-    }
-    // SAFETY: Learn: the caller's buffer is MAX_PATH characters.
-    unsafe { core::ptr::copy_nonoverlapping(out.as_ptr(), path, n + suffix + 1) };
-    shell::S_OK
 }
 
 // ----- SHGetKnownFolderPath (step 9) --------------------------------------------------------------

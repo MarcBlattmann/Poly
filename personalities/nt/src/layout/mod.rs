@@ -241,6 +241,17 @@ pub const FOLDERS: &[Folder] = &[
     ),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\SendTo", Some("FOLDERID_SendTo")), "SendTo"),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Templates", Some("FOLDERID_Templates")), "Templates"),
+    // The folders `SHGetFolderPathW` verifies for the CSIDL values that have no known folder of their
+    // own here (spec-win-apps-5: `specs/windows/shell32.dll/SHGetFolderPathW.yaml`).
+    profile("AppData\\Roaming\\Microsoft\\Windows\\Network Shortcuts", None),
+    profile("AppData\\Roaming\\Microsoft\\Windows\\Printer Shortcuts", None),
+    profile("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools", None),
+    profile("AppData\\Local\\Microsoft\\Windows\\INetCache", None),
+    profile("AppData\\Local\\Microsoft\\Windows\\INetCookies", None),
+    profile("AppData\\Local\\Microsoft\\Windows\\History", None),
+    profile("AppData\\Local\\Microsoft\\Windows\\Burn\\Burn", None),
+    drive("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Administrative Tools", None),
+    drive("Windows\\Resources", None),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Recent", Some("FOLDERID_Recent")), "Recent"),
 ];
 
