@@ -181,7 +181,7 @@ pub unsafe extern "system" fn SetFileInformationByHandle(handle: Handle, class: 
     }
     // SAFETY: the caller's buffer of `size` bytes.
     let bytes = unsafe { core::slice::from_raw_parts(buf, size as usize) };
-    match fileex::set_plan(class, bytes, &|win32| nt_path(win32)) {
+    match fileex::set_plan_in(core::mem::size_of::<usize>(), class, bytes, &|win32| nt_path(win32)) {
         Ok(SetPlan::Nt { nt_class, bytes }) => match set_info(handle, nt_class, &bytes) {
             Ok(()) => TRUE,
             Err(st) => fail_status(st, FALSE),

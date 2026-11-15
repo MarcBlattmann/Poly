@@ -110,6 +110,7 @@ pub mod version;
 pub mod waitreg;
 pub mod winmm;
 pub mod winpath;
+pub mod wow64;
 
 pub use poly_ntobj::NtStatus;
 

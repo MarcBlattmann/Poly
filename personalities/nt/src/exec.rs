@@ -344,10 +344,6 @@ pub fn start_process_listed(
     proc.thread_start = ntdll_base + u64::from(entries.thread_start);
     proc.apc_dispatcher = ntdll_base + u64::from(entries.apc_dispatcher);
     proc.exception_dispatcher = ntdll_base + u64::from(entries.exception_dispatcher);
-    if proc.wow64 {
-        // Not yet for a 32-bit process (ADR 0186's later stages): no user APC is delivered.
-        proc.apc_dispatcher = 0;
-    }
     proc.ntdll_base = ntdll_base;
 
     let rw = PAGE_READWRITE;
