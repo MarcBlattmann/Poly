@@ -43,7 +43,6 @@ use poly_win32k::proto::{ClassRef, ClassSpec, CreateSpec, Reply, Request, WinInf
 use poly_win32k::user::{self as u, CMsg, CRect, Env};
 use poly_win32k::wire;
 
-mod caret;
 mod headless;
 mod hooks;
 mod winevent;
