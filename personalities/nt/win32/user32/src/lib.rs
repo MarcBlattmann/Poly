@@ -2667,10 +2667,9 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
     if reason == DLL_PROCESS_ATTACH {
         let bytes = wire::encode(&Request::Winsta { op: poly_win32k::winsta::WinstaOp::Connect {} });
         let mut out = [0u8; 256];
-        let mut len = 0u64;
+        let mut len = 0usize;
         // SAFETY: the buffers are ours and sized as passed.
-        let s =
-            unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+        let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
         // `STATUS_ACCESS_DENIED`: the lockdown. A named station and desktop the process may not
         // use: the connection is refused too.
         if s == 0xC000_0022 {

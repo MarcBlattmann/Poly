@@ -188,6 +188,8 @@ unsafe fn sd_of(sa: *const u8) -> u64 {
     if sa.is_null() {
         return 0;
     }
+    // `lpSecurityDescriptor` follows the DWORD `nLength` at the pointer's alignment (offset 8; 4 in a
+    // 32-bit process).
     // SAFETY: the caller's structure.
-    unsafe { (sa.add(8) as *const u64).read_unaligned() }
+    unsafe { (sa.add(core::mem::size_of::<usize>()) as *const usize).read_unaligned() as u64 }
 }
