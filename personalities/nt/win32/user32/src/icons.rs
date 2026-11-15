@@ -140,11 +140,7 @@ fn arrow(hot: (i32, i32)) -> Image {
 
 fn system_cursor(index: usize) -> (Image, bool) {
     let (_, hx, hy, colour) = CURSORS[index];
-    if colour {
-        (arrow((hx as i32, hy as i32)), false)
-    } else {
-        (blank(32, 32, true, (hx as i32, hy as i32)), true)
-    }
+    if colour { (arrow((hx as i32, hy as i32)), false) } else { (blank(32, 32, true, (hx as i32, hy as i32)), true) }
 }
 
 /// Run `f` on the object behind a handle (system ones are made on demand);

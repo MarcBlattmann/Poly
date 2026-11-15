@@ -219,7 +219,10 @@ pub fn send_form(hwnd: H, msg: u32, w: usize, l: isize, from: Form) -> isize {
     let Some(i) = info(hwnd) else {
         return u::send(&SYS, hwnd as u64, msg, w as u64, l as u64) as isize;
     };
-    if msg == ansi::WM_GETTEXTLENGTH && i.unicode && (i.wndproc > poly_win32k::dlg::sysproc::MAX || i.wndproc == poly_win32k::dlg::sysproc::DIALOG) {
+    if msg == ansi::WM_GETTEXTLENGTH
+        && i.unicode
+        && (i.wndproc > poly_win32k::dlg::sysproc::MAX || i.wndproc == poly_win32k::dlg::sysproc::DIALOG)
+    {
         // The length of a UTF-16 text in bytes: the window procedure of a Unicode window gets the
         // length and then the text, as far as it needs (DefDlgProcW.yaml: WM_GETTEXT with the length
         // and the NUL).

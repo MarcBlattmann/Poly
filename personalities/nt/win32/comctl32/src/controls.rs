@@ -7,10 +7,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use poly_comctl::{
-    Column, ListView, Progress, StatusBar, Tab, Tabs, Trackbar, TreeView, UpDown, class,
-    class::Size,
-};
+use poly_comctl::{Column, ListView, Progress, StatusBar, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
 use poly_win32_gui::SpinLock;
 
 #[link(name = "user32", kind = "raw-dylib")]
@@ -26,6 +23,21 @@ unsafe extern "system" {
     fn GetSystemMetrics(index: i32) -> i32;
     fn SetWindowPos(hwnd: usize, after: usize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
     fn LoadCursorW(instance: usize, name: *const u16) -> usize;
+    fn CreateWindowExW(
+        ex: u32,
+        class: *const u16,
+        name: *const u16,
+        style: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        parent: usize,
+        menu: usize,
+        instance: usize,
+        param: usize,
+    ) -> usize;
+    fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
 }
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -122,7 +134,8 @@ unsafe fn wr<T: Copy>(p: usize, off: usize, v: T) {
 
 /// A NUL-terminated wide string.
 unsafe fn wide_at(p: usize) -> Vec<u16> {
-    if p == 0 {
+    // 0 is no text and LPSTR_TEXTCALLBACK (-1) says the control asks its owner for the text.
+    if p == 0 || p == usize::MAX {
         return Vec::new();
     }
     // SAFETY: a NUL-terminated string.
@@ -131,7 +144,7 @@ unsafe fn wide_at(p: usize) -> Vec<u16> {
 
 /// A NUL-terminated ANSI string widened (code page 1252).
 unsafe fn wide_of_ansi(p: usize) -> Vec<u16> {
-    if p == 0 {
+    if p == 0 || p == usize::MAX {
         return Vec::new();
     }
     let mut b = Vec::new();
@@ -323,7 +336,8 @@ unsafe fn status(s: &mut StatusBar, msg: u32, w: usize, l: isize) -> Option<isiz
         }
         SB_SETTEXTA | SB_SETTEXTW => {
             // SAFETY: a NUL-terminated string.
-            let t = if msg == SB_SETTEXTW { unsafe { wide_at(l as usize) } } else { unsafe { wide_of_ansi(l as usize) } };
+            let t =
+                if msg == SB_SETTEXTW { unsafe { wide_at(l as usize) } } else { unsafe { wide_of_ansi(l as usize) } };
             isize::from(s.set_text(w & 0xFF, (w as u32) & !0xFF, &t))
         }
         SB_GETTEXTLENGTHA | SB_GETTEXTLENGTHW => text_len(s, w & 0xFF),
@@ -517,7 +531,12 @@ unsafe fn tabs(t: &mut Tabs, msg: u32, w: usize, l: isize) -> Option<isize> {
             }
             // SAFETY: a TCITEM (mask 0, pszText 16, iImage 28, lParam 32).
             let (mask, text, image, param) = unsafe {
-                (rd::<u32>(l as usize, 0), rd::<usize>(l as usize, 16), rd::<i32>(l as usize, 28), rd::<isize>(l as usize, 32))
+                (
+                    rd::<u32>(l as usize, 0),
+                    rd::<usize>(l as usize, 16),
+                    rd::<i32>(l as usize, 28),
+                    rd::<isize>(l as usize, 32),
+                )
             };
             let text = if mask & TCIF_TEXT != 0 {
                 // SAFETY: a NUL-terminated string.
@@ -629,7 +648,12 @@ unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> 
             }
             // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText 24).
             let (mask, item, sub, text) = unsafe {
-                (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 4), rd::<i32>(l as usize, 8), rd::<usize>(l as usize, 24))
+                (
+                    rd::<u32>(l as usize, 0),
+                    rd::<i32>(l as usize, 4),
+                    rd::<i32>(l as usize, 8),
+                    rd::<usize>(l as usize, 24),
+                )
             };
             let item = if msg == LVM_SETITEMTEXTW { w as i32 } else { item };
             if msg == LVM_SETITEMW && mask & LVIF_TEXT == 0 {
@@ -692,7 +716,12 @@ unsafe fn tree(t: &mut TreeView, msg: u32, w: usize, l: isize) -> Option<isize> 
             }
             // SAFETY: a TVINSERTSTRUCT (hParent 0, hInsertAfter 8, mask 16, pszText 40).
             let (parent, after, mask, text) = unsafe {
-                (rd::<u64>(l as usize, 0), rd::<u64>(l as usize, 8), rd::<u32>(l as usize, 16), rd::<usize>(l as usize, 40))
+                (
+                    rd::<u64>(l as usize, 0),
+                    rd::<u64>(l as usize, 8),
+                    rd::<u32>(l as usize, 16),
+                    rd::<usize>(l as usize, 40),
+                )
             };
             let parent = if parent == poly_comctl::TVI_ROOT { 0 } else { parent as u32 };
             let txt = if mask & TVIF_TEXT != 0 {
@@ -718,7 +747,12 @@ unsafe fn tree(t: &mut TreeView, msg: u32, w: usize, l: isize) -> Option<isize> 
             }
             // SAFETY: a TVITEM (mask 0, hItem 8, pszText 24, cchTextMax 32).
             let (mask, item, buf, cap) = unsafe {
-                (rd::<u32>(l as usize, 0), rd::<u64>(l as usize, 8), rd::<usize>(l as usize, 24), rd::<i32>(l as usize, 32).max(0) as usize)
+                (
+                    rd::<u32>(l as usize, 0),
+                    rd::<u64>(l as usize, 8),
+                    rd::<usize>(l as usize, 24),
+                    rd::<i32>(l as usize, 32).max(0) as usize,
+                )
             };
             let Some(txt) = t.text(item as u32) else { return Some(0) };
             if mask & TVIF_TEXT != 0 {
@@ -737,6 +771,7 @@ unsafe fn count(n: &mut i32, msg: u32, w: usize, l: isize) -> Option<isize> {
     const HDM_GETITEMCOUNT: u32 = 0x1200;
     const HDM_DELETEITEM: u32 = 0x1202;
     const HDM_INSERTITEMW: u32 = 0x120A;
+    const TB_ADDBITMAP: u32 = 0x413;
     const TB_ADDBUTTONSA: u32 = 0x414;
     const TB_DELETEBUTTON: u32 = 0x416;
     const TB_BUTTONCOUNT: u32 = 0x418;
@@ -750,6 +785,7 @@ unsafe fn count(n: &mut i32, msg: u32, w: usize, l: isize) -> Option<isize> {
             *n += 1;
             at.clamp(0, *n - 1) as isize
         }
+        TB_ADDBITMAP => 0,
         TB_ADDBUTTONSA | TB_ADDBUTTONSW => {
             *n += w as i32;
             1
@@ -790,4 +826,72 @@ unsafe fn rebar(n: &mut i32, msg: u32, w: usize) -> Option<isize> {
         }
         _ => return None,
     })
+}
+
+fn wz(s: &str) -> Vec<u16> {
+    let mut v: Vec<u16> = s.encode_utf16().collect();
+    v.push(0);
+    v
+}
+
+/// `CreateStatusWindowW(style, text, parent, id)`: a status bar made with the style given.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateStatusWindowW(style: u32, text: *const u16, parent: usize, id: usize) -> usize {
+    register_all();
+    let class = wz("msctls_statusbar32");
+    // SAFETY: plain calls with a NUL-terminated class name.
+    unsafe {
+        CreateWindowExW(0, class.as_ptr(), text, style, 0, 0, 0, 0, parent, id, GetModuleHandleW(core::ptr::null()), 0)
+    }
+}
+
+/// `CreateToolbarEx(...)`: a toolbar with `iNumButtons` buttons from `lpButtons` (`TBBUTTON`s of
+/// `uStructSize` bytes). The bitmaps are not kept.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "system" fn CreateToolbarEx(
+    parent: usize,
+    style: u32,
+    id: usize,
+    n_bitmaps: i32,
+    _bm_inst: usize,
+    _bm_id: usize,
+    buttons: usize,
+    n_buttons: i32,
+    _dx_button: i32,
+    _dy_button: i32,
+    _dx_bitmap: i32,
+    _dy_bitmap: i32,
+    struct_size: u32,
+) -> usize {
+    register_all();
+    let class = wz("ToolbarWindow32");
+    // SAFETY: plain calls with a NUL-terminated class name.
+    unsafe {
+        let h = CreateWindowExW(
+            0,
+            class.as_ptr(),
+            core::ptr::null(),
+            style,
+            0,
+            0,
+            0,
+            0,
+            parent,
+            id,
+            GetModuleHandleW(core::ptr::null()),
+            0,
+        );
+        if h == 0 {
+            return 0;
+        }
+        SendMessageW(h, 0x41E, struct_size as usize, 0);
+        if n_bitmaps > 0 {
+            SendMessageW(h, 0x413, n_bitmaps as usize, 0);
+        }
+        if n_buttons > 0 && buttons != 0 {
+            SendMessageW(h, 0x414, n_buttons as usize, buttons as isize);
+        }
+        h
+    }
 }

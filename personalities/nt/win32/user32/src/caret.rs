@@ -53,7 +53,10 @@ fn caret_size(bitmap: usize, width: i32, height: i32) -> (i32, i32) {
         0 | 1 => {
             let screen = u::screen(&SYS);
             let border = |m| metrics::system_metric(m, &screen).unwrap_or(1);
-            (if width == 0 { border(SM_CXBORDER) } else { width }, if height == 0 { border(SM_CYBORDER) } else { height })
+            (
+                if width == 0 { border(SM_CXBORDER) } else { width },
+                if height == 0 { border(SM_CYBORDER) } else { height },
+            )
         }
         // SAFETY: gdi32 looks the handle up; a handle that is none gives 0.
         h if unsafe { GetObjectType(h) } == OBJ_BITMAP => {

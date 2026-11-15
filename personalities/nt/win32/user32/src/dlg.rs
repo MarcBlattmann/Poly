@@ -423,21 +423,7 @@ pub fn create_dialog_window(
         let data = if it.data.is_empty() { 0 } else { it.data.as_ptr() as usize };
         // SAFETY: NUL-terminated names; the creation data outlives the call.
         let c = unsafe {
-            create_w(
-                ansi,
-                cex,
-                cls.as_ptr(),
-                text.as_ptr(),
-                cstyle,
-                px,
-                py,
-                pw,
-                ph,
-                hwnd,
-                it.id as usize,
-                inst,
-                data,
-            )
+            create_w(ansi, cex, cls.as_ptr(), text.as_ptr(), cstyle, px, py, pw, ph, hwnd, it.id as usize, inst, data)
         };
         if c == 0 {
             if tpl.style & dlg::DS_NOFAILCREATE != 0 {

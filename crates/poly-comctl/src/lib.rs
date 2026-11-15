@@ -496,7 +496,11 @@ impl TreeView {
                 let Some(i) = self.position(item) else { return 0 };
                 let sibs = self.siblings(self.nodes[i].parent);
                 let at = sibs.iter().position(|&s| s == item).unwrap_or(0);
-                if kind == TVGN_NEXT { sibs.get(at + 1).copied().unwrap_or(0) } else { at.checked_sub(1).map_or(0, |p| sibs[p]) }
+                if kind == TVGN_NEXT {
+                    sibs.get(at + 1).copied().unwrap_or(0)
+                } else {
+                    at.checked_sub(1).map_or(0, |p| sibs[p])
+                }
             }
             TVGN_CARET => self.caret,
             _ => 0,

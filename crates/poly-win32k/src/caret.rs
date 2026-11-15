@@ -61,7 +61,9 @@ pub struct Snapshot {
 impl CaretQueue {
     pub fn snapshot(&self) -> Snapshot {
         match self.caret {
-            Some(c) => Snapshot { hwnd: c.hwnd, width: c.width, height: c.height, x: self.x, y: self.y, shown: c.hide == 0 },
+            Some(c) => {
+                Snapshot { hwnd: c.hwnd, width: c.width, height: c.height, x: self.x, y: self.y, shown: c.hide == 0 }
+            }
             None => Snapshot { x: self.x, y: self.y, ..Snapshot::default() },
         }
     }

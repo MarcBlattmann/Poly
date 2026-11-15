@@ -17,8 +17,8 @@
 use super::{H, SYS, SpinLock, info};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use poly_win32k::user::Env as _;
 use poly_kernelbase::text::{from_ansi, to_ansi};
+use poly_win32k::user::Env as _;
 
 /// The form of a message or of a window procedure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -204,7 +204,14 @@ pub struct Conv {
 enum Undo {
     None,
     /// A buffer the receiver (form `to`) fills for the sender (form `from`); copy it back to `buf`.
-    Buf { from: Form, to: Form, buf: usize, cap: usize, temp: usize, line: bool },
+    Buf {
+        from: Form,
+        to: Form,
+        buf: usize,
+        cap: usize,
+        temp: usize,
+        line: bool,
+    },
 }
 
 /// The form of the procedure window `h` is called through.

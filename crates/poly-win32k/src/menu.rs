@@ -126,7 +126,8 @@ impl Item {
     /// number of items of its popup.
     pub fn menu_state(&self, sub_count: usize) -> u32 {
         let mut s = self.state & (MFS_GRAYED | MFS_CHECKED | MFS_HILITE);
-        s |= self.ftype & (MFT_BITMAP | MFT_MENUBARBREAK | MFT_MENUBREAK | MFT_OWNERDRAW | MFT_SEPARATOR | MFT_RADIOCHECK);
+        s |= self.ftype
+            & (MFT_BITMAP | MFT_MENUBARBREAK | MFT_MENUBREAK | MFT_OWNERDRAW | MFT_SEPARATOR | MFT_RADIOCHECK);
         if self.sub != 0 {
             s |= MF_POPUP | ((sub_count as u32 & 0xFF) << 8);
         }

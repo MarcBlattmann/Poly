@@ -341,7 +341,11 @@ unsafe fn param_text(inst: usize, p: usize, ansi: bool) -> Option<Vec<u16>> {
     if p < 0x1_0000 {
         let mut buf = [0u16; 1024];
         // SAFETY: our buffer; the instance may be anything (LoadStringW says so).
-        let n = if inst != 0 { unsafe { super::strings::LoadStringW(inst as *mut u8, p as u32, buf.as_mut_ptr(), 1024) } } else { 0 };
+        let n = if inst != 0 {
+            unsafe { super::strings::LoadStringW(inst as *mut u8, p as u32, buf.as_mut_ptr(), 1024) }
+        } else {
+            0
+        };
         return Some(buf[..n.max(0) as usize].to_vec());
     }
     if ansi {

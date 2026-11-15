@@ -1315,7 +1315,8 @@ pub unsafe extern "system" fn GetMenuBarInfo(hwnd: H, object: i32, item: i32, pm
             }
             let cap = wm_metrics::caption_for_dpi(96);
             let frame = wm_metrics::frame_for_dpi(96);
-            let icon = [i.window.left + frame, i.window.top + frame, i.window.left + frame + cap, i.window.top + frame + cap];
+            let icon =
+                [i.window.left + frame, i.window.top + frame, i.window.left + frame + cap, i.window.top + frame + cap];
             let r = match item {
                 0 => icon,
                 1 => [icon[0] + 2, icon[1] + 2, icon[2] - 2, icon[3] - 2],
