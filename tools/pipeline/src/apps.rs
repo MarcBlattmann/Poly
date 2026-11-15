@@ -52,7 +52,9 @@ use crate::sha256;
 use crate::util::{self, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
+#[cfg(unix)]
 use std::ffi::CString;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
@@ -268,7 +270,17 @@ impl Tree {
     }
 
     /// Write the tree into the empty directory `root` (created), with the
+    /// same modes and times. The reference runs of app tests are Linux
+    /// ones (ADR 0124): elsewhere this reports that.
+    #[cfg(not(unix))]
+    pub fn materialise(&self, root: &Path) -> Result {
+        let _ = root;
+        Err(util::needs_linux("trace and diff of app tests (the app tree builder: file modes, symlinks, mtimes)"))
+    }
+
+    /// Write the tree into the empty directory `root` (created), with the
     /// same modes and times.
+    #[cfg(unix)]
     pub fn materialise(&self, root: &Path) -> Result {
         use std::os::unix::fs::PermissionsExt;
         std::fs::create_dir(root).map_err(|e| format!("{}: {e}", root.display()))?;
@@ -317,6 +329,7 @@ impl Tree {
 
 /// Set the modification and access time of `path` (not following a
 /// symbolic link) to [`MTIME`].
+#[cfg(unix)]
 fn set_mtime(path: &Path) -> Result {
     let c = CString::new(path.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
     let t = libc::timespec { tv_sec: libc::time_t::from(MTIME), tv_nsec: 0 };
@@ -431,6 +444,7 @@ pub fn build_tree(def: &AppDef, launcher: &[u8]) -> Result<Tree> {
 /// Directories app trees are written to on the reference system: a tmpfs
 /// that allows programs to run if there is one (`$POLY_APP_TREE_DIR`,
 /// `/dev/shm`), else the temporary directory.
+#[cfg(unix)]
 pub fn tree_base() -> PathBuf {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(d) = std::env::var_os("POLY_APP_TREE_DIR") {
@@ -446,6 +460,14 @@ pub fn tree_base() -> PathBuf {
         .unwrap_or(tmp)
 }
 
+/// Windows: app trees are a Linux matter ([`Tree::materialise`]); the
+/// temporary directory keeps the directory names well-formed.
+#[cfg(not(unix))]
+pub fn tree_base() -> PathBuf {
+    std::env::temp_dir()
+}
+
+#[cfg(unix)]
 fn statvfs_flags(dir: &Path) -> Option<u64> {
     let c = CString::new(dir.as_os_str().as_bytes()).ok()?;
     // SAFETY: statvfs is plain integers; all zeroes is a valid value.
@@ -461,11 +483,12 @@ fn allows_exec(dir: &Path) -> bool {
 
 /// Only Linux reports `noexec` through statvfs(3); app trees are a Linux
 /// matter anyway (they need its namespaces), so elsewhere any directory will do.
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(unix, not(target_os = "linux")))]
 fn allows_exec(dir: &Path) -> bool {
     statvfs_flags(dir).is_some()
 }
 
+#[cfg(unix)]
 fn writable(dir: &Path) -> bool {
     let Ok(c) = CString::new(dir.as_os_str().as_bytes()) else { return false };
     // SAFETY: `c` is a NUL-terminated path.
@@ -473,6 +496,7 @@ fn writable(dir: &Path) -> bool {
 }
 
 /// Whether `dir` is on a tmpfs (statfs(2), `TMPFS_MAGIC` of linux/magic.h).
+#[cfg(unix)]
 pub fn is_tmpfs(dir: &Path) -> bool {
     const TMPFS_MAGIC: i64 = 0x0102_1994;
     let Ok(c) = CString::new(dir.as_os_str().as_bytes()) else { return false };
@@ -613,6 +637,18 @@ mod tests {
         assert_eq!(entries[5].mode, cpio::S_IFDIR | 0o1777);
     }
 
+    /// Without Unix file modes, symlinks and mtimes the tree cannot be
+    /// written faithfully: a Windows host says so (ADR 0124).
+    #[cfg(not(unix))]
+    #[test]
+    fn materialising_a_tree_needs_linux() {
+        let root = std::env::temp_dir().join(format!("poly-apps-test-{}", std::process::id()));
+        let e = sample_tree().materialise(&root).unwrap_err();
+        assert!(e.contains("needs a Linux host (ADR 0124)"), "{e}");
+        assert!(!root.exists(), "nothing is written");
+    }
+
+    #[cfg(unix)]
     #[test]
     fn materialised_trees_have_modes_and_times() {
         use std::os::unix::fs::MetadataExt;

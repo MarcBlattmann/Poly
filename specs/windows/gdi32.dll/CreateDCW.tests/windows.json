@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "cdc_basic",
+      "exe_sha256": "c0b24b7486141b3fe2646c296e63f4b3a0249a0a36ecf1bae6d876aeb41c8fbc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRENXIERJU1BMQVk6IERDIHR5cGUgMyBCSVRTUElYRUwgMzIgOyBEZWxldGVEQyAxIGFnYWluIDAKQ3JlYXRlRENXIGRpc3BsYXkgKGxvd2VyIGNhc2UpOiBEQyB0eXBlIDMgQklUU1BJWEVMIDMyIDsgRGVsZXRlREMgMSBhZ2FpbiAwCkNyZWF0ZURDVyBESVNQTEFZIHdpdGggYSBtYWRlLXVwIGRldmljZSBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMCAvIGVycm9yIDE4MDEpCkNyZWF0ZURDVyBESVNQTEFZIHdpdGggZGV2aWNlIG5hbWUgXFwuXE5vU3VjaERpc3BsYXk6IERDIHR5cGUgMyBCSVRTUElYRUwgMzIgOyBEZWxldGVEQyAxIGFnYWluIDAKQ3JlYXRlRENXIGVtcHR5IGRyaXZlciBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMSAvIGVycm9yIDApCkNyZWF0ZURDVyBtYWRlLXVwIGRyaXZlciBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMSAvIGVycm9yIDApCkNyZWF0ZURDVyBOVUxMIGRyaXZlciBhbmQgTlVMTCBkZXZpY2U6IE5VTEwgKGVycm9yIHVuY2hhbmdlZCAxIC8gZXJyb3IgMCkKQ3JlYXRlSUNXIERJU1BMQVk6IERDIHR5cGUgMyBCSVRTUElYRUwgMzIgOyBEZWxldGVEQyAxIGFnYWluIDAKQ3JlYXRlSUNXIGRpc3BsYXkgKGxvd2VyIGNhc2UpOiBEQyB0eXBlIDMgQklUU1BJWEVMIDMyIDsgRGVsZXRlREMgMSBhZ2FpbiAwCkNyZWF0ZUlDVyBESVNQTEFZIHdpdGggYSBtYWRlLXVwIGRldmljZSBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMCAvIGVycm9yIDE4MDEpCkNyZWF0ZUlDVyBESVNQTEFZIHdpdGggZGV2aWNlIG5hbWUgXFwuXE5vU3VjaERpc3BsYXk6IERDIHR5cGUgMyBCSVRTUElYRUwgMzIgOyBEZWxldGVEQyAxIGFnYWluIDAKQ3JlYXRlSUNXIGVtcHR5IGRyaXZlciBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMSAvIGVycm9yIDApCkNyZWF0ZUlDVyBtYWRlLXVwIGRyaXZlciBuYW1lOiBOVUxMIChlcnJvciB1bmNoYW5nZWQgMSAvIGVycm9yIDApCkNyZWF0ZUlDVyBOVUxMIGRyaXZlciBhbmQgTlVMTCBkZXZpY2U6IE5VTEwgKGVycm9yIHVuY2hhbmdlZCAxIC8gZXJyb3IgMCkKdHdvIERJU1BMQVkgRENzOiBib3RoIG1hZGUgMSBkaWZmZXJlbnQgaGFuZGxlcyAxCmFmdGVyIGRlbGV0aW5nIHRoZSBzZWNvbmQgdGhlIGZpcnN0IHN0aWxsIGFuc3dlcnM6IEJJVFNQSVhFTCAzMgpkZWZhdWx0IHN0YXRlOiB0ZXh0IGNvbG91ciAwMDAwMDAgYmsgY29sb3VyIGZmZmZmZiBiayBtb2RlIDIgUk9QMiAxMyBtYXAgbW9kZSAxCmN1cnJlbnQgYnJ1c2ggaXMgV0hJVEVfQlJVU0ggMSBwZW4gaXMgQkxBQ0tfUEVOIDEgZm9udCBpcyBhIGZvbnQgNiBiaXRtYXAgdHlwZSA3Cm9yaWdpbjogMSBhdCAwLDAgOyBjbGlwIGJveDogdHlwZSAyIGxlZnQsdG9wIDAsMCBzaXplIGVxdWFscyB0aGUgcHJpbWFyeSBzY3JlZW4gMSAxCmNhcGFiaWxpdGllcyB0aGF0IGRpZmZlciBmcm9tIEdldERDKE5VTEwpOiBub25lCkRlbGV0ZURDIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateDCW DISPLAY: DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateDCW display (lower case): DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateDCW DISPLAY with a made-up device name: NULL (error unchanged 0 / error 1801)\nCreateDCW DISPLAY with device name \\\\.\\NoSuchDisplay: DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateDCW empty driver name: NULL (error unchanged 1 / error 0)\nCreateDCW made-up driver name: NULL (error unchanged 1 / error 0)\nCreateDCW NULL driver and NULL device: NULL (error unchanged 1 / error 0)\nCreateICW DISPLAY: DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateICW display (lower case): DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateICW DISPLAY with a made-up device name: NULL (error unchanged 0 / error 1801)\nCreateICW DISPLAY with device name \\\\.\\NoSuchDisplay: DC type 3 BITSPIXEL 32 ; DeleteDC 1 again 0\nCreateICW empty driver name: NULL (error unchanged 1 / error 0)\nCreateICW made-up driver name: NULL (error unchanged 1 / error 0)\nCreateICW NULL driver and NULL device: NULL (error unchanged 1 / error 0)\ntwo DISPLAY DCs: both made 1 different handles 1\nafter deleting the second the first still answers: BITSPIXEL 32\ndefault state: text colour 000000 bk colour ffffff bk mode 2 ROP2 13 map mode 1\ncurrent brush is WHITE_BRUSH 1 pen is BLACK_PEN 1 font is a font 6 bitmap type 7\norigin: 1 at 0,0 ; clip box: type 2 left,top 0,0 size equals the primary screen 1 1\ncapabilities that differ from GetDC(NULL): none\nDeleteDC 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getadaptersaddresses_calls",
+      "exe_sha256": "f96fb35b7744343d4935c0cfe873485f42a7a6cab08acd41252e6de9e62792fd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBidWZmZXIsIHNpemUgMDogcmVzdWx0IDExMSBzaXplLXBvc2l0aXZlIDEKQUZfVU5TUEVDIGZsYWdzIDB4ODBFLCAxNTAwMCBieXRlczogcmVzdWx0IDAgc2l6ZS1hZnRlciAxNTAwMCAodW5jaGFuZ2VkKSBoYXMtYWRhcHRlcnMgMQpBRl9VTlNQRUMgZmxhZ3MgMHhGLCAxNTAwMCBieXRlczogcmVzdWx0IDAgc2l6ZS1hZnRlciAxNTAwMCAodW5jaGFuZ2VkKSBoYXMtYWRhcHRlcnMgMQpOVUxMIHNpemUgcG9pbnRlcjogODcKZGVmYXVsdCBsaXN0OiBzb21lIGFkYXB0ZXIgaGFzIHVuaWNhc3QgdHJ1ZTsgZXZlcnkgYWRhcHRlciBoYXMgYSBuYW1lIHRydWUgYW5kIGEgZnJpZW5kbHkgbmFtZSB0cnVlClNLSVBfTVVMVElDQVNUOiByZXN1bHQgMCBGaXJzdE11bHRpY2FzdEFkZHJlc3Mgbm9uLU5VTEwgZm9yIHNvbWUgYWRhcHRlcjogMCBzYW1lIGFkYXB0ZXIgY291bnQgYXMgZGVmYXVsdCAxClNLSVBfRlJJRU5ETFlfTkFNRTogcmVzdWx0IDAgRnJpZW5kbHlOYW1lIG5vbi1OVUxMIGZvciBzb21lIGFkYXB0ZXI6IDEgc2FtZSBhZGFwdGVyIGNvdW50IGFzIGRlZmF1bHQgMQpBRl9JTkVUNjogcmVzdWx0IDAgZXZlcnkgdW5pY2FzdCBhZGRyZXNzIGhhcyBmYW1pbHkgMjMgKDAgPSBub25lLCAxID0gbWl4ZWQpOiAyMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL buffer, size 0: result 111 size-positive 1\nAF_UNSPEC flags 0x80E, 15000 bytes: result 0 size-after 15000 (unchanged) has-adapters 1\nAF_UNSPEC flags 0xF, 15000 bytes: result 0 size-after 15000 (unchanged) has-adapters 1\nNULL size pointer: 87\ndefault list: some adapter has unicast true; every adapter has a name true and a friendly name true\nSKIP_MULTICAST: result 0 FirstMulticastAddress non-NULL for some adapter: 0 same adapter count as default 1\nSKIP_FRIENDLY_NAME: result 0 FriendlyName non-NULL for some adapter: 1 same adapter count as default 1\nAF_INET6: result 0 every unicast address has family 23 (0 = none, 1 = mixed): 23\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    },
+    {
+      "name": "getadaptersaddresses_calls_b",
+      "exe_sha256": "f04430dd8576cbad045be894592a64dc640d5b13d27b78b9c0921aa8b748916b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTAwLWJ5dGUgYnVmZmVyOiByZXN1bHQgMTExIHNpemUtYXNrZWQtZm9yLW92ZXItMTAwIDEKQUZfVU5TUEVDIGZsYWdzIDB4MkUsIDE1MDAwIGJ5dGVzOiByZXN1bHQgMCBzaXplLWFmdGVyIDE1MDAwICh1bmNoYW5nZWQpIGhhcy1hZGFwdGVycyAxCkFGX1VOU1BFQyBmbGFncyAwLCAxNTAwMCBieXRlczogcmVzdWx0IDAgc2l6ZS1hZnRlciAxNTAwMCAodW5jaGFuZ2VkKSBoYXMtYWRhcHRlcnMgMQpub24tTlVMTCByZXNlcnZlZDogMApTS0lQX1VOSUNBU1Q6IHJlc3VsdCAwIEZpcnN0VW5pY2FzdEFkZHJlc3Mgbm9uLU5VTEwgZm9yIHNvbWUgYWRhcHRlcjogMCBzYW1lIGFkYXB0ZXIgY291bnQgYXMgZGVmYXVsdCAxClNLSVBfRE5TX1NFUlZFUjogcmVzdWx0IDAgRmlyc3REbnNTZXJ2ZXJBZGRyZXNzIG5vbi1OVUxMIGZvciBzb21lIGFkYXB0ZXI6IDAgc2FtZSBhZGFwdGVyIGNvdW50IGFzIGRlZmF1bHQgMQpJTkNMVURFX1BSRUZJWDogcmVzdWx0IDAgRmlyc3RQcmVmaXggbm9uLU5VTEwgZm9yIHNvbWUgYWRhcHRlcjogMSBzYW1lIGFkYXB0ZXIgY291bnQgYXMgZGVmYXVsdCAxCnRoZSBzaXplIGFza2VkIGZvciB0d2ljZSBpcyB0aGUgc2FtZSAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "100-byte buffer: result 111 size-asked-for-over-100 1\nAF_UNSPEC flags 0x2E, 15000 bytes: result 0 size-after 15000 (unchanged) has-adapters 1\nAF_UNSPEC flags 0, 15000 bytes: result 0 size-after 15000 (unchanged) has-adapters 1\nnon-NULL reserved: 0\nSKIP_UNICAST: result 0 FirstUnicastAddress non-NULL for some adapter: 0 same adapter count as default 1\nSKIP_DNS_SERVER: result 0 FirstDnsServerAddress non-NULL for some adapter: 0 same adapter count as default 1\nINCLUDE_PREFIX: result 0 FirstPrefix non-NULL for some adapter: 1 same adapter count as default 1\nthe size asked for twice is the same 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    },
+    {
+      "name": "getadaptersaddresses_calls_c",
+      "exe_sha256": "aacb4e41c6e86e199b735fe8f2eb58a650410660bf89b550c386090da80a4c56",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhhY3RseSB0aGUgc2l6ZSBhc2tlZCBmb3I6IHJlc3VsdCAwIHNpemUtdW5jaGFuZ2VkLW9yLXNtYWxsZXIgMQpBRl9VTlNQRUMgZmxhZ3MgMHgyNywgMTUwMDAgYnl0ZXM6IHJlc3VsdCAwIHNpemUtYWZ0ZXIgMTUwMDAgKHVuY2hhbmdlZCkgaGFzLWFkYXB0ZXJzIDEKZmFtaWx5IDk5OiA4Nwp1bmtub3duIGZsYWcgYml0IDB4NDAwMDAwMDA6IDAKU0tJUF9BTllDQVNUOiByZXN1bHQgMCBGaXJzdEFueWNhc3RBZGRyZXNzIG5vbi1OVUxMIGZvciBzb21lIGFkYXB0ZXI6IDAgc2FtZSBhZGFwdGVyIGNvdW50IGFzIGRlZmF1bHQgMQpTS0lQX0ROU19JTkZPOiByZXN1bHQgMCBGaXJzdERuc1NlcnZlckFkZHJlc3Mgbm9uLU5VTEwgZm9yIHNvbWUgYWRhcHRlcjogMCBzYW1lIGFkYXB0ZXIgY291bnQgYXMgZGVmYXVsdCAxCkFGX0lORVQ6IHJlc3VsdCAwIGV2ZXJ5IHVuaWNhc3QgYWRkcmVzcyBoYXMgZmFtaWx5IDIgKDAgPSBub25lLCAxID0gbWl4ZWQpOiAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "exactly the size asked for: result 0 size-unchanged-or-smaller 1\nAF_UNSPEC flags 0x27, 15000 bytes: result 0 size-after 15000 (unchanged) has-adapters 1\nfamily 99: 87\nunknown flag bit 0x40000000: 0\nSKIP_ANYCAST: result 0 FirstAnycastAddress non-NULL for some adapter: 0 same adapter count as default 1\nSKIP_DNS_INFO: result 0 FirstDnsServerAddress non-NULL for some adapter: 0 same adapter count as default 1\nAF_INET: result 0 every unicast address has family 2 (0 = none, 1 = mixed): 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 102
+    },
+    {
+      "name": "getadaptersaddresses_shape_b",
+      "exe_sha256": "971d626aa2393ef4a5bdac64390cfcb75210dcc85fa6b3d57e7bfaab2e4e7d93",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXQgbGVhc3Qgb25lIGFkYXB0ZXIgMQpPcGVyU3RhdHVzIHdpdGhpbiAxLi43IHRydWUsIElmVHlwZSBub256ZXJvIHRydWUKdGhlIGxvb3BiYWNrIGFkYXB0ZXIgd2l0aCAxMjcuMC4wLjE6IE9wZXJTdGF0dXMgMSAoMSA9IHVwKSwgTXR1IDB4ZmZmZmZmZmYsIFBoeXNpY2FsQWRkcmVzc0xlbmd0aCAwLCBwcmVmaXggbGVuZ3RoIG9mIDEyNy4wLjAuMSA4LCBEYWRTdGF0ZSA0LCBoYXMgYW4gSXB2NklmSW5kZXggMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "at least one adapter 1\nOperStatus within 1..7 true, IfType nonzero true\nthe loopback adapter with 127.0.0.1: OperStatus 1 (1 = up), Mtu 0xffffffff, PhysicalAddressLength 0, prefix length of 127.0.0.1 8, DadState 4, has an Ipv6IfIndex 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

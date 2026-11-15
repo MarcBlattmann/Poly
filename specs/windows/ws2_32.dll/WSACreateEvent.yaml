@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSACreateEvent.yaml
+id: windows/api/ws2_32.dll/WSACreateEvent
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSACreateEvent function", "WSASetEvent", "WSAResetEvent", "WSACloseEvent", "WSAWaitForMultipleEvents function"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates an event object: a manual-reset kernel event, not signalled. Chrome's network service calls WSACreateEvent twice per connection (53 calls), WSAResetEvent 60 times (after each overlapped send), WSACloseEvent 47 times. The tests give the semantics of the five event functions, which are the kernel32 event calls under other names: the same handle works with SetEvent, ResetEvent, WaitForSingleObject and CloseHandle. This sheet also holds the rules of WSASetEvent, WSAResetEvent, WSACloseEvent and WSAWaitForMultipleEvents.
+interface:
+  signature: "WSAEVENT WSACreateEvent(void); BOOL WSASetEvent(WSAEVENT); BOOL WSAResetEvent(WSAEVENT); BOOL WSACloseEvent(WSAEVENT); DWORD WSAWaitForMultipleEvents(DWORD n, const WSAEVENT* events, BOOL waitAll, DWORD timeout, BOOL alertable)"
+chrome:
+  calls: "WSACreateEvent 53, WSAResetEvent 60, WSACloseEvent 47 (all succeed); WSAWaitForMultipleEvents is not called (Chrome waits in its own message loop with WaitForMultipleObjects)"
+rules:
+  create: "returns a usable handle, not signalled (WaitForSingleObject(h, 0) = 258 WAIT_TIMEOUT), GetHandleInformation succeeds with flags 0 (not inheritable)"
+  manual_reset: "after WSASetEvent every wait returns 0 and the event stays set until WSAResetEvent or ResetEvent; WSAResetEvent on an event that is not set returns TRUE; SetEvent and ResetEvent work on it and WSAWaitForMultipleEvents sees the state"
+  wait_multi: "no event set, timeout 0: 258 (WSA_WAIT_TIMEOUT); with several set, the lowest index wins (events 1 and 2 set: 1); waitAll with one not set: 258; waitAll with all set: 0; a 50 ms timeout on a reset event: 258; 64 events: allowed; 65 events or 0 events: 0xFFFFFFFF (WSA_WAIT_FAILED) with error 87 (WSA_INVALID_PARAMETER); an invalid handle: 0xFFFFFFFF with error 6 (WSA_INVALID_HANDLE)"
+  close: "WSACloseEvent returns TRUE once; closing again, WSASetEvent on a closed handle, WSAResetEvent(NULL), WSACloseEvent(NULL) and WSASetEvent(0x1234): FALSE with error 6; WSAGetLastError and GetLastError return the same value (6); CloseHandle also closes such an event"
+errors:
+  invalid_handle: "WSA_INVALID_HANDLE 6"
+  invalid_parameter: "WSA_INVALID_PARAMETER 87"
+side_effects: "creates or changes a kernel event"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  A NULL array in WSAWaitForMultipleEvents (the call faults), alertable waits, the 64-event limit with WaitAll.

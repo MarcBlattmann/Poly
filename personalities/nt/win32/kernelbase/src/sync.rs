@@ -72,7 +72,7 @@ pub unsafe extern "system" fn CreateThread(
         let q = unsafe {
             nt::NtQueryInformationThread(h, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut())
         };
-        let id = if q.is_success() { u64::from_le_bytes(info[24..32].try_into().unwrap()) as u32 } else { 0 };
+        let id = if q.is_success() { crate::base::id_in(&info, crate::base::TBI_UNIQUE_THREAD) } else { 0 };
         // SAFETY: the caller's out-pointer.
         unsafe { thread_id.write(id) };
     }

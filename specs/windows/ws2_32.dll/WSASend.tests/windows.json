@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsasend_full_buffer",
+      "exe_sha256": "d1a0180160e0de594bf66897fd91d07e5cfa0dceaf3c5de3979cafc9fcf60f2b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VuZCBvbiBhIG5vbi1ibG9ja2luZyBzb2NrZXQgc3RvcHBlZCB3aXRoIC0xL1dTQUVXT1VMREJMT0NLCnRoZSBwZWVyIHJlYWQgZXZlcnl0aGluZyB0aGF0IHdhcyBhY2NlcHRlZCAxCkludGVybmFsIHdoaWxlIHBlbmRpbmcgMHgxMDMKdGhlIHBlbmRpbmcgc2VuZCBjb21wbGV0ZWQgYWZ0ZXIgdGhlIHBlZXIgcmVhZCAxCmV2ZXJ5dGhpbmcgYXJyaXZlZCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "send on a non-blocking socket stopped with -1/WSAEWOULDBLOCK\nthe peer read everything that was accepted 1\nInternal while pending 0x103\nthe pending send completed after the peer read 1\neverything arrived 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3440
+    },
+    {
+      "name": "wsasend_full_buffer_b",
+      "exe_sha256": "9741073ea3e75532e241b96ecc2ec542552edb38c6fa561cba589827fa1bba14",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aXQgYWNjZXB0ZWQgbW9yZSB0aGFuIDE2IEtpQiAxCnNlbmQgd29ya3MgYWdhaW4gMQpXU0FHZXRPdmVybGFwcGVkUmVzdWx0KHdhaXQgRkFMU0UpIEZBTFNFL1dTQV9JT19JTkNPTVBMRVRFCldTQUdldE92ZXJsYXBwZWRSZXN1bHQgVFJVRSB0cmFuc2ZlcnJlZC1pcy13aG9sZS1idWZmZXIgMQpldmVudHMgb24gdGhlIHNlbmRlciBXUklURQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "it accepted more than 16 KiB 1\nsend works again 1\nWSAGetOverlappedResult(wait FALSE) FALSE/WSA_IO_INCOMPLETE\nWSAGetOverlappedResult TRUE transferred-is-whole-buffer 1\nevents on the sender WRITE\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3434
+    },
+    {
+      "name": "wsasend_full_buffer_c",
+      "exe_sha256": "095b7af7a93727312e49ca55ca714ba96489c332cd896a1b89f2ca095502d86a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b25lIG1vcmUgYnl0ZSAtMS9XU0FFV09VTERCTE9DSwpvdmVybGFwcGVkIFdTQVNlbmQgc3RvcHBlZCB3aXRoIC0xL1dTQV9JT19QRU5ESU5HCmV2ZW50IHNpZ25hbGxlZCB3aGlsZSBwZW5kaW5nIDAKSW50ZXJuYWwgYWZ0ZXIgMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "one more byte -1/WSAEWOULDBLOCK\noverlapped WSASend stopped with -1/WSA_IO_PENDING\nevent signalled while pending 0\nInternal after 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3450
+    },
+    {
+      "name": "wsasend_overlapped_event_c",
+      "exe_sha256": "004071544b07e49630c252465a5d17110d2d420fd5b4e92f245a7d2fa10914c6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmxvY2tpbmcgc29ja2V0LCBldmVudDogZXZlbnQgc2lnbmFsbGVkIDEKYmxvY2tpbmcgc29ja2V0LCBubyBldmVudDogV1NBU2VuZCAwIHNlbnQgMTEKYmxvY2tpbmcgc29ja2V0LCBubyBldmVudDogV1NBUmVzZXRFdmVudCAxCmV2ZW50LXNlbGVjdGVkIHNvY2tldDogSW50ZXJuYWwgMHgwIEludGVybmFsSGlnaCAxMQpldmVudC1zZWxlY3RlZCBzb2NrZXQ6IFdTQVJlc2V0RXZlbnQgMQowIGJ1ZmZlcnMgLTEvV1NBRUlOVkFMCnR3byBidWZmZXJzIDAgc2VudCA2CmFmdGVyIHNodXRkb3duKFNEX1NFTkQpIC0xL1dTQUVTSFVURE9XTgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "blocking socket, event: event signalled 1\nblocking socket, no event: WSASend 0 sent 11\nblocking socket, no event: WSAResetEvent 1\nevent-selected socket: Internal 0x0 InternalHigh 11\nevent-selected socket: WSAResetEvent 1\n0 buffers -1/WSAEINVAL\ntwo buffers 0 sent 6\nafter shutdown(SD_SEND) -1/WSAESHUTDOWN\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

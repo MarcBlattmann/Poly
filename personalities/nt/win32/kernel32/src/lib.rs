@@ -14,7 +14,8 @@ use poly_win32_rt as _;
 
 extern crate alloc;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn LocalFree(mem: *mut u8) -> *mut u8;
@@ -175,7 +176,8 @@ pub unsafe extern "system" fn lstrcmpiA(a: *const u8, b: *const u8) -> i32 {
     unsafe { ansi_cmp(a, b, true) }
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetStartupInfoW(info: *mut u8);
 }
@@ -215,7 +217,8 @@ pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(p, info, STARTUPINFO_SIZE) };
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetSystemInfo(info: *mut u8);
 }

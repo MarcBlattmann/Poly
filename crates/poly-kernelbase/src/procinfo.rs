@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn an_address_finds_its_module_and_names_are_cut_to_the_buffer() {
-        let name: Vec<u16> = "\\Device\\PolyFs0\\Windows\\System32\\ntdll.dll".encode_utf16().collect();
+        let name: Vec<u16> = "\\Device\\HarddiskVolume1\\Windows\\System32\\ntdll.dll".encode_utf16().collect();
         let mods = vec![(0x1000u64, 0x2000u64, vec![1u16, 2]), (0x7ff0_0000_0000, 0x10_0000, name.clone())];
         assert_eq!(module_at(&mods, 0x7ff0_0000_1234), Some(name.as_slice()));
         assert_eq!(module_at(&mods, 0x1000), Some(&[1u16, 2][..]));

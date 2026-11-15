@@ -9,6 +9,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Result<T = ()> = std::result::Result<T, String>;
 
+/// The error of a command (or part of one) that needs a Linux host: the
+/// ptrace tracer, the diff runner's reference runs and the app/rootfs
+/// builder use ptrace, namespaces, `/proc` and Unix file modes. On a Windows
+/// host the tool still builds and says this instead (ADR 0124).
+pub fn needs_linux(what: &str) -> String {
+    format!("`pipeline {what}` needs a Linux host (ADR 0124); run it through polyd")
+}
+
 /// Command-line arguments: positionals, `--flag` switches and `--name value`
 /// options (repeatable).
 #[derive(Debug, Default)]
@@ -129,7 +137,15 @@ pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     serde_json::from_slice(&read(path)?).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-/// Every regular file under `dir`, as paths relative to it, sorted.
+/// A relative `path` with `/` between its components, on every host.
+pub fn slashed(path: &Path) -> PathBuf {
+    let parts: Vec<_> = path.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+    PathBuf::from(parts.join("/"))
+}
+
+/// Every regular file under `dir`, as paths relative to it, sorted. The
+/// separator is `/` on every host: the paths are recorded in manifests and
+/// handed to `git show`, which only know `/` (a Windows host would give `\`).
 pub fn files_under(dir: &Path) -> Result<Vec<PathBuf>> {
     fn walk(base: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result {
         let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -140,7 +156,7 @@ pub fn files_under(dir: &Path) -> Result<Vec<PathBuf>> {
             if kind.is_dir() {
                 walk(base, &path, out)?;
             } else if kind.is_file() {
-                out.push(path.strip_prefix(base).unwrap().to_path_buf());
+                out.push(slashed(path.strip_prefix(base).unwrap()));
             }
         }
         Ok(())

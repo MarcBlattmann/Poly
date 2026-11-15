@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getnameinfo.yaml
+id: windows/api/ws2_32.dll/getnameinfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "getnameinfo function (ws2tcpip.h)", "NI_* flags"; winsock2.h, ws2tcpip.h, ws2def.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Turns a socket address into text. Chrome does not call it in stage 4; the entry exists because getaddrinfo's counterpart is needed by programs that print peers. The tests use loopback addresses with NI_NUMERICHOST and NI_NUMERICSERV, the service-name lookup (port 80 gives "http" over TCP and stays "80" with NI_DGRAM), zero-length buffers for host or service, a too small host buffer, wrong sockaddr lengths and families.
+interface:
+  signature: "INT getnameinfo(const SOCKADDR *sa, socklen_t salen, PCHAR host, DWORD hostlen, PCHAR serv, DWORD servlen, INT flags)"
+chrome:
+  calls: "not called in stage 4"
+rules:
+  numeric: "127.0.0.1:80, NI_NUMERICHOST|NI_NUMERICSERV: 0, \"127.0.0.1\", \"80\"; ::1:8080: \"::1\", \"8080\"; 0.0.0.0 port 0: \"0.0.0.0\", \"0\"; ::ffff:127.0.0.1 port 443: \"::ffff:127.0.0.1\", \"443\""
+  service_names: "port 80 with NI_NUMERICHOST only: service \"http\"; with NI_DGRAM added: \"80\""
+  zero_buffers: "service buffer length 0: only the host is written; host length 0: only the service; both 0: result 0 and nothing written"
+  host_buffer_size: "length 4 for \"127.0.0.1\": 122 (ERROR_INSUFFICIENT_BUFFER) and the first 4 characters (\"127.\") are written; length 10: 0 with the whole text and its NUL; the bytes after the NUL are untouched"
+  sockaddr_checks: "salen 15, salen 0, a NULL sockaddr and an IPv6 address with salen 16: 10014 (WSAEFAULT); salen 17 for an IPv4 address: accepted; family 99: 10047 (WSAEAFNOSUPPORT); the code is the return value and WSAGetLastError"
+errors:
+  buffer: "ERROR_INSUFFICIENT_BUFFER (122)"
+  fault: "WSAEFAULT (10014)"
+  family: "WSAEAFNOSUPPORT (10047)"
+side_effects: "none for numeric flags (a name lookup without NI_NUMERICHOST can query DNS and is not tested)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Name lookups (no NI_NUMERICHOST), NI_NAMEREQD, NI_NOFQDN, scope ids, the Wide form GetNameInfoW.

@@ -12,7 +12,8 @@ use poly_kernelbase::time;
 use poly_kernelbase::tz;
 use poly_ntobj::NtStatus;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LdrAddRefDll(flags: u32, handle: *mut u8) -> NtStatus;
     fn RtlPcToFileHeader(pc: *mut u8, base: *mut *mut u8) -> *mut u8;
@@ -617,24 +618,31 @@ pub unsafe extern "system" fn GetComputerNameW(buf: *mut u16, size: *mut u32) ->
     unsafe { computer_name(sysex::COMPUTER_NAME_NETBIOS, buf, size, ERROR_BUFFER_OVERFLOW) }
 }
 
-/// `IMAGE_FILE_MACHINE_UNKNOWN`, `IMAGE_FILE_MACHINE_AMD64` (`winnt.h`).
+/// `IMAGE_FILE_MACHINE_UNKNOWN`, `IMAGE_FILE_MACHINE_I386`, `IMAGE_FILE_MACHINE_AMD64` (`winnt.h`).
 const IMAGE_FILE_MACHINE_UNKNOWN: u16 = 0;
+const IMAGE_FILE_MACHINE_I386: u16 = 0x014C;
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 
-/// `IsWow64Process2`: Poly runs 64-bit x64 programs only, so the process
-/// is not emulated (`IMAGE_FILE_MACHINE_UNKNOWN`) and the machine is x64.
+/// `IsWow64Process2` (Learn): the machine is x64; the process is `IMAGE_FILE_MACHINE_UNKNOWN`
+/// when it is a native (64-bit) one, `IMAGE_FILE_MACHINE_I386` when it runs as a 32-bit one
+/// (ADR 0186).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn IsWow64Process2(
-    _process: Handle,
+    process: Handle,
     process_machine: *mut u16,
     native_machine: *mut u16,
 ) -> i32 {
     if process_machine.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
+    let machine = match crate::misc::is_wow64(process) {
+        Ok(true) => IMAGE_FILE_MACHINE_I386,
+        Ok(false) => IMAGE_FILE_MACHINE_UNKNOWN,
+        Err(st) => return crate::base::fail_status(st, FALSE),
+    };
     // SAFETY: the caller's out-pointers.
     unsafe {
-        process_machine.write_unaligned(IMAGE_FILE_MACHINE_UNKNOWN);
+        process_machine.write_unaligned(machine);
         if !native_machine.is_null() {
             native_machine.write_unaligned(IMAGE_FILE_MACHINE_AMD64);
         }

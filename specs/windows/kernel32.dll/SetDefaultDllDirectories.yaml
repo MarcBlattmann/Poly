@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetDefaultDllDirectories.yaml
+id: windows/api/kernel32.dll/SetDefaultDllDirectories
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SetDefaultDllDirectories function (libloaderapi.h)", "LoadLibraryW", "Dynamic-Link Library Search Order", "LoadLibraryEx"; libloaderapi.h and winbase.h (LOAD_LIBRARY_SEARCH_APPLICATION_DIR 0x200, USER_DIRS 0x400, SYSTEM32 0x800, DEFAULT_DIRS 0x1000) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Narrows the places where LoadLibrary-style calls without a full path look for libraries. Chrome's GPU process, network service and every confined target call it at start-up with the system directory only. After SYSTEM32 only, a library copied next to the executable (poly_s2_copy.dll) is no longer found by name (error 126) while system libraries are, and a full path still loads. SYSTEM32 with APPLICATION_DIR and USER_DIRS finds the copy again. Flag 0 and undefined low bits are refused with 87; the call can be repeated with different sets.
+interface:
+  signature: "BOOL SetDefaultDllDirectories(DWORD flags)"
+chrome:
+  calls: "4 calls in the confined GPU, network and utility processes of stage 2; the value is the system directory only (LOAD_LIBRARY_SEARCH_SYSTEM32 0x800 is what the effect test uses)"
+rules:
+  default_search: "before any call a library next to the executable is found by name (copy of winmm.dll as poly_s2_copy.dll: loaded)"
+  flag_sets: "SYSTEM32|APPLICATION_DIR|USER_DIRS = TRUE and the copy loads; SYSTEM32 = TRUE and the copy fails with 126 while winmm.dll and a full path to the copy load; DEFAULT_DIRS 0x1000, 0x2000, APPLICATION_DIR alone, SYSTEM32 alone: TRUE"
+  refused: "flags 0, 0x1, SYSTEM32|0x1 and 0xFFFFFFFF: FALSE, error 87"
+  missing_library: "a library that does not exist: error 126"
+errors:
+  bad_flags: "ERROR_INVALID_PARAMETER (87)"
+  not_found: "ERROR_MOD_NOT_FOUND (126) from LoadLibraryW"
+side_effects: "changes the process's DLL search for later loads"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The test copies a system library next to itself and deletes the copy at the end.
+not_covered: >
+  AddDllDirectory directories, LOAD_LIBRARY_SEARCH_* flags passed to LoadLibraryExW itself, LOAD_LIBRARY_SAFE_CURRENT_DIRS's effect.

@@ -78,6 +78,7 @@ pub enum Opt {
     Size,
     FreshState,
     FreshDisk,
+    DiskSize,
     KernelArgs,
     Display,
     Groups,
@@ -144,7 +145,7 @@ impl Entry {
         use Opt::*;
         match self {
             Entry::Desktop => {
-                &[Release, TestApps, Chromium, Accel, Scale, Size, FreshState, FreshDisk, KernelArgs, Display]
+                &[Release, TestApps, Chromium, Accel, Scale, Size, FreshState, FreshDisk, DiskSize, KernelArgs, Display]
             }
             Entry::ChromiumDisk => &[],
             Entry::Toolkits => &[Release, Accel, FreshDisk],
@@ -201,6 +202,7 @@ impl Opt {
             Opt::Size => "Screen size",
             Opt::FreshState => "Fresh settings",
             Opt::FreshDisk => "Fresh disk",
+            Opt::DiskSize => "Disk free space",
             Opt::KernelArgs => "Kernel arguments",
             Opt::Display => "QEMU display",
             Opt::Groups => "Groups",
@@ -225,6 +227,9 @@ impl Opt {
             Opt::FreshState => "--fresh-state: start the desktop's settings disk again",
             Opt::FreshDisk => {
                 "--fresh-disk: make the root disk again (with Chromium: its disk, and so its profile, bookmarks and logins)"
+            }
+            Opt::DiskSize => {
+                "--disk-size=SIZE: free room on Chromium's disk when it is made (auto: 4G, so apps installed with apt fit); needs Fresh disk to apply to a disk that exists"
             }
             Opt::Chromium => {
                 "--chromium: the desktop boots from Chromium's disk, with Poly's apps; Chromium is the default browser"
@@ -261,6 +266,8 @@ pub struct Settings {
     pub size: String,
     pub fresh_state: bool,
     pub fresh_disk: bool,
+    /// `auto` or one of [`DISK_SIZES`] (`--disk-size=`).
+    pub disk_size: String,
     pub kernel_args: String,
     /// `auto` or a QEMU `-display` value.
     pub display: String,
@@ -284,6 +291,7 @@ impl Default for Settings {
             size: "auto".into(),
             fresh_state: false,
             fresh_disk: false,
+            disk_size: "auto".into(),
             kernel_args: String::new(),
             display: "auto".into(),
             groups: vec!["desktop".into(), "desktop-shell".into()],
@@ -310,6 +318,8 @@ const SIZES: [&str; 10] = [
     "3840x2160",
     "3840x2400",
 ];
+/// The free room Chromium's disk can be made with (`auto`: 4G).
+const DISK_SIZES: [&str; 6] = ["auto", "small", "2G", "8G", "16G", "32G"];
 const DISPLAYS: [&str; 5] = ["auto", "sdl", "gtk", "vnc=:0", "none"];
 
 /// `WxH` with each side 320 to 8192 (what `desktop --size=` takes).
@@ -352,6 +362,7 @@ impl Settings {
             "size": self.size,
             "fresh_state": self.fresh_state,
             "fresh_disk": self.fresh_disk,
+            "disk_size": self.disk_size,
             "kernel_args": self.kernel_args,
             "display": self.display,
             "groups": self.groups,
@@ -388,6 +399,7 @@ impl Settings {
             size: text("size").filter(|s| s == "auto" || valid_size(s)).unwrap_or(d.size.clone()),
             fresh_state: flag("fresh_state", false),
             fresh_disk: flag("fresh_disk", false),
+            disk_size: one_of("disk_size", &DISK_SIZES, "auto"),
             kernel_args: text("kernel_args").filter(|a| !a.contains(['\n', '\r'])).unwrap_or_default(),
             display: text("display")
                 .filter(|s| !s.trim().is_empty() && !s.contains(char::is_whitespace))
@@ -441,6 +453,7 @@ impl Settings {
             Opt::Size => self.size.clone(),
             Opt::FreshState => if self.fresh_state { "yes" } else { "no" }.into(),
             Opt::FreshDisk => if self.fresh_disk { "yes" } else { "no" }.into(),
+            Opt::DiskSize => self.disk_size.clone(),
             Opt::KernelArgs => {
                 if self.kernel_args.trim().is_empty() {
                     "(none)".into()
@@ -527,7 +540,7 @@ pub fn chromium_refusal(host: &Host) -> Option<String> {
 /// What the first start with Chromium costs, as the option's description
 /// says it (nothing to say once the disk is built).
 pub fn chromium_cost(host: &Host) -> String {
-    let disk = format!("a {} disk image", crate::chromium::DISK_SIZE);
+    let disk = format!("a {} disk image with 4 GB free for apps", crate::chromium::DISK_SIZE);
     match (host.chromium_disk, host.chromium_download) {
         (true, _) => "its disk is built: a start takes the desktop plus about a minute for the window".into(),
         (false, Some(0)) => {
@@ -639,6 +652,9 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
             flag(&mut a, s.chromium, "--chromium");
             flag(&mut a, s.fresh_state, "--fresh-state");
             flag(&mut a, s.chromium && s.fresh_disk, "--fresh-disk");
+            if s.chromium && s.disk_size != "auto" {
+                a.push(format!("--disk-size={}", s.disk_size));
+            }
             if s.scale != "auto" {
                 a.push(format!("--scale={}", s.scale));
             }
@@ -877,6 +893,7 @@ impl Menu {
             | Opt::Chromium
             | Opt::FreshState
             | Opt::FreshDisk
+            | Opt::DiskSize
             | Opt::Accel
             | Opt::Scale => self.change(o, 1),
             Opt::Size | Opt::Display | Opt::KernelArgs if enter => {
@@ -930,6 +947,7 @@ impl Menu {
             },
             Opt::FreshState => s.fresh_state = !s.fresh_state,
             Opt::FreshDisk => s.fresh_disk = !s.fresh_disk,
+            Opt::DiskSize => s.disk_size = cycle(&DISK_SIZES, &s.disk_size),
             Opt::Accel => s.accel = cycle(&self.host.accels(), &s.accel),
             Opt::Scale => s.scale = cycle(&SCALES, &s.scale),
             Opt::Size => s.size = cycle(&SIZES, &s.size),
@@ -1513,6 +1531,7 @@ mod tests {
             size: "2560x1600".into(),
             fresh_state: true,
             fresh_disk: true,
+            disk_size: "8G".into(),
             kernel_args: "poly.x=1 poly.y".into(),
             display: "gtk,zoom-to-fit=on".into(),
             groups: vec!["desktop".into(), "wayland".into()],
@@ -1589,6 +1608,11 @@ mod tests {
                 "poly.b"
             ]
         );
+        // The disk's free room is passed when it is not the default (ADR 0184).
+        s.disk_size = "8G".into();
+        assert!(args(Entry::Desktop, &s).iter().any(|a| a == "--disk-size=8G"));
+        s.disk_size = "auto".into();
+        assert!(!args(Entry::Desktop, &s).iter().any(|a| a.starts_with("--disk-size")));
         s.test_apps = false;
         s.release = false;
         assert_eq!(args(Entry::ChromiumDisk, &s), ["chromium", "disk"]);
@@ -1942,14 +1966,19 @@ mod tests {
         assert!(text.contains("With Chromium"), "{text}");
         // Nothing downloaded or built yet: the size is in the option's line.
         assert!(
-            text.contains("first start: downloads 228 MB of Debian packages and makes a 1.3 GB disk image"),
+            text.contains(
+                "first start: downloads 228 MB of Debian packages and makes a 1.3 GB disk image with 4 GB free for apps"
+            ),
             "{text}"
         );
         assert!(text.contains("The launcher: Chromium (the default browser), Poly's apps"), "{text}");
         assert_eq!(plan(&m.s, &m.host).unwrap()[0].line(), "cargo xtask desktop --release --chromium");
         // Packages there, the disk not yet; then the disk too.
         let host = Host { chromium_download: Some(0), ..windows() };
-        assert!(chromium_cost(&host).contains("makes a 1.3 GB disk image from the packages already downloaded"));
+        assert!(
+            chromium_cost(&host)
+                .contains("makes a 1.3 GB disk image with 4 GB free for apps from the packages already downloaded")
+        );
         let host = Host { chromium_disk: true, ..host };
         assert!(chromium_cost(&host).contains("its disk is built"));
         // The lock unreadable: no size, still the way.

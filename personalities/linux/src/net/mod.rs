@@ -14,15 +14,18 @@
 pub mod abi;
 pub mod dev;
 mod errno;
+pub mod ipopt;
 pub mod netlink;
 
 pub use abi::{SockAddr, Ucred, UnixAddr};
+pub use ipopt::{Congestion, Membership, RecvAnc, StoredOpt};
 
 use crate::errno::Errno;
 use crate::fileio::NewFd;
 use crate::ns::NetNs;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::net::{Ipv4Addr, Ipv6Addr};
 
 /// Address families the kernel supports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,6 +155,9 @@ pub struct RecvMsg {
     pub rights_truncated: bool,
     /// `SCM_CREDENTIALS` (with `SO_PASSCRED`).
     pub creds: Option<Ucred>,
+    /// What the socket's `IP_PKTINFO` / `IP_RECVTOS` / `IP_RECVTTL` (or
+    /// `IPV6_RECV*`) options ask recvmsg to return for this datagram.
+    pub anc: RecvAnc,
 }
 
 /// A socket option to set, decoded.
@@ -191,6 +197,27 @@ pub enum SockOpt {
     Ipv6RecvErr(bool),
     NetlinkAddMembership(u32),
     NetlinkDropMembership(u32),
+    /// An int option of [`ipopt`] that is stored and reported back, its
+    /// value checked and reduced by [`StoredOpt::normalize`].
+    Stored(StoredOpt, i32),
+    /// `IPV6_TCLASS` (-1, the default, is 0 here).
+    Ipv6Tclass(u8),
+    /// `IP_MULTICAST_IF`: `in_addr` (index 0) or `ip_mreqn`.
+    IpMulticastIf {
+        addr: Ipv4Addr,
+        ifindex: u32,
+    },
+    /// `IP_ADD_MEMBERSHIP` / `IPV6_ADD_MEMBERSHIP`: the group is
+    /// multicast.
+    AddMembership(Membership),
+    DropMembership(Membership),
+    /// `IPV6_PKTINFO` as an option: the source address and interface that
+    /// sends use.
+    Ipv6PktInfo {
+        addr: Ipv6Addr,
+        ifindex: u32,
+    },
+    TcpCongestion(Congestion),
 }
 
 /// A socket option to read.
@@ -227,6 +254,13 @@ pub enum OptName {
     Ipv6UnicastHops,
     IpRecvErr,
     Ipv6RecvErr,
+    Stored(StoredOpt),
+    Ipv6Tclass,
+    IpMulticastIf,
+    /// `IP_MTU`: the path MTU of a connected socket (`ENOTCONN` else).
+    IpMtu,
+    Ipv6PktInfo,
+    TcpCongestion,
 }
 
 /// An option's value, as `getsockopt` encodes it.
@@ -242,6 +276,22 @@ pub enum OptValue {
     Timeval(u64),
     /// `struct ucred`.
     Ucred(Ucred),
+    /// Up to [`OptValue::BYTES`] bytes: `struct in_addr`, `struct
+    /// in6_pktinfo`, a congestion control name.
+    Bytes([u8; OptValue::BYTES], u8),
+}
+
+impl OptValue {
+    /// The most bytes a [`OptValue::Bytes`] holds.
+    pub const BYTES: usize = 20;
+
+    /// A value of `data` (at most [`OptValue::BYTES`] bytes).
+    pub fn bytes(data: &[u8]) -> OptValue {
+        let mut buf = [0u8; OptValue::BYTES];
+        let n = data.len().min(OptValue::BYTES);
+        buf[..n].copy_from_slice(&data[..n]);
+        OptValue::Bytes(buf, n as u8)
+    }
 }
 
 /// The kernel's sockets for the calling thread. Descriptors that are not

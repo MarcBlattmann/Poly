@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetTimeZoneInformation.yaml
+id: windows/api/kernel32.dll/GetTimeZoneInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SystemTimeToTzSpecificLocalTime", "TzSpecificLocalTimeToSystemTime", "GetTimeZoneInformation", "GetDynamicTimeZoneInformation", "TIME_ZONE_INFORMATION", "SYSTEMTIME"; timezoneapi.h, minwinbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the system's time zone as a TIME_ZONE_INFORMATION (172 bytes) and 0, 1 or 2 (no daylight time, standard time, daylight time) or 0xFFFFFFFF. The zone is the machine's, so the tests do not record it; they record what is true on any machine: the biases are within a day, the names end with a NUL within their 32 units, both dates are empty, a weekday rule (year 0, month, weekday, occurrence 1 to 5, hour, minute) or an absolute date, a zone with empty standard date returns 0 and the other way round, and GetDynamicTimeZoneInformation (432 bytes, with the registry key name and a daylight-time-disabled flag) returns the same value and the same fields. The confined renderers and the browser call both (GetTimeZoneInformation 4, GetDynamicTimeZoneInformation 4 calls) before the registry is closed.
+interface:
+  signature: "DWORD GetTimeZoneInformation(LPTIME_ZONE_INFORMATION tz); DWORD GetDynamicTimeZoneInformation(PDYNAMIC_TIME_ZONE_INFORMATION tz)"
+chrome:
+  calls: "browser and renderers; GetDynamicTimeZoneInformation also by renderers (stage 2 sandboxed: before the lowering)"
+rules:
+  return_value: "0, 1 or 2 for a valid zone; 0 exactly when the zone has no daylight time (empty standard date)"
+  fields: "|Bias|, |StandardBias| and |DaylightBias| are at most 1440; both names contain a NUL; each date is all zero, a weekday rule or an absolute date"
+  dynamic: "GetDynamicTimeZoneInformation returns the same value; Bias, the two biases, the two dates and the two names equal the static ones; TimeZoneKeyName is not empty and has a NUL; DynamicDaylightTimeDisabled is 0 or 1"
+  sizes: "the structures are 172 and 432 bytes"
+  conversion: "SystemTimeToTzSpecificLocalTime with the returned zone succeeds for the current time and stays within a day of UTC"
+errors:
+  none: "no failure was provoked"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The tests assert properties that hold on any machine: the zone itself (names, offsets) is not recorded.
+not_covered: >
+  The values of the machine's zone, zones with dynamic rules for particular years, GetDynamicTimeZoneInformationEffectiveYears, changes of the zone while the process runs.
