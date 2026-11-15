@@ -1284,7 +1284,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.9%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">542 / 62,721 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">567 / 62,721 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 20,419 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="183.6" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2da44e"/>
@@ -1361,11 +1361,11 @@
 <rect x="321.3" y="531.9" width="45.3" height="46.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="327.3" y="546.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">icu</text>
 </g>
-<g><title>user32: 120 / 993 done (12.1%)</title>
+<g><title>user32: 144 / 993 done (14.5%)</title>
 <rect x="322.3" y="579.7" width="43.3" height="41.9" fill="#e6eaef"/>
-<rect x="322.3" y="579.7" width="5.2" height="41.9" fill="#2da44e"/>
-<rect x="327.5" y="579.7" width="9.4" height="41.9" fill="#d4a72c"/>
-<rect x="336.9" y="579.7" width="6.1" height="41.9" fill="#218bff"/>
+<rect x="322.3" y="579.7" width="6.3" height="41.9" fill="#2da44e"/>
+<rect x="328.6" y="579.7" width="9.4" height="41.9" fill="#d4a72c"/>
+<rect x="337.9" y="579.7" width="5.1" height="41.9" fill="#218bff"/>
 <rect x="321.3" y="578.7" width="45.3" height="43.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="327.3" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
@@ -1604,10 +1604,11 @@
 <rect x="440.5" y="566.4" width="17.4" height="16.7" fill="#e6eaef"/>
 <rect x="439.5" y="565.4" width="19.4" height="18.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>comctl32: 0 / 180 done (0.0%)</title>
+<g><title>comctl32: 1 / 180 done (0.6%)</title>
 <rect x="440.5" y="585.1" width="17.4" height="16.6" fill="#e6eaef"/>
-<rect x="440.5" y="585.1" width="3.4" height="16.6" fill="#d4a72c"/>
-<rect x="443.9" y="585.1" width="1.0" height="16.6" fill="#218bff"/>
+<rect x="440.5" y="585.1" width="0.1" height="16.6" fill="#2da44e"/>
+<rect x="440.6" y="585.1" width="3.4" height="16.6" fill="#d4a72c"/>
+<rect x="444.0" y="585.1" width="0.9" height="16.6" fill="#218bff"/>
 <rect x="439.5" y="584.1" width="19.4" height="18.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>odbc32: 0 / 174 done (0.0%)</title>
