@@ -12,7 +12,7 @@
 {"symbol":"#111","src":["wine-spec"]},
 {"symbol":"#112","src":["wine-spec"]},
 {"symbol":"#113","src":["wine-spec"]},
-{"symbol":"#114","src":["wine-spec"]},
+{"symbol":"#114","status":"stub","src":["wine-spec"]},
 {"symbol":"#115","src":["wine-spec"]},
 {"symbol":"#116","src":["wine-spec"]},
 {"symbol":"#117","src":["wine-spec"]}
