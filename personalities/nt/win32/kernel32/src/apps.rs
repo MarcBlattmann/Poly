@@ -122,7 +122,6 @@ poly_win32_rt::fail_exports!(
         CopyFile2,
         CopyFileA,
         CopyFileExW,
-        CopyFileW,
         CreateActCtxW,
         CreateDirectoryExA,
         CreateDirectoryExW,
@@ -245,7 +244,6 @@ poly_win32_rt::fail_exports!(
         GetSystemDefaultUILanguage,
         GetSystemTimeAdjustment,
         GetSystemTimes,
-        GetSystemWindowsDirectoryA,
         GetSystemWow64DirectoryW,
         GetTapeParameters,
         GetTapePosition,
@@ -434,25 +432,4 @@ poly_win32_rt::fail_exports!(
 
 // The real versions are written by the implementer track `impl-win-apps` (branch `impl-win-apps`, spec-win-apps-1): when it
 // merges, delete these names (and the group when it is empty).
-poly_win32_rt::fail_exports!(
-    "kernel32",
-    win32,
-    [
-        CreateNamedPipeA,
-        EnumResourceLanguagesA,
-        EnumResourceNamesA,
-        EnumResourceNamesW,
-        FindResourceA,
-        FindResourceExW,
-        FindResourceW,
-        FreeResource,
-        GetEnvironmentVariableA,
-        GetSystemDirectoryA,
-        GetVersionExA,
-        GetWindowsDirectoryA,
-        LoadResource,
-        LockResource,
-        SetEnvironmentVariableA,
-        SizeofResource,
-    ]
-);
+poly_win32_rt::fail_exports!("kernel32", win32, [EnumResourceLanguagesA, EnumResourceNamesA, FindResourceA,]);
