@@ -356,7 +356,7 @@ mod tests {
 
     impl Img {
         fn put(&mut self, b: &[u8]) -> u32 {
-            while self.0.len() % 8 != 0 {
+            while !self.0.len().is_multiple_of(8) {
                 self.0.push(0);
             }
             let r = self.0.len() as u32;
