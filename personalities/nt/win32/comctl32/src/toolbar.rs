@@ -317,6 +317,14 @@ const CCM_SETUNICODEFORMAT: u32 = 0x2005;
 const CCM_GETUNICODEFORMAT: u32 = 0x2006;
 const CCM_SETWINDOWTHEME: u32 = 0x200B;
 
+/// A separator that has no width has the default one.
+fn with_separator_width(mut b: Button) -> Button {
+    if b.is_separator() && b.image <= 0 {
+        b.image = tb::SEPARATOR_WIDTH;
+    }
+    b
+}
+
 fn insert_buttons(hwnd: usize, at: i32, count: usize, p: usize) -> bool {
     if p == 0 {
         return false;
@@ -326,7 +334,7 @@ fn insert_buttons(hwnd: usize, at: i32, count: usize, p: usize) -> bool {
     for i in 0..count {
         // SAFETY: `count` TBBUTTON structures of the caller's.
         let b: TbButton = unsafe { rd(p, i * size) };
-        let ok = with(hwnd, |s| s.t.insert(index, b.into())).is_some();
+        let ok = with(hwnd, |s| s.t.insert(index, with_separator_width(b.into()))).is_some();
         if !ok {
             return false;
         }
@@ -461,7 +469,7 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                         break;
                     }
                     let b: TbButton = rd(l as usize, i * size);
-                    ok = with(hwnd, |s| s.t.insert(at + i as i32, b.into())).is_some();
+                    ok = with(hwnd, |s| s.t.insert(at + i as i32, with_separator_width(b.into()))).is_some();
                 }
                 invalidate(hwnd);
                 isize::from(ok)

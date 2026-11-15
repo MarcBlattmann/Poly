@@ -311,7 +311,8 @@ impl Outline {
             i64::from(bb[2]) - i64::from(bb[0])
         };
         let (lo, hi) = font.cmap_range().unwrap_or((0x20, 0xFFFD));
-        let first = lo.clamp(0x20, 0xFFFF) as u16;
+        // A font whose first character is just below the space (0x1E) keeps it; control characters are not one.
+        let first = if (0x1E..=0xFFFF).contains(&lo) { lo } else { 0x20 } as u16;
         let last = hi.min(0xFFFF).max(u32::from(first)) as u16;
         let (fixed, family) = match class {
             Some(Class::Sans) => (false, 0x20),

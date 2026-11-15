@@ -11,9 +11,12 @@ extern crate alloc;
 
 mod cc;
 mod controls;
+mod header;
 mod imagelist;
+mod listview;
 mod statusbar;
 mod toolbar;
+mod treeview;
 
 use poly_win32_gui as _;
 use poly_win32_rt as _;

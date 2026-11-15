@@ -7,8 +7,8 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::{statusbar, toolbar};
-use poly_comctl::{Column, ListView, Progress, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
+use crate::{header, listview, statusbar, toolbar, treeview};
+use poly_comctl::{Progress, Tab, Tabs, Trackbar, UpDown, class, class::Size};
 use poly_win32_gui::SpinLock;
 
 #[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -68,8 +68,6 @@ enum Model {
     Track(Trackbar),
     UpDown(UpDown),
     Tabs(Tabs),
-    List(ListView),
-    Tree(TreeView),
     /// The header and toolbar start with no items; this counts them.
     Count(i32),
     /// The rebar's bands.
@@ -80,6 +78,9 @@ enum Model {
 enum Ext {
     Status,
     Toolbar,
+    Header,
+    List,
+    Tree,
 }
 
 static CTLS: SpinLock<BTreeMap<usize, Model>> = SpinLock::new(BTreeMap::new());
@@ -114,13 +115,13 @@ fn model_for(name: &str) -> Model {
     match name.to_ascii_lowercase().as_str() {
         "msctls_statusbar32" => Model::Ext(Ext::Status),
         "toolbarwindow32" => Model::Ext(Ext::Toolbar),
+        "sysheader32" => Model::Ext(Ext::Header),
+        "syslistview32" => Model::Ext(Ext::List),
+        "systreeview32" => Model::Ext(Ext::Tree),
         "msctls_progress32" => Model::Progress(Progress::default()),
         "msctls_trackbar32" => Model::Track(Trackbar::default()),
         "msctls_updown32" => Model::UpDown(UpDown::default()),
         "systabcontrol32" => Model::Tabs(Tabs::default()),
-        "syslistview32" => Model::List(ListView::default()),
-        "systreeview32" => Model::Tree(TreeView::default()),
-        "sysheader32" => Model::Count(0),
         "rebarwindow32" => Model::Rebar(0),
         _ => Model::Plain,
     }
@@ -213,7 +214,8 @@ fn ext_created(ext: Ext, hwnd: usize, l: isize) {
             z.push(0);
             statusbar::proc(hwnd, 0x40B, 0, z.as_ptr() as isize);
         }
-        Ext::Toolbar => {}
+        Ext::Toolbar | Ext::Header | Ext::Tree => {}
+        Ext::List => listview::on_created(hwnd),
     }
 }
 
@@ -221,6 +223,9 @@ fn ext_proc(ext: Ext, hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
     match ext {
         Ext::Status => statusbar::proc(hwnd, msg, w, l),
         Ext::Toolbar => toolbar::proc(hwnd, msg, w, l),
+        Ext::Header => header::proc(hwnd, msg, w, l),
+        Ext::List => listview::proc(hwnd, msg, w, l),
+        Ext::Tree => treeview::proc(hwnd, msg, w, l),
     }
 }
 
@@ -239,6 +244,9 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
             match ext_of(hwnd) {
                 Some(Ext::Status) => statusbar::on_create(hwnd, Vec::new()),
                 Some(Ext::Toolbar) => toolbar::on_create(hwnd),
+                Some(Ext::Header) => header::on_create(hwnd),
+                Some(Ext::List) => listview::on_create(hwnd),
+                Some(Ext::Tree) => treeview::on_create(hwnd),
                 None => {}
             }
             if let Some(mk) = make {
@@ -279,6 +287,9 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
             match ext_of(hwnd) {
                 Some(Ext::Status) => statusbar::on_destroy(hwnd),
                 Some(Ext::Toolbar) => toolbar::on_destroy(hwnd),
+                Some(Ext::Header) => header::on_destroy(hwnd),
+                Some(Ext::List) => listview::on_destroy(hwnd),
+                Some(Ext::Tree) => treeview::on_destroy(hwnd),
                 None => {}
             }
             CTLS.with(|m| m.remove(&hwnd));
@@ -346,8 +357,6 @@ fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
             Model::Track(t) => track(t, msg, w, l),
             Model::UpDown(u) => updown(u, msg, w, l),
             Model::Tabs(t) => tabs(t, msg, w, l),
-            Model::List(v) => list(v, msg, w, l),
-            Model::Tree(t) => tree(t, msg, w, l),
             Model::Count(n) => count(n, msg, w, l),
             Model::Rebar(n) => rebar(n, msg, w),
             Model::Plain | Model::Ext(_) => None,
@@ -568,171 +577,6 @@ unsafe fn tabs(t: &mut Tabs, msg: u32, w: usize, l: isize) -> Option<isize> {
                     // SAFETY: as above.
                     tab.param = unsafe { rd::<isize>(l as usize, 32) };
                 }
-            }
-            1
-        }
-        _ => return None,
-    })
-}
-
-unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> {
-    const LVM_GETITEMCOUNT: u32 = 0x1004;
-    const LVM_DELETEITEM: u32 = 0x1008;
-    const LVM_DELETEALLITEMS: u32 = 0x1009;
-    const LVM_GETHEADER: u32 = 0x101F;
-    const LVM_GETITEMW: u32 = 0x104B;
-    const LVM_SETITEMW: u32 = 0x104C;
-    const LVM_INSERTITEMW: u32 = 0x104D;
-    const LVM_INSERTCOLUMNW: u32 = 0x1061;
-    const LVM_GETITEMTEXTW: u32 = 0x1073;
-    const LVM_SETITEMTEXTW: u32 = 0x1074;
-    const LVIF_TEXT: u32 = 1;
-    const LVCF_WIDTH: u32 = 2;
-    const LVCF_TEXT: u32 = 4;
-    Some(match msg {
-        LVM_GETITEMCOUNT => v.items.len() as isize,
-        LVM_GETHEADER => 0,
-        LVM_INSERTCOLUMNW => {
-            if l == 0 {
-                return Some(-1);
-            }
-            // SAFETY: an LVCOLUMN (mask 0, cx 8, pszText 16).
-            let (mask, cx, text) =
-                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 8), rd::<usize>(l as usize, 16)) };
-            let col = Column {
-                // SAFETY: a NUL-terminated string.
-                text: if mask & LVCF_TEXT != 0 { unsafe { wide_at(text) } } else { Vec::new() },
-                width: if mask & LVCF_WIDTH != 0 { cx } else { 0 },
-            };
-            v.insert_column(w as i32, col) as isize
-        }
-        LVM_INSERTITEMW => {
-            if l == 0 {
-                return Some(-1);
-            }
-            // SAFETY: an LVITEM (mask 0, iItem 4, pszText 24).
-            let (mask, item, text) =
-                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 4), rd::<usize>(l as usize, 24)) };
-            // SAFETY: a NUL-terminated string.
-            let t = if mask & LVIF_TEXT != 0 { unsafe { wide_at(text) } } else { Vec::new() };
-            v.insert_item(item, &t) as isize
-        }
-        LVM_SETITEMTEXTW | LVM_SETITEMW => {
-            if l == 0 {
-                return Some(0);
-            }
-            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText 24).
-            let (mask, item, sub, text) = unsafe {
-                (
-                    rd::<u32>(l as usize, 0),
-                    rd::<i32>(l as usize, 4),
-                    rd::<i32>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
-                )
-            };
-            let item = if msg == LVM_SETITEMTEXTW { w as i32 } else { item };
-            if msg == LVM_SETITEMW && mask & LVIF_TEXT == 0 {
-                return Some(isize::from((item as usize) < v.items.len()));
-            }
-            // SAFETY: a NUL-terminated string.
-            let t = unsafe { wide_at(text) };
-            isize::from(v.set_text(item, sub, &t))
-        }
-        LVM_GETITEMTEXTW | LVM_GETITEMW => {
-            if l == 0 {
-                return Some(0);
-            }
-            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText 24, cchTextMax 32).
-            let (mask, item, sub, buf, cap) = unsafe {
-                (
-                    rd::<u32>(l as usize, 0),
-                    rd::<i32>(l as usize, 4),
-                    rd::<i32>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
-                    rd::<i32>(l as usize, 32).max(0) as usize,
-                )
-            };
-            let item = if msg == LVM_GETITEMTEXTW { w as i32 } else { item };
-            if msg == LVM_GETITEMW && mask & LVIF_TEXT == 0 {
-                return Some(isize::from((item as usize) < v.items.len()));
-            }
-            match v.text(item, sub) {
-                // SAFETY: the caller's buffer of `cap` units.
-                Some(t) => {
-                    let n = unsafe { put(buf, cap, t) };
-                    if msg == LVM_GETITEMW { 1 } else { n as isize }
-                }
-                None => 0,
-            }
-        }
-        LVM_DELETEITEM => isize::from(v.delete(w as i32)),
-        LVM_DELETEALLITEMS => {
-            v.items.clear();
-            1
-        }
-        _ => return None,
-    })
-}
-
-unsafe fn tree(t: &mut TreeView, msg: u32, w: usize, l: isize) -> Option<isize> {
-    const TVM_INSERTITEMA: u32 = 0x1100;
-    const TVM_DELETEITEM: u32 = 0x1101;
-    const TVM_GETCOUNT: u32 = 0x1105;
-    const TVM_GETNEXTITEM: u32 = 0x110A;
-    const TVM_SELECTITEM: u32 = 0x110B;
-    const TVM_INSERTITEMW: u32 = 0x1132;
-    const TVM_GETITEMW: u32 = 0x113E;
-    const TVIF_TEXT: u32 = 1;
-    Some(match msg {
-        TVM_GETCOUNT => t.count() as isize,
-        TVM_INSERTITEMW | TVM_INSERTITEMA => {
-            if l == 0 {
-                return Some(0);
-            }
-            // SAFETY: a TVINSERTSTRUCT (hParent 0, hInsertAfter 8, mask 16, pszText 40).
-            let (parent, after, mask, text) = unsafe {
-                (
-                    rd::<u64>(l as usize, 0),
-                    rd::<u64>(l as usize, 8),
-                    rd::<u32>(l as usize, 16),
-                    rd::<usize>(l as usize, 40),
-                )
-            };
-            let parent = if parent == poly_comctl::TVI_ROOT { 0 } else { parent as u32 };
-            let txt = if mask & TVIF_TEXT != 0 {
-                // SAFETY: a NUL-terminated string.
-                if msg == TVM_INSERTITEMW { unsafe { wide_at(text) } } else { unsafe { wide_of_ansi(text) } }
-            } else {
-                Vec::new()
-            };
-            t.insert(parent, after, &txt) as isize
-        }
-        TVM_GETNEXTITEM => t.next_item(w as u32, l as u32) as isize,
-        TVM_SELECTITEM => {
-            if w as u32 == poly_comctl::TVGN_CARET {
-                isize::from(t.select(l as u32))
-            } else {
-                1
-            }
-        }
-        TVM_DELETEITEM => isize::from(t.delete(l as u64)),
-        TVM_GETITEMW => {
-            if l == 0 {
-                return Some(0);
-            }
-            // SAFETY: a TVITEM (mask 0, hItem 8, pszText 24, cchTextMax 32).
-            let (mask, item, buf, cap) = unsafe {
-                (
-                    rd::<u32>(l as usize, 0),
-                    rd::<u64>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
-                    rd::<i32>(l as usize, 32).max(0) as usize,
-                )
-            };
-            let Some(txt) = t.text(item as u32) else { return Some(0) };
-            if mask & TVIF_TEXT != 0 {
-                // SAFETY: the caller's buffer.
-                unsafe { put(buf, cap, txt) };
             }
             1
         }
