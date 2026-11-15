@@ -54,8 +54,8 @@ unsafe extern "system" {
     fn GetTickCount() -> u32;
     fn CreateEventW(attrs: *mut u8, manual: i32, initial: i32, name: *const u16) -> usize;
     fn WaitForSingleObject(h: usize, ms: u32) -> u32;
-    fn WaitForMultipleObjects(n: u32, handles: *const usize, all: i32, ms: u32) -> u32;
-    fn Sleep(ms: u32);
+    fn WaitForMultipleObjectsEx(n: u32, handles: *const usize, all: i32, ms: u32, alertable: i32) -> u32;
+    fn SleepEx(ms: u32, alertable: i32) -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -192,19 +192,26 @@ impl Env for Sys {
         unsafe { WaitForSingleObject(h, ms_of(ms)) };
     }
 
-    fn wait_handles(&self, handles: &[u64], wait_all: bool, ms: Option<u64>, queue: bool) -> Option<u32> {
+    fn wait_handles(&self, handles: &[u64], wait_all: bool, ms: Option<u64>, queue: bool, alertable: bool) -> u32 {
         let mut hs: Vec<usize> = handles.iter().map(|&h| h as usize).collect();
         if queue {
             hs.push(self.queue_event());
         }
         if hs.is_empty() {
             // SAFETY: no preconditions.
-            unsafe { Sleep(ms_of(ms)) };
-            return None;
+            let r = unsafe { SleepEx(ms_of(ms), i32::from(alertable)) };
+            return if r == 0xC0 { r } else { WAIT_TIMEOUT };
         }
+        // A wait that ends normally leaves the last error as it was (MsgWaitForMultipleObjectsEx.yaml `results`).
+        let before = poly_win32_gui::last_error();
         // SAFETY: valid handles of the caller and ours.
-        let r = unsafe { WaitForMultipleObjects(hs.len() as u32, hs.as_ptr(), i32::from(wait_all), ms_of(ms)) };
-        if r == WAIT_TIMEOUT || r as usize >= hs.len() { None } else { Some(r) }
+        let r = unsafe {
+            WaitForMultipleObjectsEx(hs.len() as u32, hs.as_ptr(), i32::from(wait_all), ms_of(ms), i32::from(alertable))
+        };
+        if r != u32::MAX {
+            set_last_error(before);
+        }
+        r
     }
 
     fn fill_rect(&self, hdc: u64, rect: CRect, brush: u64) {
@@ -283,6 +290,7 @@ impl Env for Sys {
 
     fn pump_events(&self) {
         winevent::pump();
+        headless::pump_power_settings();
     }
 }
 
@@ -1155,7 +1163,13 @@ pub unsafe extern "system" fn MsgWaitForMultipleObjectsEx(
         })
         .collect();
     const MWMO_WAITALL: u32 = 1;
-    u::msg_wait(&SYS, &hs, flags & MWMO_WAITALL != 0, ms, mask, flags)
+    // A wait that ends normally leaves the last error alone (MsgWaitForMultipleObjectsEx.yaml `results`).
+    let before = poly_win32_gui::last_error();
+    let r = u::msg_wait(&SYS, &hs, flags & MWMO_WAITALL != 0, ms, mask, flags);
+    if r != u32::MAX {
+        set_last_error(before);
+    }
+    r
 }
 
 #[unsafe(no_mangle)]
@@ -2263,12 +2277,28 @@ pub extern "system" fn GetTopWindow(hwnd: H) -> H {
 
 type EnumProc = unsafe extern "system" fn(H, isize) -> i32;
 
+/// `windows` as `EnumWindows` and `EnumThreadWindows` list them: in z order, the windows of the
+/// classes `IME` and `MSCTFIME UI` after all the others (GetWindow.yaml `ime_windows`).
+pub(crate) fn enumeration_order(windows: Vec<H>) -> Vec<H> {
+    let tagged: Vec<(H, bool)> = windows
+        .into_iter()
+        .map(|h| {
+            let ime = matches!(call(Request::ClassName { hwnd: h as u64 }), Reply::Text { text } if poly_win32k::ime::is_ime_class(&text));
+            (h, ime)
+        })
+        .collect();
+    poly_win32k::ime::enumeration_order(&tagged)
+}
+
 unsafe fn enum_children(parent: H, f: EnumProc, l: isize, deep: bool) -> bool {
     let mut kids = Vec::new();
     let mut h = GetWindow(parent, 5);
     while h != 0 {
         kids.push(h);
         h = GetWindow(h, 2);
+    }
+    if !deep && parent == GetDesktopWindow() {
+        kids = enumeration_order(kids);
     }
     for k in kids {
         // SAFETY: the caller's callback.

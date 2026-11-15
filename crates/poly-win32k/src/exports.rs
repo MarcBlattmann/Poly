@@ -221,6 +221,7 @@ pub const USER32_EXPORTS: &[&str] = &[
     "GetCaretBlinkTime",
     "GetLastInputInfo",
     "GetPointerDevices",
+    "GetPointerDevice",
     "RegisterPointerDeviceNotifications",
     "SetWindowDisplayAffinity",
     "NotifyWinEvent",

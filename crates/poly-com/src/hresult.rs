@@ -27,6 +27,9 @@ pub const CLASS_E_NOAGGREGATION: Hresult = 0x8004_0110_u32 as i32;
 pub const DRAGDROP_E_NOTREGISTERED: Hresult = 0x8004_0100_u32 as i32;
 pub const DRAGDROP_E_ALREADYREGISTERED: Hresult = 0x8004_0101_u32 as i32;
 pub const DRAGDROP_E_INVALIDHWND: Hresult = 0x8004_0102_u32 as i32;
+/// `CO_E_NOT_SUPPORTED` (the MTA has no message filter), `STG_E_INVALIDPARAMETER` (a `PROPVARIANT` type that does not exist).
+pub const CO_E_NOT_SUPPORTED: Hresult = 0x8000_4021_u32 as i32;
+pub const STG_E_INVALIDPARAMETER: Hresult = 0x8003_0057_u32 as i32;
 /// `RPC_E_TOO_LATE`: `CoInitializeSecurity` after the first marshalling.
 pub const RPC_E_TOO_LATE: Hresult = 0x8001_0119_u32 as i32;
 

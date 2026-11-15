@@ -11,6 +11,7 @@
 
 use super::*;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use poly_win32k::notify::{self, Kind, Pending, Registry};
 use poly_win32k::props::{Key, Props};
 
 // ----- window properties
@@ -29,6 +30,8 @@ unsafe fn prop_key(raw: *const u16) -> Option<Key> {
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, size: i32) -> u32;
+    fn OpenThread(access: u32, inherit: i32, tid: u32) -> usize;
+    fn CloseHandle(handle: usize) -> i32;
 }
 
 /// The string of a global atom made from one (`GlobalAddAtomW`).
@@ -120,36 +123,46 @@ pub unsafe extern "system" fn RegisterWindowMessageW(name: *const u16) -> u32 {
 
 // ----- enumeration
 
-/// `EnumThreadWindows`: the thread's top-level and message-only windows,
-/// top first; stops when the callback returns FALSE. TRUE even when there
-/// are none.
+/// `EnumThreadWindows`: the thread's top-level windows (no message-only
+/// windows), top first, the IME windows last; stops when the callback
+/// returns FALSE. TRUE even when there are none.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn EnumThreadWindows(tid: u32, f: Option<EnumProc>, l: isize) -> i32 {
     let Some(f) = f else {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     };
-    let message_parent = match call(Request::Desktop {}) {
-        Reply::Desktop { message, .. } => message as H,
-        _ => 0,
-    };
     let mut mine = Vec::new();
-    for parent in [GetDesktopWindow(), message_parent] {
-        if parent == 0 {
+    let mut h = GetWindow(GetDesktopWindow(), 5);
+    while h != 0 {
+        if info(h).is_some_and(|i| i.tid == tid) {
+            mine.push(h);
+        }
+        h = GetWindow(h, 2);
+    }
+    if mine.is_empty() {
+        // A thread id that names no thread (EnumThreadWindows.yaml `no_windows`): the call
+        // finds nothing and says why.
+        let before = poly_win32_gui::last_error();
+        // SAFETY: a query for the thread's existence; the handle is closed at once.
+        let t = unsafe { OpenThread(0x0800, 0, tid) };
+        if t != 0 {
+            // SAFETY: the handle just opened.
+            unsafe { CloseHandle(t) };
+        }
+        let missing = t == 0 && poly_win32_gui::last_error() == ERROR_INVALID_PARAMETER;
+        set_last_error(if missing { ERROR_INVALID_PARAMETER } else { before });
+        return 1;
+    }
+    for h in crate::enumeration_order(mine) {
+        // A window destroyed by an earlier callback is no longer reported; the error stays.
+        if info(h).is_none() {
+            set_last_error(ERROR_INVALID_WINDOW_HANDLE);
             continue;
         }
-        let mut h = GetWindow(parent, 5);
-        while h != 0 {
-            if info(h).is_some_and(|i| i.tid == tid) {
-                mine.push(h);
-            }
-            h = GetWindow(h, 2);
-        }
-    }
-    for h in mine {
         // SAFETY: the caller's callback.
         if unsafe { f(h, l) } == 0 {
-            break;
+            return 0;
         }
     }
     1
@@ -204,11 +217,15 @@ pub unsafe extern "system" fn GetLastInputInfo(plii: *mut u8) -> i32 {
     1
 }
 
-/// `GetPointerDevices`: no pointer devices are reported (`*count` = 0).
+/// `GetPointerDevices`: there are no pen or touch devices. A query with no buffer says so
+/// (`*count` = 0); a call with a buffer fails and leaves both alone (GetPointerDevices.yaml).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetPointerDevices(count: *mut u32, _devices: *mut u8) -> i32 {
+pub unsafe extern "system" fn GetPointerDevices(count: *mut u32, devices: *mut u8) -> i32 {
     if count.is_null() {
         set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    if !devices.is_null() {
         return 0;
     }
     // SAFETY: the caller's out parameter.
@@ -216,10 +233,20 @@ pub unsafe extern "system" fn GetPointerDevices(count: *mut u32, _devices: *mut 
     1
 }
 
-/// `RegisterPointerDeviceNotifications`: accepted.
+/// `GetPointerDevice`: no handle names a device; NULL is a bad parameter, anything else a bad handle.
 #[unsafe(no_mangle)]
-pub extern "system" fn RegisterPointerDeviceNotifications(_hwnd: H, _notify_range: i32) -> i32 {
-    1
+pub unsafe extern "system" fn GetPointerDevice(device: usize, _info: *mut u8) -> i32 {
+    set_last_error(if device == 0 { ERROR_INVALID_PARAMETER } else { ERROR_INVALID_HANDLE });
+    0
+}
+
+/// `RegisterPointerDeviceNotifications`: once per window; no message ever comes (no devices).
+#[unsafe(no_mangle)]
+pub extern "system" fn RegisterPointerDeviceNotifications(hwnd: H, _notify_range: i32) -> i32 {
+    if info(hwnd).is_none() {
+        return bad_window();
+    }
+    i32::from(REGISTRY.with(|r| r.add_pointer(hwnd as u64, |w| info(w as H).is_some())))
 }
 
 /// `GetSystemMenu`: a window of ours has no system menu object (NULL).
@@ -231,88 +258,176 @@ pub extern "system" fn GetSystemMenu(hwnd: H, _revert: i32) -> H {
     0
 }
 
-/// `GetWindowDisplayAffinity`: `WDA_NONE`.
+/// The display affinity of the top-level windows that have one other than `WDA_NONE`.
+static AFFINITY: SpinLock<Vec<(u64, u32)>> = SpinLock::new(Vec::new());
+
+/// `WDA_NONE`, `WDA_MONITOR` and `WDA_EXCLUDEFROMCAPTURE` (winuser.h): the values `SetWindowDisplayAffinity` takes.
+const WDA_VALUES: [u32; 3] = [0, 1, 0x11];
+
+/// `GetWindowDisplayAffinity` (GetWindowDisplayAffinity.yaml): FALSE with 87 for a child window,
+/// 998 for a NULL output; the desktop window and bad handles fail with the output left alone.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetWindowDisplayAffinity(hwnd: H, affinity: *mut u32) -> i32 {
+    let Some(i) = info(hwnd) else { return bad_window() };
     if affinity.is_null() {
+        set_last_error(ERROR_NOACCESS);
+        return 0;
+    }
+    if i.style & poly_win32k::metrics::WS_CHILD != 0 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    if info(hwnd).is_none() {
-        return bad_window();
+    if i.desktop {
+        return 0;
     }
-    // SAFETY: the caller's out parameter.
-    unsafe { *affinity = 0 };
+    // A window that is not shown (hidden, or minimized and then hidden) has no affinity to report
+    // (GetWindowDisplayAffinity.yaml, test gwda_basic: 0 after minimize and hide).
+    let v = if i.visible {
+        AFFINITY.with(|a| {
+            a.retain(|&(h, _)| info(h as H).is_some());
+            a.iter().find(|&&(h, _)| h == hwnd as u64).map_or(0, |&(_, v)| v)
+        })
+    } else {
+        0
+    };
+    // SAFETY: the caller's out parameter, checked for NULL.
+    unsafe { *affinity = v };
     1
 }
 
-/// `SetWindowDisplayAffinity`: only `WDA_NONE` (0) is possible here.
+/// `SetWindowDisplayAffinity`: 0, 1 and 0x11 for a top-level window, from any thread of the process.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetWindowDisplayAffinity(hwnd: H, affinity: u32) -> i32 {
-    if info(hwnd).is_none() {
-        return bad_window();
+    let Some(i) = info(hwnd) else { return bad_window() };
+    if i.desktop {
+        return 0;
     }
-    if affinity == 0 {
-        1
-    } else {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        0
-    }
-}
-
-// ----- notification registrations (device, power, suspend and resume)
-
-static NEXT_REGISTRATION: AtomicUsize = AtomicUsize::new(0x000A_0000);
-
-fn registration() -> usize {
-    NEXT_REGISTRATION.fetch_add(0x10, Ordering::Relaxed)
-}
-
-/// `RegisterDeviceNotificationW`: a handle; no device ever arrives.
-#[unsafe(no_mangle)]
-pub extern "system" fn RegisterDeviceNotificationW(recipient: H, filter: *const u8, _flags: u32) -> usize {
-    if recipient == 0 || filter.is_null() {
+    if i.style & poly_win32k::metrics::WS_CHILD != 0 || !WDA_VALUES.contains(&affinity) {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    registration()
+    AFFINITY.with(|a| {
+        a.retain(|&(h, _)| h != hwnd as u64);
+        if affinity != 0 {
+            a.push((hwnd as u64, affinity));
+        }
+    });
+    1
+}
+
+// ----- notification registrations (device, power, suspend and resume; `poly_win32k::notify`)
+
+static REGISTRY: SpinLock<Registry> = SpinLock::new(Registry::new());
+
+const ERROR_INVALID_HANDLE: u32 = 6;
+const ERROR_NOACCESS: u32 = 998;
+const WM_POWERBROADCAST: u32 = 0x0218;
+/// `PBT_POWERSETTINGCHANGE` (winuser.h).
+const PBT_POWERSETTINGCHANGE: usize = 0x8013;
+
+/// The initial messages of power-setting registrations that wait for the calling thread: it is
+/// looking into its queue now.
+pub fn pump_power_settings() {
+    let tid = SYS.tid();
+    loop {
+        let Some(p) = REGISTRY.with(|r| if r.waiting_for(tid) { r.take_for(tid) } else { None }) else { return };
+        // POWERBROADCAST_SETTING: the GUID, the data length (4) and the value.
+        let mut data = [0u8; 24];
+        data[..16].copy_from_slice(&p.guid);
+        data[16..20].copy_from_slice(&4u32.to_le_bytes());
+        data[20..24].copy_from_slice(&p.value.to_le_bytes());
+        SendMessageW(p.hwnd as H, WM_POWERBROADCAST, PBT_POWERSETTINGCHANGE, data.as_ptr() as isize);
+    }
+}
+
+/// `RegisterDeviceNotificationW`: a handle of its own for every call; no device ever arrives. The
+/// recipient is not checked (RegisterDeviceNotificationW.yaml).
+#[unsafe(no_mangle)]
+pub extern "system" fn RegisterDeviceNotificationW(recipient: H, filter: *const u8, flags: u32) -> usize {
+    if filter.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: a DEV_BROADCAST_HDR is 12 bytes (size, type, reserved) and the caller's filter has
+    // at least that (sizes 12 and 31 are accepted by Windows).
+    let device_type = unsafe { core::ptr::read_unaligned(filter.add(4) as *const u32) };
+    if let Err(e) = notify::check_device_filter(device_type, flags) {
+        set_last_error(e);
+        return 0;
+    }
+    set_last_error(0);
+    REGISTRY.with(|r| r.add(Kind::Device, recipient as u64))
+}
+
+/// Release a registration of `kind`: the error (set) or TRUE (`clear`: also sets the last error
+/// to 0, which only the device kind does).
+fn release(kind: Kind, handle: usize, clear: bool) -> i32 {
+    match REGISTRY.with(|r| r.release(kind, handle)) {
+        Ok(_) => {
+            if clear {
+                set_last_error(0);
+            }
+            1
+        }
+        Err(e) => {
+            set_last_error(e);
+            0
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn UnregisterDeviceNotification(handle: usize) -> i32 {
-    i32::from(handle != 0)
+    release(Kind::Device, handle, true)
 }
 
-/// `RegisterPowerSettingNotification`: a handle; no setting ever changes.
+/// `RegisterPowerSettingNotification`: a handle; a setting that has a value now sends it once to
+/// its window's thread when that next looks into its queue.
 #[unsafe(no_mangle)]
-pub extern "system" fn RegisterPowerSettingNotification(recipient: H, guid: *const u8, _flags: u32) -> usize {
-    if recipient == 0 || guid.is_null() {
+pub extern "system" fn RegisterPowerSettingNotification(recipient: H, guid: *const u8, flags: u32) -> usize {
+    if guid.is_null() {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    registration()
+    if flags & notify::DEVICE_NOTIFY_SERVICE_HANDLE != 0 {
+        set_last_error(notify::ERROR_SERVICE_NOT_ACTIVE);
+        return 0;
+    }
+    let mut g = [0u8; 16];
+    // SAFETY: the caller's GUID is 16 bytes.
+    unsafe { core::ptr::copy_nonoverlapping(guid, g.as_mut_ptr(), 16) };
+    let tid = info(recipient).map(|i| i.tid);
+    set_last_error(0);
+    REGISTRY.with(|r| {
+        let h = r.add(Kind::Power, recipient as u64);
+        if let (Some(value), Some(tid)) = (notify::power_value(&g), tid) {
+            r.defer(Pending { handle: h, hwnd: recipient as u64, tid, guid: g, value });
+        }
+        h
+    })
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn UnregisterPowerSettingNotification(handle: usize) -> i32 {
-    i32::from(handle != 0)
+    release(Kind::Power, handle, false)
 }
 
-/// `RegisterSuspendResumeNotification`: a handle; the machine never suspends.
+/// `RegisterSuspendResumeNotification`: a handle; the machine never suspends. The last error is
+/// left alone.
 #[unsafe(no_mangle)]
-pub extern "system" fn RegisterSuspendResumeNotification(recipient: H, _flags: u32) -> usize {
-    if recipient == 0 {
+pub extern "system" fn RegisterSuspendResumeNotification(recipient: H, flags: u32) -> usize {
+    if flags & notify::DEVICE_NOTIFY_SERVICE_HANDLE != 0 {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
-    registration()
+    REGISTRY.with(|r| r.add(Kind::Suspend, recipient as u64))
 }
 
-/// `UnregisterSuspendResumeNotification` (`powrprof.dll`'s on Windows 8
-/// and later, user32's name on some builds): FALSE for NULL.
+/// `UnregisterSuspendResumeNotification` (`powrprof.dll`'s on Windows 8 and later, user32's name
+/// on some builds).
 #[unsafe(no_mangle)]
 pub extern "system" fn UnregisterSuspendResumeNotification(handle: usize) -> i32 {
-    i32::from(handle != 0)
+    release(Kind::Suspend, handle, false)
 }
 
 // ----- the per-monitor DPI functions (`api-ms-win-shcore-scaling-*`)

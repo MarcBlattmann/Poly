@@ -25,7 +25,9 @@
 #![allow(clippy::missing_safety_doc)]
 
 use core::ffi::c_void;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+
+extern crate alloc;
 use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, Model};
 use poly_com::guid::{GUID_TEXT_LEN, Guid};
 use poly_com::hresult::*;
@@ -42,6 +44,12 @@ unsafe extern "system" {
     fn TlsFree(index: u32) -> i32;
     fn TlsGetValue(index: u32) -> *mut u8;
     fn TlsSetValue(index: u32, value: *mut u8) -> i32;
+    fn GetCurrentThreadId() -> u32;
+    fn OpenThread(access: u32, inherit: i32, tid: u32) -> usize;
+    fn CloseHandle(handle: usize) -> i32;
+    fn WaitForSingleObject(handle: usize, ms: u32) -> u32;
+    fn LoadLibraryW(name: *const u16) -> usize;
+    fn GetProcAddress(module: usize, name: *const u8) -> usize;
 }
 
 #[link(name = "bcryptprimitives", kind = "raw-dylib")]
@@ -52,6 +60,8 @@ unsafe extern "system" {
 #[link(name = "oleaut32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn SysFreeString(s: *mut u16);
+    fn SysStringByteLen(s: *mut u16) -> u32;
+    fn SysAllocStringByteLen(s: *const u8, len: u32) -> *mut u16;
 }
 
 /// `poly-com` links `alloc`: the process heap (16-byte aligned).
@@ -152,32 +162,112 @@ fn set_apartment(a: Apartment) {
     }
 }
 
-/// `CoInitializeEx` / `RoInitialize` / `OleInitialize` on this thread.
+/// The thread that is the process's main STA (0: none), and how many threads have the MTA.
+static MAIN_STA: AtomicU32 = AtomicU32::new(0);
+static MTA_THREADS: AtomicU32 = AtomicU32::new(0);
+
+/// Whether thread `tid` still runs (a thread that ended without `CoUninitialize` is not the main STA any more).
+fn thread_alive(tid: u32) -> bool {
+    // SAFETY: SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION; the handle is closed at once.
+    unsafe {
+        let h = OpenThread(0x0010_0000 | 0x0800, 0, tid);
+        if h == 0 {
+            return false;
+        }
+        let r = WaitForSingleObject(h, 0);
+        CloseHandle(h);
+        r == 0x102
+    }
+}
+
+/// The first STA of the process while it lives is the main STA (`APTTYPE_MAINSTA`).
+fn claim_main_sta() -> bool {
+    // SAFETY: no preconditions.
+    let me = unsafe { GetCurrentThreadId() };
+    loop {
+        let cur = MAIN_STA.load(Ordering::Acquire);
+        if cur == me {
+            return true;
+        }
+        if cur != 0 && thread_alive(cur) {
+            return false;
+        }
+        if MAIN_STA.compare_exchange(cur, me, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            return true;
+        }
+    }
+}
+
+/// The thread got its apartment just now.
+fn apartment_begins(a: &mut Apartment, model: Model) {
+    match model {
+        Model::Sta => a.set_main(claim_main_sta()),
+        Model::Mta => {
+            MTA_THREADS.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+}
+
+/// The thread's apartment ended (its last initialisation was balanced): `before` is what it was.
+fn apartment_ends(before: Apartment) {
+    if before.is_main() {
+        // SAFETY: no preconditions.
+        let me = unsafe { GetCurrentThreadId() };
+        let _ = MAIN_STA.compare_exchange(me, 0, Ordering::AcqRel, Ordering::Acquire);
+    }
+    if before.model() == Some(Model::Mta) {
+        let _ = MTA_THREADS.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
+    }
+    // The message filter of the apartment goes with it.
+    let f = filter();
+    if !f.is_null() {
+        set_filter(core::ptr::null_mut());
+        // SAFETY: a filter the thread registered (we hold a reference).
+        unsafe { release(f) };
+    }
+}
+
+/// `CoInitializeEx` / `RoInitialize` on this thread.
 fn initialize(model: Model) -> Hresult {
     if slot().is_none() {
         return E_OUTOFMEMORY;
     }
     let mut a = apartment();
+    let fresh = a.model().is_none();
     let hr = a.initialize(model);
     if hr >= 0 {
+        if fresh {
+            apartment_begins(&mut a, model);
+        }
         set_apartment(a);
     }
     hr
 }
 
 fn uninitialize() {
-    let mut a = apartment();
+    let before = apartment();
+    let mut a = before;
     a.uninitialize();
     set_apartment(a);
+    if before.model().is_some() && a.model().is_none() {
+        apartment_ends(before);
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn CoInitializeEx(_reserved: *mut c_void, co_init: u32) -> Hresult {
+pub extern "system" fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hresult {
+    // A reserved pointer and any bit that is no `COINIT` value are refused (CoInitializeEx.yaml `bad_arguments`).
+    if !reserved.is_null() || co_init & !poly_com::apartment::COINIT_VALID != 0 {
+        return E_INVALIDARG;
+    }
     initialize(Model::from_coinit(co_init))
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn CoInitialize(_reserved: *mut c_void) -> Hresult {
+pub extern "system" fn CoInitialize(reserved: *mut c_void) -> Hresult {
+    if !reserved.is_null() {
+        return E_INVALIDARG;
+    }
     initialize(Model::Sta)
 }
 
@@ -186,40 +276,62 @@ pub extern "system" fn CoUninitialize() {
     uninitialize();
 }
 
+/// `OleInitialize`: COM for the STA plus OLE's own count on the thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn OleInitialize(_reserved: *mut c_void) -> Hresult {
-    initialize(Model::Sta)
+pub extern "system" fn OleInitialize(reserved: *mut c_void) -> Hresult {
+    if !reserved.is_null() {
+        return E_INVALIDARG;
+    }
+    if slot().is_none() {
+        return E_OUTOFMEMORY;
+    }
+    let mut a = apartment();
+    let fresh = a.model().is_none();
+    let hr = a.ole_initialize();
+    if hr >= 0 {
+        if fresh {
+            apartment_begins(&mut a, Model::Sta);
+        }
+        set_apartment(a);
+    }
+    hr
 }
 
+/// `OleUninitialize`: the last one releases the drop targets registered on the thread.
 #[unsafe(no_mangle)]
 pub extern "system" fn OleUninitialize() {
-    uninitialize();
+    let before = apartment();
+    let mut a = before;
+    let last = a.ole_uninitialize();
+    set_apartment(a);
+    if last {
+        release_drop_targets();
+    }
+    if before.model().is_some() && a.model().is_none() {
+        apartment_ends(before);
+    }
 }
 
-/// `CoGetApartmentType`: `CO_E_NOTINITIALIZED` when the thread has none.
+/// `CoGetApartmentType`: `CO_E_NOTINITIALIZED` when the thread has none and the process no MTA; a
+/// thread without COM in a process that has the MTA is in it implicitly.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut i32) -> Hresult {
     if kind.is_null() || qualifier.is_null() {
         return E_INVALIDARG;
     }
-    match apartment().apartment_type() {
-        Some((t, q)) => {
-            // SAFETY: the caller's out parameters.
-            unsafe {
-                *kind = t;
-                *qualifier = q;
-            }
-            S_OK
+    let (hr, t, q) = match apartment().apartment_type() {
+        Some((t, q)) => (S_OK, t, q),
+        None if MTA_THREADS.load(Ordering::Acquire) > 0 => {
+            (S_OK, poly_com::apartment::APTTYPE_MTA, poly_com::apartment::APTTYPEQUALIFIER_IMPLICIT_MTA)
         }
-        None => {
-            // SAFETY: the caller's out parameters.
-            unsafe {
-                *kind = 0;
-                *qualifier = APTTYPEQUALIFIER_NONE;
-            }
-            CO_E_NOTINITIALIZED
-        }
+        None => (CO_E_NOTINITIALIZED, 0, APTTYPEQUALIFIER_NONE),
+    };
+    // SAFETY: the caller's out parameters.
+    unsafe {
+        *kind = t;
+        *qualifier = q;
     }
+    hr
 }
 
 #[unsafe(no_mangle)]
@@ -230,6 +342,270 @@ pub extern "system" fn RoInitialize(init_type: i32) -> Hresult {
 #[unsafe(no_mangle)]
 pub extern "system" fn RoUninitialize() {
     uninitialize();
+}
+
+// ----- the thread's message filter ---------------------------------------------------------
+
+/// The TLS slot of the thread's message filter (an `IMessageFilter` pointer we hold a reference to).
+static FILTER_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+fn filter_slot() -> Option<u32> {
+    let s = FILTER_SLOT.load(Ordering::Acquire);
+    if s != TLS_OUT_OF_INDEXES {
+        return Some(s);
+    }
+    // SAFETY: kernel32's TLS.
+    let n = unsafe { TlsAlloc() };
+    if n == TLS_OUT_OF_INDEXES {
+        return None;
+    }
+    match FILTER_SLOT.compare_exchange(TLS_OUT_OF_INDEXES, n, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => Some(n),
+        Err(other) => {
+            // SAFETY: the slot just allocated, unused.
+            unsafe { TlsFree(n) };
+            Some(other)
+        }
+    }
+}
+
+fn filter() -> *mut c_void {
+    // SAFETY: kernel32's TLS.
+    filter_slot().map_or(core::ptr::null_mut(), |s| unsafe { TlsGetValue(s) }.cast())
+}
+
+fn set_filter(f: *mut c_void) {
+    if let Some(s) = filter_slot() {
+        // SAFETY: kernel32's TLS.
+        unsafe { TlsSetValue(s, f.cast()) };
+    }
+}
+
+/// `IUnknown::AddRef` / `Release` of a COM object (vtable slots 1 and 2).
+unsafe fn add_ref(p: *mut c_void) {
+    // SAFETY: the caller's COM object.
+    unsafe {
+        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
+        (*vtbl.add(1))(p);
+    }
+}
+
+unsafe fn release(p: *mut c_void) {
+    // SAFETY: the caller's COM object.
+    unsafe {
+        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
+        (*vtbl.add(2))(p);
+    }
+}
+
+/// `CoRegisterMessageFilter`: one filter per STA thread, AddRef'ed; the one it replaces (or
+/// removes) goes to the caller with the reference the registration held.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoRegisterMessageFilter(new: *mut c_void, old: *mut *mut c_void) -> Hresult {
+    match apartment().model() {
+        None => return CO_E_NOTINITIALIZED,
+        Some(Model::Mta) => return CO_E_NOT_SUPPORTED,
+        Some(Model::Sta) => {}
+    }
+    let prev = filter();
+    if !new.is_null() {
+        // SAFETY: the caller's filter.
+        unsafe { add_ref(new) };
+    }
+    set_filter(new);
+    if !old.is_null() {
+        // SAFETY: the caller's out parameter.
+        unsafe { *old = prev };
+    } else if !prev.is_null() {
+        // SAFETY: the filter the thread had registered.
+        unsafe { release(prev) };
+    }
+    S_OK
+}
+
+// ----- drag and drop -------------------------------------------------------------------
+
+/// A spin lock around a value (no `std` here).
+struct Locked<T> {
+    flag: core::sync::atomic::AtomicBool,
+    value: core::cell::UnsafeCell<T>,
+}
+
+// SAFETY: the flag serialises every access to the value.
+unsafe impl<T> Sync for Locked<T> {}
+
+impl<T> Locked<T> {
+    const fn new(v: T) -> Locked<T> {
+        Locked { flag: core::sync::atomic::AtomicBool::new(false), value: core::cell::UnsafeCell::new(v) }
+    }
+    fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        while self.flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            core::hint::spin_loop();
+        }
+        // SAFETY: the lock is held.
+        let r = f(unsafe { &mut *self.value.get() });
+        self.flag.store(false, Ordering::Release);
+        r
+    }
+}
+
+/// The drop targets of the process: window, target, the registering thread.
+static TARGETS: Locked<alloc::vec::Vec<(usize, usize, u32)>> = Locked::new(alloc::vec::Vec::new());
+
+/// The window property a registration leaves (Learn: "RegisterDragDrop"): `OleDropTargetInterface`.
+const DROP_PROP: &[u16] = &[
+    b'O' as u16,
+    b'l' as u16,
+    b'e' as u16,
+    b'D' as u16,
+    b'r' as u16,
+    b'o' as u16,
+    b'p' as u16,
+    b'T' as u16,
+    b'a' as u16,
+    b'r' as u16,
+    b'g' as u16,
+    b'e' as u16,
+    b't' as u16,
+    b'I' as u16,
+    b'n' as u16,
+    b't' as u16,
+    b'e' as u16,
+    b'r' as u16,
+    b'f' as u16,
+    b'a' as u16,
+    b'c' as u16,
+    b'e' as u16,
+    0,
+];
+
+static USER32: [AtomicUsize; 4] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+
+/// A function of `user32.dll`, looked up when first used (a program with no windows never loads it).
+fn user32_fn(which: usize, name: &[u8]) -> usize {
+    let cached = USER32[which].load(Ordering::Acquire);
+    if cached != 0 {
+        return cached;
+    }
+    let lib: [u16; 11] = [117, 115, 101, 114, 51, 50, 46, 100, 108, 108, 0];
+    // SAFETY: kernel32 calls with NUL-terminated names.
+    let p = unsafe { GetProcAddress(LoadLibraryW(lib.as_ptr()), name.as_ptr()) };
+    USER32[which].store(p, Ordering::Release);
+    p
+}
+
+unsafe fn is_window(hwnd: usize) -> bool {
+    let p = user32_fn(0, b"IsWindow\0");
+    // SAFETY: user32's IsWindow, or `p` is 0 (checked).
+    p != 0 && unsafe { core::mem::transmute::<usize, unsafe extern "system" fn(usize) -> i32>(p)(hwnd) } != 0
+}
+
+unsafe fn get_prop(hwnd: usize) -> usize {
+    let p = user32_fn(1, b"GetPropW\0");
+    if p == 0 {
+        return 0;
+    }
+    // SAFETY: user32's GetPropW.
+    unsafe {
+        core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16) -> usize>(p)(
+            hwnd,
+            DROP_PROP.as_ptr(),
+        )
+    }
+}
+
+unsafe fn set_prop(hwnd: usize, value: usize) {
+    let p = user32_fn(2, b"SetPropW\0");
+    if p != 0 {
+        // SAFETY: user32's SetPropW.
+        unsafe {
+            core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16, usize) -> i32>(p)(
+                hwnd,
+                DROP_PROP.as_ptr(),
+                value,
+            )
+        };
+    }
+}
+
+unsafe fn remove_prop(hwnd: usize) {
+    let p = user32_fn(3, b"RemovePropW\0");
+    if p != 0 {
+        // SAFETY: user32's RemovePropW.
+        unsafe {
+            core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16) -> usize>(p)(
+                hwnd,
+                DROP_PROP.as_ptr(),
+            )
+        };
+    }
+}
+
+/// `RegisterDragDrop`: the target is AddRef'ed and kept (as the window's `OleDropTargetInterface`
+/// property) until `RevokeDragDrop` or the last `OleUninitialize` of this thread; it needs OLE on
+/// the thread; `DestroyWindow` does not revoke.
+#[unsafe(no_mangle)]
+pub extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
+    // SAFETY: user32's functions on a handle value; the target is the caller's COM object.
+    unsafe {
+        if hwnd == 0 || !is_window(hwnd) {
+            return DRAGDROP_E_INVALIDHWND;
+        }
+        if target.is_null() {
+            return E_INVALIDARG;
+        }
+        let a = apartment();
+        if a.ole_count() == 0 {
+            return if a.ole_used() { CO_E_NOTINITIALIZED } else { E_OUTOFMEMORY };
+        }
+        if get_prop(hwnd) != 0 {
+            return DRAGDROP_E_ALREADYREGISTERED;
+        }
+        add_ref(target);
+        set_prop(hwnd, target as usize);
+        let me = GetCurrentThreadId();
+        TARGETS.with(|t| t.push((hwnd, target as usize, me)));
+    }
+    S_OK
+}
+
+/// `RevokeDragDrop`: the target is released once and the property goes.
+#[unsafe(no_mangle)]
+pub extern "system" fn RevokeDragDrop(hwnd: usize) -> Hresult {
+    // SAFETY: user32's functions on a handle value; the target we AddRef'ed.
+    unsafe {
+        if hwnd == 0 || !is_window(hwnd) {
+            return DRAGDROP_E_INVALIDHWND;
+        }
+        let target = get_prop(hwnd);
+        if target == 0 {
+            return DRAGDROP_E_NOTREGISTERED;
+        }
+        remove_prop(hwnd);
+        TARGETS.with(|t| t.retain(|e| e.0 != hwnd));
+        release(target as *mut c_void);
+    }
+    S_OK
+}
+
+/// The last `OleUninitialize` of the thread: its drop targets are released.
+fn release_drop_targets() {
+    // SAFETY: no preconditions.
+    let me = unsafe { GetCurrentThreadId() };
+    let mine: alloc::vec::Vec<(usize, usize, u32)> = TARGETS.with(|t| {
+        let (mine, rest) = t.drain(..).partition(|e| e.2 == me);
+        *t = rest;
+        mine
+    });
+    for (hwnd, target, _) in mine {
+        // SAFETY: the registration's target and window handle.
+        unsafe {
+            if is_window(hwnd) && get_prop(hwnd) == target {
+                remove_prop(hwnd);
+            }
+            release(target as *mut c_void);
+        }
+    }
 }
 
 // ----- activation ----------------------------------------------------------------------
@@ -330,51 +706,97 @@ pub unsafe extern "system" fn RoActivateInstance(_class_id: HString, instance: *
 
 // ----- objects that do nothing ---------------------------------------------------------
 
-/// The IUnknown-only object `CoCreateFreeThreadedMarshaler` hands out.
+/// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
+const IID_IUNKNOWN: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+/// `IID_IMarshal` (`objidl.h`): {00000003-0000-0000-C000-000000000046}.
+const IID_IMARSHAL: Guid = Guid { data1: 3, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+
+type UnkFn = unsafe extern "system" fn(*mut c_void) -> u32;
+type QiFn = unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult;
+
+/// The free-threaded marshaler `CoCreateFreeThreadedMarshaler` hands out: the inner `IUnknown`
+/// (this struct's first field is its vtable pointer) and, inside the same block, its `IMarshal`
+/// interface. Without an outer object it counts its own references; aggregated, the `IMarshal`
+/// interface delegates `QueryInterface`, `AddRef` and `Release` to the outer unknown.
 #[repr(C)]
-struct Unknown {
+struct Marshaler {
     vtbl: *const UnknownVtbl,
     refs: AtomicU32,
+    outer: *mut c_void,
+    marshal: MarshalIface,
+}
+
+#[repr(C)]
+struct MarshalIface {
+    vtbl: *const MarshalVtbl,
+    owner: *mut Marshaler,
 }
 
 #[repr(C)]
 struct UnknownVtbl {
-    query_interface: unsafe extern "system" fn(*mut Unknown, *const Guid, *mut *mut c_void) -> Hresult,
-    add_ref: unsafe extern "system" fn(*mut Unknown) -> u32,
-    release: unsafe extern "system" fn(*mut Unknown) -> u32,
+    query_interface: unsafe extern "system" fn(*mut Marshaler, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut Marshaler) -> u32,
+    release: unsafe extern "system" fn(*mut Marshaler) -> u32,
 }
 
-// SAFETY: a table of function pointers.
-unsafe impl Sync for UnknownVtbl {}
+/// `IMarshal`: the three `IUnknown` methods and the six of the interface (all `E_NOTIMPL`: there is no
+/// other process to marshal to).
+#[repr(C)]
+struct MarshalVtbl {
+    query_interface: unsafe extern "system" fn(*mut MarshalIface, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut MarshalIface) -> u32,
+    release: unsafe extern "system" fn(*mut MarshalIface) -> u32,
+    rest: [unsafe extern "system" fn() -> Hresult; 6],
+}
 
-/// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
-const IID_IUNKNOWN: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+// SAFETY: tables of function pointers.
+unsafe impl Sync for UnknownVtbl {}
+// SAFETY: as above.
+unsafe impl Sync for MarshalVtbl {}
 
 static UNKNOWN_VTBL: UnknownVtbl = UnknownVtbl { query_interface: unk_qi, add_ref: unk_add_ref, release: unk_release };
+static MARSHAL_VTBL: MarshalVtbl =
+    MarshalVtbl { query_interface: mar_qi, add_ref: mar_add_ref, release: mar_release, rest: [not_impl; 6] };
 
-unsafe extern "system" fn unk_qi(this: *mut Unknown, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+unsafe extern "system" fn not_impl() -> Hresult {
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn unk_qi(this: *mut Marshaler, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }
-    // SAFETY: the caller's IID and out parameter.
+    // SAFETY: the caller's IID and out parameter; a live object.
     unsafe {
-        if !iid.is_null() && *iid == IID_IUNKNOWN {
+        *out = core::ptr::null_mut();
+        if iid.is_null() {
+            return E_INVALIDARG;
+        }
+        if *iid == IID_IUNKNOWN {
             (*this).refs.fetch_add(1, Ordering::AcqRel);
             *out = this.cast();
             S_OK
+        } else if *iid == IID_IMARSHAL {
+            // The interface counts with the outer object when there is one.
+            if (*this).outer.is_null() {
+                (*this).refs.fetch_add(1, Ordering::AcqRel);
+            } else {
+                add_ref((*this).outer);
+            }
+            *out = core::ptr::addr_of_mut!((*this).marshal).cast();
+            S_OK
         } else {
-            *out = core::ptr::null_mut();
             E_NOINTERFACE
         }
     }
 }
 
-unsafe extern "system" fn unk_add_ref(this: *mut Unknown) -> u32 {
+unsafe extern "system" fn unk_add_ref(this: *mut Marshaler) -> u32 {
     // SAFETY: a live object.
     unsafe { (*this).refs.fetch_add(1, Ordering::AcqRel) + 1 }
 }
 
-unsafe extern "system" fn unk_release(this: *mut Unknown) -> u32 {
+unsafe extern "system" fn unk_release(this: *mut Marshaler) -> u32 {
     // SAFETY: a live object from CoTaskMemAlloc.
     unsafe {
         let n = (*this).refs.fetch_sub(1, Ordering::AcqRel) - 1;
@@ -385,21 +807,69 @@ unsafe extern "system" fn unk_release(this: *mut Unknown) -> u32 {
     }
 }
 
-/// `CoCreateFreeThreadedMarshaler`: an object that is `IUnknown` and no
-/// more (there are no other processes to marshal to that it could serve).
+unsafe extern "system" fn mar_qi(this: *mut MarshalIface, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_qi(owner, iid, out)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const QiFn);
+            (*vtbl)(outer, iid, out)
+        }
+    }
+}
+
+unsafe extern "system" fn mar_add_ref(this: *mut MarshalIface) -> u32 {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_add_ref(owner)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const UnkFn);
+            (*vtbl.add(1))(outer)
+        }
+    }
+}
+
+unsafe extern "system" fn mar_release(this: *mut MarshalIface) -> u32 {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_release(owner)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const UnkFn);
+            (*vtbl.add(2))(outer)
+        }
+    }
+}
+
+/// `CoCreateFreeThreadedMarshaler`: the inner `IUnknown` of an object that is `IMarshal` too (there
+/// are no other processes to marshal to that it could serve). Creating it does not call the outer
+/// object.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoCreateFreeThreadedMarshaler(_outer: *mut c_void, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn CoCreateFreeThreadedMarshaler(outer: *mut c_void, out: *mut *mut c_void) -> Hresult {
     if out.is_null() {
-        return E_POINTER;
+        return E_INVALIDARG;
     }
     // SAFETY: the caller's out parameter; a fresh block.
     unsafe {
-        let p = CoTaskMemAlloc(core::mem::size_of::<Unknown>()).cast::<Unknown>();
+        let p = CoTaskMemAlloc(core::mem::size_of::<Marshaler>()).cast::<Marshaler>();
         if p.is_null() {
             *out = core::ptr::null_mut();
             return E_OUTOFMEMORY;
         }
-        p.write(Unknown { vtbl: &UNKNOWN_VTBL, refs: AtomicU32::new(1) });
+        p.write(Marshaler {
+            vtbl: &UNKNOWN_VTBL,
+            refs: AtomicU32::new(1),
+            outer,
+            marshal: MarshalIface { vtbl: &MARSHAL_VTBL, owner: p },
+        });
         *out = p.cast();
     }
     S_OK
@@ -434,33 +904,6 @@ pub extern "system" fn CoSetProxyBlanket(
     _capabilities: u32,
 ) -> Hresult {
     if proxy.is_null() { E_INVALIDARG } else { E_NOINTERFACE }
-}
-
-/// `CoRegisterMessageFilter`: no filter is kept; the previous one is NULL.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoRegisterMessageFilter(_new: *mut c_void, old: *mut *mut c_void) -> Hresult {
-    if !old.is_null() {
-        // SAFETY: the caller's out parameter.
-        unsafe { *old = core::ptr::null_mut() };
-    }
-    S_OK
-}
-
-/// `RegisterDragDrop`: accepted for a window and a target, nothing kept.
-#[unsafe(no_mangle)]
-pub extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
-    if hwnd == 0 {
-        DRAGDROP_E_INVALIDHWND
-    } else if target.is_null() {
-        E_INVALIDARG
-    } else {
-        S_OK
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn RevokeDragDrop(hwnd: usize) -> Hresult {
-    if hwnd == 0 { DRAGDROP_E_INVALIDHWND } else { S_OK }
 }
 
 // ----- GUIDs ---------------------------------------------------------------------------
@@ -538,7 +981,7 @@ pub unsafe extern "system" fn StringFromGUID2(guid: *const Guid, buf: *mut u16, 
 /// `StringFromCLSID` / `StringFromIID`: the text in task memory.
 unsafe fn string_from_guid(guid: *const Guid, out: *mut *mut u16) -> Hresult {
     if out.is_null() {
-        return E_POINTER;
+        return E_INVALIDARG;
     }
     // SAFETY: the caller's out parameter.
     unsafe { *out = core::ptr::null_mut() };
@@ -603,32 +1046,195 @@ const VT_LPWSTR: u16 = 31;
 const VT_BLOB: u16 = 65;
 const VT_CLSID: u16 = 72;
 const VT_VECTOR: u16 = 0x1000;
+const VT_ARRAY: u16 = 0x2000;
+const VT_BYREF: u16 = 0x4000;
+const VT_RESERVED: u16 = 0x8000;
 
-/// `PropVariantClear`: frees what the value owns (strings, blobs, vectors'
-/// arrays, interface references) and makes it `VT_EMPTY`.
+/// Whether the low twelve bits of a `vt` name a type a `PROPVARIANT` can hold (`wtypes.h`).
+fn vt_defined(base: u16) -> bool {
+    matches!(base, 0..=14 | 16..=31 | 36..=38 | 64..=73)
+}
+
+/// The size of one element of a scalar `vt` (`None`: the elements own memory or the type has no size here).
+fn vt_size(base: u16) -> Option<usize> {
+    Some(match base {
+        2 | 11 | 16 | 17 | 18 => 2,
+        3 | 4 | 10 | 19 | 22 | 23 | 25 => 4,
+        5 | 6 | 7 | 20 | 21 | 64 => 8,
+        72 => 16,
+        _ => return None,
+    })
+}
+
+/// `PropVariantClear`: frees what the value owns (strings, blobs, vectors' arrays and the strings and
+/// interfaces in them) and makes it `VT_EMPTY`. A `vt` that names no type (an undefined number or the
+/// reserved flag) is `STG_E_INVALIDPARAMETER`; the value is cleared all the same.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn PropVariantClear(pv: *mut u8) -> Hresult {
     if pv.is_null() {
         return S_OK;
     }
-    // SAFETY: a 24-byte PROPVARIANT: `vt` at 0, the union at 8.
+    // SAFETY: a 24-byte PROPVARIANT: `vt` at 0, the union at 8 (the vector's count at 8, its array at 16).
     unsafe {
         let vt = (pv as *const u16).read_unaligned();
         let payload = (pv.add(8) as *const *mut c_void).read_unaligned();
-        match vt {
-            VT_BSTR => SysFreeString(payload.cast()),
-            VT_LPSTR | VT_LPWSTR | VT_CLSID => CoTaskMemFree(payload),
-            VT_UNKNOWN | VT_DISPATCH if !payload.is_null() => {
-                // vtable[2] of IUnknown is Release.
-                let vtbl = *(payload as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
-                (*vtbl.add(2))(payload);
+        let base = vt & 0x0FFF;
+        let invalid = vt != 0xFFFF && (vt & VT_RESERVED != 0 || !vt_defined(base));
+        if !invalid && vt != 0xFFFF && vt & (VT_BYREF | VT_ARRAY) == 0 {
+            if vt & VT_VECTOR != 0 {
+                let count = (pv.add(8) as *const u32).read_unaligned() as usize;
+                let array = (pv.add(16) as *const *mut u8).read_unaligned();
+                if !array.is_null() {
+                    match base {
+                        VT_LPSTR | VT_LPWSTR => {
+                            for i in 0..count {
+                                CoTaskMemFree((array as *mut *mut c_void).add(i).read_unaligned());
+                            }
+                        }
+                        VT_BSTR => {
+                            for i in 0..count {
+                                SysFreeString((array as *mut *mut u16).add(i).read_unaligned());
+                            }
+                        }
+                        VT_UNKNOWN | VT_DISPATCH => {
+                            for i in 0..count {
+                                let p = (array as *mut *mut c_void).add(i).read_unaligned();
+                                if !p.is_null() {
+                                    release(p);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                CoTaskMemFree(array.cast());
+            } else {
+                match vt {
+                    VT_BSTR => SysFreeString(payload.cast()),
+                    VT_LPSTR | VT_LPWSTR | VT_CLSID => CoTaskMemFree(payload),
+                    VT_UNKNOWN | VT_DISPATCH if !payload.is_null() => release(payload),
+                    // CLOB-like: the byte count at 8, the data pointer at 16.
+                    VT_BLOB => CoTaskMemFree((pv.add(16) as *const *mut c_void).read_unaligned()),
+                    _ => {}
+                }
             }
-            VT_BLOB => CoTaskMemFree((pv.add(16) as *const *mut c_void).read_unaligned()),
-            v if v & VT_VECTOR != 0 => CoTaskMemFree((pv.add(16) as *const *mut c_void).read_unaligned()),
-            _ => {}
         }
         core::ptr::write_bytes(pv, 0, 24);
         (pv as *mut u16).write_unaligned(VT_EMPTY);
+        if invalid { STG_E_INVALIDPARAMETER } else { S_OK }
+    }
+}
+
+/// A copy of the `n` bytes at `src` in task memory (NULL when `src` is NULL or memory is short).
+unsafe fn task_copy(src: *const u8, n: usize) -> *mut c_void {
+    if src.is_null() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: `n` readable bytes at `src`; a fresh block.
+    unsafe {
+        let p = CoTaskMemAlloc(n);
+        if !p.is_null() {
+            core::ptr::copy_nonoverlapping(src, p.cast(), n);
+        }
+        p
+    }
+}
+
+/// The characters (without the NUL) of a NUL-terminated string of `unit` bytes per character.
+unsafe fn string_len(p: *const u8, unit: usize) -> usize {
+    let mut n = 0;
+    // SAFETY: a NUL-terminated string.
+    unsafe {
+        while if unit == 2 { (p as *const u16).add(n).read_unaligned() != 0 } else { *p.add(n) != 0 } {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// `PropVariantCopy`: a deep copy (strings, blobs, interface references, vectors of numbers or
+/// strings); `STG_E_INVALIDPARAMETER` for a `vt` that names no type.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PropVariantCopy(dst: *mut u8, src: *const u8) -> Hresult {
+    if dst.is_null() || src.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: 24-byte PROPVARIANTs.
+    unsafe {
+        let vt = (src as *const u16).read_unaligned();
+        let base = vt & 0x0FFF;
+        if vt != 0xFFFF && (vt & VT_RESERVED != 0 || !vt_defined(base)) {
+            return STG_E_INVALIDPARAMETER;
+        }
+        core::ptr::copy(src, dst, 24);
+        if vt == 0xFFFF || vt & (VT_BYREF | VT_ARRAY) != 0 {
+            return S_OK;
+        }
+        let payload = (src.add(8) as *const *const u8).read_unaligned();
+        if vt & VT_VECTOR != 0 {
+            let count = (src.add(8) as *const u32).read_unaligned() as usize;
+            let array = (src.add(16) as *const *const u8).read_unaligned();
+            if array.is_null() || count == 0 {
+                return S_OK;
+            }
+            let elem = match (base, vt_size(base)) {
+                (_, Some(n)) => n,
+                (VT_LPSTR | VT_LPWSTR | VT_BSTR | VT_UNKNOWN | VT_DISPATCH, _) => core::mem::size_of::<usize>(),
+                _ => return E_INVALIDARG,
+            };
+            let copy = task_copy(array, elem * count).cast::<u8>();
+            if copy.is_null() {
+                return E_OUTOFMEMORY;
+            }
+            if vt_size(base).is_none() {
+                for i in 0..count {
+                    let slot = (copy as *mut *mut c_void).add(i);
+                    let p = slot.read_unaligned();
+                    if p.is_null() {
+                        continue;
+                    }
+                    let q = match base {
+                        VT_LPSTR => task_copy(p.cast(), string_len(p.cast(), 1) + 1),
+                        VT_LPWSTR => task_copy(p.cast(), (string_len(p.cast(), 2) + 1) * 2),
+                        VT_UNKNOWN | VT_DISPATCH => {
+                            add_ref(p);
+                            p
+                        }
+                        _ => p,
+                    };
+                    slot.write_unaligned(q);
+                }
+            }
+            (dst.add(16) as *mut *mut u8).write_unaligned(copy);
+            return S_OK;
+        }
+        match vt {
+            VT_LPSTR if !payload.is_null() => {
+                let p = task_copy(payload, string_len(payload, 1) + 1);
+                (dst.add(8) as *mut *mut c_void).write_unaligned(p);
+            }
+            VT_LPWSTR if !payload.is_null() => {
+                let p = task_copy(payload, (string_len(payload, 2) + 1) * 2);
+                (dst.add(8) as *mut *mut c_void).write_unaligned(p);
+            }
+            VT_CLSID if !payload.is_null() => {
+                let p = task_copy(payload, 16);
+                (dst.add(8) as *mut *mut c_void).write_unaligned(p);
+            }
+            VT_BLOB => {
+                let n = (src.add(8) as *const u32).read_unaligned() as usize;
+                let data = (src.add(16) as *const *const u8).read_unaligned();
+                let p = task_copy(data, n);
+                (dst.add(16) as *mut *mut c_void).write_unaligned(p);
+            }
+            VT_UNKNOWN | VT_DISPATCH if !payload.is_null() => add_ref(payload as *mut c_void),
+            VT_BSTR if !payload.is_null() => {
+                let len = SysStringByteLen(payload as *mut u16);
+                let copy = SysAllocStringByteLen(payload, len);
+                (dst.add(8) as *mut *mut u16).write_unaligned(copy);
+            }
+            _ => {}
+        }
     }
     S_OK
 }

@@ -34,7 +34,6 @@ poly_win32_rt::fail_exports!(
         GetMenuInfo,
         GetMenuItemInfoW,
         GetMonitorInfoA,
-        GetPointerDevice,
         GetPointerPenInfo,
         GetPointerType,
         GetProcessWindowStation,
