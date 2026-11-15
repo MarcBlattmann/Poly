@@ -270,7 +270,12 @@ fn show(hwnd: usize, t: &Tex) {
 }
 
 /// `GetBuffer(Buffer, riid, ppSurface)`: buffer 0 is the back buffer.
-unsafe extern "system" fn get_buffer(this: *mut c_void, index: u32, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn get_buffer(
+    this: *mut c_void,
+    index: u32,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if index != 0 {
         // SAFETY: the caller's output.
         unsafe { put(out, core::ptr::null_mut()) };
@@ -320,7 +325,14 @@ unsafe extern "system" fn get_desc(this: *mut c_void, out: *mut u8) -> HRESULT {
 
 /// `ResizeBuffers(BufferCount, Width, Height, NewFormat, SwapChainFlags)`: a new back buffer
 /// (0 keeps the count and format, a size of 0 is the window's).
-unsafe extern "system" fn resize_buffers(this: *mut c_void, count: u32, w: u32, h: u32, format: u32, flags: u32) -> HRESULT {
+unsafe extern "system" fn resize_buffers(
+    this: *mut c_void,
+    count: u32,
+    w: u32,
+    h: u32,
+    format: u32,
+    flags: u32,
+) -> HRESULT {
     // SAFETY: a live swap chain.
     let s = unsafe { chain(this) };
     let (cw, ch) = client_size(s.hwnd);

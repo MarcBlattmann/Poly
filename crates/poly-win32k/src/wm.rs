@@ -1531,13 +1531,26 @@ impl Wm {
 
     /// Apply a compositor-moved or resized client rectangle to a top-level
     /// window's Win32 geometry. `client` is in screen coordinates, as the
-    /// desktop link's `Configure` record is.
+    /// desktop link's `Configure` record is. A window that draws its own
+    /// caption (ADR 0183 addendum: `WS_CAPTION` and a client area its
+    /// `WM_NCCALCSIZE` answer put at the top) keeps the borders that answer
+    /// left around its client area; Poly's frame is around the others.
     pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
-        if self.get(u64::from(hwnd)).is_none() {
-            return false;
-        }
+        let Some(w) = self.get(u64::from(hwnd)) else { return false };
+        let own_caption = w.style & crate::metrics::WS_CAPTION == crate::metrics::WS_CAPTION
+            && !crate::surfaces::poly_frames(w.style, w.window_rel, w.client_rel);
+        let (old_w, old_c) = (w.window_rel, w.client_rel);
         let (ox, oy) = self.parent_origin(hwnd);
-        let outer = frame.window_from_surface(client);
+        let outer = if own_caption {
+            Rect::new(
+                client.left - (old_c.left - old_w.left),
+                client.top - (old_c.top - old_w.top),
+                client.right + (old_w.right - old_c.right),
+                client.bottom + (old_w.bottom - old_c.bottom),
+            )
+        } else {
+            frame.window_from_surface(client)
+        };
         let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
         let client_rel = Rect::new(client.left - ox, client.top - oy, client.right - ox, client.bottom - oy);
         let Some(window) = self.get_mut(u64::from(hwnd)) else { return false };
@@ -2422,6 +2435,24 @@ mod tests {
             panic!("the compositor close request was not queued")
         };
         assert_eq!((msg.hwnd, msg.msg, msg.time), (hwnd, crate::user::WM_CLOSE, 77));
+    }
+
+    /// A window that draws its own caption keeps its own borders when the compositor moves it
+    /// (ADR 0183 addendum): Chrome's 900x500 window with an 884x492 client area from its top.
+    #[test]
+    fn a_desktop_move_keeps_the_borders_of_a_window_that_draws_its_own_caption() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", 0x06CF_0000, 0, 0);
+        let mut fx = Effects::default();
+        let window_rel = Some(Rect::new(40, 40, 940, 540));
+        let client_rel = Some(Rect::new(48, 40, 932, 532));
+        wm.handle(A, Request::SetRects { hwnd, window_rel, client_rel }, &mut fx);
+        assert!(wm.configure_from_desktop(hwnd, Rect::new(148, 140, 1032, 632), FrameMetrics::POLY));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, Rect::new(148, 140, 1032, 632));
+        assert_eq!(info.window, Rect::new(140, 140, 1040, 640));
+        assert!(!crate::surfaces::poly_frames(info.style, info.window_rel, info.client_rel));
     }
 
     #[test]

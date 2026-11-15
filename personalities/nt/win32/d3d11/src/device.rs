@@ -223,7 +223,12 @@ unsafe extern "system" fn check_format_support(_: *mut c_void, format: u32, out:
 }
 
 /// `CheckMultisampleQualityLevels`: one quality level without multisampling, none with it.
-unsafe extern "system" fn check_multisample_quality_levels(_: *mut c_void, _: u32, count: u32, out: *mut u32) -> HRESULT {
+unsafe extern "system" fn check_multisample_quality_levels(
+    _: *mut c_void,
+    _: u32,
+    count: u32,
+    out: *mut u32,
+) -> HRESULT {
     // SAFETY: the caller's output.
     unsafe { put(out, u32::from(count == 1)) };
     S_OK
@@ -712,7 +717,12 @@ unsafe extern "system" fn dxgi_get_parent(this: *mut c_void, riid: *const Guid, 
 }
 
 /// `QueryResourceResidency`: every resource is in memory (`DXGI_RESIDENCY_FULLY_RESIDENT`).
-unsafe extern "system" fn query_resource_residency(_: *mut c_void, _: *const *mut c_void, out: *mut u32, n: u32) -> HRESULT {
+unsafe extern "system" fn query_resource_residency(
+    _: *mut c_void,
+    _: *const *mut c_void,
+    out: *mut u32,
+    n: u32,
+) -> HRESULT {
     if out.is_null() {
         return E_INVALIDARG;
     }

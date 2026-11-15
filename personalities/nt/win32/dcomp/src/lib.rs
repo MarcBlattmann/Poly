@@ -75,7 +75,17 @@ fn log_iid(what: &str, iid: &Guid) {
     let d = iid.d4;
     log(&alloc::format!(
         "stub: dcomp: {what} has no interface {{{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}}}",
-        iid.d1, iid.d2, iid.d3, d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]
+        iid.d1,
+        iid.d2,
+        iid.d3,
+        d[0],
+        d[1],
+        d[2],
+        d[3],
+        d[4],
+        d[5],
+        d[6],
+        d[7]
     ));
 }
 
@@ -323,11 +333,8 @@ static DESKTOP_DEVICE_VTBL: Vt<27> = Vt([
 ]);
 
 fn new_device(desktop: bool) -> *mut c_void {
-    let (vtbl, iids) = if desktop {
-        (DESKTOP_DEVICE_VTBL.ptr(), &DEVICE2_IIDS[..])
-    } else {
-        (DEVICE_VTBL.ptr(), &DEVICE_IIDS[..])
-    };
+    let (vtbl, iids) =
+        if desktop { (DESKTOP_DEVICE_VTBL.ptr(), &DEVICE2_IIDS[..]) } else { (DEVICE_VTBL.ptr(), &DEVICE_IIDS[..]) };
     into_raw(Device {
         obj: Obj { vtbl, refs: AtomicU32::new(1), iids, dtor: drop_device, name: "IDCompositionDevice" },
         targets: Vec::new(),
@@ -391,12 +398,23 @@ unsafe extern "system" fn check_device_state(_: *mut c_void, valid: *mut i32) ->
 }
 
 /// `CreateTargetForHwnd(hwnd, topmost, target)`.
-unsafe extern "system" fn create_target_for_hwnd(this: *mut c_void, hwnd: usize, _topmost: i32, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn create_target_for_hwnd(
+    this: *mut c_void,
+    hwnd: usize,
+    _topmost: i32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if out.is_null() {
         return E_POINTER;
     }
     let t = into_raw(Target {
-        obj: Obj { vtbl: TARGET_VTBL.ptr(), refs: AtomicU32::new(1), iids: &TARGET_IIDS, dtor: drop_target, name: "IDCompositionTarget" },
+        obj: Obj {
+            vtbl: TARGET_VTBL.ptr(),
+            refs: AtomicU32::new(1),
+            iids: &TARGET_IIDS,
+            dtor: drop_target,
+            name: "IDCompositionTarget",
+        },
         hwnd,
         root: core::ptr::null_mut(),
     });
@@ -415,7 +433,13 @@ unsafe extern "system" fn create_visual(_: *mut c_void, out: *mut *mut c_void) -
         return E_POINTER;
     }
     let v = into_raw(Visual {
-        obj: Obj { vtbl: VISUAL_VTBL.ptr(), refs: AtomicU32::new(1), iids: &VISUAL_IIDS, dtor: drop_visual, name: "IDCompositionVisual" },
+        obj: Obj {
+            vtbl: VISUAL_VTBL.ptr(),
+            refs: AtomicU32::new(1),
+            iids: &VISUAL_IIDS,
+            dtor: drop_visual,
+            name: "IDCompositionVisual",
+        },
         content: core::ptr::null_mut(),
         children: Vec::new(),
     });
@@ -435,8 +459,12 @@ struct Target {
 
 static TARGET_IIDS: [Guid; 1] = [IID_TARGET];
 
-static TARGET_VTBL: Vt<4> =
-    Vt([query_interface as *const c_void, add_ref as *const c_void, release as *const c_void, set_root as *const c_void]);
+static TARGET_VTBL: Vt<4> = Vt([
+    query_interface as *const c_void,
+    add_ref as *const c_void,
+    release as *const c_void,
+    set_root as *const c_void,
+]);
 
 unsafe fn drop_target(p: *mut c_void) {
     // SAFETY: made by `create_target_for_hwnd`.
@@ -584,7 +612,11 @@ unsafe fn create(desktop: bool, riid: *const c_void, out: *mut *mut c_void) -> H
 
 /// `DCompositionCreateDevice(dxgiDevice, iid, dcompositionDevice)`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DCompositionCreateDevice(_dxgi: *mut c_void, riid: *const c_void, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn DCompositionCreateDevice(
+    _dxgi: *mut c_void,
+    riid: *const c_void,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { create(false, riid, out) }
 }
@@ -592,14 +624,22 @@ pub unsafe extern "system" fn DCompositionCreateDevice(_dxgi: *mut c_void, riid:
 /// `DCompositionCreateDevice2(renderingDevice, iid, dcompositionDevice)`: an
 /// `IDCompositionDesktopDevice`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DCompositionCreateDevice2(_device: *mut c_void, riid: *const c_void, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn DCompositionCreateDevice2(
+    _device: *mut c_void,
+    riid: *const c_void,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { create(true, riid, out) }
 }
 
 /// `DCompositionCreateDevice3`: as `DCompositionCreateDevice2`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DCompositionCreateDevice3(_device: *mut c_void, riid: *const c_void, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn DCompositionCreateDevice3(
+    _device: *mut c_void,
+    riid: *const c_void,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { create(true, riid, out) }
 }

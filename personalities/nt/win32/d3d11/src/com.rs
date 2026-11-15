@@ -69,7 +69,17 @@ pub fn log_iid(what: &str, iid: &Guid) {
     let d = iid.d4;
     log(&alloc::format!(
         "stub: d3d11: {what} has no interface {{{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}}}",
-        iid.d1, iid.d2, iid.d3, d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7]
+        iid.d1,
+        iid.d2,
+        iid.d3,
+        d[0],
+        d[1],
+        d[2],
+        d[3],
+        d[4],
+        d[5],
+        d[6],
+        d[7]
     ));
 }
 
@@ -171,7 +181,12 @@ pub unsafe extern "system" fn query_interface(this: *mut c_void, riid: *const Gu
 }
 
 /// `GetPrivateData`: nothing is kept.
-pub unsafe extern "system" fn get_private_data(_: *mut c_void, _: *const Guid, size: *mut u32, _: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn get_private_data(
+    _: *mut c_void,
+    _: *const Guid,
+    size: *mut u32,
+    _: *mut c_void,
+) -> HRESULT {
     if !size.is_null() {
         // SAFETY: the caller's size.
         unsafe { *size = 0 };

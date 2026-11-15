@@ -92,7 +92,17 @@ fn log_missing(iid: &Guid) {
     let d4 = iid.d4;
     let text = alloc::format!(
         "stub: dxgi: no interface {{{:08x}-{:04x}-{:04x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}}}",
-        iid.d1, iid.d2, iid.d3, d4[0], d4[1], d4[2], d4[3], d4[4], d4[5], d4[6], d4[7]
+        iid.d1,
+        iid.d2,
+        iid.d3,
+        d4[0],
+        d4[1],
+        d4[2],
+        d4[3],
+        d4[4],
+        d4[5],
+        d4[6],
+        d4[7]
     );
     // SAFETY: the service reads `text.len()` bytes.
     unsafe { PolyDebugPrint(text.as_ptr(), text.len()) };
@@ -223,8 +233,14 @@ struct FactoryVtbl {
         *mut c_void,
         *mut *mut c_void,
     ) -> HRESULT,
-    create_swap_chain_for_core_window:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut c_void, *const c_void, *mut c_void, *mut *mut c_void) -> HRESULT,
+    create_swap_chain_for_core_window: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *const c_void,
+        *mut c_void,
+        *mut *mut c_void,
+    ) -> HRESULT,
     get_shared_resource_adapter_luid: unsafe extern "system" fn(*mut c_void, usize, *mut u64) -> HRESULT,
     register_stereo_status_window: unsafe extern "system" fn(*mut c_void, usize, u32, *mut u32) -> HRESULT,
     register_stereo_status_event: unsafe extern "system" fn(*mut c_void, usize, *mut u32) -> HRESULT,
@@ -377,7 +393,12 @@ unsafe extern "system" fn get_window_association(_: *mut c_void, out: *mut usize
 }
 
 /// `CreateSwapChain(pDevice, pDesc, ppSwapChain)`: a swap chain of a `d3d11.dll` device.
-unsafe extern "system" fn create_swap_chain(_: *mut c_void, device: *mut c_void, desc: *mut c_void, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn create_swap_chain(
+    _: *mut c_void,
+    device: *mut c_void,
+    desc: *mut c_void,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if !out.is_null() {
         // SAFETY: the caller's output pointer.
         unsafe { *out = core::ptr::null_mut() };
@@ -508,7 +529,8 @@ struct OutputVtbl {
     get_parent: unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> HRESULT,
     get_desc: unsafe extern "system" fn(*mut c_void, *mut u8) -> HRESULT,
     get_display_mode_list: unsafe extern "system" fn(*mut c_void, u32, u32, *mut u32, *mut c_void) -> HRESULT,
-    find_closest_matching_mode: unsafe extern "system" fn(*mut c_void, *const c_void, *mut c_void, *mut c_void) -> HRESULT,
+    find_closest_matching_mode:
+        unsafe extern "system" fn(*mut c_void, *const c_void, *mut c_void, *mut c_void) -> HRESULT,
     wait_for_vblank: unsafe extern "system" fn(*mut c_void) -> HRESULT,
     take_ownership: unsafe extern "system" fn(*mut c_void, *mut c_void, i32) -> HRESULT,
     release_ownership: unsafe extern "system" fn(*mut c_void),

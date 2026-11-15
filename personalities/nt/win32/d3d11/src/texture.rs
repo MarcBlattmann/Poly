@@ -88,7 +88,11 @@ pub unsafe extern "system" fn part_release(this: *mut c_void) -> u32 {
     unsafe { release((*(this as *const Part)).owner) }
 }
 
-pub unsafe extern "system" fn part_query_interface(this: *mut c_void, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn part_query_interface(
+    this: *mut c_void,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: a `Part` of a live object.
     unsafe { query_interface((*(this as *const Part)).owner, riid, out) }
 }

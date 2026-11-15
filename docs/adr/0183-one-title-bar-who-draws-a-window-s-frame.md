@@ -174,3 +174,11 @@ Its caption buttons and tab strip are drawn by Chrome; moving and resizing it th
 non-client hit testing (`WM_NCHITTEST` → `HTCAPTION`, `HTLEFT`, ...) needs win32k to start the
 compositor's interactive move (`Desktop::begin_move` exists and is not called yet): open, listed
 in the hand-off `chrome-win-s3-hunt.md`.
+
+**Follow-up (2026-11-15, S3 hunt 2).** Moving and resizing through the app's own non-client hit
+testing now works (ADR 0128 addendum "child windows ..."): a press on Chrome's tab strip
+(`HTCAPTION`) moves the window with the pointer, a double click maximizes and restores it. When
+the compositor moves such a window, win32k keeps the borders its `WM_NCCALCSIZE` answer left
+around the client area (`Wm::configure_from_desktop`); it used to put Poly's frame metrics around
+the surface, which made the window look framed by Poly and re-made its surface after the first
+step of the drag (`chrome-win-s3-hunt-2-before-reframed-on-move.png`).

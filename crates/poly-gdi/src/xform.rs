@@ -82,14 +82,7 @@ impl Xform {
         }
         let det = self.m11 * self.m22 - self.m12 * self.m21;
         let (m11, m12, m21, m22) = (self.m22 / det, -self.m12 / det, -self.m21 / det, self.m11 / det);
-        Some(Xform {
-            m11,
-            m12,
-            m21,
-            m22,
-            dx: -(self.dx * m11 + self.dy * m21),
-            dy: -(self.dx * m12 + self.dy * m22),
-        })
+        Some(Xform { m11, m12, m21, m22, dx: -(self.dx * m11 + self.dy * m21), dy: -(self.dx * m12 + self.dy * m22) })
     }
 
     /// `CombineTransform(out, first, second)`: `first`, then `second`.

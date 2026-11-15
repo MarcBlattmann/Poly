@@ -938,7 +938,19 @@ fn a_press_on_the_caption_or_a_border_moves_or_sizes_through_the_compositor() {
     // Learn: WM_NCLBUTTONDOWN, WM_NCLBUTTONDBLCLK, WM_SYSCOMMAND (SC_MOVE, SC_SIZE).
     with_env(|e| {
         register(e, "Own");
-        let h = create(e, 'A', 0, "Own", WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000 | WS_VISIBLE, 100, 100, 300, 200, 0, 0);
+        let h = create(
+            e,
+            'A',
+            0,
+            "Own",
+            WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000 | WS_VISIBLE,
+            100,
+            100,
+            300,
+            200,
+            0,
+            0,
+        );
         let screen = makelparam(150, 105);
         take_log();
         let sys = |hit: i32| {
