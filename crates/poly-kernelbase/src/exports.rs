@@ -97,6 +97,12 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetEnvironmentVariableW", "api-ms-win-core-processenvironment-l1-1-0"),
     ("GetEnvironmentStringsW", "api-ms-win-core-processenvironment-l1-1-0"),
     ("FreeEnvironmentStringsW", "api-ms-win-core-processenvironment-l1-1-0"),
+    // ANSI forms (ADR 0186, stage 3).
+    ("GetEnvironmentStrings", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("GetEnvironmentStringsA", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("FreeEnvironmentStringsA", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("GetCurrentDirectoryA", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("GetModuleFileNameA", "api-ms-win-core-libraryloader-l1-1-0"),
     ("ExpandEnvironmentStringsW", "api-ms-win-core-processenvironment-l1-1-0"),
     ("GetCurrentDirectoryW", "api-ms-win-core-processenvironment-l1-1-0"),
     ("SetCurrentDirectoryW", "api-ms-win-core-processenvironment-l1-1-0"),
