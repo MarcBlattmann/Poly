@@ -114,7 +114,12 @@ pub unsafe extern "system" fn CommandLineToArgvW(cmd_line: *const u16, num_args:
     }
     // SAFETY: `block` is `size` writable bytes; `num_args` is the caller's out-pointer.
     unsafe {
-        shell::write_argv_block(&args, block as usize as u64, core::mem::size_of::<usize>(), core::slice::from_raw_parts_mut(block, size));
+        shell::write_argv_block(
+            &args,
+            block as usize as u64,
+            core::mem::size_of::<usize>(),
+            core::slice::from_raw_parts_mut(block, size),
+        );
         num_args.write(args.len() as i32);
     }
     block.cast()

@@ -26,7 +26,8 @@ pub const KERNEL_ENV: &str = "POLY_WOW64_DIR";
 const PROGRAMS_DIR: &str = "tests/windows/wow64";
 /// The modules (in the cache under these names).
 /// `win32u`, `gdi32` and `user32` are the 32-bit GUI (ADR 0186 stage 4).
-pub const CORE_MODULES: &[&str] = &["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
+pub const CORE_MODULES: &[&str] =
+    &["ntdll.dll", "kernelbase.dll", "kernel32.dll", "win32u.dll", "gdi32.dll", "user32.dll"];
 /// The other system DLLs 32-bit programs import (ADR 0186 stage 3), built from the same crates
 /// as the x64 ones in the Win32 workspace (the package is the file name without `.dll`).
 pub const SYSTEM_MODULES: &[&str] = &[
@@ -143,7 +144,17 @@ pub fn ensure() -> Result<PathBuf> {
 
 /// The crates of the Win32 workspace that are test programs: built for x64 only.
 const TEST_CRATES: &[&str] = &[
-    "a32test", "b35test", "contest", "crtiotest", "crtloctest", "crttest", "cryptest", "httptest", "k32test", "s1test", "wstest",
+    "a32test",
+    "b35test",
+    "contest",
+    "crtiotest",
+    "crtloctest",
+    "crttest",
+    "cryptest",
+    "httptest",
+    "k32test",
+    "s1test",
+    "wstest",
 ];
 
 /// Every `raw-dylib` link of a module that is also built for i686 must say how its names are
@@ -196,10 +207,11 @@ pub fn check_links(root: &Path) -> Result {
 
 /// The hash of everything the modules are built from.
 fn cache_key(root: &Path) -> Result<u64> {
-    let mut start: Vec<String> = ["ntdll", "win32/rt", "win32/kernelbase", "win32/kernel32", "win32/win32u", "win32/gdi32", "win32/user32"]
-        .iter()
-        .map(|d| format!("personalities/nt/{d}"))
-        .collect();
+    let mut start: Vec<String> =
+        ["ntdll", "win32/rt", "win32/kernelbase", "win32/kernel32", "win32/win32u", "win32/gdi32", "win32/user32"]
+            .iter()
+            .map(|d| format!("personalities/nt/{d}"))
+            .collect();
     start.extend(SYSTEM_MODULES.iter().map(|m| format!("personalities/nt/win32/{}", m.trim_end_matches(".dll"))));
     let start: Vec<&str> = start.iter().map(String::as_str).collect();
     let files = crate::ntdll::inputs_from(
@@ -422,10 +434,8 @@ fn verify(dir: &Path) -> Result {
                 return Err(format!("the i686 {m} imports decorated names from {dll}: {bad:?}"));
             }
         }
-        if let Some(bad) = export_names(m, &pe)?.into_iter().find(|n| n.contains('@') || n.starts_with('_')) {
-            if bad.contains('@') {
-                return Err(format!("the i686 {m} exports the decorated name {bad}"));
-            }
+        if let Some(bad) = export_names(m, &pe)?.into_iter().find(|n| n.contains('@')) {
+            return Err(format!("the i686 {m} exports the decorated name {bad}"));
         }
     }
     for p in PROGRAMS {

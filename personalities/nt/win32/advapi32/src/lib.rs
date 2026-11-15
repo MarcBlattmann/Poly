@@ -587,7 +587,8 @@ fn user_name() -> Result<&'static str, u32> {
     }
     // `TOKEN_USER` is a `SID_AND_ATTRIBUTES` (a pointer and a DWORD, padded to two pointers: 16
     // bytes in 64 bits, 8 in 32), the SID right behind it.
-    let user = sid::Sid::from_bytes(&buf[2 * core::mem::size_of::<usize>()..]).ok_or(poly_security::error::ERROR_NONE_MAPPED)?;
+    let user = sid::Sid::from_bytes(&buf[2 * core::mem::size_of::<usize>()..])
+        .ok_or(poly_security::error::ERROR_NONE_MAPPED)?;
     if user == poly_security::poly_user_sid() {
         Ok(poly_security::POLY_USER_NAME)
     } else {
