@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSALookupServiceBeginW.yaml
+id: windows/api/ws2_32.dll/WSALookupServiceBeginW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSALookupServiceBeginW function", "WSALookupServiceNext", "WSALookupServiceEnd", "WSAQUERYSET structure", "LUP_* flags"; winsock2.h, ws2tcpip.h, ws2def.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Starts a name-space query. Chrome's browser and network service each call Begin(&querySet, 0xFF0 (every LUP_RETURN_* flag), &handle), Next(handle, 0x10, &length, &buffer) and End(handle) once; all three return 0. The query set Chrome passes was not captured; the tests found that NS_ALL (0) and NS_NLA (15) with flags 0xFF0 are accepted (and nothing else tried is): Begin returns 0 and writes a handle; the first Next returns a result (or WSA_E_NO_MORE on a machine without networks) whose first field (dwSize) is at least 80; a Next with no buffer fails (WSAEFAULT with the length asked for, or WSA_E_NO_MORE); End returns 0 and the handle is dead afterwards (End again, Next after End: error 6).
+interface:
+  signature: "INT WSALookupServiceBeginW(LPWSAQUERYSETW q, DWORD flags, LPHANDLE h); INT WSALookupServiceNextW(HANDLE h, DWORD flags, LPDWORD len, LPWSAQUERYSETW buf); INT WSALookupServiceEnd(HANDLE h)"
+  result: "0, or -1 with WSAGetLastError (some failures set Win32 codes such as 87 or 6)"
+chrome:
+  calls: "Begin (&qs, 4080, &h) -> 0, Next (h, 16, &len, buf) -> 0, End (h) -> 0: once each in the browser and once in the network service; the query set's contents were not captured"
+rules:
+  accepted: "dwNameSpace NS_ALL (0) and NS_NLA (15) with flags 0xFF0 (and with flags 0): 0 and a handle; the first Next on them succeeds or says WSA_E_NO_MORE (the number of results depends on the machine's networks and is not recorded); a returned query set has dwSize >= 80"
+  refused: "with flags 0xFF0: NS_DNS (12) and NS_NTDS (32): -1 with 87; NS_NETBT (13), NS_WINS (14) and an unknown namespace (99): 10108 (WSASERVICE_NOT_FOUND); with flags LUP_RETURN_NAME|LUP_CONTAINERS (0x12): NS_ALL gives 10108, NS_NLA gives 11004 (WSANO_DATA), NS_DNS and NS_NTDS 87, NS_NETBT, NS_WINS and 99 give 10108"
+  arguments: "a NULL query set: WSAEFAULT (10014); dwSize 8 or 0: WSAEINVAL (10022); a NULL handle pointer: 10014; on a refusal the handle is not written (stays NULL)"
+  handles: "End(NULL): -1 with 6 (ERROR_INVALID_HANDLE); Next(NULL): 6; End on an ended handle: 6; Next after End: 6"
+  next_without_buffer: "Next with length 0 and a NULL buffer: -1 with WSAEFAULT (10014) and a positive length asked for, or WSA_E_NO_MORE (10110) when there is no result left"
+errors:
+  service_not_found: "WSASERVICE_NOT_FOUND (10108)"
+  no_data: "WSANO_DATA (11004)"
+  invalid: "WSAEINVAL (10022) / ERROR_INVALID_PARAMETER (87)"
+  fault: "WSAEFAULT (10014)"
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "holds a lookup context until End"
+threading: "may be called from any thread; a handle belongs to the process"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). No test ends a handle it got with flags 0 (one handle of the flags-0 probe is left to the process's end).
+not_covered: >
+  The query set Chrome really passes (its fields were not captured), the content of the results (network names are the machine's), NS_DNS queries with a name (they need the network), LUP_FLUSHPREVIOUS and LUP_NEAREST, WSALookupServiceBeginA.

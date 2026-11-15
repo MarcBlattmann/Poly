@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dhcpcsvc.dll/DhcpRequestParams.yaml
+id: windows/api/dhcpcsvc.dll/DhcpRequestParams
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  The same observations as the DhcpCApiInitialize entry of this DLL.
+summary: >
+  Requests DHCP options for an adapter. Chrome calls it twice with flags 2. Offline only the refusals are known (87 for an unknown adapter name, 123 when option 252 is asked for an unknown adapter, 87 before DhcpCApiInitialize and after DhcpCApiCleanup). No tests of its own.
+same_as: "windows/api/dhcpcsvc.dll/DhcpCApiInitialize"
+interface:
+  signature: "DWORD DhcpRequestParams(DWORD flags, LPVOID reserved, LPWSTR adapter, LPDHCPCAPI_CLASSID class, DHCPCAPI_PARAMS_ARRAY send, DHCPCAPI_PARAMS_ARRAY recd, LPBYTE buffer, LPDWORD size, LPWSTR requestId)"
+rules:
+  values: "see the rules of DhcpCApiInitialize"
+errors:
+  see_sheet: "the errors of the DhcpCApiInitialize sheet"
+side_effects: "none for unknown adapters"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the DhcpCApiInitialize sheet lists as not covered.

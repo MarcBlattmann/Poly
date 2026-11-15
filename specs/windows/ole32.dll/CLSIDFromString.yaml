@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CLSIDFromString.yaml
+id: windows/api/ole32.dll/CLSIDFromString
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CoInitializeEx function (combaseapi.h)", "CoUninitialize", "CoGetApartmentType", "CoRegisterMessageFilter", "CoCreateInstance", "CoGetClassObject", "CLSIDFromString", "StringFromCLSID", "CoTaskMemAlloc", "CoTaskMemFree", "PropVariantClear", "COINIT enumeration"; objbase.h, combaseapi.h, wtypes.h, propidl.h, winerror.h (S_FALSE 1, RPC_E_CHANGED_MODE 0x80010106, CO_E_NOTINITIALIZED 0x800401F0, REGDB_E_CLASSNOTREG 0x80040154, CO_E_CLASSSTRING 0x800401F3, E_INVALIDARG 0x80070057) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Parses a class id from its braced text form; StringFromCLSID makes that text. Chrome's browser calls CLSIDFromString twice and StringFromCLSID in the window-creation path. Only the form {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX} is parsed (hexadecimal digits of either case, exactly 8-4-4-4-12): everything else (no braces, a missing brace, a digit short or too many, a non-hex digit, no dashes, an empty string, white space around, a text that is no registered ProgID) fails with CO_E_CLASSSTRING (0x800401F3) and leaves the output untouched, except that an empty string leaves it untouched too and some malformed texts have partly written it. A NULL text gives the all-zero id with S_OK; a NULL output E_INVALIDARG. StringFromCLSID writes 38 characters with upper-case hexadecimal in a buffer that is freed with CoTaskMemFree; NULL arguments give E_INVALIDARG.
+interface:
+  signature: "HRESULT CLSIDFromString(LPCOLESTR text, LPCLSID clsid); HRESULT StringFromCLSID(REFCLSID clsid, LPOLESTR* text)"
+chrome:
+  calls: "CLSIDFromString 2 calls (browser), StringFromCLSID 2 calls in the window-creating stages; results 0"
+rules:
+  accepted: "{00000000-0000-0000-C000-000000000046} gives bytes 00 00 00 00 00 00 00 00 c0 00 00 00 00 00 00 46 (the first three fields little-endian); lower case letters are accepted ({0000000a-bcde-f012-...} -> 0a 00 00 00 de bc 12 f0 ...); a mixed id {12345678-9ABC-DEF0-1122-334455667788} -> 78 56 34 12 bc 9a f0 de 11 22 33 44 55 66 77 88"
+  refused: "without braces, missing the closing brace, one digit short, one digit too many, a non-hexadecimal digit, no dashes, leading or trailing white space, a name that is no ProgID: 0x800401F3; the output is written partly or not at all (the tests print whether it stayed untouched: it did not for the malformed forms with the right length, it did for the empty string)"
+  null: "CLSIDFromString(NULL, out) = 0 with the all-zero id; CLSIDFromString(text, NULL) = 0x80070057"
+  string_from_clsid: "the text of IID_IUnknown is {00000000-0000-0000-C000-000000000046}; the mixed id gives {12345678-9ABC-DEF0-1122-334455667788} (upper case, 38 characters); the all-zero id {00000000-0000-0000-0000-000000000000}; all ones {FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}; NULL id or NULL output: 0x80070057; the round trip returns the same id"
+errors:
+  class_string: "CO_E_CLASSSTRING 0x800401F3"
+  bad_argument: "E_INVALIDARG 0x80070057"
+side_effects: "StringFromCLSID allocates the text with CoTaskMemAlloc"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  ProgID lookup of a registered name (the machine's registry), the form with a leading number sign, long inputs, which bytes of the output a failing parse writes (not asserted beyond 'untouched or not').

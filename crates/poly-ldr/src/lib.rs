@@ -113,6 +113,19 @@ pub trait Process {
     /// the search goes on to the next directory).
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus>;
 
+    /// The DLL at this NT path, for loading it: mapped as an image section
+    /// view by the kernel ([`ImageFile::Mapped`]: its clean pages are shared
+    /// with every other process that maps the file, ADR 0188), or the whole
+    /// file ([`ImageFile::Bytes`], which the loader lays out in memory of
+    /// its own). An error means the file is not there (the search goes on).
+    /// By default the file is read.
+    fn open_image(&mut self, nt_path: &[u16]) -> Result<ImageFile, NtStatus> {
+        self.read_file(nt_path).map(ImageFile::Bytes)
+    }
+
+    /// Unmap a view [`open_image`](Self::open_image) mapped.
+    fn unmap_image(&mut self, _base: u64) {}
+
     /// Reserve and commit `size` bytes of zeroed read/write memory at
     /// exactly `base` (failing with `STATUS_CONFLICTING_ADDRESSES` if any
     /// of it is in use), or anywhere (64 KiB aligned) when `base` is `None`.
@@ -138,6 +151,18 @@ pub trait Process {
 
     /// Free what [`alloc`](Self::alloc) returned.
     fn free_alloc(&mut self, addr: u64);
+}
+
+/// A DLL file as [`Process::open_image`] hands it over.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImageFile {
+    /// Mapped by the kernel (`NtMapViewOfSection` of a `SEC_IMAGE`
+    /// section): laid out at `base`, `size` bytes, with each section's
+    /// protection. `relocate`: the view is not where the image's bytes say
+    /// (`STATUS_IMAGE_NOT_AT_BASE`), the loader applies the relocations.
+    Mapped { base: u64, size: u64, relocate: bool },
+    /// The file's bytes.
+    Bytes(Vec<u8>),
 }
 
 /// Little-endian reads and writes through a [`Process`].

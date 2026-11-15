@@ -372,7 +372,7 @@ an outline font of the height asked, as on any Windows.
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
 (`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
-`kernelbase`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
+`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
@@ -627,6 +627,24 @@ cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write 
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
+
+## On a Windows host
+
+The pipeline tool builds and its tests pass on a Windows host with the same
+`cargo xtask pipeline ...` commands (ADR 0124); `ci lint` checks it with
+`clippy --target x86_64-pc-windows-msvc` next to xtask. What is Linux by
+nature is behind `cfg(unix)` and says so at run time instead of failing to
+build:
+
+| Command | On a Windows host |
+|---|---|
+| `spec`, `tests`, `handoff`, `initramfs`, `win ...` | work (`win build` cross-builds the Windows test programs; `win remote` needs ssh) |
+| `build`, `trace`, `diff`, `polyrun` | exit 1: `` `pipeline <cmd>` needs a Linux host (ADR 0124); run it through polyd `` |
+| `selfcheck`, `polycheck` | skip themselves with the same reason (exit 0), like without a C compiler |
+| `mac ...` | need a Mac, as before |
+
+Repository paths the tool records (spec sheets, visible tests, hand-off
+log, manifests) always use `/`, whatever the host.
 
 ## Safety rules
 

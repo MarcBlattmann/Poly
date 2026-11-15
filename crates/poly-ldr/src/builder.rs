@@ -559,3 +559,119 @@ fn reloc_table(rvas: &[u32]) -> Vec<u8> {
     }
     data
 }
+
+/// Where [`append_section`] put a section, and how long the file must be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Appended {
+    /// The section's RVA (and its file offset: file and image are laid out alike).
+    pub rva: u32,
+    /// The file's length once the section's whole raw size is in it.
+    pub file_len: u64,
+}
+
+/// Add a section to an image file made by [`PeBuilder::write`], for a test
+/// that needs a big executable without holding it in memory. `size` (a
+/// multiple of 4 KiB, at least `data.len()`) is the section's raw and
+/// virtual size; only `data` is appended to `file`, and the rest of the
+/// section is zeros the caller makes by growing the file to
+/// [`Appended::file_len`] (a sparse file, a counting reader, `resize`).
+/// `None` when the headers have no room for another section header.
+pub fn append_section(
+    file: &mut Vec<u8>,
+    name: &str,
+    data: &[u8],
+    size: u32,
+    characteristics: u32,
+) -> Option<Appended> {
+    let u16_at = |f: &[u8], at: usize| u16::from_le_bytes([f[at], f[at + 1]]);
+    let u32_at = |f: &[u8], at: usize| u32::from_le_bytes([f[at], f[at + 1], f[at + 2], f[at + 3]]);
+    if !size.is_multiple_of(ALIGN) || (size as usize) < data.len() {
+        return None;
+    }
+    let coff = PE_OFFSET + 4;
+    let opt = coff + 20;
+    let count = usize::from(u16_at(file, coff + 2));
+    let size_of_image = u32_at(file, opt + 56);
+    let header = opt + OPTIONAL_HEADER_SIZE + count * 40;
+    // The file is the image (4 KiB alignment), and the headers fit in a page.
+    if file.len() != size_of_image as usize || header + 40 > ALIGN as usize {
+        return None;
+    }
+    let rva = size_of_image;
+    let mut n = [0u8; 8];
+    n[..name.len().min(8)].copy_from_slice(&name.as_bytes()[..name.len().min(8)]);
+    file[header..header + 8].copy_from_slice(&n);
+    file[header + 8..header + 12].copy_from_slice(&size.to_le_bytes());
+    file[header + 12..header + 16].copy_from_slice(&rva.to_le_bytes());
+    file[header + 16..header + 20].copy_from_slice(&size.to_le_bytes());
+    file[header + 20..header + 24].copy_from_slice(&rva.to_le_bytes());
+    file[header + 36..header + 40].copy_from_slice(&characteristics.to_le_bytes());
+    file[coff + 2..coff + 4].copy_from_slice(&(count as u16 + 1).to_le_bytes());
+    file[opt + 56..opt + 60].copy_from_slice(&(rva + size).to_le_bytes());
+    file.extend_from_slice(data);
+    Some(Appended { rva, file_len: u64::from(rva) + u64::from(size) })
+}
+
+/// Point data directory `index` (`IMAGE_DIRECTORY_ENTRY_*`) of an image file
+/// at `rva` and `size`.
+pub fn set_directory(file: &mut [u8], index: usize, rva: u32, size: u32) {
+    let at = PE_OFFSET + 4 + 20 + 112 + index * 8;
+    file[at..at + 4].copy_from_slice(&rva.to_le_bytes());
+    file[at + 4..at + 8].copy_from_slice(&size.to_le_bytes());
+}
+
+#[cfg(test)]
+mod append_tests {
+    use super::*;
+
+    fn exe() -> Vec<u8> {
+        PeBuilder {
+            image_base: 0x1_4000_0000,
+            entry: 0x1000,
+            sections: vec![Section::new(".text", vec![0xC3], TEXT)],
+            stack_reserve: 0x1_0000,
+            stack_commit: 0x1000,
+            ..PeBuilder::default()
+        }
+        .write()
+    }
+
+    #[test]
+    fn a_big_section_is_described_not_held() {
+        let mut file = exe();
+        let before = file.len() as u64;
+        let pad = 64u32 << 20;
+        let at = append_section(&mut file, ".pad", &[7; 100], pad, DATA).unwrap();
+        assert_eq!(at.rva as u64, before);
+        assert_eq!(at.file_len, before + u64::from(pad));
+        assert_eq!(file.len() as u64, before + 100, "only the data is in the vector");
+        let pe = poly_pe::Pe::parse(&file).unwrap();
+        assert_eq!(u64::from(pe.info().optional.size_of_image), before + u64::from(pad));
+        // The plan accepts the file once it has its full length.
+        let plan = pe.load_plan_in(at.file_len).unwrap();
+        let pad_region = plan.regions().find(|r| r.rva == at.rva).expect("the padded section is planned");
+        assert_eq!(pad_region.size, pad);
+        assert_eq!(pad_region.data_size, pad);
+        assert_eq!(pad_region.data_offset as u64, before);
+    }
+
+    #[test]
+    fn append_refuses_what_does_not_fit() {
+        let mut file = exe();
+        assert!(append_section(&mut file, ".x", &[0; 10], 0x800, DATA).is_none(), "not a page multiple");
+        assert!(append_section(&mut file, ".x", &[0; 0x2000], 0x1000, DATA).is_none(), "data over the size");
+        // A header made for 100 sections has no room for one more.
+        let mut full = exe();
+        full[PE_OFFSET + 4 + 2] = 100;
+        assert!(append_section(&mut full, ".x", &[], 0x1000, DATA).is_none());
+    }
+
+    #[test]
+    fn set_directory_writes_the_entry() {
+        let mut file = exe();
+        set_directory(&mut file, 5, 0x1234, 0x56);
+        let pe = poly_pe::Pe::parse(&file).unwrap();
+        let d = pe.info().directory(poly_pe::dir::BASERELOC).unwrap();
+        assert_eq!((d.virtual_address, d.size), (0x1234, 0x56));
+    }
+}

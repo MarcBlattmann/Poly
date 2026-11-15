@@ -2,10 +2,10 @@
 # Path: specs/<os>/<component>/<symbol>.yaml
 id: windows/api/user32.dll/BeginPaint
 oracle:
-  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the tests added by spec-chrome-win-s3 were run on build 26200.9974 (the same machine after a Windows update; its taskbar is then 48 pixels high at the bottom)"
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
-  observed_by: spec-win-gui-b, spec-win-gui-b2, spec-win-gui-b3
-  date: 2026-11-02, 2026-11-09, 2026-11-10
+  observed_by: spec-win-gui-b, spec-win-gui-b2, spec-win-gui-b3, spec-chrome-win-s3
+  date: 2026-11-02, 2026-11-09, 2026-11-10, 2026-11-14
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -47,6 +47,7 @@ rules:
   paintstruct_fields: "BeginPaint writes every field of the PAINTSTRUCT: a block pre-filled with 0x55 comes back with hdc, fErase and rcPaint set, fRestore 0, fIncUpdate 0 and the 32 reserved bytes all zero"
   dc_value: "the value is not a fresh handle per paint: consecutive paints of one window (no paint of another window in between) see the same HDC value, and the WM_ERASEBKGND wParam of a paint is the value that window's previous paint got (the cache hands the window its entry again). A CS_OWNDC window's own DC is returned every time (the same value as GetDC, also twice in a row), and a CS_CLASSDC class shares one DC among its windows (same value for all, also for a nested BeginPaint of a second window of the class). What several windows of the plain class get when they paint in turn is not specified: two such windows did not share a value, a later paint of the first could get the value of the other again, a window created while another is alive (its creation paint counts as a paint) changed the first window's value, and a window created after another was destroyed did not always get the destroyed window's value; do not depend on more than the rule above"
   dc_state: "a plain window's DC state is the default one at every paint (what the previous paint set is gone); a CS_OWNDC window keeps what was set (a text colour set in one paint is seen at the next paint and through GetDC; each window has its own); a CS_CLASSDC class keeps it across paints and across the windows of the class"
+  chrome_first_paint: "The first paint of Chrome's top-level window (test bp_chrome_first_paint, window with a white class background brush and a procedure that answers WM_ERASEBKGND with 1 and paints with BeginPaint/EndPaint): right after ShowWindow(SW_SHOWNORMAL) GetUpdateRect says the whole client area (0,0,624,392 for main, 0,0,624,292 for the child) and GetQueueStatus has QS_PAINT; the sent messages are WM_NCPAINT(1) then WM_ERASEBKGND for main and for its child (the erase is sent from inside ShowWindow), then WM_WINDOWPOSCHANGED, WM_SIZE; WM_PAINT comes from the queue first for main then for the child; the window handles it once (BeginPaint/EndPaint), afterwards GetUpdateRect is 0 for both; InvalidateRect(main, 10,10,60,40, no erase) gives the update rectangle 10,10,60,40 and one WM_PAINT; InvalidateRect with erase gives one WM_PAINT (the erase happens inside BeginPaint); RedrawWindow(RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN) sends WM_PAINT to main (before the call returns) and to the child, then WM_NCPAINT(1) to the child; UpdateWindow with nothing pending returns 1 and sends nothing"
 errors:
   bad_window: "a made-up handle: NULL, ERROR_INVALID_WINDOW_HANDLE (1400); the PAINTSTRUCT is zeroed"
 side_effects: "none beyond the rules above"
@@ -56,7 +57,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 9  # count in <symbol>.tests/
+  visible: 10  # count in <symbol>.tests/
   held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each

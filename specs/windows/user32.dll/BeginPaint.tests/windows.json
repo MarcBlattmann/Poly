@@ -12,6 +12,19 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
+      "name": "bp_chrome_first_paint",
+      "exe_sha256": "470da7b81e99373cc7c46ff667d760a6e0eefe1ac687f8d1597656d230b24a1c",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "PT0gU2hvd1dpbmRvdyhtYWluLCBTV19TSE9XTk9STUFMKSwgdGhlbiB3aGF0IGlzIHBlbmRpbmcgYmVmb3JlIGFueXRoaW5nIGlzIGRpc3BhdGNoZWQKICBHZXRVcGRhdGVSZWN0KG1haW4pID0gMSByZWN0PTAsMCw2MjQsMzkyCiAgR2V0VXBkYXRlUmVjdChyd2gpID0gMSByZWN0PTAsMCw2MjQsMjkyCiAgUVNfUEFJTlQgaW4gdGhlIHF1ZXVlIHN0YXR1czogMzIKICBTIG1haW4gV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICBTIGN0ZiBXTV9TSVpFIHR5cGU9MCBjbGllbnQ9MHgwCiAgUyBtYWluIFdNX05DUEFJTlQgcmduPTEKICBTIG1haW4gV01fRVJBU0VCS0dORAogIFMgcndoIFdNX05DUEFJTlQgcmduPTEKICBTIHJ3aCBXTV9FUkFTRUJLR05ECiAgUyBtYWluIFdNX1dJTkRPV1BPU0NIQU5HRUQgcG9zPTQwLDQwIHNpemU9NjQwLDQwMCBmbGFncz0weDEwMDAxODQ3IGFmdGVyPXdpbmRvdwogIFMgbWFpbiBXTV9TSVpFIHR5cGU9MCBjbGllbnQ9NjI0eDM5Mgo9PSB0aGUgbWVzc2FnZXMgdGhhdCB3YWl0CiAgUCBtYWluIFdNX1BBSU5UCiAgUCByd2ggV01fUEFJTlQKICBXTV9QQUlOVCBoYW5kbGVkIGJ5IG1haW46IDEKICBHZXRVcGRhdGVSZWN0KG1haW4pIGFmdGVyd2FyZHMgPSAwCiAgR2V0VXBkYXRlUmVjdChyd2gpIGFmdGVyd2FyZHMgPSAwCj09IEludmFsaWRhdGVSZWN0KG1haW4sIDEwLDEwLDYwLDQwLCBlcmFzZT1GQUxTRSksIHRoZW4gZGlzcGF0Y2gKICBHZXRVcGRhdGVSZWN0ID0gMSByZWN0PTEwLDEwLDYwLDQwCiAgUCBtYWluIFdNX1BBSU5UCiAgV01fUEFJTlQgaGFuZGxlZCBieSBtYWluOiAxCj09IEludmFsaWRhdGVSZWN0KG1haW4sIC4uLiwgZXJhc2U9VFJVRSkgd2l0aCB0aGUgd2luZG93IGFuc3dlcmluZyBXTV9FUkFTRUJLR05EIDAgKHRoZSBkZWZhdWx0IGVyYXNlIGhhcHBlbnMpLCB0aGVuIGRpc3BhdGNoCiAgUCBtYWluIFdNX1BBSU5UCj09IFJlZHJhd1dpbmRvdyhtYWluLCBOVUxMLCBOVUxMLCBSRFdfSU5WQUxJREFURSB8IFJEV19VUERBVEVOT1cgfCBSRFdfQUxMQ0hJTERSRU4pCiAgcmV0dXJuZWQgMTsgV01fUEFJTlQgaGFuZGxlZCBieSBtYWluIGR1cmluZyB0aGUgY2FsbDogMQogIFMgbWFpbiBXTV9QQUlOVAogIFMgcndoIFdNX1BBSU5UCiAgUyByd2ggV01fTkNQQUlOVCByZ249MQo9PSBVcGRhdGVXaW5kb3cobWFpbikgd2l0aCBub3RoaW5nIHBlbmRpbmcKICByZXR1cm5lZCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== ShowWindow(main, SW_SHOWNORMAL), then what is pending before anything is dispatched\n  GetUpdateRect(main) = 1 rect=0,0,624,392\n  GetUpdateRect(rwh) = 1 rect=0,0,624,292\n  QS_PAINT in the queue status: 32\n  S main WM_SHOWWINDOW show=1 status=0\n  S ctf WM_SIZE type=0 client=0x0\n  S main WM_NCPAINT rgn=1\n  S main WM_ERASEBKGND\n  S rwh WM_NCPAINT rgn=1\n  S rwh WM_ERASEBKGND\n  S main WM_WINDOWPOSCHANGED pos=40,40 size=640,400 flags=0x10001847 after=window\n  S main WM_SIZE type=0 client=624x392\n== the messages that wait\n  P main WM_PAINT\n  P rwh WM_PAINT\n  WM_PAINT handled by main: 1\n  GetUpdateRect(main) afterwards = 0\n  GetUpdateRect(rwh) afterwards = 0\n== InvalidateRect(main, 10,10,60,40, erase=FALSE), then dispatch\n  GetUpdateRect = 1 rect=10,10,60,40\n  P main WM_PAINT\n  WM_PAINT handled by main: 1\n== InvalidateRect(main, ..., erase=TRUE) with the window answering WM_ERASEBKGND 0 (the default erase happens), then dispatch\n  P main WM_PAINT\n== RedrawWindow(main, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN)\n  returned 1; WM_PAINT handled by main during the call: 1\n  S main WM_PAINT\n  S rwh WM_PAINT\n  S rwh WM_NCPAINT rgn=1\n== UpdateWindow(main) with nothing pending\n  returned 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1217
+    },
+    {
       "name": "bp_class_brush",
       "exe_sha256": "334ff21ba6dee5a09f4e45900b8005443dabd1ac135c3ba8e33fd282f9ba3f33",
       "status": "ran",

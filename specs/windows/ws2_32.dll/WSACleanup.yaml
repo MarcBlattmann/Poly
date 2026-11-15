@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSACleanup.yaml
+id: windows/api/ws2_32.dll/WSACleanup
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Decrements the start-up count; see the WSAStartup sheet (0 while the count stays above zero, 0 at zero, then -1/WSANOTINITIALISED).
+interface:
+  signature: "see the Learn page"
+chrome:
+  calls: "not called in S4 (WSACleanup, WSASetLastError) or not called by Chrome's network service (socket; it uses WSASocketW)"
+rules:
+  pointer: "Decrements the start-up count; see the WSAStartup sheet (0 while the count stays above zero, 0 at zero, then -1/WSANOTINITIALISED)."
+errors:
+  see: "the sheet named in the summary"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  No tests of its own: Decrements the start-up count; see the WSAStartup sheet (0 while the count stays above zero, 0 at zero, then -1/WSANOTINITIALISED).
+not_covered: >
+  everything not in the sheet it points to.

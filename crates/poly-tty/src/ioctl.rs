@@ -23,6 +23,9 @@ pub const TIOCGPGRP: u32 = 0x540F;
 pub const TIOCSPGRP: u32 = 0x5410;
 pub const TIOCOUTQ: u32 = 0x5411;
 pub const TIOCSTI: u32 = 0x5412;
+/// `TIOCPKT` (ioctl_tty(2)): switch a pty master's packet mode on (the
+/// `int` argument points to is nonzero) or off.
+pub const TIOCPKT: u32 = 0x5420;
 pub const TIOCGWINSZ: u32 = 0x5413;
 pub const TIOCSWINSZ: u32 = 0x5414;
 pub const FIONREAD: u32 = 0x541B;
@@ -48,6 +51,8 @@ pub const TIOCGPTPEER: u32 = 0x5441;
 pub const TIOCSPTLCK: u32 = 0x4004_5431;
 /// `_IOW('T', 0x36, int)`: send a signal to the slave's foreground group.
 pub const TIOCSIG: u32 = 0x4004_5436;
+/// `_IOR('T', 0x38, int)`: whether a pty master is in packet mode.
+pub const TIOCGPKT: u32 = 0x8004_5438;
 /// `_IOR('T', 0x39, int)`: whether the slave is locked.
 pub const TIOCGPTLCK: u32 = 0x8004_5439;
 /// `_IOR('T', 0x40, int)`: whether the terminal is in exclusive mode.
@@ -64,3 +69,22 @@ pub const VT_OPENQRY: u32 = 0x5600;
 pub const VT_GETSTATE: u32 = 0x5603;
 /// `KDGKBTYPE` (`linux/kd.h`, ioctl_console(2)): the keyboard type, one byte.
 pub const KDGKBTYPE: u32 = 0x4B33;
+
+/// The status byte that starts every read of a pty master in packet mode
+/// (ioctl_tty(2), `TIOCPKT`): `TIOCPKT_DATA` (0) means data follows, the
+/// other values are bits set by what happened on the slave side.
+pub const TIOCPKT_DATA: u8 = 0;
+/// The slave's read (input) queue was flushed.
+pub const TIOCPKT_FLUSHREAD: u8 = 1;
+/// The slave's write (output) queue was flushed.
+pub const TIOCPKT_FLUSHWRITE: u8 = 2;
+/// Output was stopped (`^S`, `TCOOFF`).
+pub const TIOCPKT_STOP: u8 = 4;
+/// Output was started again.
+pub const TIOCPKT_START: u8 = 8;
+/// `^S` / `^Q` flow control was switched off.
+pub const TIOCPKT_NOSTOP: u8 = 16;
+/// `^S` / `^Q` flow control was switched on.
+pub const TIOCPKT_DOSTOP: u8 = 32;
+/// The slave's termios state changed.
+pub const TIOCPKT_IOCTL: u8 = 64;

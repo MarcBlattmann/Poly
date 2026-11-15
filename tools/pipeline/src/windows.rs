@@ -46,7 +46,10 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`,
 /// `iphlpapi`, `oleacc`, `uiautomationcore`, with `ole32` and `oleaut32`
 /// for the COM objects they hand out, and `kernelbase` for the functions
-/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`).
+/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
+/// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
+/// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -72,6 +75,12 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "ole32.dll",
     "oleaut32.dll",
     "kernelbase.dll",
+    "ws2_32.dll",
+    "mswsock.dll",
+    "winhttp.dll",
+    "crypt32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -738,16 +747,25 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 // ---------------------------------------------------------------------------
 // Poly: boot the test and read what the kernel reports.
 
+/// Where a Windows test runs on Poly: `C:\PolyTests`, the VFS directory
+/// `/nt/c/PolyTests`. The system DLLs are on `C:` too, so a test and
+/// `ntdll.dll` share a volume device as on Windows, where a program and the
+/// system directory are usually on the same volume (ADR 0185).
+pub const TEST_DIR: &str = "/nt/c/PolyTests";
+/// The test executable on Poly (`C:\PolyTests\test-binary`).
+pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary";
+
 /// Kernel arguments: the test-run protocol (ADR 0027) plus the
 /// observation file, which the kernel reports as standard output
 /// (`POLY-OUT: fd=1`) when the program has ended.
 pub fn poly_kernel_args() -> String {
-    format!("{} poly.test.stdout=/{OUTPUT_FILE}", poly::KERNEL_ARGS)
+    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(TEST_EXE))
 }
 
-/// A test's run from Poly's serial log. The executable is `/test-binary`
-/// in the initramfs root, which Poly's NT personality names
-/// `Z:\test-binary`, so the observation file is `/poly-test.out`.
+/// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
+/// (`/nt/c/PolyTests/test-binary` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\test-binary`, so the observation file is
+/// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
         name: name.into(),
@@ -898,7 +916,7 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
-        let image = poly::initramfs_with(&bytes, &fonts)?;
+        let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
         let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
@@ -1350,8 +1368,11 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
-        let other = image(&[("winhttp.dll", &["WinHttpOpen"])], 3);
-        assert!(check_image(&other).unwrap_err().contains("winhttp.dll"));
+        // Chrome's network stage (spec-chrome-win-s4).
+        let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
+        assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
+        assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());
@@ -1501,7 +1522,8 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/poly-test.out"));
+        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary "));
+        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 
     #[test]

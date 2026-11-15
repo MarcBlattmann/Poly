@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getpeername.yaml
+id: windows/api/ws2_32.dll/getpeername
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Not called by Chrome in S4 (the traced network service uses getsockname only); specified for the connection state tests. Observed: unconnected sockets (fresh TCP and UDP, listener, after a refused connect) are -1/WSAENOTCONN (10057) with the buffer untouched; a connected client returns 0, family 2, the listener's port and 127.0.0.1; a length of 64 becomes 16; 8, 0 and a NULL length pointer are WSAEFAULT (length unchanged); the accepted socket's peer port is the client's local port; the answer is unchanged after the peer shut down sending, after the peer closed and after our own SD_BOTH; after closesocket WSAENOTSOCK; a non-blocking connect that reached FD_CONNECT answers 0; a connected UDP socket answers 0 with the address it was connected to, and connecting a UDP socket to 0.0.0.0:0 disconnects it (connect returns 0 and getpeername is WSAENOTCONN again).
+interface:
+  signature: "int getpeername(SOCKET s, struct sockaddr *name, int *namelen)"
+  result: "0 or SOCKET_ERROR"
+chrome:
+  calls: "not in the S4 trace"
+rules:
+  unconnected: "fresh TCP, fresh UDP and a listener: -1/WSAENOTCONN, length unchanged, nothing written; not a socket: WSAENOTSOCK; after a refused connect: WSAENOTCONN"
+  connected: "length 16 and 64: 0 and the length becomes 16; length 8, 0 and NULL length pointer: -1/WSAEFAULT with nothing written"
+  ports: "client's peer port is the listener's; the accepted socket's peer port is the client's local port; address 127.0.0.1, family 2"
+  after_events: "after the peer's SD_SEND, after the peer closed, after our own SD_BOTH: still 0 with the same answer"
+  udp: "connected UDP socket: 0, the connected port and 127.0.0.1; connect to 0.0.0.0:0 returns 0 and the socket is then unconnected (WSAENOTCONN)"
+  nonblocking: "after the event of a non-blocking connect: events CONNECT and getpeername 0"
+errors:
+  not_connected: "WSAENOTCONN 10057"
+  buffer: "WSAEFAULT 10014"
+  socket: "WSAENOTSOCK 10038"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  IPv6 peers (see the getsockname sheet), the state during a pending non-blocking connect.

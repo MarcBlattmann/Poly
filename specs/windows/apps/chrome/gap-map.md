@@ -1219,6 +1219,29 @@ ACE order and merge rules of `SetEntriesInAclW`, the inheritance propagation rul
 cannot be set (DEP 50, CFG and shadow stack 5, strict handle checks need both flags), and the hash-based, case-insensitive,
 64-character-limited AppContainer SID.
 
+## 10b. Specs for stage 2 added by `spec-chrome-win-s2` (2026-11-14)
+
+The sandbox-side calls that stage 2 makes and no sheet covered (sheets `specs/windows/<dll>/<Symbol>.yaml`, tests `<Symbol>.tests/`,
+oracle build 26200.9974, SSH session 0 only): **alternate window station and desktop** (user32 `CreateWindowStationW`,
+`SetProcessWindowStation`, `CreateDesktopW`, `GetThreadDesktop`, `GetUserObjectInformationW`; `CloseWindowStation`, `CloseDesktop`,
+`GetProcessWindowStation` as pointer sheets); **what a locked-down target does and is refused** (`RegOpenKeyExW`, `LoadLibraryExW`,
+`SetHandleInformation`, `RegDisablePredefinedCache`, `SetDefaultDllDirectories`, `GetCurrentProcessorNumber`), built from a restricted
+Untrusted primary token plus the impersonation token the broker sets on the suspended main thread and the target's `RevertToSelf`;
+**process and thread information** (`SetProcessInformation`, `SetThreadInformation`, `SetErrorMode`); **Chrome's creation attributes**
+(rules added to `UpdateProcThreadAttribute`: the 16-byte mitigation words of the GPU, storage and renderer children as the child sees
+them, child process policy 367, `0x2001A`, win32k lockdown refusing user32); **time zones** (`SystemTimeToTzSpecificLocalTime`,
+`TzSpecificLocalTimeToSystemTime`, `GetTimeZoneInformation`, `GetDynamicTimeZoneInformation`); **COM basics** (`CoInitializeEx` with
+`CoUninitialize`, `CoGetApartmentType`, `CoRegisterMessageFilter`; `CoCreateInstance`/`CoGetClassObject`; `CLSIDFromString`/`StringFromCLSID`;
+`CoTaskMemAlloc`/`CoTaskMemFree`/`PropVariantClear`). Findings an implementer needs: a Low or Untrusted child on an alternate
+desktop only starts if both the station and the desktop carry a DACL for it and a mandatory label at its level (`D:(A;;GA;;;WD)S:(ML;;;;;LW)`
+works; the creator's default security ends the child with 0xC0000142); a restricted Untrusted process with no impersonation token on its
+main thread cannot initialise (0xC0000022) and an impersonation token of a higher integrity level than the process token ends it with
+0xC00000A5. Arguments of the window-station and desktop calls are not in the committed traces (the sync tracer reached the first
+`DuplicateTokenEx(.., 136, NULL, 1, 2)` and `SetTokenInformation(TokenIntegrityLevel)` of the executable-access check, then the unsigned proxy kit's
+children died, so the broker never reached its own calls). Not specified: `CreateAppContainerToken`, `AppContainerRegisterSid`
+(undocumented), `NtCreateKey`/`NtOpenKeyEx`, the Microsoft-signed-only effect on an unsigned DLL, `GetLogicalProcessorInformation(Ex)`,
+`GetComputerName*`, `GetProductInfo`, `VerifyVersionInfoW`, the locale and geo functions, and the remaining COM calls.
+
 ## 11. Cross-references and open problems
 
 * spec-win-sec: tokens, ACLs, SDs, jobs. spec-win-ipc: pipes, IOCP, attribute lists, `DuplicateHandle`, sections.
@@ -1268,3 +1291,52 @@ cannot be set (DEP 50, CFG and shadow stack 5, strict handle checks need both fl
   `advapi32.dll` and `userenv.dll` imports (the line also changes in `spec-win-sec`: merge by taking the union).
 * Machine: homeserver2 for everything (Windows 11 Home 25H2, 26200.9711, elevated administrator over SSH); the owner's PC only to build the kits.
   The homeserver2 sshd reset connections for about an hour while the 220-run fault batch was running (it is the batch's load).
+
+## 13. S3 on the spec side (`spec-chrome-win-s3`, 2026-11-14)
+
+The window stage S3 (a visible `Chrome_WidgetWin_1` you can click and type into) was specified while S1 was still being fixed, on the
+oracle (homeserver2, interactive session, build 26200.9974). What was added:
+
+* **What Chrome's windows are, in order** (`s3-windows.md`, `traces/s3-windows.recording.txt`, driver `drivers/s3_windows.ps1`): classes,
+  styles, extended styles, class styles, owners and parents of every window of the browser process, the order they appear and change
+  while the page loads, is clicked, typed into, resized, minimized, restored and closed. An out-of-context WinEvent hook crashes Chrome
+  (breakpoint in `chrome.dll` before its first window), so the observer polls.
+* **Eight scenario tests** that reproduce Chrome's calls with our own code and record the sent (`WH_CALLWNDPROC`) and posted
+  (`WH_GETMESSAGE`) messages in order, with parameters reduced to machine-independent classes (`chrome_build`: the holder
+  `Chrome_WidgetWin_0`, the top-level window and its `Chrome_RenderWidgetHostHWND` child): creating the window with Chrome's styles and
+  `WS_EX_NOREDIRECTIONBITMAP` (`CreateWindowExW`), showing and activating it with the IME window around (`ShowWindow`), the first paint
+  (`BeginPaint`), a click (`SendInput`), typed keys as Unicode packets and as virtual keys (`SendInput`), move, resize, minimize and restore
+  with the child moved under the holder (`SetWindowPos`), and `WM_CLOSE` (`DestroyWindow`). Each is a rule in the existing sheet.
+* **43 new sheets** for the calls of section 8 that had no sheet (below); 42 + 6 = 48 entries are claimed as `spec-chrome-win-s3`
+  (`CharUpperW` stays claimed by `7zip`), hand-offs to `impl-chrome-s3`.
+
+| Group | Entry (visible / held-out tests) |
+|---|---|
+| window queries | `IsWindowVisible` (2/1), `IsIconic` (1/1), `IsZoomed` (1/1), `GetWindow` (1/1), `GetAncestor` (1/1), `GetWindowThreadProcessId` (1/1), `GetClassNameW` (1/1), `IsChild` (1/1), `GetWindowTextLengthW` (1/1), `GetDesktopWindow` (1/1), `EnumThreadWindows` (1/1), `EnumWindows` (1/1) |
+| properties, long values, messages, placement, rectangles | `SetPropW` (1/1), `GetPropW` (1/1), `RemovePropW` (1/1), `GetWindowLongW` (1/1), `SetWindowLongW` (1/1), `SetParent` (1/1), `RegisterWindowMessageW` (1/1), `GetWindowPlacement` (1/1), `IsRectEmpty` (1/1), `OffsetRect` (1/1) |
+| WinEvents | `SetWinEventHook` (3/1), `UnhookWinEvent` (2/1), `NotifyWinEvent` (2/1) |
+| time, input, keyboard | `GetMessageTime` (1/1), `GetMessageExtraInfo` (1/1), `GetDoubleClickTime` (1/1), `GetCaretBlinkTime` (1/1), `GetKeyboardLayout` (1/1), `GetKeyboardLayoutList` (2/1), `GetKeyboardLayoutNameW` (2/1), `ToUnicodeEx` (2/1), `SetKeyboardState` (2/1), `GetLastInputInfo` (1/1), `CharUpperW` (1/1) |
+| gdi32 DCs and objects | `GetStockObject` (3/1), `GetDeviceCaps` (2/1), `CreateBitmap` (2/1), `DeleteDC` (1/1), `CreateDCW` (1/1), `CreateRectRgnIndirect` (2/1), `GetICMProfileW` (2/1) |
+
+Tests of the six sharpened entries: `CreateWindowExW` 7/3 (+1/+1), `ShowWindow` 9/4 (+1/0), `BeginPaint` 10/3 (+1/0), `SendInput` 5/3 (+1/+1),
+`SetWindowPos` 3/1 (+1/0), `DestroyWindow` 4/1 (+1/0).
+
+**Findings a window manager must meet** (all in the sheets): `IsWindowVisible` is 1 for a minimized window and 0 for a child of a hidden
+parent; a minimized Chrome window has the rectangle -32000,-32000,-31840,-31972 and its child is moved under the hidden holder with
+`SetParent` (hidden, client coordinates kept); `SetWindowLongPtrW` refuses to add `WS_EX_NOREDIRECTIONBITMAP` (error 87, only
+`WM_STYLECHANGING`); a `WS_EX_TRANSPARENT` child gets `WM_NCHITTEST` after its parent and the posted mouse messages go to it;
+`GetWindowLongW` has no 32-bit form of `GWL_WNDPROC`, `GWL_HINSTANCE`, `GWL_HWNDPARENT`; window properties compare names without case
+and atoms and strings are one name; `GetKeyboardLayoutNameW` is the KLID, not the language of the HKL; `NotifyWinEvent` with no hook is
+free and out-of-context hooks call back only when the thread looks into its queue; `ShowWindow(SW_MINIMIZE)` returns 24 on the
+oracle (not normalised); `CreateBitmap` rounds rows to 16 bits and treats 0 sizes as 1x1 monochrome.
+
+**Still without a sheet after this round** (in the S3 delta of section 8): `DisplayConfigGetDeviceInfo`, `GetDisplayConfigBufferSizes`,
+`QueryDisplayConfig` (they return 0 = ERROR_SUCCESS in all their calls in the trace: they need the monitor topology of the oracle, one path and one target),
+`FindWindowExW` (only used as in the scenario above), `GetSystemMenu`, `GetWindowDC`, `GetWindowDisplayAffinity`, `IsWindowArranged`,
+`RegisterDeviceNotificationW` / `UnregisterDeviceNotification`, `RegisterPowerSettingNotification` / `UnregisterPowerSettingNotification`,
+`RegisterSuspendResumeNotification`, `RegisterPointerDeviceNotifications`, `GetPointerDevices`, `RegisterClassW` (crashpad), the
+`MsgWaitForMultipleObjectsEx` ones that return anything but a plain wait, and the COM / OLE entry points of the window code
+(`ole32`: `OleInitialize`, `RegisterDragDrop`, `CoCreateFreeThreadedMarshaler`, `CoRegisterMessageFilter`, ... never succeed on the oracle
+in the browser). Claimed without a sheet of this round: `CreateFontIndirectW`, `GetObjectW` (spec-chrome-win-6), `DwmGetWindowAttribute`
+and `SystemParametersInfoW` (spec-win-gui-c), `GetActiveWindow` and `GetWindowRgnBox` (earlier GUI rounds). Not done: the paint of a page
+(DirectWrite and Skia, section 8's `dwrite`), the title bar's non-client painting that Chrome does itself, and a real IME composition.

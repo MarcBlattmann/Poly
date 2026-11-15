@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/crypt32.dll/CertFindCertificateInStore.yaml
+id: windows/api/crypt32.dll/CertFindCertificateInStore
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "CertOpenStore function (wincrypt.h)", "Certificate Store Provider Types", "CertAddStoreToCollection", "CertCloseStore", "CertControlStore", "CertFindCertificateInStore", "CertEnumCertificatesInStore", "Collection and Sibling Certificate Stores", "System Store Locations"; wincrypt.h, winerror.h and winnt.h for constants and layouts. The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Chrome looks certificates up in its four collections: 60 calls with (collection, X509_ASN_ENCODING, 0, CERT_FIND_SHA1_HASH 0x10000 with a 20-byte CRYPT_HASH_BLOB, NULL) and (..., CERT_FIND_SUBJECT_NAME 0x20007 with a CERT_NAME_BLOB, NULL) and gets NULL every time; the last error is then CRYPT_E_NOT_FOUND (0x80092004), set again by every call whatever it was before. Observed on memory stores holding the two test certificates: hash, subject and issuer name, subject string, existing, any; the previous-context chain; encoding type 0 works like 1; a 10-byte hash is not found.
+interface:
+  signature: "PCCERT_CONTEXT CertFindCertificateInStore(HCERTSTORE store, DWORD encoding, DWORD flags, DWORD type, const void *para, PCCERT_CONTEXT prev)"
+  result: "a certificate context (to be freed with CertFreeCertificateContext, or passed as `prev`), or NULL with the last error set"
+chrome:
+  calls: "CertFindCertificateInStore 60 calls: (collection, 1, 0, 0x10000, &hashblob, NULL) 54 times and (collection, 1, 0, 0x20007, &nameblob, NULL) 6 times, in six rounds of ten over the same three stores, all NULL, last error 0x80092004 each time"
+rules:
+  not_found: "NULL and last error 0x80092004 every time: in a collection over a system store (three rounds), in a memory store, with the last error set to 5 beforehand, and with a 10-byte hash"
+  by_hash: "CERT_FIND_SHA1_HASH with the SHA-1 of the encoded certificate finds exactly that certificate (A or B); last error untouched on success"
+  by_name: "CERT_FIND_SUBJECT_NAME with the subject blob of a certificate finds it; CERT_FIND_ISSUER_NAME with the same blob finds it too (the test certificates are self-signed)"
+  by_string: "CERT_FIND_SUBJECT_STR_W is a case-insensitive substring match on the subject string: \"poly test b\" finds B, \"Poly Test\" finds both, newest first (B then A), and the chain with the previous context ends with NULL"
+  existing: "CERT_FIND_EXISTING with a context finds the same certificate in the store"
+  any_chain: "CERT_FIND_ANY enumerates like CertEnumCertificatesInStore (B then A, newest added first); past the end: NULL and last error 0x80092004"
+  encoding: "encoding type 0 and 0x10001 behave like 1: the certificate is found, last error untouched"
+  empty_store: "CERT_FIND_ANY on an empty memory store: NULL, last error 0x80092004"
+  previous_context: "the context passed as `prev` is freed by the call (the test reads what it needs before passing it on)"
+errors:
+  not_found: "CRYPT_E_NOT_FOUND (0x80092004)"
+side_effects: "none (contexts are reference counted)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING.
+not_covered: >
+  A NULL find parameter (not tested), other CERT_FIND_* types, searches of the real system stores' contents (machine dependent), dwFindFlags other than 0, CRYPT_E_NOT_FOUND set only on the not-found path.
