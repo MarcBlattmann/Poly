@@ -2702,7 +2702,10 @@ pub unsafe extern "system" fn BeginPaint(hwnd: H, ps: *mut u::PaintStruct) -> H 
 pub unsafe extern "system" fn EndPaint(hwnd: H, ps: *const u::PaintStruct) -> i32 {
     // SAFETY: the caller's PAINTSTRUCT, if any.
     let p = if ps.is_null() { u::PaintStruct::default() } else { unsafe { *ps } };
-    i32::from(u::end_paint(&SYS, hwnd as u64, &p))
+    let r = i32::from(u::end_paint(&SYS, hwnd as u64, &p));
+    // What the window painted may have covered the caret.
+    caretdraw::painted(hwnd);
+    r
 }
 
 #[unsafe(no_mangle)]

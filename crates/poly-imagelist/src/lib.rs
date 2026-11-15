@@ -501,14 +501,19 @@ impl ImageList {
             return if fill_bk { Shade::Color(bk & 0xFF_FFFF) } else { Shade::Skip };
         }
         let c = argb_to_colorref(p);
-        if flags & (ILD_BLEND25 | ILD_BLEND50) != 0 && (x + y) % 2 == 0 {
+        if flags & (ILD_BLEND25 | ILD_BLEND50) != 0 {
             // Blending dithers: every second pixel takes the blend colour (the highlight colour for
-            // `CLR_DEFAULT`), or is left alone for `CLR_NONE`.
+            // `CLR_DEFAULT`) and the others keep the image; with `CLR_NONE` there is no blend colour,
+            // the image shows at the first kind only and the destination at the others.
+            let even = (x + y) % 2 == 0;
             if fg == CLR_NONE {
-                return Shade::Skip;
+                if !even {
+                    return Shade::Skip;
+                }
+            } else if even {
+                let b = if fg == CLR_DEFAULT { highlight } else { fg };
+                return Shade::Color(b & 0xFF_FFFF);
             }
-            let b = if fg == CLR_DEFAULT { highlight } else { fg };
-            return Shade::Color(b & 0xFF_FFFF);
         }
         if a == 255 { Shade::Color(c) } else { Shade::Alpha(c, a as u8) }
     }

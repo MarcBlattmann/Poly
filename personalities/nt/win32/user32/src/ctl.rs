@@ -361,6 +361,8 @@ fn other(h: H, msg: u32, w: usize, l: isize) -> isize {
 /// A combo box: `CBS_HASSTRINGS` is on unless the box draws its items itself, and the window
 /// text it was made with is not kept (its text is the edit field's: empty at first;
 /// `InitCommonControlsEx.yaml` `classes_5_82`).
+const WM_CREATE: u32 = 0x0001;
+
 fn combobox(h: H, msg: u32, w: usize, l: isize) -> isize {
     let r = other(h, msg, w, l);
     if msg == WM_NCCREATE && r != 0 {
