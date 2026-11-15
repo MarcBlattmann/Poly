@@ -12,6 +12,7 @@
   "tests": [
     {
       "name": "dw_chrome_close",
+      "session": "interactive-bottom",
       "exe_sha256": "290d7c8983987d330b93fc5a5d406144e0714accd2f3a7e4b2dad1caadad848e",
       "status": "ran",
       "exit_code": 0,
@@ -39,6 +40,7 @@
     },
     {
       "name": "dw_ime_after",
+      "session": "interactive-bottom",
       "exe_sha256": "a0b58e91749e68c068bda20c445794e1acfc0ed8bd86b5500f103a9b50fc9568",
       "status": "ran",
       "exit_code": 0,
