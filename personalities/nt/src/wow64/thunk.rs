@@ -9,10 +9,11 @@
 //! services from `RSP + 0x28 + 8 * (n - 4)` (the x64 convention, `crate::abi`), so the call's
 //! RSP points at the window's start and those slots are the window's first bytes.
 //!
-//! A service that keeps an address for later (an asynchronous request's `IO_STATUS_BLOCK`, an
-//! APC routine) would keep a window address that means nothing after the call: such arguments
-//! are `X` in the table, or (the status block) only correct for calls that finish in the call,
-//! which is every call on a synchronous handle. ADR 0186 lists this as a later stage.
+//! A service that keeps an address for later must not keep a window address: an
+//! `IO_STATUS_BLOCK` is therefore not copied but passed as the caller's own address marked
+//! [`crate::io::irp::IOSB32`], which every status-block write decodes (an asynchronous request
+//! keeps it and writes the 8-byte 32-bit block when it completes); an APC routine is a 32-bit
+//! code address the kernel calls in compatibility mode (`super::apc_frame`).
 
 use super::sigs;
 use crate::kernel::{Apc, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault};
@@ -44,14 +45,20 @@ pub enum Arg {
     US,
     /// `UNICODE_STRING*`, in and out.
     UO,
-    /// `IO_STATUS_BLOCK*`.
+    /// `IO_STATUS_BLOCK*`: the caller's address, marked [`crate::io::irp::IOSB32`].
     IO,
+    /// An `IO_STATUS_BLOCK*` naming a request to cancel: marked like [`Arg::IO`], not read.
+    IR,
     /// `CLIENT_ID*`.
     CI,
     /// A `HANDLE` array counted by the first argument.
     HA,
     /// `CONTEXT*` (in).
     CX,
+    /// `CONTEXT*` (in and out: `NtGetContextThread`).
+    CO,
+    /// `FILE_IO_COMPLETION_INFORMATION*` (out), as many as the next argument counts.
+    CE,
     /// `EXCEPTION_RECORD*` (in).
     ER,
     /// Not converted yet: must be null.
@@ -119,11 +126,19 @@ impl Scratch {
 enum Back {
     /// The low 32 bits of the 8 bytes at `wide`, to `narrow`.
     Low32 { narrow: u64, wide: u64 },
-    /// An `IO_STATUS_BLOCK`: `Status` and `Information`.
-    Iosb { narrow: u64, wide: u64 },
     /// A `UNICODE_STRING`'s `Length` and `MaximumLength`.
     Lengths { narrow: u64, wide: u64 },
+    /// The groups `flags` names of the 64-bit `CONTEXT` at `wide`, into the x86 one at `narrow`
+    /// (on success).
+    Context { narrow: u64, wide: u64, flags: u32 },
+    /// `FILE_IO_COMPLETION_INFORMATION` entries (64-bit: 32 bytes each, `KeyContext`,
+    /// `ApcContext`, `IoStatusBlock`; 32-bit: 16), as many as the `ULONG` at `removed` says.
+    Entries { narrow: u64, wide: u64, removed: u64, max: usize },
 }
+
+/// The most completion entries one 32-bit `NtRemoveIoCompletionEx` takes (the window's room);
+/// removing fewer than asked is what the call may do anyway.
+const MAX_ENTRIES: usize = 1024;
 
 /// An information class whose output has pointer-sized fields: the 64-bit size the service
 /// writes, the 32-bit size the caller gets, and the conversion.
@@ -244,6 +259,45 @@ const INFO: &[InfoSpec] = &[
     },
 ];
 
+/// `NtSetInformationFile`'s input classes with pointer-sized fields (`wdm.h`/`ntifs.h`):
+/// `FileRenameInformation` (10), `FileLinkInformation` (11), their `Ex` forms (65, 72) —
+/// `ReplaceIfExists`/`Flags`, `RootDirectory` (a handle), `FileNameLength`, `FileName`: the name
+/// at 12 in 32 bits, 20 in 64 — and `FileCompletionInformation` (30: `Port`, `Key`).
+const SET_FILE_RENAME_CLASSES: [u32; 4] = [10, 11, 65, 72];
+const FILE_COMPLETION_INFORMATION: u32 = 30;
+
+/// The 64-bit copy of a 32-bit `NtSetInformationFile` input of class `class` (`b`: the caller's
+/// `length` bytes), or `None` when the class has the same layout in both widths.
+fn set_file_input(class: u32, b: &[u8]) -> Option<Result<Vec<u8>, NtStatus>> {
+    if SET_FILE_RENAME_CLASSES.contains(&class) {
+        if b.len() < 12 {
+            return Some(Err(STATUS_INFO_LENGTH_MISMATCH));
+        }
+        let len = (u32_at(b, 8) as usize).min(b.len() - 12);
+        let mut w = alloc::vec![0u8; 20 + len];
+        w[0..4].copy_from_slice(&b[0..4]);
+        w[8..16].copy_from_slice(&sign(u32_at(b, 4)).to_le_bytes());
+        w[16..20].copy_from_slice(&(len as u32).to_le_bytes());
+        w[20..].copy_from_slice(&b[12..12 + len]);
+        return Some(Ok(w));
+    }
+    if class == FILE_COMPLETION_INFORMATION {
+        if b.len() < 8 {
+            return Some(Err(STATUS_INFO_LENGTH_MISMATCH));
+        }
+        let mut w = alloc::vec![0u8; 16];
+        w[0..8].copy_from_slice(&sign(u32_at(b, 0)).to_le_bytes());
+        w[8..16].copy_from_slice(&u64::from(u32_at(b, 4)).to_le_bytes());
+        return Some(Ok(w));
+    }
+    None
+}
+
+#[cfg(test)]
+pub(crate) fn set_file_input_for_tests(class: u32, b: &[u8]) -> Option<Result<Vec<u8>, NtStatus>> {
+    set_file_input(class, b)
+}
+
 /// A converted information call: where the 64-bit result goes and what the caller gets.
 #[derive(Debug)]
 struct InfoCall {
@@ -281,6 +335,14 @@ fn unicode<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64) -> Result<u64, NtSt
     Ok(wide)
 }
 
+/// Whether the calling thread switched file-system redirection off (`kernelbase`'s
+/// `Wow64DisableWow64FsRedirection`, the flag in its TEB: [`super::TEB_FS_REDIRECTION_OFF`]).
+fn fs_redirection_off<K: NtKernel>(k: &mut K) -> bool {
+    let thread = k.caller().thread;
+    let Some(teb) = k.with_state(|_, p, _| p.thread(thread).map(|t| t.teb)) else { return false };
+    read32(k, teb + super::TEB_FS_REDIRECTION_OFF).is_ok_and(|v| v != 0)
+}
+
 /// The 64-bit copy of the 32-bit `OBJECT_ATTRIBUTES` at `at` (`ntdef.h`: `Length`,
 /// `RootDirectory`, `ObjectName`, `Attributes`, `SecurityDescriptor`,
 /// `SecurityQualityOfService`; 24 bytes, 48 in 64 bits), with its name.
@@ -299,7 +361,7 @@ fn object_attributes<K: NtKernel>(k: &mut K, s: &mut Scratch, at: u64, file: boo
         let buffer = u64::from(read32(k, at + 4)?);
         abi::read(k, buffer, &mut chars)?;
         let path: Vec<u16> = chars.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-        if let Some(to) = super::redirect_system32(&path) {
+        if let Some(to) = super::file_view(&path, fs_redirection_off(k)) {
             let bytes: Vec<u8> = to.iter().flat_map(|c| c.to_le_bytes()).collect();
             let length = u16::try_from(bytes.len()).map_err(|_| poly_ntobj::status::STATUS_OBJECT_NAME_INVALID)?;
             let buffer = s.alloc(bytes.len())?;
@@ -334,7 +396,10 @@ const FILE_SERVICES: &[Service] = &[
 ];
 
 /// Read and widen the arguments of a call to `service` whose 32-bit arguments start at `at`.
-fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Result<Prepared, NtStatus> {
+/// Not inlined: its locals (an x86 `CONTEXT`, a 64-bit one) must not stay on the kernel stack
+/// while the service runs (`NtCreateUserProcess` goes deep).
+#[inline(never)]
+fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Option<Service>, sig: &[Arg]) -> Result<Prepared, NtStatus> {
     let mut narrow = Vec::with_capacity(sig.len());
     for i in 0..sig.len() {
         narrow.push(read32(k, at + 4 * i as u64)?);
@@ -358,18 +423,8 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 backs.push(Back::Low32 { narrow: p, wide });
                 wide
             }
-            Arg::IO => {
-                let mut b = [0u8; 8];
-                abi::read(k, p, &mut b)?;
-                let wide = s.alloc(16)?;
-                let mut w = [0u8; 16];
-                w[..4].copy_from_slice(&b[..4]);
-                w[8..12].copy_from_slice(&b[4..8]);
-                s.put(wide, &w);
-                backs.push(Back::Iosb { narrow: p, wide });
-                wide
-            }
-            Arg::OA => object_attributes(k, &mut s, p, FILE_SERVICES.contains(&service))?,
+            Arg::IO | Arg::IR => p | crate::io::irp::IOSB32,
+            Arg::OA => object_attributes(k, &mut s, p, service.is_some_and(|sv| FILE_SERVICES.contains(&sv)))?,
             Arg::US => unicode(k, &mut s, p)?,
             Arg::UO => {
                 let wide = unicode(k, &mut s, p)?;
@@ -383,12 +438,25 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
                 s.put(wide + 8, &u64::from(thread).to_le_bytes());
                 wide
             }
-            Arg::CX => {
+            Arg::CX | Arg::CO => {
                 let mut b = alloc::vec![0u8; super::context::CONTEXT32_SIZE];
                 abi::read(k, p, &mut b)?;
                 let bytes = super::context::from_context32(&b).to_bytes();
                 let wide = s.alloc(bytes.len())?;
                 s.put(wide, &bytes);
+                if kind == Arg::CO {
+                    let flags = u32::from_le_bytes(b[..4].try_into().expect("4 bytes"));
+                    backs.push(Back::Context { narrow: p, wide, flags });
+                }
+                wide
+            }
+            Arg::CE => {
+                // The count is the next argument, the number removed the one after it.
+                let i = args.len();
+                let count = (narrow.get(i + 1).copied().unwrap_or(0) as usize).min(MAX_ENTRIES);
+                let wide = s.alloc(32 * count.max(1))?;
+                let removed = u64::from(narrow.get(i + 2).copied().unwrap_or(0));
+                backs.push(Back::Entries { narrow: p, wide, removed, max: count });
                 wide
             }
             Arg::ER => {
@@ -415,10 +483,27 @@ fn prepare<K: NtKernel>(k: &mut K, at: u64, service: Service, sig: &[Arg]) -> Re
         };
         args.push(wide);
     }
+    // An input class with pointer-sized fields: the service reads a 64-bit copy.
+    let converted = |class: u32| SET_FILE_RENAME_CLASSES.contains(&class) || class == FILE_COMPLETION_INFORMATION;
+    if service == Some(Service::SetInformationFile) && narrow[2] != 0 && converted(narrow[4]) {
+        let length = (narrow[3] as usize).min(0x1_0000);
+        let mut b = alloc::vec![0u8; length];
+        abi::read(k, u64::from(narrow[2]), &mut b)?;
+        match set_file_input(narrow[4], &b) {
+            None => {}
+            Some(Err(status)) => return Ok(Prepared::Done(status)),
+            Some(Ok(w)) => {
+                let wide = s.alloc(w.len())?;
+                s.put(wide, &w);
+                args[2] = wide;
+                args[3] = w.len() as u64;
+            }
+        }
+    }
     // An information class with pointer-sized fields: the service writes the 64-bit form into
     // the window, the caller gets the 32-bit one.
     let mut info = None;
-    if let Some(spec) = INFO.iter().find(|s| s.service == service)
+    if let Some(spec) = INFO.iter().find(|s| Some(s.service) == service)
         && let Some(class) = spec.classes.iter().find(|c| c.class == narrow[spec.class])
     {
         let (buffer, length, returned) =
@@ -467,21 +552,36 @@ pub fn dispatch32<K: NtKernel>(
     run: impl FnOnce(&mut Thunked<'_, K>, &mut SyscallRegs) -> Outcome,
 ) -> Outcome {
     let number = regs.rax as u32;
-    let found = Service::from_number(number).and_then(|s| sigs::signature(s).map(|sig| (s, sig)));
+    let (table, index) = crate::decode(number);
+    let found = if table == crate::Table::Win32k {
+        poly_win32k::services::Win32kService::from_number(number)
+            .and_then(sigs::win32k_signature)
+            .map(|sig| (None, sig))
+    } else {
+        Service::from_number(number).and_then(|s| sigs::signature(s).map(|sig| (Some(s), sig)))
+    };
     let Some((service, sig)) = found else {
-        let (table, index) = crate::decode(number);
         regs.rax = u64::from(crate::STATUS_NOT_IMPLEMENTED);
         return Outcome::Unimplemented { table: table.name(), number: u64::from(index) };
     };
     let end = k.with_state(|_, p, _| p.vm.end());
     let facts = Facts { end };
-    let (args, backs, info, scratch) = match prepare(k, regs.rdx & 0xFFFF_FFFF, service, sig) {
+    let (mut args, backs, info, scratch) = match prepare(k, regs.rdx & 0xFFFF_FFFF, service, sig) {
         Ok(Prepared::Call { args, backs, info, scratch }) => (args, backs, info, scratch),
         Ok(Prepared::Done(status)) | Err(status) => {
             regs.rax = u64::from(status.0);
             return Outcome::Handled;
         }
     };
+    // The entries' count: no more than the window holds.
+    for b in &backs {
+        if let Back::Entries { max, .. } = b
+            && let Some(i) = sig.iter().position(|a| *a == Arg::CE)
+            && let Some(count) = args.get_mut(i + 1)
+        {
+            *count = (*count).min(*max as u64);
+        }
+    }
     let mut wide = SyscallRegs {
         rax: u64::from(number),
         rdi: 0,
@@ -508,6 +608,7 @@ pub fn dispatch32<K: NtKernel>(
     outcome
 }
 
+#[inline(never)]
 fn write_back<K: NtKernel>(
     k: &mut K,
     s: &Scratch,
@@ -519,13 +620,30 @@ fn write_back<K: NtKernel>(
     for b in backs {
         match *b {
             Back::Low32 { narrow, wide } => abi::write_u32(k, narrow, s.u64_at(wide) as u32)?,
-            Back::Iosb { narrow, wide } => {
-                let mut n = [0u8; 8];
-                n[..4].copy_from_slice(&s.get(wide, 4)[..4]);
-                n[4..].copy_from_slice(&s.get(wide + 8, 4)[..4]);
-                abi::write(k, narrow, &n)?;
-            }
             Back::Lengths { narrow, wide } => abi::write(k, narrow, &s.get(wide, 4)[..4])?,
+            Back::Context { narrow, wide, flags } if status.is_success() => {
+                let Some(ctx) = poly_seh::Context::from_bytes(s.get(wide, poly_seh::context::CONTEXT_SIZE)) else {
+                    continue;
+                };
+                let mut b = alloc::vec![0u8; super::context::CONTEXT32_SIZE];
+                abi::read(k, narrow, &mut b)?;
+                super::context::merge_context32(&mut b, &ctx, flags);
+                abi::write(k, narrow, &b)?;
+            }
+            Back::Context { .. } => {}
+            Back::Entries { narrow, wide, removed, max } if status.is_success() && removed != 0 => {
+                let n = (abi::read_u32(k, removed)? as usize).min(max);
+                let mut out = alloc::vec![0u8; 16 * n];
+                for i in 0..n {
+                    let e = s.get(wide + 32 * i as u64, 32);
+                    // KeyContext, ApcContext, then the block's Status and Information.
+                    for (j, at) in [0usize, 8, 16, 24].into_iter().enumerate() {
+                        out[16 * i + 4 * j..16 * i + 4 * j + 4].copy_from_slice(&e[at..at + 4]);
+                    }
+                }
+                abi::write(k, narrow, &out)?;
+            }
+            Back::Entries { .. } => {}
         }
     }
     if let Some(i) = info {

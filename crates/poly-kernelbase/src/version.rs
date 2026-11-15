@@ -315,23 +315,9 @@ pub const VER_OR: u8 = 7;
 pub const PLATFORM_WIN32_NT: u32 = 2;
 pub const NT_WORKSTATION: u8 = 1;
 
-/// Bit 63 of every condition mask `VerSetConditionMask` returns: the call-site trace of Chrome on
-/// Windows 11 shows `0x8000000000000018` for `VerSetConditionMask(0, VER_MAJORVERSION,
-/// VER_GREATER_EQUAL)` (the three bits of the condition at bit 3, and this one).
-pub const CONDITION_MASK_FLAG: u64 = 1 << 63;
-
-/// `VerSetConditionMask`: three bits per version field, at the position of
-/// the field's type bit (bit 0 for the minor version ... bit 7 for the
-/// product type), and [`CONDITION_MASK_FLAG`].
-pub fn set_condition(mask: u64, type_mask: u32, condition: u8) -> u64 {
-    let mut m = mask | CONDITION_MASK_FLAG;
-    for bit in 0..8 {
-        if type_mask & (1 << bit) != 0 {
-            m = (m & !(7u64 << (3 * bit))) | (u64::from(condition & 7) << (3 * bit));
-        }
-    }
-    m
-}
+// `VerSetConditionMask` lives in `poly_rtl::version`: `ntdll.dll` exports it (`kernelbase.dll` and
+// `kernel32.dll` too).
+pub use poly_rtl::version::{CONDITION_MASK_FLAG, set_condition};
 
 /// The version fields of the system, in `OSVERSIONINFOEXW`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

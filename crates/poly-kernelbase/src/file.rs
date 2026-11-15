@@ -303,12 +303,33 @@ pub fn to_find_data(buf: &[u8], at: usize) -> Option<[u8; find_data::SIZE]> {
 /// `BOOLEAN`, padded), `RootDirectory` at 8, `FileNameLength` at 16,
 /// `FileName` at 20.
 pub fn rename_information(replace: bool, nt_target: &[u16]) -> Vec<u8> {
-    let mut b = alloc::vec![0u8; 20 + nt_target.len() * 2 + 2];
+    rename_information_in(8, replace, nt_target)
+}
+
+/// `FILE_RENAME_INFORMATION` / `FILE_LINK_INFORMATION` (`ntifs.h`: the same layout) for a
+/// process whose pointers are `ptr_size` bytes (ADR 0186): `ReplaceIfExists` (a `BOOLEAN`,
+/// padded to a pointer), `RootDirectory` (a `HANDLE`) at `ptr_size`, `FileNameLength` (a
+/// `ULONG`) at `2 * ptr_size` and `FileName` after it: at 20 in a 64-bit process, 12 in a
+/// 32-bit one.
+pub fn rename_information_in(ptr_size: usize, replace: bool, nt_target: &[u16]) -> Vec<u8> {
+    let length_at = 2 * ptr_size;
+    let name_at = length_at + 4;
+    let mut b = alloc::vec![0u8; name_at + nt_target.len() * 2 + 2];
     b[0] = replace as u8;
-    b[16..20].copy_from_slice(&((nt_target.len() * 2) as u32).to_le_bytes());
+    b[length_at..name_at].copy_from_slice(&((nt_target.len() * 2) as u32).to_le_bytes());
     for (i, c) in nt_target.iter().enumerate() {
-        b[20 + 2 * i..22 + 2 * i].copy_from_slice(&c.to_le_bytes());
+        b[name_at + 2 * i..name_at + 2 + 2 * i].copy_from_slice(&c.to_le_bytes());
     }
+    b
+}
+
+/// `FILE_COMPLETION_INFORMATION` (`ntifs.h`) for a process whose pointers are `ptr_size` bytes
+/// (ADR 0186): `Port` (a `HANDLE`) and `Key` (a `PVOID`), one pointer each (16 bytes in a
+/// 64-bit process, 8 in a 32-bit one). The values are truncated to the pointer width.
+pub fn completion_information(ptr_size: usize, port: u64, key: u64) -> Vec<u8> {
+    let mut b = alloc::vec![0u8; 2 * ptr_size];
+    b[..ptr_size].copy_from_slice(&port.to_le_bytes()[..ptr_size]);
+    b[ptr_size..].copy_from_slice(&key.to_le_bytes()[..ptr_size]);
     b
 }
 
@@ -554,5 +575,31 @@ mod tests {
         assert_eq!(b[0], 1);
         assert_eq!(u32::from_le_bytes(b[16..20].try_into().unwrap()), 4);
         assert_eq!(&b[20..24], &[0x41, 0, 0x42, 0]);
+    }
+
+    #[test]
+    fn rename_information_layout_32_bit() {
+        // A 32-bit process: RootDirectory at 4, FileNameLength at 8, FileName at 12.
+        let b = rename_information_in(4, true, &[0x41, 0x42]);
+        assert_eq!(b.len(), 12 + 4 + 2);
+        assert_eq!(b[0], 1);
+        assert_eq!(&b[4..8], &[0; 4]);
+        assert_eq!(u32::from_le_bytes(b[8..12].try_into().unwrap()), 4);
+        assert_eq!(&b[12..16], &[0x41, 0, 0x42, 0]);
+        assert_eq!(&b[16..18], &[0, 0]);
+        // The x64 wrapper is the 8-byte form.
+        assert_eq!(rename_information(false, &[1]), rename_information_in(8, false, &[1]));
+    }
+
+    #[test]
+    fn completion_information_layout() {
+        let b = completion_information(8, 0x44, 0x1_0000_0002);
+        assert_eq!(b.len(), 16);
+        assert_eq!(&b[0..8], &0x44u64.to_le_bytes());
+        assert_eq!(&b[8..16], &0x1_0000_0002u64.to_le_bytes());
+        let b = completion_information(4, 0x44, 0x1_0000_0002);
+        assert_eq!(b.len(), 8);
+        assert_eq!(&b[0..4], &0x44u32.to_le_bytes());
+        assert_eq!(&b[4..8], &2u32.to_le_bytes());
     }
 }

@@ -24,23 +24,14 @@ fn readable(p: *const u8, n: usize) -> bool {
     let mut at = p as usize;
     let end = at.saturating_add(n.max(1));
     while at < end {
-        let mut mbi = [0u64; 6];
-        let mut got = 0usize;
-        // SAFETY: a MEMORY_BASIC_INFORMATION-sized buffer.
-        let st = unsafe {
-            nt::NtQueryVirtualMemory(nt::CURRENT_PROCESS, at as *const u8, 0, mbi.as_mut_ptr().cast(), 48, &mut got)
-        };
-        if !st.is_success() {
-            return false;
-        }
-        // BaseAddress, AllocationBase, AllocationProtect/PartitionId, RegionSize, State, Protect.
-        let (state, protect) = ((mbi[4] & 0xFFFF_FFFF) as u32, (mbi[4] >> 32) as u32);
+        let Some(mbi) = crate::base::query_memory(at) else { return false };
+        let (state, protect) = (mbi.state, mbi.protect);
         const MEM_COMMIT: u32 = 0x1000;
         const NOACCESS_OR_GUARD: u32 = 0x101;
         if state != MEM_COMMIT || protect & NOACCESS_OR_GUARD != 0 || protect == 0 {
             return false;
         }
-        let region_end = (mbi[0] as usize).saturating_add(mbi[3] as usize);
+        let region_end = mbi.base_address.saturating_add(mbi.region_size);
         if region_end <= at {
             return false;
         }

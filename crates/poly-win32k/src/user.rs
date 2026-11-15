@@ -128,21 +128,22 @@ pub struct CPoint {
     pub y: i32,
 }
 
-/// `CREATESTRUCTW`.
+/// `CREATESTRUCTW` (pointer-sized fields are `usize`: the same structure serves the 32-bit
+/// `user32`, ADR 0186).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CreateStructW {
-    pub create_params: u64,
-    pub instance: u64,
-    pub menu: u64,
-    pub parent: u64,
+    pub create_params: usize,
+    pub instance: usize,
+    pub menu: usize,
+    pub parent: usize,
     pub cy: i32,
     pub cx: i32,
     pub y: i32,
     pub x: i32,
     pub style: u32,
-    pub name: u64,
-    pub class: u64,
+    pub name: usize,
+    pub class: usize,
     pub ex_style: u32,
 }
 
@@ -161,8 +162,8 @@ pub struct MinMaxInfo {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowPos {
-    pub hwnd: u64,
-    pub insert_after: u64,
+    pub hwnd: usize,
+    pub insert_after: usize,
     pub x: i32,
     pub y: i32,
     pub cx: i32,
@@ -190,10 +191,10 @@ pub struct StyleStruct {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CMsg {
-    pub hwnd: u64,
+    pub hwnd: usize,
     pub message: u32,
-    pub w: u64,
-    pub l: u64,
+    pub w: usize,
+    pub l: usize,
     pub time: u32,
     pub pt: CPoint,
     pub private: u32,
@@ -489,17 +490,17 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         (cx, cy)
     };
     let mut cs = CreateStructW {
-        create_params: param,
-        instance,
-        menu,
-        parent: c.cs_parent,
+        create_params: param as usize,
+        instance: instance as usize,
+        menu: menu as usize,
+        parent: c.cs_parent as usize,
         cy: cs_cy,
         cx: cs_cx,
         y,
         x,
         style,
-        name,
-        class: class_name.as_ptr() as u64,
+        name: name as usize,
+        class: (class_name.as_ptr() as u64) as usize,
         ex_style: c.ex_style,
     };
     if send(env, h, WM_NCCREATE, 0, ptr(&mut cs)) == 0 {
@@ -893,7 +894,7 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         // Owned windows come along above their owner.
         for o in owned {
             let mut wp = WindowPos {
-                hwnd: u64::from(o),
+                hwnd: (u64::from(o)) as usize,
                 flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
                 ..WindowPos::default()
             };
@@ -1270,7 +1271,8 @@ fn swp<E: Env + ?Sized>(
 ) -> bool {
     let h = u64::from(hwnd);
     let Some(i) = info(env, h) else { return false };
-    let mut wp = WindowPos { hwnd: h, insert_after: after, x, y, cx: cx.max(0), cy: cy.max(0), flags };
+    let mut wp =
+        WindowPos { hwnd: h as usize, insert_after: after as usize, x, y, cx: cx.max(0), cy: cy.max(0), flags };
     if flags & SWP_NOSENDCHANGING == 0 {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
@@ -1291,7 +1293,7 @@ fn swp<E: Env + ?Sized>(
     let zchanged = f & SWP_NOZORDER == 0
         && !opts.keep_z
         && matches!(
-            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
+            env.call(Request::ZOrder { hwnd, after: wp.insert_after as u64, apply: false }),
             Reply::Bool { value: true }
         );
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
@@ -1299,7 +1301,7 @@ fn swp<E: Env + ?Sized>(
     if hide && f & SWP_NOACTIVATE == 0 && interactive && i.owner != 0 && was_active {
         // The owner is the next window to activate: it is asked first.
         let mut o = WindowPos {
-            hwnd: u64::from(i.owner),
+            hwnd: (u64::from(i.owner)) as usize,
             flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
             ..WindowPos::default()
         };
@@ -1362,7 +1364,7 @@ fn swp<E: Env + ?Sized>(
     let old_client = i.client_rel;
     let new_client = if sized || frame {
         let mut calc = WindowPos {
-            hwnd: h,
+            hwnd: h as usize,
             insert_after: wp.insert_after,
             x: nx,
             y: ny,
@@ -1409,7 +1411,7 @@ fn swp<E: Env + ?Sized>(
             if !behind || noactivate {
                 if i.owner != 0 {
                     let mut o = WindowPos {
-                        hwnd: u64::from(i.owner),
+                        hwnd: (u64::from(i.owner)) as usize,
                         flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
                         ..WindowPos::default()
                     };
@@ -1434,7 +1436,7 @@ fn swp<E: Env + ?Sized>(
     }
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
-        env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: true });
+        env.call(Request::ZOrder { hwnd, after: wp.insert_after as u64, apply: true });
     }
     if show || hide {
         env.call(Request::SetState {
@@ -1476,7 +1478,8 @@ fn swp<E: Env + ?Sized>(
             paint::moved_paint(env, &now, cur, f & SWP_NOCOPYBITS != 0 && f & SWP_STATECHANGED == 0);
         }
     }
-    let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
+    let mut done =
+        WindowPos { hwnd: h as usize, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
     if hide && vis_before && top {
         focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0, opts.destroying);
@@ -1500,7 +1503,7 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
         }
         _ => return 0,
     };
-    let mut wp = WindowPos { hwnd, flags: SWP_NOSIZE | SWP_NOZORDER, ..WindowPos::default() };
+    let mut wp = WindowPos { hwnd: hwnd as usize, flags: SWP_NOSIZE | SWP_NOZORDER, ..WindowPos::default() };
     send(env, hwnd, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     send(env, hwnd, WM_CHILDACTIVATE, 0, 0);
     u64::from(old)
@@ -1517,7 +1520,7 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 let cs = unsafe { &*(l as *const CreateStructW) };
                 if cs.name != 0 && cs.name >> 16 != 0 {
                     // SAFETY: a NUL-terminated string the creator passed.
-                    let text = unsafe { read_wstr(cs.name) };
+                    let text = unsafe { read_wstr(cs.name as u64) };
                     env.call(Request::SetText { hwnd: hwnd as u32, text });
                 }
             }
@@ -1701,10 +1704,10 @@ pub unsafe fn read_wstr(p: u64) -> Vec<u16> {
 
 fn to_cmsg(m: &Msg) -> CMsg {
     CMsg {
-        hwnd: u64::from(m.hwnd),
+        hwnd: (u64::from(m.hwnd)) as usize,
         message: m.msg,
-        w: m.w,
-        l: m.l,
+        w: m.w as usize,
+        l: m.l as usize,
         time: m.time,
         pt: CPoint { x: m.x, y: m.y },
         private: m.private,
@@ -1758,11 +1761,11 @@ pub fn get_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u
 pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
     if m.message == WM_TIMER && m.l != 0 {
         let valid = matches!(
-            env.call(Request::TimerProc { hwnd: m.hwnd, id: m.w, timer_proc: m.l }),
+            env.call(Request::TimerProc { hwnd: m.hwnd as u64, id: m.w as u64, timer_proc: m.l as u64 }),
             Reply::Bool { value: true }
         );
         if valid {
-            env.call_proc(m.l, m.hwnd as u32, WM_TIMER, m.w, u64::from(env.tick()));
+            env.call_proc(m.l as u64, m.hwnd as u32, WM_TIMER, m.w as u64, u64::from(env.tick()));
             // The value the oracle returned after a timer callback.
             return 22;
         }
@@ -1771,11 +1774,11 @@ pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
     if m.hwnd == 0 {
         return 0;
     }
-    let Some(i) = info(env, m.hwnd) else {
+    let Some(i) = info(env, m.hwnd as u64) else {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
     };
-    env.call_proc(i.wndproc, i.hwnd, m.message, m.w, m.l)
+    env.call_proc(i.wndproc, i.hwnd, m.message, m.w as u64, m.l as u64)
 }
 
 /// The character a key makes with no modifier down on the US layout, for
@@ -1819,7 +1822,7 @@ pub fn translate_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> bool {
         _ => return false,
     };
     if let Some(c) = key_char(m.w as u32) {
-        env.call(Request::Post { hwnd: m.hwnd, msg: out, w: u64::from(c), l: m.l });
+        env.call(Request::Post { hwnd: m.hwnd as u64, msg: out, w: u64::from(c), l: m.l as u64 });
     }
     true
 }

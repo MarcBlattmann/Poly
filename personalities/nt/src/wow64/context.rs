@@ -120,6 +120,31 @@ pub fn from_context32(b: &[u8]) -> Context {
     c
 }
 
+/// Write into the x86 `CONTEXT` `b` the groups the x86 `flags` select (control, integer,
+/// segments, and the `FXSAVE` image for `CONTEXT_EXTENDED_REGISTERS`) from `ctx`, leaving the
+/// others as the caller had them (`NtGetContextThread` fills only what was asked for).
+pub fn merge_context32(b: &mut [u8], ctx: &Context, flags: u32) {
+    if flags & CONTEXT_I386 == 0 {
+        return;
+    }
+    let full = to_context32(ctx);
+    let mut copy = |at: usize, len: usize| b[at..at + len].copy_from_slice(&full[at..at + len]);
+    if flags & 0x01 != 0 {
+        for at in [OFF_EBP, OFF_EIP, OFF_SEG_CS, OFF_EFLAGS, OFF_ESP, OFF_SEG_SS] {
+            copy(at, 4);
+        }
+    }
+    if flags & 0x02 != 0 {
+        copy(OFF_EDI, OFF_EBP - OFF_EDI);
+    }
+    if flags & 0x04 != 0 {
+        copy(OFF_SEG_GS, OFF_EDI - OFF_SEG_GS);
+    }
+    if flags & 0x20 != 0 && ctx.context_flags & CONTEXT_FLOATING_POINT == CONTEXT_FLOATING_POINT {
+        copy(OFF_EXTENDED, FLT_SAVE_SIZE);
+    }
+}
+
 /// The x86 `EXCEPTION_RECORD` of `r` (addresses and parameters cut to 32 bits).
 pub fn to_record32(r: &ExceptionRecord) -> [u8; EXCEPTION_RECORD32_SIZE] {
     let mut b = [0u8; EXCEPTION_RECORD32_SIZE];
@@ -248,5 +273,21 @@ mod tests {
         assert_eq!(call_frame(&f)[4..8], (f.record as u32).to_le_bytes());
         assert_eq!(frame32_below(1 << 32), None);
         assert_eq!(frame32_below(0x1_0100), None);
+    }
+
+    #[test]
+    fn get_context_fills_only_the_groups_asked_for() {
+        let mut c = Context { context_flags: CONTEXT_CONTROL | CONTEXT_INTEGER, ..Context::default() };
+        c.gpr[0] = 0xAA;
+        c.rip = 0x40_1000;
+        c.gpr[4] = 0x12_0000;
+        let mut b = [0x55u8; CONTEXT32_SIZE];
+        put(&mut b, 0, CONTEXT32_CONTROL);
+        merge_context32(&mut b, &c, CONTEXT32_CONTROL);
+        assert_eq!((get(&b, OFF_EIP), get(&b, OFF_ESP)), (0x40_1000, 0x12_0000));
+        // EAX (integer) was not asked for.
+        assert_eq!(get(&b, OFF_EAX), 0x5555_5555);
+        merge_context32(&mut b, &c, CONTEXT32_INTEGER);
+        assert_eq!(get(&b, OFF_EAX), 0xAA);
     }
 }

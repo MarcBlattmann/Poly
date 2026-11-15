@@ -31,10 +31,10 @@ fn is_button_down(m: u32) -> bool {
 /// WM_NC* message otherwise (About Mouse Input). `false`: the message is
 /// eaten (MA_NOACTIVATEANDEAT).
 pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
-    let h = m.hwnd;
+    let h = m.hwnd as u64;
     let Some(i) = info(env, h) else { return true };
     let (sx, sy) = (m.l as u16 as i16 as i32, (m.l >> 16) as u16 as i16 as i32);
-    let screen_l = m.l;
+    let screen_l = m.l as u64;
     let st0 = focus::input(env);
     // A disabled top-level window: the hit is HTERROR, WM_SETCURSOR is all
     // it gets; no WM_NCHITTEST, no activation, the mouse message is dropped
@@ -47,7 +47,7 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
         // Captured: client coordinates of the capture window, no hit test
         // and no WM_SETCURSOR (SetCapture.yaml).
         if m.message != WM_MOUSEWHEEL {
-            m.l = makelparam(sx - i.client.left, sy - i.client.top);
+            m.l = (makelparam(sx - i.client.left, sy - i.client.top)) as usize;
         }
         return true;
     }
@@ -116,11 +116,11 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     }
     if hit == HTCLIENT {
         let (cx, cy) = (sx - i.client.left, sy - i.client.top);
-        m.l = makelparam(cx, cy);
+        m.l = (makelparam(cx, cy)) as usize;
     } else {
         // WM_NCMOUSEMOVE .. WM_NCMBUTTONDBLCLK: the hit code, screen coordinates.
         m.message = m.message - WM_MOUSEMOVE + 0x00A0;
-        m.w = hit & 0xFFFF;
+        m.w = (hit & 0xFFFF) as usize;
     }
     true
 }
@@ -192,12 +192,12 @@ pub fn translate<E: Env + ?Sized>(env: &E, m: &CMsg, dead: &mut kbd::DeadState) 
             if m.w == 0xE7 {
                 // VK_PACKET: the unit SendInput gave (KEYEVENTF_UNICODE).
                 let msg = if m.message == WM_KEYDOWN { WM_CHAR } else { WM_SYSCHAR };
-                env.call(Request::Post { hwnd: m.hwnd, msg, w: u64::from(m.private), l: m.l });
+                env.call(Request::Post { hwnd: m.hwnd as u64, msg, w: u64::from(m.private), l: m.l as u64 });
                 return true;
             }
             let keys = key_state(env);
-            for c in kbd::translate_key(m.message, m.w, m.l, &keys, dead).iter() {
-                env.call(Request::Post { hwnd: m.hwnd, msg: c.msg, w: c.wparam, l: c.lparam });
+            for c in kbd::translate_key(m.message, m.w as u64, m.l as u64, &keys, dead).iter() {
+                env.call(Request::Post { hwnd: m.hwnd as u64, msg: c.msg, w: c.wparam, l: c.lparam });
             }
             true
         }

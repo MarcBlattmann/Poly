@@ -31,6 +31,16 @@
 //! result and return; the Win32 one also calls
 //! `ntdll!RtlSetLastWin32Error(120)`. Built with `poly_ldr::builder` (the
 //! PE format specification), no toolchain involved.
+//!
+//! **The 32-bit `polystub.dll`** ([`build_x86`], ADR 0186) cannot return: a 32-bit Win32 function
+//! is `stdcall` and pops its own arguments, and how many a missing function takes is not known
+//! (its import names no count). Returning with the wrong `ret N` would corrupt the caller's stack
+//! silently, so a 32-bit stub logs `stub: dll!name` and ends the process with
+//! `STATUS_NOT_IMPLEMENTED`: the load still succeeds, and the first missing function the program
+//! really calls is named. Each stub is `push length; push text; jmp common` (16 bytes; the text's
+//! address is relocated with the image), and the common routine calls
+//! `ntdll!PolyDebugPrint(text, length)` and `ntdll!NtTerminateProcess(-1, STATUS_NOT_IMPLEMENTED)`
+//! through the import address table.
 
 #![no_std]
 
@@ -41,6 +51,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use poly_ldr::builder::{Export, Import, PeBuilder, RDATA, Section, Sym, TEXT, Target};
+
+pub mod sysdlls;
+pub mod system;
 
 pub use poly_ldr::{STUB_DLL, stub_key};
 
@@ -237,6 +250,81 @@ pub fn build(wants: &[Want]) -> Vec<u8> {
     b.write()
 }
 
+/// `polystub.dll` for a 32-bit process (see the module documentation): one stub per `(dll, symbol)`
+/// of `wants`, each logging its name and ending the process.
+pub fn build_x86(wants: &[Want]) -> Vec<u8> {
+    const STUB32: usize = 16;
+    const FIRST32: usize = 0x20;
+    let mut by_key: BTreeMap<String, String> = BTreeMap::new();
+    for w in wants {
+        let (key, shown) = stub_text(&w.dll, &w.symbol);
+        by_key.entry(key).or_insert(shown);
+    }
+    let n = by_key.len();
+    let strings_at = FIRST32 + STUB32 * n;
+    let mut strings: Vec<u8> = Vec::new();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for shown in by_key.values() {
+        spans.push((strings_at + strings.len(), shown.len()));
+        strings.extend_from_slice(shown.as_bytes());
+    }
+    let text_len = strings_at + strings.len();
+    let generated = TEXT_RVA + (text_len as u32).div_ceil(0x1000) * 0x1000 + 0x1000;
+    let builder = |text: Vec<u8>, exports: Vec<Export>, relocations: Vec<u32>| PeBuilder {
+        sections: alloc::vec![Section::new(".text", text, TEXT), Section::new(".rdata", alloc::vec![0], RDATA)],
+        export_name: STUB_DLL.to_string(),
+        exports,
+        imports: alloc::vec![Import {
+            dll: "ntdll.dll".to_string(),
+            symbols: alloc::vec![Sym::name("PolyDebugPrint"), Sym::name("NtTerminateProcess")],
+            ..Import::default()
+        }],
+        relocations,
+        generated_rva: Some(generated),
+        ..PeBuilder::x86()
+    };
+    // Where the import address table's two slots are (the same for any text of this length).
+    let layout = builder(alloc::vec![0xCC; text_len], Vec::new(), Vec::new()).layout();
+    let base = PeBuilder::x86().image_base as u32;
+    let (iat_print, iat_end) = (base + layout.iat[0][0], base + layout.iat[0][1]);
+    let mut relocations = Vec::new();
+    // The common routine: the stub left [text, length] on the stack above the caller's return
+    // address; PolyDebugPrint (stdcall) takes them, then the process ends.
+    let mut text: Vec<u8> = Vec::with_capacity(text_len);
+    text.extend_from_slice(&[0xFF, 0x15]); // call [PolyDebugPrint]
+    relocations.push(TEXT_RVA + text.len() as u32);
+    text.extend_from_slice(&iat_print.to_le_bytes());
+    text.push(0x68); // push STATUS_NOT_IMPLEMENTED
+    text.extend_from_slice(&STATUS_NOT_IMPLEMENTED.to_le_bytes());
+    text.extend_from_slice(&[0x6A, 0xFF]); // push -1 (NtCurrentProcess)
+    text.extend_from_slice(&[0xFF, 0x15]); // call [NtTerminateProcess]
+    relocations.push(TEXT_RVA + text.len() as u32);
+    text.extend_from_slice(&iat_end.to_le_bytes());
+    text.push(0xCC);
+    assert!(text.len() <= FIRST32);
+    text.resize(FIRST32, 0xCC);
+    let mut exports = Vec::with_capacity(n);
+    for (i, key) in by_key.keys().enumerate() {
+        let at = FIRST32 + STUB32 * i;
+        let (str_at, len) = spans[i];
+        text.push(0x68); // push length
+        text.extend_from_slice(&(len as u32).to_le_bytes());
+        text.push(0x68); // push text
+        relocations.push(TEXT_RVA + text.len() as u32);
+        text.extend_from_slice(&(base + TEXT_RVA + str_at as u32).to_le_bytes());
+        text.push(0xE9); // jmp common
+        text.extend_from_slice(&(-((at + 15) as i32)).to_le_bytes());
+        text.push(0xCC);
+        exports.push(Export {
+            name: Some(key.clone()),
+            ordinal: i as u32 + 1,
+            target: Target::Rva(TEXT_RVA + at as u32),
+        });
+    }
+    text.extend_from_slice(&strings);
+    builder(text, exports, relocations).write()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,5 +411,32 @@ mod tests {
         // The routines are exactly as long as the sequences above.
         assert_eq!(common(Kind::Win32, 0, slot, slot + 8).len(), 4 + 6 + 5 + 6 + 2 + 4 + 1);
         assert_eq!(common(Kind::Hresult, 0, slot, slot + 8).len(), 4 + 6 + 5 + 4 + 1);
+    }
+
+    #[test]
+    fn the_32_bit_stubs_log_and_end_the_process() {
+        let wants = [want("WS2_32.DLL", "socket"), want("ws2_32.dll", "socket"), want("msi.dll", "#12")];
+        let bytes = build_x86(&wants);
+        let pe = poly_pe::Pe::parse(&bytes).unwrap();
+        assert_eq!(pe.info().machine(), poly_pe::machine::I386);
+        let names: Vec<String> = pe
+            .exports()
+            .unwrap()
+            .unwrap()
+            .names()
+            .map(|e| String::from_utf8_lossy(e.unwrap().0).into_owned())
+            .collect();
+        assert_eq!(names, ["msi$#12", "ws2_32$socket"]);
+        // The first stub: push length, push the text's address (relocated), jmp to offset 0.
+        let at = img(0x1000) + 0x20;
+        assert_eq!(bytes[at], 0x68);
+        assert_eq!(le32(&bytes, at + 1), "stub: msi!#12".len() as i32);
+        assert_eq!(bytes[at + 5], 0x68);
+        assert_eq!(bytes[at + 10], 0xE9);
+        assert_eq!(le32(&bytes, at + 11), -(0x20 + 15));
+        // The common routine calls through the IAT and ends the process.
+        assert_eq!(&bytes[img(0x1000)..img(0x1000) + 2], &[0xFF, 0x15]);
+        assert_eq!(bytes[img(0x1000) + 6], 0x68);
+        assert_eq!(le32(&bytes, img(0x1000) + 7) as u32, STATUS_NOT_IMPLEMENTED);
     }
 }

@@ -183,7 +183,8 @@ fn create_set_query_enumerate() {
         let n = f.u32_at(buf + 12) as usize;
         subs.push(utf16(&f.bytes_at(buf + 16, n)));
     }
-    assert_eq!(subs, ["Classes", "Microsoft", "PolyTest"]);
+    // (`Wow6432Node` is the 32-bit view of the software hive, ADR 0186 stage 2: a 64-bit caller lists it.)
+    assert_eq!(subs, ["Classes", "Microsoft", "PolyTest", "Wow6432Node"]);
     let buf = f.alloc(64);
     assert_eq!(
         f.call(Service::EnumerateKey, &[sw, 0, u64::from(KEY_NAME_INFORMATION), buf, 64, 0]),
@@ -439,4 +440,142 @@ fn default_user_hives() {
     let (s, _, b) = query_value(&mut f, env, "Path", KEY_VALUE_BASIC_INFORMATION, 64);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(u32::from_le_bytes(b[4..8].try_into().unwrap()), REG_EXPAND_SZ);
+}
+
+// ----- the registry views of WOW64 (ADR 0186, stage 2) -------------------------------------------
+
+/// The names of the subkeys of `h`, by `NtEnumerateKey(KeyBasicInformation)`.
+fn subkeys(f: &mut Fake, h: u64) -> Vec<String> {
+    let mut names = Vec::new();
+    for i in 0.. {
+        let buf = f.alloc(512);
+        let ret = f.alloc(4);
+        let s = f.call(Service::EnumerateKey, &[h, i, u64::from(KEY_BASIC_INFORMATION), buf, 512, ret]);
+        if s != STATUS_SUCCESS {
+            assert_eq!(s, STATUS_NO_MORE_ENTRIES);
+            break;
+        }
+        // KEY_BASIC_INFORMATION: LastWriteTime 0, TitleIndex 8, NameLength 12, Name 16.
+        let len = f.u32_at(buf + 12) as usize;
+        names.push(utf16(&f.bytes_at(buf + 16, len)));
+    }
+    names
+}
+
+#[test]
+fn the_default_software_hive_has_an_empty_wow6432node() {
+    let mut f = Fake::new();
+    let node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node");
+    assert!(subkeys(&mut f, node).is_empty());
+    // A 64-bit process lists it below HKLM\SOFTWARE.
+    let sw = open_ok(&mut f, SOFTWARE);
+    assert!(subkeys(&mut f, sw).iter().any(|n| n == "Wow6432Node"));
+}
+
+#[test]
+fn a_32_bit_process_opens_and_creates_software_keys_under_wow6432node() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    // The 32-bit process creates HKLM\SOFTWARE\Vendor ...
+    let (s, h, d) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_ALL_ACCESS, 0);
+    assert_eq!((s, d), (STATUS_SUCCESS, REG_CREATED_NEW_KEY));
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor");
+    // ... and finds it again in its own view.
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_READ).0, STATUS_SUCCESS);
+    // With KEY_WOW64_64KEY it sees the native view, where there is no such key.
+    assert_eq!(
+        open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_READ | KEY_WOW64_64KEY).0,
+        STATUS_OBJECT_NAME_NOT_FOUND
+    );
+    let (s, n) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Vendor", KEY_READ);
+    assert_eq!(s, STATUS_SUCCESS, "the physical key is below the node");
+    assert_eq!(key_name(&mut f, n), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor");
+    // A 32-bit process sees no Wow6432Node below HKLM\SOFTWARE (it is HKLM\SOFTWARE).
+    let sw = open_ok(&mut f, SOFTWARE);
+    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node");
+    assert!(!subkeys(&mut f, sw).iter().any(|n| n == "Wow6432Node"));
+    assert!(subkeys(&mut f, sw).iter().any(|n| n == "Vendor"));
+}
+
+#[test]
+fn a_64_bit_process_does_not_see_the_32_bit_keys_unless_it_asks() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Only32", KEY_ALL_ACCESS, 0);
+    f.proc.wow64 = false;
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Only32", KEY_READ).0, STATUS_OBJECT_NAME_NOT_FOUND);
+    let (s, h) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Only32", KEY_READ | KEY_WOW64_32KEY);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Only32");
+    // The mask bits are no rights: creating with them works in a 64-bit process, too.
+    let (s, h, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Made32", KEY_ALL_ACCESS | KEY_WOW64_32KEY, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Made32");
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Made32", KEY_READ).0, STATUS_OBJECT_NAME_NOT_FOUND);
+}
+
+#[test]
+fn a_relative_open_below_hklm_software_is_redirected_for_a_32_bit_process() {
+    let mut f = Fake::new();
+    // kernelbase opens HKLM (\REGISTRY\MACHINE) as the root and names the rest relative to it.
+    let machine = open_ok(&mut f, "\\Registry\\Machine");
+    f.proc.wow64 = true;
+    let (s, h, _) = create_key(&mut f, machine, "SOFTWARE\\Rel", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Rel");
+    // A handle to HKLM\SOFTWARE (the 32-bit view) and a relative create below it.
+    let (s, sw) = open_key(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node");
+    let (s, h, _) = create_key(&mut f, sw, "Below", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Below");
+    // The native view of the same relative name.
+    let (s, native) = open_key(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, native), "\\REGISTRY\\MACHINE\\SOFTWARE");
+    // A key that is not under SOFTWARE is the same for both.
+    let (s, sys) = open_key(&mut f, machine, "SYSTEM", KEY_READ);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, sys), "\\REGISTRY\\MACHINE\\SYSTEM");
+}
+
+#[test]
+fn shared_keys_are_the_same_in_both_views() {
+    let mut f = Fake::new();
+    let policies = "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies";
+    // A 64-bit process makes a shared key; the 32-bit one finds it, and the other way round.
+    let (s, _, _) = create_key(&mut f, 0, policies, KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    f.proc.wow64 = true;
+    let (s, h) = open_key(&mut f, 0, policies, KEY_READ);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies");
+    // `Classes` is shared; its CLSID subkey is not.
+    let (s, _, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.poly", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    f.proc.wow64 = false;
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.poly", KEY_READ).0, STATUS_SUCCESS);
+    let (s, _, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+}
+
+#[test]
+fn deleting_a_key_deletes_the_one_the_handle_names() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    let (s, h, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Gone", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(f.call(Service::DeleteKey, &[h]), STATUS_SUCCESS);
+    close(&mut f, h);
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Gone", KEY_READ).0, STATUS_OBJECT_NAME_NOT_FOUND);
+    // RegDeleteKeyEx opens with DELETE and the view flag and then deletes.
+    f.proc.wow64 = false;
+    let (s, h, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Gone64", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    close(&mut f, h);
+    f.proc.wow64 = true;
+    let (s, h) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Gone64", DELETE | KEY_WOW64_64KEY);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(f.call(Service::DeleteKey, &[h]), STATUS_SUCCESS);
 }

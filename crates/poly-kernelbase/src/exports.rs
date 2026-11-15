@@ -421,6 +421,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetComputerNameExW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetComputerNameW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("IsWow64Process2", "api-ms-win-core-wow64-l1-1-1"),
+    // ADR 0186, stage 2 (wow64apiset.h).
+    ("Wow64DisableWow64FsRedirection", "api-ms-win-core-wow64-l1-1-0"),
+    ("Wow64RevertWow64FsRedirection", "api-ms-win-core-wow64-l1-1-0"),
+    ("Wow64EnableWow64FsRedirection", "api-ms-win-core-wow64-l1-1-0"),
     ("GetSystemPowerStatus", "api-ms-win-core-sysinfo-l1-1-0"),
     // ADR 0155, step 9: what Chrome's browser needs to get past its start (Learn; the
     // contracts are the ones the functions' headers belong to, to be confirmed).
