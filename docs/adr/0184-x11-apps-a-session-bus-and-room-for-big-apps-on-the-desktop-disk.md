@@ -120,6 +120,12 @@ compositor's own session bus),
 | LibreOffice Writer 25.2.3 (default plugin) | no window ("Failed to open display") | Writer 1280x800, `hello.txt` loaded, typing works |
 | Krita 5.2.9 | no window (xcb: could not connect) | window, start page, Open dialog |
 | Blender 4.3.2 | no window (GHOST: unable to open a display) | window, the default scene (the first start takes 3 to 5 minutes: software GL under the emulated disk) |
+| Xfce Terminal 1.1.4 | dialog "Failed to open PTY: Inappropriate ioctl for device", no shell | a shell: the prompt takes typed text (`TIOCPKT`) |
+| Transmission 4.1 | `setsockopt(IP_MULTICAST_*)`, `IPV6_TCLASS`, `TCP_FASTOPEN`: "Protocol not available"; "Cannot autolaunch D-Bus" | none of them printed; the dconf service of the session bus runs |
+| Firefox ESR 153 | `neqo_glue ... os error 92` per UDP socket; no session bus | no socket error; window, welcome page |
+| Thunderbird 153 | the same | no socket error; window, account setup |
+| VS Code 1.146 | `mmap(0x1a000, ..)` answered with a high address, loop, abort | V8 reserves its address space at the hint (`mmap(0xec800000000, ..)` is honoured); the CLI still aborts later, in a thread that starts a libuv loop (open, see the hand-back) |
+| mpv 0.40 | partly (software output) | unchanged (EGL/GL is not part of this track) |
 
 ## Also in this track (no decision needed; each follows a man page)
 
