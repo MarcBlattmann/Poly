@@ -16,7 +16,14 @@ use poly_win32k::user::Env;
 #[link(name = "gdi32", kind = "raw-dylib")]
 unsafe extern "system" {
     fn CreateBitmap(w: i32, h: i32, planes: u32, bpp: u32, bits: *const u8) -> usize;
-    fn CreateDIBSection(hdc: usize, info: *const u8, usage: u32, bits: *mut *mut u8, section: usize, offset: u32) -> usize;
+    fn CreateDIBSection(
+        hdc: usize,
+        info: *const u8,
+        usage: u32,
+        bits: *mut *mut u8,
+        section: usize,
+        offset: u32,
+    ) -> usize;
     fn GetObjectType(h: usize) -> u32;
     fn GetPixel(hdc: usize, x: i32, y: i32) -> u32;
     fn SetPixelV(hdc: usize, x: i32, y: i32, color: u32) -> i32;

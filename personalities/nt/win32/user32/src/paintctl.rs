@@ -195,7 +195,12 @@ pub fn paint_button(h: H) {
                 p.text(&text, [8, 0, p.w - 4, th + 2], DT_LEFT | DT_SINGLELINE | DT_NOPREFIX, fg);
             }
         }
-        BS_AUTOCHECKBOX | ctl::BS_CHECKBOX | ctl::BS_3STATE | ctl::BS_AUTO3STATE | ctl::BS_RADIOBUTTON | BS_AUTORADIOBUTTON => {
+        BS_AUTOCHECKBOX
+        | ctl::BS_CHECKBOX
+        | ctl::BS_3STATE
+        | ctl::BS_AUTO3STATE
+        | ctl::BS_RADIOBUTTON
+        | BS_AUTORADIOBUTTON => {
             let radio = kind == ctl::BS_RADIOBUTTON || kind == BS_AUTORADIOBUTTON;
             let box_sz = 13;
             let top = (p.ht - box_sz) / 2;
@@ -380,7 +385,13 @@ pub fn paint_edit(h: H) {
     fillc(p.hdc, 0, 0, p.w, p.ht, bg);
     let mut text = ctl::text_of(h);
     let (s0, e0, pass) = ctl::edit_state(h, |s| (s.sel_start.min(s.sel_end), s.sel_start.max(s.sel_end), s.password));
-    let pw = if pass != 0 { pass } else if style & ctl::ES_PASSWORD != 0 { u16::from(b'*') } else { 0 };
+    let pw = if pass != 0 {
+        pass
+    } else if style & ctl::ES_PASSWORD != 0 {
+        u16::from(b'*')
+    } else {
+        0
+    };
     if pw != 0 {
         text.iter_mut().for_each(|c| *c = pw);
     }
@@ -414,7 +425,18 @@ pub fn paint_edit(h: H) {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn draw_line(p: &Painter, line: &[u16], base: usize, s0: usize, e0: usize, x: i32, y: i32, lh: i32, fg: u32, focused: bool) {
+fn draw_line(
+    p: &Painter,
+    line: &[u16],
+    base: usize,
+    s0: usize,
+    e0: usize,
+    x: i32,
+    y: i32,
+    lh: i32,
+    fg: u32,
+    focused: bool,
+) {
     // The selection within this line.
     let ls = s0.max(base).min(base + line.len()) - base;
     let le = e0.max(base).min(base + line.len()) - base;
@@ -449,7 +471,13 @@ pub fn paint_list(h: H) {
         if y >= p.ht {
             break;
         }
-        let fg = if *sel { sys(COLOR_HIGHLIGHTTEXT) } else if enabled { sys(COLOR_WINDOWTEXT) } else { sys(COLOR_GRAYTEXT) };
+        let fg = if *sel {
+            sys(COLOR_HIGHLIGHTTEXT)
+        } else if enabled {
+            sys(COLOR_WINDOWTEXT)
+        } else {
+            sys(COLOR_GRAYTEXT)
+        };
         if *sel {
             fillc(p.hdc, 0, y, p.w, y + ih, sys(COLOR_HIGHLIGHT));
         } else if focused && n as i32 == caret {

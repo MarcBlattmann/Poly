@@ -249,7 +249,13 @@ pub unsafe extern "system" fn MessageBoxW(owner: H, text: *const u16, caption: *
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn MessageBoxExW(owner: H, text: *const u16, caption: *const u16, ty: u32, _lang: u16) -> i32 {
+pub unsafe extern "system" fn MessageBoxExW(
+    owner: H,
+    text: *const u16,
+    caption: *const u16,
+    ty: u32,
+    _lang: u16,
+) -> i32 {
     // SAFETY: as MessageBoxW.
     unsafe { MessageBoxW(owner, text, caption, ty) }
 }

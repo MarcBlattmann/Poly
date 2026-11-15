@@ -271,7 +271,13 @@ pub fn parse_template(data: &[u8]) -> Option<DlgTemplate> {
         // The creation data: in the old format `n` bytes (the count includes
         // its own two bytes in `DLGITEMTEMPLATEEX`: Learn says "the length,
         // in bytes, of the creation data ... if zero there is none").
-        let data_len = if n == 0 { 0 } else if ex { n.saturating_sub(2) } else { n };
+        let data_len = if n == 0 {
+            0
+        } else if ex {
+            n.saturating_sub(2)
+        } else {
+            n
+        };
         let bytes = r.d.get(r.at..r.at + data_len)?.to_vec();
         r.at += data_len;
         items.push(DlgItem { style, ex_style, help_id, x, y, cx, cy, id, class, title, data: bytes });
@@ -568,7 +574,11 @@ pub fn parse_accelerators(data: &[u8]) -> Vec<Accel> {
     let mut out = Vec::new();
     for c in data.chunks_exact(8) {
         let flags = c[0];
-        out.push(Accel { flags: flags & !ACCEL_LAST, key: u16::from_le_bytes([c[2], c[3]]), cmd: u16::from_le_bytes([c[4], c[5]]) });
+        out.push(Accel {
+            flags: flags & !ACCEL_LAST,
+            key: u16::from_le_bytes([c[2], c[3]]),
+            cmd: u16::from_le_bytes([c[4], c[5]]),
+        });
         if flags & ACCEL_LAST != 0 {
             break;
         }
@@ -675,7 +685,15 @@ mod tests {
     fn radios() -> Vec<NavCtl> {
         // 1003 check, 1004..1006 radios (1004 group+tabstop), 1007 tri-state (group+tabstop)
         let c = |id, style| NavCtl { id, style, visible: true, enabled: true };
-        vec![c(1001, 0), c(1002, WS_TABSTOP), c(1003, WS_TABSTOP), c(1004, WS_GROUP | WS_TABSTOP), c(1005, 0), c(1006, 0), c(1007, WS_GROUP | WS_TABSTOP)]
+        vec![
+            c(1001, 0),
+            c(1002, WS_TABSTOP),
+            c(1003, WS_TABSTOP),
+            c(1004, WS_GROUP | WS_TABSTOP),
+            c(1005, 0),
+            c(1006, 0),
+            c(1007, WS_GROUP | WS_TABSTOP),
+        ]
     }
 
     #[test]

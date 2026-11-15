@@ -13,7 +13,10 @@ use super::{H, SYS, SpinLock, call, info, set_last_error, u};
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
-use poly_win32k::dlg::{self, DLGC_BUTTON, DLGC_DEFPUSHBUTTON, DLGC_HASSETSEL, DLGC_RADIOBUTTON, DLGC_STATIC, DLGC_UNDEFPUSHBUTTON, DLGC_WANTARROWS, DLGC_WANTCHARS};
+use poly_win32k::dlg::{
+    self, DLGC_BUTTON, DLGC_DEFPUSHBUTTON, DLGC_HASSETSEL, DLGC_RADIOBUTTON, DLGC_STATIC, DLGC_UNDEFPUSHBUTTON,
+    DLGC_WANTARROWS, DLGC_WANTCHARS,
+};
 use poly_win32k::proto::{Reply, Request};
 
 // ---- messages (winuser.h)
@@ -617,7 +620,12 @@ fn statik(h: H, msg: u32, w: usize, l: isize) -> isize {
         WM_GETDLGCODE => DLGC_STATIC as isize,
         WM_NCHITTEST => HTTRANSPARENT,
         STM_SETICON | STM_SETIMAGE => {
-            let old = STATS.with(|m| core::mem::replace(&mut m.entry(h as u32).or_default().image, if msg == STM_SETICON { w } else { l as usize }));
+            let old = STATS.with(|m| {
+                core::mem::replace(
+                    &mut m.entry(h as u32).or_default().image,
+                    if msg == STM_SETICON { w } else { l as usize },
+                )
+            });
             invalidate(h);
             old as isize
         }
@@ -657,9 +665,7 @@ pub struct Edit {
 static EDITS: SpinLock<BTreeMap<u32, Edit>> = SpinLock::new(BTreeMap::new());
 
 pub fn edit_state<R>(h: H, f: impl FnOnce(&mut Edit) -> R) -> R {
-    EDITS.with(|m| {
-        f(m.entry(h as u32).or_insert_with(|| Edit { limit: 0x7FFF_FFFE, ..Edit::default() }))
-    })
+    EDITS.with(|m| f(m.entry(h as u32).or_insert_with(|| Edit { limit: 0x7FFF_FFFE, ..Edit::default() })))
 }
 
 fn edit_changed(h: H, notify: bool) {
@@ -788,7 +794,11 @@ fn edit(h: H, msg: u32, w: usize, l: isize) -> isize {
         EM_SETSEL => {
             let len = text_of(h).len();
             let (s, e) = (w as i32, l as i32);
-            let (s, e) = if s == -1 { (e.max(0) as usize, e.max(0) as usize) } else { (s as usize, if e == -1 { len } else { e as usize }) };
+            let (s, e) = if s == -1 {
+                (e.max(0) as usize, e.max(0) as usize)
+            } else {
+                (s as usize, if e == -1 { len } else { e as usize })
+            };
             let (s, e) = if s == 0 && e == usize::MAX { (0, len) } else { (s.min(len), e.min(len)) };
             edit_state(h, |st| {
                 st.sel_start = s;
@@ -972,7 +982,8 @@ fn edit(h: H, msg: u32, w: usize, l: isize) -> isize {
                 }
                 0x16 => {
                     if !ro && let Some(t) = super::paintctl::clipboard_get_text(h) {
-                        let t: Vec<u16> = if multi { t } else { t.into_iter().take_while(|&c| c != 13 && c != 10).collect() };
+                        let t: Vec<u16> =
+                            if multi { t } else { t.into_iter().take_while(|&c| c != 13 && c != 10).collect() };
                         edit_replace(h, &t);
                     }
                 }
@@ -1121,7 +1132,9 @@ pub struct List {
 static LISTS: SpinLock<BTreeMap<u32, List>> = SpinLock::new(BTreeMap::new());
 
 fn list<R>(h: H, f: impl FnOnce(&mut List) -> R) -> R {
-    LISTS.with(|m| f(m.entry(h as u32).or_insert_with(|| List { cur: -1, caret: -1, item_height: 0, ..List::default() })))
+    LISTS.with(|m| {
+        f(m.entry(h as u32).or_insert_with(|| List { cur: -1, caret: -1, item_height: 0, ..List::default() }))
+    })
 }
 
 pub fn list_snapshot(h: H) -> (Vec<(Vec<u16>, bool)>, i32, i32) {
@@ -1222,13 +1235,20 @@ fn listbox(h: H, msg: u32, w: usize, l: isize) -> isize {
             } else {
                 unsafe { super::wide(l as *const u16, -1) }
             };
-            let data = if text.is_empty() && style & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE) != 0 { l as usize } else { 0 };
+            let data = if text.is_empty() && style & (LBS_OWNERDRAWFIXED | LBS_OWNERDRAWVARIABLE) != 0 {
+                l as usize
+            } else {
+                0
+            };
             let at = list(h, |ls| {
                 let n = ls.items.len();
                 let at = if msg == LB_INSERTSTRING && w32 >= 0 && (w32 as usize) < n {
                     w32 as usize
                 } else if style & LBS_SORT != 0 {
-                    ls.items.iter().position(|it| fold_cmp(&it.text, &text) == core::cmp::Ordering::Greater).unwrap_or(n)
+                    ls.items
+                        .iter()
+                        .position(|it| fold_cmp(&it.text, &text) == core::cmp::Ordering::Greater)
+                        .unwrap_or(n)
                 } else {
                     n
                 };
@@ -1313,7 +1333,11 @@ fn listbox(h: H, msg: u32, w: usize, l: isize) -> isize {
             if ok { 0 } else { LB_ERR }
         }
         LB_SELITEMRANGE | LB_SELITEMRANGEEX => {
-            let (a, b) = if msg == LB_SELITEMRANGE { ((l & 0xFFFF) as usize, ((l >> 16) & 0xFFFF) as usize) } else { (w, l as usize) };
+            let (a, b) = if msg == LB_SELITEMRANGE {
+                ((l & 0xFFFF) as usize, ((l >> 16) & 0xFFFF) as usize)
+            } else {
+                (w, l as usize)
+            };
             list(h, |ls| {
                 for i in a.min(b)..=a.max(b) {
                     if let Some(it) = ls.items.get_mut(i) {
@@ -1332,7 +1356,8 @@ fn listbox(h: H, msg: u32, w: usize, l: isize) -> isize {
             }
         }
         LB_GETSELITEMS => {
-            let picks: Vec<u32> = list(h, |ls| ls.items.iter().enumerate().filter(|(_, i)| i.selected).map(|(n, _)| n as u32).collect());
+            let picks: Vec<u32> =
+                list(h, |ls| ls.items.iter().enumerate().filter(|(_, i)| i.selected).map(|(n, _)| n as u32).collect());
             let n = picks.len().min(w);
             for (i, p) in picks.iter().take(n).enumerate() {
                 // SAFETY: the caller's array of `w` ints.

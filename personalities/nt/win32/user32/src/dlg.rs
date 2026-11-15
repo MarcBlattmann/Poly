@@ -5,7 +5,7 @@
 //! the behaviour is the spec sheets' (`DialogBoxParamW`, `CreateDialogParamW`,
 //! `EndDialog`, `GetDlgItem`, `SetDlgItemTextW`, `IsDialogMessageW`, ...).
 
-use super::ctl::{self, BN_CLICKED, BM_CLICK, send};
+use super::ctl::{self, BM_CLICK, BN_CLICKED, send};
 use super::{H, SYS, SpinLock, call, info, set_last_error, u, wide};
 use alloc::collections::BTreeMap;
 use alloc::vec;
@@ -188,7 +188,24 @@ fn dialog_font(tpl: &DlgTemplate) -> (usize, BaseUnits) {
     face.push(0);
     let height = -dlg::mul_div(i32::from(f.points), 96, 72);
     // SAFETY: a NUL-terminated face name.
-    let font = unsafe { CreateFontW(height, 0, 0, 0, i32::from(f.weight), u32::from(f.italic), 0, 0, u32::from(f.charset), 0, 0, 0, 0, face.as_ptr()) };
+    let font = unsafe {
+        CreateFontW(
+            height,
+            0,
+            0,
+            0,
+            i32::from(f.weight),
+            u32::from(f.italic),
+            0,
+            0,
+            u32::from(f.charset),
+            0,
+            0,
+            0,
+            0,
+            face.as_ptr(),
+        )
+    };
     (font, measure_font(font))
 }
 
@@ -230,7 +247,12 @@ fn first_focus(children: &[H]) -> H {
 
 fn nav_of(c: H) -> NavCtl {
     let i = info(c);
-    NavCtl { id: ctl::id_of(c), style: i.as_ref().map_or(0, |i| i.style), visible: i.as_ref().is_some_and(|i| i.style & WS_VISIBLE != 0), enabled: i.as_ref().is_some_and(|i| i.style & 0x0800_0000 == 0) }
+    NavCtl {
+        id: ctl::id_of(c),
+        style: i.as_ref().map_or(0, |i| i.style),
+        visible: i.as_ref().is_some_and(|i| i.style & WS_VISIBLE != 0),
+        enabled: i.as_ref().is_some_and(|i| i.style & 0x0800_0000 == 0),
+    }
 }
 
 fn nav_list(children: &[H]) -> Vec<NavCtl> {
@@ -239,7 +261,15 @@ fn nav_list(children: &[H]) -> Vec<NavCtl> {
 
 /// Make the dialog window of `tpl` and its controls and send `WM_INITDIALOG`;
 /// 0 with the last error set on failure.
-pub fn create_dialog_window(tpl: &DlgTemplate, inst: usize, parent: H, proc_: usize, param: isize, modal: bool, px_units: bool) -> H {
+pub fn create_dialog_window(
+    tpl: &DlgTemplate,
+    inst: usize,
+    parent: H,
+    proc_: usize,
+    param: isize,
+    modal: bool,
+    px_units: bool,
+) -> H {
     if parent != 0 && info(parent).is_none() {
         set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
@@ -278,10 +308,13 @@ pub fn create_dialog_window(tpl: &DlgTemplate, inst: usize, parent: H, proc_: us
         x = x.min(screen.work.right - ww).max(screen.work.left);
         y = y.min(screen.work.bottom - wh).max(screen.work.top);
     }
-    let class = tpl.class.class_name().map_or_else(|| wstr("#32770"), |mut c| {
-        c.push(0);
-        c
-    });
+    let class = tpl.class.class_name().map_or_else(
+        || wstr("#32770"),
+        |mut c| {
+            c.push(0);
+            c
+        },
+    );
     let mut title = tpl.title.clone();
     title.push(0);
     let init = InitData { magic: MAGIC, proc_ };
@@ -296,7 +329,20 @@ pub fn create_dialog_window(tpl: &DlgTemplate, inst: usize, parent: H, proc_: us
     };
     // SAFETY: NUL-terminated names; `init` outlives the creation messages.
     let hwnd = unsafe {
-        super::CreateWindowExW(ex, class.as_ptr(), title.as_ptr(), style & !WS_VISIBLE, x, y, ww, wh, parent, menu, inst, &init as *const InitData as usize)
+        super::CreateWindowExW(
+            ex,
+            class.as_ptr(),
+            title.as_ptr(),
+            style & !WS_VISIBLE,
+            x,
+            y,
+            ww,
+            wh,
+            parent,
+            menu,
+            inst,
+            &init as *const InitData as usize,
+        )
     };
     if hwnd == 0 {
         return 0;
@@ -326,7 +372,8 @@ pub fn create_dialog_window(tpl: &DlgTemplate, inst: usize, parent: H, proc_: us
         let mut cstyle = it.style | WS_CHILD;
         let mut cex = it.ex_style;
         let cname = it.class.class_name().unwrap_or_default();
-        let is_edit_like = [wstr("Edit"), wstr("ListBox"), wstr("ComboBox")].iter().any(|n| eq_fold(&n[..n.len() - 1], &cname));
+        let is_edit_like =
+            [wstr("Edit"), wstr("ListBox"), wstr("ComboBox")].iter().any(|n| eq_fold(&n[..n.len() - 1], &cname));
         if is_edit_like && cstyle & WS_BORDER != 0 {
             cstyle &= !WS_BORDER;
             cex |= WS_EX_CLIENTEDGE;
@@ -335,7 +382,22 @@ pub fn create_dialog_window(tpl: &DlgTemplate, inst: usize, parent: H, proc_: us
         let (pw, ph) = (units.x_px(i32::from(it.cx)), units.y_px(i32::from(it.cy)));
         let data = if it.data.is_empty() { 0 } else { it.data.as_ptr() as usize };
         // SAFETY: NUL-terminated names; the creation data outlives the call.
-        let c = unsafe { super::CreateWindowExW(cex, cls.as_ptr(), text.as_ptr(), cstyle, px, py, pw, ph, hwnd, it.id as usize, inst, data) };
+        let c = unsafe {
+            super::CreateWindowExW(
+                cex,
+                cls.as_ptr(),
+                text.as_ptr(),
+                cstyle,
+                px,
+                py,
+                pw,
+                ph,
+                hwnd,
+                it.id as usize,
+                inst,
+                data,
+            )
+        };
         if c == 0 {
             if tpl.style & dlg::DS_NOFAILCREATE != 0 {
                 continue;
@@ -722,7 +784,9 @@ fn set_default(dlg: H, id: u32) {
             continue;
         }
         let c = find_item(dlg, cid);
-        if c != 0 && send(c, ctl::WM_GETDLGCODE, 0, 0) as u32 & (dlg::DLGC_DEFPUSHBUTTON | dlg::DLGC_UNDEFPUSHBUTTON) != 0 {
+        if c != 0
+            && send(c, ctl::WM_GETDLGCODE, 0, 0) as u32 & (dlg::DLGC_DEFPUSHBUTTON | dlg::DLGC_UNDEFPUSHBUTTON) != 0
+        {
             send(c, ctl::BM_SETSTYLE, if def { ctl::BS_DEFPUSHBUTTON } else { ctl::BS_PUSHBUTTON } as usize, 1);
         }
     }
@@ -776,7 +840,8 @@ pub unsafe extern "system" fn IsDialogMessageW(dlg: H, msg: *mut CMsg) -> i32 {
     let vk = m.w as u32;
     match m.message {
         ctl::WM_KEYDOWN => {
-            let code = if target == dlg { 0 } else { send(target, ctl::WM_GETDLGCODE, vk as usize, msg as isize) as u32 };
+            let code =
+                if target == dlg { 0 } else { send(target, ctl::WM_GETDLGCODE, vk as usize, msg as isize) as u32 };
             match vk {
                 ctl::VK_TAB => {
                     if code & (dlg::DLGC_WANTTAB | dlg::DLGC_WANTALLKEYS) != 0 {
@@ -894,7 +959,14 @@ fn run_modal(hdlg: H, owner: H) -> isize {
             owner_disabled = true;
         }
     }
-    let top_owner = if owner != 0 { { let t = super::GetAncestor(owner, 2); if t == 0 { owner } else { t } } } else { 0 };
+    let top_owner = if owner != 0 {
+        {
+            let t = super::GetAncestor(owner, 2);
+            if t == 0 { owner } else { t }
+        }
+    } else {
+        0
+    };
     loop {
         if dlg_state(hdlg, |d| d.ended) || info(hdlg).is_none() {
             break;
@@ -933,7 +1005,13 @@ unsafe fn template_from(inst: usize, name: *const u16) -> Option<DlgTemplate> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateDialogParamW(inst: usize, name: *const u16, parent: H, proc_: usize, param: isize) -> H {
+pub unsafe extern "system" fn CreateDialogParamW(
+    inst: usize,
+    name: *const u16,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> H {
     // SAFETY: a resource id or a NUL-terminated name.
     let Some(tpl) = (unsafe { template_from(inst, name) }) else {
         if poly_win32_gui::last_error() == 0 {
@@ -945,7 +1023,13 @@ pub unsafe extern "system" fn CreateDialogParamW(inst: usize, name: *const u16, 
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateDialogIndirectParamW(inst: usize, template: *const u8, parent: H, proc_: usize, param: isize) -> H {
+pub unsafe extern "system" fn CreateDialogIndirectParamW(
+    inst: usize,
+    template: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> H {
     let Some(tpl) = (unsafe { template_in_memory(template) }) else {
         set_last_error(87);
         return 0;
@@ -965,7 +1049,13 @@ unsafe fn template_in_memory(p: *const u8) -> Option<DlgTemplate> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DialogBoxParamW(inst: usize, name: *const u16, parent: H, proc_: usize, param: isize) -> isize {
+pub unsafe extern "system" fn DialogBoxParamW(
+    inst: usize,
+    name: *const u16,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> isize {
     // SAFETY: a resource id or a NUL-terminated name.
     let Some(tpl) = (unsafe { template_from(inst, name) }) else {
         return -1;
@@ -974,7 +1064,13 @@ pub unsafe extern "system" fn DialogBoxParamW(inst: usize, name: *const u16, par
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DialogBoxIndirectParamW(inst: usize, template: *const u8, parent: H, proc_: usize, param: isize) -> isize {
+pub unsafe extern "system" fn DialogBoxIndirectParamW(
+    inst: usize,
+    template: *const u8,
+    parent: H,
+    proc_: usize,
+    param: isize,
+) -> isize {
     let Some(tpl) = (unsafe { template_in_memory(template) }) else {
         return -1;
     };
