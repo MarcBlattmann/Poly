@@ -9,6 +9,7 @@
 
 extern crate alloc;
 
+mod controls;
 mod imagelist;
 
 use poly_win32_gui as _;
@@ -28,14 +29,20 @@ pub unsafe extern "system" fn InitCommonControlsEx(init: *const u32) -> i32 {
     }
     // SAFETY: `dwSize` says the structure is 8 bytes: `dwICC` follows (`commctrl.h`).
     let icc = unsafe { init.add(1).read_unaligned() };
-    i32::from(poly_kernelbase::session::init_common_controls(size, icc))
+    let ok = poly_kernelbase::session::init_common_controls(size, icc);
+    if ok {
+        controls::register_all();
+    }
+    i32::from(ok)
 }
 
 /// `InitCommonControls()`: "Registers and initializes certain common control window classes"
 /// (Learn); it returns nothing. Also export number 17 (`build.rs`): programs built with the
 /// SDK's import library import it by that ordinal (7-Zip File Manager does).
 #[unsafe(no_mangle)]
-pub extern "system" fn InitCommonControls() {}
+pub extern "system" fn InitCommonControls() {
+    controls::register_all();
+}
 
 /// `DllGetVersion(pdvi)` (`shlwapi.h`): the version of this DLL. Programs without a
 /// manifest get comctl32 5.82 (the oracle's tests run that way), so that is what is

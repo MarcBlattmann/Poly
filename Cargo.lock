@@ -119,6 +119,10 @@ name = "poly-com"
 version = "0.0.1"
 
 [[package]]
+name = "poly-comctl"
+version = "0.0.1"
+
+[[package]]
 name = "poly-comdlg"
 version = "0.0.1"
 

@@ -193,6 +193,8 @@ struct Queue {
     raw: VecDeque<Msg>,
     /// The thread's own key state after SetKeyboardState (`raw`).
     keys: Option<Vec<u8>>,
+    /// The queue's caret and caret position (`caret`).
+    caret: crate::caret::CaretQueue,
 }
 
 #[derive(Debug)]
@@ -845,7 +847,9 @@ impl Wm {
         let (wndproc, unicode, extra, class_name) = {
             let c = self.classes[class].as_mut().expect("found");
             c.windows += 1;
-            (c.wndproc, c.unicode, c.wnd_extra.max(0) as usize, c.name.clone())
+            // A window of a system class made through an `A` function is an ANSI window.
+            let unicode = c.unicode && !(s.ansi && c.pid == SYSTEM_DESKTOP_PID);
+            (c.wndproc, unicode, c.wnd_extra.max(0) as usize, c.name.clone())
         };
         // WM_GETMINMAXINFO at creation only for a window that is not
         // WS_POPUP or has a sizing frame (ShowWindow.yaml
@@ -1001,6 +1005,9 @@ impl Wm {
         }
         self.forget_input(hwnd);
         self.clip.window_gone(hwnd);
+        for q in self.queues.values_mut() {
+            q.caret.window_gone(hwnd);
+        }
         for q in self.queues.values_mut() {
             q.posted.retain(|m| m.hwnd != hwnd);
         }
@@ -2119,6 +2126,7 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::InputState {} => self.input_reply(ctx.key()),
+            Request::Caret { op, hwnd, a, b, tid } => self.caret_op(ctx, op, hwnd, a, b, tid),
             Request::MayTakeForeground {} => Reply::Bool { value: self.may_take_foreground(ctx.key()) },
             Request::ActivationHistory {} => {
                 let k = self.input_key(ctx.key());

@@ -12,7 +12,6 @@ poly_win32_rt::fail_exports!(
         CharToOemBuffW,
         ClipCursor,
         CloseTouchInputHandle,
-        CreateWindowExA,
         DdeClientTransaction,
         DdeConnect,
         DdeCreateStringHandleW,
@@ -37,7 +36,6 @@ poly_win32_rt::fail_exports!(
         RegisterHotKey,
         RegisterRawInputDevices,
         UnregisterHotKey,
-        UnregisterClassA
     ]
 );
 

@@ -48,6 +48,7 @@
 
 extern crate alloc;
 
+pub mod caret;
 pub mod clip;
 pub mod desktop;
 pub mod dib;
