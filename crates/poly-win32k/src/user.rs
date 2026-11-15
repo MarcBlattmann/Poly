@@ -2080,8 +2080,9 @@ pub fn msg_wait<E: Env + ?Sized>(env: &E, handles: &[u64], wait_all: bool, ms: u
         };
         let input = changed & mask != 0 || (flags & MWMO_INPUTAVAILABLE != 0 && now & mask != 0);
         if input && !wait_all {
-            // A signaled object still wins over the message.
-            if n > 0 {
+            // A message that is new ends the wait first (MsgWaitForMultipleObjects.yaml, mwait_basic); a
+            // queued one that was seen already (`MWMO_INPUTAVAILABLE`) loses to a signaled object.
+            if n > 0 && changed & mask == 0 {
                 let r = env.wait_handles(handles, false, Some(0), false, false);
                 if r != WAIT_TIMEOUT {
                     return r;

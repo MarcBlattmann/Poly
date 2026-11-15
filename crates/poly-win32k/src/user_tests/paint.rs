@@ -304,3 +304,30 @@ fn children_are_painted_in_their_z_order_after_their_parent() {
         assert_eq!(hwnds, [p as u32, z as u32, y as u32, x as u32]);
     });
 }
+
+#[test]
+fn invalidating_through_a_parent_erases_its_children_unless_the_flag_alone_reached_them() {
+    // RedrawWindow.yaml `children_default`: a parent without WS_CLIPCHILDREN invalidates its children
+    // with itself, frame and erase pending (InvalidateRect.yaml ir_children), also with
+    // RDW_ALLCHILDREN; a parent with WS_CLIPCHILDREN reaches them only through RDW_ALLCHILDREN, and
+    // then, without RDW_ERASE, they are not erased (BeginPaint.yaml bp_chrome_first_paint).
+    with_env(|e| {
+        interactive(e);
+        register(e, "Pc");
+        let plain = create(e, 'P', 0, "Pc", WS_POPUP | WS_VISIBLE, 100, 100, 200, 140, 0, 0);
+        let a = create(e, 'A', 0, "Pc", WS_CHILD | WS_VISIBLE, 10, 10, 60, 40, plain, 1);
+        let clip = create(e, 'Q', 0, "Pc", WS_POPUP | WS_VISIBLE | WS_CLIPCHILDREN, 400, 100, 200, 140, 0, 0);
+        let b = create(e, 'B', 0, "Pc", WS_CHILD | WS_VISIBLE, 10, 10, 60, 40, clip, 2);
+        for (parent, child, expect_erase) in [(plain, a, true), (clip, b, false)] {
+            paint::redraw_window(e, parent, None, RDW_VALIDATE | RDW_ALLCHILDREN);
+            paint::redraw_window(e, parent, None, RDW_INVALIDATE | RDW_ALLCHILDREN);
+            let c = paint::pending(e, child as u32).expect("child");
+            assert!(!c.rects.is_empty() && c.frame, "the child is invalid with its frame");
+            assert_eq!(c.erase, expect_erase, "erase pending for child {child:#x}");
+        }
+        // The parent that clips: RDW_ERASE asked for erases them too.
+        paint::redraw_window(e, clip, None, RDW_VALIDATE | RDW_ALLCHILDREN);
+        paint::redraw_window(e, clip, None, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+        assert!(paint::pending(e, b as u32).expect("child").erase);
+    });
+}

@@ -80,7 +80,7 @@ impl Registry {
 
     /// Whether `h` is a handle that was given out once (and may be gone since).
     fn was_issued(&self, h: usize) -> bool {
-        h >= FIRST && (h - FIRST) % STEP == 0 && (h - FIRST) / STEP < self.issued
+        h >= FIRST && (h - FIRST).is_multiple_of(STEP) && (h - FIRST) / STEP < self.issued
     }
 
     /// Release `h` with the function of `kind`. Another kind's handle, a released one and NULL fail

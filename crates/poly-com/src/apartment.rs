@@ -262,7 +262,7 @@ mod tests {
         assert!(a.ole_uninitialize());
         assert_eq!(a.model(), None);
         assert!(a.ole_used());
-        assert_eq!(Apartment::from_word(a.to_word()).ole_used(), true);
+        assert!(Apartment::from_word(a.to_word()).ole_used());
         // An unmatched call changes nothing, and the next OleInitialize is the first again.
         assert!(!a.ole_uninitialize());
         assert_eq!(a.ole_initialize(), S_OK);
