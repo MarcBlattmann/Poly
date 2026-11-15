@@ -25,6 +25,8 @@
 //! Poly fills the page when a process starts (a snapshot: the clock fields do not advance).
 
 use crate::cpu::CpuId;
+use alloc::boxed::Box;
+use alloc::vec;
 use poly_rtl::version;
 
 /// Where the page is mapped in every process.
@@ -96,9 +98,10 @@ fn put_time(page: &mut [u8; SIZE], at: usize, value: u64) {
     put(page, at + 8, &((value >> 32) as u32).to_le_bytes());
 }
 
-/// The page's contents.
-pub fn page(f: &Facts) -> [u8; SIZE] {
-    let mut p = [0u8; SIZE];
+/// The page's contents. Built on the heap: a kernel thread's stack has room for little more than
+/// the system call it serves, and this runs deep inside process creation.
+pub fn page(f: &Facts) -> Box<[u8; SIZE]> {
+    let mut p: Box<[u8; SIZE]> = vec![0u8; SIZE].into_boxed_slice().try_into().expect("SIZE bytes");
     put(&mut p, TICK_COUNT_MULTIPLIER, &TICK_MULTIPLIER.to_le_bytes());
     put_time(&mut p, INTERRUPT_TIME, f.uptime);
     put_time(&mut p, SYSTEM_TIME, f.system_time);
