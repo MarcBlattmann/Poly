@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "srw_release_errors_b",
+      "exe_sha256": "7f3730fdb97eae164e3e2148d6caa539d7ddf98a9f9e1fead03b0bb6fc57df44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhfb25fZnJlZTogMHg2MDBkCnNoX29uX2V4Y2x1c2l2ZTogMHg2MDBkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ex_on_free: 0x600d\nsh_on_exclusive: 0x600d\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 105
+    },
+    {
+      "name": "srw_release_errors_c",
+      "exe_sha256": "98b0a492ec92fd1667a270c2015f274989ca2003efd8f417f9d4ddef2f430eed",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2hfb25fZnJlZTogMHhjMDAwMDI2NApleF90d2ljZTogMHg2MDBkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sh_on_free: 0xc0000264\nex_twice: 0x600d\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 105
+    }
+  ]
+}

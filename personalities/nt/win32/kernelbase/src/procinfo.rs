@@ -35,12 +35,30 @@ pub unsafe extern "system" fn QueryProcessCycleTime(process: Handle, cycles: *mu
     TRUE
 }
 
-/// What this process set with `SetProcessInformation`: memory priority, the two power
-/// throttling masks, the leap-second flags.
-static MEMORY_PRIORITY: AtomicU32 = AtomicU32::new(procinfo::MEMORY_PRIORITY_NORMAL);
-static THROTTLE_CONTROL: AtomicU32 = AtomicU32::new(0);
-static THROTTLE_STATE: AtomicU32 = AtomicU32::new(0);
+/// The leap-second flags this process set with `SetProcessInformation` (Poly keeps them here;
+/// the memory priority and the power-throttling masks are the kernel's, so another process can
+/// set and read them: `NtSetInformationProcess` classes 39 and 77).
 static LEAP_FLAGS: AtomicU32 = AtomicU32::new(0);
+
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn NtSetInformationProcess(process: Handle, class: u32, info: *const u8, length: u32) -> poly_ntobj::NtStatus;
+}
+
+/// `ProcessMemoryPriority` and `ProcessPowerThrottlingState` of `NtSetInformationProcess` /
+/// `NtQueryInformationProcess` (`ntddk.h`): the structures are `SetProcessInformation`'s.
+const NT_PROCESS_MEMORY_PRIORITY: u32 = 39;
+const NT_PROCESS_POWER_THROTTLING_STATE: u32 = 77;
+
+/// The kernel's class for a `PROCESS_INFORMATION_CLASS` it keeps per process.
+fn kernel_class(class: u32) -> Option<u32> {
+    match class {
+        procinfo::PROCESS_MEMORY_PRIORITY => Some(NT_PROCESS_MEMORY_PRIORITY),
+        procinfo::PROCESS_POWER_THROTTLING => Some(NT_PROCESS_POWER_THROTTLING_STATE),
+        _ => None,
+    }
+}
 
 /// Whether `process` is a handle to this process (a bad handle sets the last error).
 fn is_self(process: Handle) -> Option<bool> {
@@ -51,26 +69,31 @@ fn is_self(process: Handle) -> Option<bool> {
     (pid != 0).then(|| pid == crate::process::GetCurrentProcessId())
 }
 
-/// The state `GetProcessInformation` reports for `process`: this process's own, or a new
-/// process's for another (Poly keeps the state in the process that set it).
-fn state_of(own: bool) -> ProcessState {
-    if !own {
-        return ProcessState::NEW;
-    }
-    ProcessState {
-        memory_priority: MEMORY_PRIORITY.load(Ordering::Relaxed),
-        throttle_control: THROTTLE_CONTROL.load(Ordering::Relaxed),
-        throttle_state: THROTTLE_STATE.load(Ordering::Relaxed),
-        leap_flags: LEAP_FLAGS.load(Ordering::Relaxed),
-    }
-}
-
 /// `GetProcessInformation(hProcess, ProcessInformationClass, ProcessInformation,
 /// ProcessInformationSize)`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetProcessInformation(process: Handle, class: u32, info: *mut u8, size: u32) -> i32 {
     if info.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // The sheet's rule `version_first`: the caller's buffer says Version 1 before the call.
+    // SAFETY: the caller's buffer of `size` bytes (at least the field when the size is right).
+    if class == procinfo::PROCESS_POWER_THROTTLING
+        && size as usize == 12
+        && !procinfo::power_throttling_version_ok(unsafe { info.cast::<u32>().read_unaligned() })
+    {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // The class and the size first (the sheet's `ERROR_INVALID_PARAMETER` / `ERROR_BAD_LENGTH`).
+    if let Err(e) = procinfo::get(&ProcessState::NEW, &AppMemory::default(), class, size as usize) {
+        return fail(e, FALSE);
+    }
+    // What the kernel keeps per process: memory priority and power throttling, of any process the
+    // handle can query.
+    if let Some(kclass) = kernel_class(class) {
+        // SAFETY: the caller's buffer of `size` bytes.
+        let st = unsafe { nt::NtQueryInformationProcess(process, kclass, info, size, core::ptr::null_mut()) };
+        return if st.is_success() { TRUE } else { fail_status(st, FALSE) };
     }
     let Some(own) = is_self(process) else { return FALSE };
     let mut memory = AppMemory::default();
@@ -83,15 +106,9 @@ pub unsafe extern "system" fn GetProcessInformation(process: Handle, class: u32,
             memory.available_commit = u64::from_le_bytes(status[32..40].try_into().expect("8 bytes"));
         }
     }
-    // The sheet's rule `version_first`: the caller's buffer says Version 1 before the call.
-    // SAFETY: the caller's buffer of `size` bytes (at least the field when the size is right).
-    if class == procinfo::PROCESS_POWER_THROTTLING
-        && size as usize == 12
-        && !procinfo::power_throttling_version_ok(unsafe { info.cast::<u32>().read_unaligned() })
-    {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    match procinfo::get(&state_of(own), &memory, class, size as usize) {
+    let state =
+        ProcessState { leap_flags: if own { LEAP_FLAGS.load(Ordering::Relaxed) } else { 0 }, ..ProcessState::NEW };
+    match procinfo::get(&state, &memory, class, size as usize) {
         Ok(bytes) => {
             // SAFETY: the caller's buffer holds `size` bytes, which is `bytes.len()`.
             unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), info, bytes.len()) };
@@ -101,33 +118,36 @@ pub unsafe extern "system" fn GetProcessInformation(process: Handle, class: u32,
     }
 }
 
-/// `SetProcessInformation`: kept for this process and read back by `GetProcessInformation`;
-/// for another process the request is checked and accepted without effect (nothing in Poly
-/// acts on memory priority or power throttling yet).
+/// `SetProcessInformation`: the class, the size and the values are judged by
+/// `poly_kernelbase::procinfo::set` (87 / 24); memory priority and power throttling go to the
+/// kernel (`NtSetInformationProcess`, needs `PROCESS_SET_INFORMATION`: 5 and 6 come from there)
+/// and are read back by any process that can query this one; the leap-second flags are this
+/// process's own.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SetProcessInformation(process: Handle, class: u32, info: *const u8, size: u32) -> i32 {
     if info.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    let Some(own) = is_self(process) else { return FALSE };
     // The buffer is read only when its size is the class's structure's; otherwise `set` sees
     // an empty one and refuses it (a wrong length, or a class it does not know).
-    let len = procinfo::class_size(class).filter(|&n| n == size as usize).unwrap_or(0);
+    let len = procinfo::set_class_size(class).filter(|&n| n == size as usize).unwrap_or(0);
     // SAFETY: the caller's buffer of `size` bytes; `len` is `size` or 0.
     let data: Vec<u8> = unsafe { core::slice::from_raw_parts(info, len) }.to_vec();
-    let mut state = state_of(own);
-    match procinfo::set(&mut state, class, &data) {
-        Ok(()) => {
-            if own {
-                MEMORY_PRIORITY.store(state.memory_priority, Ordering::Relaxed);
-                THROTTLE_CONTROL.store(state.throttle_control, Ordering::Relaxed);
-                THROTTLE_STATE.store(state.throttle_state, Ordering::Relaxed);
-                LEAP_FLAGS.store(state.leap_flags, Ordering::Relaxed);
-            }
-            TRUE
-        }
-        Err(e) => fail(e, FALSE),
+    let mut state = ProcessState::NEW;
+    if let Err(e) = procinfo::set(&mut state, class, &data) {
+        return fail(e, FALSE);
     }
+    if let Some(kclass) = kernel_class(class) {
+        // SAFETY: the validated structure.
+        let st = unsafe { NtSetInformationProcess(process, kclass, data.as_ptr(), data.len() as u32) };
+        return if st.is_success() { TRUE } else { fail_status(st, FALSE) };
+    }
+    // Leap-second flags: kept for this process; another process's are accepted without effect.
+    let Some(own) = is_self(process) else { return FALSE };
+    if own {
+        LEAP_FLAGS.store(state.leap_flags, Ordering::Relaxed);
+    }
+    TRUE
 }
 
 /// This process's shutdown level and flags (`SetProcessShutdownParameters`). Poly has no

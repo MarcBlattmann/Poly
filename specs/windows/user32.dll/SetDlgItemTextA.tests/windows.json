@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "sda_windows",
+      "exe_sha256": "eb518a228369c980d5123f4253c8b3f1a85993b5be0942166c9cc6986e8a3f16",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SXNXaW5kb3dVbmljb2RlOiBwYXJlbnQgMSBBTlNJIGNoaWxkIDAgVW5pY29kZSBjaGlsZCAxClNldERsZ0l0ZW1UZXh0QSB0byB0aGUgQU5TSSBjaGlsZDogMQpTZXREbGdJdGVtVGV4dEEgdG8gdGhlIFVuaWNvZGUgY2hpbGQ6IDEKU2V0RGxnSXRlbVRleHRBICdwbGFpbicgdG8gdGhlIFVuaWNvZGUgY2hpbGQ6IDEKU2V0RGxnSXRlbVRleHRXIChhIFVuaWNvZGUgdGV4dCkgdG8gdGhlIEFOU0kgY2hpbGQ6IDEKU2V0RGxnSXRlbVRleHRXIChhIFVuaWNvZGUgdGV4dCkgdG8gdGhlIFVuaWNvZGUgY2hpbGQ6IDEKICAgW0Egd2luZG93XSBXTV9TRVRURVhUIGdvdCBieXRlcyAnY2FmPGU5PiA8ODA+IDw4MT4gPGZmPicKICAgW1cgd2luZG93XSBXTV9TRVRURVhUIGdvdCB1bml0cyAnY2FmPDAwZTk+IDwyMGFjPiA8MDA4MT4gPDAwZmY+JwogICBbVyB3aW5kb3ddIFdNX1NFVFRFWFQgZ290IHVuaXRzICdwbGFpbicKICAgW0Egd2luZG93XSBXTV9TRVRURVhUIGdvdCBieXRlcyAnY2FmPGU5Pj8/PDgwPicKICAgW1cgd2luZG93XSBXTV9TRVRURVhUIGdvdCB1bml0cyAnY2FmPDAwZTk+PDRlMmQ+PDA0MTY+PDIwYWM+JwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "IsWindowUnicode: parent 1 ANSI child 0 Unicode child 1\nSetDlgItemTextA to the ANSI child: 1\nSetDlgItemTextA to the Unicode child: 1\nSetDlgItemTextA 'plain' to the Unicode child: 1\nSetDlgItemTextW (a Unicode text) to the ANSI child: 1\nSetDlgItemTextW (a Unicode text) to the Unicode child: 1\n   [A window] WM_SETTEXT got bytes 'caf<e9> <80> <81> <ff>'\n   [W window] WM_SETTEXT got units 'caf<00e9> <20ac> <0081> <00ff>'\n   [W window] WM_SETTEXT got units 'plain'\n   [A window] WM_SETTEXT got bytes 'caf<e9>??<80>'\n   [W window] WM_SETTEXT got units 'caf<00e9><4e2d><0416><20ac>'\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

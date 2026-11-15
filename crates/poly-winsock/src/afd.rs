@@ -73,6 +73,14 @@ pub const INFO: u32 = code(0x80F);
 /// The network interfaces and their addresses, for `iphlpapi.dll`
 /// (`poly_iphlp::wire`; ADR 0155). Takes nothing; the output is the list.
 pub const IF_LIST: u32 = code(0x810);
+/// `AcceptEx` (`mswsock.dll`, ADR 0195): wait for a connection on the listener (the request's own
+/// endpoint) and, with a receive length, for its first data; the connection goes into the endpoint
+/// the request names. Always overlapped: it pends, its completion writes the data and the two
+/// addresses into the buffer. Input: [`AcceptExReq`].
+pub const ACCEPT_EX: u32 = code(0x811);
+/// `ConnectEx` (`mswsock.dll`, ADR 0195): an overlapped connect, then the data to send. Input:
+/// [`ConnectExReq`].
+pub const CONNECT_EX: u32 = code(0x812);
 
 /// Pend instead of waiting ([`SEND`], [`RECV`]).
 pub const FLAG_OVERLAPPED: u32 = 0x1;
@@ -170,6 +178,74 @@ impl SendReq {
     /// The destination's bytes, if any.
     pub fn to(&self) -> Option<&[u8]> {
         (self.addr_len != 0).then(|| &self.addr[..(self.addr_len as usize).min(MAX_SIZE)])
+    }
+}
+
+/// [`ACCEPT_EX`]: the endpoint that takes the connection, the buffer (data first, then the local
+/// and the remote address, each in the length given) and its three lengths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AcceptExReq {
+    pub accept: u64,
+    pub buf: u64,
+    pub recv_len: u32,
+    pub local_len: u32,
+    pub remote_len: u32,
+}
+
+impl AcceptExReq {
+    pub const SIZE: usize = 28;
+
+    pub fn encode(&self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..8].copy_from_slice(&self.accept.to_le_bytes());
+        b[8..16].copy_from_slice(&self.buf.to_le_bytes());
+        b[16..20].copy_from_slice(&self.recv_len.to_le_bytes());
+        b[20..24].copy_from_slice(&self.local_len.to_le_bytes());
+        b[24..28].copy_from_slice(&self.remote_len.to_le_bytes());
+        b
+    }
+
+    pub fn decode(b: &[u8]) -> Option<AcceptExReq> {
+        Some(AcceptExReq {
+            accept: u64_at(b, 0)?,
+            buf: u64_at(b, 8)?,
+            recv_len: u32_at(b, 16)?,
+            local_len: u32_at(b, 20)?,
+            remote_len: u32_at(b, 24)?,
+        })
+    }
+}
+
+/// [`CONNECT_EX`]: the data to send once connected (address and length) and the destination.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConnectExReq {
+    pub buf: u64,
+    pub len: u32,
+    pub addr_len: u32,
+    pub addr: [u8; MAX_SIZE],
+}
+
+impl ConnectExReq {
+    pub const SIZE: usize = 16 + MAX_SIZE;
+
+    pub fn encode(&self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0..8].copy_from_slice(&self.buf.to_le_bytes());
+        b[8..12].copy_from_slice(&self.len.to_le_bytes());
+        b[12..16].copy_from_slice(&self.addr_len.to_le_bytes());
+        b[16..].copy_from_slice(&self.addr);
+        b
+    }
+
+    pub fn decode(b: &[u8]) -> Option<ConnectExReq> {
+        let mut addr = [0u8; MAX_SIZE];
+        addr.copy_from_slice(b.get(16..16 + MAX_SIZE)?);
+        Some(ConnectExReq { buf: u64_at(b, 0)?, len: u32_at(b, 8)?, addr_len: u32_at(b, 12)?, addr })
+    }
+
+    /// The destination's bytes.
+    pub fn to(&self) -> &[u8] {
+        &self.addr[..(self.addr_len as usize).min(MAX_SIZE)]
     }
 }
 
@@ -351,25 +427,77 @@ impl Info {
     }
 }
 
-/// `socket`'s checks (Learn: "socket"): the family (`WSAEAFNOSUPPORT`),
-/// the type (`SOCK_RAW` and others: `WSAESOCKTNOSUPPORT`), the protocol
-/// (`WSAEPROTOTYPE` when it belongs to the other type,
-/// `WSAEPROTONOSUPPORT` when Poly has no such protocol). A zero protocol
-/// becomes the type's (TCP for streams, UDP for datagrams); the request
-/// returned is what [`SOCKET`] takes.
+/// `socket`'s and `WSASocketW`'s checks (Learn: "socket", "WSASocketW"; observed on Windows, see
+/// the spec sheet of `WSASocketW`): the family (`WSAEAFNOSUPPORT`; `AF_UNSPEC` needs a protocol that
+/// says what to make, else `WSAEINVAL`; `AF_UNIX` makes a stream socket only), the type (type 0 takes
+/// it from the protocol, stream when that is 0 as well; `SOCK_RAW` needs a privilege Poly has no use
+/// for: `WSAEACCES`; any other type `WSAESOCKTNOSUPPORT`) and the protocol (one that does not belong
+/// to the type: `WSAEPROTONOSUPPORT`). A zero protocol becomes the type's (TCP for streams, UDP for
+/// datagrams); the request returned is what [`SOCKET`] takes. `AF_UNSPEC` and `AF_UNIX` sockets are
+/// made as IPv4 ones.
 pub fn check_socket(family: i32, ty: i32, protocol: i32) -> Result<SocketReq, u32> {
     use crate::consts::*;
-    if !matches!(family, AF_INET | AF_INET6) {
-        return Err(WSAEAFNOSUPPORT);
-    }
+    let family = match family {
+        AF_INET | AF_INET6 => family,
+        AF_UNSPEC if matches!(protocol, IPPROTO_TCP | IPPROTO_UDP) => AF_INET,
+        AF_UNSPEC => return Err(WSAEINVAL),
+        // `AF_UNIX`: a stream socket is made, a datagram one is not.
+        1 if matches!(ty, SOCK_STREAM | 0) => AF_INET,
+        _ => return Err(WSAEAFNOSUPPORT),
+    };
+    let ty = match (ty, protocol) {
+        (0, IPPROTO_UDP) => SOCK_DGRAM,
+        (0, 0 | IPPROTO_TCP) => SOCK_STREAM,
+        (0, _) => return Err(WSAEPROTONOSUPPORT),
+        _ => ty,
+    };
     let protocol = match (ty, protocol) {
         (SOCK_STREAM, 0 | IPPROTO_TCP) => IPPROTO_TCP,
         (SOCK_DGRAM, 0 | IPPROTO_UDP) => IPPROTO_UDP,
-        (SOCK_STREAM, IPPROTO_UDP) | (SOCK_DGRAM, IPPROTO_TCP) => return Err(WSAEPROTOTYPE),
         (SOCK_STREAM | SOCK_DGRAM, _) => return Err(WSAEPROTONOSUPPORT),
+        (SOCK_RAW, _) => return Err(WSAEACCES),
         _ => return Err(WSAESOCKTNOSUPPORT),
     };
     Ok(SocketReq { family, ty, protocol })
+}
+
+/// Whether `(level, name)` is an option Poly knows (for some kind of socket). `getsockopt` of an
+/// unknown option sets the length it returns to 0; one that is known but not the socket's own
+/// (`SO_BROADCAST` on a stream) leaves it.
+pub fn option_known(level: i32, name: i32) -> bool {
+    use crate::consts::*;
+    match level {
+        SOL_SOCKET => matches!(
+            name,
+            SO_DEBUG
+                | SO_ACCEPTCONN
+                | SO_REUSEADDR
+                | SO_KEEPALIVE
+                | SO_DONTROUTE
+                | SO_BROADCAST
+                | SO_LINGER
+                | SO_OOBINLINE
+                | SO_DONTLINGER
+                | SO_EXCLUSIVEADDRUSE
+                | SO_SNDBUF
+                | SO_RCVBUF
+                | SO_SNDTIMEO
+                | SO_RCVTIMEO
+                | SO_ERROR
+                | SO_TYPE
+                | SO_CONDITIONAL_ACCEPT
+                // `SO_MAX_MSG_SIZE`, `SO_PROTOCOL_INFOW`, `SO_RANDOMIZE_PORT`, `SO_CONNECT_TIME`
+                // (`winsock2.h`, `ws2def.h`, `mswsock.h`).
+                | 0x2003
+                | 0x2005
+                | 0x3005
+                | 0x700C
+        ),
+        IPPROTO_TCP => matches!(name, TCP_NODELAY | TCP_KEEPALIVE | TCP_KEEPINTVL | TCP_KEEPCNT),
+        IPPROTO_IP => matches!(name, IP_TTL | IP_TOS | 50),
+        IPPROTO_IPV6 => matches!(name, IPV6_UNICAST_HOPS | IPV6_V6ONLY | 50),
+        _ => false,
+    }
 }
 
 /// [`SET_OPTION`]'s and [`GET_OPTION`]'s level and name, then the value.
@@ -435,6 +563,11 @@ mod tests {
         let d = NetInfo::decode(&ni.encode()).unwrap();
         assert_eq!(d.servers(), &[[10, 0, 2, 3]]);
         assert_eq!(d.host_name(), "poly");
+        let ax = AcceptExReq { accept: 0x44, buf: 0x5000, recv_len: 16, local_len: 32, remote_len: 32 };
+        assert_eq!(AcceptExReq::decode(&ax.encode()), Some(ax));
+        let cx = ConnectExReq { buf: 0x6000, len: 7, addr_len: n as u32, addr };
+        let d = ConnectExReq::decode(&cx.encode()).unwrap();
+        assert_eq!((d, d.to().len()), (cx, 16));
         let i = Info { family: 2, ty: 1, protocol: 6, listening: 1, nonblocking: 0 };
         assert_eq!(Info::decode(&i.encode()), Some(i));
         assert_eq!(read_u32(&option_header(0xffff, 4), 4), Some(4));
@@ -445,9 +578,31 @@ mod tests {
         use crate::consts::*;
         assert_eq!(check_socket(AF_INET, SOCK_STREAM, 0), Ok(SocketReq { family: 2, ty: 1, protocol: 6 }));
         assert_eq!(check_socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP).map(|r| r.protocol), Ok(17));
-        assert_eq!(check_socket(AF_UNSPEC, SOCK_STREAM, 0), Err(WSAEAFNOSUPPORT));
-        assert_eq!(check_socket(AF_INET, SOCK_RAW, 0), Err(WSAESOCKTNOSUPPORT));
-        assert_eq!(check_socket(AF_INET, SOCK_STREAM, IPPROTO_UDP), Err(WSAEPROTOTYPE));
+        // AF_UNSPEC needs a protocol to say what to make.
+        assert_eq!(check_socket(AF_UNSPEC, SOCK_STREAM, 0), Err(WSAEINVAL));
+        assert_eq!(check_socket(0, 0, 0), Err(WSAEINVAL));
+        assert_eq!(check_socket(AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP), Ok(SocketReq { family: 2, ty: 1, protocol: 6 }));
+        assert_eq!(check_socket(AF_UNSPEC, SOCK_DGRAM, IPPROTO_UDP).map(|r| r.family), Ok(2));
+        // AF_UNIX: a stream socket is made, a datagram one is not.
+        assert_eq!(check_socket(1, SOCK_STREAM, 0).map(|r| r.ty), Ok(1));
+        assert_eq!(check_socket(1, SOCK_DGRAM, 0), Err(WSAEAFNOSUPPORT));
+        assert_eq!(check_socket(99, SOCK_STREAM, 0), Err(WSAEAFNOSUPPORT));
+        assert_eq!(check_socket(-1, SOCK_STREAM, 0), Err(WSAEAFNOSUPPORT));
+        assert_eq!(check_socket(65535, SOCK_STREAM, 0), Err(WSAEAFNOSUPPORT));
+        // Type 0 takes the type from the protocol.
+        assert_eq!(check_socket(AF_INET, 0, 0).map(|r| r.ty), Ok(SOCK_STREAM));
+        assert_eq!(check_socket(AF_INET, 0, IPPROTO_TCP).map(|r| r.ty), Ok(SOCK_STREAM));
+        assert_eq!(check_socket(AF_INET, 0, IPPROTO_UDP).map(|r| (r.ty, r.protocol)), Ok((SOCK_DGRAM, 17)));
+        assert_eq!(check_socket(AF_INET, SOCK_RAW, 255), Err(WSAEACCES));
+        assert_eq!(check_socket(AF_INET, 4, 0), Err(WSAESOCKTNOSUPPORT));
+        assert_eq!(check_socket(AF_INET, 5, 0), Err(WSAESOCKTNOSUPPORT));
+        assert_eq!(check_socket(AF_INET, 99, 0), Err(WSAESOCKTNOSUPPORT));
+        // A protocol that is not the type's, or none Poly has: WSAEPROTONOSUPPORT.
+        assert_eq!(check_socket(AF_INET, SOCK_STREAM, IPPROTO_UDP), Err(WSAEPROTONOSUPPORT));
+        assert_eq!(check_socket(AF_INET, SOCK_DGRAM, IPPROTO_TCP), Err(WSAEPROTONOSUPPORT));
+        assert_eq!(check_socket(AF_INET6, SOCK_STREAM, IPPROTO_UDP), Err(WSAEPROTONOSUPPORT));
+        assert_eq!(check_socket(AF_INET, SOCK_STREAM, 1), Err(WSAEPROTONOSUPPORT));
+        assert_eq!(check_socket(AF_INET, SOCK_STREAM, 99), Err(WSAEPROTONOSUPPORT));
         assert_eq!(check_socket(AF_INET, SOCK_DGRAM, 99), Err(WSAEPROTONOSUPPORT));
     }
 }

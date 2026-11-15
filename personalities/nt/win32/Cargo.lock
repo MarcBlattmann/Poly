@@ -116,6 +116,7 @@ dependencies = [
 name = "dhcpcsvc"
 version = "0.0.1"
 dependencies = [
+ "poly-iphlp",
  "poly-win32-netrt",
  "poly-win32-rt",
 ]
@@ -233,6 +234,15 @@ dependencies = [
  "poly-win32-crt",
  "poly-win32-cxxrt",
  "poly-win32-rt",
+]
+
+[[package]]
+name = "mswsock"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+ "poly-winsock",
 ]
 
 [[package]]

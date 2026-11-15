@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "dbi_errors",
+      "exe_sha256": "84a4208ebd16496864a1231224493f9218e95a8d09991d37810102cffd40ca1f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5rbm93biBjb250cm9sIGNsYXNzOiAtMSBlcnI9MTQwNwpleHRlbmRlZCB0ZW1wbGF0ZSB3aXRoIHRoZSB2ZXJzaW9uIDI6IDkKYmFkIHBhcmVudCB3aW5kb3c6IDAgZXJyPTE0MDAKV1NfQ0hJTEQgaW4gdGhlIHRlbXBsYXRlIHN0eWxlIChhIGNoaWxkIG5lZWRzIGEgcGFyZW50KTogLTEgZXJyPTE0MDYKV1NfQ0hJTEQgaW4gdGhlIHRlbXBsYXRlIHN0eWxlIHdpdGggYSBwYXJlbnQ6IC0xIGVycj0xNDA2CkVuZERpYWxvZygwKSBnaXZlcyBiYWNrIHRoZSBzYW1lIHZhbHVlCkVuZERpYWxvZygxKSBnaXZlcyBiYWNrIHRoZSBzYW1lIHZhbHVlCkVuZERpYWxvZygtMSkgZ2l2ZXMgYmFjayB0aGUgc2FtZSB2YWx1ZQpFbmREaWFsb2coMHg3RkZGRkZGRikgZ2l2ZXMgYmFjayB0aGUgc2FtZSB2YWx1ZQpFbmREaWFsb2coMHgxMDAwMDAwMDApIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKGlzaXplOjpNQVgpIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKRW5kRGlhbG9nKGlzaXplOjpNSU4pIGdpdmVzIGJhY2sgdGhlIHNhbWUgdmFsdWUKd2l0aCBhbiBvd25lcjogNApvd25lciBlbmFibGVkIGFnYWluOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unknown control class: -1 err=1407\nextended template with the version 2: 9\nbad parent window: 0 err=1400\nWS_CHILD in the template style (a child needs a parent): -1 err=1406\nWS_CHILD in the template style with a parent: -1 err=1406\nEndDialog(0) gives back the same value\nEndDialog(1) gives back the same value\nEndDialog(-1) gives back the same value\nEndDialog(0x7FFFFFFF) gives back the same value\nEndDialog(0x100000000) gives back the same value\nEndDialog(isize::MAX) gives back the same value\nEndDialog(isize::MIN) gives back the same value\nwith an owner: 4\nowner enabled again: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

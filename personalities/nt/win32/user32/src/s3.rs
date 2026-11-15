@@ -153,11 +153,6 @@ pub unsafe extern "system" fn DisplayConfigGetDeviceInfo(packet: *mut u8) -> i32
     code
 }
 
-#[unsafe(no_mangle)]
-pub extern "system" fn GetThreadDesktop(_tid: u32) -> usize {
-    0x0000_0030
-}
-
 #[allow(dead_code)]
 fn keep() -> u32 {
     SYS.tid()

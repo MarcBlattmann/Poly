@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "gmbi_items",
+      "exe_sha256": "320516c71f4239699d1f502084f478d9718bbc7695d7a90e6676a850c9934b46",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm91ciBpdGVtczogNCBpdGVtIHJlY3RhbmdsZXMsIGluc2lkZSB0aGUgYmFyIDEsIGluIG9yZGVyIDEsIGRpc2pvaW50IDEsIGJhciBwcmVzZW50IDEKZml2ZSBpdGVtcyBhZnRlciBEcmF3TWVudUJhcjogNSBpdGVtIHJlY3RhbmdsZXMsIGluc2lkZSB0aGUgYmFyIDEsIGluIG9yZGVyIDEsIGRpc2pvaW50IDEsIGJhciBwcmVzZW50IDEKZm91ciBpdGVtcyBhZ2FpbiBhZnRlciBSZW1vdmVNZW51OiA0IGl0ZW0gcmVjdGFuZ2xlcywgaW5zaWRlIHRoZSBiYXIgMSwgaW4gb3JkZXIgMSwgZGlzam9pbnQgMSwgYmFyIHByZXNlbnQgMQppdGVtIDUgZXhpc3RzIG5vdzogMAp3aXRoIGEgTUZfTUVOVUJSRUFLIGl0ZW06IDUgaXRlbSByZWN0YW5nbGVzLCBpbnNpZGUgdGhlIGJhciAxLCBpbiBvcmRlciAxLCBkaXNqb2ludCAxLCBiYXIgcHJlc2VudCAxCnRoZSBiYXIgYmVjYW1lIGhpZ2hlciB3aXRoIHRoZSBicmVhazogMQphZnRlciBtYWtpbmcgdGhlIHdpbmRvdyBuYXJyb3c6IDUgaXRlbSByZWN0YW5nbGVzLCBpbnNpZGUgdGhlIGJhciAxLCBpbiBvcmRlciAxLCBkaXNqb2ludCAxLCBiYXIgcHJlc2VudCAxCnRoZSBuYXJyb3cgYmFyIGlzIG5vdCBsb3dlciB0aGFuIHRoZSB3aWRlIG9uZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "four items: 4 item rectangles, inside the bar 1, in order 1, disjoint 1, bar present 1\nfive items after DrawMenuBar: 5 item rectangles, inside the bar 1, in order 1, disjoint 1, bar present 1\nfour items again after RemoveMenu: 4 item rectangles, inside the bar 1, in order 1, disjoint 1, bar present 1\nitem 5 exists now: 0\nwith a MF_MENUBREAK item: 5 item rectangles, inside the bar 1, in order 1, disjoint 1, bar present 1\nthe bar became higher with the break: 1\nafter making the window narrow: 5 item rectangles, inside the bar 1, in order 1, disjoint 1, bar present 1\nthe narrow bar is not lower than the wide one: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

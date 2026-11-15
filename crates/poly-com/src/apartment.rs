@@ -14,10 +14,72 @@ pub const COINIT_APARTMENTTHREADED: u32 = 2;
 pub const RO_INIT_SINGLETHREADED: i32 = 0;
 pub const RO_INIT_MULTITHREADED: i32 = 1;
 
+/// The bits `CoInitializeEx` accepts in `dwCoInit` (`COINIT_APARTMENTTHREADED` 2,
+/// `COINIT_DISABLE_OLE1DDE` 4, `COINIT_SPEED_OVER_MEMORY` 8); any other bit is
+/// `E_INVALIDARG` (sheet `CoInitializeEx`: 1, 0x10, 0x100 and `0xFFFFFFFF`).
+pub const COINIT_VALID_BITS: u32 = 0xE;
+
+/// Whether `dwCoInit` only holds defined bits.
+pub fn coinit_is_valid(flags: u32) -> bool {
+    flags & !COINIT_VALID_BITS == 0
+}
+
 /// `APTTYPE` and `APTTYPEQUALIFIER` (`objidl.h`).
 pub const APTTYPE_STA: i32 = 0;
 pub const APTTYPE_MTA: i32 = 1;
+/// `APTTYPE_MAINSTA`: the first single-threaded apartment of the process.
+pub const APTTYPE_MAINSTA: i32 = 3;
 pub const APTTYPEQUALIFIER_NONE: i32 = 0;
+
+/// Which thread owns the process's main STA (Learn, "APTTYPE": `APTTYPE_MAINSTA`
+/// is the first STA a process makes; it is gone when that thread's last
+/// initialisation is balanced, and the next STA thread becomes it). One word
+/// per process: the owner's thread id, 0 for none.
+#[derive(Debug)]
+pub struct MainSta(core::sync::atomic::AtomicU32);
+
+impl MainSta {
+    pub const fn new() -> MainSta {
+        MainSta(core::sync::atomic::AtomicU32::new(0))
+    }
+
+    /// A thread made its first STA initialisation: it is the main STA when none exists.
+    pub fn claim(&self, tid: u32) {
+        use core::sync::atomic::Ordering::{AcqRel, Acquire};
+        let _ = self.0.compare_exchange(0, tid, AcqRel, Acquire);
+    }
+
+    /// A thread's STA ended.
+    pub fn release(&self, tid: u32) {
+        use core::sync::atomic::Ordering::{AcqRel, Acquire};
+        let _ = self.0.compare_exchange(tid, 0, AcqRel, Acquire);
+    }
+
+    /// Whether `tid` owns the main STA.
+    pub fn is_main(&self, tid: u32) -> bool {
+        tid != 0 && self.0.load(core::sync::atomic::Ordering::Acquire) == tid
+    }
+}
+
+impl Default for MainSta {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// What an activation of an unregistered class answers (sheets `CoCreateInstance` and
+/// `CoGetClassObject`): `CO_E_NOTINITIALIZED` on a thread with no apartment,
+/// `CLASS_E_NOAGGREGATION` when an outer unknown is given, else `REGDB_E_CLASSNOTREG`, whatever
+/// the class context or the class id (the all-zero one too).
+pub fn activation_failure(initialised: bool, has_outer: bool) -> Hresult {
+    if !initialised {
+        crate::hresult::CO_E_NOTINITIALIZED
+    } else if has_outer {
+        crate::hresult::CLASS_E_NOAGGREGATION
+    } else {
+        crate::hresult::REGDB_E_CLASSNOTREG
+    }
+}
 
 /// The concurrency model of an initialised thread.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,14 +110,8 @@ impl Model {
     }
 }
 
-/// `APTTYPE_MAINSTA` (`objidl.h`): the first single-threaded apartment of the process, while it lives.
-pub const APTTYPE_MAINSTA: i32 = 3;
 /// `APTTYPEQUALIFIER_IMPLICIT_MTA`: a thread without COM in a process that has the MTA.
 pub const APTTYPEQUALIFIER_IMPLICIT_MTA: i32 = 1;
-
-/// `CoInitializeEx`'s `dwCoInit` bits that mean something (`COINIT_APARTMENTTHREADED` 2,
-/// `COINIT_DISABLE_OLE1DDE` 4, `COINIT_SPEED_OVER_MEMORY` 8); any other bit is `E_INVALIDARG`.
-pub const COINIT_VALID: u32 = 0xE;
 
 /// A thread's apartment state: the model, how many initialisations are open, whether it is the
 /// process's main STA, and how many of them are `OleInitialize` (OLE is a state of its own on
@@ -197,10 +253,18 @@ impl Apartment {
     }
 
     /// `CoGetApartmentType`: the type and qualifier, or `None`
-    /// (`CO_E_NOTINITIALIZED`) when the thread has no apartment.
+    /// (`CO_E_NOTINITIALIZED`) when the thread has no apartment. An STA
+    /// reports `APTTYPE_MAINSTA` (3) when `main`, the first STA of the process.
+    pub fn apartment_type_in(self, main: bool) -> Option<(i32, i32)> {
+        self.model.map(|m| match m {
+            Model::Sta if main => (APTTYPE_MAINSTA, APTTYPEQUALIFIER_NONE),
+            m => (m.apt_type(), APTTYPEQUALIFIER_NONE),
+        })
+    }
+
+    /// [`Apartment::apartment_type_in`] with the thread's own main-STA flag.
     pub fn apartment_type(self) -> Option<(i32, i32)> {
-        self.model
-            .map(|m| (if self.main && m == Model::Sta { APTTYPE_MAINSTA } else { m.apt_type() }, APTTYPEQUALIFIER_NONE))
+        self.apartment_type_in(self.main)
     }
 }
 
@@ -240,6 +304,53 @@ mod tests {
         assert_eq!(b, a);
         assert_eq!(b.apartment_type(), Some((APTTYPE_MTA, APTTYPEQUALIFIER_NONE)));
         assert_eq!(Apartment::from_word(0).apartment_type(), None);
+    }
+
+    #[test]
+    fn activation_of_an_unregistered_class() {
+        use crate::hresult::*;
+        assert_eq!(activation_failure(false, false), CO_E_NOTINITIALIZED);
+        assert_eq!(activation_failure(false, true), CO_E_NOTINITIALIZED);
+        assert_eq!(activation_failure(true, false), REGDB_E_CLASSNOTREG);
+        assert_eq!(activation_failure(true, true), CLASS_E_NOAGGREGATION);
+    }
+
+    #[test]
+    fn an_sta_reports_main_or_plain() {
+        let mut s = Apartment::new();
+        s.initialize(Model::Sta);
+        assert_eq!(s.apartment_type_in(true), Some((APTTYPE_MAINSTA, 0)));
+        assert_eq!(s.apartment_type_in(false), Some((APTTYPE_STA, 0)));
+        let mut m = Apartment::new();
+        m.initialize(Model::Mta);
+        assert_eq!(m.apartment_type_in(true), Some((APTTYPE_MTA, 0)));
+    }
+
+    #[test]
+    fn coinit_accepts_only_the_defined_bits() {
+        for ok in [0, 2, 4, 6, 8, 10, 12, 14] {
+            assert!(coinit_is_valid(ok), "{ok:#x}");
+        }
+        for bad in [1, 3, 0x10, 0x100, 0x8000_0000, 0xFFFF_FFFF] {
+            assert!(!coinit_is_valid(bad), "{bad:#x}");
+        }
+    }
+
+    #[test]
+    fn the_first_sta_is_the_main_one_until_it_ends() {
+        let m = MainSta::new();
+        assert!(!m.is_main(7));
+        m.claim(7);
+        m.claim(9);
+        assert!(m.is_main(7));
+        assert!(!m.is_main(9));
+        m.release(9);
+        assert!(m.is_main(7));
+        m.release(7);
+        assert!(!m.is_main(7));
+        m.claim(9);
+        assert!(m.is_main(9));
+        assert!(!m.is_main(0));
     }
 
     #[test]
