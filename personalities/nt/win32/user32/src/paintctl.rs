@@ -7,7 +7,8 @@ use super::{H, info};
 use alloc::vec::Vec;
 use poly_win32k::user as u;
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SelectObject(hdc: usize, obj: usize) -> usize;
     fn GetStockObject(index: i32) -> usize;
@@ -17,7 +18,8 @@ unsafe extern "system" {
     fn PolyGdiFillRect(hdc: usize, rect: *const i32, brush: usize, color: u32) -> i32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GlobalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn GlobalLock(mem: *mut u8) -> *mut u8;

@@ -9,7 +9,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use poly_win32k::dlg::{DS_MODALFRAME, DlgItem, DlgTemplate, SzOrd};
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateCompatibleDC(hdc: usize) -> usize;
     fn DeleteDC(hdc: usize) -> i32;
