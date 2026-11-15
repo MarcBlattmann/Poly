@@ -242,10 +242,6 @@ fn initialize(model: Model) -> Hresult {
             apartment_begins(&mut a, model);
         }
         set_apartment(a);
-        if hr == S_OK && model == Model::Sta {
-            // SAFETY: no arguments.
-            MAIN_STA.claim(unsafe { GetCurrentThreadId() });
-        }
     }
     hr
 }
