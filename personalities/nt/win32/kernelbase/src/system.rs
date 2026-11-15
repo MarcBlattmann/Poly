@@ -10,7 +10,7 @@
 use crate::base::*;
 use crate::nt::{self, Handle, IoStatusBlock, ObjectAttributes, UnicodeString};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use poly_kernelbase::cpu::CpuId;
 use poly_kernelbase::error::*;
 use poly_kernelbase::file::{FILE_DIRECTORY_FILE, FILE_READ_ATTRIBUTES, FILE_SYNCHRONOUS_IO_NONALERT, SYNCHRONIZE};
@@ -71,33 +71,33 @@ pub unsafe extern "system" fn GetProcessTimes(
 /// `ERROR_NOACCESS` (`winerror.h`).
 const ERROR_NOACCESS: u32 = 998;
 
-/// `sizeof(STARTUPINFOW)` on x64 (`processthreadsapi.h`).
-const STARTUPINFOW_SIZE: usize = 104;
-
 /// `GetStartupInfoW`: Learn: "the STARTUPINFO structure that was specified
 /// when the calling process was created": `CreateProcessW` keeps it in
 /// the child's parameters (ADR 0089, `poly_kernelbase::process::
 /// startup_info`). A process the kernel started gets `cb` and zeros: no
 /// `STARTF_*` flags, so the standard handles come from `GetStdHandle`.
+/// The structure is this process's own size (104 bytes, 68 in a 32-bit
+/// process, ADR 0186).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStartupInfoW(info: *mut u8) {
+    use poly_kernelbase::process::{PARAMETERS_SIZE, SI_NATIVE, startup_info_in};
     let pp = parameters();
-    let b = if pp == 0 {
-        poly_kernelbase::process::startup_info(&[])
+    let header: &[u8] = if pp == 0 {
+        &[]
     } else {
         // SAFETY: the process parameters are one mapped allocation of at
         // least the structure's size (ADR 0073, 0079).
-        let header = unsafe { core::slice::from_raw_parts(pp as *const u8, poly_kernelbase::process::PARAMETERS_SIZE) };
-        poly_kernelbase::process::startup_info(header)
+        unsafe { core::slice::from_raw_parts(pp as *const u8, PARAMETERS_SIZE) }
     };
+    let b = startup_info_in(&poly_rtl::layout::NATIVE, &SI_NATIVE, header);
     // SAFETY: the caller's STARTUPINFOW.
-    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, STARTUPINFOW_SIZE) };
+    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), info, b.len()) };
 }
 
 /// This process's affinity mask as `SetProcessAffinityMask` set it (0:
 /// the system's). Poly's scheduler does not pin threads yet, so the masks
 /// are recorded and reported, not enforced (ADR 0087).
-static PROCESS_AFFINITY: AtomicU64 = AtomicU64::new(0);
+static PROCESS_AFFINITY: AtomicUsize = AtomicUsize::new(0);
 
 /// Whether `process` is a handle to this process.
 fn is_current_process(process: Handle) -> bool {
@@ -107,11 +107,12 @@ fn is_current_process(process: Handle) -> bool {
     same
 }
 
-fn system_affinity() -> u64 {
-    system::system_affinity(crate::misc::processors())
+/// The system's mask as a `DWORD_PTR`: in a 32-bit process only the first 32 processors fit.
+fn system_affinity() -> usize {
+    (system::system_affinity(crate::misc::processors()) & usize::MAX as u64) as usize
 }
 
-fn process_affinity() -> u64 {
+fn process_affinity() -> usize {
     match PROCESS_AFFINITY.load(Ordering::Relaxed) {
         0 => system_affinity(),
         m => m,
@@ -120,7 +121,11 @@ fn process_affinity() -> u64 {
 
 /// `GetProcessAffinityMask`: the process's and the system's masks.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetProcessAffinityMask(process: Handle, mask: *mut u64, system_mask: *mut u64) -> i32 {
+pub unsafe extern "system" fn GetProcessAffinityMask(
+    process: Handle,
+    mask: *mut usize,
+    system_mask: *mut usize,
+) -> i32 {
     if mask.is_null() || system_mask.is_null() {
         return fail(ERROR_NOACCESS, FALSE);
     }
@@ -136,8 +141,8 @@ pub unsafe extern "system" fn GetProcessAffinityMask(process: Handle, mask: *mut
 /// `SetProcessAffinityMask`: Learn: the mask must be a subset of the
 /// system's (`ERROR_INVALID_PARAMETER`).
 #[unsafe(no_mangle)]
-pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: u64) -> i32 {
-    if !system::valid_affinity(mask, system_affinity()) {
+pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: usize) -> i32 {
+    if !system::valid_affinity(mask as u64, system_affinity() as u64) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     if process == nt::CURRENT_PROCESS || is_current_process(process) {
@@ -150,27 +155,37 @@ pub extern "system" fn SetProcessAffinityMask(process: Handle, mask: u64) -> i32
 /// process's), 0 with `ERROR_INVALID_PARAMETER` for a mask outside the
 /// process's.
 #[unsafe(no_mangle)]
-pub extern "system" fn SetThreadAffinityMask(thread: Handle, mask: u64) -> u64 {
+pub extern "system" fn SetThreadAffinityMask(thread: Handle, mask: usize) -> usize {
     let process = process_affinity();
-    if !system::valid_affinity(mask, process) {
+    if !system::valid_affinity(mask as u64, process as u64) {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
-    // The thread's previous mask is `ThreadBasicInformation.AffinityMask`; the kernel moves the
-    // thread (`NtSetInformationThread(ThreadAffinityMask)`).
-    let mut info = [0u8; 48];
-    // SAFETY: a buffer of the class's size.
-    let st = unsafe { nt::NtQueryInformationThread(thread, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
-    if !st.is_success() {
-        return fail_status(st, 0);
+    // A 32-bit process keeps the process's mask: its `ThreadBasicInformation` has another layout and
+    // the 32-bit `ntdll` does not convert this class.
+    #[cfg(target_arch = "x86")]
+    {
+        let _ = thread;
+        process
     }
-    let previous = u64::from_le_bytes(info[32..40].try_into().expect("8 bytes"));
-    let bytes = mask.to_le_bytes();
-    // SAFETY: an 8-byte KAFFINITY.
-    let st = unsafe { nt::NtSetInformationThread(thread, 4, bytes.as_ptr(), 8) };
-    if !st.is_success() {
-        return fail_status(st, 0);
+    #[cfg(not(target_arch = "x86"))]
+    {
+        // The thread's previous mask is `ThreadBasicInformation.AffinityMask`; the kernel moves the
+        // thread (`NtSetInformationThread(ThreadAffinityMask)`).
+        let mut info = [0u8; 48];
+        // SAFETY: a buffer of the class's size.
+        let st = unsafe { nt::NtQueryInformationThread(thread, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
+        if !st.is_success() {
+            return fail_status(st, 0);
+        }
+        let previous = u64::from_le_bytes(info[32..40].try_into().expect("8 bytes"));
+        let bytes = (mask as u64).to_le_bytes();
+        // SAFETY: an 8-byte KAFFINITY.
+        let st = unsafe { nt::NtSetInformationThread(thread, 4, bytes.as_ptr(), 8) };
+        if !st.is_success() {
+            return fail_status(st, 0);
+        }
+        previous as usize
     }
-    previous
 }
 
 /// `GetCurrentProcessorNumber`: the CPU the thread runs on now (`NtGetCurrentProcessorNumber`).
@@ -222,8 +237,11 @@ const PROCESS_HANDLE_COUNT: u32 = 20;
 
 /// The processor's `CPUID` leaves and `XCR0` (`poly_kernelbase::cpu`).
 fn cpuid() -> CpuId {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::__cpuid_count;
+    #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64::__cpuid_count;
-    // SAFETY: CPUID exists on every x64 processor; leaves beyond the
+    // SAFETY: CPUID exists on every x64 processor (and every one that runs a 32-bit process here); leaves beyond the
     // maximum are not read.
     unsafe {
         let max = __cpuid_count(0, 0).eax;
@@ -561,8 +579,9 @@ pub unsafe extern "system" fn DeviceIoControl(
     let (iosb, event) = if overlapped.is_null() {
         (&mut local as *mut IoStatusBlock, 0)
     } else {
-        // SAFETY: the caller's OVERLAPPED: Internal at 0, hEvent at 24.
-        (overlapped.cast::<IoStatusBlock>(), unsafe { overlapped.add(24).cast::<Handle>().read_unaligned() })
+        // SAFETY: the caller's OVERLAPPED: Internal at 0, hEvent after the offsets (24 in a 64-bit
+        // process, 16 in a 32-bit one: `Overlapped`'s layout is this build's own).
+        (overlapped.cast::<IoStatusBlock>(), unsafe { (*overlapped.cast::<crate::file::Overlapped>()).event })
     };
     // SAFETY: the caller's buffers; the kernel checks their sizes.
     let mut st = unsafe {

@@ -20,7 +20,8 @@ use poly_kernelbase::error::*;
 use poly_kernelbase::registry::{self as reg, Predefined};
 use poly_ntobj::NtStatus;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtOpenKeyEx(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes, options: u32) -> NtStatus;
     fn NtCreateKey(
@@ -90,9 +91,6 @@ const KEY_NODE_INFORMATION: u32 = 1;
 const KEY_FULL_INFORMATION: u32 = 2;
 const KEY_VALUE_FULL_INFORMATION: u32 = 1;
 const KEY_VALUE_PARTIAL_INFORMATION: u32 = 2;
-
-/// `SECURITY_ATTRIBUTES.bInheritHandle` (offset 16 on x64, `minwinbase.h`).
-const SA_INHERIT_OFFSET: usize = 16;
 
 fn err(status: NtStatus) -> u32 {
     poly_kernelbase::error::from_status(status)
@@ -238,7 +236,7 @@ pub unsafe extern "system" fn RegOpenKeyExW(
     sam: u32,
     out: *mut HKey,
 ) -> u32 {
-    if out.is_null() {
+    if out.is_null() || reg::both_views(sam) {
         return ERROR_INVALID_PARAMETER;
     }
     // SAFETY: the caller's NUL-terminated string or null.
@@ -302,7 +300,7 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     out: *mut HKey,
     disposition: *mut u32,
 ) -> u32 {
-    if out.is_null() || sub.is_null() {
+    if out.is_null() || sub.is_null() || reg::both_views(sam) {
         return ERROR_INVALID_PARAMETER;
     }
     // SAFETY: checked non-null; NUL-terminated per the contract.
@@ -310,7 +308,7 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     // SAFETY: the caller's string or null.
     let class = unsafe { wide_arg(class) };
     // SAFETY: a SECURITY_ATTRIBUTES or null.
-    let inherit = !security.is_null() && unsafe { (security.add(SA_INHERIT_OFFSET) as *const i32).read() } != 0;
+    let inherit = unsafe { crate::base::sa_inherits(security) };
     let parts = reg::components(sub);
     let options = options & (reg::REG_OPTION_VOLATILE | reg::REG_OPTION_CREATE_LINK | reg::REG_OPTION_BACKUP_RESTORE);
     let start = if reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot) && !parts.is_empty() {
@@ -525,6 +523,9 @@ pub extern "system" fn RegNotifyChangeKeyValue(
 /// `ERROR_ACCESS_DENIED`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RegDeleteKeyExW(hkey: HKey, sub: *const u16, sam: u32, _reserved: u32) -> u32 {
+    if reg::both_views(sam) {
+        return ERROR_INVALID_PARAMETER;
+    }
     // SAFETY: the caller's string or null.
     let Some(sub) = (unsafe { wide_arg(sub) }) else { return ERROR_INVALID_PARAMETER };
     let access = reg::DELETE | (sam & reg::KEY_WOW64_RES);

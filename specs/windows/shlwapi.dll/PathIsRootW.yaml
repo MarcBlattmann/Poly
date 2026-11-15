@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/PathIsRootW.yaml
+id: windows/api/shlwapi.dll/PathIsRootW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathIsRootW function (shlwapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data).
+summary: >
+  Says whether a path is only a root. 1 package imports it; PathCombine/Append users use it indirectly.
+interface:
+  signature: "BOOL PathIsRootW(LPCWSTR pszPath)"
+  returns: "TRUE or FALSE"
+rules:
+  true_for: "`\\`, `\\\\`, `C:\\` (a drive letter, a colon and ONE backslash), `\\\\?\\C:\\`, `\\\\?\\Volume{guid}\\`, `\\\\?\\UNC\\`, `\\\\?\\UNC\\s`, `\\\\?\\UNC\\s\\sh`, a UNC server alone (`\\\\s`, `\\\\server`, `\\\\.`), a UNC server and share without a trailing backslash (`\\\\s\\sh`, `\\\\server\\share`), `\\\\.\\C:` (no backslash after it)"
+  false_for: "'', `C:` (no backslash), `C:\\\\` (two), `C:\\a`, `a`, `\\\\\\` (three), `\\\\s\\` (trailing backslash after the server), `\\\\s\\sh\\`, `\\\\s\\sh\\f`, `\\\\?\\C:`, `\\\\?\\`, `\\\\?\\UNC`, `\\\\?\\UNC\\s\\`, `\\\\?\\UNC\\s\\sh\\`, `\\\\.\\`, `\\\\.\\C:\\`, `//s/sh/f`, `1:\\`, `CC:\\`, any path with a component"
+errors:
+  none: "no error; the last error is not changed"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  A NULL pointer, the A function (the same rules on bytes), non-ASCII drive letters, mapped network drives.

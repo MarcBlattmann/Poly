@@ -152,6 +152,29 @@ impl core::fmt::Debug for Readiness {
     }
 }
 
+/// Interface index of the loopback device (`lo`, `ip link`'s number 1).
+pub const IFINDEX_LOOPBACK: u32 = 1;
+/// Interface index of the Ethernet device.
+pub const IFINDEX_DEVICE: u32 = 2;
+
+/// What a received datagram's IP header said, kept with it for the
+/// ancillary data `IP_PKTINFO`, `IP_RECVTOS`, `IP_RECVTTL` (ip(7)) and
+/// `IPV6_RECVPKTINFO`, `IPV6_RECVTCLASS`, `IPV6_RECVHOPLIMIT` (ipv6(7)) ask
+/// for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RxMeta {
+    /// The packet's destination address (`None`: not known, as for TCP
+    /// and for datagrams that were not received from the network).
+    pub dst: Option<IpAddr>,
+    /// The interface it arrived on ([`IFINDEX_LOOPBACK`],
+    /// [`IFINDEX_DEVICE`]); 0 if not known.
+    pub ifindex: u32,
+    /// The IPv4 type of service byte or the IPv6 traffic class.
+    pub tos: u8,
+    /// The IPv4 time to live or the IPv6 hop limit.
+    pub ttl: u8,
+}
+
 /// What `recv_from` returns besides the data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RecvInfo {
@@ -162,6 +185,8 @@ pub struct RecvInfo {
     pub full_len: usize,
     /// Where it came from.
     pub from: SocketAddr,
+    /// What its IP header said (datagrams only; the default for TCP).
+    pub meta: RxMeta,
 }
 
 /// Flags for receive calls.
@@ -176,6 +201,9 @@ pub struct RecvFlags {
 pub(crate) struct Datagram {
     pub addr: SocketAddr,
     pub data: Vec<u8>,
+    /// Received datagrams: their header's fields; the default for datagrams
+    /// waiting to be sent.
+    pub meta: RxMeta,
 }
 
 /// UDP or ICMP echo socket state.
@@ -225,13 +253,13 @@ impl DgramSocket {
 
     /// Queue a received datagram if there is room (datagrams that do not
     /// fit are dropped, as UDP allows).
-    pub fn deliver(&mut self, addr: SocketAddr, data: &[u8]) -> bool {
+    pub fn deliver(&mut self, addr: SocketAddr, data: &[u8], meta: RxMeta) -> bool {
         if self.rd_shut || self.rx_bytes + data.len() > self.rx_cap {
             self.rx_dropped += 1;
             return false;
         }
         self.rx_bytes += data.len();
-        self.rx.push_back(Datagram { addr, data: data.to_vec() });
+        self.rx.push_back(Datagram { addr, data: data.to_vec(), meta });
         true
     }
 
@@ -262,14 +290,14 @@ impl DgramSocket {
                 return Err(e);
             }
             return if self.rd_shut {
-                Ok(RecvInfo { len: 0, full_len: 0, from: self.unspecified() })
+                Ok(RecvInfo { len: 0, full_len: 0, from: self.unspecified(), meta: RxMeta::default() })
             } else {
                 Err(Errno::EAGAIN)
             };
         };
         let n = d.data.len().min(out.len());
         out[..n].copy_from_slice(&d.data[..n]);
-        let info = RecvInfo { len: n, full_len: d.data.len(), from: d.addr };
+        let info = RecvInfo { len: n, full_len: d.data.len(), from: d.addr, meta: d.meta };
         if !flags.peek {
             self.rx_bytes -= d.data.len();
             self.rx.pop_front();
@@ -300,9 +328,9 @@ mod tests {
     fn datagram_queue_limits_and_truncation() {
         let from: SocketAddr = "10.0.0.2:7".parse().unwrap();
         let mut s = DgramSocket::new(Protocol::Udp, 10, 10);
-        assert!(s.deliver(from, b"hello"));
-        assert!(s.deliver(from, b"world"));
-        assert!(!s.deliver(from, b"!"), "over the receive buffer");
+        assert!(s.deliver(from, b"hello", RxMeta::default()));
+        assert!(s.deliver(from, b"world", RxMeta::default()));
+        assert!(!s.deliver(from, b"!", RxMeta::default()), "over the receive buffer");
         let mut out = [0u8; 3];
         let i = s.recv(&mut out, RecvFlags { peek: true }).unwrap();
         assert_eq!((i.len, i.full_len, &out), (3, 5, b"hel"));

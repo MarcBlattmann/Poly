@@ -10,7 +10,7 @@
 //! prefixed `nt_file_` so it never clashes with the other test PEs'
 //! `global_asm!` (the linker puts them in one object).
 //!
-//! Steps, all under `C:` (`\Device\PolyFs1`, the VFS's `/nt/c`):
+//! Steps, all under `C:` (`\Device\HarddiskVolume1`, the VFS's `/nt/c`):
 //!
 //! 1. `NtCreateFile` a file, `NtWriteFile` 8 bytes, read them back,
 //!    `NtClose` (synchronous I/O with a file position).

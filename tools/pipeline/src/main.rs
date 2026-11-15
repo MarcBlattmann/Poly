@@ -1,6 +1,12 @@
 //! `pipeline`: the deterministic, model-free parts of the agent pipeline
 //! (docs/AGENT_PIPELINE.md). Run it as `cargo xtask pipeline <command>`.
 //!
+//! On a Windows host the tool builds and everything that is not Linux's runs:
+//! `spec`, `tests`, `handoff`, `win`, `initramfs`. `build`, `trace`, `diff` and
+//! `polyrun` (the Linux reference: ptrace, namespaces, the Linux test corpus)
+//! report that they need a Linux host (ADR 0124; run them through polyd), and
+//! `selfcheck` and `polycheck` skip themselves.
+//!
 //! ```text
 //! build [--cc CC] [--out DIR]                    compile the test corpus in tests/linux/
 //! trace <test|path>... [--all] [--tracer ptrace|strace|none] [--out-dir DIR] [--print]
@@ -227,7 +233,12 @@ fn link_latest(runs: &Path, run: &Path) {
     let latest = runs.join("latest");
     let _ = std::fs::remove_file(&latest);
     if let Some(name) = run.file_name() {
+        #[cfg(unix)]
         let _ = std::os::unix::fs::symlink(name, &latest);
+        // Symbolic links need a privilege on Windows; the link is a
+        // convenience, so it is made where it can be.
+        #[cfg(windows)]
+        let _ = std::os::windows::fs::symlink_dir(name, &latest);
     }
 }
 
@@ -551,6 +562,10 @@ fn selfcheck(repo: &Path) -> Result<u8> {
         println!("pipeline selfcheck: skipped (implementer agents do not run programs on the reference OS)");
         return Ok(0);
     }
+    if cfg!(not(unix)) {
+        println!("pipeline selfcheck: skipped (needs a Linux host, ADR 0124; run it through polyd)");
+        return Ok(0);
+    }
     let cc = corpus::compiler(None);
     if corpus::compiler_version(&cc).is_err() {
         println!("pipeline selfcheck: skipped (no C compiler; install gcc or set CC)");
@@ -632,6 +647,10 @@ fn polycheck(repo: &Path, a: &Args) -> Result<u8> {
     let shard = a.opt("shard").map(parse_shard).transpose()?;
     if oracle_guard("polycheck").is_err() {
         println!("pipeline polycheck: skipped (implementer agents do not run programs on the reference OS)");
+        return Ok(0);
+    }
+    if cfg!(not(unix)) {
+        println!("pipeline polycheck: skipped (needs a Linux host, ADR 0124; run it through polyd)");
         return Ok(0);
     }
     let cc = corpus::compiler(None);
@@ -1094,6 +1113,13 @@ fn run(args: &[String]) -> Result<u8> {
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
     let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "record", "diff"];
     let a = Args::parse(rest, &switches)?;
+    // The reference system is Linux: its test corpus is built for Linux, run
+    // under ptrace and in namespaces, and handed to Poly. A Windows host
+    // builds this tool and says so instead (ADR 0124); `selfcheck` and
+    // `polycheck` skip themselves, as they do without a compiler.
+    if cfg!(not(unix)) && matches!(cmd.as_str(), "build" | "trace" | "diff" | "polyrun") {
+        return Err(util::needs_linux(cmd));
+    }
     match cmd.as_str() {
         "build" => build(&repo, &a),
         "trace" => trace_cmd(&repo, &a),

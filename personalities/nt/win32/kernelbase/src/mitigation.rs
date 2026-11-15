@@ -12,7 +12,8 @@ use poly_kernelbase::error::ERROR_INVALID_PARAMETER;
 use poly_kernelbase::mitigation::{CHILD_PROCESS, DEP, MAX_POLICY, OPTIONS_MASK, USER_POINTER_AUTH};
 use poly_ntobj::NtStatus;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtSetInformationProcess(process: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     fn NtQueryInformationProcess(process: Handle, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> NtStatus;

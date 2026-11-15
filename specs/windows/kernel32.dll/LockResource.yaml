@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/LockResource.yaml
+id: windows/api/kernel32.dll/LockResource
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. The tests write a small generated PE32+ DLL image (no code, only a .rsrc section; lib/mkpe.py of the spec agent's kit builds the 2,048 bytes, and the test source carries them as a byte array) next to themselves and load it with LoadLibraryExW three ways: as a data file (0x2), as image resources (0x20) and as a normal image (0); every lookup gives the same lines in all three ways. Microsoft Learn: "LockResource function (libloaderapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns a pointer to the data of a loaded resource (the handle LoadResource returned). Specified with LoadResource and SizeofResource: the tests of the three entries are the same program, so the observations agree.
+interface:
+  signature: "LPVOID LockResource(HGLOBAL hResData)"
+  returns: "a pointer to the first byte of the resource's data, or NULL"
+rules:
+  pointer: "LockResource(LoadResource(module, FindResourceW(...))) points to the bytes of the resource in the module (BLOB: \"0123456789ABCDEFGHIJ\"); locking twice gives the same pointer; the memory is readable up to SizeofResource bytes (a sum over all 20 bytes works); a resource of 0 bytes still gives a non-NULL pointer"
+  null: "LockResource(NULL) returns NULL and does not change the last error"
+  free: "after FreeResource the pointer still points to the same data"
+  modes: "The three load modes give identical answers. A module handle is the one LoadLibraryExW returned: with LOAD_LIBRARY_AS_DATAFILE its low bit is\n        set (the handle is not an address of a mapped image), with LOAD_LIBRARY_AS_IMAGE_RESOURCE bit 1 is set and bit 0 clear, and a normal\n        image's handle is 64 KiB aligned. The resource functions must accept all three"
+errors:
+  none: "NULL for NULL; the last error is not changed"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); they import kernel32.dll (and user32.dll for LoadStringW). Each line is one call with its type and name written as #n for a number and "text" for a string, then -> found/NULL and the last error, or the size and the first bytes of the data (non-printable bytes as <xx>). The tests need a loader that can load a PE image that has no code and no imports with LOAD_LIBRARY_AS_DATAFILE, LOAD_LIBRARY_AS_IMAGE_RESOURCE and normally (a DLL without an entry point); a program of another kind (a console exe) is not needed for the lookups. The tests lkr_basic and lkr_errors are copies of lr_basic and lr_errors (LoadResource's tests): LockResource cannot be tested without them.
+not_covered: >
+  A handle that was not returned by LoadResource.

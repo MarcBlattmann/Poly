@@ -11,7 +11,8 @@
 //! frame, and every return goes through the same exit, `trap_return`.
 //!
 //! All 256 entries are interrupt gates, so the CPU clears RFLAGS.IF on entry
-//! and handlers never nest. Every gate but the breakpoint's has DPL 0, so
+//! and handlers never nest. Every gate but the breakpoint's and the 32-bit
+//! system call's ([`SYSCALL32_VECTOR`], ADR 0186) has DPL 0, so
 //! user mode cannot raise any vector with `INT n`: that is a #GP, which
 //! kills it. `INT3` (vector 3, DPL 3) is a breakpoint trap that becomes
 //! `SIGTRAP` (rt_sigreturn's spec sheet: `SI_KERNEL`, trapno 3, `rip` after
@@ -437,6 +438,16 @@ const IRQ_STUB_SIZE: u64 = 16;
 /// First vector that is not a CPU exception.
 pub const FIRST_INTERRUPT_VECTOR: u8 = 32;
 
+/// The vector of the 32-bit system-call gate (ADR 0186): `int 0xF4` from a
+/// 32-bit thread is a system call (`syscall.rs`). Not a device, IPI or APIC
+/// vector, and above the legacy PIC's range, so no hardware raises it.
+pub const SYSCALL32_VECTOR: u8 = 0xf4;
+const _: () = assert!(
+    SYSCALL32_VECTOR > super::irq::LAST_DEVICE_VECTOR
+        && SYSCALL32_VECTOR > super::irq::TLB_VECTOR
+        && SYSCALL32_VECTOR < super::irq::ERROR_VECTOR
+);
+
 /// Address of the entry stub for vector `vector` (32 or more).
 pub fn irq_stub(vector: u8) -> u64 {
     debug_assert!(vector >= FIRST_INTERRUPT_VECTOR);
@@ -506,6 +517,9 @@ pub unsafe fn init() {
         for vector in FIRST_INTERRUPT_VECTOR..=u8::MAX {
             idt.add(vector.into()).write(IdtEntry::interrupt_gate(irq_stub(vector), 0, 0));
         }
+        // The 32-bit system-call gate (ADR 0186), which ring 3 may raise.
+        let gate = IdtEntry::interrupt_gate(super::syscall::syscall32_gate(), 0, 3);
+        idt.add(SYSCALL32_VECTOR.into()).write(gate);
         let ptr = DescriptorTablePointer { limit: (size_of::<[IdtEntry; 256]>() - 1) as u16, base: idt as u64 };
         asm!("lidt [{}]", in(reg) &ptr, options(readonly, nostack, preserves_flags));
     }

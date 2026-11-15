@@ -170,7 +170,10 @@ impl T {
                 self.f.mem.write_bytes(*addr, data).unwrap();
             }
             if c.iosb != 0 {
-                self.f.mem.write_bytes(c.iosb, &c.iosb_bytes()).unwrap();
+                {
+                    let w = c.iosb_write();
+                    self.f.mem.write_bytes(w.addr, w.bytes()).unwrap();
+                }
             }
             if let Some((t, apc)) = self.f.sys.io.finish(&mut self.f.sys.objects, &c) {
                 self.f.apcs.push((t, apc));
@@ -204,3 +207,4 @@ mod locks_async;
 mod namespace;
 mod npfs;
 mod process;
+mod process_big;

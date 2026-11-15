@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gwl_chrome",
+      "exe_sha256": "4d0e1f0e6bb685e24e087169c12cac3919c58c562bbe9ea60c9c06e47afcbe92",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YnVpbHQ6IGhpZCAweDhjMDAwMDAwLzB4MDAwMDAwODAgbWFpbiAweDA2Y2YwMDAwLzB4MDAyMDAxMDAgcndoIDB4NDYzMDAwMDAvMHgwMDAwMDAyMCBpZCA2NTYKY2hpbGQgc2hvd246IGhpZCAweDhjMDAwMDAwLzB4MDAwMDAwODAgbWFpbiAweDA2Y2YwMDAwLzB4MDAyMDAxMDAgcndoIDB4NTYzMDAwMDAvMHgwMDAwMDAyMCBpZCA2NTYKdG9wLWxldmVsIHNob3duOiBoaWQgMHg4YzAwMDAwMC8weDAwMDAwMDgwIG1haW4gMHgxNmNmMDAwMC8weDAwMjAwMTAwIHJ3aCAweDU2MzAwMDAwLzB4MDAwMDAwMjAgaWQgNjU2Cm1pbmltaXplZDogaGlkIDB4OGMwMDAwMDAvMHgwMDAwMDA4MCBtYWluIDB4MzZjZjAwMDAvMHgwMDIwMDEwMCByd2ggMHg1NjMwMDAwMC8weDAwMDAwMDIwIGlkIDY1NgpyZXN0b3JlZDogaGlkIDB4OGMwMDAwMDAvMHgwMDAwMDA4MCBtYWluIDB4MTZjZjAwMDAvMHgwMDIwMDEwMCByd2ggMHg1NjMwMDAwMC8weDAwMDAwMDIwIGlkIDY1Ngo9PSBTZXRXaW5kb3dMb25nVyhyd2gsIEdXTF9TVFlMRSwgc3R5bGUgfCBXU19ESVNBQkxFRCkgYW5kIGJhY2sKICByZXR1cm5lZCB0aGUgb2xkIHN0eWxlOiAxIChsYXN0IGVycm9yIDApCldTX0RJU0FCTEVEIHNldDogaGlkIDB4OGMwMDAwMDAvMHgwMDAwMDA4MCBtYWluIDB4MTZjZjAwMDAvMHgwMDIwMDEwMCByd2ggMHg1ZTMwMDAwMC8weDAwMDAwMDIwIGlkIDY1NgpXU19ESVNBQkxFRCBjbGVhcmVkOiBoaWQgMHg4YzAwMDAwMC8weDAwMDAwMDgwIG1haW4gMHgxNmNmMDAwMC8weDAwMjAwMTAwIHJ3aCAweDU2MzAwMDAwLzB4MDAwMDAwMjAgaWQgNjU2CiAgUyByd2ggV01fU1RZTEVDSEFOR0lORyB3aGljaD1zdHlsZSBvbGQ9MHg1NjMwMDAwMCBuZXc9MHg1ZTMwMDAwMAogIFMgcndoIFdNX1NUWUxFQ0hBTkdFRCB3aGljaD1zdHlsZSBvbGQ9MHg1NjMwMDAwMCBuZXc9MHg1ZTMwMDAwMAogIFMgcndoIFdNX1NUWUxFQ0hBTkdJTkcgd2hpY2g9c3R5bGUgb2xkPTB4NWUzMDAwMDAgbmV3PTB4NTYzMDAwMDAKICBTIHJ3aCBXTV9TVFlMRUNIQU5HRUQgd2hpY2g9c3R5bGUgb2xkPTB4NWUzMDAwMDAgbmV3PTB4NTYzMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: hid 0x8c000000/0x00000080 main 0x06cf0000/0x00200100 rwh 0x46300000/0x00000020 id 656\nchild shown: hid 0x8c000000/0x00000080 main 0x06cf0000/0x00200100 rwh 0x56300000/0x00000020 id 656\ntop-level shown: hid 0x8c000000/0x00000080 main 0x16cf0000/0x00200100 rwh 0x56300000/0x00000020 id 656\nminimized: hid 0x8c000000/0x00000080 main 0x36cf0000/0x00200100 rwh 0x56300000/0x00000020 id 656\nrestored: hid 0x8c000000/0x00000080 main 0x16cf0000/0x00200100 rwh 0x56300000/0x00000020 id 656\n== SetWindowLongW(rwh, GWL_STYLE, style | WS_DISABLED) and back\n  returned the old style: 1 (last error 0)\nWS_DISABLED set: hid 0x8c000000/0x00000080 main 0x16cf0000/0x00200100 rwh 0x5e300000/0x00000020 id 656\nWS_DISABLED cleared: hid 0x8c000000/0x00000080 main 0x16cf0000/0x00200100 rwh 0x56300000/0x00000020 id 656\n  S rwh WM_STYLECHANGING which=style old=0x56300000 new=0x5e300000\n  S rwh WM_STYLECHANGED which=style old=0x56300000 new=0x5e300000\n  S rwh WM_STYLECHANGING which=style old=0x5e300000 new=0x56300000\n  S rwh WM_STYLECHANGED which=style old=0x5e300000 new=0x56300000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 510
+    }
+  ]
+}

@@ -1156,10 +1156,10 @@ A PE executable reaches the file system through file and device objects in
 the object namespace (`personalities/nt/src/io`, carried out by
 `kernel/src/nt/io.rs`):
 
-- **The namespace.** Each VFS mount is a device `\Device\PolyFs<N>` with a
+- **The namespace.** Each VFS mount is a device `\Device\HarddiskVolume<N>` (ADR 0185) with a
   parse procedure; drive letters are symbolic links in `\??`: `\??\C:` →
-  `\Device\PolyFs1` (the VFS's `/nt/c`, the NT system root), `\??\Z:` →
-  `\Device\PolyFs0` (`/`, the whole VFS), and one device per other mount.
+  `\Device\HarddiskVolume1` (the VFS's `/nt/c`, the NT system root), `\??\Z:` →
+  `\Device\HarddiskVolume2` (`/`, the whole VFS), and one device per other mount.
   So `\??\C:\Windows\win.ini` becomes `/nt/c/Windows/win.ini`. `NtCreateFile`
   of a path Poly has not attached a volume for is `STATUS_OBJECT_PATH_NOT_FOUND`
   (the layer is attached lazily the first time an NT process starts — before

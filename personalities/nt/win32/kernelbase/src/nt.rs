@@ -10,7 +10,8 @@ use poly_rtl::critsec::CriticalSection;
 
 pub type Handle = isize;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn NtClose(handle: Handle) -> NtStatus;
     pub fn NtCreateFile(
@@ -441,12 +442,13 @@ impl ObjectAttributes {
     }
 }
 
-/// `IO_STATUS_BLOCK` (`wdm.h`).
+/// `IO_STATUS_BLOCK` (`wdm.h`): a pointer-sized status union and `Information` (`ULONG_PTR`),
+/// 16 bytes in a 64-bit process and 8 in a 32-bit one (ADR 0186).
 #[repr(C)]
 #[derive(Default)]
 pub struct IoStatusBlock {
-    pub status: u64,
-    pub information: u64,
+    pub status: usize,
+    pub information: usize,
 }
 
 /// `STATUS_*` values `kernelbase` looks at (`ntstatus.h`).

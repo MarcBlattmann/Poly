@@ -313,6 +313,9 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
             token_of(k, h, token::query_right(info_class))?;
         }
         if let Some(n) = token::exact_query_length(info_class, before_rights) {
+            // `TOKEN_LINKED_TOKEN` is a handle: 4 bytes in a 32-bit process (ADR 0186).
+            let n =
+                if info_class == class::TOKEN_LINKED_TOKEN { k.with_state(|_, p, _| p.layout().ptr as u32) } else { n };
             if ret == 0 {
                 return Err(STATUS_ACCESS_VIOLATION);
             }
@@ -324,7 +327,9 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     }
     let id = token_of(k, h, token::query_right(info_class))?;
     let t = copy_of(k, id)?;
-    let bytes = t.query(info_class, buf)?;
+    // Pointers and `SID_AND_ATTRIBUTES` in the caller's width (ADR 0186).
+    let w = k.with_state(|_, p, _| p.layout().ptr as usize);
+    let bytes = t.query_width(info_class, buf, w)?;
     if ret == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
     }
@@ -498,15 +503,17 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         return Err(STATUS_INVALID_INFO_CLASS);
     }
     let id = token_of(k, h, token::set_rights(info_class))?;
-    if !token::set_length_ok(info_class, length) {
+    // The structures' pointers are the caller's width (4 bytes in a 32-bit process, ADR 0186).
+    let w = k.with_state(|_, p, _| p.layout().ptr as usize);
+    if !token::set_length_ok_width(info_class, length, w) {
         return Err(token::STATUS_INFO_LENGTH_MISMATCH);
     }
+    let read_ptr = |k: &mut K, at: u64| -> Result<u64> {
+        if w == 4 { abi::read_u32(k, at).map(u64::from) } else { abi::read_u64(k, at) }
+    };
     let data = match info_class {
         class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP => {
-            if length < 8 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Sid(None)
             } else {
@@ -515,10 +522,7 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
             }
         }
         class::TOKEN_INTEGRITY_LEVEL => {
-            if length < 16 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Sid(None)
             } else {
@@ -527,10 +531,7 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
             }
         }
         class::TOKEN_DEFAULT_DACL => {
-            if length < 8 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Acl(None)
             } else {
