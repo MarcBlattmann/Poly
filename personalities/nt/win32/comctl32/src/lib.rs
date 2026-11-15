@@ -35,3 +35,6 @@ pub extern "system" fn InitCommonControls() {}
 pub extern "system" fn comctl32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
