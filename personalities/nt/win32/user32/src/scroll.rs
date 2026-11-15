@@ -258,7 +258,9 @@ pub unsafe extern "system" fn SetScrollRange(hwnd: H, bar: i32, min: i32, max: i
     }
     let mut want = [None, None];
     let mut bad = false;
-    for &idx in indices(bar) {
+    // `SB_BOTH` changes the vertical bar only (the sheet's `sb_both`).
+    let bars: &[usize] = if bar == s::SB_BOTH { &[1] } else { indices(bar) };
+    for &idx in bars {
         let keep = with_win(hwnd, i.style, |w| {
             let slot = &mut w.bars[idx];
             if !slot.bar.set_range(min, max) {

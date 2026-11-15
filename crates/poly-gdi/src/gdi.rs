@@ -2678,7 +2678,17 @@ impl Gdi {
         let (Some(o), Some(data)) = (sel.outline, sel.data.as_deref()) else { return Some(None) };
         let Ok(font) = poly_font::Font::parse(data) else { return Some(None) };
         let name = |id: u16| -> Vec<u16> { font.name(id).map(|s| s.encode_utf16().collect()).unwrap_or_default() };
-        let (family, style, full) = (name(1), name(2), name(4));
+        // The full name GDI reports is the font's full name and the number of its version
+        // ("PolyDlg Mixed" and "Version 1.0" give "PolyDlg Mixed 1.0": GetOutlineTextMetricsA.yaml).
+        let (family, style) = (name(1), name(2));
+        let mut full = name(4);
+        let version = font.name(5).unwrap_or_default();
+        if let Some(v) = version.strip_prefix("Version ")
+            && !full.is_empty()
+        {
+            full.push(u16::from(b' '));
+            full.extend(v.encode_utf16());
+        }
         let face = if style.is_empty() || style == "Regular".encode_utf16().collect::<Vec<u16>>() {
             family.clone()
         } else {
