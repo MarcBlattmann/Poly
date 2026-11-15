@@ -6,6 +6,7 @@ use super::win32k::user_call;
 use super::*;
 use crate::winsta::Start;
 use alloc::format;
+use alloc::string::String;
 use poly_security::token::{SE_GROUP_INTEGRITY, Token};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::winsta::*;
@@ -340,4 +341,23 @@ fn an_unreadable_descriptor_is_refused() {
     let junk = f.put(&[0xEE; 8]);
     let r = ask(&mut f, WinstaOp::CreateStation { name: wide("polyws_junk"), flags: 0, access: 1, sd: junk });
     assert_eq!(err(r), ERROR_INVALID_PARAMETER);
+}
+
+#[test]
+fn a_station_without_a_name_is_the_sessions_and_refused_to_a_second_asker() {
+    let mut f = fake();
+    // No name and no descriptor: the sheet's error 5.
+    assert_eq!(err(create_station(&mut f, "", 0, GENERIC_ALL)), ERROR_ACCESS_DENIED);
+    // With a descriptor that does not let its maker in (Chrome's broker): the session's station
+    // is made, and the second call, which opens it, is refused.
+    let at = sd(&mut f, "D:(A;;GA;;;SY)(A;;GWGR;;;S-1-15-2-1)S:(ML;;;;;S-1-16-0)");
+    let first = ask(&mut f, WinstaOp::CreateStation { name: vec![], flags: 0, access: 0x8000_0008, sd: at });
+    assert!(matches!(first, WinstaRes::HandleClear { .. }), "{first:?}");
+    let second = ask(&mut f, WinstaOp::CreateStation { name: vec![], flags: 0, access: 10, sd: at });
+    assert_eq!(err(second), ERROR_ACCESS_DENIED);
+    // The station has the session's name.
+    let h = handle(first);
+    let WinstaRes::Info { data } = info(&mut f, h, UOI_NAME, 256) else { panic!() };
+    let name: Vec<u16> = data.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect();
+    assert!(String::from_utf16(&name).unwrap().starts_with("Service-0x0-"));
 }

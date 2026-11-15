@@ -57,6 +57,13 @@ fn own_process(sys: &NtSystem, proc: &NtProcess, caller: &Caller, h: Handle, acc
 /// prohibit-dynamic-code mitigation cannot make memory executable.
 const STATUS_DYNAMIC_CODE_BLOCKED: NtStatus = NtStatus(0xC000_0604);
 
+/// Poly's own bit in the protection `ntdll`'s loader passes when it makes the sections of a module
+/// it maps executable. Windows maps modules as image sections, which the prohibit-dynamic-code
+/// mitigation lets be (Learn, "Process Mitigation Policies"); Poly's loader maps them with
+/// ordinary memory, so it asks for the exemption this way (ADR 0186). No `PAGE_*` value of Windows
+/// uses the bit.
+pub const PAGE_POLY_LOADER: u32 = 0x0100_0000;
+
 /// Whether a `PAGE_*` protection allows execution.
 fn executable(protect: u32) -> bool {
     protect & 0xF0 != 0
@@ -111,12 +118,13 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
         return Err(STATUS_ACCESS_VIOLATION);
     }
     let caller = k.caller();
+    let (loader, new) = (new as u32 & PAGE_POLY_LOADER != 0, new as u32 & !PAGE_POLY_LOADER);
     let (base, size, old) = k.with_state(|sys, proc, b| {
         own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
-        if proc.dynamic_code_blocked && executable(new as u32) {
+        if proc.dynamic_code_blocked && executable(new) && !loader {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
-        proc.vm.protect(b, base, size, new as u32)
+        proc.vm.protect(b, base, size, new)
     })?;
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;

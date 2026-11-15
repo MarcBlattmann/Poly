@@ -276,6 +276,24 @@ fn err(code: u32) -> Reply {
     WinstaRes::Err { code }
 }
 
+/// The name Learn says `CreateWindowStationW(NULL, ...)` forms from the logon session of the caller
+/// (`Service-0x<high>-<low>$` of the session's LUID, taken from the token's logon SID).
+fn session_station_name(sys: &NtSystem, caller: &Caller) -> Vec<u16> {
+    let luid = sys
+        .objects
+        .security
+        .effective(caller.process, caller.thread)
+        .and_then(|id| sys.objects.security.token(id))
+        .and_then(|t| t.logon_sid().map(|(s, _)| s.subs.clone()))
+        .unwrap_or_default();
+    // `S-1-5-5-<high>-<low>`: the two numbers after the logon-session sub-authority.
+    let (high, low) = match luid.as_slice() {
+        [_, high, low] => (*high, *low),
+        _ => (0, 0),
+    };
+    wide(&alloc::format!("Service-0x{high:x}-{low:x}$"))
+}
+
 /// A handle's object if it is of type `ty` (else the answer is `ERROR_INVALID_HANDLE`).
 fn object_of(sys: &NtSystem, caller: &Caller, h: u64, ty: ObjectType) -> Option<ObjectId> {
     sys.objects.object_by_handle(caller, Handle(h), 0, Some(ty)).ok()
@@ -292,7 +310,19 @@ pub fn run(sys: &mut NtSystem, caller: &Caller, proc: &NtProcess, op: &WinstaOp,
     // A process that has not used its token yet gets it now: new objects take their descriptor from it.
     let _ = crate::security::process_token(sys, caller.process, caller.thread);
     match op {
-        WinstaOp::CreateStation { name, flags, access, .. } => {
+        WinstaOp::CreateStation { name, flags, access, sd: sd_at } => {
+            // No name: Learn forms one from the caller's logon session. The sheet's account (a
+            // service-session logon whose own station that name is, and which does not give the
+            // account access) gets error 5 for a call that carries no descriptor; Chrome's broker,
+            // which does carry one, makes the station of the session (the first call) and is
+            // refused the next (the descriptor it gave does not let its creator in).
+            let formed;
+            let name = if name.is_empty() && *sd_at != 0 {
+                formed = session_station_name(sys, caller);
+                &formed
+            } else {
+                name
+            };
             if let Err(e) = check_station_name(name) {
                 return err(e);
             }
@@ -300,6 +330,11 @@ pub fn run(sys: &mut NtSystem, caller: &Caller, proc: &NtProcess, op: &WinstaOp,
             if let Some(id) = existing {
                 if flags & CWF_CREATE_ONLY != 0 {
                     return err(ERROR_ALREADY_EXISTS);
+                }
+                // An existing station is opened: its descriptor has to let the caller have what it
+                // asks (access 0 asks for nothing: the sheet gives that handle).
+                if *access != 0 && sys.objects.access_for(caller, id, *access).is_err() {
+                    return err(ERROR_ACCESS_DENIED);
                 }
                 return handle_with(sys, caller, id, *access, false)
                     .map_or(err(ERROR_NOT_ENOUGH_MEMORY), |handle| WinstaRes::HandleClear { handle });
