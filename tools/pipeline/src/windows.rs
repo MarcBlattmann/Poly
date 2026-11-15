@@ -1192,10 +1192,13 @@ pub fn check_split_files(files: &[String]) -> Result<()> {
     for f in files {
         let path = Path::new(f);
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-        if f.contains(['/', '\\']) || !is_test_source(path) || !valid_name(&stem) {
+        // `<name>.exe` is allowed beside `<name>.cpp`: a test built by Microsoft's compiler
+        // (`poly-cxx: compiler=msvc`, `wincxx::Compiler::Msvc`).
+        let prebuilt = path.extension().is_some_and(|x| x == "exe") && files.contains(&format!("{stem}.cpp"));
+        if f.contains(['/', '\\']) || !(is_test_source(path) || prebuilt) || !valid_name(&stem) {
             return Err(format!(
-                "{f}: a Windows entry's generated tests are .rs or .cpp files named in lower-case letters, digits \
-                 and _, directly in the directory"
+                "{f}: a Windows entry's generated tests are .rs or .cpp files (and the .exe of a compiler=msvc \
+                 .cpp) named in lower-case letters, digits and _, directly in the directory"
             ));
         }
     }
@@ -1418,6 +1421,10 @@ mod tests {
     #[test]
     fn windows_split_checks_files_and_divides_results() {
         assert!(check_split_files(&["a_b.cpp".into(), "c.rs".into()]).is_ok());
+        // The executable of a compiler=msvc test goes with its source (only then).
+        assert!(check_split_files(&["a_b.cpp".into(), "a_b.exe".into()]).is_ok());
+        assert!(check_split_files(&["a_b.exe".into()]).is_err());
+        assert!(check_split_files(&["c.rs".into(), "c.exe".into()]).is_err());
         for bad in ["x.h", "sub/a.cpp", "Bad.cpp", "a-b.rs", "windows.json"] {
             assert!(check_split_files(&[bad.into()]).is_err(), "{bad}");
         }
