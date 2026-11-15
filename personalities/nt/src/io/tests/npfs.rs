@@ -190,6 +190,7 @@ fn creating_pipes_checks_names_instances_and_directions() {
     assert_eq!(t.np_create("bad", rws, 3, FILE_CREATE, SYNC, 0, 1, 2, 4096).0, STATUS_INVALID_PARAMETER);
     assert_eq!(t.np_create("bad", rws, 3, FILE_CREATE, SYNC, 0, 0, 0, 4096).0, STATUS_INVALID_PARAMETER);
     assert_eq!(t.np_create("bad", rws, 3, FILE_OPEN, SYNC, 0, 0, 1, 4096).0, STATUS_OBJECT_NAME_NOT_FOUND);
+    assert_eq!(t.np_create("bad", rws, 3, FILE_SUPERSEDE, SYNC, 0, 0, 1, 4096).0, STATUS_INVALID_PARAMETER);
     // Outside the pipe device.
     let out = t.f.alloc(8);
     let iosb = t.f.alloc(16);

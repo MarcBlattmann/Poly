@@ -233,6 +233,7 @@ const TABLE: &[(u32, u32)] = &[
     (0xC000_0103, ERROR_DIRECTORY),            // STATUS_NOT_A_DIRECTORY
     (0xC000_0106, ERROR_FILENAME_EXCED_RANGE), // STATUS_NAME_TOO_LONG
     (0xC000_010A, ERROR_ACCESS_DENIED),        // STATUS_PROCESS_IS_TERMINATING
+    (0xC000_011E, ERROR_FILE_INVALID),         // STATUS_MAPPED_FILE_SIZE_ZERO (CreateFileMappingW of an empty file: 1006)
     (0xC000_0120, ERROR_OPERATION_ABORTED),    // STATUS_CANCELLED
     (0xC000_0121, ERROR_ACCESS_DENIED),        // STATUS_CANNOT_DELETE
     (0xC000_012D, ERROR_COMMITMENT_LIMIT),     // STATUS_COMMITMENT_LIMIT
@@ -286,6 +287,8 @@ mod tests {
         assert_eq!(nt_status_to_dos_error(NtStatus(0xC000_0017)), ERROR_NOT_ENOUGH_MEMORY);
         assert_eq!(nt_status_to_dos_error(NtStatus(0x8000_0005)), ERROR_MORE_DATA);
         assert_eq!(nt_status_to_dos_error(NtStatus(0x0000_0103)), ERROR_IO_PENDING);
+        // A file mapping of an empty file.
+        assert_eq!(nt_status_to_dos_error(NtStatus(0xC000_011E)), ERROR_FILE_INVALID);
     }
 
     #[test]

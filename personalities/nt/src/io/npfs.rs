@@ -360,6 +360,8 @@ impl IoState {
     ) -> core::result::Result<(u64, u64), NtStatus> {
         let exists = self.np.pipes.contains_key(key);
         match (c.disposition, exists) {
+            // A server end is created or opened, never superseded (the sheet's `parameters`).
+            (FILE_SUPERSEDE, _) => return Err(STATUS_INVALID_PARAMETER),
             (FILE_CREATE, true) => return Err(STATUS_ACCESS_DENIED),
             (FILE_OPEN, false) => return Err(STATUS_OBJECT_NAME_NOT_FOUND),
             _ => {}

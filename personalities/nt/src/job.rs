@@ -266,37 +266,88 @@ pub enum SetOp {
     Accepted,
 }
 
-/// The number of bytes `NtSetInformationJobObject` reads for `class` and `len`
-/// (specs/windows/ntdll.dll/NtSetInformationJobObject.yaml: `lengths`, `class_lengths`), or
-/// the status of a class or length it refuses.
-pub fn set_length(class: u32, len: usize) -> Result<usize> {
-    let fits = |lens: &[usize]| if lens.contains(&len) { Ok(len) } else { Err(STATUS_INFO_LENGTH_MISMATCH) };
+/// What `NtSetInformationJobObject` does with a class at one of its lengths.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SetRule {
+    /// The structure is read and used (or ignored).
+    Take,
+    /// The structure is read and a zero one is `STATUS_INVALID_PARAMETER`.
+    Invalid,
+    /// A query-only class: `STATUS_INVALID_INFO_CLASS`.
+    NoSet,
+    /// `STATUS_NOT_SUPPORTED`.
+    NotSupported,
+}
+
+/// The classes 1 to 35 that are not accepted at every length: their lengths and what happens at
+/// them (every other length is `STATUS_INFO_LENGTH_MISMATCH`), as the visible test of the sheet
+/// scanned them with a zeroed structure. Class 11 and class 14 take several lengths
+/// ([`set_length`]); class 19 none.
+const SET_CLASSES: &[(u32, &[usize], SetRule)] = &[
+    (1, &[48], SetRule::NoSet),
+    (2, &[64], SetRule::Take),
+    (3, &[16], SetRule::NoSet),
+    (4, &[4], SetRule::Take),
+    (5, &[40], SetRule::NotSupported),
+    (6, &[4], SetRule::Take),
+    (7, &[16], SetRule::Take),
+    (8, &[96], SetRule::NoSet),
+    (9, &[144, 152], SetRule::Take),
+    (10, &[4], SetRule::NoSet),
+    (12, &[48, 56], SetRule::Take),
+    (13, &[0], SetRule::NoSet),
+    (15, &[8], SetRule::Invalid),
+    (16, &[4], SetRule::Take),
+    (17, &[8], SetRule::NoSet),
+    (18, &[16], SetRule::Invalid),
+    (20, &[0], SetRule::NoSet),
+    (21, &[1], SetRule::Invalid),
+    (22, &[1], SetRule::Invalid),
+    (23, &[1], SetRule::Invalid),
+    (24, &[8], SetRule::Invalid),
+    (25, &[0], SetRule::Take),
+    (26, &[8], SetRule::NoSet),
+    (27, &[0], SetRule::Take),
+    (28, &[16], SetRule::NoSet),
+    (29, &[8], SetRule::NoSet),
+    (30, &[0], SetRule::NoSet),
+    (31, &[48, 96, 144], SetRule::Take),
+    (32, &[16], SetRule::Invalid),
+    (33, &[72], SetRule::Take),
+    (34, &[104], SetRule::NoSet),
+    (35, &[0], SetRule::Invalid),
+];
+
+/// The rule of `class` at `len`, or the status of a class or length it refuses
+/// (specs/windows/ntdll.dll/NtSetInformationJobObject.yaml: `lengths`, `class_lengths`, and the
+/// scan of the visible test `ntsijo_misc`).
+fn set_rule(class: u32, len: usize) -> Result<SetRule> {
     match class {
         0 => Err(STATUS_INVALID_INFO_CLASS),
-        BASIC_LIMIT => fits(&[64]),
-        UI_RESTRICTIONS | END_OF_JOB_TIME | 16 => fits(&[4]),
-        ASSOCIATE_PORT => fits(&[16]),
-        EXTENDED_LIMIT => fits(&[144, 152]),
-        12 => fits(&[48, 56]),
-        31 => fits(&[48, 96, 144]),
-        33 => fits(&[72]),
-        15 => fits(&[8]),
-        18 => fits(&[16]),
-        14 if len.is_multiple_of(16) => Ok(len),
-        14 => Err(STATUS_INFO_LENGTH_MISMATCH),
-        // The query-only classes: the length of their structure, then no set.
-        BASIC_ACCOUNTING | PROCESS_ID_LIST | BASIC_AND_IO | 10 | 34 => {
-            let own = match class {
-                BASIC_ACCOUNTING => 48,
-                PROCESS_ID_LIST => 16,
-                BASIC_AND_IO => 96,
-                10 => 4,
-                _ => 104,
-            };
-            Err(if len == own { STATUS_INVALID_INFO_CLASS } else { STATUS_INFO_LENGTH_MISMATCH })
-        }
-        SECURITY_LIMIT => Err(if len == 40 { STATUS_NOT_SUPPORTED } else { STATUS_INFO_LENGTH_MISMATCH }),
-        _ => Err(STATUS_INFO_LENGTH_MISMATCH),
+        // Group information: 2 bytes are taken, the other even lengths are invalid.
+        GROUP_INFORMATION => match len {
+            2 => Ok(SetRule::Take),
+            4.. if len.is_multiple_of(2) => Ok(SetRule::Invalid),
+            _ => Err(STATUS_INFO_LENGTH_MISMATCH),
+        },
+        GROUP_INFORMATION_EX if len.is_multiple_of(16) => Ok(SetRule::Take),
+        GROUP_INFORMATION_EX => Err(STATUS_INFO_LENGTH_MISMATCH),
+        // Silos and containers were not probed: not a class this set knows.
+        c if c > 35 => Err(STATUS_INVALID_INFO_CLASS),
+        c => match SET_CLASSES.iter().find(|(k, _, _)| *k == c) {
+            Some((_, lens, rule)) if lens.contains(&len) => Ok(*rule),
+            _ => Err(STATUS_INFO_LENGTH_MISMATCH),
+        },
+    }
+}
+
+/// The number of bytes `NtSetInformationJobObject` reads for `class` and `len`, or the status of a
+/// class or length it refuses.
+pub fn set_length(class: u32, len: usize) -> Result<usize> {
+    match set_rule(class, len)? {
+        SetRule::Take | SetRule::Invalid => Ok(len),
+        SetRule::NoSet => Err(STATUS_INVALID_INFO_CLASS),
+        SetRule::NotSupported => Err(STATUS_NOT_SUPPORTED),
     }
 }
 
@@ -315,8 +366,10 @@ pub fn parse_set(class: u32, data: &[u8]) -> Result<SetOp> {
             if v > 1 { Err(STATUS_INVALID_PARAMETER) } else { Ok(SetOp::EndOfJob(v)) }
         }
         ASSOCIATE_PORT => Ok(SetOp::Port { key: u64_at(0), port: u64_at(8) }),
-        // CPU and network rate control: the zero structure is refused.
-        15 | 18 if data.iter().all(|&b| b == 0) => Err(STATUS_INVALID_PARAMETER),
+        // Rate control and the other classes that refuse a zero structure.
+        c if set_rule(c, data.len()) == Ok(SetRule::Invalid) && data.iter().all(|&b| b == 0) => {
+            Err(STATUS_INVALID_PARAMETER)
+        }
         _ => Ok(SetOp::Accepted),
     }
 }
@@ -1144,6 +1197,24 @@ mod tests {
         assert_eq!(set_length(14, 8), Err(STATUS_INFO_LENGTH_MISMATCH));
         assert_eq!(parse_set(15, &[0; 8]), Err(STATUS_INVALID_PARAMETER));
         assert_eq!(parse_set(18, &[0; 16]), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(35, &[]), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(11, &[0; 4]), Err(STATUS_INVALID_PARAMETER));
+        assert_eq!(parse_set(11, &[0; 2]), Ok(SetOp::Accepted));
+        // The scan of the visible test: class 11 at 2 bytes, other even lengths invalid, odd ones
+        // and 0 a mismatch; class 14 at multiples of 16; class 19 never; class 13 and 20 at 0 are
+        // query-only; 25 and 27 at 0 are taken; unknown classes are not classes.
+        assert_eq!(set_length(11, 2), Ok(2));
+        assert_eq!(set_length(11, 6), Ok(6));
+        assert_eq!(set_length(11, 7), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(11, 0), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(14, 288), Ok(288));
+        assert_eq!(set_length(19, 8), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(13, 0), Err(STATUS_INVALID_INFO_CLASS));
+        assert_eq!(set_length(25, 0), Ok(0));
+        assert_eq!(set_length(27, 0), Ok(0));
+        assert_eq!(set_length(24, 8), Ok(8));
+        assert_eq!(set_length(24, 7), Err(STATUS_INFO_LENGTH_MISMATCH));
+        assert_eq!(set_length(99, 4), Err(STATUS_INVALID_INFO_CLASS));
         // UI restrictions and the end-of-job action.
         for v in [0u32, 1, 0x3f, 0xff, 0x100, 0x1ff] {
             assert_eq!(parse_set(UI_RESTRICTIONS, &v.to_le_bytes()), Ok(SetOp::Ui(v)));

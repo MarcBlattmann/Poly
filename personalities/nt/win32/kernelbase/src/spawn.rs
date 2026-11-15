@@ -515,6 +515,8 @@ unsafe fn create(
         (information.add(2 * hs) as *mut u32).write_unaligned(pid);
         (information.add(2 * hs + 4) as *mut u32).write_unaligned(tid);
     }
+    // A created process leaves the last error 0 (the sheet of UpdateProcThreadAttribute).
+    set_last_error(ERROR_SUCCESS);
     TRUE
 }
 

@@ -15,6 +15,8 @@ pub const MITIGATION_POLICY: usize = 0x0002_0007;
 pub const SECURITY_CAPABILITIES: usize = 0x0002_0009;
 pub const JOB_LIST: usize = 0x0002_000D;
 pub const CHILD_PROCESS_POLICY: usize = 0x0002_000E;
+/// `PROC_THREAD_ATTRIBUTE_COMPONENT_FILTER` (`winbase.h`): a 4-byte value that nothing shows.
+pub const COMPONENT_FILTER: usize = 0x0002_001A;
 
 /// The header and one record.
 const HEADER: usize = 8;
@@ -71,7 +73,7 @@ pub unsafe extern "system" fn UpdateProcThreadAttribute(
         PARENT_PROCESS => Some(size == core::mem::size_of::<usize>()),
         HANDLE_LIST | JOB_LIST => Some(size != 0 && size % core::mem::size_of::<usize>() == 0),
         MITIGATION_POLICY => Some(size == 4 || size == 8 || size == 16),
-        CHILD_PROCESS_POLICY => Some(size == 4),
+        CHILD_PROCESS_POLICY | COMPONENT_FILTER => Some(size == 4),
         // SECURITY_CAPABILITIES (`winnt.h`): two pointers and two DWORDs (24 bytes, 16 in a 32-bit process).
         SECURITY_CAPABILITIES => Some(size == 2 * core::mem::size_of::<usize>() + 8),
         _ => None,
