@@ -376,3 +376,6 @@ pub unsafe extern "system" fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, si
     }
     n as u32
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
