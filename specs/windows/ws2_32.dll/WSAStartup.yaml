@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAStartup.yaml
+id: windows/api/ws2_32.dll/WSAStartup
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Initialises Winsock for the process and counts the start-ups. Chrome's browser and network service each call it once, WSAStartup(0x0202, &data), and expect 0. Observed: the request is MAKEWORD(major, minor); a request with major 2 (any minor 0..3) or major 3 gets version 2.2 back (wVersion 0x0202), a request with major 1 (any minor) gets 1.1 (0x0101) with iMaxSockets 32767 and iMaxUdpDg 65467, major 0 is refused with WSAVERNOTSUPPORTED (10092) and wVersion/wHighVersion still filled with 0x0202. wHighVersion is always 0x0202. Every successful call counts: three start-ups need three WSACleanup calls; sockets made at count 3 still work after the first two cleanups, and after the third WSANOTINITIALISED (10093) is what every socket call returns, including closesocket and ioctl on the old socket and getaddrinfo (the error code is its return value). A cleanup with count 0 is -1/WSANOTINITIALISED. A new start-up after that works again.
+interface:
+  signature: "int WSAStartup(WORD version, LPWSADATA data); int WSACleanup(void)"
+  result: "0 on success, otherwise the WSA error code itself (not a last error); WSACleanup returns 0 or SOCKET_ERROR with WSAGetLastError"
+chrome:
+  calls: "WSAStartup(514, &data) once per process (browser and network service, stage S4), result 0. WSACleanup is not called"
+rules:
+  versions_2: "requested 2.2, 2.0, 2.1 and 2.3 (higher minor), and 3.0 (higher major): result 0, wVersion 0x0202, wHighVersion 0x0202, iMaxSockets 0, iMaxUdpDg 0"
+  versions_1: "requested 1.1, 1.0 and 1.2: result 0, wVersion 0x0101 (always 1.1), wHighVersion 0x0202, iMaxSockets 32767, iMaxUdpDg 65467"
+  version_0: "requested 0.0 and 0.2: result WSAVERNOTSUPPORTED (10092), wVersion and wHighVersion are written as 0x0202 anyway"
+  strings: "szDescription is \"WinSock 2.0\", szSystemStatus is \"Running\", lpVendorInfo is NULL (for version 2.2 requests)"
+  null_data: "a NULL WSADATA: result WSAEFAULT (10014), the start-up is not counted (sockets still fail with 10093 afterwards)"
+  before_start: "before any start-up: WSASocketW fails with WSANOTINITIALISED (10093), WSACleanup is -1/10093, closesocket of a made-up value is -1/10093, getaddrinfo returns 10093, WSAGetLastError() reads 0"
+  nesting: "start-ups 2.2, 1.1, 2.2: each result 0; cleanups 1 and 2 return 0 and sockets (also one made at count 3) keep working; cleanup 3 returns 0 and then WSASocketW, ioctlsocket and closesocket on the old socket all give -1/WSANOTINITIALISED; a fourth cleanup is -1/WSANOTINITIALISED; a new start-up works and sockets work again"
+errors:
+  version: "WSAVERNOTSUPPORTED (10092)"
+  pointer: "WSAEFAULT (10014)"
+  not_started: "WSANOTINITIALISED (10093)"
+side_effects: "raises the process's Winsock start-up count; loads nothing a test can see"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  WSASYSNOTREADY (10091), the cleanup's effect on blocking calls in other threads, a start-up from several threads at once, what happens to open sockets after the last cleanup beyond the error codes above (whether they are closed: their handles were not looked at).

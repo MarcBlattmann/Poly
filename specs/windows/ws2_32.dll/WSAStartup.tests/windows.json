@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsastartup_versions",
+      "exe_sha256": "ee8192911248cd901fa6f8a50a8e83648585fcc944c920e59368c7951ed06edb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIHRoZSBmaXJzdCBzdGFydC11cDogc29ja2V0IGZhaWxzIFdTQU5PVElOSVRJQUxJU0VECmdldGFkZHJpbmZvIGJlZm9yZSBzdGFydC11cCBXU0FOT1RJTklUSUFMSVNFRApjbGVhbnVwIDAKMi4xOiByZXN1bHQgMCB2ZXJzaW9uIDB4MDEwMiBoaWdoIDB4MDIwMiBtYXhfc29ja2V0cyAwIG1heF91ZHBfZGcgMAozLjAgKGhpZ2hlciBtYWpvcik6IHJlc3VsdCAwIHZlcnNpb24gMHgwMjAyIGhpZ2ggMHgwMjAyIG1heF9zb2NrZXRzIDAgbWF4X3VkcF9kZyAwCjEuMjogcmVzdWx0IDAgdmVyc2lvbiAweDAxMDEgaGlnaCAweDAyMDIgbWF4X3NvY2tldHMgMzI3NjcgbWF4X3VkcF9kZyA2NTQ2Nwp2ZW5kb3IgaW5mbyBudWxsIDEKZmlyc3Q6IHJlc3VsdCAwIHZlcnNpb24gMHgwMjAyIGhpZ2ggMHgwMjAyIG1heF9zb2NrZXRzIDAgbWF4X3VkcF9kZyAwCnNvY2tldCBtYWRlIGF0IGNvdW50IDMgMQogIEZJT05SRUFEIG9uIHRoZSBvbGQgc29ja2V0IDAgMAogIEZJT05SRUFEIG9uIHRoZSBvbGQgc29ja2V0IDAgMApGSU9OUkVBRCBvbiB0aGUgb2xkIHNvY2tldCBhZnRlciB0aGUgbGFzdCBjbGVhbnVwIC0xL1dTQU5PVElOSVRJQUxJU0VEIDAKYWdhaW4gYWZ0ZXIgY2xlYW51cDogcmVzdWx0IDAgdmVyc2lvbiAweDAyMDIgaGlnaCAweDAyMDIgbWF4X3NvY2tldHMgMCBtYXhfdWRwX2RnIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before the first start-up: socket fails WSANOTINITIALISED\ngetaddrinfo before start-up WSANOTINITIALISED\ncleanup 0\n2.1: result 0 version 0x0102 high 0x0202 max_sockets 0 max_udp_dg 0\n3.0 (higher major): result 0 version 0x0202 high 0x0202 max_sockets 0 max_udp_dg 0\n1.2: result 0 version 0x0101 high 0x0202 max_sockets 32767 max_udp_dg 65467\nvendor info null 1\nfirst: result 0 version 0x0202 high 0x0202 max_sockets 0 max_udp_dg 0\nsocket made at count 3 1\n  FIONREAD on the old socket 0 0\n  FIONREAD on the old socket 0 0\nFIONREAD on the old socket after the last cleanup -1/WSANOTINITIALISED 0\nagain after cleanup: result 0 version 0x0202 high 0x0202 max_sockets 0 max_udp_dg 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "wsastartup_versions_b",
+      "exe_sha256": "41c393e08800da1b1649706bff5e683f03f053f91ec5b2a5701b9bf856d0892e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBQ2xlYW51cCBiZWZvcmUgc3RhcnQtdXAgLTEvV1NBTk9USU5JVElBTElTRUQKV1NBR2V0TGFzdEVycm9yIGJlZm9yZSBzdGFydC11cCAwCjEuMTogcmVzdWx0IDAgdmVyc2lvbiAweDAxMDEgaGlnaCAweDAyMDIgbWF4X3NvY2tldHMgMzI3NjcgbWF4X3VkcF9kZyA2NTQ2NwoxLjA6IHJlc3VsdCAwIHZlcnNpb24gMHgwMDAxIGhpZ2ggMHgwMjAyIG1heF9zb2NrZXRzIDMyNzY3IG1heF91ZHBfZGcgNjU0NjcKMC4wOiByZXN1bHQgV1NBVkVSTk9UU1VQUE9SVEVEIHZlcnNpb24gMHgwMjAyIGhpZ2ggMHgwMjAyCmRlc2NyaXB0aW9uICJXaW5Tb2NrIDIuMCIKV1NBU3RhcnR1cCB3aXRoIGEgTlVMTCBXU0FEQVRBIFdTQUVGQVVMVApzZWNvbmQ6IHJlc3VsdCAwIHZlcnNpb24gMHgwMTAxIGhpZ2ggMHgwMjAyIG1heF9zb2NrZXRzIDMyNzY3IG1heF91ZHBfZGcgNjU0NjcKY2xlYW51cCAxIDAKY2xlYW51cCAyIDAKY2xlYW51cCAzIDAKY2xvc2Vzb2NrZXQgb2YgdGhlIG9sZCBzb2NrZXQgYWZ0ZXIgdGhlIGxhc3QgY2xlYW51cCAtMS9XU0FOT1RJTklUSUFMSVNFRAphZnRlciB0aGUgbmV3IHN0YXJ0LXVwOiBzb2NrZXQgd29ya3MKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSACleanup before start-up -1/WSANOTINITIALISED\nWSAGetLastError before start-up 0\n1.1: result 0 version 0x0101 high 0x0202 max_sockets 32767 max_udp_dg 65467\n1.0: result 0 version 0x0001 high 0x0202 max_sockets 32767 max_udp_dg 65467\n0.0: result WSAVERNOTSUPPORTED version 0x0202 high 0x0202\ndescription \"WinSock 2.0\"\nWSAStartup with a NULL WSADATA WSAEFAULT\nsecond: result 0 version 0x0101 high 0x0202 max_sockets 32767 max_udp_dg 65467\ncleanup 1 0\ncleanup 2 0\ncleanup 3 0\nclosesocket of the old socket after the last cleanup -1/WSANOTINITIALISED\nafter the new start-up: socket works\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

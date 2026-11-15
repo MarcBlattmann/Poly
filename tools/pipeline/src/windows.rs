@@ -46,7 +46,10 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`,
 /// `iphlpapi`, `oleacc`, `uiautomationcore`, with `ole32` and `oleaut32`
 /// for the COM objects they hand out, and `kernelbase` for the functions
-/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`).
+/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
+/// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
+/// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -71,6 +74,12 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "ole32.dll",
     "oleaut32.dll",
     "kernelbase.dll",
+    "ws2_32.dll",
+    "mswsock.dll",
+    "winhttp.dll",
+    "crypt32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";

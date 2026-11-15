@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "getnameinfo_numeric",
+      "exe_sha256": "1e7fe7dd66b4b078ad6399f42f28ccc7495b2e770c5695b9790d961a7bb82d2c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTI3LjAuMC4xOjgwIE5VTUVSSUNIT1NUfE5VTUVSSUNTRVJWOiByZXQ9MCB3c2E9MCBob3N0PTEyNy4wLjAuMSBzZXJ2PTgwCjAuMC4wLjAgTlVNRVJJQ0hPU1R8TlVNRVJJQ1NFUlY6IHJldD0wIHdzYT0wIGhvc3Q9MC4wLjAuMCBzZXJ2PTAKc2VydmljZSBuYW1lIG9mIDgwIChOSV9ER1JBTSk6IHJldD0wIHdzYT0wIGhvc3Q9MTI3LjAuMC4xIHNlcnY9ODAKYm90aCBidWZmZXJzIDA6IHJldD0wIHdzYT0wIGhvc3Q9IHNlcnY9Cmxlbmd0aCAxNTogcmV0PTEwMDE0IHdzYT0xMDAxNCBob3N0PSBzZXJ2PQpJUHY2IGxlbmd0aCAxNjogcmV0PTEwMDE0IHdzYT0xMDAxNCBob3N0PSBzZXJ2PQpieXRlcyBhZnRlciB0aGUgTlVMIHVudG91Y2hlZDogcmV0PTAgaG9zdFsxMC4uXT0xIHNlcnZbMy4uXT0xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "127.0.0.1:80 NUMERICHOST|NUMERICSERV: ret=0 wsa=0 host=127.0.0.1 serv=80\n0.0.0.0 NUMERICHOST|NUMERICSERV: ret=0 wsa=0 host=0.0.0.0 serv=0\nservice name of 80 (NI_DGRAM): ret=0 wsa=0 host=127.0.0.1 serv=80\nboth buffers 0: ret=0 wsa=0 host= serv=\nlength 15: ret=10014 wsa=10014 host= serv=\nIPv6 length 16: ret=10014 wsa=10014 host= serv=\nbytes after the NUL untouched: ret=0 host[10..]=1 serv[3..]=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "getnameinfo_numeric_c",
+      "exe_sha256": "9ddb06b046cb3f36e6475ca3c89e074b51775364beba7c377f519875d1ca090f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "OjoxOjgwODAgTlVNRVJJQ0hPU1R8TlVNRVJJQ1NFUlY6IHJldD0wIHdzYT0wIGhvc3Q9OjoxIHNlcnY9ODA4MApzZXJ2aWNlIG5hbWUgb2YgODAgKHRjcCk6IHJldD0wIHdzYT0wIGhvc3Q9MTI3LjAuMC4xIHNlcnY9aHR0cApzZXJ2aWNlIG9ubHkgKGhvc3QgYnVmZmVyIDApOiByZXQ9MCB3c2E9MCBob3N0PSBzZXJ2PTgwCmhvc3QgYnVmZmVyIDEwIChleGFjdGx5IDEyNy4wLjAuMSBhbmQgTlVMKTogcmV0PTAgd3NhPTAgaG9zdD0xMjcuMC4wLjEgc2Vydj04MApsZW5ndGggMTc6IHJldD0wIHdzYT0wIGhvc3Q9MTI3LjAuMC4xIHNlcnY9aHR0cApmYW1pbHkgOTk6IHJldD0xMDA0NyB3c2E9MTAwNDcgaG9zdD0gc2Vydj0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "::1:8080 NUMERICHOST|NUMERICSERV: ret=0 wsa=0 host=::1 serv=8080\nservice name of 80 (tcp): ret=0 wsa=0 host=127.0.0.1 serv=http\nservice only (host buffer 0): ret=0 wsa=0 host= serv=80\nhost buffer 10 (exactly 127.0.0.1 and NUL): ret=0 wsa=0 host=127.0.0.1 serv=80\nlength 17: ret=0 wsa=0 host=127.0.0.1 serv=http\nfamily 99: ret=10047 wsa=10047 host= serv=\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winhttp.dll/WinHttpGetIEProxyConfigForCurrentUser.yaml
+id: windows/api/winhttp.dll/WinHttpGetIEProxyConfigForCurrentUser
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WinHttpGetIEProxyConfigForCurrentUser function (winhttp.h)", "WINHTTP_CURRENT_USER_IE_PROXY_CONFIG structure", "GlobalFree"; winhttp.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Reads the current user's Internet Explorer proxy settings into a 32-byte WINHTTP_CURRENT_USER_IE_PROXY_CONFIG: BOOL fAutoDetect (4 bytes, then 4 bytes of padding), then lpszAutoConfigUrl, lpszProxy and lpszProxyBypass (wide strings allocated with GlobalAlloc, to be released with GlobalFree; NULL when not set). Chrome calls it twice in the browser at start and the result is TRUE. On the oracle the call writes all four fields (including the padding) and returns TRUE; fAutoDetect is 0 or 1; the settings (flag, URL, proxy, bypass list) are the user's and are not recorded. A NULL pointer: FALSE with 87. Two calls give equal contents in separate allocations; an old content of the structure is overwritten (not freed).
+interface:
+  signature: "BOOL WinHttpGetIEProxyConfigForCurrentUser(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG *cfg)"
+  result: "TRUE, or FALSE with GetLastError"
+chrome:
+  calls: "WinHttpGetIEProxyConfigForCurrentUser(&cfg) -> TRUE, 2 calls (browser), a 32-byte structure; on the owner's PC fAutoDetect was 1 and the three strings were NULL"
+rules:
+  result: "a valid pointer: TRUE; the structure is 32 bytes; fAutoDetect is 0 or 1; all fields are written, the 4 padding bytes after fAutoDetect included; a call does not leave the last error as it was"
+  two_calls: "two calls give the same flag and equal strings; non-NULL strings are different allocations; each non-NULL string is global memory (GlobalSize covers the text and its NUL, GlobalFree returns NULL)"
+  old_values: "a structure that holds other values first (7 and pointers 0x10, 0x20, 0x30): TRUE and all of them are replaced"
+  null_pointer: "a NULL pointer: FALSE with last error 87 (ERROR_INVALID_PARAMETER)"
+errors:
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "allocates the three strings"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The tests do not change the user's proxy settings; on the oracle all three strings are NULL, so the GlobalSize / GlobalFree checks of non-NULL strings were not exercised there (the test prints which of them were NULL).
+not_covered: >
+  Non-NULL strings (needs a configured proxy, a PAC URL or a bypass list), the registry values the call reads, per-machine group policy settings, WinHttpGetDefaultProxyConfiguration.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "cryptprotectdata_roundtrip",
+      "exe_sha256": "8430d1446913100d66836cdb9051ca469d87ccce93570b58bbd6a881632a9029",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvdGVjdCAzMiBieXRlcywgbm8gZGVzY3JpcHRpb24sIG5vIGVudHJvcHksIGZsYWdzIDA6IDEgbGFzdCBlcnJvciAwCm91dHB1dCBpcyBhIExvY2FsQWxsb2MgYmxvY2sgb2YgYXQgbGVhc3QgaXRzIGxlbmd0aDogMQp0aGUgc2FtZSBpbnB1dCB0d2ljZSBnaXZlcyBkaWZmZXJlbnQgYmxvYnM6IDEKZGVzY3JpcHRpb24gb2YgYSBibG9iIG1hZGUgd2l0aG91dCBvbmU6IDEgbGFzdCBlcnJvciAwIHRleHQgJycgbm9uLU5VTEwgMQp1bnByb3RlY3Qgd2l0aCBvdGhlciBlbnRyb3B5OiAwIGxhc3QgZXJyb3IgMTMgb3V0cHV0IE5VTEwgMQpwcm90ZWN0IGZsYWdzIFVJX0ZPUkJJRERFTiAxOiAxIGxhc3QgZXJyb3IgMCB1bnByb3RlY3QgMSBsYXN0IGVycm9yIDAgcm91bmQgdHJpcCAxCnByb3RlY3QgZmxhZ3MgQVVESVQgMHgxMDogMSBsYXN0IGVycm9yIDAgdW5wcm90ZWN0IDEgbGFzdCBlcnJvciAwIHJvdW5kIHRyaXAgMQpwcm90ZWN0IHplcm8gYnl0ZXM6IDEgbGFzdCBlcnJvciAwCnRoZSBibG9iIG9uZSBieXRlIHNob3J0OiAwIGxhc3QgZXJyb3IgMTMKdW5wcm90ZWN0IHplcm8gYnl0ZXM6IDAgbGFzdCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "protect 32 bytes, no description, no entropy, flags 0: 1 last error 0\noutput is a LocalAlloc block of at least its length: 1\nthe same input twice gives different blobs: 1\ndescription of a blob made without one: 1 last error 0 text '' non-NULL 1\nunprotect with other entropy: 0 last error 13 output NULL 1\nprotect flags UI_FORBIDDEN 1: 1 last error 0 unprotect 1 last error 0 round trip 1\nprotect flags AUDIT 0x10: 1 last error 0 unprotect 1 last error 0 round trip 1\nprotect zero bytes: 1 last error 0\nthe blob one byte short: 0 last error 13\nunprotect zero bytes: 0 last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "cryptprotectdata_roundtrip_b",
+      "exe_sha256": "afe11161653ebcda6d34104a0603ec33aea8880c2732d85bd9223f1921fe603f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3V0cHV0IGxvbmdlciB0aGFuIGlucHV0OiAxIG91dHB1dCBub3QgdGhlIHBsYWludGV4dDogMQp1bnByb3RlY3Q6IDEgbGFzdCBlcnJvciAwIHJvdW5kIHRyaXAgMQpwcm90ZWN0IHdpdGggYSBkZXNjcmlwdGlvbjogMSBsYXN0IGVycm9yIDAKcHJvdGVjdCB3aXRoIGVudHJvcHk6IDEgbGFzdCBlcnJvciAwCnVucHJvdGVjdCB3aXRob3V0IHRoZSBlbnRyb3B5OiAwIGxhc3QgZXJyb3IgMTMgb3V0cHV0IE5VTEwgMQpwcm90ZWN0IGZsYWdzIExPQ0FMX01BQ0hJTkUgNDogMSBsYXN0IGVycm9yIDAgdW5wcm90ZWN0IDEgbGFzdCBlcnJvciAwIHJvdW5kIHRyaXAgMQpwcm90ZWN0IGZsYWdzIFZFUklGWV9QUk9URUNUSU9OIDB4NDA6IDEgbGFzdCBlcnJvciAwIHVucHJvdGVjdCAxIGxhc3QgZXJyb3IgMCByb3VuZCB0cmlwIDEKdW5wcm90ZWN0IHRoYXQ6IDEgbGFzdCBlcnJvciAwIGxlbmd0aCAwCm9ubHkgdGhlIGZpcnN0IDggYnl0ZXMgb2YgYSBibG9iOiAwIGxhc3QgZXJyb3IgODcKcHJvdGVjdCB3aXRoIGEgTlVMTCBkYXRhIHBvaW50ZXIgYW5kIGxlbmd0aCAxNjogMCBsYXN0IGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "output longer than input: 1 output not the plaintext: 1\nunprotect: 1 last error 0 round trip 1\nprotect with a description: 1 last error 0\nprotect with entropy: 1 last error 0\nunprotect without the entropy: 0 last error 13 output NULL 1\nprotect flags LOCAL_MACHINE 4: 1 last error 0 unprotect 1 last error 0 round trip 1\nprotect flags VERIFY_PROTECTION 0x40: 1 last error 0 unprotect 1 last error 0 round trip 1\nunprotect that: 1 last error 0 length 0\nonly the first 8 bytes of a blob: 0 last error 87\nprotect with a NULL data pointer and length 16: 0 last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}
