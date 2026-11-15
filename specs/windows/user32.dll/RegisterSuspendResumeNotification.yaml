@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/RegisterSuspendResumeNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Registers a window for the suspend and resume messages (WM_POWERBROADCAST with PBT_APMSUSPEND,
+  PBT_APMRESUMEAUTOMATIC, PBT_APMRESUMESUSPEND). Chrome's browser calls it once in a run (S3) and never
+  unregisters.
+interface:
+  signature: "HPOWERNOTIFY RegisterSuspendResumeNotification(HANDLE hRecipient, DWORD Flags)"
+rules:
+  success: "returns a non-NULL handle and leaves the last error alone; a second registration of the same window gives a different handle; a message-only window and a child window register; twenty at once work; a NULL recipient and a window that does not exist are accepted"
+  flags: "DEVICE_NOTIFY_SERVICE_HANDLE (1) with a window returns NULL with ERROR_INVALID_PARAMETER 87; the callback flag (2) is not covered"
+  messages: "nothing arrives by itself (no suspend happens); a WM_POWERBROADCAST (PBT_APMSUSPEND 4, PBT_APMRESUMEAUTOMATIC 0x12) sent by hand reaches the window procedure as usual"
+  with_the_others: "registrations of this kind, of RegisterPowerSettingNotification and of RegisterDeviceNotificationW on one window do not disturb each other; releasing one kind leaves the others valid; the one initial power-setting message arrives once and no other messages; the registration does not change the window's visibility"
+  lifetime: "the handle can be released after the window is destroyed (returns 1); DestroyWindow works with registrations still there"
+errors:
+  invalid_parameter: "87: the service flag with a window handle"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Real suspend and resume.

@@ -1381,7 +1381,7 @@ fn swp<E: Env + ?Sized>(
     // Whether the window moves in the z order: asked before an activation
     // below brings it to the top, which is a move all the same.
     let styled_visible = i.style & WS_VISIBLE != 0;
-    let apply_after = if wp.insert_after == reported as usize { after } else { wp.insert_after as u64 };
+    let apply_after = if wp.insert_after as u64 == reported { after } else { wp.insert_after as u64 };
     let zchanged = f & SWP_NOZORDER == 0
         && !opts.keep_z
         && matches!(env.call(Request::ZOrder { hwnd, after: apply_after, apply: false }), Reply::Bool { value: true });

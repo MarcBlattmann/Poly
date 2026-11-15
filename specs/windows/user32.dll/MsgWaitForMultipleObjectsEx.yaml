@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/MsgWaitForMultipleObjectsEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Waits for any (or with MWMO_WAITALL all) of the objects or for input matching the mask in the thread's
+  queue. Chrome's UI thread calls it about 900 times in a run (S3), with the mask QS_ALLINPUT and
+  MWMO_INPUTAVAILABLE.
+interface:
+  signature: "DWORD MsgWaitForMultipleObjectsEx(DWORD nCount, const HANDLE *pHandles, DWORD dwMilliseconds, DWORD dwWakeMask, DWORD dwFlags)"
+rules:
+  results: "WAIT_OBJECT_0 + index of the lowest signaled object; WAIT_OBJECT_0 + nCount when input in the mask arrived; WAIT_TIMEOUT 0x102; WAIT_ABANDONED_0 + index (0x81 for index 1) for an abandoned mutex; WAIT_IO_COMPLETION 0xC0 when an alertable wait ran an APC; WAIT_FAILED 0xFFFFFFFF with the last error set; success leaves the last error alone"
+  objects_only: "no objects and an empty queue with timeout 0 returns WAIT_TIMEOUT; with timeout 150 it returns after at least 140 ms; three unsignaled events time out; the lowest index wins when several are signaled; an auto-reset event is consumed by the wait; with the mask 0 only the objects count; SetEvent from another thread ends a long wait with index 0"
+  wait_all: "MWMO_WAITALL waits for all objects and for input: all signaled and no input returns WAIT_TIMEOUT; all signaled and a message queued returns WAIT_OBJECT_0"
+  limits_and_errors: "63 handles are accepted, 64 or 65 return WAIT_FAILED with 87; an invalid or NULL handle returns WAIT_FAILED with ERROR_INVALID_HANDLE 6; an unknown flag (0x80) returns WAIT_FAILED with 87; an unknown mask bit (0x8000) is ignored"
+  posted_messages: "a posted message ends the wait with WAIT_OBJECT_0 + nCount for QS_ALLINPUT, QS_POSTMESSAGE and QS_ALLPOSTMESSAGE; QS_SENDMESSAGE, QS_KEY, QS_PAINT and QS_TIMER do not see it; a signaled object wins over a queued message (index 0)"
+  peeked_messages: "after PeekMessage(PM_NOREMOVE) has looked at the message the wait no longer reports it (WAIT_TIMEOUT) unless MWMO_INPUTAVAILABLE is given (then WAIT_OBJECT_0 + nCount as long as it is queued); the flag does not help with a mask that does not match; after the message is removed even the flag times out; GetQueueStatus still shows the queued message; a message that arrives after the peek is seen without the flag"
+  timer_and_paint: "a WM_TIMER that became due ends a wait with QS_TIMER (about the period); a mask of QS_POSTMESSAGE does not see it; a window that needs painting is seen with QS_PAINT and QS_ALLINPUT (after InvalidateRect: result WAIT_OBJECT_0 + nCount) and not with QS_POSTMESSAGE"
+  sent_messages: "a message sent from another thread ends a QS_ALLINPUT wait early (result WAIT_OBJECT_0 + nCount) without running the window procedure; the procedure runs when the thread calls PeekMessage; with a mask of QS_KEY the wait lasts the whole timeout (WAIT_TIMEOUT) and the sent message waits; a message posted from another thread wakes the wait"
+  apc: "a queued APC does not run in a plain wait and the wait times out; with MWMO_ALERTABLE the wait returns WAIT_IO_COMPLETION (0xC0) and the APC has run; with an APC and a posted message at once and MWMO_ALERTABLE|MWMO_INPUTAVAILABLE the first call returns WAIT_OBJECT_0 + nCount (the message) and a second does too"
+errors:
+  invalid_handle: "6"
+  invalid_parameter: "87: too many handles, unknown flag"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Waits on processes, threads, semaphores and waitable timers (the same kernel waits), input from the keyboard
+  and mouse (QS_KEY, QS_MOUSE), QS_RAWINPUT, QS_HOTKEY.

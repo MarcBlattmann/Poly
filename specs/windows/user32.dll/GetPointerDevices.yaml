@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetPointerDevices
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Gets the pen and touch devices that are attached (a mouse is not listed). Chrome's browser calls it 8 times
+  in a run (S3) and does not find any device on the oracle.
+interface:
+  signature: "BOOL GetPointerDevices(UINT32 *deviceCount, POINTER_DEVICE_INFO *pointerDevices)"
+rules:
+  struct: "POINTER_DEVICE_INFO is 1080 bytes (displayOrientation, device handle, type, monitor, startingCursorId, maxActiveContacts, 520-character product string)"
+  count_query: "with a NULL buffer: returns TRUE, writes the number of devices in *deviceCount (whatever the value passed in: 7 or 4 become 0 on the oracle) and does not touch the last error; twenty queries agree; from several threads at once and from a thread with no window and no message queue it gives the same; registering a window for pointer-device messages and destroying it changes nothing"
+  no_devices: "with no device a call with a buffer returns FALSE (the last error is a stale value, 15299 on the oracle: not specified) and leaves the count as passed and the buffer untouched, also with a count of 0"
+  devices: "when devices exist a call with a buffer of the right size fills the entries (type in 1..4, a monitor, a product string) and returns the count; the test prints these only when the count is not 0"
+  bad_pointers: "a NULL count pointer returns FALSE with 87, with and without a buffer"
+  related: "GetPointerDevice with a garbage handle returns FALSE with ERROR_INVALID_HANDLE 6 and with NULL FALSE with 87"
+errors:
+  invalid_parameter: "87: NULL count pointer"
+  invalid_handle: "6: GetPointerDevice with a garbage handle"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Machines with touch or pen devices (the entries' contents), GetPointerDeviceCursors, hot-plug.
