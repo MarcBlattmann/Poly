@@ -376,7 +376,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 3] = [
+pub const STAGES: [Stage; 4] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -413,6 +413,25 @@ pub const STAGES: [Stage; 3] = [
         args: &[],
         expect: "PROBE file C:\\Program Files\\Chrome\\chrome_elf.dll",
         seconds: 60,
+    },
+    // S3 (the spec's ladder: a visible window with `--disable-gpu`): Chrome stays open, so the launcher
+    // stops it after `seconds` and the stage reports what Chrome printed. The page is stage 1's; the
+    // window itself is what `cargo xtask win-app run --mode desktop` shows on the desktop.
+    Stage {
+        number: 3,
+        name: "a visible window, no sandbox, no GPU (ends after the launcher's wait)",
+        program: None,
+        args: &[
+            "--disable-gpu",
+            "--no-sandbox",
+            "--no-first-run",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--window-position=40,40",
+            "--window-size=900,500",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: "LAUNCH-EXIT",
+        seconds: 120,
     },
 ];
 
@@ -1330,7 +1349,7 @@ mod tests {
 
     #[test]
     fn stage_one_and_two_run_the_specs_page() {
-        for st in STAGES.iter().filter(|s| s.program.is_none()) {
+        for st in STAGES.iter().filter(|s| s.program.is_none() && s.number <= 2) {
             assert!(st.args.contains(&"file:///C:/poly-test/s1.html"));
             assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
             assert!(st.expect.contains("script-ran 42"));

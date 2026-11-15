@@ -143,3 +143,34 @@ sets the Motif hint for its own title bar.
   their own (Chromium); minimize and maximize buttons in GTK's own title bars (`gtk-decoration-layout` had no effect
   in the test apps); a dark GTK theme for the title bars
   (`gtk-application-prefer-dark-theme=1` works).
+
+## Addendum (2026-11-15): Windows apps that draw their own caption (Chrome S3)
+
+**Context.** Chrome's browser window on Poly's desktop showed two title bars: Poly's frame
+("poly-s3 - Google Chrome for Testing" with Poly's three buttons) around Chrome's own tab strip
+with Chrome's minimize, maximize and close buttons (`impl-chrome-s3-run2-a.png`). win32k framed
+every top-level window with `WS_CAPTION`. Chrome's `Chrome_WidgetWin_1` has
+`WS_OVERLAPPEDWINDOW` (so `WS_CAPTION`), but answers `WM_NCCALCSIZE` with a client area that
+starts at the window's top edge and keeps only the 8-pixel side and bottom borders
+(`specs/windows/apps/chrome/s3-windows.md`: 884x492 client in a 900x500 window). On Windows
+that is the documented way to draw into the caption area (Learn, "Custom Window Frame Using
+DWM": a window removes the standard frame by returning a client area that covers it from
+`WM_NCCALCSIZE`); the caption it then shows is its own.
+
+**Decision.** win32k decides from the window's style **and** its `WM_NCCALCSIZE` answer, the way
+the Wayland signals decide above (`poly_win32k::surfaces::poly_frames`, host-tested): Poly
+frames a top-level window when it has `WS_CAPTION` **and** its client area starts at least a
+caption's height (`SM_CYCAPTION`, 23 px at 96 DPI) below its window's top. A captioned window
+whose client area starts higher draws its own title bar; its surface is still an application
+window (`SurfaceKind::TopLevel`: taskbar entry, activation, stacking), only without Poly's
+frame, shadow or rounding, like a client-drawn Wayland window. The surface is the client area
+as for every window (the invisible resize borders stay outside, as on Windows 11). When the
+answer changes while the window is shown (a `SWP_FRAMECHANGED` that brings the caption back or
+takes it away), its surface is made again with the new frame. The compositor logs
+`frame: own` for such a window.
+
+**Consequences.** Chrome has one title bar, its own, as on Windows (`chrome-win-s3-hunt-one-title-bar.png`).
+Its caption buttons and tab strip are drawn by Chrome; moving and resizing it through its own
+non-client hit testing (`WM_NCHITTEST` → `HTCAPTION`, `HTLEFT`, ...) needs win32k to start the
+compositor's interactive move (`Desktop::begin_move` exists and is not called yet): open, listed
+in the hand-off `chrome-win-s3-hunt.md`.

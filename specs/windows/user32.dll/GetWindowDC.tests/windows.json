@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "gwdc_draw",
+      "exe_sha256": "a947d2df1538869fa2d8909240fb585de8484173e304e07a5e49849a57b86cbd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHRoaWNrIGZyYW1lIGlzIHdpZGVyIHRoYW4gMCBwaXhlbHM6IHRydWUKcGl4ZWwgaW4gdGhlIGZyYW1lIHJlYWRzIGJhY2sgcmVkOiB0cnVlLCBpbiB0aGUgY2xpZW50IGFyZWEgYmx1ZTogdHJ1ZQp0aGUgYmx1ZSBwaXhlbCB0aHJvdWdoIEdldERDIGF0ICg1LDUpOiB0cnVlCmEgY29vcmRpbmF0ZSBsZWZ0IG9mIHRoZSBjbGllbnQgYXJlYSB0aHJvdWdoIEdldERDIHJlYWRzIENMUl9JTlZBTElEIChvdXRzaWRlIHRoZSBjbGllbnQgY2xpcDogQ0xSX0lOVkFMSUQgMHhGRkZGRkZGRikKYSBjb29yZGluYXRlIG91dHNpZGUgdGhlIHdpbmRvdyB0aHJvdWdoIHRoZSB3aW5kb3cgREMgcmVhZHMgQ0xSX0lOVkFMSUQKYSByb3cgb2YgdGVuIGdyZWVuIHBpeGVscyByZWFkcyBiYWNrOiB0cnVlCndpdGggYSBjbGlwIHJlZ2lvbiBvZiA1MHg1MDogYSBwaXhlbCBpbnNpZGUgaXMgc2V0IHRydWUsIG9uZSBvdXRzaWRlIGlzIG5vdCB0cnVlCmNsaXAgYm94IG5vdyA1MHg1MCBhdCAwLDAKYWZ0ZXIgRXhjbHVkZUNsaXBSZWN0IG9mIHRoZSB0b3AtbGVmdCBjb3JuZXI6IHJlZ2lvbiBraW5kIDMgKENPTVBMRVhSRUdJT04gMyksIGEgcGl4ZWwgaW4gdGhlIGNvcm5lciBpcyBub3Qgc2V0IHRydWUKYSBwaXhlbCB1bmRlciBhIGNoaWxkIHdpbmRvdywgcGFyZW50IHdpdGhvdXQgV1NfQ0xJUENISUxEUkVOLCB3aW5kb3cgREM6IHNldCB0cnVlCndpdGggV1NfQ0xJUENISUxEUkVOIHNldCBvbiB0aGUgcGFyZW50OiB0aGUgd2luZG93IERDIGlzIHN0aWxsIG9uZSByZWN0YW5nbGUgKHJlZ2lvbiBraW5kIDIsIFNJTVBMRVJFR0lPTiAyKTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the thick frame is wider than 0 pixels: true\npixel in the frame reads back red: true, in the client area blue: true\nthe blue pixel through GetDC at (5,5): true\na coordinate left of the client area through GetDC reads CLR_INVALID (outside the client clip: CLR_INVALID 0xFFFFFFFF)\na coordinate outside the window through the window DC reads CLR_INVALID\na row of ten green pixels reads back: true\nwith a clip region of 50x50: a pixel inside is set true, one outside is not true\nclip box now 50x50 at 0,0\nafter ExcludeClipRect of the top-left corner: region kind 3 (COMPLEXREGION 3), a pixel in the corner is not set true\na pixel under a child window, parent without WS_CLIPCHILDREN, window DC: set true\nwith WS_CLIPCHILDREN set on the parent: the window DC is still one rectangle (region kind 2, SIMPLEREGION 2): true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 107
+    }
+  ]
+}

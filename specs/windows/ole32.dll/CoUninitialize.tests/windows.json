@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "cu_objects",
+      "exe_sha256": "be19dbc579ac5db6d0fc57de17e4801a7289259003bf6696a237898219a5ef69",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJlZS10aHJlYWRlZCBtYXJzaGFsZXIgbWFkZSBpbnNpZGUgdGhlIGFwYXJ0bWVudDogMHgwCnJlbW92aW5nIHRoZSBtZXNzYWdlIGZpbHRlciAoTlVMTCk6IDB4MCwgbm8gb2xkIGZpbHRlciB0cnVlCkNvVGFza01lbUFsbG9jIGRhdGEgc3Vydml2ZXMgQ29VbmluaXRpYWxpemU6IHRydWUKcmVsZWFzaW5nIHRoZSBtYXJzaGFsZXIgYWZ0ZXIgQ29VbmluaXRpYWxpemUgcmV0dXJucyBjb3VudCAwCmEgbmV3IENvSW5pdGlhbGl6ZUV4OiAweDAsIENvR2V0QXBhcnRtZW50VHlwZSAweDAgdHlwZSAzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "free-threaded marshaler made inside the apartment: 0x0\nremoving the message filter (NULL): 0x0, no old filter true\nCoTaskMemAlloc data survives CoUninitialize: true\nreleasing the marshaler after CoUninitialize returns count 0\na new CoInitializeEx: 0x0, CoGetApartmentType 0x0 type 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

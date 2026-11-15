@@ -1284,7 +1284,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">0.7%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">449 / 62,721 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">450 / 62,721 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 3 / 20,419 done (0.0%)</title>
 <rect x="16.0" y="469.0" width="183.6" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.0" height="218.0" fill="#2ea043"/>
@@ -1338,11 +1338,11 @@
 <text x="271.3" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">win32k…</text>
 <text x="271.3" y="607.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
 </g>
-<g><title>ntdll: 74 / 1,523 done (4.9%)</title>
+<g><title>ntdll: 75 / 1,523 done (4.9%)</title>
 <rect x="266.3" y="634.6" width="54.0" height="52.4" fill="#21262d"/>
-<rect x="266.3" y="634.6" width="2.6" height="52.4" fill="#2ea043"/>
-<rect x="268.9" y="634.6" width="2.5" height="52.4" fill="#bb8009"/>
-<rect x="271.4" y="634.6" width="4.9" height="52.4" fill="#388bfd"/>
+<rect x="266.3" y="634.6" width="2.7" height="52.4" fill="#2ea043"/>
+<rect x="269.0" y="634.6" width="2.5" height="52.4" fill="#bb8009"/>
+<rect x="271.5" y="634.6" width="4.9" height="52.4" fill="#388bfd"/>
 <rect x="265.3" y="633.6" width="56.0" height="54.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="271.3" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntdll</text>
 <text x="271.3" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">5%</text>
@@ -1365,7 +1365,7 @@
 <rect x="322.3" y="579.7" width="43.3" height="41.9" fill="#21262d"/>
 <rect x="322.3" y="579.7" width="5.1" height="41.9" fill="#2ea043"/>
 <rect x="327.4" y="579.7" width="10.6" height="41.9" fill="#bb8009"/>
-<rect x="338.0" y="579.7" width="4.1" height="41.9" fill="#388bfd"/>
+<rect x="338.0" y="579.7" width="4.9" height="41.9" fill="#388bfd"/>
 <rect x="321.3" y="578.7" width="45.3" height="43.9" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="327.3" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">user…</text>
 </g>
@@ -1469,7 +1469,7 @@
 <g><title>ole32: 0 / 303 done (0.0%)</title>
 <rect x="395.4" y="614.2" width="22.0" height="23.2" fill="#21262d"/>
 <rect x="395.4" y="614.2" width="6.1" height="23.2" fill="#bb8009"/>
-<rect x="401.5" y="614.2" width="0.9" height="23.2" fill="#388bfd"/>
+<rect x="401.5" y="614.2" width="1.2" height="23.2" fill="#388bfd"/>
 <rect x="394.4" y="613.2" width="24.0" height="25.2" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>netapi32: 1 / 300 done (0.3%)</title>

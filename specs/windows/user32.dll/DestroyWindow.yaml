@@ -21,6 +21,7 @@ summary: >
 interface:
   signature: "BOOL DestroyWindow(HWND hwnd)"
 rules:
+  ime_windows: "when the active top-level window of a thread (Chrome's main window) is destroyed the thread's default IME window (class IME) and its MSCTFIME UI window are not destroyed: their owner becomes NULL, they stay hidden, the holder window stays, and in the z order walk they are above the holder with ime above ctf (before the destroy: ctf above ime above the main window). EnumThreadWindows lists them last (holder ime ctf). Test: dw_ime_after."
   tree_order: "popup P with children A (with child G), B: WM_DESTROY P, A, G, B; then WM_NCDESTROY G, A, B, P"
   child_alone: "parent gets WM_PARENTNOTIFY(LOWORD WM_DESTROY, HIWORD id, lParam child) before the child's WM_DESTROY; not when the whole tree goes"
   owned_first: "owner O with owned popups X (owning Z) and Y (with child K), child C: Y, K, (NC K), (NC Y), Z, (NC Z), X, (NC X), then O, C, (NC C), (NC O): owned windows are destroyed completely, most recently created first, each with its own owned windows first, before the owner's WM_DESTROY"
@@ -43,7 +44,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
+  visible: 5  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name

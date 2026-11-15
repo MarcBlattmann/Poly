@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "rdd_basic",
+      "exe_sha256": "34e0da0bdb4fd94e720810ad4694502e27d1b208ad6c0053067f1975a44c4ea9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgcmVnaXN0cmF0aW9uOiAweDAsIEFkZFJlZiBjYWxscyAxLCByZWxlYXNlcyAwLCBRdWVyeUludGVyZmFjZSBjYWxscyAwCndpbmRvdyBwcm9wZXJ0eSBPbGVEcm9wVGFyZ2V0SW50ZXJmYWNlIGhvbGRzIHRoZSB0YXJnZXQ6IHRydWUKdGhlIHNhbWUgd2luZG93IHdpdGggYW5vdGhlciB0YXJnZXQ6IDB4ODAwNDAxMDEsIHRoYXQgdGFyZ2V0IEFkZFJlZidlZCAwIHRpbWUocykKdGhlIHNhbWUgd2luZG93IHdpdGggdGhlIHNhbWUgdGFyZ2V0OiAweDgwMDQwMTAxCnRoZSBzYW1lIHRhcmdldCBmb3IgYW5vdGhlciB3aW5kb3c6IDB4MCwgQWRkUmVmIGNhbGxzIG5vdyAyCnJldm9raW5nIHRoZSBzZWNvbmQgd2luZG93OiAweDAsIHJlbGVhc2VzIDEKYSB3aW5kb3cgb2YgYW5vdGhlciB0aHJlYWQ6IDB4MApOVUxMIHdpbmRvdzogMHg4MDA0MDEwMgphbiBpbnZhbGlkIHdpbmRvdyBoYW5kbGU6IDB4ODAwNDAxMDIKTlVMTCB0YXJnZXQ6IDB4ODAwNzAwNTcKYSBjaGlsZCB3aW5kb3c6IDB4MCwgYSBtZXNzYWdlLW9ubHkgd2luZG93OiAweDAKRGVzdHJveVdpbmRvdyBvZiB0aGUgcmVnaXN0ZXJlZCB3aW5kb3cgcmVsZWFzZXMgdGhlIHRhcmdldCAwIHRpbWUocykgKGEgcmVnaXN0cmF0aW9uIHN0YXlzIHVudGlsIGl0IGlzIHJldm9rZWQpCmEgZGVzdHJveWVkIHdpbmRvdzogMHg4MDA0MDEwMgp0aGUgZGVza3RvcCB3aW5kb3c6IDB4MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first registration: 0x0, AddRef calls 1, releases 0, QueryInterface calls 0\nwindow property OleDropTargetInterface holds the target: true\nthe same window with another target: 0x80040101, that target AddRef'ed 0 time(s)\nthe same window with the same target: 0x80040101\nthe same target for another window: 0x0, AddRef calls now 2\nrevoking the second window: 0x0, releases 1\na window of another thread: 0x0\nNULL window: 0x80040102\nan invalid window handle: 0x80040102\nNULL target: 0x80070057\na child window: 0x0, a message-only window: 0x0\nDestroyWindow of the registered window releases the target 0 time(s) (a registration stays until it is revoked)\na destroyed window: 0x80040102\nthe desktop window: 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 86
+    }
+  ]
+}

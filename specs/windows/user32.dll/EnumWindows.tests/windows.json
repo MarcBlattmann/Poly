@@ -24,6 +24,19 @@
       "error": null,
       "stable": true,
       "ms": 631
+    },
+    {
+      "name": "ew_ime_last",
+      "exe_sha256": "e2f6711eee09d02e0776acfa471426c77098662718537522e9a646c2195aa278",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "YnVpbHQ6IEVudW1XaW5kb3dzLCBvdXIgd2luZG93czogW21haW5+IGhpZH4gaW1lfl07IGFsbCB3aW5kb3dzIG9mIHRoZSBJTUUgY2xhc3NlcyAoZXZlcnkgcHJvY2VzcykgY29tZSBhZnRlciBldmVyeSBvdGhlciB3aW5kb3cgb2YgdGhlIGxpc3Q6IHRydWUKc2hvd24gYW5kIGFjdGl2ZTogRW51bVdpbmRvd3MsIG91ciB3aW5kb3dzOiBbbWFpbiBoaWR+IGN0Zn4gaW1lfl07IGFsbCB3aW5kb3dzIG9mIHRoZSBJTUUgY2xhc3NlcyAoZXZlcnkgcHJvY2VzcykgY29tZSBhZnRlciBldmVyeSBvdGhlciB3aW5kb3cgb2YgdGhlIGxpc3Q6IHRydWUKbWluaW1pemVkOiBFbnVtV2luZG93cywgb3VyIHdpbmRvd3M6IFtoaWR+IG1haW4gY3RmfiBpbWV+XTsgYWxsIHdpbmRvd3Mgb2YgdGhlIElNRSBjbGFzc2VzIChldmVyeSBwcm9jZXNzKSBjb21lIGFmdGVyIGV2ZXJ5IG90aGVyIHdpbmRvdyBvZiB0aGUgbGlzdDogdHJ1ZQpyZXN0b3JlZDogRW51bVdpbmRvd3MsIG91ciB3aW5kb3dzOiBbbWFpbiBoaWR+IGN0Zn4gaW1lfl07IGFsbCB3aW5kb3dzIG9mIHRoZSBJTUUgY2xhc3NlcyAoZXZlcnkgcHJvY2VzcykgY29tZSBhZnRlciBldmVyeSBvdGhlciB3aW5kb3cgb2YgdGhlIGxpc3Q6IHRydWUKdG9wLWxldmVsIGRlc3Ryb3llZDogRW51bVdpbmRvd3MsIG91ciB3aW5kb3dzOiBbaGlkfiBpbWV+IGN0Zn5dOyBhbGwgd2luZG93cyBvZiB0aGUgSU1FIGNsYXNzZXMgKGV2ZXJ5IHByb2Nlc3MpIGNvbWUgYWZ0ZXIgZXZlcnkgb3RoZXIgd2luZG93IG9mIHRoZSBsaXN0OiB0cnVlCihFbnVtV2luZG93cyBsaXN0cyB0aGUgd2luZG93cyBpbiB0aGUgeiBvcmRlciBvZiB0aGUgd2FsayBleGNlcHQgdGhhdCB0aGUgSU1FLWNsYXNzIHdpbmRvd3MgYXJlIG1vdmVkIGJlaGluZCBhbGwgdGhlIG90aGVycykKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: EnumWindows, our windows: [main~ hid~ ime~]; all windows of the IME classes (every process) come after every other window of the list: true\nshown and active: EnumWindows, our windows: [main hid~ ctf~ ime~]; all windows of the IME classes (every process) come after every other window of the list: true\nminimized: EnumWindows, our windows: [hid~ main ctf~ ime~]; all windows of the IME classes (every process) come after every other window of the list: true\nrestored: EnumWindows, our windows: [main hid~ ctf~ ime~]; all windows of the IME classes (every process) come after every other window of the list: true\ntop-level destroyed: EnumWindows, our windows: [hid~ ime~ ctf~]; all windows of the IME classes (every process) come after every other window of the list: true\n(EnumWindows lists the windows in the z order of the walk except that the IME-class windows are moved behind all the others)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 928
     }
   ]
 }
