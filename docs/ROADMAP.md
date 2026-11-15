@@ -113,7 +113,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the `wintrace` boot group; ADR 0114: all 15 steps without a divergence, `TRACE_REQUIRED`, a required check)
 - [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
-- [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
+- [x] Our own `vcruntime140` and `vcruntime140_1` (ADR 0199, taking up ADR 0055's fallback; FH4 and RTTI wait for spec sheets)
+- [ ] Our own `msvcp140` and siblings, in the order of the names apps import (ADR 0199)
 
 ## Phase 6: Graphics, input, audio and the desktop
 

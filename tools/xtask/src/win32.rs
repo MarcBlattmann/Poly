@@ -104,6 +104,9 @@ pub const OUTPUTS: &[&str] = &[
     "propsys.dll",
     "wevtapi.dll",
     "hid.dll",
+    // ADR 0199.
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -264,6 +267,9 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/propsys",
             "personalities/nt/win32/wevtapi",
             "personalities/nt/win32/hid",
+            // ADR 0199.
+            "personalities/nt/win32/vcruntime140",
+            "personalities/nt/win32/vcruntime140_1",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

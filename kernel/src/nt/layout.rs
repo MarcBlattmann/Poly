@@ -179,6 +179,9 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("propsys.dll", super::PROPSYS),
         ("wevtapi.dll", super::WEVTAPI),
         ("hid.dll", super::HID),
+        // ADR 0199: Poly's own Visual C++ runtime support library.
+        ("vcruntime140.dll", super::VCRUNTIME140),
+        ("vcruntime140_1.dll", super::VCRUNTIME140_1),
     ] {
         if bytes.is_empty() {
             continue;

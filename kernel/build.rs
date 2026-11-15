@@ -100,6 +100,9 @@ fn embed_win32() {
         "propsys.dll",
         "wevtapi.dll",
         "hid.dll",
+        // ADR 0199.
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
     ] {
         match &dir {
             Some(d) => {
