@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/CreateRectRgnIndirect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Creates a rectangular region from a RECT (the same as CreateRectRgn with its four members). Chrome's browser
+  calls it twice a run (S3). A NULL pointer crashes (not tried).
+interface:
+  signature: "HRGN CreateRectRgnIndirect(const RECT *r)"
+rules:
+  normalise: "the rectangle is normalised: (30,20,10,40), (10,40,30,20) and (30,40,10,20) all give the region of (10,20,30,40): GetRgnBox type SIMPLEREGION (2), box 10,20,30,40, one rectangle; the corners (left-top, right-top, left-bottom, right-bottom minus one) are inside and the points right and below are outside (right and bottom are exclusive); the result equals CreateRectRgn of the normalised numbers (EqualRgn 1)"
+  empty: "zero width or zero height, (0,0,0,0) and (10,20,10,20): GetRgnBox returns NULLREGION (1) with the box 0,0,0,0 and no rectangles; EqualRgn with the empty CreateRectRgn 1"
+  negative: "(-1,-1,0,0), (-30,-20,-10,-5) and (-5,-5,5,5) keep their coordinates; (5,5,-5,-5) is normalised to (-5,-5,5,5)"
+  too_large: "a coordinate beyond 32 bits of range such as (0,0,INT_MAX,INT_MAX), (INT_MAX,INT_MAX,0,0) and (-2147483647,-2147483647,0,0): NULL with ERROR_INVALID_PARAMETER (87)"
+  combine: "CombineRgn between two indirect regions a = (0,0,20,20) and b = (10,10,30,30): RGN_AND gives (10,10,20,20) SIMPLEREGION (2); OR gives COMPLEXREGION (3) with the box 0,0,30,30 and the rectangles 0,0,20,10 + 0,10,30,20 + 10,20,30,30; XOR gives COMPLEXREGION with 0,0,20,10 + 0,10,10,20 + 20,10,30,20 + 10,20,30,30; DIFF gives COMPLEXREGION with 0,0,20,10 + 0,10,10,20; disjoint AND gives NULLREGION (1), disjoint OR/XOR two rectangles, a inside b etc. as above; XOR of a region with itself NULLREGION; DIFF of a region by one inside it gives a frame of four rectangles; an empty region as one operand gives the other (OR, XOR, DIFF a-empty) or NULLREGION (AND)"
+  chrome: "SelectClipRgn(dc, rect 4,3,12,9) returns SIMPLEREGION (2): the clip box is 4,3,12,9 and only those pixels are drawn (the region may be deleted after selecting); ExtSelectClipRgn with RGN_AND and RGN_DIFF intersects and subtracts (the second DIFF with the same region gives NULLREGION: nothing drawn); SelectClipRgn(NULL) resets to the whole DC; a reversed rectangle region (10,8,2,2) clips to 2,2,10,8; an empty region gives NULLREGION (1) and draws nothing; GetClipRgn returns 1 and the clip region; SetWindowRgn(window, region) returns 1, GetWindowRgnBox gives the box in window coordinates (SIMPLEREGION), a reversed rectangle normalised, an empty one NULLREGION (the box printed as -40,-40,-40,-40 for the empty region at 5,5 of that window: the box of the empty region is moved by the window's origin), and SetWindowRgn(NULL) removes it (GetWindowRgnBox 0)"
+errors:
+  too_large: "see rules.too_large"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  The screen is the oracle's: one monitor 1920x1080, 32 bits per pixel, 96 DPI; values that follow from it are
+  printed as equalities (HORZRES equals SM_CXSCREEN) where the tests allow. A NULL RECT pointer (crashes: not
+  tried).

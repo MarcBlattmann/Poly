@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetDesktopWindow
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Returns the handle of the desktop window: the same value for every call and every thread, the root of the
+  window tree. Chrome's browser calls it 7 times a run (S3), the GPU process 3.
+interface:
+  signature: "HWND GetDesktopWindow(void)"
+rules:
+  identity: "never NULL; the same handle on every call and in another thread of the process; GetClassNameW gives '#32769'; IsWindowVisible 1, IsWindowEnabled 1, IsIconic 0, IsZoomed 0, IsWindow 1; owned by another process and thread (not ours)"
+  geometry: "its window rectangle starts at 0,0 and equals GetSystemMetrics(SM_CXSCREEN) x SM_CYSCREEN; its client rectangle equals its size; HORZRES of GetDC(desktop) equals SM_CXSCREEN and equals that of GetDC(NULL)"
+  tree: "GetParent(desktop), GW_OWNER, GA_PARENT and GA_ROOT are NULL; GetWindow(desktop, GW_CHILD) equals GetTopWindow(NULL) and GetTopWindow(desktop); a top-level window has GetParent NULL, GetAncestor(GA_PARENT) the desktop and GW_OWNER NULL; SetParent(child, desktop) returns the old parent and keeps WS_CHILD in the style"
+  map_points: "MapWindowPoints(window, desktop, ...) equals ClientToScreen and back"
+  protected: "DestroyWindow(desktop): FALSE with ERROR_ACCESS_DENIED (5); SetWindowLongPtrW(desktop, GWLP_USERDATA): 0 with ERROR_ACCESS_DENIED (5); SetWindowTextW(desktop) returns 1 (the call succeeds)"
+errors:
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

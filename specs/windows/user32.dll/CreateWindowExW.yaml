@@ -2,10 +2,10 @@
 # Path: specs/<os>/<component>/<symbol>.yaml
 id: windows/api/user32.dll/CreateWindowExW
 oracle:
-  os: "Windows 11 Home 25H2 (build 26200.9711), x64"
+  os: "Windows 11 Home 25H2 (build 26200.9711), x64; the tests added by spec-chrome-win-s3 were run on build 26200.9974 (the same machine after a Windows update; its taskbar is then 48 pixels high at the bottom)"
   machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
-  observed_by: spec-win-gui-a
-  date: 2026-11-02
+  observed_by: spec-win-gui-a, spec-chrome-win-s3
+  date: 2026-11-02, 2026-11-14
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -38,6 +38,8 @@ rules:
   params: "lpParam reaches lpCreateParams of both messages; a child's hMenu becomes GWLP_ID; the window text is set by DefWindowProc's WM_NCCREATE from lpszName (empty when the procedure answers WM_NCCREATE itself with TRUE, or when lpszName is NULL)"
   owner: "hWndParent for WS_POPUP / overlapped windows is the owner (GW_OWNER, GWLP_HWNDPARENT); a child given as owner makes its top-level ancestor the owner; the parent of top-level windows is the desktop; HWND_MESSAGE makes a message-only window (GA_PARENT is the message parent, not the desktop)"
   wm_create_result: "only -1 from WM_CREATE fails the creation (-2 does not)"
+  chrome_widget: "Chrome's windows in the order the browser makes them (test cw_chrome_widget; the recording is specs/windows/apps/chrome/s3-windows.md): the hidden holder Chrome_WidgetWin_0 (WS_POPUP | WS_DISABLED | WS_CLIPSIBLINGS = 0x8c000000 once WS_CLIPSIBLINGS is added, WS_EX_TOOLWINDOW, empty rectangle) is the first window of the thread: before its own WM_NCCALCSIZE the thread's default IME window (class IME, style 0x88000000, parent and owner the holder) is created with WM_NCCREATE, WM_NCCALCSIZE, WM_CREATE, WM_SIZE(0x0), WM_MOVE(0,0); then the holder's WM_NCCALCSIZE, WM_CREATE, WM_SIZE, WM_MOVE; the top-level window Chrome_WidgetWin_1 (WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, WS_EX_NOREDIRECTIONBITMAP, hidden, 40,40 640x400): WM_GETMINMAXINFO (maxsize 1936,1096, maxpos -8,-8, mintrack 136,39, maxtrack 1940,1100 for the oracle's 1920x1080 screen), WM_NCCREATE (style 0x6cf0000, ex 0x200100), WM_NCCALCSIZE(FALSE, 40,40,680,440), WM_CREATE, and no WM_SIZE or WM_MOVE (hidden); its child Chrome_RenderWidgetHostHWND (WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_HSCROLL | WS_VSCROLL = 0x46300000 in WM_NCCREATE, WS_EX_TRANSPARENT, id 656, empty rectangle, hidden): WM_NCCREATE, WM_NCCALCSIZE(FALSE, the parent's client origin 48,40), WM_CREATE, WM_SIZE(0x0), WM_MOVE(0,0), then the parent gets WM_PARENTNOTIFY(WM_CREATE); the child's first placement (SetWindowPos 0,100 624x292 with SWP_NOZORDER | SWP_NOACTIVATE) sends WM_WINDOWPOSCHANGING (flags 0x14), WM_NCCALCSIZE(TRUE), WM_WINDOWPOSCHANGED (0x1c), WM_MOVE, WM_SIZE; SetWindowPos with SWP_SHOWWINDOW of the child while its parent is hidden sends only WM_WINDOWPOSCHANGING (0x57) and WM_WINDOWPOSCHANGED (0x185f), no WM_SHOWWINDOW, and IsWindowVisible stays 0; SetWindowTextW sends WM_SETTEXT; after all this the queue holds one posted WM_DWMNCRENDERINGCHANGED(wParam 1) for the top-level window. The default IME window's owner is the holder (the first window of the thread) until a window is shown"
+  noredirect: "WS_EX_NOREDIRECTIONBITMAP (0x00200000): CreateWindowExW keeps it with every other extended style tested (stored 0x200100 for an overlapped window which gets WS_EX_WINDOWEDGE, 0x200000 for a popup, 0x280100 with WS_EX_LAYERED, 0x200108 with WS_EX_TOPMOST, 0x200180 with WS_EX_TOOLWINDOW, 0x240100 with WS_EX_APPWINDOW, 0x200300 with WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE) and WM_NCCREATE already shows the stored value; a child with the bit keeps it (0x200000); SetWindowLongPtrW(GWL_EXSTYLE) cannot add the bit later: it returns 0 (the old value is not returned), the style stays, the last error is ERROR_INVALID_PARAMETER (87) and only WM_STYLECHANGING is sent (no WM_STYLECHANGED); a call that does not change the style returns the old style and sends both messages; a visible window with and without the bit gets one WM_ERASEBKGND and one WM_PAINT after ShowWindow; after InvalidateRect(erase) the window with the bit gets WM_PAINT and no WM_ERASEBKGND (0 erases, 1 paint), the one without 1 erase and 1 paint"
 errors:
   unknown_class: "NULL, ERROR_CANNOT_FIND_WND_CLASS (1407)"
   child_without_parent: "NULL, ERROR_TLW_WITH_WSCHILD (1406)"
@@ -54,8 +56,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 6  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) that import user32.dll and gdi32.dll by name
   (allowed since this slice); each carries its own declarations (Learn
