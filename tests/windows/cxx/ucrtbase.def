@@ -1,0 +1,10 @@
+; Import names of ucrtbase.dll (the Universal C runtime) that the C++ Windows
+; test programs use when they take their C++ runtime from vcruntime140.dll
+; (ADR 0199): its `terminate` is the one vcruntime140.dll calls. Names from
+; Microsoft Learn's CRT reference (`set_terminate`, `terminate`, `malloc`, `free`).
+LIBRARY ucrtbase.dll
+EXPORTS
+    set_terminate
+    terminate
+    malloc
+    free

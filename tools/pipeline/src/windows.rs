@@ -324,6 +324,17 @@ fn rel(repo: &Path, path: &Path) -> String {
 /// compiles `core` for the target (about half a minute), later ones only
 /// the tests.
 pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Result<Manifest> {
+    build_runtime(repo, out, extra, only, None)
+}
+
+/// [`build`] with every C++ test taking its runtime from `runtime` (ADR 0199) when given.
+pub fn build_runtime(
+    repo: &Path,
+    out: &Path,
+    extra: &[PathBuf],
+    only: &[String],
+    runtime: Option<wincxx::Runtime>,
+) -> Result<Manifest> {
     let mut srcs = sources(repo, extra)?;
     if !only.is_empty() {
         for name in only {
@@ -364,7 +375,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     for src in &srcs {
         let exe = format!("{}.exe", src.name);
         let (built, allowed) = if src.is_cpp() {
-            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir)?, wincxx::ALLOWED_DLLS)
+            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir, runtime)?, wincxx::ALLOWED_DLLS)
         } else {
             (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
         };

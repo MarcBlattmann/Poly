@@ -102,12 +102,24 @@ fn embed_win32() {
         "propsys.dll",
         "wevtapi.dll",
         "hid.dll",
+        // ADR 0199.
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
     ] {
         match &dir {
             Some(d) => {
                 let path = d.join(name);
                 println!("cargo:rerun-if-changed={}", path.display());
                 std::fs::copy(&path, out.join(name)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                // ADR 0199: a DLL the user's installer may replace carries Poly's marker, which the
+                // layout looks for (`create::OWN_COPY_MARKER`).
+                if name.starts_with("vcruntime140") {
+                    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                    assert!(
+                        bytes.windows(OWN_COPY_MARKER.len()).any(|w| w == OWN_COPY_MARKER),
+                        "{name} lacks Poly's own-copy marker (ADR 0199)"
+                    );
+                }
             }
             None => std::fs::write(out.join(name), []).expect("write an empty module"),
         }
@@ -311,3 +323,7 @@ fn check_vdso(b: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// `poly_personality_nt::layout::create::OWN_COPY_MARKER` (ADR 0199), which Poly's own
+/// `vcruntime140*.dll` must contain.
+const OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";
