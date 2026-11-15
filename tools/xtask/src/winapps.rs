@@ -18,7 +18,9 @@
 //!     `type:TEXT`, `key:QCODE`, `chord:ctrl+s`, `click:X,Y`, `dclick:X,Y`, `rclick:X,Y`.
 //!     Without steps: `launch`, `sleep:20`, `shot:window`, `sleep:20`, `shot:later`.
 //!   - Options: `--name N` (default: the program's file stem), `--args "..."` (the program's
-//!     command line after its name), `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
+//!     command line after its name), `--then "..."` (repeatable: run the program again with
+//!     these arguments after the previous run, in the same boot and on the same disk),
+//!     `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
 //!     limit), `--exceptions[=N]`, `--trace`, `--kernel "OPTIONS"` (more kernel options, such as
 //!     `poly.nt.waits=10 poly.nt.trail`), `--release`, `--out DIR` (log, summary and
 //!     screenshots; default `target/win-app/<name>-out`), `--memory=SIZE`, `--cpus=N`.
@@ -85,6 +87,11 @@ fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
 }
 
+/// Every value of an option that may be given more than once.
+fn flags(args: &[String], name: &str) -> Vec<String> {
+    args.windows(2).filter(|w| w[0] == name).map(|w| w[1].clone()).collect()
+}
+
 fn imports(args: &[String]) -> Result {
     let dir = PathBuf::from(flag(args, "--dir").ok_or("--dir DIR is needed")?);
     let mods = modules(&dir)?;
@@ -136,6 +143,9 @@ struct Opts {
     exe: String,
     name: String,
     args: String,
+    /// More runs of the same program after the first one, in the same boot (`--then "ARGS"`,
+    /// repeatable): each one's arguments.
+    then: Vec<String>,
     cwd: String,
     desktop: bool,
     seconds: u64,
@@ -183,6 +193,7 @@ fn parse(args: &[String]) -> Result<Opts> {
         dir,
         exe,
         args: flag(args, "--args").unwrap_or_default(),
+        then: flags(args, "--then"),
         cwd: flag(args, "--dir-cwd").unwrap_or_default(),
         desktop: mode == "desktop",
         seconds: num("--seconds", 60)?,
@@ -218,8 +229,17 @@ fn disk(o: &Opts) -> Result<PathBuf> {
     } else {
         o.cwd.clone()
     };
-    let cmdline = format!("\"{exe_dos}\" {}", o.args).trim_end().to_string();
-    let stage = format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n", o.seconds);
+    // One stage per run; each but the last asks the launcher for the next one (line 7).
+    let runs: Vec<&String> = core::iter::once(&o.args).chain(o.then.iter()).collect();
+    let stages: Vec<String> = runs
+        .iter()
+        .enumerate()
+        .map(|(i, args)| {
+            let cmdline = format!("\"{exe_dos}\" {args}").trim_end().to_string();
+            let next = if i + 1 < runs.len() { "next" } else { "" };
+            format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n\n\n{next}\n", o.seconds)
+        })
+        .collect();
     let mut tree = crate::rootdisk::RootTree::default();
     for d in ["poly", "poly/nt", "poly/nt/registry", "poly/nt/c", APPS_ON_DISK] {
         tree.dir(d, 0o755);
@@ -230,7 +250,9 @@ fn disk(o: &Opts) -> Result<PathBuf> {
         let mode = if low.ends_with(".exe") || low.ends_with(".dll") { 0o755 } else { 0o644 };
         tree.host_file(&format!("{APPS_ON_DISK}/{}/{rel}", o.name), mode, &path, crate::hostfs::mtime(&meta));
     }
-    tree.file("poly/nt/c/poly-test/stage1.cmd", 0o644, stage.as_bytes());
+    for (i, stage) in stages.iter().enumerate() {
+        tree.file(&format!("poly/nt/c/poly-test/stage{}.cmd", i + 1), 0o644, stage.as_bytes());
+    }
     tree.file(&format!("poly/nt/c/poly-test/{}.exe", crate::chromewin::LAUNCHER), 0o755, &launcher);
     tree.file(&format!("{}/{}", crate::chromewin::SYSTEM32_ON_DISK, poly_stubs::STUB_DLL), 0o755, &stubs);
     let started = Instant::now();
@@ -341,6 +363,14 @@ fn report(o: &Opts, s: &crate::chromewin::Summary, text: &str) -> String {
     let mut r = String::new();
     let _ = writeln!(r, "program: {}\\{}\\{} {}", APPS_DOS, o.name, o.exe, o.args);
     let _ = writeln!(r, "launcher: {}", s.exit.as_deref().unwrap_or("(no LAUNCH-EXIT line)"));
+    for (i, args) in o.then.iter().enumerate() {
+        let _ = writeln!(r, "then {}: {args}", i + 2);
+    }
+    if !o.then.is_empty() {
+        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT")) {
+            let _ = writeln!(r, "  {}", l.trim());
+        }
+    }
     for which in ["stdout", "stderr"] {
         let lines = program_output(text, which);
         let _ = writeln!(r, "{which} ({} lines):", lines.len());
