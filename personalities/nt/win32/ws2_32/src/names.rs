@@ -417,7 +417,8 @@ pub unsafe extern "system" fn gethostname(name: *mut u8, len: i32) -> i32 {
     // SAFETY: the caller's buffer.
     match unsafe { put_str(info.host_name(), name, len as usize, false) } {
         Ok(()) => 0,
-        Err(e) => fail(e),
+        // `gethostname` says `WSAEFAULT` for a buffer that is too short (`getnameinfo` the other code).
+        Err(_) => fail(WSAEFAULT),
     }
 }
 
@@ -434,7 +435,7 @@ pub unsafe extern "system" fn GetHostNameW(name: *mut u16, len: i32) -> i32 {
     // SAFETY: the caller's buffer.
     match unsafe { put_wide(info.host_name(), name, len as usize) } {
         Ok(()) => 0,
-        Err(e) => fail(e),
+        Err(_) => fail(WSAEFAULT),
     }
 }
 
