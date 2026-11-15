@@ -32,9 +32,6 @@ poly_win32_rt::fail_exports!(
     ]
 );
 
-// `RegDisablePredefinedCache` returns a Win32 error code: `ERROR_CALL_NOT_IMPLEMENTED`.
-poly_win32_rt::fail_exports!("advapi32", value(120), [RegDisablePredefinedCache]);
-
 // The LSA policy functions return an `NTSTATUS`.
 poly_win32_rt::fail_exports!("advapi32", status, [LsaAddAccountRights, LsaClose, LsaOpenPolicy]);
 

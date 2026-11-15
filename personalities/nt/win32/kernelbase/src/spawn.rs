@@ -393,7 +393,11 @@ unsafe fn create(
         None => current_dir(),
     };
     // The parameters, laid out where they will stay during the call.
-    let child = p::Child { image: &image, command_line: &line, env: &env, current: &cwd, startup };
+    // The creator's own standard handles, when the child inherits them (ADR 0194).
+    let startup_flags = startup.map_or(0, p::Startup::flags);
+    let inherited_std = p::inherits_std_handles(startup_flags, r.inherit_handles, flags)
+        .then(|| crate::process::std_handles().map(|h| h as u64));
+    let child = p::Child { image: &image, command_line: &line, env: &env, current: &cwd, startup, inherited_std };
     let size = match p::child_parameters_in(&poly_rtl::layout::NATIVE, 0, &child) {
         Ok(b) => b.len(),
         Err(e) => return fail(e, FALSE),
@@ -427,7 +431,7 @@ unsafe fn create(
             return fail(ERROR_INVALID_PARAMETER, FALSE);
         }
     }
-    if !crate::attrlist::mitigation_defined(parsed.mitigation) {
+    if !poly_kernelbase::mitigation::creation_defined(parsed.mitigation[0]) {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let handle_words: Vec<u64> = parsed.handle_list.iter().flatten().map(|&h| h as u64).collect();
@@ -441,14 +445,23 @@ unsafe fn create(
     if parsed.handle_list.is_some() {
         record(1, handle_words.as_ptr() as u64, handle_words.len() as u64 * 8);
     }
-    if parsed.mitigation != 0 {
-        record(2, parsed.mitigation, 8);
+    if parsed.has_mitigation {
+        // Kind 2: the value points at the two mitigation words (ADR 0192).
+        record(2, parsed.mitigation.as_ptr() as u64, 16);
+    }
+    if let Some(v) = parsed.child_policy {
+        record(6, u64::from(v), 4);
     }
     if !job_words.is_empty() {
         record(3, job_words.as_ptr() as u64, job_words.len() as u64 * 8);
     }
     if flags & CREATE_BREAKAWAY_FROM_JOB != 0 {
         record(4, 1, 0);
+    }
+    // A child starts with the error mode in force when it is created (`SetErrorMode`).
+    let error_mode = crate::errmode::process_mode();
+    if error_mode != 0 {
+        record(5, u64::from(error_mode), 0);
     }
     blob.insert(0, records);
     let attribute_blob = if records == 0 { core::ptr::null() } else { blob.as_ptr() as *const u8 };
@@ -511,6 +524,8 @@ unsafe fn create(
         (information.add(2 * hs) as *mut u32).write_unaligned(pid);
         (information.add(2 * hs + 4) as *mut u32).write_unaligned(tid);
     }
+    // A process made: the last error reads 0 (the sheet of `UpdateProcThreadAttribute`).
+    set_last_error(0);
     TRUE
 }
 

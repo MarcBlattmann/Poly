@@ -100,6 +100,8 @@
 //!   wow64               the same for the 32-bit (i686) ntdll.dll, kernelbase.dll, kernel32.dll
 //!                       and the 32-bit test programs of tests/windows/wow64 (wow64.rs, ADR 0186)
 //!   win fetch-7zip      download the pinned 7-Zip 7za.exe (x64) into the cache, checked (sevenzip.rs)
+//!   win fetch-git       download and unpack the pinned MinGit (Git for Windows) into the cache,
+//!                       checked, for the `git-win` boot test (gitwin.rs, ADR 0194)
 //!   win imports <exe | 7zip> [--markdown <file>] [--check]
 //!                       what a Windows program imports and what of it our DLLs lack
 //!                       (winimports.rs, ADR 0087); --check fails unless every import binds
@@ -142,6 +144,7 @@ mod ext2disk;
 mod ext4disk;
 mod font;
 mod fonts;
+mod gitwin;
 mod hostfs;
 mod hostscreen;
 mod initramfs;
@@ -1657,6 +1660,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Chrome for Testing's headless --dump-dom on the NT personality, skipped
     // without the cached package (chromewin.rs, ADR 0155).
     ("chrome-win", chromewin::boot_test),
+    // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
+    // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
+    // ADR 0194).
+    ("git-win", gitwin::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1789,7 +1796,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
-    ("sevenzip-b", &["7zip-b"]),
+    ("sevenzip-b", &["7zip-b", "git-win"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.

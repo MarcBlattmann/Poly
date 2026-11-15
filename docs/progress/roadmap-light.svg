@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 106 of 166 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 108 of 167 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">106 / 166 milestones · 64%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">108 / 167 milestones · 65%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -195,63 +195,66 @@
 <text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#0969da" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <text x="328.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#0969da" text-anchor="end">NOW</text>
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
-<rect x="340.0" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="340.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle: a dedicated machine over SSH, ADR 0097; tracer: ADR 0090; Wine seeds: ADR 0097)</title>
-<rect x="365.1" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="363.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
-<rect x="390.1" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="387.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT memory services: sections, NtAllocateVirtualMemory, NtMapViewOfSection, protections</title>
-<rect x="415.2" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="411.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)</title>
-<rect x="440.2" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="435.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT synchronisation: events, mutants, semaphores, timers, NtWaitForMultipleObjects (ADR 0065)</title>
-<rect x="465.3" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="459.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O (ADR 0067)</title>
-<rect x="490.3" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="482.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)</title>
-<rect x="515.4" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="506.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Registry: hive storage, NtOpenKey family, default system hives</title>
-<rect x="540.4" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="530.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock (ADR 0071)</title>
-<rect x="565.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="554.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, STARTUPINFO and its standard handles, CREATE_SUSPENDED in CreateProcessW)</title>
-<rect x="590.5" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="578.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice ADR 0084; math, setjmp/longjmp and positional printf ADR 0092; files, processes, pipes, wildcard argv and console I/O ADR 0093; locales and multibyte code pages ADR 0094; C++ exceptions in msvcrt ADR 0099)</title>
-<rect x="615.6" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="601.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ advapi32 basics: registry API, security descriptors, tokens (single user) (ADR 0083)</title>
-<rect x="640.6" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="625.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Console: our console host, AllocConsole, ReadConsole / WriteConsole, standard handles (ADR 0080)</title>
-<rect x="665.7" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="649.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
-<rect x="690.7" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="673.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group; ADR 0114: all 15 steps without a divergence, TRACE_REQUIRED, a required check)</title>
-<rect x="715.8" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="697.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Winsock (ws2_32) on our sockets; winhttp / wininet basics (ADR 0095)</title>
-<rect x="740.8" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="720.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app) (ADR 0096)</title>
-<rect x="765.9" y="203.0" width="23.1" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="744.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<g><title>Fallback if needed: our own vcruntime140 (and msvcp140 subsets) per ADR 0055</title>
-<rect x="790.9" y="203.0" width="23.1" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+<g><title>✔ Our own vcruntime140 and vcruntime140_1 (ADR 0199, taking up ADR 0055's fallback; FH4 and RTTI wait for spec sheets)</title>
+<rect x="768.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">18/19</text>
+<g><title>Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199)</title>
+<rect x="792.2" y="203.0" width="21.8" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+</g>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">19/20</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
 <rect x="340.0" y="233.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
@@ -383,8 +386,8 @@
 <g><title>One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)</title>
 <rect x="498.7" y="293.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<g><title>AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)</title>
-<rect x="525.1" y="293.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<g><title>✔ ⚖️ Decided (owner, 2026-11-15): no FUSE-free path for AppImages; they install and run through FUSE as on Linux (PR #221, ADR 0132)</title>
+<rect x="525.1" y="293.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ An installed Linux app uninstalls from Files' Applications (a confirmation window, Debian's own apt-get remove and autoremove; Poly's own apps and the base root stay) and an AppImage installs from a double click (run or install, read without running it, in the launcher and Applications, uninstalled again), started the runtime's normal way from its FUSE mount (extracting only where there is no FUSE) (ADR 0180)</title>
 <rect x="551.6" y="293.0" width="24.4" height="16.0" fill="#2da44e" rx="3"/>
@@ -416,7 +419,7 @@
 <g><title>One user home visible as ~, C:\Users\&lt;name&gt; and /Users/&lt;name&gt;</title>
 <rect x="789.6" y="293.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">4/18</text>
+<text x="884.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">5/18</text>
 <text x="16.0" y="335.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 9  XNU personality and macOS foundations</text>
 <g><title>✔ ⚖️ Decided (owner, ADR 0151): both: an arm64 → x86-64 translator first (arm64-only Mac apps on x86 PCs), and an aarch64 kernel port as groundwork</title>
 <rect x="340.0" y="323.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>

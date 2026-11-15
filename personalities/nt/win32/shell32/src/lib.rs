@@ -543,3 +543,6 @@ pub extern "system" fn shell32_main(_module: *mut u8, _reason: u32, _reserved: *
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

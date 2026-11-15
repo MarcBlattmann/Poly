@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlAcquireSRWLockExclusive.yaml
+id: windows/api/ntdll.dll/RtlAcquireSRWLockExclusive
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Slim Reader/Writer (SRW) Locks, Condition Variables, One-Time Initialization, Critical Section Objects, InitOnceExecuteOnce / InitOnceBeginInitialize functions, SleepConditionVariableSRW / SleepConditionVariableCS, Using One-Time Initialization. Layouts and constants from winnt.h (RTL_SRWLOCK, RTL_CONDITION_VARIABLE, RTL_RUN_ONCE, RTL_CRITICAL_SECTION), ntstatus.h and winerror.h. Wine's tests and source were not read.
+summary: >
+  Takes a slim reader/writer lock for exclusive use: the call returns when no other thread holds the lock in either mode, and blocks until then. Not recursive (a second exclusive acquire by the owner blocks forever). The lock has no owner: any thread may release it. kernel32's AcquireSRWLockExclusive is the same function. Today Poly's version is a no-op that returns at once, so programs that rely on it (Firefox, Node, Audacity) race.
+interface:
+  signature: "void RtlAcquireSRWLockExclusive(PRTL_SRWLOCK lock)"
+rules:
+  blocks_exclusive: "while a thread holds the lock exclusive another exclusive acquire does not return (observed still blocked after 300 ms) and returns within milliseconds once the holder releases."
+  blocks_shared: "an exclusive holder also keeps shared acquirers out; shared holders keep an exclusive acquirer out; shared holders admit more shared holders at once (a second thread's shared acquire returned while the first still held it)."
+  writer_priority: "a waiting exclusive acquirer holds back readers that arrive after it: with one reader holding the lock and a writer waiting, a new shared acquire (RtlTryAcquireSRWLockShared: FALSE; a thread calling RtlAcquireSRWLockShared: blocked after 300 ms) does not get the lock until the writer has had it and released it. Several waiting writers are served one at a time."
+  mutual_exclusion: "four threads incrementing a counter 20000 times each under the exclusive lock with a gap between reading and writing the counter end at exactly 80000; the same for four threads spinning on RtlTryAcquireSRWLockExclusive (5000 each: 20000); two writers keeping two values equal and two readers under the shared lock (20000 reads each) never saw them differ."
+  lock_word: "an unlocked lock is a zero word; held exclusive the low four bits are 1 (bit 0 is the lock bit); held shared by n readers the word is (n << 4) | 1 (0x11, 0x21 ...) while nobody waits; it is zero again after the last release. Programs only initialise the word to zero; the values are given for implementers' own checks."
+  no_owner: "a lock taken by a thread that then ends is still held (RtlTryAcquireSRWLockExclusive fails) until some thread releases it; releasing from another thread than the acquirer works."
+errors:
+  none: "the call has no failure result; releasing a lock that is not held is covered by RtlReleaseSRWLockExclusive and RtlReleaseSRWLockShared."
+side_effects: "the calling thread may block"
+threading: "designed for use from any number of threads"
+ordering: ["a blocked exclusive acquirer gets the lock after the holder's release; waiting writers are served in turn; readers that arrive after a waiting writer queue behind it"]
+timing:
+  typical: "an uncontended acquire takes well under a microsecond; a blocked acquirer resumes within a few milliseconds of the release"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing ntdll.dll and kernel32.dll by name. Every wait that must not return is observed after 300 ms of waiting, every wait that must return is bounded by 5 s or more, so a failing implementation fails an observation instead of hanging the run. Observations are statuses, counts, booleans and small words; lock words are shown only when they are zero or small (the lock value of an uncontended lock). Counts of threads and loops are fixed so the outputs are identical on every run. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x600D: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Exact fairness between many waiting readers and writers, lock words while threads wait (they contain pointers), spurious wake-ups of waiters, behaviour under thread termination while waiting, acquire on a lock word in shared memory between processes.

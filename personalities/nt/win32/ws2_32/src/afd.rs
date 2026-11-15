@@ -35,6 +35,7 @@ unsafe extern "system" {
         output_len: u32,
     ) -> u32;
     pub fn NtClose(handle: Handle) -> u32;
+    fn NtQueryEvent(handle: Handle, class: u32, info: *mut u8, len: u32, returned: *mut u32) -> u32;
 }
 
 /// `IO_STATUS_BLOCK` (`wdm.h`): the status in a pointer-sized slot, then
@@ -84,16 +85,27 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ_WRITE: u32 = 3;
 const FILE_OPEN_IF: u32 = 3;
 const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+/// `OBJ_INHERIT` (`ntdef.h`): the handle is inheritable (Winsock's sockets are, unless
+/// `WSA_FLAG_NO_HANDLE_INHERIT` says not).
+const OBJ_INHERIT: u32 = 0x02;
 
-/// Open a new endpoint (no socket yet).
-pub fn open_endpoint() -> Result<Handle, u32> {
+/// Is `h` an event object (`NtQueryEvent(EventBasicInformation)` answers)?
+pub fn is_event(h: Handle) -> bool {
+    let mut info = [0u8; 8];
+    let mut ret = 0u32;
+    // SAFETY: the buffers are live locals of the lengths given.
+    unsafe { NtQueryEvent(h, 0, info.as_mut_ptr(), info.len() as u32, &mut ret) == STATUS_SUCCESS }
+}
+
+/// Open a new endpoint (no socket yet); `inherit`: the handle is inheritable by child processes.
+pub fn open_endpoint(inherit: bool) -> Result<Handle, u32> {
     const _: () = assert!(afd::ENDPOINT.len() == 20);
     let name = UnicodeString { length: 40, maximum_length: 40, buffer: ENDPOINT.as_ptr() };
     let oa = ObjectAttributes {
         length: core::mem::size_of::<ObjectAttributes>() as u32,
         root: 0,
         name: &name,
-        attributes: OBJ_CASE_INSENSITIVE,
+        attributes: OBJ_CASE_INSENSITIVE | if inherit { OBJ_INHERIT } else { 0 },
         security: core::ptr::null(),
         qos: core::ptr::null(),
     };
@@ -197,7 +209,7 @@ pub fn control() -> Result<Handle, u32> {
     if h != 0 {
         return Ok(h);
     }
-    let new = open_endpoint()?;
+    let new = open_endpoint(false)?;
     match CONTROL.compare_exchange(0, new, Ordering::SeqCst, Ordering::SeqCst) {
         Ok(_) => Ok(new),
         Err(other) => {

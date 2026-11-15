@@ -13,6 +13,7 @@ mod objects;
 mod registry;
 mod sections;
 mod win32k;
+mod winsta;
 
 use crate::backend::{Backend, SectionSource, ViewMap, ViewSource};
 use crate::context::NtContext;
@@ -179,6 +180,10 @@ impl Backend for Mem {
             self.pages.insert(a, Page { prot: map.prot, frame, section });
         }
         Ok(())
+    }
+
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        Mem::read(self, addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
@@ -393,6 +398,15 @@ impl NtKernel for Fake {
                 Err(e)
             }
         }
+    }
+
+    fn with_process<R>(
+        &mut self,
+        pid: ProcessId,
+        f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R,
+    ) -> Option<R> {
+        let (child, mem) = self.children.iter_mut().find(|(p, _)| p.pid == pid)?;
+        Some(f(&mut self.sys, child, mem))
     }
 
     fn terminate_thread(&mut self, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {

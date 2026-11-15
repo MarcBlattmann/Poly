@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "sfc_basic",
+      "exe_sha256": "af3429a8bb68506fa05eb19b8ce729fdd37472f8ab6420eb1113fce58a176f4d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R1VJRF9OVUxMOiByZXR1cm5zIDB4MCwgMzggY2hhcmFjdGVycywgdGV4dCB7MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwfSwgMTYtYnl0ZSBhbGlnbmVkIGJsb2NrIHRydWUKSUlEX0lVbmtub3duOiByZXR1cm5zIDB4MCwgMzggY2hhcmFjdGVycywgdGV4dCB7MDAwMDAwMDAtMDAwMC0wMDAwLUMwMDAtMDAwMDAwMDAwMDQ2fSwgMTYtYnl0ZSBhbGlnbmVkIGJsb2NrIHRydWUKYSBHVUlEIHdpdGggZXZlcnkga2luZCBvZiBkaWdpdDogcmV0dXJucyAweDAsIDM4IGNoYXJhY3RlcnMsIHRleHQge0RFQURCRUVGLTFBMkItM0M0RC01RTZGLTcwODE5MkEzQjRDNX0sIDE2LWJ5dGUgYWxpZ25lZCBibG9jayB0cnVlCmFsbCBvbmVzOiByZXR1cm5zIDB4MCwgMzggY2hhcmFjdGVycywgdGV4dCB7RkZGRkZGRkYtRkZGRi1GRkZGLUZGRkYtRkZGRkZGRkZGRkZGfSwgMTYtYnl0ZSBhbGlnbmVkIGJsb2NrIHRydWUKdGhlIG1vbml0b3IgaW50ZXJmYWNlIGNsYXNzOiByZXR1cm5zIDB4MCwgMzggY2hhcmFjdGVycywgdGV4dCB7RTZGMDdCNUYtRUU5Ny00QTkwLUIwNzYtMzNGNTdCRjRFQUE3fSwgMTYtYnl0ZSBhbGlnbmVkIGJsb2NrIHRydWUKU3RyaW5nRnJvbUdVSUQyIHJldHVybnMgMzkgKGNoYXJhY3RlcnMgd2l0aCB0aGUgTlVMKSBhbmQgdGhlIHNhbWUgdGV4dDogdHJ1ZQphIE5VTEwgY2xzaWQgcG9pbnRlcjogcmV0dXJucyAweDgwMDcwMDU3LCBzdHJpbmcgbm9uZQphIE5VTEwgb3V0cHV0IHBvaW50ZXI6IHJldHVybnMgMHg4MDA3MDA1NwpmaXZlIGh1bmRyZWQgY2FsbHMgYW5kIGZyZWVzOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GUID_NULL: returns 0x0, 38 characters, text {00000000-0000-0000-0000-000000000000}, 16-byte aligned block true\nIID_IUnknown: returns 0x0, 38 characters, text {00000000-0000-0000-C000-000000000046}, 16-byte aligned block true\na GUID with every kind of digit: returns 0x0, 38 characters, text {DEADBEEF-1A2B-3C4D-5E6F-708192A3B4C5}, 16-byte aligned block true\nall ones: returns 0x0, 38 characters, text {FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}, 16-byte aligned block true\nthe monitor interface class: returns 0x0, 38 characters, text {E6F07B5F-EE97-4A90-B076-33F57BF4EAA7}, 16-byte aligned block true\nStringFromGUID2 returns 39 (characters with the NUL) and the same text: true\na NULL clsid pointer: returns 0x80070057, string none\na NULL output pointer: returns 0x80070057\nfive hundred calls and frees: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    }
+  ]
+}

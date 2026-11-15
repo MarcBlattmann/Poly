@@ -234,6 +234,81 @@ fn a_whole_process_is_suspended_and_resumed_by_handle() {
     assert_eq!(Service::ResumeProcess.name(), "NtResumeProcess");
 }
 
+/// The values a process keeps for itself (`crate::procattrs`): error mode, memory priority and
+/// power throttling go through `NtSetInformationProcess` / `NtQueryInformationProcess`, a wrong
+/// size or value is refused, a new process starts with its creator's error mode, and the handle
+/// count counts handles.
+#[test]
+fn process_values_are_set_and_read_back() {
+    use crate::procattrs::*;
+    let mut f = Fake::new();
+    let word = |f: &mut Fake, v: u32| f.put(&v.to_le_bytes());
+    let out = f.alloc(16);
+    let read = |f: &mut Fake, class: u64, n: u64| {
+        let st = f.call(Service::QueryInformationProcess, &[SELF, class, out, n, 0]);
+        (st, f.bytes_at(out, n as usize))
+    };
+    // Defaults: error mode 0, memory priority 5, power throttling Version 1 with empty masks.
+    assert_eq!(read(&mut f, PROCESS_DEFAULT_HARD_ERROR_MODE, 4), (STATUS_SUCCESS, vec![0; 4]));
+    assert_eq!(read(&mut f, PROCESS_MEMORY_PRIORITY, 4), (STATUS_SUCCESS, vec![5, 0, 0, 0]));
+    assert_eq!(read(&mut f, PROCESS_POWER_THROTTLING_STATE, 12).1, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    // Set and read back.
+    let p = word(&mut f, 0x8003);
+    assert_eq!(f.call(Service::SetInformationProcess, &[SELF, PROCESS_DEFAULT_HARD_ERROR_MODE, p, 4]), STATUS_SUCCESS);
+    assert_eq!(read(&mut f, PROCESS_DEFAULT_HARD_ERROR_MODE, 4).1, 0x8003u32.to_le_bytes());
+    let p = word(&mut f, 2);
+    assert_eq!(f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 4]), STATUS_SUCCESS);
+    assert_eq!(read(&mut f, PROCESS_MEMORY_PRIORITY, 4).1, 2u32.to_le_bytes());
+    let p = word(&mut f, 9);
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 4]),
+        STATUS_INVALID_PARAMETER
+    );
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_MEMORY_PRIORITY, p, 8]),
+        STATUS_INFO_LENGTH_MISMATCH
+    );
+    let throttle = f.put(&[1u32, 5, 5].iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>());
+    assert_eq!(
+        f.call(Service::SetInformationProcess, &[SELF, PROCESS_POWER_THROTTLING_STATE, throttle, 12]),
+        STATUS_SUCCESS
+    );
+    assert_eq!(read(&mut f, PROCESS_POWER_THROTTLING_STATE, 12).1[4..], [5, 0, 0, 0, 5, 0, 0, 0]);
+    // A buffer that is too small for a query.
+    assert_eq!(
+        f.call(Service::QueryInformationProcess, &[SELF, PROCESS_POWER_THROTTLING_STATE, out, 4, 0]),
+        STATUS_INFO_LENGTH_MISMATCH
+    );
+    // A handle that is none.
+    let p = word(&mut f, 1);
+    assert_eq!(f.call(Service::SetInformationProcess, &[0, PROCESS_MEMORY_PRIORITY, p, 4]), STATUS_INVALID_HANDLE);
+    // The handle count: one more handle, one more.
+    let count = |f: &mut Fake| u32::from_le_bytes(read(f, 20, 4).1.try_into().unwrap());
+    let before = count(&mut f);
+    let h = f.alloc(8);
+    assert_eq!(f.call(Service::CreateEvent, &[h, 0x1f0003, 0, 0, 0]), STATUS_SUCCESS);
+    assert_eq!(count(&mut f), before + 1);
+    let h = f.u64_at(h);
+    assert_eq!(f.call(Service::Close, &[h]), STATUS_SUCCESS);
+    assert_eq!(count(&mut f), before);
+}
+
+/// `NtGetCurrentProcessorNumber` and the thread's affinity reach the kernel; the thread's
+/// `ThreadBasicInformation` carries the affinity mask.
+#[test]
+fn processor_number_and_thread_affinity() {
+    let mut f = Fake::new();
+    assert_eq!(f.call(Service::GetCurrentProcessorNumber, &[]), NtStatus(0));
+    assert_eq!(Service::GetCurrentProcessorNumber.name(), "NtGetCurrentProcessorNumber");
+    let out = f.alloc(48);
+    assert_eq!(f.call(Service::QueryInformationThread, &[(-2i64) as u64, 0, out, 48, 0]), STATUS_SUCCESS);
+    assert_eq!(f.u64_at(out + 32), 1);
+    // A mask of 8 bytes only, through a handle that can set information.
+    let p = f.put_u64(0xF);
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 8]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 4]), STATUS_INFO_LENGTH_MISMATCH);
+}
+
 #[test]
 fn unknown_services_are_not_implemented() {
     let mut f = Fake::new();
@@ -309,7 +384,38 @@ fn kuser_shared_data_is_mapped_read_only_with_the_version() {
     let major = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_MAJOR_VERSION as u64, 4);
     assert_eq!(major, 10u32.to_le_bytes());
     let build = f.mem.bytes_at(kuser::ADDRESS + kuser::NT_BUILD_NUMBER as u64, 4);
-    assert_eq!(build, 19045u32.to_le_bytes());
+    assert_eq!(build, 26200u32.to_le_bytes());
     // A second mapping is refused (the page is there).
     assert!(exec::map_user_shared_data(&mut f.proc, &mut f.mem, &facts).is_err());
+}
+
+#[test]
+fn a_stack_the_program_allocated_grows_when_the_teb_names_it() {
+    // The MSYS2 runtime runs its main thread on memory it reserved itself and
+    // points the TEB's StackBase at it (ADR 0194).
+    let mut f = Fake::bare();
+    let s = start(&mut f, &test_exe(false)).unwrap();
+    let (base, top) = (0x6_0000_0000u64, 0x6_0002_0000u64);
+    f.proc.vm.allocate(&mut f.mem, base, top - base, 0, MEM_RESERVE, PAGE_READWRITE).unwrap();
+    f.proc.vm.allocate(&mut f.mem, top - 0x2000, 0x2000, 0, MEM_COMMIT, PAGE_READWRITE).unwrap();
+    f.proc.vm.allocate(&mut f.mem, top - 0x3000, 0x1000, 0, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    let guard = top - 0x3000;
+    // Not the thread's stack yet: an ordinary guard page.
+    assert_eq!(
+        exec::access_fault(&mut f.proc, &mut f.mem, TID, guard + 8),
+        AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION)
+    );
+    // Guard it again and name it in the TEB: the stack grows.
+    f.proc.vm.protect(&mut f.mem, guard, 0x1000, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    f.mem.write_bytes(s.teb + TEB_STACK_BASE, &top.to_le_bytes()).unwrap();
+    assert_eq!(exec::access_fault(&mut f.proc, &mut f.mem, TID, guard + 8), AccessFault::StackGrown { limit: guard });
+    assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), guard);
+    assert_eq!(f.proc.vm.query(guard - 0x1000).unwrap().protect, PAGE_READWRITE | PAGE_GUARD);
+    // A guard page elsewhere is still an exception.
+    let other = 0x7_0000_0000u64;
+    f.proc.vm.allocate(&mut f.mem, other, 0x1000, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    assert_eq!(
+        exec::access_fault(&mut f.proc, &mut f.mem, TID, other),
+        AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION)
+    );
 }

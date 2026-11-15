@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "crmf_basic",
+      "exe_sha256": "a5cac26faee5cb816ce16c23069581ca92946875f3585fe98261af3e0f163ec1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgZmlsdGVyOiAweDAsIG5vIG9sZCBmaWx0ZXIgMSwgcmVmZXJlbmNlcyBoZWxkIDIKc2Vjb25kIGZpbHRlcjogMHgwLCB0aGUgb2xkIG9uZSBjb21lcyBiYWNrIDEsIGl0cyByZWZlcmVuY2VzIDIsIHRoZSBuZXcgb25lJ3MgMgp0aGUgc2FtZSBmaWx0ZXIgYWdhaW4gd2l0aG91dCBhbiBvbGQgcG9pbnRlcjogMHgwLCBpdHMgcmVmZXJlbmNlcyAyCk5VTEwgcmVtb3ZlcyBpdDogMHgwLCB0aGUgb2xkIGZpbHRlciBjb21lcyBiYWNrIDEsIGl0cyByZWZlcmVuY2VzIDIKTlVMTCBhZ2FpbjogMHgwLCBubyBvbGQgZmlsdGVyIDEKYW4gTVRBIHRocmVhZDogcmVtb3ZpbmcgMHg4MDAwNDAyMSwgcmVnaXN0ZXJpbmcgMHg4MDAwNDAyMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first filter: 0x0, no old filter 1, references held 2\nsecond filter: 0x0, the old one comes back 1, its references 2, the new one's 2\nthe same filter again without an old pointer: 0x0, its references 2\nNULL removes it: 0x0, the old filter comes back 1, its references 2\nNULL again: 0x0, no old filter 1\nan MTA thread: removing 0x80004021, registering 0x80004021\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

@@ -181,6 +181,8 @@ pub const FILE_FS_FULL_SIZE_INFORMATION: u32 = 7;
 /// `FILE_DEVICE_DISK` and `FILE_DEVICE_NAMED_PIPE` (`DEVICE_TYPE`, `wdm.h`).
 pub const FILE_DEVICE_DISK: u32 = 0x0000_0007;
 pub const FILE_DEVICE_NAMED_PIPE: u32 = 0x0000_0011;
+/// `FILE_DEVICE_NULL` (`wdm.h`): the `NUL` device.
+pub const FILE_DEVICE_NULL: u32 = 0x0000_0015;
 /// `FILE_DEVICE_UNKNOWN` (`wdm.h`): an inherited character device.
 pub const FILE_DEVICE_UNKNOWN: u32 = 0x0000_0022;
 
@@ -213,6 +215,8 @@ pub const STATUS_NOT_A_DIRECTORY: NtStatus = NtStatus(0xC000_0103);
 pub const STATUS_NAME_TOO_LONG: NtStatus = NtStatus(0xC000_0106);
 pub const STATUS_TOO_MANY_OPENED_FILES: NtStatus = NtStatus(0xC000_011F);
 pub const STATUS_CANCELLED: NtStatus = NtStatus(0xC000_0120);
+/// `STATUS_CONNECTION_ABORTED` (`ntstatus.h`).
+pub const STATUS_CONNECTION_ABORTED: NtStatus = NtStatus(0xC000_0241);
 pub const STATUS_CANNOT_DELETE: NtStatus = NtStatus(0xC000_0121);
 pub const STATUS_PIPE_BROKEN: NtStatus = NtStatus(0xC000_014B);
 pub const STATUS_IO_DEVICE_ERROR: NtStatus = NtStatus(0xC000_0185);

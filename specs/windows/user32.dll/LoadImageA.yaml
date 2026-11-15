@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/LoadImageA.yaml
+id: windows/api/user32.dll/LoadImageA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, nothing is visible or painted, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-3
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs carry their own resources: string tables, menus, dialog templates, accelerator tables, bitmaps and icons are compiled into each test executable). Microsoft Learn reference pages of the functions and messages named here, "About Menus", "Using Menus", "About Dialog Boxes", "Using Dialog Boxes", "About Resource Files", "Resource Definition Statements", "About Keyboard Accelerators", "Common Dialog Box Library", "Common Controls"; winuser.h, commctrl.h, commdlg.h, winbase.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads an icon, bitmap or cursor by number or by ANSI name from the executable; the same results as LoadImageW. (For files, LR_LOADFROMFILE takes an ANSI path; not covered.)
+interface:
+  signature: "HANDLE LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy, UINT fuLoad)"
+rules:
+  icons: "IMAGE_ICON of the group 500: 16x16 gives the 16 image, 32x32 and 0x0 the 32 image, 24x24 a 24x24 icon scaled from the 32 image, 8x8 an 8x8 icon scaled from the 16 image, 64x64 and 16x32 the given sizes; colour 32 bits and mask 1 bit each time; pixels as for LoadIconW (the left half (200,30,30), the right (30,30,200) in the 32 image, (30,200,30) in the 16 image); without LR_SHARED two handles, DestroyIcon TRUE then FALSE; with LR_SHARED the same size gives the same handle and another size another handle"
+  bitmaps: "IMAGE_BITMAP of the number 400 (a 4x3 bitmap) without flags gives a device-dependent bitmap of the screen depth; LR_CREATEDIBSECTION a 24 bit DIB section with the resource's pixels; 8x6 stretches it; LR_MONOCHROME gives 1 bit; 'NAMEDBMP' by name (any case) loads an 8x2 bitmap; LoadBitmapA gives the same bitmaps"
+  cursors_and_modules: "see LoadCursorA and LoadIconA for the cursors and the errors"
+errors:
+  absent: "a bitmap number that does not exist: NULL with ERROR_RESOURCE_NAME_NOT_FOUND (1814); an unknown image type (7): NULL, the last error unchanged; icons: 1813 for ids that are not groups"
+side_effects: "none beyond the rules above"
+threading: "menus, windows and dialogs belong to the thread that created them; the tests use one thread unless the rules say otherwise"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (a dialog or message box that is ended at once: a few tens of milliseconds)"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations (Learn prototypes, header constants) and, where the entry needs them, its own resources (a resource directory written as data in the executable; formats from Learn: DLGTEMPLATE, DLGTEMPLATEEX, menu templates, ACCEL, string tables, BITMAPINFOHEADER, icon groups). Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes and booleans; no line holds a handle, a pointer, a window position or a font-dependent size. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is never printed (it is not specified).
+not_covered: >
+  Other ANSI code pages (a double-byte code page such as 932 or 936 changes byte counts and the conversion of every byte above 0x7F), the thread's own locale (the functions use the system ANSI code page), characters outside the code page with a best-fit form other than '?' (none was seen in 1252 for U+4E2D, U+0416). LR_LOADFROMFILE (ANSI path conversion), LR_LOADTRANSPARENT, LR_LOADMAP3DCOLORS, images of other modules.

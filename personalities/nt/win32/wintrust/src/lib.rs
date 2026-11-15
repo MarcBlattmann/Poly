@@ -31,3 +31,6 @@ poly_win32_rt::fail_exports!(
 pub extern "system" fn wintrust_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

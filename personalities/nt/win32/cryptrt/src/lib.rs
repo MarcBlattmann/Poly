@@ -27,6 +27,7 @@ unsafe extern "system" {
     fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn SetLastError(e: u32);
+    fn GetLastError() -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -246,6 +247,12 @@ pub fn set_last_error(e: u32) {
     unsafe { SetLastError(e) }
 }
 
+/// The thread's last error.
+pub fn last_error() -> u32 {
+    // SAFETY: no preconditions.
+    unsafe { GetLastError() }
+}
+
 // ----- Files (crypt32's system stores and DPAPI master keys) ------------------------------
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -265,6 +272,7 @@ unsafe extern "system" {
     fn CloseHandle(h: isize) -> i32;
     fn CreateDirectoryW(name: *const u16, sa: *const u8) -> i32;
     fn DeleteFileW(name: *const u16) -> i32;
+    fn GetFileAttributesW(name: *const u16) -> u32;
     fn FindFirstFileW(pattern: *const u16, data: *mut u8) -> isize;
     fn FindNextFileW(h: isize, data: *mut u8) -> i32;
     fn FindClose(h: isize) -> i32;
@@ -344,6 +352,15 @@ pub fn delete_file(path: &str) -> bool {
     let p = wz(path);
     // SAFETY: a NUL-terminated name.
     unsafe { DeleteFileW(p.as_ptr()) != 0 }
+}
+
+/// Whether `path` names an existing directory.
+pub fn dir_exists(path: &str) -> bool {
+    let p = wz(path);
+    // SAFETY: a NUL-terminated name.
+    let a = unsafe { GetFileAttributesW(p.as_ptr()) };
+    // INVALID_FILE_ATTRIBUTES (`fileapi.h`), FILE_ATTRIBUTE_DIRECTORY (`winnt.h`).
+    a != 0xFFFF_FFFF && a & 0x10 != 0
 }
 
 /// Make a directory and its parents (existing ones are fine).

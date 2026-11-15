@@ -47,7 +47,7 @@
 {"symbol":"MakeSignature","forward":"secur32.MakeSignature","src":["wine-spec"]},
 {"symbol":"QueryContextAttributesA","forward":"secur32.QueryContextAttributesA","src":["wine-spec"]},
 {"symbol":"QueryContextAttributesExA","src":["wine-spec"]},
-{"symbol":"QueryContextAttributesExW","src":["wine-spec"]},
+{"symbol":"QueryContextAttributesExW","status":"stub","src":["wine-spec"]},
 {"symbol":"QueryContextAttributesW","forward":"secur32.QueryContextAttributesW","src":["wine-spec"]},
 {"symbol":"QueryCredentialsAttributesA","forward":"secur32.QueryCredentialsAttributesA","src":["wine-spec"]},
 {"symbol":"QueryCredentialsAttributesExA","src":["wine-spec"]},

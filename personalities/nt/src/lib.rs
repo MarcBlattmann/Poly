@@ -66,6 +66,7 @@ pub mod objects;
 pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
+pub mod procattrs;
 pub mod protect;
 pub mod registry;
 pub mod section;
@@ -78,6 +79,7 @@ pub mod threads;
 pub mod trace;
 pub mod vm;
 pub mod win32k;
+pub mod winsta;
 pub mod wow64;
 
 #[cfg(test)]
@@ -88,6 +90,7 @@ pub use context::NtContext;
 pub use kernel::{
     Apc, ClientId, NtKernel, NtTimeout, ProcessCreate, ProcessCreated, ThreadCreate, ThreadCreated, UserFault,
 };
+pub use poly_kernelbase::mitigation::State as MitigationState;
 pub use poly_kernelbase::{cpu::CpuId, kuser};
 pub use protect::HwProt;
 pub use services::Service;
@@ -238,6 +241,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         ResumeThread => threads::resume_thread(k, regs),
         SuspendProcess => threads::suspend_process(k, regs),
         ResumeProcess => threads::resume_process(k, regs),
+        GetCurrentProcessorNumber => threads::get_current_processor_number(k, regs),
         GetContextThread => threads::get_context_thread(k, regs),
         SetContextThread => threads::set_context_thread(k, regs),
 
@@ -290,6 +294,9 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         QuerySystemTime => sysinfo::query_system_time(k, regs),
         QueryPerformanceCounter => sysinfo::query_performance_counter(k, regs),
         QuerySystemInformation => sysinfo::query_system_information(k, regs),
+        AllocateLocallyUniqueId => security::allocate_locally_unique_id(k, regs),
+        ReadVirtualMemory => memory::read_virtual(k, regs),
+        WriteVirtualMemory => memory::write_virtual(k, regs),
         DeviceIoControlFile => console::services::device_io_control_file(k, regs),
         QuerySection => memory::query_section(k, regs),
         UnmapViewOfSectionEx => memory::unmap_view_ex(k, regs),

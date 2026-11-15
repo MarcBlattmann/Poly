@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "rdn_interface",
+      "exe_sha256": "9d2a09461442b5b1e6f18266eaac7a83615062d54a705f595ae8a3ec903ccc59",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvZiB0aGUgZmlsdGVyIHN0cnVjdHVyZTogMzIKY2xhc3MgVVNCIGRldmljZTogaGFuZGxlIHJldHVybmVkIHRydWUsIGxhc3QgZXJyb3IgaXMgc2V0IHRvIDAgdHJ1ZQpjbGFzcyBISUQgZGV2aWNlOiBoYW5kbGUgcmV0dXJuZWQgdHJ1ZSwgbGFzdCBlcnJvciBpcyBzZXQgdG8gMCB0cnVlCmNsYXNzIG1vbml0b3I6IGhhbmRsZSByZXR1cm5lZCB0cnVlLCBsYXN0IGVycm9yIGlzIHNldCB0byAwIHRydWUKdGhlIHRocmVlIGhhbmRsZXMgYXJlIGRpZmZlcmVudDogdHJ1ZQp0aGUgc2FtZSBjbGFzcyBhZ2FpbiBnaXZlcyBhIG5ldyBoYW5kbGU6IHRydWUKV01fREVWSUNFQ0hBTkdFIG1lc3NhZ2VzIHRoYXQgYXJyaXZlZCBieSB0aGVtc2VsdmVzOiAwCnNpemUgMTIgKHRoZSBoZWFkZXIgb25seSk6IGhhbmRsZSByZXR1cm5lZCwgbGFzdCBlcnJvciAwCnNpemUgMzE6IGhhbmRsZSByZXR1cm5lZCwgbGFzdCBlcnJvciAwCmZsYWcgQUxMX0lOVEVSRkFDRV9DTEFTU0VTOiBoYW5kbGUgcmV0dXJuZWQsIGxhc3QgZXJyb3IgMAphbiB1bmtub3duIGZsYWcgMHg4MDogaGFuZGxlIHJldHVybmVkLCBsYXN0IGVycm9yIDAKdHlwZSBPRU06IGhhbmRsZSBOVUxMLCBsYXN0IGVycm9yIDEzCnR5cGUgUE9SVDogaGFuZGxlIE5VTEwsIGxhc3QgZXJyb3IgMTMKdHlwZSA5OTogaGFuZGxlIE5VTEwsIGxhc3QgZXJyb3IgMTMKdGhlIHNlcnZpY2UgZmxhZyB3aXRoIGEgd2luZG93OiBoYW5kbGUgTlVMTCwgbGFzdCBlcnJvciA2Ck5VTEwgZmlsdGVyOiBoYW5kbGUgTlVMTCwgbGFzdCBlcnJvciA4NwpOVUxMIHJlY2lwaWVudDogaGFuZGxlIHJldHVybmVkCmEgd2luZG93IGhhbmRsZSB0aGF0IGRvZXMgbm90IGV4aXN0OiBoYW5kbGUgcmV0dXJuZWQKdW5yZWdpc3RlcmluZyBhZnRlciB0aGUgd2luZG93IHdhcyBkZXN0cm95ZWQ6IDEsIGxhc3QgZXJyb3IgaXMgc2V0IHRvIDAgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size of the filter structure: 32\nclass USB device: handle returned true, last error is set to 0 true\nclass HID device: handle returned true, last error is set to 0 true\nclass monitor: handle returned true, last error is set to 0 true\nthe three handles are different: true\nthe same class again gives a new handle: true\nWM_DEVICECHANGE messages that arrived by themselves: 0\nsize 12 (the header only): handle returned, last error 0\nsize 31: handle returned, last error 0\nflag ALL_INTERFACE_CLASSES: handle returned, last error 0\nan unknown flag 0x80: handle returned, last error 0\ntype OEM: handle NULL, last error 13\ntype PORT: handle NULL, last error 13\ntype 99: handle NULL, last error 13\nthe service flag with a window: handle NULL, last error 6\nNULL filter: handle NULL, last error 87\nNULL recipient: handle returned\na window handle that does not exist: handle returned\nunregistering after the window was destroyed: 1, last error is set to 0 true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 192
+    }
+  ]
+}

@@ -25,6 +25,8 @@
 //! Poly fills the page when a process starts (a snapshot: the clock fields do not advance).
 
 use crate::cpu::CpuId;
+use alloc::vec;
+use alloc::vec::Vec;
 use poly_rtl::version;
 
 /// Where the page is mapped in every process.
@@ -84,21 +86,22 @@ pub struct Facts {
     pub cpu: CpuId,
 }
 
-fn put(page: &mut [u8; SIZE], at: usize, bytes: &[u8]) {
+fn put(page: &mut [u8], at: usize, bytes: &[u8]) {
     page[at..at + bytes.len()].copy_from_slice(bytes);
 }
 
 /// A `KSYSTEM_TIME`: the low part, then the high part twice (a reader retries until
 /// `High1Time == High2Time`).
-fn put_time(page: &mut [u8; SIZE], at: usize, value: u64) {
+fn put_time(page: &mut [u8], at: usize, value: u64) {
     put(page, at, &(value as u32).to_le_bytes());
     put(page, at + 4, &((value >> 32) as u32).to_le_bytes());
     put(page, at + 8, &((value >> 32) as u32).to_le_bytes());
 }
 
-/// The page's contents.
-pub fn page(f: &Facts) -> [u8; SIZE] {
-    let mut p = [0u8; SIZE];
+/// The page's contents. Built on the heap: a kernel thread's stack has room for little more than
+/// the system call it serves, and this runs deep inside process creation.
+pub fn page(f: &Facts) -> Vec<u8> {
+    let mut p = vec![0u8; SIZE];
     put(&mut p, TICK_COUNT_MULTIPLIER, &TICK_MULTIPLIER.to_le_bytes());
     put_time(&mut p, INTERRUPT_TIME, f.uptime);
     put_time(&mut p, SYSTEM_TIME, f.system_time);
@@ -150,7 +153,7 @@ mod tests {
     fn the_version_fields_are_the_reported_version() {
         let p = page(&facts());
         assert_eq!((u32_at(&p, NT_MAJOR_VERSION), u32_at(&p, NT_MINOR_VERSION)), (10, 0));
-        assert_eq!(u32_at(&p, NT_BUILD_NUMBER), 19045);
+        assert_eq!(u32_at(&p, NT_BUILD_NUMBER), 26200);
         assert_eq!((u32_at(&p, NT_PRODUCT_TYPE), p[PRODUCT_TYPE_IS_VALID]), (1, 1));
         assert_eq!(u16::from_le_bytes([p[NATIVE_PROCESSOR_ARCHITECTURE], p[NATIVE_PROCESSOR_ARCHITECTURE + 1]]), 9);
         assert_eq!(u32_at(&p, SUITE_MASK), 0x100);

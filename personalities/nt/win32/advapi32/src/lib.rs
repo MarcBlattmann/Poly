@@ -153,6 +153,16 @@ unsafe fn sid_bytes<'a>(p: *const u8) -> &'a [u8] {
 
 // ----- the registry ---------------------------------------------------------------------
 
+/// `RegDisablePredefinedCache`: Learn: "Instructs the system to disable the predefined registry
+/// handle table cache for the current process"; the call returns `ERROR_SUCCESS` and leaves the
+/// last error alone (the sheet), also when it is repeated. Poly keeps no cache of
+/// `HKEY_CURRENT_USER`'s handle: a predefined key is resolved at each open, so the call only
+/// has to succeed.
+#[unsafe(no_mangle)]
+pub extern "system" fn RegDisablePredefinedCache() -> u32 {
+    0
+}
+
 /// `RegDeleteKeyW`: `RegDeleteKeyExW` without a view.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RegDeleteKeyW(hkey: Handle, sub: *const u16) -> u32 {
@@ -751,3 +761,6 @@ pub extern "system" fn advapi32_main(_module: *mut u8, _reason: u32, _reserved: 
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

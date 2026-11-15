@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/QueueUserAPC.yaml
+id: windows/api/kernel32.dll/QueueUserAPC
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Queues a routine (with one argument) to a thread's APC queue; it runs on that thread only when the thread waits alertably, and the wait returns WAIT_IO_COMPLETION (192). The MSYS2 runtime queues one to its own thread (the thread pseudo-handle) right before it creates its signal thread.
+interface:
+  signature: "DWORD QueueUserAPC(PAPCFUNC fn, HANDLE thread, ULONG_PTR param); void CALLBACK fn(ULONG_PTR param)"
+rules:
+  self_queue: "QueueUserAPC(fn, GetCurrentThread(), p) returns non-zero and the routine does not run: not at the call, not in a plain SleepEx(0, FALSE) or a non-alertable wait (timeout 258); it runs inside the next alertable wait, SleepEx(0, TRUE), which returns 192 (WAIT_IO_COMPLETION); the routine received the parameter; a second alertable sleep returns 0 with nothing more to run."
+  order: "three routines queued, one SleepEx(0, TRUE): all three ran in queue order, one call returned 192; an alertable WaitForSingleObjectEx(event, 5000, TRUE) with a routine queued returned 192 at once (it did not wait for the event)."
+  other_thread: "TRUE for a handle with THREAD_SET_CONTEXT (the CreateThread handle, or OpenThread(0x10)); the routine ran on the target thread, in queue order, when it became alertable (its SleepEx returned 192); not while it slept without alerting."
+  rights: "a handle with only SYNCHRONIZE|THREAD_QUERY_LIMITED_INFORMATION: 0 with ERROR_ACCESS_DENIED (5)."
+  ended_thread: "a handle to a thread that ended: 0 with ERROR_GEN_FAILURE (31)."
+  bad_handles: "NULL, INVALID_HANDLE_VALUE and the process pseudo-handle: 0 with ERROR_INVALID_HANDLE (6)."
+errors:
+  no_right: "ERROR_ACCESS_DENIED (5)"
+  ended: "ERROR_GEN_FAILURE (31)"
+  bad_handle: "ERROR_INVALID_HANDLE (6)"
+side_effects: "queues a routine to the thread"
+threading: "any thread may queue to any thread it has a handle for"
+ordering: ["routines run in queue order, inside the target's alertable waits"]
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  APCs delivered to a thread suspended or inside system calls, WAIT_IO_COMPLETION from I/O completion routines, QueueUserAPC2.

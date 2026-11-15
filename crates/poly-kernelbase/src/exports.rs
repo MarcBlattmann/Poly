@@ -168,6 +168,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("VirtualFree", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualProtect", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualQuery", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualAllocEx", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualFreeEx", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualProtectEx", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualQueryEx", "api-ms-win-core-memory-l1-1-0"),
     ("ReadProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("WriteProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("HeapCreate", "api-ms-win-core-heap-l1-1-0"),
@@ -299,6 +303,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // 0087). The contract is the oldest version of the one each page's
     // "APILocation" metadata names (as ADR 0083 reads advapi32's).
     ("ResumeThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("TerminateThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
     ("SuspendThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),
@@ -342,6 +349,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProductInfo", "api-ms-win-core-sysinfo-l1-2-0"),
     ("AddVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("RemoveVectoredExceptionHandler", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("AddVectoredContinueHandler", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("RemoveVectoredContinueHandler", "api-ms-win-core-errorhandling-l1-1-0"),
     ("GetStringTypeW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringW", "api-ms-win-core-string-l1-1-0"),
     ("CompareStringEx", "api-ms-win-core-string-l1-1-0"),
@@ -380,6 +389,24 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("ReplaceFileW", "api-ms-win-core-file-l1-2-0"),
     ("GetFinalPathNameByHandleW", "api-ms-win-core-file-l2-1-0"),
     ("GetLongPathNameW", "api-ms-win-core-file-l1-1-0"),
+    // The ANSI forms of the environment, version and directory functions (impl-win-apps: the
+    // programs of the app survey call them before anything else).
+    ("GetEnvironmentVariableA", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("SetEnvironmentVariableA", "api-ms-win-core-processenvironment-l1-1-0"),
+    ("GetVersionExA", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetSystemDirectoryA", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetWindowsDirectoryA", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("GetSystemWindowsDirectoryA", "api-ms-win-core-sysinfo-l1-1-0"),
+    ("CreateNamedPipeA", "api-ms-win-core-namedpipe-l1-1-0"),
+    ("FindResourceW", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("FindResourceExW", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("LoadResource", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("LockResource", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("SizeofResource", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("FreeResource", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("EnumResourceNamesW", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("EnumResourceTypesW", "api-ms-win-core-libraryloader-l1-1-0"),
+    ("CopyFileW", "api-ms-win-core-file-l2-1-0"),
     ("GetSystemDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetSystemWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
@@ -435,6 +462,29 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
     ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome stage 2 (impl-chrome-s2; contracts from Learn's "API set" rows).
+    ("SetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("SetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetThreadErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),
+    ("GetCurrentProcessorNumber", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetCurrentProcessorNumberEx", "api-ms-win-core-processthreads-l1-1-1"),
+    ("GetProcessHandleCount", "api-ms-win-core-processthreads-l1-1-0"),
+    // Chrome S3 hunt: scheduling settings and thread times (the browser, its GPU process and
+    // crash handler call them all the time; Learn's "API set" rows).
+    ("SetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetThreadPriorityBoost", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("GetProcessPriorityBoost", "api-ms-win-core-processthreads-l1-1-2"),
+    ("SetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetPriorityClass", "api-ms-win-core-processthreads-l1-1-0"),
+    ("SetThreadInformation", "api-ms-win-core-processthreads-l1-1-3"),
+    ("GetThreadTimes", "api-ms-win-core-processthreads-l1-1-0"),
+    ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
+    ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
+    ("K32GetModuleInformation", "api-ms-win-core-psapi-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -493,6 +543,11 @@ pub const USER32_EXPORTS: &[&str] = &["CharUpperW", "CharPrevExA"];
 /// functions and (second slice) the `lstr*` string functions, whose Learn
 /// pages name no API set.
 pub const KERNEL32_OWN: &[&str] = &[
+    // The global atom table (Learn names no API set for these pages).
+    "GlobalAddAtomW",
+    "GlobalFindAtomW",
+    "GlobalDeleteAtom",
+    "GlobalGetAtomNameW",
     "GlobalAlloc",
     "GlobalFree",
     "GlobalSize",

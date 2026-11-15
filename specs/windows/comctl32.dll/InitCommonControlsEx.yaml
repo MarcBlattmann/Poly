@@ -4,7 +4,7 @@ id: windows/api/comctl32.dll/InitCommonControlsEx
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9974), x64"
   machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
-  observed_by: spec-chrome-win-5
+  observed_by: spec-chrome-win-5, sharpened by spec-win-apps-3
   date: 2026-11-11
 sources: >
   Observations of our own test programs on the machine above, and Chrome's call in a fresh call-site trace of stage 1. Microsoft Learn: "InitCommonControlsEx function (commctrl.h)", "INITCOMMONCONTROLSEX structure", "Common Control Versions". Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
@@ -24,6 +24,8 @@ rules:
   size: "dwSize must be exactly 8: with 0, 4, 7, 9, 12, 16 or 0xFFFFFFFF the call returns FALSE, the last error is not changed, and a correct call afterwards still returns TRUE"
   bits_version_5: "in version 5.82 (what a program without a manifest gets): each of the bits 0x1 to 0x2000 alone returns TRUE, so do mixes of them (0x7FF, 0x3FFF) and dwICC 0 (nothing asked for). ICC_STANDARD_CLASSES (0x4000) and ICC_LINK_CLASS (0x8000) alone, every mask that contains one of them (0xFFFF, 0xFFFFFFFF) and a mask of only undefined bits (0xFFFF0000) return FALSE, without changing the last error"
   last_error: "a successful call leaves leftovers in the last error (1410, ERROR_CLASS_ALREADY_EXISTS, after a call that registers classes a second time); the return value is the result"
+  classes_5_82: "after InitCommonControls (ICC_WIN95_CLASSES) CreateWindowExW makes a control of each of these classes (Unicode windows, class name as given): SysListView32, SysTreeView32, ToolbarWindow32 (style CCS_TOP 1 by default), msctls_statusbar32, SysTabControl32 (WS_CLIPSIBLINGS added), msctls_progress32, msctls_trackbar32, msctls_updown32, ReBarWindow32 (CCS_TOP 1 added), SysHeader32, tooltips_class32 (WS_POPUP | WS_BORDER 0x80800000 added), SysAnimate32, msctls_hotkey32, SysDateTimePick32 (shows today's date), SysMonthCal32, ComboBoxEx32, SysIPAddress32 (text 0.0.0.0), SysPager, NativeFontCtl; SysLink is not available in version 5.82 (error 1407, ERROR_CANNOT_FIND_WND_CLASS); the later bits (ICC_DATE_CLASSES, ICC_USEREX_CLASSES, ICC_COOL_CLASSES, ICC_INTERNET_CLASSES, ICC_PAGESCROLLER_CLASS) are accepted and change nothing for these classes"
+  messages_5_82: "status bar: SB_SETPARTS (3 parts, -1 for the last) returns 1, SB_GETPARTS returns the count and the right edges, SB_SETTEXTW/SB_GETTEXTW per part (length in the low word, type in the high word: SBT_NOBORDERS 0x100 comes back), WM_SETTEXT sets part 0; progress bar: default range 0..100, PBM_SETRANGE32 returns the old range, PBM_SETPOS returns the old position and clamps to the range, PBM_DELTAPOS, PBM_SETSTEP (default step 10, returns the old one), PBM_STEPIT; trackbar: default range 0..100, TBM_SETRANGE, TBM_SETPOS clamps; up-down: UDM_SETRANGE/UDM_GETRANGE, UDM_SETPOS clamps to the range; tab control: TCM_INSERTITEMW returns the index (an index past the end appends), TCM_SETCURSEL returns the old selection, TCM_DELETEITEM, TCM_DELETEALLITEMS (selection -1); list view: LVM_INSERTCOLUMNW, LVM_INSERTITEMW (inserting at 0 pushes the others down), LVM_GETITEMTEXTW, LVM_SETITEMTEXTW for a sub item, LVM_DELETEITEM, LVM_DELETEALLITEMS; tree view: TVM_INSERTITEMW (root and child), TVM_GETCOUNT, TVM_GETNEXTITEM (child, parent, caret), TVM_SELECTITEM, TVM_DELETEITEM (a root takes its children); header, rebar and toolbar start with 0 items; TB_ADDBUTTONSW"
 errors:
   wrong_size: "FALSE; last error unchanged"
   unknown_bits: "FALSE; last error unchanged (version 5.82; see not_covered for version 6)"
@@ -34,8 +36,8 @@ timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2
-  held_out: 1
+  visible: 3
+  held_out: 2
 building_tests: >
   Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes and booleans; no line holds a handle, a pointer, a drive letter, a user name or a time. The tests import comctl32.dll by name and so load the system directory's version 5.82.
 not_covered: >

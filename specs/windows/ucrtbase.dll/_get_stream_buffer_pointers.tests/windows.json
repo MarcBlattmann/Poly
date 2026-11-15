@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "stream_pointers",
+      "exe_sha256": "a0d6496fb5d2f241f4fe7b9f8a6bd59d85e923d74b325cce8008640f822e94bb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9wZW4gZm9yIHdyaXRpbmc6IDEKICBhZnRlciBmd3JpdGUgb2YgMTAgYnl0ZXM6IHJldHVybnMgMCBzbG90cyBhdCAweDggMHgwIDB4MTAgYnVmZmVyIHNldCBwb3NpdGlvbi1pbi1idWZmZXIgMTAgY291bnQgNDA4NiBuZXh0IGJ5dGUgMAogIGFmdGVyIDEwMDAwIGJ5dGVzIGluIGFsbDogcmV0dXJucyAwIHNsb3RzIGF0IDB4OCAweDAgMHgxMCBidWZmZXIgc2V0IHBvc2l0aW9uLWluLWJ1ZmZlciAxNzA4IGNvdW50IDIzODggbmV4dCBieXRlIDAKICBhZnRlciBmZ2V0YzogcmV0dXJucyAwIHNsb3RzIGF0IDB4OCAweDAgMHgxMCBidWZmZXIgc2V0IHBvc2l0aW9uLWluLWJ1ZmZlciAxIGNvdW50IDQwOTUgbmV4dCBieXRlIDEKICB0d28gY2FsbHMgZ2l2ZSB0aGUgc2FtZSBzbG90czogMQogIGFmdGVyIGZzZWVrIHRvIDA6IHJldHVybnMgMCBzbG90cyBhdCAweDggMHgwIDB4MTAgYnVmZmVyIHNldCBwb3NpdGlvbi1pbi1idWZmZXIgMCBjb3VudCAwIG5leHQgYnl0ZSAtMQogIGJlZm9yZSBhIHJlYWQ6IHJldHVybnMgMCBzbG90cyBhdCAweDggMHgwIDB4MTAgYnVmZmVyIHNldCBwb3NpdGlvbi1pbi1idWZmZXIgMCBjb3VudCAwIG5leHQgYnl0ZSAtMQpzZXR2YnVmKF9JT05CRik6IDAKICB0aGUgYnVmZmVyIHN0YXJ0IGlzIGluc2lkZSB0aGUgRklMRSByZWNvcmQ6IDEgYnl0ZSByZWFkIDAKc3RhbmRhcmQgc3RyZWFtIDE6IHJldHVybnMgMApjaGlsZCBudWxsX2Jhc2U6IDB4NjAwMDAwMDAKY2hpbGQgY2xvc2VkOiAweDYwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fopen for writing: 1\n  after fwrite of 10 bytes: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 10 count 4086 next byte 0\n  after 10000 bytes in all: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 1708 count 2388 next byte 0\n  after fgetc: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 1 count 4095 next byte 1\n  two calls give the same slots: 1\n  after fseek to 0: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 0 count 0 next byte -1\n  before a read: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 0 count 0 next byte -1\nsetvbuf(_IONBF): 0\n  the buffer start is inside the FILE record: 1 byte read 0\nstandard stream 1: returns 0\nchild null_base: 0x60000000\nchild closed: 0x60000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 189
+    },
+    {
+      "name": "stream_pointers_b",
+      "exe_sha256": "c4d946a0fffa04e38f8a011f51ea37c29adf4e2959847ee8f36f3c4599d666fa",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d3JpdGUgYnVmZmVyLCBmcmVzaCBzdHJlYW06CiAgYWZ0ZXIgMTAwIGJ5dGVzIGluIGFsbDogcmV0dXJucyAwIHNsb3RzIGF0IDB4OCAweDAgMHgxMCBidWZmZXIgc2V0IHBvc2l0aW9uLWluLWJ1ZmZlciAxMDAgY291bnQgMzk5NiBuZXh0IGJ5dGUgMApyZWFkIGJ1ZmZlciwgZGVmYXVsdCBidWZmZXJpbmc6CiAgZmdldGMgcmV0dXJuZWQgMAogIGFmdGVyIDMwMCBieXRlcyBpbiBhbGw6IHJldHVybnMgMCBzbG90cyBhdCAweDggMHgwIDB4MTAgYnVmZmVyIHNldCBwb3NpdGlvbi1pbi1idWZmZXIgMzAwIGNvdW50IDM3OTYgbmV4dCBieXRlIDQ5CiAgYWZ0ZXIgb25lIG1vcmUgZmdldGM6IHJldHVybnMgMCBzbG90cyBhdCAweDggMHgwIDB4MTAgYnVmZmVyIHNldCBwb3NpdGlvbi1pbi1idWZmZXIgMSBjb3VudCA1MTEgbmV4dCBieXRlIDEKICBhZnRlciBmZ2V0YzogcmV0dXJucyAwIHNsb3RzIGF0IDB4OCAweDAgMHgxMCBidWZmZXIgc2V0IHBvc2l0aW9uLWluLWJ1ZmZlciAxIGNvdW50IDgxOTEgbmV4dCBieXRlIDEKICBiZWZvcmUgYSByZWFkOiByZXR1cm5zIDAgc2xvdHMgYXQgMHg4IDB4MCAweDEwIGJ1ZmZlciBzZXQgcG9zaXRpb24taW4tYnVmZmVyIDAgY291bnQgMCBuZXh0IGJ5dGUgLTEKdGV4dCBtb2RlIGFmdGVyIGZnZXRjOiByZXR1cm5zIDAgc2xvdHMgYXQgMHg4IDB4MCAweDEwIGJ1ZmZlciBzZXQgcG9zaXRpb24taW4tYnVmZmVyIDEgY291bnQgMjUgbmV4dCBieXRlIDEKc3RhbmRhcmQgc3RyZWFtIDI6IHJldHVybnMgMApjaGlsZCBudWxsX3B0cjogMHg2MDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "write buffer, fresh stream:\n  after 100 bytes in all: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 100 count 3996 next byte 0\nread buffer, default buffering:\n  fgetc returned 0\n  after 300 bytes in all: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 300 count 3796 next byte 49\n  after one more fgetc: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 1 count 511 next byte 1\n  after fgetc: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 1 count 8191 next byte 1\n  before a read: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 0 count 0 next byte -1\ntext mode after fgetc: returns 0 slots at 0x8 0x0 0x10 buffer set position-in-buffer 1 count 25 next byte 1\nstandard stream 2: returns 0\nchild null_ptr: 0x60000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 147
+    }
+  ]
+}

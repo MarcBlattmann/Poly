@@ -26,10 +26,11 @@
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
-use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, Model};
+use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, MainSta, Model, coinit_is_valid};
 use poly_com::guid::{GUID_TEXT_LEN, Guid};
 use poly_com::hresult::*;
 use poly_com::hstring::{self, HString, Header};
+use poly_com::propvariant::{self, Elem, Kind};
 use poly_win32_rt as _;
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -43,6 +44,7 @@ unsafe extern "system" {
     fn TlsFree(index: u32) -> i32;
     fn TlsGetValue(index: u32) -> *mut u8;
     fn TlsSetValue(index: u32, value: *mut u8) -> i32;
+    fn GetCurrentThreadId() -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "bcryptprimitives", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -55,6 +57,9 @@ unsafe extern "system" {
 #[cfg_attr(not(target_arch = "x86"), link(name = "oleaut32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SysFreeString(s: *mut u16);
+    fn SysAllocStringByteLen(s: *const u8, len: u32) -> *mut u16;
+    fn SysStringByteLen(s: *const u16) -> u32;
+    fn SafeArrayDestroy(psa: *mut u8) -> u32;
 }
 
 /// `poly-com` links `alloc`: the process heap (16-byte aligned).
@@ -155,6 +160,32 @@ fn set_apartment(a: Apartment) {
     }
 }
 
+/// The process's main STA (`APTTYPE_MAINSTA`): the first thread that made a single-threaded apartment.
+static MAIN_STA: MainSta = MainSta::new();
+
+/// The TLS slot of the thread's message filter (`CoRegisterMessageFilter`).
+static FILTER_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+fn filter_slot() -> Option<u32> {
+    let s = FILTER_SLOT.load(Ordering::Acquire);
+    if s != TLS_OUT_OF_INDEXES {
+        return Some(s);
+    }
+    // SAFETY: kernel32's TLS.
+    let n = unsafe { TlsAlloc() };
+    if n == TLS_OUT_OF_INDEXES {
+        return None;
+    }
+    match FILTER_SLOT.compare_exchange(TLS_OUT_OF_INDEXES, n, Ordering::AcqRel, Ordering::Acquire) {
+        Ok(_) => Some(n),
+        Err(other) => {
+            // SAFETY: the slot just allocated, unused.
+            unsafe { TlsFree(n) };
+            Some(other)
+        }
+    }
+}
+
 /// `CoInitializeEx` / `RoInitialize` / `OleInitialize` on this thread.
 fn initialize(model: Model) -> Hresult {
     if slot().is_none() {
@@ -164,6 +195,10 @@ fn initialize(model: Model) -> Hresult {
     let hr = a.initialize(model);
     if hr >= 0 {
         set_apartment(a);
+        if hr == S_OK && model == Model::Sta {
+            // SAFETY: no arguments.
+            MAIN_STA.claim(unsafe { GetCurrentThreadId() });
+        }
     }
     hr
 }
@@ -172,15 +207,56 @@ fn uninitialize() {
     let mut a = apartment();
     a.uninitialize();
     set_apartment(a);
+    if a.model().is_none() {
+        // SAFETY: no arguments.
+        MAIN_STA.release(unsafe { GetCurrentThreadId() });
+        // The apartment's message filter goes with it.
+        if let Some(f) = filter_slot() {
+            // SAFETY: kernel32's TLS.
+            unsafe {
+                let old = TlsGetValue(f);
+                if !old.is_null() {
+                    TlsSetValue(f, core::ptr::null_mut());
+                    release_unknown(old.cast());
+                }
+            }
+        }
+    }
 }
 
+/// `IUnknown::Release` (vtable slot 2) of a COM object.
+unsafe fn release_unknown(p: *mut c_void) {
+    // SAFETY: the caller's COM object.
+    unsafe {
+        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
+        (*vtbl.add(2))(p);
+    }
+}
+
+/// `IUnknown::AddRef` (vtable slot 1) of a COM object.
+unsafe fn add_ref_unknown(p: *mut c_void) {
+    // SAFETY: the caller's COM object.
+    unsafe {
+        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
+        (*vtbl.add(1))(p);
+    }
+}
+
+/// `CoInitializeEx`: `dwCoInit` may only hold the defined bits and `pvReserved` must be NULL
+/// (`E_INVALIDARG`; the thread stays as it was).
 #[unsafe(no_mangle)]
-pub extern "system" fn CoInitializeEx(_reserved: *mut c_void, co_init: u32) -> Hresult {
+pub extern "system" fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hresult {
+    if !reserved.is_null() || !coinit_is_valid(co_init) {
+        return E_INVALIDARG;
+    }
     initialize(Model::from_coinit(co_init))
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn CoInitialize(_reserved: *mut c_void) -> Hresult {
+pub extern "system" fn CoInitialize(reserved: *mut c_void) -> Hresult {
+    if !reserved.is_null() {
+        return E_INVALIDARG;
+    }
     initialize(Model::Sta)
 }
 
@@ -205,7 +281,9 @@ pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut
     if kind.is_null() || qualifier.is_null() {
         return E_INVALIDARG;
     }
-    match apartment().apartment_type() {
+    // SAFETY: no arguments.
+    let main = MAIN_STA.is_main(unsafe { GetCurrentThreadId() });
+    match apartment().apartment_type_in(main) {
         Some((t, q)) => {
             // SAFETY: the caller's out parameters.
             unsafe {
@@ -237,6 +315,8 @@ pub extern "system" fn RoUninitialize() {
 
 // ----- activation ----------------------------------------------------------------------
 
+use poly_com::apartment::activation_failure as activation_result;
+
 /// `CoGetClassObject`: no class is registered.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoGetClassObject(
@@ -251,23 +331,24 @@ pub unsafe extern "system" fn CoGetClassObject(
     }
     // SAFETY: the caller's out parameter.
     unsafe { *ppv = core::ptr::null_mut() };
-    if apartment().model().is_none() {
-        return CO_E_NOTINITIALIZED;
-    }
-    REGDB_E_CLASSNOTREG
+    activation_result(apartment().model().is_some(), false)
 }
 
 /// `CoCreateInstance`: no class is registered.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstance(
     _clsid: *const Guid,
-    _outer: *mut c_void,
+    outer: *mut c_void,
     _context: u32,
     _iid: *const Guid,
     ppv: *mut *mut c_void,
 ) -> Hresult {
-    // SAFETY: the same checks.
-    unsafe { CoGetClassObject(core::ptr::null(), 0, core::ptr::null_mut(), core::ptr::null(), ppv) }
+    if ppv.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *ppv = core::ptr::null_mut() };
+    activation_result(apartment().model().is_some(), !outer.is_null())
 }
 
 /// `MULTI_QI` (`objidl.h`).
@@ -439,12 +520,30 @@ pub extern "system" fn CoSetProxyBlanket(
     if proxy.is_null() { E_INVALIDARG } else { E_NOINTERFACE }
 }
 
-/// `CoRegisterMessageFilter`: no filter is kept; the previous one is NULL.
+/// `CoRegisterMessageFilter`: only a single-threaded apartment has a message filter
+/// (`CO_E_NOT_SUPPORTED` on a multithreaded thread, `CO_E_NOTINITIALIZED` on one with no apartment).
+/// The thread keeps the new filter (with a reference of its own) and hands the previous one back
+/// (NULL at first); the filter is never called, since no call ever has to be rejected or retried.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoRegisterMessageFilter(_new: *mut c_void, old: *mut *mut c_void) -> Hresult {
-    if !old.is_null() {
-        // SAFETY: the caller's out parameter.
-        unsafe { *old = core::ptr::null_mut() };
+pub unsafe extern "system" fn CoRegisterMessageFilter(new: *mut c_void, old: *mut *mut c_void) -> Hresult {
+    match apartment().model() {
+        None => return CO_E_NOTINITIALIZED,
+        Some(Model::Mta) => return CO_E_NOT_SUPPORTED,
+        Some(Model::Sta) => {}
+    }
+    let Some(f) = filter_slot() else { return E_OUTOFMEMORY };
+    // SAFETY: kernel32's TLS; `new` is a COM object or NULL; the caller's out parameter.
+    unsafe {
+        let previous = TlsGetValue(f).cast::<c_void>();
+        if !new.is_null() {
+            add_ref_unknown(new);
+        }
+        TlsSetValue(f, new.cast());
+        if !old.is_null() {
+            *old = previous;
+        } else if !previous.is_null() {
+            release_unknown(previous);
+        }
     }
     S_OK
 }
@@ -500,7 +599,15 @@ pub unsafe extern "system" fn CLSIDFromString(text: *const u16, clsid: *mut Guid
             unsafe { *clsid = g };
             S_OK
         }
-        None => CO_E_CLASSSTRING,
+        None => {
+            // The sheet: the output is left alone for an empty string and written (partly, by the
+            // parse) for any other malformed text; Poly writes the all-zero id.
+            if !s.is_empty() {
+                // SAFETY: the caller's out parameter.
+                unsafe { *clsid = Guid::default() };
+            }
+            CO_E_CLASSSTRING
+        }
     }
 }
 
@@ -540,14 +647,12 @@ pub unsafe extern "system" fn StringFromGUID2(guid: *const Guid, buf: *mut u16, 
 
 /// `StringFromCLSID` / `StringFromIID`: the text in task memory.
 unsafe fn string_from_guid(guid: *const Guid, out: *mut *mut u16) -> Hresult {
-    if out.is_null() {
-        return E_POINTER;
+    // The sheet: a NULL id or a NULL output is E_INVALIDARG.
+    if out.is_null() || guid.is_null() {
+        return E_INVALIDARG;
     }
     // SAFETY: the caller's out parameter.
     unsafe { *out = core::ptr::null_mut() };
-    if guid.is_null() {
-        return E_INVALIDARG;
-    }
     // SAFETY: task memory for 39 characters, then StringFromGUID2.
     unsafe {
         let p = CoTaskMemAlloc((GUID_TEXT_LEN + 1) * 2).cast::<u16>();
@@ -597,43 +702,316 @@ pub unsafe extern "system" fn CoCreateGuid(out: *mut Guid) -> Hresult {
 
 // ----- PROPVARIANT ---------------------------------------------------------------------
 
-const VT_EMPTY: u16 = 0;
-const VT_BSTR: u16 = 8;
-const VT_DISPATCH: u16 = 9;
-const VT_UNKNOWN: u16 = 13;
-const VT_LPSTR: u16 = 30;
-const VT_LPWSTR: u16 = 31;
-const VT_BLOB: u16 = 65;
-const VT_CLSID: u16 = 72;
-const VT_VECTOR: u16 = 0x1000;
+/// A `PROPVARIANT` is 24 bytes on x64 (`propidl.h`): `vt` at 0, the value at 8 (a pointer, a
+/// number, or `cElems` at 8 and `pElems` at 16; a blob's `cbSize` at 8 and `pBlobData` at 16).
+const PV_SIZE: usize = 24;
 
-/// `PropVariantClear`: frees what the value owns (strings, blobs, vectors'
-/// arrays, interface references) and makes it `VT_EMPTY`.
+unsafe fn pv_ptr(pv: *const u8, at: usize) -> *mut c_void {
+    // SAFETY: the caller's 24-byte variant.
+    unsafe { (pv.add(at) as *const *mut c_void).read_unaligned() }
+}
+
+unsafe fn pv_set_ptr(pv: *mut u8, at: usize, p: *mut c_void) {
+    // SAFETY: the caller's 24-byte variant.
+    unsafe { (pv.add(at) as *mut *mut c_void).write_unaligned(p) }
+}
+
+/// Free what a `CLIPDATA` pointer owns: the data block and the structure (`cbSize` 4, `ulClipFmt` 4,
+/// `pClipData` 8).
+unsafe fn free_clipdata(c: *mut u8) {
+    if !c.is_null() {
+        // SAFETY: a CLIPDATA from CoTaskMemAlloc.
+        unsafe {
+            CoTaskMemFree((c.add(8) as *const *mut c_void).read_unaligned());
+            CoTaskMemFree(c.cast());
+        }
+    }
+}
+
+/// Free what one element of a vector owns (the element is `elem.size()` bytes at `e`).
+unsafe fn free_element(elem: Elem, e: *mut u8) {
+    // SAFETY: an element of the caller's vector.
+    unsafe {
+        match elem {
+            Elem::Plain(_) => {}
+            Elem::Bstr => SysFreeString((e as *const *mut u16).read_unaligned()),
+            Elem::TaskString => CoTaskMemFree((e as *const *mut c_void).read_unaligned()),
+            Elem::Variant => clear_owned(e),
+            Elem::ClipData => CoTaskMemFree((e.add(8) as *const *mut c_void).read_unaligned()),
+        }
+    }
+}
+
+/// Release what a variant of a valid type owns, without changing the variant itself.
+unsafe fn clear_owned(pv: *mut u8) {
+    // SAFETY: a 24-byte PROPVARIANT.
+    unsafe {
+        let vt = (pv as *const u16).read_unaligned();
+        let Some(kind) = propvariant::classify(vt) else { return };
+        let payload = pv_ptr(pv, 8);
+        match kind {
+            Kind::Plain | Kind::ByRef => {}
+            Kind::Bstr => SysFreeString(payload.cast()),
+            Kind::TaskString | Kind::Clsid => CoTaskMemFree(payload),
+            Kind::Blob => CoTaskMemFree(pv_ptr(pv, 16)),
+            Kind::Interface => {
+                if !payload.is_null() {
+                    release_unknown(payload);
+                }
+            }
+            Kind::ClipData => free_clipdata(payload.cast()),
+            Kind::SafeArray => {
+                if !payload.is_null() {
+                    SafeArrayDestroy(payload.cast());
+                }
+            }
+            Kind::Vector(elem) => {
+                let n = (pv.add(8) as *const u32).read_unaligned() as usize;
+                let p = pv_ptr(pv, 16).cast::<u8>();
+                if !p.is_null() {
+                    for i in 0..n {
+                        free_element(elem, p.add(i * elem.size()));
+                    }
+                    CoTaskMemFree(p.cast());
+                }
+            }
+        }
+    }
+}
+
+/// `PropVariantClear`: frees what the value owns (strings, blobs, vectors' elements and array,
+/// interface references, a `SAFEARRAY`) and makes it `VT_EMPTY` with a zero value. A type no
+/// `PROPVARIANT` has is `STG_E_INVALIDPARAMETER`; the sheet's variant is emptied all the same
+/// (type 0, value words 0). NULL is accepted.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn PropVariantClear(pv: *mut u8) -> Hresult {
     if pv.is_null() {
         return S_OK;
     }
-    // SAFETY: a 24-byte PROPVARIANT: `vt` at 0, the union at 8.
+    // SAFETY: a 24-byte PROPVARIANT.
     unsafe {
         let vt = (pv as *const u16).read_unaligned();
-        let payload = (pv.add(8) as *const *mut c_void).read_unaligned();
-        match vt {
-            VT_BSTR => SysFreeString(payload.cast()),
-            VT_LPSTR | VT_LPWSTR | VT_CLSID => CoTaskMemFree(payload),
-            VT_UNKNOWN | VT_DISPATCH if !payload.is_null() => {
-                // vtable[2] of IUnknown is Release.
-                let vtbl = *(payload as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
-                (*vtbl.add(2))(payload);
-            }
-            VT_BLOB => CoTaskMemFree((pv.add(16) as *const *mut c_void).read_unaligned()),
-            v if v & VT_VECTOR != 0 => CoTaskMemFree((pv.add(16) as *const *mut c_void).read_unaligned()),
-            _ => {}
-        }
-        core::ptr::write_bytes(pv, 0, 24);
-        (pv as *mut u16).write_unaligned(VT_EMPTY);
+        let hr = if propvariant::classify(vt).is_some() {
+            clear_owned(pv);
+            S_OK
+        } else {
+            STG_E_INVALIDPARAMETER
+        };
+        core::ptr::write_bytes(pv, 0, PV_SIZE);
+        hr
     }
-    S_OK
+}
+
+/// A copy of `n` bytes in task memory (NULL for no bytes).
+unsafe fn task_dup(src: *const u8, n: usize) -> Result<*mut u8, Hresult> {
+    if src.is_null() || n == 0 {
+        return Ok(core::ptr::null_mut());
+    }
+    // SAFETY: `n` readable bytes at `src`; fresh task memory.
+    unsafe {
+        let p = CoTaskMemAlloc(n).cast::<u8>();
+        if p.is_null() {
+            return Err(E_OUTOFMEMORY);
+        }
+        core::ptr::copy_nonoverlapping(src, p, n);
+        Ok(p)
+    }
+}
+
+/// The length in bytes (without the NUL) of a task string: `wide` for `LPWSTR`.
+unsafe fn task_string_len(p: *const u8, wide: bool) -> usize {
+    let mut n = 0;
+    // SAFETY: a NUL-terminated string.
+    unsafe {
+        if wide {
+            while (p as *const u16).add(n).read_unaligned() != 0 {
+                n += 1;
+            }
+            n * 2
+        } else {
+            while *p.add(n) != 0 {
+                n += 1;
+            }
+            n
+        }
+    }
+}
+
+/// Copy one string slot (`*src` -> `*dst`): a `BSTR` or an `LPSTR` / `LPWSTR`.
+unsafe fn copy_string_slot(elem: Elem, wide: bool, src: *const u8, dst: *mut u8) -> Hresult {
+    // SAFETY: the pointer slots of the caller's variants.
+    unsafe {
+        let s = (src as *const *const u8).read_unaligned();
+        let d: *mut c_void = if s.is_null() {
+            core::ptr::null_mut()
+        } else if elem == Elem::Bstr {
+            let b = SysAllocStringByteLen(s, SysStringByteLen(s.cast()));
+            if b.is_null() {
+                return E_OUTOFMEMORY;
+            }
+            b.cast()
+        } else {
+            let n = task_string_len(s, wide) + if wide { 2 } else { 1 };
+            match task_dup(s, n) {
+                Ok(p) => p.cast(),
+                Err(e) => return e,
+            }
+        };
+        (dst as *mut *mut c_void).write_unaligned(d);
+        S_OK
+    }
+}
+
+/// Copy a variant's owned data: `dst` already holds a bit copy of `src`.
+unsafe fn copy_owned(src: *const u8, dst: *mut u8) -> Hresult {
+    // SAFETY: two 24-byte PROPVARIANTs.
+    unsafe {
+        let vt = (src as *const u16).read_unaligned();
+        let Some(kind) = propvariant::classify(vt) else { return STG_E_INVALIDPARAMETER };
+        let base = vt & !(propvariant::VT_VECTOR | propvariant::VT_ARRAY | propvariant::VT_BYREF);
+        match kind {
+            Kind::Plain | Kind::ByRef => S_OK,
+            Kind::Bstr => copy_string_slot(Elem::Bstr, true, src.add(8), dst.add(8)),
+            Kind::TaskString => {
+                copy_string_slot(Elem::TaskString, base == propvariant::VT_LPWSTR, src.add(8), dst.add(8))
+            }
+            Kind::Clsid => match task_dup(pv_ptr(src, 8).cast(), 16) {
+                Ok(p) => {
+                    pv_set_ptr(dst, 8, p.cast());
+                    S_OK
+                }
+                Err(e) => e,
+            },
+            Kind::Blob => {
+                let n = (src.add(8) as *const u32).read_unaligned() as usize;
+                match task_dup(pv_ptr(src, 16).cast(), n) {
+                    Ok(p) => {
+                        pv_set_ptr(dst, 16, p.cast());
+                        S_OK
+                    }
+                    Err(e) => e,
+                }
+            }
+            Kind::Interface => {
+                let p = pv_ptr(src, 8);
+                if !p.is_null() {
+                    add_ref_unknown(p);
+                }
+                S_OK
+            }
+            Kind::ClipData => match copy_clipdata(pv_ptr(src, 8).cast()) {
+                Ok(p) => {
+                    pv_set_ptr(dst, 8, p.cast());
+                    S_OK
+                }
+                Err(e) => e,
+            },
+            Kind::SafeArray => E_NOTIMPL,
+            Kind::Vector(elem) => {
+                let n = (src.add(8) as *const u32).read_unaligned() as usize;
+                let sp = pv_ptr(src, 16).cast::<u8>();
+                if sp.is_null() || n == 0 {
+                    pv_set_ptr(dst, 16, core::ptr::null_mut());
+                    return S_OK;
+                }
+                let Some(total) = n.checked_mul(elem.size()) else { return E_OUTOFMEMORY };
+                let dp = CoTaskMemAlloc(total).cast::<u8>();
+                if dp.is_null() {
+                    return E_OUTOFMEMORY;
+                }
+                core::ptr::copy_nonoverlapping(sp, dp, total);
+                for i in 0..n {
+                    let (s, d) = (sp.add(i * elem.size()), dp.add(i * elem.size()));
+                    let hr = match elem {
+                        Elem::Plain(_) => S_OK,
+                        Elem::Bstr => copy_string_slot(Elem::Bstr, true, s, d),
+                        Elem::TaskString => copy_string_slot(elem, base == propvariant::VT_LPWSTR, s, d),
+                        Elem::Variant => copy_owned(s, d),
+                        Elem::ClipData => copy_clip_slot(s, d),
+                    };
+                    if hr < 0 {
+                        // Elements before `i` own their copies; the rest are bit copies of the source's:
+                        // empty them so the partial vector can be freed.
+                        for j in i..n {
+                            core::ptr::write_bytes(dp.add(j * elem.size()), 0, elem.size());
+                        }
+                        let mut tmp = [0u8; PV_SIZE];
+                        (tmp.as_mut_ptr() as *mut u16).write_unaligned(vt);
+                        (tmp.as_mut_ptr().add(8) as *mut u32).write_unaligned(n as u32);
+                        pv_set_ptr(tmp.as_mut_ptr(), 16, dp.cast());
+                        clear_owned(tmp.as_mut_ptr());
+                        return hr;
+                    }
+                }
+                pv_set_ptr(dst, 16, dp.cast());
+                S_OK
+            }
+        }
+    }
+}
+
+/// A new `CLIPDATA` (and its data block) copied from `c`, NULL for NULL.
+unsafe fn copy_clipdata(c: *const u8) -> Result<*mut u8, Hresult> {
+    if c.is_null() {
+        return Ok(core::ptr::null_mut());
+    }
+    // SAFETY: a CLIPDATA: size, format, data pointer.
+    unsafe {
+        let n = c.cast::<u32>().read_unaligned() as usize;
+        let d = CoTaskMemAlloc(16).cast::<u8>();
+        if d.is_null() {
+            return Err(E_OUTOFMEMORY);
+        }
+        core::ptr::copy_nonoverlapping(c, d, 16);
+        // `cbSize` counts the format word too (`ulClipFmt` + the data).
+        let data = (c.add(8) as *const *const u8).read_unaligned();
+        let len = n.saturating_sub(4);
+        match task_dup(data, len) {
+            Ok(p) => {
+                (d.add(8) as *mut *mut u8).write_unaligned(p);
+                Ok(d)
+            }
+            Err(e) => {
+                CoTaskMemFree(d.cast());
+                Err(e)
+            }
+        }
+    }
+}
+
+/// One `CLIPDATA` element of a vector (inline structure): its data block is copied.
+unsafe fn copy_clip_slot(s: *const u8, d: *mut u8) -> Hresult {
+    // SAFETY: a CLIPDATA structure inline in a vector.
+    unsafe {
+        let n = s.cast::<u32>().read_unaligned() as usize;
+        let data = (s.add(8) as *const *const u8).read_unaligned();
+        match task_dup(data, n.saturating_sub(4)) {
+            Ok(p) => {
+                (d.add(8) as *mut *mut u8).write_unaligned(p);
+                S_OK
+            }
+            Err(e) => e,
+        }
+    }
+}
+
+/// `PropVariantCopy`: `dst` becomes a deep copy of `src` (what `dst` held before is not cleared).
+/// A type no `PROPVARIANT` has is `STG_E_INVALIDPARAMETER` (and `dst` is left empty); a `SAFEARRAY`
+/// is `E_NOTIMPL` here.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PropVariantCopy(dst: *mut u8, src: *const u8) -> Hresult {
+    if dst.is_null() || src.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: two 24-byte PROPVARIANTs.
+    unsafe {
+        core::ptr::copy(src, dst, PV_SIZE);
+        let hr = copy_owned(src, dst);
+        if hr < 0 {
+            core::ptr::write_bytes(dst, 0, PV_SIZE);
+        }
+        hr
+    }
 }
 
 // ----- HSTRING -------------------------------------------------------------------------
@@ -801,3 +1179,17 @@ pub extern "system" fn ole32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+/// `IsEqualGUID(rguid1, rguid2)`: whether two GUIDs are equal (Learn: `guiddef.h`; the logic is
+/// `poly_kernelbase::apps::guid_eq`). Doc-derived, ADR 0155 addendum, step 10.
+///
+/// # Safety
+/// Both point to 16 readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn IsEqualGUID(a: *const [u8; 16], b: *const [u8; 16]) -> i32 {
+    // SAFETY: the caller's contract.
+    i32::from(poly_kernelbase::apps::guid_eq(unsafe { &*a }, unsafe { &*b }))
+}

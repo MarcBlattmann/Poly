@@ -324,12 +324,20 @@ crate::wire_enum! {
         63 => DefaultIme { tid: u32 },
         /// The minimized position `GetWindowPlacement` reports (`WinInfo::min_x`, `min_y`).
         64 => SetMinPos { hwnd: u32, x: i32, y: i32 },
+        /// The window a top-level window `hwnd` would lie directly after if it were put at `after` (a
+        /// `Handle`, 0: the top): `WINDOWPOS.hwndInsertAfter` as the messages show it.
+        66 => ZReport { hwnd: u32, after: u64 },
+        /// Whether thread `tid` (of any process) owns a window: a `Bool` (GetKeyboardLayout of another thread).
+        65 => ThreadHasWindows { tid: u32 },
         /// `RegisterWindowMessageW`: the message number (0xC000..=0xFFFF) of a
         /// name, the same for every caller of the session and the same
         /// number as a class of that name has as its atom; an `Atom`.
         70 => RegisterMessage { name: Vec<u16> },
         /// A clipboard operation (ADR 0172): a `Clip`.
         100 => Clip { op: crate::clip::ClipOp },
+        /// A window station or desktop operation (ADR 0192): the NT personality answers it
+        /// itself (it makes the handles), the window manager never sees it.
+        120 => Winsta { op: crate::winsta::WinstaOp },
         /// DPI awareness (`awareness` is `guic::AWARE_*`): without `set` a
         /// `Value` with the calling thread's; with `set` for the process an
         /// `Ok` (once) or for the thread a `Value` with the previous one.
@@ -395,6 +403,8 @@ crate::wire_enum! {
         /// of another process that had it before).
         25 => Next { kind: u8, hwnd: u32 },
         100 => Clip { res: crate::clip::ClipRes },
+        /// The answer to `Request::Winsta`.
+        120 => Winsta { res: crate::winsta::WinstaRes },
         105 => Ime { res: crate::ime::ImeRes },
     }
 }

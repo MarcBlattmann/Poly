@@ -73,6 +73,8 @@ fn embed_win32() {
         "secur32.dll",
         "dhcpcsvc.dll",
         "dnsapi.dll",
+        // ADR 0195.
+        "mswsock.dll",
         "dbghelp.dll",
         "b35test.exe",
         // ADR 0170.
@@ -100,16 +102,50 @@ fn embed_win32() {
         "propsys.dll",
         "wevtapi.dll",
         "hid.dll",
+        // ADR 0199.
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
     ] {
         match &dir {
             Some(d) => {
                 let path = d.join(name);
                 println!("cargo:rerun-if-changed={}", path.display());
                 std::fs::copy(&path, out.join(name)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                // ADR 0199: a DLL the user's installer may replace carries Poly's marker, which the
+                // layout looks for (`create::OWN_COPY_MARKER`).
+                if name.starts_with("vcruntime140") {
+                    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                    assert!(
+                        bytes.windows(OWN_COPY_MARKER.len()).any(|w| w == OWN_COPY_MARKER),
+                        "{name} lacks Poly's own-copy marker (ADR 0199)"
+                    );
+                }
             }
             None => std::fs::write(out.join(name), []).expect("write an empty module"),
         }
     }
+    embed_stub_dlls(&out, dir.as_deref());
+}
+
+/// The generated system DLLs (ADR 0155, step 10: `poly-stubs`' `system` module): `xtask` writes them next to
+/// the Win32 modules and lists their file names in `stub-dlls.txt`. The kernel gets one table of
+/// `(file name, bytes)` (`nt::STUB_DLLS`), empty without `xtask`.
+fn embed_stub_dlls(out: &Path, dir: Option<&Path>) {
+    let mut table = String::from("pub static STUB_DLLS: &[(&str, &[u8])] = &[\n");
+    if let Some(d) = dir {
+        let list = d.join("stub-dlls.txt");
+        println!("cargo:rerun-if-changed={}", list.display());
+        for name in std::fs::read_to_string(&list).unwrap_or_default().lines().map(str::trim).filter(|l| !l.is_empty())
+        {
+            let path = d.join(name);
+            println!("cargo:rerun-if-changed={}", path.display());
+            let embedded = format!("stub-{name}");
+            std::fs::copy(&path, out.join(&embedded)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            table.push_str(&format!("    ({name:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/{embedded}\"))),\n"));
+        }
+    }
+    table.push_str("];\n");
+    std::fs::write(out.join("stub_dlls.rs"), table).expect("write stub_dlls.rs");
 }
 
 /// Where `cargo xtask` names the directory with the 32-bit modules (ADR 0186): the i686
@@ -322,3 +358,7 @@ fn check_vdso(b: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// `poly_personality_nt::layout::create::OWN_COPY_MARKER` (ADR 0199), which Poly's own
+/// `vcruntime140*.dll` must contain.
+const OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";

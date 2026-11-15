@@ -183,6 +183,143 @@ pub extern "system" fn DeleteDC(hdc: H) -> i32 {
     i32::from(ok)
 }
 
+/// The display DC `CreateDCW` and `CreateICW` make (CreateDCW.yaml): the whole screen.
+unsafe fn create_device_dc(driver: *const u16, device: *const u16) -> H {
+    // SAFETY: NUL-terminated strings or NULL.
+    let (d, v) = unsafe { (wide(driver, -1), wide(device, -1)) };
+    match poly_gdi::device::open_display(
+        (!driver.is_null()).then_some(d.as_slice()),
+        (!device.is_null()).then_some(v.as_slice()),
+    ) {
+        Ok(()) => {
+            let size = display_size();
+            gdi(|g| {
+                if let Some((width, height)) = size {
+                    g.screen = poly_gdi::gdi::Screen { width, height };
+                }
+                let dc = g.create_device_dc();
+                let s = g.screen;
+                g.set_display_geometry(dc as u64, (0, 0), &[Rect::new(0, 0, s.width, s.height)], &[]);
+                dc as H
+            })
+        }
+        Err(code) => {
+            if let Some(e) = code {
+                set_last_error(e);
+            }
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateDCW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
+    // SAFETY: as `create_device_dc`.
+    unsafe { create_device_dc(driver, device) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateICW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
+    // SAFETY: as `create_device_dc`.
+    unsafe { create_device_dc(driver, device) }
+}
+
+/// `GetDCOrgEx`: the DC's origin on the screen.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDCOrgEx(hdc: H, pt: *mut i32) -> i32 {
+    let Some((x, y)) = gdi(|g| g.is_dc(hdc as u64).then(|| g.display_origin(hdc as u64).unwrap_or((0, 0)))) else {
+        return 0;
+    };
+    if !pt.is_null() {
+        // SAFETY: the caller's POINT.
+        unsafe {
+            *pt = x;
+            *pt.add(1) = y;
+        }
+    }
+    1
+}
+
+/// `GetROP2`: no `SetROP2` yet, so every DC draws with R2_COPYPEN (13).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetROP2(hdc: H) -> i32 {
+    if gdi(|g| g.is_dc(hdc as u64)) {
+        13
+    } else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        0
+    }
+}
+
+/// `GetMapMode`: no `SetMapMode` yet, so every DC is MM_TEXT (1).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetMapMode(hdc: H) -> i32 {
+    if gdi(|g| g.is_dc(hdc as u64)) {
+        1
+    } else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        0
+    }
+}
+
+/// The DCs `GetICMProfileW` has answered and whether any call was the first of the process
+/// (GetICMProfileW.yaml `basic`: the first success of a DC clears the last error, the first of all
+/// leaves 2012).
+static ICM_SEEN: SpinLock<(bool, Vec<u64>)> = SpinLock::new((false, Vec::new()));
+
+/// `GetICMProfileW`: the colour profile of a DC of the display.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetICMProfileW(hdc: H, size: *mut u32, name: *mut u16) -> i32 {
+    const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const ERROR_ICM_COLORSPACE: u32 = 2012;
+    if size.is_null() || !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's size.
+    let size_in = unsafe { *size };
+    match poly_gdi::device::icm_profile(size_in, !name.is_null()) {
+        poly_gdi::device::IcmAnswer::TooSmall(need) => {
+            // SAFETY: the caller's size.
+            unsafe { *size = need };
+            set_last_error(ERROR_INSUFFICIENT_BUFFER);
+            0
+        }
+        poly_gdi::device::IcmAnswer::Path(path) => {
+            // SAFETY: the buffer holds `size_in` characters, at least `path.len()`.
+            unsafe {
+                core::ptr::copy_nonoverlapping(path.as_ptr(), name, path.len());
+                *size = path.len() as u32;
+            }
+            let (first_ever, first_of_dc) = ICM_SEEN.with(|s| {
+                let fresh = !s.1.contains(&(hdc as u64));
+                if fresh {
+                    s.1.push(hdc as u64);
+                }
+                let first = !s.0;
+                s.0 = true;
+                (first, fresh)
+            });
+            if first_ever {
+                set_last_error(ERROR_ICM_COLORSPACE);
+            } else if first_of_dc {
+                set_last_error(0);
+            }
+            1
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn DeleteObject(h: H) -> i32 {
     let (ok, freed) = gdi(|g| {
@@ -775,7 +912,10 @@ pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
         g.device_caps(hdc as u64, index)
     });
     caps.unwrap_or_else(|| {
-        set_last_error(ERROR_INVALID_HANDLE);
+        // A deleted DC still answers GetObjectType with OBJ_DC: ERROR_INVALID_PARAMETER for it
+        // (GetDeviceCaps.yaml `invalid_dc`), ERROR_INVALID_HANDLE for what is no DC.
+        let deleted = gdi(|g| g.object_type(hdc as u64)) == 3;
+        set_last_error(if deleted { ERROR_INVALID_PARAMETER } else { ERROR_INVALID_HANDLE });
         0
     })
 }
@@ -1909,3 +2049,6 @@ pub extern "system" fn gdi32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

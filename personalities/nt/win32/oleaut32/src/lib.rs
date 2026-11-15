@@ -668,3 +668,6 @@ pub unsafe extern "system" fn SafeArrayGetVartype(psa: *const u8, vt: *mut u16) 
 pub extern "system" fn oleaut32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

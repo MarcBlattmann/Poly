@@ -68,7 +68,15 @@ pub fn encode(d: &Duplicate) -> [u8; PROTOCOL_INFO_SIZE] {
     b[TYPE_AT..TYPE_AT + 4].copy_from_slice(&d.ty.to_le_bytes());
     b[PROTOCOL_AT..PROTOCOL_AT + 4].copy_from_slice(&d.protocol.to_le_bytes());
     b[RESERVED_AT..RESERVED_AT + 4].copy_from_slice(&1u32.to_le_bytes());
-    let name = b"Poly AFD";
+    // The service flags and the catalog name of the protocol, as Windows' own records have them
+    // (what the spec sheet of `WSADuplicateSocketW` observed): programs show or compare them.
+    let (flags, name): (u32, &[u8]) = match (d.family == crate::consts::AF_INET6, d.ty == crate::consts::SOCK_DGRAM) {
+        (false, false) => (0x20066, b"MSAFD Tcpip [TCP/IP]"),
+        (false, true) => (0x20609, b"MSAFD Tcpip [UDP/IP]"),
+        (true, false) => (0x20066, b"MSAFD Tcpip [TCP/IPv6]"),
+        (true, true) => (0x20609, b"MSAFD Tcpip [UDP/IPv6]"),
+    };
+    b[0..4].copy_from_slice(&flags.to_le_bytes());
     for (i, c) in name.iter().enumerate() {
         b[PROTOCOL_NAME_AT + 2 * i] = *c;
     }
@@ -106,6 +114,10 @@ mod tests {
         assert_eq!(i32::from_le_bytes(b[80..84].try_into().unwrap()), 16);
         let d6 = Duplicate { handle: 8, family: 23, ty: 2, protocol: 17 };
         assert_eq!(i32::from_le_bytes(encode(&d6)[80..84].try_into().unwrap()), 28);
+        // Windows' service flags and protocol names.
+        assert_eq!(u32::from_le_bytes(b[0..4].try_into().unwrap()), 0x20066);
+        assert_eq!(u32::from_le_bytes(encode(&d6)[0..4].try_into().unwrap()), 0x20609);
+        assert_eq!(&encode(&d6)[116..120], &[b'M', 0, b'S', 0]);
     }
 
     #[test]

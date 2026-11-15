@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "138f0876d79e",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:26:08Z",
+  "tests": [
+    {
+      "name": "apc_basic",
+      "exe_sha256": "f704d49ad39fd77b2f87877a25131fa4e2deac38ca9161c3b9279895901943e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UXVldWVVc2VyQVBDIHRvIHRoZSBwc2V1ZG8taGFuZGxlIG9mIHRoaXMgdGhyZWFkOiAxIGVycm9yIHVuY2hhbmdlZAogIGFmdGVyIGEgbm9uLWFsZXJ0YWJsZSB3YWl0ICh0aW1lb3V0IDUwIG1zKTogcmFuIDAgcmV0dXJuZWQgMjU4CnRocmVlIHF1ZXVlZCwgb25lIFNsZWVwRXgoMCwgVFJVRSk6IHJldHVybmVkIDE5MiBvcmRlciAweDEgMHgyIDB4MyAKICByYW4gd2hpbGUgdGhhdCB0aHJlYWQgc2xlZXBzIHdpdGhvdXQgYWxlcnRpbmc6IDAKICBhZnRlciB0aGUgdGhyZWFkIHdlbnQgYWxlcnRhYmxlOiByZXR1cm5lZCAxIHJvdXRpbmVzIHJ1biAyIG9uIHRoYXQgdGhyZWFkIDIgb3JkZXIgMHgyMSAweDIzIApOVUxMIGhhbmRsZTogMCBlcnJvciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "QueueUserAPC to the pseudo-handle of this thread: 1 error unchanged\n  after a non-alertable wait (timeout 50 ms): ran 0 returned 258\nthree queued, one SleepEx(0, TRUE): returned 192 order 0x1 0x2 0x3 \n  ran while that thread sleeps without alerting: 0\n  after the thread went alertable: returned 1 routines run 2 on that thread 2 order 0x21 0x23 \nNULL handle: 0 error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 464
+    },
+    {
+      "name": "apc_basic_c",
+      "exe_sha256": "431f6e79eee64c9b8fc02e91afe21c967a0558ee20a20717993a21f04f69f164",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBhZnRlciBhIG5vbi1hbGVydGFibGUgU2xlZXBFeCgwKTogcmFuIDAgcmV0dXJuZWQgMAogIGEgc2Vjb25kIGFsZXJ0YWJsZSBzbGVlcDogcmV0dXJuZWQgMCByYW4gMQpRdWV1ZVVzZXJBUEMgdG8gYW5vdGhlciB0aHJlYWQ6IDEgZXJyb3IgdW5jaGFuZ2VkCiAgd2l0aCBhIFRIUkVBRF9TRVRfQ09OVEVYVCBoYW5kbGU6IDEgZXJyb3IgdW5jaGFuZ2VkCmFmdGVyIHRoZSB0aHJlYWQgZW5kZWQ6IDAgZXJyb3IgMzEKdGhlIHByb2Nlc3MgcHNldWRvLWhhbmRsZTogMCBlcnJvciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  after a non-alertable SleepEx(0): ran 0 returned 0\n  a second alertable sleep: returned 0 ran 1\nQueueUserAPC to another thread: 1 error unchanged\n  with a THREAD_SET_CONTEXT handle: 1 error unchanged\nafter the thread ended: 0 error 31\nthe process pseudo-handle: 0 error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 479
+    }
+  ]
+}

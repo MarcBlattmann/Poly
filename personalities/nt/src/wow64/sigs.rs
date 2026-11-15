@@ -80,6 +80,8 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::MapViewOfSection, &[H, H, OS, V, V, P, OS, V, V, V]),
     (Service::UnmapViewOfSection, &[H, V]),
     (Service::FlushVirtualMemory, &[H, OS, OS, IO]),
+    (Service::ReadVirtualMemory, &[H, V, P, V, OS]),
+    (Service::WriteVirtualMemory, &[H, V, P, V, OS]),
     (Service::TerminateProcess, &[H, V]),
     (Service::TerminateThread, &[H, V]),
     (Service::CreateThreadEx, &[OH, V, OA, H, V, V, V, V, V, V, X]),
@@ -128,6 +130,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::RaiseException, &[ER, CX, V]),
     (Service::Continue, &[CX, V]),
     (Service::QuerySystemTime, &[P]),
+    (Service::AllocateLocallyUniqueId, &[P]),
     (Service::QueryPerformanceCounter, &[P, P]),
     (Service::QuerySystemInformation, &[V, P, V, P]),
     (Service::DeviceIoControlFile, &[H, H, V, V, IO, V, P, V, P, V]),
@@ -166,6 +169,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::UnmapViewOfSectionEx, &[H, V, V]),
     (Service::SuspendProcess, &[H]),
     (Service::ResumeProcess, &[H]),
+    (Service::GetCurrentProcessorNumber, &[]),
 ];
 
 /// The 32-bit signature of `service`, if it has one.

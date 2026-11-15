@@ -113,7 +113,8 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the `wintrace` boot group; ADR 0114: all 15 steps without a divergence, `TRACE_REQUIRED`, a required check)
 - [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
-- [ ] Fallback if needed: our own `vcruntime140` (and `msvcp140` subsets) per ADR 0055
+- [x] Our own `vcruntime140` and `vcruntime140_1` (ADR 0199, taking up ADR 0055's fallback; FH4 and RTTI wait for spec sheets)
+- [ ] Our own `msvcp140` and siblings, in the order of the names apps import (ADR 0199)
 
 ## Phase 6: Graphics, input, audio and the desktop
 
@@ -165,7 +166,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] A preinstalled browser (Chromium) downloads and installs Linux and Windows apps, which then appear in the launcher
 - [ ] What Linux package formats need from the kernel: squashfs, loop devices, `/dev/fuse`, overlayfs, user/mount/PID/network namespaces with `pivot_root` and `setns`, seccomp filters (ADR 0132)
 - [ ] One installer for every Linux package format, as on macOS or Windows: opening a downloaded package shows what it is and installs it with one click; it appears in the launcher, updates through its own channel and uninstalls from the launcher or Settings (ADR 0132)
-- [ ] AppImages install and run, without FUSE (Poly mounts their squashfs) (ADR 0132)
+- [x] ⚖️ Decided (owner, 2026-11-15): no FUSE-free path for AppImages; they install and run through FUSE as on Linux (PR #221, ADR 0132)
 - [x] An installed Linux app uninstalls from Files' Applications (a confirmation window, Debian's own `apt-get remove` and `autoremove`; Poly's own apps and the base root stay) and an AppImage installs from a double click (run or install, read without running it, in the launcher and Applications, uninstalled again), started the runtime's normal way from its FUSE mount (extracting only where there is no FUSE) (ADR 0180)
 - [x] ⚖️ Decided (owner, ADR 0132): `.deb` installs go into Debian stable or Ubuntu LTS bases (chosen from the package's dependencies), `.rpm` into a Fedora base
 - [x] `.deb` packages install with their dependencies and maintainer scripts (the distribution's own `apt` and `dpkg` in a shared base root) (ADR 0132; ADR 0173: the Debian base, which is the desktop's root disk; a downloaded package opened from Chromium or Files, Poly's installer, the app in the launcher)

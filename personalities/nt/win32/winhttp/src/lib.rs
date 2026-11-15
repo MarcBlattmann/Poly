@@ -388,4 +388,54 @@ pub unsafe extern "system" fn WinHttpGetIEProxyConfigForCurrentUser(config: *mut
     TRUE
 }
 
+/// `WinHttpGetProxyForUrl(hSession, lpcwszUrl, pAutoProxyOptions, pProxyInfo)`: the arguments are
+/// checked as Windows does (the session handle, the URL, the options: `WINHTTP_AUTOPROXY_OPTIONS`
+/// x64, `dwFlags` at 0, `dwAutoDetectFlags` 4, `lpszAutoConfigUrl` 8; a flag from `winhttp.h`
+/// `WINHTTP_AUTOPROXY_AUTO_DETECT` 1 or `_CONFIG_URL` 2 is needed, auto-detection needs a detect
+/// flag, a script URL needs its URL). Poly has neither WPAD nor a script engine: a valid request
+/// fails with `ERROR_WINHTTP_AUTODETECTION_FAILED` (or `ERROR_WINHTTP_UNABLE_TO_DOWNLOAD_SCRIPT`
+/// when a script URL was given), which callers treat as "use a direct connection".
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpGetProxyForUrl(
+    session: Handle,
+    url: *const u16,
+    options: *const u8,
+    info: *mut u8,
+) -> i32 {
+    const AUTO_DETECT: u32 = 1;
+    const CONFIG_URL: u32 = 2;
+    const ERROR_AUTODETECTION_FAILED: u32 = 12180;
+    const ERROR_UNABLE_TO_DOWNLOAD_SCRIPT: u32 = 12167;
+    if let Err(e) = inet::with_object(session, |o| inet::session_of(o).map(|_| ())) {
+        return fail(e);
+    }
+    if url.is_null() || options.is_null() || info.is_null() {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: the caller's options structure.
+    let (flags, detect, script) = unsafe {
+        (
+            options.cast::<u32>().read_unaligned(),
+            options.add(4).cast::<u32>().read_unaligned(),
+            options.add(8).cast::<*const u16>().read_unaligned(),
+        )
+    };
+    if flags & (AUTO_DETECT | CONFIG_URL) == 0
+        || (flags & AUTO_DETECT != 0 && detect == 0)
+        || (flags & CONFIG_URL != 0 && script.is_null())
+    {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    // SAFETY: the caller's string.
+    let text = unsafe { inet::wstr(url) }.unwrap_or_default();
+    let units: Vec<u16> = text.encode_utf16().collect();
+    if poly_http::url::crack(&units).is_err() {
+        return fail(ERROR_UNRECOGNIZED_SCHEME);
+    }
+    fail(if flags & CONFIG_URL != 0 { ERROR_UNABLE_TO_DOWNLOAD_SCRIPT } else { ERROR_AUTODETECTION_FAILED })
+}
+
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

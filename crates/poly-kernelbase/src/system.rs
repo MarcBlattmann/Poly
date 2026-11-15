@@ -167,7 +167,43 @@ pub fn active_processor_count(group: u16, cpus: u32) -> Result<u32, u32> {
 /// The `LOAD_LIBRARY_SEARCH_*` flags `SetDefaultDllDirectories` takes
 /// (`libloaderapi.h`): `APPLICATION_DIR`, `USER_DIRS`, `SYSTEM32`,
 /// `DEFAULT_DIRS`.
-pub const DEFAULT_DLL_DIRECTORY_FLAGS: u32 = 0x0200 | 0x0400 | 0x0800 | 0x1000;
+pub const DEFAULT_DLL_DIRECTORY_FLAGS: u32 = 0x0200 | 0x0400 | 0x0800 | 0x1000 | 0x2000;
+
+/// `LOAD_LIBRARY_SEARCH_*` (`libloaderapi.h`).
+pub const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0100;
+pub const LOAD_LIBRARY_SEARCH_APPLICATION_DIR: u32 = 0x0200;
+pub const LOAD_LIBRARY_SEARCH_USER_DIRS: u32 = 0x0400;
+pub const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 0x0800;
+pub const LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: u32 = 0x1000;
+/// Every search flag; a load whose flags (or the process's default directories) hold one of
+/// these searches only what they name.
+pub const LOAD_LIBRARY_SEARCH_MASK: u32 = 0x1F00;
+
+/// The directories a name without a path is looked for in when the search flags are `flags`
+/// (Learn, "LoadLibraryEx", "SetDefaultDllDirectories"), in Learn's order: the application's
+/// directory, the directories `AddDllDirectory` added (Poly has none), the system directory.
+/// `DEFAULT_DIRS` is all three. `None` when `flags` holds no search flag: the standard search
+/// order applies. (`DLL_LOAD_DIR` names the directory of a full path: for a name without a path
+/// it adds nothing.)
+pub fn dll_search_dirs(flags: u32, app: &[u16], system32: &[u16]) -> Option<alloc::vec::Vec<alloc::vec::Vec<u16>>> {
+    if flags & LOAD_LIBRARY_SEARCH_MASK == 0 {
+        return None;
+    }
+    let mut out = alloc::vec::Vec::new();
+    if flags & (LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) != 0 {
+        out.push(app.to_vec());
+    }
+    if flags & (LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS) != 0 {
+        out.push(system32.to_vec());
+    }
+    Some(out)
+}
+
+/// The flags a load searches by: the call's own search flags when it has any, else the process's
+/// default directories (`SetDefaultDllDirectories`), 0 for neither.
+pub fn effective_search_flags(call_flags: u32, process_default: u32) -> u32 {
+    if call_flags & LOAD_LIBRARY_SEARCH_MASK != 0 { call_flags } else { process_default }
+}
 
 /// Whether `flags` is a valid `SetDefaultDllDirectories` argument: Learn's
 /// table lists those four values, "any combination" of them; Poly takes
@@ -181,6 +217,7 @@ pub fn valid_default_dll_directories(flags: u32) -> bool {
 mod tests {
     use super::*;
     extern crate std;
+    use alloc::vec;
 
     #[test]
     fn processor_groups_and_dll_directories() {
@@ -193,6 +230,32 @@ mod tests {
         assert!(valid_default_dll_directories(0x0200 | 0x0400 | 0x0800));
         assert!(!valid_default_dll_directories(0));
         assert!(!valid_default_dll_directories(0x0100), "LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR is LoadLibraryEx's only");
+        // The sheet: 0x2000 (LOAD_LIBRARY_SAFE_CURRENT_DIRS) is accepted; 0x1, SYSTEM32|0x1, all ones are not.
+        assert!(valid_default_dll_directories(0x2000));
+        assert!(!valid_default_dll_directories(0x1));
+        assert!(!valid_default_dll_directories(0x0800 | 0x1));
+        assert!(!valid_default_dll_directories(0xFFFF_FFFF));
+    }
+
+    #[test]
+    fn search_flags_narrow_the_directories() {
+        let app = [b'A' as u16];
+        let sys = [b'S' as u16];
+        // No flag: the standard order.
+        assert_eq!(dll_search_dirs(0, &app, &sys), None);
+        assert_eq!(dll_search_dirs(0x2000, &app, &sys), None);
+        // System directory only: the copy next to the program is not found (the sheet).
+        assert_eq!(dll_search_dirs(0x0800, &app, &sys), Some(vec![sys.to_vec()]));
+        assert_eq!(dll_search_dirs(0x0200 | 0x0400 | 0x0800, &app, &sys), Some(vec![app.to_vec(), sys.to_vec()]));
+        assert_eq!(dll_search_dirs(0x0200, &app, &sys), Some(vec![app.to_vec()]));
+        assert_eq!(dll_search_dirs(0x1000, &app, &sys), Some(vec![app.to_vec(), sys.to_vec()]));
+        // Only the user directories, of which Poly has none.
+        assert_eq!(dll_search_dirs(0x0400, &app, &sys), Some(vec![]));
+        // The call's flags win over the process's defaults.
+        assert_eq!(effective_search_flags(0, 0x0800), 0x0800);
+        assert_eq!(effective_search_flags(0x0200, 0x0800), 0x0200);
+        assert_eq!(effective_search_flags(0x0008, 0x0800), 0x0800);
+        assert_eq!(effective_search_flags(0, 0), 0);
     }
 
     #[test]

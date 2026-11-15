@@ -115,6 +115,58 @@ pub fn interface_info_call(ifs: &[IfInfo], capacity: u32) -> Result<Vec<u8>, (u3
     Ok(b)
 }
 
+/// `FIXED_INFO` (`FIXED_INFO_W2KSP1`, `iptypes.h`, x64): HostName[132] 0,
+/// DomainName[132] 132, CurrentDnsServer 264, DnsServerList (an
+/// `IP_ADDR_STRING`) 272, NodeType 320, ScopeId[260] 324, EnableRouting 584,
+/// EnableProxy 588, EnableDns 592; 600 bytes. More DNS servers follow it as
+/// `IP_ADDR_STRING`s linked from `DnsServerList.Next`.
+pub const FIXED_INFO_SIZE: usize = 600;
+/// `BROADCAST_NODETYPE` (`iptypes.h`): Poly has no WINS server.
+pub const BROADCAST_NODETYPE: u32 = 1;
+
+/// `GetNetworkParams`' `FIXED_INFO` for a buffer at `base`: the host name
+/// (no domain), the DNS servers of the Ethernet adapters (each once, in
+/// order), DNS on, no routing or ARP proxy. `CurrentDnsServer` is reserved
+/// (Learn) and stays NULL.
+pub fn network_params(host: &str, ifs: &[IfInfo], base: u64) -> Vec<u8> {
+    let mut servers: Vec<[u8; 4]> = Vec::new();
+    for d in adapters(ifs).iter().flat_map(|f| f.dns.iter()) {
+        if !servers.contains(d) {
+            servers.push(*d);
+        }
+    }
+    let mut o = Out::new(base);
+    let f = o.alloc(FIXED_INFO_SIZE);
+    o.put_bytes(f, &host.as_bytes()[..host.len().min(131)]);
+    o.put_u32(f + 320, BROADCAST_NODETYPE);
+    o.put_u32(f + 592, 1);
+    let mut prev = f + 272;
+    for (i, s) in servers.iter().enumerate() {
+        let at = if i == 0 {
+            f + 272
+        } else {
+            let at = o.alloc(ADDR_STRING_SIZE);
+            let ptr = o.ptr(at);
+            o.put_u64(prev, ptr);
+            at
+        };
+        o.put_bytes(at + 8, dotted(*s).as_bytes());
+        prev = at;
+    }
+    o.buf
+}
+
+/// `GetNetworkParams`' whole call: `capacity` is `*pOutBufLen` (0 for a
+/// NULL `pFixedInfo`); `Err((ERROR_BUFFER_OVERFLOW, size))` for a short
+/// buffer (Learn).
+pub fn network_params_call(host: &str, ifs: &[IfInfo], base: u64, capacity: u32) -> Result<Vec<u8>, (u32, u32)> {
+    let need = network_params(host, ifs, 0).len();
+    if (capacity as usize) < need {
+        return Err((ERROR_BUFFER_OVERFLOW, need as u32));
+    }
+    Ok(network_params(host, ifs, base))
+}
+
 /// `if_indextoname`: the interface's name as Windows spells it
 /// (`ethernet_<n>`, `loopback_0`), or `None` for an unknown index.
 pub fn index_to_name(ifs: &[IfInfo], index: u32) -> Option<String> {
@@ -168,6 +220,35 @@ const _: u32 = NO_ERROR;
 mod tests {
     use super::*;
     use crate::testing::*;
+
+    #[test]
+    fn network_params_has_the_host_and_each_dns_server_once() {
+        let ifs = [IfInfo::loopback(), eth()];
+        let b = network_params("poly", &ifs, 0x5000);
+        assert_eq!(b.len(), FIXED_INFO_SIZE);
+        assert_eq!(ansi_at(&b, 0), "poly");
+        assert_eq!(ansi_at(&b, 132), "");
+        assert_eq!(u64_at(&b, 264), 0);
+        assert_eq!((u64_at(&b, 272), ansi_at(&b, 280)), (0, String::from("10.0.2.3")));
+        assert_eq!((u32_at(&b, 320), u32_at(&b, 584), u32_at(&b, 588), u32_at(&b, 592)), (1, 0, 0, 1));
+        // Two servers: the second one follows the structure, linked.
+        let mut two = eth();
+        two.dns.push([1, 1, 1, 1]);
+        let mut again = eth();
+        again.index = 3;
+        let b = network_params("poly", &[two, again], 0x5000);
+        assert_eq!(b.len(), FIXED_INFO_SIZE + ADDR_STRING_SIZE);
+        assert_eq!(u64_at(&b, 272), 0x5000 + FIXED_INFO_SIZE as u64);
+        assert_eq!(ansi_at(&b, FIXED_INFO_SIZE + 8), "1.1.1.1");
+        assert_eq!(u64_at(&b, FIXED_INFO_SIZE), 0);
+        // A short buffer (or none) says how much is needed.
+        assert_eq!(network_params_call("poly", &ifs, 0, 0), Err((ERROR_BUFFER_OVERFLOW, 600)));
+        assert_eq!(network_params_call("poly", &ifs, 0x5000, 599), Err((ERROR_BUFFER_OVERFLOW, 600)));
+        assert!(network_params_call("poly", &ifs, 0x5000, 600).is_ok());
+        // No adapter: the host name and no server.
+        let b = network_params("poly", &[IfInfo::loopback()], 0);
+        assert_eq!(ansi_at(&b, 280), "");
+    }
 
     #[test]
     fn adapter_info_lists_the_ethernet_adapter_only() {

@@ -29,6 +29,15 @@ pub const TABLE: &[(&str, Option<&str>)] = &[
     // `CallNtPowerInformation` and the power-setting functions by contract (powrprof.dll on
     // Windows too; ADR 0155, step 9).
     ("api-ms-win-power-", Some("powrprof.dll")),
+    // The contracts the Windows applications import (ADR 0155, step 10): the user-interface, shell, app-model and
+    // Windows Runtime ones are hosted by the DLL of ours that has the functions; the `ext-` ones stay absent
+    // (programs probe them and fall back).
+    ("api-ms-win-ntuser-", Some("user32.dll")),
+    ("api-ms-win-rtcore-ntuser-", Some("user32.dll")),
+    ("api-ms-win-shcore-", Some("shcore.dll")),
+    ("api-ms-win-shell-", Some("shell32.dll")),
+    ("api-ms-win-appmodel-", Some("kernelbase.dll")),
+    ("api-ms-win-ro-", Some("ole32.dll")),
     ("api-ms-win-core-", Some("kernelbase.dll")),
     ("api-ms-win-security-", Some("advapi32.dll")),
     ("api-ms-win-eventing-", Some("advapi32.dll")),
@@ -118,6 +127,11 @@ mod tests {
         assert_eq!(resolve(&w("api-ms-win-power-base-l1-1-0.dll")), ApiSet::Host("powrprof.dll"));
         assert_eq!(resolve(&w("api-ms-win-power-setting-l1-1-0.dll")), ApiSet::Host("powrprof.dll"));
         assert_eq!(resolve(&w("api-ms-win-core-realtime-l1-1-1.dll")), ApiSet::Host("kernelbase.dll"));
+        assert_eq!(resolve(&w("api-ms-win-ntuser-sysparams-l1-1-0.dll")), ApiSet::Host("user32.dll"));
+        assert_eq!(resolve(&w("api-ms-win-shcore-obsolete-l1-1-0.dll")), ApiSet::Host("shcore.dll"));
+        assert_eq!(resolve(&w("api-ms-win-shell-namespace-l1-1-0.dll")), ApiSet::Host("shell32.dll"));
+        assert_eq!(resolve(&w("api-ms-win-appmodel-runtime-l1-1-1.dll")), ApiSet::Host("kernelbase.dll"));
+        assert_eq!(resolve(&w("api-ms-win-ro-typeresolution-l1-1-0.dll")), ApiSet::Host("ole32.dll"));
         assert_eq!(resolve(&w("ext-ms-win-ntuser-window-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("api-ms-win-unknown-l1-1-0.dll")), ApiSet::Absent);
         assert_eq!(resolve(&w("kernel32.dll")), ApiSet::NotApiSet);
