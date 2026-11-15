@@ -6,8 +6,22 @@
 //! of a name, so the ordinal wins over the one rustc passes.
 
 fn main() {
+    // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
+    for ordinal in APPS_ORDINALS {
+        println!("cargo:rustc-link-arg=/EXPORT:ord_{ordinal},@{ordinal}");
+    }
+    // END generated
     println!("cargo:rustc-link-arg=/ENTRY:shlwapi_main");
     for (name, ordinal) in [("SHCreateMemStream", 12), ("QISearch", 219), ("IsOS", 437)] {
         println!("cargo:rustc-link-arg=/EXPORT:{name},@{ordinal}");
     }
 }
+
+// BEGIN generated consts
+#[rustfmt::skip]
+const APPS_ORDINALS: &[u32] = &[
+    2,
+    176,
+    213,
+];
+// END generated consts

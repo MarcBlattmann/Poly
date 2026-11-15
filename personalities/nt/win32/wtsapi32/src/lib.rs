@@ -186,3 +186,5 @@ pub unsafe extern "system" fn WTSFreeMemory(memory: *mut u8) {
 pub extern "system" fn wtsapi32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

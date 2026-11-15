@@ -57,6 +57,11 @@ fn main() {
     assert!(seen.iter().any(|n| n == "PolyResumeApc"), "no PolyResumeApc service found");
     // The diagnostics service is exported for Poly's own stub DLLs (ADR 0155).
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
+    // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
+    // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
+    for name in ["memcpy", "memmove", "memset", "memcmp"] {
+        println!("cargo:rustc-link-arg=/EXPORT:{name}");
+    }
     // RtlCaptureContext is assembly too (ADR 0087).
     let exports = ["/EXPORT:LdrInitializeThunk", "/EXPORT:KiUserApcDispatcher", "/EXPORT:RtlCaptureContext"];
     for link in ["/NOENTRY", "/BASE:0x7FF000000000"].into_iter().chain(exports) {

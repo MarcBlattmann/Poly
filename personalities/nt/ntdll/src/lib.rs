@@ -149,3 +149,5 @@ fn run_callouts(callouts: &[Callout]) -> Result<(), usize> {
     }
     Ok(())
 }
+
+mod apps;

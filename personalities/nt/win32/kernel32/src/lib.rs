@@ -256,3 +256,5 @@ pub extern "system" fn GetActiveProcessorCount(group: u16) -> u32 {
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

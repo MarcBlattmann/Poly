@@ -69,6 +69,7 @@
 extern crate alloc;
 
 pub mod advapi;
+pub mod apps;
 pub mod cpu;
 pub mod env;
 pub mod error;

@@ -1,6 +1,6 @@
 [
 {"symbol":"#138","src":["wine-spec"]},
-{"symbol":"CreateAppContainerProfile","src":["wine-spec"]},
+{"symbol":"CreateAppContainerProfile","status":"stub","src":["wine-spec"]},
 {"symbol":"CreateEnvironmentBlock","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
 {"symbol":"DeriveAppContainerSidFromAppContainerName","status":"green","tests_visible":1,"tests_held_out":1,"src":["chrome-win-trace"]},
 {"symbol":"DestroyEnvironmentBlock","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_create_env"]},
@@ -14,13 +14,13 @@
 {"symbol":"GetDefaultUserProfileDirectoryW","src":["wine-spec"]},
 {"symbol":"GetProfileType","status":"claimed","claimed_by":"impl-chrome-s9","src":["wine-spec"]},
 {"symbol":"GetProfilesDirectoryA","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_profiles_dir"]},
-{"symbol":"GetProfilesDirectoryW","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_profiles_dir"]},
+{"symbol":"GetProfilesDirectoryW","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_profiles_dir"]},
 {"symbol":"GetUserProfileDirectoryA","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_user_profile_dir"]},
-{"symbol":"GetUserProfileDirectoryW","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_user_profile_dir"]},
+{"symbol":"GetUserProfileDirectoryW","status":"stub","src":["wine-spec"],"seeds":["wine:userenv/tests/userenv.c:test_get_user_profile_dir"]},
 {"symbol":"LeaveCriticalPolicySection","status":"stub","src":["wine-spec"]},
 {"symbol":"LoadUserProfileA","src":["wine-spec"]},
-{"symbol":"LoadUserProfileW","src":["wine-spec"]},
+{"symbol":"LoadUserProfileW","status":"stub","src":["wine-spec"]},
 {"symbol":"RegisterGPNotification","src":["wine-spec"]},
-{"symbol":"UnloadUserProfile","src":["wine-spec"]},
+{"symbol":"UnloadUserProfile","status":"stub","src":["wine-spec"]},
 {"symbol":"UnregisterGPNotification","src":["wine-spec"]}
 ]

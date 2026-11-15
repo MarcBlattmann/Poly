@@ -174,3 +174,5 @@ pub unsafe extern "system" fn QISearch(
 pub extern "system" fn shlwapi_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

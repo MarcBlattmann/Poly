@@ -32,6 +32,7 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
  "poly-wincrypt",
 ]
 
@@ -84,6 +85,7 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
  "poly-wincrypt",
  "poly-x509",
 ]
@@ -232,6 +234,7 @@ name = "ole32"
 version = "0.0.1"
 dependencies = [
  "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 

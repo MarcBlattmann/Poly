@@ -1,5 +1,5 @@
 [
-{"symbol":"CreateSecurityPage","src":["wine-spec"]},
-{"symbol":"EditSecurity","src":["wine-spec"]},
-{"symbol":"IID_ISecurityInformation","src":["wine-spec"]}
+{"symbol":"CreateSecurityPage","status":"stub","src":["wine-spec"]},
+{"symbol":"EditSecurity","status":"stub","src":["wine-spec"]},
+{"symbol":"IID_ISecurityInformation","status":"stub","src":["wine-spec"]}
 ]

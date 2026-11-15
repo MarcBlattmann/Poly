@@ -1648,3 +1648,5 @@ pub unsafe extern "system" fn CryptUnprotectMemory(data: *mut u8, len: u32, flag
 pub extern "system" fn crypt32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

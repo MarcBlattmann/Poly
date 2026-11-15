@@ -153,7 +153,7 @@ mod tests {
                     .map_err(|_| "the image was refused before its relocation")?;
                 match prepared {
                     Prepared::Nt { process, image, launch } => {
-                        Ok(super::super::spawn_pe_with(&process, image, crate::user::DEFAULT_HOOK, &launch))
+                        Ok(super::super::spawn_pe_with(&process, *image, crate::user::DEFAULT_HOOK, &launch))
                     }
                     _ => Err("not a PE"),
                 }

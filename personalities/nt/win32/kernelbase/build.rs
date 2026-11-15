@@ -2,6 +2,11 @@
 //! there is no C runtime to provide `_DllMainCRTStartup` (ADR 0079).
 
 fn main() {
+    // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
+    for (name, target) in APPS_FORWARDS {
+        println!("cargo:rustc-link-arg=/EXPORT:{name}={target}");
+    }
+    // END generated
     println!("cargo:rustc-link-arg=/ENTRY:kernelbase_main");
     // The version resource (ADR 0155, step 9): programs read the system's version from this
     // file (Learn, "Getting the System Version"). lld-link takes a `.res` file as an input.
@@ -11,3 +16,26 @@ fn main() {
     std::fs::write(&res, poly_kernelbase::verinfo::res_file(&version)).expect("write version.res");
     println!("cargo:rustc-link-arg={}", res.display());
 }
+
+// BEGIN generated consts
+#[rustfmt::skip]
+const APPS_FORWARDS: &[(&str, &str)] = &[
+    ("AllocateLocallyUniqueId", "advapi32.AllocateLocallyUniqueId"),
+    ("EventRegister", "advapi32.EventRegister"),
+    ("EventSetInformation", "advapi32.EventSetInformation"),
+    ("EventUnregister", "advapi32.EventUnregister"),
+    ("EventWriteTransfer", "advapi32.EventWriteTransfer"),
+    ("GetFileVersionInfoSizeExW", "version.GetFileVersionInfoSizeExW"),
+    ("GetFileVersionInfoSizeW", "version.GetFileVersionInfoSizeW"),
+    ("GetFileVersionInfoW", "version.GetFileVersionInfoW"),
+    ("GlobalAlloc", "kernel32.GlobalAlloc"),
+    ("GlobalFree", "kernel32.GlobalFree"),
+    ("GlobalLock", "kernel32.GlobalLock"),
+    ("GlobalSize", "kernel32.GlobalSize"),
+    ("GlobalUnlock", "kernel32.GlobalUnlock"),
+    ("RegDeleteKeyW", "advapi32.RegDeleteKeyW"),
+    ("VerQueryValueW", "version.VerQueryValueW"),
+    ("lstrcmpW", "kernel32.lstrcmpW"),
+    ("lstrcmpiW", "kernel32.lstrcmpiW"),
+];
+// END generated consts

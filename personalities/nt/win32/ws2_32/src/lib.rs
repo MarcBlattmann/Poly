@@ -211,3 +211,5 @@ pub unsafe fn wstr(p: *const u16) -> Option<alloc::string::String> {
 pub extern "system" fn ws2_32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

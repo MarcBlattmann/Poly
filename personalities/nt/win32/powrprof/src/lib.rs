@@ -110,3 +110,5 @@ pub extern "system" fn PowerReadDCValue(
 pub extern "system" fn powrprof_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

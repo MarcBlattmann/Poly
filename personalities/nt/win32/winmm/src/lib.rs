@@ -63,3 +63,5 @@ pub extern "system" fn timeEndPeriod(period: u32) -> u32 {
 pub extern "system" fn winmm_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+mod apps;

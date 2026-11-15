@@ -95,6 +95,22 @@ pub const OUTPUTS: &[&str] = &[
     "powrprof.dll",
     "uxtheme.dll",
 ];
+/// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
+/// embeds what it names.
+pub const STUB_LIST: &str = "stub-dlls.txt";
+
+/// Make the system DLLs of `poly_stubs::sysdlls::SYSTEM_DLLS` in `dir`, and the list that names them.
+fn write_stub_dlls(dir: &Path) -> Result {
+    let mut list = String::new();
+    for dll in poly_stubs::sysdlls::SYSTEM_DLLS {
+        let bytes = poly_stubs::system::build_system_dll(dll);
+        std::fs::write(dir.join(dll.file), bytes).map_err(|e| format!("{}: {e}", dll.file))?;
+        list.push_str(dll.file);
+        list.push('\n');
+    }
+    std::fs::write(dir.join(STUB_LIST), list).map_err(|e| format!("{STUB_LIST}: {e}"))
+}
+
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -133,7 +149,7 @@ pub fn ensure() -> Result<PathBuf> {
     let key = cache_key(&root)?;
     let cache = cache_dir(&root);
     let cached = cache.join(format!("win32-{key:016x}"));
-    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
+    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) && cached.join(STUB_LIST).is_file() {
         return Ok(cached);
     }
     let target = root.join("target").join("win32");
@@ -148,6 +164,7 @@ pub fn ensure() -> Result<PathBuf> {
     for f in OUTPUTS {
         std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
     }
+    write_stub_dlls(&tmp)?;
     if std::fs::rename(&tmp, &cached).is_err() {
         // Another worktree cached the same version first.
         let _ = std::fs::remove_dir_all(&tmp);
@@ -225,6 +242,9 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/mfplat",
             "personalities/nt/win32/powrprof",
             "personalities/nt/win32/uxtheme",
+            // The generated system DLLs (ADR 0155, step 10).
+            "crates/poly-stubs",
+            "crates/poly-ldr",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

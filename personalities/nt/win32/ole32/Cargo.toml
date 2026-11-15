@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-com = { path = "../../../../crates/poly-com" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 
 [lints]
 workspace = true

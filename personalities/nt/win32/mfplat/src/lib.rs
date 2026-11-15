@@ -34,3 +34,5 @@ pub extern "system" fn mfplat_main(_module: *mut u8, _reason: u32, _reserved: *m
 }
 
 mod delayed;
+
+mod apps;

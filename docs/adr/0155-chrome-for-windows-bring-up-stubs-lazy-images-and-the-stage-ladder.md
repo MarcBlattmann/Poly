@@ -738,3 +738,77 @@ Notepad++, WinMerge, KeePassXC, WinSCP, Sumatra PDF, XnView MP, Audacity, Node.j
   a small program with a data section that exists only as the file's length) starts and exits
   with its status; an image whose relocation table needs more than one heap block fails with
   `STATUS_NO_MEMORY` and the kernel goes on.
+
+## Addendum: the DLLs and exports the popular Windows programs import (`win-apps-exports`, step 10)
+
+The survey (`windows-app-survey`) ran 19 popular Windows programs: none got a window, and many stopped
+for a name or a DLL, not for behaviour. This step makes every system DLL and export they import (statically,
+delay-loaded, or looked up at run time in the first runs) exist, so that the next blockers are behaviour.
+Nothing here reads a program's code: the inputs are PE import tables (names), our own export tables and the
+loader's own "failed" log lines.
+
+- **Fail-only exports in the DLLs Poly has.** 1,739 names in 34 DLLs (`src/apps.rs` of each crate, from
+  `poly_win32_rt::fail_exports!`, the macro of step 9; new kinds `invalid_handle` and `error(code, value)`), 83 in
+  `ntdll`. Each logs `stub: dll!name` and fails as Learn documents: `FALSE`/`NULL`/0 with `ERROR_CALL_NOT_IMPLEMENTED`
+  (the default of the Win32 API); `(HANDLE)-1` or `-1` for the functions whose failure value that is
+  (`CreateFile2`, `DialogBoxParamW`, `ImageList_Add`, `GetMessageA` ...); `E_NOTIMPL` for COM, shell and theme
+  functions; `STATUS_NOT_IMPLEMENTED` for `Nt*` and the `NTSTATUS` functions of `ntdll`, `bcrypt` and `hid`;
+  the function's own error value where it returns one directly (`ERROR_CALL_NOT_IMPLEMENTED` from `Reg*`, `Cred*`,
+  `SH*Value`; `ERROR_NOT_SUPPORTED` from `iphlpapi` and `netapi32`; `MMSYSERR_NOTSUPPORTED` from `winmm`;
+  `SEC_E_UNSUPPORTED_FUNCTION` from `secur32`; `WSAEOPNOTSUPP` and `SOCKET_ERROR` from `ws2_32`;
+  `APPMODEL_ERROR_NO_PACKAGE` (15700) from the package-identity functions, which is also what a program without
+  identity gets on Windows; `E_HANDLE` from the `uxtheme` functions that take a theme handle, of which Poly
+  has given none out). Exports by ordinal only (`#2557` of `user32`, the ordinals the programs import from
+  `shell32`, `oleaut32`, `comctl32`, `ws2_32`, `shlwapi`) are `ord_<n>` with an `/EXPORT:ord_<n>,@<n>` link argument.
+  The generated lists are the `src/apps.rs` files; they carry no knowledge of what the functions do.
+- **Forwarders.** `kernelbase` forwards the names `kernel32`, `version.dll` and `advapi32` hold (`GlobalAlloc`,
+  `VerQueryValueW`, `EventRegister` ...), and `kernel32` and `ucrtbase` forward `__C_specific_handler` to `ntdll`;
+  `msvcrt` forwards three accessors to `ucrtbase`. `ucrtbase` exports the "optimized" `_o_<name>` entry points
+  as aliases of `<name>` (the same function; the names are from the import tables).
+- **The DLLs Poly lacks, generated.** `poly-stubs` (the crate of `polystub.dll`) got a `system` module that makes a
+  whole DLL from a table (`sysdlls.rs`, 73 DLLs, about 2,100 exports): `comdlg32`, `rpcrt4`, `mpr`, `ncrypt`,
+  `setupapi`, `hid`, `winspool.drv`, `msimg32`, `usp10`, `gdiplus`, `wldap32`, `wintrust`, `urlmon`, `propsys`,
+  `windowscodecs`, `xmllite`, `authz`, `msi`, `pdh`, `tdh`, `wevtapi`, `cabinet`, `httpapi`, the DirectX and Media
+  Foundation set (`d3d9`, `d3d11`, `d3d12`, `dxgi`, `dcomp`, `d2d1`, `dsound`, `mf`, `mfreadwrite`, `mfplay`, `evr`,
+  `dxva2`, `mmdevapi`, `d3dcompiler_47`), `opengl32`, `mscoree`, `riched20`, `riched32`, `mlang`, `winsta`,
+  `cryptbase`, `vulkan-1`, `icu` and the rest (the table is the list). No toolchain is involved: `xtask win32`
+  writes them next to the DLLs it builds, names them in `stub-dlls.txt`, and the kernel's `build.rs` embeds that
+  list as `nt::STUB_DLLS`, which `layout` installs in `System32` (one place for all of them). A DLL's exports are
+  the names the programs import plus, for the small DLLs, the names the coverage map lists. Each failure is the
+  documented one: `DXGI_ERROR_UNSUPPORTED` from `D3D11CreateDevice`, `D3D12CreateDevice` and `CreateDXGIFactory*` (no
+  adapter), `NULL` from `Direct3DCreate9`, `D3DERR_NOTAVAILABLE` from `Direct3DCreate9Ex`, `DSERR_NODRIVER` from
+  `dsound`, `NTE_NOT_SUPPORTED` from `ncrypt`, `TRUST_E_PROVIDER_UNKNOWN` from `WinVerifyTrust`,
+  `PDH_NOT_IMPLEMENTED` from `pdh`, `LDAP_NOT_SUPPORTED` from `wldap32`, `Status` 6 (`NotImplemented`) from `gdiplus`,
+  `SCARD_E_NO_SERVICE` from `winscard`, `CDERR_DIALOGFAILURE` from `CommDlgExtendedError` (the dialog functions
+  return FALSE). `vulkan-1.dll` is the loader with no driver: `vkEnumerateInstanceExtensionProperties` and
+  `vkEnumerateInstanceLayerProperties` report 0 items, `vkEnumerateInstanceVersion` 1.0, `vkGetInstanceProcAddr`
+  and `vkGetDeviceProcAddr` NULL, and `vkCreateInstance` (and every function that needs an instance)
+  `VK_ERROR_INCOMPATIBLE_DRIVER` (-9), as the specification says for "no conformant implementation". A few are
+  forwarders to what Poly has: `psapi` to `kernel32!K32*` (Learn names the pairs), `wsock32` to `ws2_32`, `shfolder`
+  to `shell32`, `combase` to `ole32`, `sspicli` to `secur32`, `cryptbase!SystemFunction036` to `advapi32`.
+  The report tool (`cargo xtask win-app imports`) counts these DLLs, and names exports by ordinal only as `#<n>`.
+- **API sets.** `api-ms-win-ntuser-*`, `api-ms-win-rtcore-ntuser-*` (`user32`), `api-ms-win-shcore-*` (`shcore`),
+  `api-ms-win-shell-*` (`shell32`), `api-ms-win-appmodel-*` (`kernelbase`) and `api-ms-win-ro-*` (`ole32`) are hosted;
+  the `ext-` ones stay absent (programs probe for them and fall back; ADR 0155 step 9).
+- **Doc-derived implementations** (from Learn, not observed on Windows; host tests in `poly_kernelbase::apps`,
+  `poly_crt::math`, `poly-stubs`): `MulDiv` (a tie rounds away from zero, which Learn does not say),
+  `EncodePointer` / `DecodePointer` (a rotation and an exclusive-or with a per-process cookie: `EncodePointer(NULL)`
+  is not NULL), `SetErrorMode` / `GetErrorMode` (the four `SEM_*` flags Learn lists), `InterlockedIncrement` /
+  `InterlockedDecrement`, `IsEqualGUID`, `DisableThreadLibraryCalls` (the loader's
+  `LdrDisableThreadCalloutsForDll`), `VerSetConditionMask` in `ntdll` (the code of `kernelbase`'s, moved to
+  `poly_rtl::version`), `memcpy` / `memmove` / `memset` / `memcmp` in `ntdll` (`compiler_builtins`'), and in `ucrtbase`
+  the C99 functions that only round, scale or compare, so the answer is exact: `ceilf floorf truncf roundf rint
+  nearbyint lrint llrint lround llround scalbn ilogb nextafter nexttoward fmax fmin copysign nan imaxdiv` and their
+  `float` / `long double` forms (`ceilf` also in `msvcrt`). To be confirmed on Windows: the `MulDiv` tie; the cookie
+  scheme (only the round trip is documented); `lrint` of a NaN or an out-of-range value (Learn: unspecified); the
+  ordinals `wsock32!#101` to `#116` and `#151`, which forward to the same ordinals of `ws2_32`.
+- **Left to `impl-win-apps` (spec-win-apps-1).** The kernel32 ANSI variants, `shlwapi!Path*`, `PathCch*`, the resource
+  APIs, `RtlGetNtVersionNumbers` and `LoadStringW` are fail-only here, in a separate `fail_exports!` group at the end
+  of each `src/apps.rs` ("The real versions are written by the implementer track"): merging that branch deletes
+  those names from the groups. Menus, dialogs, comctl32 controls and comdlg32 dialogs stay fail-only until their
+  implementer round (spec-win-apps-2).
+- **Coverage.** The names in the map are `stub` (3,591 entries); the doc-derived ones are claimed by `impl-win-apps`
+  (56; they have no sheet, so they stay `claimed`). Names the programs import that the map does not list (275, most
+  of them ordinals) are exports without an entry.
+- **Where the programs stop now** is in the hand-off `win-apps-exports.md`: the per-program table, run on the final
+  head, and the ranked next blockers.

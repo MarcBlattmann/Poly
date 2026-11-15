@@ -340,3 +340,5 @@ pub unsafe extern "system" fn NotifyRouteChange(handle: *mut Handle, overlapped:
 pub extern "system" fn iphlpapi_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     TRUE
 }
+
+mod apps;

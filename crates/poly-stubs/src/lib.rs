@@ -42,6 +42,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use poly_ldr::builder::{Export, Import, PeBuilder, RDATA, Section, Sym, TEXT, Target};
 
+pub mod sysdlls;
+pub mod system;
+
 pub use poly_ldr::{STUB_DLL, stub_key};
 
 /// How a stub fails.

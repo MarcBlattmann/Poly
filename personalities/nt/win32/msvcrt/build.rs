@@ -3,6 +3,11 @@
 //! functions (ADR 0084, `poly_crt::exports`).
 
 fn main() {
+    // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
+    for (name, target) in APPS_FORWARDS {
+        println!("cargo:rustc-link-arg=/EXPORT:{name}={target}");
+    }
+    // END generated
     println!("cargo:rerun-if-changed=../../../../crates/poly-crt/src/exports.rs");
     println!("cargo:rustc-link-arg=/ENTRY:msvcrt_main");
     let own = poly_crt::exports::MSVCRT_OWN_MEMORY;
@@ -33,3 +38,12 @@ fn main() {
     }
     println!("cargo:rustc-link-arg=/EXPORT:longjmp=poly_crt_longjmp");
 }
+
+// BEGIN generated consts
+#[rustfmt::skip]
+const APPS_FORWARDS: &[(&str, &str)] = &[
+    ("__p__commode", "ucrtbase.__p__commode"),
+    ("__p__environ", "ucrtbase.__p__environ"),
+    ("__p__fmode", "ucrtbase.__p__fmode"),
+];
+// END generated consts

@@ -325,3 +325,5 @@ pub extern "system" fn wininet_main(_module: *mut u8, _reason: u32, _reserved: *
 }
 
 mod delayed;
+
+mod apps;

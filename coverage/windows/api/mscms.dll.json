@@ -41,7 +41,7 @@
 {"symbol":"GenerateCopyFilePaths","src":["wine-spec"]},
 {"symbol":"GetCMMInfo","src":["wine-spec"]},
 {"symbol":"GetColorDirectoryA","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorDirectoryA","wine:mscms/tests/profile.c:test_AssociateColorProfileWithDeviceA","wine:mscms/tests/profile.c:test_InstallColorProfileA","wine:mscms/tests/profile.c:test_UninstallColorProfileA"]},
-{"symbol":"GetColorDirectoryW","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorDirectoryW","wine:mscms/tests/profile.c:test_InstallColorProfileW","wine:mscms/tests/profile.c:test_UninstallColorProfileW"]},
+{"symbol":"GetColorDirectoryW","status":"stub","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorDirectoryW","wine:mscms/tests/profile.c:test_InstallColorProfileW","wine:mscms/tests/profile.c:test_UninstallColorProfileW"]},
 {"symbol":"GetColorProfileElement","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorProfileElement","wine:mscms/tests/profile.c:test_SetColorProfileElement"]},
 {"symbol":"GetColorProfileElementTag","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorProfileElementTag"]},
 {"symbol":"GetColorProfileFromHandle","src":["wine-spec"],"seeds":["wine:mscms/tests/profile.c:test_GetColorProfileFromHandle"]},

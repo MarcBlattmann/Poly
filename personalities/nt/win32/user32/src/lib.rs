@@ -2640,3 +2640,5 @@ pub extern "system" fn user32_main(_module: *mut u8, _reason: u32, _reserved: *m
 }
 
 mod delayed;
+
+mod apps;
