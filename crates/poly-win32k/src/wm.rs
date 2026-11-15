@@ -24,6 +24,7 @@ pub mod raw;
 pub const ERROR_ACCESS_DENIED: u32 = 5;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
+pub const ERROR_MORE_DATA: u32 = 234;
 pub const ERROR_INVALID_WINDOW_HANDLE: u32 = 1400;
 pub const ERROR_INVALID_MENU_HANDLE: u32 = 1401;
 pub const ERROR_TLW_WITH_WSCHILD: u32 = 1406;
@@ -241,6 +242,16 @@ impl Wm {
             })
             .collect()
     }
+}
+
+/// Where a window goes in its parent's list ([`Wm::z_plan`]).
+struct ZPlan {
+    parent: u32,
+    was_below: bool,
+    old: Vec<u32>,
+    new: Vec<u32>,
+    below: bool,
+    raised: Vec<u32>,
 }
 
 /// The session's window manager.
@@ -864,7 +875,21 @@ impl Wm {
                 flags |= crate::zorder::HELPER;
             }
             let new = crate::zorder::Top { hwnd, queue: self.input_key(ctx.key()), flags, owner };
-            crate::zorder::new_slot(&self.tops(), &new, self.barrier(ctx.key()))
+            let list = self.tops();
+            // The text services' window lies directly above the default IME window that owns it.
+            let ime_ui = self.display.interactive
+                && owner != 0
+                && upcase(&class_name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>());
+            let slot = match list.iter().position(|t| t.hwnd == owner) {
+                Some(i) if ime_ui => i,
+                _ => crate::zorder::new_slot(&list, &new, self.barrier(ctx.key())),
+            };
+            // `slot` counts the windows the z rules see; the text services' windows lie among them.
+            let real = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            match list.get(slot).and_then(|t| real.iter().position(|&c| c == t.hwnd)) {
+                Some(i) => i,
+                None => real.len(),
+            }
         } else {
             0
         };
@@ -1094,14 +1119,66 @@ impl Wm {
     /// those of the window's band, owned windows come along above a raised
     /// owner, and a thread without the foreground right stays below the
     /// foreground process's windows.
+    /// The window `hwnd` would lie directly after if it were put at `after`: what a
+    /// `WM_WINDOWPOSCHANGING` of a top-level window reports as `hwndInsertAfter` (0: the top).
+    /// `HWND_TOP` of a window that is not topmost comes after the topmost ones, `HWND_BOTTOM`
+    /// after the last window (ShowWindow.yaml `chrome_show`, SetWindowPos.yaml `chrome_resize`).
+    fn z_report(&mut self, hwnd: u32, after: u64) -> Reply {
+        let Some(w) = self.get(u64::from(hwnd)) else { return Reply::Handle { hwnd: 0 } };
+        if w.parent != self.desktop || hwnd == self.desktop {
+            return Reply::Handle { hwnd: after as u32 };
+        }
+        if self.is_ime_ui(hwnd) {
+            // It lies directly above its owner: the window above it now.
+            let list = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            let at = list.iter().position(|&c| c == hwnd);
+            return Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| list[i]) };
+        }
+        let Some(new) = self.z_plan(hwnd, after).map(|p| p.new) else { return Reply::Handle { hwnd: after as u32 } };
+        let at = new.iter().position(|&c| c == hwnd);
+        Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| new[i]) }
+    }
+
     fn z_order(&mut self, hwnd: u32, after: u64, apply: bool) -> Reply {
-        let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let plan = match self.z_plan(hwnd, after) {
+            Some(p) => p,
+            None if self.get(u64::from(hwnd)).is_none() => return err(ERROR_INVALID_WINDOW_HANDLE),
+            None => return Reply::Bool { value: false },
+        };
+        let (parent, was_below) = (plan.parent, plan.was_below);
+        let (new, below, raised, old) = (plan.new, plan.below, plan.raised, plan.old);
+        // A process's only window in a session without other processes'
+        // windows (session 0): the list alone cannot say that it went to
+        // the bottom (ShowWindow.yaml `z_order`).
+        let changed = new != old || below != was_below;
+        if apply && changed {
+            let new = if parent == self.desktop { self.with_ui(new) } else { new };
+            self.get_mut(u64::from(parent)).expect("valid").children = new;
+            if let Some(w) = self.get_mut(u64::from(hwnd)) {
+                w.below_others = below;
+            }
+            for o in raised {
+                if let Some(w) = self.get_mut(u64::from(o)) {
+                    w.below_others = false;
+                }
+            }
+        }
+        Reply::Bool { value: changed }
+    }
+
+    /// Where `hwnd` would go for `after`: the new child list of its parent and what goes with it.
+    fn z_plan(&self, hwnd: u32, after: u64) -> Option<ZPlan> {
+        let w = self.get(u64::from(hwnd))?;
         let parent = w.parent;
         let thread = w.thread;
         let was_below = w.below_others;
-        let Some(p) = self.get(u64::from(parent)) else { return Reply::Bool { value: false } };
-        let old = p.children.clone();
+        let p = self.get(u64::from(parent))?;
         let top_level = parent == self.desktop;
+        let old: Vec<u32> = if top_level {
+            p.children.iter().copied().filter(|&c| !self.is_ime_ui(c)).collect()
+        } else {
+            p.children.clone()
+        };
         let mut raised: Vec<u32> = Vec::new();
         let (new, below) = match after {
             HWND_TOP | HWND_TOPMOST | HWND_NOTOPMOST => {
@@ -1129,32 +1206,13 @@ impl Wm {
             }
             a => {
                 let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
-                match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
-                    Some(i) => {
-                        let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
-                        new.insert(i + 1, hwnd);
-                        (new, below)
-                    }
-                    None => return Reply::Bool { value: false },
-                }
+                let i = new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF)?;
+                let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
+                new.insert(i + 1, hwnd);
+                (new, below)
             }
         };
-        // A process's only window in a session without other processes'
-        // windows (session 0): the list alone cannot say that it went to
-        // the bottom (ShowWindow.yaml `z_order`).
-        let changed = new != old || below != was_below;
-        if apply && changed {
-            self.get_mut(u64::from(parent)).expect("valid").children = new;
-            if let Some(w) = self.get_mut(u64::from(hwnd)) {
-                w.below_others = below;
-            }
-            for o in raised {
-                if let Some(w) = self.get_mut(u64::from(o)) {
-                    w.below_others = false;
-                }
-            }
-        }
-        Reply::Bool { value: changed }
+        Some(ZPlan { parent, was_below, old, new, below, raised })
     }
 
     fn set_parent(&mut self, hwnd: u32, parent: u64) -> Reply {
@@ -1883,6 +1941,7 @@ impl Wm {
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
             Request::ZOrder { hwnd, after, apply } => self.z_order(hwnd, after, apply),
+            Request::ZReport { hwnd, after } => self.z_report(hwnd, after),
             Request::SetParent { hwnd, parent } => self.set_parent(hwnd, parent),
             Request::SetState { hwnd, visible, minimized, maximized, normal, size_move_pending } => {
                 let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
@@ -2076,10 +2135,20 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
+            Request::ThreadHasWindows { tid } => {
+                Reply::Bool { value: tid != 0 && self.slots.iter().flatten().any(|w| w.thread.1 == tid) }
+            }
             Request::RegisterMessage { name } => {
                 // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
-                if name.is_empty() || name.len() > 255 {
-                    err(ERROR_INVALID_PARAMETER)
+                // Over that: ERROR_MORE_DATA; the empty string and "#1234" (an integer atom) give
+                // 0 and no error (RegisterWindowMessageW.yaml `length`, `special`).
+                let integer_atom = name.first() == Some(&(b'#' as u16))
+                    && name.len() > 1
+                    && name[1..].iter().all(|&c| (u16::from(b'0')..=u16::from(b'9')).contains(&c));
+                if name.len() > 255 {
+                    err(ERROR_MORE_DATA)
+                } else if name.is_empty() || integer_atom {
+                    Reply::Atom { atom: 0 }
                 } else {
                     Reply::Atom { atom: self.atom_for(&name) }
                 }
@@ -2237,8 +2306,9 @@ mod tests {
         assert_eq!(reg(&mut wm, B, "CHROME_MESSAGEWINDOW"), Reply::Atom { atom: a });
         let Reply::Atom { atom: b } = reg(&mut wm, A, "TaskbarCreated") else { panic!() };
         assert_ne!(a, b);
-        assert_eq!(reg(&mut wm, A, ""), err(ERROR_INVALID_PARAMETER));
-        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_INVALID_PARAMETER));
+        assert_eq!(reg(&mut wm, A, ""), Reply::Atom { atom: 0 });
+        assert_eq!(reg(&mut wm, A, "#1234"), Reply::Atom { atom: 0 });
+        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_MORE_DATA));
     }
 
     #[test]

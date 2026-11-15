@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "rsrn_basic",
+      "exe_sha256": "66c85f1e658ead690b73e46116fc9fb0a4e89ea90fe8bd3e510b621b7d698790",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0ZXI6IGhhbmRsZSB0cnVlLCBsYXN0IGVycm9yIGxlZnQgYWxvbmUgdHJ1ZQpubyBtZXNzYWdlIGJ5IGl0c2VsZjogMApQQlRfQVBNU1VTUEVORCBhbmQgUEJUX0FQTVJFU1VNRUFVVE9NQVRJQyBzZW50IGJ5IGhhbmQgcmVhY2ggdGhlIHByb2NlZHVyZTogMgphIHNlY29uZCByZWdpc3RyYXRpb24gb2YgdGhlIHNhbWUgd2luZG93OiBoYW5kbGUgdHJ1ZSwgZGlmZmVyZW50IHRydWUKcmVsZWFzZSB0aGUgZmlyc3Q6IDEsIGxhc3QgZXJyb3IgbGVmdCBhbG9uZSB0cnVlCnJlbGVhc2UgaXQgYWdhaW46IDAsIGxhc3QgZXJyb3IgODcKcmVsZWFzZSB0aGUgc2Vjb25kOiAxCmEgTlVMTCByZWNpcGllbnQ6IGhhbmRsZSByZXR1cm5lZCwgbGFzdCBlcnJvciAwCmFuIGludmFsaWQgcmVjaXBpZW50OiBoYW5kbGUgcmV0dXJuZWQsIGxhc3QgZXJyb3IgMAp0aGUgc2VydmljZSBmbGFnIHdpdGggYSB3aW5kb3c6IGhhbmRsZSBOVUxMLCBsYXN0IGVycm9yIDg3CmEgbWVzc2FnZS1vbmx5IHdpbmRvdyBhbmQgYSBjaGlsZCB3aW5kb3cgcmVnaXN0ZXI6IHRydWUgdHJ1ZQp0d2VudHkgcmVnaXN0cmF0aW9uczogMjAgc3VjY2VlZCwgMjAgcmVsZWFzZWQKdGhlIHdpbmRvdyBkZXN0cm95ZWQgd2l0aCB0aGUgcmVnaXN0cmF0aW9uIGtlcHQ6IHRoZSBoYW5kbGUgY2FuIHN0aWxsIGJlIHJlbGVhc2VkIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "register: handle true, last error left alone true\nno message by itself: 0\nPBT_APMSUSPEND and PBT_APMRESUMEAUTOMATIC sent by hand reach the procedure: 2\na second registration of the same window: handle true, different true\nrelease the first: 1, last error left alone true\nrelease it again: 0, last error 87\nrelease the second: 1\na NULL recipient: handle returned, last error 0\nan invalid recipient: handle returned, last error 0\nthe service flag with a window: handle NULL, last error 87\na message-only window and a child window register: true true\ntwenty registrations: 20 succeed, 20 released\nthe window destroyed with the registration kept: the handle can still be released 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 242
+    }
+  ]
+}

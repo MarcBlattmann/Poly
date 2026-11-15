@@ -37,6 +37,19 @@
       "error": null,
       "stable": true,
       "ms": 51
+    },
+    {
+      "name": "ctma_basic",
+      "exe_sha256": "bfbd0114b4e83d94be78aa4e3e8c5384ae09b4aa22bfd3b787e47f0e4f9861f1",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "c2l6ZSAwOiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDE6IG5vdCBOVUxMIHRydWUsIDE2LWJ5dGUgYWxpZ25lZCB0cnVlLCB3cml0YWJsZSB0cnVlCnNpemUgNzogbm90IE5VTEwgdHJ1ZSwgMTYtYnl0ZSBhbGlnbmVkIHRydWUsIHdyaXRhYmxlIHRydWUKc2l6ZSA4OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDE1OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDE2OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDE3OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDEwMDogbm90IE5VTEwgdHJ1ZSwgMTYtYnl0ZSBhbGlnbmVkIHRydWUsIHdyaXRhYmxlIHRydWUKc2l6ZSA0MDk2OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDY1NTM2OiBub3QgTlVMTCB0cnVlLCAxNi1ieXRlIGFsaWduZWQgdHJ1ZSwgd3JpdGFibGUgdHJ1ZQpzaXplIDEwNDg1NzY6IG5vdCBOVUxMIHRydWUsIDE2LWJ5dGUgYWxpZ25lZCB0cnVlLCB3cml0YWJsZSB0cnVlCnR3byBibG9ja3Mgb2YgMTAwIGJ5dGVzOiBkaWZmZXJlbnQgdHJ1ZSwgY29udGVudHMga2VwdCBhcGFydCB0cnVlCmFuIGFsbG9jYXRpb24gb2YgaGFsZiB0aGUgYWRkcmVzcyBzcGFjZTogTlVMTAphbiBhbGxvY2F0aW9uIG9mIHVzaXplOjpNQVg6IE5VTEwKQ29UYXNrTWVtRnJlZShOVUxMKSByZXR1cm5lZAphIGJsb2NrIGZyZWVkIGJ5IGFub3RoZXIgdGhyZWFkOiBjb250ZW50cyBzZWVuIHRoZXJlIDEKcmVhbGxvYyB0byA1MDAwIGJ5dGVzIGtlZXBzIHRoZSBmaXJzdCB0ZW4gYnl0ZXM6IHRydWUKcmVhbGxvYyBkb3duIHRvIDQgYnl0ZXMga2VlcHMgZm91ciBieXRlczogdHJ1ZQpyZWFsbG9jIHRvIHNpemUgMCBmcmVlcyB0aGUgYmxvY2sgYW5kIGdpdmVzIE5VTEw6IHRydWUKcmVhbGxvYyBvZiBOVUxMIGFsbG9jYXRlczogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size 0: not NULL true, 16-byte aligned true, writable true\nsize 1: not NULL true, 16-byte aligned true, writable true\nsize 7: not NULL true, 16-byte aligned true, writable true\nsize 8: not NULL true, 16-byte aligned true, writable true\nsize 15: not NULL true, 16-byte aligned true, writable true\nsize 16: not NULL true, 16-byte aligned true, writable true\nsize 17: not NULL true, 16-byte aligned true, writable true\nsize 100: not NULL true, 16-byte aligned true, writable true\nsize 4096: not NULL true, 16-byte aligned true, writable true\nsize 65536: not NULL true, 16-byte aligned true, writable true\nsize 1048576: not NULL true, 16-byte aligned true, writable true\ntwo blocks of 100 bytes: different true, contents kept apart true\nan allocation of half the address space: NULL\nan allocation of usize::MAX: NULL\nCoTaskMemFree(NULL) returned\na block freed by another thread: contents seen there 1\nrealloc to 5000 bytes keeps the first ten bytes: true\nrealloc down to 4 bytes keeps four bytes: true\nrealloc to size 0 frees the block and gives NULL: true\nrealloc of NULL allocates: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
     }
   ]
 }

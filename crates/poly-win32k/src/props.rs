@@ -25,10 +25,32 @@ impl Key {
     /// The key for `SetPropW`'s `lpString`: an integer below 0x10000 is an
     /// atom (0 is not a key), anything else a pointer to a name read by `name`.
     pub fn from_raw(raw: usize, name: impl FnOnce() -> Vec<u16>) -> Option<Key> {
-        if raw >> 16 == 0 {
-            return (raw != 0).then_some(Key::Atom(raw as u16));
+        Key::from_raw_atoms(raw, name, |_| None)
+    }
+
+    /// As [`Key::from_raw`], with the global atom table's names: an atom made from a string is the
+    /// same key as the string (SetPropW.yaml `atoms`).
+    pub fn from_raw_atoms(
+        raw: usize,
+        name: impl FnOnce() -> Vec<u16>,
+        atom_name: impl FnOnce(u16) -> Option<Vec<u16>>,
+    ) -> Option<Key> {
+        let name = if raw >> 16 == 0 {
+            if raw == 0 {
+                return None;
+            }
+            match atom_name(raw as u16) {
+                Some(n) if raw >= 0xC000 => n,
+                _ => return Some(Key::Atom(raw as u16)),
+            }
+        } else {
+            name()
+        };
+        // A name is at most 255 characters (SetPropW.yaml `length`).
+        if name.len() > 255 {
+            return None;
         }
-        let folded = name()
+        let folded = name
             .into_iter()
             .map(|c| match char::from_u32(u32::from(c)) {
                 Some(ch) => {
