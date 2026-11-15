@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ecada78ec668",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:11:17Z",
+  "tests": [
+    {
+      "name": "tp_pool",
+      "exe_sha256": "5b017f4332c272d70a32c72df383e65c485d9317752a61505bd170de0af6cef5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0VGhyZWFkcG9vbFRocmVhZE1pbmltdW0oMikgb24gYSBmcmVzaCBwb29sOiAxIGVycm9yIHVuY2hhbmdlZAptYXhpbXVtIDMsIHNpeCBibG9ja2VkIGNhbGxiYWNrcyBzdWJtaXR0ZWQ6IHJ1bm5pbmcgYXQgb25jZSAzCiAgdGhlbiBlaWdodCBibG9ja2VkIGNhbGxiYWNrczogcnVubmluZyBhdCBvbmNlIDUKICBuZWl0aGVyIGlzIHRoaXMgdGhyZWFkOiAxCndhaXQgaW4gdGhlIHBvb2wncyBlbnZpcm9ubWVudCByYW46IDEKZW52aXJvbm1lbnQgd2l0aG91dCBhIHBvb2w6IHN1Ym1pdHRlZCAxIHJhbiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetThreadpoolThreadMinimum(2) on a fresh pool: 1 error unchanged\nmaximum 3, six blocked callbacks submitted: running at once 3\n  then eight blocked callbacks: running at once 5\n  neither is this thread: 1\nwait in the pool's environment ran: 1\nenvironment without a pool: submitted 1 ran 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1745
+    },
+    {
+      "name": "tp_pool_b",
+      "exe_sha256": "3668572d805e83f1b4d0375bc04798d26238dafb719787c45ea5f0ab540f433b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWluaW11bSAyLCBtYXhpbXVtIDIsIHNpeCBibG9ja2VkIGNhbGxiYWNrcyBzdWJtaXR0ZWQ6IHJ1bm5pbmcgYXQgb25jZSAyCiAgYWZ0ZXIgcmVsZWFzZTogY2FsbGJhY2tzIDYKVHJ5U3VibWl0VGhyZWFkcG9vbENhbGxiYWNrIHdpdGggdGhlIHBvb2wgaW4gdGhlIGVudmlyb25tZW50OiByYW4gMwp0aW1lciBpbiB0aGUgcG9vbCdzIGVudmlyb25tZW50IHJhbjogMQogIG9uIHRoZSBwb29sJ3MgdGhyZWFkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "minimum 2, maximum 2, six blocked callbacks submitted: running at once 2\n  after release: callbacks 6\nTrySubmitThreadpoolCallback with the pool in the environment: ran 3\ntimer in the pool's environment ran: 1\n  on the pool's thread: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1751
+    }
+  ]
+}

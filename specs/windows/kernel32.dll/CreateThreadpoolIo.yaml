@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateThreadpoolIo.yaml
+id: windows/api/kernel32.dll/CreateThreadpoolIo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: Thread Pools, Using the Thread Pool Functions, CreateThreadpoolWork, SubmitThreadpoolWork, WaitForThreadpoolWorkCallbacks, CloseThreadpoolWork, CreateThreadpoolTimer, SetThreadpoolTimer, SetThreadpoolTimerEx, IsThreadpoolTimerSet, CreateThreadpoolWait, SetThreadpoolWait, SetThreadpoolWaitEx, CreateThreadpoolIo, StartThreadpoolIo, CancelThreadpoolIo, CreateThreadpool, SetThreadpoolThreadMaximum, SetThreadpoolThreadMinimum, CreateThreadpoolCleanupGroup, CloseThreadpoolCleanupGroupMembers, CallbackMayRunLong, SetEventWhenCallbackReturns and its siblings, DisassociateCurrentThreadFromCallback, TrySubmitThreadpoolCallback, RegisterWaitForSingleObject, UnregisterWaitEx, QueueUserWorkItem, Thread Pool Callback Environments (TP_CALLBACK_ENVIRON_V3 layout and the inline helpers from winbase.h / threadpoolapiset.h). Wine's tests and source were not read.
+summary: >
+  Associates an overlapped file or pipe handle with the pool: StartThreadpoolIo before each overlapped call, and the callback then runs for each completion with the OVERLAPPED, the error code and the byte count; CancelThreadpoolIo withdraws a Start whose I/O call failed to start; WaitForThreadpoolIoCallbacks waits for the callbacks.
+interface:
+  signature: "PTP_IO CreateThreadpoolIo(HANDLE, PTP_WIN32_IO_CALLBACK, PVOID, PTP_CALLBACK_ENVIRON); void StartThreadpoolIo(PTP_IO); void CancelThreadpoolIo(PTP_IO); void WaitForThreadpoolIoCallbacks(PTP_IO, BOOL cancel); void CloseThreadpoolIo(PTP_IO); void CALLBACK cb(PTP_CALLBACK_INSTANCE, PVOID ctx, PVOID overlapped, ULONG ioResult, ULONG_PTR bytes, PTP_IO)"
+rules:
+  pending_read: "StartThreadpoolIo then ReadFile on an empty overlapped byte pipe: ReadFile returned FALSE with ERROR_IO_PENDING (997); no callback for 200 ms; after the peer wrote 5 bytes the callback ran once on a pool thread with the context, the same OVERLAPPED pointer, ioResult 0 and bytes 5; the data had arrived."
+  immediate: "a read with data waiting returned TRUE at once (3 bytes) and the callback still came (ioResult 0, bytes 3); a write on the server end returned TRUE (5 written) and the callback came with bytes 5."
+  cancel: "StartThreadpoolIo followed by CancelThreadpoolIo (no I/O issued): WaitForThreadpoolIoCallbacks returned quickly and no callback ran."
+  error: "a pending read whose peer closed its end: the callback ran with ioResult 109 (ERROR_BROKEN_PIPE) and 0 bytes."
+errors:
+  none: "none provoked"
+side_effects: "completions call the callback on a pool thread"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "milliseconds after the completion"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing kernel32.dll (and ntdll.dll / advapi32.dll where named) by name. A callback that must not have run yet is observed after 200-300 ms, a callback that must run is waited for up to 5 s, so a failing implementation fails an observation instead of hanging the run. Only the main thread writes observations; callbacks store into atomics. Pool sizes are set explicitly where concurrency is observed (a private pool). Timer periods are observed as counts with generous bounds. Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Files with FILE_SKIP_COMPLETION_PORT_ON_SUCCESS (the callback is then not called for synchronous completions), many concurrent operations, closing the handle before the callbacks.
