@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/proc_info.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# proc_info.tests/macos.json.
+id: macos/syscall/bsd/proc_info
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-14
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 336,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 336, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. proc_info(call,
+  pid, flavor, argument, buffer, size). Call 2 (PROC_INFO_CALL_PIDINFO)
+  with flavor 3 (PROC_PIDTBSDINFO) fills struct proc_bsdinfo (136 bytes,
+  <sys/proc_info.h>: pbi_status u32 at 4, pbi_pid at 12, pbi_ppid at 16,
+  pbi_uid at 20, pbi_comm char[16] at 48) and returns its size 136; a
+  larger buffer still gets 136 bytes. pbi_status is 2 for a running
+  process (a value). A forked child sees its own pid and its parent's.
+  Flavor 1 (PROC_PIDLISTFDS) fills an array of struct proc_fdinfo {i32 fd,
+  u32 type} (8 bytes) with one entry per open descriptor in ascending
+  order, from fd 0, and returns the bytes used (a multiple of 8): type 1
+  (PROX_FDTYPE_VNODE) for a file (and for /dev/null), 6 (PIPE) for each
+  end of a pipe, 5 (KQUEUE) for a queue; a closed descriptor is gone from
+  the list.
+returns:
+  success: "the number of bytes stored (136 for the BSD info)"
+errors:
+  no_process: "ESRCH (3): a pid that does not exist"
+  bad_request: "EINVAL (22): flavor 9999, call 99"
+  small_buffer: "ENOMEM (12): a 100-byte buffer for the BSD info"
+  bad_pointer: "EFAULT (14): buffer at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

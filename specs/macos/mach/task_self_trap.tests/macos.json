@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "task_self_reply_ports",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "d2d34255c476a1370599899d6e63b0f5088a49858764370d84ac0b87066f9738",
+          "executable_sha256": "074c88fca4c67fe0481ca3b8e3ae427d542317955c723bcd3e4cfeb4f78d4f15",
           "exit_code": 0,
           "stdout": "ok mach_reply_port gives a name\nok a new one each time\nok never the task's\nok the task's name stays\nsummary 4 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "24ad9c7f1241e2d78105b9414bdc155b103e4b0899828cb81e44e87e236411f4",
+          "executable_sha256": "0e4d72e566f032cdfa66c8eaf9e376c8284d44b5973a25b41b41ef08d4607fe2",
           "exit_code": 0,
           "stdout": "ok not MACH_PORT_NULL\nok not MACH_PORT_DEAD\nok a 32-bit name\nok the same name twice\nsummary 4 passed, 0 failed\n",
           "stderr": "",

@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 17:49:33",
+  "started": "2026-11-14 21:33:19",
   "tests": [
     {
       "name": "read_errors",
@@ -18,7 +18,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "d113f4df958ed32d3ec493a73b0dcd9ae56db4bd341ec2f18e34dc2992fd3ca5",
+          "executable_sha256": "4fbcc6613db0879c6f801d55fe7a48b824bde6a009c2bcf18ccfe530821be5b9",
           "exit_code": 0,
           "stdout": "ok fd 77: EBADF\nok a write-only descriptor: EBADF\nok a directory: EISDIR\nok a buffer at address 8: EFAULT\nok the failed read consumed nothing\nok at the end, the same buffer: 0\nsummary 6 passed, 0 failed\n",
           "stderr": "",
@@ -33,7 +33,7 @@
       "results": {
         "arm64": {
           "status": "ran",
-          "executable_sha256": "9b7491aed10b4073093dd19daba576d10ad1bd7ee4927f995112b8e68b26346c",
+          "executable_sha256": "b3b59962634e533e1dcbd651e60e202b85025bde9404688690f422d0ecc47daf",
           "exit_code": 0,
           "stdout": "ok a count of 2 reads 2\nok the rest: 3 bytes\nok at the end: 0\nok a count of 0: 0\nok and the offset did not move\nsummary 5 passed, 0 failed\n",
           "stderr": "",

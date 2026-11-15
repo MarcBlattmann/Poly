@@ -783,7 +783,7 @@
 </g>
 <g><title>BSD syscalls: 0 / 455 done (0.0%)</title>
 <rect x="873.3" y="289.2" width="10.7" height="11.8" fill="#21262d"/>
-<rect x="873.3" y="289.2" width="0.3" height="11.8" fill="#388bfd"/>
+<rect x="873.3" y="289.2" width="0.9" height="11.8" fill="#388bfd"/>
 <rect x="872.3" y="288.2" width="12.7" height="13.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>AppIntentsTypeSupport: 0 / 447 done (0.0%)</title>

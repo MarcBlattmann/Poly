@@ -1,0 +1,61 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-14 21:33:19",
+  "tests": [
+    {
+      "name": "kevent_errors",
+      "source_sha256": "89bb741b2fe844c2ed23600e1919ca1c750b73fb5b8a775296b4e3a54fedf867",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "91a453b9d5708194aa041b9aa7e281b1043d168aa11189efb26af18251ed53fa",
+          "exit_code": 0,
+          "stdout": "ok a bad descriptor with room: one event\nok EV_ERROR|EV_ADD, data EBADF, ident and udata echoed\nok without room: EBADF\nok an unknown filter: an event with data EINVAL\nok EV_RECEIPT: one event for the successful change\nok flags EV_ERROR|EV_RECEIPT|EV_ADD, data 0\nok a queue that is not open: EBADF\nok a descriptor that is not a queue: EBADF\nok the change list at address 8: EFAULT\nok a timeout of 2e9 ns: EINVAL\nok a negative timeout: EINVAL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kevent_read_write",
+      "source_sha256": "9d3feac6dc88189dc1d6cff2c7f9a689c8715fbd2f79b509f9cf3b7bdc16bfd9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b609c314b12c3ca260ead04c948bef9be4d2ee8040dbe9a5f9b7261155b2fe44",
+          "exit_code": 0,
+          "stdout": "ok EV_ADD of an empty pipe: no event yet\nok after a write: one event\nok ident is the descriptor, filter EVFILT_READ\nok flags are EV_ADD, data 3, udata echoed\nok level triggered: reported again\nok after reading: nothing\nok EVFILT_WRITE on the write end: ready at once\nok with room (data > 0)\nok EV_DELETE\nok EV_DELETE again, no room for events: ENOENT\nok with room for events: reported as an event\nok flags EV_ERROR|EV_DELETE, data ENOENT\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kevent_timer_signal",
+      "source_sha256": "ecf8e838b88ad3045f46ed34653abb2d2a8a3e4e5a26c8ce07163cc660c54819",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "878ca2e1b43cf7f90ecf011744f6b04c9076d060c49f16fc16e12c1fdfabb612",
+          "exit_code": 0,
+          "stdout": "ok add a 20 ms one-shot timer\nok waiting up to 1 s: the timer fires\nok ident 1, EVFILT_TIMER, 1 expiration\nok flags as added (EV_ADD|EV_ONESHOT|EV_CLEAR)\nok udata echoed\nok a one-shot timer is gone afterwards\nok a 50 ms wait with nothing to report: 0\nok two ignored SIGUSR1: one event\nok ident 30, EVFILT_SIGNAL, data 2\nok reported once: then nothing\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
