@@ -90,6 +90,29 @@ pub unsafe extern "system" fn GetAdaptersInfo(info: *mut u8, size: *mut u32) -> 
     }
 }
 
+/// `GetNetworkParams(pFixedInfo, pOutBufLen)` (Learn): the host name and
+/// DNS servers; a NULL buffer is a short one.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetNetworkParams(info: *mut u8, size: *mut u32) -> u32 {
+    if size.is_null() {
+        return ip::ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: checked non-null.
+    let capacity = if info.is_null() { 0 } else { unsafe { size.read() } };
+    match oldapi::network_params_call(&rt::host_name(), &rt::interfaces(), info as u64, capacity) {
+        Ok(bytes) => {
+            // SAFETY: `capacity` covered `bytes`.
+            unsafe { copy_out(&bytes, info) };
+            ip::NO_ERROR
+        }
+        Err((e, need)) => {
+            // SAFETY: checked non-null.
+            unsafe { size.write(need) };
+            e
+        }
+    }
+}
+
 /// `GetInterfaceInfo(IfTable, SizePointer)`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetInterfaceInfo(info: *mut u8, size: *mut u32) -> u32 {
@@ -340,3 +363,6 @@ pub unsafe extern "system" fn NotifyRouteChange(handle: *mut Handle, overlapped:
 pub extern "system" fn iphlpapi_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     TRUE
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

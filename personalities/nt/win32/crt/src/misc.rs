@@ -190,6 +190,62 @@ pub extern "C" fn rand() -> i32 {
     ((t.rand >> 16) & 0x7FFF) as i32
 }
 
+/// `rand_s(randomValue*)` (Learn): a random `unsigned int` from the
+/// operating system's generator (Learn: it "depends on the RtlGenRandom
+/// API"; Poly's is the kernel's random device, as `advapi32!SystemFunction036`
+/// reads it), 0 on success. A null pointer is an invalid parameter
+/// (`EINVAL`); a failed read returns `EINVAL` without touching the value.
+///
+/// # Safety
+/// `out` is null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rand_s(out: *mut u32) -> i32 {
+    if out.is_null() {
+        global::invalid(EINVAL);
+        return EINVAL;
+    }
+    let mut bytes = [0u8; 4];
+    if !system_random(&mut bytes) {
+        return EINVAL;
+    }
+    // SAFETY: the caller's writable value.
+    unsafe { out.write_unaligned(u32::from_le_bytes(bytes)) };
+    0
+}
+
+/// Fill `buf` from `Z:\dev\urandom` (the whole VFS is `Z:`, ADR 0067).
+fn system_random(buf: &mut [u8]) -> bool {
+    use crate::sys;
+    let path: [u16; 15] = {
+        let mut p = [0u16; 15];
+        for (d, c) in p.iter_mut().zip("Z:\\dev\\urandom".encode_utf16()) {
+            *d = c;
+        }
+        p
+    };
+    // GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING (`winnt.h`, `fileapi.h`).
+    // SAFETY: a NUL-terminated name; no security attributes or template.
+    let h = unsafe { sys::CreateFileW(path.as_ptr(), 0x8000_0000, 3, core::ptr::null(), 3, 0, 0) };
+    if h == sys::INVALID_HANDLE_VALUE {
+        return false;
+    }
+    let mut done = 0usize;
+    while done < buf.len() {
+        let mut n = 0u32;
+        // SAFETY: `buf` past `done` is writable for the length given.
+        let ok = unsafe {
+            sys::ReadFile(h, buf[done..].as_mut_ptr(), (buf.len() - done) as u32, &mut n, core::ptr::null_mut())
+        };
+        if ok == 0 || n == 0 {
+            break;
+        }
+        done += n as usize;
+    }
+    // SAFETY: our handle.
+    unsafe { sys::CloseHandle(h) };
+    done == buf.len()
+}
+
 // ----- errno and handlers ----------------------------------------------------------------
 
 #[unsafe(no_mangle)]

@@ -16,6 +16,7 @@ mod display;
 mod icons;
 mod layered;
 mod s3;
+mod strings;
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -2662,3 +2663,6 @@ pub extern "system" fn user32_main(_module: *mut u8, _reason: u32, _reserved: *m
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

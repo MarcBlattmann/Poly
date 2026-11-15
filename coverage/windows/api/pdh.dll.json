@@ -84,7 +84,7 @@
 {"symbol":"PdhOpenLogA","src":["wine-spec"]},
 {"symbol":"PdhOpenLogW","src":["wine-spec"]},
 {"symbol":"PdhOpenQuery","src":["wine-spec"]},
-{"symbol":"PdhOpenQueryA","src":["wine-spec"],"seeds":["wine:pdh/tests/pdh.c:test_PdhOpenQueryA","wine:pdh/tests/pdh.c:test_PdhGetCounterTimeBase","wine:pdh/tests/pdh.c:test_PdhSetCounterScaleFactor","wine:pdh/tests/pdh.c:test_PdhAddCounterA","wine:pdh/tests/pdh.c:test_PdhAddEnglishCounterA","wine:pdh/tests/pdh.c:test_PdhCollectQueryDataWithTime","wine:pdh/tests/pdh.c:test_PdhGetCounterInfoA","wine:pdh/tests/pdh.c:test_PdhGetRawCounterValue"]},
+{"symbol":"PdhOpenQueryA","status":"stub","src":["wine-spec"],"seeds":["wine:pdh/tests/pdh.c:test_PdhOpenQueryA","wine:pdh/tests/pdh.c:test_PdhGetCounterTimeBase","wine:pdh/tests/pdh.c:test_PdhSetCounterScaleFactor","wine:pdh/tests/pdh.c:test_PdhAddCounterA","wine:pdh/tests/pdh.c:test_PdhAddEnglishCounterA","wine:pdh/tests/pdh.c:test_PdhCollectQueryDataWithTime","wine:pdh/tests/pdh.c:test_PdhGetCounterInfoA","wine:pdh/tests/pdh.c:test_PdhGetRawCounterValue"]},
 {"symbol":"PdhOpenQueryH","src":["wine-spec"]},
 {"symbol":"PdhOpenQueryW","status":"stub","src":["wine-spec"],"seeds":["wine:pdh/tests/pdh.c:test_PdhOpenQueryW","wine:pdh/tests/pdh.c:test_PdhAddCounterW","wine:pdh/tests/pdh.c:test_PdhAddEnglishCounterW","wine:pdh/tests/pdh.c:test_PdhGetCounterInfoW","wine:pdh/tests/pdh.c:test_PdhGetFormattedCounterArrayW"]},
 {"symbol":"PdhParseCounterPathA","src":["wine-spec"]},

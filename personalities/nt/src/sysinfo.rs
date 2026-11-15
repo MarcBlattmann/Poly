@@ -89,6 +89,18 @@ mod tests {
     }
 
     #[test]
+    fn locally_unique_ids_differ() {
+        let mut f = Fake::new();
+        let (a, b) = (f.alloc(8), f.alloc(8));
+        assert_eq!(f.call(Service::AllocateLocallyUniqueId, &[a]), STATUS_SUCCESS);
+        assert_eq!(f.call(Service::AllocateLocallyUniqueId, &[b]), STATUS_SUCCESS);
+        let (a, b) = (f.u64_at(a), f.u64_at(b));
+        assert!(a != 0 && b != 0 && a != b, "{a:#x} {b:#x}");
+        // An address the caller cannot write.
+        assert_eq!(f.call(Service::AllocateLocallyUniqueId, &[0x10]), STATUS_ACCESS_VIOLATION);
+    }
+
+    #[test]
     fn basic_information() {
         let mut f = Fake::new();
         let (buf, ret) = (f.alloc(64), f.alloc(4));
