@@ -78,6 +78,27 @@ unsafe extern "system" {
     fn GetSystemPowerStatus(s: *mut u8) -> i32;
     fn GetCurrentProcess() -> Handle;
     fn lstrcmpiA(a: *const u8, b: *const u8) -> i32;
+    fn CreateThread(
+        sa: *const u8,
+        stack: usize,
+        start: extern "system" fn(*mut u8) -> u32,
+        param: *mut u8,
+        flags: u32,
+        tid: *mut u32,
+    ) -> Handle;
+    fn SuspendThread(t: Handle) -> u32;
+    fn ResumeThread(t: Handle) -> u32;
+    fn GetThreadContext(t: Handle, ctx: *mut u8) -> i32;
+    fn GetTickCount() -> u32;
+    fn SetThreadPriority(t: Handle, p: i32) -> i32;
+    fn GetThreadPriority(t: Handle) -> i32;
+    fn SetThreadPriorityBoost(t: Handle, off: i32) -> i32;
+    fn GetThreadPriorityBoost(t: Handle, off: *mut i32) -> i32;
+    fn GetPriorityClass(p: Handle) -> u32;
+    fn SetPriorityClass(p: Handle, c: u32) -> i32;
+    fn GetThreadTimes(t: Handle, c: *mut u64, e: *mut u64, k: *mut u64, u: *mut u64) -> i32;
+    fn QueryThreadCycleTime(t: Handle, cycles: *mut u64) -> i32;
+    fn SetThreadInformation(t: Handle, class: u32, info: *const u8, size: u32) -> i32;
 }
 
 const GENERIC_READ: u32 = 0x8000_0000;
@@ -144,7 +165,76 @@ pub unsafe fn run() {
         loader_and_threads();
         memory();
         waits();
+        suspended_waiter();
         locale_time_and_system();
+    }
+}
+
+/// The waiter of `suspended_waiter`: waits for the event it is given, forever.
+extern "system" fn wait_forever(event: *mut u8) -> u32 {
+    // SAFETY: an event handle of the test.
+    unsafe { WaitForSingleObject(event as Handle, INFINITE) }
+}
+
+/// `CONTEXT` (`winnt.h`, x64): 1232 bytes, 16-aligned; `ContextFlags` at 0x30, `Rsp` at 0x98,
+/// `Rip` at 0xF8; `CONTEXT_CONTROL` is `CONTEXT_AMD64 | 1`.
+#[repr(C, align(16))]
+struct Context([u8; 1232]);
+
+/// Chrome's stack sampler (ADR 0155 addendum "S3 hunt"): a thread suspended while it waits in
+/// the kernel gives its context at once (`GetThreadContext`, Learn: the thread is suspended),
+/// not after its wait ends; and the scheduling settings and times of a thread (Learn).
+unsafe fn suspended_waiter() {
+    // SAFETY: valid arguments throughout.
+    unsafe {
+        let event = CreateEventW(np(), 1, 0, np());
+        let t = CreateThread(np(), 0, wait_forever, event as *mut u8, 0, core::ptr::null_mut());
+        check(event != 0 && t != 0);
+        // Let it reach its wait.
+        check(WaitForSingleObject(t, 100) == 0x102);
+        check(SuspendThread(t) == 0);
+        let mut ctx = Context([0; 1232]);
+        ctx.0[0x30..0x34].copy_from_slice(&0x0010_0001u32.to_le_bytes());
+        let start = GetTickCount();
+        check(GetThreadContext(t, ctx.0.as_mut_ptr()) != 0);
+        check(GetTickCount().wrapping_sub(start) < 1000);
+        check(u64_at(&ctx.0, 0xF8) != 0 && u64_at(&ctx.0, 0x98) != 0);
+        // Suspended in its wait, it does not end when the event is set; resumed, it does.
+        check(SetEvent(event) != 0);
+        check(WaitForSingleObject(t, 100) == 0x102);
+        check(ResumeThread(t) == 1);
+        check(WaitForSingleObject(t, 10_000) == 0);
+
+        // Priorities: set and read back; boosting; the process's class.
+        check(GetThreadPriority(t) == 0);
+        check(SetThreadPriority(t, 2) != 0 && GetThreadPriority(t) == 2);
+        check(SetThreadPriority(t, 3) == 0);
+        check_error(87);
+        check(GetThreadPriority(0) == 0x7FFF_FFFF);
+        let mut off = 7;
+        check(GetThreadPriorityBoost(t, &mut off) != 0 && off == 0);
+        check(SetThreadPriorityBoost(t, 1) != 0 && GetThreadPriorityBoost(t, &mut off) != 0 && off == 1);
+        check(GetPriorityClass(GetCurrentProcess()) == 0x20);
+        check(SetPriorityClass(GetCurrentProcess(), 0x4000) != 0 && GetPriorityClass(GetCurrentProcess()) == 0x4000);
+        check(SetPriorityClass(GetCurrentProcess(), 0x20) != 0);
+        // THREAD_POWER_THROTTLING_STATE version 1.
+        let throttle = [1u32, 1, 1];
+        check(SetThreadInformation(GetCurrentThread(), 3, throttle.as_ptr().cast(), 12) != 0);
+        check(SetThreadInformation(GetCurrentThread(), 3, throttle.as_ptr().cast(), 8) == 0);
+        check_error(87);
+
+        // Times: the running thread has used some, and they only grow.
+        let (mut c, mut e, mut k, mut u) = (0u64, 0u64, 0u64, 0u64);
+        let mut spin = 0u64;
+        let begin = GetTickCount();
+        while GetTickCount().wrapping_sub(begin) < 50 {
+            spin = core::hint::black_box(spin + 1);
+        }
+        check(GetThreadTimes(GetCurrentThread(), &mut c, &mut e, &mut k, &mut u) != 0);
+        check(c != 0 && k + u > 0);
+        let mut cycles = 0u64;
+        check(QueryThreadCycleTime(GetCurrentThread(), &mut cycles) != 0 && cycles >= k + u);
+        check(CloseHandle(t) != 0 && CloseHandle(event) != 0);
     }
 }
 

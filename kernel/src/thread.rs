@@ -556,6 +556,21 @@ pub fn state(id: ThreadId) -> Option<State> {
     THREADS.lock().sched.state(id)
 }
 
+/// The user registers of user thread `id` while it is not running: the frame its last entry
+/// from ring 3 left at the top of its kernel stack (a system call it is blocked in, or the
+/// interrupt that preempted it). `None` while it runs, before it first entered user mode, or
+/// for a kernel thread. The thread table's lock keeps it from being switched in meanwhile.
+pub fn user_regs_of(id: ThreadId) -> Option<arch::user::UserRegs> {
+    let _irq = InterruptsOff::new();
+    let t = THREADS.lock();
+    if t.sched.state(id)? == State::Running {
+        return None;
+    }
+    t.user[id.slot()].as_ref()?;
+    let top = t.stacks[id.slot()].as_ref()?.top();
+    arch::user::regs_at(top)
+}
+
 /// The CPU thread `id` runs on, waits for, or ran on last.
 pub fn cpu_of(id: ThreadId) -> Option<usize> {
     let _irq = InterruptsOff::new();

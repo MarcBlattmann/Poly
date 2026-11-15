@@ -11,7 +11,8 @@ type EventProc = unsafe extern "system" fn(usize, u32, usize, i32, i32, u32, u32
 
 static TABLE: SpinLock<Table> = SpinLock::new(Table::new());
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetCurrentProcessId() -> u32;
     fn OpenThread(access: u32, inherit: i32, tid: u32) -> usize;
