@@ -313,3 +313,34 @@ fn kuser_shared_data_is_mapped_read_only_with_the_version() {
     // A second mapping is refused (the page is there).
     assert!(exec::map_user_shared_data(&mut f.proc, &mut f.mem, &facts).is_err());
 }
+
+#[test]
+fn a_stack_the_program_allocated_grows_when_the_teb_names_it() {
+    // The MSYS2 runtime runs its main thread on memory it reserved itself and
+    // points the TEB's StackBase at it (ADR 0194).
+    let mut f = Fake::bare();
+    let s = start(&mut f, &test_exe(false)).unwrap();
+    let (base, top) = (0x6_0000_0000u64, 0x6_0002_0000u64);
+    f.proc.vm.allocate(&mut f.mem, base, top - base, 0, MEM_RESERVE, PAGE_READWRITE).unwrap();
+    f.proc.vm.allocate(&mut f.mem, top - 0x2000, 0x2000, 0, MEM_COMMIT, PAGE_READWRITE).unwrap();
+    f.proc.vm.allocate(&mut f.mem, top - 0x3000, 0x1000, 0, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    let guard = top - 0x3000;
+    // Not the thread's stack yet: an ordinary guard page.
+    assert_eq!(
+        exec::access_fault(&mut f.proc, &mut f.mem, TID, guard + 8),
+        AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION)
+    );
+    // Guard it again and name it in the TEB: the stack grows.
+    f.proc.vm.protect(&mut f.mem, guard, 0x1000, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    f.mem.write_bytes(s.teb + TEB_STACK_BASE, &top.to_le_bytes()).unwrap();
+    assert_eq!(exec::access_fault(&mut f.proc, &mut f.mem, TID, guard + 8), AccessFault::StackGrown { limit: guard });
+    assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), guard);
+    assert_eq!(f.proc.vm.query(guard - 0x1000).unwrap().protect, PAGE_READWRITE | PAGE_GUARD);
+    // A guard page elsewhere is still an exception.
+    let other = 0x7_0000_0000u64;
+    f.proc.vm.allocate(&mut f.mem, other, 0x1000, 0, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD).unwrap();
+    assert_eq!(
+        exec::access_fault(&mut f.proc, &mut f.mem, TID, other),
+        AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION)
+    );
+}

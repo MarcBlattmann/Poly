@@ -71,7 +71,6 @@ poly_win32_rt::fail_exports!(
         GetNumaProcessorNode,
         GetSystemMetadataPathForPackage,
         GetTempPathA,
-        GetThreadContext,
         GetTimeFormatEx,
         GetTimeFormatW,
         GetVolumeInformationW,
