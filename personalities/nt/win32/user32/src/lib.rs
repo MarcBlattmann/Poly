@@ -72,7 +72,7 @@ unsafe extern "system" {
         right_margin: i32,
         drawn: *mut u32,
     ) -> i32;
-    fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
+    fn PolyGdiAttachSurfaceRows(hdc: usize, width: u32, total: u32, skip: u32, rows: u32) -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
@@ -244,6 +244,22 @@ impl Env for Sys {
 
     fn window_freed(&self, hwnd: u32, menu: u64) {
         menu::window_freed(hwnd, menu);
+    }
+
+    fn menu_hit(&self, hwnd: u32, x: i32, y: i32) -> bool {
+        menutrack::hit_menu(hwnd as H, x, y)
+    }
+
+    fn menu_click(&self, hwnd: u32, x: i32, y: i32) {
+        menutrack::nc_click(hwnd as H, x, y);
+    }
+
+    fn menu_sys_key(&self, hwnd: u32, msg: u32, w: u64, l: u64) -> bool {
+        menutrack::sys_key(hwnd as H, msg, w, l)
+    }
+
+    fn menu_paint(&self, hwnd: u32) {
+        menutrack::draw_bar(hwnd as H);
     }
 
     fn set_cursor(&self, cursor: u64) {
@@ -576,7 +592,11 @@ pub unsafe extern "system" fn CreateWindowExW(
         menu: menu as u64,
         instance: instance as u64,
     };
-    u::create_window(&SYS, spec, name as u64, param as u64) as H
+    let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
+    if h != 0 && menu != 0 && style & 0x4000_0000 == 0 {
+        menu::after_create(h);
+    }
+    h
 }
 
 #[link(name = "kernel32", kind = "raw-dylib")]
@@ -1570,8 +1590,12 @@ fn attach_surface(hwnd: u32, dc: H) -> H {
         _ => 0,
     };
     if dc != 0 {
+        // The surface holds the menu bar above the client area: a client DC draws
+        // on the rows below it.
+        let (w, total) = (size as u32, (size >> 32) as u32);
+        let bar = if total > 0 { info(hwnd as H).map_or(0, |i| i.menu_bar.max(0) as u32).min(total - 1) } else { 0 };
         // SAFETY: our gdi32 checks the DC.
-        unsafe { PolyGdiAttachSurface(dc, size as u32, (size >> 32) as u32) };
+        unsafe { PolyGdiAttachSurfaceRows(dc, w, total, bar, total - bar) };
     }
     dc
 }

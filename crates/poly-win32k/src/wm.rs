@@ -169,6 +169,8 @@ struct Window {
     /// Its thread's default IME window in the interactive session: in the
     /// z order it follows the thread's active window (`input`, ADR 0176).
     helper: bool,
+    /// The menu bar's height above the client area, inside the surface.
+    menu_bar: i32,
 }
 
 #[derive(Debug, Default)]
@@ -610,6 +612,7 @@ impl Wm {
             creating: w.state == State::Creating,
             ime: w.ime,
             lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
+            menu_bar: w.menu_bar,
         })
     }
 
@@ -1461,12 +1464,14 @@ impl Wm {
     /// Apply a compositor-moved or resized client rectangle to a top-level
     /// window's Win32 geometry. `client` is in screen coordinates, as the
     /// desktop link's `Configure` record is.
-    pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
-        if self.get(u64::from(hwnd)).is_none() {
+    pub fn configure_from_desktop(&mut self, hwnd: u32, surface: Rect, frame: FrameMetrics) -> bool {
+        let Some(bar) = self.get(u64::from(hwnd)).map(|w| w.menu_bar) else {
             return false;
-        }
+        };
         let (ox, oy) = self.parent_origin(hwnd);
-        let outer = frame.window_from_surface(client);
+        // The surface holds the menu bar above the client area.
+        let client = Rect::new(surface.left, (surface.top + bar).min(surface.bottom), surface.right, surface.bottom);
+        let outer = frame.window_from_surface(surface);
         let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
         let client_rel = Rect::new(client.left - ox, client.top - oy, client.right - ox, client.bottom - oy);
         let Some(window) = self.get_mut(u64::from(hwnd)) else { return false };
@@ -2047,6 +2052,13 @@ impl Wm {
                 }
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
+            Request::MenuBar { hwnd, height } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => {
+                    w.menu_bar = height.clamp(0, 256);
+                    Reply::Ok {}
+                }
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
             Request::DefaultIme { tid } => {
                 let tid = if tid == 0 { ctx.tid } else { tid };
                 Reply::Handle { hwnd: self.default_ime(tid) }
@@ -2163,6 +2175,7 @@ impl Window {
             restore_max: false,
             min_pos: (-1, -1),
             helper: false,
+            menu_bar: 0,
         }
     }
 }

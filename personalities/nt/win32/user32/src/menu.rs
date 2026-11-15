@@ -550,6 +550,14 @@ fn bar_of(hwnd: H) -> Option<(poly_win32k::proto::WinInfo, u32)> {
     Some((i, if top { id as u32 } else { 0 }))
 }
 
+/// A window was made with a menu: the bar's room in its surface.
+pub(crate) fn after_create(hwnd: H) {
+    let Some((_, menu)) = bar_of(hwnd) else { return };
+    if bar_shown(u64::from(menu)) {
+        super::menutrack::set_bar_height(hwnd, super::menutrack::bar_height());
+    }
+}
+
 /// Whether a bar has a row of items (it takes room from the client area).
 pub(crate) fn bar_shown(menu: u64) -> bool {
     menu >> 32 == 0 && with(|m| m.item_count(menu as u32)).is_some_and(|n| n > 0)
@@ -563,6 +571,8 @@ fn refresh_bar(hwnd: H) {
         return;
     }
     let want = bar_shown(u64::from(menu));
+    super::menutrack::set_bar_height(hwnd, if want { super::menutrack::bar_height() } else { 0 });
+    let i = info(hwnd).unwrap_or(i);
     let base = metrics::client_insets(i.style, i.ex_style, false).top;
     let row = metrics::menu_for_dpi(96);
     let have = (i.client_rel.top - i.window_rel.top) - base >= row && !i.minimized;

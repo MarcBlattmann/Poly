@@ -399,6 +399,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "PolyGdiFillRect",
     "PolyGdiDrawText",
     "PolyGdiAttachSurface",
+    "PolyGdiAttachSurfaceRows",
     "PolyGdiSurface",
     "PolyGdiSetDisplayGeometry",
     "PolyGdiSetSystemClip",

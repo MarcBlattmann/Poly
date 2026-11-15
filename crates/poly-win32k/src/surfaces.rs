@@ -198,8 +198,10 @@ impl Surfaces {
                 None => continue,
             };
             if shown {
-                let (cw, ch) = ((client.right - client.left) as u32, (client.bottom - client.top) as u32);
-                desktop.set_geometry(s, client.left, client.top, cw, ch);
+                // The surface holds the window's menu bar above the client area.
+                let bar = i.menu_bar.max(0);
+                let (cw, ch) = ((client.right - client.left) as u32, (client.bottom - client.top + bar) as u32);
+                desktop.set_geometry(s, client.left, client.top - bar, cw, ch);
                 let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.width, b.height));
                 if current != Some((cw, ch))
                     && cw <= MAX_SIDE
@@ -269,7 +271,8 @@ impl Surfaces {
         }
         let Some(i) = wm.info(top) else { return false };
         if flags & 1 != 0 && (key & 0xFF) == ((key >> 16) & 0xFF) {
-            return self.client_pixel(desktop, top, x - i.client.left, y - i.client.top) == Some(key & 0x00FF_FFFF);
+            return self.client_pixel(desktop, top, x - i.client.left, y - i.client.top + i.menu_bar)
+                == Some(key & 0x00FF_FFFF);
         }
         false
     }
@@ -286,9 +289,12 @@ impl Surfaces {
             let content = self.contents.get(&h).filter(|_| lay.is_some_and(|l| l.update));
             let px = match content {
                 Some(c) => c.at(x - i.window.left, y - i.window.top),
-                None if i.client.contains(x, y) => self
-                    .client_pixel(desktop, h, x - i.client.left, y - i.client.top)
-                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, 255]),
+                None if i.client.contains(x, y)
+                    || (x >= i.client.left && x < i.client.right && y >= i.client.top - i.menu_bar && y < i.client.top) =>
+                {
+                    self.client_pixel(desktop, h, x - i.client.left, y - i.client.top + i.menu_bar)
+                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, 255])
+                }
                 None => None,
             };
             let Some(px) = px else { continue };
