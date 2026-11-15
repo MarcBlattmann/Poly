@@ -142,7 +142,6 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::DuplicateToken, &[H, V, OA, V, V, OH]),
     (Service::FilterToken, &[H, V, P, P, P, OH]),
     (Service::CreateLowBoxToken, &[OH, H, V, OA, P, V, X, V, X]),
-    (Service::GetCurrentProcessorNumber, &[]),
     (Service::AdjustGroupsToken, &[H, V, P, V, P, P]),
     (Service::SetInformationToken, &[H, V, P, V]),
     (Service::CompareTokens, &[H, H, P]),
