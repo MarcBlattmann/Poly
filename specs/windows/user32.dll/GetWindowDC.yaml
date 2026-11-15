@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetWindowDC
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Gets a device context for the whole window including the non-client area (the frame and caption). Chrome's
+  browser calls it once in a run (S3) while it prepares its own frame.
+interface:
+  signature: "HDC GetWindowDC(HWND hWnd)"
+rules:
+  geometry: "the DC's origin is the window's top-left corner on the screen (GetDCOrgEx equals the window rectangle's left and top, also after the window is moved); GetClipBox gives 0,0,width,height of the window rectangle (a simple region); WindowFromDC gives the window; the object type is OBJ_DC (3); the device size is the screen's; map mode MM_TEXT, ROP2 R2_COPYPEN; GetDC of the same window is a different handle with the client area's clip box and an origin inside the window rectangle"
+  kinds: "a popup, a popup with border and client edge and a child window have clip boxes the size of the window rectangle; a hidden window and a minimized window give a valid DC with an empty clip box (0x0, NULLREGION)"
+  handles: "two calls at once give two different handles for a window of a class without CS_OWNDC; CS_OWNDC gives the same handle every time and GetDC of that window is a different handle; CS_CLASSDC works"
+  release: "ReleaseDC returns 1 for the window and the DC; a second ReleaseDC of the same handle returns 0; ReleaseDC(NULL, dc) of a DC of GetWindowDC(NULL) returns 1; the DC stays valid after the window is hidden"
+  null_window: "GetWindowDC(NULL) is a DC of the whole screen (clip box the screen, WindowFromDC is a window: the desktop)"
+  errors_rule: "an invalid or destroyed window returns NULL with the last error 1400"
+  drawing: "pixels set with SetPixelV on the window DC in the frame and in the client area read back with GetPixel (a topmost window of the test, so nothing covers it); a pixel outside the window reads CLR_INVALID (0xFFFFFFFF); the client DC reads the same pixel at the shifted coordinate and CLR_INVALID left of its client area; a clip region of the DC limits SetPixelV; ExcludeClipRect makes the clip a complex region; a parent without WS_CLIPCHILDREN is not clipped by its children, and with WS_CLIPCHILDREN the window DC stays one rectangle"
+errors:
+  invalid_window_handle: "1400: invalid or destroyed window"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Layered windows, DWM-composed non-client drawing, DPI-scaled windows, printing to the DC.

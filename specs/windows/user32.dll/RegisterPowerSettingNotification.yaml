@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/RegisterPowerSettingNotification
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Registers a window to receive WM_POWERBROADCAST with PBT_POWERSETTINGCHANGE (0x8013) when a power setting
+  changes. Chrome's browser calls it three times in a run (S3) and unregisters all three at the end.
+interface:
+  signature: "HPOWERNOTIFY RegisterPowerSettingNotification(HANDLE hRecipient, LPCGUID PowerSettingGuid, DWORD Flags)"
+rules:
+  success: "returns a non-NULL handle and sets the last error to 0, for known and unknown GUIDs; six settings at once work; registering for a window that was destroyed still returns a handle; a message-only window works; a copy of a GUID works like the original"
+  initial_message: "for a setting that has a value now the window gets one WM_POWERBROADCAST (wParam PBT_POWERSETTINGCHANGE, lParam a POWERBROADCAST_SETTING with the GUID, a data length of 4 and the value) on its own thread, but only when the thread next looks at its queue (not before the call returns); a release before that cancels it; two registrations of the same setting get two messages"
+  values: "GUID_CONSOLE_DISPLAY_STATE (6FE69556-704A-47A0-8F24-C28D936FDA47), GUID_MONITOR_POWER_ON (02731015-4510-4526-99E6-E5A17EBD1AEA) and GUID_SESSION_DISPLAY_STATUS (2B84C20E-AD23-4DDF-93DB-05FFBD7EFCA5) give 1 (display on); GUID_SESSION_USER_PRESENCE (3C0F4548-C03F-4C4D-B9F2-237EDE686376) gives 0 (present) or 2; GUID_ACDC_POWER_SOURCE (5D3E9A59-E9D5-4B00-A6BD-FF34FF516548) gives 0 (AC), 1 (DC) or 2; GUID_BATTERY_PERCENTAGE_REMAINING gives no message on a machine without a battery; a GUID that is no power setting (the USB device class) gives no message and still returns a handle"
+  no_further_messages: "after the release nothing more arrives"
+  recipient: "a NULL recipient or a window handle that does not exist is accepted; the service flag (1) with a window returns NULL with a service error (1083 on the oracle)"
+  callback_flag: "the callback flag (2) takes a DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS pointer as the recipient: not covered (a window handle with it crashes)"
+errors:
+  service_error: "1083 on the oracle: the service flag with a window handle"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Changes of settings during the test (the display turning off), the callback form, the power-setting GUIDs of
+  laptops.

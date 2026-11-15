@@ -19,6 +19,7 @@ summary: >
 interface:
   signature: "BOOL EnumWindows(WNDENUMPROC proc, LPARAM lparam)"
 rules:
+  ime_windows: "EnumWindows and EnumThreadWindows do not list in the order of the z order walk for the IME windows: every window of the classes IME and MSCTFIME UI (of every process: all the IME windows of the desktop) is listed after all the other windows, keeping their order among themselves; the others are in z order. So where the walk says ctf ime main holder the enumeration says main holder ctf ime, minimized holder main ctf ime, and after the main window was destroyed holder ime ctf (the walk: ime ctf holder). The rule follows the class: a window of the class MSCTFIME UI created by a test is listed with that group (the class IME cannot be created by a program). Test: ew_ime_last (EnumWindows) and etw_ime_last (EnumThreadWindows)."
   set: "our top-level windows E (topmost), C (popup owned by A), A and the hidden B are reported: 'E C A B~'; the child D and the message-only window M are not; windows of other processes are reported too (the order among ours is the z order)"
   lparam: "the lParam is passed to every call"
   stop: "the callback returning 0 after the first (third) of our windows stops the enumeration: EnumWindows returns 0 with last error 0"
@@ -33,7 +34,7 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 1  # count in <symbol>.tests/
+  visible: 2  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
