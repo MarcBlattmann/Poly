@@ -51,7 +51,6 @@ struct State {
     /// The selected cell: grid id and index.
     sel: Option<(i32, usize)>,
     next_custom: usize,
-    updating: bool,
 }
 
 impl State {
@@ -103,7 +102,6 @@ pub fn run(c: *mut u8) -> i32 {
         custom: rd(c, at::CUSTOM),
         sel: None,
         next_custom: 0,
-        updating: false,
     });
     let dlg = build_template();
     let bytes = dlg.build();
@@ -272,6 +270,11 @@ fn build_template() -> Dialog<'static> {
     }
 }
 
+/// The boxes are being set by the dialog itself: their change notifications are not the user's.
+/// (Not a field of `State`: the notifications arrive in a nested call that holds its own
+/// reference to the state, and the compiler may not assume nothing changed it meanwhile.)
+static UPDATING: AtomicBool = AtomicBool::new(false);
+
 static REGISTERED: AtomicBool = AtomicBool::new(false);
 
 /// Register the two window classes of the dialog once per process.
@@ -359,14 +362,14 @@ fn command(st: &mut State, id: i32, code: u32) {
                 redraw_grids(st);
             }
         }
-        ID_HUE | ID_SAT | ID_LUM if code == EN_CHANGE && !st.updating => {
+        ID_HUE | ID_SAT | ID_LUM if code == EN_CHANGE && !UPDATING.load(Ordering::Acquire) => {
             let h = num(hdlg, ID_HUE);
             let s = num(hdlg, ID_SAT);
             let l = num(hdlg, ID_LUM);
             st.cur = color::from_hsl(h, s, l);
             sync_fields_except(st, true);
         }
-        ID_RED | ID_GREEN | ID_BLUE if code == EN_CHANGE && !st.updating => {
+        ID_RED | ID_GREEN | ID_BLUE if code == EN_CHANGE && !UPDATING.load(Ordering::Acquire) => {
             let (r, g, b) = (num(hdlg, ID_RED).min(255), num(hdlg, ID_GREEN).min(255), num(hdlg, ID_BLUE).min(255));
             st.cur = color::rgb(r as u8, g as u8, b as u8);
             sync_fields_except(st, false);
@@ -409,7 +412,7 @@ fn sync_fields(st: &mut State) {
 /// (`from_rgb`: false) the hue, saturation and luminance boxes follow, and the other way round.
 fn sync_fields_except(st: &mut State, hsl_changed: bool) {
     let hdlg = st.hdlg;
-    st.updating = true;
+    UPDATING.store(true, Ordering::Release);
     let c = st.cur;
     if hsl_changed {
         put_num(hdlg, ID_RED, c & 255);
@@ -421,7 +424,7 @@ fn sync_fields_except(st: &mut State, hsl_changed: bool) {
         put_num(hdlg, ID_SAT, s);
         put_num(hdlg, ID_LUM, l);
     }
-    st.updating = false;
+    UPDATING.store(false, Ordering::Release);
     // SAFETY: windows of the dialog.
     unsafe {
         let s = sys::GetDlgItem(hdlg, ID_CURRENT);
