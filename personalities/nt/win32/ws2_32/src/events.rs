@@ -20,7 +20,8 @@ use poly_winsock::error::STATUS_SUCCESS;
 use poly_winsock::events::{self as ev, Inputs, Registration};
 use poly_winsock::{dup, poll};
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateThread(
         security: *const u8,
