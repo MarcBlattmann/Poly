@@ -257,11 +257,17 @@ impl Job {
 #[derive(Debug, PartialEq, Eq)]
 pub enum SetOp {
     /// The basic (and, from the extended structure, the rest) limits.
-    Limits { basic: [u8; 64], tail: Option<[u8; 80]> },
+    Limits {
+        basic: [u8; 64],
+        tail: Option<[u8; 80]>,
+    },
     Ui(u32),
     EndOfJob(u32),
     /// `JOBOBJECT_ASSOCIATE_COMPLETION_PORT`: key and port handle.
-    Port { key: u64, port: u64 },
+    Port {
+        key: u64,
+        port: u64,
+    },
     /// A class that is accepted and has no effect here.
     Accepted,
 }

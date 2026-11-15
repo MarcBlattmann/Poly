@@ -4,8 +4,8 @@
 use crate::Handle;
 use core::sync::atomic::{AtomicIsize, Ordering};
 use poly_winsock::afd;
-use poly_winsock::known::Known;
 use poly_winsock::error::{STATUS_PENDING, STATUS_SUCCESS};
+use poly_winsock::known::Known;
 
 #[link(name = "ntdll", kind = "raw-dylib")]
 unsafe extern "system" {

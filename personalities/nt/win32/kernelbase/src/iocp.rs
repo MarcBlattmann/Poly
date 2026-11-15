@@ -377,7 +377,8 @@ unsafe extern "system" fn io_apc(context: usize, iosb: *mut IoStatusBlock, _rese
         let rec = Box::from_raw(context as *mut ApcRecord);
         let status = NtStatus((*iosb).status as u32);
         let bytes = (*iosb).information as u32;
-        let error = poly_kernelbase::file::ex_completion_error(status.0).unwrap_or_else(|| nt::RtlNtStatusToDosError(status));
+        let error =
+            poly_kernelbase::file::ex_completion_error(status.0).unwrap_or_else(|| nt::RtlNtStatusToDosError(status));
         (rec.routine)(error, bytes, rec.overlapped);
     }
 }
