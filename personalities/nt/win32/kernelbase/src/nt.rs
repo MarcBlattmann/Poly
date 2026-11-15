@@ -328,6 +328,7 @@ unsafe extern "system" {
         length: u32,
         returned: *mut u32,
     ) -> NtStatus;
+    #[cfg(not(target_arch = "x86"))]
     pub fn NtSetInformationThread(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
     pub fn NtGetCurrentProcessorNumber() -> u32;
