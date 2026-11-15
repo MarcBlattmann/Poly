@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/DeriveCapabilitySidsFromName.yaml
+id: windows/api/kernelbase.dll/DeriveCapabilitySidsFromName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed. The values were also compared with a public SHA-256 implementation (the test's own): the outputs equal it as described below.
+summary: >
+  Derives the capability group SID and the capability SID for a capability name. The declaration is in securitybaseapi.h (advapi32), but the export is only in kernelbase.dll (advapi32.dll and kernel32.dll do not export it: a program resolves it from kernelbase.dll). One group SID S-1-5-32-<8 values> and one capability SID per name: well-known names (internetClient and the others of winnt.h's SECURITY_CAPABILITY_* list that the tests tried) give S-1-15-3-<rid>; every other name gives S-1-15-3-1024-<the same 8 values as the group>.
+interface:
+  signature: "BOOL DeriveCapabilitySidsFromName(LPCWSTR name, PSID **group_sids, DWORD *n_groups, PSID **capability_sids, DWORD *n_caps)"
+  result: "TRUE with one group and one capability"
+chrome:
+  calls: "not in the S2 trace by name; the capability SIDs of the sandbox's tokens come from this derivation or from the well-known ones"
+rules:
+  counts: "every name gave 1 group SID and 1 capability SID (the group SID is 44 bytes, the capability SID 16 bytes for a well-known name and 48 bytes for a hashed one)"
+  well_known: "internetClient S-1-15-3-1, internetClientServer 2, privateNetworkClientServer 3, picturesLibrary 4, videosLibrary 5, musicLibrary 6, documentsLibrary 7, enterpriseAuthentication 8, sharedUserCertificates 9, removableStorage 10, appointments 11, contacts 12; internetExplorer is not well known here (hashed)"
+  hash: "the 8 values of the group SID (and of a hashed capability SID after 1024) are the first eight 32-bit words, read as little endian, of the SHA-256 of the name in upper case as UTF-16LE (compared by the test: true for every name, including the empty name, a name that looks like a SID and the well-known ones' group SIDs); the AppContainer SID of DeriveAppContainerSidFromAppContainerName uses the first seven words of the same kind of hash over the name in lower case (its sheet)"
+  case: "the name is case-insensitive: InternetClient, INTERNETCLIENT and internetclient give the same SIDs; internetClient and internetClientServer differ"
+  empty_and_odd: "the empty name, a one-letter name, a name with a space and a non-ASCII letter all work and are hashed"
+  samples: "registryRead -> S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681 (group S-1-5-32-1065365936-...); lpacCom -> S-1-15-3-1024-2405443489-874036122-4286035555-1823921565-1746547431-2453885448-3625952902-991631256; a -> S-1-15-3-1024-3391167718-440101745-433174511-2624029583-2530583628-1965193701-3020120797-2099451538; internetClient group S-1-5-32-2779705173-1925339129-2667939958-2414465498-3395756507-4015878651-158944808-788332705"
+  null_name: "a NULL name: the child process of the test ends with the exit code printed by the test (an access violation or a status)"
+errors:
+  none_seen: "no failure for any name tried; last error 0xDEAD (the test's mark) is left alone on success"
+side_effects: "allocates the arrays and SIDs (LocalFree is the documented way; the tests leave them)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The export is resolved with GetProcAddress on kernelbase.dll; the test computes the SHA-256 itself and compares.
+not_covered: >
+  Names longer than 260 characters, names with non-BMP characters, the lower-case handling of non-ASCII letters (the test's own hash only upper-cases ASCII: the result for the non-ASCII name is recorded as observed), freeing the memory.

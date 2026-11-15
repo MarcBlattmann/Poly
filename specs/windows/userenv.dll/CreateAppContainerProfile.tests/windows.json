@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "15bb70091a8b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T11:00:14Z",
+  "tests": [
+    {
+      "name": "cacp_profile_b",
+      "exe_sha256": "8ef09dff4c796a38794fdbddfe414bfe4f106a95a09dd4e802dc350200a6c10c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlOiAweDAKZm9sZGVyOiAweDAgZW5kcyB3aXRoICdcQXBwRGF0YVxMb2NhbFxQYWNrYWdlc1xwb2x5czJiLnByb2YxXEFDJwpkZWxldGU6IDB4MApkaXJlY3RvcnkgZ29uZTogdHJ1ZQpvbmUgY2hhcmFjdGVyOiAweDAsIFNJRCByZXR1cm5lZCB0cnVlCjY1IGNoYXJhY3RlcnM6IDB4ODAwNzAwNTcsIFNJRCByZXR1cm5lZCBmYWxzZQp3aXRoIGEgc2xhc2g6IDB4ODAwNzAwMDMsIFNJRCByZXR1cm5lZCBmYWxzZQogIHRoZSBzYW1lIG5hbWUgaW4gbG93ZXIgY2FzZSBhZnRlcndhcmRzOiAweDgwMDcwMGI3CjUxMS1jaGFyYWN0ZXIgZGlzcGxheSBuYW1lOiAweDAKMjA0Ny1jaGFyYWN0ZXIgZGVzY3JpcHRpb246IDB4MAoxMDAtY2hhcmFjdGVyIGRpc3BsYXkgbmFtZTogMHgwCmEgY2FwYWJpbGl0eSBjb3VudCBvZiAxIHdpdGggYSBOVUxMIGxpc3Q6IDB4ODAwNzAwNTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create: 0x0\nfolder: 0x0 ends with '\\AppData\\Local\\Packages\\polys2b.prof1\\AC'\ndelete: 0x0\ndirectory gone: true\none character: 0x0, SID returned true\n65 characters: 0x80070057, SID returned false\nwith a slash: 0x80070003, SID returned false\n  the same name in lower case afterwards: 0x800700b7\n511-character display name: 0x0\n2047-character description: 0x0\n100-character display name: 0x0\na capability count of 1 with a NULL list: 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 257
+    },
+    {
+      "name": "cacp_profile_c",
+      "exe_sha256": "f8e84f3d737ea7358985e5395e3d55930a0f922dc34068d4963bd930d409c052",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0lEIGVxdWFscyB0aGUgb25lIGRlcml2ZWQgZnJvbSB0aGUgbmFtZTogdHJ1ZQpmb2xkZXIgZXhpc3RzIGFuZCBpcyBhIGRpcmVjdG9yeTogdHJ1ZQpyZWdpc3RyeSBhZnRlciB0aGUgZGVsZXRlOiAnPG5vIGtleT4nCmRlbGV0ZSBhZ2FpbjogMHgwCjYzIGNoYXJhY3RlcnM6IDB4MCwgU0lEIHJldHVybmVkIHRydWUKd2l0aCBhIHNwYWNlOiAweDAsIFNJRCByZXR1cm5lZCB0cnVlCndpdGggYSBjb2xvbjogMHg4MDA3MDEwYiwgU0lEIHJldHVybmVkIGZhbHNlCmVtcHR5IGRpc3BsYXkgbmFtZSBhbmQgZGVzY3JpcHRpb246IDB4ODAwNzAwNTcKNTEyLWNoYXJhY3RlciBkaXNwbGF5IG5hbWU6IDB4ODAwNzAwNTcKMjA0OC1jaGFyYWN0ZXIgZGVzY3JpcHRpb246IDB4ODAwNzAwNTcKNTIwLWNoYXJhY3RlciBkZXNjcmlwdGlvbjogMHgwCkdldEFwcENvbnRhaW5lclJlZ2lzdHJ5TG9jYXRpb24gb3V0c2lkZSBhIGNvbnRhaW5lcjogMHg4MDAwZmZmZiwga2V5IHJldHVybmVkIGZhbHNlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SID equals the one derived from the name: true\nfolder exists and is a directory: true\nregistry after the delete: '<no key>'\ndelete again: 0x0\n63 characters: 0x0, SID returned true\nwith a space: 0x0, SID returned true\nwith a colon: 0x8007010b, SID returned false\nempty display name and description: 0x80070057\n512-character display name: 0x80070057\n2048-character description: 0x80070057\n520-character description: 0x0\nGetAppContainerRegistryLocation outside a container: 0x8000ffff, key returned false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 256
+    }
+  ]
+}

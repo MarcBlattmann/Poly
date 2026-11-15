@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mdmregistration.dll/IsDeviceRegisteredWithManagement.yaml
+id: windows/api/mdmregistration.dll/IsDeviceRegisteredWithManagement
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn "IsDeviceRegisteredWithManagement function" and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Asks whether the device is enrolled with a management (MDM) service. Chrome's browser loads mdmregistration.dll (the S2 run on Poly fails with 0xC0000135 for the library twice) and resolves this function and IsManagementRegistrationAllowed by name. On the oracle (a workgroup computer that is not enrolled) the call succeeds, reports FALSE and leaves the UPN buffer alone; it also accepts NULL arguments.
+interface:
+  signature: "HRESULT IsDeviceRegisteredWithManagement(BOOL *registered, DWORD cch_upn, LPWSTR upn)"
+  result: "S_OK (0)"
+chrome:
+  calls: "mdmregistration.dll loaded (twice in the Poly run, both 0xC0000135: library missing); GetProcAddress of IsDeviceRegisteredWithManagement in the browser"
+rules:
+  not_enrolled: "LoadLibraryW(\"mdmregistration.dll\") works; IsDeviceRegisteredWithManagement(&flag, 64, buffer): S_OK, flag 0, the buffer of 64 units untouched; with a zero length and a NULL buffer: S_OK and 0; with a length of 64 and a NULL buffer: S_OK and 0; with a zero length and a buffer: S_OK, 0, buffer untouched; with NULL for the flag and the buffer: S_OK; repeated calls give the same result"
+  other_export: "mdmregistration.dll also exports IsManagementRegistrationAllowed"
+errors:
+  none_seen: "no failure was seen for any argument shape on a machine that is not enrolled"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. The library and the export are found with LoadLibraryW and GetProcAddress.
+not_covered: >
+  An enrolled device (the oracle is not: the UPN buffer, the TRUE result and the lengths needed for it are unknown), the registry values the function reads, IsManagementRegistrationAllowed, other exports.
