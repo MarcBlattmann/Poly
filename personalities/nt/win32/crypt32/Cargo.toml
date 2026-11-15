@@ -11,6 +11,7 @@ name = "crypt32"
 crate-type = ["cdylib"]
 
 [dependencies]
+poly-win32-rt = { path = "../rt" }
 poly-win32-cryptrt = { path = "../cryptrt" }
 poly-crypto = { path = "../../../../crates/poly-crypto" }
 poly-x509 = { path = "../../../../crates/poly-x509" }

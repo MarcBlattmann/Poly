@@ -13,3 +13,6 @@ poly_win32_rt::fail_exports!("wevtapi", win32, [EvtClose, EvtCreateRenderContext
 pub extern "system" fn wevtapi_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

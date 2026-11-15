@@ -87,3 +87,9 @@ pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved:
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+#[cfg(target_arch = "x86_64")]
+mod apps_impl;
