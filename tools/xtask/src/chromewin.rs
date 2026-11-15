@@ -744,10 +744,10 @@ pub fn console_stream(log: &str) -> String {
 }
 
 /// Guest memory: Chrome's browser, GPU, network and renderer processes. Stage 1 starts about
-/// ten Chrome processes; in 4 GiB the kernel ran out of frames (its heap takes them from the
-/// same allocator: "memory allocation of 1232 bytes failed" in an exception's context) in about
-/// half the runs (ADR 0155 step 12).
-pub const MEMORY: &str = "8G";
+/// ten Chrome processes; they share `chrome.dll`'s clean pages since DLLs are image section views
+/// (ADR 0188): about 360 MiB of user pages at the most, where every process had its own 300 MB
+/// copy before and the 4 GiB guest ran out of frames (ADR 0155 steps 12 and 13).
+pub const MEMORY: &str = "4G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
