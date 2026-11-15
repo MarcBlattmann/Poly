@@ -99,7 +99,6 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("FreeEnvironmentStringsW", "api-ms-win-core-processenvironment-l1-1-0"),
     // Start-up calls of 32-bit programs (ADR 0186, stage 3).
     ("SetHandleCount", "api-ms-win-core-handle-l1-1-0"),
-    ("MulDiv", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetThreadUILanguage", "api-ms-win-core-localization-l1-2-0"),
     ("SetThreadPreferredUILanguages", "api-ms-win-core-localization-l1-2-0"),
     // ANSI forms (ADR 0186, stage 3).

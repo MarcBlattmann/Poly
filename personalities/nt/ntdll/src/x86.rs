@@ -285,8 +285,7 @@ unsafe fn dispatch(record: *mut u8, context: *mut u8) -> bool {
             return false;
         }
         // SAFETY: the handler takes the documented arguments.
-        let disposition =
-            unsafe { poly_call_handler(handler, record, frame, context, dc.as_mut_ptr().cast()) };
+        let disposition = unsafe { poly_call_handler(handler, record, frame, context, dc.as_mut_ptr().cast()) };
         if disposition == CONTINUE_EXECUTION {
             // SAFETY: the caller's record.
             if unsafe { u32_at(record, RECORD_FLAGS) } & EXCEPTION_NONCONTINUABLE == 0 {

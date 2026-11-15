@@ -22,8 +22,7 @@ const RUSTFLAGS: &str = "-Clinker=rust-lld -Clinker-flavor=lld-link -Clink-arg=/
 /// system then refuses every frame handler in it (SafeSEH, ADR 0186). The test programs register
 /// their own frames, so they are linked as legacy images (no table, no flag), as a compiler
 /// that does not know `/SAFESEH` makes them; `safeseh32` asks for a table (`programs_build_rs`).
-const PROGRAM_FLAGS: &str =
-    "-Clink-arg=/ENTRY:mainCRTStartup -Clink-arg=/SUBSYSTEM:CONSOLE -Clink-arg=/safeseh:no";
+const PROGRAM_FLAGS: &str = "-Clink-arg=/ENTRY:mainCRTStartup -Clink-arg=/SUBSYSTEM:CONSOLE -Clink-arg=/safeseh:no";
 /// The target.
 pub const TARGET: &str = "i686-pc-windows-msvc";
 /// The environment variable that gives the kernel's `build.rs` the directory.

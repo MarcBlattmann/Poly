@@ -57,9 +57,3 @@ pub unsafe extern "system" fn SetThreadPreferredUILanguages(flags: u32, language
     }
     TRUE
 }
-
-/// `MulDiv(nNumber, nNumerator, nDenominator)`: see [`poly_kernelbase::muldiv`].
-#[unsafe(no_mangle)]
-pub extern "system" fn MulDiv(number: i32, numerator: i32, denominator: i32) -> i32 {
-    poly_kernelbase::muldiv::mul_div(number, numerator, denominator)
-}

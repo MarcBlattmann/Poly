@@ -176,7 +176,8 @@ fn embed_wow64() {
         "user32.dll",
         "hello32.exe",
         "gui32.exe",
-        "sys32.exe", "safeseh32.exe",
+        "sys32.exe",
+        "safeseh32.exe",
     ]
     .iter()
     .map(|n| n.to_string())
