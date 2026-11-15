@@ -201,15 +201,6 @@ pub extern "system" fn RegisterPointerDeviceNotifications(_hwnd: H, _notify_rang
     1
 }
 
-/// `GetSystemMenu`: a window of ours has no system menu object (NULL).
-#[unsafe(no_mangle)]
-pub extern "system" fn GetSystemMenu(hwnd: H, _revert: i32) -> H {
-    if info(hwnd).is_none() {
-        return bad_window();
-    }
-    0
-}
-
 /// `GetWindowDisplayAffinity`: `WDA_NONE`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetWindowDisplayAffinity(hwnd: H, affinity: *mut u32) -> i32 {

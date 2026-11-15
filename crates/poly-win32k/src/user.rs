@@ -246,6 +246,16 @@ pub trait Env {
     fn set_region_rects(&self, _rgn: u64, _rects: &[Rect]) -> i32 {
         0
     }
+    /// Whether menu `menu` (a top-level window's `GWLP_ID`) has a row of
+    /// items to show: the menu bar takes room from the client area only then
+    /// (`SetMenu.yaml` `client_area`).
+    fn menu_bar_shown(&self, _menu: u64) -> bool {
+        false
+    }
+    /// A window is going (after its `WM_NCDESTROY`): `user32` destroys the
+    /// menu `menu` it owned (a top-level window's `GWLP_ID`, 0: none) and its
+    /// system menu.
+    fn window_freed(&self, _hwnd: u32, _menu: u64) {}
 }
 
 /// `MAKELPARAM(lo, hi)`.
@@ -668,10 +678,11 @@ fn nc_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
         }
     }
     send(env, u64::from(hwnd), WM_NCDESTROY, 0, 0);
-    if let Some(i) = info(env, u64::from(hwnd))
-        && i.own_dc != 0
-    {
-        env.delete_dc(i.own_dc);
+    if let Some(i) = info(env, u64::from(hwnd)) {
+        if i.own_dc != 0 {
+            env.delete_dc(i.own_dc);
+        }
+        env.window_freed(hwnd, if i.style & WS_CHILD == 0 { i.id } else { 0 });
     }
     env.call(Request::Free { hwnd });
 }
@@ -1510,7 +1521,8 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             if l != 0 {
                 // SAFETY: lParam starts with a RECT (NCCALCSIZE_PARAMS for TRUE).
                 let r = unsafe { &mut *(l as *mut CRect) };
-                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, false));
+                let bar = i.style & WS_CHILD == 0 && i.id != 0 && env.menu_bar_shown(i.id);
+                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, bar));
             }
             0
         }

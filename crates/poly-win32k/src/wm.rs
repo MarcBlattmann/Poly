@@ -750,10 +750,6 @@ impl Wm {
             }
             (self.desktop, self.root(s.parent as u32))
         };
-        if !child && s.menu != 0 {
-            // No menus exist yet, so no value is a menu handle.
-            return err(ERROR_INVALID_MENU_HANDLE);
-        }
         // A layered child window needs a manifest that declares Windows 8
         // support: without one it is not created, and no last error is set
         // (SetLayeredWindowAttributes.yaml `children`).
@@ -833,7 +829,8 @@ impl Wm {
         win.wndproc = wndproc;
         win.unicode = unicode;
         win.instance = s.instance;
-        win.id = if child { s.menu } else { 0 };
+        // A top-level window's `id` is its menu handle (user32 checks it is one).
+        win.id = s.menu;
         win.extra = vec![0; extra];
         win.state = State::Creating;
         win.dpi =
@@ -1034,12 +1031,7 @@ impl Wm {
                     u64::from(w.parent)
                 }
             }
-            -12 => {
-                if w.style & WS_CHILD == 0 && value != 0 {
-                    return err(ERROR_INVALID_MENU_HANDLE);
-                }
-                core::mem::replace(&mut w.id, value)
-            }
+            -12 => core::mem::replace(&mut w.id, value),
             -16 => u64::from(core::mem::replace(&mut w.style, value as u32)),
             -20 => {
                 let new = guic::filter_ex_style(w.style, w.ex_style, value as u32, &mut w.lay);
