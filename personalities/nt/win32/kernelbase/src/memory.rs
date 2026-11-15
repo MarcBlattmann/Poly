@@ -19,6 +19,63 @@ pub unsafe extern "system" fn VirtualAlloc(address: *mut u8, size: usize, kind: 
     if st.is_success() { base } else { fail_status(st, core::ptr::null_mut()) }
 }
 
+/// `VirtualAllocEx` (ADR 0196): `VirtualAlloc` in the address space of `process`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualAllocEx(
+    process: isize,
+    address: *mut u8,
+    size: usize,
+    kind: u32,
+    protect: u32,
+) -> *mut u8 {
+    if let Err(e) = memory::check_alloc_type(kind) {
+        return fail(e, core::ptr::null_mut());
+    }
+    let (mut base, mut sz) = (address, size);
+    // SAFETY: valid in/out pointers; the kernel checks the arguments.
+    let st = unsafe { nt::NtAllocateVirtualMemory(process, &mut base, 0, &mut sz, kind, protect) };
+    if st.is_success() { base } else { fail_status(st, core::ptr::null_mut()) }
+}
+
+/// `VirtualFreeEx`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualFreeEx(process: isize, address: *mut u8, size: usize, kind: u32) -> i32 {
+    if let Err(e) = memory::check_free(size, kind) {
+        return fail(e, FALSE);
+    }
+    let (mut base, mut sz) = (address, size);
+    // SAFETY: valid in/out pointers.
+    let st = unsafe { nt::NtFreeVirtualMemory(process, &mut base, &mut sz, kind) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `VirtualProtectEx`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualProtectEx(
+    process: isize,
+    address: *mut u8,
+    size: usize,
+    protect: u32,
+    old: *mut u32,
+) -> i32 {
+    if old.is_null() {
+        return fail(ERROR_NOACCESS, FALSE);
+    }
+    let (mut base, mut sz) = (address, size);
+    // SAFETY: valid in/out pointers.
+    let st = unsafe { nt::NtProtectVirtualMemory(process, &mut base, &mut sz, protect, old) };
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `VirtualQueryEx`: the bytes of `MEMORY_BASIC_INFORMATION` written, or 0.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualQueryEx(process: isize, address: *const u8, info: *mut u8, length: usize) -> usize {
+    let mut returned = 0usize;
+    // SAFETY: the caller's buffer of `length` bytes.
+    let st = unsafe { nt::NtQueryVirtualMemory(process, address, 0, info, length, &mut returned) };
+    if st.is_success() { returned } else { fail_status(st, 0) }
+}
+
 /// `VirtualFree`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn VirtualFree(address: *mut u8, size: usize, kind: u32) -> i32 {
@@ -178,8 +235,7 @@ pub unsafe extern "system" fn LocalSize(mem: *mut u8) -> usize {
 
 /// Copy between this process's memory and `buf`, region by region: a region that cannot be
 /// read (or, for a write, opened for writing) ends the copy with `ERROR_PARTIAL_COPY` and the
-/// bytes done so far. Only the calling process is supported (`ERROR_NOT_SUPPORTED` otherwise):
-/// there is no cross-process memory service yet.
+/// bytes done so far. Another process's memory is copied by the kernel (ADR 0196).
 unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done: *mut usize, write: bool) -> i32 {
     if process != nt::CURRENT_PROCESS as isize {
         // SAFETY: plain calls; `process` is only looked at.
@@ -189,7 +245,21 @@ unsafe fn copy_self(process: isize, base: usize, buf: *mut u8, size: usize, done
             return FALSE;
         }
         if id != crate::process::GetCurrentProcessId() {
-            return fail(ERROR_NOT_SUPPORTED, FALSE);
+            // Another process: the kernel copies (`NtReadVirtualMemory`, `NtWriteVirtualMemory`).
+            let mut n = 0usize;
+            // SAFETY: the caller's buffer of `size` bytes; the kernel checks the other side.
+            let st = unsafe {
+                if write {
+                    nt::NtWriteVirtualMemory(process, base as *mut u8, buf, size, &mut n)
+                } else {
+                    nt::NtReadVirtualMemory(process, base as *const u8, buf, size, &mut n)
+                }
+            };
+            if !done.is_null() {
+                // SAFETY: the caller's out parameter.
+                unsafe { *done = n };
+            }
+            return if st.is_success() { TRUE } else { fail_status(st, FALSE) };
         }
     }
     let mut copied = 0usize;

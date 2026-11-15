@@ -484,16 +484,17 @@ unsafe fn create(
     // creator's own (ADR 0196).
     let mut lowbox: Option<Handle> = None;
     if let Some(sc) = parsed.security_capabilities {
-        if r.token.is_some() {
-            return fail(ERROR_INVALID_PARAMETER, FALSE);
-        }
+        // With a token (`CreateProcessAsUserW`, which Chrome's broker uses) the container is made
+        // of that token, else of the creator's own.
         // SAFETY: the caller's structure, which the list's contract keeps valid.
-        match unsafe { crate::appcontainer::start_in_container(sc as *const crate::appcontainer::SecurityCapabilities) } {
+        match unsafe {
+            crate::appcontainer::start_in_container(r.token.unwrap_or(0), sc as *const crate::appcontainer::SecurityCapabilities)
+        } {
             Ok(h) => lowbox = Some(h),
             Err(e) => return fail(e, FALSE),
         }
     }
-    let token = r.token.or(lowbox);
+    let token = lowbox.or(r.token);
     let mut process_flags = if r.inherit_handles { p::NT_PROCESS_INHERIT_HANDLES } else { 0 };
     if token.is_some() {
         process_flags |= NT_PROCESS_POLY_TOKEN;

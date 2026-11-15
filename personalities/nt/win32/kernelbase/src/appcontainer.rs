@@ -355,7 +355,7 @@ pub(crate) unsafe fn make_lowbox(source: Handle, sc: &SecurityCapabilities) -> R
 
 /// The token of a child `CreateProcessW` starts in the container of `sc`: its profile has to
 /// exist (a mapping for the SID), else error 2.
-pub(crate) unsafe fn start_in_container(sc: *const SecurityCapabilities) -> Result<Handle, u32> {
+pub(crate) unsafe fn start_in_container(source: Handle, sc: *const SecurityCapabilities) -> Result<Handle, u32> {
     // SAFETY: the caller's structure.
     let sc = unsafe { &*sc };
     // SAFETY: the caller's SID.
@@ -368,7 +368,7 @@ pub(crate) unsafe fn start_in_container(sc: *const SecurityCapabilities) -> Resu
         };
     }
     // SAFETY: as above.
-    unsafe { make_lowbox(0, sc) }
+    unsafe { make_lowbox(source, sc) }
 }
 
 /// `CreateAppContainerToken(source, &securityCapabilities, &token)`: a primary lowbox token.

@@ -76,6 +76,18 @@ pub trait Backend {
     /// committed and writable): the TEB and PEB of a new process.
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus>;
 
+    /// Read `len` bytes of the process's memory at `addr` (committed, readable pages): another
+    /// process's memory for `NtReadVirtualMemory` (ADR 0196).
+    fn read(&mut self, _addr: u64, _len: u64) -> Result<Vec<u8>, NtStatus> {
+        Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// [`write`](Self::write) into pages whatever their protection says, as a debugger writes
+    /// (`NtWriteVirtualMemory`); the pages keep it.
+    fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
+        self.write(addr, data)
+    }
+
     /// Make the pages of a new section; returns the kernel's id for them.
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus>;
 

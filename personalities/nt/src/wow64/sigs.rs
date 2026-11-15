@@ -71,6 +71,8 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::FreeVirtualMemory, &[H, OS, OS, V]),
     (Service::ProtectVirtualMemory, &[H, OS, OS, V, P]),
     (Service::QueryVirtualMemory, &[H, V, V, P, V, OS]),
+    (Service::ReadVirtualMemory, &[H, V, P, V, OS]),
+    (Service::WriteVirtualMemory, &[H, V, P, V, OS]),
     (Service::CreateSection, &[OH, V, OA, P, V, V, H]),
     (Service::OpenSection, &[OH, V, OA]),
     (Service::MapViewOfSection, &[H, H, OS, V, V, P, OS, V, V, V]),

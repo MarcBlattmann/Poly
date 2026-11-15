@@ -186,6 +186,16 @@ impl Backend for MemBackend<'_> {
         self.memory.write(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
+    fn read(&mut self, addr: u64, len: u64) -> Result<Vec<u8>, NtStatus> {
+        let mut buf = alloc::vec![0u8; len as usize];
+        self.memory.read(addr, &mut buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)?;
+        Ok(buf)
+    }
+
+    fn write_forced(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
+        self.memory.write_forced(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    }
+
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
         let page_source: Arc<dyn PageSource> = match source {
             SectionSource::Pagefile { size, .. } => Arc::new(AnonShared::new(*size)),

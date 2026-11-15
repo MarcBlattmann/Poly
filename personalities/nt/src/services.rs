@@ -148,6 +148,12 @@ pub enum Service {
     /// MemoryInformationClass, MemoryInformation, MemoryInformationLength,
     /// ReturnLength*)`.
     QueryVirtualMemory,
+    /// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
+    /// NumberOfBytesRead*)` (ADR 0196).
+    ReadVirtualMemory,
+    /// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
+    /// NumberOfBytesWritten*)` (ADR 0196).
+    WriteVirtualMemory,
     /// `NtCreateSection(SectionHandle*, DesiredAccess, ObjectAttributes*,
     /// MaximumSize*, SectionPageProtection, AllocationAttributes,
     /// FileHandle)`.
@@ -462,7 +468,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 77] = [
+pub const SERVICES: [(Service, u32, &str); 79] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -504,6 +510,8 @@ pub const SERVICES: [(Service, u32, &str); 77] = [
     (Service::FreeVirtualMemory, 0x041, "NtFreeVirtualMemory"),
     (Service::ProtectVirtualMemory, 0x042, "NtProtectVirtualMemory"),
     (Service::QueryVirtualMemory, 0x043, "NtQueryVirtualMemory"),
+    (Service::ReadVirtualMemory, 0x04B, "NtReadVirtualMemory"),
+    (Service::WriteVirtualMemory, 0x04C, "NtWriteVirtualMemory"),
     (Service::CreateSection, 0x044, "NtCreateSection"),
     (Service::OpenSection, 0x045, "NtOpenSection"),
     (Service::MapViewOfSection, 0x046, "NtMapViewOfSection"),

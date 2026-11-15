@@ -1,10 +1,9 @@
 //! The memory, section and process services: arguments in, the model of
 //! [`crate::vm`] and [`crate::section`] asked, results out.
 //!
-//! Every memory service names a process. Only the calling process's own
-//! memory can be reached yet (`NtCurrentProcess()`, or a handle to its own
-//! process object with the right access); a handle to another process is
-//! `STATUS_NOT_IMPLEMENTED` until the process milestone. A null handle is
+//! Every memory service names a process: the caller's own (`NtCurrentProcess()`, or a handle
+//! to its own process object with the right access) or, for allocating, freeing, protecting,
+//! querying, reading and writing, another process (ADR 0196). A null handle is
 //! `STATUS_INVALID_HANDLE`.
 
 use crate::abi;
@@ -62,14 +61,29 @@ fn executable(protect: u32) -> bool {
     protect & 0xF0 != 0
 }
 
+/// Run `f` on the address space `process` names with `access`: the caller's own, or another
+/// process's (`VirtualAllocEx` and its relatives, ADR 0196; the sandbox's broker prepares the
+/// memory of a target this way).
+fn on_process<K: NtKernel, R>(
+    k: &mut K,
+    process: u64,
+    access: u32,
+    f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn crate::backend::Backend) -> Result<R>,
+) -> Result<R> {
+    let caller = k.caller();
+    let target = k.with_state(|sys, proc, _| target_of(sys, proc, &caller, Handle(process), access))?;
+    match target {
+        Target::Own => k.with_state(f),
+        Target::Other(pid) => k.with_process(pid, f).ok_or(STATUS_PROCESS_IS_TERMINATING)?,
+    }
+}
+
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
 pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, size) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
         if proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
@@ -89,11 +103,8 @@ pub fn free<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, free_type] = abi::args::<K, 4>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let caller = k.caller();
-    let (base, size) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
-        proc.vm.free(b, base, size, free_type as u32)
-    })?;
+    let (base, size) =
+        on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| proc.vm.free(b, base, size, free_type as u32))?;
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     Ok(STATUS_SUCCESS)
@@ -110,10 +121,8 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if old_ptr == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
     }
-    let caller = k.caller();
     let new = new as u32;
-    let (base, size, old) = k.with_state(|sys, proc, b| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_VM_OPERATION)?;
+    let (base, size, old) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
         // What the mitigation lets be executable are the views of image sections (Learn,
         // "Process Mitigation Policies": modules are mapped, not made): the loader's own
         // modules, nothing a program makes out of private memory (ADR 0196).
@@ -126,6 +135,79 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     abi::write_u64(k, size_ptr, size)?;
     abi::write_u32(k, old_ptr, old)?;
     Ok(STATUS_SUCCESS)
+}
+
+/// `STATUS_PARTIAL_COPY` (`ntstatus.h`).
+const STATUS_PARTIAL_COPY: NtStatus = NtStatus(0x8000_000D);
+
+/// The longest piece `NtReadVirtualMemory` / `NtWriteVirtualMemory` copy at once.
+const MAX_COPY: u64 = 16 << 20;
+
+/// `NtReadVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToRead,
+/// NumberOfBytesRead*)` (`ReadProcessMemory`): the memory of a process (needs
+/// `PROCESS_VM_READ`) into the caller's buffer. A range that is not all readable is
+/// `STATUS_PARTIAL_COPY` with the bytes done before the first page that is not.
+pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buffer, size, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    if size > MAX_COPY {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let (data, status) = on_process(k, process, PROCESS_VM_READ, |_, proc, b| {
+        let mut got: Vec<u8> = Vec::new();
+        let mut at = base;
+        let end = base.checked_add(size).ok_or(STATUS_ACCESS_VIOLATION)?;
+        while at < end {
+            let piece = (crate::vm::PAGE_SIZE - at % crate::vm::PAGE_SIZE).min(end - at);
+            let readable = proc
+                .vm
+                .query(at)
+                .is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0);
+            match readable.then(|| b.read(at, piece)) {
+                Some(Ok(bytes)) => got.extend_from_slice(&bytes),
+                _ => return Ok((got, STATUS_PARTIAL_COPY)),
+            }
+            at += piece;
+        }
+        Ok((got, STATUS_SUCCESS))
+    })?;
+    abi::write(k, buffer, &data)?;
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, data.len() as u64)?;
+    }
+    if status == STATUS_SUCCESS { Ok(STATUS_SUCCESS) } else { Err(status) }
+}
+
+/// `NtWriteVirtualMemory(ProcessHandle, BaseAddress, Buffer, NumberOfBytesToWrite,
+/// NumberOfBytesWritten*)` (`WriteProcessMemory`): the caller's bytes into a process's memory
+/// (needs `PROCESS_VM_WRITE`). Pages that are committed are written whatever their protection
+/// says (Learn: the function changes it for the copy and puts it back); the first one that is
+/// not ends the copy with `STATUS_PARTIAL_COPY`.
+pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [process, base, buffer, size, done_ptr] = abi::args::<K, 5>(k, regs)?;
+    if size > MAX_COPY {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let mut data = alloc::vec![0u8; size as usize];
+    abi::read(k, buffer, &mut data)?;
+    let (done, status) = on_process(k, process, PROCESS_VM_WRITE, |_, proc, b| {
+        let mut at = base;
+        let mut done = 0usize;
+        let end = base.checked_add(size).ok_or(STATUS_ACCESS_VIOLATION)?;
+        while at < end {
+            let piece = (crate::vm::PAGE_SIZE - at % crate::vm::PAGE_SIZE).min(end - at);
+            let committed = proc.vm.query(at).is_ok_and(|q| q.state == MEM_COMMIT && q.protect & PAGE_NOACCESS == 0);
+            if !committed || b.write_forced(at, &data[done..done + piece as usize]).is_err() {
+                return Ok((done, STATUS_PARTIAL_COPY));
+            }
+            at += piece;
+            done += piece as usize;
+        }
+        Ok((done, STATUS_SUCCESS))
+    })?;
+    if done_ptr != 0 {
+        abi::write_u64(k, done_ptr, done as u64)?;
+    }
+    if status == STATUS_SUCCESS { Ok(STATUS_SUCCESS) } else { Err(status) }
 }
 
 /// `NtQueryVirtualMemory(MemoryBasicInformation)`; other classes are
@@ -143,11 +225,7 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if (length as usize) < MEMORY_BASIC_INFORMATION_SIZE {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
-    let caller = k.caller();
-    let info = k.with_state(|sys, proc, _| {
-        own_process(sys, proc, &caller, Handle(process), PROCESS_QUERY_INFORMATION)?;
-        proc.vm.query(addr)
-    })?;
+    let info = on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, _| proc.vm.query(addr))?;
     abi::write(k, buf, &info.to_bytes())?;
     if ret != 0 {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;

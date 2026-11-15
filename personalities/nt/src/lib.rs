@@ -223,6 +223,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         FreeVirtualMemory => memory::free(k, regs),
         ProtectVirtualMemory => memory::protect(k, regs),
         QueryVirtualMemory => memory::query(k, regs),
+        ReadVirtualMemory => memory::read_virtual(k, regs),
+        WriteVirtualMemory => memory::write_virtual(k, regs),
         CreateSection => memory::create_section(k, regs),
         OpenSection => memory::open_section(k, regs),
         MapViewOfSection => memory::map_view(k, regs),

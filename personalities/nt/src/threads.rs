@@ -492,14 +492,20 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         return Err(STATUS_INVALID_INFO_CLASS);
     }
     let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
-    let (exit, peb) = k.with_state(|sys, proc, _| {
+    let (exit, own_peb) = k.with_state(|sys, proc, _| {
         if proc.pid == pid {
-            (proc.exit_status.unwrap_or(STATUS_PENDING), proc.peb)
+            (proc.exit_status.unwrap_or(STATUS_PENDING), Some(proc.peb))
         } else {
             // Another process: its exit status once it has ended (ADR 0079).
-            (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), 0)
+            (sys.process_exits.get(&pid).copied().unwrap_or(STATUS_PENDING), None)
         }
     });
+    // The PEB of another process is its own (`PebBaseAddress`, Learn: "PROCESS_BASIC_INFORMATION"):
+    // the sandbox's broker writes into its target's PEB (ADR 0196); a process that has ended has none.
+    let peb = match own_peb {
+        Some(p) => p,
+        None => k.with_process(pid, |_, proc, _| proc.peb).unwrap_or(0),
+    };
     let mut b = [0u8; PROCESS_BASIC_INFORMATION_SIZE];
     b[0..4].copy_from_slice(&exit.0.to_le_bytes());
     b[8..16].copy_from_slice(&peb.to_le_bytes());

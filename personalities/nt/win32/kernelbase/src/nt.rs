@@ -235,6 +235,20 @@ unsafe extern "system" {
         kind: u32,
         protect: u32,
     ) -> NtStatus;
+    pub fn NtReadVirtualMemory(
+        process: Handle,
+        base: *const u8,
+        buffer: *mut u8,
+        size: usize,
+        done: *mut usize,
+    ) -> NtStatus;
+    pub fn NtWriteVirtualMemory(
+        process: Handle,
+        base: *mut u8,
+        buffer: *const u8,
+        size: usize,
+        done: *mut usize,
+    ) -> NtStatus;
     pub fn NtFreeVirtualMemory(process: Handle, base: *mut *mut u8, size: *mut usize, kind: u32) -> NtStatus;
     pub fn NtProtectVirtualMemory(
         process: Handle,
