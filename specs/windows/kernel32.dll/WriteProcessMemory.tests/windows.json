@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "wpm_rules",
+      "exe_sha256": "27b648d211487417af331838035dbe308c7dce51b3d66d5c49fd4b4cd2782312",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgY29kZSBwYWdlIGJlZm9yZTogdHlwZT1NRU1fSU1BR0Ugc3RhdGU9MHgxMDAwIHByb3RlY3Q9MHgyMCBhbGxvY3Byb3RlY3Q9MHg4MApXcml0ZVByb2Nlc3NNZW1vcnkgdG8gaW1hZ2UgY29kZSAoUEFHRV9FWEVDVVRFX1JFQUQpOiBvaz10cnVlIGNvcGllZD0xNiBlcnJvcj0wCnByaXZhdGUgMHgyOiBOdFdyaXRlVmlydHVhbE1lbW9yeSBzdGF0dXM9MHg4MDAwMDAwZCBjb3BpZWQ9MApwcml2YXRlIDB4MTogTnRXcml0ZVZpcnR1YWxNZW1vcnkgc3RhdHVzPTB4ODAwMDAwMGQgY29waWVkPTAKcHJpdmF0ZSAweDIwOiBOdFdyaXRlVmlydHVhbE1lbW9yeSBzdGF0dXM9MHg4MDAwMDAwZCBjb3BpZWQ9MApwcml2YXRlIDB4NDogTnRXcml0ZVZpcnR1YWxNZW1vcnkgc3RhdHVzPTB4MCBjb3BpZWQ9NAoxNiBieXRlcyBmcm9tIGEgY29tbWl0dGVkIHBhZ2UgaW50byBhIHJlc2VydmVkIG9uZTogb2s9ZmFsc2UgY29waWVkPTggZXJyb3I9Mjk5CnRvIGFkZHJlc3MgMHgxMDogb2s9ZmFsc2UgY29waWVkPTAgZXJyb3I9OTk4CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image code page before: type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nWriteProcessMemory to image code (PAGE_EXECUTE_READ): ok=true copied=16 error=0\nprivate 0x2: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x1: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x20: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x4: NtWriteVirtualMemory status=0x0 copied=4\n16 bytes from a committed page into a reserved one: ok=false copied=8 error=299\nto address 0x10: ok=false copied=0 error=998\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    },
+    {
+      "name": "wpm_rules_c",
+      "exe_sha256": "04ce6337de93065681998568eeff42dfe75ae5b1d75a8e1c3fe806261583eb31",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgY29kZSBwYWdlIGFmdGVyIGl0OiBwcm90ZWN0PTB4MjAKdGhlIGNoaWxkJ3Mgc3R1YiBob2xkcyB0aGUgbmV3IGJ5dGVzOiB0cnVlCnByaXZhdGUgMHgyOiByZWFkIGJhY2sgb2s9dHJ1ZSBjb3BpZWQ9NCBieXRlcyBbMCwgMCwgMCwgMF0KcHJpdmF0ZSAweDE6IHJlYWQgYmFjayBvaz1mYWxzZSBjb3BpZWQ9MCBieXRlcyBbMCwgMCwgMCwgMF0KcHJpdmF0ZSAweDIwOiByZWFkIGJhY2sgb2s9dHJ1ZSBjb3BpZWQ9NCBieXRlcyBbMSwgMiwgMywgNF0KcHJpdmF0ZSAweDQ6IHJlYWQgYmFjayBvaz10cnVlIGNvcGllZD00IGJ5dGVzIFsxLCAyLCAzLCA0XQowIGJ5dGVzOiBvaz10cnVlIGNvcGllZD0wIGVycm9yPTAKY2hpbGQgcmFuOiBleGl0IGNvZGUgNTIwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image code page after it: protect=0x20\nthe child's stub holds the new bytes: true\nprivate 0x2: read back ok=true copied=4 bytes [0, 0, 0, 0]\nprivate 0x1: read back ok=false copied=0 bytes [0, 0, 0, 0]\nprivate 0x20: read back ok=true copied=4 bytes [1, 2, 3, 4]\nprivate 0x4: read back ok=true copied=4 bytes [1, 2, 3, 4]\n0 bytes: ok=true copied=0 error=0\nchild ran: exit code 5200\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

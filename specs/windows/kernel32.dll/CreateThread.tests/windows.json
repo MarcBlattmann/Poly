@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a1cf84e98d3a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T17:48:34Z",
+  "tests": [
+    {
+      "name": "k32_export_code_b",
+      "exe_sha256": "35bc62717e5a29700d95b2032dc748fad56f7ccd98707467f7ee743e71ef3885",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGFkZHJlc3MgaXMgaW4ga2VybmVsMzIncyBpbWFnZT10cnVlIHBhZ2UgcHJvdGVjdD0weDIwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the address is in kernel32's image=true page protect=0x20\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "k32_export_code_c",
+      "exe_sha256": "6f9966b17c463f37db36c0cfd936a5451782f869ce74be9c78c4c368417e64e9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0UHJvY0FkZHJlc3Moa2VybmVsMzIsIENyZWF0ZVRocmVhZCkgaXMgdGhlIHNhbWUgYWRkcmVzczogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetProcAddress(kernel32, CreateThread) is the same address: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}
