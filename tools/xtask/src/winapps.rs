@@ -111,10 +111,19 @@ fn imports(args: &[String]) -> Result {
     Ok(())
 }
 
-/// `polystub.dll` for the directory: a stub for every import of its files that Poly cannot bind.
-fn polystub(dir: &Path) -> Result<Vec<u8>> {
+/// Whether `path` is a 32-bit (PE32) executable: it runs in a 32-bit process, whose system
+/// DLLs are Poly's i686 ones in `SysWOW64` (ADR 0186).
+fn is_pe32(path: &Path) -> bool {
+    std::fs::read(path)
+        .ok()
+        .is_some_and(|b| poly_pe::Pe::parse(&b).is_ok_and(|pe| pe.info().bits() == poly_pe::Bits::Pe32))
+}
+
+/// `polystub.dll` for the directory: a stub for every import of its files that Poly cannot bind
+/// (`x86`: against the i686 modules, with the 32-bit stubs that end the process when called).
+fn polystub(dir: &Path, x86: bool) -> Result<Vec<u8>> {
     let mods = modules(dir)?;
-    let mut ours = crate::winimports::load_ours()?;
+    let mut ours = if x86 { crate::winimports::load_ours_x86()? } else { crate::winimports::load_ours()? };
     for (name, exports) in own_dlls(dir)? {
         ours.dlls.entry(name).or_insert(exports);
     }
@@ -132,7 +141,7 @@ fn polystub(dir: &Path) -> Result<Vec<u8>> {
             }
         }
     }
-    let image = poly_stubs::build(&wants);
+    let image = if x86 { poly_stubs::build_x86(&wants) } else { poly_stubs::build(&wants) };
     eprintln!("==> polystub.dll: {} stubs, {} KiB", wants.len(), image.len() >> 10);
     Ok(image)
 }
@@ -226,7 +235,8 @@ fn disk(o: &Opts) -> Result<PathBuf> {
     let image = work.join(format!("{}.img", o.name));
     let built = crate::winapp::build(&[crate::chromewin::LAUNCHER])?;
     let launcher = built.into_iter().next().map(|(_, b)| b).ok_or("the launcher was not built")?;
-    let stubs = polystub(&o.dir)?;
+    let x86 = is_pe32(&o.dir.join(&o.exe));
+    let stubs = polystub(&o.dir, x86)?;
     let exe_dos = format!("{APPS_DOS}\\{}\\{}", o.name, o.exe.replace('/', "\\"));
     let cwd = if o.cwd.is_empty() {
         exe_dos.rsplit_once('\\').map_or(APPS_DOS.to_string(), |p| p.0.to_string())
@@ -259,7 +269,9 @@ fn disk(o: &Opts) -> Result<PathBuf> {
         tree.file(&format!("poly/nt/c/poly-test/stage{}.cmd", i + 1), 0o644, stage.as_bytes());
     }
     tree.file(&format!("poly/nt/c/poly-test/{}.exe", crate::chromewin::LAUNCHER), 0o755, &launcher);
-    tree.file(&format!("{}/{}", crate::chromewin::SYSTEM32_ON_DISK, poly_stubs::STUB_DLL), 0o755, &stubs);
+    // A 32-bit program's loader searches SysWOW64, its System32 (ADR 0186).
+    let system = if x86 { "poly/nt/c/Windows/SysWOW64" } else { crate::chromewin::SYSTEM32_ON_DISK };
+    tree.file(&format!("{system}/{}", poly_stubs::STUB_DLL), 0o755, &stubs);
     let started = Instant::now();
     crate::rootdisk::write_image_poly_ext2(&tree, &image)?;
     eprintln!("==> disk {} ({} entries, {:.0?})", image.display(), tree.entries.len(), started.elapsed());

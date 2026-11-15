@@ -226,3 +226,188 @@ and continued, and `RtlUnwind` of an inner frame. The ring-3 kernel test
 - DS, ES and FS are the user data selector in ring 0 too; nothing in the kernel uses them.
 - Changing a service's arguments now means changing its row in `wow64/sigs.rs` (a host test
   checks every service has exactly one).
+
+## Addendum: stage 2 (registry and file-system views)
+
+Stage 2 of the plan is done, with host tests. Inputs: Learn's "Registry Redirector", "Registry
+Keys Affected by WOW64" (the table's column for Windows 7 and newer), "Accessing an Alternate
+Registry View", "File System Redirector", `Wow64DisableWow64FsRedirection`,
+`Wow64RevertWow64FsRedirection`, `Wow64EnableWow64FsRedirection`.
+
+### Registry views
+
+- **The rule** is one pure function over NT paths, `registry::wow64_view(path, wow64, access)`
+  (`personalities/nt/src/registry/wow64.rs`). A call's view is the 32-bit one for a 32-bit
+  process, or when `KEY_WOW64_32KEY` (0x0200) is in `DesiredAccess`, in either
+  kind of process; `KEY_WOW64_64KEY` (0x0100) gives the native view to a 32-bit process. Both
+  flags together mean nothing to the kernel (the process's own view); `RegCreateKeyEx`,
+  `RegOpenKeyEx` and `RegDeleteKeyEx` refuse them with `ERROR_INVALID_PARAMETER`, as Learn says.
+  The view bits are not rights: `registry::key_access` already dropped them from the access
+  check, and `kernelbase` now passes them to `NtOpenKey`, `NtOpenKeyEx` and `NtCreateKey`
+  instead of dropping them.
+- **In the 32-bit view**, `HKLM\SOFTWARE` and everything below it lives under
+  `HKLM\SOFTWARE\Wow6432Node`, except the keys Learn lists as shared (`registry::wow64::SHARED`,
+  with its source in the table's "Windows 7 and Newer" column: `Classes` and its subkeys,
+  `Clients`, `Policies`, `RegisteredApplications`, and the `Microsoft\...` keys from `COM3` to
+  `Windows NT\CurrentVersion\Time Zones`; every subkey inherits). Below `Classes`, the five
+  subkeys Learn marks redirected (`CLSID`, `DirectShow`, `Interface`, `Media Type`,
+  `MediaFoundation`) live under `Classes\Wow6432Node`. `HKCU\SOFTWARE` is shared and only those
+  five `Classes` subkeys are redirected (`\REGISTRY\USER\<sid>\Software\Classes\...` and the
+  `\REGISTRY\USER\<sid>_Classes` hive form). Learn's page lists `Microsoft\Shared Tools\MSInfo`
+  with a doubled `SOFTWARE\Microsoft\` prefix, a typo of the page; the key meant is used. The
+  symbolic links Learn lists for programs that hard-code `Wow6432Node` paths are not made.
+- **Where it applies**: the name resolution of `NtCreateKey`, `NtOpenKey`, `NtOpenKeyEx`
+  (`registry::apply_view`), on the *full* path: the root handle's path plus the relative name, or
+  the absolute name. `kernelbase` opens `HKLM` (`\REGISTRY\MACHINE`) as a handle and the rest
+  relative to it, so the same code handles `RegOpenKeyEx(HKLM, "SOFTWARE\X")` and
+  `NtOpenKey("\Registry\Machine\Software\X")`. A path already below `Wow6432Node` is physical and
+  not moved again (`RegCreateKeyEx` creates one component after the other); below it a shared key
+  is mapped to its one physical key, so a relative open from a handle of the 32-bit view reaches
+  the same key as the one-step open. `NtDeleteKey` takes a handle and needs no view; handles keep
+  the physical key they opened (Learn: "all subsequent operations on child registry keys must
+  explicitly use the same flag"). `RegEnumKey` on `HKLM\SOFTWARE` lists `Wow6432Node` for a
+  64-bit caller, never for a 32-bit one.
+- **The default hive** has an empty `HKLM\SOFTWARE\Wow6432Node` (`poly_registry::defaults::install`
+  makes it after mounting the software hive, also for a hive loaded from an older file).
+- **Not done**: Learn's rewriting of `%ProgramFiles%` and `%commonprogramfiles%` in `REG_SZ` and
+  `REG_EXPAND_SZ` values a 32-bit process writes (to `%ProgramFiles(x86)%`, ...), the
+  `Wow6432Node` compatibility links, `HKEY_CLASSES_ROOT`'s merge of the two views beyond what the
+  paths give, and `RRF_SUBKEY_WOW64xxKEY` of `RegGetValue`.
+
+### File-system views
+
+- **Per-thread switch.** `Wow64DisableWow64FsRedirection(&old)`, `Wow64RevertWow64FsRedirection(old)`
+  and `Wow64EnableWow64FsRedirection(enable)` are in `kernelbase` (`kernel32` forwards them
+  through the `api-ms-win-core-wow64-l1-1-0` contract like `IsWow64Process`). The state is one
+  `u32` in the **calling thread's TEB** at `poly_rtl::layout::TEB_FS_REDIRECTION_OFF` (0x1FF0, in
+  both widths' two-page TEB, far above `ntdll`'s data at `TEB_POLY`), zero in a new thread. Both
+  sides own it: `kernelbase` stores it (no system call), `wow64::thunk::object_attributes` reads
+  it for the calling thread before it redirects a file name, so it is per thread by
+  construction (Learn: "Disabling file system redirection affects only operations made by the
+  current thread"). `OldValue` is the flag's previous value, so nested pairs restore what was
+  there (the rules are `poly_kernelbase::wow64`, host-tested). In a 64-bit process the three
+  functions fail with `ERROR_INVALID_FUNCTION` (Learn names no error; to be confirmed below).
+- **`%windir%\Sysnative`** (`wow64::sysnative_to_system32`): a path under it names the same path
+  under `System32`, whether redirection is on or off (Learn: "a special alias used to indicate
+  that the file system should not redirect the access"). A 64-bit process gets no alias: only
+  the 32-bit conversion looks for it.
+- **Redirection** now also covers the other two rows of Learn's table:
+  `%windir%\lastgood\system32` (to `lastgood\SysWOW64`) and `%windir%\regedit.exe` (to
+  `SysWOW64\regedit.exe`).
+
+### Checks of stage 1's calls against Learn
+
+`IsWow64Process2` writes `IMAGE_FILE_MACHINE_I386` for a 32-bit process and
+`IMAGE_FILE_MACHINE_UNKNOWN` for a 64-bit one in `pProcessMachine`, `IMAGE_FILE_MACHINE_AMD64` in
+the optional `pNativeMachine` (Learn); `GetSystemInfo` and `GetNativeSystemInfo` in a 32-bit
+process use the 36-byte x86 `SYSTEM_INFO` (`system_info_32`, host-tested: architecture,
+page size, address range, processor mask and count, `dwProcessorType`, granularity, level), the
+native call with `PROCESSOR_ARCHITECTURE_AMD64`. No change was needed.
+
+### To be confirmed by the spec agent (additions to the list above)
+
+7. What the three `Wow64*FsRedirection` functions do in a 64-bit process (Poly: fail with
+   `ERROR_INVALID_FUNCTION`, `Wow64EnableWow64FsRedirection` returning FALSE).
+8. Whether `NtOpenKey` with both `KEY_WOW64_64KEY` and `KEY_WOW64_32KEY` is an error (Poly: the
+   process's own view; the Win32 functions refuse it).
+9. What a relative open below a handle opened with the other view does in the kernel (Poly: the
+   32-bit view of the full path, which Learn calls "unexpected behavior").
+10. Whether a created key below a shared key whose parents exist only in the other location
+    works (Poly: the parents must exist at the shared location).
+
+## Addendum: stage 1 completed — every conversion the plan listed (`nt-wow64-2`)
+
+Inputs as above (Learn, the SDK headers' `_X86_` and 32-bit layouts), nothing else.
+
+- **Status blocks of requests that finish later.** A 32-bit caller's `IO_STATUS_BLOCK*` is no
+  longer copied into the scratch window: the thunk passes the caller's own address with bit 62 set
+  (`io::irp::IOSB32`, not a canonical address, so a write that forgot to decode it faults instead of
+  landing elsewhere). Every status-block write decodes it (`io::irp::iosb_write`: the 16-byte block,
+  or the 8-byte one — `Status`, a 4-byte `Information` — at the caller's address): the services'
+  `write_iosb`, the kernel's completion drain, the registry's change notifications,
+  `NtFlushVirtualMemory`. The request keeps the marked value, so an asynchronous `ReadFile` or
+  `WriteFile` writes the 32-bit `OVERLAPPED.Internal`/`InternalHigh` when it completes; an APC
+  routine gets the plain address; `NtCancelIoFileEx`/`NtCancelSynchronousIoFile` name the request
+  by the same marked value (kind `IR`).
+- **APCs in 32-bit code.** The routine (a 32-bit code address, kind `V`) and its three arguments are
+  written below the interrupted ESP (`wow64::apc_frame`, Poly's own frame) and the thread continues
+  at the i686 `ntdll`'s `KiUserApcDispatcher`, which pops the routine, calls it (`stdcall`) and then
+  `PolyResumeApc`, which restores the interrupted context as for a 64-bit thread (a routine that
+  takes fewer arguments leaves the rest; the restore drops them). `QueueUserAPC`, timer APCs and
+  I/O completion routines all take this path; a wait that returns `STATUS_USER_APC` runs every
+  queued APC as before.
+- **I/O completion entries.** `NtRemoveIoCompletion`'s outputs were already pointer-sized slots;
+  `NtRemoveIoCompletionEx`'s `FILE_IO_COMPLETION_INFORMATION` array (kind `CE`) is run against
+  32-byte entries in the window and written back as 16-byte ones (at most 1024 per call).
+- **`NtGetContextThread` / `NtSetContextThread`.** `CX` (in) and `CO` (in and out): the x86
+  `CONTEXT` becomes a 64-bit one for the service; `NtGetContextThread` writes back only the groups
+  its x86 `ContextFlags` names (`wow64::context::merge_context32`), the others stay the caller's.
+- **`NtCreateUserProcess` from a 32-bit parent.** The parameter block is read in the caller's own
+  layout (`params::read_for` with `poly_rtl::layout::X86`: 4-byte pointers, 8-byte strings); the
+  attribute list is Poly's own all-64-bit format and the token handle a value. The child is 32-bit
+  or 64-bit by its image, and its parameters are written in its own layout, so a 32-bit parent
+  starts a 64-bit child and back. `kernelbase` builds the block (`child_parameters_in`) and reads
+  `STARTUPINFO` (`SiLayout`: 104 bytes x64, 68 in 32 bits, `GetStartupInfoW/A`) in the process's own
+  layout; `PROCESS_INFORMATION` and `SECURITY_ATTRIBUTES` are pointer-sized. Every other
+  structure `kernelbase` reads or writes in the caller's memory with pointer-sized fields is laid
+  out in the process's own width too (`MEMORY_BASIC_INFORMATION`, the affinity masks,
+  `FormatMessage`'s argument slots, `OVERLAPPED_ENTRY`, `FILE_RENAME_INFO`, the token groups,
+  `MEM_EXTENDED_PARAMETER`, ...; `nt-wow64-2c`).
+- **Information classes laid out in the caller's width** (kind `P`; the service asks the caller's
+  layout): `NtQueryDirectoryObject` (`OBJECT_DIRECTORY_INFORMATION`: two 8-byte strings),
+  `NtQueryObject` `ObjectNameInformation` / `ObjectTypeInformation`, `NtQueryVirtualMemory`
+  `MemoryMappedFilenameInformation` (8-byte `UNICODE_STRING` headers), `NtQueryInformationToken`
+  (`Token::query_width`: 4-byte pointers, 8-byte `SID_AND_ATTRIBUTES`, `TOKEN_GROUPS` without
+  padding; `TokenAccessInformation` is `STATUS_NOT_IMPLEMENTED` for a 32-bit caller),
+  `NtSetInformationToken` (the owner, primary group, default DACL and label pointers). The key
+  information classes have no pointer-sized fields: unchanged. `NtSetInformationFile`'s
+  `FileRenameInformation`, `FileLinkInformation` (and their `Ex` forms) and
+  `FileCompletionInformation` are widened from the 32-bit layout by the thunk.
+- **Kernel stack.** A 32-bit `NtCreateUserProcess` overflowed the 16 KiB kernel stack (the thunk's
+  inlined helpers held an x86 and a 64-bit `CONTEXT` while the deep process creation ran):
+  `prepare` and `write_back` are kept out of line.
+- **Tests.** Host (`wow64::tests`, table-driven where the signature table allows): contexts both
+  ways, APC frame and routine, completion packets and `Ex` entries, the marked status block,
+  directory entries, `TOKEN_USER` and `ObjectNameInformation`, the rename/link/completion inputs, a
+  32-bit parameter block and `STARTUPINFO` round trip (`params`, `poly-kernelbase`). Boot:
+  `hello32.exe` gained `apc` (two `QueueUserAPC`s in an alertable `SleepEx`), `iocp` (overlapped
+  `WriteFile`/`ReadFile` on a completion port) and `child` (itself as a 32-bit child checking its
+  68-byte `STARTUPINFOW`, and the 64-bit `k32test.exe --child4`).
+
+## Addendum: stage 4 started — 32-bit GUI (`nt-wow64-2`)
+
+- **No callbacks from the kernel are needed.** Poly's `user32` calls window procedures itself (ADR
+  0128: the window manager is reached through `PolyUserCall` with `poly_win32k::wire` records and
+  blocking happens in `user32`), so a 32-bit window procedure is called by the i686 `user32` in the
+  same process. Table 1 has two services; `wow64::sigs::WIN32K_SIGNATURES` gives their 32-bit
+  rows (`PolyUserCall`: the reply length is a `SIZE_T*`; `PolyUserCommitSurface`), which also give
+  `win32u`'s i686 stubs (`int 0xF4`, `ret 20`). The wire records are fixed-width, so a 32-bit
+  `user32` sends the 64-bit one's bytes.
+- **i686 `win32u`, `gdi32`, `user32`** are built by `cargo xtask wow64` from the same sources and
+  installed in `SysWOW64`. What had a 64-bit layout baked in: the stubs' `u64` arguments (now
+  pointer-sized), `poly_win32k`'s `CREATESTRUCTW`, `WINDOWPOS`, `MSG` and `PAINTSTRUCT` mirrors
+  (pointer-sized fields are `usize`), `user32`'s `WNDCLASS(EX)W`, `GUITHREADINFO`,
+  `TRACKMOUSEEVENT`, `ICONINFO`, `CURSORINFO`, `HIGHCONTRASTW` (`user32::cstructs`, with size
+  assertions for both widths).
+- **Painting needs a display.** The window manager invalidates and paints only on an interactive
+  display (a headless kernel test sends no `WM_PAINT`, for 64-bit programs too), so the boot test
+  calls `BeginPaint` itself and fills a memory DC; `gui32 --show --paint` checks `WM_PAINT` on
+  Poly's desktop (`cargo xtask win-app run --mode desktop`).
+- **Tests.** Host: a 32-bit `PolyUserCall` round trip. Boot: `gui32.exe`
+  (`nt_wow64_32_bit_window_program_paints_and_gets_messages`): `RegisterClassExW` (48-byte class),
+  `CreateWindowExW` with its 32-bit window procedure seeing `WM_CREATE` and its `lpParam`,
+  `GetWindowTextW`, `GetClientRect`, `BeginPaint` (the 64-byte `PAINTSTRUCT`), `FillRect` and
+  `GetPixel` on a memory DC, `SendMessageW`, `PostMessageW`, `GetMessageW`/`DispatchMessageW`,
+  `DestroyWindow`, `PostQuitMessage`.
+- **A 32-bit `polystub.dll`** (`poly_stubs::build_x86`): a missing import of a 32-bit program
+  binds to a stub as on x64 (ADR 0155), but a 32-bit stub cannot return: the function is `stdcall`
+  and pops its own arguments, and the import does not say how many. So the stub logs
+  `stub: dll!name` and ends the process with `STATUS_NOT_IMPLEMENTED`; the load succeeds and the
+  first missing function the program really calls is named. `cargo xtask win-app` builds it for a
+  PE32 program against the i686 modules and puts it in `SysWOW64`.
+- **WinSCP 6.7.1 (portable, 32-bit, C++ Builder)**: every import of its 32 DLLs binds (496 to the
+  32-bit stubs: 26 of its DLLs have no i686 build yet), its start-up code runs, and it ends at its
+  first missing function, `kernel32!SetThreadLocale`; behind that are the registry, COM, shell and
+  common-control functions of the DLLs that are still x64-only (`advapi32`, `ole32`, `oleaut32`,
+  `shell32`, `comctl32`, `comdlg32`, ...). The next step is building those for i686 as this stage
+  did for `user32` and `gdi32`.

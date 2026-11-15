@@ -12,7 +12,17 @@
 //!   own last error; `WaitForSingleObject` and `GetExitCodeThread` see it end with its result;
 //! - `seh`: an access violation and a `RaiseException` under a frame-based handler linked at
 //!   `fs:[0]` (what `__try` compiles to) reach it and continue, and `RtlUnwind` (imported from
-//!   `ntdll`) unwinds an inner frame.
+//!   `ntdll`) unwinds an inner frame;
+//! - `apc`: two `QueueUserAPC` routines run, in order, in an alertable `SleepEx`, which returns
+//!   `WAIT_IO_COMPLETION` (ADR 0186: user APCs in 32-bit code);
+//! - `iocp`: an overlapped `WriteFile` and `ReadFile` on a file bound to a completion port end in
+//!   packets `GetQueuedCompletionStatus` returns, with the key, the `OVERLAPPED` and its 32-bit
+//!   `Internal`/`InternalHigh` (the status block written when the request completed);
+//! - `child`: `CreateProcessW` of itself with `child32` (a 32-bit child, whose
+//!   `GetStartupInfoW` returns the 68-byte 32-bit `STARTUPINFOW` its creator passed; it ends with
+//!   42) and of the 64-bit `k32test.exe --child4` (which checks its environment and the
+//!   `STARTUPINFO` title the 32-bit parent gave it and ends with 0xC0DE0004), when that program
+//!   is installed (the kernel test puts it in `C:\\Program Files\\PolyK32Test`).
 //!
 //! It ends with `ExitProcess(0)` when every check passed, else with the number of the first
 //! one that failed. Not part of the x64 test corpus (`tests/windows/*.rs`): the oracle pipeline
@@ -61,6 +71,34 @@ unsafe extern "system" {
     fn GetCurrentThreadId() -> u32;
     fn RaiseException(code: u32, flags: u32, count: u32, arguments: *const usize);
     fn ExitProcess(code: u32) -> !;
+    fn GetCurrentThread() -> Handle;
+    fn QueueUserAPC(routine: extern "system" fn(usize), thread: Handle, data: usize) -> u32;
+    fn SleepEx(milliseconds: u32, alertable: i32) -> u32;
+    fn CreateIoCompletionPort(file: Handle, port: Handle, key: usize, threads: u32) -> Handle;
+    fn GetQueuedCompletionStatus(
+        port: Handle,
+        bytes: *mut u32,
+        key: *mut usize,
+        overlapped: *mut *mut u32,
+        milliseconds: u32,
+    ) -> i32;
+    fn CreateProcessW(
+        application: *const u16,
+        command_line: *mut u16,
+        process_security: *mut u8,
+        thread_security: *mut u8,
+        inherit: i32,
+        flags: u32,
+        environment: *const u16,
+        directory: *const u16,
+        startup: *const u8,
+        info: *mut u32,
+    ) -> i32;
+    fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
+    fn GetModuleFileNameW(module: Handle, name: *mut u16, size: u32) -> u32;
+    fn GetCommandLineW() -> *const u16;
+    fn GetStartupInfoW(info: *mut u8);
+    fn GetFileAttributesW(name: *const u16) -> u32;
 }
 
 #[link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -353,14 +391,291 @@ fn file() -> bool {
     }
 }
 
+// ----- APCs, overlapped I/O on a completion port, child processes ------------------------------
+
+/// What the APC routines saw, in order (each shifts the value left and adds its data).
+static APC_SAW: AtomicU32 = AtomicU32::new(0);
+
+extern "system" fn apc_routine(data: usize) {
+    let v = APC_SAW.load(Ordering::SeqCst);
+    APC_SAW.store(v * 16 + data as u32, Ordering::SeqCst);
+}
+
+/// `WAIT_IO_COMPLETION` (`winbase.h`).
+const WAIT_IO_COMPLETION: u32 = 0xC0;
+
+fn apc() -> bool {
+    // SAFETY: plain kernel32 calls; the routine has the documented `PAPCFUNC` signature.
+    unsafe {
+        let me = GetCurrentThread();
+        if QueueUserAPC(apc_routine, me, 1) == 0 || QueueUserAPC(apc_routine, me, 2) == 0 {
+            return false;
+        }
+        // Not run before the thread waits alertably.
+        if APC_SAW.load(Ordering::SeqCst) != 0 {
+            return false;
+        }
+        let r = SleepEx(10_000, 1);
+        r == WAIT_IO_COMPLETION && APC_SAW.load(Ordering::SeqCst) == 0x12
+    }
+}
+
+/// `FILE_FLAG_OVERLAPPED`, `ERROR_IO_PENDING` (`winbase.h`, `winerror.h`).
+const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
+const ERROR_IO_PENDING: u32 = 997;
+
+/// A 32-bit `OVERLAPPED`: `Internal`, `InternalHigh`, `Offset`, `OffsetHigh`, `hEvent`.
+type Overlapped = [u32; 5];
+
+/// Wait for the port's next packet: it must be `ov`'s, with `key` and `n` bytes.
+fn packet(port: Handle, ov: &mut Overlapped, key: usize, n: u32) -> Option<&'static [u8]> {
+    let (mut bytes, mut got_key, mut got) = (0u32, 0usize, core::ptr::null_mut());
+    // SAFETY: valid out-pointers.
+    let ok = unsafe { GetQueuedCompletionStatus(port, &mut bytes, &mut got_key, &mut got, 10_000) };
+    if ok == 0 {
+        return Some(b"GetQueuedCompletionStatus");
+    }
+    if bytes != n || got_key != key || got != ov.as_mut_ptr() {
+        return Some(b"the packet's bytes, key or OVERLAPPED");
+    }
+    // The status block the request wrote at completion: the 32-bit `Internal`/`InternalHigh`.
+    // SAFETY: the OVERLAPPED is ours; the kernel wrote it while this thread waited.
+    let (status, information) = unsafe { (core::ptr::read_volatile(&ov[0]), core::ptr::read_volatile(&ov[1])) };
+    if status != 0 || information != n {
+        return Some(b"OVERLAPPED.Internal or InternalHigh");
+    }
+    None
+}
+
+fn iocp_step() -> Option<&'static [u8]> {
+    let mut name = [0u16; 64];
+    for (d, s) in name.iter_mut().zip("C:\\Windows\\Temp\\poly-hello32-iocp.txt".encode_utf16()) {
+        *d = s;
+    }
+    let data = b"overlapped 32-bit write\n";
+    // SAFETY: plain kernel32 calls with valid buffers; the OVERLAPPED structures and buffers live
+    // until their packets are taken.
+    unsafe {
+        let h = CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            core::ptr::null_mut(),
+            CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+            0,
+        );
+        if h == INVALID_HANDLE_VALUE {
+            return Some(b"CreateFileW");
+        }
+        let port = CreateIoCompletionPort(h, 0, 5, 0);
+        if port == 0 {
+            return Some(b"CreateIoCompletionPort");
+        }
+        let mut ov: Overlapped = [0xEEEE_EEEE, 0xEEEE_EEEE, 0, 0, 0];
+        let wrote = WriteFile(h, data.as_ptr(), data.len() as u32, core::ptr::null_mut(), ov.as_mut_ptr().cast());
+        if wrote == 0 && GetLastError() != ERROR_IO_PENDING {
+            return Some(b"WriteFile");
+        }
+        if let Some(step) = packet(port, &mut ov, 5, data.len() as u32) {
+            return Some(step);
+        }
+        let mut back = [0u8; 64];
+        let mut rov: Overlapped = [0xEEEE_EEEE, 0xEEEE_EEEE, 0, 0, 0];
+        let read = ReadFile(h, back.as_mut_ptr(), data.len() as u32, core::ptr::null_mut(), rov.as_mut_ptr().cast());
+        if read == 0 && GetLastError() != ERROR_IO_PENDING {
+            return Some(b"ReadFile");
+        }
+        if let Some(step) = packet(port, &mut rov, 5, data.len() as u32) {
+            return Some(step);
+        }
+        if &back[..data.len()] != data {
+            return Some(b"the data read back");
+        }
+        CloseHandle(port);
+        CloseHandle(h);
+        if DeleteFileW(name.as_ptr()) == 0 {
+            return Some(b"DeleteFileW");
+        }
+    }
+    None
+}
+
+fn iocp() -> bool {
+    report(b"iocp", iocp_step())
+}
+
+fn report(what: &[u8], step: Option<&'static [u8]>) -> bool {
+    match step {
+        None => true,
+        Some(step) => {
+            out(what);
+            out(b" step failed: ");
+            out(step);
+            out(b"\n");
+            false
+        }
+    }
+}
+
+/// `STARTF_USESHOWWINDOW` (`winbase.h`); `CREATE_UNICODE_ENVIRONMENT`.
+const STARTF_USESHOWWINDOW: u32 = 1;
+const CREATE_UNICODE_ENVIRONMENT: u32 = 0x400;
+/// `sizeof(STARTUPINFOW)` in a 32-bit program (`processthreadsapi.h`).
+const STARTUPINFO32: usize = 68;
+
+/// `text` as NUL-terminated UTF-16 in `buf`.
+fn wide(buf: &mut [u16], text: &str) {
+    for (d, s) in buf.iter_mut().zip(text.encode_utf16().chain(core::iter::once(0))) {
+        *d = s;
+    }
+}
+
+/// Run `command_line` with `startup` (and an environment block, if any) and return its exit
+/// code.
+fn run(command_line: &mut [u16], startup: &[u8; STARTUPINFO32], env: Option<&[u16]>) -> Result<u32, &'static [u8]> {
+    // PROCESS_INFORMATION: hProcess, hThread, dwProcessId, dwThreadId.
+    let mut info = [0u32; 4];
+    let (env, flags) = match env {
+        Some(e) => (e.as_ptr(), CREATE_UNICODE_ENVIRONMENT),
+        None => (core::ptr::null(), 0),
+    };
+    // SAFETY: plain kernel32 calls with valid buffers.
+    unsafe {
+        let ok = CreateProcessW(
+            core::ptr::null(),
+            command_line.as_mut_ptr(),
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            0,
+            flags,
+            env,
+            core::ptr::null(),
+            startup.as_ptr(),
+            info.as_mut_ptr(),
+        );
+        if ok == 0 {
+            return Err(b"CreateProcessW");
+        }
+        let (process, thread) = (info[0] as Handle, info[1] as Handle);
+        if info[2] == 0 || info[3] == 0 {
+            return Err(b"PROCESS_INFORMATION ids");
+        }
+        if WaitForSingleObject(process, 30_000) != 0 {
+            return Err(b"WaitForSingleObject on the child");
+        }
+        let mut code = 0u32;
+        if GetExitCodeProcess(process, &mut code) == 0 {
+            return Err(b"GetExitCodeProcess");
+        }
+        CloseHandle(thread);
+        CloseHandle(process);
+        Ok(code)
+    }
+}
+
+fn child_step() -> Option<&'static [u8]> {
+    let mut path = [0u16; 260];
+    // SAFETY: a valid buffer.
+    let n = unsafe { GetModuleFileNameW(0, path.as_mut_ptr(), 260) } as usize;
+    if n == 0 || n > 200 {
+        return Some(b"GetModuleFileNameW");
+    }
+    // `"<path>" child32`.
+    let mut line = [0u16; 300];
+    line[0] = b'"' as u16;
+    line[1..1 + n].copy_from_slice(&path[..n]);
+    wide(&mut line[1 + n..], "\" child32");
+    let mut title = [0u16; 8];
+    wide(&mut title, "t32");
+    let mut si = [0u8; STARTUPINFO32];
+    si[0..4].copy_from_slice(&(STARTUPINFO32 as u32).to_le_bytes());
+    si[12..16].copy_from_slice(&(title.as_ptr() as u32).to_le_bytes());
+    si[44..48].copy_from_slice(&STARTF_USESHOWWINDOW.to_le_bytes());
+    si[48..50].copy_from_slice(&7u16.to_le_bytes());
+    match run(&mut line, &si, None) {
+        Ok(42) => {}
+        Ok(_) => return Some(b"the 32-bit child's exit code"),
+        Err(step) => return Some(step),
+    }
+    // A 64-bit child, when the test installed one.
+    let mut k32 = [0u16; 64];
+    wide(&mut k32, "C:\\Program Files\\PolyK32Test\\k32test.exe");
+    // SAFETY: a NUL-terminated name.
+    if unsafe { GetFileAttributesW(k32.as_ptr()) } == u32::MAX {
+        return None;
+    }
+    let mut env = [0u16; 32];
+    wide(&mut env, "POLY_CHILD=ansi\0");
+    let mut title = [0u16; 16];
+    wide(&mut title, "ansi title");
+    let mut si = [0u8; STARTUPINFO32];
+    si[0..4].copy_from_slice(&(STARTUPINFO32 as u32).to_le_bytes());
+    si[12..16].copy_from_slice(&(title.as_ptr() as u32).to_le_bytes());
+    // `--child4` checks its command line only for the flag.
+    let mut full = [0u16; 96];
+    wide(&mut full, "\"C:\\Program Files\\PolyK32Test\\k32test.exe\" --child4");
+    match run(&mut full, &si, Some(&env)) {
+        Ok(0xC0DE_0004) => None,
+        Ok(_) => Some(b"the 64-bit child's exit code"),
+        Err(step) => Some(step),
+    }
+}
+
+fn child() -> bool {
+    report(b"child", child_step())
+}
+
+/// Started with `child32`: check the `STARTUPINFOW` the parent passed, in the 32-bit layout.
+fn as_child() -> ! {
+    let mut si = [0xFFu8; 80];
+    // SAFETY: a buffer larger than the 32-bit structure.
+    unsafe { GetStartupInfoW(si.as_mut_ptr()) };
+    let u32_at = |o: usize| u32::from_le_bytes(si[o..o + 4].try_into().unwrap_or([0; 4]));
+    let title = u32_at(12) as usize as *const u16;
+    // SAFETY: the parameters' NUL-terminated copy of the title.
+    let title_ok =
+        !title.is_null() && unsafe { [title.read(), title.add(1).read(), title.add(2).read(), title.add(3).read()] }
+            == [b't' as u16, b'3' as u16, b'2' as u16, 0];
+    let ok = u32_at(0) == STARTUPINFO32 as u32
+        && u32_at(44) == STARTF_USESHOWWINDOW
+        && si[48] == 7
+        && title_ok
+        // Nothing past the 68 bytes was written.
+        && si[STARTUPINFO32] == 0xFF
+        && wow64_view();
+    // SAFETY: ends the process.
+    unsafe { ExitProcess(if ok { 42 } else { 43 }) }
+}
+
+/// Whether the command line ends with `child32`.
+fn is_child() -> bool {
+    // SAFETY: the process's NUL-terminated command line.
+    unsafe {
+        let line = GetCommandLineW();
+        let mut n = 0;
+        while line.add(n).read() != 0 {
+            n += 1;
+        }
+        let tail: [u16; 7] = core::array::from_fn(|i| if n >= 7 { line.add(n - 7 + i).read() } else { 0 });
+        tail.iter().copied().eq("child32".encode_utf16())
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 5] = [
+    if is_child() {
+        as_child();
+    }
+    let checks: [(&[u8], fn() -> bool); 8] = [
         (b"last error\n", last_error),
         (b"wow64 view\n", wow64_view),
         (b"file\n", file),
         (b"thread\n", thread),
         (b"seh\n", seh),
+        (b"apc\n", apc),
+        (b"iocp\n", iocp),
+        (b"child\n", child),
     ];
     if !out(b"hello\n") {
         // SAFETY: ends the process.

@@ -404,12 +404,25 @@ pub type ReadUser<'a> = dyn FnMut(u64, &mut [u8]) -> Result<(), NtStatus> + 'a;
 /// (`NtCreateUserProcess`, ADR 0079): the strings and the environment
 /// block, copied out. `read` reads the caller's memory.
 pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
+    read_for(&X64, at, read)
+}
+
+/// [`read`] for a caller of layout `l`: a 32-bit process passes the 32-bit structure (4-byte
+/// pointers and sizes, 8-byte `UNICODE_STRING`s, ADR 0186), whose strings are its own memory.
+pub fn read_for(l: &Layout, at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
     let mut header = alloc::vec![0u8; HEADER as usize];
     read(at, &mut header)?;
-    let u64_at = |o: u64| u64::from_le_bytes(header[o as usize..][..8].try_into().expect("8 bytes"));
+    let ptr = l.ptr as usize;
+    let ptr_at = |o: u64| {
+        let mut b = [0u8; 8];
+        b[..ptr].copy_from_slice(&header[o as usize..][..ptr]);
+        u64::from_le_bytes(b)
+    };
+    let buffer = l.unicode_string - l.ptr;
+    let length = |o: u64| usize::from(u16::from_le_bytes([header[o as usize], header[o as usize + 1]]));
     let mut string = |o: u64| -> Result<Vec<u16>, NtStatus> {
-        let len = usize::from(u16::from_le_bytes([header[o as usize], header[o as usize + 1]]));
-        let buf = u64_at(o + 8);
+        let len = length(o);
+        let buf = ptr_at(o + buffer);
         if len == 0 || buf == 0 {
             return Ok(Vec::new());
         }
@@ -420,10 +433,10 @@ pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
         read(buf, &mut b)?;
         Ok(b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
     };
-    let image_path = string(PP_IMAGE_PATH_NAME)?;
-    let command_line = string(PP_COMMAND_LINE)?;
-    let current_dir = string(PP_CURRENT_DIRECTORY)?;
-    let (env_at, env_size) = (u64_at(PP_ENVIRONMENT), u64_at(PP_ENVIRONMENT_SIZE));
+    let image_path = string(l.pp_image_path_name)?;
+    let command_line = string(l.pp_command_line)?;
+    let current_dir = string(l.pp_current_directory)?;
+    let (env_at, env_size) = (ptr_at(l.pp_environment), ptr_at(l.pp_environment_size));
     let environment = if env_at == 0 || env_size == 0 {
         alloc::vec![0, 0]
     } else {
@@ -439,8 +452,8 @@ pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
     }
     // The STARTUPINFO (ADR 0089): a string with a null buffer is `None`.
     let mut optional = |o: u64| -> Result<Option<Vec<u16>>, NtStatus> {
-        let len = usize::from(u16::from_le_bytes([header[o as usize], header[o as usize + 1]]));
-        let buf = u64_at(o + 8);
+        let len = length(o);
+        let buf = ptr_at(o + buffer);
         if buf == 0 {
             return Ok(None);
         }
@@ -451,22 +464,26 @@ pub fn read(at: u64, read: &mut ReadUser<'_>) -> Result<Parameters, NtStatus> {
         read(buf, &mut b)?;
         Ok(Some(b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect()))
     };
-    let (desktop, title, shell_info) = (optional(PP_DESKTOP)?, optional(PP_TITLE)?, optional(PP_SHELL_INFO)?);
+    let (desktop, title, shell_info) = (optional(l.pp_desktop)?, optional(l.pp_title)?, optional(l.pp_shell_info)?);
     let mut fixed = [0u8; STARTUP_FIXED];
-    fixed.copy_from_slice(&header[PP_STARTUP as usize..][..STARTUP_FIXED]);
-    let cb2 = PP_STARTUP_CB_RESERVED2 as usize;
+    fixed.copy_from_slice(&header[l.pp_startup as usize..][..STARTUP_FIXED]);
+    let cb2 = (l.pp_startup + poly_rtl::layout::STARTUP_CB_RESERVED2) as usize;
     let reserved2_len = usize::from(u16::from_le_bytes([header[cb2], header[cb2 + 1]]));
-    let reserved2_at = u64_at(PP_RESERVED2);
+    let reserved2_at = ptr_at(l.pp_reserved2);
     let mut reserved2 = Vec::new();
     if reserved2_len > 0 && reserved2_at != 0 {
         reserved2 = alloc::vec![0u8; reserved2_len];
         read(reserved2_at, &mut reserved2)?;
     } else {
         // No bytes: none are counted.
-        fixed[cb2 - PP_STARTUP as usize..][..2].fill(0);
+        fixed[cb2 - l.pp_startup as usize..][..2].fill(0);
     }
     let startup = Startup { fixed, desktop, title, shell_info, reserved2 };
-    let std_handles = core::array::from_fn(|i| u64_at(PP_STANDARD_INPUT + 8 * i as u64));
+    // A 32-bit handle is sign extended (`INVALID_HANDLE_VALUE` is -1 in both widths).
+    let std_handles = core::array::from_fn(|i| {
+        let v = ptr_at(l.pp_standard_input + l.ptr * i as u64);
+        if ptr == 4 { v as u32 as i32 as i64 as u64 } else { v }
+    });
     Ok(Parameters { image_path, command_line, environment, current_dir, startup, std_handles })
 }
 
@@ -682,5 +699,31 @@ mod tests {
         p.current_dir = wide("D:\\work\\");
         let img = image(0x1000, &p).unwrap();
         assert_eq!(string_at(&img, 0x1000, PP_DOS_CURRENT_DIRECTORY), "D:\\work\\");
+    }
+
+    #[test]
+    fn a_32_bit_parameter_block_reads_back() {
+        use poly_rtl::layout::X86;
+        let mut p = Parameters {
+            image_path: "C:\\x\\a.exe".encode_utf16().collect(),
+            command_line: "a.exe 1".encode_utf16().collect(),
+            environment: "A=1\0\0".encode_utf16().collect(),
+            current_dir: "C:\\x".encode_utf16().collect(),
+            ..Default::default()
+        };
+        p.startup.title = Some("t".encode_utf16().collect());
+        p.startup.fixed[0..4].copy_from_slice(&68u32.to_le_bytes());
+        p.std_handles = [4, 8, u64::MAX];
+        p.startup.fixed[(PP_STARTUP_FLAGS - PP_STARTUP) as usize..][..4]
+            .copy_from_slice(&STARTF_USESTDHANDLES.to_le_bytes());
+        let base = 0x0050_0000u64;
+        let bytes = image_for(&X86, base, &p).unwrap();
+        let back = read_for(&X86, base, &mut |addr, buf| {
+            let at = (addr - base) as usize;
+            buf.copy_from_slice(&bytes[at..at + buf.len()]);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(back, p);
     }
 }

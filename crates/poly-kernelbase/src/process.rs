@@ -30,6 +30,7 @@
 //! ([`PP_CURRENT_DIRECTORY`]).
 
 use alloc::vec::Vec;
+use poly_rtl::layout::{Layout, X64};
 
 /// `CREATE_SUSPENDED`, `CREATE_UNICODE_ENVIRONMENT` (`winbase.h`).
 pub const CREATE_SUSPENDED: u32 = 0x4;
@@ -175,7 +176,9 @@ pub fn normalized_block(block: &[u16]) -> Vec<u16> {
     v
 }
 
-fn put_string(buf: &mut Vec<u8>, at: usize, base: u64, s: &[u16]) -> Result<(), u32> {
+/// A `UNICODE_STRING` (`Length`, `MaximumLength`, then the pointer-sized `Buffer`) at `at` naming a
+/// NUL-terminated copy of `s` appended to `buf` (which is placed at `base`).
+fn put_string_in(l: &Layout, buf: &mut Vec<u8>, at: usize, base: u64, s: &[u16]) -> Result<(), u32> {
     let len = u16::try_from(s.len() * 2).map_err(|_| crate::error::ERROR_FILENAME_EXCED_RANGE)?;
     let ptr = base + buf.len() as u64;
     buf.extend(s.iter().flat_map(|c| c.to_le_bytes()));
@@ -183,7 +186,9 @@ fn put_string(buf: &mut Vec<u8>, at: usize, base: u64, s: &[u16]) -> Result<(), 
     buf.resize(buf.len().next_multiple_of(8), 0);
     buf[at..at + 2].copy_from_slice(&len.to_le_bytes());
     buf[at + 2..at + 4].copy_from_slice(&(len + 2).to_le_bytes());
-    buf[at + 8..at + 16].copy_from_slice(&ptr.to_le_bytes());
+    let (bytes, n) = l.ptr_bytes(ptr);
+    let field = at + (l.unicode_string - l.ptr) as usize;
+    buf[field..field + n].copy_from_slice(&bytes[..n]);
     Ok(())
 }
 
@@ -226,6 +231,70 @@ pub const SI_RESERVED2: usize = 72;
 pub const SI_STD_INPUT: usize = 80;
 /// The bytes from `dwX` through `cbReserved2`.
 pub const SI_FIELDS: usize = 36;
+
+/// Where `STARTUPINFOW`'s (and `STARTUPINFOA`'s) fields are for one pointer size
+/// (`processthreadsapi.h`): the x64 offsets above, and the 32-bit ones of a WOW64 process
+/// (ADR 0186): `cb` 0, `lpReserved` 4, `lpDesktop` 8, `lpTitle` 12, `dwX` .. `dwFlags` 16 .. 48,
+/// `wShowWindow` 48, `cbReserved2` 50, `lpReserved2` 52, the three handles 56, 60, 64; 68 bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SiLayout {
+    pub size: usize,
+    pub ptr: usize,
+    pub reserved: usize,
+    pub desktop: usize,
+    pub title: usize,
+    pub x: usize,
+    pub flags: usize,
+    pub cb_reserved2: usize,
+    pub reserved2: usize,
+    pub std_input: usize,
+}
+
+pub const SI_X64: SiLayout = SiLayout {
+    size: STARTUPINFO_SIZE,
+    ptr: 8,
+    reserved: SI_RESERVED,
+    desktop: SI_DESKTOP,
+    title: SI_TITLE,
+    x: SI_X,
+    flags: SI_FLAGS,
+    cb_reserved2: SI_CB_RESERVED2,
+    reserved2: SI_RESERVED2,
+    std_input: SI_STD_INPUT,
+};
+
+pub const SI_X86: SiLayout = SiLayout {
+    size: 68,
+    ptr: 4,
+    reserved: 4,
+    desktop: 8,
+    title: 12,
+    x: 16,
+    flags: 44,
+    cb_reserved2: 50,
+    reserved2: 52,
+    std_input: 56,
+};
+
+/// The `STARTUPINFO` of the process this code is compiled for.
+#[cfg(target_pointer_width = "32")]
+pub const SI_NATIVE: SiLayout = SI_X86;
+/// The `STARTUPINFO` of the process this code is compiled for.
+#[cfg(not(target_pointer_width = "32"))]
+pub const SI_NATIVE: SiLayout = SI_X64;
+
+impl SiLayout {
+    /// The pointer-sized field at `at` of a `STARTUPINFO` laid out this way.
+    pub fn pointer(&self, si: &[u8], at: usize) -> u64 {
+        let mut b = [0u8; 8];
+        b[..self.ptr].copy_from_slice(&si[at..at + self.ptr]);
+        u64::from_le_bytes(b)
+    }
+
+    fn put_ptr(&self, si: &mut [u8], at: usize, v: u64) {
+        si[at..at + self.ptr].copy_from_slice(&v.to_le_bytes()[..self.ptr]);
+    }
+}
 
 /// `NtCreateUserProcess`'s flags as Poly's NT personality reads them (ADR
 /// 0089, `poly_personality_nt::consts`): `ProcessFlags` bit 2 inherits the
@@ -288,20 +357,27 @@ impl Startup {
         reserved: Option<Vec<u16>>,
         reserved2: Vec<u8>,
     ) -> Startup {
+        Startup::from_raw_in(&SI_X64, si, desktop, title, reserved, reserved2)
+    }
+
+    /// [`Startup::from_raw`] for a `STARTUPINFO` laid out as `sl` says (`si`: its `sl.size` bytes).
+    pub fn from_raw_in(
+        sl: &SiLayout,
+        si: &[u8],
+        desktop: Option<Vec<u16>>,
+        title: Option<Vec<u16>>,
+        reserved: Option<Vec<u16>>,
+        reserved2: Vec<u8>,
+    ) -> Startup {
         let cb = u32::from_le_bytes(si[0..4].try_into().expect("4 bytes"));
         let mut fields = [0u8; SI_FIELDS];
-        fields.copy_from_slice(&si[SI_X..SI_X + SI_FIELDS]);
-        let std =
-            core::array::from_fn(|i| u64::from_le_bytes(si[SI_STD_INPUT + 8 * i..][..8].try_into().expect("8 bytes")));
-        Startup {
-            cb: if cb == 0 { STARTUPINFO_SIZE as u32 } else { cb },
-            fields,
-            desktop,
-            title,
-            reserved,
-            reserved2,
-            std,
-        }
+        fields.copy_from_slice(&si[sl.x..sl.x + SI_FIELDS]);
+        // A 32-bit handle is sign extended (`INVALID_HANDLE_VALUE` is -1 in both widths).
+        let std = core::array::from_fn(|i| {
+            let v = sl.pointer(si, sl.std_input + sl.ptr * i);
+            if sl.ptr == 4 { v as u32 as i32 as i64 as u64 } else { v }
+        });
+        Startup { cb: if cb == 0 { sl.size as u32 } else { cb }, fields, desktop, title, reserved, reserved2, std }
     }
 
     /// `dwFlags`.
@@ -344,40 +420,49 @@ pub fn inherits_std_handles(startup_flags: u32, inherit_handles: bool, creation_
         && creation_flags & (CREATE_NEW_CONSOLE | DETACHED_PROCESS | CREATE_NO_WINDOW) == 0
 }
 
-/// A `UNICODE_STRING` with a null buffer for `None`.
-fn put_opt_string(buf: &mut Vec<u8>, at: usize, base: u64, s: Option<&[u16]>) -> Result<(), u32> {
-    match s {
-        Some(s) => put_string(buf, at, base, s),
-        None => Ok(()),
-    }
-}
-
 /// [`parameters`] with everything a child gets: with a `STARTUPINFO`, its
 /// fields (see [`PP_STARTUP_CB`]) and, with `STARTF_USESTDHANDLES`, its
 /// three handles as the standard handles (+ 0x20).
 pub fn child_parameters(base: u64, c: &Child<'_>) -> Result<Vec<u8>, u32> {
+    child_parameters_in(&X64, base, c)
+}
+
+/// [`child_parameters`] laid out for a creator of layout `l` (a 32-bit `kernelbase` passes the
+/// 32-bit structure, ADR 0186; the kernel reads it in the caller's layout).
+pub fn child_parameters_in(l: &Layout, base: u64, c: &Child<'_>) -> Result<Vec<u8>, u32> {
+    let at = |o: u64| o as usize;
+    let ptr = l.ptr as usize;
     let mut buf = alloc::vec![0u8; PARAMETERS_SIZE];
-    put_string(&mut buf, PP_IMAGE_PATH_NAME, base, c.image)?;
-    put_string(&mut buf, PP_COMMAND_LINE, base, c.command_line)?;
-    put_string(&mut buf, PP_CURRENT_DIRECTORY, base, c.current)?;
+    put_string_in(l, &mut buf, at(l.pp_image_path_name), base, c.image)?;
+    put_string_in(l, &mut buf, at(l.pp_command_line), base, c.command_line)?;
+    put_string_in(l, &mut buf, at(l.pp_current_directory), base, c.current)?;
     if let Some(s) = c.startup {
-        buf[PP_STARTUP_CB..PP_STARTUP_CB + 4].copy_from_slice(&s.cb.to_le_bytes());
-        buf[PP_STARTUP_FIELDS..PP_STARTUP_FIELDS + SI_FIELDS].copy_from_slice(&s.fields);
-        put_opt_string(&mut buf, PP_DESKTOP, base, s.desktop.as_deref())?;
-        put_opt_string(&mut buf, PP_TITLE, base, s.title.as_deref())?;
-        put_opt_string(&mut buf, PP_SHELL_INFO, base, s.reserved.as_deref())?;
+        let (cb_at, fields_at) = (at(l.pp_startup), at(l.pp_startup) + 4);
+        buf[cb_at..cb_at + 4].copy_from_slice(&s.cb.to_le_bytes());
+        buf[fields_at..fields_at + SI_FIELDS].copy_from_slice(&s.fields);
+        let strings = [
+            (l.pp_desktop, s.desktop.as_deref()),
+            (l.pp_title, s.title.as_deref()),
+            (l.pp_shell_info, s.reserved.as_deref()),
+        ];
+        for (field, text) in strings {
+            if let Some(text) = text {
+                put_string_in(l, &mut buf, at(field), base, text)?;
+            }
+        }
         let n = s.cb_reserved2().min(s.reserved2.len());
         if n > 0 {
-            let at = base + buf.len() as u64;
+            let r2 = base + buf.len() as u64;
             buf.extend_from_slice(&s.reserved2[..n]);
             buf.resize(buf.len().next_multiple_of(8), 0);
-            buf[PP_RESERVED2..PP_RESERVED2 + 8].copy_from_slice(&at.to_le_bytes());
+            buf[at(l.pp_reserved2)..][..ptr].copy_from_slice(&r2.to_le_bytes()[..ptr]);
         }
         // The count says how many bytes there are.
-        buf[PP_STARTUP_CB_RESERVED2..PP_STARTUP_CB_RESERVED2 + 2].copy_from_slice(&(n as u16).to_le_bytes());
+        let cb2 = fields_at + (SI_CB_RESERVED2 - SI_X);
+        buf[cb2..cb2 + 2].copy_from_slice(&(n as u16).to_le_bytes());
         if s.flags() & STARTF_USESTDHANDLES != 0 {
             for (i, h) in s.std.iter().enumerate() {
-                buf[PP_STANDARD_INPUT + 8 * i..][..8].copy_from_slice(&h.to_le_bytes());
+                buf[at(l.pp_standard_input) + ptr * i..][..ptr].copy_from_slice(&h.to_le_bytes()[..ptr]);
             }
         }
     }
@@ -386,14 +471,14 @@ pub fn child_parameters(base: u64, c: &Child<'_>) -> Result<Vec<u8>, u32> {
     let chosen = c.startup.is_some_and(|s| s.flags() & STARTF_USESTDHANDLES != 0);
     if let (Some(std), false) = (c.inherited_std, chosen) {
         for (i, h) in std.iter().enumerate() {
-            buf[PP_STANDARD_INPUT + 8 * i..][..8].copy_from_slice(&h.to_le_bytes());
+            buf[at(l.pp_standard_input) + ptr * i..][..ptr].copy_from_slice(&h.to_le_bytes()[..ptr]);
         }
     }
     buf.resize(buf.len().next_multiple_of(16), 0);
     let env_at = base + buf.len() as u64;
     buf.extend(c.env.iter().flat_map(|c| c.to_le_bytes()));
-    buf[PP_ENVIRONMENT..PP_ENVIRONMENT + 8].copy_from_slice(&env_at.to_le_bytes());
-    buf[PP_ENVIRONMENT_SIZE..PP_ENVIRONMENT_SIZE + 8].copy_from_slice(&((c.env.len() * 2) as u64).to_le_bytes());
+    buf[at(l.pp_environment)..][..ptr].copy_from_slice(&env_at.to_le_bytes()[..ptr]);
+    buf[at(l.pp_environment_size)..][..ptr].copy_from_slice(&((c.env.len() * 2) as u64).to_le_bytes()[..ptr]);
     Ok(buf)
 }
 
@@ -406,23 +491,38 @@ pub fn child_parameters(base: u64, c: &Child<'_>) -> Result<Vec<u8>, u32> {
 /// in when `dwFlags` has `STARTF_USESTDHANDLES` (they are the process's
 /// standard handles then), else zero.
 pub fn startup_info(pp: &[u8]) -> [u8; STARTUPINFO_SIZE] {
-    let mut si = [0u8; STARTUPINFO_SIZE];
-    si[0..4].copy_from_slice(&(STARTUPINFO_SIZE as u32).to_le_bytes());
-    if pp.len() < PP_RESERVED2 + 8 {
+    startup_info_in(&X64, &SI_X64, pp).try_into().expect("the x64 size")
+}
+
+/// [`startup_info`] for a process of layout `l` whose `STARTUPINFO` is laid out as `sl` says (a
+/// 32-bit process's is 68 bytes, ADR 0186).
+pub fn startup_info_in(l: &Layout, sl: &SiLayout, pp: &[u8]) -> Vec<u8> {
+    let mut si = alloc::vec![0u8; sl.size];
+    si[0..4].copy_from_slice(&(sl.size as u32).to_le_bytes());
+    let ptr = l.ptr as usize;
+    if pp.len() < l.pp_reserved2 as usize + ptr {
         return si;
     }
-    let u64_at = |o: usize| u64::from_le_bytes(pp[o..o + 8].try_into().expect("8 bytes"));
-    if u32::from_le_bytes(pp[PP_STARTUP_CB..PP_STARTUP_CB + 4].try_into().expect("4 bytes")) == 0 {
+    let ptr_at = |o: u64| {
+        let mut b = [0u8; 8];
+        b[..ptr].copy_from_slice(&pp[o as usize..o as usize + ptr]);
+        u64::from_le_bytes(b)
+    };
+    let cb_at = l.pp_startup as usize;
+    if u32::from_le_bytes(pp[cb_at..cb_at + 4].try_into().expect("4 bytes")) == 0 {
         return si;
     }
-    si[SI_X..SI_X + SI_FIELDS].copy_from_slice(&pp[PP_STARTUP_FIELDS..PP_STARTUP_FIELDS + SI_FIELDS]);
-    for (field, string) in [(SI_RESERVED, PP_SHELL_INFO), (SI_DESKTOP, PP_DESKTOP), (SI_TITLE, PP_TITLE)] {
-        si[field..field + 8].copy_from_slice(&u64_at(string + 8).to_le_bytes());
+    si[sl.x..sl.x + SI_FIELDS].copy_from_slice(&pp[cb_at + 4..cb_at + 4 + SI_FIELDS]);
+    let buffer = l.unicode_string - l.ptr;
+    for (field, string) in [(sl.reserved, l.pp_shell_info), (sl.desktop, l.pp_desktop), (sl.title, l.pp_title)] {
+        sl.put_ptr(&mut si, field, ptr_at(string + buffer));
     }
-    si[SI_RESERVED2..SI_RESERVED2 + 8].copy_from_slice(&u64_at(PP_RESERVED2).to_le_bytes());
-    let flags = u32::from_le_bytes(si[SI_FLAGS..SI_FLAGS + 4].try_into().expect("4 bytes"));
+    sl.put_ptr(&mut si, sl.reserved2, ptr_at(l.pp_reserved2));
+    let flags = u32::from_le_bytes(si[sl.flags..sl.flags + 4].try_into().expect("4 bytes"));
     if flags & STARTF_USESTDHANDLES != 0 {
-        si[SI_STD_INPUT..SI_STD_INPUT + 24].copy_from_slice(&pp[PP_STANDARD_INPUT..PP_STANDARD_INPUT + 24]);
+        for i in 0..3u64 {
+            sl.put_ptr(&mut si, sl.std_input + sl.ptr * i as usize, ptr_at(l.pp_standard_input + l.ptr * i));
+        }
     }
     si
 }
@@ -647,5 +747,47 @@ mod tests {
         assert_eq!(handle_flag_bits(true, true), both);
         assert_eq!(handle_flag_bits(false, true), HANDLE_FLAG_PROTECT_FROM_CLOSE);
         assert_eq!(handle_flag_bits(false, false), 0);
+    }
+
+    #[test]
+    fn a_32_bit_creator_s_parameters_and_startup_info_have_the_32_bit_layout() {
+        use poly_rtl::layout::X86;
+        let mut raw = [0u8; 68];
+        raw[0..4].copy_from_slice(&68u32.to_le_bytes());
+        raw[SI_X86.flags..SI_X86.flags + 4].copy_from_slice(&(STARTF_USESTDHANDLES | 1).to_le_bytes());
+        for (i, h) in [0x10u32, 0x14, 0xFFFF_FFFF].iter().enumerate() {
+            raw[56 + 4 * i..60 + 4 * i].copy_from_slice(&h.to_le_bytes());
+        }
+        let s = Startup::from_raw_in(&SI_X86, &raw, None, Some("t".encode_utf16().collect()), None, Vec::new());
+        assert_eq!(s.std, [0x10, 0x14, u64::MAX]);
+        assert_eq!(s.flags(), STARTF_USESTDHANDLES | 1);
+        let image: Vec<u16> = "C:\\a.exe".encode_utf16().collect();
+        let env: Vec<u16> = "A=1\0\0".encode_utf16().collect();
+        let c = Child {
+            image: &image,
+            command_line: &image,
+            env: &env,
+            current: &[],
+            startup: Some(&s),
+            inherited_std: None,
+        };
+        let base = 0x0040_0000u64;
+        let pp = child_parameters_in(&X86, base, &c).unwrap();
+        let u16_at = |o: u64| u16::from_le_bytes(pp[o as usize..o as usize + 2].try_into().unwrap());
+        let u32_at = |o: u64| u32::from_le_bytes(pp[o as usize..o as usize + 4].try_into().unwrap());
+        assert_eq!(u16_at(X86.pp_image_path_name), (image.len() * 2) as u16);
+        let image_at = u64::from(u32_at(X86.pp_image_path_name + 4)) - base;
+        assert_eq!(&pp[image_at as usize..image_at as usize + 2], &[b'C', 0]);
+        assert_eq!(u32_at(X86.pp_standard_input + 8), 0xFFFF_FFFF);
+        assert_eq!(u32_at(X86.pp_environment_size), (env.len() * 2) as u32);
+        let si = startup_info_in(&X86, &SI_X86, &pp);
+        assert_eq!(si.len(), 68);
+        assert_eq!(u32::from_le_bytes(si[44..48].try_into().unwrap()), STARTF_USESTDHANDLES | 1);
+        assert_eq!(u32::from_le_bytes(si[56..60].try_into().unwrap()), 0x10);
+        assert_eq!(u32::from_le_bytes(si[64..68].try_into().unwrap()), 0xFFFF_FFFF);
+        // lpTitle points at the parameters' NUL-terminated copy of the title.
+        let title = u64::from(u32::from_le_bytes(si[12..16].try_into().unwrap())) - base;
+        assert_eq!(&pp[title as usize..title as usize + 4], &[b't', 0, 0, 0]);
+        assert_eq!(&si[4..8], &[0; 4]);
     }
 }

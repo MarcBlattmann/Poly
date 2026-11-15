@@ -183,11 +183,12 @@ pub struct NameAnswer {
 /// A file with no path on its device (`path` `None`: an anonymous pipe)
 /// has only the device's name to give, and that is
 /// `STATUS_OBJECT_PATH_INVALID` once it fits.
-pub fn file_name_answer(device: &[u16], path: Option<&[u16]>, length: usize, buf: u64) -> NameAnswer {
-    let header = UNICODE_STRING_SIZE;
+///
+/// `header` is the caller's `UNICODE_STRING` size ([`abi::caller_unicode_size`]).
+pub fn file_name_answer(device: &[u16], path: Option<&[u16]>, length: usize, buf: u64, header: usize) -> NameAnswer {
     let string = |chars: usize, text: &[u8]| {
         let s = UnicodeString { length: chars as u16, maximum_length: chars as u16 + 2, buffer: buf + header as u64 };
-        let mut out = s.to_bytes().to_vec();
+        let mut out = s.to_bytes_in(header);
         out.extend_from_slice(text);
         out
     };
@@ -228,13 +229,13 @@ pub fn file_name_answer(device: &[u16], path: Option<&[u16]>, length: usize, buf
     }
 }
 
-/// A `UNICODE_STRING` followed by `pad` bytes and then its characters and
-/// a NUL, all at `buf`: what `ObjectNameInformation` and
-/// `ObjectTypeInformation` return.
-fn string_info(buf: u64, header: usize, text: &[u16]) -> Vec<u8> {
+/// A `UNICODE_STRING` (of the caller's size `us`) followed by the rest of
+/// a `header`-byte structure and then its characters and a NUL, all at
+/// `buf`: what `ObjectNameInformation` and `ObjectTypeInformation` return.
+fn string_info(buf: u64, header: usize, us: usize, text: &[u16]) -> Vec<u8> {
     let mut out = alloc::vec![0u8; header];
     let bytes = abi::utf16_bytes(text);
-    let s = if text.is_empty() && header == UNICODE_STRING_SIZE {
+    let s = if text.is_empty() && header == us {
         // An unnamed object: an empty name with no buffer.
         UnicodeString { length: 0, maximum_length: 0, buffer: 0 }
     } else {
@@ -244,7 +245,7 @@ fn string_info(buf: u64, header: usize, text: &[u16]) -> Vec<u8> {
             buffer: buf + header as u64,
         }
     };
-    out[..UNICODE_STRING_SIZE].copy_from_slice(&s.to_bytes());
+    out[..us].copy_from_slice(&s.to_bytes_in(us));
     if s.buffer != 0 {
         out.extend_from_slice(&bytes);
         out.extend_from_slice(&[0, 0]);
@@ -261,6 +262,7 @@ pub fn query_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
     let [h, class, buf, length, ret] = abi::args::<K, 5>(k, regs)?;
     let (h, class) = (Handle(h), class as u32);
     let caller = k.caller();
+    let us = abi::caller_unicode_size(k);
     if class == OBJECT_NAME_INFORMATION {
         // A file object's name is its device's name and its path there.
         let parts = k.with_state(|sys, _, _| {
@@ -268,7 +270,7 @@ pub fn query_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
             sys.io.object_name_parts(sys.objects.cookie(id)?)
         });
         if let Some((device, path)) = parts {
-            let a = file_name_answer(&device, path.as_deref(), length as usize, buf);
+            let a = file_name_answer(&device, path.as_deref(), length as usize, buf, us);
             abi::write_opt_u32(k, ret, a.return_length)?;
             abi::write(k, buf, &a.bytes)?;
             return Ok(a.status);
@@ -285,10 +287,11 @@ pub fn query_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
                 }
                 b
             }
-            OBJECT_NAME_INFORMATION => string_info(buf, UNICODE_STRING_SIZE, &om.nt_query_object_name(&caller, h)?),
+            OBJECT_NAME_INFORMATION => string_info(buf, us, us, &om.nt_query_object_name(&caller, h)?),
             OBJECT_TYPE_INFORMATION => {
+                // `PUBLIC_OBJECT_TYPE_INFORMATION`: the name, then 22 `ULONG`s.
                 let name: Vec<u16> = om.nt_query_object_type(&caller, h)?.encode_utf16().collect();
-                string_info(buf, OBJECT_TYPE_INFORMATION_SIZE, &name)
+                string_info(buf, OBJECT_TYPE_INFORMATION_SIZE - UNICODE_STRING_SIZE + us, us, &name)
             }
             OBJECT_HANDLE_FLAG_INFORMATION => {
                 let f = om.handle_flags(&caller, h)?;
@@ -354,6 +357,9 @@ pub fn query_directory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     let [h, buf, length, single, restart, context, ret] = abi::args::<K, 7>(k, regs)?;
     let start = if restart as u8 != 0 { 0 } else { abi::read_u32(k, context)? as usize };
     let caller = k.caller();
+    // `OBJECT_DIRECTORY_INFORMATION` is two `UNICODE_STRING`s: 32 bytes, 16 for a 32-bit caller.
+    let us = abi::caller_unicode_size(k);
+    let entry = 2 * us;
     let entries = k.with_state(|sys, _, _| sys.objects.nt_query_directory_object(&caller, Handle(h)))?;
     if start >= entries.len() {
         abi::write_opt_u32(k, ret, 0)?;
@@ -363,7 +369,7 @@ pub fn query_directory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     let max = if single as u8 != 0 { 1 } else { rest.len() };
     let size_of = |n: usize| -> usize {
         let strings: usize = rest[..n].iter().map(|(name, ty)| name.len() * 2 + 2 + ty.len() * 2 + 2).sum();
-        (n + 1) * OBJECT_DIRECTORY_INFORMATION_SIZE + strings
+        (n + 1) * entry + strings
     };
     let mut n = 0;
     while n < max && size_of(n + 1) <= length as usize {
@@ -373,7 +379,7 @@ pub fn query_directory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
         abi::write_opt_u32(k, ret, size_of(1) as u32)?;
         return Ok(STATUS_BUFFER_TOO_SMALL);
     }
-    let mut out = alloc::vec![0u8; (n + 1) * OBJECT_DIRECTORY_INFORMATION_SIZE];
+    let mut out = alloc::vec![0u8; (n + 1) * entry];
     for (i, (name, ty)) in rest[..n].iter().enumerate() {
         let ty: Vec<u16> = ty.encode_utf16().collect();
         for (j, text) in [name.as_slice(), ty.as_slice()].into_iter().enumerate() {
@@ -383,8 +389,8 @@ pub fn query_directory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                 maximum_length: (text.len() * 2 + 2) as u16,
                 buffer: at,
             };
-            let slot = i * OBJECT_DIRECTORY_INFORMATION_SIZE + j * UNICODE_STRING_SIZE;
-            out[slot..slot + UNICODE_STRING_SIZE].copy_from_slice(&s.to_bytes());
+            let slot = i * entry + j * us;
+            out[slot..slot + us].copy_from_slice(&s.to_bytes_in(us));
             out.extend_from_slice(&abi::utf16_bytes(text));
             out.extend_from_slice(&[0, 0]);
         }
@@ -492,7 +498,8 @@ mod name_tests {
 
     /// `(status, return length, Length, MaximumLength, bytes written, name)`.
     fn ask(path: Option<&str>, length: usize) -> (u32, u32, u16, u16, usize, alloc::string::String) {
-        let a = file_name_answer(&w("\\Device\\NamedPipe"), path.map(w).as_deref(), length, 0x1000);
+        let a =
+            file_name_answer(&w("\\Device\\NamedPipe"), path.map(w).as_deref(), length, 0x1000, UNICODE_STRING_SIZE);
         if a.bytes.is_empty() {
             return (a.status.0, a.return_length, 0, 0, 0, alloc::string::String::new());
         }
@@ -535,7 +542,7 @@ mod name_tests {
         assert_eq!(ask(p, 79), (0x8000_0005, 82, 61, 63, 79, "\\Device\\NamedPipe\\PolySpec4_Ob".into()));
         assert_eq!(ask(p, 81), (0x8000_0005, 82, 63, 65, 81, "\\Device\\NamedPipe\\PolySpec4_Obj".into()));
         // The NUL after the name is written when it fits.
-        let a = file_name_answer(&w("\\Device\\NamedPipe"), Some(&w("\\P")), 528, 0);
+        let a = file_name_answer(&w("\\Device\\NamedPipe"), Some(&w("\\P")), 528, 0, UNICODE_STRING_SIZE);
         assert_eq!(a.bytes.len(), 16 + 38 + 2);
         assert_eq!(&a.bytes[a.bytes.len() - 2..], [0, 0]);
     }

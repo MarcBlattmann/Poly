@@ -90,6 +90,75 @@ pub fn id_in(info: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b)
 }
 
+/// `SECURITY_ATTRIBUTES` (`minwinbase.h`): `nLength`, `lpSecurityDescriptor`, `bInheritHandle`.
+/// The layout is the build's own: the descriptor at 8 and the BOOL at 16 in a 64-bit process,
+/// at 4 and 8 in a 32-bit one (ADR 0186).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SecurityAttributesRaw {
+    pub length: u32,
+    pub descriptor: *const u8,
+    pub inherit: i32,
+}
+
+/// The `lpSecurityDescriptor` of a caller's `SECURITY_ATTRIBUTES`, or null.
+///
+/// # Safety
+/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
+pub unsafe fn sa_descriptor(sa: *const u8) -> *const u8 {
+    if sa.is_null() {
+        return core::ptr::null();
+    }
+    // SAFETY: the caller's structure when non-null.
+    unsafe { (sa as *const SecurityAttributesRaw).read_unaligned() }.descriptor
+}
+
+/// `SECURITY_ATTRIBUTES.bInheritHandle` of a caller's structure (false for null).
+///
+/// # Safety
+/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
+pub unsafe fn sa_inherits(sa: *const u8) -> bool {
+    if sa.is_null() {
+        return false;
+    }
+    // SAFETY: the caller's structure when non-null.
+    unsafe { (sa as *const SecurityAttributesRaw).read_unaligned() }.inherit != 0
+}
+
+/// `MEMORY_BASIC_INFORMATION` (`winnt.h`) in this build's layout (ADR 0186): 48 bytes in a
+/// 64-bit process (the `PartitionId` field exists there only), 28 in a 32-bit one.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct MemoryBasicInformation {
+    pub base_address: usize,
+    pub allocation_base: usize,
+    pub allocation_protect: u32,
+    #[cfg(target_pointer_width = "64")]
+    pub partition_id: u16,
+    pub region_size: usize,
+    pub state: u32,
+    pub protect: u32,
+    pub ty: u32,
+}
+
+/// `MemoryBasicInformation` of the address `at` of this process.
+pub fn query_memory(at: usize) -> Option<MemoryBasicInformation> {
+    let mut mbi = MemoryBasicInformation::default();
+    let mut got = 0usize;
+    // SAFETY: a buffer of the stated length.
+    let st = unsafe {
+        nt::NtQueryVirtualMemory(
+            nt::CURRENT_PROCESS,
+            at as *const u8,
+            0,
+            (&mut mbi as *mut MemoryBasicInformation).cast(),
+            core::mem::size_of::<MemoryBasicInformation>(),
+            &mut got,
+        )
+    };
+    st.is_success().then_some(mbi)
+}
+
 /// Where the loader keeps its lists (`PEB.Ldr`, `LDR_DATA_TABLE_ENTRY`) in this build's process.
 #[cfg(target_arch = "x86")]
 pub const LDR: &poly_ldr::LdrLayout = poly_ldr::Bitness::X86.layout();

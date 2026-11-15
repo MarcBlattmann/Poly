@@ -212,17 +212,19 @@ fn manifest_of(base: u64) -> Option<Vec<u8>> {
     unsafe {
         let nt_off = ((base + 0x3C) as *const u32).read() as u64;
         let opt = base + nt_off + 24;
-        if (opt as *const u16).read() != 0x20B {
-            return None;
-        }
-        // PE32+: the data directories start at optional header + 112; the
-        // resource table is entry 2.
-        let count = ((opt + 108) as *const u32).read();
+        // PE32+ (0x20B): the data directories start at optional header + 112, their count at 108;
+        // PE32 (0x10B, a 32-bit image): at 96 and 92. The resource table is entry 2.
+        let dirs: u64 = match (opt as *const u16).read() {
+            0x20B => 112,
+            0x10B => 96,
+            _ => return None,
+        };
+        let count = ((opt + dirs - 4) as *const u32).read();
         if count < 3 {
             return None;
         }
-        let rva = ((opt + 112 + 16) as *const u32).read() as u64;
-        let size = ((opt + 112 + 20) as *const u32).read() as usize;
+        let rva = ((opt + dirs + 16) as *const u32).read() as u64;
+        let size = ((opt + dirs + 20) as *const u32).read() as usize;
         let image_size = ((opt + 56) as *const u32).read() as u64;
         if rva == 0 || rva + size as u64 > image_size {
             return None;
@@ -333,10 +335,10 @@ unsafe fn system_info(out: *mut u8, native: bool) {
 
 // ----- FormatMessageW / FormatMessageA -------------------------------------------------------
 
-/// The insert arguments: a `va_list` (on x64 a pointer to 8-byte slots) or,
-/// with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of `DWORD_PTR` — the same
-/// layout here.
-struct Slots(*const u64);
+/// The insert arguments: a `va_list` (a pointer to pointer-sized slots: 8 bytes in a 64-bit
+/// process, 4 in a 32-bit one) or, with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of
+/// `DWORD_PTR` — the same layout here.
+struct Slots(*const usize);
 
 impl message::Args for Slots {
     fn slot(&self, index: usize) -> Option<u64> {
@@ -344,7 +346,7 @@ impl message::Args for Slots {
             return None;
         }
         // SAFETY: the caller promised an argument for every insert.
-        Some(unsafe { self.0.add(index - 1).read_unaligned() })
+        Some(unsafe { self.0.add(index - 1).read_unaligned() } as u64)
     }
     fn wide(&self, address: u64) -> Vec<u16> {
         // SAFETY: a wide string insert is a NUL-terminated string.
@@ -402,7 +404,7 @@ unsafe fn format_message(
     string: Option<&[u16]>,
     id: u32,
     lang: u32,
-    args: *const u64,
+    args: *const usize,
     ansi: bool,
 ) -> Result<Vec<u16>, u32> {
     let ignore = flags & FORMAT_MESSAGE_IGNORE_INSERTS != 0;
@@ -415,7 +417,7 @@ unsafe fn format_message(
         Some(Slots(args))
     } else {
         // SAFETY: a `va_list*`: the address of the slot pointer.
-        Some(Slots(unsafe { (args as *const *const u64).read() }))
+        Some(Slots(unsafe { (args as *const *const usize).read_unaligned() }))
     };
     let a = slots.as_ref().map(|s| s as &dyn message::Args);
     if flags & FORMAT_MESSAGE_FROM_STRING != 0 {
@@ -501,7 +503,7 @@ pub unsafe extern "system" fn FormatMessageW(
     lang: u32,
     buffer: *mut u16,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { wide_arg(source as *const u16) } } else { None };
@@ -524,7 +526,7 @@ pub unsafe extern "system" fn FormatMessageA(
     lang: u32,
     buffer: *mut u8,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's ANSI string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { ansi_arg(source) } } else { None };
@@ -593,6 +595,76 @@ pub unsafe extern "system" fn IsWow64Process(process: nt::Handle, wow64: *mut i3
             TRUE
         }
         Err(st) => crate::base::fail_status(st, FALSE),
+    }
+}
+
+// ----- WOW64 file-system redirection ------------------------------------------------------
+
+/// The calling thread's redirection flag (in its TEB; `poly_rtl::layout::TEB_FS_REDIRECTION_OFF`).
+#[cfg(target_pointer_width = "32")]
+fn fs_redirection_flag() -> *mut u32 {
+    (teb() + poly_rtl::layout::TEB_FS_REDIRECTION_OFF) as *mut u32
+}
+
+/// `Wow64DisableWow64FsRedirection` (Learn): switch the redirection of `%windir%\System32` off
+/// for the calling thread only; `*old_value` is what `Wow64RevertWow64FsRedirection` takes. A
+/// 64-bit process has no redirection to switch: `ERROR_INVALID_FUNCTION` (to be confirmed by the
+/// spec agent; Learn names no error). ADR 0186, stage 2.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64DisableWow64FsRedirection(old_value: *mut usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        if old_value.is_null() {
+            return fail(ERROR_INVALID_PARAMETER, FALSE);
+        }
+        let flag = fs_redirection_flag();
+        // SAFETY: the calling thread's TEB, readable and writable; the caller's out-pointer.
+        unsafe {
+            let (new, old) = poly_kernelbase::wow64::disable(flag.read());
+            flag.write(new);
+            old_value.write(old);
+        }
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64RevertWow64FsRedirection` (Learn): restore the redirection `old_value` (from
+/// `Wow64DisableWow64FsRedirection`) describes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64RevertWow64FsRedirection(old_value: usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::revert(old_value)) };
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64EnableWow64FsRedirection` (Learn; the older call): TRUE switches the redirection on for
+/// the calling thread, FALSE off. Returns a `BOOLEAN`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64EnableWow64FsRedirection(enable: u8) -> u8 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::enable(enable != 0)) };
+        1
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = enable;
+        set_last_error(ERROR_INVALID_FUNCTION);
+        0
     }
 }
 

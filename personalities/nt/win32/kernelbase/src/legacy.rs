@@ -7,7 +7,7 @@ use alloc::collections::VecDeque;
 use poly_kernelbase::error::*;
 use poly_kernelbase::file::{
     FILE_OPEN_FOR_BACKUP_INTENT, FILE_OPEN_REPARSE_POINT, FILE_STREAM_INFORMATION, FILE_SYNCHRONOUS_IO_NONALERT,
-    FIND_STREAM_DATA_SIZE, MOVEFILE_COPY_ALLOWED, SYNCHRONIZE, find_stream_data, rename_information,
+    FIND_STREAM_DATA_SIZE, MOVEFILE_COPY_ALLOWED, SYNCHRONIZE, find_stream_data, rename_information_in,
 };
 use poly_kernelbase::time;
 
@@ -69,7 +69,7 @@ pub unsafe extern "system" fn CreateHardLinkW(new: *const u16, existing: *const 
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
-    let info = rename_information(false, &target);
+    let info = rename_information_in(core::mem::size_of::<usize>(), false, &target);
     // SAFETY: valid pointers.
     let st = unsafe { nt::NtSetInformationFile(h, &mut iosb, info.as_ptr(), info.len() as u32, FILE_LINK_INFORMATION) };
     close(h);

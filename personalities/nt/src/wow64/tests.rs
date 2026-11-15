@@ -4,6 +4,7 @@
 extern crate std;
 
 use super::*;
+use crate::NtContext;
 use crate::services::Service;
 use crate::tests::{Fake, SELF};
 use crate::vm::{LOWEST_ADDRESS, VirtualMemory};
@@ -183,10 +184,13 @@ fn memory_basic_information_has_the_32_bit_layout() {
 #[test]
 fn an_unconverted_structure_and_an_unknown_service_are_not_implemented() {
     let mut c = Caller32::new();
-    let ctx = c.put(&[0u8; 0x2CC]);
-    assert_eq!(c.call(Service::SetContextThread, &[0xFFFF_FFFE, ctx]), STATUS_NOT_IMPLEMENTED);
-    // A win32k (table 1) number has no 32-bit signature yet.
-    let (outcome, status) = c.call_outcome(0x1000, &[]);
+    // NtCreateThreadEx's attribute list is not converted yet.
+    let out = c.put32(0);
+    let list = c.put(&[0u8; 16]);
+    let args = [out, 0x1F_FFFF, 0, CURRENT, 0x40_1000, 0, 0, 0, 0, 0, list];
+    assert_eq!(c.call(Service::CreateThreadEx, &args), STATUS_NOT_IMPLEMENTED);
+    // A win32k (table 1) number that is no service.
+    let (outcome, status) = c.call_outcome(0x1FFF, &[]);
     assert!(matches!(outcome, Outcome::Unimplemented { .. }));
     assert_eq!(status, STATUS_NOT_IMPLEMENTED);
 }
@@ -308,7 +312,8 @@ fn a_pe32_executable_starts_a_32_bit_process_below_4_gib() {
     let frame: Vec<u32> = (0..4).map(|i| u32_at(&f, ps.rsp + 4 * i)).collect();
     assert_eq!(frame, [0, 0x40_1000, ps.peb as u32, 0x40_0000]);
     // Exceptions go to the i686 ntdll's dispatcher; APCs are not delivered to 32-bit code yet.
-    assert_eq!((f.proc.exception_dispatcher, f.proc.apc_dispatcher), (0x7700_1020, 0));
+    assert_eq!(f.proc.exception_dispatcher, 0x7700_1020);
+    assert_eq!(f.proc.apc_dispatcher, 0x7700_1010);
     // The parameters have the 32-bit layout.
     let params = crate::params::for_program("C:\\Apps\\app.exe", &["a b"], vec![0, 0]);
     let base = crate::params::write(&mut f.proc, &mut f.mem, ps.peb, &params).unwrap();
@@ -370,6 +375,58 @@ fn a_32_bit_process_opening_system32_gets_syswow64() {
 }
 
 #[test]
+fn lastgood_and_regedit_are_redirected_too() {
+    let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+    let r = |s: &str| redirect_system32(&w(s)).map(|v| std::string::String::from_utf16(&v).unwrap());
+    // Learn's table: %windir%\lastgood\system32 and %windir%\regedit.exe.
+    assert_eq!(r("C:\\Windows\\lastgood\\system32\\a.dll").as_deref(), Some("C:\\Windows\\lastgood\\SysWOW64\\a.dll"));
+    assert_eq!(r("c:\\WINDOWS\\LastGood\\System32").as_deref(), Some("c:\\WINDOWS\\LastGood\\SysWOW64"));
+    assert_eq!(r("C:\\Windows\\regedit.exe").as_deref(), Some("C:\\Windows\\SysWOW64\\regedit.exe"));
+    assert_eq!(r("C:\\Windows\\regedit.exe.bak"), None);
+    assert_eq!(r("C:\\Windows\\lastgood\\other"), None);
+}
+
+#[test]
+fn sysnative_names_the_real_system32_and_is_not_a_directory() {
+    let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+    let n = |s: &str| sysnative_to_system32(&w(s)).map(|v| std::string::String::from_utf16(&v).unwrap());
+    assert_eq!(n("C:\\Windows\\Sysnative\\notepad.exe").as_deref(), Some("C:\\Windows\\System32\\notepad.exe"));
+    assert_eq!(n("\\??\\c:\\windows\\SYSNATIVE").as_deref(), Some("\\??\\c:\\Windows\\System32"));
+    assert_eq!(n("C:\\Windows\\Sysnativex\\a"), None);
+    assert_eq!(n("C:\\Windows\\System32\\a"), None);
+    // `file_view` maps it with redirection on and off, and System32 only with it on.
+    let v = |s: &str, off: bool| file_view(&w(s), off).map(|v| std::string::String::from_utf16(&v).unwrap());
+    assert_eq!(v("C:\\Windows\\Sysnative\\a", false).as_deref(), Some("C:\\Windows\\System32\\a"));
+    assert_eq!(v("C:\\Windows\\Sysnative\\a", true).as_deref(), Some("C:\\Windows\\System32\\a"));
+    assert_eq!(v("C:\\Windows\\System32\\a", false).as_deref(), Some("C:\\Windows\\SysWOW64\\a"));
+    assert_eq!(v("C:\\Windows\\System32\\a", true), None);
+}
+
+#[test]
+fn a_thread_that_switched_redirection_off_reaches_the_real_system32() {
+    let mut c = Caller32::new();
+    let info = c.put(&[0u8; 40]);
+    let teb = c.f.proc.threads[0].teb;
+    let flag = teb + TEB_FS_REDIRECTION_OFF;
+    let system32 = "\\??\\C:\\Windows\\System32\\kernel32.dll";
+    // Off (the flag's value 1): the name stays, and Sysnative still maps to System32.
+    c.f.mem.write_bytes(flag, &1u32.to_le_bytes()).unwrap();
+    let oa = c.attrs(system32, 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+    let oa = c.attrs("\\??\\C:\\Windows\\Sysnative\\kernel32.dll", 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+    // Back on (zero, as in a new thread): redirected again.
+    c.f.mem.write_bytes(flag, &0u32.to_le_bytes()).unwrap();
+    let oa = c.attrs(system32, 0x40);
+    assert_eq!(
+        converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]),
+        "\\??\\C:\\Windows\\SysWOW64\\kernel32.dll"
+    );
+    let oa = c.attrs("\\??\\C:\\Windows\\Sysnative\\kernel32.dll", 0x40);
+    assert_eq!(converted_name(&mut c, Service::QueryAttributesFile, oa, &[info]), system32);
+}
+
+#[test]
 fn a_raised_exception_reaches_the_32_bit_dispatcher_with_x86_structures() {
     use crate::wow64::context::{CONTEXT32_SIZE, from_context32, to_record32};
     let mut c = Caller32::new();
@@ -412,4 +469,197 @@ fn nt_continue_loads_an_x86_context() {
     assert_eq!(c.call(Service::Continue, &[at, 0]), STATUS_SUCCESS);
     let loaded = c.f.loaded.clone().expect("loaded");
     assert_eq!((loaded.rip, loaded.rsp(), loaded.gpr[2]), (0x40_2000, 0x12_F000, 0x55));
+}
+
+const CURRENT_THREAD: u32 = 0xFFFF_FFFE;
+
+#[test]
+fn get_context_thread_answers_an_x86_context_with_the_groups_asked_for() {
+    use crate::wow64::context::{CONTEXT32_CONTROL, CONTEXT32_INTEGER, CONTEXT32_SIZE};
+    let mut c = Caller32::new();
+    let me = crate::kernel::NtKernel::caller(&c.f).thread;
+    let regs = NtContext { rip: 0x40_1000, rax: 7, rsp: 0x12_FF00, rbx: 9, ..Default::default() };
+    c.f.contexts.insert(me, regs);
+    let mut ctx = [0x55u8; CONTEXT32_SIZE];
+    ctx[0..4].copy_from_slice(&CONTEXT32_CONTROL.to_le_bytes());
+    let at = c.put(&ctx);
+    assert_eq!(c.call(Service::GetContextThread, &[CURRENT_THREAD, at]), STATUS_SUCCESS);
+    assert_eq!((c.u32_at(at + 0xB8), c.u32_at(at + 0xC4)), (0x40_1000, 0x12_FF00), "Eip, Esp");
+    // Integer registers were not asked for: the caller's bytes stay.
+    assert_eq!(c.u32_at(at + 0xB0), 0x5555_5555);
+    c.f.mem.write_bytes(u64::from(at), &CONTEXT32_INTEGER.to_le_bytes()).unwrap();
+    assert_eq!(c.call(Service::GetContextThread, &[CURRENT_THREAD, at]), STATUS_SUCCESS);
+    assert_eq!((c.u32_at(at + 0xB0), c.u32_at(at + 0xA4)), (7, 9), "Eax, Ebx");
+}
+
+#[test]
+fn set_context_thread_takes_an_x86_context() {
+    use crate::wow64::context::{CONTEXT32_CONTROL, CONTEXT32_SIZE};
+    let mut c = Caller32::new();
+    let me = crate::kernel::NtKernel::caller(&c.f).thread;
+    let mut ctx = [0u8; CONTEXT32_SIZE];
+    ctx[0..4].copy_from_slice(&CONTEXT32_CONTROL.to_le_bytes());
+    ctx[0xB8..0xBC].copy_from_slice(&0x40_2222u32.to_le_bytes());
+    ctx[0xC4..0xC8].copy_from_slice(&0x13_0000u32.to_le_bytes());
+    let at = c.put(&ctx);
+    assert_eq!(c.call(Service::SetContextThread, &[CURRENT_THREAD, at]), STATUS_SUCCESS);
+    let now = c.f.contexts.get(&me).copied().expect("set");
+    assert_eq!((now.rip, now.rsp), (0x40_2222, 0x13_0000));
+}
+
+#[test]
+fn an_apc_routine_is_a_32_bit_address_and_its_frame_lies_below_esp() {
+    let mut c = Caller32::new();
+    assert_eq!(c.call(Service::QueueApcThread, &[CURRENT_THREAD, 0x40_1500, 1, 2, 3]), STATUS_SUCCESS);
+    let (_, apc) = c.f.apcs.last().copied().expect("queued");
+    assert_eq!((apc.routine, apc.arg1, apc.arg2, apc.arg3), (0x40_1500, 1, 2, 3));
+    let (esp, frame) = apc_frame(0x0012_FF03, &apc).unwrap();
+    assert_eq!(esp, 0x0012_FEF0);
+    let words: Vec<u32> = frame.chunks(4).map(|w| u32::from_le_bytes(w.try_into().unwrap())).collect();
+    assert_eq!(words, [0x40_1500, 1, 2, 3]);
+    assert_eq!(apc_frame(1 << 32, &apc), None);
+    assert_eq!(apc_frame(0x1_0008, &apc), None);
+}
+
+#[test]
+fn completion_packets_come_back_with_4_byte_contexts_and_an_8_byte_status_block() {
+    let mut c = Caller32::new();
+    let port = c.put32(0);
+    assert_eq!(c.call(Service::CreateIoCompletion, &[port, 0x1F_0003, 0, 0]), STATUS_SUCCESS);
+    let port = c.u32_at(port);
+    for i in 0..3 {
+        assert_eq!(c.call(Service::SetIoCompletion, &[port, 0x10 + i, 0x20 + i, 0, 0x30 + i]), STATUS_SUCCESS);
+    }
+    let (key, context) = (c.put32(0xFFFF_FFFF), c.put32(0xFFFF_FFFF));
+    let iosb = c.put(&[0xEE; 12]);
+    let zero = c.put(&[0u8; 8]);
+    assert_eq!(c.call(Service::RemoveIoCompletion, &[port, key, context, iosb, zero]), STATUS_SUCCESS);
+    assert_eq!((c.u32_at(key), c.u32_at(context)), (0x10, 0x20));
+    assert_eq!((c.u32_at(iosb), c.u32_at(iosb + 4)), (0, 0x30), "Status, Information");
+    // The block is 8 bytes: what follows is the caller's.
+    assert_eq!(c.u32_at(iosb + 8), 0xEEEE_EEEE);
+    // The other two through NtRemoveIoCompletionEx: 16-byte entries.
+    let entries = c.put(&[0xEE; 16 * 3]);
+    let removed = c.put32(0);
+    assert_eq!(c.call(Service::RemoveIoCompletionEx, &[port, entries, 3, removed, zero, 0]), STATUS_SUCCESS);
+    assert_eq!(c.u32_at(removed), 2);
+    let words: Vec<u32> = (0..8).map(|i| c.u32_at(entries + 4 * i)).collect();
+    assert_eq!(words, [0x11, 0x21, 0, 0x31, 0x12, 0x22, 0, 0x32]);
+    assert_eq!(c.u32_at(entries + 32), 0xEEEE_EEEE);
+}
+
+#[test]
+fn a_status_block_marked_32_bit_is_written_as_8_bytes_at_the_caller_s_address() {
+    use crate::io::irp::{IOSB32, iosb_address, iosb_write};
+    let w = iosb_write(0x0040_1000 | IOSB32, NtStatus(0x103), 0x1_0000_0005);
+    assert_eq!((w.addr, w.bytes()), (0x0040_1000, &[3, 1, 0, 0, 5, 0, 0, 0][..]));
+    let w = iosb_write(0x0040_1000, NtStatus(0), 5);
+    assert_eq!(w.bytes().len(), 16);
+    assert_eq!(iosb_address(0x0040_1000 | IOSB32), 0x0040_1000);
+}
+
+#[test]
+fn directory_entries_have_the_32_bit_layout() {
+    let mut c = Caller32::new();
+    let ev = c.put32(0);
+    let oa = c.attrs("\\BaseNamedObjects\\wow64-dir-test", 0);
+    assert_eq!(c.call(Service::CreateEvent, &[ev, 0x1F_0003, oa, 0, 0]), STATUS_SUCCESS);
+    let dir = c.put32(0);
+    let oa = c.attrs("\\BaseNamedObjects", 0);
+    assert_eq!(c.call(Service::OpenDirectoryObject, &[dir, 0x3, oa]), STATUS_SUCCESS);
+    let dir = c.u32_at(dir);
+    let buf = c.put(&[0u8; 2048]);
+    let (context, ret) = (c.put32(0), c.put32(0));
+    let mut found = false;
+    for restart in [1u32, 0, 0, 0, 0, 0, 0, 0] {
+        let st = c.call(Service::QueryDirectoryObject, &[dir, buf, 2048, 1, restart, context, ret]);
+        if st != STATUS_SUCCESS {
+            break;
+        }
+        // Name: Length, MaximumLength, a 4-byte Buffer; then TypeName at 8.
+        let len = c.u32_at(buf) & 0xFFFF;
+        let at = u64::from(c.u32_at(buf + 4));
+        assert!(at > u64::from(buf) && at < u64::from(buf) + 2048, "{at:#x}");
+        let units: Vec<u16> =
+            c.f.bytes_at(at, len as usize).chunks(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+        if std::string::String::from_utf16(&units).unwrap() == "wow64-dir-test" {
+            let tlen = c.u32_at(buf + 8) & 0xFFFF;
+            let tat = u64::from(c.u32_at(buf + 12));
+            let t: Vec<u16> =
+                c.f.bytes_at(tat, tlen as usize).chunks(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+            assert_eq!(std::string::String::from_utf16(&t).unwrap(), "Event");
+            // One entry and the zero entry ending the array: 2 * 16 bytes before the strings.
+            assert_eq!(at, u64::from(buf) + 32);
+            found = true;
+        }
+    }
+    assert!(found);
+}
+
+#[test]
+fn token_user_and_object_name_have_4_byte_pointers() {
+    let mut c = Caller32::new();
+    let h = c.put32(0);
+    assert_eq!(c.call(Service::OpenProcessToken, &[CURRENT, 0x8, h]), STATUS_SUCCESS);
+    let h = c.u32_at(h);
+    let buf = c.put(&[0u8; 128]);
+    let ret = c.put32(0);
+    assert_eq!(c.call(Service::QueryInformationToken, &[h, 1, buf, 128, ret]), STATUS_SUCCESS);
+    // TOKEN_USER: the SID right after the 8-byte SID_AND_ATTRIBUTES.
+    assert_eq!(c.u32_at(buf), buf + 8);
+    assert_eq!(c.f.bytes_at(u64::from(buf) + 8, 1)[0], 1, "SID revision");
+    assert_eq!(c.u32_at(ret) as usize, 8 + 8 + 4 * usize::from(c.f.bytes_at(u64::from(buf) + 9, 1)[0]));
+    // ObjectNameInformation of a named event: an 8-byte UNICODE_STRING then the name.
+    let ev = c.put32(0);
+    let oa = c.attrs("\\BaseNamedObjects\\wow64-name", 0);
+    assert_eq!(c.call(Service::CreateEvent, &[ev, 0x1F_0003, oa, 0, 0]), STATUS_SUCCESS);
+    let name = c.put(&[0u8; 256]);
+    assert_eq!(c.call(Service::QueryObject, &[c.u32_at(ev), 1, name, 256, ret]), STATUS_SUCCESS);
+    assert_eq!(c.u32_at(name + 4), name + 8);
+    let len = (c.u32_at(name) & 0xFFFF) as usize;
+    assert_eq!(c.u32_at(ret) as usize, 8 + len + 2);
+}
+
+#[test]
+fn a_32_bit_user32_calls_win32k_with_the_same_request_bytes_and_a_4_byte_reply_length() {
+    use poly_win32k::proto::{Reply, Request};
+    use poly_win32k::services::Win32kService;
+    let mut c = Caller32::new();
+    let req = poly_win32k::wire::encode(&Request::Desktop {});
+    let at = c.put(&req);
+    let out = c.put(&[0u8; 256]);
+    let len = c.put(&[0xEE; 8]);
+    let (outcome, status) = c.call_outcome(Win32kService::Call.number(), &[at, req.len() as u32, out, 256, len]);
+    assert_eq!((outcome, status), (Outcome::Handled, STATUS_SUCCESS));
+    let n = c.u32_at(len) as usize;
+    assert!(n > 0 && n <= 256);
+    // The length is a 4-byte SIZE_T: the next bytes are the caller's.
+    assert_eq!(c.u32_at(len + 4), 0xEEEE_EEEE);
+    let reply: Reply = poly_win32k::wire::decode(&c.f.bytes_at(u64::from(out), n)).expect("a reply");
+    assert!(matches!(reply, Reply::Desktop { .. }), "{reply:?}");
+}
+
+#[test]
+fn rename_link_and_completion_inputs_are_widened() {
+    use crate::wow64::thunk::set_file_input_for_tests as widen;
+    // FILE_RENAME_INFORMATION, 32 bits: ReplaceIfExists, RootDirectory (-1 here), length 4, "AB".
+    let mut b = vec![1u8, 0, 0, 0];
+    b.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    b.extend_from_slice(&4u32.to_le_bytes());
+    b.extend_from_slice(&[b'A', 0, b'B', 0]);
+    let w = widen(10, &b).unwrap().unwrap();
+    assert_eq!(w.len(), 24);
+    assert_eq!(w[0], 1);
+    assert_eq!(u64::from_le_bytes(w[8..16].try_into().unwrap()), u64::MAX, "the handle sign extended");
+    assert_eq!(u32::from_le_bytes(w[16..20].try_into().unwrap()), 4);
+    assert_eq!(&w[20..], &[b'A', 0, b'B', 0]);
+    assert_eq!(widen(11, &b[..8]), Some(Err(STATUS_INFO_LENGTH_MISMATCH)));
+    // FILE_COMPLETION_INFORMATION: Port, Key.
+    let w = widen(30, &[0x10, 0, 0, 0, 0x78, 0x56, 0x34, 0x12]).unwrap().unwrap();
+    assert_eq!(
+        (u64::from_le_bytes(w[0..8].try_into().unwrap()), u64::from_le_bytes(w[8..16].try_into().unwrap())),
+        (0x10, 0x1234_5678)
+    );
+    // FileBasicInformation has no pointers.
+    assert_eq!(widen(4, &[0u8; 40]), None);
 }
