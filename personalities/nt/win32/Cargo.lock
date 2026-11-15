@@ -116,10 +116,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "d3d11"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "dbghelp"
 version = "0.0.1"
 dependencies = [
  "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "dcomp"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -156,6 +170,13 @@ dependencies = [
  "poly-dwrite",
  "poly-font",
  "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "dxgi"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

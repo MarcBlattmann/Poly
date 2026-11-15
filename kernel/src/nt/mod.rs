@@ -149,6 +149,12 @@ pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"
 pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
 pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
+/// `dxgi`: a factory with one software adapter (the S3 hunt, ADR 0155).
+pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
+/// `d3d11`: a software device whose swap chains present through GDI (the S3 hunt, ADR 0155).
+pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
+/// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
+pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
