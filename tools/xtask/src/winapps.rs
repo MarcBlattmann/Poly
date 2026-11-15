@@ -587,6 +587,8 @@ enum Step {
     Click(i32, i32),
     DClick(i32, i32),
     RClick(i32, i32),
+    /// Press the left button at the first point, move to the second in steps, release.
+    Drag(i32, i32, i32, i32),
 }
 
 impl Step {
@@ -618,6 +620,15 @@ impl Step {
             "rclick" => {
                 let (x, y) = xy()?;
                 Step::RClick(x, y)
+            }
+            "drag" => {
+                let v: Vec<i32> = arg
+                    .split('|')
+                    .map(|p| p.trim().parse())
+                    .collect::<core::result::Result<_, _>>()
+                    .map_err(|_| format!("step {s:?}: X1|Y1|X2|Y2"))?;
+                let [x1, y1, x2, y2] = v[..] else { return Err(format!("step {s:?}: X1|Y1|X2|Y2")) };
+                Step::Drag(x1, y1, x2, y2)
             }
             _ => return Err(format!("step {s:?}: no such step (click takes X|Y because steps are comma separated)")),
         })
@@ -757,6 +768,16 @@ impl Driver {
             Step::Click(x, y) => self.click(*x, *y, "left", 1)?,
             Step::DClick(x, y) => self.click(*x, *y, "left", 2)?,
             Step::RClick(x, y) => self.click(*x, *y, "right", 1)?,
+            Step::Drag(x1, y1, x2, y2) => {
+                self.at(*x1, *y1)?;
+                self.events(&[Self::btn(true, "left")])?;
+                std::thread::sleep(Duration::from_millis(400));
+                for i in 1..=8 {
+                    self.at(x1 + (x2 - x1) * i / 8, y1 + (y2 - y1) * i / 8)?;
+                }
+                self.events(&[Self::btn(false, "left")])?;
+                std::thread::sleep(Duration::from_millis(200));
+            }
         }
         Ok(())
     }
@@ -798,6 +819,8 @@ mod tests {
         assert_eq!(Step::parse("launch"), Ok(Step::Launch));
         assert_eq!(Step::parse("sleep:5"), Ok(Step::Sleep(5)));
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
+        assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
+        assert!(Step::parse("drag:1|2|3").is_err());
         assert_eq!(Step::parse("chord:ctrl+s"), Ok(Step::Chord(vec!["ctrl".into(), "s".into()])));
         assert!(Step::parse("fly").is_err());
     }

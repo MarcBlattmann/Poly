@@ -491,3 +491,27 @@ agent may; an implementer may not):
 - The service list is the first slice's starting point, not a promise:
   until a service ships with an implementation its number may still be
   reshaped; after that, numbers are never reused (ADR 0063).
+
+## Addendum (2026-11-15): child windows draw into their top-level surface; moves by an app's own caption
+
+**Context.** Only top-level windows had surfaces: a window DC of a child had no surface and drew
+nowhere. Chrome's GPU process presents its frames into a child of the browser's window, a window
+of another process. And `DefWindowProc` did not handle `WM_NCLBUTTONDOWN`, so a window that draws
+its own caption (ADR 0183 addendum) could not be moved or sized by it; the compositor ignored
+`BeginMove`.
+
+**Decision.**
+- **Child surfaces.** As on Windows, a child's pixels are part of its top-level window's picture.
+  win32k answers `Request::Surface` for a child with its client size
+  (`Surfaces::child_area`); the child's DCs draw into a bitmap of that size in the drawing
+  process, and its commit (`PolyUserCommitSurface` with the child's handle) writes those rows into
+  the top-level window's buffer where the child is, clipped to it, and damages that area
+  (`commit_child`). The drawing process need not be the top-level window's.
+- **Non-client presses** (Learn, `WM_NCLBUTTONDOWN`, `WM_NCLBUTTONDBLCLK`, `WM_SYSCOMMAND`):
+  `HTCAPTION` sends `SC_MOVE`, a border or corner `SC_SIZE` with its `WMSZ_*` side, a caption
+  button acts when it is released over it, a double click on the caption maximizes or restores.
+  `SC_MOVE` / `SC_SIZE` of a top-level window that is neither maximized nor minimized become
+  `Request::MoveSize`, which starts the compositor's interactive move or resize
+  (`Desktop::begin_move` / `begin_resize`) while the button is held, where Windows runs a modal
+  loop. The compositor starts the move of the window's scene window
+  (`Server::internal_start_move`); a resize from `SC_SIZE` is not run by the compositor yet.

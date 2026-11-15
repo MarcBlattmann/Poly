@@ -10,7 +10,7 @@
 //! `DefWindowProcW.yaml`, the message functions' sheets. Structures passed
 //! to procedures are the `winuser.h` layouts, in this process's memory.
 
-use crate::frame::Rect;
+use crate::frame::{self, Rect};
 use crate::metrics::{self, *};
 use crate::proto::*;
 use crate::wm::{ERROR_INVALID_WINDOW_HANDLE, PM_REMOVE, WM_QUIT, WM_TIMER};
@@ -99,6 +99,34 @@ pub const SC_CLOSE: u64 = 0xF060;
 pub const SC_MINIMIZE: u64 = 0xF020;
 pub const SC_MAXIMIZE: u64 = 0xF030;
 pub const SC_RESTORE: u64 = 0xF120;
+pub const SC_SIZE: u64 = 0xF000;
+pub const SC_MOVE: u64 = 0xF010;
+pub const WM_NCLBUTTONDOWN: u32 = 0x00A1;
+pub const WM_NCLBUTTONUP: u32 = 0x00A2;
+pub const WM_NCLBUTTONDBLCLK: u32 = 0x00A3;
+
+/// The compositor's edges (`link::Edges`) of a `WMSZ_*` side or corner
+/// (winuser.h: `WMSZ_LEFT` 1 .. `WMSZ_BOTTOMRIGHT` 8); 0 for none.
+pub fn wmsz_edges(wmsz: u64) -> u8 {
+    use crate::link::Edges;
+    let e = match wmsz {
+        1 => Edges::LEFT,
+        2 => Edges::RIGHT,
+        3 => Edges::TOP,
+        4 => Edges::TOP.union(Edges::LEFT),
+        5 => Edges::TOP.union(Edges::RIGHT),
+        6 => Edges::BOTTOM,
+        7 => Edges::BOTTOM.union(Edges::LEFT),
+        8 => Edges::BOTTOM.union(Edges::RIGHT),
+        _ => Edges(0),
+    };
+    e.0
+}
+
+/// The caption button (`HTMINBUTTON`, `HTMAXBUTTON`, `HTCLOSE`) pressed
+/// in a window: (window, hit code); its command goes when the button is
+/// released over it (DefWindowProc, `WM_NCLBUTTONDOWN` / `WM_NCLBUTTONUP`).
+pub static NC_PRESSED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 pub const ERROR_ACCESS_DENIED: u32 = 5;
 
 /// `RECT` (`windef.h`).
@@ -1765,7 +1793,68 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 SC_RESTORE => {
                     show_window(env, hwnd, SW_RESTORE);
                 }
+                // An interactive move or resize of a top-level window: the
+                // compositor runs it with the pointer (ADR 0128), where
+                // Windows runs a modal loop. A maximized or minimized
+                // window stays where it is.
+                cmd @ (SC_MOVE | SC_SIZE) => {
+                    let Some(i) = info(env, hwnd) else { return 0 };
+                    if i.style & (WS_CHILD | WS_MAXIMIZE | WS_MINIMIZE) != 0 {
+                        return 0;
+                    }
+                    let edges = if cmd == SC_MOVE { 0 } else { wmsz_edges(w & 0xF) };
+                    if cmd == SC_SIZE && edges == 0 {
+                        return 0;
+                    }
+                    env.call(Request::MoveSize { hwnd: hwnd as u32, edges });
+                }
                 _ => {}
+            }
+            0
+        }
+        // A press in the non-client area (Learn, WM_NCLBUTTONDOWN): the
+        // caption moves the window, a border sizes it (WM_SYSCOMMAND
+        // SC_MOVE / SC_SIZE with the side), a caption button acts when it
+        // is released over it.
+        WM_NCLBUTTONDOWN => {
+            let hit = w as i32;
+            match hit {
+                frame::HTCAPTION => {
+                    send(env, hwnd, WM_SYSCOMMAND, SC_MOVE | 2, l);
+                }
+                frame::HTLEFT..=frame::HTBOTTOMRIGHT => {
+                    send(env, hwnd, WM_SYSCOMMAND, SC_SIZE | (hit - frame::HTLEFT + 1) as u64, l);
+                }
+                frame::HTMINBUTTON | frame::HTMAXBUTTON | frame::HTCLOSE => {
+                    NC_PRESSED.store((hwnd << 8) | hit as u64, core::sync::atomic::Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            0
+        }
+        WM_NCLBUTTONUP => {
+            let pressed = NC_PRESSED.swap(0, core::sync::atomic::Ordering::Relaxed);
+            let hit = w as i32;
+            if pressed == (hwnd << 8) | (hit as u64 & 0xFF) {
+                let zoomed = info(env, hwnd).is_some_and(|i| i.style & WS_MAXIMIZE != 0);
+                let cmd = match hit {
+                    frame::HTMINBUTTON => SC_MINIMIZE,
+                    frame::HTMAXBUTTON if zoomed => SC_RESTORE,
+                    frame::HTMAXBUTTON => SC_MAXIMIZE,
+                    _ => SC_CLOSE,
+                };
+                send(env, hwnd, WM_SYSCOMMAND, cmd, l);
+            }
+            0
+        }
+        // A double click on the caption maximizes or restores the window.
+        WM_NCLBUTTONDBLCLK => {
+            if w as i32 == frame::HTCAPTION
+                && let Some(i) = info(env, hwnd)
+                && i.style & WS_MAXIMIZEBOX != 0
+            {
+                let cmd = if i.style & WS_MAXIMIZE != 0 { SC_RESTORE } else { SC_MAXIMIZE };
+                send(env, hwnd, WM_SYSCOMMAND, cmd, l);
             }
             0
         }
