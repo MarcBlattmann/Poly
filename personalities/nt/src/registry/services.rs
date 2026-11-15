@@ -7,6 +7,11 @@
 //! `(KeyHandle, KeySetInformationClass, KeySetInformation, Length)`, the
 //! order of the `KEY_SET_INFORMATION_CLASS` routine the WDK describes.
 //!
+//! The registry views of WOW64 (ADR 0186, stage 2): `NtCreateKey`, `NtOpenKey` and `NtOpenKeyEx`
+//! resolve the name in the caller's view ([`super::wow64`]), a 32-bit process's by default,
+//! or the one `KEY_WOW64_64KEY` / `KEY_WOW64_32KEY` in `DesiredAccess` names. Key handles keep
+//! the physical key they opened: `NtDeleteKey` and the others need no view.
+//!
 //! Access each service needs of the key handle (Learn): query and
 //! enumerate values `KEY_QUERY_VALUE`, enumerate subkeys
 //! `KEY_ENUMERATE_SUB_KEYS`, set and delete values `KEY_SET_VALUE`, delete
@@ -53,7 +58,9 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     }
     let now = k.system_time();
     let caller = k.caller();
-    let (handle, d) = k.with_state(|sys, _, b| {
+    let (handle, d) = k.with_state(|sys, p, b| {
+        // The 32-bit or 64-bit view of the name (ADR 0186, stage 2).
+        super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
         let r = (|| {
             let root = match attrs.root {
                 Some(h) => root_key(sys, &caller, h)?,
@@ -111,7 +118,8 @@ fn open<K: NtKernel>(k: &mut K, out: u64, access: u64, attrs: Attributes, open_o
     }
     let now = k.system_time();
     let caller = k.caller();
-    let h = k.with_state(|sys, _, b| {
+    let h = k.with_state(|sys, p, b| {
+        super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
         let mut hook = KeyParse {
             reg: &mut sys.registry.reg,
             open_link: attrs.attributes & OBJ_OPENLINK != 0,

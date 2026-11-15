@@ -576,6 +576,76 @@ pub unsafe extern "system" fn IsWow64Process(process: nt::Handle, wow64: *mut i3
     }
 }
 
+// ----- WOW64 file-system redirection ------------------------------------------------------
+
+/// The calling thread's redirection flag (in its TEB; `poly_rtl::layout::TEB_FS_REDIRECTION_OFF`).
+#[cfg(target_pointer_width = "32")]
+fn fs_redirection_flag() -> *mut u32 {
+    (teb() + poly_rtl::layout::TEB_FS_REDIRECTION_OFF) as *mut u32
+}
+
+/// `Wow64DisableWow64FsRedirection` (Learn): switch the redirection of `%windir%\System32` off
+/// for the calling thread only; `*old_value` is what `Wow64RevertWow64FsRedirection` takes. A
+/// 64-bit process has no redirection to switch: `ERROR_INVALID_FUNCTION` (to be confirmed by the
+/// spec agent; Learn names no error). ADR 0186, stage 2.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64DisableWow64FsRedirection(old_value: *mut usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        if old_value.is_null() {
+            return fail(ERROR_INVALID_PARAMETER, FALSE);
+        }
+        let flag = fs_redirection_flag();
+        // SAFETY: the calling thread's TEB, readable and writable; the caller's out-pointer.
+        unsafe {
+            let (new, old) = poly_kernelbase::wow64::disable(flag.read());
+            flag.write(new);
+            old_value.write(old);
+        }
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64RevertWow64FsRedirection` (Learn): restore the redirection `old_value` (from
+/// `Wow64DisableWow64FsRedirection`) describes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64RevertWow64FsRedirection(old_value: usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::revert(old_value)) };
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64EnableWow64FsRedirection` (Learn; the older call): TRUE switches the redirection on for
+/// the calling thread, FALSE off. Returns a `BOOLEAN`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64EnableWow64FsRedirection(enable: u8) -> u8 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::enable(enable != 0)) };
+        1
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = enable;
+        set_last_error(ERROR_INVALID_FUNCTION);
+        0
+    }
+}
+
 /// `PRODUCT_PROFESSIONAL` (`winnt.h`).
 const PRODUCT_PROFESSIONAL: u32 = 0x30;
 

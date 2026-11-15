@@ -233,7 +233,7 @@ pub unsafe extern "system" fn RegOpenKeyExW(
     sam: u32,
     out: *mut HKey,
 ) -> u32 {
-    if out.is_null() {
+    if out.is_null() || reg::both_views(sam) {
         return ERROR_INVALID_PARAMETER;
     }
     // SAFETY: the caller's NUL-terminated string or null.
@@ -297,7 +297,7 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     out: *mut HKey,
     disposition: *mut u32,
 ) -> u32 {
-    if out.is_null() || sub.is_null() {
+    if out.is_null() || sub.is_null() || reg::both_views(sam) {
         return ERROR_INVALID_PARAMETER;
     }
     // SAFETY: checked non-null; NUL-terminated per the contract.
@@ -520,6 +520,9 @@ pub extern "system" fn RegNotifyChangeKeyValue(
 /// `ERROR_ACCESS_DENIED`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RegDeleteKeyExW(hkey: HKey, sub: *const u16, sam: u32, _reserved: u32) -> u32 {
+    if reg::both_views(sam) {
+        return ERROR_INVALID_PARAMETER;
+    }
     // SAFETY: the caller's string or null.
     let Some(sub) = (unsafe { wide_arg(sub) }) else { return ERROR_INVALID_PARAMETER };
     let access = reg::DELETE | (sam & reg::KEY_WOW64_RES);

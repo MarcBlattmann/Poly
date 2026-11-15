@@ -226,3 +226,91 @@ and continued, and `RtlUnwind` of an inner frame. The ring-3 kernel test
 - DS, ES and FS are the user data selector in ring 0 too; nothing in the kernel uses them.
 - Changing a service's arguments now means changing its row in `wow64/sigs.rs` (a host test
   checks every service has exactly one).
+
+## Addendum: stage 2 (registry and file-system views)
+
+Stage 2 of the plan is done, with host tests. Inputs: Learn's "Registry Redirector", "Registry
+Keys Affected by WOW64" (the table's column for Windows 7 and newer), "Accessing an Alternate
+Registry View", "File System Redirector", `Wow64DisableWow64FsRedirection`,
+`Wow64RevertWow64FsRedirection`, `Wow64EnableWow64FsRedirection`.
+
+### Registry views
+
+- **The rule** is one pure function over NT paths, `registry::wow64_view(path, wow64, access)`
+  (`personalities/nt/src/registry/wow64.rs`). A call's view is the 32-bit one for a 32-bit
+  process, or when `KEY_WOW64_32KEY` (0x0200) is in `DesiredAccess`, in either
+  kind of process; `KEY_WOW64_64KEY` (0x0100) gives the native view to a 32-bit process. Both
+  flags together mean nothing to the kernel (the process's own view); `RegCreateKeyEx`,
+  `RegOpenKeyEx` and `RegDeleteKeyEx` refuse them with `ERROR_INVALID_PARAMETER`, as Learn says.
+  The view bits are not rights: `registry::key_access` already dropped them from the access
+  check, and `kernelbase` now passes them to `NtOpenKey`, `NtOpenKeyEx` and `NtCreateKey`
+  instead of dropping them.
+- **In the 32-bit view**, `HKLM\SOFTWARE` and everything below it lives under
+  `HKLM\SOFTWARE\Wow6432Node`, except the keys Learn lists as shared (`registry::wow64::SHARED`,
+  with its source in the table's "Windows 7 and Newer" column: `Classes` and its subkeys,
+  `Clients`, `Policies`, `RegisteredApplications`, and the `Microsoft\...` keys from `COM3` to
+  `Windows NT\CurrentVersion\Time Zones`; every subkey inherits). Below `Classes`, the five
+  subkeys Learn marks redirected (`CLSID`, `DirectShow`, `Interface`, `Media Type`,
+  `MediaFoundation`) live under `Classes\Wow6432Node`. `HKCU\SOFTWARE` is shared and only those
+  five `Classes` subkeys are redirected (`\REGISTRY\USER\<sid>\Software\Classes\...` and the
+  `\REGISTRY\USER\<sid>_Classes` hive form). Learn's page lists `Microsoft\Shared Tools\MSInfo`
+  with a doubled `SOFTWARE\Microsoft\` prefix, a typo of the page; the key meant is used. The
+  symbolic links Learn lists for programs that hard-code `Wow6432Node` paths are not made.
+- **Where it applies**: the name resolution of `NtCreateKey`, `NtOpenKey`, `NtOpenKeyEx`
+  (`registry::apply_view`), on the *full* path: the root handle's path plus the relative name, or
+  the absolute name. `kernelbase` opens `HKLM` (`\REGISTRY\MACHINE`) as a handle and the rest
+  relative to it, so the same code handles `RegOpenKeyEx(HKLM, "SOFTWARE\X")` and
+  `NtOpenKey("\Registry\Machine\Software\X")`. A path already below `Wow6432Node` is physical and
+  not moved again (`RegCreateKeyEx` creates one component after the other); below it a shared key
+  is mapped to its one physical key, so a relative open from a handle of the 32-bit view reaches
+  the same key as the one-step open. `NtDeleteKey` takes a handle and needs no view; handles keep
+  the physical key they opened (Learn: "all subsequent operations on child registry keys must
+  explicitly use the same flag"). `RegEnumKey` on `HKLM\SOFTWARE` lists `Wow6432Node` for a
+  64-bit caller, never for a 32-bit one.
+- **The default hive** has an empty `HKLM\SOFTWARE\Wow6432Node` (`poly_registry::defaults::install`
+  makes it after mounting the software hive, also for a hive loaded from an older file).
+- **Not done**: Learn's rewriting of `%ProgramFiles%` and `%commonprogramfiles%` in `REG_SZ` and
+  `REG_EXPAND_SZ` values a 32-bit process writes (to `%ProgramFiles(x86)%`, ...), the
+  `Wow6432Node` compatibility links, `HKEY_CLASSES_ROOT`'s merge of the two views beyond what the
+  paths give, and `RRF_SUBKEY_WOW64xxKEY` of `RegGetValue`.
+
+### File-system views
+
+- **Per-thread switch.** `Wow64DisableWow64FsRedirection(&old)`, `Wow64RevertWow64FsRedirection(old)`
+  and `Wow64EnableWow64FsRedirection(enable)` are in `kernelbase` (`kernel32` forwards them
+  through the `api-ms-win-core-wow64-l1-1-0` contract like `IsWow64Process`). The state is one
+  `u32` in the **calling thread's TEB** at `poly_rtl::layout::TEB_FS_REDIRECTION_OFF` (0x1FF0, in
+  both widths' two-page TEB, far above `ntdll`'s data at `TEB_POLY`), zero in a new thread. Both
+  sides own it: `kernelbase` stores it (no system call), `wow64::thunk::object_attributes` reads
+  it for the calling thread before it redirects a file name, so it is per thread by
+  construction (Learn: "Disabling file system redirection affects only operations made by the
+  current thread"). `OldValue` is the flag's previous value, so nested pairs restore what was
+  there (the rules are `poly_kernelbase::wow64`, host-tested). In a 64-bit process the three
+  functions fail with `ERROR_INVALID_FUNCTION` (Learn names no error; to be confirmed below).
+- **`%windir%\Sysnative`** (`wow64::sysnative_to_system32`): a path under it names the same path
+  under `System32`, whether redirection is on or off (Learn: "a special alias used to indicate
+  that the file system should not redirect the access"). A 64-bit process gets no alias: only
+  the 32-bit conversion looks for it.
+- **Redirection** now also covers the other two rows of Learn's table:
+  `%windir%\lastgood\system32` (to `lastgood\SysWOW64`) and `%windir%\regedit.exe` (to
+  `SysWOW64\regedit.exe`).
+
+### Checks of stage 1's calls against Learn
+
+`IsWow64Process2` writes `IMAGE_FILE_MACHINE_I386` for a 32-bit process and
+`IMAGE_FILE_MACHINE_UNKNOWN` for a 64-bit one in `pProcessMachine`, `IMAGE_FILE_MACHINE_AMD64` in
+the optional `pNativeMachine` (Learn); `GetSystemInfo` and `GetNativeSystemInfo` in a 32-bit
+process use the 36-byte x86 `SYSTEM_INFO` (`system_info_32`, host-tested: architecture,
+page size, address range, processor mask and count, `dwProcessorType`, granularity, level), the
+native call with `PROCESSOR_ARCHITECTURE_AMD64`. No change was needed.
+
+### To be confirmed by the spec agent (additions to the list above)
+
+7. What the three `Wow64*FsRedirection` functions do in a 64-bit process (Poly: fail with
+   `ERROR_INVALID_FUNCTION`, `Wow64EnableWow64FsRedirection` returning FALSE).
+8. Whether `NtOpenKey` with both `KEY_WOW64_64KEY` and `KEY_WOW64_32KEY` is an error (Poly: the
+   process's own view; the Win32 functions refuse it).
+9. What a relative open below a handle opened with the other view does in the kernel (Poly: the
+   32-bit view of the full path, which Learn calls "unexpected behavior").
+10. Whether a created key below a shared key whose parents exist only in the other location
+    works (Poly: the parents must exist at the shared location).
