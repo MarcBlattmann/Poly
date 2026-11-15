@@ -213,9 +213,26 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
     let req: Request = wire::decode(&bytes).ok_or(STATUS_INVALID_PARAMETER)?;
     let caller = k.caller();
     let ctx = Ctx { pid: caller.process.0, tid: caller.thread.0 as u32, now: k.monotonic_100ns() / 10_000 };
-    let reply = k.with_state(|sys, _, _| {
+    // Window stations and desktops make handles and read the caller's descriptors: the NT side's.
+    let reply = if let Request::Winsta { op } = &req {
+        Reply::Winsta { res: crate::winsta::handle_call(k, op) }
+    } else {
+        call_wm(k, &caller, ctx, req)
+    };
+    let out = wire::encode(&reply);
+    abi::write_u64(k, out_len_ptr, out.len() as u64)?;
+    if out.len() as u64 > out_cap {
+        return Ok(STATUS_BUFFER_TOO_SMALL);
+    }
+    abi::write(k, out_ptr, &out)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// One request for the window manager.
+fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: Request) -> Reply {
+    k.with_state(|sys, _, _| {
         match req {
-            Request::RegisterEvent { handle } => return register_event(sys, &caller, ctx, handle),
+            Request::RegisterEvent { handle } => return register_event(sys, caller, ctx, handle),
             Request::Surface { hwnd } => {
                 let w = &sys.win32k;
                 let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
@@ -271,14 +288,7 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
         sys.win32k.wake(&mut sys.objects, &fx);
         sys.win32k.sync();
         reply
-    });
-    let out = wire::encode(&reply);
-    abi::write_u64(k, out_len_ptr, out.len() as u64)?;
-    if out.len() as u64 > out_cap {
-        return Ok(STATUS_BUFFER_TOO_SMALL);
-    }
-    abi::write(k, out_ptr, &out)?;
-    Ok(STATUS_SUCCESS)
+    })
 }
 
 /// `PolyUserCommitSurface(hwnd, pixels, width, height, stride)`: the app

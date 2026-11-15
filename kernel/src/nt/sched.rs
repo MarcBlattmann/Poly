@@ -473,6 +473,22 @@ fn owner_of(pid: ProcessId, thread: ThreadRef) -> ProcessId {
     })
 }
 
+/// The kernel's thread behind NT thread `thread` of the calling process `pid` (`me` is the
+/// calling thread): for its scheduler affinity. A thread that has ended is
+/// `STATUS_THREAD_IS_TERMINATING`; one the process does not have `STATUS_INVALID_CID`.
+pub fn kernel_thread(pid: ProcessId, me: ThreadRef, thread: ThreadRef) -> Result<thread::ThreadId, NtStatus> {
+    if thread == me {
+        return Ok(thread::current());
+    }
+    let flags = find(owner_of(pid, thread))
+        .and_then(|p| p.thread_flags(thread.0 as u32))
+        .ok_or(poly_ntobj::status::STATUS_THREAD_IS_TERMINATING)?;
+    match flags.thread.load(Ordering::SeqCst) {
+        0 => Err(poly_ntobj::status::STATUS_THREAD_IS_TERMINATING),
+        bits => Ok(thread::ThreadId::from_bits(bits - 1)),
+    }
+}
+
 /// A thread's suspend count stops here (`MAXIMUM_SUSPEND_COUNT`, `winnt.h`).
 const MAXIMUM_SUSPEND_COUNT: u32 = 127;
 

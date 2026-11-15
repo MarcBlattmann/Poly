@@ -132,9 +132,14 @@ pub struct ProcessCreate {
     /// and whether it joins its creator's too.
     pub jobs: alloc::vec::Vec<u64>,
     pub join_creator_jobs: bool,
-    /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
-    /// it cannot make memory executable.
-    pub dynamic_code_blocked: bool,
+    /// Its mitigation policies from the creation attributes (ADR 0192); a dynamic-code policy
+    /// in them means it cannot make memory executable.
+    pub mitigation: poly_kernelbase::mitigation::State,
+    /// The window station and desktop it starts on (`lpDesktop` and what it inherits, ADR 0192).
+    pub desktop: crate::winsta::Start,
+    /// The creator's error mode (`SetErrorMode`): the new process starts with it
+    /// ([`crate::procattrs`]).
+    pub error_mode: u32,
     /// The security descriptors of the new process object and of its first thread object
     /// (`lpProcessAttributes`, `lpThreadAttributes`; self-relative). The creator's handles are
     /// opened before they apply.
@@ -234,6 +239,23 @@ pub trait NtKernel {
     /// `STATUS_NOT_IMPLEMENTED`.
     fn suspend_process(&mut self, _pid: poly_ntobj::ProcessId) -> Result<(), NtStatus> {
         Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED)
+    }
+
+    /// The CPU the calling thread runs on (`NtGetCurrentProcessorNumber`).
+    fn current_processor(&mut self) -> u32 {
+        0
+    }
+
+    /// The CPUs `thread` may run on, as a mask (`ThreadBasicInformation.AffinityMask`); the
+    /// threads of the calling process only. A kernel without per-thread affinity says CPU 0.
+    fn thread_affinity(&mut self, _thread: ThreadRef) -> Result<u64, NtStatus> {
+        Ok(1)
+    }
+
+    /// Let `thread` run only on the CPUs of `mask` that exist (`NtSetInformationThread`,
+    /// `ThreadAffinityMask`); a mask with none of them is `STATUS_INVALID_PARAMETER`.
+    fn set_thread_affinity(&mut self, _thread: ThreadRef, _mask: u64) -> Result<(), NtStatus> {
+        Ok(())
     }
 
     /// Resume every thread of process `pid` once (`NtResumeProcess`).

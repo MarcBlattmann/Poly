@@ -23,6 +23,7 @@ mod attrlist;
 mod base;
 mod console;
 mod copy;
+mod errmode;
 mod except;
 mod file;
 mod fileex;
