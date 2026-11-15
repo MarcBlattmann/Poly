@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "gdbu_system",
+      "exe_sha256": "357711bbb2eb08f194947b5fb8bc1db9c15ba96cda08f06fdcac69f8d01c6e2d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkRm9udE1lbVJlc291cmNlRXggZm9yIFBvbHlEbGcgTWl4ZWQ6IGhhbmRsZSB0cnVlIGZvbnRzIDEKQWRkRm9udE1lbVJlc291cmNlRXggZm9yIFBvbHlEbGcgRXZlbjogaGFuZGxlIHRydWUgZm9udHMgMQpHZXREaWFsb2dCYXNlVW5pdHMgPSAoOCwgMTYpOyBoaWdoIGJpdHMgb2YgdGhlIHJlc3VsdCBhcmUgdGhlIGhlaWdodDogdHJ1ZQphIHNlY29uZCBjYWxsIGdpdmVzIHRoZSBzYW1lIHJlc3VsdDogdHJ1ZQpzeXN0ZW0gZm9udDogdG1IZWlnaHQgMTYgdG1BdmVDaGFyV2lkdGggNyB3aWR0aCBvZiB0aGUgNTIgbGV0dGVycyA0MjkKeCBlcXVhbHMgdG1BdmVDaGFyV2lkdGggZmFsc2U7IHggZXF1YWxzICh3aWR0aCBvZiB0aGUgNTIgbGV0dGVycyAvIDI2ICsgMSkgLyAyOiB0cnVlOyB5IGVxdWFscyB0bUhlaWdodCB0cnVlCmEgZGlhbG9nIHdpdGhvdXQgYSBmb250OiBNYXBEaWFsb2dSZWN0IGJhc2UgdW5pdHMgKDgsIDE2KTsgZXF1YWwgdG8gR2V0RGlhbG9nQmFzZVVuaXRzOiB0cnVlCmFmdGVyIG1ha2luZyBhIGRpYWxvZyB3aXRoIGl0cyBvd24gZm9udCB0aGUgcmVzdWx0IGlzIHVuY2hhbmdlZDogdHJ1ZQpmcm9tIGFub3RoZXIgdGhyZWFkOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "AddFontMemResourceEx for PolyDlg Mixed: handle true fonts 1\nAddFontMemResourceEx for PolyDlg Even: handle true fonts 1\nGetDialogBaseUnits = (8, 16); high bits of the result are the height: true\na second call gives the same result: true\nsystem font: tmHeight 16 tmAveCharWidth 7 width of the 52 letters 429\nx equals tmAveCharWidth false; x equals (width of the 52 letters / 26 + 1) / 2: true; y equals tmHeight true\na dialog without a font: MapDialogRect base units (8, 16); equal to GetDialogBaseUnits: true\nafter making a dialog with its own font the result is unchanged: true\nfrom another thread: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}
