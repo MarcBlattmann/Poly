@@ -362,8 +362,9 @@ unsafe fn com() {
     // The model can change once the thread is balanced.
     check_hr(CoInitializeEx(core::ptr::null_mut(), 2), S_OK);
     check_hr(CoGetApartmentType(&mut kind, &mut qual), S_OK);
-    check_eq(kind as usize, 0); // APTTYPE_STA
-    check_hr(OleInitialize(core::ptr::null_mut()), S_FALSE);
+    check_eq(kind as usize, 3); // APTTYPE_MAINSTA: the first STA of the process
+    // OLE is a state of its own on top of the apartment: the first OleInitialize is S_OK even there.
+    check_hr(OleInitialize(core::ptr::null_mut()), S_OK);
     OleUninitialize();
 
     // No class is registered.
@@ -391,9 +392,9 @@ unsafe fn com() {
     check_eq(bad as usize, 0);
     check_eq(release(m) as usize, 0);
 
-    // Drag and drop registration is accepted.
-    check_hr(RegisterDragDrop(0x1234, 1 as *mut c_void), S_OK);
-    check_hr(RevokeDragDrop(0x1234), S_OK);
+    // Drag and drop needs a window: a handle that is none is DRAGDROP_E_INVALIDHWND.
+    check_hr(RegisterDragDrop(0x1234, 1 as *mut c_void), 0x8004_0102);
+    check_hr(RevokeDragDrop(0x1234), 0x8004_0102);
     CoUninitialize();
 
     // Task memory.
@@ -543,11 +544,11 @@ unsafe fn windows() {
     check_got(wide_eq(&short, "Poly"), 0);
     check_eq(GetDpiForWindow(hwnd) as usize, 96);
 
-    // EnumThreadWindows finds it, and stops when asked to.
+    // EnumThreadWindows lists no message-only window (EnumThreadWindows.yaml).
     ENUM_TARGET.store(hwnd as u32, Ordering::Relaxed);
     ENUM_SEEN.store(0, Ordering::Relaxed);
     check_eq(EnumThreadWindows(GetCurrentThreadId(), enum_cb, 0) as usize, 1);
-    check_got(ENUM_SEEN.load(Ordering::Relaxed) >= 1, ENUM_SEEN.load(Ordering::Relaxed));
+    check_got(ENUM_SEEN.load(Ordering::Relaxed) == 0, ENUM_SEEN.load(Ordering::Relaxed));
     ENUM_SEEN.store(0, Ordering::Relaxed);
     check_eq(EnumThreadWindows(0xFFFF_0000, enum_cb, 0) as usize, 1);
     check_eq(ENUM_SEEN.load(Ordering::Relaxed) as usize, 0);
