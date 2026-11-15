@@ -15,6 +15,7 @@ interface:
 rules:
   basic_accounting: "class 1, 48 bytes: TotalProcesses at offset 36, ActiveProcesses at 40, TotalTerminatedProcesses at 44 (32-bit each). An empty job is all zeros. After one assignment: 1/1/0; two assigned: 2 active; after one exits normally: total 2, active 1; after the other is terminated with TerminateProcess: active 0 (the terminated counter stayed 0 in the test)."
   returned_length: "the returned length is the structure size (48, 64, 144, 16 for the id list with one member)."
+  default_priority_class: "class 2 (JobObjectBasicLimitInformation) through kernel32 reports PriorityClass 0x20 (NORMAL_PRIORITY_CLASS) for a job without a priority limit: a fresh job and one that only had ActiveProcessLimit 4 set (flags 0x8), whether the set went through SetInformationJobObject or NtSetInformationJobObject; SchedulingClass is 5. The same jobs read through NtQueryInformationJobObject (ntdll) report PriorityClass 0 and SchedulingClass 5: kernel32 supplies the default"
   id_list: "class 3: a header of two 32-bit values (assigned count, ids in the list) followed by 64-bit ids; with one member in a 64-byte buffer: assigned 1, in list 1, the id, length 16. A buffer of exactly the header (8 bytes), smaller, or of 12 bytes fails with ERROR_BAD_LENGTH."
   exact_sizes: "class 1 with 40 or 100 bytes, class 9 with 64 bytes: FALSE, ERROR_BAD_LENGTH (24). Class 2 (basic limit) is 64 bytes and class 9 (extended) 144 bytes; both return flags 0 for a new job."
   classes: "on a job without processes, with a 1024-byte buffer: classes 3, 5, 11 and 14 succeed (lengths 8, 1024, 0, 16) and the others fail with ERROR_BAD_LENGTH (24): the buffer length must match their structure. Class 0 and class 4096: ERROR_INVALID_PARAMETER (87)."
@@ -30,7 +31,7 @@ timing:
   typical: "well under a millisecond per call on the oracle, except where the call waits"
   guarantees: none
 tests:
-  visible: 1
+  visible: 2
   held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one file per test, importing kernel32.dll by name (a few import ntdll.dll). Each file carries its own declarations (Learn prototypes, winerror.h/winbase.h constants). Pipe names are \\.\pipe\poly-ipc-<test>-<process id in hex>, so runs do not collide. Observations are error codes, counts, bytes and booleans, never handles, process ids or times; timing appears only as coarse envelopes ("waited at least N ms", "woke in under N ms"). A test that needs a second process starts its own image with CreateProcessW and the arguments --child <mode>; the child reports through its exit code. Every blocking call is bounded by a helper thread, a poll or a timeout, so a failing implementation fails a check instead of hanging.
