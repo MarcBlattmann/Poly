@@ -282,12 +282,19 @@ struct DcState {
     /// origin + viewport origin.
     viewport_org: (i32, i32),
     window_org: (i32, i32),
+    /// Where a child window's client origin is in its top-level window's
+    /// surface (user32 sets it, [`Gdi::set_display_base`]): added to every
+    /// logical coordinate, not visible through `GetViewportOrgEx`.
+    base_org: (i32, i32),
 }
 
 impl DcState {
     /// What to add to logical coordinates for device ones.
     fn to_device(&self) -> (i32, i32) {
-        (self.viewport_org.0.wrapping_sub(self.window_org.0), self.viewport_org.1.wrapping_sub(self.window_org.1))
+        (
+            self.viewport_org.0.wrapping_sub(self.window_org.0).wrapping_add(self.base_org.0),
+            self.viewport_org.1.wrapping_sub(self.window_org.1).wrapping_add(self.base_org.1),
+        )
     }
 }
 
@@ -708,6 +715,7 @@ impl Gdi {
             clip: None,
             viewport_org: (0, 0),
             window_org: (0, 0),
+            base_org: (0, 0),
         }
     }
 
@@ -808,7 +816,22 @@ impl Gdi {
     /// A display DC's origin on the screen (`None`: not a display DC).
     pub fn display_origin(&self, h: u64) -> Option<(i32, i32)> {
         let d = self.dc(h)?;
-        matches!(d.kind, DcKind::Display { .. }).then_some(d.vis_origin)
+        matches!(d.kind, DcKind::Display { .. })
+            .then_some((d.vis_origin.0 + d.state.base_org.0, d.vis_origin.1 + d.state.base_org.1))
+    }
+
+    /// A child window's DC draws into its top-level window's surface: its logical
+    /// origin is `base` from the surface's (and `vis_origin` is the surface's on the screen).
+    pub fn set_display_base(&mut self, dc: u64, base: (i32, i32)) -> bool {
+        let Some(d) = self.dc_mut(dc) else { return false };
+        if d.kind == DcKind::Memory {
+            return false;
+        }
+        d.state.base_org = base;
+        for s in &mut d.saved {
+            s.base_org = base;
+        }
+        true
     }
 
     /// The handles of deleted objects of type `ty` stop answering
@@ -1826,7 +1849,8 @@ impl Gdi {
         if d.kind == DcKind::Memory {
             return false;
         }
-        d.sys_clip = clip;
+        let base = d.state.base_org;
+        d.sys_clip = clip.map(|c| c.offset_by(base.0, base.1));
         true
     }
 

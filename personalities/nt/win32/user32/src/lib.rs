@@ -76,6 +76,8 @@ unsafe extern "system" {
         drawn: *mut u32,
     ) -> i32;
     fn PolyGdiAttachSurface(hdc: usize, width: u32, height: u32) -> i32;
+    fn PolyGdiAttachSurfaceTo(hdc: usize, surface_hwnd: usize, width: u32, height: u32) -> i32;
+    fn PolyGdiSetDisplayBase(hdc: usize, x: i32, y: i32) -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
@@ -1545,12 +1547,49 @@ fn dc_geometry(i: &WinInfo, dc: H, whole: bool) -> H {
     let flat = |rs: &[Rect]| -> Vec<i32> { rs.iter().flat_map(|r| [r.left, r.top, r.right, r.bottom]).collect() };
     let (inc, exc) = (flat(&[include]), flat(&exclude));
     if dc != 0 {
+        // A child window's DC draws into its top-level window's surface, at the child's place in it.
+        let (ox, oy, bx, by) = match root_surface(i) {
+            Some((root, w, h)) => {
+                // SAFETY: our gdi32 checks the DC.
+                unsafe { PolyGdiAttachSurfaceTo(dc, root.hwnd as H, w, h) };
+                (root.client.left, root.client.top, area.left - root.client.left, area.top - root.client.top)
+            }
+            None => (area.left, area.top, 0, 0),
+        };
         // SAFETY: our gdi32 reads 1 and `exclude.len()` RECTs.
         unsafe {
-            PolyGdiSetDisplayGeometry(dc, area.left, area.top, inc.as_ptr(), 1, exc.as_ptr(), exclude.len() as u32)
+            PolyGdiSetDisplayGeometry(dc, ox, oy, inc.as_ptr(), 1, exc.as_ptr(), exclude.len() as u32);
+            PolyGdiSetDisplayBase(dc, bx, by);
         };
     }
     dc
+}
+
+/// The top-level window a child window's surface is, with the surface's size, when it has one.
+fn root_surface(i: &WinInfo) -> Option<(WinInfo, u32, u32)> {
+    if i.style & metrics::WS_CHILD == 0 {
+        return None;
+    }
+    let mut cur = i.clone();
+    while cur.style & metrics::WS_CHILD != 0 {
+        cur = info(cur.parent as H)?;
+    }
+    match call(Request::Surface { hwnd: cur.hwnd }) {
+        Reply::Value { value } if value != 0 => Some((cur, value as u32, (value >> 32) as u32)),
+        _ => None,
+    }
+}
+
+/// The top-level window of `hwnd` (itself when it is one).
+fn top_level_of(hwnd: H) -> H {
+    let mut cur = hwnd;
+    for _ in 0..64 {
+        match info(cur) {
+            Some(i) if i.style & metrics::WS_CHILD != 0 => cur = i.parent as H,
+            _ => break,
+        }
+    }
+    cur
 }
 
 /// The desktop link (ADR 0131): a window DC draws into the window's
@@ -1570,6 +1609,7 @@ fn attach_surface(hwnd: u32, dc: H) -> H {
 
 /// What the window's DCs drew goes to its surface (`ReleaseDC`).
 fn commit_surface(hwnd: H) {
+    let hwnd = if hwnd == 0 { 0 } else { top_level_of(hwnd) };
     let mut s = [0u64; 3];
     // SAFETY: our gdi32 writes three u64s.
     if hwnd == 0 || unsafe { PolyGdiSurface(hwnd, s.as_mut_ptr()) } == 0 {

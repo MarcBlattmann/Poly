@@ -1518,11 +1518,31 @@ static SURFACES: SpinLock<Vec<SurfaceDib>> = SpinLock::new(Vec::new());
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> i32 {
     let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
+    attach_surface_of(hdc, hwnd as H, width, height)
+}
+
+/// As [`PolyGdiAttachSurface`] for the surface of window `surface_hwnd` (a child
+/// window's DC draws into its top-level window's surface) and, with
+/// [`PolyGdiSetDisplayBase`], at the child's place in it.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurfaceTo(hdc: H, surface_hwnd: H, width: u32, height: u32) -> i32 {
+    if gdi(|g| g.display_hwnd(hdc as u64)).is_none() {
+        return 0;
+    }
+    attach_surface_of(hdc, surface_hwnd, width, height)
+}
+
+/// Where a child window's client (or window) origin is in the surface its DC draws into.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiSetDisplayBase(hdc: H, x: i32, y: i32) -> i32 {
+    i32::from(gdi(|g| g.set_display_base(hdc as u64, (x, y))))
+}
+
+fn attach_surface_of(hdc: H, hwnd: H, width: u32, height: u32) -> i32 {
     if width == 0 || height == 0 {
         gdi(|g| g.set_surface(hdc as u64, None));
         return 1;
     }
-    let hwnd = hwnd as H;
     let current = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied());
     let bitmap = match current {
         Some((_, b, _, w, h)) if (w, h) == (width, height) => b,
