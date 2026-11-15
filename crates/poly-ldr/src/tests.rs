@@ -36,6 +36,9 @@ struct Fake {
     views: bool,
     /// Views `unmap_image` unmapped.
     unmapped: Vec<u64>,
+    /// The protection of the executable's code each time a file was read (that is, while its
+    /// imports were being bound).
+    exe_code_when_reading: Vec<u32>,
 }
 
 fn s(v: &[u16]) -> String {
@@ -121,6 +124,10 @@ impl Process for Fake {
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
         let key = s(nt_path).to_lowercase();
         self.tried.push(key.clone());
+        if self.regions.contains_key(&EXE_BASE) {
+            let prot = self.prot_at(EXE_BASE + 0x1000);
+            self.exe_code_when_reading.push(prot);
+        }
         if self.denied.contains(&key) {
             return Err(STATUS_ACCESS_DENIED);
         }
@@ -340,6 +347,9 @@ fn process_start_binds_imports_in_dependency_order() {
     assert_eq!(iat(&mut w, &e, 0, 1), ab + 0x1050);
     assert_eq!(iat(&mut w, &e, 1, 0), NTDLL_BASE + 0x1020);
     assert_eq!(iat(&mut w, &a, 0, 0), bb + 0x1040);
+    // The executable's code was executable the whole time its imports were bound (ADR 0196).
+    assert!(!w.p.exe_code_when_reading.is_empty());
+    assert!(w.p.exe_code_when_reading.iter().all(|&p| p == page::EXECUTE_READ), "{:?}", w.p.exe_code_when_reading);
     // Section protections: code read/execute, the headers read-only.
     assert_eq!(w.p.prot_at(ab), page::READONLY);
     assert_eq!(w.p.prot_at(ab + 0x1000), page::EXECUTE_READ);
