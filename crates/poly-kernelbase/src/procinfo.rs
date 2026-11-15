@@ -239,6 +239,41 @@ pub fn mapped_name_copy(name: &[u16], size: u32) -> (usize, bool, u32, Option<u3
     }
 }
 
+// ----- K32GetModuleInformation ----------------------------------------------------------------
+
+/// The entry point's RVA in a PE image whose headers are `header` (`AddressOfEntryPoint`, the
+/// optional header's field at offset 16, after the `PE  ` signature and the 20-byte file
+/// header the DOS header's `e_lfanew` at 0x3C points to; the PE/COFF specification). `None` for
+/// headers that are not a PE image's; `Some(0)` for an image without one (a resource DLL).
+pub fn entry_point_rva(header: &[u8]) -> Option<u32> {
+    let u32_at = |at: usize| header.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    if header.get(0..2)? != b"MZ" {
+        return None;
+    }
+    let pe = u32_at(0x3C)? as usize;
+    if header.get(pe..pe + 4)? != b"PE  " {
+        return None;
+    }
+    u32_at(pe + 24 + 16)
+}
+
+/// `K32GetModuleInformation`'s `MODULEINFO` (`psapi.h`): `lpBaseOfDll`, `SizeOfImage` (a
+/// `DWORD`), `EntryPoint`, in a process whose pointers are `word` bytes (24 bytes on x64, 12 in
+/// 32 bits); `ERROR_INSUFFICIENT_BUFFER` when `cb` is smaller.
+pub fn module_info(base: u64, size: u32, entry: u64, cb: u32, word: usize) -> Result<Vec<u8>, u32> {
+    let total = 3 * word;
+    if (cb as usize) < total {
+        return Err(crate::error::ERROR_INSUFFICIENT_BUFFER);
+    }
+    let mut out = Vec::with_capacity(total);
+    out.extend_from_slice(&base.to_le_bytes()[..word]);
+    let mut s = [0u8; 8];
+    s[..4].copy_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&s[..word]);
+    out.extend_from_slice(&entry.to_le_bytes()[..word]);
+    Ok(out)
+}
+
 // ----- K32GetProcessMemoryInfo --------------------------------------------------------------
 
 /// `K32GetProcessMemoryInfo(process, ppsmemCounters, cb)` (Learn, `psapi.h`): the structure
@@ -427,5 +462,25 @@ mod tests {
         assert_eq!(process_memory_counters(&vm, 44, 4).unwrap().len(), 44);
         assert_eq!(process_memory_counters(&vm, 52, 4).unwrap().len(), 52);
         assert_eq!(process_memory_counters(&vm, 39, 4), Err(122));
+    }
+
+    #[test]
+    fn module_information() {
+        let mut h = vec![0u8; 0x200];
+        h[0..2].copy_from_slice(b"MZ");
+        h[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        h[0x80..0x84].copy_from_slice(b"PE  ");
+        h[0x80 + 40..0x80 + 44].copy_from_slice(&0x1234u32.to_le_bytes());
+        assert_eq!(entry_point_rva(&h), Some(0x1234));
+        assert_eq!(entry_point_rva(&h[..0x90]), None);
+        h[0] = b'X';
+        assert_eq!(entry_point_rva(&h), None);
+        let mi = module_info(0x1_8000_0000, 0x5000, 0x1_8000_1234, 24, 8).unwrap();
+        assert_eq!(mi.len(), 24);
+        assert_eq!(u64::from_le_bytes(mi[0..8].try_into().unwrap()), 0x1_8000_0000);
+        assert_eq!(u32::from_le_bytes(mi[8..12].try_into().unwrap()), 0x5000);
+        assert_eq!(u64::from_le_bytes(mi[16..24].try_into().unwrap()), 0x1_8000_1234);
+        assert_eq!(module_info(0x40_0000, 0x5000, 0x40_1000, 12, 4).unwrap().len(), 12);
+        assert_eq!(module_info(0x40_0000, 0x5000, 0x40_1000, 11, 4), Err(122));
     }
 }

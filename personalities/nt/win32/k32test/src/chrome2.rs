@@ -100,6 +100,7 @@ unsafe extern "system" {
     fn QueryThreadCycleTime(t: Handle, cycles: *mut u64) -> i32;
     fn SetThreadInformation(t: Handle, class: u32, info: *const u8, size: u32) -> i32;
     fn K32GetProcessMemoryInfo(p: Handle, counters: *mut u8, cb: u32) -> i32;
+    fn K32GetModuleInformation(p: Handle, module: *mut u8, info: *mut u8, cb: u32) -> i32;
 }
 
 const GENERIC_READ: u32 = 0x8000_0000;
@@ -248,6 +249,17 @@ unsafe fn suspended_waiter() {
         check(u32_at(&pmc, 0) == 80 && u64_at(&pmc, 72) > 0);
         check(K32GetProcessMemoryInfo(GetCurrentProcess(), pmc.as_mut_ptr(), 16) == 0);
         check_error(122);
+
+        // Module information: kernel32's base, a size, an entry point inside it.
+        let k32 = GetModuleHandleW(w!("kernel32.dll"));
+        let mut mi = [0u8; 24];
+        check(!k32.is_null() && K32GetModuleInformation(GetCurrentProcess(), k32, mi.as_mut_ptr(), 24) != 0);
+        let (base, size, entry) = (u64_at(&mi, 0), u64::from(u32_at(&mi, 8)), u64_at(&mi, 16));
+        check(base == k32 as u64 && size >= 0x1000 && entry > base && entry < base + size);
+        check(K32GetModuleInformation(GetCurrentProcess(), k32, mi.as_mut_ptr(), 8) == 0);
+        check_error(122);
+        check(K32GetModuleInformation(GetCurrentProcess(), 0x1000 as *mut u8, mi.as_mut_ptr(), 24) == 0);
+        check_error(6);
     }
 }
 
