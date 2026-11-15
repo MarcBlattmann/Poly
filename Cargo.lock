@@ -342,6 +342,10 @@ name = "poly-mem"
 version = "0.0.1"
 
 [[package]]
+name = "poly-msvcp"
+version = "0.0.1"
+
+[[package]]
 name = "poly-net"
 version = "0.0.1"
 
