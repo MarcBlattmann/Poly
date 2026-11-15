@@ -16,6 +16,10 @@
 //!
 //! [`install_file`] puts one of Poly's own files (a system DLL) into a
 //! layout folder, rewriting it only when its bytes differ.
+//! [`install_own_copy`] does the same for a file the user may replace with
+//! someone else's (ADR 0199: Microsoft's Visual C++ runtime installed by
+//! `vc_redist`): a file there that is not Poly's (it lacks
+//! [`OWN_COPY_MARKER`]) is left as it is.
 
 use super::{FOLDERS, User};
 use crate::io::consts::{FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
@@ -128,7 +132,16 @@ pub enum Installed {
     Written,
     /// It was already there with these bytes.
     Unchanged,
+    /// Another file of that name, not Poly's, is there and stays
+    /// ([`install_own_copy`]).
+    Yielded,
 }
+
+/// The bytes every Poly DLL that a user's installer may replace carries
+/// (ADR 0199): `vcruntime140.dll` and `vcruntime140_1.dll` today. The DLLs
+/// hold the same text (`personalities/nt/win32/vcruntime140*/src/lib.rs`)
+/// and the kernel's `build.rs` refuses to embed one without it.
+pub const OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";
 
 /// Put `bytes` as file `name` into the folder `dir` (`\`-separated, below
 /// `root`, made if missing), unless a file of that name (without case)
@@ -160,6 +173,56 @@ pub fn install_file(vr: &VfsRoot, root: &NodeRef, dir: &str, name: &str, bytes: 
         }
     }
     Ok(Installed::Written)
+}
+
+/// [`install_file`] for a DLL the user may replace with another vendor's
+/// copy (ADR 0199, owner decision 5: Microsoft's `vc_redist` replaces
+/// Poly's Visual C++ runtime): written when missing, rewritten when it is
+/// an older Poly copy (it holds `marker`) with other bytes, and left alone
+/// ([`Installed::Yielded`]) when the file there is someone else's.
+pub fn install_own_copy(
+    vr: &VfsRoot,
+    root: &NodeRef,
+    dir: &str,
+    name: &str,
+    bytes: &[u8],
+    marker: &[u8],
+) -> Result<Installed, NtStatus> {
+    let (folder, _) = ensure_path(vr, root, dir)?;
+    if let Some(on_disk) = find_child(vr, &folder, &wide(name))? {
+        let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(&folder), &on_disk, true).map_err(status_of)?;
+        if node.kind().map_err(status_of)? == FileType::Regular && !contains(vr, &folder, &on_disk, marker)? {
+            return Ok(Installed::Yielded);
+        }
+    }
+    install_file(vr, root, dir, name, bytes)
+}
+
+/// Whether the file `name` in `dir` holds `needle` anywhere.
+fn contains(vr: &VfsRoot, dir: &NodeRef, name: &[u8], needle: &[u8]) -> Result<bool, NtStatus> {
+    if needle.is_empty() {
+        return Ok(true);
+    }
+    let file = vr.vfs.open(&vr.ctx, &vr.cred, At::Node(dir), name, OpenFlags::RDONLY, 0).map_err(status_of)?;
+    // Each read is appended to the last `needle.len() - 1` bytes of the one
+    // before, so a match across two reads is found.
+    let keep = needle.len() - 1;
+    let mut window: Vec<u8> = Vec::new();
+    let mut buf = alloc::vec![0u8; 16 * 1024];
+    let mut at = 0u64;
+    loop {
+        let n = file.read_at(at, &mut buf).map_err(status_of)?;
+        if n == 0 {
+            return Ok(false);
+        }
+        at += n as u64;
+        window.extend_from_slice(&buf[..n]);
+        if window.windows(needle.len()).any(|w| w == needle) {
+            return Ok(true);
+        }
+        let drop = window.len().saturating_sub(keep);
+        window.drain(..drop);
+    }
 }
 
 fn same_contents(vr: &VfsRoot, dir: &NodeRef, name: &[u8], want: &[u8]) -> Result<bool, NtStatus> {

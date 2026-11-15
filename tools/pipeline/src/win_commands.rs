@@ -64,17 +64,108 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
             problems.push(format!("green entry {}: {}", w.entry.id, bad.join(", ")));
         }
     }
+    let parity = vcruntime_parity(repo, &entries, &base, &target, jobs, &mut report, &mut problems)?;
     util::write(&run_dir.join("report.txt"), &report)?;
     print!("{report}");
     if !problems.is_empty() {
         return Err(format!("on Poly, {} (report: {})", problems.join("; "), run_dir.join("report.txt").display()));
     }
     println!(
-        "pipeline win polycheck: the {} visible tests of {} green Windows entries pass on Poly",
+        "pipeline win polycheck: the {} visible tests of {} green Windows entries pass on Poly \
+         ({parity} of them also with vcruntime140.dll)",
         tests.len(),
         entries.len()
     );
     Ok(0)
+}
+
+/// The tests directory of a green `msvcrt.dll` entry (ADR 0199's parity pass).
+const MSVCRT_SPECS: &str = "specs/windows/msvcrt.dll";
+/// The corpus tests of `vcruntime140.dll`'s own exports (ADR 0199), in `tests/windows`.
+const VCRT_TESTS: &[&str] = &["vcrt_exception_state", "vcrt_typeinfo_exception"];
+
+/// ADR 0199: `vcruntime140.dll` runs the C++ exception code `msvcrt.dll` has (ADR 0099), so
+/// the C++ tests of the green `msvcrt.dll` entries, built to take their runtime from
+/// `vcruntime140.dll` (`wincxx::Runtime::Vcruntime140`), must give the results recorded for
+/// them on Windows. Until a spec agent records `vcruntime140.dll`'s own results, this is
+/// the check that the two DLLs behave alike. The implementer's own `vcruntime140.dll` tests
+/// ([`VCRT_TESTS`], self-checking, no Windows results yet) run in the same boot and must pass.
+/// Returns how many tests ran.
+fn vcruntime_parity(
+    repo: &Path,
+    entries: &[green::WindowsEntry],
+    base: &Path,
+    target: &poly::Target,
+    jobs: usize,
+    report: &mut String,
+    problems: &mut Vec<String>,
+) -> Result<usize> {
+    let cpp = |w: &green::WindowsEntry| -> Vec<String> {
+        w.entry
+            .tests
+            .iter()
+            .filter(|t| repo.join(&w.entry.tests_dir).join(format!("{t}.cpp")).is_file())
+            .cloned()
+            .collect()
+    };
+    let chosen: Vec<(&green::WindowsEntry, Vec<String>)> = entries
+        .iter()
+        .filter(|w| w.entry.tests_dir.starts_with(MSVCRT_SPECS))
+        .map(|w| (w, cpp(w)))
+        .filter(|(_, t)| !t.is_empty())
+        .collect();
+    if chosen.is_empty() {
+        return Ok(0);
+    }
+    let own: Vec<String> = VCRT_TESTS
+        .iter()
+        .filter(|t| repo.join(windows::CORPUS_DIR).join(format!("{t}.cpp")).is_file())
+        .map(|t| t.to_string())
+        .collect();
+    let bin = base.join("bin-vcruntime140");
+    let dirs: Vec<PathBuf> = chosen.iter().map(|(w, _)| repo.join(&w.entry.tests_dir)).collect();
+    let tests: Vec<String> = chosen.iter().flat_map(|(_, t)| t.iter().cloned()).chain(own.iter().cloned()).collect();
+    let manifest = windows::build_runtime(repo, &bin, &dirs, &tests, Some(wincxx::Runtime::Vcruntime140))?;
+    let run_dir = base.join("run-vcruntime140");
+    let _ = std::fs::remove_dir_all(&run_dir);
+    let mut results = windows::run_poly(target, &bin, &manifest, &run_dir, jobs)?;
+    util::write_json(&run_dir.join("poly.json"), &results)?;
+    // The reference ran the msvcrt build of each test: these are other executables on
+    // purpose, so only what they observed is compared.
+    for r in &mut results.tests {
+        r.exe_sha256 = None;
+    }
+    for (w, t) in &chosen {
+        let reference = windows::RunFile::load(&repo.join(&w.reference))?;
+        let summary = windows::diff(&reference, &results, t)?;
+        report.push_str(&format!("== {} (built for vcruntime140.dll)\n{}\n", w.entry.id, windows::report(&summary)));
+        let bad: Vec<String> =
+            summary.tests.iter().filter(|t| t.verdict != windows::Verdict::Pass).map(|t| t.name.clone()).collect();
+        if !bad.is_empty() {
+            problems.push(format!("{} built for vcruntime140.dll: {}", w.entry.id, bad.join(", ")));
+        }
+    }
+    for name in &own {
+        let r = results.test(name);
+        let ok = r.is_some_and(|r| r.exit_code == Some(0));
+        report.push_str(&format!(
+            "== {name} (vcruntime140.dll, self-checking): {}
+",
+            if ok { "pass" } else { "FAIL" }
+        ));
+        if let Some(out) = r.and_then(|r| r.output.as_deref()) {
+            for line in out.lines().filter(|l| l.starts_with("not ok") || l.starts_with("summary")) {
+                report.push_str(&format!(
+                    "   {line}
+"
+                ));
+            }
+        }
+        if !ok {
+            problems.push(format!("{name} on vcruntime140.dll (exit {:?})", r.and_then(|r| r.exit_code)));
+        }
+    }
+    Ok(tests.len())
 }
 
 /// The freestanding hello world makes exactly two syscalls.
@@ -96,10 +187,11 @@ pub(super) fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
     let bin_dir = a.opt("bin-dir").map_or_else(|| win.join("bin"), PathBuf::from);
     match sub.as_str() {
         "build" => {
-            a.only(&["tests-dir", "tests", "out"])?;
+            a.only(&["tests-dir", "tests", "out", "cxx-runtime"])?;
             let out = a.opt("out").map_or_else(|| win.join("bin"), PathBuf::from);
             let extra: Vec<PathBuf> = a.all("tests-dir").into_iter().map(PathBuf::from).collect();
-            let m = windows::build(repo, &out, &extra, &test_list(a))?;
+            let runtime = a.opt("cxx-runtime").map(wincxx::Runtime::parse).transpose()?;
+            let m = windows::build_runtime(repo, &out, &extra, &test_list(a), runtime)?;
             for t in &m.tests {
                 let imports: Vec<String> = t.imports.iter().map(|(d, n)| format!("{d}: {}", n.join(" "))).collect();
                 println!("{:<28} {:>6} bytes  {}", t.exe, t.size, imports.join("; "));
