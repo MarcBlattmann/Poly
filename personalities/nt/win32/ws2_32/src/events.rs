@@ -95,9 +95,19 @@ fn hook(s: Socket, f: impl FnOnce(&mut Registration)) {
     });
 }
 
-/// `recv` ran on `s`.
+/// `recv` ran on `s`: `FD_READ` may be recorded again, and when no data is left the record that
+/// was not taken yet loses its `FD_READ` (the event object stays signalled).
 pub fn after_recv(s: Socket) {
-    hook(s, Registration::after_recv);
+    if COUNT.load(Ordering::Acquire) == 0 {
+        return;
+    }
+    let drained = bytes_readable(s) == 0;
+    hook(s, |r| {
+        r.after_recv();
+        if drained {
+            r.data_drained();
+        }
+    });
 }
 
 /// `send` failed with `WSAEWOULDBLOCK` on `s`.

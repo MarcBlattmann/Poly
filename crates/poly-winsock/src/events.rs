@@ -183,6 +183,14 @@ impl Registration {
         self.armed_read = true;
     }
 
+    /// A `recv` left no data: a recorded `FD_READ` that was not taken is dropped (the event object
+    /// stays signalled, Windows' own), and the next data counts as arriving.
+    pub fn data_drained(&mut self) {
+        self.pending &= !FD_READ;
+        self.errors[bit(FD_READ)] = 0;
+        self.seen_bytes = 0;
+    }
+
     /// `send` failed with `WSAEWOULDBLOCK` (or an overlapped one is pending): `FD_WRITE` is
     /// recorded when sending is possible again.
     pub fn after_send_blocked(&mut self) {
@@ -358,6 +366,19 @@ mod tests {
         r.after_recv();
         assert!(!r.step(&poll(false, true)));
         assert!(r.step(&data(2)));
+    }
+
+    #[test]
+    fn a_recv_that_drains_the_data_drops_the_recorded_read() {
+        let mut r = Registration::new(FD_READ | FD_CLOSE, 7, false, true);
+        assert!(r.step(&data(10)));
+        // The program reads it all before asking: the record has no FD_READ any more.
+        r.after_recv();
+        r.data_drained();
+        assert_eq!(r.take(), (0, [0; 10]));
+        // New data is news again.
+        assert!(r.step(&data(3)));
+        assert_eq!(r.take().0, FD_READ);
     }
 
     #[test]
