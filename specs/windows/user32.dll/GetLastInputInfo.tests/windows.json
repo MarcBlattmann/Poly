@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gli_chrome",
+      "exe_sha256": "92c5ad1d8a4a3deb496af8711374c8e0af94ecf00ba6af92900d99caa84bd1ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiBpcyB0aGUgZm9yZWdyb3VuZCB3aW5kb3c6IDEKZmlyc3QgY2FsbDogMSwgdGhlIHRpbWUgaXMgbm90IGluIHRoZSBmdXR1cmU6IDEKc2VudCAyIGV2ZW50cyBmb3IgVktfRjI0CnNlY29uZCBjYWxsOiAxLCBub3Qgb2xkZXIgdGhhbiB0aGUgZmlyc3Q6IDEKdGhlIHRpbWUgbW92ZWQ6IDEKaWRsZSB0aW1lIGFmdGVyIHRoZSBrZXkgaXMgYmVsb3cgZml2ZSBzZWNvbmRzOiAxCiAgUCBtYWluIFdNX0tFWURPV04gdms9MHg4NyByZXBlYXQ9MSBmbGFncz0weDAKICBQIG1haW4gV01fS0VZVVAgdms9MHg4NyByZXBlYXQ9MSBmbGFncz0weGMwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main is the foreground window: 1\nfirst call: 1, the time is not in the future: 1\nsent 2 events for VK_F24\nsecond call: 1, not older than the first: 1\nthe time moved: 1\nidle time after the key is below five seconds: 1\n  P main WM_KEYDOWN vk=0x87 repeat=1 flags=0x0\n  P main WM_KEYUP vk=0x87 repeat=1 flags=0xc000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 591
+    }
+  ]
+}

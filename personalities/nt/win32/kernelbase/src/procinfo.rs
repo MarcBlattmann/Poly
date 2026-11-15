@@ -187,19 +187,20 @@ fn module_spans() -> Vec<(u64, u64, Vec<u16>)> {
     // SAFETY: ntdll keeps the loader data in process memory (ADR 0071); the list is circular
     // through its head.
     unsafe {
-        let ldr = ((peb() + 0x18) as *const u64).read();
+        let l = crate::base::LDR;
+        let ldr = crate::base::ptr_at(peb() + poly_rtl::layout::NATIVE.peb_ldr);
         if ldr == 0 {
             return out;
         }
-        let head = ldr + 0x20;
-        let mut link = (head as *const u64).read();
+        let head = ldr + l.ldr_in_memory_order;
+        let mut link = crate::base::ptr_at(head);
         let mut guard = 0;
         while link != head && link != 0 && guard < 4096 {
-            let entry = link - 0x10;
-            let base = ((entry + 0x30) as *const u64).read();
-            let size = u64::from(((entry + 0x40) as *const u32).read());
-            out.push((base, size, unicode_at(entry + 0x48).to_vec()));
-            link = (link as *const u64).read();
+            let entry = link - l.entry_in_memory_order;
+            let base = crate::base::ptr_at(entry + l.entry_dll_base);
+            let size = u64::from(((entry + l.entry_size_of_image) as *const u32).read());
+            out.push((base, size, unicode_at(entry + l.entry_full_name).to_vec()));
+            link = crate::base::ptr_at(link);
             guard += 1;
         }
     }

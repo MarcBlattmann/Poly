@@ -552,7 +552,7 @@ pub unsafe extern "system" fn GetExitCodeProcess(process: Handle, code: *mut u32
 #[unsafe(no_mangle)]
 pub extern "system" fn GetProcessId(process: Handle) -> u32 {
     match basic_information(process) {
-        Ok(info) => u64::from_le_bytes(info[32..40].try_into().unwrap()) as u32,
+        Ok(info) => crate::base::id_in(&info, crate::base::PBI_UNIQUE_PROCESS_ID),
         Err(e) => fail(e, 0),
     }
 }

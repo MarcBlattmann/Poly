@@ -64,7 +64,10 @@ pub use errno::Errno;
 pub use neighbor::NeighborConfig;
 pub use reassembly::{ReassemblyConfig, ReassemblyStats};
 pub use setting::{Setting, SettingError, StaticIpv4};
-pub use socket::{Domain, Protocol, Readiness, RecvFlags, RecvInfo, Shutdown, SockType, SocketHandle};
+pub use socket::{
+    Domain, IFINDEX_DEVICE, IFINDEX_LOOPBACK, Protocol, Readiness, RecvFlags, RecvInfo, RxMeta, Shutdown, SockType,
+    SocketHandle,
+};
 pub use stack::{Config, Ipv4Cidr, Ipv6Cidr, SocketFlags, Stack, Stats, TcpInfo};
 pub use tcp::{TcpConfig, TcpState, TcpStats};
 pub use time::Instant;

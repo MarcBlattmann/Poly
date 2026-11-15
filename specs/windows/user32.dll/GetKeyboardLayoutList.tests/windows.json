@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "gkll_basic",
+      "exe_sha256": "f908e5e3c60c79489744e017c665878d67f32ac0d8e15256905e996f8fafc88f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSAwLCBubyBidWZmZXI6IGF0IGxlYXN0IDE6IDEgKGxhc3QgZXJyb3IgMHhiZWVmKQpzaXplIDY0OiByZXR1cm5zIHRoZSBjb3VudDogMQogIHRoZSBmaWxsZWQgZW50cmllcyBhcmUgbm90IHplcm86IDEKICB0aGUgcmVzdCBvZiB0aGUgYnVmZmVyIGlzIHVudG91Y2hlZDogMQogIHRoZSBsaXN0IGNvbnRhaW5zIHRoZSB0aHJlYWQncyBsYXlvdXQ6IDEKICBlbnRyaWVzIGFyZSBwYWlyd2lzZSBkaWZmZXJlbnQ6IDEKICBldmVyeSBlbnRyeSBoYXMgYSBsYW5ndWFnZSBpZGVudGlmaWVyOiAxCiAgYSBzZWNvbmQgY2FsbCByZXR1cm5zIHRoZSBzYW1lIGNvdW50IGFuZCBsaXN0OiAxCj09IHNtYWxsIGJ1ZmZlcnMKICBzaXplIDE6IHJldHVybnMgbWluKGNvdW50LCAxKTogMQogICAgdGhlIGVudHJpZXMgYXJlIHRoZSBmaXJzdCBvZiB0aGUgZnVsbCBsaXN0OiAxCiAgICB0aGUgZW50cmllcyBiZXlvbmQgYXJlIHVudG91Y2hlZDogMQogIHNpemUgMjogcmV0dXJucyBtaW4oY291bnQsIDIpOiAxCiAgICB0aGUgZW50cmllcyBhcmUgdGhlIGZpcnN0IG9mIHRoZSBmdWxsIGxpc3Q6IDEKICAgIHRoZSBlbnRyaWVzIGJleW9uZCBhcmUgdW50b3VjaGVkOiAxCj09IHNpemUgMCB3aXRoIGEgYnVmZmVyCiAgcmV0dXJucyB0aGUgY291bnQ6IDEsIGJ1ZmZlciB1bnRvdWNoZWQ6IDEKPT0gbmVnYXRpdmUgc2l6ZQogIHNpemUgLTE6IHJldHVybnMgMCwgYnVmZmVyIHVudG91Y2hlZDogMSwgbGFzdCBlcnJvciA5OTgKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size 0, no buffer: at least 1: 1 (last error 0xbeef)\nsize 64: returns the count: 1\n  the filled entries are not zero: 1\n  the rest of the buffer is untouched: 1\n  the list contains the thread's layout: 1\n  entries are pairwise different: 1\n  every entry has a language identifier: 1\n  a second call returns the same count and list: 1\n== small buffers\n  size 1: returns min(count, 1): 1\n    the entries are the first of the full list: 1\n    the entries beyond are untouched: 1\n  size 2: returns min(count, 2): 1\n    the entries are the first of the full list: 1\n    the entries beyond are untouched: 1\n== size 0 with a buffer\n  returns the count: 1, buffer untouched: 1\n== negative size\n  size -1: returns 0, buffer untouched: 1, last error 998\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    },
+    {
+      "name": "gkll_chrome",
+      "exe_sha256": "a58bf6555410aa2283e061441588b53a6075f443cbb21d75740b031294664a81",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cm91bmQgMTogY291bnQgYXQgbGVhc3QgMTogMSwgZmlsbGVkIGVudHJpZXMgZXF1YWwgdGhlIGNvdW50OiAxCnJvdW5kIDI6IHNhbWUgY291bnQsIHNhbWUgZW50cmllcyBhcyByb3VuZCAxOiAxCnJvdW5kIDM6IHNhbWUgY291bnQsIHNhbWUgZW50cmllcyBhcyByb3VuZCAxOiAxCnJvdW5kIDQ6IHNhbWUgY291bnQsIHNhbWUgZW50cmllcyBhcyByb3VuZCAxOiAxCnJvdW5kcyAyIHRvIDQgZXF1YWwgcm91bmQgMTogMyBvZiAzCnRoZSB0aHJlYWQncyBsYXlvdXQgaXMgaW4gdGhlIGxpc3Q6IDEKZXZlcnkgbG93IHdvcmQgaXMgbm90IHplcm86IDEKbGF5b3V0cyB0aGF0IGFyZSBJTUVzOiBhdCBtb3N0IHRoZSBjb3VudDogMQpJbW1Jc0lNRSBvZiB0aGUgdGhyZWFkJ3MgbGF5b3V0IGlzIHRoZSBzYW1lIGFzIG9mIGl0cyBsaXN0IGVudHJ5OiAxCm1haW4gaXMgdGhlIGZvcmVncm91bmQgd2luZG93OiAxCmluIHRoZSBmb3JlZ3JvdW5kOiBzYW1lIGNvdW50IGFuZCBlbnRyaWVzOiAxCj09IG1lc3NhZ2VzIHRoZSBjYWxscyBjYXVzZWQgKG5vbmUgZXhwZWN0ZWQpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "round 1: count at least 1: 1, filled entries equal the count: 1\nround 2: same count, same entries as round 1: 1\nround 3: same count, same entries as round 1: 1\nround 4: same count, same entries as round 1: 1\nrounds 2 to 4 equal round 1: 3 of 3\nthe thread's layout is in the list: 1\nevery low word is not zero: 1\nlayouts that are IMEs: at most the count: 1\nImmIsIME of the thread's layout is the same as of its list entry: 1\nmain is the foreground window: 1\nin the foreground: same count and entries: 1\n== messages the calls caused (none expected)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 539
+    }
+  ]
+}

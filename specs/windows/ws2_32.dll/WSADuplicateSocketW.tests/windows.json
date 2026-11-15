@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsaduplicatesocketw_child",
+      "exe_sha256": "b542c33cfbdeb2047c9428994ebb539f947b3f5a5e60ae7e1489c9f844d6ad15",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RklPTkJJTyBvbiB0aGUgb3JpZ2luYWwgMAp1bmJvdW5kOiBwYXJlbnQgYWNjZXB0ZWQgdGhlIGNoaWxkJ3MgY29ubmVjdGlvbiAxCmNoaWxkOiByZWNvcmQgYnl0ZXMgcmVhZCA2MjgKY2hpbGQ6IHNlbmQgMgpsaXN0ZW5pbmc6IGNsaWVudCBjb25uZWN0IHRvIHRoZSBsaXN0ZW5pbmcgcG9ydCBhZnRlciB0aGUgb3JpZ2luYWwgd2FzIGNsb3NlZDogMApjaGlsZDogcmVjb3JkIGJ5dGVzIHJlYWQgNjI4CmNoaWxkOiByZWFkYWJsZSAoYSBjb25uZWN0aW9uIHdhaXRzKSAxCmNvbm5lY3RlZDogV1NBRHVwbGljYXRlU29ja2V0VyAwCmNvbm5lY3RlZDogcGFyZW50IHBlZXIgc2VuZCA0CmNoaWxkOiBXU0FTb2NrZXRXIGZyb20gdGhlIHJlY29yZDogc29ja2V0IG1hZGU9MSBlcnI9MApjaGlsZDogcmVjdiA0IFsxMTIsIDExMSwgMTEwLCAxMDNdCnR3aWNlOiBjaGlsZCBleGl0IDAKY2hpbGQ6IHNlY29uZCBXU0FTb2NrZXRXIGZyb20gdGhlIHNhbWUgcmVjb3JkOiBtYWRlPTEgZXJyPTAKY2hpbGQ6IHNlY29uZCBzdGlsbCB3b3JrcyBhZnRlciB0aGUgZmlyc3QgaXMgY2xvc2VkOiBwb3J0IG5vbnplcm8gMApvcmlnX29wZW46IHRoZSBvcmlnaW5hbCBzaG93cyB0aGUgcG9ydCB0aGUgY2hpbGQgYm91bmQgMApjaGlsZDogV1NBU29ja2V0VyBmcm9tIHRoZSByZWNvcmQ6IHNvY2tldCBtYWRlPTEgZXJyPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FIONBIO on the original 0\nunbound: parent accepted the child's connection 1\nchild: record bytes read 628\nchild: send 2\nlistening: client connect to the listening port after the original was closed: 0\nchild: record bytes read 628\nchild: readable (a connection waits) 1\nconnected: WSADuplicateSocketW 0\nconnected: parent peer send 4\nchild: WSASocketW from the record: socket made=1 err=0\nchild: recv 4 [112, 111, 110, 103]\ntwice: child exit 0\nchild: second WSASocketW from the same record: made=1 err=0\nchild: second still works after the first is closed: port nonzero 0\norig_open: the original shows the port the child bound 0\nchild: WSASocketW from the record: socket made=1 err=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 142
+    },
+    {
+      "name": "wsaduplicatesocketw_child_b",
+      "exe_sha256": "da4e8958840dbc7ab34a8448226dcb0051e2de1dea3a4ef1a17d46100d2ff937",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dW5ib3VuZDogV1NBRHVwbGljYXRlU29ja2V0VyAwCnVuYm91bmQ6IHBhcmVudCByZWN2IDIgWzEwNCwgMTA1XQpjaGlsZDogV1NBU29ja2V0VyBmcm9tIHRoZSByZWNvcmQ6IHNvY2tldCBtYWRlPTEgZXJyPTAKbGlzdGVuaW5nOiBXU0FEdXBsaWNhdGVTb2NrZXRXIDAKbGlzdGVuaW5nOiBjbGllbnQgc2VuZCA0CmNoaWxkOiBXU0FTb2NrZXRXIGZyb20gdGhlIHJlY29yZDogc29ja2V0IG1hZGU9MSBlcnI9MApjaGlsZDogYWNjZXB0IG9uIHRoZSBkdXBsaWNhdGU6IG1hZGU9MQpjb25uZWN0ZWQ6IGNsb3Nlc29ja2V0IG9mIHRoZSBvcmlnaW5hbCAwCmNvbm5lY3RlZDogY2hpbGQgZXhpdCAwCmNoaWxkOiBnZXRwZWVybmFtZSAwIGFkZHIgWzEyNywgMCwgMCwgMV0gcG9ydC1tYXRjaGVzIDEKdHdpY2U6IFdTQUR1cGxpY2F0ZVNvY2tldFcgMApjaGlsZDogcmVjb3JkIGJ5dGVzIHJlYWQgNjI4CmNoaWxkOiBiaW5kIG9uIHRoZSBmaXJzdCAwCm9yaWdfb3BlbjogV1NBRHVwbGljYXRlU29ja2V0VyAwCm9yaWdfb3BlbjogdGhlIG9yaWdpbmFsIGlzIHN0aWxsIHVzYWJsZTogU09fVFlQRSAoMCwgMSkKY2hpbGQ6IGJpbmQgb24gdGhlIGR1cGxpY2F0ZSAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "unbound: WSADuplicateSocketW 0\nunbound: parent recv 2 [104, 105]\nchild: WSASocketW from the record: socket made=1 err=0\nlistening: WSADuplicateSocketW 0\nlistening: client send 4\nchild: WSASocketW from the record: socket made=1 err=0\nchild: accept on the duplicate: made=1\nconnected: closesocket of the original 0\nconnected: child exit 0\nchild: getpeername 0 addr [127, 0, 0, 1] port-matches 1\ntwice: WSADuplicateSocketW 0\nchild: record bytes read 628\nchild: bind on the first 0\norig_open: WSADuplicateSocketW 0\norig_open: the original is still usable: SO_TYPE (0, 1)\nchild: bind on the duplicate 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 137
+    },
+    {
+      "name": "wsaduplicatesocketw_local_b",
+      "exe_sha256": "d3aa60e2bc9c415712304732a4e93db7109bb00ce385810fd22533d7591d0e8b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VURQIElQdjQgcmVjb3JkOiByZXN1bHQgMCBzZXJ2aWNlLWZsYWdzMSAweDIwNjA5IGZhbWlseSAyIHR5cGUgMiBwcm90b2NvbCAxNyBwcm90b2NvbC10ZXh0IE1TQUZEIFRjcGlwIFtVRFAvSVBdCldTQUR1cGxpY2F0ZVNvY2tldFcgcGlkIDA6IC0xL1dTQUVJTlZBTAphIGNsb3NlZCBzb2NrZXQ6IC0xL1dTQUVOT1RTT0NLCmR1cCBmb3IgdGhlIG93biBwaWQ6IDAKdGhlIG9yaWdpbmFsIGFmdGVyIHRoZSBkdXBsaWNhdGUgd2FzIGNsb3NlZDogU09fVFlQRSAoMCwgMSkKV1NBU29ja2V0VyB3aXRoIHRoZSByZWNvcmQgYW5kIG9ubHkgdGhlIHByb3RvY29sIC0xOiBtYWRlPTEgZXJyPTAKV1NBU29ja2V0VyB3aXRoIHRoZSByZWNvcmQgYW5kIGFub3RoZXIgcHJvdG9jb2wgKFVEUCk6IG1hZGU9MSBlcnI9MAphIHJlY29yZCBvZiB6ZXJvczogbWFkZT0wIGVycj0xMDAyMgphIHNlY29uZCBkdXBsaWNhdGUgb2YgdGhlIHNhbWUgc29ja2V0OiAwIHJlY29yZHMgZXF1YWwgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "UDP IPv4 record: result 0 service-flags1 0x20609 family 2 type 2 protocol 17 protocol-text MSAFD Tcpip [UDP/IP]\nWSADuplicateSocketW pid 0: -1/WSAEINVAL\na closed socket: -1/WSAENOTSOCK\ndup for the own pid: 0\nthe original after the duplicate was closed: SO_TYPE (0, 1)\nWSASocketW with the record and only the protocol -1: made=1 err=0\nWSASocketW with the record and another protocol (UDP): made=1 err=0\na record of zeros: made=0 err=10022\na second duplicate of the same socket: 0 records equal 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "wsaduplicatesocketw_local_c",
+      "exe_sha256": "7a06f7ebc9d2ebb83158ca05a3cfcb51eace111851614fd63f0588403147c606",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VENQIElQdjYgcmVjb3JkOiByZXN1bHQgMCBzZXJ2aWNlLWZsYWdzMSAweDIwMDY2IGZhbWlseSAyMyB0eXBlIDEgcHJvdG9jb2wgNiBwcm90b2NvbC10ZXh0IE1TQUZEIFRjcGlwIFtUQ1AvSVB2Nl0KV1NBRHVwbGljYXRlU29ja2V0VyBwaWQgMHhGRkZGRkZGRjogLTEvV1NBRUlOVkFMCklOVkFMSURfU09DS0VUOiAtMS9XU0FFTk9UU09DSwptYWRlIGZyb20gdGhlIHJlY29yZCBpbiB0aGUgc2FtZSBwcm9jZXNzOiAxIGVyciAwCldTQVNvY2tldFcgd2l0aCB0aGUgcmVjb3JkIGFuZCBmYW1pbHksIHR5cGUsIHByb3RvY29sIGVxdWFsIHRvIHRoZSByZWNvcmQ6IG1hZGU9MSBlcnI9MApXU0FTb2NrZXRXIHdpdGggdGhlIHJlY29yZCBhbmQgYW5vdGhlciBmYW1pbHkgKEFGX0lORVQ2KTogbWFkZT0xIGVycj0wCldTQVNvY2tldFcgd2l0aCB0aGUgcmVjb3JkIGFuZCB6ZXJvczogbWFkZT0xIGVycj0wCmEgcmVjb3JkIG9mIDB4RkY6IG1hZGU9MCBlcnI9MTAwMjIKRklPTkJJTyBvbiB0aGUgb3JpZ2luYWwgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TCP IPv6 record: result 0 service-flags1 0x20066 family 23 type 1 protocol 6 protocol-text MSAFD Tcpip [TCP/IPv6]\nWSADuplicateSocketW pid 0xFFFFFFFF: -1/WSAEINVAL\nINVALID_SOCKET: -1/WSAENOTSOCK\nmade from the record in the same process: 1 err 0\nWSASocketW with the record and family, type, protocol equal to the record: made=1 err=0\nWSASocketW with the record and another family (AF_INET6): made=1 err=0\nWSASocketW with the record and zeros: made=1 err=0\na record of 0xFF: made=0 err=10022\nFIONBIO on the original 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

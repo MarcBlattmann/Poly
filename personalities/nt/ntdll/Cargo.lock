@@ -7,6 +7,7 @@ name = "ntdll"
 version = "0.0.1"
 dependencies = [
  "poly-ldr",
+ "poly-msvc32",
  "poly-ntobj",
  "poly-pe",
  "poly-rtl",
@@ -21,6 +22,10 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
 ]
+
+[[package]]
+name = "poly-msvc32"
+version = "0.0.1"
 
 [[package]]
 name = "poly-ntobj"

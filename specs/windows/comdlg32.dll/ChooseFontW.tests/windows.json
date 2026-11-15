@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cf_errors",
+      "exe_sha256": "61ed99f71a5d2238705c4379b479a807d475ea517606164da0f58c70456d6d20",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZW9mIENIT09TRUZPTlRXIDEwNCBMT0dGT05UVyA5MgpDaG9vc2VGb250VyBsU3RydWN0U2l6ZSAwOiAwIGVycm9yIDB4MQpDaG9vc2VGb250VyBDRl9FTkFCTEVIT09LIHdpdGhvdXQgYSBob29rOiAwIGVycm9yIDB4YgpDaG9vc2VGb250VyBDRl9MSU1JVFNJWkUgd2l0aCBtaW4gPiBtYXg6IDAgZXJyb3IgMHgyMDAyCkNob29zZUZvbnRXIHdpdGggbm8gZm9udCB0eXBlIGZsYWc6IDAgZXJyb3IgMHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sizeof CHOOSEFONTW 104 LOGFONTW 92\nChooseFontW lStructSize 0: 0 error 0x1\nChooseFontW CF_ENABLEHOOK without a hook: 0 error 0xb\nChooseFontW CF_LIMITSIZE with min > max: 0 error 0x2002\nChooseFontW with no font type flag: 0 error 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 159
+    }
+  ]
+}

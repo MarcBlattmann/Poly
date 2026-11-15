@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "cpm_basic",
+      "exe_sha256": "2c4da62adfe586db5f7d7cb05e980a87178f0e2c48e40b8f090cfb8bfecfbcdc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlUG9wdXBNZW51IHdpbmRvdyBJc01lbnUgMSBjb3VudCAwCmRlZmF1bHRzOiBvaz0xIGVycj0tMSBzdHlsZT0weDAgY3ltYXg9MCBoZWxwPTAgZGF0YT0weDAKU2V0TWVudUluZm8gc3R5bGUsIGhlaWdodCwgaGVscCBpZCwgZGF0YTogMQphZnRlciBzZXQ6IG9rPTEgZXJyPS0xIHN0eWxlPTB4ODQwMDAwMDAgY3ltYXg9NzcgaGVscD0xMjM0IGRhdGE9MHhkZWFkYmVlZgpTZXRNZW51SW5mbyBzdHlsZSBvbmx5OiAxCmFmdGVyIHN0eWxlIG9ubHk6IG9rPTEgZXJyPS0xIHN0eWxlPTB4MTAwMDAwMDAgY3ltYXg9NzcgaGVscD0xMjM0IGRhdGE9MHhkZWFkYmVlZgpTZXRNZW51SW5mbyB3aXRoIE1JTV9BUFBMWVRPU1VCTUVOVVM6IDEKcDogb2s9MSBlcnI9LTEgc3R5bGU9MHg0MDAwMDAwMCBjeW1heD03NyBoZWxwPTEyMzQgZGF0YT0weGRlYWRiZWVmCnM6IG9rPTEgZXJyPS0xIHN0eWxlPTB4NDAwMDAwMDAgY3ltYXg9MCBoZWxwPTAgZGF0YT0weDAKY2JTaXplIDA6IDAgZXJyPTg3CmNiU2l6ZSAyODogMCBlcnI9ODcKY2JTaXplIDQwOiAxCmNiU2l6ZSA0NDogMCBlcnI9ODcKYmFkIG1lbnUgc2V0OiAwIGVycj04NwpiYWQgbWVudSBnZXQ6IDAgZXJyPTE0MDEKRGVzdHJveU1lbnU6IDEKZGVzdHJveSBhZ2FpbjogMCBlcnI9MTQwMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreatePopupMenu window IsMenu 1 count 0\ndefaults: ok=1 err=-1 style=0x0 cymax=0 help=0 data=0x0\nSetMenuInfo style, height, help id, data: 1\nafter set: ok=1 err=-1 style=0x84000000 cymax=77 help=1234 data=0xdeadbeef\nSetMenuInfo style only: 1\nafter style only: ok=1 err=-1 style=0x10000000 cymax=77 help=1234 data=0xdeadbeef\nSetMenuInfo with MIM_APPLYTOSUBMENUS: 1\np: ok=1 err=-1 style=0x40000000 cymax=77 help=1234 data=0xdeadbeef\ns: ok=1 err=-1 style=0x40000000 cymax=0 help=0 data=0x0\ncbSize 0: 0 err=87\ncbSize 28: 0 err=87\ncbSize 40: 1\ncbSize 44: 0 err=87\nbad menu set: 0 err=87\nbad menu get: 0 err=1401\nDestroyMenu: 1\ndestroy again: 0 err=1401\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

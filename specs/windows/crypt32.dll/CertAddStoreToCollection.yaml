@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/crypt32.dll/CertAddStoreToCollection.yaml
+id: windows/api/crypt32.dll/CertAddStoreToCollection
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "CertOpenStore function (wincrypt.h)", "Certificate Store Provider Types", "CertAddStoreToCollection", "CertCloseStore", "CertControlStore", "CertFindCertificateInStore", "CertEnumCertificatesInStore", "Collection and Sibling Certificate Stores", "System Store Locations"; wincrypt.h, winerror.h and winnt.h for constants and layouts. The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Adds a sibling store to a collection store. Chrome calls it 19 times with (collection, sibling, 0, 0): five collections receive the read-only system stores it opens (and each other), and it closes the sibling handle straight after the call. Observed: the sibling is enumerated through the collection (a store handle closed afterwards keeps working inside the collection), a sibling added twice is enumerated twice, a higher priority number is enumerated first, siblings of equal priority are enumerated in the order they were added, certificates added to the collection land in a sibling opened with CERT_PHYSICAL_STORE_ADD_ENABLE_FLAG (1) and are refused (access denied) when no sibling has it, and a store that is not a collection refuses with E_INVALIDARG.
+interface:
+  signature: "BOOL CertAddStoreToCollection(HCERTSTORE collection, HCERTSTORE sibling, DWORD flags, DWORD priority); void CertRemoveStoreFromCollection(HCERTSTORE collection, HCERTSTORE sibling)"
+  result: "TRUE, or FALSE with the last error set"
+chrome:
+  calls: "19 calls in the browser, all (collection, sibling, 0, 0) -> TRUE; the sibling is closed with CertCloseStore(sibling, 0) right after"
+rules:
+  success: "(collection, memory store, 0, 0): TRUE, last error unchanged"
+  order: "a collection of the A-store then the B-store enumerates AB (each sibling's own order: a memory store enumerates the certificate added last first, so one store holding A then B enumerates BA); a collection of B-store then A-store enumerates BA"
+  same_sibling_twice: "adding the same sibling a second time returns TRUE, last error unchanged, and its certificates are enumerated twice (A-store, B-store, A-store gives ABA)"
+  priority: "priority 1 for the A-store and 5 for the B-store: B is enumerated before A"
+  not_a_collection: "the target is a memory store: FALSE, last error 0x80070057"
+  writing: "CertAddEncodedCertificateToStore into a collection whose second sibling was added with flags 1 (CERT_PHYSICAL_STORE_ADD_ENABLE_FLAG): TRUE, last error 0, the certificate is in that sibling and not in the first, the returned context is the certificate; into a collection whose only sibling was added with flags 0: FALSE, last error 0x80070005"
+  remove: "CertRemoveStoreFromCollection removes one entry of the sibling: after it the collection enumerates BA (the one remaining A-store entry and the B-store)"
+  sibling_outlives: "closing the collection leaves the sibling store usable (it still enumerates A)"
+errors:
+  not_a_collection: "0x80070057"
+  writing_refused: "0x80070005"
+side_effects: "the collection keeps a reference to the sibling"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0). The two test certificates are fixed byte arrays inside the tests (self-signed EC P-256 certificates with the subject names "Poly Test A" and "Poly Test B", made once with openssl as a black-box tool); their SHA-1 hashes are computed offline. The tests never write to a system store: system stores are only opened with READONLY|OPEN_EXISTING.
+not_covered: >
+  A collection added to itself and a NULL sibling (both returned TRUE on the oracle; enumerating afterwards ended the process with a stack overflow or an access violation, so they are not in the tests), flags other than 0 and 1, collections of system stores' contents (machine dependent).

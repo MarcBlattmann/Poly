@@ -903,6 +903,11 @@ fn sys_kernel_files() {
     assert_eq!(e.text("/proc/sys/kernel/domainname"), "(none)\n");
     assert_eq!(e.text("/proc/sys/kernel/pid_max"), "32768\n");
     assert_eq!(e.text("/proc/sys/fs/nr_open"), "1048576\n");
+    // The values are the region map's: nothing is mapped below 64 KiB, and
+    // a process has 65530 regions at most.
+    assert_eq!(e.text("/proc/sys/vm/mmap_min_addr"), "65536\n");
+    assert_eq!(e.text("/proc/sys/vm/max_map_count"), "65530\n");
+    assert_eq!(names(&e.list("/proc/sys/vm")), [".", "..", "mmap_min_addr", "max_map_count"]);
     assert_eq!(e.text("/proc/sys/kernel/cap_last_cap"), "40\n");
     assert_eq!(e.text("/proc/sys/fs/inotify/max_user_watches"), "65536\n");
     assert_eq!(e.text("/proc/sys/fs/inotify/max_user_instances"), "128\n");
@@ -911,7 +916,7 @@ fn sys_kernel_files() {
     assert_eq!(e.text("/proc/sys/kernel/random/entropy_avail"), "256\n");
     assert_eq!(e.text("/proc/sys/kernel/random/boot_id"), "00010203-0405-4607-8809-0a0b0c0d0e0f\n");
     assert_eq!(e.text("/proc/sys/kernel/random/uuid"), "ffffffff-ffff-4fff-bfff-ffffffffffff\n");
-    assert_eq!(names(&e.list("/proc/sys")), [".", "..", "kernel", "fs"]);
+    assert_eq!(names(&e.list("/proc/sys")), [".", "..", "kernel", "fs", "vm"]);
     // `..` climbs back to /proc and then out of the mount.
     assert_eq!(e.text("/proc/sys/kernel/../../uptime"), "12.34 10.00\n");
     let mut ctx = e.ctx.clone();

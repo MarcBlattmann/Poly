@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAIoctl.yaml
+id: windows/api/ws2_32.dll/WSAIoctl
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Chrome calls WSAIoctl on every TCP socket with SIO_KEEPALIVE_VALS (0x98000004), 12 bytes {onoff 1, keepalivetime 45000, keepaliveinterval 45000}, no output buffer, a bytes-returned pointer, no overlapped and no routine (37 calls, result 0, bytes returned 0), and on every UDP socket with SIO_GET_EXTENSION_FUNCTION_POINTER (0xC8000006) for the GUID of WSARecvMsg ({F689D7C8-6F1F-436B-8A53-E54FE351C322}, 16 bytes in, 8 bytes out) (8 calls, result 0, 8 bytes returned). Observed: SIO_KEEPALIVE_VALS also sets SO_KEEPALIVE (onoff 1 reads 1, 0 reads 0, 5 reads 0: only 1 is on) and works on a connected, accepted, listening and unconnected TCP socket; input length 8 and 0, a NULL input and a NULL bytes-returned pointer are WSAEFAULT, length 16 works; on UDP and for an unknown code the result is WSAEOPNOTSUPP (10045). The extension pointers for WSARecvMsg, WSASendMsg, ConnectEx, AcceptEx, GetAcceptExSockaddrs, TransmitFile and DisconnectEx come back for every TCP and UDP socket (also IPv6), 8 bytes returned, the same pointer for every socket and both socket types; an unknown GUID is WSAEINVAL and writes nothing; the input must be exactly 16 bytes or more (15 and 0: WSAEFAULT, 17 works) and the output at least 8 bytes (4 and 7 and 0: WSAEFAULT, 16 works and only 8 are written).
+interface:
+  signature: "int WSAIoctl(SOCKET s, DWORD code, LPVOID in, DWORD inlen, LPVOID out, DWORD outlen, LPDWORD returned, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE routine)"
+  result: "0 or SOCKET_ERROR"
+chrome:
+  calls: "WSAIoctl 8 to 25 calls per run: (s, 0x98000004, &{1,45000,45000}, 12, NULL, 0, &ret, NULL, NULL) -> 0 on 37 sockets; (udp, 0xC8000006, &WSAID_WSARECVMSG, 16, &fn, 8, &ret, NULL, NULL) -> 0 on 8 sockets; Chrome then calls WSARecvMsg through the pointer"
+rules:
+  keepalive: "{1,45000,45000}: 0, bytes returned 0, SO_KEEPALIVE 1; {0,..}: SO_KEEPALIVE 0; {1,0,0} and {1,1000,500}: 0; {5,45000,45000}: 0 and SO_KEEPALIVE reads 0"
+  keepalive_sizes: "input length 8: WSAEFAULT; 16: 0; 0: WSAEFAULT; NULL input: WSAEFAULT; NULL bytes returned: WSAEFAULT; a 16-byte output buffer: 0, bytes returned 0, the output untouched"
+  keepalive_sockets: "accepted socket, listener and unconnected TCP socket: 0; UDP socket: WSAEOPNOTSUPP; not a socket: WSAENOTSOCK; unknown code 0x98000FFF: WSAEOPNOTSUPP"
+  udp_connreset: "SIO_UDP_CONNRESET 0x9800000C with FALSE or TRUE (4 bytes) on UDP: 0, bytes returned 0; input length 1: 0; length 0: WSAEFAULT; on a TCP socket: WSAEINVAL; SIO_UDP_NETRESET 0x9800000F FALSE on UDP: 0"
+  base_handle: "SIO_BASE_HANDLE 0x48000022 with an 8-byte output: 0, 8 bytes returned, the base handle equals the socket; a 4-byte output or NULL output: WSAEFAULT"
+  extension_functions: "WSARecvMsg, WSASendMsg, ConnectEx, AcceptEx, GetAcceptExSockaddrs, TransmitFile, DisconnectEx on a TCP and on a UDP socket (and WSARecvMsg on IPv6 UDP): 0, a non-NULL pointer, 8 bytes returned, the word after it untouched; the same pointer from two TCP sockets and from TCP and UDP"
+  unknown_guid: "an unknown GUID: -1/WSAEINVAL, the output and the bytes-returned value untouched"
+  extension_sizes: "input 15 and 0 bytes: WSAEFAULT; 17: 0; output 4, 7 and 0 bytes: WSAEFAULT; 16: 0 with only 8 bytes returned; NULL GUID and output: WSAEFAULT; NULL bytes-returned pointer (no overlapped): WSAEFAULT; not a socket: WSAENOTSOCK"
+errors:
+  pointer: "WSAEFAULT 10014"
+  udp_or_code: "WSAEOPNOTSUPP 10045"
+  guid: "WSAEINVAL 10022"
+  socket: "WSAENOTSOCK 10038"
+side_effects: "SIO_KEEPALIVE_VALS and SIO_UDP_CONNRESET change the socket"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  overlapped WSAIoctl (SIO_ADDRESS_LIST_CHANGE and others that complete later), SIO_ADDRESS_LIST_QUERY, SIO_RCVALL, calling the returned functions (ConnectEx and AcceptEx belong to the mswsock sheets).

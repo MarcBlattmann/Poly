@@ -11,6 +11,7 @@ use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// `EXCEPTION_CONTINUE_EXECUTION` (`excpt.h`).
+#[cfg_attr(target_arch = "x86", allow(dead_code))] // 32-bit dispatch is a later stage (ADR 0186)
 pub const CONTINUE_EXECUTION: i32 = -1;
 
 struct List {
@@ -71,14 +72,14 @@ fn remove(list: &List, handle: *mut u8) -> u32 {
 /// (`first` non-zero) or last; returns a handle for the removal (an opaque
 /// non-null value, distinct for every call).
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
+pub extern "system" fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8 {
     add(&LIST, first, handler)
 }
 
 /// `RtlRemoveVectoredExceptionHandler(Handle)`: non-zero if the handle was
 /// registered.
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
+pub extern "system" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
     remove(&LIST, handle)
 }
 
@@ -88,14 +89,14 @@ pub extern "C" fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
 /// dispatch continue handlers are called, so Poly keeps them registered and
 /// does not call them yet.
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
+pub extern "system" fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
     add(&CONTINUE, first, handler)
 }
 
 /// `RtlRemoveVectoredContinueHandler(Handle)`: non-zero if the handle was a
 /// registered continue handler.
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
+pub extern "system" fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
     remove(&CONTINUE, handle)
 }
 
@@ -106,6 +107,7 @@ pub extern "C" fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
 ///
 /// # Safety
 /// `record` and `context` are a valid `EXCEPTION_RECORD` and `CONTEXT`.
+#[cfg_attr(target_arch = "x86", allow(dead_code))]
 pub unsafe fn call_handlers(record: *mut u8, context: *mut u8) -> bool {
     let handlers: Vec<u64> = with(|l| l.iter().map(|&(_, h)| h).collect());
     let mut pointers: [*mut u8; 2] = [record, context];
@@ -113,7 +115,7 @@ pub unsafe fn call_handlers(record: *mut u8, context: *mut u8) -> bool {
     for h in handlers {
         // SAFETY: a handler the program registered, with the documented
         // `PVECTORED_EXCEPTION_HANDLER` signature.
-        if unsafe { core::mem::transmute::<u64, Handler>(h)(&mut pointers) } == CONTINUE_EXECUTION {
+        if unsafe { core::mem::transmute::<usize, Handler>(h as usize)(&mut pointers) } == CONTINUE_EXECUTION {
             return true;
         }
     }

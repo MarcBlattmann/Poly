@@ -126,6 +126,9 @@ pub struct ThreadFlags {
     /// user mode the personality looks at the area
     /// (`Linux::rseq_resume`). Cleared by the thread itself.
     pub rseq_notify: AtomicBool,
+    /// Where the thread was in user mode when an interrupt last returned to it, while
+    /// [`crate::user::SAMPLE_USER_RIP`] is on (a diagnostic: where a busy thread spins).
+    pub last_user_rip: AtomicU64,
 }
 
 impl ThreadFlags {

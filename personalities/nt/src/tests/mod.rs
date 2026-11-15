@@ -269,6 +269,10 @@ pub struct Fake {
     pub sockets: Option<SocketFactory>,
     /// Bump allocator in the scratch area.
     next: u64,
+    /// The last context `load_context` was given, when [`Fake::accept_contexts`] is set (the
+    /// WOW64 tests); otherwise `load_context` is not implemented, as before.
+    pub loaded: Option<poly_seh::Context>,
+    pub accept_contexts: bool,
 }
 
 /// What the fake's `socket_create` calls.
@@ -299,6 +303,14 @@ impl NtKernel for Fake {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, alloc::string::String) {
         (vec![[10, 0, 2, 3]], "polytest".into())
+    }
+
+    fn load_context(&mut self, ctx: &poly_seh::Context, _flags: u32) -> Result<(), NtStatus> {
+        if !self.accept_contexts {
+            return Err(poly_ntobj::status::STATUS_NOT_IMPLEMENTED);
+        }
+        self.loaded = Some(ctx.clone());
+        Ok(())
     }
 
     fn net_interfaces(&self) -> Vec<poly_iphlp::IfInfo> {
@@ -550,6 +562,8 @@ impl Fake {
             children: Vec::new(),
             sockets: None,
             next: SCRATCH,
+            loaded: None,
+            accept_contexts: false,
         }
     }
 
@@ -559,6 +573,14 @@ impl Fake {
         crate::exec::start_process(&mut f.sys, &mut f.proc, &mut f.mem, &test_exe(false), &fake_ntdll(), None, TID)
             .expect("starts");
         f
+    }
+
+    /// Make `[base, base + size)` plain read-write memory the test writes arguments to (a
+    /// 32-bit caller's, below 4 GiB, ADR 0186); the process's own memory model does not know it.
+    pub fn map_test_memory(&mut self, base: u64, size: u64) {
+        for a in (base..base + size).step_by(PAGE_SIZE as usize) {
+            self.mem.pages.insert(a, Page { prot: HwProt::RW, frame: frame(), section: None });
+        }
     }
 
     /// Scratch space for `n` bytes, zeroed (8-aligned).

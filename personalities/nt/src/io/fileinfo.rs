@@ -111,6 +111,16 @@ impl IoState {
         }
     }
 
+    /// The object manager's name of volume `volume`'s device
+    /// (`\Device\HarddiskVolume<N>`, ADR 0185).
+    pub fn volume_device_path(&self, volume: usize) -> Vec<u16> {
+        let mut p = wide("\\Device\\");
+        if let Some(v) = self.volumes.get(volume) {
+            p.extend_from_slice(&v.device);
+        }
+        p
+    }
+
     /// The parts of a file object's full name (`ObjectNameInformation`):
     /// its device's name and the path on the device, `None` where the file
     /// has no path there (an anonymous pipe). `None` for files that are on
@@ -119,7 +129,7 @@ impl IoState {
     pub fn object_name_parts(&self, cookie: u64) -> Option<(Vec<u16>, Option<Vec<u16>>)> {
         let pipe_device = || wide("\\Device\\NamedPipe");
         match self.files.get(&cookie).map(|f| &f.target)? {
-            Target::Disk(d) => Some((wide(&alloc::format!("\\Device\\PolyFs{}", d.volume)), Some(d.path.clone()))),
+            Target::Disk(d) => Some((self.volume_device_path(d.volume), Some(d.path.clone()))),
             Target::NamedPipe(_) | Target::PipeRoot => Some((pipe_device(), Some(self.file_name(cookie)))),
             Target::PipeDevice => Some((pipe_device(), Some(Vec::new()))),
             Target::Pipe(_) => Some((pipe_device(), None)),
