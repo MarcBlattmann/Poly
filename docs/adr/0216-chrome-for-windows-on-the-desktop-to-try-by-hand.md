@@ -41,10 +41,11 @@ Chromium, a Linux program on a Debian disk (ADR 0147).
    same list). On `main` it is `--no-sandbox --disable-gpu`; when the sandbox (S2) and the GPU
    (S5) work are on `main` it is empty. Besides it: `--no-first-run`, `--no-default-browser-check`
    and the profile.
-8. **A boot check in the `chrome-win` group** (`chrometry::boot_test`, after stage 3): the same
+8. **A boot check, the group `chrome-try`** (`chrometry::group_boot_test`, run in the CI job of the
+   window check, ADR 0214): the same
    disk and entry, started from the launcher by its name, the page painted after 125 s, a URL typed
-   into the address field. It skips where Chrome is not fetched (CI) and on a host without Unix
-   sockets (QMP).
+   into the address field. It skips where Chrome is not fetched and on a host without Unix
+   sockets (QMP); CI's window job fetches Chrome, so it runs there.
 
 ## Consequences
 

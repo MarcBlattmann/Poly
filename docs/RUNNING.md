@@ -39,7 +39,7 @@ history, logins) is on the disk, so it survives a reboot; only `--fresh-disk` (o
 version, which makes the disk again) starts it empty. The keyboard layout is the desktop's own
 (Settings, or the menu's; ADR 0209). Chrome's switches are in `chrometry::FLAGS`: today
 `--no-sandbox --disable-gpu`, until the sandbox and the GPU work lands. `cargo xtask boot-tests
-chrome-win-window` (after `cargo xtask chrome-win fetch`; Linux or `polyd`) also starts it from the
+chrome-try` (after `cargo xtask chrome-win fetch`; Linux or `polyd`) also starts it from the
 launcher, checks that the page paints and loads a typed URL.
 
 **Installing a Linux app** (ADR 0173): on the desktop with Chromium, download a `.deb`

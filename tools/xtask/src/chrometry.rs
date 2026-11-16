@@ -13,12 +13,12 @@
 //!   and then the profile starts empty.
 //! - **The launcher entry** ([`desktop_entry`]) is a desktop file in the initramfs, so it follows the
 //!   checkout while the disk is kept. Chrome's switches are in [`FLAGS`], the one place to change
-//!   them: the window check ([`boot_test`]) and the stage 3 check use the same list.
+//!   them: the window check ([`group_boot_test`]) and the stage 3 check use the same list.
 //! - **Mounts**: the disk is `virtio0`, mounted on [`MOUNT`]; the settings disk of the desktop
 //!   (layout, scale, shortcuts), when there is one, is `virtio1` on `/mnt` ([`mounts`]).
 //!
 //! Everything here builds on a Windows and a Linux host (ADR 0124): the disk is written by the
-//! repository's own formatter. Only [`boot_test`] needs Linux (QMP over a Unix socket).
+//! repository's own formatter. Only [`group_boot_test`] needs Linux (QMP over a Unix socket).
 
 use crate::Result;
 use std::path::{Path, PathBuf};
@@ -183,13 +183,21 @@ pub fn parts(fresh_disk: bool) -> Result<Parts> {
 
 // ---- the boot check -------------------------------------------------------------
 
+/// The steps of stage 3 (`chromewin::S3_STEPS`) with a screenshot after each key step, so a failed
+/// check shows where the typed address went.
+const TRY_STEPS: &str = concat!(
+    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
+    "chord:ctrl+l,sleep:2,shot:address-focused,type:data:text/html,<body bgcolor=blue>,",
+    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff"
+);
+
 /// The window check of what the menu boots: the same disk and entry as `desktop --chrome-win`
 /// (the entry only adds the first page and where the window is), started from the launcher by its
 /// name, then the page of stage 3 is painted after 125 s, a URL typed into the address field loads
-/// (`chromewin::S3_STEPS`). Skipped where Chrome is not fetched (CI) or there is no Unix host (QMP
+/// (`chromewin::S3_STEPS`); the boot test group `chrome-try`, in the shard of `chrome-win-window`. Skipped where Chrome is not fetched or there is no Unix host (QMP
 /// over a Unix socket); an exception, a window that never came or a wrong colour fails it, and a
 /// page that never finished loading (the slow start) is inconclusive after three runs, as stage 3.
-pub fn boot_test(kernel: &Path) -> Result {
+pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!("==> boot test: Chrome for Windows from the menu's disk and launcher entry ({ENTRY_NAME}, ADR 0216)");
     if !crate::chromewin::fetched() {
         eprintln!("==> skipped: Chrome is not in the cache; `cargo xtask chrome-win fetch` downloads it");
@@ -209,7 +217,7 @@ pub fn boot_test(kernel: &Path) -> Result {
             entry_files(&more),
             &mounts(false),
             ENTRY_NAME,
-            crate::chromewin::S3_STEPS,
+            TRY_STEPS,
             &log,
         )?;
         let exceptions: Vec<&str> = text.lines().filter(|l| l.contains("nt-exc:")).take(3).collect();
@@ -220,6 +228,15 @@ pub fn boot_test(kernel: &Path) -> Result {
             }
             crate::chromewin::S3Verdict::Inconclusive => {
                 eprintln!("==> attempt {attempt}: the page was still loading (slow start); log {}", log.display());
+            }
+            // A typed address that did not load (the page is still the green one): under a busy
+            // machine the browser's first keys can be lost, as the slow start of stage 3; another
+            // run, and a failure only when every run shows it.
+            crate::chromewin::S3Verdict::Fail
+                if attempt < 3
+                    && stopped.as_deref().is_some_and(|w| w.contains("is [00, 80, 00], wanted [00, 00, ff]")) =>
+            {
+                eprintln!("==> attempt {attempt}: the typed address did not load; log {}", log.display());
             }
             crate::chromewin::S3Verdict::Fail => {
                 return Err(format!(

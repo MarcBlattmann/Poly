@@ -1249,8 +1249,7 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
 }
 
 /// The boot test group `chrome-win-window`: stage 3, Chrome's window on the desktop
-/// ([`stage3_window`]), then the same from the menu's disk and launcher entry
-/// ([`crate::chrometry::boot_test`]). Skipped without the cached package, like `chrome-win`.
+/// ([`stage3_window`]). Skipped without the cached package, like `chrome-win`.
 pub fn window_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     if !fetched() {
         if chrome_required() {
@@ -1263,9 +1262,7 @@ pub fn window_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sy
         eprintln!("==> skipped: Chrome {VERSION} is not in the cache; `cargo xtask chrome-win fetch` downloads it");
         return Ok(());
     }
-    stage3_window(kernel)?;
-    // The menu's disk and launcher entry (`cargo xtask start`, "Desktop with Chrome for Windows", ADR 0216).
-    crate::chrometry::boot_test(kernel)
+    stage3_window(kernel)
 }
 
 /// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
