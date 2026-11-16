@@ -423,6 +423,248 @@ pub unsafe extern "system" fn CharUpperW(s: *mut u16) -> *mut u16 {
     s
 }
 
+/// The mapping a `Char*` function does: one unit of a wide string.
+fn map_wide(kind: poly_kernelbase::locale::MapKind, c: u16) -> u16 {
+    poly_kernelbase::locale::map_unit(kind, c)
+}
+
+/// A `CharUpper`/`CharLower` function on a wide string or one character in the low word.
+unsafe fn map_w(kind: poly_kernelbase::locale::MapKind, s: *mut u16) -> *mut u16 {
+    if poly_kernelbase::oleaut::is_single_char(s as usize) {
+        return usize::from(map_wide(kind, s as usize as u16)) as *mut u16;
+    }
+    let mut p = s;
+    // SAFETY: a NUL-terminated string the caller owns.
+    unsafe {
+        while *p != 0 {
+            *p = map_wide(kind, *p);
+            p = p.add(1);
+        }
+    }
+    s
+}
+
+/// A `CharUpper`/`CharLower` function on an ANSI string or one character in the low word.
+unsafe fn map_a(kind: poly_kernelbase::locale::MapKind, s: *mut u8) -> *mut u8 {
+    if poly_kernelbase::oleaut::is_single_char(s as usize) {
+        return usize::from(poly_kernelbase::locale::map_ansi_byte(kind, s as usize as u8)) as *mut u8;
+    }
+    let mut p = s;
+    // SAFETY: a NUL-terminated string the caller owns.
+    unsafe {
+        while *p != 0 {
+            *p = poly_kernelbase::locale::map_ansi_byte(kind, *p);
+            p = p.add(1);
+        }
+    }
+    s
+}
+
+/// `CharLowerW`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharLowerW(s: *mut u16) -> *mut u16 {
+    // SAFETY: the caller's string or character.
+    unsafe { map_w(poly_kernelbase::locale::MapKind::Lower, s) }
+}
+
+/// `CharUpperA`, `CharLowerA`: the ANSI code page's letters.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharUpperA(s: *mut u8) -> *mut u8 {
+    // SAFETY: the caller's string or character.
+    unsafe { map_a(poly_kernelbase::locale::MapKind::Upper, s) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharLowerA(s: *mut u8) -> *mut u8 {
+    // SAFETY: the caller's string or character.
+    unsafe { map_a(poly_kernelbase::locale::MapKind::Lower, s) }
+}
+
+/// `CharUpperBuffW` and the three like it: map `cch` characters in place and return how many
+/// (Learn: the length of the string, or 0 for a length of 0, nothing for a NULL pointer).
+unsafe fn buff_w(kind: poly_kernelbase::locale::MapKind, s: *mut u16, cch: u32) -> u32 {
+    if s.is_null() {
+        return 0;
+    }
+    for i in 0..cch as usize {
+        // SAFETY: the caller's buffer of `cch` units.
+        unsafe { *s.add(i) = map_wide(kind, *s.add(i)) };
+    }
+    cch
+}
+
+unsafe fn buff_a(kind: poly_kernelbase::locale::MapKind, s: *mut u8, cch: u32) -> u32 {
+    if s.is_null() {
+        return 0;
+    }
+    for i in 0..cch as usize {
+        // SAFETY: the caller's buffer of `cch` bytes.
+        unsafe { *s.add(i) = poly_kernelbase::locale::map_ansi_byte(kind, *s.add(i)) };
+    }
+    cch
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharUpperBuffW(s: *mut u16, cch: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { buff_w(poly_kernelbase::locale::MapKind::Upper, s, cch) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharLowerBuffW(s: *mut u16, cch: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { buff_w(poly_kernelbase::locale::MapKind::Lower, s, cch) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharUpperBuffA(s: *mut u8, cch: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { buff_a(poly_kernelbase::locale::MapKind::Upper, s, cch) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharLowerBuffA(s: *mut u8, cch: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { buff_a(poly_kernelbase::locale::MapKind::Lower, s, cch) }
+}
+
+/// `CharNextA`, `CharNextW`: the next character, or the same pointer at the terminating NUL
+/// (every code page Poly serves to ANSI programs is single-byte, as for `CharPrevExA`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharNextA(p: *const u8) -> *mut u8 {
+    // SAFETY: a NUL-terminated string.
+    if p.is_null() || unsafe { *p } == 0 { p as *mut u8 } else { p.wrapping_add(1) as *mut u8 }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CharNextW(p: *const u16) -> *mut u16 {
+    // SAFETY: a NUL-terminated string.
+    if p.is_null() || unsafe { *p } == 0 { p as *mut u16 } else { p.wrapping_add(1) as *mut u16 }
+}
+
+/// `CharPrevW`: the character before `current`, or `start`.
+#[unsafe(no_mangle)]
+pub extern "system" fn CharPrevW(start: *const u16, current: *const u16) -> *mut u16 {
+    if current as usize <= start as usize { start as *mut u16 } else { current.wrapping_sub(1) as *mut u16 }
+}
+
+/// `IsCharAlphaW`, `IsCharAlphaNumericW`, `IsCharUpperW`, `IsCharLowerW`: `CT_CTYPE1` of the
+/// character (Learn: a letter, a letter or a digit, an upper- or a lower-case letter).
+#[unsafe(no_mangle)]
+pub extern "system" fn IsCharAlphaW(c: u16) -> i32 {
+    i32::from(poly_kernelbase::locale::ctype1(c) & poly_kernelbase::locale::C1_ALPHA != 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn IsCharAlphaNumericW(c: u16) -> i32 {
+    use poly_kernelbase::locale::{C1_ALPHA, C1_DIGIT, ctype1};
+    i32::from(ctype1(c) & (C1_ALPHA | C1_DIGIT) != 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn IsCharUpperW(c: u16) -> i32 {
+    i32::from(poly_kernelbase::locale::ctype1(c) & poly_kernelbase::locale::C1_UPPER != 0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn IsCharLowerW(c: u16) -> i32 {
+    i32::from(poly_kernelbase::locale::ctype1(c) & poly_kernelbase::locale::C1_LOWER != 0)
+}
+
+/// The strings `wsprintf` reads: NUL-terminated, 16-bit units or bytes widened one to one.
+fn read_printf_string(p: usize, wide: bool) -> alloc::vec::Vec<u16> {
+    let mut v = alloc::vec::Vec::new();
+    // SAFETY: the caller of `wsprintf` passed a pointer to a NUL-terminated string for `%s`.
+    unsafe {
+        if wide {
+            let mut q = p as *const u16;
+            while *q != 0 {
+                v.push(*q);
+                q = q.add(1);
+            }
+        } else {
+            let mut q = p as *const u8;
+            while *q != 0 {
+                v.push(poly_kernelbase::text::from_ansi(&[*q])[0]);
+                q = q.add(1);
+            }
+        }
+    }
+    v
+}
+
+/// `wsprintfW(buffer, format, ...)`: a `cdecl` function with a variable argument list. The
+/// arguments are read as the words the caller pushed (Rust cannot define a variadic function;
+/// words past the caller's own are the stack's, which the formatter reads only if the format
+/// asks for them).
+///
+/// # Safety
+/// `buffer` holds 1024 units; `format` is NUL-terminated and its arguments are present.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wsprintfW(
+    buffer: *mut u16,
+    format: *const u16,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
+    a8: usize,
+    a9: usize,
+    a10: usize,
+    a11: usize,
+) -> i32 {
+    let args = [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11];
+    // SAFETY: the format is a NUL-terminated string.
+    let fmt = unsafe { poly_kernelbase::text::wide_at(format) };
+    let out = poly_kernelbase::wsprintf::format(fmt, true, &args, core::mem::size_of::<usize>(), &read_printf_string);
+    // SAFETY: the buffer holds 1024 units; the output is at most 1023.
+    unsafe {
+        core::ptr::copy_nonoverlapping(out.as_ptr(), buffer, out.len());
+        buffer.add(out.len()).write(0);
+    }
+    out.len() as i32
+}
+
+/// `wsprintfA`: the same with ANSI strings.
+///
+/// # Safety
+/// As [`wsprintfW`], with bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wsprintfA(
+    buffer: *mut u8,
+    format: *const u8,
+    a0: usize,
+    a1: usize,
+    a2: usize,
+    a3: usize,
+    a4: usize,
+    a5: usize,
+    a6: usize,
+    a7: usize,
+    a8: usize,
+    a9: usize,
+    a10: usize,
+    a11: usize,
+) -> i32 {
+    let args = [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11];
+    // SAFETY: the format is a NUL-terminated string.
+    let fmt = poly_kernelbase::text::from_ansi(unsafe {
+        core::slice::from_raw_parts(format, poly_kernelbase::text::strlen(format))
+    });
+    let out = poly_kernelbase::wsprintf::format(&fmt, false, &args, core::mem::size_of::<usize>(), &read_printf_string);
+    let bytes = poly_kernelbase::text::to_ansi(&out);
+    // SAFETY: the buffer holds 1024 bytes; the output is at most 1023.
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer, bytes.len());
+        buffer.add(bytes.len()).write(0);
+    }
+    bytes.len() as i32
+}
+
 /// `CharPrevExA`.
 #[unsafe(no_mangle)]
 pub extern "system" fn CharPrevExA(_code_page: u16, start: *const u8, current: *const u8, _flags: u32) -> *mut u8 {
@@ -589,6 +831,25 @@ pub extern "system" fn GetClassLongPtrW(hwnd: H, index: i32) -> usize {
         }
         _ => 0,
     }
+}
+
+/// `SetClassLongPtrW`: the previous value, or 0 with the last error for a bad window or index.
+#[unsafe(no_mangle)]
+pub extern "system" fn SetClassLongPtrW(hwnd: H, index: i32, value: isize) -> usize {
+    match call(Request::SetClassLong { hwnd: hwnd as u64, index, value: value as usize as u64 }) {
+        Reply::Value { value } => value as usize,
+        Reply::Error { code } => {
+            set_last_error(code);
+            0
+        }
+        _ => 0,
+    }
+}
+
+/// `SetClassLongW`: the 32-bit form (the value is a `LONG`, the previous value a `DWORD`).
+#[unsafe(no_mangle)]
+pub extern "system" fn SetClassLongW(hwnd: H, index: i32, value: i32) -> u32 {
+    SetClassLongPtrW(hwnd, index, value as u32 as isize) as u32
 }
 
 #[unsafe(no_mangle)]

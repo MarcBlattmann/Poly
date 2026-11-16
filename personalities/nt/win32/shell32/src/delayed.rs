@@ -11,13 +11,10 @@ poly_win32_rt::fail_exports!(
         DragQueryFileW,
         SHAppBarMessage,
         SHGetFileInfoW,
-        SHGetPathFromIDListW,
-        SHGetSpecialFolderPathW,
         ShellExecuteA,
         SHChangeNotify,
         ShellExecuteExW,
         ShellExecuteW,
-        ILCreateFromPathW,
         IsUserAnAdmin
     ]
 );
@@ -29,8 +26,6 @@ poly_win32_rt::fail_exports!(
     [
         SHCreateItemFromParsingName,
         SHGetDesktopFolder,
-        SHGetMalloc,
-        SHGetSpecialFolderLocation,
         SHGetStockIconInfo,
         SHOpenFolderAndSelectItems,
         SHParseDisplayName,

@@ -258,6 +258,44 @@ fn end_after_unhandled(mut k: Kernel) -> ! {
     let record = unhandled.0;
     drop(unhandled);
     drop(k);
+    // What the exception's parameters point at: a language runtime's exception object (Delphi's
+    // 0x0EEDFADE carries one) says its class by its first word and its message by a text field.
+    for (i, &p) in record.parameters().iter().enumerate() {
+        if !(0x1_0000..0xffff_ffff).contains(&p) {
+            continue;
+        }
+        let mut b = [0u8; 64];
+        if user::copy_from_user(&mut b, p).is_err() {
+            continue;
+        }
+        let hex: alloc::string::String = b.iter().map(|x| alloc::format!("{x:02x}")).collect();
+        structures.push(alloc::format!("parameter {i} {p:#x}: {hex}"));
+        for (j, d) in b.chunks_exact(4).take(8).enumerate() {
+            let d = u64::from(u32::from_le_bytes([d[0], d[1], d[2], d[3]]));
+            if d < 0x1_0000 {
+                continue;
+            }
+            // A Delphi `UnicodeString`: code page and element size (2), reference count, length, then units.
+            let mut head = [0u8; 12];
+            if user::copy_from_user(&mut head, d - 12).is_err() {
+                continue;
+            }
+            let (size, len) =
+                (u16::from_le_bytes([head[2], head[3]]), u32::from_le_bytes([head[8], head[9], head[10], head[11]]));
+            if size == 2 && (1..=400).contains(&len) {
+                let mut units = alloc::vec![0u8; len as usize * 2];
+                if user::copy_from_user(&mut units, d).is_ok() {
+                    let text: alloc::vec::Vec<u16> =
+                        units.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                    structures.push(alloc::format!(
+                        "parameter {i} field +{:#x} is the text {:?}",
+                        4 * j,
+                        alloc::string::String::from_utf16_lossy(&text)
+                    ));
+                }
+            }
+        }
+    }
     structures.push(alloc::format!("teb, tls array, peb, image base, ldr, params, first tls slots {tls:x?}"));
     drop(tls);
     end_unhandled(pid, tid, &record, frames, regs, words, structures)
@@ -278,7 +316,7 @@ pub(super) fn report_delivered(
     use poly_personality_nt::diag;
     let read = |at: u64, buf: &mut [u8]| user::copy_from_user(buf, at).is_ok();
     let teb = with(|s| s.processes.get(&pid)?.thread(tid).map(|t| t.teb)).unwrap_or(0);
-    let modules = diag::modules(&read, teb);
+    let modules = if crate::arch::user::compat() { diag::modules32(&read, teb) } else { diag::modules(&read, teb) };
     let rsp = ctx.rsp();
     // Whole pages may be missing above the stack's top: read a quadword at a time.
     let mut stack: Vec<u64> = Vec::with_capacity(words);
@@ -290,7 +328,12 @@ pub(super) fn report_delivered(
         stack.push(u64::from_le_bytes(b));
     }
     let at = diag::Raised { pid: pid.0, tid: tid.0, code: record.code, address: record.address };
-    for line in diag::exception_report(&at, record.parameters(), &ctx.gpr, &stack, &modules) {
+    // A 32-bit thread's stack is read as 32-bit words, and its registers are the low halves.
+    let compat = crate::arch::user::compat();
+    let stack: Vec<u64> = if compat { stack.iter().flat_map(|&w| [w & 0xffff_ffff, w >> 32]).collect() } else { stack };
+    for line in
+        diag::exception_report_words(&at, record.parameters(), &ctx.gpr, &stack, &modules, if compat { 4 } else { 8 })
+    {
         crate::kprintln!("{line}");
     }
     if memory != 0 {
@@ -303,6 +346,7 @@ pub(super) fn report_delivered(
         }
     }
     drop(stack);
+    super::apitrace::dump_ring();
     if memory != 0 {
         // What the thread's last calls left below its stack pointer.
         let mut below: Vec<u64> = Vec::with_capacity(diag::STALE_WORDS);

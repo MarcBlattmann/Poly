@@ -84,6 +84,12 @@ fn starts(name: &[u16], prefix: &str) -> bool {
 /// Resolve a module name (a base name, no path) that may be an API set.
 pub fn resolve(name: &[u16]) -> ApiSet {
     let low: alloc::vec::Vec<u16> = name.iter().map(|&c| lower(c)).collect();
+    // `shfolder.dll` is the redistributable that gave old systems `SHGetFolderPath` (Learn, "SHGetFolderPathW":
+    // "Minimum supported client: ... Shfolder.dll"); a system that has the function in `shell32.dll` has
+    // `shfolder.dll` forward to it. Programs import it by name, so it is an alias of `shell32.dll` here.
+    if low == "shfolder.dll".encode_utf16().collect::<alloc::vec::Vec<u16>>() {
+        return ApiSet::Host("shell32.dll");
+    }
     if !starts(&low, "api-") && !starts(&low, "ext-") {
         return ApiSet::NotApiSet;
     }
@@ -115,6 +121,8 @@ mod tests {
     fn contracts_resolve_to_their_hosts() {
         assert_eq!(resolve(&w("api-ms-win-crt-runtime-l1-1-0.dll")), ApiSet::Host("ucrtbase.dll"));
         assert_eq!(resolve(&w("API-MS-WIN-CRT-STDIO-L1-1-0")), ApiSet::Host("ucrtbase.dll"));
+        assert_eq!(resolve(&w("SHFOLDER.DLL")), ApiSet::Host("shell32.dll"));
+        assert_eq!(resolve(&w("shfolder.dll.bak")), ApiSet::NotApiSet);
         assert_eq!(resolve(&w("api-ms-win-core-file-l1-2-4.dll")), ApiSet::Host("kernelbase.dll"));
         assert_eq!(resolve(&w("api-ms-win-core-rtlsupport-l1-1-0.dll")), ApiSet::Host("ntdll.dll"));
         assert_eq!(resolve(&w("api-ms-win-security-base-l1-2-0.dll")), ApiSet::Host("kernelbase.dll"));

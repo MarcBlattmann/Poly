@@ -68,8 +68,10 @@ pub enum Kind {
     Status,
 }
 
-/// DLLs whose functions return an `HRESULT` (COM and DirectX style).
+/// DLLs whose functions return an `HRESULT` (COM and DirectX style) or an error code that is 0 for success.
 const HRESULT_DLLS: &[&str] = &[
+    // `msi.dll` functions return a `UINT` error code: any non-zero value is a failure, and `E_NOTIMPL` is one.
+    "msi",
     "ole32",
     "oleaut32",
     "oleacc",

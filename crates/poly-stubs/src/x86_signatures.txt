@@ -7,6 +7,10 @@
 # A name that is not here still ends the process: add it (from its Learn page) when a program
 # reaches it.
 
+# `MsiEnumRelatedProductsW(lpUpgradeCode, dwReserved, iProductIndex, lpProductBuf)` is the call WinSCP makes with
+# ordinal 205 (a string, 0, 0, a buffer).
+msi!#205 4
+
 advapi32!RegConnectRegistryW 3
 advapi32!RegEnumKeyA 4
 advapi32!RegLoadKeyW 3
