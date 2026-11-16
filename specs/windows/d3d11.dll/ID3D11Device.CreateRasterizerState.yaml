@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateRasterizerState.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateRasterizerState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateRasterizerState", "ID3D11Device1::CreateRasterizerState1", "D3D11_RASTERIZER_DESC", "D3D11_FILL_MODE", "D3D11_CULL_MODE", "ID3D11RasterizerState::GetDesc"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes (or returns the cached) rasterizer state. Chrome (ANGLE) makes one per GL culling / scissor / polygon-offset configuration. Equal descriptions give the same object pointer; GetDesc returns the description with BOOLs as 0/1.
+interface:
+  signature: "HRESULT ID3D11Device::CreateRasterizerState(const D3D11_RASTERIZER_DESC*, ID3D11RasterizerState**); HRESULT ID3D11Device1::CreateRasterizerState1(const D3D11_RASTERIZER_DESC1*, ID3D11RasterizerState1**)"
+  layout: "D3D11_RASTERIZER_DESC (40 bytes, 10 words): FillMode, CullMode, FrontCounterClockwise, DepthBias (int), DepthBiasClamp (float), SlopeScaledDepthBias (float), DepthClipEnable, ScissorEnable, MultisampleEnable, AntialiasedLineEnable; D3D11_RASTERIZER_DESC1 adds ForcedSampleCount (UINT, 11th word) (d3d11.h, d3d11_1.h)"
+  constants: "D3D11_FILL_MODE: WIREFRAME 2, SOLID 3; D3D11_CULL_MODE: NONE 1, FRONT 2, BACK 3"
+chrome:
+  calls: "ANGLE caches rasterizer states by their GL configuration (assumed)"
+rules:
+  default: "the documented default (SOLID, BACK, clockwise, bias 0, clamp 0, slope 0, depth clip on, scissor off, multisample off, antialiased lines off) succeeds and GetDesc matches"
+  fields: "FillMode accepts 2 and 3 only (0, 1, 4, 0xFF are E_INVALIDARG); CullMode accepts 1, 2, 3 (0, 4, 0xFF are E_INVALIDARG); BOOL fields with the value 5 succeed and read back 1"
+  bias: "DepthBias accepts every int (100, -100, 16777216, 0x7FFFFFFF, INT_MIN); DepthBiasClamp and SlopeScaledDepthBias accept finite values and +-infinity (1.0, -1.0, 2.5, -2.5, 1e30, inf; read back bit for bit) and refuse NaN (E_INVALIDARG)"
+  identity: "the same description twice is the same object (reference count 2); a different CullMode gives a different object; the object answers ID3D11RasterizerState, ID3D11RasterizerState1, ID3D11RasterizerState2 and ID3D11DeviceChild with the same pointer"
+  null_output: "a NULL output pointer only validates: S_FALSE for a valid description, E_INVALIDARG for an invalid one (FillMode 9)"
+  forced_sample_count: "CreateRasterizerState1: ForcedSampleCount 0, 1, 4, 8 succeed; 2, 3, 16 are E_INVALIDARG; a description with count 0 gives the same object as the plain default CreateRasterizerState"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "creates or shares a state object"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the limit of unique rasterizer states (same mechanism as blend states, 0x887C0001, not tried here), conservative rasterization, state objects in a draw.

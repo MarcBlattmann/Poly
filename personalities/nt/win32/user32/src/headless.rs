@@ -191,7 +191,7 @@ pub unsafe extern "system" fn GetKeyboardLayoutNameW(buf: *mut u16) -> i32 {
         return 0;
     }
     // SAFETY: the caller's buffer of KL_NAMELENGTH (9) characters.
-    unsafe { put_wide(buf as *mut u8, 9, "00000407") };
+    unsafe { put_wide(buf as *mut u8, 9, crate::refresh_layout().klid()) };
     1
 }
 

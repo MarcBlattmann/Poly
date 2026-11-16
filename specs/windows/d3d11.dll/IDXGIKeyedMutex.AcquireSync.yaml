@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/IDXGIKeyedMutex.AcquireSync.yaml
+id: windows/api/d3d11.dll/IDXGIKeyedMutex.AcquireSync
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIKeyedMutex::AcquireSync", "IDXGIKeyedMutex::ReleaseSync", "D3D11_RESOURCE_MISC_FLAG", "Sharing Resources and Surfaces", "ID3D11Device1::OpenSharedResource1"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  A keyed mutex hands a shared texture between devices (and processes). It holds a 64-bit key that starts at 0; AcquireSync(key, ms) waits until the mutex is free AND its key equals `key`, then gives the caller ownership; ReleaseSync(key) frees it and sets the key. Chrome ping-pongs a frame with it (writer: acquire 0 / release 1; reader: acquire 1 / release 0). Observed with three mutex objects on one resource (the original, an open on the same device, an open on a second device). The wait result is the plain success code WAIT_TIMEOUT (0x102) when the key or the ownership is not available in time. Writes and reads of the texture only count while the caller holds the mutex (see ReleaseSync).
+interface:
+  signature: "HRESULT IDXGIKeyedMutex::AcquireSync(UINT64 key, DWORD milliseconds)"
+  constants: "WAIT_TIMEOUT 0x102 returned as an HRESULT (a success code); INFINITE 0xFFFFFFFF"
+chrome:
+  calls: "the GPU process acquires the keyed mutex of the shared frame texture around each use (assumed from Chrome's DXGI shared-image design; not visible to the tracer)"
+rules:
+  initial_key: "a new mutex has key 0: AcquireSync(1, 0 ms) and AcquireSync(5, 10 ms) return 0x102 (timeout, nothing acquired); AcquireSync(0, 0) is S_OK; the texture's mutex object is not the texture pointer (QueryInterface gives another pointer) and the three mutex objects of one resource differ"
+  held: "while one mutex object holds it, AcquireSync on another object (second device or same device, any key, 0 or 20 ms) returns 0x102; AcquireSync on the object that holds it is DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  handover: "ReleaseSync(1) frees the mutex with key 1: afterwards AcquireSync(0, 0) by anyone is 0x102 and AcquireSync(1, 0) by another mutex object (second device) is S_OK; the second device sees the data the first wrote under the lock (a UpdateSubresource of 0xFF00FF00 reads as 0xFF00FF00), writes 0xFFFF0000, ReleaseSync(0); then AcquireSync(1, 0) by anyone is 0x102 and AcquireSync(0, 0) by the first is S_OK and reads 0xFFFF0000; the same hand-over works between two mutex objects of one device (release key 2 on one, acquire key 2 on the other, write 0xFF121212, release key 3, the second device acquires key 3 and reads it)"
+  key_width: "keys are compared as 64-bit values: ReleaseSync(0x100000000) then AcquireSync(0, 0) is 0x102 and AcquireSync(0x100000000, 0) is S_OK; ReleaseSync(0xFFFFFFFFFFFFFFFF) then AcquireSync(0xFFFFFFFFFFFFFFFF, 0) is S_OK"
+  timeouts: "a wait of 1 ms or 0 ms when free is S_OK; a 1 ms wait while another object holds it is 0x102; the tests never use INFINITE"
+  independent: "a second shared texture has its own mutex (key 0, free) unaffected by the first"
+  references: "the mutex interface shares the reference count of the texture (3 with the texture, IDXGIResource1 and the mutex held; AddRef gives 4)"
+  legacy: "a texture with SHARED_KEYEDMUTEX (0x100, legacy handle) behaves the same: AcquireSync(1, 0) is 0x102, AcquireSync(0, 0) is S_OK, ReleaseSync(1) S_OK, AcquireSync(1, 0) S_OK"
+errors:
+  timeout: "0x00000102 (WAIT_TIMEOUT as a success code)"
+  invalid: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+side_effects: "takes ownership of the mutex"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  waits with a long or infinite timeout, abandoned mutexes (the holder's process dying), the mutex across processes, WAIT_ABANDONED, threads.

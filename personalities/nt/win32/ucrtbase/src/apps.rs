@@ -32,7 +32,6 @@ poly_win32_rt::fail_exports!(
         _fpclass,
         _free_base,
         _futime64,
-        _get_stream_buffer_pointers,
         _getdrive,
         _getdrives,
         _getmaxstdio,

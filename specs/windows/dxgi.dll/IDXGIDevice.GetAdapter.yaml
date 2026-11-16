@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIDevice.GetAdapter.yaml
+id: windows/api/dxgi.dll/IDXGIDevice.GetAdapter
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIDevice::GetAdapter method (dxgi.h)", "IDXGIObject::GetParent method (dxgi.h)", "IDXGIObject::SetPrivateData", "IDXGIObject::GetPrivateData", "IDXGIObject::SetPrivateDataInterface"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the adapter a DXGI/D3D11 device was created on. Chrome and ANGLE use QueryInterface(IDXGIDevice) -> GetAdapter -> GetParent(IDXGIFactory2) to find the factory for CreateSwapChainFor*. Observed: S_OK, the adapter has a reference added (count 2 with the device's own, 3 after a second call); repeated calls return the same pointer; for a D3D_DRIVER_TYPE_WARP device it is the WARP adapter ('Microsoft Basic Render Driver', same LUID as EnumWarpAdapter's, but a different object); it answers IDXGIAdapter .. IDXGIAdapter4. GetParent works as in the rules; private data of IDXGIObject (the same on adapter, factory, device, swap chain and surface objects) is in the rules. This entry's test also covers GetParent and SetPrivateData, GetPrivateData and SetPrivateDataInterface.
+interface:
+  signature: "HRESULT IDXGIDevice::GetAdapter(IDXGIAdapter** pAdapter)"
+  constants: "DXGI_ERROR_MORE_DATA 0x887A0003, DXGI_ERROR_NOT_FOUND 0x887A0002"
+chrome:
+  calls: "ANGLE (Renderer11) obtains the DXGI adapter and factory from the device with QueryInterface(IDXGIDevice) -> GetAdapter -> GetParent(IDXGIFactory2) (assumed from ANGLE's documented behaviour); SetPrivateData is used by ANGLE to attach debug names (assumed)"
+rules:
+  adapter: "S_OK; the adapter has reference count 2 (device + caller), 3 after a second call that returns the same pointer; the adapter is the WARP adapter (same LUID as IDXGIFactory4::EnumWarpAdapter, name 'Microsoft Basic Render Driver', vendor 0x1414); QueryInterface for IUnknown, IDXGIObject, IDXGIAdapter, IDXGIAdapter1, IDXGIAdapter2, IDXGIAdapter3, IDXGIAdapter4 gives S_OK with the same pointer"
+  adapter_parent: "adapter->GetParent: S_OK for IDXGIObject, IUnknown, IDXGIFactory, IDXGIFactory1, IDXGIFactory2, IDXGIFactory4, IDXGIFactory7 (the factory, one reference added); IDXGIAdapter, ID3D11Device and made-up ids: E_NOINTERFACE with a NULL output"
+  device_parent: "IDXGIDevice::GetParent: IDXGIAdapter and IDXGIAdapter1 and IUnknown: S_OK and the same pointer as GetAdapter; IDXGIFactory, ID3D11Device, made-up: E_NOINTERFACE"
+  factory_parent: "IDXGIFactory::GetParent(anything: IDXGIObject, IDXGIAdapter, IDXGIFactory, IUnknown): E_NOINTERFACE (a factory has no parent)"
+  other_parents: "swap chain GetParent(IDXGIFactory2): the factory that created it (same pointer); a back buffer surface's GetParent(IDXGISwapChain): the swap chain; an output's GetParent(IDXGIAdapter1): its adapter"
+  private_data_set: "the same on a factory, an adapter, a device, a swap chain and a back buffer surface: SetPrivateData(guid, 8, data): S_OK; replacing it with 4 bytes: S_OK, GetPrivateData then returns size 4; SetPrivateData(guid, 0, NULL) deletes the entry (S_OK; afterwards DXGI_ERROR_NOT_FOUND); SetPrivateData(guid, 0, non-NULL data): S_OK; a 1000 byte value is accepted and read back; SetPrivateData(guid, 8, NULL): S_FALSE (1)"
+  private_data_get: "GetPrivateData with size 8 and a buffer: S_OK, size 8, data equal; size 4: DXGI_ERROR_MORE_DATA (0x887A0003), *size set to 8 and the buffer is untouched; size 16: S_OK, *size set to 8; size 0 with a NULL buffer: S_OK, *size set to 8; an unknown guid: DXGI_ERROR_NOT_FOUND and *size set to 0"
+  private_data_interface: "SetPrivateDataInterface(guid, obj): S_OK and one more reference on obj; GetPrivateData then returns S_OK, size 8, the same pointer, with another reference added for the caller; with size 4: DXGI_ERROR_MORE_DATA and size 8; SetPrivateDataInterface(guid, NULL): S_OK, the reference on obj is released (count back to the starting value), a following GetPrivateData is S_OK"
+  private_data_scope: "private data belongs to the COM object, not to the underlying adapter: data set on the device's adapter object is not visible on the object returned by EnumWarpAdapter (DXGI_ERROR_NOT_FOUND) nor on the factory"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  NULL output pointers, private data sizes above 1000 bytes, a very large number of entries, GetAdapter on a device whose adapter was removed.

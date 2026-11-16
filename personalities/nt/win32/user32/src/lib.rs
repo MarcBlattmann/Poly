@@ -1251,6 +1251,9 @@ pub unsafe extern "system" fn TranslateMessage(msg: *const CMsg) -> i32 {
     }
     // SAFETY: the caller's MSG.
     let m = unsafe { &*msg };
+    if matches!(m.message, kbd::WM_KEYDOWN | kbd::WM_SYSKEYDOWN) {
+        refresh_layout();
+    }
     // The dead-key state is the thread's, shared with ToUnicode.
     i32::from(with_dead_state(|d| u::input::translate(&SYS, m, d)))
 }
@@ -1377,9 +1380,21 @@ fn with_dead_state<R>(f: impl FnOnce(&mut kbd::DeadState) -> R) -> R {
     })
 }
 
+/// The keyboard layout win32k reads keys with (the desktop's, ADR 0209; German without
+/// one), made this process's for the keyboard functions.
+pub(crate) fn refresh_layout() -> kbd::Layout {
+    let l = match call(Request::KeyboardLayout {}) {
+        Reply::Value { value } => kbd::Layout::from_id(value),
+        _ => kbd::Layout::German,
+    };
+    kbd::set_active(l);
+    l
+}
+
 /// `MapVirtualKeyW` (`MapVirtualKeyW.yaml`).
 #[unsafe(no_mangle)]
 pub extern "system" fn MapVirtualKeyW(code: u32, map_type: u32) -> u32 {
+    refresh_layout();
     kbd::try_map_virtual_key(code, map_type).unwrap_or_else(|e| {
         set_last_error(e);
         0
@@ -1423,6 +1438,7 @@ pub unsafe extern "system" fn ToUnicode(
     unsafe { core::ptr::copy_nonoverlapping(key_state, ks.as_mut_ptr(), 256) };
     // SAFETY: the caller's buffer of `buffer_len` units.
     let buf = unsafe { core::slice::from_raw_parts_mut(buffer, buffer_len as usize) };
+    refresh_layout();
     with_dead_state(|dead| kbd::to_unicode(vk, scan, &ks, buf, flags, dead))
 }
 
@@ -1441,6 +1457,7 @@ pub unsafe extern "system" fn ToUnicodeEx(
     layout: usize,
 ) -> i32 {
     // A layout that is not installed gives no character (ToUnicodeEx.yaml `layouts`).
+    refresh_layout();
     if layout != 0 && s3::PrivateLayoutInstalled(layout) == 0 {
         if !buffer.is_null() && buffer_len > 0 {
             // SAFETY: the caller's buffer of `buffer_len` characters.
@@ -1458,11 +1475,12 @@ pub unsafe extern "system" fn ToUnicodeEx(
 pub extern "system" fn GetKeyboardLayout(thread: u32) -> usize {
     // A thread that has no window (or does not exist) has no layout of its own to give: 0
     // (GetKeyboardLayout.yaml `other_threads`).
+    let hkl = refresh_layout().hkl() as usize;
     if thread == 0 || thread == SYS.tid() {
-        return kbd::HKL as usize;
+        return hkl;
     }
     match call(Request::ThreadHasWindows { tid: thread }) {
-        Reply::Bool { value: true } => kbd::HKL as usize,
+        Reply::Bool { value: true } => hkl,
         _ => 0,
     }
 }
@@ -2339,12 +2357,7 @@ pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn ReleaseCapture() -> i32 {
-    let st = u::focus::input(&SYS);
-    if st.capture != 0 {
-        call(Request::SetInput { active: 0, focus: 0, capture: 0, which: poly_win32k::wm::input::SET_CAPTURE });
-        u::send(&SYS, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
-    }
-    1
+    u::focus::release_capture(&SYS) as i32
 }
 
 /// `GetCursorPos`: (0, 0) until input exists.

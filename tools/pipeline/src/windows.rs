@@ -49,7 +49,9 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
 /// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
 /// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
-/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`.
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
+/// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -81,6 +83,10 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "d3d11.dll",
+    "dxgi.dll",
+    "dcomp.dll",
+    "dxcore.dll",
     "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
@@ -779,8 +785,8 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 /// `ntdll.dll` share a volume device as on Windows, where a program and the
 /// system directory are usually on the same volume (ADR 0185).
 pub const TEST_DIR: &str = "/nt/c/PolyTests";
-/// The test executable on Poly (`C:\PolyTests\test-binary`).
-pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary";
+/// The test executable on Poly (`C:\PolyTests\test-binary.exe`).
+pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary.exe";
 
 /// Kernel arguments: the test-run protocol (ADR 0027) plus the
 /// observation file, which the kernel reports as standard output
@@ -790,8 +796,8 @@ pub fn poly_kernel_args() -> String {
 }
 
 /// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
-/// (`/nt/c/PolyTests/test-binary` in the initramfs), which Poly's NT
-/// personality names `C:\PolyTests\test-binary`, so the observation file is
+/// (`/nt/c/PolyTests/test-binary.exe` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\test-binary.exe`, so the observation file is
 /// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
@@ -1407,6 +1413,17 @@ mod tests {
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        // Chrome's GPU stage (spec-chrome-win-s5).
+        let gpu = image(
+            &[
+                ("d3d11.dll", &["D3D11CreateDevice"]),
+                ("DXGI.dll", &["CreateDXGIFactory1"]),
+                ("dcomp.dll", &["DCompositionCreateDevice"]),
+            ],
+            3,
+        );
+        assert_eq!(check_image(&gpu).unwrap()["d3d11.dll"], ["D3D11CreateDevice"]);
+        assert_eq!(check_image(&gpu).unwrap()["dxgi.dll"], ["CreateDXGIFactory1"]);
         let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
@@ -1562,7 +1579,7 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary "));
+        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary.exe "));
         assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 

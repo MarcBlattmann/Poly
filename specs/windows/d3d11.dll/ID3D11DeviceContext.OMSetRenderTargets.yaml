@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.OMSetRenderTargets.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.OMSetRenderTargets
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::OMSetRenderTargets", "ID3D11DeviceContext::OMGetRenderTargets", "ID3D11DeviceContext::RSSetViewports", "ID3D11DeviceContext::RSGetViewports", "ID3D11DeviceContext::RSSetScissorRects", "ID3D11DeviceContext::RSGetScissorRects", "ID3D11DeviceContext::ClearState", "D3D11_VIEWPORT"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The immediate context's bound render targets, depth view, viewports and scissor rectangles. Chrome (ANGLE) sets the render target and the viewport before every draw and reads them back rarely. Observed: Set replaces the whole target set; Get returns the same view pointers with a new public reference each (the context's own hold is not counted) and NULL for empty slots; a bad viewport or scissor call is IGNORED (the old state stays, no error and no device removal); ClearState empties everything. Binding the same view twice, or two views of one texture, in one call is silently refused (nothing bound).
+interface:
+  signature: "void OMSetRenderTargets(UINT n, ID3D11RenderTargetView* const* rtvs, ID3D11DepthStencilView* dsv); void OMGetRenderTargets(UINT n, ID3D11RenderTargetView** rtvs, ID3D11DepthStencilView** dsv); void RSSetViewports(UINT n, const D3D11_VIEWPORT*); void RSGetViewports(UINT* n, D3D11_VIEWPORT*); void RSSetScissorRects(UINT n, const D3D11_RECT*); void RSGetScissorRects(UINT* n, D3D11_RECT*); void ClearState()"
+  layout: "D3D11_VIEWPORT: TopLeftX, TopLeftY, Width, Height, MinDepth, MaxDepth (6 floats); D3D11_RECT: left, top, right, bottom (4 LONG)"
+chrome:
+  calls: "ANGLE binds its render targets and viewport before drawing (assumed; invisible to the tracer)"
+rules:
+  fresh_context: "no render targets (8 NULLs), no depth view, 0 viewports, 0 scissor rects"
+  get_set: "after OMSetRenderTargets(1, [v1], NULL): OMGetRenderTargets(8, out, &dsv) gives slot 0 = v1 (same pointer), the other slots NULL, depth NULL; each non-NULL result carries a new public reference (v1: 1 -> 2, back to 1 after the caller releases it); binding does not change the view's reference count (1); Get(1) without a depth output works; Get(0) with only the depth output returns the depth view; rebinding [v2] replaces slot 0 (v1 count stays 1)"
+  views_and_depth: "OMSetRenderTargets(2, [v1, v2], dsv): Get returns v1, v2 in slots 0 and 1 and the same depth view (its count 2 while Get's reference is held); [NULL, v2] leaves slot 0 empty; (0, NULL, dsv) binds only the depth view; eight NULL views clear all slots; OMSetRenderTargets with 9 views crashes the calling process on Windows (access violation) and is therefore not tested"
+  lifetime: "a view stays bound after the creator released both the view and the texture (Get returns it and its resource has type 3); ClearRenderTargetView works on a view that is not bound"
+  refused_bindings: "the same view in slots 0 and 1, or two different views of the same texture in slots 0 and 1: the call is ignored (Get returns NULL in both slots), no error, the device stays alive; a render target of 8x8 with a 16x16 depth view binds without complaint"
+  srv_hazard: "bind a texture's SRV (slot 0) then its RTV as render target: the SRV slot reads back NULL (the hazard unbinds the shader resource); bind the RTV first then PSSetShaderResources of the SRV of the same texture: the SRV slot reads back NULL and the render target stays bound"
+  viewport_get: "RSGetViewports(&n, NULL) returns the stored count in n; with room for more than are stored it returns the stored count and zeroes the extra slots; with room for fewer it fills that many (n = the number copied: Get(1) with two stored gives n = 1)"
+  viewport_values: "accepted and read back bit for bit: x -3, y -4, 8 wide; fractional (0.5, 0.25, 8.75, 8.5); zero width and height; width and height 200000 at -100000; width 16384 and 16385; x 32767 and 32768; x -32768 width 65536; MinDepth = MaxDepth = 0.5; IGNORED (the previous state stays): negative width or height, MinDepth > MaxDepth (1 and 0), MinDepth -0.5, MaxDepth 1.5, NaN x, infinite width"
+  viewport_count: "up to 16 viewports are stored (16 -> count 16, 9 -> 9); 17 and 32 are ignored: the count read back is 0 on a fresh context (no previous state), no error, the device stays alive; RSSetViewports(0, NULL) clears (count 0)"
+  scissor: "RSSetScissorRects stores left/top/right/bottom as given for empty (3,3,3,3), negative (-10..-2) and huge (+-100000) rectangles; right < left (10,10,5,5) is ignored (the previous rectangle stays); 9 rectangles are stored (9 -> 9), 17 and 32 are ignored (count 0 on a fresh context); (0, NULL) clears; Get fills extra slots with zeros"
+  clear_state: "ClearState unbinds the render targets and the depth view, clears the viewports and scissor rects (counts 0), and does not change the public reference counts of the views or state objects (1 before, 1 after)"
+  no_removal: "none of the cases above removes the device"
+errors:
+  none: "the setters return nothing; invalid input is ignored"
+side_effects: "changes the immediate context's state"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  OMSetRenderTargets with more than 8 views (crashes the process), OMSetRenderTargetsAndUnorderedAccessViews, deferred contexts, rendering into bound targets (no shader can be built), array / 3D views of the bound targets.

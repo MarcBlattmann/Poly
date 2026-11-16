@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "mutex_release_b",
+      "exe_sha256": "504e3a3bae55dc880019f56fd1152fb39750ad8e808142262016f56c5ffb7168",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBhZnRlcndhcmRzIEFjcXVpcmUoMCwgMCkgMHgwMDAwMDAwMCBBY3F1aXJlKGtleSAwLCAwKSAweDg4N2EwMDAxCiAgYWZ0ZXJ3YXJkcyBBY3F1aXJlKDAsIDApIDB4MDAwMDAwMDAgQWNxdWlyZShrZXkgMSwgMCkgMHg4ODdhMDAwMQogIGFmdGVyd2FyZHMgQWNxdWlyZSgwLCAwKSAweDAwMDAwMDAwIEFjcXVpcmUoa2V5IDcsIDApIDB4ODg3YTAwMDEKUmVsZWFzZSgxKTogMHgwMDAwMDAwMAp0aGVuIEFjcXVpcmUoMSwgMCkgMHgwMDAwMDAwMApBY3F1aXJlKDApIHRoZW4gUmVsZWFzZSgwKTogMHgwMDAwMDAwMAphY3F1aXJlZCB0aHJvdWdoIG9uZSBtdXRleCBvYmplY3QsIFJlbGVhc2VTeW5jIHRocm91Z2ggdGhlIG90aGVyOiAweDg4N2EwMDAxCnJlbGVhc2UgdGhyb3VnaCBhbm90aGVyIG11dGV4IG9iamVjdDogZGV2aWNlIHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAKICByZWFkIGFmdGVyIEFjcXVpcmU6IDB4MDAwMDAwMDAKICByZWFkIGFmdGVyIFJlbGVhc2U6IDB4MDAwMDAwMDAKICByZWFkIGFmdGVyIHRoZSBzZWNvbmQgQWNxdWlyZTogMHhmZjBhMGEwYQpjbGVhciB3aXRob3V0IGFjcXVpcmU6IGRldmljZSByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwCmFmdGVyIHJlbGVhc2luZyBhbiBhY3F1aXJlZCB0ZXh0dXJlOiBhIG5ldyB0ZXh0dXJlIDB4MDAwMDAwMDAKbGVnYWN5IGtleWVkIG11dGV4IHRleHR1cmU6IElEWEdJS2V5ZWRNdXRleCAweDAwMDAwMDAwIEFjcXVpcmUoMSwgMCkgMHgwMDAwMDEwMiBBY3F1aXJlKDAsIDApIDB4MDAwMDAwMDAgUmVsZWFzZSgxKSAweDAwMDAwMDAwIEFjcXVpcmUoMSwgMCkgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  afterwards Acquire(0, 0) 0x00000000 Acquire(key 0, 0) 0x887a0001\n  afterwards Acquire(0, 0) 0x00000000 Acquire(key 1, 0) 0x887a0001\n  afterwards Acquire(0, 0) 0x00000000 Acquire(key 7, 0) 0x887a0001\nRelease(1): 0x00000000\nthen Acquire(1, 0) 0x00000000\nAcquire(0) then Release(0): 0x00000000\nacquired through one mutex object, ReleaseSync through the other: 0x887a0001\nrelease through another mutex object: device removed reason 0x00000000\n  read after Acquire: 0x00000000\n  read after Release: 0x00000000\n  read after the second Acquire: 0xff0a0a0a\nclear without acquire: device removed reason 0x00000000\nafter releasing an acquired texture: a new texture 0x00000000\nlegacy keyed mutex texture: IDXGIKeyedMutex 0x00000000 Acquire(1, 0) 0x00000102 Acquire(0, 0) 0x00000000 Release(1) 0x00000000 Acquire(1, 0) 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 114
+    },
+    {
+      "name": "mutex_release_c",
+      "exe_sha256": "3c8fd01d51c0b6e65b9022ed83536c9a2b43676b35a8e72b9cb60584ba6a92c8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBuZXZlciBhY3F1aXJlZDogZGV2aWNlIHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAKICBuZXZlciBhY3F1aXJlZDogZGV2aWNlIHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAKICBuZXZlciBhY3F1aXJlZDogZGV2aWNlIHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAKUmVsZWFzZSgxKSBhZ2FpbjogMHg4ODdhMDAwMQpSZWxlYXNlKDApOiAweDAwMDAwMDAwCnRoZW4gQWNxdWlyZSgwLCAwKTogMHgwMDAwMDAwMAogIHRoZW4gdGhlIGZpcnN0IG9iamVjdCdzIFJlbGVhc2VTeW5jOiAweDAwMDAwMDAwClVwZGF0ZVN1YnJlc291cmNlIHdpdGhvdXQgQWNxdWlyZSwgdGhlbiByZWFkIHdpdGhvdXQgQWNxdWlyZTogMHgwMDAwMDAwMAogIHBhaW50ZWQgdW5kZXIgdGhlIGxvY2ssIHJlYWQgdW5kZXIgdGhlIGxvY2s6IDB4ZmYwYTBhMGEKICBwYWludGVkIGFmdGVyIFJlbGVhc2UsIHJlYWQgYWZ0ZXIgUmVsZWFzZTogMHgwMDAwMDAwMAp1cGRhdGUgd2l0aG91dCBhY3F1aXJlOiBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMApDb3B5UmVzb3VyY2UgZnJvbSBhIGtleWVkIHRleHR1cmUgdGhhdCB3YXMgbm90IGFjcXVpcmVkOiBwaXhlbCAweDAwMDAwMDAwCiAgaXRzIG11dGV4IEFjcXVpcmUoMCwgMCk6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  never acquired: device removed reason 0x00000000\n  never acquired: device removed reason 0x00000000\n  never acquired: device removed reason 0x00000000\nRelease(1) again: 0x887a0001\nRelease(0): 0x00000000\nthen Acquire(0, 0): 0x00000000\n  then the first object's ReleaseSync: 0x00000000\nUpdateSubresource without Acquire, then read without Acquire: 0x00000000\n  painted under the lock, read under the lock: 0xff0a0a0a\n  painted after Release, read after Release: 0x00000000\nupdate without acquire: device removed reason 0x00000000\nCopyResource from a keyed texture that was not acquired: pixel 0x00000000\n  its mutex Acquire(0, 0): 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 108
+    }
+  ]
+}

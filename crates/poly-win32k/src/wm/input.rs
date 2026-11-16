@@ -38,6 +38,14 @@ pub const SET_CAPTURE_QUIET: u8 = 16;
 /// SetForegroundWindow on a window of its own: GetForegroundWindow.yaml
 /// `foreground_right`).
 pub const SET_FG_GRANT: u8 = 32;
+/// The capture was released and its WM_CAPTURECHANGED delivered: synthesize
+/// the mouse move to the window under the cursor now, so that it never can
+/// be retrieved before the capture window's notification (ReleaseCapture.yaml
+/// `rc_nocapture`: WM_CAPTURECHANGED, then WM_NCHITTEST). The sender of the
+/// notification may be another thread whose input is attached to the owner
+/// of the queue: queueing the move first let the owner see it while the
+/// notification was still on its way.
+pub const SET_CAPTURE_MOVE: u8 = 64;
 
 /// The keeper's key: a thread of no process of ours.
 pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FF50);

@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "ctx_draw_b",
+      "exe_sha256": "389492d43cb4cd22abf55768f9f609da92bedc1328ed545d7c2f86987e40aba9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKRHJhdygzLCAwKSwgdGFyZ2V0IGJvdW5kIHRydWUsIHRvcG9sb2d5IDU6IHJldHVybmVkOyBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IHBpeGVsIDB4ZmYwMGZmMDAKICBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKRHJhdygwLCAwKTogcmV0dXJuZWQ7IGRldmljZSByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgcGl4ZWwgMHhmZjAwZmYwMAogIGEgbmV3IHRleHR1cmUgYWZ0ZXJ3YXJkczogMHgwMDAwMDAwMApEcmF3SW5kZXhlZCgzLCAwLCAwKSB3aXRoIG5vIGluZGV4IGJ1ZmZlcjogcmV0dXJuZWQ7IGRldmljZSByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgcGl4ZWwgMHhmZjAwZmYwMAogIGEgbmV3IHRleHR1cmUgYWZ0ZXJ3YXJkczogMHgwMDAwMDAwMApEaXNwYXRjaCgxLCAxLCAxKSB3aXRoIG5vIGNvbXB1dGUgc2hhZGVyOiByZXR1cm5lZDsgZGV2aWNlIHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBwaXhlbCAweGZmMDBmZjAwCiAgYSBuZXcgdGV4dHVyZSBhZnRlcndhcmRzOiAweDAwMDAwMDAwCmFmdGVyIGEgZHJhdyB3aXRoIG5vIHNoYWRlcnMsIGNsZWFyIGFuZCByZWFkIGJhY2s6IDB4ZmZmZjAwMDA7IHJlbW92ZWQgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  a new texture afterwards: 0x00000000\nDraw(3, 0), target bound true, topology 5: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDraw(0, 0): returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDrawIndexed(3, 0, 0) with no index buffer: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDispatch(1, 1, 1) with no compute shader: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nafter a draw with no shaders, clear and read back: 0xffff0000; removed 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 125
+    },
+    {
+      "name": "ctx_draw_c",
+      "exe_sha256": "4e496497faee600ab18ad32b96084318f72b91daa04f1784d46d8638e7c1ddd6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RHJhdygzLCAwKSwgdGFyZ2V0IGJvdW5kIHRydWUsIHRvcG9sb2d5IDQ6IHJldHVybmVkOyBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IHBpeGVsIDB4ZmYwMGZmMDAKICBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKRHJhdygzLCAwKSwgdGFyZ2V0IGJvdW5kIHRydWUsIHRvcG9sb2d5IDI6IHJldHVybmVkOyBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IHBpeGVsIDB4ZmYwMGZmMDAKICBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKRHJhd0luc3RhbmNlZCgzLCA1LCAwLCAwKTogcmV0dXJuZWQ7IGRldmljZSByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgcGl4ZWwgMHhmZjAwZmYwMAogIGEgbmV3IHRleHR1cmUgYWZ0ZXJ3YXJkczogMHgwMDAwMDAwMApEcmF3QXV0byB3aXRoIG5vdGhpbmcgYm91bmQ6IHJldHVybmVkOyBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IHBpeGVsIDB4ZmYwMGZmMDAKICBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKRHJhdygzLCAwKSB3aXRoIGEgdmVydGV4IGJ1ZmZlciBib3VuZDogcmV0dXJuZWQ7IGRldmljZSByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgcGl4ZWwgMHhmZjAwZmYwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Draw(3, 0), target bound true, topology 4: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDraw(3, 0), target bound true, topology 2: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDrawInstanced(3, 5, 0, 0): returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDrawAuto with nothing bound: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\n  a new texture afterwards: 0x00000000\nDraw(3, 0) with a vertex buffer bound: returned; device removed reason 0x00000000 ; pixel 0xff00ff00\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 135
+    }
+  ]
+}

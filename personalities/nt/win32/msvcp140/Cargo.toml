@@ -1,0 +1,21 @@
+[package]
+name = "msvcp140"
+description = "Our msvcp140.dll (ADR 0199): the separately compiled part of Visual C++'s standard library, its first names; the rest fail-only"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "msvcp140"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-msvcp = { path = "../../../../crates/poly-msvcp" }
+
+[build-dependencies]
+poly-msvcp = { path = "../../../../crates/poly-msvcp" }
+
+[lints]
+workspace = true

@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIFactory.MakeWindowAssociation.yaml
+id: windows/api/dxgi.dll/IDXGIFactory.MakeWindowAssociation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIFactory::MakeWindowAssociation method (dxgi.h)", "IDXGIFactory::GetWindowAssociation method (dxgi.h)", "DXGI_MWA_FLAGS (Alt-Enter)", "IDXGIFactory5::CheckFeatureSupport method (dxgi1_5.h)", "DXGI_FEATURE enumeration", "IDXGIFactory2::IsWindowedStereoEnabled", "IDXGIFactory1::IsCurrent", "IDXGIFactory2::RegisterOcclusionStatusEvent"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Tells DXGI which window it may watch for Alt+Enter, print screen and window changes. ANGLE calls MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER) so that DXGI does not switch to fullscreen. Observed: flags 0, 1 (NO_WINDOW_CHANGES), 2 (NO_ALT_ENTER), 4 (NO_PRINT_SCREEN) and 7 give S_OK; any other bit (8, 0x10, 0x80000000, 0xFFFFFFFF) gives DXGI_ERROR_INVALID_CALL, also with a NULL window; a NULL, made-up or desktop window handle is accepted. GetWindowAssociation always returns S_OK and a NULL handle in the tests, even right after an association was made (the association is not observable). This entry's test also covers IDXGIFactory5::CheckFeatureSupport (PRESENT_ALLOW_TEARING), IsWindowedStereoEnabled, IsCurrent and RegisterOcclusionStatusEvent.
+interface:
+  signature: "HRESULT IDXGIFactory::MakeWindowAssociation(HWND WindowHandle, UINT Flags)"
+  constants: "DXGI_MWA_NO_WINDOW_CHANGES 1, DXGI_MWA_NO_ALT_ENTER 2, DXGI_MWA_NO_PRINT_SCREEN 4, DXGI_MWA_VALID 7 (dxgi.h). DXGI_FEATURE_PRESENT_ALLOW_TEARING 0 (dxgi1_5.h)"
+chrome:
+  calls: "ANGLE (Renderer11 / SwapChain11) calls IDXGIFactory::MakeWindowAssociation(window, DXGI_MWA_NO_ALT_ENTER) after creating a window swap chain (assumed from ANGLE's documented behaviour); CheckFeatureSupport(PRESENT_ALLOW_TEARING) is used to enable the tearing flag (assumed)"
+rules:
+  flags: "MakeWindowAssociation(window, flags): 0, 1, 2, 4, 7: S_OK; 8, 0x10, 0x80000000, 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL (0x887A0001); (NULL, 0): S_OK; (NULL, 0xFFFFFFFF): INVALID_CALL (the flags are validated first)"
+  handles: "a made-up handle (0x1234) and the desktop window: S_OK"
+  get_association: "GetWindowAssociation on a new factory: S_OK, handle NULL; after every successful MakeWindowAssociation with a real window it is still S_OK with a NULL handle; also on the device's factory after an association and a swap chain creation on that window; a second factory is independent (S_OK, NULL); after the window was destroyed: S_OK, NULL"
+  swap_chain: "creating a swap chain for an associated window: S_OK"
+  check_feature: "IDXGIFactory5::CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING = 0, &BOOL, 4): S_OK and the BOOL is written (1 on the factory of a WARP device and on the owner's machine; machine dependent for a factory of a machine without tearing support: 0 or 1); features 1, 2, 99 and 0xFFFFFFFF with size 4: DXGI_ERROR_INVALID_CALL and the buffer is untouched; sizes 0, 1, 2, 3, 5, 8, 16 for feature 0: INVALID_CALL (the size must be exactly 4) and the buffer is untouched; a NULL buffer with size 0 or 8, and with an unknown feature: INVALID_CALL (no crash); the factory answers IDXGIFactory4 and IDXGIFactory5"
+  stereo_current: "IsWindowedStereoEnabled: FALSE (0); IsCurrent: TRUE (1), also after a WARP device was created"
+  occlusion_event: "IDXGIFactory2::RegisterOcclusionStatusEvent(event, &cookie): S_OK and the cookie is written; UnregisterOcclusionStatus(cookie) returns (no result)"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the effect of NO_ALT_ENTER on the message loop (windows are never shown or pumped), associations of several swap chains, occlusion notifications.

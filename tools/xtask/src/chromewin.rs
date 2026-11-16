@@ -1211,8 +1211,13 @@ const S3_PAGE: &str =
 /// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
 /// (a slow start still finishes loading, so the component updater's download task runs, which
 /// stopped the browser about 35 s after its first page before ADR 0207); at about
-/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000).
-const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000";
+/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000). Then a
+/// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
+/// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
+/// (ADR 0155 addendum "browsing").
+const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
+                        chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
+                        pixel:200|400|0000ff";
 
 /// What one stage 3 run showed.
 #[derive(Debug, PartialEq, Eq)]
@@ -1231,7 +1236,8 @@ fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
     match stopped {
         _ if !exceptions.is_empty() => S3Verdict::Fail,
         None => S3Verdict::Pass,
-        Some(why) if why.contains("is [ff, ff, ff], wanted") => S3Verdict::Inconclusive,
+        // White where the first page should be green; white after the navigation is a failure.
+        Some(why) if why.contains("is [ff, ff, ff], wanted [00, 80, 00]") => S3Verdict::Inconclusive,
         Some(_) => S3Verdict::Fail,
     }
 }
@@ -1299,6 +1305,12 @@ pub fn command(args: &[String]) -> Result {
     }
 }
 
+/// Whether [`S3_STEPS`] are steps `win-app` takes (for the test).
+#[cfg(test)]
+fn crate_steps_parse() -> bool {
+    crate::winapps::steps_parse(S3_STEPS)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1311,6 +1323,10 @@ mod tests {
         assert_eq!(s3_verdict(Some(white), &[]), S3Verdict::Inconclusive);
         assert_eq!(s3_verdict(Some(white), &["nt-exc: pid 2"]), S3Verdict::Fail);
         assert_eq!(s3_verdict(Some(wallpaper), &[]), S3Verdict::Fail);
+        // After the first page was green, a navigation that leaves the page white failed.
+        let not_navigated = "Pixel(200, 400, [0, 0, 255]): pixel 200,400 is [ff, ff, ff], wanted [00, 00, ff]";
+        assert_eq!(s3_verdict(Some(not_navigated), &[]), S3Verdict::Fail);
+        assert!(super::crate_steps_parse());
         assert_eq!(s3_verdict(Some("Launch: no \"poly-compositor: launched\" in the log"), &[]), S3Verdict::Fail);
     }
 

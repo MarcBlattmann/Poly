@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "state_sampler_b",
+      "exe_sha256": "d035a5c46a3a0bab8cd649cee7025db7beb5122f359846469b8c2081e0b218c6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RmlsdGVyIHZhbHVlczogMHgwPTB4MDAwMDAwMDAgMHgxPTB4MDAwMDAwMDAgMHg0PTB4MDAwMDAwMDAgMHg1PTB4MDAwMDAwMDAgMHgxMD0weDAwMDAwMDAwIDB4MTE9MHgwMDAwMDAwMCAweDE0PTB4MDAwMDAwMDAgMHgxNT0weDAwMDAwMDAwIDB4NTU9MHgwMDAwMDAwMCAweDgwPTB4MDAwMDAwMDAgMHg5NT0weDAwMDAwMDAwIDB4ZDU9MHgwMDAwMDAwMApDb21wYXJpc29uRnVuYyB2YWx1ZXM6IDA9MHgwMDAwMDAwMCBjb21wYXJpc29uLWZpbHRlciAwPTB4ODAwNzAwNTcgMT0weDAwMDAwMDAwIGNvbXBhcmlzb24tZmlsdGVyIDE9MHgwMDAwMDAwMCA4PTB4MDAwMDAwMDAgY29tcGFyaXNvbi1maWx0ZXIgOD0weDAwMDAwMDAwIDk9MHgwMDAwMDAwMCBjb21wYXJpc29uLWZpbHRlciA5PTB4ODAwNzAwNTcgMjU1PTB4MDAwMDAwMDAgY29tcGFyaXNvbi1maWx0ZXIgMjU1PTB4ODAwNzAwNTcKcG9pbnQgZmlsdGVyLCBhbmlzbyA3LCBjb21wYXJpc29uIDU6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWx0ZXIgMHgwIGFkZHJlc3MgMyAzIDMgYmlhcyAweDAgYW5pc28gMCBjbXAgMSBib3JkZXIgMHgwIDB4MCAweDAgMHgwIGxvZCAweGZmN2ZmZmZmIDB4N2Y3ZmZmZmYKYm9yZGVyIGNvbG91ciBzZXQgd2l0aCBCT1JERVIgYWRkcmVzc2luZyBvbiBVOiAweDAwMDAwMDAwIEdldERlc2MgZmlsdGVyIDB4MTUgYWRkcmVzcyA0IDMgMyBiaWFzIDB4MCBhbmlzbyAwIGNtcCAxIGJvcmRlciAweDNmMDAwMDAwIDB4M2U4MDAwMDAgMHgzZTAwMDAwMCAweDNmODAwMDAwIGxvZCAweGZmN2ZmZmZmIDB4N2Y3ZmZmZmYKYmlhcyAxNS45OTogMHgwMDAwMDAwMCBHZXREZXNjIGZpbHRlciAweDE1IGFkZHJlc3MgMyAzIDMgYmlhcyAweDQxN2ZkNzBhIGFuaXNvIDAgY21wIDEgYm9yZGVyIDB4MCAweDAgMHgwIDB4MCBsb2QgMHhmZjdmZmZmZiAweDdmN2ZmZmZmCmJpYXMgLTE2LjA6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWx0ZXIgMHgxNSBhZGRyZXNzIDMgMyAzIGJpYXMgMHhjMTgwMDAwMCBhbmlzbyAwIGNtcCAxIGJvcmRlciAweDAgMHgwIDB4MCAweDAgbG9kIDB4ZmY3ZmZmZmYgMHg3ZjdmZmZmZgpNaW5MT0QgMyBNYXhMT0QgMjogMHgwMDAwMDAwMCBHZXREZXNjIGZpbHRlciAweDE1IGFkZHJlc3MgMyAzIDMgYmlhcyAweDAgYW5pc28gMCBjbXAgMSBib3JkZXIgMHgwIDB4MCAweDAgMHgwIGxvZCAweDQwNDAwMDAwIDB4NDAwMDAwMDAKTWluTE9EIE5hTjogMHg4MDA3MDA1NyBwdHI9bnVsbApNYXhMT0QgaW5mOiAweDAwMDAwMDAwIEdldERlc2MgZmlsdGVyIDB4MTUgYWRkcmVzcyAzIDMgMyBiaWFzIDB4MCBhbmlzbyAwIGNtcCAxIGJvcmRlciAweDAgMHgwIDB4MCAweDAgbG9kIDB4MCAweDdmODAwMDAwCmEgbm9uLWFuaXNvdHJvcGljIGZpbHRlciB3aXRoIE1heEFuaXNvdHJvcHkgNzogc2FtZSBvYmplY3QgYXMgdGhlIGRlZmF1bHQgdHJ1ZQpOVUxMIG91dHB1dCwgaW52YWxpZDogMHg4MDA3MDA1NyBwdHI9bnVsbApkZXZpY2UgcmVtb3ZlZCByZWFzb24gYXQgdGhlIGVuZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Filter values: 0x0=0x00000000 0x1=0x00000000 0x4=0x00000000 0x5=0x00000000 0x10=0x00000000 0x11=0x00000000 0x14=0x00000000 0x15=0x00000000 0x55=0x00000000 0x80=0x00000000 0x95=0x00000000 0xd5=0x00000000\nComparisonFunc values: 0=0x00000000 comparison-filter 0=0x80070057 1=0x00000000 comparison-filter 1=0x00000000 8=0x00000000 comparison-filter 8=0x00000000 9=0x00000000 comparison-filter 9=0x80070057 255=0x00000000 comparison-filter 255=0x80070057\npoint filter, aniso 7, comparison 5: 0x00000000 GetDesc filter 0x0 address 3 3 3 bias 0x0 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0xff7fffff 0x7f7fffff\nborder colour set with BORDER addressing on U: 0x00000000 GetDesc filter 0x15 address 4 3 3 bias 0x0 aniso 0 cmp 1 border 0x3f000000 0x3e800000 0x3e000000 0x3f800000 lod 0xff7fffff 0x7f7fffff\nbias 15.99: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x417fd70a aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0xff7fffff 0x7f7fffff\nbias -16.0: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0xc1800000 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0xff7fffff 0x7f7fffff\nMinLOD 3 MaxLOD 2: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x0 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0x40400000 0x40000000\nMinLOD NaN: 0x80070057 ptr=null\nMaxLOD inf: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x0 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0x0 0x7f800000\na non-anisotropic filter with MaxAnisotropy 7: same object as the default true\nNULL output, invalid: 0x80070057 ptr=null\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    },
+    {
+      "name": "state_sampler_c",
+      "exe_sha256": "c9ff63cfc774f58741ebfa902a7ad0d527b997e2898773667547f2c3da02a3a0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RmlsdGVyIHZhbHVlczogMHgxMDA9MHgwMDAwMDAwMCAweDExNT0weDAwMDAwMDAwIDB4MTU1PTB4MDAwMDAwMDAgMHgxODA9MHgwMDAwMDAwMCAweDE5NT0weDAwMDAwMDAwIDB4MWQ1PTB4MDAwMDAwMDAgMHgyPTB4ODAwNzAwNTcgMHgzPTB4ODAwNzAwNTcgMHg0MD0weDgwMDcwMDU3IDB4NTY9MHg4MDA3MDA1NyAweDFmZj0weDgwMDcwMDU3IDB4MjAwPTB4ODAwNzAwNTcgMHhmZmZmZmZmZj0weDgwMDcwMDU3Ck1heEFuaXNvdHJvcHkgdmFsdWVzOiBmaWx0ZXIgMHgxNSBhbmlzbyAwPTB4MDAwMDAwMDAgZmlsdGVyIDB4NTUgYW5pc28gMD0weDAwMDAwMDAwIGZpbHRlciAweDE1IGFuaXNvIDE9MHgwMDAwMDAwMCBmaWx0ZXIgMHg1NSBhbmlzbyAxPTB4MDAwMDAwMDAgZmlsdGVyIDB4MTUgYW5pc28gMj0weDAwMDAwMDAwIGZpbHRlciAweDU1IGFuaXNvIDI9MHgwMDAwMDAwMCBmaWx0ZXIgMHgxNSBhbmlzbyAxNj0weDAwMDAwMDAwIGZpbHRlciAweDU1IGFuaXNvIDE2PTB4MDAwMDAwMDAgZmlsdGVyIDB4MTUgYW5pc28gMTc9MHg4MDA3MDA1NyBmaWx0ZXIgMHg1NSBhbmlzbyAxNz0weDgwMDcwMDU3IGZpbHRlciAweDE1IGFuaXNvIDEwMD0weDgwMDcwMDU3IGZpbHRlciAweDU1IGFuaXNvIDEwMD0weDgwMDcwMDU3CmNvbXBhcmlzb24gcG9pbnQgZmlsdGVyLCBjb21wYXJpc29uIDU6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWx0ZXIgMHg4MCBhZGRyZXNzIDMgMyAzIGJpYXMgMHgwIGFuaXNvIDAgY21wIDUgYm9yZGVyIDB4MCAweDAgMHgwIDB4MCBsb2QgMHhmZjdmZmZmZiAweDdmN2ZmZmZmCmJpYXMgMi41OiAweDAwMDAwMDAwIEdldERlc2MgZmlsdGVyIDB4MTUgYWRkcmVzcyAzIDMgMyBiaWFzIDB4NDAyMDAwMDAgYW5pc28gMCBjbXAgMSBib3JkZXIgMHgwIDB4MCAweDAgMHgwIGxvZCAweGZmN2ZmZmZmIDB4N2Y3ZmZmZmYKYmlhcyAxNi4wOiAweDgwMDcwMDU3IHB0cj1udWxsCmJpYXMgLTE2LjU6IDB4ODAwNzAwNTcgcHRyPW51bGwKTWluTE9EIDIgTWF4TE9EIDI6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWx0ZXIgMHgxNSBhZGRyZXNzIDMgMyAzIGJpYXMgMHgwIGFuaXNvIDAgY21wIDEgYm9yZGVyIDB4MCAweDAgMHgwIDB4MCBsb2QgMHg0MDAwMDAwMCAweDQwMDAwMDAwCk1heExPRCBOYU46IDB4ODAwNzAwNTcgcHRyPW51bGwKTWluTE9EIC1pbmY6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWx0ZXIgMHgxNSBhZGRyZXNzIDMgMyAzIGJpYXMgMHgwIGFuaXNvIDAgY21wIDEgYm9yZGVyIDB4MCAweDAgMHgwIDB4MCBsb2QgMHhmZjgwMDAwMCAweDdmN2ZmZmZmCnNhbXBsZXIgc3RhdGUgaW50ZXJmYWNlczogSUQzRDExU2FtcGxlclN0YXRlPXllcyhzYW1lKSBJRDNEMTFEZXZpY2VDaGlsZD15ZXMoc2FtZSkgSUQzRDExUmFzdGVyaXplclN0YXRlPW5vCmNyZWF0aW5nIGRpc3RpbmN0IHNhbXBsZXIgc3RhdGVzIHdoaWxlIGtlZXBpbmcgdGhlbSBhbGl2ZTogc3RvcHBlZCB3aXRoIDB4ODg3YzAwMDEgYWZ0ZXIgNDA5NiBvYmplY3RzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Filter values: 0x100=0x00000000 0x115=0x00000000 0x155=0x00000000 0x180=0x00000000 0x195=0x00000000 0x1d5=0x00000000 0x2=0x80070057 0x3=0x80070057 0x40=0x80070057 0x56=0x80070057 0x1ff=0x80070057 0x200=0x80070057 0xffffffff=0x80070057\nMaxAnisotropy values: filter 0x15 aniso 0=0x00000000 filter 0x55 aniso 0=0x00000000 filter 0x15 aniso 1=0x00000000 filter 0x55 aniso 1=0x00000000 filter 0x15 aniso 2=0x00000000 filter 0x55 aniso 2=0x00000000 filter 0x15 aniso 16=0x00000000 filter 0x55 aniso 16=0x00000000 filter 0x15 aniso 17=0x80070057 filter 0x55 aniso 17=0x80070057 filter 0x15 aniso 100=0x80070057 filter 0x55 aniso 100=0x80070057\ncomparison point filter, comparison 5: 0x00000000 GetDesc filter 0x80 address 3 3 3 bias 0x0 aniso 0 cmp 5 border 0x0 0x0 0x0 0x0 lod 0xff7fffff 0x7f7fffff\nbias 2.5: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x40200000 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0xff7fffff 0x7f7fffff\nbias 16.0: 0x80070057 ptr=null\nbias -16.5: 0x80070057 ptr=null\nMinLOD 2 MaxLOD 2: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x0 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0x40000000 0x40000000\nMaxLOD NaN: 0x80070057 ptr=null\nMinLOD -inf: 0x00000000 GetDesc filter 0x15 address 3 3 3 bias 0x0 aniso 0 cmp 1 border 0x0 0x0 0x0 0x0 lod 0xff800000 0x7f7fffff\nsampler state interfaces: ID3D11SamplerState=yes(same) ID3D11DeviceChild=yes(same) ID3D11RasterizerState=no\ncreating distinct sampler states while keeping them alive: stopped with 0x887c0001 after 4096 objects\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 83
+    }
+  ]
+}

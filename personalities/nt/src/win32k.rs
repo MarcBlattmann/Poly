@@ -107,6 +107,7 @@ impl Win32k {
                     }
                 }
                 FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
+                FromCompositor::Axis { vertical, .. } => self.wm.link_wheel(vertical, &mut fx),
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.
@@ -115,18 +116,35 @@ impl Win32k {
                         self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
                     }
                 }
-                // The compositor moved or resized the window's surface.
+                // The shell minimizes, maximizes or restores the window (a minimized window
+                // picked in the window switcher): the window command, as from its caption.
+                FromCompositor::Request { surface, request } => {
+                    let sc = match request {
+                        DesktopRequest::Minimize => poly_win32k::user::SC_MINIMIZE,
+                        DesktopRequest::Maximize => poly_win32k::user::SC_MAXIMIZE,
+                        _ => poly_win32k::user::SC_RESTORE,
+                    };
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
+                        self.wm.post_system_message_with(hwnd, poly_win32k::user::WM_SYSCOMMAND, sc, 0, &mut fx);
+                    }
+                }
+                // The compositor moved or resized the window's surface (a new size: its
+                // thread applies it with `SetWindowPos`).
                 FromCompositor::Configure { surface, x, y, width, height } => {
                     if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
                         let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
                         let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
-                        self.wm.configure_from_desktop(hwnd, client, frame);
+                        self.wm.configure_from_desktop(hwnd, client, frame, &mut fx);
                     }
                 }
                 _ => {}
             }
         }
         self.wake(objects, &fx);
+        // Windows programs type with the desktop's keyboard layout (ADR 0209).
+        if let Some(name) = self.desktop.layout() {
+            self.wm.set_layout(poly_win32k::kbd::Layout::for_desktop(name));
+        }
         // With a compositor the session is interactive, its screen the
         // output, the work area below Poly's 24-pixel ridge.
         if let Some(o) = self.desktop.output()
