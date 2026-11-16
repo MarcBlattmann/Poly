@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "hstring_buffer",
+      "exe_sha256": "640eaa5c62aa3bada9a79071e89f5701001c064f4ab1ffe45f3e110057d7a28c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJlYWxsb2MoNSkgPSAweDAwMDAwMDAwIGNoYXJzX251bGwgZmFsc2UgYnVmX251bGwgZmFsc2UKICB0aGUgc3RyaW5nJ3MgY2hhcmFjdGVycyBhcmUgdGhlIGJ1ZmZlcidzOiB0cnVlCnByZWFsbG9jKDQpIHRoZW4gZGVsZXRlYnVmZmVyID0gMHgwMDAwMDAwMApwcmVhbGxvYygzLCBOVUxMIGNoYXJzKSA9IDB4ODAwMDQwMDMKICBpdHMgZHVwbGljYXRlIHNoYXJlcyB0aGUgaGFuZGxlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "prealloc(5) = 0x00000000 chars_null false buf_null false\n  the string's characters are the buffer's: true\nprealloc(4) then deletebuffer = 0x00000000\nprealloc(3, NULL chars) = 0x80004003\n  its duplicate shares the handle: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "hstring_buffer_b",
+      "exe_sha256": "a30a72fad28ff400ebbaf39fe8392e8ca70ab5e438437490a75875d24ba02c51",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgY2hhcmFjdGVyIGFmdGVyIHRoZSA1IGlzIE5VTDogdHJ1ZQpwcmVhbGxvYygwKSA9IDB4MDAwMDAwMDAgY2hhcnNfbnVsbCBmYWxzZSBidWZfbnVsbCBmYWxzZQpkZWxldGVidWZmZXIoTlVMTCkgPSAweDAwMDAwMDAwCnByZWFsbG9jKDMsIE5VTEwgYnVmZmVyKSA9IDB4ODAwMDQwMDMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the character after the 5 is NUL: true\nprealloc(0) = 0x00000000 chars_null false buf_null false\ndeletebuffer(NULL) = 0x00000000\nprealloc(3, NULL buffer) = 0x80004003\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

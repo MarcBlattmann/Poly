@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "hstring_concat_dup_b",
+      "exe_sha256": "1470ee1e370bbe899b5e5133b37ce5b5d37f6b66b4b874ae14cd0056d6ec2869",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZHVwbGljYXRlKE5VTEwpID0gMHgwMDAwMDAwMCBvdXRfbnVsbCB0cnVlCmNvbmNhdChhYixhYykgPSAweDAwMDAwMDAwIHRleHQgYWJhYwpjb25jYXQoYWIsTlVMTCkgPSAweDAwMDAwMDAwIHNhbWVfaGFuZGxlX2FzX2FiIHRydWUKY29uY2F0KHJlZiBhYmMsIGFiKSA9IDB4MDAwMDAwMDAgdGV4dCBhYmNhYgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "duplicate(NULL) = 0x00000000 out_null true\nconcat(ab,ac) = 0x00000000 text abac\nconcat(ab,NULL) = 0x00000000 same_handle_as_ab true\nconcat(ref abc, ab) = 0x00000000 text abcab\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "hstring_concat_dup_c",
+      "exe_sha256": "ed017ed21d17c5075f0302322e692fadbad7078aab1bab9fa7e0f2f1e83cf7b1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZHVwbGljYXRlKGFiLCBOVUxMIG91dCkgPSAweDgwMDcwMDU3CiAgbGVuIDQgc2FtZV9hc19sZWZ0IGZhbHNlCmNvbmNhdChOVUxMLE5VTEwpID0gMHgwMDAwMDAwMCBvdXRfbnVsbCB0cnVlCmNvbmNhdChOVUxMLCByZWYgYWJjKSA9IDB4MDAwMDAwMDAgc2FtZV9oYW5kbGVfYXNfcmVmIGZhbHNlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "duplicate(ab, NULL out) = 0x80070057\n  len 4 same_as_left false\nconcat(NULL,NULL) = 0x00000000 out_null true\nconcat(NULL, ref abc) = 0x00000000 same_handle_as_ref false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

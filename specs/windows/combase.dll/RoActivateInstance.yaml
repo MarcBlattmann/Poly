@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/RoActivateInstance.yaml
+id: windows/api/combase.dll/RoActivateInstance
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  Creates an instance of a Windows Runtime class with a default constructor. Windows.UI.ViewManagement.UISettings and AccessibilitySettings give working objects (identity, interfaces, getters, colours); a registered class without a default constructor gives E_NOTIMPL; an unregistered one REGDB_E_CLASSNOTREG. The UISettings object is what the Qt 6 and Firefox appearance code reads.
+interface:
+  signature: "HRESULT RoActivateInstance(HSTRING activatableClassId, IInspectable **instance)"
+rules:
+  classes: "UISettings, AccessibilitySettings and Windows.Foundation.Collections.PropertySet give S_OK; Windows.UI.ViewManagement.UIViewSettings, Windows.Foundation.Uri, Windows.Storage.StorageFile and Windows.System.Launcher (no default constructor) give E_NOTIMPL (0x80004001); PropertyValue (static only) gives 0x80040111; unregistered names REGDB_E_CLASSNOTREG (0x80040154); empty or NULL names E_INVALIDARG. *instance is NULL after every failure."
+  identity: "the UISettings object's GetIids (IInspectable slot 3) lists IUISettings {85361600-1C63-4627-BCB1-3A89E0BC9C55}, IUISettings2 {BAD82401-2721-44F9-BB91-2BB228BE442F}, IUISettings3 {03021BE4-5254-4781-8194-5168F7D06D7B}, IUISettings4 {52BB3002-919B-4D6B-9B78-8DD66FF4B93B}, IUISettings5 {5349D588-0CB5-5F05-BD34-706B3231F0BD} and IAgileObject {00000038-0000-0000-C000-000000000046} (at least these; 7 on the oracle's build, which adds IUISettings6). GetRuntimeClassName (slot 4) gives \"Windows.UI.ViewManagement.UISettings\"; GetTrustLevel (slot 5) gives BaseTrust (0)."
+  query_interface: "QueryInterface answers S_OK for IUnknown, IInspectable, IUISettings .. IUISettings5 and IAgileObject; E_NOINTERFACE (0x80004002) for IActivationFactory and IRestrictedErrorInfo."
+  colors: "IUISettings3::GetColorValue (slot 6) for UIColorType 0..8 (Background, Foreground, AccentDark3..AccentLight3 in the header's order) gives S_OK and an opaque colour (alpha 255); for 9, 10, 24 and 100 it gives E_INVALIDARG (0x80070057) and leaves alpha 0. IUISettings::UIElementColor (slot 18) gives S_OK for 0, 1, 5, 20 and 100 with alpha 255 for the first three and 0 for the others. Colours depend on the user's theme and are not compared."
+  getters: "IUISettings getters (slots 6..17: HandPreference, CursorSize, ScrollBarSize, ScrollBarArrowSize, ScrollBarThumbBoxSize, MessageDuration, AnimationsEnabled, CaretBrowsingEnabled, CaretBlinkRate, CaretWidth, DoubleClickTime, MouseHoverTime) return S_OK; the sizes and times are positive; IUISettings2::TextScaleFactor (slot 6) is S_OK and between 1.0 and 2.25; IUISettings5::AutoHideScrollBars is S_OK."
+  events: "add_ColorValuesChanged(NULL handler) = E_INVALIDARG with token 0; remove_ColorValuesChanged(0) = S_OK."
+  lifetime: "AddRef returns more than 1 and Release brings the count back; the last Release returns 0; two activations are different objects."
+  accessibility: "AccessibilitySettings: S_OK, HighContrast (slot 6) is a boolean, GetIids lists 2 interfaces."
+  error_info: "a failed activation leaves a restricted error info on the thread (GetRestrictedErrorInfo returns an object after the last failure of the second test file)."
+errors:
+  no_default_constructor: "E_NOTIMPL 0x80004001"
+  static_only: "0x80040111"
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  invalid_name: "E_INVALIDARG 0x80070057"
+  invalid_colour_type: "E_INVALIDARG 0x80070057"
+side_effects: "creates an object"
+threading: "the thread should have called RoInitialize; UISettings is agile (usable from any thread)"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  The event sources (a real handler object), IUISettings6's events, the colours' actual values, the unlisted classes of other namespaces.

@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/WindowsCreateString.yaml
+id: windows/api/combase.dll/WindowsCreateString
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  Makes an HSTRING (a reference-counted, immutable, NUL-terminated UTF-16 string) from counted characters. The empty string is the NULL HSTRING: NULL or zero-length input gives S_OK and a NULL handle, and every query function answers for NULL as for the empty string.
+interface:
+  signature: "HRESULT WindowsCreateString(PCNZWCH sourceString, UINT32 length, HSTRING *string)"
+rules:
+  empty: "length 0 (with or without a source pointer) gives S_OK and *string = NULL. A NULL source with a length above 0 gives E_POINTER (0x80004003), *string = NULL."
+  created: "a non-empty string gets a handle of its own; WindowsGetStringRawBuffer returns its characters, the string is NUL-terminated after `length` units, and the buffer is a copy (not the caller's pointer). Asking for the raw buffer twice gives the same pointer. Two creations of the same text give two different handles."
+  embedded_nul: "a NUL inside the characters is kept: the length counts it and WindowsStringHasEmbeddedNull reports TRUE."
+  long: "1000 units are kept whole. A length of 0xFFFFFFFF with a short buffer gives 0x80080011 (and *string = NULL)."
+  null_handle_queries: "WindowsGetStringLen(NULL) = 0, WindowsIsStringEmpty(NULL) = TRUE, WindowsStringHasEmbeddedNull(NULL) = S_OK with FALSE, WindowsDeleteString(NULL) = S_OK, WindowsGetStringRawBuffer(NULL, &len) writes 0 and returns a non-NULL pointer to an empty (NUL) string; it also returns a non-NULL pointer when the length pointer is NULL."
+  out_pointer: "a NULL result pointer gives E_INVALIDARG (0x80070057) for a non-empty source."
+errors:
+  null_source: "E_POINTER 0x80004003"
+  null_out: "E_INVALIDARG 0x80070057"
+  absurd_length: "0x80080011"
+side_effects: "allocates memory the caller frees with WindowsDeleteString"
+threading: "HSTRINGs may be used from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  Memory exhaustion, strings of more than a few thousand units, the exact handle values and reference counts (only handle identity is shown).

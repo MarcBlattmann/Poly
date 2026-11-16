@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "image_name",
+      "exe_sha256": "fbb93eda6210ee1191743052970a3321808869bda61972a2f49b2e78268b12ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luMzIgZm9ybTogMSBlcnIgdW5jaGFuZ2VkIHNpemUgPT0gR2V0TW9kdWxlRmlsZU5hbWVXIGxlbmd0aCB0cnVlIHRleHQgZXF1YWxzIHRydWUgbnVsIGFmdGVyIHRydWUKZmxhZ3MgMHgyOiAwIGVyciA4NwpzaXplIDA6IDAgZXJyIDEyMiBzaXplIGFmdGVyOiB1bmNoYW5nZWQKc2l6ZSBuYW1lIGxlbmd0aDogMCBlcnIgMTIyIHNpemUgYWZ0ZXI6IHVuY2hhbmdlZApJTlZBTElEX0hBTkRMRV9WQUxVRSAoLTEgPSB0aGUgY3VycmVudCBwcm9jZXNzKSA9IDEgZXJyIHVuY2hhbmdlZAphIHRocmVhZCBoYW5kbGUgPSAwIGVyciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "win32 form: 1 err unchanged size == GetModuleFileNameW length true text equals true nul after true\nflags 0x2: 0 err 87\nsize 0: 0 err 122 size after: unchanged\nsize name length: 0 err 122 size after: unchanged\nINVALID_HANDLE_VALUE (-1 = the current process) = 1 err unchanged\na thread handle = 0 err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "image_name_c",
+      "exe_sha256": "7613fd9d4e45f76bed340503266f4b804d1c7568744422bb0e1f583eb04f8de3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmF0aXZlIGZvcm0gKGZsYWdzIDEpOiAxIHN0YXJ0cyB3aXRoIHRoZSBkZXZpY2UgcHJlZml4IHRydWUgZW5kcyBsaWtlIHRoZSB3aW4zMiBuYW1lIHRydWUKZmxhZ3MgMHhmZmZmZmZmZjogMCBlcnIgODcKc2l6ZSA0OiAwIGVyciAxMjIgc2l6ZSBhZnRlcjogdW5jaGFuZ2VkCk5VTEwgaGFuZGxlID0gMCBlcnIgNgpoYW5kbGUgd2l0aCBvbmx5IFNZTkNIUk9OSVpFID0gMCBlcnIgNQogIGJ5IE9wZW5Qcm9jZXNzKDB4MTAwMCk6IDEgc2FtZSBpbWFnZSB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "native form (flags 1): 1 starts with the device prefix true ends like the win32 name true\nflags 0xffffffff: 0 err 87\nsize 4: 0 err 122 size after: unchanged\nNULL handle = 0 err 6\nhandle with only SYNCHRONIZE = 0 err 5\n  by OpenProcess(0x1000): 1 same image true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

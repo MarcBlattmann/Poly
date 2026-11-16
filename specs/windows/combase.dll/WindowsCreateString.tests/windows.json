@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "hstring_create",
+      "exe_sha256": "10f4708d2ce48960d127655e289b5476c085f705c918b626a277c1251c600024",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlKE5VTEwsMCkgPSAweDAwMDAwMDAwIG91dF9udWxsIHRydWUKY3JlYXRlKGFiYywzLE5VTEwgb3V0KSA9IDB4ODAwNzAwNTcKICBHZXRTdHJpbmdMZW4gMyBJc0VtcHR5IDAKY3JlYXRlKGEgTlVMIGIsMykgPSAweDAwMDAwMDAwCnJhdyhOVUxMKSBsZW4gMCBwdHJfbnVsbCBmYWxzZSBmaXJzdF91bml0IDAKSGFzRW1iZWRkZWROdWxsKE5VTEwpIDB4MDAwMDAwMDAgPSAwCiAgYm90aCBkZWxldGU6IDB4MDAwMDAwMDAgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create(NULL,0) = 0x00000000 out_null true\ncreate(abc,3,NULL out) = 0x80070057\n  GetStringLen 3 IsEmpty 0\ncreate(a NUL b,3) = 0x00000000\nraw(NULL) len 0 ptr_null false first_unit 0\nHasEmbeddedNull(NULL) 0x00000000 = 0\n  both delete: 0x00000000 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "hstring_create_c",
+      "exe_sha256": "ae53171d0075c5729576e00bf3036c61c3bd3102e12b711612b2edca38cba69e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlKGFiYywwKSA9IDB4MDAwMDAwMDAgb3V0X251bGwgdHJ1ZQogIHJhdyBsZW4gMyB0ZXh0IGFiYyBudWxfYWZ0ZXIgdHJ1ZSBzYW1lX3B0cl9hc19zb3VyY2UgZmFsc2UKICBIYXNFbWJlZGRlZE51bGwgMHgwMDAwMDAwMCA9IDAKY3JlYXRlKGFiYywweEZGRkZGRkZGKSA9IDB4ODAwODAwMTEgb3V0X251bGwgdHJ1ZQpsZW4oTlVMTCkgMCBJc0VtcHR5KE5VTEwpIDEKY3JlYXRlIHR3aWNlOiBzYW1lX2hhbmRsZSBmYWxzZQogIGxlbiAxMDAwIGxhc3RfdW5pdCA2NSBudWxfYWZ0ZXIgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create(abc,0) = 0x00000000 out_null true\n  raw len 3 text abc nul_after true same_ptr_as_source false\n  HasEmbeddedNull 0x00000000 = 0\ncreate(abc,0xFFFFFFFF) = 0x80080011 out_null true\nlen(NULL) 0 IsEmpty(NULL) 1\ncreate twice: same_handle false\n  len 1000 last_unit 65 nul_after true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

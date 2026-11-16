@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "dll_directory",
+      "exe_sha256": "d5378def8911a245c34d3718f0abd0cee0ec9e5ca170ec9da0fb74f02e2febf2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5pdGlhbGx5OiBHZXREbGxEaXJlY3RvcnlXID0gMCB0ZXh0IFtdIG51bCB0cnVlIGVyciAwClNldERsbERpcmVjdG9yeVcoIkM6XFxub1xcc3VjaFxcZGlyZWN0b3J5IikgPSAxIGVyciB1bmNoYW5nZWQKICB0aGVuOiBHZXREbGxEaXJlY3RvcnlXID0gMTIgdGV4dCBbcmVsYXRpdmVcZGlyXSBudWwgdHJ1ZSBlcnIgMApTZXREbGxEaXJlY3RvcnlXKCJDOlxcV2luZG93c1xcIikgPSAxIGVyciB1bmNoYW5nZWQKICB0aGVuOiBHZXREbGxEaXJlY3RvcnlXID0gMCB0ZXh0IFtdIG51bCB0cnVlIGVyciAwCkdldERsbERpcmVjdG9yeVcoYnVmZmVyIDEwKSA9IDExIGVyciAwIGZpcnN0IDAgd3JpdHRlbl9udWwgdHJ1ZQpHZXREbGxEaXJlY3RvcnlXKDAsIE5VTEwpID0gMTEgZXJyIDAKTG9hZExpYnJhcnlXKCJwb2x5dmVyLmRsbCIpIHdpdGggdGhlIGRpcmVjdG9yeSBzZXQ6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "initially: GetDllDirectoryW = 0 text [] nul true err 0\nSetDllDirectoryW(\"C:\\\\no\\\\such\\\\directory\") = 1 err unchanged\n  then: GetDllDirectoryW = 12 text [relative\\dir] nul true err 0\nSetDllDirectoryW(\"C:\\\\Windows\\\\\") = 1 err unchanged\n  then: GetDllDirectoryW = 0 text [] nul true err 0\nGetDllDirectoryW(buffer 10) = 11 err 0 first 0 written_nul true\nGetDllDirectoryW(0, NULL) = 11 err 0\nLoadLibraryW(\"polyver.dll\") with the directory set: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "dll_directory_b",
+      "exe_sha256": "57968b3195fa2c0986c936a674b86489978c8572d0ece1b4d928c58e268c96f2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0RGxsRGlyZWN0b3J5VygiQzpcXFdpbmRvd3MiKSA9IDEgZXJyIHVuY2hhbmdlZAogIHRoZW46IEdldERsbERpcmVjdG9yeVcgPSAyMCB0ZXh0IFtDOlxub1xzdWNoXGRpcmVjdG9yeV0gbnVsIHRydWUgZXJyIDAKU2V0RGxsRGlyZWN0b3J5VygiIikgPSAxIGVyciB1bmNoYW5nZWQKICB0aGVuOiBHZXREbGxEaXJlY3RvcnlXID0gMTEgdGV4dCBbQzpcV2luZG93c1xdIG51bCB0cnVlIGVyciAwCkdldERsbERpcmVjdG9yeVcoYnVmZmVyIDApID0gMTEgZXJyIDAgZmlyc3QgYWFhYSB3cml0dGVuX251bCBmYWxzZQpHZXREbGxEaXJlY3RvcnlXKGJ1ZmZlciAxMSkgPSAxMCBlcnIgMCBmaXJzdCA0MyB3cml0dGVuX251bCB0cnVlCnNldCB1cCBhIGRpcmVjdG9yeSB3aXRoIGEgRExMIGNvcHk6IHRydWUgdHJ1ZQogIEdldE1vZHVsZUhhbmRsZVcgZmluZHMgaXQ6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetDllDirectoryW(\"C:\\\\Windows\") = 1 err unchanged\n  then: GetDllDirectoryW = 20 text [C:\\no\\such\\directory] nul true err 0\nSetDllDirectoryW(\"\") = 1 err unchanged\n  then: GetDllDirectoryW = 11 text [C:\\Windows\\] nul true err 0\nGetDllDirectoryW(buffer 0) = 11 err 0 first aaaa written_nul false\nGetDllDirectoryW(buffer 11) = 10 err 0 first 43 written_nul true\nset up a directory with a DLL copy: true true\n  GetModuleHandleW finds it: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

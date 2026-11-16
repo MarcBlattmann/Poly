@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "ro_error_info_b",
+      "exe_sha256": "e63fc34c20d32701cd3d471d875168a61433e066c757bc1dc12643a5a4931673",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0UmVzdHJpY3RlZEVycm9ySW5mbyB3aXRoIG5vdGhpbmcgc2V0ID0gMHgwMDAwMDAwMSBvdXRfbnVsbCB0cnVlCiAgZGV0YWlsczogR2V0RXJyb3JEZXRhaWxzID0gMHgwMDAwMDAwMCBlcnJvciAweDgwMDA0MDA1IGRlc2NyaXB0aW9uIFtVbnNwZWNpZmllZCBlcnJvcjwwMDBkPjwwMDBhPl0gcmVzdHJpY3RlZCBbcG9seSBtZXNzYWdlXSBzaWQgWzxudWxsPl0KICBRSSBJSW5zcGVjdGFibGUgPSAweDgwMDA0MDAyCiAgZ2V0IGFnYWluOiBzYW1lX29iamVjdCB0cnVlClJvT3JpZ2luYXRlRXJyb3IoU19PSywgbXNnKSA9IDAKICBkZXRhaWxzOiBHZXRFcnJvckRldGFpbHMgPSAweDAwMDAwMDAwIGVycm9yIDB4ODAwMDQwMDUgZGVzY3JpcHRpb24gW1Vuc3BlY2lmaWVkIGVycm9yPDAwMGQ+PDAwMGE+XSByZXN0cmljdGVkIFtVbnNwZWNpZmllZCBlcnJvcjwwMDBkPjwwMDBhPl0gc2lkIFs8bnVsbD5dClJvT3JpZ2luYXRlRXJyb3JXKEVfSU5WQUxJREFSRywgNCwgdGV4dCkgKHNob3J0ZXIgdGhhbiB0aGUgdGV4dCkgPSAxCiAgZGV0YWlsczogR2V0RXJyb3JEZXRhaWxzID0gMHgwMDAwMDAwMCBlcnJvciAweDgwMDA0MDA0IGRlc2NyaXB0aW9uIFtPcGVyYXRpb24gYWJvcnRlZDwwMDBkPjwwMDBhPl0gcmVzdHJpY3RlZCBbcG9seSBtZXNzYWdlXSBzaWQgWzxudWxsPl0KUm9HZXRFcnJvclJlcG9ydGluZ0ZsYWdzID0gMHgwMDAwMDAwMCA0ClJvU2V0RXJyb3JSZXBvcnRpbmdGbGFncygweDMwKSA9IDB4ODAwNzAwNTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetRestrictedErrorInfo with nothing set = 0x00000001 out_null true\n  details: GetErrorDetails = 0x00000000 error 0x80004005 description [Unspecified error<000d><000a>] restricted [poly message] sid [<null>]\n  QI IInspectable = 0x80004002\n  get again: same_object true\nRoOriginateError(S_OK, msg) = 0\n  details: GetErrorDetails = 0x00000000 error 0x80004005 description [Unspecified error<000d><000a>] restricted [Unspecified error<000d><000a>] sid [<null>]\nRoOriginateErrorW(E_INVALIDARG, 4, text) (shorter than the text) = 1\n  details: GetErrorDetails = 0x00000000 error 0x80004004 description [Operation aborted<000d><000a>] restricted [poly message] sid [<null>]\nRoGetErrorReportingFlags = 0x00000000 4\nRoSetErrorReportingFlags(0x30) = 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "ro_error_info_c",
+      "exe_sha256": "b77fdf254d6dc35f4a7b554e0037334f1e32b30af40e260eb42f908b0f75a578",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Um9PcmlnaW5hdGVFcnJvcihFX0ZBSUwsIG1zZykgPSAxCiAgUUkgSVJlc3RyaWN0ZWRFcnJvckluZm8gPSAweDAwMDAwMDAwCiAgc2Vjb25kIEdldFJlc3RyaWN0ZWRFcnJvckluZm8gPSAweDAwMDAwMDAxIG91dF9udWxsIHRydWUKU2V0UmVzdHJpY3RlZEVycm9ySW5mbyhOVUxMKSA9IDB4MDAwMDAwMDAKICBhZnRlciBTX09LOiBubyBlcnJvciBpbmZvClJvT3JpZ2luYXRlRXJyb3JXKEVfSU5WQUxJREFSRywgMTIsIHRleHQpID0gMQogIGRldGFpbHM6IEdldEVycm9yRGV0YWlscyA9IDB4MDAwMDAwMDAgZXJyb3IgMHg4MDA3MDA1NyBkZXNjcmlwdGlvbiBbVGhlIHBhcmFtZXRlciBpcyBpbmNvcnJlY3QuPDAwMGQ+PDAwMGE+XSByZXN0cmljdGVkIFt3aWRlXSBzaWQgWzxudWxsPl0KdHdvIG9yaWdpbmF0ZXMsIHRoZW4gb25lIGdldDogR2V0RXJyb3JEZXRhaWxzID0gMHgwMDAwMDAwMCBlcnJvciAweDgwMDcwMDU3IGRlc2NyaXB0aW9uIFtUaGUgcGFyYW1ldGVyIGlzIGluY29ycmVjdC48MDAwZD48MDAwYT5dIHJlc3RyaWN0ZWQgW3NlY29uZF0gc2lkIFs8bnVsbD5dClJvU2V0RXJyb3JSZXBvcnRpbmdGbGFncyg4KSA9IDB4MDAwMDAwMDAKUm9TZXRFcnJvclJlcG9ydGluZ0ZsYWdzKDApID0gMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RoOriginateError(E_FAIL, msg) = 1\n  QI IRestrictedErrorInfo = 0x00000000\n  second GetRestrictedErrorInfo = 0x00000001 out_null true\nSetRestrictedErrorInfo(NULL) = 0x00000000\n  after S_OK: no error info\nRoOriginateErrorW(E_INVALIDARG, 12, text) = 1\n  details: GetErrorDetails = 0x00000000 error 0x80070057 description [The parameter is incorrect.<000d><000a>] restricted [wide] sid [<null>]\ntwo originates, then one get: GetErrorDetails = 0x00000000 error 0x80070057 description [The parameter is incorrect.<000d><000a>] restricted [second] sid [<null>]\nRoSetErrorReportingFlags(8) = 0x00000000\nRoSetErrorReportingFlags(0) = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}
