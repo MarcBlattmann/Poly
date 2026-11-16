@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "performance_info",
+      "exe_sha256": "728906a0d57ae1572f5a14c1cd16578d660e10792d04eea74965bfbe2dc8e88f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SzMyR2V0UGVyZm9ybWFuY2VJbmZvKDEwNCkgPSAxIGVyciB1bmNoYW5nZWQgY2IgMTA0CnBoeXNpY2FsIHRvdGFsIGluIHBhZ2VzIGF0IGxlYXN0IDEgR2lCIHRydWUKc2l6ZSA1MDogMCBlcnIgMjQgY2IgMApzaXplIDIwMDogMSBlcnIgdW5jaGFuZ2VkIGNiIDEwNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "K32GetPerformanceInfo(104) = 1 err unchanged cb 104\nphysical total in pages at least 1 GiB true\nsize 50: 0 err 24 cb 0\nsize 200: 1 err unchanged cb 104\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "performance_info_b",
+      "exe_sha256": "23e8a284bceca16793caa647b8414309bcf73f6617a0d88e741bac8b8627c64f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGFnZSBzaXplIDQwOTY7IGNvbW1pdCB0b3RhbCA8PSBsaW1pdCB0cnVlOyBwZWFrID49IHRvdGFsIHRydWU7IHBoeXNpY2FsIHRvdGFsID4gYXZhaWxhYmxlIHRydWUKc2l6ZSAwOiAwIGVyciAyNCBjYiAwCnNpemUgMTAzOiAwIGVyciAyNCBjYiAwCnNpemUgMjU2OiAxIGVyciB1bmNoYW5nZWQgY2IgMTA0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "page size 4096; commit total <= limit true; peak >= total true; physical total > available true\nsize 0: 0 err 24 cb 0\nsize 103: 0 err 24 cb 0\nsize 256: 1 err unchanged cb 104\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

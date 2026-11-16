@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlQueryPerformanceCounter.yaml
+id: windows/api/ntdll.dll/RtlQueryPerformanceCounter
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  ntdll's QueryPerformanceCounter; RtlQueryPerformanceFrequency is its frequency twin. The same values kernel32's functions return.
+interface:
+  signature: "BOOL RtlQueryPerformanceCounter(PLARGE_INTEGER PerformanceCounter)"
+rules:
+  counter: "TRUE; the value is positive, never decreases, grows across a 20 ms Sleep, and kernel32's QueryPerformanceCounter taken afterwards is not smaller."
+  frequency: "RtlQueryPerformanceFrequency: TRUE, positive, equal to QueryPerformanceFrequency's value; a 100 ms Sleep measures between 95 and 400 ms in those units."
+errors:
+  none: "never fails"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  A NULL pointer (raises).

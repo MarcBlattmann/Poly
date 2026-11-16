@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "hstring_substring",
+      "exe_sha256": "ce35fca67fa58258f11ed8d1ee0e637bd35f27aee043e1086f11490d8f9cd59e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3Vic3RyaW5nKGhlbGxvLDApID0gMHgwMDAwMDAwMCBvdXRfbnVsbCBmYWxzZSB0ZXh0IFtoZWxsb10gc2FtZV9oYW5kbGUgZmFsc2UKc3Vic3RyaW5nKGhlbGxvLDYpID0gMHg4MDAwMDAwYiBvdXRfbnVsbCB0cnVlIHRleHQgW10gc2FtZV9oYW5kbGUgZmFsc2UKc3Vic3RyaW5nKGhlbGxvLDAsNSkgPSAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlIHRleHQgW2hlbGxvXSBzYW1lX2hhbmRsZSBmYWxzZQpzdWJzdHJpbmcoaGVsbG8sNSwwKSA9IDB4MDAwMDAwMDAgb3V0X251bGwgdHJ1ZSB0ZXh0IFtdIHNhbWVfaGFuZGxlIGZhbHNlCnN1YnN0cmluZyhoZWxsbywwLDQyOTQ5NjcyOTUpID0gMHg4MDAwMDAwYiBvdXRfbnVsbCB0cnVlIHRleHQgW10gc2FtZV9oYW5kbGUgZmFsc2UKc3Vic3RyaW5nKE5VTEwsMSkgPSAweDgwMDAwMDBiIG91dF9udWxsIHRydWUKc3Vic3RyaW5nKGhlbGxvLDEsMyk6IGxlbiAzIG51bF9hZnRlciB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "substring(hello,0) = 0x00000000 out_null false text [hello] same_handle false\nsubstring(hello,6) = 0x8000000b out_null true text [] same_handle false\nsubstring(hello,0,5) = 0x00000000 out_null false text [hello] same_handle false\nsubstring(hello,5,0) = 0x00000000 out_null true text [] same_handle false\nsubstring(hello,0,4294967295) = 0x8000000b out_null true text [] same_handle false\nsubstring(NULL,1) = 0x8000000b out_null true\nsubstring(hello,1,3): len 3 nul_after true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "hstring_substring_b",
+      "exe_sha256": "8fde0091ff6a2e65b70b1832207961ad926b640c4581733d0fef4a4e99ae5f90",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3Vic3RyaW5nKGhlbGxvLDIpID0gMHgwMDAwMDAwMCBvdXRfbnVsbCBmYWxzZSB0ZXh0IFtsbG9dIHNhbWVfaGFuZGxlIGZhbHNlCnN1YnN0cmluZyhoZWxsbyw0Mjk0OTY3Mjk1KSA9IDB4ODAwMDAwMGIgb3V0X251bGwgdHJ1ZSB0ZXh0IFtdIHNhbWVfaGFuZGxlIGZhbHNlCnN1YnN0cmluZyhoZWxsbywwLDApID0gMHgwMDAwMDAwMCBvdXRfbnVsbCB0cnVlIHRleHQgW10gc2FtZV9oYW5kbGUgZmFsc2UKc3Vic3RyaW5nKGhlbGxvLDYsMCkgPSAweDgwMDAwMDBiIG91dF9udWxsIHRydWUgdGV4dCBbXSBzYW1lX2hhbmRsZSBmYWxzZQpzdWJzdHJpbmcoaGVsbG8sMSw0Mjk0OTY3Mjk1KSA9IDB4ODAwNzAyMTYgb3V0X251bGwgdHJ1ZSB0ZXh0IFtdIHNhbWVfaGFuZGxlIGZhbHNlCnN1YnN0cmluZyhOVUxMLDAsMCkgPSAweDAwMDAwMDAwIG91dF9udWxsIHRydWUKICBhZnRlciBkZWxldGluZyB0aGUgc291cmNlOiBlbGwKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "substring(hello,2) = 0x00000000 out_null false text [llo] same_handle false\nsubstring(hello,4294967295) = 0x8000000b out_null true text [] same_handle false\nsubstring(hello,0,0) = 0x00000000 out_null true text [] same_handle false\nsubstring(hello,6,0) = 0x8000000b out_null true text [] same_handle false\nsubstring(hello,1,4294967295) = 0x80070216 out_null true text [] same_handle false\nsubstring(NULL,0,0) = 0x00000000 out_null true\n  after deleting the source: ell\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

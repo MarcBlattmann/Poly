@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "dep_policy_b",
+      "exe_sha256": "910913522ea382b17e085f3ab8626e68ddb909efd2e3356e710a6245803c66e0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0UHJvY2Vzc0RFUFBvbGljeSgweDEpID0gMCBlcnIgNTAKU2V0UHJvY2Vzc0RFUFBvbGljeSgweDQpID0gMCBlcnIgNTAKR2V0UHJvY2Vzc0RFUFBvbGljeShOVUxMKSA9IDAgZXJyIDYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDEPPolicy(0x1) = 0 err 50\nSetProcessDEPPolicy(0x4) = 0 err 50\nGetProcessDEPPolicy(NULL) = 0 err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "dep_policy_c",
+      "exe_sha256": "fd207e7f801764ab776819eae7a3f6c1416a08bd59be32b85f8db4eea7e0232f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0UHJvY2Vzc0RFUFBvbGljeSgweDIpID0gMCBlcnIgNTAKU2V0UHJvY2Vzc0RFUFBvbGljeSgweGZmZmYpID0gMCBlcnIgNTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDEPPolicy(0x2) = 0 err 50\nSetProcessDEPPolicy(0xffff) = 0 err 50\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    }
+  ]
+}

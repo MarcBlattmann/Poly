@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetCurrentPackageId.yaml
+id: windows/api/kernel32.dll/GetCurrentPackageId
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  Package identity of the process. A plain Win32 program has none: APPMODEL_ERROR_NO_PACKAGE (15700). Covers GetCurrentPackageFamilyName and the other package queries too.
+interface:
+  signature: "LONG GetCurrentPackageId(UINT32 *bufferLength, BYTE *buffer)"
+rules:
+  no_package: "GetCurrentPackageId, GetCurrentPackageFamilyName, GetCurrentPackageFullName, GetCurrentPackagePath and GetPackageFamilyName(current process) return 15700 (APPMODEL_ERROR_NO_PACKAGE) with the length left unchanged (0 stays 0, 100 stays 100); GetApplicationUserModelId(current process) returns 15703 (APPMODEL_ERROR_NO_APPLICATION)."
+  null_length: "a NULL length pointer: ERROR_INVALID_PARAMETER (87) as the return value (GetCurrentPackageId and GetCurrentPackageFamilyName)."
+errors:
+  no_package: "15700"
+  no_application: "15703"
+  null_pointer: "87"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  A packaged process (no packaged program is available on the oracle).

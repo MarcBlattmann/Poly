@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "spec-win-input-final",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T04:56:24Z",
+  "tests": [
+    {
+      "name": "akl_threads",
+      "exe_sha256": "09a2127bd66c9ef66f2f11d12373f4acbd1f0872b453649b9b32ef4eab61d349",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZm9yZWdyb3VuZAp0aGUgb3RoZXIgdGhyZWFkJ3MgbGF5b3V0IGF0IHN0YXJ0OiAweDA0MDcyMDAwIChzYW1lIGFzIG91cnM6IHRydWUpCmFjdGl2YXRlZCBVUyBpbiB0aGUgZmlyc3QgdGhyZWFkLCBwcmV2aW91cyAweDA0MDcyMDAwCmZpcnN0IHRocmVhZCBub3cgMHgwNDA5MDQwOQp0aGUgb3RoZXIgdGhyZWFkJ3MgbGF5b3V0IGFmdGVyIHRoZSBhY3RpdmF0aW9uOiAweDA0MDcyMDAwIChvdXJzIGJlZm9yZTogdHJ1ZSkKQWN0aXZhdGVLZXlib2FyZExheW91dChvcmlnaW5hbCwgS0xGX1NFVEZPUlBST0NFU1MpIHJldHVybmVkIDB4MDQwOTA0MDkKYSB0aHJlYWQgY3JlYXRlZCBhZnRlciBLTEZfU0VURk9SUFJPQ0VTUyhvcmlnaW5hbCkgaGFzIDB4MDQwNzIwMDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok foreground\nthe other thread's layout at start: 0x04072000 (same as ours: true)\nactivated US in the first thread, previous 0x04072000\nfirst thread now 0x04090409\nthe other thread's layout after the activation: 0x04072000 (ours before: true)\nActivateKeyboardLayout(original, KLF_SETFORPROCESS) returned 0x04090409\na thread created after KLF_SETFORPROCESS(original) has 0x04072000\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 305
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/RoGetActivationFactory.yaml
+id: windows/api/combase.dll/RoGetActivationFactory
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  Gets the activation factory of a Windows Runtime class. On Windows the classes of the system's own namespaces (Windows.UI.ViewManagement.UISettings, AccessibilitySettings, Windows.Foundation.Uri and PropertyValue, PropertySet, Windows.Storage.StorageFile, Windows.System.Launcher, Windows.Globalization.Language) give a working factory object; an unregistered class gives REGDB_E_CLASSNOTREG; this is the call Qt 6's platform plugin and Firefox make first.
+interface:
+  signature: "HRESULT RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void **factory)"
+rules:
+  registered: "with IID_IActivationFactory (00000035-0000-0000-C000-000000000046) the listed classes give S_OK and a non-NULL pointer. The object answers QueryInterface for IUnknown and IInspectable."
+  unregistered: "\"Windows.Foo.Bar\", \"NoDots\", \"Windows.\", \"Windows.UI.ViewManagement\" (a namespace), \"Windows.UI.ViewManagement.UISettings.Extra\", the same name with a trailing space, and the name in lower case all give REGDB_E_CLASSNOTREG (0x80040154) with *factory = NULL (class names are case sensitive)."
+  bad_name: "an empty string or a NULL HSTRING gives E_INVALIDARG (0x80070057) with *factory = NULL."
+  interfaces: "for UISettings the factory answers IUnknown and IInspectable (S_OK); IUISettings (an interface of the instance, not of the factory) and IRestrictedErrorInfo give E_NOINTERFACE (0x80004002) with a NULL result."
+  uninitialised: "after RoUninitialize on a thread with no other initialisation the call gives CO_E_NOTINITIALIZED (0x800401F0)."
+  factory_identity: "a second request for the same class returns the same factory object for most classes (UISettings's first two requests differ); GetRuntimeClassName of a factory is E_ILLEGAL_STATE_CHANGE (0x8000000E) for most classes, but \"Windows.Foundation.PropertyValue\" for PropertyValue (see the test output)."
+  error_info: "a failed call leaves a restricted error info on the thread: after an unregistered class GetRestrictedErrorInfo returns an object (S_OK)."
+errors:
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  invalid_class_name: "E_INVALIDARG 0x80070057"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+side_effects: "may load the class's implementation"
+threading: "the thread should have called RoInitialize"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  Classes of the Windows Apps (packaged) world; out-of-process servers; RoRegisterActivationFactories.

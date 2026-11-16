@@ -515,6 +515,15 @@ fn a_pen_or_bitmap_deleted_while_selected_goes_when_deselected_or_with_its_dc() 
     assert!(!g.delete_object(bmp));
     assert_eq!(g.object_bytes_for(bmp, 128).map(|b| b.len()), Some(104), "a DIB section's DIBSECTION");
     assert_eq!(g.object_bytes_for(bmp, 32).map(|b| b.len()), Some(32));
+    // A 32-bit process: BITMAP 24 bytes with bmBits at 20, DIBSECTION 84 bytes with the BITMAPINFOHEADER at 24.
+    let narrow = g.object_bytes_for_width(bmp, 128, 4).expect("a DIB section");
+    assert_eq!(narrow.len(), 84);
+    assert_eq!(u32::from_le_bytes(narrow[24..28].try_into().unwrap()), 40, "biSize");
+    assert_eq!(g.object_bytes_for_width(bmp, 24, 4).map(|b| b.len()), Some(24));
+    let (wide, thin) = (g.object_bytes_for(bmp, 128).unwrap(), g.object_bytes_for_width(bmp, 128, 4).unwrap());
+    assert_eq!(wide[4..20], thin[4..20], "the fields before the pointer agree");
+    assert_eq!(&wide[24..28], &thin[20..24], "bmBits, low half");
+    assert_eq!(wide[32 + 4..32 + 24], thin[24 + 4..24 + 24], "biWidth to biSizeImage agree");
     let other = u64::from(g.create_compatible_dc(0));
     assert_eq!(g.select_object(other, bmp), Ok(0), "not into a second DC");
     assert!(g.delete_dc(dc).0);
@@ -1897,3 +1906,32 @@ fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
 mod sheets_last_line;
 mod sheets_text;
 mod world;
+
+#[test]
+fn set_bitmap_rows_converts_a_dib_into_a_bitmap_not_in_a_dc() {
+    use crate::bitmap::{Bitmap, Storage};
+    let mut g = Gdi::new();
+    let bm = u64::from(g.create_bitmap(2, 2, 32, None));
+    // A 24-bit top-down DIB of two rows: red, green / blue, white (B, G, R bytes, rows of 8).
+    let bytes: Vec<u8> = vec![0, 0, 255, 0, 255, 0, 0, 0, 255, 0, 0, 255, 255, 255, 0, 0];
+    let src = Bitmap {
+        width: 2,
+        height: 2,
+        bpp: 24,
+        stride: 8,
+        top_down: true,
+        dib: true,
+        colors: Vec::new(),
+        storage: Storage::External(bytes.as_ptr() as u64, bytes.len()),
+    };
+    assert_eq!(g.set_bitmap_rows(bm, &src, 0), Some(2));
+    let (w, h, bgra) = g.bitmap_bgra(bm).unwrap();
+    assert_eq!((w, h), (2, 2));
+    assert_eq!(&bgra[..3], &[0, 0, 255], "red");
+    assert_eq!(&bgra[8..11], &[255, 0, 0], "blue");
+    // Rows outside the bitmap are skipped; a bitmap selected into a DC is refused.
+    assert_eq!(g.set_bitmap_rows(bm, &src, 1), Some(1));
+    let dc = u64::from(g.create_compatible_dc(0));
+    g.select_object(dc, bm).unwrap();
+    assert_eq!(g.set_bitmap_rows(bm, &src, 0), None);
+}

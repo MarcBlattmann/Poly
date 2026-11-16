@@ -107,6 +107,50 @@ pub fn cp_info(cp: CodePage) -> [u8; CPINFO_SIZE] {
     b
 }
 
+/// `CPINFOEXW` and `CPINFOEXA` (`winnls.h`): the `CPINFO` (18 bytes), `UnicodeDefaultChar`
+/// (WCHAR, offset 18), `CodePage` (UINT, 20) and `CodePageName[MAX_PATH]` (WCHAR or CHAR, 24).
+pub const CPINFOEXW_SIZE: usize = 24 + 260 * 2;
+pub const CPINFOEXA_SIZE: usize = 24 + 260;
+
+/// The name of a code page as `CPINFOEX` carries it: the number and a description (Learn's
+/// "Code Page Identifiers" names).
+pub fn code_page_name(id: u32) -> alloc::string::String {
+    let description = match id {
+        437 => "OEM - United States",
+        850 => "OEM - Multilingual Latin I",
+        932 => "ANSI/OEM - Japanese Shift-JIS",
+        936 => "ANSI/OEM - Simplified Chinese GBK",
+        949 => "ANSI/OEM - Korean",
+        950 => "ANSI/OEM - Traditional Chinese Big5",
+        1250 => "ANSI - Central Europe",
+        1251 => "ANSI - Cyrillic",
+        1252 => "ANSI - Latin I",
+        65001 => "UTF-8",
+        _ => "",
+    };
+    if description.is_empty() { alloc::format!("{id}") } else { alloc::format!("{id} ({description})") }
+}
+
+/// The `CPINFOEXW` (`wide`) or `CPINFOEXA` of a code page: its `CPINFO`, the Unicode default
+/// character `?`, the code page's number (`CP_ACP` and the like resolved) and its name.
+pub fn cp_info_ex(cp: CodePage, wide: bool) -> Vec<u8> {
+    let mut b = alloc::vec![0u8; if wide { CPINFOEXW_SIZE } else { CPINFOEXA_SIZE }];
+    b[..CPINFO_SIZE].copy_from_slice(&cp_info(cp));
+    b[18..20].copy_from_slice(&u16::from(DEFAULT_CHAR).to_le_bytes());
+    b[20..24].copy_from_slice(&cp.id().to_le_bytes());
+    let name = code_page_name(cp.id());
+    if wide {
+        for (i, u) in name.encode_utf16().take(259).enumerate() {
+            b[24 + 2 * i..26 + 2 * i].copy_from_slice(&u.to_le_bytes());
+        }
+    } else {
+        for (i, c) in name.bytes().take(259).enumerate() {
+            b[24 + i] = c;
+        }
+    }
+    b
+}
+
 /// `IsDBCSLeadByteEx`: `Err` for a code page Poly lacks.
 pub fn is_lead_byte(id: u32, b: u8) -> Result<bool, u32> {
     code_page(id).map(|cp| cp.is_lead(b))
@@ -321,5 +365,23 @@ mod tests {
         assert_eq!(compare_ordinal(&wide("b"), &wide("a"), false), CSTR_GREATER_THAN);
         assert_eq!(lstrcmp(&wide("Hello"), &wide("hello"), true), 0);
         assert!(lstrcmp(&wide("a"), &wide("b"), false) < 0);
+    }
+
+    #[test]
+    fn cp_info_ex_has_the_number_and_name() {
+        let b = cp_info_ex(code_page(CP_ACP).unwrap(), true);
+        assert_eq!(b.len(), 544);
+        assert_eq!(u32::from_le_bytes(b[0..4].try_into().unwrap()), 1);
+        assert_eq!(u16::from_le_bytes(b[18..20].try_into().unwrap()), u16::from(b'?'));
+        assert_eq!(u32::from_le_bytes(b[20..24].try_into().unwrap()), 1252);
+        let name: Vec<u16> =
+            b[24..].chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+        assert_eq!(alloc::string::String::from_utf16(&name).unwrap(), "1252 (ANSI - Latin I)");
+        let a = cp_info_ex(code_page(CP_OEMCP).unwrap(), false);
+        assert_eq!(a.len(), 284);
+        assert_eq!(u32::from_le_bytes(a[20..24].try_into().unwrap()), 437);
+        assert_eq!(&a[24..24 + 4], b"437 ");
+        assert_eq!(&a[24..24 + 25], b"437 (OEM - United States)");
+        assert_eq!(a[24 + 25], 0);
     }
 }

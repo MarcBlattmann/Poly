@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "mta_usage",
+      "exe_sha256": "8d1fd6c6ff221d09682bdcc32bd2b1009d196a17830b5ed617e750603b242741",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIG1haW4gdGhyZWFkIGJlZm9yZSBhbnl0aGluZzogMHg4MDA0MDFmMCB0eXBlIC0xIHF1YWxpZmllciAwCiAgdGhlIGNhbGxpbmcgdGhyZWFkIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAgdHlwZSAxIHF1YWxpZmllciAxCkNvRGVjcmVtZW50TVRBVXNhZ2Uoc2Vjb25kKSA9IDB4MDAwMDAwMDAKICBhIG5ldyB0aHJlYWQgYWZ0ZXIgYm90aCByZWxlYXNlZDogLTQ5NgogIHRoZSB0aHJlYWQgaXMgc3RpbGw6IDB4MDAwMDAwMDAgdHlwZSAzIHF1YWxpZmllciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the main thread before anything: 0x800401f0 type -1 qualifier 0\n  the calling thread afterwards: 0x00000000 type 1 qualifier 1\nCoDecrementMTAUsage(second) = 0x00000000\n  a new thread after both released: -496\n  the thread is still: 0x00000000 type 3 qualifier 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "mta_usage_b",
+      "exe_sha256": "d0d13581d841ed55f15224948b7579ddcdeba0bb309ef6f8611f6872970dc736",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBuZXcgdGhyZWFkIGJlZm9yZSBhbnl0aGluZyAoYXBhcnRtZW50IHR5cGUqMTAgKyBxdWFsaWZpZXIsIG9yIG1pbnVzIHRoZSBIUkVTVUxUJ3MgbG93IDE2IGJpdHMpOiAtNDk2CiAgYSBuZXcgdGhyZWFkIGFmdGVyd2FyZHM6IDExCiAgYSBuZXcgdGhyZWFkOiAxMQpDb0luaXRpYWxpemVFeChTVEEpID0gMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a new thread before anything (apartment type*10 + qualifier, or minus the HRESULT's low 16 bits): -496\n  a new thread afterwards: 11\n  a new thread: 11\nCoInitializeEx(STA) = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

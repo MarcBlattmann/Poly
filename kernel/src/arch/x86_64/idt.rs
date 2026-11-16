@@ -79,6 +79,7 @@ pub struct TrapFrame {
     pub ss: u64,
 }
 
+pub const DEBUG: u64 = 1;
 pub const NMI: u64 = 2;
 pub const BREAKPOINT: u64 = 3;
 pub const DOUBLE_FAULT: u64 = 8;
@@ -542,6 +543,11 @@ extern "C" fn trap_dispatch(frame: *mut TrapFrame) {
     // in ring 0.
     if from_user && !matches!(vector, NMI | MACHINE_CHECK | DOUBLE_FAULT) {
         crate::cputime::entered_kernel();
+        // `poly.nt.apitrace`: a single-step trap of the traced thread is not an exception.
+        // SAFETY: the stub passes the complete frame it just pushed on this stack.
+        if vector == DEBUG && crate::nt::apitrace::step(unsafe { &mut *frame }) {
+            return;
+        }
         // Returns only if the thread goes on: a page fault was resolved and
         // the instruction is retried, or a signal handler runs next.
         // SAFETY: as above; the handler gets a copy.
