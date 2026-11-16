@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/WM_NCHITTEST
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  Where the default window procedure puts the hit-test boundaries of a top-level window with a sizing frame: the
+  frame width, how far each corner zone (HTTOPLEFT, HTTOPRIGHT, HTBOTTOMLEFT, HTBOTTOMRIGHT) extends along the
+  edges, with and without a caption, and its dependence on the system metrics.
+interface:
+  signature: "LRESULT DefWindowProcW(HWND hwnd, WM_NCHITTEST, 0, MAKELPARAM(x, y))  /* x, y: screen coordinates */"
+rules:
+  what: "DefWindowProc's answer to WM_NCHITTEST (the screen point in lParam) for a visible top-level window: HTCLIENT inside the client rectangle, the caption, buttons and borders outside it; the tests send WM_NCHITTEST to the window with SendMessage for every point along edges and print runs of equal answers (\"a..b=HTxxx\": the offsets a..b of the scan line)"
+  metrics_96dpi: "at the oracle's 96 DPI (scale 100%): SM_CXFRAME = SM_CYFRAME = SM_CXSIZEFRAME 4, SM_CXPADDEDBORDER 4, SM_CXBORDER 1, SM_CYCAPTION 23, SM_CXSIZE 36, SM_CYSIZE 22, NONCLIENTMETRICS iCaptionWidth effectively 22 (GetSystemParametersInfo reports 36)"
+  frame_width: "the resizing frame of a window with WS_THICKFRAME is SM_CXFRAME + SM_CXPADDEDBORDER = 8 pixels wide (SM_CYFRAME + SM_CXPADDEDBORDER high) when the window has a caption, 7 (one less: SM_CXBORDER) when it has none (WS_POPUP|WS_THICKFRAME); the client rectangle starts at that offset (client origin 8,31 and 7,7 in the tests of a 400x300 window)"
+  with_caption_400x300: "WS_OVERLAPPEDWINDOW at 300,200 size 400x300 (hit_corners_cap; the same numbers for WS_OVERLAPPED|WS_THICKFRAME and WS_POPUP|WS_THICKFRAME|WS_CAPTION): row top+0, x: 0..18=HTTOPLEFT 19..381=HTTOP 382..399=HTTOPRIGHT | row top+7, x: 0..18=HTTOPLEFT 19..381=HTTOP 382..399=HTTOPRIGHT | row top+8, x: 0..7=HTTOPLEFT 8..26=HTSYSMENU 27..288=HTTOP 289..321=HTMINBUTTON 322..323=HTTOP 324..356=HTMAXBUTTON 357..391=HTCLOSE 392..399=HTTOPRIGHT | row top+9, x: 0..7=HTLEFT 8..26=HTSYSMENU 27..288=HTCAPTION 289..321=HTMINBUTTON 322..323=HTCAPTION 324..356=HTMAXBUTTON 357..391=HTCLOSE 392..399=HTRIGHT | row top+30, x: 0..18=HTLEFT 19..381=HTCAPTION 382..399=HTRIGHT | row bottom-0, x: 0..17=HTBOTTOMLEFT 18..382=HTBOTTOM 383..399=HTBOTTOMRIGHT | row bottom-6, x: 0..17=HTBOTTOMLEFT 18..382=HTBOTTOM 383..399=HTBOTTOMRIGHT | row bottom-7, x: 0..8=HTLEFT 9..17=HTBOTTOMLEFT 18..382=HTBOTTOM 383..391=HTBOTTOMRIGHT 392..399=HTRIGHT | row bottom-8, x: 0..7=HTLEFT 8..391=HTCLIENT 392..399=HTRIGHT | column left+0, y from top (0..300): 0..8=HTTOPLEFT 9..292=HTLEFT 293..299=HTBOTTOMLEFT | column left+7, y from top (0..300): 0..8=HTTOPLEFT 9..292=HTLEFT 293..299=HTBOTTOMLEFT | column left+8, y from top (0..300): 0..7=HTTOPLEFT 8..29=HTSYSMENU 30..30=HTLEFT 31..291=HTCLIENT 292..292=HTLEFT 293..299=HTBOTTOMLEFT | column right-0, y from top: 0..8=HTTOPRIGHT 9..292=HTRIGHT 293..299=HTBOTTOMRIGHT | column right-8, y from top: 0..7=HTTOPRIGHT 8..29=HTCLOSE 30..30=HTRIGHT 31..291=HTCLIENT 292..299=HTBOTTOMRIGHT"
+  with_caption_rule: "in words (window of width w and height h, captioned, default metrics): the top corners are HTTOPLEFT for x 0..18 and HTTOPRIGHT for x w-18..w-1 (19 and 18 pixels) on the 8 frame rows (y 0..7) and the caption's first row (y 8, where there is no button); HTTOP between them; the left and right corners are HTTOPLEFT/HTTOPRIGHT for y 0..8 (9 rows); at the bottom HTBOTTOMLEFT x 0..17 and HTBOTTOMRIGHT x w-17..w-1 (18 and 17 pixels) on the last 7 rows (y h-7..h-1), the bottom corners along the sides y h-7..h-1 (7 rows), and the row y h-8 is HTBOTTOM between x 18 and w-18 and HTBOTTOMLEFT/RIGHT up to x 17 / w-18 but HTLEFT/HTRIGHT in the 9-pixel margins (x 0..8 and w-9..w-1); HTLEFT/HTRIGHT elsewhere along the 8-pixel side borders (x 0..7, plus the pixel column x=8 and w-9 on the rows next to the client edge, y 30 and y h-8); the caption (HTCAPTION) from row 9 down to the client, HTSYSMENU, HTMINBUTTON, HTMAXBUTTON, HTCLOSE where the buttons are (system menu x 8..26, minimize 289..321, maximize 324..356, close 357..391 in the 400-wide window, rows 8..30)"
+  sizes_and_styles: "the corner lengths do not depend on the window size (200x100, 400x300, 1000x600, 160x160, 300x500 all give the same runs at their corners) nor on which of the three captioned styles it is; a WS_EX_TOOLWINDOW window with caption has top corners 15 and 14 pixels wide (HTTOPLEFT x 0..14, HTTOPRIGHT x w-14..w-1) and top vertical corners 17 pixels (y 0..16), the bottom corners as the normal window: top+2 x: 0..14=TOPLEFT 15..385=TOP 386..399=TOPRIGHT | bottom-3 x: 0..17=BOTTOMLEFT 18..382=BOTTOM 383..399=BOTTOMRIGHT | left+2 y: 0..16=TOPLEFT 17..292=LEFT 293..299=BOTTOMLEFT | right-3 y: 0..16=TOPRIGHT 17..292=RIGHT 293..299=BOTTOMRIGHT"
+  without_caption_400x300: "WS_POPUP|WS_THICKFRAME at 300,200 size 400x300 (hit_corners_nocap): the frame is 7 pixels wide; the corner zones are 29 pixels long on every side: row top+0, x: 0..28=HTTOPLEFT 29..370=HTTOP 371..399=HTTOPRIGHT | row top+7, x: 0..6=HTTOPLEFT 7..392=HTCLIENT 393..399=HTTOPRIGHT | row top+30, x: 0..6=HTLEFT 7..392=HTCLIENT 393..399=HTRIGHT | row bottom-0, x: 0..28=HTBOTTOMLEFT 29..370=HTBOTTOM 371..399=HTBOTTOMRIGHT | column left+0, y from top (0..300): 0..28=HTTOPLEFT 29..270=HTLEFT 271..299=HTBOTTOMLEFT | column left+7, y from top (0..300): 0..6=HTTOPLEFT 7..292=HTCLIENT 293..299=HTBOTTOMLEFT | column right-0, y from top: 0..28=HTTOPRIGHT 29..270=HTRIGHT 271..299=HTBOTTOMRIGHT"
+  corner_dependence: "from the same scan with the system metrics changed for the session (SPI_SETNONCLIENTMETRICS, put back afterwards; kit only): the corners of a window without caption are F + iCaptionWidth pixels along the top and bottom and F + iCaptionHeight along the sides (F the frame width above; iCaptionWidth, iCaptionHeight 22 at default, SM_CYSIZE 22), for example F 7: 29 wide and 29 tall; padded border 0 gives F 3: 25 and 25; iCaptionWidth 36 gives 43 wide; iCaptionHeight 40 gives 47 tall; border widths 4 and 7 (SM_CXFRAME 7 and 10) give F 10 and 13 and 32 and 35; the scroll bar width has no effect; a captioned window keeps its 19/18 wide and 9/7 tall corners whatever of these is changed, except that the lower side corner is 6 rows with iBorderWidth 2 + iPaddedBorderWidth 2 + iCaptionHeight 30 and 8 rows with iBorderWidth 2 + iPaddedBorderWidth 4 or iBorderWidth 1 + iPaddedBorderWidth 2; DPI other than 96 was not measured"
+  point_outside: "a point outside the window rectangle is not tested"
+errors:
+  none: "no error cases observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  DPI other than 96 (measured only by changing the non-client metrics in the session), child windows, dialog
+  frames without WS_THICKFRAME, windows with a menu bar, with scroll bars or with WS_EX_CLIENTEDGE, points
+  outside the window, HTHELP and the layered or transparent cases.
