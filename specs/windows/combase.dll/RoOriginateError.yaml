@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/RoOriginateError.yaml
+id: windows/api/combase.dll/RoOriginateError
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  Records a restricted error info on the calling thread: the HRESULT and a message. GetRestrictedErrorInfo takes it (once); SetRestrictedErrorInfo puts one back or clears it. RoOriginateErrorW, RoOriginateLanguageException (what a C++/WinRT throw calls), RoClearError and the error reporting flags are tested here too. The error info object is also what GetErrorInfo hands out (see that sheet).
+interface:
+  signature: "BOOL RoOriginateError(HRESULT error, HSTRING message)"
+rules:
+  originate: "RoOriginateError(E_FAIL, \"poly message\") = TRUE (1). GetRestrictedErrorInfo then gives S_OK and an object whose GetErrorDetails (slot 3: description, error, restrictedDescription, capabilitySid) returns S_OK, the HRESULT, the system's message text for it with a trailing CR LF as the description (\"Unspecified error\", \"The parameter is incorrect.\", \"Operation aborted\"), the given message as the restricted description, and a NULL capability SID."
+  take_once: "GetRestrictedErrorInfo clears the thread's info: a second call gives S_FALSE (1) and NULL, as does a call with nothing set. SetRestrictedErrorInfo(p) puts it back (S_OK) and the next Get returns the same object; SetRestrictedErrorInfo(NULL) clears it (S_OK)."
+  object: "the object answers QueryInterface for IRestrictedErrorInfo and IUnknown, not IInspectable (E_NOINTERFACE)."
+  success_code: "RoOriginateError(S_OK, msg) returns FALSE (0) and records nothing."
+  null_message: "a NULL message: TRUE; the restricted description is then the system's message text with its CR LF."
+  wide: "RoOriginateErrorW(E_INVALIDARG, 12, \"wide message\") = TRUE with the restricted description \"wide message\"; with 4 it is \"wide\" (the count of units is honoured)."
+  language_exception: "RoOriginateLanguageException(E_ABORT, msg, NULL) = TRUE (a NULL language exception object is accepted); the details are as for RoOriginateError."
+  replacement: "a second originate replaces the first: one Get returns the second error, the next Get gives nothing."
+  clear: "RoClearError clears the thread's info."
+  flags: "RoGetErrorReportingFlags = S_OK with the default 4; RoSetErrorReportingFlags(8) = S_OK and the next Get returns 8; other values are in the test output."
+errors:
+  success_code: "FALSE for a success HRESULT"
+side_effects: "sets the calling thread's error info"
+threading: "the error info is per thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  Stack back traces (RoCaptureErrorContext, RoInspectCapturedStackBackTrace), RoTransformError, RoFailFastWithErrorContext, a real language exception object, ILanguageExceptionErrorInfo.

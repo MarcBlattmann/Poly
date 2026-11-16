@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/WindowsSubstring.yaml
+id: windows/api/combase.dll/WindowsSubstring
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  A copy of the tail of an HSTRING (WindowsSubstring) or of a range of it (WindowsSubstringWithSpecifiedLength); an empty result is NULL; ranges outside the string give E_BOUNDS.
+interface:
+  signature: "HRESULT WindowsSubstring(HSTRING string, UINT32 startIndex, HSTRING *newString)"
+rules:
+  tail: "\"hello\" from 0 gives \"hello\" (a new handle, not the original), from 2 gives \"llo\"; from 5 (= the length) gives S_OK and NULL; from 6 or 0xFFFFFFFF gives E_BOUNDS (0x8000000B) with the output left NULL."
+  range: "WindowsSubstringWithSpecifiedLength(\"hello\", 1, 3) = \"ell\"; (0, 5) = \"hello\"; (4, 1) = \"o\"; (0, 0) and (5, 0) give S_OK and NULL; (2, 4) (past the end), (6, 0) and (0, 0xFFFFFFFF) give E_BOUNDS; (1, 0xFFFFFFFF) gives 0x80070216 (arithmetic overflow)."
+  result: "a substring is NUL-terminated and independent of its source (it still reads after the source is deleted)."
+  null_input: "a NULL input string: start 0 gives S_OK and NULL; any other start gives E_BOUNDS."
+errors:
+  out_of_range: "E_BOUNDS 0x8000000B"
+side_effects: "allocates memory the caller frees with WindowsDeleteString"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  The result of a NULL result pointer (raises in the tests' runs, not exercised).

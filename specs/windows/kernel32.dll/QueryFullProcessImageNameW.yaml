@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/QueryFullProcessImageNameW.yaml
+id: windows/api/kernel32.dll/QueryFullProcessImageNameW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  The path of a process's executable: the Win32 form (C:\...) or, with PROCESS_NAME_NATIVE (1), the device form (\Device\HarddiskVolumeN\...). The size is in/out and counts characters without the NUL.
+interface:
+  signature: "BOOL QueryFullProcessImageNameW(HANDLE hProcess, DWORD dwFlags, LPWSTR lpExeName, PDWORD lpdwSize)"
+rules:
+  win32: "flags 0: TRUE; the text equals GetModuleFileNameW(NULL) of the same process, a drive letter path; *size becomes its length (without the NUL) and the text is NUL-terminated."
+  native: "flags 1: TRUE; the text starts with \\Device\\ and ends with the Win32 path after the drive letter."
+  bad_flags: "flags 2, 0x10 and 0xFFFFFFFF: FALSE, ERROR_INVALID_PARAMETER (87)."
+  size: "a size that is at most the name's length (0, 1, 4, the length itself): FALSE, ERROR_INSUFFICIENT_BUFFER (122), *size unchanged. The length + 1: TRUE and *size = the length. So the size passed in must include the NUL."
+  handles: "NULL: FALSE, 6. The pseudo handle -1 (the current process): TRUE. A handle with only PROCESS_QUERY_LIMITED_INFORMATION (0x1000): TRUE. A handle with only SYNCHRONIZE: FALSE, ERROR_ACCESS_DENIED (5). A thread handle: FALSE, 6. Another process's handle (CreateProcess's, or OpenProcess(0x1000)): TRUE, its image path."
+errors:
+  bad_flags: "87"
+  buffer_too_small: "122"
+  bad_handle: "6"
+  no_access: "5"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Processes of other users, protected processes, a process that has exited.

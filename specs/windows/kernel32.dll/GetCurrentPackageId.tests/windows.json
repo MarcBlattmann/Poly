@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "package_calls",
+      "exe_sha256": "a882a40b1bb62d7672c2a7d90510fba8f946c5eff579e9f247d662be50a3d6a1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Q3VycmVudFBhY2thZ2VJZChsZW5ndGggMCwgbm8gYnVmZmVyKSA9IDE1NzAwIGxlbmd0aCBhZnRlciAwCkdldEN1cnJlbnRQYWNrYWdlSWQoTlVMTCBsZW5ndGgpID0gODcKR2V0Q3VycmVudFBhY2thZ2VGYW1pbHlOYW1lKGxlbmd0aCAzMDApID0gMTU3MDAgbGVuZ3RoIGFmdGVyIDMwMApHZXRDdXJyZW50UGFja2FnZVBhdGgoMCkgPSAxNTcwMCBsZW5ndGggMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetCurrentPackageId(length 0, no buffer) = 15700 length after 0\nGetCurrentPackageId(NULL length) = 87\nGetCurrentPackageFamilyName(length 300) = 15700 length after 300\nGetCurrentPackagePath(0) = 15700 length 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "package_calls_b",
+      "exe_sha256": "f9b299d20590f690b6462f8d0bef602123f3e272505827bea6f25d1ae9628a2e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Q3VycmVudFBhY2thZ2VJZChsZW5ndGggMTAwKSA9IDE1NzAwIGxlbmd0aCBhZnRlciAxMDAKR2V0Q3VycmVudFBhY2thZ2VGYW1pbHlOYW1lKGxlbmd0aCAwLCBubyBidWZmZXIpID0gMTU3MDAgbGVuZ3RoIGFmdGVyIDAKR2V0Q3VycmVudFBhY2thZ2VGYW1pbHlOYW1lKE5VTEwgbGVuZ3RoKSA9IDg3CkdldFBhY2thZ2VGYW1pbHlOYW1lKGN1cnJlbnQgcHJvY2VzcykgPSAxNTcwMCBsZW5ndGggMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetCurrentPackageId(length 100) = 15700 length after 100\nGetCurrentPackageFamilyName(length 0, no buffer) = 15700 length after 0\nGetCurrentPackageFamilyName(NULL length) = 87\nGetPackageFamilyName(current process) = 15700 length 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

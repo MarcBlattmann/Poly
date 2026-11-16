@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "ro_factory_classes",
+      "exe_sha256": "e8a013a23d0b07bfb3ee5d7c880b70e622010f07c1f36fb408037683c9c46497",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Um9Jbml0aWFsaXplKDEpID0gMHgwMDAwMDAwMAogICBRSSBJVW5rbm93biA9IDB4MDAwMDAwMDAKUm9HZXRBY3RpdmF0aW9uRmFjdG9yeSgiV2luZG93cy5VSS5WaWV3TWFuYWdlbWVudC5BY2Nlc3NpYmlsaXR5U2V0dGluZ3MiLCBJQWN0aXZhdGlvbkZhY3RvcnkpID0gMHgwMDAwMDAwMCBvdXRfbnVsbCBmYWxzZQogICBHZXRSdW50aW1lQ2xhc3NOYW1lID0gMHg4MDAwMDAwZSAKICAgUUkgSUluc3BlY3RhYmxlID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCiAgIHNlY29uZCByZXF1ZXN0OiBzYW1lIGZhY3Rvcnkgb2JqZWN0IHRydWUKICAgUUkgSVVua25vd24gPSAweDAwMDAwMDAwClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuRm91bmRhdGlvbi5Db2xsZWN0aW9ucy5Qcm9wZXJ0eVNldCIsIElBY3RpdmF0aW9uRmFjdG9yeSkgPSAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlCiAgIEdldFJ1bnRpbWVDbGFzc05hbWUgPSAweDgwMDAwMDBlIAogICBRSSBJSW5zcGVjdGFibGUgPSAweDAwMDAwMDAwIG51bGwgZmFsc2UKICAgc2Vjb25kIHJlcXVlc3Q6IHNhbWUgZmFjdG9yeSBvYmplY3QgZmFsc2UKICAgUUkgSVVua25vd24gPSAweDAwMDAwMDAwClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuR2xvYmFsaXphdGlvbi5MYW5ndWFnZSIsIElBY3RpdmF0aW9uRmFjdG9yeSkgPSAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlCiAgIEdldFJ1bnRpbWVDbGFzc05hbWUgPSAweDgwMDAwMDBlIApSb0dldEFjdGl2YXRpb25GYWN0b3J5KCJOb0RvdHMiLCBJQWN0aXZhdGlvbkZhY3RvcnkpID0gMHg4MDA0MDE1NCBvdXRfbnVsbCB0cnVlClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuVUkuVmlld01hbmFnZW1lbnQuVUlTZXR0aW5ncyAiLCBJQWN0aXZhdGlvbkZhY3RvcnkpID0gMHg4MDA0MDE1NCBvdXRfbnVsbCB0cnVlClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoZW1wdHkgc3RyaW5nKSA9IDB4ODAwNzAwNTcgb3V0X251bGwgdHJ1ZQpSb0dldEFjdGl2YXRpb25GYWN0b3J5KFVJU2V0dGluZ3MsIElJbnNwZWN0YWJsZSkgPSAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlCmFmdGVyIHRoZSB1bnJlZ2lzdGVyZWQgY2xhc3M6IGVycm9yIGluZm8gbnVsbCBmYWxzZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RoInitialize(1) = 0x00000000\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.UI.ViewManagement.AccessibilitySettings\", IActivationFactory) = 0x00000000 out_null false\n   GetRuntimeClassName = 0x8000000e \n   QI IInspectable = 0x00000000 null false\n   second request: same factory object true\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.Foundation.Collections.PropertySet\", IActivationFactory) = 0x00000000 out_null false\n   GetRuntimeClassName = 0x8000000e \n   QI IInspectable = 0x00000000 null false\n   second request: same factory object false\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.Globalization.Language\", IActivationFactory) = 0x00000000 out_null false\n   GetRuntimeClassName = 0x8000000e \nRoGetActivationFactory(\"NoDots\", IActivationFactory) = 0x80040154 out_null true\nRoGetActivationFactory(\"Windows.UI.ViewManagement.UISettings \", IActivationFactory) = 0x80040154 out_null true\nRoGetActivationFactory(empty string) = 0x80070057 out_null true\nRoGetActivationFactory(UISettings, IInspectable) = 0x00000000 out_null false\nafter the unregistered class: error info null false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "ro_factory_classes_c",
+      "exe_sha256": "18bdc250a76f1f7d02b0c57b4a1f3acc1b6b81d5ac2d0d979f6a6ffd286e79dd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICAgUUkgSUluc3BlY3RhYmxlID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCiAgIHNlY29uZCByZXF1ZXN0OiBzYW1lIGZhY3Rvcnkgb2JqZWN0IHRydWUKICAgUUkgSVVua25vd24gPSAweDAwMDAwMDAwClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuRm91bmRhdGlvbi5Qcm9wZXJ0eVZhbHVlIiwgSUFjdGl2YXRpb25GYWN0b3J5KSA9IDB4MDAwMDAwMDAgb3V0X251bGwgZmFsc2UKICAgR2V0UnVudGltZUNsYXNzTmFtZSA9IDB4MDAwMDAwMDAgV2luZG93cy5Gb3VuZGF0aW9uLlByb3BlcnR5VmFsdWUKICAgUUkgSUluc3BlY3RhYmxlID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCiAgIHNlY29uZCByZXF1ZXN0OiBzYW1lIGZhY3Rvcnkgb2JqZWN0IHRydWUKICAgUUkgSVVua25vd24gPSAweDAwMDAwMDAwClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuU3RvcmFnZS5TdG9yYWdlRmlsZSIsIElBY3RpdmF0aW9uRmFjdG9yeSkgPSAweDAwMDAwMDAwIG91dF9udWxsIGZhbHNlCiAgIEdldFJ1bnRpbWVDbGFzc05hbWUgPSAweDgwMDAwMDBlIAogICBRSSBJSW5zcGVjdGFibGUgPSAweDAwMDAwMDAwIG51bGwgZmFsc2UKICAgc2Vjb25kIHJlcXVlc3Q6IHNhbWUgZmFjdG9yeSBvYmplY3QgdHJ1ZQogICBRSSBJVW5rbm93biA9IDB4MDAwMDAwMDAKUm9HZXRBY3RpdmF0aW9uRmFjdG9yeSgiV2luZG93cy5Gb28uQmFyIiwgSUFjdGl2YXRpb25GYWN0b3J5KSA9IDB4ODAwNDAxNTQgb3V0X251bGwgdHJ1ZQpSb0dldEFjdGl2YXRpb25GYWN0b3J5KCJ3aW5kb3dzLnVpLnZpZXdtYW5hZ2VtZW50LnVpc2V0dGluZ3MiLCBJQWN0aXZhdGlvbkZhY3RvcnkpID0gMHg4MDA0MDE1NCBvdXRfbnVsbCB0cnVlClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoIldpbmRvd3MuVUkuVmlld01hbmFnZW1lbnQiLCBJQWN0aXZhdGlvbkZhY3RvcnkpID0gMHg4MDA0MDE1NCBvdXRfbnVsbCB0cnVlClJvR2V0QWN0aXZhdGlvbkZhY3RvcnkoVUlTZXR0aW5ncywgSVVua25vd24pID0gMHgwMDAwMDAwMCBvdXRfbnVsbCBmYWxzZQpSb0dldEFjdGl2YXRpb25GYWN0b3J5KFVJU2V0dGluZ3MsIElSZXN0cmljdGVkRXJyb3JJbmZvKSA9IDB4ODAwMDQwMDIgb3V0X251bGwgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "   QI IInspectable = 0x00000000 null false\n   second request: same factory object true\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.Foundation.PropertyValue\", IActivationFactory) = 0x00000000 out_null false\n   GetRuntimeClassName = 0x00000000 Windows.Foundation.PropertyValue\n   QI IInspectable = 0x00000000 null false\n   second request: same factory object true\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.Storage.StorageFile\", IActivationFactory) = 0x00000000 out_null false\n   GetRuntimeClassName = 0x8000000e \n   QI IInspectable = 0x00000000 null false\n   second request: same factory object true\n   QI IUnknown = 0x00000000\nRoGetActivationFactory(\"Windows.Foo.Bar\", IActivationFactory) = 0x80040154 out_null true\nRoGetActivationFactory(\"windows.ui.viewmanagement.uisettings\", IActivationFactory) = 0x80040154 out_null true\nRoGetActivationFactory(\"Windows.UI.ViewManagement\", IActivationFactory) = 0x80040154 out_null true\nRoGetActivationFactory(UISettings, IUnknown) = 0x00000000 out_null false\nRoGetActivationFactory(UISettings, IRestrictedErrorInfo) = 0x80004002 out_null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}
