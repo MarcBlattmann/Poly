@@ -49,7 +49,8 @@ Held-out tests (~30%) are **not** stored in this repository. They live in
 the held-out store (`$POLY_HELDOUT_DIR`, default `~/.poly-heldout`) with the
 diff runner, so implementer agents can never see them. See `../CLEAN_ROOM.md`.
 
-Every hand-off from spec agent to implementer is appended to `HANDOFF_LOG.md`.
+Every hand-off from spec agent to implementer is recorded in a file of its own
+under `handoffs/` (older ones are rows of the legacy `HANDOFF_LOG.md`).
 
 The tools for all of this are `cargo xtask pipeline spec new`, `tests split`
 and `handoff record|bundle|verify`; see `../docs/AGENT_PIPELINE.md`.

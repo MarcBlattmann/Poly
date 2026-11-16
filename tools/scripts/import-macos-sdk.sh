@@ -34,11 +34,12 @@ cargo xtask coverage import macos-sdk "$SDK" --revision "$REVISION"
 echo "==> Ticking the roadmap milestone"
 sed -i '' 's/^- \[ \] macOS framework API mapped from the SDK/- [x] macOS framework API mapped from the SDK/' docs/ROADMAP.md
 
-echo "==> Regenerating the README progress section"
-cargo xtask coverage readme
+# The README's progress section and docs/progress are regenerated on main
+# after every merge (ADR 0213); do not commit them. `cargo xtask coverage
+# readme` previews them.
 
 echo
 echo "Done. Check the result, then commit and push:"
-echo "    git add coverage README.md docs/progress docs/ROADMAP.md"
+echo "    git add coverage docs/ROADMAP.md"
 echo "    git commit -m \"Map the macOS framework API from $REVISION\""
 echo "    git push"

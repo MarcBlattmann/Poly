@@ -2279,10 +2279,19 @@ fn tcg_boot_tests() -> Result {
 /// The boot test shard CI also runs on TCG ([`tcg_boot_tests`]).
 const TCG_SHARD: &str = "selftest";
 
-/// The coverage map's checks.
+/// The coverage map's checks. The README's progress section, the progress
+/// graphics and the ADR index are not checked against `coverage/` and the
+/// roadmap any more: `main` regenerates them after every merge, and a pull
+/// request must not change them (ADR 0213). `POLY_PR_BASE` names the commit
+/// the change is compared with (CI sets it to the pull request's base);
+/// without it, the merge base with `origin/main`, where there is one.
 fn coverage_checks() -> Result {
     coverage(&["check".into()])?;
-    coverage(&["readme".into(), "--check".into()])
+    let mut args = vec!["generated-check".to_string()];
+    if let Some(base) = std::env::var("POLY_PR_BASE").ok().filter(|b| !b.is_empty()) {
+        args.extend(["--base".into(), base]);
+    }
+    coverage(&args)
 }
 
 /// The slices CI runs the agent pipeline's checks in, one job each
