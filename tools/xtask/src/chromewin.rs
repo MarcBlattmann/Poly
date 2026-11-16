@@ -1157,17 +1157,48 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     Ok(Outcome { summary, elapsed: started.elapsed(), timed_out, log, passed, digest_note, trace })
 }
 
+/// Whether a missing Chrome fails the boot test groups instead of skipping them
+/// (`POLY_CHROME_REQUIRED=1`; CI's `chrome` job sets it, ADR 0214).
+fn chrome_required() -> bool {
+    std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1")
+}
+
+/// On GitHub Actions, an error annotation that names the stage (shown on the run's summary page
+/// and in the pull request's checks), with the run's address; elsewhere nothing.
+fn ci_annotation(stage: u32, what: &str, message: &str) {
+    if std::env::var("GITHUB_ACTIONS").is_ok_and(|v| v == "true") {
+        let run = match (
+            std::env::var("GITHUB_SERVER_URL"),
+            std::env::var("GITHUB_REPOSITORY"),
+            std::env::var("GITHUB_RUN_ID"),
+        ) {
+            (Ok(server), Ok(repo), Ok(id)) => format!(" Logs: {server}/{repo}/actions/runs/{id}"),
+            _ => String::new(),
+        };
+        println!("::error title=Chrome for Windows, stage {stage} ({what}) failed::{message}.{run}");
+    }
+}
+
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 must pass
-/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
-/// unless `POLY_CHROME_REQUIRED=1`.
+/// downloads the 210 MB package); CI's `chrome` job fetches it and sets
+/// `POLY_CHROME_REQUIRED=1`, so there a missing package fails instead (ADR 0214).
+/// Stage 1 must pass ([`S1_REQUIRED`]); with it off the group only reports how
+/// far Chrome got, unless `POLY_CHROME_REQUIRED=1`. The window check (stage 3)
+/// is the group `chrome-win-window` ([`window_boot_test`]).
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
     );
     if !fetched() {
+        if chrome_required() {
+            ci_annotation(1, "headless", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            return Err(format!(
+                "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
+                cache_dir().display()
+            ));
+        }
         eprintln!(
             "==> skipped: Chrome {VERSION} is not in the cache ({}); `cargo xtask chrome-win fetch` downloads it",
             cache_dir().display()
@@ -1189,10 +1220,15 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         },
     )?;
     outcome.report(st);
-    let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
+    let required = S1_REQUIRED || chrome_required();
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
     } else if required {
+        ci_annotation(
+            st.number,
+            "headless",
+            "Chrome's headless --dump-dom did not pass (the serial log is an artifact of the run)",
+        );
         return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
@@ -1200,6 +1236,23 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
             st.number,
             outcome.log.display()
         );
+    }
+    Ok(())
+}
+
+/// The boot test group `chrome-win-window`: stage 3, Chrome's window on the desktop
+/// ([`stage3_window`]). Skipped without the cached package, like `chrome-win`.
+pub fn window_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    if !fetched() {
+        if chrome_required() {
+            ci_annotation(3, "window", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            return Err(format!(
+                "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
+                cache_dir().display()
+            ));
+        }
+        eprintln!("==> skipped: Chrome {VERSION} is not in the cache; `cargo xtask chrome-win fetch` downloads it");
+        return Ok(());
     }
     stage3_window(kernel)
 }
@@ -1275,6 +1328,7 @@ fn stage3_window(kernel: &Path) -> Result {
                 );
             }
             S3Verdict::Fail => {
+                ci_annotation(3, "window", "Chrome's window did not show its page, or the browser raised an exception");
                 return Err(format!(
                     "stage 3 did not pass: {}; exceptions: {exceptions:?} (see {})",
                     stopped.unwrap_or_else(|| "the steps ran".into()),
