@@ -239,10 +239,10 @@ fn show(hwnd: usize, t: &Tex) {
     let (w, h) = (t.width() as u32, t.height() as u32);
     let swapped: Vec<u8>;
     let bits = if texture::red_first(t.format()) {
-        swapped = t.data.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
+        swapped = t.data().chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
         swapped.as_ptr()
     } else {
-        t.data.as_ptr()
+        t.data().as_ptr()
     };
     // BITMAPINFOHEADER: 40 bytes, width, -height (top-down), 1 plane, 32 bits, BI_RGB.
     let mut info = [0u8; 40];
@@ -263,7 +263,7 @@ fn show(hwnd: usize, t: &Tex) {
     // The first frames shown say where they went (the kernel log).
     static SHOWN: AtomicU32 = AtomicU32::new(0);
     if SHOWN.fetch_add(1, Ordering::Relaxed) < 3 || (dc == 0 || lines == 0) && SHOWN.load(Ordering::Relaxed) < 20 {
-        let first = t.data.get(..4).map_or(0, |p| u32::from_le_bytes([p[0], p[1], p[2], p[3]]));
+        let first = t.data().get(..4).map_or(0, |p| u32::from_le_bytes([p[0], p[1], p[2], p[3]]));
         log(&alloc::format!(
             "d3d11: present {w}x{h} format {} into window {hwnd:#x}: dc {dc:#x}, {lines} lines, first pixel {first:#010x}",
             t.format()

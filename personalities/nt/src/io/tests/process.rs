@@ -336,3 +336,24 @@ fn a_parent_reads_writes_queries_and_allocates_in_its_child() {
     let limited = t.f.u64_at(limited);
     assert_eq!(t.f.call(Service::ReadVirtualMemory, &[limited, peb, back, 8, 0]), STATUS_ACCESS_DENIED);
 }
+
+/// Share access ends with a file object's last handle (Learn, "IoRemoveShareAccess": the cleanup
+/// request), not with its last reference: a section mapping the file does not keep it.
+#[test]
+fn a_section_of_a_file_does_not_keep_its_sharing() {
+    use crate::consts::PAGE_READWRITE;
+    let mut t = setup();
+    let p = "\\??\\C:\\mapped-share.bin";
+    let (s, h, _) = t.create(p, RW, 0, FILE_OPEN_IF, SYNC | FILE_NON_DIRECTORY_FILE, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    t.write(h, &[1; 4096], Some(0));
+    let (s, section) = create_section(&mut t, h, 0, PAGE_READWRITE);
+    assert_eq!(s, STATUS_SUCCESS);
+    // While the handle is open, the open without sharing refuses others.
+    assert_eq!(t.create(p, RW, SHARE_ALL, FILE_OPEN, SYNC, 0).0, STATUS_SHARING_VIOLATION);
+    t.close(h);
+    let (s, h2, _) = t.create(p, RW, 0, FILE_OPEN, SYNC, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    t.close(h2);
+    t.close(section);
+}

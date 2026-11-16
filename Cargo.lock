@@ -188,6 +188,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-d3d"
+version = "0.0.1"
+
+[[package]]
 name = "poly-dbus"
 version = "0.0.1"
 

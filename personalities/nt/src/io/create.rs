@@ -293,6 +293,7 @@ impl CreateHook<'_> {
             options: p.options,
             position: 0,
             delete_on_close: p.options & FILE_DELETE_ON_CLOSE != 0,
+            cleaned: false,
             scan: None,
             port: None,
             skip_port: false,

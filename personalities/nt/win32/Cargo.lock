@@ -120,6 +120,7 @@ dependencies = [
 name = "d3d11"
 version = "0.0.1"
 dependencies = [
+ "poly-d3d",
  "poly-win32-rt",
 ]
 
@@ -367,6 +368,10 @@ version = "0.0.1"
 dependencies = [
  "poly-seh",
 ]
+
+[[package]]
+name = "poly-d3d"
+version = "0.0.1"
 
 [[package]]
 name = "poly-dwrite"
