@@ -419,6 +419,14 @@ fn ptr<T>(v: &mut T) -> u64 {
 
 /// Run a message another thread sent to us, and report its result.
 pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
+    // The compositor resized the window by its border: this thread applies the size, as
+    // Windows' sizing loop calls `SetWindowPos` in the window's thread (`Wm::configure_from_desktop`).
+    if inc.wndproc == 0 && inc.msg == crate::wm::DESKTOP_SET_POS {
+        let (x, y, cx, cy) = crate::wm::unpack_set_pos(inc.w, inc.l);
+        set_window_pos(env, u64::from(inc.hwnd), 0, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+        env.call(Request::SendDone { id: inc.id, result: 0 });
+        return;
+    }
     env.sent_hook(inc.hwnd, inc.msg, inc.w, inc.l, false);
     let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, inc.l);
     env.call(Request::SendDone { id: inc.id, result: r });
