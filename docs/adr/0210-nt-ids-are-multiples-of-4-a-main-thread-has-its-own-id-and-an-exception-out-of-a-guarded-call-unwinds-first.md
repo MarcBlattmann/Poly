@@ -18,7 +18,7 @@ a sheet applied in the place that owned them.
 
 - **Ids.** A process or thread of the NT personality gets an id that is a non-zero multiple of 4
   (`GetThreadId.yaml`, `created_thread`), from the kernel's one counter (`process::alloc_nt_id`
-  takes the next multiple of 4 and moves the counter past it, so Linux and NT ids never repeat).
+  takes the next multiple of 4, not below 0x400 (a program may use a small number such as 4 as "no such thread"), and moves the counter past it, so Linux and NT ids never repeat).
   The first thread of a process made by `NtCreateUserProcess` (or started by `spawn_pe_with`) has an
   id of its own, not its process id (`child_main_thread`). The id is chosen before the TEB, the
   thread object and the `ClientId` are made (`Start::tid`), and a suspended first thread is resumed

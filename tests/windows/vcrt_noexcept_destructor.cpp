@@ -15,7 +15,10 @@ static poly::Log g_log;
 static void on_terminate() {
     g_log.add("terminate");
     poly::g_test.expect_str("order: the destructor's own scope, then terminate", g_log.str(), "~Bad terminate");
+#ifndef POLY_CXX_RUNTIME_VCRUNTIME140
+    // (With vcruntime140.dll the compiler's call goes to that DLL's own __std_terminate, not counted here.)
     poly::g_test.expect("terminate came from the compiler's terminate scope", poly_std_terminate_calls, 1);
+#endif
     poly::finish_and_exit();
 }
 
