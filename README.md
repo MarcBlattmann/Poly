@@ -79,7 +79,9 @@ cargo xtask start
 ```
 
 A menu opens. Press Enter to boot Poly's desktop with Chromium; the first
-start downloads about 230 MB once. More commands are in
+start downloads about 230 MB once. To try a Windows program, choose
+*Desktop with Chrome for Windows* instead: Chrome for Testing (a download of about
+210 MB, once) runs on the same desktop and is in its launcher. More commands are in
 [docs/RUNNING.md](docs/RUNNING.md).
 
 ## How far along is it?

@@ -131,6 +131,7 @@ mod asmlabels;
 mod busybox;
 mod chromecalls;
 mod chrometrace;
+mod chrometry;
 mod chromewin;
 mod chromium;
 mod compositor;
@@ -1663,6 +1664,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Chrome's window on the desktop with its page painted, a URL typed into the address field
     // (stage 3; chromewin.rs, ADR 0155, ADR 0214).
     ("chrome-win-window", chromewin::window_boot_test),
+    // The same window from what `cargo xtask start` boots as "Desktop with Chrome for Windows": its
+    // disk and launcher entry (chrometry.rs, ADR 0216).
+    ("chrome-try", chrometry::group_boot_test),
     // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
     // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
     // ADR 0194).
@@ -1802,7 +1806,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 13] = [
     // Chrome for Windows, each stage its own job so a flaky window check can never hide stage 1
     // (the `chrome` job of the workflow fetches the package; ADR 0214).
     ("chrome-win", &["chrome-win"]),
-    ("chrome-win-window", &["chrome-win-window"]),
+    ("chrome-win-window", &["chrome-win-window", "chrome-try"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
