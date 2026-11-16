@@ -43,6 +43,7 @@ mod npipe;
 mod nt;
 mod pathcch;
 mod pipe;
+mod priority;
 mod privilege;
 mod process;
 mod procinfo;
@@ -55,6 +56,7 @@ mod spawn;
 mod sync;
 mod sysex;
 mod system;
+mod threadpool;
 mod tls;
 mod waits;
 

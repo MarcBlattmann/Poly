@@ -1280,6 +1280,7 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
+        proc.parent = handles.map_or(0, |h| h.caller.process.0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());
