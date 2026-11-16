@@ -46,6 +46,7 @@ const LINUX_ONLY: &str = "needs a Linux host: run it in the poly-dev container o
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Entry {
     Desktop,
+    ChromeWin,
     ChromiumDisk,
     Toolkits,
     Shell,
@@ -56,8 +57,9 @@ pub enum Entry {
 }
 
 /// The menu's entries, in its order.
-pub const ENTRIES: [Entry; 8] = [
+pub const ENTRIES: [Entry; 9] = [
     Entry::Desktop,
+    Entry::ChromeWin,
     Entry::ChromiumDisk,
     Entry::Toolkits,
     Entry::Shell,
@@ -92,6 +94,7 @@ impl Entry {
     pub fn id(self) -> &'static str {
         match self {
             Entry::Desktop => "desktop",
+            Entry::ChromeWin => "chrome-win",
             Entry::ChromiumDisk => "chromium-disk",
             Entry::Toolkits => "toolkits",
             Entry::Shell => "shell",
@@ -110,6 +113,7 @@ impl Entry {
     pub fn title(self) -> &'static str {
         match self {
             Entry::Desktop => "Desktop",
+            Entry::ChromeWin => "Desktop with Chrome for Windows",
             Entry::ChromiumDisk => "Build Chromium's disk",
             Entry::Toolkits => "Toolkits disk (GTK, Qt, VLC)",
             Entry::Shell => "Kernel shell",
@@ -125,6 +129,9 @@ impl Entry {
         match self {
             Entry::Desktop => {
                 "Poly's desktop in QEMU's window, with Chromium as the browser (cargo xtask desktop --chromium)"
+            }
+            Entry::ChromeWin => {
+                "Poly's desktop in QEMU's window with Chrome for Testing (the Windows program) in the launcher, 4 GB, network, its profile kept on its disk (cargo xtask desktop --chrome-win)"
             }
             Entry::ChromiumDisk => {
                 "download the pinned Debian packages and make target/poly-chromium-disk.img now, not at the first start"
@@ -147,6 +154,7 @@ impl Entry {
             Entry::Desktop => {
                 &[Release, TestApps, Chromium, Accel, Scale, Size, FreshState, FreshDisk, DiskSize, KernelArgs, Display]
             }
+            Entry::ChromeWin => &[Release, Accel, Scale, Size, FreshState, FreshDisk, KernelArgs, Display],
             Entry::ChromiumDisk => &[],
             Entry::Toolkits => &[Release, Accel, FreshDisk],
             Entry::Shell | Entry::Busybox => &[Release, Accel, KernelArgs],
@@ -160,7 +168,7 @@ impl Entry {
     /// the interactive boots only; the boot tests keep their fixed sizes.
     pub fn resources(self) -> &'static [Opt] {
         match self {
-            Entry::Desktop | Entry::Toolkits | Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
+            Entry::Desktop | Entry::ChromeWin | Entry::Toolkits | Entry::Shell | Entry::Busybox | Entry::DiskRoot => {
                 &[Opt::Memory, Opt::Cpus]
             }
             Entry::ChromiumDisk | Entry::BootTests | Entry::Ci => &[],
@@ -174,6 +182,7 @@ impl Entry {
         match self {
             Entry::Desktop if chromium => Some((crate::chromium::MEMORY, crate::chromium::CPUS.unwrap_or(cpus))),
             Entry::Desktop => Some((crate::desktop::MEMORY, cpus)),
+            Entry::ChromeWin => Some((crate::chrometry::MEMORY, crate::chrometry::CPUS)),
             Entry::Toolkits => Some((crate::toolkits::MEMORY, cpus)),
             Entry::Shell | Entry::Busybox => Some((crate::DEFAULT_MEMORY, cpus)),
             Entry::DiskRoot => Some((crate::rootdisk::MEMORY, cpus)),
@@ -184,7 +193,7 @@ impl Entry {
     /// Whether it boots a kernel (built first, with the progress table).
     fn kernel(self, s: &Settings) -> Option<bool> {
         match self {
-            Entry::Desktop | Entry::ChromiumDisk | Entry::Ci => None,
+            Entry::Desktop | Entry::ChromeWin | Entry::ChromiumDisk | Entry::Ci => None,
             Entry::BootTests => Some(false),
             _ => Some(s.release),
         }
@@ -226,7 +235,7 @@ impl Opt {
             }
             Opt::FreshState => "--fresh-state: start the desktop's settings disk again",
             Opt::FreshDisk => {
-                "--fresh-disk: make the root disk again (with Chromium: its disk, and so its profile, bookmarks and logins)"
+                "--fresh-disk: make the root disk again (Chromium's or Chrome's: the disk, and so the profile, bookmarks and logins)"
             }
             Opt::DiskSize => {
                 "--disk-size=SIZE: free room on Chromium's disk when it is made (auto: 4G, so apps installed with apt fit); needs Fresh disk to apply to a disk that exists"
@@ -486,6 +495,8 @@ pub struct Host {
     pub chromium_download: Option<u64>,
     /// `curl` runs here (it downloads the packages).
     pub curl: bool,
+    /// Chrome for Testing is downloaded (`cargo xtask chrome-win fetch`).
+    pub chrome_fetched: bool,
     /// Its memory and cores, for the resources it can give a guest.
     pub res: HostResources,
 }
@@ -499,6 +510,7 @@ impl Host {
             chromium_disk: crate::root().join("target").join(crate::chromium::FILE_NAME).is_file(),
             chromium_download: crate::chromium::first_start().0,
             curl: std::process::Command::new("curl").arg("--version").output().is_ok_and(|o| o.status.success()),
+            chrome_fetched: crate::chromewin::fetched(),
             res: HostResources::probe(),
         }
     }
@@ -559,8 +571,21 @@ fn megabytes(bytes: u64) -> String {
     format!("{} MB", (bytes + 500_000) / 1_000_000)
 }
 
+/// Why this host cannot run the desktop with Chrome for Windows, if it cannot: the guest's memory
+/// ([`crate::chrometry::MEMORY`]) must be one the host can give, and `curl` must be there to
+/// download Chrome the first time.
+pub fn chrome_win_refusal(host: &Host) -> Option<String> {
+    if !host.curl && !host.chrome_fetched {
+        return Some("needs curl here, to download Chrome for Testing (cargo xtask chrome-win fetch)".into());
+    }
+    let memory = crate::chrometry::MEMORY;
+    let mib = resources::parse_memory(memory)?;
+    host.res.memory_refusal(mib).map(|why| format!("Chrome needs {memory} of guest memory, but {why}"))
+}
+
 pub fn availability(e: Entry, host: &Host) -> Avail {
     match e {
+        Entry::ChromeWin => chrome_win_refusal(host).map_or(Avail::Ready, Avail::No),
         Entry::Toolkits if !host.linux => Avail::No(format!("{LINUX_ONLY} (its disk is the host's GTK, Qt and VLC)")),
         Entry::DiskRoot if !host.linux => {
             Avail::No(format!("{LINUX_ONLY} (the root disk is the host's bash, coreutils, Python, gcc)"))
@@ -580,6 +605,12 @@ fn note(e: Entry, host: &Host) -> Option<&'static str> {
             Some("CI runs on Linux; here some parts fail or skip: the poly-dev container runs all")
         }
         Entry::ChromiumDisk if host.chromium_disk => Some("built already: this makes it again"),
+        Entry::ChromeWin if !host.chrome_fetched => {
+            Some("first start: downloads Chrome for Testing (210 MB) and builds its disk; later starts keep both")
+        }
+        Entry::ChromeWin => {
+            Some("Chrome is downloaded: a start builds what changed, then the window takes about a minute")
+        }
         _ => None,
     }
 }
@@ -596,6 +627,9 @@ fn apps_line(e: Entry, s: &Settings, host: &Host) -> Option<String> {
             } else {
                 Some(format!("The launcher: {browser}Poly's apps, and the test apps: {}", apps.join(", ")))
             }
+        }
+        Entry::ChromeWin => {
+            Some(format!("The launcher: {} (Chrome for Testing), Poly's apps", crate::chrometry::ENTRY_NAME))
         }
         _ => None,
     }
@@ -655,6 +689,21 @@ pub fn args(e: Entry, s: &Settings) -> Vec<String> {
             if s.chromium && s.disk_size != "auto" {
                 a.push(format!("--disk-size={}", s.disk_size));
             }
+            if s.scale != "auto" {
+                a.push(format!("--scale={}", s.scale));
+            }
+            if s.size != "auto" {
+                a.push(format!("--size={}", s.size));
+            }
+            resources(&mut a);
+            kernel_args(&mut a);
+        }
+        Entry::ChromeWin => {
+            a.push("desktop".into());
+            flag(&mut a, s.release, "--release");
+            a.push("--chrome-win".into());
+            flag(&mut a, s.fresh_state, "--fresh-state");
+            flag(&mut a, s.fresh_disk, "--fresh-disk");
             if s.scale != "auto" {
                 a.push(format!("--scale={}", s.scale));
             }
@@ -734,8 +783,10 @@ fn execute(job: &Job, s: &Settings, build_only: bool) -> Result {
     eprintln!("==> {}", job.line());
     let rest = &job.args[1..];
     match job.entry {
-        Entry::Desktop => {
-            let title = if job.args.iter().any(|a| a == "--chromium") {
+        Entry::Desktop | Entry::ChromeWin => {
+            let title = if job.args.iter().any(|a| a == "--chrome-win") {
+                "Building the desktop with Chrome for Windows"
+            } else if job.args.iter().any(|a| a == "--chromium") {
                 "Building the desktop with Chromium"
             } else {
                 "Building the desktop"
@@ -1498,6 +1549,7 @@ mod tests {
             chromium_disk: false,
             chromium_download: Some(228_000_000),
             curl: true,
+            chrome_fetched: false,
             res: BIG,
         }
     }
@@ -1510,6 +1562,7 @@ mod tests {
             chromium_disk: true,
             chromium_download: Some(0),
             curl: true,
+            chrome_fetched: false,
             res: BIG,
         }
     }
@@ -1662,6 +1715,61 @@ mod tests {
         assert_eq!(plan(&s, &w).unwrap()[0].line(), "cargo xtask desktop --release --chromium");
         let s = Settings { entry: Entry::Toolkits, ..Settings::default() };
         assert!(plan(&s, &w).unwrap_err().contains("Linux host"));
+    }
+
+    #[test]
+    fn the_desktop_with_chrome_for_windows_is_an_entry_of_its_own() {
+        let w = windows();
+        assert_eq!(Entry::ChromeWin.title(), "Desktop with Chrome for Windows");
+        assert_eq!(Entry::from_id("chrome-win"), Some(Entry::ChromeWin));
+        let s = Settings { entry: Entry::ChromeWin, ..Settings::default() };
+        // Not Chromium's switch: the Windows program on its own disk.
+        assert_eq!(plan(&s, &w).unwrap()[0].line(), "cargo xtask desktop --release --chrome-win");
+        let s = Settings {
+            fresh_disk: true,
+            fresh_state: true,
+            scale: "2".into(),
+            memory: "6G".into(),
+            cpus: "2".into(),
+            kernel_args: "poly.a=1".into(),
+            ..s
+        };
+        assert_eq!(
+            args(Entry::ChromeWin, &s),
+            [
+                "desktop",
+                "--release",
+                "--chrome-win",
+                "--fresh-state",
+                "--fresh-disk",
+                "--scale=2",
+                "--memory=6G",
+                "--cpus=2",
+                "poly.a=1"
+            ]
+        );
+        // 4 GB and 4 CPUs unless asked; the entry boots no kernel of its own before the table.
+        assert_eq!(Entry::ChromeWin.default_resources(false), Some(("4G", 4)));
+        assert_eq!(Entry::ChromeWin.kernel(&s), None);
+        // It runs on Windows and on Linux hosts alike.
+        assert_eq!(availability(Entry::ChromeWin, &windows()), Avail::Ready);
+        assert_eq!(availability(Entry::ChromeWin, &linux()), Avail::Ready);
+    }
+
+    #[test]
+    fn chrome_for_windows_needs_its_memory_and_a_way_to_download_chrome() {
+        let small = Host { res: HostResources { memory_mib: Some(4 * 1024), cpus: 8 }, ..windows() };
+        match availability(Entry::ChromeWin, &small) {
+            Avail::No(why) => assert!(why.contains("4G"), "{why}"),
+            other => panic!("{other:?}"),
+        }
+        let no_curl = Host { curl: false, ..windows() };
+        match availability(Entry::ChromeWin, &no_curl) {
+            Avail::No(why) => assert!(why.contains("curl"), "{why}"),
+            other => panic!("{other:?}"),
+        }
+        // Already downloaded: curl is not needed.
+        assert_eq!(availability(Entry::ChromeWin, &Host { chrome_fetched: true, ..no_curl }), Avail::Ready);
     }
 
     #[test]

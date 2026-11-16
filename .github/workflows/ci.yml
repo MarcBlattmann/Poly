@@ -20,12 +20,19 @@ name: CI
 # "Let QEMU use KVM" step); one boot job runs the self-test boots on QEMU's
 # emulator (TCG) as well.
 
+# `workflow_dispatch` runs the whole CI on any branch without a pull request:
+# `gh workflow run ci.yml --ref <branch>` (ADR 0213).
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
-# A newer push to a pull request cancels the run of the older one.
+# A newer push to a pull request cancels the run of the older one. A manual
+# run has the group of its branch (`ci-refs/heads/<branch>`): it cancels
+# nothing of another branch, a pull request or main (their groups differ),
+# and is not cancelled by them; a second manual run of the same branch waits
+# for the first.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -38,7 +45,9 @@ jobs:
   # A pull request that only changes prose (ADRs, Markdown files, the
   # generated progress charts) skips the jobs that run programs: host tests,
   # the boot tests and the pipeline. Lint and coverage always run (the
-  # lint job checks README.md and docs/ROADMAP.md against coverage/).
+  # coverage step checks that a pull request leaves the generated progress
+  # files alone, ADR 0213). Any other event, a push to main or a manual run
+  # (`workflow_dispatch`), runs everything.
   changes:
     name: changes (code or prose)
     runs-on: ubuntu-24.04
@@ -72,6 +81,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull request's merge commit and its first parent, the base it
+          # was merged into: the coverage step compares the generated files
+          # with it.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
       - name: Install Rust (version from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -105,9 +119,15 @@ jobs:
           path: target/wow64-cache
           key: ${{ steps.keys.outputs.wow64 }}
       - run: cargo xtask ci lint
-      # The coverage map's checks (README and ROADMAP against coverage/) are
-      # a minute: with lint, which ends sooner than the boots.
+      # The coverage map's checks are a minute: with lint, which ends sooner
+      # than the boots. In a pull request they also fail if the change
+      # rewrites what main generates (the README's progress section, the
+      # graphics, the ADR index), compared with the merge commit's first
+      # parent. Those files are not checked for being out of date: main
+      # regenerates them after every merge (progress.yml, ADR 0213).
       - run: cargo xtask ci coverage
+        env:
+          POLY_PR_BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
 
   host-tests:
     name: host tests

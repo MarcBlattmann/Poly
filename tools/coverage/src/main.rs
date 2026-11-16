@@ -16,12 +16,17 @@
 //! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
 //!                                                    (every entry of those components)
 //! coverage check
-//! coverage readme [--check]      README progress section + docs/progress/*.svg
+//! coverage readme [--check]      README progress section + docs/progress/*.svg + the ADR index
+//!                                (generated on main only, ADR 0213: previews it locally, do not commit it)
+//! coverage generated-check [--base <rev>]
+//!                                fails if the working tree changes the generated files compared with
+//!                                <rev> (default: the merge base with origin/main; skipped without one)
 //! coverage seed-wine <wine-checkout> --revision <rev>
 //!                                where Wine's conformance tests exercise each Windows entry (names only, ADR 0097)
 //! coverage show <id>...          one entry: status, sources, tests, seeds (seeds hidden from implementers)
 //! ```
 
+mod generated;
 mod import;
 mod model;
 mod objc;
@@ -276,6 +281,16 @@ fn readme(args: &[String]) -> Result<(), String> {
     let mut files = readme::assets(&coverage, &roadmap);
     let updated = readme::splice(&current, &readme::render(&coverage, &roadmap))?;
     files.push(("README.md".into(), readme::splice_phases(&updated, &readme::render_phases(&roadmap))?));
+    // The ADR index, once its markers are in the file (ADR 0213).
+    let adr_path = root().join(generated::ADR_INDEX);
+    let adr_current = std::fs::read_to_string(&adr_path).map_err(|e| format!("{}: {e}", adr_path.display()))?;
+    if generated::region(&adr_current, generated::ADR_BEGIN, generated::ADR_END).is_some() {
+        let section = generated::adr_index(&root().join("docs/adr"))?;
+        files.push((
+            generated::ADR_INDEX.into(),
+            readme::splice_between(&adr_current, generated::ADR_BEGIN, generated::ADR_END, &section)?,
+        ));
+    }
 
     let check = args.iter().any(|a| a == "--check");
     let mut stale = Vec::new();
@@ -300,6 +315,47 @@ fn readme(args: &[String]) -> Result<(), String> {
     if check {
         println!("README progress section, phase table and graphics up to date");
     }
+    Ok(())
+}
+
+/// `generated-check [--base <rev>]`: a pull request must not change what
+/// main generates (ADR 0213). Compares the working tree with `<rev>`; without
+/// one, with the merge base with `origin/main`, and passes (saying so) where
+/// there is none (a shallow checkout of main itself, a push to main).
+fn generated_check(args: &[String]) -> Result<(), String> {
+    let git = |args: &[&str]| -> Result<String, String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root())
+            .args(args)
+            .output()
+            .map_err(|e| format!("git: {e} (is git installed?)"))?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    let base = match opt(args, "--base") {
+        Some(b) => b.to_string(),
+        None => match git(&["merge-base", "origin/main", "HEAD"]) {
+            Ok(b) => b.trim().to_string(),
+            Err(_) => {
+                println!("generated files: no origin/main here to compare with; not checked (CI passes --base)");
+                return Ok(());
+            }
+        },
+    };
+    // The files at the base; a path the base does not have reads as `None`.
+    let at_base = |file: &str| git(&["show", &format!("{base}:{file}")]).ok();
+    let now = |file: &str| std::fs::read_to_string(root().join(file)).ok();
+    let diff =
+        git(&["diff", "--name-only", &base, "--", readme::ASSET_DIR]).map_err(|e| format!("git diff {base}: {e}"))?;
+    let progress: Vec<String> = diff.lines().filter(|l| generated::is_progress_file(l)).map(String::from).collect();
+    let changed = generated::changed(&at_base, &now, &progress);
+    if !changed.is_empty() {
+        return Err(generated::explain(&changed));
+    }
+    println!("generated files (README sections, docs/progress, ADR index) not changed against {base}");
     Ok(())
 }
 
@@ -408,7 +464,11 @@ fn main() -> ExitCode {
         Some("set-status") => set_status(rest),
         Some("check") => check(),
         Some("readme") => readme(rest),
-        _ => Err("usage: coverage <import|seed-wine|show|claim|release|set-status|check|readme> ...".into()),
+        Some("generated-check") => generated_check(rest),
+        _ => {
+            Err("usage: coverage <import|seed-wine|show|claim|release|set-status|check|readme|generated-check> ..."
+                .into())
+        }
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
