@@ -536,7 +536,9 @@ fn set_state(hwnd: usize, i: i32, bits: u32, mask: u32, defer: &mut Vec<(i32, u3
     let old = item_state(hwnd, i);
     let new = (old & !mask) | (bits & mask);
     // The notifications carry the bits the call is about.
-    let refused = notify_item(hwnd, LVN_ITEMCHANGING, i, 0, new & mask, old & mask, LVIF_STATE) != 0;
+    let owner = with(hwnd, |lv| lv.owner).unwrap_or(false);
+    // An owner data list is told of the change, not asked.
+    let refused = !owner && notify_item(hwnd, LVN_ITEMCHANGING, i, 0, new & mask, old & mask, LVIF_STATE) != 0;
     if refused {
         return false;
     }
@@ -569,8 +571,13 @@ fn set_state(hwnd: usize, i: i32, bits: u32, mask: u32, defer: &mut Vec<(i32, u3
 }
 
 fn flush(hwnd: usize, defer: Vec<(i32, u32, u32)>) {
+    let owner = with(hwnd, |lv| lv.owner).unwrap_or(false);
     for (i, new, old) in defer.into_iter().rev() {
         notify_item(hwnd, LVN_ITEMCHANGED, i, 0, new, old, LVIF_STATE);
+        if owner {
+            // The list asks its owner for the item's indent afterwards.
+            dispinfo(hwnd, i, 0, LVIF_INDENT, 0);
+        }
     }
 }
 

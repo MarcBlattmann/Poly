@@ -56,6 +56,8 @@ const TVHT_BELOW: u32 = 0x200;
 
 const TVC_BYMOUSE: u32 = 1;
 const TVC_BYKEYBOARD: u32 = 2;
+/// Not a `TVC_` value: `TVM_EXPAND` with `TVE_TOGGLE` does not tell the parent (the sheet's test).
+const QUIET: u32 = 0x100;
 
 const TVN_FIRST: i32 = -400;
 const TVN_SELCHANGINGW: i32 = TVN_FIRST - 50;
@@ -437,7 +439,7 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
         TVE_TOGGLE => !expanded,
         _ => return false,
     };
-    let _ = action_hint;
+    let quiet = action_hint & QUIET != 0;
     if want_expand == expanded {
         if !want_expand && flags & TVE_COLLAPSERESET != 0 {
             // (The item is collapsed already; the children go all the same.)
@@ -462,7 +464,7 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
     }
     let action = if want_expand { TVE_EXPAND } else { TVE_COLLAPSE };
     // The parent hears of an expansion, not of a collapse (`TVM_EXPAND` in the sheet's test).
-    if want_expand && node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, 0x3E))) != 0 {
+    if want_expand && !quiet && node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, 0x3E))) != 0 {
         return false;
     }
     with(hwnd, |t| {
@@ -476,7 +478,9 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
         // A selected item below a collapsed one moves the selection up to it.
     });
     if want_expand {
-        node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
+        if !quiet {
+            node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
+        }
         with(hwnd, |t| {
             if let Some(n) = t.nodes.get_mut(&id) {
                 n.state |= TVIS_EXPANDEDONCE;
@@ -997,6 +1001,12 @@ fn get_item(hwnd: usize, l: usize, wide: bool) -> bool {
     }
     if it.mask & TVIF_CHILDREN != 0 {
         it.children = full.children;
+        if full.children == -1 {
+            // I_CHILDRENCALLBACK: the parent says whether the item has children.
+            let mut nm = NmTvDispInfo { hdr: NmHdr::default(), item: TvItem { mask: TVIF_CHILDREN, item: it.item, ..TvItem::default() } };
+            notify(hwnd, TVN_GETDISPINFOW, &mut nm);
+            it.children = nm.item.children;
+        }
     }
     if it.mask & TVIF_STATE != 0 {
         it.state = full.state & it.state_mask;
@@ -1156,7 +1166,7 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 if l as usize > u32::MAX as usize {
                     return 0;
                 }
-                isize::from(expand(hwnd, id, w as u32, 0))
+                isize::from(expand(hwnd, id, w as u32, if w as u32 & !0xC000 == TVE_TOGGLE { QUIET } else { 0 }))
             }
             TVM_GETITEMRECT => {
                 if l == 0 {
