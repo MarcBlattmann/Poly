@@ -160,6 +160,8 @@ pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"))
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
+/// Poly's own `msvcp140.dll` (ADR 0199): its first names, the rest fail-only.
+pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -335,6 +337,9 @@ static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0
 /// bounded dump of the stack (`poly_personality_nt::diag::exception_report`, ADR 0155 step 9).
 /// The number of stack quadwords to dump; 0 is off.
 static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+/// `poly.nt.exceptions.mem[=N]` (`poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG`): the bytes the
+/// exception log shows from each register that points into user memory; 0 is off.
+static EXCEPTION_MEMORY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// `poly.nt.waits[=SECONDS]` (default 30): every that many seconds a kernel thread logs every blocked
 /// NT wait (`nt-waits:` lines: thread id, the objects it waits on with their type, name and kernel
@@ -640,6 +645,11 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
     }
     apitrace::configure(boot);
+    let memory = boot.arg(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG);
+    if memory.is_some() || boot.has_flag(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG) {
+        let bytes = poly_personality_nt::diag::exception_memory_bytes(memory);
+        EXCEPTION_MEMORY.store(bytes as u32, core::sync::atomic::Ordering::Relaxed);
+    }
     use poly_personality_nt::trace::{ONLY_FLAG, TRAIL_FLAG, trail_len};
     if let Some(n) = trail_len(boot.has_flag(TRAIL_FLAG), boot.arg(TRAIL_FLAG)) {
         TRAIL_LEN.store(n, core::sync::atomic::Ordering::Relaxed);
@@ -969,7 +979,8 @@ impl NtKernel for Kernel {
         }
         let words = EXCEPTIONS.load(core::sync::atomic::Ordering::Relaxed);
         if words != 0 {
-            exception::report_delivered(self.pid, self.tid, record, ctx, words as usize);
+            let memory = EXCEPTION_MEMORY.load(core::sync::atomic::Ordering::Relaxed) as usize;
+            exception::report_delivered(self.pid, self.tid, record, ctx, words as usize, memory);
         }
     }
 
@@ -1312,6 +1323,8 @@ fn start_params(
                 proc.object,
                 proc.threads.first().map(|t| t.object),
             );
+            // Its first thread has not run yet (job notifications, ADR 0169).
+            s.sys.jobs.mark_unstarted(pid);
             // Its creator's jobs and the ones it was made for (ADR 0169).
             if let Some(h) = handles {
                 s.sys.jobs.process_created(
@@ -1479,6 +1492,9 @@ pub(super) fn spawn_thread(
 /// Start a new NT process's first thread in ring 3 at `start`; if it
 /// cannot start, the process ends.
 pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, start: &Start) -> Result<(), NtStatus> {
+    // The job notifications count the first thread as run from here on (ADR 0169).
+    let pid = ProcessId(process.pid);
+    with(|s| s.sys.jobs.started(pid));
     match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, None) {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.

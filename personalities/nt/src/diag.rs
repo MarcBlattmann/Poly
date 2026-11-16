@@ -397,6 +397,117 @@ pub fn exception_report_words(
     out
 }
 
+/// The kernel argument that makes the exception log also dump the memory the registers point to
+/// (`poly.nt.exceptions.mem=N`: N bytes from each pointer and a quarter of that before it). A
+/// program that stops at a check of its own leaves no reason on the stack; the objects it was
+/// holding often name what it was working on.
+pub const EXCEPTION_MEMORY_FLAG: &str = "poly.nt.exceptions.mem";
+/// The most bytes shown after one register's pointer.
+pub const EXCEPTION_MEMORY_MAX: usize = 4096;
+/// Bytes on one line of a memory dump.
+pub const MEMORY_LINE: usize = 32;
+
+/// How many bytes `poly.nt.exceptions.mem[=N]` shows from each pointer: N rounded up to whole
+/// lines, at most [`EXCEPTION_MEMORY_MAX`]; 256 for no value or one that is not a number.
+pub fn exception_memory_bytes(value: Option<&str>) -> usize {
+    let n = value.and_then(|v| v.parse::<usize>().ok()).unwrap_or(256).clamp(MEMORY_LINE, EXCEPTION_MEMORY_MAX);
+    n.div_ceil(MEMORY_LINE) * MEMORY_LINE
+}
+
+/// The registers worth a memory dump, with their names: those that can be a pointer into user
+/// memory (not the stack pointer, whose memory the report has already), each value once.
+pub fn pointer_registers(registers: &[u64; 16]) -> Vec<(&'static str, u64)> {
+    const NAMES: [&str; 16] =
+        ["rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"];
+    let mut out: Vec<(&'static str, u64)> = Vec::new();
+    for (name, &value) in NAMES.iter().zip(registers) {
+        if *name == "rsp" || !(0x1_0000..0x8000_0000_0000).contains(&value) {
+            continue;
+        }
+        if out.iter().any(|&(_, v)| v == value) {
+            continue;
+        }
+        out.push((name, value));
+    }
+    out
+}
+
+/// Text that values on the stack point to inside a module: a program keeps the names of what it
+/// is doing as pointers to constant strings (the function and file a task was posted from), which
+/// the stack's own bytes do not show. One entry per distinct pointer whose target starts with at
+/// least 6 printable ASCII characters: the value's index in `stack`, and where the pointer leads
+/// with the text.
+pub fn referenced_text(r: Read<'_>, stack: &[u64], modules: &[ModuleSpan]) -> Vec<(usize, String)> {
+    let mut seen: Vec<u64> = Vec::new();
+    let mut out = Vec::new();
+    for (i, &word) in stack.iter().enumerate() {
+        if out.len() >= REPORT_ITEMS {
+            break;
+        }
+        if seen.contains(&word) {
+            continue;
+        }
+        let Some(place) = locate(modules, word) else { continue };
+        seen.push(word);
+        let mut text = String::new();
+        while text.len() < TEXT_MAX {
+            match r_byte(r, word + text.len() as u64) {
+                Some(b) if (0x20..0x7F).contains(&b) => text.push(char::from(b)),
+                _ => break,
+            }
+        }
+        if text.len() >= 6 {
+            out.push((i, format!("{place} {text:?}")));
+        }
+    }
+    out
+}
+
+/// Quadwords below the stack pointer that the exception log looks at for [`stale_code`].
+pub const STALE_WORDS: usize = 512;
+
+/// The code addresses left below the stack pointer: the return addresses of the calls the thread
+/// made last (their frames are gone, their bytes are not), nearest to the stack pointer first.
+/// `below[i]` is the quadword at `rsp - 8 * (i + 1)`. A check that stops a program names nothing;
+/// the call it made just before often does.
+pub fn stale_code(at: &Raised, below: &[u64], modules: &[ModuleSpan]) -> Option<String> {
+    let found: Vec<String> = below
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &w)| locate(modules, w).map(|m| format!("-{:#x} {m}", (i + 1) * 8)))
+        .take(2 * REPORT_ITEMS)
+        .collect();
+    (!found.is_empty()).then(|| {
+        format!(
+            "nt-exc: pid {} tid {} code addresses below the stack pointer (its last calls): {}",
+            at.pid,
+            at.tid,
+            found.join(", ")
+        )
+    })
+}
+
+/// One line of a memory dump: the bytes at `address` (a whole line, [`MEMORY_LINE`] bytes or
+/// fewer) in hexadecimal and as text, for the register `name` whose value is `pointer`.
+pub fn memory_line(at: &Raised, name: &str, pointer: u64, address: u64, bytes: &[u8]) -> String {
+    let mut hex = String::new();
+    for (i, b) in bytes.iter().enumerate() {
+        if i != 0 && i % 8 == 0 {
+            hex.push(' ');
+        }
+        hex.push_str(&format!("{b:02x}"));
+    }
+    let text: String = bytes.iter().map(|&b| if (0x20..0x7F).contains(&b) { char::from(b) } else { '.' }).collect();
+    let offset = address.wrapping_sub(pointer) as i64;
+    let sign = if offset < 0 { '-' } else { '+' };
+    format!(
+        "nt-exc: pid {} tid {} mem {name}{sign}{:#05x} {address:#x}: {hex} |{text}|",
+        at.pid,
+        at.tid,
+        offset.unsigned_abs()
+    )
+}
+
 fn r_byte(r: Read<'_>, at: u64) -> Option<u8> {
     let mut b = [0u8; 1];
     r(at, &mut b).then_some(b[0])
@@ -406,6 +517,77 @@ fn r_byte(r: Read<'_>, at: u64) -> Option<u8> {
 mod tests {
     use super::*;
     use alloc::collections::BTreeMap;
+
+    #[test]
+    fn text_a_stack_value_points_to_inside_a_module_is_shown_once() {
+        let modules = [ModuleSpan { base: 0x1000, size: 0x1000, name: "app.dll".into() }];
+        let memory: BTreeMap<u64, &[u8]> = BTreeMap::from([
+            (0x1100, &b"chrome\\browser\\thing.cc\0"[..]),
+            (0x1200, &b"ab\0"[..]),
+            (0x9000, &b"not in a module\0"[..]),
+        ]);
+        let read = |at: u64, buf: &mut [u8]| {
+            let Some((&start, bytes)) = memory.range(..=at).next_back() else { return false };
+            let from = (at - start) as usize;
+            if from + buf.len() > bytes.len() {
+                return false;
+            }
+            buf.copy_from_slice(&bytes[from..from + buf.len()]);
+            true
+        };
+        // The same pointer twice, a short string, a pointer outside every module, a number.
+        let stack = [0x1100, 0x1200, 0x9000, 7, 0x1100];
+        assert_eq!(
+            referenced_text(&read, &stack, &modules),
+            [(0, String::from("app.dll+0x100 \"chrome\\\\browser\\\\thing.cc\""))]
+        );
+    }
+
+    #[test]
+    fn code_addresses_below_the_stack_pointer_are_listed_nearest_first() {
+        let at = Raised { pid: 2, tid: 21, code: 0x8000_0003, address: 0 };
+        let modules = [ModuleSpan { base: 0x1000, size: 0x1000, name: "ole32.dll".into() }];
+        // rsp - 8, rsp - 0x10, ...: a code address, a number, a code address, a number.
+        let below = [0x1100, 0, 0x1234, 5];
+        assert_eq!(
+            stale_code(&at, &below, &modules).as_deref(),
+            Some(
+                "nt-exc: pid 2 tid 21 code addresses below the stack pointer (its last calls): \
+                 -0x8 ole32.dll+0x100, -0x18 ole32.dll+0x234"
+            )
+        );
+        assert_eq!(stale_code(&at, &[1, 2, 3], &modules), None);
+    }
+
+    #[test]
+    fn a_memory_dump_names_the_register_and_shows_hex_and_text() {
+        let at = Raised { pid: 2, tid: 21, code: 0x8000_0003, address: 0 };
+        let line = memory_line(&at, "rcx", 0x1000, 0x0FE0, b"Poly\x00\x01\xff ok");
+        assert_eq!(line, "nt-exc: pid 2 tid 21 mem rcx-0x020 0xfe0: 506f6c790001ff20 6f6b |Poly... ok|");
+        let line = memory_line(&at, "rdx", 0x2000, 0x2020, &[0x41; 3]);
+        assert_eq!(line, "nt-exc: pid 2 tid 21 mem rdx+0x020 0x2020: 414141 |AAA|");
+    }
+
+    #[test]
+    fn only_registers_that_can_point_into_user_memory_get_a_dump_and_each_value_once() {
+        let mut regs = [0u64; 16];
+        regs[1] = 0x624c_0019_1590; // rcx
+        regs[2] = 0x83_2e19; // rdx
+        regs[4] = 0x1af4_f310; // rsp: the stack is in the report already
+        regs[5] = 0xffff_fffc_0000_0000; // rbp: a mask, not an address
+        regs[6] = 0x624c_0019_1590; // rsi: the same as rcx
+        regs[13] = 0x2c; // r13: a small number
+        assert_eq!(pointer_registers(&regs), [("rcx", 0x624c_0019_1590), ("rdx", 0x83_2e19)]);
+    }
+
+    #[test]
+    fn the_memory_dump_size_is_whole_lines_within_its_limits() {
+        assert_eq!(exception_memory_bytes(None), 256);
+        assert_eq!(exception_memory_bytes(Some("x")), 256);
+        assert_eq!(exception_memory_bytes(Some("1")), 32);
+        assert_eq!(exception_memory_bytes(Some("100")), 128);
+        assert_eq!(exception_memory_bytes(Some("999999")), EXCEPTION_MEMORY_MAX);
+    }
 
     /// A sparse memory of bytes.
     struct Mem(BTreeMap<u64, u8>);

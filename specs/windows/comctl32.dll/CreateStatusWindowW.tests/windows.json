@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "csw_basic",
+      "exe_sha256": "4da620ce2ac7e84aa764144d7c3f3de80ee5cf10fe9bf14f8e32c12d719cb58a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NfQ0hJTEQgfCBXU19WSVNJQkxFLCB0ZXh0ICdSZWFkeScsIGlkIDUwMTogd2luZG93IG1hZGUKICBjbGFzcyAnbXNjdGxzX3N0YXR1c2JhcjMyJywgV1NfQ0hJTEQgdHJ1ZSBXU19WSVNJQkxFIHRydWUgQ0NTX0JPVFRPTSBmYWxzZSBTQkFSU19TSVpFR1JJUCBmYWxzZSwgY29udHJvbCBpZCA1MDEKICBXTV9HRVRURVhUID0gNTsgU0JfR0VUVEVYVFcgbGVuZ3RoIDUgdHlwZSAweDAgdGV4dCAnUmVhZHknOyBwYXJ0cyAxLCBmaXJzdCByaWdodCBlZGdlIC0xCiAgaGFzIGEgc2l6ZTogdHJ1ZQp3aXRoIFNCQVJTX1NJWkVHUklQOiB3aW5kb3cgbWFkZQogIGNsYXNzICdtc2N0bHNfc3RhdHVzYmFyMzInLCBXU19DSElMRCB0cnVlIFdTX1ZJU0lCTEUgdHJ1ZSBDQ1NfQk9UVE9NIGZhbHNlIFNCQVJTX1NJWkVHUklQIHRydWUsIGNvbnRyb2wgaWQgNTAyCiAgV01fR0VUVEVYVCA9IDQ7IFNCX0dFVFRFWFRXIGxlbmd0aCA0IHR5cGUgMHgwIHRleHQgJ0dyaXAnOyBwYXJ0cyAxLCBmaXJzdCByaWdodCBlZGdlIC0xCiAgaGFzIGEgc2l6ZTogdHJ1ZQpXU19DSElMRCBvbmx5OiB3aW5kb3cgbWFkZQogIGNsYXNzICdtc2N0bHNfc3RhdHVzYmFyMzInLCBXU19DSElMRCB0cnVlIFdTX1ZJU0lCTEUgZmFsc2UgQ0NTX0JPVFRPTSBmYWxzZSBTQkFSU19TSVpFR1JJUCBmYWxzZSwgY29udHJvbCBpZCA1MDMKICBXTV9HRVRURVhUID0gNjsgU0JfR0VUVEVYVFcgbGVuZ3RoIDYgdHlwZSAweDAgdGV4dCAnSGlkZGVuJzsgcGFydHMgMSwgZmlyc3QgcmlnaHQgZWRnZSAtMQogIGhhcyBhIHNpemU6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WS_CHILD | WS_VISIBLE, text 'Ready', id 501: window made\n  class 'msctls_statusbar32', WS_CHILD true WS_VISIBLE true CCS_BOTTOM false SBARS_SIZEGRIP false, control id 501\n  WM_GETTEXT = 5; SB_GETTEXTW length 5 type 0x0 text 'Ready'; parts 1, first right edge -1\n  has a size: true\nwith SBARS_SIZEGRIP: window made\n  class 'msctls_statusbar32', WS_CHILD true WS_VISIBLE true CCS_BOTTOM false SBARS_SIZEGRIP true, control id 502\n  WM_GETTEXT = 4; SB_GETTEXTW length 4 type 0x0 text 'Grip'; parts 1, first right edge -1\n  has a size: true\nWS_CHILD only: window made\n  class 'msctls_statusbar32', WS_CHILD true WS_VISIBLE false CCS_BOTTOM false SBARS_SIZEGRIP false, control id 503\n  WM_GETTEXT = 6; SB_GETTEXTW length 6 type 0x0 text 'Hidden'; parts 1, first right edge -1\n  has a size: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

@@ -152,11 +152,19 @@ impl Stack {
         if orig.protocol == proto::ICMP && quote.get(orig.header_len.min(20)).is_some_and(|&t| icmpv4::is_error(t)) {
             return;
         }
-        let Some(cidr) = self.cfg.ipv4 else { return };
+        // A datagram to a loopback address is answered from that address, with or without an
+        // address on the interface (a host with no network still tells its own sockets).
+        let cidr = self.cfg.ipv4;
+        if cidr.is_none() && !orig.dst.is_loopback() {
+            return;
+        }
         if !self.icmp_allowed() {
             return;
         }
-        let src = if orig.dst.is_loopback() || orig.dst == cidr.addr { orig.dst } else { cidr.addr };
+        let src = match cidr {
+            Some(c) if !orig.dst.is_loopback() && orig.dst != c.addr => c.addr,
+            _ => orig.dst,
+        };
         let n = quote.len().min(ICMP4_QUOTE).min(self.mtu - 28);
         let mut b = core::mem::take(&mut self.tx_buf);
         b[icmpv4::HEADER_LEN..icmpv4::HEADER_LEN + n].copy_from_slice(&quote[..n]);

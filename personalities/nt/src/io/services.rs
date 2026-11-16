@@ -768,12 +768,26 @@ pub fn query_information_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     }
     let caller = k.caller();
     let need = super::IoState::query_access(class).ok_or(STATUS_INVALID_INFO_CLASS)?;
-    let answer = k.with_state(|sys, _, _| {
-        let (_, cookie) = file_handle(sys, &caller, Handle(h), need)?;
-        let granted = sys.objects.granted_access(&caller, Handle(h))?;
-        sys.io.query_info(cookie, class, granted)
-    })?;
-    put_info(k, iosb, out, len as u32 as usize, &answer.bytes, answer.fixed)
+    let len = len as u32 as usize;
+    let answer = k
+        .with_state(|sys, _, _| {
+            let (_, cookie) = file_handle(sys, &caller, Handle(h), need)?;
+            let granted = sys.objects.granted_access(&caller, Handle(h))?;
+            sys.io.query_info(cookie, class, granted)
+        })
+        .map_err(|e| {
+            // The length check comes before the handle-type check: a name
+            // asked of the pipe device itself with a buffer below the
+            // structure is a length mismatch, not an invalid parameter
+            // (specs/windows/ntdll.dll/NtQueryInformationFile.yaml,
+            // `device_handle_length_first`).
+            if class == FILE_NAME_INFORMATION && e == STATUS_INVALID_PARAMETER && len < NAME_INFO_FIXED {
+                STATUS_INFO_LENGTH_MISMATCH
+            } else {
+                e
+            }
+        })?;
+    put_info(k, iosb, out, len, &answer.bytes, answer.fixed)
 }
 
 /// `NtSetInformationFile(FileHandle, IoStatusBlock*, FileInformation,

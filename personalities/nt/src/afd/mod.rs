@@ -367,6 +367,9 @@ pub struct Endpoint {
     pub broken: Option<NtStatus>,
     /// Why a connect failed (`SO_ERROR` keeps reading it, as Winsock does).
     pub conn_error: Option<u32>,
+    /// The program itself read `conn_error` (not only the event helper): the failure is known to it,
+    /// and a new connect is not "already under way".
+    pub conn_error_read: bool,
     /// A connection exists (or existed): `connect` finished or `accept` made it.
     pub connected: bool,
     /// The peer's address once known (`getpeername` still answers after the connection ended).

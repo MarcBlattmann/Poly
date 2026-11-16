@@ -528,7 +528,6 @@ fn desktop_file(name: &str, exe: &str, args: &str) -> String {
 }
 
 /// A desktop run: the compositor is init, a desktop file starts the program, QMP drives it.
-#[cfg(unix)]
 fn run_desktop(
     o: &Opts,
     kernel: &Path,
@@ -537,6 +536,24 @@ fn run_desktop(
     res: &crate::resources::Resources,
     more: &str,
 ) -> Result<String> {
+    let (text, stopped) = run_desktop_checked(o, kernel, image, log, res, more)?;
+    if let Some(e) = stopped {
+        eprintln!("==> the steps stopped: {e}");
+    }
+    Ok(text)
+}
+
+/// [`run_desktop`] that also says why the steps stopped, if they did (a step that failed, such
+/// as a `pixel` check).
+#[cfg(unix)]
+fn run_desktop_checked(
+    o: &Opts,
+    kernel: &Path,
+    image: &Path,
+    log: &Path,
+    res: &crate::resources::Resources,
+    more: &str,
+) -> Result<(String, Option<String>)> {
     let dos = format!("/mnt/root/{APPS_ON_DISK}/{}/{}", o.name, o.exe);
     let file = desktop_file(&o.name, &dos, &o.args);
     let extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
@@ -562,15 +579,62 @@ fn run_desktop(
     let _ = std::fs::remove_file(&socket);
     let _ = child.kill();
     let _ = child.wait();
-    if let Err(e) = result {
-        eprintln!("==> the steps stopped: {e}");
-    }
-    Ok(std::fs::read(log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default())
+    let text = std::fs::read(log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    Ok((text, result.err()))
 }
 
 #[cfg(not(unix))]
-fn run_desktop(_: &Opts, _: &Path, _: &Path, _: &Path, _: &crate::resources::Resources, _: &str) -> Result<String> {
+fn run_desktop_checked(
+    _: &Opts,
+    _: &Path,
+    _: &Path,
+    _: &Path,
+    _: &crate::resources::Resources,
+    _: &str,
+) -> Result<(String, Option<String>)> {
     Err("--mode desktop needs a Unix host (QMP over a Unix socket); run it with polyd".into())
+}
+
+/// Boot `kernel` on the desktop with the program directory `dir` as `C:pps\<name>`, start
+/// `exe` with `args` from the launcher and run `steps` (the steps of `--steps`, comma separated,
+/// ending in a `pixel:X|Y|RRGGBB` check, for instance): the cleaned serial log (also written to
+/// `log`) and the reason the steps stopped, if a step failed. For boot tests of a program's window
+/// (`chromewin.rs`, stage 3).
+pub fn desktop_check(
+    kernel: &Path,
+    dir: &Path,
+    exe: &str,
+    name: &str,
+    args: &str,
+    steps: &str,
+    log: &Path,
+) -> Result<(String, Option<String>)> {
+    let steps = steps.split(',').filter(|p| !p.is_empty()).map(Step::parse).collect::<Result<Vec<_>>>()?;
+    let out = log.parent().map_or_else(|| root().join("target"), Path::to_path_buf);
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let o = Opts {
+        dir: dir.to_path_buf(),
+        exe: exe.to_string(),
+        name: name.to_string(),
+        args: args.to_string(),
+        runs: vec![(exe.to_string(), args.to_string())],
+        cwd: String::new(),
+        desktop: true,
+        seconds: 60,
+        timeout: 900,
+        exceptions: Some(String::new()),
+        trace: false,
+        kernel: String::new(),
+        release: false,
+        out,
+        steps,
+        rest: Vec::new(),
+    };
+    let image = disk(&o)?;
+    let _ = std::fs::remove_file(log);
+    let res = crate::resources::Resources::from_args(&[])?;
+    let (text, stopped) = run_desktop_checked(&o, kernel, &image, log, &res, &kernel_arguments(&o))?;
+    Ok((clean(&text), stopped))
 }
 
 /// One step of a desktop run.
@@ -581,6 +645,8 @@ enum Step {
     Sleep(u64),
     Wait(String),
     Shot(String),
+    /// The screen's pixel at X|Y must be this colour (RRGGBB): the step fails otherwise.
+    Pixel(i32, i32, [u8; 3]),
     Type(String),
     Key(String),
     Chord(Vec<String>),
@@ -606,6 +672,15 @@ impl Step {
             "sleep" => Step::Sleep(arg.parse().map_err(|_| format!("step {s:?}: seconds"))?),
             "wait" => Step::Wait(arg.into()),
             "shot" => Step::Shot(arg.into()),
+            "pixel" => {
+                let v: Vec<&str> = arg.split('|').collect();
+                let [x, y, rgb] = v[..] else { return Err(format!("step {s:?}: X|Y|RRGGBB")) };
+                let colour = u32::from_str_radix(rgb.trim(), 16).ok().filter(|_| rgb.trim().len() == 6);
+                let (Ok(x), Ok(y), Some(c)) = (x.trim().parse(), y.trim().parse(), colour) else {
+                    return Err(format!("step {s:?}: X|Y|RRGGBB"));
+                };
+                Step::Pixel(x, y, [(c >> 16) as u8, (c >> 8) as u8, c as u8])
+            }
             "type" => Step::Type(arg.into()),
             "key" => Step::Key(arg.into()),
             "chord" => Step::Chord(arg.split('+').map(str::to_string).collect()),
@@ -753,6 +828,20 @@ impl Driver {
                 self.qmp.screendump(&png)?;
                 eprintln!("==> screenshot {}", png.display());
             }
+            Step::Pixel(x, y, want) => {
+                let ppm = self.out.join(format!("{}-pixel.ppm", self.name));
+                self.qmp.screendump(&ppm)?;
+                let image = crate::screen::Image::read_ppm(&ppm)?;
+                let (px, py) = (u32::try_from(*x).unwrap_or(u32::MAX), u32::try_from(*y).unwrap_or(u32::MAX));
+                if px >= image.width || py >= image.height {
+                    return Err(format!("pixel {x},{y} is outside the {}x{} screen", image.width, image.height));
+                }
+                let got = image.pixel(px, py);
+                if got != *want {
+                    return Err(format!("pixel {x},{y} is {got:02x?}, wanted {want:02x?}"));
+                }
+                eprintln!("==> pixel {x},{y} is {got:02x?}");
+            }
             Step::Type(t) => {
                 for c in t.chars() {
                     let (q, shift) = qcode(c).ok_or(format!("cannot type {c:?}"))?;
@@ -821,6 +910,9 @@ mod tests {
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
         assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
         assert!(Step::parse("drag:1|2|3").is_err());
+        assert_eq!(Step::parse("pixel:200|400|008000"), Ok(Step::Pixel(200, 400, [0, 128, 0])));
+        assert!(Step::parse("pixel:200|400|8000").is_err());
+        assert!(Step::parse("pixel:200|400").is_err());
         assert_eq!(Step::parse("chord:ctrl+s"), Ok(Step::Chord(vec!["ctrl".into(), "s".into()])));
         assert!(Step::parse("fly").is_err());
     }

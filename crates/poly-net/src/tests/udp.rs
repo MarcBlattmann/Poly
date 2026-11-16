@@ -381,3 +381,32 @@ fn path_mtu_of_a_connected_socket() {
     let t = s.a.socket(Domain::Inet, SockType::Stream, None).unwrap();
     assert_eq!(s.a.path_mtu_to_peer(t), Err(Errno::ENOTCONN));
 }
+
+#[test]
+fn a_connected_socket_hears_port_unreachable_from_loopback_on_its_next_receive() {
+    let mut s = Sim::new(48);
+    let u = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.connect(u, sa(Ipv4Addr::LOCALHOST, 54)).unwrap();
+    s.a.send(u, b"knock").unwrap();
+    s.run_for(Duration::from_millis(10));
+    let mut buf = [0u8; 8];
+    assert_eq!(s.a.recv(u, &mut buf), Err(Errno::ECONNREFUSED), "the error comes once");
+    assert_eq!(s.a.recv(u, &mut buf), Err(Errno::EAGAIN));
+}
+
+#[test]
+fn port_unreachable_from_loopback_needs_no_interface_address() {
+    let mut s = Sim::with_configs(
+        49,
+        crate::Config { ipv4: None, ipv6: false, ..crate::Config::default() },
+        crate::Config::default(),
+        1500,
+    );
+    s.a.set_loopback(true);
+    let u = s.a.socket(Domain::Inet, SockType::Datagram, None).unwrap();
+    s.a.connect(u, sa(Ipv4Addr::LOCALHOST, 54)).unwrap();
+    s.a.send(u, b"knock").unwrap();
+    s.run_for(Duration::from_millis(10));
+    let mut buf = [0u8; 8];
+    assert_eq!(s.a.recv(u, &mut buf), Err(Errno::ECONNREFUSED));
+}
