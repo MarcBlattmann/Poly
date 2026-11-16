@@ -55,6 +55,7 @@ pub mod context;
 pub mod diag;
 pub mod exception;
 pub mod exec;
+pub mod ids;
 pub mod image;
 pub mod imageshare;
 pub mod io;

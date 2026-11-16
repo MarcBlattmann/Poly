@@ -1,0 +1,17 @@
+[
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.appleID","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.passkeyAccountCreation","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.passkeyAssertion","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.passkeyRegistration","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.password","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.securityKeyAssertion","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.ASAuthorizationResult.securityKeyRegistration","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.authorizationController","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.credentialDataManager","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.credentialExportManager","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.credentialImportManager","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.deliveredVerificationCodesManager","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.EnvironmentValues.webAuthenticationSession","src":["macos-swift-interface"]},
+{"symbol":"swift:_AuthenticationServices_SwiftUI.View.signInWithAppleButtonStyle(_:)","src":["macos-swift-interface"]}
+]

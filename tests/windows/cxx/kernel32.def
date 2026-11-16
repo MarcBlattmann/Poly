@@ -26,3 +26,7 @@ EXPORTS
     CreateEventW
     GetLastError
     TlsAlloc
+    GetProcAddress
+    LoadLibraryW
+    SetLastError
+    FormatMessageA

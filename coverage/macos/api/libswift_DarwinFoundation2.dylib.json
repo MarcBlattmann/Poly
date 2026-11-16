@@ -14,5 +14,13 @@
 {"symbol":"$sSo8timespecV6DarwinEyABs8DurationVcfC","src":["macos-sdk"]},
 {"symbol":"$ss8DurationV6DarwinEyABSo7timevalVcfC","src":["macos-sdk"]},
 {"symbol":"$ss8DurationV6DarwinEyABSo8timespecVcfC","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swift_DarwinFoundation2","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swift_DarwinFoundation2","src":["macos-sdk"]},
+{"symbol":"swift:_DarwinFoundation2.Duration.init(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.dprintf(_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.snprintf(ptr:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.stderr","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.stdin","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.stdout","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.timespec.init(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation2.timeval.init(_:)","src":["macos-swift-interface"]}
 ]

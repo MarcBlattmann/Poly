@@ -906,7 +906,7 @@
 {"symbol":"RtlSetUserValueHeap","src":["wine-spec"],"seeds":["wine:kernel32/tests/heap.c:test_block_layout","wine:kernel32/tests/heap.c:test_GlobalAlloc"]},
 {"symbol":"RtlSizeHeap","status":"claimed","claimed_by":"ntdll","src":["wine-spec"]},
 {"symbol":"RtlSleepConditionVariableCS","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
-{"symbol":"RtlSleepConditionVariableSRW","status":"claimed","claimed_by":"spec-win-apps-4","src":["wine-spec"]},
+{"symbol":"RtlSleepConditionVariableSRW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"RtlSplay","src":["wine-spec"]},
 {"symbol":"RtlStartRXact","src":["wine-spec"]},
 {"symbol":"RtlStringFromGUID","src":["wine-spec"],"seeds":["wine:ntdll/tests/rtlstr.c:test_RtlStringFromGUID"]},

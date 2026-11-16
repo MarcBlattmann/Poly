@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "pmr_null_resource",
+      "exe_sha256": "05aa9ababa7a57b195ae333c5feefc83e77ce89c425b5d5a85ea622254527a04",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbm90IG51bGwKb2sgc2FtZSBvYmplY3QgZXZlcnkgdGltZQpvayBub3QgbmV3X2RlbGV0ZV9yZXNvdXJjZSgpCm9rIGRvX2FsbG9jYXRlIHRocm93cyBzdGQ6OmJhZF9hbGxvYwpvayB3aGF0KCkgaXMgJ2JhZCBhbGxvY2F0aW9uJwpvayBkb19hbGxvY2F0ZSB0aHJvd3Mgc3RkOjpiYWRfYWxsb2MKb2sgd2hhdCgpIGlzICdiYWQgYWxsb2NhdGlvbicKb2sgZG9fYWxsb2NhdGUgdGhyb3dzIHN0ZDo6YmFkX2FsbG9jCm9rIHdoYXQoKSBpcyAnYmFkIGFsbG9jYXRpb24nCm9rIGFsbG9jYXRlKCkgdGhyb3VnaCB0aGUgd3JhcHBlciB0aHJvd3MKb2sgZG9fZGVhbGxvY2F0ZSBkb2VzIG5vdGhpbmcsIGV2ZW4gZm9yIGEgcG9pbnRlciBpdCBkaWQgbm90IGhhbmQgb3V0Cm9rIGRvX2lzX2VxdWFsOiBvbmx5IGl0c2VsZgpvayBvcGVyYXRvcj09IGNvbXBhcmVzIGJ5IGlkZW50aXR5CnN1bW1hcnkgMTMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok not null\nok same object every time\nok not new_delete_resource()\nok do_allocate throws std::bad_alloc\nok what() is 'bad allocation'\nok do_allocate throws std::bad_alloc\nok what() is 'bad allocation'\nok do_allocate throws std::bad_alloc\nok what() is 'bad allocation'\nok allocate() through the wrapper throws\nok do_deallocate does nothing, even for a pointer it did not hand out\nok do_is_equal: only itself\nok operator== compares by identity\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}
