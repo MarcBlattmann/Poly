@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/ActivateKeyboardLayout
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  Makes a loaded layout the thread's own: the return value, WM_INPUTLANGCHANGE, HKL_NEXT and HKL_PREV through
+  the list, KLF_REORDER, a layout that is not loaded and the independence of the threads. The list with one
+  layout and with several is in the tests' traces: the oracle has three.
+interface:
+  signature: "HKL ActivateKeyboardLayout(HKL hkl, UINT Flags)"
+rules:
+  what: "activates a layout for the calling thread; the test akl_activate loads US and Swiss German, activates them and walks the list; akl_threads uses a second thread"
+  return: "the previous layout of the thread; activating the layout that is already active returns it; a number that is not a loaded layout (0x12345678) returns NULL with last error 0 and changes nothing: ActivateKeyboardLayout(US, 0) returned 0x04072000 (the original: true) / [A] WM_INPUTLANGCHANGE charset=0 hkl=0x04090409 / [A] WM_KEYUP vk=0x11 / after activating US: GetKeyboardLayout(0)=0x04090409 name(ret 1)=00000409 / list after activating US: count 5: 0x08070809 0x04072000 0x04070809 0x04090409 0x08070807 / ActivateKeyboardLayout(US, 0) again returned 0x04090409"
+  message: "the focus window of the thread gets WM_INPUTLANGCHANGE (charset 0 (ANSI_CHARSET), lParam the new HKL) once per change, none when the layout stays the same; the IME messages WM_IME_SETCONTEXT/NOTIFY and a WM_KEYUP of VK_CONTROL (0x11) sometimes come along and are not traced"
+  next_prev: "HKL_NEXT (1) goes to the next entry of GetKeyboardLayoutList with wrap-around (US -> de-CH -> 0x08070809 -> 0x04072000 -> 0x04070809 -> US ... in the test's list [08070809, 04072000, 04070809, 04090409, 08070807]), HKL_PREV (0) to the previous; both return the previous layout: HKL_NEXT #0 returned 0x08070807 / [A] WM_INPUTLANGCHANGE charset=0 hkl=0x08070809 / now: GetKeyboardLayout(0)=0x08070809 name(ret 1)=00000807 / HKL_NEXT #1 returned 0x08070809 / [A] WM_INPUTLANGCHANGE charset=0 hkl=0x04072000 / [A] WM_KEYUP vk=0x11 / now: GetKeyboardLayout(0)=0x04072000 name(ret 1)=00000407 / HKL_NEXT #2 returned 0x04072000"
+  reorder: "KLF_REORDER (8) moves the activated layout to the front of the list: list after ActivateKeyboardLayout(US, KLF_REORDER): count 5: 0x04090409 0x08070809 0x04072000 0x04070809 0x08070807 / now: GetKeyboardLayout(0)=0x04090409 name(ret 1)=00000409"
+  name: "GetKeyboardLayoutNameW follows the thread: after activating 0x04090409 it gives 00000409, after 0x08070807 gives 00000807, 0x08070809 (the user's Swiss German under en-GB) gives 00000807, 0x04070809 gives 00000407"
+  threads: "the layout is per thread: a second thread, running before the activation, still has the original layout afterwards; KLF_SETFORPROCESS (0x100) with the original layout returns the layout active so far and a thread created afterwards starts with the original: ActivateKeyboardLayout(original, KLF_SETFORPROCESS) returned 0x04090409 / a thread created after KLF_SETFORPROCESS(original) has 0x04072000"
+errors:
+  not_loaded: "NULL returned, last error 0, nothing changes"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  A desktop with a single layout (the oracle's user has three; GetKeyboardLayoutList is another entry),
+  KLF_SETFORPROCESS's effect on threads that already run, input language hotkeys, WM_INPUTLANGCHANGEREQUEST
+  (sent by the shell, not by this call), IME layouts.

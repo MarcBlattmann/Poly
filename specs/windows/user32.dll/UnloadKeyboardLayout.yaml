@@ -1,0 +1,50 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/UnloadKeyboardLayout
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  Unloads a keyboard layout: what it returns for a loaded layout, one loaded twice, the thread's own layout and
+  numbers that are not layouts; the effect on a thread that has the layout active.
+interface:
+  signature: "BOOL UnloadKeyboardLayout(HKL hkl)"
+rules:
+  what: "removes a layout loaded by this process: ukl_basic and ukl_effects"
+  results: "UnloadKeyboardLayout of a layout this test loaded: 1 and the list is back to the 3 entries; the same HKL a second time: UnloadKeyboardLayout(US) again = 0 lasterror 0; the thread's own layout (0x04072000): 0, last error 0, the list unchanged; a number that is not a loaded layout (0x12345678): 0, last error 0"
+  active_layout: "unloading the layout the thread has activated succeeds (1) and the thread falls back to the first layout of the list (here 0x08070809, announced by WM_INPUTLANGCHANGE), not to the layout it had before: UnloadKeyboardLayout(the active US) = 1 lasterror 0 / [A] WM_INPUTLANGCHANGE charset=0 hkl=0x08070809 / after: GetKeyboardLayout(0)=0x08070809 name(ret 1)=00000807 / list after: count 3: 0x08070809 0x04072000 0x04070809; unloading it again afterwards: 0"
+  never: "UnloadKeyboardLayout(NULL) and UnloadKeyboardLayout(HKL_NEXT = 1) returned 1 in the oracle and removed two of the user's installed layouts from the session's list (0x08070809 and 0x04070809 disappeared; the registry was not changed and LoadKeyboardLayoutW with KLF_SUBSTITUTE_OK put them back): observed by accident, so not in any test"
+errors:
+  not_loaded: "0 with the last error unchanged (0)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  Unloading the installed layouts (it removes them from the session's list: see 'never'), NULL and the
+  HKL_NEXT/HKL_PREV values, reference counts across processes.

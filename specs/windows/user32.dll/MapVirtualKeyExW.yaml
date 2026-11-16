@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/MapVirtualKeyExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  The layout-explicit form of MapVirtualKeyW (see MapVirtualKeyW for the thread's own layout): maps a virtual
+  key to its scan code, a scan code to a virtual key and a virtual key to its character through the layout of
+  the HKL passed. Pinned down here for the US, German, Swiss German and French layouts.
+interface:
+  signature: "UINT MapVirtualKeyExW(UINT code, UINT map_type, HKL hkl)"
+rules:
+  what: "converts between virtual keys, scan codes and characters through the layout of the HKL passed; the tests mvk_<layout> print, for the keys of the ToUnicodeEx tables and for the modifier, function, navigation and system keys, vk -> vsc (MAPVK_VK_TO_VSC 0), vsc_ex (MAPVK_VK_TO_VSC_EX 4) and char (MAPVK_VK_TO_CHAR 2: the unshifted character in the low word, bit 31 set for a dead key; the upper-case letter for letters), and scan code -> vk (MAPVK_VSC_TO_VK 1) and vk_ex (MAPVK_VSC_TO_VK_EX 3, which tells left from right) for 0x00-0x5F and extended codes 0xE0xx"
+  vk_to_vsc_us: "US: letters and digits at the places of the printed legends (VK_Q 0x10, VK_W 0x11 ... VK_Z 0x2C, VK_Y 0x15, VK_1 0x02 .. VK_0 0x0B), VK_OEM_1 0x27, VK_OEM_PLUS 0x0D, VK_OEM_COMMA 0x33, VK_OEM_MINUS 0x0C, VK_OEM_PERIOD 0x34, VK_OEM_2 0x35, VK_OEM_3 0x29, VK_OEM_4 0x1A, VK_OEM_5 0x2B, VK_OEM_6 0x1B, VK_OEM_7 0x28, VK_OEM_102 0x56, VK_OEM_8 none (0); Space 0x39, Back 0x0E, Tab 0x0F, Return 0x1C, Escape 0x01"
+  vk_to_vsc_differences: "other layouts against the US one (vk to vsc): Swiss German Y vsc 15 -> 2c char 59 -> 59; Z vsc 2c -> 15 char 5a -> 5a; OEM_1 vsc 27 -> 1a char 3b -> fc; OEM_PLUS vsc 0d -> 00 char 3d -> 0; OEM_MINUS vsc 0c -> 35 char 2d -> 2d; OEM_2 vsc 35 -> 29 char 2f -> a7; OEM_3 vsc 29 -> 1b char 60 -> 800000a8; OEM_4 vsc 1a -> 0c char 5b -> 27; OEM_5 vsc 2b -> 28 char 5c -> e4; OEM_6 vsc 1b -> 0d char 5d -> 8000005e; OEM_7 vsc 28 -> 27 char 27 -> f6; OEM_8 vsc 00 -> 2b char 0 -> 24; OEM_102 vsc 56 -> 56 char 5c -> 3c | German Y vsc 15 -> 2c char 59 -> 59; Z vsc 2c -> 15 char 5a -> 5a; DECIMAL vsc 53 -> 53 char 2e -> 2c; OEM_1 vsc 27 -> 1a char 3b -> fc; OEM_PLUS vsc 0d -> 1b char 3d -> 2b; OEM_MINUS vsc 0c -> 35 char 2d -> 2d; OEM_2 vsc 35 -> 2b char 2f -> 23; OEM_3 vsc 29 -> 27 char 60 -> f6; OEM_4 vsc 1a -> 0c char 5b -> df; OEM_5 vsc 2b -> 29 char 5c -> 8000005e; OEM_6 vsc 1b -> 0d char 5d -> 800000b4; OEM_7 vsc 28 -> 28 char 27 -> e4; OEM_102 vsc 56 -> 56 char 5c -> 3c | French 0 vsc 0b -> 0b char 30 -> e0; 1 vsc 02 -> 02 char 31 -> 26; 2 vsc 03 -> 03 char 32 -> e9; 3 vsc 04 -> 04 char 33 -> 22; 4 vsc 05 -> 05 char 34 -> 27; 5 vsc 06 -> 06 char 35 -> 28; 6 vsc 07 -> 07 char 36 -> 2d; 7 vsc 08 -> 08 char 37 -> e8; 8 vsc 09 -> 09 char 38 -> 5f; 9 vsc 0a -> 0a char 39 -> e7; A vsc 1e -> 10 char 41 -> 41; M vsc 32 -> 27 char 4d -> 4d; Q vsc 10 -> 1e char 51 -> 51; W vsc 11 -> 2c char 57 -> 57; Z vsc 2c -> 11 char 5a -> 5a; OEM_1 vsc 27 -> 1b char 3b -> 24; OEM_COMMA vsc 33 -> 32 char 2c -> 2c; OEM_MINUS vsc 0c -> 00 char 2d -> 0; OEM_PERIOD vsc 34 -> 33 char 2e -> 3b; OEM_2 vsc 35 -> 34 char 2f -> 3a; OEM_3 vsc 29 -> 28 char 60 -> f9; OEM_4 vsc 1a -> 0c char 5b -> 29; OEM_5 vsc 2b -> 2b char 5c -> 2a; OEM_6 vsc 1b -> 1a char 5d -> 8000005e; OEM_7 vsc 28 -> 29 char 27 -> b2; OEM_8 vsc 00 -> 35 char 0 -> 21; OEM_102 vsc 56 -> 56 char 5c -> 3c"
+  vsc_to_vk_differences: "scan -> vk (type 1) against US: Swiss German 0c: bd -> db, 0d: bb -> dd, 15: 59 -> 5a, 1a: db -> ba, 1b: dd -> c0, 27: ba -> de, 28: de -> dc, 29: c0 -> bf, 2b: dc -> df, 2c: 5a -> 59, 35: bf -> bd | German 0c: bd -> db, 0d: bb -> dd, 15: 59 -> 5a, 1a: db -> ba, 1b: dd -> bb, 27: ba -> c0, 29: c0 -> dc, 2b: dc -> bf, 2c: 5a -> 59, 35: bf -> bd | French 0c: bd -> db, 10: 51 -> 41, 11: 57 -> 5a, 1a: db -> dd, 1b: dd -> ba, 1e: 41 -> 51, 27: ba -> 4d, 28: de -> c0, 29: c0 -> de, 2c: 5a -> 57, 32: 4d -> bc, 33: bc -> be, 34: be -> bf, 35: bf -> df"
+  vk_ex: "type 4 and 3 (extended): vk -> vsc_ex: A3=e01d A5=e038 21=0049 22=0051 23=004f 24=0047 Left=004b 26=0048 27=004d 28=0050 2D=0052 Delete=0053 5B=e05b 5C=e05c 5D=e05d DIVIDE=e035; scan -> vk_ex: 0057=7a 0058=7b 0059=0c 0064=7c 007e=c2 007f=00 0080=00 00ff=00 e01c=0d e01d=a3 e035=6f e038=a5 e047=24 e048=26 e049=21 e04b=25 e04d=27 e04f=23 e050=28 e051=22 e052=2d e053=2e e05b=5b e05c=5c e05d=5d"
+  dead_char: "type 2 returns the spacing character with bit 31 set for a dead key: Swiss German VK_OEM_3 800000a8, VK_OEM_6 8000005e, VK_OEM_4 (a dead key only with AltGr) 00000027; German VK_OEM_5 8000005e, VK_OEM_6 800000b4; French VK_OEM_6 8000005e"
+errors:
+  unmapped: "a key the layout does not have (for example VK_OEM_8 in the US layout, VK_OEM_PLUS in Swiss German) maps to 0 in every type"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  Layouts other than the four, IME layouts, MAPVK_VK_TO_CHAR for keys of other scripts.

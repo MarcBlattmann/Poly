@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/WM_MOUSEHWHEEL
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  The horizontal mouse wheel: what SendInput(MOUSEEVENTF_HWHEEL) delivers: the sign of the delta, the key flags
+  in wParam, the screen point in lParam, which window gets the message and how the default procedure passes it
+  up.
+interface:
+  signature: "WM_MOUSEHWHEEL: wParam = (delta << 16) | key flags, lParam = MAKELPARAM(x, y) in screen coordinates"
+rules:
+  what: "SendInput with MOUSEEVENTF_HWHEEL (mouseData the signed delta) produces WM_MOUSEHWHEEL (0x020E); the tests send it and MOUSEEVENTF_WHEEL (vertical, for comparison) while windows A (popup 400x300), its child C and another top-level window B (same process and thread) are open and A has the focus"
+  delta_sign: "positive mouseData (+120) = wheel tilted right: WM_MOUSEHWHEEL with a positive delta (the high word of wParam as a signed 16-bit value); -120 negative; the vertical wheel's +120 is WM_MOUSEWHEEL +120 (scroll up); deltas 240, 60, 1, -1 arrive unchanged, one message each"
+  wparam: "low word of wParam = the key flags: MK_CONTROL 0x8 with Ctrl down, MK_SHIFT 0x4 with Shift down, MK_LBUTTON 0x1 with the left button down, otherwise 0; the high word the delta"
+  lparam: "lParam = the cursor position in SCREEN coordinates (x low word, y high word) at the moment of the message"
+  target: "the message goes to the window under the cursor (the one WM_NCHITTEST finds), not to the focus window: with the cursor over A's client A gets it; over B (not the focus) B gets it; with the cursor over nothing of the process (the desktop at 1500,600) the test windows get nothing; the system sends WM_NCHITTEST to the window first (answer HTCLIENT) and then the wheel message"
+  forwarding: "DefWindowProc of a child passes WM_MOUSEHWHEEL on to its parent unchanged (the same as WM_MOUSEWHEEL): the child C gets it first, then its parent A, wParam and lParam unchanged (screen coordinates)"
+  routing_cases: "whl_routing: hwheel +120 over A's client: A: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=400,350 | hwheel +120 over the child C (focus on A): C: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=160,160, A: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=160,160 | hwheel +120 over B (focus on A): B: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=700,200 | vwheel +120 over B (focus on A): B: WM_MOUSEWHEEL keys=0x0 delta=120 screen=700,200 | hwheel +120 over the desktop (focus on A): nothing | focus on C: hwheel +120 over A's client: A: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=400,350 | focus on C: hwheel +120 over B: B: WM_MOUSEHWHEEL keys=0x0 delta=120 screen=700,200"
+  key_cases: "whl_keys: hwheel +120 over A's client: nothing | hwheel -120 over A's client: nothing | hwheel +240, +60, -1, +1 over A: nothing | Ctrl held: A: WM_KEYDOWN vk=0x11, A: WM_MOUSEHWHEEL keys=0x8 delta=120 screen=400,350, A: WM_KEYUP vk=0x11 | Shift held: A: WM_KEYDOWN vk=0x10, A: WM_MOUSEHWHEEL keys=0x4 delta=-120 screen=400,350, A: WM_KEYUP vk=0x10 | left button held: A: WM_SETCURSOR hit=HTCLIENT 1 msg=0x0201, A: WM_LBUTTONDOWN keys=0x1 client=300,250, A: WM_MOUSEHWHEEL keys=0x1 delta=120 screen=400,350, A: WM_SETCURSOR hit=HTCLIENT 1 msg=0x0202, A: WM_LBUTTONUP keys=0x0 client=300,250"
+errors:
+  none: "no error cases observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  A real mouse or touchpad with a precision wheel (small deltas), SetProcessMousewheelRoutingMode, hooks,
+  windows of other processes or desktops, high-resolution wheel deltas, scrolling by lines or pages
+  (SPI_GETWHEELSCROLLCHARS).
