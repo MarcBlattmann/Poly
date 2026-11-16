@@ -125,6 +125,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetExitCodeThread", "api-ms-win-core-processthreads-l1-1-0"),
     // Synchronisation (synchapi.h).
     ("CreateEventW", "api-ms-win-core-synch-l1-1-0"),
+    ("CreateWaitableTimerW", "api-ms-win-core-synch-l1-1-0"),
     ("SetEvent", "api-ms-win-core-synch-l1-1-0"),
     ("ResetEvent", "api-ms-win-core-synch-l1-1-0"),
     ("CreateMutexW", "api-ms-win-core-synch-l1-1-0"),

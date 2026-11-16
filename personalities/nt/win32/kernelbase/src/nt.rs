@@ -203,6 +203,7 @@ unsafe extern "system" {
         kind: u32,
         initial: u8,
     ) -> NtStatus;
+    pub fn NtCreateTimer(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes, kind: u32) -> NtStatus;
     pub fn NtSetEvent(handle: Handle, previous: *mut i32) -> NtStatus;
     pub fn NtResetEvent(handle: Handle, previous: *mut i32) -> NtStatus;
     pub fn NtCreateMutant(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes, owner: u8)

@@ -292,3 +292,56 @@ fn the_trace_reads_the_name_a_call_carries() {
     regs.rax = 0x0FFF;
     assert_eq!(trace::begin(&mut f, &regs).name, "nt#0xfff");
 }
+
+/// `NtQueryInformationProcess(ProcessHandleTable)` (class 0x3a): the handle list of the sheet
+/// (`handle_list_*`): ascending 4-byte values, as many as `ProcessHandleCount`, every one answering
+/// `NtQueryObject(ObjectTypeInformation)`, lengths and alignment as the sheet says.
+#[test]
+fn the_handle_table_lists_every_open_handle_and_each_answers_for_its_type() {
+    const SELF: u64 = u64::MAX;
+    let mut f = Fake::new();
+    let (s1, e1) = create_event(&mut f, "", 0);
+    let (s2, e2) = create_event(&mut f, r"\BaseNamedObjects\h58", 0);
+    assert_eq!((s1, s2), (STATUS_SUCCESS, STATUS_SUCCESS));
+    let (_, dir) = open_directory(&mut f, r"\BaseNamedObjects");
+    let count = {
+        let b = f.alloc(4);
+        assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 20, b, 4, 0]), STATUS_SUCCESS);
+        f.u32_at(b)
+    };
+    assert!(count >= 3);
+    let buf = f.alloc(0x1068);
+    let ret = f.put_u64(0xAAAA);
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, buf, 0x1068, ret]), STATUS_SUCCESS);
+    assert_eq!(u64::from(f.u32_at(ret)), 4 * u64::from(count));
+    let list: Vec<u32> = (0..count as u64).map(|i| f.u32_at(buf + 4 * i)).collect();
+    assert!(list.windows(2).all(|w| w[0] < w[1]) && list.iter().all(|v| *v != 0 && v % 4 == 0));
+    for h in [e1, e2, dir] {
+        assert!(list.contains(&(h as u32)), "{h:#x} is listed");
+    }
+    // Every listed handle answers for its type.
+    for v in &list {
+        let b = f.alloc(0x80);
+        let r = f.alloc(4);
+        let s = f.call(Service::QueryObject, &[u64::from(*v), 2, b, 0x80, r]);
+        assert!(s == STATUS_SUCCESS || s == STATUS_INFO_LENGTH_MISMATCH, "handle {v:#x}: {s:?}");
+    }
+    // A short buffer: whole entries only, the first ones; below 4 bytes the returned length stays.
+    let ret = f.put_u64(0xAAAA);
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, buf, 9, ret]), STATUS_SUCCESS);
+    assert_eq!(f.u32_at(ret), 8);
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, buf, 3, ret]), STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(f.u32_at(ret), 8);
+    // A buffer that is not 4-byte aligned, an unmapped one, the thread pseudo handle, a closed handle.
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, buf + 2, 8, ret]), NtStatus(0x8000_0002));
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, 0x10, 8, ret]), STATUS_ACCESS_VIOLATION);
+    assert_eq!(
+        f.call(Service::QueryInformationProcess, &[u64::MAX - 1, 0x3A, buf, 8, ret]),
+        STATUS_OBJECT_TYPE_MISMATCH
+    );
+    assert_eq!(f.call(Service::QueryInformationProcess, &[0, 0x3A, buf, 8, ret]), STATUS_INVALID_HANDLE);
+    // Closing a handle removes its entry.
+    assert_eq!(f.call(Service::Close, &[e1]), STATUS_SUCCESS);
+    assert_eq!(f.call(Service::QueryInformationProcess, &[SELF, 0x3A, buf, 0x1068, ret]), STATUS_SUCCESS);
+    assert_eq!(u64::from(f.u32_at(ret)), 4 * u64::from(count - 1));
+}

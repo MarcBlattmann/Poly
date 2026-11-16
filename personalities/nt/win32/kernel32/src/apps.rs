@@ -121,7 +121,6 @@ poly_win32_rt::fail_exports!(
         CreateTimerQueueTimer,
         CreateWaitableTimerExA,
         CreateWaitableTimerExW,
-        CreateWaitableTimerW,
         DeactivateActCtx,
         DebugActiveProcess,
         DebugActiveProcessStop,
