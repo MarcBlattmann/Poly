@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "map_staging",
+      "exe_sha256": "c320380873e5247de5c89da031e88a68fc3ee724c83537030b86ff7caa1adea7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhZ2luZyAxeDEgZm9ybWF0IDg3OiBNYXAgMHgwMDAwMDAwMCByb3cgcGl0Y2ggNCBkZXB0aCBwaXRjaCA0IGRhdGE9c2V0CnN0YWdpbmcgMTV4NCBmb3JtYXQgODc6IE1hcCAweDAwMDAwMDAwIHJvdyBwaXRjaCA2MCBkZXB0aCBwaXRjaCAyNDAgZGF0YT1zZXQKc3RhZ2luZyAzMXgyIGZvcm1hdCA4NzogTWFwIDB4MDAwMDAwMDAgcm93IHBpdGNoIDEyNCBkZXB0aCBwaXRjaCAyNDggZGF0YT1zZXQKc3RhZ2luZyAxMDB4MyBmb3JtYXQgNjE6IE1hcCAweDAwMDAwMDAwIHJvdyBwaXRjaCAxMDAgZGVwdGggcGl0Y2ggMzAwIGRhdGE9c2V0CnN0YWdpbmcgNjR4NjQgZm9ybWF0IDg3OiBNYXAgMHgwMDAwMDAwMCByb3cgcGl0Y2ggMjU2IGRlcHRoIHBpdGNoIDE2Mzg0IGRhdGE9c2V0CmZpbGw6IDB4MDAwMDAwMDAKc3RhZ2luZyBNYXAgV1JJVEU6IDB4MDAwMDAwMDAgZGF0YT1zZXQKc3RhZ2luZyBNYXAgV1JJVEVfTk9fT1ZFUldSSVRFOiAweDgwMDcwMDU3IGRhdGE9bnVsbApzdGFnaW5nIE1hcCAweGZmZmZmZmZmOiAweDgwMDcwMDU3IGRhdGE9bnVsbApNYXAgUkVBRCB3aXRoIGZsYWdzIDB4MTAwMDAwOiAweDAwMDAwMDAwCk1hcCBSRUFEIHdpdGggZmxhZ3MgMHhmZmZmZmZmZjogMHg4MDA3MDA1NwpNYXAgc3VicmVzb3VyY2UgMHgyIG9mIGEgMS1taXAgdGV4dHVyZTogMHg4MDA3MDA1NwpVbm1hcCBvZiBhbiB1bm1hcHBlZCByZXNvdXJjZSByZXR1cm5lZAogIHN1YnJlc291cmNlIDE6IDB4MDAwMDAwMDAgcm93IHBpdGNoIDMyCiAgc3VicmVzb3VyY2UgNDogMHgwMDAwMDAwMCByb3cgcGl0Y2ggMzIKZGVmYXVsdCB0ZXh0dXJlOiBSRUFEPTB4ODAwNzAwNTcgcGl0Y2ggMCBXUklURT0weDgwMDcwMDU3IHBpdGNoIDAgUkVBRF9XUklURT0weDgwMDcwMDU3IHBpdGNoIDAgV1JJVEVfRElTQ0FSRD0weDgwMDcwMDU3IHBpdGNoIDAgV1JJVEVfTk9fT1ZFUldSSVRFPTB4ODAwNzAwNTcgcGl0Y2ggMApzdGFnaW5nIGJ1ZmZlcjogY3JlYXRlIDB4MDAwMDAwMDAgUkVBRD0weDAwMDAwMDAwIHJvd3BpdGNoIDI1NiBkZXB0aHBpdGNoIDI1NiBXUklURT0weDAwMDAwMDAwIHJvd3BpdGNoIDI1NiBkZXB0aHBpdGNoIDI1NiBSRUFEX1dSSVRFPTB4MDAwMDAwMDAgcm93cGl0Y2ggMjU2IGRlcHRocGl0Y2ggMjU2IFdSSVRFX0RJU0NBUkQ9MHg4MDA3MDA1NyByb3dwaXRjaCAwIGRlcHRocGl0Y2ggMCBXUklURV9OT19PVkVSV1JJVEU9MHg4MDA3MDA1NyByb3dwaXRjaCAwIGRlcHRocGl0Y2ggMApkZWZhdWx0IGJ1ZmZlcjogY3JlYXRlIDB4MDAwMDAwMDAgUkVBRD0weDgwMDcwMDU3IHJvd3BpdGNoIDAgZGVwdGhwaXRjaCAwIFdSSVRFPTB4ODAwNzAwNTcgcm93cGl0Y2ggMCBkZXB0aHBpdGNoIDAgUkVBRF9XUklURT0weDgwMDcwMDU3IHJvd3BpdGNoIDAgZGVwdGhwaXRjaCAwIFdSSVRFX0RJU0NBUkQ9MHg4MDA3MDA1NyByb3dwaXRjaCAwIGRlcHRocGl0Y2ggMCBXUklURV9OT19PVkVSV1JJVEU9MHg4MDA3MDA1NyByb3dwaXRjaCAwIGRlcHRocGl0Y2ggMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "staging 1x1 format 87: Map 0x00000000 row pitch 4 depth pitch 4 data=set\nstaging 15x4 format 87: Map 0x00000000 row pitch 60 depth pitch 240 data=set\nstaging 31x2 format 87: Map 0x00000000 row pitch 124 depth pitch 248 data=set\nstaging 100x3 format 61: Map 0x00000000 row pitch 100 depth pitch 300 data=set\nstaging 64x64 format 87: Map 0x00000000 row pitch 256 depth pitch 16384 data=set\nfill: 0x00000000\nstaging Map WRITE: 0x00000000 data=set\nstaging Map WRITE_NO_OVERWRITE: 0x80070057 data=null\nstaging Map 0xffffffff: 0x80070057 data=null\nMap READ with flags 0x100000: 0x00000000\nMap READ with flags 0xffffffff: 0x80070057\nMap subresource 0x2 of a 1-mip texture: 0x80070057\nUnmap of an unmapped resource returned\n  subresource 1: 0x00000000 row pitch 32\n  subresource 4: 0x00000000 row pitch 32\ndefault texture: READ=0x80070057 pitch 0 WRITE=0x80070057 pitch 0 READ_WRITE=0x80070057 pitch 0 WRITE_DISCARD=0x80070057 pitch 0 WRITE_NO_OVERWRITE=0x80070057 pitch 0\nstaging buffer: create 0x00000000 READ=0x00000000 rowpitch 256 depthpitch 256 WRITE=0x00000000 rowpitch 256 depthpitch 256 READ_WRITE=0x00000000 rowpitch 256 depthpitch 256 WRITE_DISCARD=0x80070057 rowpitch 0 depthpitch 0 WRITE_NO_OVERWRITE=0x80070057 rowpitch 0 depthpitch 0\ndefault buffer: create 0x00000000 READ=0x80070057 rowpitch 0 depthpitch 0 WRITE=0x80070057 rowpitch 0 depthpitch 0 READ_WRITE=0x80070057 rowpitch 0 depthpitch 0 WRITE_DISCARD=0x80070057 rowpitch 0 depthpitch 0 WRITE_NO_OVERWRITE=0x80070057 rowpitch 0 depthpitch 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    },
+    {
+      "name": "map_staging_c",
+      "exe_sha256": "f4f2b305b36a30ed04cd41d90cb8d714720b08b8ca4899ac1d9367da779a69d2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhZ2luZyAzeDMgZm9ybWF0IDg3OiBNYXAgMHgwMDAwMDAwMCByb3cgcGl0Y2ggMTIgZGVwdGggcGl0Y2ggMzYgZGF0YT1zZXQKc3RhZ2luZyAxN3g0IGZvcm1hdCA4NzogTWFwIDB4MDAwMDAwMDAgcm93IHBpdGNoIDY4IGRlcHRoIHBpdGNoIDI3MiBkYXRhPXNldApzdGFnaW5nIDYzeDIgZm9ybWF0IDI4OiBNYXAgMHgwMDAwMDAwMCByb3cgcGl0Y2ggMjUyIGRlcHRoIHBpdGNoIDUwNCBkYXRhPXNldApzdGFnaW5nIDd4NSBmb3JtYXQgMjogTWFwIDB4MDAwMDAwMDAgcm93IHBpdGNoIDExMiBkZXB0aCBwaXRjaCA1NjAgZGF0YT1zZXQKc3RhZ2luZyAxMDAweDIgZm9ybWF0IDg3OiBNYXAgMHgwMDAwMDAwMCByb3cgcGl0Y2ggNDAwMCBkZXB0aCBwaXRjaCA4MDAwIGRhdGE9c2V0CnN0YWdpbmcgTWFwIFJFQUQ6IDB4MDAwMDAwMDAgZGF0YT1zZXQKc3RhZ2luZyBNYXAgV1JJVEVfRElTQ0FSRDogMHg4MDA3MDA1NyBkYXRhPW51bGwKc3RhZ2luZyBNYXAgNjogMHg4MDA3MDA1NyBkYXRhPW51bGwKTWFwIFJFQUQgd2l0aCBmbGFncyAweDA6IDB4MDAwMDAwMDAKTWFwIFJFQUQgd2l0aCBmbGFncyAweDIwMDAwMDogMHg4MDA3MDA1NwpNYXAgc3VicmVzb3VyY2UgMHgxIG9mIGEgMS1taXAgdGV4dHVyZTogMHg4MDA3MDA1NwpNYXAgc3VicmVzb3VyY2UgMHhmZmZmZmZmZiBvZiBhIDEtbWlwIHRleHR1cmU6IDB4ODAwNzAwNTcKICBzdWJyZXNvdXJjZSAwOiAweDAwMDAwMDAwIHJvdyBwaXRjaCA2NAogIHN1YnJlc291cmNlIDM6IDB4MDAwMDAwMDAgcm93IHBpdGNoIDY0CiAgc3VicmVzb3VyY2UgNjogMHg4MDA3MDA1NyByb3cgcGl0Y2ggMjg2MzMxMTUzMApkeW5hbWljIHRleHR1cmU6IFJFQUQ9MHg4MDA3MDA1NyBwaXRjaCAwIFdSSVRFPTB4ODAwNzAwNTcgcGl0Y2ggMCBSRUFEX1dSSVRFPTB4ODAwNzAwNTcgcGl0Y2ggMCBXUklURV9ESVNDQVJEPTB4MDAwMDAwMDAgcGl0Y2ggNjQgV1JJVEVfTk9fT1ZFUldSSVRFPTB4ODAwNzAwNTcgcGl0Y2ggMApkeW5hbWljIGNvbnN0YW50IGJ1ZmZlcjogY3JlYXRlIDB4MDAwMDAwMDAgUkVBRD0weDgwMDcwMDU3IHJvd3BpdGNoIDAgZGVwdGhwaXRjaCAwIFdSSVRFPTB4ODAwNzAwNTcgcm93cGl0Y2ggMCBkZXB0aHBpdGNoIDAgUkVBRF9XUklURT0weDgwMDcwMDU3IHJvd3BpdGNoIDAgZGVwdGhwaXRjaCAwIFdSSVRFX0RJU0NBUkQ9MHgwMDAwMDAwMCByb3dwaXRjaCAyNTYgZGVwdGhwaXRjaCAyNTYgV1JJVEVfTk9fT1ZFUldSSVRFPTB4MDAwMDAwMDAgcm93cGl0Y2ggMjU2IGRlcHRocGl0Y2ggMjU2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "staging 3x3 format 87: Map 0x00000000 row pitch 12 depth pitch 36 data=set\nstaging 17x4 format 87: Map 0x00000000 row pitch 68 depth pitch 272 data=set\nstaging 63x2 format 28: Map 0x00000000 row pitch 252 depth pitch 504 data=set\nstaging 7x5 format 2: Map 0x00000000 row pitch 112 depth pitch 560 data=set\nstaging 1000x2 format 87: Map 0x00000000 row pitch 4000 depth pitch 8000 data=set\nstaging Map READ: 0x00000000 data=set\nstaging Map WRITE_DISCARD: 0x80070057 data=null\nstaging Map 6: 0x80070057 data=null\nMap READ with flags 0x0: 0x00000000\nMap READ with flags 0x200000: 0x80070057\nMap subresource 0x1 of a 1-mip texture: 0x80070057\nMap subresource 0xffffffff of a 1-mip texture: 0x80070057\n  subresource 0: 0x00000000 row pitch 64\n  subresource 3: 0x00000000 row pitch 64\n  subresource 6: 0x80070057 row pitch 2863311530\ndynamic texture: READ=0x80070057 pitch 0 WRITE=0x80070057 pitch 0 READ_WRITE=0x80070057 pitch 0 WRITE_DISCARD=0x00000000 pitch 64 WRITE_NO_OVERWRITE=0x80070057 pitch 0\ndynamic constant buffer: create 0x00000000 READ=0x80070057 rowpitch 0 depthpitch 0 WRITE=0x80070057 rowpitch 0 depthpitch 0 READ_WRITE=0x80070057 rowpitch 0 depthpitch 0 WRITE_DISCARD=0x00000000 rowpitch 256 depthpitch 256 WRITE_NO_OVERWRITE=0x00000000 rowpitch 256 depthpitch 256\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    }
+  ]
+}

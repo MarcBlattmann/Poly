@@ -49,7 +49,9 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
 /// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
 /// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
-/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`.
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
+/// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -81,6 +83,10 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "crypt32.dll",
     "secur32.dll",
     "dhcpcsvc.dll",
+    "d3d11.dll",
+    "dxgi.dll",
+    "dcomp.dll",
+    "dxcore.dll",
     "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
@@ -1407,6 +1413,17 @@ mod tests {
         // Chrome's network stage (spec-chrome-win-s4).
         let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        // Chrome's GPU stage (spec-chrome-win-s5).
+        let gpu = image(
+            &[
+                ("d3d11.dll", &["D3D11CreateDevice"]),
+                ("DXGI.dll", &["CreateDXGIFactory1"]),
+                ("dcomp.dll", &["DCompositionCreateDevice"]),
+            ],
+            3,
+        );
+        assert_eq!(check_image(&gpu).unwrap()["d3d11.dll"], ["D3D11CreateDevice"]);
+        assert_eq!(check_image(&gpu).unwrap()["dxgi.dll"], ["CreateDXGIFactory1"]);
         let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
         assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);

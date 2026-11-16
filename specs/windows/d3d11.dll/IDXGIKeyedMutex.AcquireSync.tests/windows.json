@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "mutex_pingpong_b",
+      "exe_sha256": "3909f7009b2d19c2a9189f919eaf2ea9724cd552708cf8eedcf0d446ffb8ceea",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bXV0ZXggaW50ZXJmYWNlIGlzIHRoZSB0ZXh0dXJlJ3MgcG9pbnRlcjogZmFsc2U7IHRoZSB0aHJlZSBtdXRleCBvYmplY3RzIGRpZmZlcjogdHJ1ZQpCLkFjcXVpcmUoa2V5IDEsIDAgbXMpOiAweDAwMDAwMTAyCndoaWxlIEEgaG9sZHMgaXQ6IEEuQWNxdWlyZSgwLCAwKSBhZ2FpbiAweDg4N2EwMDAxCkIuQWNxdWlyZShrZXkgMSwgMCBtcyk6IDB4MDAwMDAwMDAKYWZ0ZXIgQi5SZWxlYXNlKDApOiBBLkFjcXVpcmUoMSwgMCkgMHgwMDAwMDEwMiBDLkFjcXVpcmUoMSwgMCkgMHgwMDAwMDEwMgpBLlJlbGVhc2Uoa2V5IDIpOiAweDAwMDAwMDAwCkMuUmVsZWFzZShrZXkgMyk6IDB4MDAwMDAwMDAKQi5SZWxlYXNlKGtleSAweDEwMDAwMDAwMCk6IDB4MDAwMDAwMDAKQi5BY3F1aXJlKGtleSAweGZmZmZmZmZmZmZmZmZmZmYsIDApOiAweDAwMDAwMDAwICBCLkFjcXVpcmUoa2V5IDB4ZmZmZmZmZmYsIDApOiAweDg4N2EwMDAxCkEuUmVsZWFzZSgwKTogMHgwMDAwMDAwMApBLlJlbGVhc2UoMCk6IDB4MDAwMDAwMDAKbXV0ZXggcmVmcyBiZWZvcmUgMyBhZnRlciBBZGRSZWYgNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mutex interface is the texture's pointer: false; the three mutex objects differ: true\nB.Acquire(key 1, 0 ms): 0x00000102\nwhile A holds it: A.Acquire(0, 0) again 0x887a0001\nB.Acquire(key 1, 0 ms): 0x00000000\nafter B.Release(0): A.Acquire(1, 0) 0x00000102 C.Acquire(1, 0) 0x00000102\nA.Release(key 2): 0x00000000\nC.Release(key 3): 0x00000000\nB.Release(key 0x100000000): 0x00000000\nB.Acquire(key 0xffffffffffffffff, 0): 0x00000000  B.Acquire(key 0xffffffff, 0): 0x887a0001\nA.Release(0): 0x00000000\nA.Release(0): 0x00000000\nmutex refs before 3 after AddRef 4\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 143
+    },
+    {
+      "name": "mutex_pingpong_c",
+      "exe_sha256": "0a313fc2d637ac1b920d636301d87296152d62dd5c1798ca30688875bce24ca8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QS5BY3F1aXJlKGtleSAxLCAwIG1zKSBvbiBhIGZyZXNoIG11dGV4OiAweDAwMDAwMTAyCkEuQWNxdWlyZShrZXkgMCwgMCBtcyk6IDB4MDAwMDAwMDAKQS5SZWxlYXNlKGtleSAxKTogMHgwMDAwMDAwMApCIHJlYWRzIHRoZSBwaXhlbCB3cml0dGVuIGJ5IEE6IDB4ZmYwMGZmMDAKQS5BY3F1aXJlKDAsIDApOiAweDAwMDAwMDAwCkMuQWNxdWlyZShrZXkgMiwgMCk6IDB4MDAwMDAwMDAKQi5BY3F1aXJlKGtleSAzLCAwKTogMHgwMDAwMDAwMApBLkFjcXVpcmUoa2V5IDAsIDApOiAweDAwMDAwMTAyICBBLkFjcXVpcmUoa2V5IDB4MTAwMDAwMDAwLCAwKTogMHgwMDAwMDAwMApCLlJlbGVhc2Uoa2V5IDApOiAweDAwMDAwMDAwCkEuQWNxdWlyZShrZXkgMCwgMSBtcykgd2hlbiBmcmVlOiAweDAwMDAwMDAwCmEgc2Vjb25kIHNoYXJlZCB0ZXh0dXJlIGhhcyBpdHMgb3duIG11dGV4OiBBY3F1aXJlKDAsIDApIDB4MDAwMDAwMDAgd2hpbGUgdGhlIGZpcnN0IGlzIGZyZWUKZGV2aWNlIHJlbW92ZWQgcmVhc29uczogMHgwMDAwMDAwMCAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "A.Acquire(key 1, 0 ms) on a fresh mutex: 0x00000102\nA.Acquire(key 0, 0 ms): 0x00000000\nA.Release(key 1): 0x00000000\nB reads the pixel written by A: 0xff00ff00\nA.Acquire(0, 0): 0x00000000\nC.Acquire(key 2, 0): 0x00000000\nB.Acquire(key 3, 0): 0x00000000\nA.Acquire(key 0, 0): 0x00000102  A.Acquire(key 0x100000000, 0): 0x00000000\nB.Release(key 0): 0x00000000\nA.Acquire(key 0, 1 ms) when free: 0x00000000\na second shared texture has its own mutex: Acquire(0, 0) 0x00000000 while the first is free\ndevice removed reasons: 0x00000000 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 127
+    }
+  ]
+}

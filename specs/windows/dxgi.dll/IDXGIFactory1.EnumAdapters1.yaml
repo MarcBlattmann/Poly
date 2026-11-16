@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIFactory1.EnumAdapters1.yaml
+id: windows/api/dxgi.dll/IDXGIFactory1.EnumAdapters1
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIFactory1::EnumAdapters1 method (dxgi.h)", "IDXGIFactory::EnumAdapters", "IDXGIFactory4::EnumWarpAdapter", "IDXGIFactory4::EnumAdapterByLuid", "IDXGIFactory6::EnumAdapterByGpuPreference", "DXGI_GPU_PREFERENCE", "DXGI_ADAPTER_DESC1", "DXGI_ADAPTER_FLAG"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Enumerates the adapters (GPUs) of the machine. Chrome's GPU info collection walks EnumAdapters1(0..) until DXGI_ERROR_NOT_FOUND and reads GetDesc1 of each (vendor, device id, flags, LUID). Observed: indexes below the adapter count give S_OK and a new adapter object (reference count 1, a different pointer on every call); the index equal to the count, and every larger index (also 0x7FFFFFFF and 0xFFFFFFFF) give DXGI_ERROR_NOT_FOUND (0x887A0002) with a NULL output. Machine dependent: hardware adapters come first; the software adapter 'Microsoft Basic Render Driver' (vendor 0x1414, flag SOFTWARE) is listed exactly once, as the last adapter, and is the only adapter on a machine without a GPU; its LUID equals the LUID of the adapter that IDXGIFactory4::EnumWarpAdapter returns. This entry's test also covers the old EnumAdapters, EnumWarpAdapter, EnumAdapterByLuid and EnumAdapterByGpuPreference.
+interface:
+  signature: "HRESULT IDXGIFactory1::EnumAdapters1(UINT Adapter, IDXGIAdapter1** ppAdapter)"
+  constants: "DXGI_ERROR_NOT_FOUND 0x887A0002; DXGI_ADAPTER_FLAG_REMOTE 1, DXGI_ADAPTER_FLAG_SOFTWARE 2 (dxgi.h)"
+chrome:
+  calls: "Chrome's GPU info collector (gpu_info_collector_win, guess from public behaviour) enumerates DXGI adapters with EnumAdapters1 and reads GetDesc1; the tracer sees CreateDXGIFactory1 and D3D11CreateDevice only"
+rules:
+  enumeration: "indexes 0 .. count-1: S_OK, *ppAdapter set; index = count, count+1, 100, 0x7FFFFFFF, 0xFFFFFFFF: DXGI_ERROR_NOT_FOUND (0x887A0002) and *ppAdapter is NULL; count is at least 1"
+  every_adapter: "for every enumerated adapter: GetDesc1 S_OK, description non-empty, VendorId non-zero, LUID non-zero, Flags has only the bits 1 (REMOTE) and 2 (SOFTWARE), SOFTWARE is set exactly when VendorId == 0x1414, the reference count of a fresh adapter object is 1, all LUIDs are distinct"
+  software_adapter: "exactly one enumerated adapter has the SOFTWARE flag and it is the last one; its LUID equals the LUID of the IDXGIFactory4::EnumWarpAdapter adapter; on a machine without a hardware adapter it is adapter 0 and the only adapter (machine dependent: a hardware adapter may precede it)"
+  adapter_objects: "two EnumAdapters1(0) calls return different COM objects (different pointers) with the same LUID; the adapter answers QueryInterface for IUnknown, IDXGIObject, IDXGIAdapter, IDXGIAdapter1, IDXGIAdapter2, IDXGIAdapter3 and IDXGIAdapter4 with the same pointer; IDXGIFactory and IDXGIDevice give E_NOINTERFACE"
+  old_enum_adapters: "IDXGIFactory::EnumAdapters(i) lists the same adapters in the same order (same LUIDs, same count) and ends with DXGI_ERROR_NOT_FOUND and a NULL output"
+  enum_warp_adapter: "IDXGIFactory4::EnumWarpAdapter(riid, out): riid IUnknown, IDXGIAdapter, IDXGIAdapter1, IDXGIAdapter2, IDXGIAdapter3, IDXGIAdapter4: S_OK, reference count 1, a new object each call with the same LUID, VendorId 0x1414, SOFTWARE flag set; riid IDXGIFactory or a made-up id: E_NOINTERFACE and a NULL output; the adapter's GetParent(IDXGIFactory1) is the same pointer as the factory that enumerated it"
+  enum_adapter_by_luid: "IDXGIFactory4::EnumAdapterByLuid(luid, riid, out) with the LUID of adapter 0 or of the WARP adapter: S_OK and an adapter with that LUID; LUID 0, all ones, or the bitwise inverse of a real LUID: DXGI_ERROR_NOT_FOUND with a NULL output; a made-up riid: E_NOINTERFACE; riid IDXGIAdapter: S_OK. (The LUID is passed by value as one 64-bit integer, low part first.)"
+  gpu_preference: "IDXGIFactory6::EnumAdapterByGpuPreference(index, preference, riid, out): the preferences 0 (unspecified), 1 (minimum power), 2 (high performance) and also the unspecified values 3 and 0xFFFFFFFF are all accepted; each list ends with DXGI_ERROR_NOT_FOUND at the same count as EnumAdapters1; on the test machine (one GPU plus the software adapter) the first adapter equals EnumAdapters1(0) for every preference (order on multi-GPU machines was not observed); a made-up riid: E_NOINTERFACE"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  NULL for the output pointer, multi-GPU ordering of EnumAdapterByGpuPreference (the oracle has one GPU), adapters appearing or disappearing while a factory lives (IsCurrent).

@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "ctx_mips",
+      "exe_sha256": "34a1a6e297e048c9ea880fcb643b5919ac0879c26649ba5cfca57ba0c7add618",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTZ4MTYgQkdSQTgsIGFsbCBtaXBzOiB0ZXh0dXJlIDB4MDAwMDAwMDAgbWlwcyA1IFNSViAweDAwMDAwMDAwIGFmdGVyIEdlbmVyYXRlTWlwczogWzA6IDE2eDE2IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMTogOHg4IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMjogNHg0IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMzogMngyIGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbNDogMXgxIGZpcnN0IDB4ZmY4MDAwODAgbGFzdCAweGZmODAwMDgwXQoyMHgxMiBCR1JBOCwgYWxsIG1pcHM6IHRleHR1cmUgMHgwMDAwMDAwMCBtaXBzIDUgU1JWIDB4MDAwMDAwMDAgYWZ0ZXIgR2VuZXJhdGVNaXBzOiBbMDogMjB4MTIgZmlyc3QgMHhmZmZmMDAwMCBsYXN0IDB4ZmYwMDAwZmZdIFsxOiAxMHg2IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMjogNXgzIGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMzogMngxIGZpcnN0IDB4ZmZjMDAwNDAgbGFzdCAweGZmYzAwMDQwXSBbNDogMXgxIGZpcnN0IDB4ZmZjMDAwNDAgbGFzdCAweGZmYzAwMDQwXQoxNngxNiBCR1JBOCwgMyBtaXBzLCBubyBHRU5FUkFURV9NSVBTIGZsYWc6IHRleHR1cmUgMHgwMDAwMDAwMCBtaXBzIDMgU1JWIDB4MDAwMDAwMDAgYWZ0ZXIgR2VuZXJhdGVNaXBzOiBbMDogMTZ4MTYgZmlyc3QgMHhmZmZmMDAwMCBsYXN0IDB4ZmYwMDAwZmZdIFsxOiA4eDggZmlyc3QgMHgwMDAwMDAwMCBsYXN0IDB4MDAwMDAwMDBdIFsyOiA0eDQgZmlyc3QgMHgwMDAwMDAwMCBsYXN0IDB4MDAwMDAwMDBdCjItc2xpY2UgYXJyYXkgdGV4dHVyZSAweDAwMDAwMDAwIHZpZXcgMHgwMDAwMDAwMDogc2xpY2UgMCBtaXAgMiAweGZmZmYwMDAwLCBzbGljZSAxIG1pcCAyIDB4ZmYwMDAwZmYgKHN1YnJlc291cmNlID0gc2xpY2UgKiAzICsgbWlwKQp2aWV3IG9mIGxldmVscyAwLi4rMyAoMHgwMDAwMDAwMCk7IGxldmVsIDAgcmVkLCB0aGUgb3RoZXJzIDB4ZmYxMTIyMzMgKyBsZXZlbDogYWZ0ZXIgR2VuZXJhdGVNaXBzIFswOiAweGZmZmYwMDAwXSBbMTogMHhmZmZmMDAwMF0gWzI6IDB4ZmZmZjAwMDBdIFszOiAweGZmMTEyMjM2XSBbNDogMHhmZjExMjIzN10KdmlldyBvZiBsZXZlbHMgMS4uKzEgKDB4MDAwMDAwMDApOyBsZXZlbCAxIHJlZCwgdGhlIG90aGVycyAweGZmMTEyMjMzICsgbGV2ZWw6IGFmdGVyIEdlbmVyYXRlTWlwcyBbMDogMHhmZjExMjIzM10gWzE6IDB4ZmZmZjAwMDBdIFsyOiAweGZmMTEyMjM1XSBbMzogMHhmZjExMjIzNl0gWzQ6IDB4ZmYxMTIyMzddCnZpZXcgb2YgbGV2ZWxzIDMuLisyICgweDAwMDAwMDAwKTsgbGV2ZWwgMyByZWQsIHRoZSBvdGhlcnMgMHhmZjExMjIzMyArIGxldmVsOiBhZnRlciBHZW5lcmF0ZU1pcHMgWzA6IDB4ZmYxMTIyMzNdIFsxOiAweGZmMTEyMjM0XSBbMjogMHhmZjExMjIzNV0gWzM6IDB4ZmZmZjAwMDBdIFs0OiAweGZmMTEyMjM3XQpTUlYgZGVzY3JpcHRpb24gYmVmb3JlIGFuZCBhZnRlciBHZW5lcmF0ZU1pcHMgZXF1YWw6IHRydWUgKDUgbWlwIGxldmVscyBpbiB0aGUgdmlldykKZGV2aWNlIHJlbW92ZWQgcmVhc29uIGF0IHRoZSBlbmQ6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "16x16 BGRA8, all mips: texture 0x00000000 mips 5 SRV 0x00000000 after GenerateMips: [0: 16x16 first 0xffff0000 last 0xff0000ff] [1: 8x8 first 0xffff0000 last 0xff0000ff] [2: 4x4 first 0xffff0000 last 0xff0000ff] [3: 2x2 first 0xffff0000 last 0xff0000ff] [4: 1x1 first 0xff800080 last 0xff800080]\n20x12 BGRA8, all mips: texture 0x00000000 mips 5 SRV 0x00000000 after GenerateMips: [0: 20x12 first 0xffff0000 last 0xff0000ff] [1: 10x6 first 0xffff0000 last 0xff0000ff] [2: 5x3 first 0xffff0000 last 0xff0000ff] [3: 2x1 first 0xffc00040 last 0xffc00040] [4: 1x1 first 0xffc00040 last 0xffc00040]\n16x16 BGRA8, 3 mips, no GENERATE_MIPS flag: texture 0x00000000 mips 3 SRV 0x00000000 after GenerateMips: [0: 16x16 first 0xffff0000 last 0xff0000ff] [1: 8x8 first 0x00000000 last 0x00000000] [2: 4x4 first 0x00000000 last 0x00000000]\n2-slice array texture 0x00000000 view 0x00000000: slice 0 mip 2 0xffff0000, slice 1 mip 2 0xff0000ff (subresource = slice * 3 + mip)\nview of levels 0..+3 (0x00000000); level 0 red, the others 0xff112233 + level: after GenerateMips [0: 0xffff0000] [1: 0xffff0000] [2: 0xffff0000] [3: 0xff112236] [4: 0xff112237]\nview of levels 1..+1 (0x00000000); level 1 red, the others 0xff112233 + level: after GenerateMips [0: 0xff112233] [1: 0xffff0000] [2: 0xff112235] [3: 0xff112236] [4: 0xff112237]\nview of levels 3..+2 (0x00000000); level 3 red, the others 0xff112233 + level: after GenerateMips [0: 0xff112233] [1: 0xff112234] [2: 0xff112235] [3: 0xffff0000] [4: 0xff112237]\nSRV description before and after GenerateMips equal: true (5 mip levels in the view)\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 89
+    },
+    {
+      "name": "ctx_mips_c",
+      "exe_sha256": "071ede27face71d6de8e29e713df4ae71adbee1341127fda015d347bd474b761",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTZ4MTYgUkdCQTgsIGFsbCBtaXBzOiB0ZXh0dXJlIDB4MDAwMDAwMDAgbWlwcyA1IFNSViAweDAwMDAwMDAwIGFmdGVyIEdlbmVyYXRlTWlwczogWzA6IDE2eDE2IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMTogOHg4IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMjogNHg0IGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbMzogMngyIGZpcnN0IDB4ZmZmZjAwMDAgbGFzdCAweGZmMDAwMGZmXSBbNDogMXgxIGZpcnN0IDB4ZmY4MDAwODAgbGFzdCAweGZmODAwMDgwXQoxNngxNiBCR1JBOCwgb25lIG1pcDogdGV4dHVyZSAweDAwMDAwMDAwIG1pcHMgMSBTUlYgMHgwMDAwMDAwMCBhZnRlciBHZW5lcmF0ZU1pcHM6IFswOiAxNngxNiBmaXJzdCAweGZmZmYwMDAwIGxhc3QgMHhmZjAwMDBmZl0KMTZ4MTYgQkdSQTgsIDMgbWlwcywgR0VORVJBVEVfTUlQUywgcmVuZGVyIHRhcmdldCBvbmx5OiB0ZXh0dXJlIDB4ODAwNzAwNTcKdmlldyBvZiBsZXZlbHMgMC4uKzIgKDB4MDAwMDAwMDApOyBsZXZlbCAwIHJlZCwgdGhlIG90aGVycyAweGZmMTEyMjMzICsgbGV2ZWw6IGFmdGVyIEdlbmVyYXRlTWlwcyBbMDogMHhmZmZmMDAwMF0gWzE6IDB4ZmZmZjAwMDBdIFsyOiAweGZmMTEyMjM1XSBbMzogMHhmZjExMjIzNl0gWzQ6IDB4ZmYxMTIyMzddCnZpZXcgb2YgbGV2ZWxzIDEuLisyICgweDAwMDAwMDAwKTsgbGV2ZWwgMSByZWQsIHRoZSBvdGhlcnMgMHhmZjExMjIzMyArIGxldmVsOiBhZnRlciBHZW5lcmF0ZU1pcHMgWzA6IDB4ZmYxMTIyMzNdIFsxOiAweGZmZmYwMDAwXSBbMjogMHhmZjExMjIzNV0gWzM6IDB4ZmYxMTIyMzZdIFs0OiAweGZmMTEyMjM3XQp2aWV3IG9mIGxldmVscyAyLi4rMiAoMHgwMDAwMDAwMCk7IGxldmVsIDIgcmVkLCB0aGUgb3RoZXJzIDB4ZmYxMTIyMzMgKyBsZXZlbDogYWZ0ZXIgR2VuZXJhdGVNaXBzIFswOiAweGZmMTEyMjMzXSBbMTogMHhmZjExMjIzNF0gWzI6IDB4ZmZmZjAwMDBdIFszOiAweGZmMTEyMjM2XSBbNDogMHhmZjExMjIzN10KdmlldyBvZiBsZXZlbHMgMC4uKzEgKDB4MDAwMDAwMDApOyBsZXZlbCAwIHJlZCwgdGhlIG90aGVycyAweGZmMTEyMjMzICsgbGV2ZWw6IGFmdGVyIEdlbmVyYXRlTWlwcyBbMDogMHhmZmZmMDAwMF0gWzE6IDB4ZmYxMTIyMzRdIFsyOiAweGZmMTEyMjM1XSBbMzogMHhmZjExMjIzNl0gWzQ6IDB4ZmYxMTIyMzddCkdlbmVyYXRlTWlwcyBvbiBhIG9uZS1taXAgdGV4dHVyZSB3aXRob3V0IHRoZSBmbGFnOiBkZXZpY2UgcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "16x16 RGBA8, all mips: texture 0x00000000 mips 5 SRV 0x00000000 after GenerateMips: [0: 16x16 first 0xffff0000 last 0xff0000ff] [1: 8x8 first 0xffff0000 last 0xff0000ff] [2: 4x4 first 0xffff0000 last 0xff0000ff] [3: 2x2 first 0xffff0000 last 0xff0000ff] [4: 1x1 first 0xff800080 last 0xff800080]\n16x16 BGRA8, one mip: texture 0x00000000 mips 1 SRV 0x00000000 after GenerateMips: [0: 16x16 first 0xffff0000 last 0xff0000ff]\n16x16 BGRA8, 3 mips, GENERATE_MIPS, render target only: texture 0x80070057\nview of levels 0..+2 (0x00000000); level 0 red, the others 0xff112233 + level: after GenerateMips [0: 0xffff0000] [1: 0xffff0000] [2: 0xff112235] [3: 0xff112236] [4: 0xff112237]\nview of levels 1..+2 (0x00000000); level 1 red, the others 0xff112233 + level: after GenerateMips [0: 0xff112233] [1: 0xffff0000] [2: 0xff112235] [3: 0xff112236] [4: 0xff112237]\nview of levels 2..+2 (0x00000000); level 2 red, the others 0xff112233 + level: after GenerateMips [0: 0xff112233] [1: 0xff112234] [2: 0xffff0000] [3: 0xff112236] [4: 0xff112237]\nview of levels 0..+1 (0x00000000); level 0 red, the others 0xff112233 + level: after GenerateMips [0: 0xffff0000] [1: 0xff112234] [2: 0xff112235] [3: 0xff112236] [4: 0xff112237]\nGenerateMips on a one-mip texture without the flag: device removed reason 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 97
+    }
+  ]
+}

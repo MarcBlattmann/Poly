@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "adapter_hw",
+      "exe_sha256": "83c29d4b5dbd6680d56b045229b401a5564a3788b788508a7404867633891623",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0RGVzYzEgMHgwMDAwMDAwMDogbmFtZS1ub25lbXB0eSB0cnVlIHZlbmRvci1ub256ZXJvIHRydWUgbHVpZC1ub256ZXJvIHRydWUgZmxhZ3Mgb25seSBrbm93biBiaXRzIHRydWUKR2V0RGVzYyAweDAwMDAwMDAwOiBmaXJzdCAzMDQgYnl0ZXMgZXF1YWwgR2V0RGVzYzEncyB0cnVlClF1ZXJ5VmlkZW9NZW1vcnlJbmZvKDAsIGxvY2FsKTogMHgwMDAwMDAwMCBidWRnZXQtbm9uemVybyB0cnVlIHVzYWdlPD1idWRnZXQgdHJ1ZQpDcmVhdGVTd2FwQ2hhaW5Gb3JId25kIG9uIHRoYXQgZGV2aWNlOiBzdWNjZWVkZWQgdHJ1ZSBzZXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetDesc1 0x00000000: name-nonempty true vendor-nonzero true luid-nonzero true flags only known bits true\nGetDesc 0x00000000: first 304 bytes equal GetDesc1's true\nQueryVideoMemoryInfo(0, local): 0x00000000 budget-nonzero true usage<=budget true\nCreateSwapChainForHwnd on that device: succeeded true set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 115
+    },
+    {
+      "name": "adapter_hw_c",
+      "exe_sha256": "75c49ebc39a5f4ab1c841ff0e1c3e7dfe47118f1c892b544b78cc9842052db5e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aGFzIG1lbW9yeSAoZGVkaWNhdGVkIHZpZGVvIG9yIHNoYXJlZCBzeXN0ZW0gbm9uemVybyk6IHRydWUKQ2hlY2tJbnRlcmZhY2VTdXBwb3J0KElEWEdJRGV2aWNlKTogc3VjY2VlZGVkIHRydWUgdmVyc2lvbiB3cml0dGVuIHRydWUKdGhlIGRldmljZSdzIGFkYXB0ZXIgaXMgdGhlIHNhbWUgb2JqZWN0IHRydWUgc2FtZSBsdWlkIHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "has memory (dedicated video or shared system nonzero): true\nCheckInterfaceSupport(IDXGIDevice): succeeded true version written true\nthe device's adapter is the same object true same luid true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 102
+    },
+    {
+      "name": "adapter_warp",
+      "exe_sha256": "63eb6ab0a8d4b5d39d93558457f71a9988bc35b9f49eb6217022e7e60065548c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2FycCBhZGFwdGVyIHNldApEZWRpY2F0ZWRWaWRlb01lbW9yeSAwIERlZGljYXRlZFN5c3RlbU1lbW9yeSAwIFNoYXJlZFN5c3RlbU1lbW9yeS1ub256ZXJvIHRydWUKR2V0RGVzYyAweDAwMDAwMDAwOiB0aGUgZmlyc3QgMzA0IGJ5dGVzIGVxdWFsIEdldERlc2MxJ3M6IHRydWUsIGJ5dGUgMzA0IHVudG91Y2hlZDogdHJ1ZQpDaGVja0ludGVyZmFjZVN1cHBvcnQoSURYR0lEZXZpY2UpOiAweDAwMDAwMDAwIHZlcnNpb24td3JpdHRlbj10cnVlIHZlcnNpb24tbm9uemVybz10cnVlCkNoZWNrSW50ZXJmYWNlU3VwcG9ydChJRDNEMTBEZXZpY2UpOiAweDg4N2EwMDA0IHZlcnNpb24td3JpdHRlbj1mYWxzZSB2ZXJzaW9uLW5vbnplcm89ZmFsc2UKV0FSUCBFbnVtT3V0cHV0cygweDEpOiAweDg4N2EwMDAyIHB0cj1udWxsClF1ZXJ5VmlkZW9NZW1vcnlJbmZvKG5vZGUgMHgwLCBncm91cCAwKTogMHgwMDAwMDAwMCBidWRnZXQtbm9uemVybz10cnVlIHVzYWdlPD1idWRnZXQ9dHJ1ZSBhdmFpbDw9YnVkZ2V0PXRydWUgcmVzZXJ2YXRpb24gMApRdWVyeVZpZGVvTWVtb3J5SW5mbyhub2RlIDB4MSwgZ3JvdXAgMCk6IDB4ODAwNzAwNTcgYnVkZ2V0LW5vbnplcm89ZmFsc2UgdXNhZ2U8PWJ1ZGdldD10cnVlIGF2YWlsPD1idWRnZXQ9dHJ1ZSByZXNlcnZhdGlvbiB1bnRvdWNoZWQKU2V0VmlkZW9NZW1vcnlSZXNlcnZhdGlvbigwLCBsb2NhbCwgMSBNaUIpOiAweDgwMDcwMDU3ClNldFZpZGVvTWVtb3J5UmVzZXJ2YXRpb24oMCwgZ3JvdXAgNywgMCk6IDB4ODAwNzAwNTcKR2V0UGFyZW50KElVbmtub3duKTogMHgwMDAwMDAwMCBwdHI9c2V0CmRldmljZSdzIGFkYXB0ZXIgaXMgdGhlIHNhbWUgb2JqZWN0OiB0cnVlCnRoZW4gQ3VycmVudFJlc2VydmF0aW9uIDB4MDAwMDAwMDAgMTA0ODU3NgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "warp adapter set\nDedicatedVideoMemory 0 DedicatedSystemMemory 0 SharedSystemMemory-nonzero true\nGetDesc 0x00000000: the first 304 bytes equal GetDesc1's: true, byte 304 untouched: true\nCheckInterfaceSupport(IDXGIDevice): 0x00000000 version-written=true version-nonzero=true\nCheckInterfaceSupport(ID3D10Device): 0x887a0004 version-written=false version-nonzero=false\nWARP EnumOutputs(0x1): 0x887a0002 ptr=null\nQueryVideoMemoryInfo(node 0x0, group 0): 0x00000000 budget-nonzero=true usage<=budget=true avail<=budget=true reservation 0\nQueryVideoMemoryInfo(node 0x1, group 0): 0x80070057 budget-nonzero=false usage<=budget=true avail<=budget=true reservation untouched\nSetVideoMemoryReservation(0, local, 1 MiB): 0x80070057\nSetVideoMemoryReservation(0, group 7, 0): 0x80070057\nGetParent(IUnknown): 0x00000000 ptr=set\ndevice's adapter is the same object: true\nthen CurrentReservation 0x00000000 1048576\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    },
+    {
+      "name": "adapter_warp_c",
+      "exe_sha256": "af07c9fc3a720389cee62d6dc34788eff6e8b0b21552146d6c163f31e71991c0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VmVuZG9ySWQgMHgxNDE0IERldmljZUlkIDB4OGMgU3ViU3lzSWQgMHgwIFJldmlzaW9uIDB4MApuYW1lIGxlbmd0aCAyOSB1bml0cywgZXZlcnl0aGluZyBhZnRlciBpdCBpcyB6ZXJvOiB0cnVlCkdldERlc2MyIDB4MDAwMDAwMDA6IGZpcnN0IDMwNCBieXRlcyBlcXVhbDogdHJ1ZSwgRmxhZ3MgMHgyLCBHcmFwaGljc1ByZWVtcHRpb25HcmFudWxhcml0eSA0LCBDb21wdXRlUHJlZW1wdGlvbkdyYW51bGFyaXR5IDQKQ2hlY2tJbnRlcmZhY2VTdXBwb3J0KElEM0QxMURldmljZSk6IDB4ODg3YTAwMDQgdmVyc2lvbi13cml0dGVuPWZhbHNlIHZlcnNpb24tbm9uemVybz1mYWxzZQpXQVJQIEVudW1PdXRwdXRzKDB4MCk6IDB4ODg3YTAwMDIgcHRyPW51bGwKV0FSUCBFbnVtT3V0cHV0cygweGZmZmZmZmZmKTogMHg4ODdhMDAwMiBwdHI9bnVsbApRdWVyeVZpZGVvTWVtb3J5SW5mbyhub2RlIDB4MCwgZ3JvdXAgMik6IDB4ODAwNzAwNTcgYnVkZ2V0LW5vbnplcm89ZmFsc2UgdXNhZ2U8PWJ1ZGdldD10cnVlIGF2YWlsPD1idWRnZXQ9dHJ1ZSByZXNlcnZhdGlvbiB1bnRvdWNoZWQKU2V0VmlkZW9NZW1vcnlSZXNlcnZhdGlvbigwLCBsb2NhbCwgMCk6IDB4ODAwNzAwNTcKU2V0VmlkZW9NZW1vcnlSZXNlcnZhdGlvbigwLCBsb2NhbCwgdTY0OjpNQVgpOiAweDgwMDcwMDU3CkdldFBhcmVudChJRFhHSURldmljZSk6IDB4ODAwMDQwMDIgcHRyPW51bGwKZGV2aWNlJ3MgYWRhcHRlciBoYXMgdGhlIHNhbWUgbHVpZDogdHJ1ZQp3aXRoIGEgZGV2aWNlOiBTZXRWaWRlb01lbW9yeVJlc2VydmF0aW9uKDEgTWlCKSAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "VendorId 0x1414 DeviceId 0x8c SubSysId 0x0 Revision 0x0\nname length 29 units, everything after it is zero: true\nGetDesc2 0x00000000: first 304 bytes equal: true, Flags 0x2, GraphicsPreemptionGranularity 4, ComputePreemptionGranularity 4\nCheckInterfaceSupport(ID3D11Device): 0x887a0004 version-written=false version-nonzero=false\nWARP EnumOutputs(0x0): 0x887a0002 ptr=null\nWARP EnumOutputs(0xffffffff): 0x887a0002 ptr=null\nQueryVideoMemoryInfo(node 0x0, group 2): 0x80070057 budget-nonzero=false usage<=budget=true avail<=budget=true reservation untouched\nSetVideoMemoryReservation(0, local, 0): 0x80070057\nSetVideoMemoryReservation(0, local, u64::MAX): 0x80070057\nGetParent(IDXGIDevice): 0x80004002 ptr=null\ndevice's adapter has the same luid: true\nwith a device: SetVideoMemoryReservation(1 MiB) 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 75
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "share_legacy",
+      "exe_sha256": "ea1bbdf2bd3cbcb41f3221ea1f406dda6fe34b5eb3d9b328f73ac0255419af41",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0U2hhcmVkSGFuZGxlOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQ7IGFnYWluIDB4MDAwMDAwMDAgc2FtZSB2YWx1ZSB0cnVlCiAgZGVzYyAxNngxNiBmbXQgODcgYmluZCAweDI4IG1pc2MgMHgyOyBwaXhlbCAweGZmMTEyMjMzCk9wZW5TaGFyZWRSZXNvdXJjZSBhcyBJRFhHSVJlc291cmNlOiAweDAwMDAwMDAwIG9iamVjdCBzZXQKT3BlblNoYXJlZFJlc291cmNlIGFzIG5vdGhpbmc6IDB4ODAwMDQwMDIgb2JqZWN0IG51bGwKT3BlblNoYXJlZFJlc291cmNlIHdpdGggTlVMTDogMHg4MDA3MDA1NyBvYmplY3QgbnVsbApPcGVuU2hhcmVkUmVzb3VyY2UgYWZ0ZXIgdGhhdDogMHgwMDAwMDAwMCBvYmplY3Qgc2V0Ck5UIHRleHR1cmU6IEdldFNoYXJlZEhhbmRsZSAweDgwMDcwMDU3IGhhbmRsZSBudWxsCklEWEdJUmVzb3VyY2U6OkdldEV2aWN0aW9uUHJpb3JpdHk6IDB4MDAwMDAwMDAgMHg3ODAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetSharedHandle: 0x00000000 handle set; again 0x00000000 same value true\n  desc 16x16 fmt 87 bind 0x28 misc 0x2; pixel 0xff112233\nOpenSharedResource as IDXGIResource: 0x00000000 object set\nOpenSharedResource as nothing: 0x80004002 object null\nOpenSharedResource with NULL: 0x80070057 object null\nOpenSharedResource after that: 0x00000000 object set\nNT texture: GetSharedHandle 0x80070057 handle null\nIDXGIResource::GetEvictionPriority: 0x00000000 0x78000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 75
+    },
+    {
+      "name": "share_legacy_c",
+      "exe_sha256": "d160c79a86cf22604829673125b3663ec600fd733a9b23fdcaa73dd6e847e17a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "T3BlblNoYXJlZFJlc291cmNlIHNlY29uZCBkZXZpY2U6IDB4MDAwMDAwMDAgb2JqZWN0IHNldApPcGVuU2hhcmVkUmVzb3VyY2UgYXMgSUQzRDExUmVzb3VyY2U6IDB4MDAwMDAwMDAgb2JqZWN0IHNldApPcGVuU2hhcmVkUmVzb3VyY2UgYXMgSUQzRDExQnVmZmVyOiAweDgwMDA0MDAyIG9iamVjdCBudWxsCk9wZW5TaGFyZWRSZXNvdXJjZTEgd2l0aCBhIGxlZ2FjeSBoYW5kbGU6IDB4ODAwNzAwNTcgb2JqZWN0IG51bGwKQ2xvc2VIYW5kbGUgb24gYSBsZWdhY3kgc2hhcmVkIGhhbmRsZTogMCAobGFzdCBlcnJvciAweDYpCmtleWVkIG11dGV4IGxlZ2FjeSB0ZXh0dXJlOiBHZXRTaGFyZWRIYW5kbGUgMHgwMDAwMDAwMCBoYW5kbGUgc2V0OyBvcGVuIG9uIHRoZSBzZWNvbmQgZGV2aWNlIDB4MDAwMDAwMDAgOyBJRFhHSUtleWVkTXV0ZXggMHgwMDAwMDAwMApJRFhHSVJlc291cmNlOjpHZXRVc2FnZSBvZiBhIHJlbmRlci10YXJnZXQgKyBzaGFkZXItcmVzb3VyY2UgdGV4dHVyZTogMHgwMDAwMDAwMCAweDMwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "OpenSharedResource second device: 0x00000000 object set\nOpenSharedResource as ID3D11Resource: 0x00000000 object set\nOpenSharedResource as ID3D11Buffer: 0x80004002 object null\nOpenSharedResource1 with a legacy handle: 0x80070057 object null\nCloseHandle on a legacy shared handle: 0 (last error 0x6)\nkeyed mutex legacy texture: GetSharedHandle 0x00000000 handle set; open on the second device 0x00000000 ; IDXGIKeyedMutex 0x00000000\nIDXGIResource::GetUsage of a render-target + shader-resource texture: 0x00000000 0x30\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    },
+    {
+      "name": "share_open_b",
+      "exe_sha256": "0746b5e96d53ef21718aad10ed604b827d42436d8526d4194174429f3638eba6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aGFuZGxlOiAweDAwMDAwMDAwCm9wZW5lZCBvYmplY3QgYW5zd2VyczogSUQzRDExUmVzb3VyY2U9eWVzIElEM0QxMVRleHR1cmUyRD15ZXMgSURYR0lSZXNvdXJjZT15ZXMgSURYR0lSZXNvdXJjZTE9eWVzIElEWEdJS2V5ZWRNdXRleD1ubyBJRDNEMTFCdWZmZXI9bm8gSUQzRDExVGV4dHVyZTJEMT15ZXMKc2FtZSBkZXZpY2U6IHdyaXR0ZW4gdGhyb3VnaCB0aGUgb3BlbmVkLCByZWFkIHRocm91Z2ggdGhlIG9yaWdpbmFsOiAweGZmNjU0MzIxCk9wZW5TaGFyZWRSZXNvdXJjZTEgYXMgSURYR0lSZXNvdXJjZTogMHgwMDAwMDAwMCBvYmplY3Qgc2V0Ck9wZW5TaGFyZWRSZXNvdXJjZTEgYXMgSUQzRDExQnVmZmVyOiAweDgwMDA0MDAyIG9iamVjdCBudWxsCnNlY29uZCBkZXZpY2UsIElEM0QxMVRleHR1cmUyRDogMHgwMDAwMDAwMCBkZXNjIDE2eDE2IG1pcHMgMSBhcnJheSAxIGZtdCA4NyBzYW1wbGVzIDEvMCB1c2FnZSAwIGJpbmQgMHgyOCBjcHUgMHgwIG1pc2MgMHg4MDIKdGhlIG9wZW5lZCB0ZXh0dXJlIGJlbG9uZ3MgdG8gdGhlIHNlY29uZCBkZXZpY2U6IHRydWUgKG5vdCB0aGUgZmlyc3Q6IGZhbHNlKQpOVUxMIGhhbmRsZTogMHg4MDA3MDA1NyBvYmplY3QgbnVsbAphbiBldmVudCBoYW5kbGU6IDB4ODAwNzAwNTcgb2JqZWN0IG51bGwKYWZ0ZXIgQ2xvc2VIYW5kbGUsIHNlY29uZCBkZXZpY2U6IDB4ODAwNzAwNTcgb2JqZWN0IG51bGwKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "handle: 0x00000000\nopened object answers: ID3D11Resource=yes ID3D11Texture2D=yes IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=no ID3D11Buffer=no ID3D11Texture2D1=yes\nsame device: written through the opened, read through the original: 0xff654321\nOpenSharedResource1 as IDXGIResource: 0x00000000 object set\nOpenSharedResource1 as ID3D11Buffer: 0x80004002 object null\nsecond device, ID3D11Texture2D: 0x00000000 desc 16x16 mips 1 array 1 fmt 87 samples 1/0 usage 0 bind 0x28 cpu 0x0 misc 0x802\nthe opened texture belongs to the second device: true (not the first: false)\nNULL handle: 0x80070057 object null\nan event handle: 0x80070057 object null\nafter CloseHandle, second device: 0x80070057 object null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    },
+    {
+      "name": "share_open_c",
+      "exe_sha256": "7e8bc1bdd59375288bbaf20ee539914c91ccdb786769ec593fa1100c98008d44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2FtZSBkZXZpY2UsIElEM0QxMVRleHR1cmUyRDogMHgwMDAwMDAwMCBkZXNjIDE2eDE2IG1pcHMgMSBhcnJheSAxIGZtdCA4NyBzYW1wbGVzIDEvMCB1c2FnZSAwIGJpbmQgMHgyOCBjcHUgMHgwIG1pc2MgMHg4MDIKb3BlbmVkIHR3aWNlOiB0d28gZGlmZmVyZW50IG9iamVjdHMgdHJ1ZQpPcGVuU2hhcmVkUmVzb3VyY2UxIGFzIElEM0QxMVJlc291cmNlOiAweDAwMDAwMDAwIG9iamVjdCBzZXQKT3BlblNoYXJlZFJlc291cmNlMSBhcyBJRFhHSUtleWVkTXV0ZXg6IDB4ODAwMDQwMDIgb2JqZWN0IG51bGwKT3BlblNoYXJlZFJlc291cmNlMSBhcyBub3RoaW5nOiAweDgwMDA0MDAyIG9iamVjdCBudWxsCnNlY29uZCBkZXZpY2Ugc2VlcyB0aGUgZGF0YSB3cml0dGVuIG9uIHRoZSBmaXJzdDogMHhmZjBhMGIwYwprZXllZCBtdXRleCB0ZXh0dXJlIG9uIHRoZSBzZWNvbmQgZGV2aWNlOiAweDAwMDAwMDAwIGRlc2MgMTZ4MTYgbWlwcyAxIGFycmF5IDEgZm10IDg3IHNhbXBsZXMgMS8wIHVzYWdlIDAgYmluZCAweDI4IGNwdSAweDAgbWlzYyAweDkwMApJTlZBTElEX0hBTkRMRV9WQUxVRTogMHg4MDA3MDA1NyBvYmplY3QgbnVsbAp0aGUgcmVhbCBoYW5kbGUgc3RpbGwgd29ya3MgYWZ0ZXIgdGhlIGJhZCBvbmVzOiAweDAwMDAwMDAwCnRoZSBvcmlnaW5hbCB0ZXh0dXJlIHN0aWxsIHJlYWRzOiAweGZmMGQwZTBmCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "same device, ID3D11Texture2D: 0x00000000 desc 16x16 mips 1 array 1 fmt 87 samples 1/0 usage 0 bind 0x28 cpu 0x0 misc 0x802\nopened twice: two different objects true\nOpenSharedResource1 as ID3D11Resource: 0x00000000 object set\nOpenSharedResource1 as IDXGIKeyedMutex: 0x80004002 object null\nOpenSharedResource1 as nothing: 0x80004002 object null\nsecond device sees the data written on the first: 0xff0a0b0c\nkeyed mutex texture on the second device: 0x00000000 desc 16x16 mips 1 array 1 fmt 87 samples 1/0 usage 0 bind 0x28 cpu 0x0 misc 0x900\nINVALID_HANDLE_VALUE: 0x80070057 object null\nthe real handle still works after the bad ones: 0x00000000\nthe original texture still reads: 0xff0d0e0f\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    }
+  ]
+}
