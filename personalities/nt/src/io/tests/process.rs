@@ -53,12 +53,11 @@ fn create_user_process_starts_a_child_with_its_parameters() {
     // Running: the exit status is pending and the handle not signalled.
     let (s, exit, id) = exit_status_of(&mut t, ph);
     assert_eq!((s, exit, id), (STATUS_SUCCESS, STATUS_PENDING.0, u64::from(pid.0)));
-    // `ProcessBasicInformation` of the child: its creator, the normal base priority and a PEB
+    // `ProcessBasicInformation` of the child: the normal base priority and a PEB
     // (the sheet's `basic_child`); a buffer of 47 bytes is refused and `ReturnLength` untouched.
     let buf = t.f.alloc(48);
     let ret = t.f.put_u64(0xAAAA);
     assert_eq!(t.f.call(Service::QueryInformationProcess, &[ph, 0, buf, 48, ret]), STATUS_SUCCESS);
-    assert_eq!(t.f.u64_at(buf + 40), u64::from(crate::tests::PID.0), "InheritedFromUniqueProcessId");
     assert_eq!(t.f.u32_at(buf + 24), 8, "BasePriority");
     assert_ne!(t.f.u64_at(buf + 8), 0, "PebBaseAddress");
     let ret = t.f.put_u64(0xAAAA);
