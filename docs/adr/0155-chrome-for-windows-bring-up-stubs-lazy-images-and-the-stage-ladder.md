@@ -1044,3 +1044,51 @@ browser still comes in some runs (once 35 s after the window without input, once
 maximize and restore); in runs with a slow start (window after 30 s, Chrome's services restarted)
 the page stays "Loading". Both are open (hand-off `chrome-win-s3-hunt-2.md`). The trace now names
 the win32k request of each `PolyUserCall` (`win32k#0x0(...) "CreateWindow { ... }"`).
+
+## Addendum (2026-11-15): S3 hunt 3, what is behind the browser's breakpoint at `chrome.dll+0xc62f809`
+
+**Context.** The browser of Chrome for Testing 157.0.8103.38 stopped with a breakpoint at
+`chrome.dll+0xc62f809` in every run that lived long enough: stage 1 runs that hung (step 13), S3
+window runs 35 to 90 s after the window. Three hunts each fixed a real Poly bug that changed the
+timing and the breakpoint came back. A failed check of Chrome's own writes no log line, so the
+log and the system call trail did not say what Chrome had found wrong.
+
+**Decision.**
+
+1. **The exception log shows what the program was holding** (`poly.nt.exceptions.mem[=N]`, with
+   `poly.nt.exceptions`; `poly_personality_nt::diag`): N bytes of the memory each register points
+   to (`mem` lines, hexadecimal and text); the text that values on the stack point to inside a
+   module (`text the stack points to`: a program keeps the function and file a task was posted
+   from as pointers to constant strings); the code addresses left below the stack pointer
+   (`code addresses below the stack pointer (its last calls)`, with the text they point to and
+   the nearest quadwords): the return addresses of the calls the thread made last. For that the
+   log is written before the exception frame is written to the thread's stack (the frame
+   overwrites what is below the stack pointer).
+2. **`ole32` names the class a program asks COM for** when it answers `REGDB_E_CLASSNOTREG`:
+   `stub: ole32: CoCreateInstance: class {...} is not registered (interface {...})`, like the
+   fail-only exports' `stub:` lines.
+
+**What the runs showed** (hand-off `fable-c62f809.md`).
+
+- The stack of the breaking thread holds the record of the task it runs: posted from
+  `DoStartDownload` in `components\update_client\background_downloader_win.cc`. It is the
+  component updater starting a download through BITS on its COM worker thread, about 35 s after
+  the first page has loaded. Nothing in it is a race: a slow start whose page never loads never
+  gets there, a run that lives long enough always does.
+- The task's method makes one call and then stops at its check; that call leaves nothing on the
+  stack and makes no call of its own, and no `CoCreateInstance` comes before the check.
+- With `TEB.ReservedForOle` (`winternl.h`; 0x1758 in the 64-bit TEB) pointing to memory that
+  cannot be read, the thread instead faults reading that pointer + 0x14; with a block whose 32
+  bits at +0x14 are all set, the call returns 1 instead of 0 and the same check still fails.
+  Chrome reads its thread's COM apartment from the block `TEB.ReservedForOle` points to, not
+  with `CoGetApartmentType`, and wants one particular kind. Poly's `ole32` keeps the apartment
+  in a TLS slot and leaves that TEB field null.
+- With Chrome's `--disable-component-update` the window stays up (240 s, page painted, no
+  exception).
+
+**Consequences.** The fix is small and is not made here: `ole32` has to keep a block per thread
+in `TEB.ReservedForOle` whose 32-bit value at +0x14 is what Windows has there for a thread with
+no apartment, a single-threaded and a multithreaded one. That value is in no public document, so
+it has to come from a spec sheet (observed on Windows: the field before `CoInitializeEx`, after
+it with each model, after `CoUninitialize`, for `OleInitialize` and `RoInitialize`). Until then
+S3 window runs that have to stay up pass `--disable-component-update`.

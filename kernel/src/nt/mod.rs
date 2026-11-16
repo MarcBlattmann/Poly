@@ -333,6 +333,9 @@ static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0
 /// bounded dump of the stack (`poly_personality_nt::diag::exception_report`, ADR 0155 step 9).
 /// The number of stack quadwords to dump; 0 is off.
 static EXCEPTIONS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+/// `poly.nt.exceptions.mem[=N]` (`poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG`): the bytes the
+/// exception log shows from each register that points into user memory; 0 is off.
+static EXCEPTION_MEMORY: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// `poly.nt.waits[=SECONDS]` (default 30): every that many seconds a kernel thread logs every blocked
 /// NT wait (`nt-waits:` lines: thread id, the objects it waits on with their type, name and kernel
@@ -636,6 +639,11 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         let words = poly_personality_nt::diag::exception_stack_words(exceptions);
         EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
+    }
+    let memory = boot.arg(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG);
+    if memory.is_some() || boot.has_flag(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG) {
+        let bytes = poly_personality_nt::diag::exception_memory_bytes(memory);
+        EXCEPTION_MEMORY.store(bytes as u32, core::sync::atomic::Ordering::Relaxed);
     }
     use poly_personality_nt::trace::{ONLY_FLAG, TRAIL_FLAG, trail_len};
     if let Some(n) = trail_len(boot.has_flag(TRAIL_FLAG), boot.arg(TRAIL_FLAG)) {
@@ -966,7 +974,8 @@ impl NtKernel for Kernel {
         }
         let words = EXCEPTIONS.load(core::sync::atomic::Ordering::Relaxed);
         if words != 0 {
-            exception::report_delivered(self.pid, self.tid, record, ctx, words as usize);
+            let memory = EXCEPTION_MEMORY.load(core::sync::atomic::Ordering::Relaxed) as usize;
+            exception::report_delivered(self.pid, self.tid, record, ctx, words as usize, memory);
         }
     }
 

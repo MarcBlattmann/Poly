@@ -3,19 +3,24 @@
 //!
 //! - COM apartments: `CoInitialize[Ex]`, `CoUninitialize`,
 //!   `CoGetApartmentType`, `OleInitialize`, `OleUninitialize`. The state
-//!   is per thread, in a TLS slot ([`poly_com::apartment`] decides).
+//!   is per thread, in the block `TEB.ReservedForOle` points to ([`poly_com::apartment`]
+//!   decides, sheet `TEB.ReservedForOle`): Chrome reads the apartment from there directly.
+//!   `CoGetApartmentType` is derived from the same block, with the implicit MTA.
 //! - Activation: every class is unregistered, so `CoCreateInstance[Ex]` and
 //!   `CoGetClassObject` fail with `REGDB_E_CLASSNOTREG` (or
 //!   `CO_E_NOTINITIALIZED` on a thread with no apartment) and clear their
 //!   out parameters.
+//! - The global interface table (`CLSID_StdGlobalInterfaceTable`, `IGlobalInterfaceTable`):
+//!   the one class that exists; registrations with cookies and counted references.
 //! - Task memory (`CoTaskMemAlloc`, `CoTaskMemRealloc`, `CoTaskMemFree`) is
 //!   the process heap's, GUID text and `CoCreateGuid`.
 //! - The Windows Runtime (`api-ms-win-core-winrt-*` resolve here, see
 //!   `poly_ldr::apiset`): `RoInitialize`/`RoUninitialize` (the same
 //!   apartment), `RoGetActivationFactory` and `RoActivateInstance` (no class
 //!   is registered) and the `HSTRING` functions ([`poly_com::hstring`]).
+//! - Drag and drop: `RegisterDragDrop`/`RevokeDragDrop` keep the target as the window's
+//!   `OleDropTargetInterface` property while the thread has OLE.
 //! - Small stand-ins that succeed without effect: `CoInitializeSecurity`,
-//!   `CoRegisterMessageFilter`, `RegisterDragDrop`/`RevokeDragDrop`,
 //!   `CoCreateFreeThreadedMarshaler` (an object that is only `IUnknown`).
 //!
 //! Sources: Microsoft Learn's page for each function, `combaseapi.h`,
@@ -24,11 +29,21 @@
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
+extern crate alloc;
+
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-
-extern crate alloc;
-use poly_com::apartment::{APTTYPEQUALIFIER_NONE, Apartment, Model};
+#[cfg(target_arch = "x86_64")]
+use poly_com::apartment::BLOCK_X64;
+#[cfg(target_arch = "x86")]
+use poly_com::apartment::BLOCK_X86;
+use poly_com::apartment::{
+    APTTYPEQUALIFIER_NONE, BLOCK_SIZE, BlockLayout, COINIT_APARTMENTTHREADED, ComState, InitKind, MainSta, Model,
+    MtaThreads, coinit_is_valid,
+};
+use poly_com::git::{
+    CLSID_BACKGROUND_COPY_MANAGER, CLSID_STD_GLOBAL_INTERFACE_TABLE, IID_IGLOBAL_INTERFACE_TABLE, Owner, Table,
+};
 use poly_com::guid::{GUID_TEXT_LEN, Guid};
 use poly_com::hresult::*;
 use poly_com::hstring::{self, HString, Header};
@@ -128,232 +143,111 @@ pub unsafe extern "system" fn CoTaskMemFree(pv: *mut c_void) {
 
 // ----- apartments ----------------------------------------------------------------------
 
-/// The TLS slot of the apartment word (allocated on first use).
-static SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
-const TLS_OUT_OF_INDEXES: u32 = u32::MAX;
+/// `HEAP_ZERO_MEMORY` (`winnt.h`).
+const HEAP_ZERO_MEMORY: u32 = 8;
 
-fn slot() -> Option<u32> {
-    let s = SLOT.load(Ordering::Acquire);
-    if s != TLS_OUT_OF_INDEXES {
-        return Some(s);
+/// The block layout of this build (sheet `TEB.ReservedForOle`).
+#[cfg(target_arch = "x86_64")]
+const LAYOUT: BlockLayout = BLOCK_X64;
+#[cfg(target_arch = "x86")]
+const LAYOUT: BlockLayout = BLOCK_X86;
+
+/// Where `TEB.ReservedForOle` is: the pointer to the thread's COM block (`winternl.h`).
+#[cfg(target_arch = "x86_64")]
+fn block_slot() -> *mut *mut u8 {
+    let teb: usize;
+    // SAFETY: GS is the TEB in every NT thread (ADR 0063).
+    unsafe { core::arch::asm!("mov {}, gs:[0x30]", out(reg) teb, options(nostack, pure, readonly)) };
+    (teb + LAYOUT.teb_offset) as *mut *mut u8
+}
+
+/// Where `TEB.ReservedForOle` is in a 32-bit thread (ADR 0186).
+#[cfg(target_arch = "x86")]
+fn block_slot() -> *mut *mut u8 {
+    let teb: usize;
+    // SAFETY: FS is the TEB in every 32-bit NT thread (ADR 0186).
+    unsafe { core::arch::asm!("mov {}, fs:[0x18]", out(reg) teb, options(nostack, pure, readonly)) };
+    (teb + LAYOUT.teb_offset) as *mut *mut u8
+}
+
+/// The thread's COM block, or NULL while it has used no COM function that makes one.
+fn block() -> *mut u8 {
+    // SAFETY: the thread's own TEB field.
+    unsafe { *block_slot() }
+}
+
+/// The thread's COM block, made on first use (zeroed, from the process heap, never freed while
+/// the thread lives: sheet `TEB.ReservedForOle`); NULL when there is no memory.
+fn block_or_make() -> *mut u8 {
+    let b = block();
+    if !b.is_null() {
+        return b;
     }
-    // SAFETY: kernel32's TLS.
-    let n = unsafe { TlsAlloc() };
-    if n == TLS_OUT_OF_INDEXES {
+    // SAFETY: the process heap; the thread's own TEB field.
+    unsafe {
+        let b = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, BLOCK_SIZE);
+        if !b.is_null() {
+            *block_slot() = b;
+        }
+        b
+    }
+}
+
+/// What the thread's block holds (all zero without one).
+fn state() -> ComState {
+    let b = block();
+    if b.is_null() {
+        ComState::new()
+    } else {
+        // SAFETY: a block this DLL made, `BLOCK_SIZE` bytes.
+        unsafe { ComState::read(b, LAYOUT) }
+    }
+}
+
+/// Run `f` on the thread's state (making the block when the thread has none) and store the result.
+fn update<R>(f: impl FnOnce(&mut ComState) -> R) -> Option<R> {
+    let b = block_or_make();
+    if b.is_null() {
         return None;
     }
-    match SLOT.compare_exchange(TLS_OUT_OF_INDEXES, n, Ordering::AcqRel, Ordering::Acquire) {
-        Ok(_) => Some(n),
-        Err(other) => {
-            // SAFETY: the slot just allocated, unused.
-            unsafe { TlsFree(n) };
-            Some(other)
-        }
-    }
-}
-
-fn apartment() -> Apartment {
-    match slot() {
-        // SAFETY: kernel32's TLS.
-        Some(s) => Apartment::from_word(unsafe { TlsGetValue(s) } as usize),
-        None => Apartment::new(),
-    }
-}
-
-fn set_apartment(a: Apartment) {
-    if let Some(s) = slot() {
-        // SAFETY: kernel32's TLS.
-        unsafe { TlsSetValue(s, a.to_word() as *mut u8) };
-    }
-}
-
-/// The thread that is the process's main STA (0: none), and how many threads have the MTA.
-static MAIN_STA: AtomicU32 = AtomicU32::new(0);
-static MTA_THREADS: AtomicU32 = AtomicU32::new(0);
-
-/// Whether thread `tid` still runs (a thread that ended without `CoUninitialize` is not the main STA any more).
-fn thread_alive(tid: u32) -> bool {
-    // SAFETY: SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION; the handle is closed at once.
+    // SAFETY: a block this DLL made, `BLOCK_SIZE` bytes.
     unsafe {
-        let h = OpenThread(0x0010_0000 | 0x0800, 0, tid);
-        if h == 0 {
-            return false;
-        }
-        let r = WaitForSingleObject(h, 0);
-        CloseHandle(h);
-        r == 0x102
+        let mut st = ComState::read(b, LAYOUT);
+        let r = f(&mut st);
+        st.write(b, LAYOUT);
+        Some(r)
     }
 }
 
-/// The first STA of the process while it lives is the main STA (`APTTYPE_MAINSTA`).
-fn claim_main_sta() -> bool {
-    // SAFETY: no preconditions.
-    let me = unsafe { GetCurrentThreadId() };
-    loop {
-        let cur = MAIN_STA.load(Ordering::Acquire);
-        if cur == me {
-            return true;
-        }
-        if cur != 0 && thread_alive(cur) {
-            return false;
-        }
-        if MAIN_STA.compare_exchange(cur, me, Ordering::AcqRel, Ordering::Acquire).is_ok() {
-            return true;
-        }
+/// The threads of the process in the multithreaded apartment (for the implicit MTA).
+static MTA_THREADS: MtaThreads = MtaThreads::new();
+
+/// Whether COM works on this thread: it has an apartment or the process has an MTA to be in.
+fn com_usable() -> bool {
+    state().is_usable(MTA_THREADS.any())
+}
+
+/// A failing call that still counts as using COM (sheet: `CoCreateInstance`, `CoGetClassObject`,
+/// `CoGetObjectContext` on a thread that never initialised): the thread gets its block, value 0x1.
+fn touch() {
+    let _ = update(|st| st.touch());
+}
+
+/// The apartment a registration or a fetch belongs to: this thread's STA, else the MTA.
+fn current_owner() -> Owner {
+    match state().model() {
+        // SAFETY: no arguments.
+        Some(Model::Sta) => Owner::Sta(unsafe { GetCurrentThreadId() }),
+        _ => Owner::Mta,
     }
 }
 
-/// The thread got its apartment just now.
-fn apartment_begins(a: &mut Apartment, model: Model) {
-    match model {
-        Model::Sta => a.set_main(claim_main_sta()),
-        Model::Mta => {
-            MTA_THREADS.fetch_add(1, Ordering::AcqRel);
-        }
-    }
-}
+const TLS_OUT_OF_INDEXES: u32 = u32::MAX;
 
-/// The thread's apartment ended (its last initialisation was balanced): `before` is what it was.
-fn apartment_ends(before: Apartment) {
-    if before.is_main() {
-        // SAFETY: no preconditions.
-        let me = unsafe { GetCurrentThreadId() };
-        let _ = MAIN_STA.compare_exchange(me, 0, Ordering::AcqRel, Ordering::Acquire);
-    }
-    if before.model() == Some(Model::Mta) {
-        let _ = MTA_THREADS.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
-    }
-    // The message filter of the apartment goes with it.
-    let f = filter();
-    if !f.is_null() {
-        set_filter(core::ptr::null_mut());
-        // SAFETY: a filter the thread registered (we hold a reference).
-        unsafe { release(f) };
-    }
-}
+/// The process's main STA (`APTTYPE_MAINSTA`): the first thread that made a single-threaded apartment.
+static MAIN_STA: MainSta = MainSta::new();
 
-/// `CoInitializeEx` / `RoInitialize` on this thread.
-fn initialize(model: Model) -> Hresult {
-    if slot().is_none() {
-        return E_OUTOFMEMORY;
-    }
-    let mut a = apartment();
-    let fresh = a.model().is_none();
-    let hr = a.initialize(model);
-    if hr >= 0 {
-        if fresh {
-            apartment_begins(&mut a, model);
-        }
-        set_apartment(a);
-    }
-    hr
-}
-
-fn uninitialize() {
-    let before = apartment();
-    let mut a = before;
-    a.uninitialize();
-    set_apartment(a);
-    if before.model().is_some() && a.model().is_none() {
-        apartment_ends(before);
-    }
-}
-
-/// `CoInitializeEx`: `dwCoInit` may only hold the defined bits and `pvReserved` must be NULL
-/// (`E_INVALIDARG`; the thread stays as it was).
-#[unsafe(no_mangle)]
-pub extern "system" fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hresult {
-    // A reserved pointer and any bit that is no `COINIT` value are refused (CoInitializeEx.yaml `bad_arguments`).
-    if !reserved.is_null() || !poly_com::apartment::coinit_is_valid(co_init) {
-        return E_INVALIDARG;
-    }
-    initialize(Model::from_coinit(co_init))
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn CoInitialize(reserved: *mut c_void) -> Hresult {
-    if !reserved.is_null() {
-        return E_INVALIDARG;
-    }
-    initialize(Model::Sta)
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn CoUninitialize() {
-    uninitialize();
-}
-
-/// `OleInitialize`: COM for the STA plus OLE's own count on the thread.
-#[unsafe(no_mangle)]
-pub extern "system" fn OleInitialize(reserved: *mut c_void) -> Hresult {
-    if !reserved.is_null() {
-        return E_INVALIDARG;
-    }
-    if slot().is_none() {
-        return E_OUTOFMEMORY;
-    }
-    let mut a = apartment();
-    let fresh = a.model().is_none();
-    let hr = a.ole_initialize();
-    if hr >= 0 {
-        if fresh {
-            apartment_begins(&mut a, Model::Sta);
-        }
-        set_apartment(a);
-    }
-    hr
-}
-
-/// `OleUninitialize`: the last one releases the drop targets registered on the thread.
-#[unsafe(no_mangle)]
-pub extern "system" fn OleUninitialize() {
-    let before = apartment();
-    let mut a = before;
-    let last = a.ole_uninitialize();
-    set_apartment(a);
-    if last {
-        release_drop_targets();
-    }
-    if before.model().is_some() && a.model().is_none() {
-        apartment_ends(before);
-    }
-}
-
-/// `CoGetApartmentType`: `CO_E_NOTINITIALIZED` when the thread has none and the process no MTA; a
-/// thread without COM in a process that has the MTA is in it implicitly.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut i32) -> Hresult {
-    if kind.is_null() || qualifier.is_null() {
-        return E_INVALIDARG;
-    }
-    let (hr, t, q) = match apartment().apartment_type() {
-        Some((t, q)) => (S_OK, t, q),
-        None if MTA_THREADS.load(Ordering::Acquire) > 0 => {
-            (S_OK, poly_com::apartment::APTTYPE_MTA, poly_com::apartment::APTTYPEQUALIFIER_IMPLICIT_MTA)
-        }
-        None => (CO_E_NOTINITIALIZED, 0, APTTYPEQUALIFIER_NONE),
-    };
-    // SAFETY: the caller's out parameters.
-    unsafe {
-        *kind = t;
-        *qualifier = q;
-    }
-    hr
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn RoInitialize(init_type: i32) -> Hresult {
-    initialize(Model::from_ro(init_type))
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn RoUninitialize() {
-    uninitialize();
-}
-
-// ----- the thread's message filter ---------------------------------------------------------
-
-/// The TLS slot of the thread's message filter (an `IMessageFilter` pointer we hold a reference to).
+/// The TLS slot of the thread's message filter (`CoRegisterMessageFilter`).
 static FILTER_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 
 fn filter_slot() -> Option<u32> {
@@ -376,28 +270,87 @@ fn filter_slot() -> Option<u32> {
     }
 }
 
-fn filter() -> *mut c_void {
-    // SAFETY: kernel32's TLS.
-    filter_slot().map_or(core::ptr::null_mut(), |s| unsafe { TlsGetValue(s) }.cast())
-}
-
-fn set_filter(f: *mut c_void) {
-    if let Some(s) = filter_slot() {
-        // SAFETY: kernel32's TLS.
-        unsafe { TlsSetValue(s, f.cast()) };
-    }
-}
-
-/// `IUnknown::AddRef` / `Release` of a COM object (vtable slots 1 and 2).
-unsafe fn add_ref(p: *mut c_void) {
-    // SAFETY: the caller's COM object.
+/// Whether thread `tid` still runs (a thread that ended without `CoUninitialize` is not the main
+/// STA any more).
+fn thread_alive(tid: u32) -> bool {
+    // SAFETY: SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION; the handle is closed at once.
     unsafe {
-        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
-        (*vtbl.add(1))(p);
+        let h = OpenThread(0x0010_0000 | 0x0800, 0, tid);
+        if h == 0 {
+            return false;
+        }
+        let r = WaitForSingleObject(h, 0);
+        CloseHandle(h);
+        r == 0x102
     }
 }
 
-unsafe fn release(p: *mut c_void) {
+/// `CoInitializeEx` / `RoInitialize` / `OleInitialize` on this thread.
+fn initialize(kind: InitKind) -> Hresult {
+    let Some(hr) = update(|st| st.initialize(kind)) else { return E_OUTOFMEMORY };
+    if hr == S_OK {
+        match kind.model() {
+            // SAFETY: no arguments.
+            Model::Sta => drop(MAIN_STA.claim_if_gone(unsafe { GetCurrentThreadId() }, thread_alive)),
+            Model::Mta => MTA_THREADS.enter(),
+        }
+    }
+    hr
+}
+
+/// `CoUninitialize` / `RoUninitialize` / `OleUninitialize`: the thread's last one ends its apartment.
+fn uninitialize(ole: bool) {
+    if block().is_null() {
+        return;
+    }
+    let before = state().model();
+    let Some((after, last_ole)) = update(|st| {
+        let last = if ole {
+            st.ole_uninitialize()
+        } else {
+            st.uninitialize();
+            false
+        };
+        (st.model(), last)
+    }) else {
+        return;
+    };
+    if last_ole {
+        release_drop_targets();
+    }
+    if before.is_none() || after.is_some() {
+        return;
+    }
+    // SAFETY: no arguments.
+    let tid = unsafe { GetCurrentThreadId() };
+    match before {
+        Some(Model::Sta) => {
+            MAIN_STA.release(tid);
+            // What the apartment registered in the global interface table ends with it.
+            let gone = with_git(|t| t.remove_owner(Owner::Sta(tid)));
+            for r in gone {
+                // SAFETY: the table held a reference of the object.
+                unsafe { release_unknown(r.object as *mut c_void) };
+            }
+        }
+        Some(Model::Mta) => MTA_THREADS.leave(),
+        None => {}
+    }
+    // The apartment's message filter goes with it.
+    if let Some(f) = filter_slot() {
+        // SAFETY: kernel32's TLS.
+        unsafe {
+            let old = TlsGetValue(f);
+            if !old.is_null() {
+                TlsSetValue(f, core::ptr::null_mut());
+                release_unknown(old.cast());
+            }
+        }
+    }
+}
+
+/// `IUnknown::Release` (vtable slot 2) of a COM object.
+unsafe fn release_unknown(p: *mut c_void) {
     // SAFETY: the caller's COM object.
     unsafe {
         let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
@@ -405,29 +358,89 @@ unsafe fn release(p: *mut c_void) {
     }
 }
 
-/// `CoRegisterMessageFilter`: one filter per STA thread, AddRef'ed; the one it replaces (or
-/// removes) goes to the caller with the reference the registration held.
+/// `IUnknown::AddRef` (vtable slot 1) of a COM object.
+unsafe fn add_ref_unknown(p: *mut c_void) {
+    // SAFETY: the caller's COM object.
+    unsafe {
+        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void) -> u32);
+        (*vtbl.add(1))(p);
+    }
+}
+
+/// `CoInitializeEx`: `dwCoInit` may only hold the defined bits and `pvReserved` must be NULL
+/// (`E_INVALIDARG`; the thread stays as it was and gets no block).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoRegisterMessageFilter(new: *mut c_void, old: *mut *mut c_void) -> Hresult {
-    match apartment().model() {
-        None => return CO_E_NOTINITIALIZED,
-        Some(Model::Mta) => return CO_E_NOT_SUPPORTED,
-        Some(Model::Sta) => {}
+pub extern "system" fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hresult {
+    if !reserved.is_null() || !coinit_is_valid(co_init) {
+        return E_INVALIDARG;
     }
-    let prev = filter();
-    if !new.is_null() {
-        // SAFETY: the caller's filter.
-        unsafe { add_ref(new) };
+    initialize(InitKind::Com(co_init))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CoInitialize(reserved: *mut c_void) -> Hresult {
+    if !reserved.is_null() {
+        return E_INVALIDARG;
     }
-    set_filter(new);
-    if !old.is_null() {
-        // SAFETY: the caller's out parameter.
-        unsafe { *old = prev };
-    } else if !prev.is_null() {
-        // SAFETY: the filter the thread had registered.
-        unsafe { release(prev) };
+    initialize(InitKind::Com(COINIT_APARTMENTTHREADED))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn CoUninitialize() {
+    uninitialize(false);
+}
+
+/// `OleInitialize`: a single-threaded apartment with an OLE count; `pvReserved` must be NULL.
+#[unsafe(no_mangle)]
+pub extern "system" fn OleInitialize(reserved: *mut c_void) -> Hresult {
+    if !reserved.is_null() {
+        return E_INVALIDARG;
     }
-    S_OK
+    initialize(InitKind::Ole)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn OleUninitialize() {
+    uninitialize(true);
+}
+
+/// `CoGetApartmentType`: `CO_E_NOTINITIALIZED` when the thread has none and the process has no
+/// multithreaded apartment to be implicitly in. Derived from the thread's block.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut i32) -> Hresult {
+    if kind.is_null() || qualifier.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: no arguments.
+    let main = MAIN_STA.is_main(unsafe { GetCurrentThreadId() });
+    match state().apartment_type_in(main, MTA_THREADS.any()) {
+        Some((t, q)) => {
+            // SAFETY: the caller's out parameters.
+            unsafe {
+                *kind = t;
+                *qualifier = q;
+            }
+            S_OK
+        }
+        None => {
+            // SAFETY: the caller's out parameters.
+            unsafe {
+                *kind = 0;
+                *qualifier = APTTYPEQUALIFIER_NONE;
+            }
+            CO_E_NOTINITIALIZED
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn RoInitialize(init_type: i32) -> Hresult {
+    initialize(InitKind::Ro(init_type))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn RoUninitialize() {
+    uninitialize(false);
 }
 
 // ----- drag and drop -------------------------------------------------------------------
@@ -552,7 +565,7 @@ unsafe fn remove_prop(hwnd: usize) {
 /// property) until `RevokeDragDrop` or the last `OleUninitialize` of this thread; it needs OLE on
 /// the thread; `DestroyWindow` does not revoke.
 #[unsafe(no_mangle)]
-pub extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
+pub unsafe extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
     // SAFETY: user32's functions on a handle value; the target is the caller's COM object.
     unsafe {
         if hwnd == 0 || !is_window(hwnd) {
@@ -561,14 +574,14 @@ pub extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hre
         if target.is_null() {
             return E_INVALIDARG;
         }
-        let a = apartment();
-        if a.ole_count() == 0 {
-            return if a.ole_used() { CO_E_NOTINITIALIZED } else { E_OUTOFMEMORY };
+        let a = state();
+        if a.ole == 0 {
+            return if a.ole_used { CO_E_NOTINITIALIZED } else { E_OUTOFMEMORY };
         }
         if get_prop(hwnd) != 0 {
             return DRAGDROP_E_ALREADYREGISTERED;
         }
-        add_ref(target);
+        add_ref_unknown(target);
         set_prop(hwnd, target as usize);
         let me = GetCurrentThreadId();
         TARGETS.with(|t| t.push((hwnd, target as usize, me)));
@@ -590,7 +603,7 @@ pub extern "system" fn RevokeDragDrop(hwnd: usize) -> Hresult {
         }
         remove_prop(hwnd);
         TARGETS.with(|t| t.retain(|e| e.0 != hwnd));
-        release(target as *mut c_void);
+        release_unknown(target as *mut c_void);
     }
     S_OK
 }
@@ -610,39 +623,51 @@ fn release_drop_targets() {
             if is_window(hwnd) && get_prop(hwnd) == target {
                 remove_prop(hwnd);
             }
-            release(target as *mut c_void);
+            release_unknown(target as *mut c_void);
         }
     }
 }
 
 // ----- activation ----------------------------------------------------------------------
 
-use poly_com::apartment::activation_failure as activation_result;
-
-/// `CoGetClassObject`: no class is registered.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoGetClassObject(
-    _clsid: *const Guid,
-    _context: u32,
-    _server_info: *mut c_void,
-    _iid: *const Guid,
-    ppv: *mut *mut c_void,
-) -> Hresult {
-    if ppv.is_null() {
-        return E_POINTER;
-    }
-    // SAFETY: the caller's out parameter.
-    unsafe { *ppv = core::ptr::null_mut() };
-    activation_result(apartment().model().is_some(), false)
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
 }
 
-/// `CoCreateInstance`: no class is registered.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoCreateInstance(
-    _clsid: *const Guid,
-    outer: *mut c_void,
-    _context: u32,
-    _iid: *const Guid,
+/// A line in the kernel log, as the fail-only exports write (`stub: ole32: ...`).
+fn log(text: &str) {
+    // SAFETY: the service reads `text.len()` bytes.
+    unsafe { PolyDebugPrint(text.as_ptr(), text.len()) };
+}
+
+/// `{XXXXXXXX-...}` for the log; `{?}` for a NULL pointer.
+fn guid_text(guid: *const Guid) -> alloc::string::String {
+    if guid.is_null() {
+        return alloc::string::String::from("{?}");
+    }
+    // SAFETY: the caller's GUID.
+    let text = unsafe { (*guid).to_text() };
+    alloc::string::String::from_utf16_lossy(&text)
+}
+
+/// Whether the caller's GUID is `want`.
+unsafe fn is_guid(p: *const Guid, want: &Guid) -> bool {
+    // SAFETY: the caller's GUID.
+    !p.is_null() && unsafe { *p } == *want
+}
+
+/// Activation of a class Poly does not have: the out parameter is cleared and the answer is
+/// `REGDB_E_CLASSNOTREG` (`CO_E_NOTINITIALIZED` on a thread with no apartment, `CLASS_E_NOAGGREGATION`
+/// with an outer unknown). The failing call still gives the thread its COM block (sheet
+/// `TEB.ReservedForOle`). The log names the class, so a program that stops after asking for one
+/// shows which; BITS is one such class: where the service is missing Windows answers the same.
+unsafe fn not_registered(
+    function: &str,
+    clsid: *const Guid,
+    iid: *const Guid,
+    outer: bool,
     ppv: *mut *mut c_void,
 ) -> Hresult {
     if ppv.is_null() {
@@ -650,7 +675,51 @@ pub unsafe extern "system" fn CoCreateInstance(
     }
     // SAFETY: the caller's out parameter.
     unsafe { *ppv = core::ptr::null_mut() };
-    activation_result(apartment().model().is_some(), !outer.is_null())
+    touch();
+    if !com_usable() {
+        return CO_E_NOTINITIALIZED;
+    }
+    // SAFETY: the caller's GUID.
+    let name =
+        if unsafe { is_guid(clsid, &CLSID_BACKGROUND_COPY_MANAGER) } { " (BITS: not installed here)" } else { "" };
+    log(&alloc::format!(
+        "stub: ole32: {function}: class {}{name} is not registered (interface {})",
+        guid_text(clsid),
+        guid_text(iid)
+    ));
+    poly_com::apartment::activation_failure(true, outer)
+}
+
+/// `CoGetClassObject`: no class is registered (the global interface table has no class factory).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetClassObject(
+    clsid: *const Guid,
+    _context: u32,
+    _server_info: *mut c_void,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Hresult {
+    // SAFETY: the caller's pointers.
+    unsafe { not_registered("CoGetClassObject", clsid, iid, false, ppv) }
+}
+
+/// `CoCreateInstance`: the global interface table is the one class there is; no other is
+/// registered.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoCreateInstance(
+    clsid: *const Guid,
+    outer: *mut c_void,
+    context: u32,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Hresult {
+    // SAFETY: the caller's pointers.
+    unsafe {
+        if is_guid(clsid, &CLSID_STD_GLOBAL_INTERFACE_TABLE) {
+            return create_global_interface_table(outer, context, iid, ppv);
+        }
+        not_registered("CoCreateInstance", clsid, iid, !outer.is_null(), ppv)
+    }
 }
 
 /// `MULTI_QI` (`objidl.h`).
@@ -661,7 +730,11 @@ pub struct MultiQi {
     hr: Hresult,
 }
 
-/// `CoCreateInstanceEx`: every requested interface fails the same way.
+/// `CO_S_NOTALLINTERFACES` (`winerror.h`): some of the interfaces asked for are missing.
+const CO_S_NOTALLINTERFACES: Hresult = 0x0008_0012;
+
+/// `CoCreateInstanceEx`: every requested interface is asked from the object, or fails the same
+/// way when the class is not there.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstanceEx(
     clsid: *const Guid,
@@ -674,18 +747,244 @@ pub unsafe extern "system" fn CoCreateInstanceEx(
     if results.is_null() || count == 0 {
         return E_INVALIDARG;
     }
-    let mut unused: *mut c_void = core::ptr::null_mut();
-    // SAFETY: as CoCreateInstance.
-    let hr = unsafe { CoCreateInstance(clsid, outer, context, core::ptr::null(), &mut unused) };
-    for i in 0..count as usize {
-        // SAFETY: `count` entries of the caller.
-        unsafe {
+    // SAFETY: the caller's pointers; `count` entries of the caller.
+    unsafe {
+        if is_guid(clsid, &CLSID_STD_GLOBAL_INTERFACE_TABLE) {
+            let mut found = 0;
+            let mut last = E_NOINTERFACE;
+            for i in 0..count as usize {
+                let q = results.add(i);
+                let mut out: *mut c_void = core::ptr::null_mut();
+                let hr = create_global_interface_table(outer, context, (*q).iid, &mut out);
+                (*q).itf = out;
+                (*q).hr = hr;
+                if hr == S_OK {
+                    found += 1;
+                } else {
+                    last = hr;
+                }
+            }
+            return if found == count {
+                S_OK
+            } else if found > 0 {
+                CO_S_NOTALLINTERFACES
+            } else {
+                last
+            };
+        }
+        let mut unused: *mut c_void = core::ptr::null_mut();
+        let hr = not_registered("CoCreateInstanceEx", clsid, core::ptr::null(), !outer.is_null(), &mut unused);
+        for i in 0..count as usize {
             let q = results.add(i);
             (*q).itf = core::ptr::null_mut();
             (*q).hr = hr;
         }
+        hr
     }
-    hr
+}
+
+/// `CoGetObjectContext`: there are no context objects; the call counts as using COM (the thread
+/// gets its block) and fails `CO_E_NOTINITIALIZED` on a thread with no apartment.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetObjectContext(_iid: *const Guid, ppv: *mut *mut c_void) -> Hresult {
+    if ppv.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *ppv = core::ptr::null_mut() };
+    touch();
+    if com_usable() { E_NOINTERFACE } else { CO_E_NOTINITIALIZED }
+}
+
+// ----- the global interface table ------------------------------------------------------
+
+/// The registrations, behind a spin lock (held for a few instructions, never across a call into
+/// an object).
+struct Git {
+    locked: core::sync::atomic::AtomicBool,
+    table: core::cell::UnsafeCell<Table>,
+}
+
+// SAFETY: `table` is only touched with `locked` held (`with_git`).
+unsafe impl Sync for Git {}
+
+static GIT_TABLE: Git =
+    Git { locked: core::sync::atomic::AtomicBool::new(false), table: core::cell::UnsafeCell::new(Table::new()) };
+
+fn with_git<R>(f: impl FnOnce(&mut Table) -> R) -> R {
+    while GIT_TABLE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock gives exclusive access.
+    let r = f(unsafe { &mut *GIT_TABLE.table.get() });
+    GIT_TABLE.locked.store(false, Ordering::Release);
+    r
+}
+
+#[repr(C)]
+struct GitVtbl {
+    query_interface: unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+    release: unsafe extern "system" fn(*mut c_void) -> u32,
+    register: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut u32) -> Hresult,
+    revoke: unsafe extern "system" fn(*mut c_void, u32) -> Hresult,
+    get: unsafe extern "system" fn(*mut c_void, u32, *const Guid, *mut *mut c_void) -> Hresult,
+}
+
+#[repr(C)]
+struct GitObject {
+    vtbl: *const GitVtbl,
+}
+
+// SAFETY: a table of function pointers and the one object that points to it.
+unsafe impl Sync for GitVtbl {}
+// SAFETY: as above; the object has no state.
+unsafe impl Sync for GitObject {}
+
+static GIT_VTBL: GitVtbl = GitVtbl {
+    query_interface: git_qi,
+    add_ref: git_add_ref,
+    release: git_release,
+    register: git_register,
+    revoke: git_revoke,
+    get: git_get,
+};
+
+/// The one table object of the process (`IGlobalInterfaceTable`; objidl.h's vtable order).
+static GIT_OBJECT: GitObject = GitObject { vtbl: &GIT_VTBL };
+
+fn git_pointer() -> *mut c_void {
+    (&GIT_OBJECT as *const GitObject).cast_mut().cast()
+}
+
+/// `CoCreateInstance(CLSID_StdGlobalInterfaceTable, ...)` (sheet `CLSID_StdGlobalInterfaceTable`):
+/// the same object for every thread; in-process contexts only; no aggregation; only `IUnknown` and
+/// `IGlobalInterfaceTable`.
+unsafe fn create_global_interface_table(
+    outer: *mut c_void,
+    context: u32,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Hresult {
+    if ppv.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *ppv = core::ptr::null_mut() };
+    touch();
+    if !com_usable() {
+        return CO_E_NOTINITIALIZED;
+    }
+    // CLSCTX_INPROC_SERVER (`wtypes.h`) is the only context the table is served in.
+    if context & 1 == 0 {
+        return REGDB_E_CLASSNOTREG;
+    }
+    if !outer.is_null() {
+        return CLASS_E_NOAGGREGATION;
+    }
+    // SAFETY: the caller's GUID.
+    if unsafe { is_guid(iid, &IID_IUNKNOWN) || is_guid(iid, &IID_IGLOBAL_INTERFACE_TABLE) } {
+        // SAFETY: the caller's out parameter.
+        unsafe { *ppv = git_pointer() };
+        S_OK
+    } else {
+        E_NOINTERFACE
+    }
+}
+
+unsafe extern "system" fn git_qi(this: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's GUID and out parameter.
+    unsafe {
+        if is_guid(iid, &IID_IUNKNOWN) || is_guid(iid, &IID_IGLOBAL_INTERFACE_TABLE) {
+            *out = this;
+            S_OK
+        } else {
+            *out = core::ptr::null_mut();
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn git_add_ref(_this: *mut c_void) -> u32 {
+    1
+}
+
+unsafe extern "system" fn git_release(_this: *mut c_void) -> u32 {
+    1
+}
+
+/// `RegisterInterfaceInGlobal`: one reference of the object is kept until the cookie is revoked or
+/// the registering apartment ends; the interface id is not checked against the object.
+unsafe extern "system" fn git_register(
+    _this: *mut c_void,
+    object: *mut c_void,
+    iid: *const Guid,
+    cookie: *mut u32,
+) -> Hresult {
+    if object.is_null() || iid.is_null() || cookie.is_null() {
+        return E_INVALIDARG;
+    }
+    if !com_usable() {
+        return CO_E_NOTINITIALIZED;
+    }
+    let owner = current_owner();
+    // SAFETY: the caller's COM object, GUID and out parameter.
+    unsafe {
+        add_ref_unknown(object);
+        let c = with_git(|t| t.register(object as usize, *iid, owner));
+        *cookie = c;
+    }
+    S_OK
+}
+
+/// `RevokeInterfaceFromGlobal`: from any apartment; the table's reference is released.
+unsafe extern "system" fn git_revoke(_this: *mut c_void, cookie: u32) -> Hresult {
+    match with_git(|t| t.revoke(cookie)) {
+        Some(r) => {
+            // SAFETY: the table held a reference of the object.
+            unsafe { release_unknown(r.object as *mut c_void) };
+            S_OK
+        }
+        None => E_INVALIDARG,
+    }
+}
+
+/// `GetInterfaceFromGlobal`: in the registering apartment the object itself answers the query; in
+/// another one the caller gets a stand-in for the proxy Windows makes. It is an object that is
+/// `IUnknown` and no more, since there is no marshalling here, and holds no reference of the
+/// registered object.
+unsafe extern "system" fn git_get(_this: *mut c_void, cookie: u32, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *out = core::ptr::null_mut() };
+    if iid.is_null() {
+        return E_INVALIDARG;
+    }
+    let Some(r) = with_git(|t| t.get(cookie)) else { return E_INVALIDARG };
+    if !com_usable() {
+        return CO_E_NOTINITIALIZED;
+    }
+    if poly_com::git::same_apartment(r.owner, current_owner()) {
+        // SAFETY: a registered COM object (the registration holds a reference); the caller's pointers.
+        unsafe {
+            let object = r.object as *mut c_void;
+            let vtbl = *(object
+                as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
+            return (*vtbl)(object, iid, out);
+        }
+    }
+    // SAFETY: the caller's GUID and out parameter.
+    unsafe {
+        if !is_guid(iid, &IID_IUNKNOWN) {
+            return E_NOINTERFACE;
+        }
+        new_unknown(out)
+    }
 }
 
 /// `RoGetActivationFactory`: no Windows Runtime class is registered.
@@ -791,7 +1090,7 @@ unsafe extern "system" fn unk_qi(this: *mut Marshaler, iid: *const Guid, out: *m
             if (*this).outer.is_null() {
                 (*this).refs.fetch_add(1, Ordering::AcqRel);
             } else {
-                add_ref((*this).outer);
+                add_ref_unknown((*this).outer);
             }
             *out = core::ptr::addr_of_mut!((*this).marshal).cast();
             S_OK
@@ -885,6 +1184,74 @@ pub unsafe extern "system" fn CoCreateFreeThreadedMarshaler(outer: *mut c_void, 
     S_OK
 }
 
+/// The stand-in `GetInterfaceFromGlobal` hands out in another apartment (Windows makes a proxy;
+/// there is no marshalling here): `IUnknown` and no more, one reference, the caller's.
+#[repr(C)]
+struct ProxyObject {
+    vtbl: *const ProxyVtbl,
+    refs: AtomicU32,
+}
+
+#[repr(C)]
+struct ProxyVtbl {
+    query_interface: unsafe extern "system" fn(*mut ProxyObject, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut ProxyObject) -> u32,
+    release: unsafe extern "system" fn(*mut ProxyObject) -> u32,
+}
+
+// SAFETY: a table of function pointers.
+unsafe impl Sync for ProxyVtbl {}
+
+static PROXY_VTBL: ProxyVtbl = ProxyVtbl { query_interface: proxy_qi, add_ref: proxy_add_ref, release: proxy_release };
+
+unsafe extern "system" fn proxy_qi(this: *mut ProxyObject, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's IID and out parameter.
+    unsafe {
+        if is_guid(iid, &IID_IUNKNOWN) {
+            (*this).refs.fetch_add(1, Ordering::AcqRel);
+            *out = this.cast();
+            S_OK
+        } else {
+            *out = core::ptr::null_mut();
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn proxy_add_ref(this: *mut ProxyObject) -> u32 {
+    // SAFETY: a live object.
+    unsafe { (*this).refs.fetch_add(1, Ordering::AcqRel) + 1 }
+}
+
+unsafe extern "system" fn proxy_release(this: *mut ProxyObject) -> u32 {
+    // SAFETY: a live object from CoTaskMemAlloc.
+    unsafe {
+        let n = (*this).refs.fetch_sub(1, Ordering::AcqRel) - 1;
+        if n == 0 {
+            CoTaskMemFree(this.cast());
+        }
+        n
+    }
+}
+
+/// A new proxy stand-in (one reference), or `E_OUTOFMEMORY`.
+unsafe fn new_unknown(out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the caller's out parameter; a fresh block.
+    unsafe {
+        let p = CoTaskMemAlloc(core::mem::size_of::<ProxyObject>()).cast::<ProxyObject>();
+        if p.is_null() {
+            *out = core::ptr::null_mut();
+            return E_OUTOFMEMORY;
+        }
+        p.write(ProxyObject { vtbl: &PROXY_VTBL, refs: AtomicU32::new(1) });
+        *out = p.cast();
+    }
+    S_OK
+}
+
 /// `CoInitializeSecurity`: accepted, nothing enforced.
 #[unsafe(no_mangle)]
 pub extern "system" fn CoInitializeSecurity(
@@ -914,6 +1281,34 @@ pub extern "system" fn CoSetProxyBlanket(
     _capabilities: u32,
 ) -> Hresult {
     if proxy.is_null() { E_INVALIDARG } else { E_NOINTERFACE }
+}
+
+/// `CoRegisterMessageFilter`: only a single-threaded apartment has a message filter
+/// (`CO_E_NOT_SUPPORTED` on a multithreaded thread, `CO_E_NOTINITIALIZED` on one with no apartment).
+/// The thread keeps the new filter (with a reference of its own) and hands the previous one back
+/// (NULL at first); the filter is never called, since no call ever has to be rejected or retried.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoRegisterMessageFilter(new: *mut c_void, old: *mut *mut c_void) -> Hresult {
+    match state().model() {
+        None => return CO_E_NOTINITIALIZED,
+        Some(Model::Mta) => return CO_E_NOT_SUPPORTED,
+        Some(Model::Sta) => {}
+    }
+    let Some(f) = filter_slot() else { return E_OUTOFMEMORY };
+    // SAFETY: kernel32's TLS; `new` is a COM object or NULL; the caller's out parameter.
+    unsafe {
+        let previous = TlsGetValue(f).cast::<c_void>();
+        if !new.is_null() {
+            add_ref_unknown(new);
+        }
+        TlsSetValue(f, new.cast());
+        if !old.is_null() {
+            *old = previous;
+        } else if !previous.is_null() {
+            release_unknown(previous);
+        }
+    }
+    S_OK
 }
 
 // ----- GUIDs ---------------------------------------------------------------------------
@@ -1107,7 +1502,7 @@ unsafe fn clear_owned(pv: *mut u8) {
             Kind::Blob => CoTaskMemFree(pv_ptr(pv, 16)),
             Kind::Interface => {
                 if !payload.is_null() {
-                    release(payload);
+                    release_unknown(payload);
                 }
             }
             Kind::ClipData => free_clipdata(payload.cast()),
@@ -1249,7 +1644,7 @@ unsafe fn copy_owned(src: *const u8, dst: *mut u8) -> Hresult {
             Kind::Interface => {
                 let p = pv_ptr(src, 8);
                 if !p.is_null() {
-                    add_ref(p);
+                    add_ref_unknown(p);
                 }
                 S_OK
             }
