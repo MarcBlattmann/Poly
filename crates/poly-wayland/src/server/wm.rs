@@ -82,6 +82,17 @@ pub enum InternalEvent {
         width: i32,
         height: i32,
     },
+    /// The user resizes the window by its border
+    /// ([`Server::internal_start_resize`]): the content rectangle asked
+    /// for (logical, on the output). The scene keeps the old one until the
+    /// owner draws the new size.
+    Configure {
+        window: WindowId,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    },
 }
 
 /// The state of an internal window.
@@ -94,6 +105,9 @@ pub(crate) struct Internal {
     pub restore: Option<Rect>,
     /// The content's size now (logical).
     pub size: (i32, i32),
+    /// Borders around the content that take the pointer too (left, top,
+    /// right, bottom; logical): a Windows window's own sizing borders.
+    pub margins: [i32; 4],
 }
 
 /// Where `r`, laid out in work area `before`, goes in work area `after`: the
@@ -192,6 +206,11 @@ impl Server {
                 continue;
             }
             let id = w.id();
+            // An owned internal window (a Windows app's popup: a menu, a status bubble) goes
+            // with its owner and is not a window of its own to switch to.
+            if w.parent().is_some() && self.internal.contains_key(&id) {
+                continue;
+            }
             let (app_id, maximized, tiled, internal) = if let Some(i) = self.internal.get(&id) {
                 (i.app_id.clone(), i.maximized, i.tile, true)
             } else if let Some((_, _, t)) = self.toplevel_of(id) {
@@ -429,8 +448,14 @@ impl Server {
         self.scene.set_title(win, title);
         let (x, y) = self.scene.place(0, 0, width, height, true);
         self.scene.set_position(win, x, y);
-        let state =
-            Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size: (width, height) };
+        let state = Internal {
+            app_id: app_id.into(),
+            maximized: false,
+            tile: None,
+            restore: None,
+            size: (width, height),
+            margins: [0; 4],
+        };
         self.internal.insert(win, state);
         self.activate_internal(win);
         win
@@ -445,10 +470,22 @@ impl Server {
             return;
         }
         let size = self.scene.window(w).map_or((0, 0), |win| win.content().logical_size());
-        let state = Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size };
+        let state =
+            Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size, margins: [0; 4] };
         self.internal.insert(w, state);
         if activate {
             self.activate_internal(w);
+        }
+    }
+
+    /// Borders around internal window `w`'s content (left, top, right,
+    /// bottom; logical) where the pointer is the window's too, as on the
+    /// content: its owner hears it with coordinates outside the content (a
+    /// Windows window's own sizing borders, which its `WM_NCHITTEST`
+    /// answers).
+    pub fn set_internal_margins(&mut self, w: WindowId, margins: [i32; 4]) {
+        if let Some(i) = self.internal.get_mut(&w) {
+            i.margins = margins.map(|m| m.max(0));
         }
     }
 

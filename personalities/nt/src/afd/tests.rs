@@ -752,3 +752,38 @@ fn a_connect_that_failed_keeps_its_error_and_the_socket_is_not_connected() {
     assert_eq!(werr::wsa_of_status(s.0), WSAENOTCONN);
     assert_eq!(get(&mut t), WSAECONNREFUSED);
 }
+
+#[test]
+fn a_second_connect_on_a_connected_socket_is_wsaeisconn() {
+    let mut t = setup();
+    let (l, c, a) = t.tcp_pair(AF_INET, "127.0.0.1");
+    let port = t.name(l, false).unwrap().port();
+    // The client has a connection: connecting again, also to the same address, is refused; so is
+    // the accepted end, and the listener is invalid.
+    let again = t.ioctl(c, afd::CONNECT, &sa(&alloc::format!("127.0.0.1:{port}")), 0).0;
+    assert_eq!(werr::wsa_of_status(again.0), WSAEISCONN);
+    let on_accepted = t.ioctl(a, afd::CONNECT, &sa(&alloc::format!("127.0.0.1:{port}")), 0).0;
+    assert_eq!(werr::wsa_of_status(on_accepted.0), WSAEISCONN);
+    let on_listener = t.ioctl(l, afd::CONNECT, &sa(&alloc::format!("127.0.0.1:{port}")), 0).0;
+    assert_eq!(werr::wsa_of_status(on_listener.0), WSAEINVAL);
+}
+
+#[test]
+fn a_failed_connect_may_connect_again_once_the_program_read_the_error() {
+    let mut t = setup();
+    let c = t.socket(AF_INET, SOCK_STREAM);
+    assert_eq!(t.ioctl(c, afd::SET_NONBLOCKING, &1u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    let s = t.ioctl(c, afd::CONNECT, &sa("127.0.0.1:9"), 0).0;
+    assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
+    // The event helper looks at SO_ERROR on its own account: the failure is not yet known to the
+    // program, and a second connect is "under way".
+    let header = afd::internal_option_header(SOL_SOCKET, SO_ERROR);
+    let (s, _, out) = t.ioctl(c, afd::GET_OPTION, &header, 8);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(u32::from_le_bytes(out[..4].try_into().unwrap()), WSAECONNREFUSED);
+    // The program reads it: connecting again is a new attempt.
+    let (s, _, out) = t.ioctl(c, afd::GET_OPTION, &afd::option_header(SOL_SOCKET, SO_ERROR), 8);
+    assert_eq!((s, u32::from_le_bytes(out[..4].try_into().unwrap())), (STATUS_SUCCESS, WSAECONNREFUSED));
+    let s = t.ioctl(c, afd::CONNECT, &sa("127.0.0.1:9"), 0).0;
+    assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
+}

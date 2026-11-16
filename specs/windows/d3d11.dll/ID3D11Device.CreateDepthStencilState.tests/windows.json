@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "state_depth",
+      "exe_sha256": "3649d8e6d99f3aee40e8d2ee6f80d4137f044e2c58f5100052a5736faf427f70",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCBkZXNjcmlwdGlvbjogMHgwMDAwMDAwMCBHZXREZXNjIGRlcHRoIDEgbWFzayAxIGZ1bmMgMiBzdGVuY2lsIDAgcmVhZCAweGZmIHdyaXRlIDB4ZmYgZnJvbnQgMSAxIDEgOCBiYWNrIDEgMSAxIDgKZGVwdGggd3JpdGUgb2ZmOiAweDAwMDAwMDAwIEdldERlc2MgZGVwdGggMSBtYXNrIDAgZnVuYyA0IHN0ZW5jaWwgMCByZWFkIDB4ZmYgd3JpdGUgMHhmZiBmcm9udCAxIDEgMSA4IGJhY2sgMSAxIDEgOApzdGVuY2lsIG9mZiBidXQgbm9uLWRlZmF1bHQgb3BzOiAweDAwMDAwMDAwIEdldERlc2MgZGVwdGggMSBtYXNrIDEgZnVuYyAyIHN0ZW5jaWwgMCByZWFkIDB4ZmYgd3JpdGUgMHhmZiBmcm9udCAxIDEgMSA4IGJhY2sgMSAxIDEgOApEZXB0aFdyaXRlTWFzayB2YWx1ZXMgKHN0ZW5jaWwgZW5hYmxlIDApOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIDI9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1NwpEZXB0aEZ1bmMgdmFsdWVzIChzdGVuY2lsIGVuYWJsZSAxKTogMD0weDgwMDcwMDU3IDE9MHgwMDAwMDAwMCAyPTB4MDAwMDAwMDAgMz0weDAwMDAwMDAwIDQ9MHgwMDAwMDAwMCA1PTB4MDAwMDAwMDAgNj0weDAwMDAwMDAwIDc9MHgwMDAwMDAwMCA4PTB4MDAwMDAwMDAgOT0weDgwMDcwMDU3IDI1NT0weDgwMDcwMDU3CmZyb250IFN0ZW5jaWxEZXB0aEZhaWxPcCB2YWx1ZXMgKHN0ZW5jaWwgZW5hYmxlIDApOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIDg9MHgwMDAwMDAwMCA5PTB4MDAwMDAwMDAKZnJvbnQgU3RlbmNpbFBhc3NPcCB2YWx1ZXMgKHN0ZW5jaWwgZW5hYmxlIDEpOiAwPTB4ODAwNzAwNTcgMT0weDAwMDAwMDAwIDg9MHgwMDAwMDAwMCA5PTB4ODAwNzAwNTcKYmFjayBTdGVuY2lsRnVuYyB2YWx1ZXMgKHN0ZW5jaWwgZW5hYmxlIDApOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIDg9MHgwMDAwMDAwMCA5PTB4MDAwMDAwMDAKRGVwdGhFbmFibGUgPSA3OiAweDAwMDAwMDAwIEdldERlc2MgZGVwdGggMSBtYXNrIDEgZnVuYyAyIHN0ZW5jaWwgMCByZWFkIDB4ZmYgd3JpdGUgMHhmZiBmcm9udCAxIDEgMSA4IGJhY2sgMSAxIDEgOAp0d28gZGVzY3JpcHRpb25zIHdpdGggdGhlIGRlcHRoIHRlc3Qgb2ZmIHRoYXQgZGlmZmVyIG9ubHkgaW4gRGVwdGhGdW5jOiBzYW1lIG9iamVjdCB0cnVlCk5VTEwgb3V0cHV0LCB2YWxpZDogMHgwMDAwMDAwMSBwdHI9bnVsbApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default description: 0x00000000 GetDesc depth 1 mask 1 func 2 stencil 0 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\ndepth write off: 0x00000000 GetDesc depth 1 mask 0 func 4 stencil 0 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\nstencil off but non-default ops: 0x00000000 GetDesc depth 1 mask 1 func 2 stencil 0 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\nDepthWriteMask values (stencil enable 0): 0=0x00000000 1=0x00000000 2=0x80070057 255=0x80070057\nDepthFunc values (stencil enable 1): 0=0x80070057 1=0x00000000 2=0x00000000 3=0x00000000 4=0x00000000 5=0x00000000 6=0x00000000 7=0x00000000 8=0x00000000 9=0x80070057 255=0x80070057\nfront StencilDepthFailOp values (stencil enable 0): 0=0x00000000 1=0x00000000 8=0x00000000 9=0x00000000\nfront StencilPassOp values (stencil enable 1): 0=0x80070057 1=0x00000000 8=0x00000000 9=0x80070057\nback StencilFunc values (stencil enable 0): 0=0x00000000 1=0x00000000 8=0x00000000 9=0x00000000\nDepthEnable = 7: 0x00000000 GetDesc depth 1 mask 1 func 2 stencil 0 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\ntwo descriptions with the depth test off that differ only in DepthFunc: same object true\nNULL output, valid: 0x00000001 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "state_depth_b",
+      "exe_sha256": "642b7fb381be73780e3a536cdafd97da5fecb60f77ef694f9e8f35b25ce30a89",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVwdGggdGVzdCBvZmY6IDB4MDAwMDAwMDAgR2V0RGVzYyBkZXB0aCAwIG1hc2sgMSBmdW5jIDIgc3RlbmNpbCAwIHJlYWQgMHhmZiB3cml0ZSAweGZmIGZyb250IDEgMSAxIDggYmFjayAxIDEgMSA4CnN0ZW5jaWwgb24sIHJlcGxhY2Ugb24gcGFzczogMHgwMDAwMDAwMCBHZXREZXNjIGRlcHRoIDAgbWFzayAxIGZ1bmMgMiBzdGVuY2lsIDEgcmVhZCAweGZmIHdyaXRlIDB4ZmYgZnJvbnQgMSAxIDMgOCBiYWNrIDEgMSAzIDgKc3RlbmNpbCBvbiwgZGlmZmVyZW50IGZyb250IGFuZCBiYWNrOiAweDAwMDAwMDAwIEdldERlc2MgZGVwdGggMSBtYXNrIDEgZnVuYyAyIHN0ZW5jaWwgMSByZWFkIDB4ZmYgd3JpdGUgMHhmZiBmcm9udCA0IDUgNiAzIGJhY2sgNyA4IDIgNQpEZXB0aFdyaXRlTWFzayB2YWx1ZXMgKHN0ZW5jaWwgZW5hYmxlIDEpOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIDI9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1Nwpmcm9udCBTdGVuY2lsRmFpbE9wIHZhbHVlcyAoc3RlbmNpbCBlbmFibGUgMCk6IDA9MHgwMDAwMDAwMCAxPTB4MDAwMDAwMDAgOD0weDAwMDAwMDAwIDk9MHgwMDAwMDAwMApmcm9udCBTdGVuY2lsRGVwdGhGYWlsT3AgdmFsdWVzIChzdGVuY2lsIGVuYWJsZSAxKTogMD0weDgwMDcwMDU3IDE9MHgwMDAwMDAwMCA4PTB4MDAwMDAwMDAgOT0weDgwMDcwMDU3CmZyb250IFN0ZW5jaWxGdW5jIHZhbHVlcyAoc3RlbmNpbCBlbmFibGUgMCk6IDA9MHgwMDAwMDAwMCAxPTB4MDAwMDAwMDAgOD0weDAwMDAwMDAwIDk9MHgwMDAwMDAwMApiYWNrIFN0ZW5jaWxGdW5jIHZhbHVlcyAoc3RlbmNpbCBlbmFibGUgMSk6IDA9MHg4MDA3MDA1NyAxPTB4MDAwMDAwMDAgOD0weDAwMDAwMDAwIDk9MHg4MDA3MDA1NwpTdGVuY2lsRW5hYmxlID0gNzogMHgwMDAwMDAwMCBHZXREZXNjIGRlcHRoIDEgbWFzayAxIGZ1bmMgMiBzdGVuY2lsIDEgcmVhZCAweGZmIHdyaXRlIDB4ZmYgZnJvbnQgMSAxIDEgOCBiYWNrIDEgMSAxIDgKdHdvIGRlc2NyaXB0aW9ucyB3aXRoIHN0ZW5jaWwgb2ZmIHRoYXQgZGlmZmVyIG9ubHkgaW4gdGhlIGZyb250LWZhY2Ugb3BzOiBzYW1lIG9iamVjdCB0cnVlCk5VTEwgb3V0cHV0LCBpbnZhbGlkOiAweDgwMDcwMDU3IHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "depth test off: 0x00000000 GetDesc depth 0 mask 1 func 2 stencil 0 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\nstencil on, replace on pass: 0x00000000 GetDesc depth 0 mask 1 func 2 stencil 1 read 0xff write 0xff front 1 1 3 8 back 1 1 3 8\nstencil on, different front and back: 0x00000000 GetDesc depth 1 mask 1 func 2 stencil 1 read 0xff write 0xff front 4 5 6 3 back 7 8 2 5\nDepthWriteMask values (stencil enable 1): 0=0x00000000 1=0x00000000 2=0x80070057 255=0x80070057\nfront StencilFailOp values (stencil enable 0): 0=0x00000000 1=0x00000000 8=0x00000000 9=0x00000000\nfront StencilDepthFailOp values (stencil enable 1): 0=0x80070057 1=0x00000000 8=0x00000000 9=0x80070057\nfront StencilFunc values (stencil enable 0): 0=0x00000000 1=0x00000000 8=0x00000000 9=0x00000000\nback StencilFunc values (stencil enable 1): 0=0x80070057 1=0x00000000 8=0x00000000 9=0x80070057\nStencilEnable = 7: 0x00000000 GetDesc depth 1 mask 1 func 2 stencil 1 read 0xff write 0xff front 1 1 1 8 back 1 1 1 8\ntwo descriptions with stencil off that differ only in the front-face ops: same object true\nNULL output, invalid: 0x80070057 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    }
+  ]
+}

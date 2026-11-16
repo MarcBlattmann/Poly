@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "msaa_levels",
+      "exe_sha256": "a86d0c4270e41a8962730ca4655b45ae6afdb5a63b16abe2bfbcff50079cba2d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9ybWF0IDA6IHgwPTB4ODAwMDQwMDUgeDE9MSB4Mj0wIHgzPTAgeDQ9MCB4OD0wIHgxNj0wIHgzMj0wIHg2ND0weDgwMDA0MDA1CmZvcm1hdCA4ODogeDA9MHg4MDAwNDAwNSB4MT0xIHgyPTEgeDM9MCB4ND0xIHg4PTEgeDE2PTEgeDMyPTAgeDY0PTB4ODAwMDQwMDUKZm9ybWF0IDQ1OiB4MD0weDgwMDA0MDA1IHgxPTEgeDI9MSB4Mz0wIHg0PTEgeDg9MSB4MTY9MSB4MzI9MCB4NjQ9MHg4MDAwNDAwNQpmb3JtYXQgMTAzOiB4MD0weDgwMDA0MDA1IHgxPTEgeDI9MCB4Mz0wIHg0PTAgeDg9MCB4MTY9MCB4MzI9MCB4NjQ9MHg4MDAwNDAwNQpmb3JtYXQgODU6IHgwPTB4ODAwMDQwMDUgeDE9MSB4Mj0xIHgzPTAgeDQ9MSB4OD0xIHgxNj0xIHgzMj0wIHg2ND0weDgwMDA0MDA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "format 0: x0=0x80004005 x1=1 x2=0 x3=0 x4=0 x8=0 x16=0 x32=0 x64=0x80004005\nformat 88: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nformat 45: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nformat 103: x0=0x80004005 x1=1 x2=0 x3=0 x4=0 x8=0 x16=0 x32=0 x64=0x80004005\nformat 85: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "msaa_levels_c",
+      "exe_sha256": "62407da724f65f95802ecea4dc7b1fd80e1dfd42fc60817752b4299bc148c846",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9ybWF0IDg3OiB4MD0weDgwMDA0MDA1IHgxPTEgeDI9MSB4Mz0wIHg0PTEgeDg9MSB4MTY9MSB4MzI9MCB4NjQ9MHg4MDAwNDAwNQpmb3JtYXQgMjogeDA9MHg4MDAwNDAwNSB4MT0xIHgyPTEgeDM9MCB4ND0xIHg4PTEgeDE2PTEgeDMyPTAgeDY0PTB4ODAwMDQwMDUKZm9ybWF0IDYxOiB4MD0weDgwMDA0MDA1IHgxPTEgeDI9MSB4Mz0wIHg0PTEgeDg9MSB4MTY9MSB4MzI9MCB4NjQ9MHg4MDAwNDAwNQpmb3JtYXQgMjQ6IHgwPTB4ODAwMDQwMDUgeDE9MSB4Mj0xIHgzPTAgeDQ9MSB4OD0xIHgxNj0xIHgzMj0wIHg2ND0weDgwMDA0MDA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "format 87: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nformat 2: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nformat 61: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nformat 24: x0=0x80004005 x1=1 x2=1 x3=0 x4=1 x8=1 x16=1 x32=0 x64=0x80004005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    }
+  ]
+}

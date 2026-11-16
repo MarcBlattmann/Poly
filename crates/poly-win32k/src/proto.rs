@@ -385,6 +385,8 @@ crate::wire_enum! {
         /// the size (`OP_CREATE`) or the position (`OP_SET_POS`), `tid` the thread asked about
         /// (`OP_QUERY`, 0: the calling one). A `Caret`.
         114 => Caret { op: u8, hwnd: u32, a: i32, b: i32, tid: u32 },
+        /// The keyboard layout keys are read with (`kbd::Layout::id`, ADR 0209): a `Value`.
+        115 => KeyboardLayout {},
     }
 }
 

@@ -1044,3 +1044,97 @@ browser still comes in some runs (once 35 s after the window without input, once
 maximize and restore); in runs with a slow start (window after 30 s, Chrome's services restarted)
 the page stays "Loading". Both are open (hand-off `chrome-win-s3-hunt-2.md`). The trace now names
 the win32k request of each `PolyUserCall` (`win32k#0x0(...) "CreateWindow { ... }"`).
+
+## Addendum (2026-11-15): S3 hunt 3, what is behind the browser's breakpoint at `chrome.dll+0xc62f809`
+
+**Context.** The browser of Chrome for Testing 157.0.8103.38 stopped with a breakpoint at
+`chrome.dll+0xc62f809` in every run that lived long enough: stage 1 runs that hung (step 13), S3
+window runs 35 to 90 s after the window. Three hunts each fixed a real Poly bug that changed the
+timing and the breakpoint came back. A failed check of Chrome's own writes no log line, so the
+log and the system call trail did not say what Chrome had found wrong.
+
+**Decision.**
+
+1. **The exception log shows what the program was holding** (`poly.nt.exceptions.mem[=N]`, with
+   `poly.nt.exceptions`; `poly_personality_nt::diag`): N bytes of the memory each register points
+   to (`mem` lines, hexadecimal and text); the text that values on the stack point to inside a
+   module (`text the stack points to`: a program keeps the function and file a task was posted
+   from as pointers to constant strings); the code addresses left below the stack pointer
+   (`code addresses below the stack pointer (its last calls)`, with the text they point to and
+   the nearest quadwords): the return addresses of the calls the thread made last. For that the
+   log is written before the exception frame is written to the thread's stack (the frame
+   overwrites what is below the stack pointer).
+2. **`ole32` names the class a program asks COM for** when it answers `REGDB_E_CLASSNOTREG`:
+   `stub: ole32: CoCreateInstance: class {...} is not registered (interface {...})`, like the
+   fail-only exports' `stub:` lines.
+
+**What the runs showed** (hand-off `fable-c62f809.md`).
+
+- The stack of the breaking thread holds the record of the task it runs: posted from
+  `DoStartDownload` in `components\update_client\background_downloader_win.cc`. It is the
+  component updater starting a download through BITS on its COM worker thread, about 35 s after
+  the first page has loaded. Nothing in it is a race: a slow start whose page never loads never
+  gets there, a run that lives long enough always does.
+- The task's method makes one call and then stops at its check; that call leaves nothing on the
+  stack and makes no call of its own, and no `CoCreateInstance` comes before the check.
+- With `TEB.ReservedForOle` (`winternl.h`; 0x1758 in the 64-bit TEB) pointing to memory that
+  cannot be read, the thread instead faults reading that pointer + 0x14; with a block whose 32
+  bits at +0x14 are all set, the call returns 1 instead of 0 and the same check still fails.
+  Chrome reads its thread's COM apartment from the block `TEB.ReservedForOle` points to, not
+  with `CoGetApartmentType`, and wants one particular kind. Poly's `ole32` keeps the apartment
+  in a TLS slot and leaves that TEB field null.
+- With Chrome's `--disable-component-update` the window stays up (240 s, page painted, no
+  exception).
+
+**Consequences.** The fix is small and is not made here: `ole32` has to keep a block per thread
+in `TEB.ReservedForOle` whose 32-bit value at +0x14 is what Windows has there for a thread with
+no apartment, a single-threaded and a multithreaded one. That value is in no public document, so
+it has to come from a spec sheet (observed on Windows: the field before `CoInitializeEx`, after
+it with each model, after `CoUninitialize`, for `OleInitialize` and `RoInitialize`). Until then
+S3 window runs that have to stay up pass `--disable-component-update`.
+
+## Addendum (2026-11-16): browsing in the window (`chrome-win-browse`)
+
+**Context.** With the page painted and the window up (ADR 0207), Chrome was driven on the
+desktop as a user would: type a URL into the address field, load `http://example.com/` and
+`https://www.iana.org/` over the network, click a link, scroll with the wheel and the keyboard,
+go back, open and close a tab, resize the window by its borders, minimize and restore it. The
+network, the omnibox, links, keyboard scrolling, back and tabs worked at once. What did not:
+
+| Step | What Poly did | Fix |
+|---|---|---|
+| typing a URL | `http://` arrived as `httpÖ--`: win32k read keys with the German layout while the desktop's was US | ADR 0209 |
+| the wheel | the compositor's `Axis` record was dropped by win32k | `Wm::link_wheel`: a `MOUSEEVENTF_WHEEL` event (Learn, "MOUSEINPUT"), `WM_MOUSEWHEEL` to the window under the pointer |
+| restore from the window switcher | win32k never sent `State` (minimized), the switcher showed the stale picture and win32k still thought the window minimized; the switcher also listed Chrome's status bubble (an owned popup) and switched to it | win32k sends `State`; the compositor asks win32k for `Request::Restore` / `Minimize` when the shell shows or hides an application window itself, win32k posts `WM_SYSCOMMAND` `SC_RESTORE` / `SC_MINIMIZE` (Learn, "WM_SYSCOMMAND"); owned internal windows are not in the switcher |
+| resize by a border | the compositor ignored `BeginResize` for Windows surfaces; a window that draws its own frame keeps its sizing borders outside its surface, where no pointer reached it; `DefWindowProc` answered `HTBORDER` on a sizable window's border | below |
+
+**Decision (resizing a Windows window by its border).**
+
+1. The compositor runs the resize: `Server::internal_start_resize` (a grab like an xdg
+   toplevel's resize) asks the owner for each new content rectangle
+   (`InternalEvent::Configure`), never smaller than 64x32; the scene keeps the old picture until
+   the app has drawn the new size.
+2. win32k gives a new size to the window's own thread: `Wm::configure_from_desktop` hands it a
+   message sent from no thread (`DESKTOP_SET_POS`, never seen by the app), on which `user32`
+   calls `SetWindowPos` there, as Windows' sizing loop does in the window's thread (the app gets
+   `WM_WINDOWPOSCHANGING`, `WM_NCCALCSIZE`, `WM_WINDOWPOSCHANGED`, `WM_SIZE` and draws). A newer
+   size replaces one the thread has not taken; a move alone is still applied at once.
+   `WM_ENTERSIZEMOVE`/`WM_SIZING`/`WM_EXITSIZEMOVE` are not sent (no program needed them yet).
+3. A window that draws its own caption tells the compositor its own borders around the surface
+   (the new link record `Margins`, skipped by a compositor that does not know it); the pointer
+   there is the window's (`Server::set_internal_margins`) where no window above it is, so its
+   `WM_NCHITTEST` decides.
+4. `DefWindowProc`'s `WM_NCHITTEST` gives Learn's sizing codes on a `WS_THICKFRAME` window's
+   border (`HTLEFT`, `HTRIGHT`, `HTTOP` above the caption, `HTBOTTOM`, the corners), `HTBORDER`
+   only for a window without a sizing border (Learn, "WM_NCHITTEST").
+
+**The kernel stack on the first NT use.** The new boot check first failed with a kernel stack
+overflow in the debug kernel: the compositor's first write to the desktop link is the first NT
+use, and `make_state` built the whole NT state (6 KiB in a debug build) in the frame that then ran
+the folder and VFS set-up (about 8 KiB deeper), at the edge of the 16 KiB stack. The state is now
+built by a function of its own whose frame is gone before the set-up runs.
+
+**Consequences.** Every step of the flow works in one run (hand-off `chrome-win-browse.md`).
+`boot-tests chrome-win` stage 3 now also types a `data:` URL into the address field after the
+green page and checks its blue background. `win-app` has the steps `wheel:X|Y|N`, `move:X|Y`,
+`wtype:TEXT` (win32k's German positions) and lets a typed text contain commas.

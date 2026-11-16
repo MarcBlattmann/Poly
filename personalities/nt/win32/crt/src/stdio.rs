@@ -96,6 +96,20 @@ pub struct Stream {
     /// Write at the end of every call (a console `stdout`).
     per_call: bool,
     commit: bool,
+    /// A buffer exists (a first read or write made it, or `setvbuf`): the slots show it.
+    has_buf: bool,
+    /// The program's own buffer of `setvbuf` (the slots point into it).
+    user_buf: *mut u8,
+    /// What the buffer slots showed the program last (see [`publish`]).
+    published: Option<Published>,
+}
+
+/// The buffer slots as the program last saw them, to find what it did to them directly.
+#[derive(Clone, Copy)]
+struct Published {
+    ptr: usize,
+    len: usize,
+    write: bool,
 }
 
 impl Stream {
@@ -117,6 +131,9 @@ impl Stream {
             bufsize: FILE_BUFFER,
             per_call: false,
             commit: false,
+            has_buf: false,
+            user_buf: core::ptr::null_mut(),
+            published: None,
         }
     }
 
@@ -133,6 +150,9 @@ impl Stream {
         self.unget.clear();
         self.wunget.clear();
         self.commit = commit;
+        self.has_buf = false;
+        self.user_buf = core::ptr::null_mut();
+        self.published = None;
         let kind = lowio::get(fd).map_or(0, |e| e.kind);
         self.buffered = true;
         self.bufsize = FILE_BUFFER;
@@ -215,12 +235,172 @@ fn with<R>(f: *mut File, fail: R, op: impl FnOnce(&mut Stream) -> R) -> R {
         return fail;
     };
     s.cs.enter();
+    let slots = SLOTS.load(Ordering::Relaxed);
+    if slots && s.open {
+        sync_in(f, s);
+    }
     let r = if s.open { op(s) } else { fail };
     if s.open && (!s.buffered || s.per_call) && s.last == Last::Write {
         let _ = flush(s);
     }
+    if slots && s.open {
+        publish(f, s);
+    }
     s.cs.leave();
     r
+}
+
+// ----- the buffer slots of the UCRT (`_get_stream_buffer_pointers`) ------------------------
+//
+// The UCRT's `FILE` starts with three fields (`_ptr` at +0, `_base` at +8, `_cnt` at +0x10) that
+// programs' inline `getc`/`putc` read and move directly, once `_get_stream_buffer_pointers` has
+// told them where the fields are. Poly's streams keep their state beside the `FILE` (the `_iob`
+// layout of `msvcrt.dll` is the classic one), so the slots are written from the stream's state
+// after every call ([`publish`]) and what the program did to them since is taken back before the
+// next one ([`sync_in`]). Only `ucrtbase.dll` turns this on ([`enable_buffer_slots`]): in
+// `msvcrt.dll`'s layout the same bytes are the old `_cnt` and `_base`.
+
+static SLOTS: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Keep the buffer slots of every `FILE` current (the UCRT's layout; `ucrtbase.dll`'s start-up).
+pub fn enable_buffer_slots() {
+    SLOTS.store(true, Ordering::Release);
+}
+
+/// `_ptr`, `_base`, `_cnt` of a UCRT `FILE`.
+fn slot_ptr(f: *mut File) -> *mut usize {
+    f.cast()
+}
+fn slot_base(f: *mut File) -> *mut usize {
+    // SAFETY: inside the FILE record (48 bytes).
+    unsafe { f.cast::<u8>().add(8).cast() }
+}
+fn slot_cnt(f: *mut File) -> *mut i32 {
+    // SAFETY: as above.
+    unsafe { f.cast::<u8>().add(0x10).cast() }
+}
+
+/// Take back what the program did to the slots since the last call: bytes it read or wrote
+/// through them.
+fn sync_in(f: *mut File, s: &mut Stream) {
+    let Some(p) = s.published.take() else { return };
+    // SAFETY: the stream's own FILE record.
+    let ptr = unsafe { slot_ptr(f).read() };
+    let moved = ptr.wrapping_sub(p.ptr) as isize;
+    if moved <= 0 {
+        return;
+    }
+    let moved = moved as usize;
+    if p.write {
+        let room = s.buf.capacity().max(s.bufsize);
+        if p.len + moved > room {
+            return;
+        }
+        if !s.user_buf.is_null() {
+            // SAFETY: the program wrote `moved` bytes after the `len` we copied into its buffer.
+            let new = unsafe { core::slice::from_raw_parts(s.user_buf.add(p.len), moved) };
+            s.buf.extend_from_slice(new);
+        } else {
+            // SAFETY: the program wrote `moved` bytes into the spare capacity after `len`.
+            unsafe { s.buf.set_len(p.len + moved) };
+        }
+        s.last = Last::Write;
+    } else if s.rpos + moved <= s.buf.len() {
+        s.rpos += moved;
+    }
+}
+
+/// The bytes of the read buffer a program may take through the slots: not past a Ctrl-Z, a
+/// carriage return of a text-mode stream (it is translated by the call), or the buffer.
+fn readable(s: &Stream) -> usize {
+    if !s.unget.is_empty() || !s.wunget.is_empty() || s.eof && s.rpos >= s.buf.len() {
+        return 0;
+    }
+    let rest = &s.buf[s.rpos.min(s.buf.len())..];
+    if s.mode() != Translation::Text {
+        return rest.len();
+    }
+    for (i, &b) in rest.iter().enumerate() {
+        if b == 0x1A || (b == b'\r' && rest.get(i + 1).is_none_or(|&n| n == b'\n')) {
+            return i;
+        }
+    }
+    rest.len()
+}
+
+/// Write the three slots from the stream's state.
+fn publish(f: *mut File, s: &mut Stream) {
+    let (base, ptr, cnt): (usize, usize, i32);
+    s.published = None;
+    if !s.buffered && !s.per_call {
+        // Unbuffered: the one-byte buffer inside the FILE record.
+        // SAFETY: inside the FILE record.
+        let b = unsafe { f.cast::<u8>().add(0x20) } as usize;
+        let read = s.last == Last::Read;
+        (base, ptr, cnt) = (b, b + usize::from(read), i32::from(read));
+    } else if !s.has_buf || s.per_call {
+        (base, ptr, cnt) = (0, 0, 0);
+    } else {
+        let want = s.bufsize.max(1);
+        if s.buf.capacity() < want {
+            s.buf.reserve(want - s.buf.len());
+        }
+        let write = s.last == Last::Write;
+        let len = s.buf.len();
+        let b = if s.user_buf.is_null() {
+            s.buf.as_ptr() as usize
+        } else {
+            // The program's own buffer holds what the stream holds.
+            let n = len.min(s.bufsize);
+            // SAFETY: `setvbuf`'s buffer, `bufsize` bytes.
+            unsafe { core::ptr::copy_nonoverlapping(s.buf.as_ptr(), s.user_buf, n) };
+            s.user_buf as usize
+        };
+        if write {
+            (base, ptr, cnt) =
+                (b, b + len, if len == 0 { 0 } else { (s.bufsize.saturating_sub(len)).min(i32::MAX as usize) as i32 });
+            s.published = Some(Published { ptr, len, write: true });
+        } else if s.last == Last::Read {
+            let n = readable(s);
+            (base, ptr, cnt) = (b, b + s.rpos.min(len), n.min(i32::MAX as usize) as i32);
+            s.published = Some(Published { ptr, len, write: false });
+        } else {
+            (base, ptr, cnt) = (b, b, 0);
+        }
+    }
+    // SAFETY: the stream's own FILE record.
+    unsafe {
+        slot_ptr(f).write(ptr);
+        slot_base(f).write(base);
+        slot_cnt(f).write(cnt);
+    }
+}
+
+/// `_get_stream_buffer_pointers`: the addresses of the slots (null out pointers are skipped).
+///
+/// # Safety
+/// The out pointers are null or writable.
+pub unsafe fn buffer_pointers(f: *mut File, base: *mut *mut usize, ptr: *mut *mut usize, cnt: *mut *mut i32) -> i32 {
+    if f.is_null() {
+        global::invalid(EINVAL);
+        return -1;
+    }
+    let ok = with(f, false, |_| true);
+    if ok {
+        // SAFETY: the caller's out pointers (checked for null).
+        unsafe {
+            if !base.is_null() {
+                base.write(slot_base(f));
+            }
+            if !ptr.is_null() {
+                ptr.write(slot_ptr(f));
+            }
+            if !cnt.is_null() {
+                cnt.write(slot_cnt(f));
+            }
+        }
+    }
+    0
 }
 
 /// Write the pending output; drop read-ahead input, moving the descriptor
@@ -230,6 +410,11 @@ fn flush(s: &mut Stream) -> Result<(), ()> {
         Last::Write => {
             if !s.buf.is_empty() {
                 let r = lowio::write(s.fd, &s.buf);
+                if SLOTS.load(Ordering::Relaxed) {
+                    // The buffer slots show what is behind the write position: nothing (zeros).
+                    // SAFETY: the vector's own bytes.
+                    unsafe { core::ptr::write_bytes(s.buf.as_mut_ptr(), 0, s.buf.len()) };
+                }
                 s.buf.clear();
                 if r.is_err() {
                     s.error = true;
@@ -273,8 +458,18 @@ fn put_bytes(s: &mut Stream, data: &[u8]) -> bool {
     if !begin_write(s) {
         return false;
     }
+    s.has_buf = true;
     s.buf.extend_from_slice(data);
-    if s.buf.len() >= s.bufsize { flush(s).is_ok() } else { true }
+    if s.buf.len() >= s.bufsize {
+        // Whole buffers go out now, the rest stays: 4,096 bytes at a time, as the UCRT does.
+        let keep = s.buf.len() % s.bufsize.max(1);
+        let tail = s.buf.split_off(s.buf.len() - keep);
+        let ok = flush(s).is_ok();
+        s.last = Last::Write;
+        s.buf.extend_from_slice(&tail);
+        return ok;
+    }
+    true
 }
 
 fn narrow_ok(s: &mut Stream) -> bool {
@@ -325,6 +520,7 @@ fn raw(s: &mut Stream, peek: bool) -> Option<u8> {
         if s.eof {
             return None;
         }
+        s.has_buf = true;
         s.buf.resize(s.bufsize.max(1), 0);
         s.rpos = 0;
         let n = match lowio::read_bytes(s.fd, &mut s.buf) {
@@ -918,6 +1114,10 @@ pub extern "C" fn _fseeki64(f: *mut File, offset: i64, origin: i32) -> i32 {
             return -1;
         }
         s.eof = false;
+        if s.read && !s.write && s.bufsize == FILE_BUFFER && s.user_buf.is_null() {
+            // The UCRT reads 512 bytes at a time after a seek.
+            s.bufsize = BUFSIZ;
+        }
         if lowio::seek(s.fd, offset, origin) < 0 { -1 } else { 0 }
     })
 }
@@ -998,10 +1198,10 @@ pub extern "C" fn _fileno(f: *mut File) -> i32 {
     with(f, -1, |s| s.fd)
 }
 
-/// `setvbuf`: the mode and size are honoured with Poly's own buffer (the
-/// caller's buffer is not used).
+/// `setvbuf`: the mode and size are honoured; the stream reads and writes through its own
+/// buffer, and the program's buffer is what the buffer slots show.
 #[unsafe(no_mangle)]
-pub extern "C" fn setvbuf(f: *mut File, _buf: *mut u8, mode: i32, size: usize) -> i32 {
+pub extern "C" fn setvbuf(f: *mut File, buf: *mut u8, mode: i32, size: usize) -> i32 {
     if !matches!(mode, IOFBF | IOLBF | IONBF) || (mode != IONBF && !(2..=i32::MAX as usize).contains(&size)) {
         global::invalid(EINVAL);
         return -1;
@@ -1010,8 +1210,11 @@ pub extern "C" fn setvbuf(f: *mut File, _buf: *mut u8, mode: i32, size: usize) -
         let _ = flush(s);
         s.buffered = mode != IONBF;
         s.per_call = false;
+        s.user_buf = core::ptr::null_mut();
         if s.buffered {
             s.bufsize = size;
+            s.has_buf = true;
+            s.user_buf = buf;
         }
         0
     })

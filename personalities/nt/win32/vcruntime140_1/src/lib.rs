@@ -2,18 +2,16 @@
 //! of functions whose C++ exception tables are in Visual C++'s compressed form ("FH4", the
 //! default of Visual C++ 2019 and later on x64), and the debugger hooks.
 //!
-//! The compressed tables are not publicly documented and clang cannot emit them, so their
-//! behaviour waits for a spec sheet observed with programs Microsoft's compiler builds on the
-//! Windows oracle (ADR 0199). Until then the handler takes no exception and runs no
-//! destructor: it logs `stub: vcruntime140_1!__CxxFrameHandler4` and lets the search go on
-//! (`ExceptionContinueSearch`), so programs that throw nothing run, and a throw through such a
-//! frame is seen in the log. That is what Poly's `msvcrt` did for every C++ frame before
-//! ADR 0099.
+//! The handler (the spec `vcruntime140_1.dll/__CxxFrameHandler4.yaml`) is in Poly's
+//! `vcruntime140.dll` (`poly-win32-cxxrt`, tables decoded by `poly_cxxeh::fh4`) and this DLL's
+//! export forwards to it (`build.rs`): the catch blocks in progress, the current exception and
+//! the count of uncaught exceptions are per-thread state that `_CxxThrowException` and
+//! `__CxxFrameHandler3` share with it, so it must live in the one DLL that has them.
 
 #![no_std]
 
-/// `ExceptionContinueSearch` (`excpt.h`).
-const CONTINUE_SEARCH: u32 = 1;
+// The panic handler and the runtime support every Poly DLL links.
+use poly_win32_rt as _;
 
 /// Marks this file as Poly's own copy (ADR 0199): at boot Poly refreshes a
 /// `System32` copy that holds these bytes and keeps any other (Microsoft's
@@ -27,13 +25,6 @@ static OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (A
 pub extern "system" fn vcruntime140_1_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     core::hint::black_box(OWN_COPY_MARKER.as_ptr());
     1
-}
-
-/// `__CxxFrameHandler4(record, establisher_frame, context, dispatcher)`: not yet (above).
-#[unsafe(no_mangle)]
-pub extern "C" fn __CxxFrameHandler4(_record: *mut u8, _frame: u64, _context: *mut u8, _dc: *mut u8) -> u32 {
-    poly_win32_rt::unimplemented_export("stub: vcruntime140_1!__CxxFrameHandler4", false, 0);
-    CONTINUE_SEARCH
 }
 
 // The debugger's non-local-goto hooks: places a debugger sets breakpoints on.

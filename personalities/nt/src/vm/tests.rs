@@ -164,3 +164,34 @@ fn placeholders_split_replace_preserve_and_coalesce() {
     assert_eq!(vm.free(&mut b, base, 0, MEM_RELEASE), Ok((base, 64 * GB)));
     assert_eq!(vm.query(base).unwrap().state, MEM_FREE);
 }
+
+#[test]
+fn committed_bytes_and_commit_charge() {
+    let mut vm = VirtualMemory::new();
+    let mut b = Count::default();
+    assert_eq!(vm.private_committed_bytes(), 0);
+    // A new allocation is charged whole; a reserve alone commits nothing.
+    assert_eq!(vm.commit_charge(0, 0x3000, MEM_RESERVE | MEM_COMMIT), 0x3000);
+    let (base, _) = vm.allocate(&mut b, 0, 0x10000, 0, MEM_RESERVE, RW).unwrap();
+    assert_eq!(vm.private_committed_bytes(), 0);
+    // Inside a reservation only the reserved pages of the range count.
+    assert_eq!(vm.commit_charge(base, 0x4000, MEM_COMMIT), 0x4000);
+    vm.allocate(&mut b, base, 0x2000, 0, MEM_COMMIT, RW).unwrap();
+    assert_eq!(vm.private_committed_bytes(), 0x2000);
+    assert_eq!(vm.commit_charge(base, 0x4000, MEM_COMMIT), 0x2000);
+    assert_eq!(vm.commit_charge(base, 0x2000, MEM_COMMIT), 0);
+    let (other, _) = vm.allocate(&mut b, 0, 0x5000, 0, MEM_RESERVE | MEM_COMMIT, RW).unwrap();
+    assert_eq!(vm.private_committed_bytes(), 0x7000);
+    vm.free(&mut b, other, 0, MEM_RELEASE).unwrap();
+    assert_eq!(vm.private_committed_bytes(), 0x2000);
+}
+
+#[test]
+fn an_address_space_wide_request_conflicts_where_a_small_one_has_no_memory() {
+    let mut vm = VirtualMemory::new();
+    let mut b = Count::default();
+    // More than the user address space holds: the address range is the problem.
+    assert_eq!(vm.allocate(&mut b, 0, (1 << 47) - 0x1_0000, 0, MEM_RESERVE, RW), Err(STATUS_CONFLICTING_ADDRESSES));
+    // A big reservation that fits is fine.
+    assert!(vm.allocate(&mut b, 0, 100 << 40, 0, MEM_RESERVE, RW).is_ok());
+}

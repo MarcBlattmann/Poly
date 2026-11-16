@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetScrollInfo.yaml
+id: windows/api/user32.dll/SetScrollInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets the range, page size and position of a window's scroll bar (SB_HORZ, SB_VERT) or of a scroll bar control (SB_CTL) and returns the position after the change. PuTTY's terminal window calls it for the scroll back bar after every output and resize; it returns the new position and decides whether the bar exists.
+interface:
+  signature: "int SetScrollInfo(HWND hwnd, int nBar, LPCSCROLLINFO lpsi, BOOL redraw)"
+rules:
+  masks: "only the fields named in fMask are set: SIF_RANGE (nMin, nMax), SIF_PAGE (nPage), SIF_POS (nPos); SIF_TRACKPOS and undefined bits are ignored (SIF_TRACKPOS alone changes nothing: the result is the current position); a mask of 0 changes nothing and returns the current position; cbSize is not checked (0, 24, 27, 29 and 32 all work); redraw does not change what is stored"
+  result: "the position after the change (so an out-of-range position is returned clamped); 0 for a position of 0 as well, so a result of 0 is not an error"
+  defaults: "a window made with WS_VSCROLL or WS_HSCROLL has the range 0..100, page 0 and position 0; a scroll bar control has 0..0"
+  position: "the position is kept in [nMin, nMax - max(nPage - 1, 0)]: range 0..100, page 10: positions 95, 1000 and 2147483647 give 91, -5 and -2147483648 give 0; range, page and position set in one call are applied together (10..60, page 20, pos 35 gives 35); a smaller range moves the position into it (0..20 with page 20 moves 35 to 1)"
+  page: "a page of 0 means no page; a page larger than the range is stored as nMax - nMin + 1 (range 0..20, page 500: 21; the position then becomes nMin); nPage is stored as an unsigned value"
+  range: "nMin above nMax gives min = max = nMin (50..10 stores 50..50 and page 1); negative bounds work (-100..-20); 0..0x7FFFFFFF and -0x7FFFFFFF..0x7FFFFFFF are stored"
+  read_back: "GetScrollInfo returns what was set; the track position equals the position when no drag is going on"
+  bars: "SB_HORZ and SB_VERT are separate; SB_BOTH is accepted for SetScrollInfo (position 1: returns 1); a window without WS_VSCROLL gets the style when SetScrollInfo is called for it (see the visibility test: the bar is created, with the given range)"
+  controls: "SB_CTL on a scroll bar control works like a window bar and the SBM_ messages see the same values: SBM_GETPOS, SBM_GETSCROLLINFO (min, max, page, pos), SBM_SETPOS (returns the old position), SBM_SETRANGE (returns the current position; the page and position are kept, the position is moved into the range) and SBM_SETSCROLLINFO (returns the new position); a position set above the largest allowed is clamped (1000 on range 0..100, page 10 gives 91); a control is not removed when the page covers the range (the page is stored as 201 on range 0..200), a window's bar is; SB_VERT and SB_HORZ on the control's window fail with ERROR_NO_SCROLLBARS (1447); SB_CTL on an ordinary window: GetScrollInfo returns TRUE and writes nothing, SetScrollInfo returns 0"
+  visibility: "a window's bar whose page covers the whole range (nPage >= nMax - nMin + 1, also range 5..5 and 0..0) is removed: the WS_VSCROLL (WS_HSCROLL) style bit is cleared, the client area gets as wide (high) as the window allows, and WM_WINDOWPOSCHANGING, WM_NCCALCSIZE, WM_WINDOWPOSCHANGED and WM_SIZE (SIZE_RESTORED) are sent; setting a smaller page (page 100 on range 0..100 shows it again), or a larger range, restores the style bit, takes the bar's width off the client area and sends the same four messages; changes that keep the bar's existence send none"
+  disable_no_scroll: "SIF_DISABLENOSCROLL keeps the bar (style bit set, client area reduced) and disables it instead of removing it when nothing is left to scroll"
+  style_created: "SetScrollInfo with a range on a window that was made without WS_VSCROLL creates the bar: the style bit is set and the client width shrinks; the same for SB_HORZ"
+  invisible_window: "works the same for a window that is not visible"
+errors:
+  bad_bar: "a bar value outside 0..3: 0 with ERROR_INVALID_PARAMETER (87)"
+  bad_window: "a NULL window and a made-up handle: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+  null_info: "a NULL SCROLLINFO pointer: 0 with ERROR_NOACCESS (998)"
+side_effects: "may change the window's style and client area and send the size messages described above"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Dragging the thumb and clicking the arrows (WM_HSCROLL / WM_VSCROLL generation, SIF_TRACKPOS during a drag) and the drawn bar: they need real mouse input; GetScrollBarInfo; scroll bars of a window made right to left; DPI scaling of the bar sizes.

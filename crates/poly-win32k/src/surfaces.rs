@@ -34,6 +34,10 @@ use alloc::vec::Vec;
 /// The largest surface side with a buffer (16 MiB of kernel memory).
 pub const MAX_SIDE: u32 = 2048;
 
+/// The widest own border a window's surface passes the pointer to (a window
+/// with a border wider than this gets this much of it).
+const MAX_MARGIN: i32 = 32;
+
 /// A buffer is kept in bands of whole rows of at most this many bytes: one
 /// kernel allocation holds 4 MiB at most (`kernel/src/heap.rs`), which a
 /// maximized window's client area on a 1920x1080 screen exceeds.
@@ -262,6 +266,30 @@ impl Surfaces {
             if let Some(text) = wm.text(h) {
                 desktop.set_title(s, &String::from_utf16_lossy(text));
             }
+            // The compositor tells a minimized window from a hidden one by this, and shows it
+            // again through the window's own restore (`Request::Restore`).
+            let state = if i.minimized {
+                crate::link::WindowState::Minimized
+            } else if i.maximized {
+                crate::link::WindowState::Maximized
+            } else {
+                crate::link::WindowState::Normal
+            };
+            desktop.set_state(s, state);
+            // A window that draws its own caption keeps its own sizing borders around the
+            // surface (invisible, as on Windows); the compositor passes the pointer there to it.
+            let margins = if shown && !framed && i.style & WS_CAPTION == WS_CAPTION && !i.maximized {
+                let side = |v: i32| v.clamp(0, MAX_MARGIN) as u16;
+                [
+                    side(client.left - i.window.left),
+                    side(client.top - i.menu_bar.max(0) - i.window.top),
+                    side(i.window.right - client.right),
+                    side(i.window.bottom - client.bottom),
+                ]
+            } else {
+                [0; 4]
+            };
+            desktop.set_margins(s, margins);
             desktop.set_visible(s, shown);
         }
     }
@@ -840,6 +868,8 @@ mod tests {
             r[0],
             ToCompositor::Create { surface, kind: SurfaceKind::TopLevel, framed: false, .. } if surface == id
         ));
+        // Its own sizing borders (8 px left, right and below; none above) take the pointer.
+        assert!(r.contains(&ToCompositor::Margins { surface: id, left: 8, top: 0, right: 8, bottom: 8 }));
         s.sync(&wm, &mut d);
         assert!(records(&mut d).is_empty());
         call(

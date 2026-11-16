@@ -19,6 +19,8 @@
 //! - [`throw`]: the exception record of a `throw`, its `ThrowInfo` and
 //!   catchable types, matching a catch clause, the address adjustment to a
 //!   base class, and what the catch object is made of.
+//! - [`fh4`]: `__CxxFrameHandler4`'s compressed tables, decoded, and the decisions for a frame
+//!   that has them (ADR 0199).
 //! - [`frame`]: the decisions for one frame: which kind of frame it is
 //!   (the function, a catch block, an unwind action), which try blocks
 //!   apply, whether a clause takes the exception (or `terminate` must be
@@ -43,10 +45,13 @@ extern crate alloc;
 
 pub mod catches;
 pub mod consts;
+pub mod fh4;
 pub mod frame;
+pub mod rtti;
 pub mod tables;
 pub mod throw;
 pub mod typeinfo;
+pub mod undname;
 
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/CreateDXGIFactory1.yaml
+id: windows/api/dxgi.dll/CreateDXGIFactory1
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "CreateDXGIFactory1 function (dxgi.h)", "CreateDXGIFactory function (dxgi.h)", "CreateDXGIFactory2 function (dxgi1_3.h)", "IDXGIFactory1::IsCurrent", "IDXGIFactory3::GetCreationFlags", "DXGI_CREATE_FACTORY_FLAGS", "IUnknown::QueryInterface"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates the DXGI factory object, the root of adapter enumeration and swap chain creation. Chrome's GPU process (and ANGLE's D3D11 backend) call CreateDXGIFactory1 first and ask for IDXGIFactory1 or IDXGIFactory2. Observed: any factory interface from IDXGIFactory to IDXGIFactory7 (and IUnknown, IDXGIObject) can be asked for and the call returns S_OK with a reference count of 1; the object then answers QueryInterface for every other factory interface with the same pointer. A made-up id or a non-factory id (IDXGIAdapter, IDXGIDevice, ID3D11Device, IDXGISwapChain) gives E_NOINTERFACE and a NULL output. Every call makes a new object. The legacy CreateDXGIFactory and CreateDXGIFactory2 are covered by the same test file and their pointer sheets.
+interface:
+  signature: "HRESULT CreateDXGIFactory1(REFIID riid, void** ppFactory)"
+  constants: "E_NOINTERFACE 0x80004002. IIDs are in dxgi.h .. dxgi1_6.h (IDXGIFactory 7b7166ec-21c7-44ae-b21a-c9ae321ae369, IDXGIFactory1 770aae78-f26f-4dba-a829-253c83d1b387, IDXGIFactory2 50c83a1c-e072-4c48-87b0-3630fa36a6d0)"
+chrome:
+  calls: "chrome.dll imports CreateDXGIFactory1 (API tracer counts, GPU process); ANGLE's D3D11 renderer asks the device for its adapter and the adapter's parent factory (IDXGIFactory2) instead of creating one (assumed from ANGLE's documented behaviour)"
+rules:
+  interfaces_ok: "riid = IUnknown, IDXGIObject, IDXGIFactory, IDXGIFactory1, IDXGIFactory2, IDXGIFactory3, IDXGIFactory4, IDXGIFactory5, IDXGIFactory6 or IDXGIFactory7: S_OK, *ppFactory set, reference count 1 (AddRef then Release probe: 2 then 1)"
+  interfaces_fail: "riid = IDXGIAdapter, IDXGIDevice, ID3D11Device, IDXGISwapChain or a made-up id: E_NOINTERFACE (0x80004002) and *ppFactory is NULL"
+  factory_qi: "the factory object answers QueryInterface for IDXGIFactory .. IDXGIFactory7 with the same pointer it was asked on, IUnknown with a stable pointer equal to the factory pointer, and IDXGIFactoryMedia with a different pointer (S_OK); IDXGIAdapter, IDXGIDevice, IDXGIDeviceSubObject and made-up ids give E_NOINTERFACE"
+  references: "AddRef returns 2 on a new factory and the following Release returns 1; a second interface pointer obtained by QueryInterface raises the count by one and releasing it lowers it again"
+  new_object: "two CreateDXGIFactory1 calls return two different objects (different pointers, different IUnknown pointers), each with reference count 1; IsCurrent is TRUE (1) on both, stays TRUE on repeated calls and after a WARP device was created"
+  legacy_factory: "CreateDXGIFactory (no 1): the same ids succeed except IDXGIFactory1, which gives E_NOINTERFACE; the object so made answers IDXGIFactory and IDXGIFactory2 .. 7 but IDXGIFactory1 gives E_NOINTERFACE on it; through its IDXGIFactory4 pointer EnumAdapters and EnumAdapters1 work and list the same number of adapters as a CreateDXGIFactory1 factory"
+  factory2_flags: "CreateDXGIFactory2(flags, riid, out) on the oracle (no Graphics Tools optional feature installed): flags 0, 2 and 0x10 give S_OK for IDXGIFactory2, IDXGIFactory7 and IUnknown, and a made-up riid gives E_NOINTERFACE (0x80004002); flags 1 (DXGI_CREATE_FACTORY_DEBUG) give DXGI_ERROR_INVALID_CALL (0x887A0001) for every riid, also the made-up one, with a NULL output; flags 0xFFFFFFFF succeed and IDXGIFactory3::GetCreationFlags then returns 0xFFFFFFFE (the debug bit is dropped); the other flags are returned unchanged; on a machine that has the debug layers (the owner's PC) flags 1 succeed and 0xFFFFFFFF is returned as 0xFFFFFFFF; IsCurrent is 1"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  NULL for the output pointer (crashes or returns an error on real Windows; not tried), the debug layer (DXGI_CREATE_FACTORY_DEBUG has no visible effect without the SDK layers), IsCurrent becoming FALSE (needs a change of the display adapters during the run).

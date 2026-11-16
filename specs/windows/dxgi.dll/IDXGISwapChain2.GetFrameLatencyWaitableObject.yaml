@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGISwapChain2.GetFrameLatencyWaitableObject.yaml
+id: windows/api/dxgi.dll/IDXGISwapChain2.GetFrameLatencyWaitableObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGISwapChain2::GetFrameLatencyWaitableObject method (dxgi1_3.h)", "IDXGISwapChain2::SetMaximumFrameLatency", "IDXGISwapChain2::GetMaximumFrameLatency", "IDXGISwapChain2::SetSourceSize", "IDXGISwapChain2::GetSourceSize", "IDXGISwapChain2::SetMatrixTransform", "IDXGISwapChain2::GetMatrixTransform", "IDXGIDevice1::SetMaximumFrameLatency", "IDXGIDevice1::GetMaximumFrameLatency", "IDXGIDevice::SetGPUThreadPriority", "DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the waitable event of a swap chain created with DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT (0x40). ANGLE waits on it before rendering the next frame to bound the queued frames. Observed on WARP for both window and composition swap chains (only flip-model swap chains accept the flag): without the flag the call returns NULL and GetMaximumFrameLatency / SetMaximumFrameLatency fail with DXGI_ERROR_INVALID_CALL; with the flag every call returns a NEW handle (a duplicate: different value, closing one leaves the other usable), the event is signaled when the swap chain is created, WaitForSingleObject consumes it (auto-reset), and each Present makes it signaled again (it is signaled within 2 s after every Present; exactly when is not deterministic). The default latency is 1; it can be set to 1 .. 40 (0 and 41 or more give INVALID_CALL, the value stays). This entry's tests also cover GetSourceSize, SetSourceSize, Get/SetMatrixTransform, the IDXGIDevice1 frame latency and IDXGIDevice GPU thread priority.
+interface:
+  signature: "HANDLE IDXGISwapChain2::GetFrameLatencyWaitableObject()"
+  constants: "DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT 0x40; DXGI_MATRIX_3X2_F: _11 _12 _21 _22 _31 _32 floats; WaitForSingleObject results 0 (signaled) and 0x102 (timeout)"
+chrome:
+  calls: "ANGLE creates the swap chain with FRAME_LATENCY_WAITABLE_OBJECT when it can, calls SetMaximumFrameLatency (1 or 2) and WaitForSingleObject on the handle before each frame (assumed from ANGLE's documented behaviour); Chrome's DirectComposition path uses SetMatrixTransform / SetSourceSize on composition swap chains for scaling (assumed)"
+rules:
+  without_flag: "a window or composition swap chain created without 0x40: GetFrameLatencyWaitableObject returns NULL (twice), GetMaximumFrameLatency and SetMaximumFrameLatency (0, 1, 2, 3, 4, 16, 17, 0xFFFFFFFF) give DXGI_ERROR_INVALID_CALL"
+  with_flag: "created with 0x40 (FLIP_DISCARD, 2 buffers): the handle is non-NULL; a second call returns a different handle value; closing the second handle succeeds and the first keeps working; GetMaximumFrameLatency is S_OK and 1"
+  event_state: "right after creation a wait of up to 2 s on the handle returns WAIT_OBJECT_0 and an immediate second wait times out (auto-reset); after each Present(0,0) a wait of up to 2 s returns WAIT_OBJECT_0 and then an immediate wait times out; after three Presents without waiting one wait returns WAIT_OBJECT_0; with latency 1 and sync interval 1 four consecutive Present + wait(2 s) all return WAIT_OBJECT_0"
+  set_latency: "SetMaximumFrameLatency(1 .. 40): S_OK and GetMaximumFrameLatency returns it, for every buffer count 2, 3, 4 and 16 (the maximum does not depend on the buffer count); 0, 41, 48, 63, 64, 100, 255, 256, 1000, 65536, 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL and the previous value stays"
+  source_size: "GetSourceSize: S_OK and the buffer size (also for a swap chain made with the window: the window's size); SetSourceSize(a, b) with a <= buffer width and b <= buffer height: S_OK and read back (including (0,0), (0,10), (10,0)); (65, 48) and (1000, 1000) for a 64x48 chain: DXGI_ERROR_INVALID_CALL and the value stays; behaviour identical on window and composition swap chains and with or without the flag"
+  matrix_transform: "a window swap chain (also with the flag): GetMatrixTransform and SetMatrixTransform give DXGI_ERROR_INVALID_CALL (the output untouched); a composition swap chain: GetMatrixTransform S_OK {1,0,0,1,0,0}; SetMatrixTransform(identity) S_OK; scale 2 ({2,0,0,2,0,0}) S_OK and read back; a skew/offset matrix {1,0.5,0.5,1,3,4}: INVALID_CALL; all zeros: S_OK"
+  device_latency: "IDXGIDevice1::GetMaximumFrameLatency on a new WARP device: 3; SetMaximumFrameLatency(0 .. 16): S_OK and read back (0 is accepted); 17, 100, 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL, value unchanged"
+  gpu_thread_priority: "IDXGIDevice::GetGPUThreadPriority on a new device: 0; SetGPUThreadPriority(-7 .. 7): S_OK and read back; -8, 8, 100, -2147483648: E_INVALIDARG (0x80070057), value unchanged"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  wait timings (exactly when the event is signaled relative to Present is not deterministic on WARP; only waits with a 2 s limit are printed), closing the first handle, waitable objects of swap chains that are being resized, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING interplay, a non-identity matrix on a live visual.

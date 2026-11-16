@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/msctls_statusbar32.yaml
+id: windows/api/comctl32.dll/msctls_statusbar32
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. The programs have no manifest, so they get the common controls of version 5.82 from the system directory (classic look, no visual styles); controls are drawn into memory bitmaps with WM_PRINT (PRF_CLIENT | PRF_ERASEBKGND | PRF_CHILDREN) and only system colours are compared, never text or glyph pixels. Microsoft Learn: "Common Controls", the control reference pages and their message and notification lists; commctrl.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The status bar: one or more parts with text, a sunken border each, aligned to the bottom of its parent. 7-Zip's file manager has one at the bottom of its window (selection counts, sizes); it does not paint on Poly.
+interface:
+  signature: "window class msctls_statusbar32 (comctl32 version 5.82): CreateWindowExW(\"msctls_statusbar32\", ...); messages SB_*"
+rules:
+  creation: "the class is registered by InitCommonControlsEx(ICC_BAR_CLASSES or ICC_WIN95_CLASSES); a bar made with no CCS_ style keeps its style bits (WS_CHILD, WS_VISIBLE); a fresh bar has one part: SB_GETPARTS returns 1 and the edge -1, SB_GETTEXTW(0) returns length 0"
+  parts: "SB_SETPARTS(n, edges) returns TRUE and SB_GETPARTS(max, array) returns the number of parts and writes min(max, n) edges as given (100, 200, -1); with an array of 1 or 2 elements for 3 parts it writes only that many and still returns 3, with max 0 it writes nothing; up to 256 parts work (257 returns FALSE and keeps the old parts); 0 parts returns FALSE and keeps the old ones; the last edge may be a number (10, 20 for two parts) and the bar has exactly the parts asked for; edges that do not increase (200, 100, -1) are accepted and read back as 200, 200, -1; text of parts that stay is kept when the parts are set again, new parts are empty"
+  text: "SB_SETTEXTW(index | type, text) returns TRUE for a part that exists and for 255 (the simple mode text) and FALSE for another index (part 3 of 3); the type bits of the index word are SBT_NOBORDERS 0x100 and SBT_POPOUT 0x200 and come back in the high word of SB_GETTEXTW and SB_GETTEXTLENGTHW (together with the length in the low word: 5 for 'first', 6 | 0x100 for 'second', 5 | 0x200 for 'third'); the empty text gives length 0; SB_GETTEXTW of a part that does not exist returns 0 and writes nothing; SB_GETTEXTW(255) returns 0 for the simple text in the test"
+  window_text: "WM_SETTEXT sets the text of part 0 (returns 1) and WM_GETTEXT, WM_GETTEXTLENGTH and GetWindowTextW read it (14 characters for 'via WM_SETTEXT'); SB_GETTEXTW(0) returns the same text"
+  rectangles: "SB_GETRECT(i) returns TRUE and the part's rectangle: with edges 100, 200, -1 in a bar 400 wide the parts are (0, 2, 100, 22), (102, 2, 200, 22) and (202, 2, 400, 22) (a 2 pixel gap between parts, top 2, bottom 22 for the oracle's 22 pixel high bar), FALSE and an untouched rectangle for a part that does not exist; SB_GETBORDERS returns TRUE with horizontal 0, vertical 2 and between parts 2"
+  simple_mode: "SB_SIMPLE(TRUE) returns 0 and SB_ISSIMPLE returns 1; SB_SIMPLE(FALSE) returns 0 and SB_ISSIMPLE 0; the parent gets SBN_SIMPLEMODECHANGE (-880) for each change; nothing is sent while the mode stays"
+  icons: "SB_SETICON(part, icon) returns TRUE (also for part 5 of a bar with fewer parts) and SB_GETICON(0) returns the icon handle that was set; SB_SETICON(0, NULL) clears it (SB_GETICON 0)"
+  height: "SB_SETMINHEIGHT(40) followed by WM_SIZE makes the bar 42 pixels high (the border is 2 pixels); the oracle's default is 22 at a 16 pixel system font; every bar has the same height"
+  placement: "a bar made with CCS_BOTTOM semantics (the default) spans the width of its parent's client area and ends at its bottom as soon as it is created (also before any WM_SIZE) and after every WM_SIZE sent to the bar (also a SIZE_MINIMIZED size with 0 x 0); when the parent grows the bar does not follow until it gets WM_SIZE; CCS_TOP puts it at the top (y 0, full width); CCS_NORESIZE keeps the size the bar was made with (50 x 30); CCS_NOPARENTALIGN keeps width and position (50 wide) but makes the height the bar's own (22)"
+  painting: "drawn into a memory bitmap each part has a sunken border: its left and top edge pixels are COLOR_BTNSHADOW, its right and bottom edge pixels COLOR_BTNHIGHLIGHT and the inside (beside the text) COLOR_BTNFACE (parts 0 to 2 of a bar with edges 150, 300, -1)"
+errors:
+  bad_part: "SB_GETRECT and SB_SETTEXTW for a part that does not exist: FALSE"
+  bad_parts: "SB_SETPARTS with 0 or 257 parts: FALSE"
+side_effects: "posts WM_NOTIFY (SBN_SIMPLEMODECHANGE) to the parent"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Version 6 controls (what PuTTY and 7-Zip get through their manifests: themed painting, extra messages, LVS_EX styles beyond the basic ones), mouse input (a mouse button message sent to these controls starts a loop that waits for the real mouse and never ends in session 0, so the tests send keys and use hit tests), drag and drop, label editing, tool tips, owner draw and custom draw (NM_CUSTOMDRAW), icon and tile views, groups, sorting, and anything that needs a real font (text pixels, text extents of the system font). SB_SETTIPTEXT, owner-drawn parts (SBT_OWNERDRAW), the size grip's drawing, text pixels, and bars with SBARS_TOOLTIPS.

@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.ClearDepthStencilView.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.ClearDepthStencilView
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::ClearDepthStencilView", "D3D11_CLEAR_FLAG", "ID3D11Device::CreateDepthStencilView", "D3D11_DEPTH_STENCIL_VIEW_DESC", "D3D11_DSV_DIMENSION", "D3D11_DSV_FLAG", "ID3D11DepthStencilView::GetDesc"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Fills the depth and/or stencil planes of a depth texture. Chrome (ANGLE) clears depth-stencil buffers this way. Observed through CopyResource into a staging texture of the same format: the depth value is quantised round-to-nearest-even to the format; depth values outside [0, 1] or NaN clear to 1.0; the stencil argument and the depth argument that the flags do not select leave the stored values untouched; flags 0 and 4 do nothing. CreateDepthStencilView with a NULL description gives the texture's own format and dimension.
+interface:
+  signature: "void ClearDepthStencilView(ID3D11DepthStencilView* view, UINT flags, FLOAT depth, UINT8 stencil); HRESULT ID3D11Device::CreateDepthStencilView(ID3D11Resource*, const D3D11_DEPTH_STENCIL_VIEW_DESC*, ID3D11DepthStencilView**)"
+  layout: "D3D11_DEPTH_STENCIL_VIEW_DESC (24 bytes, 6 words): Format, ViewDimension (TEXTURE2D 3, TEXTURE2DARRAY 4, TEXTURE2DMS 5, TEXTURE2DMSARRAY 6), Flags (READ_ONLY_DEPTH 1, READ_ONLY_STENCIL 2), then MipSlice or FirstArraySlice, ArraySize (d3d11.h)"
+  constants: "D3D11_CLEAR_FLAG: DEPTH 1, STENCIL 2"
+chrome:
+  calls: "ANGLE clears the depth-stencil buffer of its render targets with ClearDepthStencilView (assumed from its documented design)"
+rules:
+  d24_s8: "D24_UNORM_S8_UINT (45): a texel is stencil << 24 | depth24: clear (DEPTH|STENCIL, 1.0, 0) reads 0x00FFFFFF; (0.0, 0xFF) reads 0xFF000000; depth only 0.5 (stencil argument 7 ignored) keeps the stencil: 0xFF800000; stencil only 0x55 (depth argument 0.25 ignored) keeps the depth: 0x55800000; flags 0 and 4: no change; flags 0xFFFFFFFF clear both (0x22FFFFFF for 1.0 / 0x22); depth values (with stencil 0): 0.25 -> 0x400000, 0.3 -> 0x4CCCCC, 0.999 -> 0xFFBE76, 1e-7 -> 0x000002, 2.0, -1.0, NaN, +inf -> 0xFFFFFF; stencil values at depth 0.5: 0 -> 0x00800000, 1 -> 0x01800000, 0x7F, 0x80, 0xFF likewise (stencil in the top byte); every pixel is cleared"
+  d32: "D32_FLOAT (40): the depth is stored as the float: 1.0 -> 0x3F800000, 0.0 -> 0, 0.5 -> 0x3F000000, 0.25 -> 0x3E800000, 0.3 -> 0x3E99999A, 0.999 -> 0x3F7FBE77, 1e-7 -> 0x33D6BF95; 2.0, -1.0, NaN, +inf -> 1.0 (0x3F800000); the stencil argument and flag have no effect; flags 0 and 4 no change"
+  d16: "D16_UNORM (55): 1.0 -> 0xFFFF, 0.0 -> 0, 0.5 -> 0x8000, 0.25 -> 0x4000, 0.3 -> 0x4CCC, 0.999 -> 0xFFBD, 1e-7 -> 0; 2.0, -1.0, NaN, +inf -> 0xFFFF; stencil ignored; every pixel is cleared"
+  d32_s8: "D32_FLOAT_S8X24_UINT (20): 8 bytes per texel, the first word the depth float (as D32_FLOAT), the second word the stencil in its low byte (0 .. 0xFF; the upper bits read 0); depth-only clear keeps the stencil word, stencil-only clear keeps the float"
+  rounding: "depth is converted to UNORM with round-to-nearest, ties to even (0.5 * 0xFFFFFF = 8388607.5 -> 0x800000, 0.3 * 0xFFFFFF -> 0x4CCCCC; 0.5 * 0xFFFF = 32767.5 -> 0x8000, 0.3 * 0xFFFF = 19660.5 -> 0x4CCC)"
+  views_default: "NULL description: D24_UNORM_S8_UINT texture -> Format 45, TEXTURE2D (3), flags 0, MipSlice 0; D32_FLOAT -> 40; D16_UNORM -> 55; D32_FLOAT_S8X24_UINT -> 20; a 3-slice D32_FLOAT array -> TEXTURE2DARRAY (4) MipSlice 0, FirstArraySlice 0, ArraySize 3; a multisampled D24S8 -> TEXTURE2DMS (5); TYPELESS textures (R24G8, R32, R16) need an explicit format: NULL description is E_INVALIDARG"
+  views_explicit: "typeless R24G8 as D24_UNORM_S8_UINT, R32_TYPELESS as D32_FLOAT, R16_TYPELESS as D16_UNORM succeed; R24G8 as D32_FLOAT and D24S8 as D32_FLOAT are E_INVALIDARG; Format UNKNOWN is the texture's format (45); flags 1, 2, 3 (read-only depth / stencil / both) succeed and are read back; flags 4 and MipSlice 1 of a 1-mip texture are E_INVALIDARG; TEXTURE2DMS on a single-sample texture succeeds (Format 45, dimension 5); TEXTURE2D on a multisampled texture is E_INVALIDARG; array: 2DARRAY slices 1..2 reads [0, 1, 2], size -1 reads the real count 3; a plain TEXTURE2D view of an array texture succeeds; views of a render-target texture and of a texture without the DEPTH_STENCIL bind are E_INVALIDARG"
+  read_only: "ClearDepthStencilView through a view created with READ_ONLY_DEPTH (D32_FLOAT texture, depth cleared to 0.5 through a writable view) leaves the depth unchanged (a request for 0.25 is ignored) and the device alive"
+errors:
+  argument: "E_INVALIDARG (0x80070057) from CreateDepthStencilView"
+side_effects: "overwrites depth and stencil planes"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  clearing array slices and multisampled depth textures (only the view creation was tried), depth views with mip slices above 0, clearing in a bound render pass (no shader), the interaction with SRV reads of the depth texture.
