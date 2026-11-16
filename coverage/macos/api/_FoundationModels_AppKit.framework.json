@@ -5,5 +5,6 @@
 {"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE20promptRepresentation0bC06PromptVvg","src":["macos-sdk"]},
 {"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE20promptRepresentation0bC06PromptVvpMV","src":["macos-sdk"]},
 {"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE26instructionsRepresentation0bC012InstructionsVvg","src":["macos-sdk"]},
-{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE26instructionsRepresentation0bC012InstructionsVvpMV","src":["macos-sdk"]}
+{"symbol":"$sSo7NSImageC24_FoundationModels_AppKitE26instructionsRepresentation0bC012InstructionsVvpMV","src":["macos-sdk"]},
+{"symbol":"swift:_FoundationModels_AppKit.Attachment.init(_:orientation:)","src":["macos-swift-interface"]}
 ]

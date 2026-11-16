@@ -109,5 +109,11 @@
 {"symbol":"$s22_GeoToolbox_AppIntents21PlaceDescriptorEntityVMn","src":["macos-sdk"]},
 {"symbol":"$s22_GeoToolbox_AppIntents21PlaceDescriptorEntityVN","src":["macos-sdk"]},
 {"symbol":"$s22_GeoToolbox_AppIntents21PlaceDescriptorEntityVs12IdentifiableAAMc","src":["macos-sdk"]},
-{"symbol":"$s22_GeoToolbox_AppIntents21PlaceDescriptorEntityVyAC0aB00eF0VcfC","src":["macos-sdk"]}
+{"symbol":"$s22_GeoToolbox_AppIntents21PlaceDescriptorEntityVyAC0aB00eF0VcfC","src":["macos-sdk"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.Specification","src":["macos-swift-interface"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.UnwrappedType","src":["macos-swift-interface"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.ValueType","src":["macos-swift-interface"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.defaultResolverSpecification","src":["macos-swift-interface"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.displayRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_GeoToolbox_AppIntents.PlaceDescriptor.typeDisplayRepresentation","src":["macos-swift-interface"]}
 ]

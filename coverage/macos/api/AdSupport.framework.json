@@ -1,3 +1,6 @@
 [
-{"symbol":"objc:ASIdentifierManager","src":["macos-sdk"]}
+{"symbol":"objc:ASIdentifierManager","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:ASIdentifierManager+sharedManager","src":["macos-objc-api"]},
+{"symbol":"objc:ASIdentifierManager.@advertisingIdentifier","src":["macos-objc-api"]},
+{"symbol":"objc:ASIdentifierManager.@advertisingTrackingEnabled","src":["macos-objc-api"]}
 ]
