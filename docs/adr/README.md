@@ -188,7 +188,6 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0207](0207-the-com-apartment-lives-in-teb-reservedforole-the-global-interface-table-and-bits-is-not-registered.md) | The COM apartment lives in `TEB.ReservedForOle`; the global interface table; BITS is not registered | Accepted |
 | [0209](0209-windows-programs-type-with-the-desktop-s-keyboard-layout.md) | Windows programs type with the desktop's keyboard layout | Accepted |
 | [0210](0210-nt-ids-are-multiples-of-4-a-main-thread-has-its-own-id-and-an-exception-out-of-a-guarded-call-unwinds-first.md) | NT ids are multiples of 4, a main thread has its own id, and an exception out of a guarded call unwinds first | Accepted |
-| [0212](0212-keyboard-layouts-are-data-and-windows-sizing-and-moving-run-as-a-loop-in-defwindowproc.md) | Keyboard layouts are data, and Windows' sizing and moving run as a loop in DefWindowProc | Accepted |
 | [0213](0213-landing-work-on-main-hand-off-records-one-file-each-progress-files-written-on-main-ci-on-any-branch-fast-handoff-verify.md) | Landing work on main: hand-off records one file each, progress files written on main, CI on any branch, a fast `handoff verify` | Accepted |
 | [0214](0214-ci-runs-chrome-for-windows-stage-1-and-the-window-check-on-every-pull-request.md) | CI runs Chrome for Windows, stage 1 and the window check, on every pull request | Accepted |
 | [0216](0216-chrome-for-windows-on-the-desktop-to-try-by-hand.md) | Chrome for Windows on the desktop, to try by hand | Accepted |
