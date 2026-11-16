@@ -33,7 +33,7 @@ mod tests {
         assert_eq!(counter.fetch_add(1, Ordering::Relaxed), 10);
         let c = alloc_multiple_of_4(&counter);
         assert_eq!(c, 12);
-        assert!(a % 4 == 0 && b % 4 == 0 && c % 4 == 0 && a != 0);
+        assert!(a.is_multiple_of(4) && b.is_multiple_of(4) && c.is_multiple_of(4) && a != 0);
     }
 
     #[test]
