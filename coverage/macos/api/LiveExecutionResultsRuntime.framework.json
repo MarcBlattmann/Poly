@@ -1,0 +1,11 @@
+[
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_scope_entry(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_scope_entry_extended(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_scope_exit(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_scope_exit_extended(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_with_id(_:_:_:_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_log_with_id_extended(_:_:_:_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_postPrint(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_postPrint_extended(_:_:_:_:_:_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:LiveExecutionResultsRuntime.__builtin_send_data(_:)","src":["macos-swift-interface"]}
+]

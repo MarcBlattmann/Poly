@@ -10,5 +10,6 @@
 {"symbol":"$sSo28UNMutableNotificationContentC29_UserNotifications_AppIntentsE26appEntityIdentifiersBridgeSay0fG00I10IdentifierVGSgvM","src":["macos-sdk"]},
 {"symbol":"$sSo28UNMutableNotificationContentC29_UserNotifications_AppIntentsE26appEntityIdentifiersBridgeSay0fG00I10IdentifierVGSgvg","src":["macos-sdk"]},
 {"symbol":"$sSo28UNMutableNotificationContentC29_UserNotifications_AppIntentsE26appEntityIdentifiersBridgeSay0fG00I10IdentifierVGSgvpMV","src":["macos-sdk"]},
-{"symbol":"$sSo28UNMutableNotificationContentC29_UserNotifications_AppIntentsE26appEntityIdentifiersBridgeSay0fG00I10IdentifierVGSgvs","src":["macos-sdk"]}
+{"symbol":"$sSo28UNMutableNotificationContentC29_UserNotifications_AppIntentsE26appEntityIdentifiersBridgeSay0fG00I10IdentifierVGSgvs","src":["macos-sdk"]},
+{"symbol":"swift:_UserNotifications_AppIntents.UNMutableNotificationContent.appEntityIdentifiers","src":["macos-swift-interface"]}
 ]
