@@ -1415,7 +1415,11 @@ mod tests {
         assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
         // Chrome's GPU stage (spec-chrome-win-s5).
         let gpu = image(
-            &[("d3d11.dll", &["D3D11CreateDevice"]), ("DXGI.dll", &["CreateDXGIFactory1"]), ("dcomp.dll", &["DCompositionCreateDevice"])],
+            &[
+                ("d3d11.dll", &["D3D11CreateDevice"]),
+                ("DXGI.dll", &["CreateDXGIFactory1"]),
+                ("dcomp.dll", &["DCompositionCreateDevice"]),
+            ],
             3,
         );
         assert_eq!(check_image(&gpu).unwrap()["d3d11.dll"], ["D3D11CreateDevice"]);
