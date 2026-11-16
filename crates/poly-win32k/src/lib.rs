@@ -61,6 +61,8 @@ pub mod hooks;
 pub mod icofile;
 pub mod ime;
 pub mod kbd;
+pub mod kbdlist;
+pub mod kbdtab;
 pub mod link;
 pub mod menu;
 pub mod metrics;
