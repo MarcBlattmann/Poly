@@ -65,7 +65,24 @@ it still ran, and a pull request that broke Chrome was found only afterwards.
 
 ## Flakiness
 
-See "Results" below.
+Each entry ran three times on GitHub's ubuntu-24.04 runners with KVM (the pull
+request's run, a re-run of it and the run on `main` after the merge; the S3
+entry's third run is a re-run of the `main` run), 2026-11-16:
+
+| entry | run 1 (cold cache) | run 2 | run 3 |
+|---|---|---|---|
+| `s1-headless` | passed, 4 m 34 s | passed, 4 m 42 s | passed, 4 m 03 s |
+| `s3-window` | passed, 6 m 14 s | passed, 6 m 34 s | passed, 5 m 57 s |
+
+No run needed one of stage 3's three attempts for a slow start. So both
+stages stay **required**; the rule from the decision stands: if the window
+check turns out flaky later, its entry becomes `continue-on-error` and stage 1
+stays required. In the job, stage 1's boot is 40 s of Chrome (the group takes
+about 130 s with the disk) and stage 3's group about 235 s; the rest is
+about 2 min of setup (packages, Rust, the 210 MB archive, the disk). The
+`chrome (s3-window)` entry ends about 3 min after the longest other job, so
+a pull request waits that much longer than before; building the launcher and
+probe in the `build` job instead of in this one would take about a minute off.
 
 ## Consequences
 
