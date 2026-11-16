@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetCommState.yaml
+id: windows/api/kernel32.dll/GetCommState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  The state of a serial port. The C runtime of MSYS2 calls it on every standard handle to find out whether it is a serial port; for anything else it fails and clears the DCB.
+interface:
+  signature: "BOOL GetCommState(HANDLE hFile, LPDCB lpDCB)"
+rules:
+  not_a_port: "the NUL device and an anonymous pipe (both ends): FALSE, ERROR_INVALID_FUNCTION (1)."
+  bad_handle: "NULL, INVALID_HANDLE_VALUE, a closed handle value, an event and the process pseudo handle: FALSE, ERROR_INVALID_HANDLE (6)."
+  dcb: "the DCB is cleared even on failure: a 28-byte DCB filled with 0x5A comes back with its DCBlength field unchanged (28) and the other bytes zero."
+  standard_handles: "stdin, stdout and stderr of the test (files or pipes): FALSE with error 1 or 6. GetCommTimeouts(INVALID_HANDLE_VALUE): FALSE, 6."
+errors:
+  not_a_comm_device: "ERROR_INVALID_FUNCTION 1"
+  bad_handle: "ERROR_INVALID_HANDLE 6"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  A real serial port.

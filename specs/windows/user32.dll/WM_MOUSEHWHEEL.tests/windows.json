@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "spec-win-input-final",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T04:56:24Z",
+  "tests": [
+    {
+      "name": "whl_keys",
+      "exe_sha256": "7ee55785131f397774b6691ba0d425eefca6d5598b3b153ea5642eaaefa06c78",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZm9yZWdyb3VuZApmb2N1cyBpcyBBOiB0cnVlCkN0cmwgaGVsZDogaHdoZWVsICsxMjAgb3ZlciBBOiBjdXJzb3IgYXQgNDAwLDM1MAogIFtBXSBXTV9LRVlET1dOIHZrPTB4MTEKICBbQV0gV01fTkNISVRURVNUIHNjcmVlbj00MDAsMzUwCiAgICAtPiBIVENMSUVOVCAoMSkKICBbQV0gV01fTU9VU0VIV0hFRUwga2V5cz0weDggZGVsdGE9MTIwIHNjcmVlbj00MDAsMzUwCiAgW0FdIFdNX0tFWVVQIHZrPTB4MTEKU2hpZnQgaGVsZDogaHdoZWVsIC0xMjAgb3ZlciBBOiBjdXJzb3IgYXQgNDAwLDM1MAogIFtBXSBXTV9LRVlET1dOIHZrPTB4MTAKICBbQV0gV01fTkNISVRURVNUIHNjcmVlbj00MDAsMzUwCiAgICAtPiBIVENMSUVOVCAoMSkKICBbQV0gV01fTU9VU0VIV0hFRUwga2V5cz0weDQgZGVsdGE9LTEyMCBzY3JlZW49NDAwLDM1MAogIFtBXSBXTV9LRVlVUCB2az0weDEwCmxlZnQgYnV0dG9uIGhlbGQgKHByZXNzZWQgb3ZlciBBKTogaHdoZWVsICsxMjA6IGN1cnNvciBhdCA0MDAsMzUwCiAgW0FdIFdNX05DSElUVEVTVCBzY3JlZW49NDAwLDM1MAogICAgLT4gSFRDTElFTlQgKDEpCiAgW0FdIFdNX1NFVENVUlNPUiBoaXQ9SFRDTElFTlQgMSBtc2c9MHgwMjAxCiAgW0FdIFdNX0xCVVRUT05ET1dOIGtleXM9MHgxIGNsaWVudD0zMDAsMjUwCiAgW0FdIFdNX05DSElUVEVTVCBzY3JlZW49NDAwLDM1MAogICAgLT4gSFRDTElFTlQgKDEpCiAgW0FdIFdNX01PVVNFSFdIRUVMIGtleXM9MHgxIGRlbHRhPTEyMCBzY3JlZW49NDAwLDM1MAogIFtBXSBXTV9OQ0hJVFRFU1Qgc2NyZWVuPTQwMCwzNTAKICAgIC0+IEhUQ0xJRU5UICgxKQogIFtBXSBXTV9TRVRDVVJTT1IgaGl0PUhUQ0xJRU5UIDEgbXNnPTB4MDIwMgogIFtBXSBXTV9MQlVUVE9OVVAga2V5cz0weDAgY2xpZW50PTMwMCwyNTAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok foreground\nfocus is A: true\nCtrl held: hwheel +120 over A: cursor at 400,350\n  [A] WM_KEYDOWN vk=0x11\n  [A] WM_NCHITTEST screen=400,350\n    -> HTCLIENT (1)\n  [A] WM_MOUSEHWHEEL keys=0x8 delta=120 screen=400,350\n  [A] WM_KEYUP vk=0x11\nShift held: hwheel -120 over A: cursor at 400,350\n  [A] WM_KEYDOWN vk=0x10\n  [A] WM_NCHITTEST screen=400,350\n    -> HTCLIENT (1)\n  [A] WM_MOUSEHWHEEL keys=0x4 delta=-120 screen=400,350\n  [A] WM_KEYUP vk=0x10\nleft button held (pressed over A): hwheel +120: cursor at 400,350\n  [A] WM_NCHITTEST screen=400,350\n    -> HTCLIENT (1)\n  [A] WM_SETCURSOR hit=HTCLIENT 1 msg=0x0201\n  [A] WM_LBUTTONDOWN keys=0x1 client=300,250\n  [A] WM_NCHITTEST screen=400,350\n    -> HTCLIENT (1)\n  [A] WM_MOUSEHWHEEL keys=0x1 delta=120 screen=400,350\n  [A] WM_NCHITTEST screen=400,350\n    -> HTCLIENT (1)\n  [A] WM_SETCURSOR hit=HTCLIENT 1 msg=0x0202\n  [A] WM_LBUTTONUP keys=0x0 client=300,250\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2545
+    }
+  ]
+}

@@ -176,9 +176,11 @@ impl Wm {
                 let child_area = under.offset(-cr.left, -cr.top);
                 // Invalidated through its parent, a child also has its
                 // frame and erase pending (InvalidateRect.yaml ir_children).
-                // (RedrawWindow with RDW_ALLCHILDREN and no RDW_ERASE erases none: bp_chrome_first_paint.)
+                // (RedrawWindow with RDW_ALLCHILDREN on a parent that clips its children, so that the
+                // children are reached by the flag alone, and no RDW_ERASE erases none: bp_chrome_first_paint;
+                // a parent that does not clip them invalidates them with itself and they are erased.)
                 let child_flags = if flags & RDW_INVALIDATE != 0 {
-                    flags | RDW_FRAME | if flags & RDW_ALLCHILDREN != 0 { 0 } else { RDW_ERASE }
+                    flags | RDW_FRAME | if flags & RDW_ALLCHILDREN != 0 && clip_children { 0 } else { RDW_ERASE }
                 } else {
                     flags
                 };

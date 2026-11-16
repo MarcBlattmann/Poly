@@ -24,7 +24,6 @@ poly_win32_rt::fail_exports!(
         FlashWindowEx,
         FrameRect,
         GetGuiResources,
-        GetPointerDevice,
         GetPointerPenInfo,
         GetPointerType,
         InvertRect,

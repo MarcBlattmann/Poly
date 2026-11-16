@@ -387,6 +387,9 @@ crate::wire_enum! {
         114 => Caret { op: u8, hwnd: u32, a: i32, b: i32, tid: u32 },
         /// The keyboard layout keys are read with (`kbd::Layout::id`, ADR 0209): a `Value`.
         115 => KeyboardLayout {},
+        /// `SetClassLongPtrW(hwnd, index, value)`: the class value `index` (`GCL_*` or an extra byte offset) of the
+        /// window's class set; the old value in a `Value`.
+        116 => SetClassLong { hwnd: u64, index: i32, value: u64 },
     }
 }
 

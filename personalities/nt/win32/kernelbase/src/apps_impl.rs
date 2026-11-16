@@ -12,8 +12,13 @@ pub extern "system" fn MulDiv(number: i32, numerator: i32, denominator: i32) -> 
     apps::mul_div(number, numerator, denominator)
 }
 
+#[cfg(target_arch = "x86")]
+use core::arch::x86::_rdtsc;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::_rdtsc;
+
 /// The process's pointer-encoding cookie: made on first use from the time-stamp counter and the
-/// stack's address, never 0.
+/// stack's address, never 0 (and, for a 32-bit process, never 0 in its low 32 bits).
 fn cookie() -> u64 {
     static COOKIE: AtomicU64 = AtomicU64::new(0);
     let c = COOKIE.load(Ordering::Relaxed);
@@ -21,7 +26,7 @@ fn cookie() -> u64 {
         return c;
     }
     // SAFETY: rdtsc has no preconditions.
-    let tsc = unsafe { core::arch::x86_64::_rdtsc() };
+    let tsc = unsafe { _rdtsc() };
     let marker = 0u8;
     let fresh = (tsc.rotate_left(17) ^ (core::ptr::addr_of!(marker) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)) | 1;
     match COOKIE.compare_exchange(0, fresh, Ordering::Relaxed, Ordering::Relaxed) {
@@ -33,13 +38,21 @@ fn cookie() -> u64 {
 /// `EncodePointer`.
 #[unsafe(no_mangle)]
 pub extern "system" fn EncodePointer(ptr: usize) -> usize {
-    apps::encode_pointer(ptr as u64, cookie()) as usize
+    if cfg!(target_arch = "x86") {
+        apps::encode_pointer32(ptr as u32, cookie() as u32) as usize
+    } else {
+        apps::encode_pointer(ptr as u64, cookie()) as usize
+    }
 }
 
 /// `DecodePointer`.
 #[unsafe(no_mangle)]
 pub extern "system" fn DecodePointer(ptr: usize) -> usize {
-    apps::decode_pointer(ptr as u64, cookie()) as usize
+    if cfg!(target_arch = "x86") {
+        apps::decode_pointer32(ptr as u32, cookie() as u32) as usize
+    } else {
+        apps::decode_pointer(ptr as u64, cookie()) as usize
+    }
 }
 
 /// `InterlockedIncrement`.

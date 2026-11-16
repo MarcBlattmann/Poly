@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "rtl_qpc_b",
+      "exe_sha256": "8ad60c210ed39891366e7f662a9d301906c36e10f4932aa4a00251b49537b8fc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBub256ZXJvIHRydWUgbW9ub3RvbmljIHRydWUgdGhlIDIwIG1zIHNsZWVwIG1vdmVkIGl0IGZvcndhcmQgdHJ1ZQphIDEwMCBtcyBzbGVlcCBtZWFzdXJlcyA5NS4uNDAwIG1zOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  nonzero true monotonic true the 20 ms sleep moved it forward true\na 100 ms sleep measures 95..400 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 184
+    },
+    {
+      "name": "rtl_qpc_c",
+      "exe_sha256": "e87a78b9c08eae1f951f38bf52f41b6622ca853ae066fca7727d307a83331671",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBrZXJuZWwzMidzIGNvdW50ZXIgKHRha2VuIGFmdGVyKSBpcyBub3QgYmVmb3JlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  kernel32's counter (taken after) is not before: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 179
+    }
+  ]
+}

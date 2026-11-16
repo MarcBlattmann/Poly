@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateWaitableTimerExW.yaml
+id: windows/api/kernel32.dll/CreateWaitableTimerExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  Creates a waitable timer object. This is the call Firefox stops on (its timer thread makes two and treats a failure as fatal). The same test covers SetWaitableTimer, SetWaitableTimerEx, CancelWaitableTimer and OpenWaitableTimerW: what a timer does when it fires.
+interface:
+  signature: "HANDLE CreateWaitableTimerExW(LPSECURITY_ATTRIBUTES attrs, LPCWSTR name, DWORD flags, DWORD desiredAccess)"
+rules:
+  flags: "0 (auto reset), CREATE_WAITABLE_TIMER_MANUAL_RESET (1), CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (2) and 3 give a handle; 4 and 0x80 (unknown flags) give NULL with ERROR_INVALID_PARAMETER (87)."
+  access: "TIMER_ALL_ACCESS (0x1F0003) and TIMER_MODIFY_STATE|SYNCHRONIZE (0x100002) give a working timer. Access 0 and TIMER_QUERY_STATE|SYNCHRONIZE give a handle but SetWaitableTimer and CancelWaitableTimer on it fail with ERROR_ACCESS_DENIED (5)."
+  auto_reset: "a 20 ms auto-reset timer: the first wait returns WAIT_OBJECT_0 after 15..2000 ms, the second WAIT_TIMEOUT (258); a manual-reset timer stays signalled (every wait 0). Setting a signalled manual timer again clears it (wait(0) = 258); CancelWaitableTimer (TRUE, also when nothing is set) stops it."
+  period: "a period of 20 ms after a first due time of 10 ms: four consecutive waits are all signalled."
+  due_time: "a negative due time is relative in 100 ns units; a positive one absolute (a time in the past, 1, fires at once; so does 0)."
+  arguments: "SetWaitableTimer with a NULL due time or a negative period: FALSE, ERROR_INVALID_PARAMETER (87); with an event handle or a NULL handle: FALSE, ERROR_INVALID_HANDLE (6); CancelWaitableTimer(event) FALSE, 6. SetWaitableTimerEx (tolerable delay 5, NULL context) is TRUE and fires."
+  completion_routine: "SetWaitableTimer with a completion routine and argument 0x1234: TRUE; SleepEx(2000, TRUE) returns WAIT_IO_COMPLETION (192), the routine ran once with that argument, and the timer object is signalled too."
+  names: "a named timer: handle and no error; the same name again: a handle and ERROR_ALREADY_EXISTS (183); OpenWaitableTimerW: a handle; a missing name: NULL, ERROR_FILE_NOT_FOUND (2); a name used by an event: NULL, ERROR_INVALID_HANDLE (6). CreateWaitableTimerW(manual) works the same way."
+errors:
+  unknown_flags: "ERROR_INVALID_PARAMETER 87"
+  no_access: "ERROR_ACCESS_DENIED 5"
+  wrong_object: "ERROR_INVALID_HANDLE 6"
+  name_in_use_by_other_type: "ERROR_INVALID_HANDLE 6"
+  already_exists: "ERROR_ALREADY_EXISTS 183 (handle valid)"
+side_effects: "creates a kernel object"
+threading: "a completion routine runs in the calling thread at its next alertable wait"
+ordering: []
+timing:
+  typical: "a due time of 20 ms signals after 20 ms plus scheduling"
+  guarantees: "not before the due time (tests allow 15 ms below to 2 s above)"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Resume-from-suspend (the fResume argument), timer resolution, REASON_CONTEXT contents, security attributes, the tolerable delay's effect on timing.

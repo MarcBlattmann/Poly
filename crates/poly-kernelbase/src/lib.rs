@@ -120,6 +120,7 @@ pub mod waitreg;
 pub mod winmm;
 pub mod winpath;
 pub mod wow64;
+pub mod wsprintf;
 
 pub use poly_ntobj::NtStatus;
 

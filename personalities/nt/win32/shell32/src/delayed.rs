@@ -17,7 +17,6 @@ poly_win32_rt::fail_exports!(
     [
         SHCreateItemFromParsingName,
         SHGetDesktopFolder,
-        SHGetMalloc,
         SHGetStockIconInfo,
         SHOpenFolderAndSelectItems,
         SHQueryUserNotificationState,

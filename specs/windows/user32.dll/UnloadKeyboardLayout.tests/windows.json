@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "spec-win-input-final",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T04:56:24Z",
+  "tests": [
+    {
+      "name": "ukl_basic",
+      "exe_sha256": "4ffa9f5659b33cf1ea3ac7e9db10347267e4b48d17d138aac9772b73ee2a2387",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5pdGlhbCBsaXN0OiBjb3VudCAzOiAweDA4MDcwODA5IDB4MDQwNzIwMDAgMHgwNDA3MDgwOQpsb2FkZWQgVVMgMHgwNDA5MDQwOQpVbmxvYWRLZXlib2FyZExheW91dChVUykgPSAxIGxhc3RlcnJvciAwCmFmdGVyIHVubG9hZGluZyBpdDogY291bnQgMzogMHgwODA3MDgwOSAweDA0MDcyMDAwIDB4MDQwNzA4MDkKVW5sb2FkS2V5Ym9hcmRMYXlvdXQoVVMpIGFnYWluID0gMCBsYXN0ZXJyb3IgMApVbmxvYWRLZXlib2FyZExheW91dCh0aGUgdGhyZWFkJ3MgbGF5b3V0IDB4MDQwNzIwMDApID0gMCBsYXN0ZXJyb3IgMApVbmxvYWRLZXlib2FyZExheW91dCgweDEyMzQ1Njc4KSA9IDAgbGFzdGVycm9yIDAKZmluYWwgbGlzdDogY291bnQgMzogMHgwODA3MDgwOSAweDA0MDcyMDAwIDB4MDQwNzA4MDkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "initial list: count 3: 0x08070809 0x04072000 0x04070809\nloaded US 0x04090409\nUnloadKeyboardLayout(US) = 1 lasterror 0\nafter unloading it: count 3: 0x08070809 0x04072000 0x04070809\nUnloadKeyboardLayout(US) again = 0 lasterror 0\nUnloadKeyboardLayout(the thread's layout 0x04072000) = 0 lasterror 0\nUnloadKeyboardLayout(0x12345678) = 0 lasterror 0\nfinal list: count 3: 0x08070809 0x04072000 0x04070809\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

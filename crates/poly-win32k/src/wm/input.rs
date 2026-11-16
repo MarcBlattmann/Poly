@@ -153,7 +153,11 @@ impl Wm {
         for &u in d.children.iter().filter(|&&h| self.is_ime_ui(h)) {
             let owner = self.get(u64::from(u)).map_or(0, |w| w.owner);
             let at = order.iter().position(|&h| h == owner).unwrap_or(0);
-            order.insert(at, u);
+            // Directly above the default IME window, except while that has no owner (its window
+            // was destroyed): then it lies above the text services' window (GetWindow.yaml
+            // `ime_windows`: "ime ctf holder").
+            let orphan = at < order.len() && self.get(u64::from(owner)).is_some_and(|w| w.owner == 0);
+            order.insert(if orphan { at + 1 } else { at }, u);
         }
         order
     }
@@ -260,8 +264,11 @@ impl Wm {
             let next = if active != 0 && active != gone {
                 active
             } else {
+                // A window that is shown: the hidden holder of the thread (Chrome's) does not take the
+                // IME window over (GetWindow.yaml `ime_windows`: "owner NULL" after the last visible
+                // window is destroyed).
                 list.iter()
-                    .find(|o| o.queue == t.queue && o.hwnd != gone && !o.is(zorder::HELPER))
+                    .find(|o| o.queue == t.queue && o.hwnd != gone && !o.is(zorder::HELPER) && o.is(zorder::VISIBLE))
                     .map_or(0, |o| o.hwnd)
             };
             let topmost = self.get(u64::from(next)).map_or(0, |w| w.ex_style & WS_EX_TOPMOST);
@@ -269,10 +276,13 @@ impl Wm {
                 w.owner = next;
                 w.ex_style = (w.ex_style & !WS_EX_TOPMOST) | topmost;
             }
-            if next != 0 {
-                let order = zorder::helper_above_owner(&self.tops(), t.hwnd, next);
-                self.set_order(order);
-            }
+            let order = if next != 0 {
+                zorder::helper_above_owner(&self.tops(), t.hwnd, next)
+            } else {
+                // No owner any more: the text services' window goes below it.
+                self.tops().iter().map(|t| t.hwnd).collect()
+            };
+            self.set_order(order);
         }
     }
 

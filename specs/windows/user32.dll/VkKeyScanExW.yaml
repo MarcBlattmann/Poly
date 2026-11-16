@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/VkKeyScanExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  Which virtual key and shift state type a character in the layout of the HKL passed (VkKeyScanW does the same
+  for the thread's layout). Pinned down for the US, German, Swiss German and French layouts.
+interface:
+  signature: "SHORT VkKeyScanExW(WCHAR ch, HKL hkl)"
+rules:
+  what: "returns for a character the virtual key in the low byte and the shift state in the high byte (bit 0 Shift, 1 Ctrl, 2 Alt) or -1 (0xFFFF) when the layout cannot type it with these keys; the tests vks_<layout> print the result for the characters 0x00-0x1F, 0x20-0x7E, 0xA0-0xFF, U+20AC and a few quotation marks"
+  us_ascii: "US: U+0020=20/0 !=31/1 \"=DE/1 #=33/1 $=34/1 %=35/1 &=37/1 '=DE/0 (=39/1 )=30/1 *=38/1 +=BB/1 ,=BC/0 -=BD/0 .=BE/0 /=BF/0 0=30/0 1=31/0 2=32/0 3=33/0 4=34/0 5=35/0 6=36/0 7=37/0 8=38/0 9=39/0 :=BA/1 ;=BA/0 <=BC/1 ==BB/0 >=BE/1 ?=BF/1 @=32/1 A=41/1 B=42/1 C=43/1 D=44/1 E=45/1 F=46/1 G=47/1 H=48/1 I=49/1 J=4A/1 K=4B/1 L=4C/1 M=4D/1 N=4E/1 O=4F/1 P=50/1 Q=51/1 R=52/1 S=53/1 T=54/1 U=55/1 V=56/1 W=57/1 X=58/1 Y=59/1 Z=5A/1 [=DB/0 \\=DC/0 ]=DD/0 ^=36/1 _=BD/1 `=C0/0 a=41/0 b=42/0 c=43/0 d=44/0 e=45/0 f=46/0 g=47/0 h=48/0 i=49/0 j=4A/0 k=4B/0 l=4C/0 m=4D/0 n=4E/0 o=4F/0 p=50/0 q=51/0 r=52/0 s=53/0 t=54/0 u=55/0 v=56/0 w=57/0 x=58/0 y=59/0 z=5A/0 {=DB/1 |=DC/1 }=DD/1 ~=C0/1; characters 0xA0-0xFF and U+20AC: none (-1)"
+  us_control: "US, control characters (character: key/state): U+0000=32/3 U+0001=41/2 U+0002=42/2 U+0003=03/0 U+0004=44/2 U+0005=45/2 U+0006=46/2 U+0007=47/2 U+0008=08/0 U+0009=09/0 U+000A=0D/2 U+000B=4B/2 U+000C=4C/2 U+000D=0D/0 U+000E=4E/2 U+000F=4F/2 U+0010=50/2 U+0011=51/2 U+0012=52/2 U+0013=53/2 U+0014=54/2 U+0015=55/2 U+0016=56/2 U+0017=57/2 U+0018=58/2 U+0019=59/2 U+001A=5A/2 U+001B=1B/0 U+001C=DC/2 U+001D=DD/2 U+001E=36/3 U+001F=BD/3 (the low byte is the virtual key, the number after / the shift state 1 Shift, 2 Ctrl, 4 Alt)"
+  dech_against_us: "Swiss German against US (character: US -> Swiss German, key/shift state): U+0000:32/3->40/2 U+001C:DC/2->DF/2 U+001D:DD/2->C0/2 U+001F:BD/3->BD/2 !:31/1->C0/1 \":DE/1->32/1 #:33/1->33/6 $:34/1->DF/0 &:37/1->36/1 ':DE/0->DB/0 (:39/1->38/1 ):30/1->39/1 *:38/1->33/1 +:BB/1->31/1 /:BF/0->37/1 ::BA/1->BE/1 ;:BA/0->BC/1 <:BC/1->E2/0 =:BB/0->30/1 >:BE/1->E2/1 ?:BF/1->DB/1 @:32/1->32/6 [:DB/0->BA/6 \\:DC/0->E2/6 ]:DD/0->C0/6 ^:36/1->DD/0 `:C0/0->DD/1 {:DB/1->DC/6 |:DC/1->37/6 }:DD/1->DF/6 ~:C0/1->DD/6 U+20AC:none->45/6"
+  de_against_us: "German against US: U+001C:DC/2->BF/2 U+001D:DD/2->BB/2 \":DE/1->32/1 #:33/1->BF/0 &:37/1->36/1 ':DE/0->BF/1 (:39/1->38/1 ):30/1->39/1 *:38/1->BB/1 +:BB/1->BB/0 /:BF/0->37/1 ::BA/1->BE/1 ;:BA/0->BC/1 <:BC/1->E2/0 =:BB/0->30/1 >:BE/1->E2/1 ?:BF/1->DB/1 @:32/1->51/6 [:DB/0->38/6 \\:DC/0->DB/6 ]:DD/0->39/6 ^:36/1->DC/0 `:C0/0->DD/1 {:DB/1->37/6 |:DC/1->E2/6 }:DD/1->30/6 ~:C0/1->BB/6 U+20AC:none->45/6"
+  fr_against_us: "French against US: U+0000:32/3->30/2 U+001D:DD/2->BA/2 U+001E:36/3->39/3 U+001F:BD/3->36/3 !:31/1->DF/0 \":DE/1->33/0 #:33/1->33/6 $:34/1->BA/0 %:35/1->C0/1 &:37/1->31/0 ':DE/0->34/0 (:39/1->35/0 ):30/1->DB/0 *:38/1->DC/0 -:BD/0->36/0 .:BE/0->BE/1 /:BF/0->BF/1 0:30/0->30/1 1:31/0->31/1 2:32/0->32/1 3:33/0->33/1 4:34/0->34/1 5:35/0->35/1 6:36/0->36/1 7:37/0->37/1 8:38/0->38/1 9:39/0->39/1 ::BA/1->BF/0 ;:BA/0->BE/0 <:BC/1->E2/0 >:BE/1->E2/1 ?:BF/1->BC/1 @:32/1->30/6 [:DB/0->35/6 \\:DC/0->38/6 ]:DD/0->DB/6 ^:36/1->DD/0 _:BD/1->38/0 `:C0/0->37/6 {:DB/1->34/6 |:DC/1->36/6 }:DD/1->BB/6 ~:C0/1->32/6 U+20AC:none->45/6"
+  dech_altgr: "Swiss German, the characters reached with AltGr or dead keys: @=32/6 #=33/6 |=37/6 [=BA/6 ]=C0/6 {=DC/6 }=DF/6 \\=E2/6 U+20AC=45/6 ~=DD/6 ^=DD/0 `=DD/1 U+00B4=DB/6 U+00A8=C0/0 U+00A6=31/6 U+00A2=38/6 U+00AC=36/6 U+00B0=34/6 U+00A7=35/6 U+00E4=DC/0 U+00F6=DE/0 U+00FC=BA/0 U+00E8=BA/1 U+00E9=DE/1 U+00E0=DC/1 U+00E7=34/1 U+00C4=DC/0 U+00D6=DE/0 U+00DC=BA/0 (state 6 = Ctrl+Alt = AltGr)"
+errors:
+  none_found: "a character the layout cannot type: -1 (0xFFFF), both bytes -1"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  Layouts other than the four, characters outside Latin-1 except U+20AC, dead-key characters typed as their
+  combination.

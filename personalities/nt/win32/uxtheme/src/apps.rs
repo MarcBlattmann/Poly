@@ -8,16 +8,11 @@ poly_win32_rt::fail_exports!(
     "uxtheme",
     hresult,
     [
-        BufferedPaintInit,
         BufferedPaintRenderAnimation,
         BufferedPaintSetAlpha,
         BufferedPaintStopAllAnimations,
-        BufferedPaintUnInit,
-        EnableThemeDialogTexture,
         EndBufferedAnimation,
-        EndBufferedPaint,
         EndPanningFeedback,
-        SetWindowTheme,
         SetWindowThemeAttribute,
         UpdatePanningFeedback,
     ]
@@ -26,35 +21,7 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!(
     "uxtheme",
     value(0),
-    [
-        BeginBufferedAnimation,
-        BeginBufferedPaint,
-        BeginPanningFeedback,
-        GetThemeSysColor,
-        IsThemeBackgroundPartiallyTransparent,
-        OpenThemeDataForDpi,
-        ord_133,
-        ord_135,
-    ]
+    [BeginBufferedAnimation, BeginPanningFeedback, OpenThemeDataForDpi, ord_133, ord_135,]
 );
 
-poly_win32_rt::fail_exports!(
-    "uxtheme",
-    value(0x80070006),
-    [
-        DrawThemeParentBackground,
-        DrawThemeText,
-        DrawThemeTextEx,
-        GetCurrentThemeName,
-        GetThemeBackgroundRegion,
-        GetThemeBool,
-        GetThemeColor,
-        GetThemeEnumValue,
-        GetThemeFont,
-        GetThemeInt,
-        GetThemeMargins,
-        GetThemePropertyOrigin,
-        GetThemeSysFont,
-        GetThemeTransitionDuration,
-    ]
-);
+poly_win32_rt::fail_exports!("uxtheme", value(0x80070006), [DrawThemeTextEx, GetThemeTransitionDuration,]);

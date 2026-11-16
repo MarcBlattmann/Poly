@@ -53,6 +53,25 @@ impl MainSta {
         let _ = self.0.compare_exchange(0, tid, AcqRel, Acquire);
     }
 
+    /// A thread made its first STA initialisation: it becomes the main STA when there is none or the
+    /// holder is gone (`alive` says whether a thread still runs: a thread can end without
+    /// `CoUninitialize`). Whether `tid` is the main STA now.
+    pub fn claim_if_gone(&self, tid: u32, alive: impl Fn(u32) -> bool) -> bool {
+        use core::sync::atomic::Ordering::{AcqRel, Acquire};
+        loop {
+            let cur = self.0.load(Acquire);
+            if cur == tid {
+                return true;
+            }
+            if cur != 0 && alive(cur) {
+                return false;
+            }
+            if self.0.compare_exchange(cur, tid, AcqRel, Acquire).is_ok() {
+                return true;
+            }
+        }
+    }
+
     /// A thread's STA ended.
     pub fn release(&self, tid: u32) {
         use core::sync::atomic::Ordering::{AcqRel, Acquire};
@@ -158,12 +177,16 @@ pub struct BlockLayout {
     pub flags: usize,
     pub count: usize,
     pub ole: usize,
+    /// A dword of our own after the observable ones: non-zero once `OleInitialize` was ever called.
+    pub ole_used: usize,
 }
 
 /// The 64-bit layout: `TEB.ReservedForOle` at 0x1758; flags +0x14, count +0x28, OLE count +0x2c.
-pub const BLOCK_X64: BlockLayout = BlockLayout { teb_offset: 0x1758, flags: 0x14, count: 0x28, ole: 0x2C };
+pub const BLOCK_X64: BlockLayout =
+    BlockLayout { teb_offset: 0x1758, flags: 0x14, count: 0x28, ole: 0x2C, ole_used: 0x30 };
 /// The 32-bit layout (WOW64 and native 32-bit): at 0xF80; flags +0x0C, count +0x18, OLE count +0x1C.
-pub const BLOCK_X86: BlockLayout = BlockLayout { teb_offset: 0xF80, flags: 0x0C, count: 0x18, ole: 0x1C };
+pub const BLOCK_X86: BlockLayout =
+    BlockLayout { teb_offset: 0xF80, flags: 0x0C, count: 0x18, ole: 0x1C, ole_used: 0x20 };
 /// Bytes of a block (zeroed when made; the dwords other than the three above stay 0).
 pub const BLOCK_SIZE: usize = 0x40;
 
@@ -227,12 +250,15 @@ pub struct ComState {
     pub count: u32,
     /// `OleInitialize` calls not yet undone.
     pub ole: u32,
+    /// `OleInitialize` was ever called on this thread (`RegisterDragDrop` tells "OLE not initialised"
+    /// from "OLE uninitialised again" by it). Kept in a dword of our own, not in the sheet's.
+    pub ole_used: bool,
 }
 
 impl ComState {
     /// A block just made: all zero.
     pub const fn new() -> ComState {
-        ComState { flags: 0, count: 0, ole: 0 }
+        ComState { flags: 0, count: 0, ole: 0, ole_used: false }
     }
 
     /// The model of an initialised thread; `None` when it has no apartment of its own.
@@ -273,22 +299,22 @@ impl ComState {
             Some(_) => return RPC_E_CHANGED_MODE,
         };
         if kind == InitKind::Ole {
+            // The first OleInitialize of the thread is S_OK, also on a thread CoInitializeEx made.
+            let first = self.ole == 0;
             self.ole = self.ole.saturating_add(1);
+            self.ole_used = true;
+            return if first { S_OK } else { S_FALSE };
         }
         hr
     }
 
-    /// `CoUninitialize` / `RoUninitialize` (and `OleUninitialize`, with `ole`): balances one call.
-    /// The last one leaves the block as it is with the flags value 0x1; on a thread that is not
-    /// initialised nothing changes.
-    pub fn uninitialize(&mut self, ole: bool) {
+    /// `CoUninitialize` / `RoUninitialize`: balances one call. The last one leaves the block as it is
+    /// with the flags value 0x1; on a thread that is not initialised nothing changes.
+    pub fn uninitialize(&mut self) {
         if self.count == 0 {
             return;
         }
         self.count -= 1;
-        if ole && self.ole > 0 {
-            self.ole -= 1;
-        }
         if self.ole > self.count {
             self.ole = self.count;
         }
@@ -296,6 +322,20 @@ impl ComState {
             self.flags = FLAG_USED;
             self.ole = 0;
         }
+    }
+
+    /// `OleUninitialize`: balances one `OleInitialize` (and its share of the apartment); `true` when
+    /// that was the last one (the drop targets go). A call without OLE does nothing.
+    pub fn ole_uninitialize(&mut self) -> bool {
+        if self.ole == 0 {
+            return false;
+        }
+        let ole = self.ole - 1;
+        self.uninitialize();
+        if self.model().is_some() {
+            self.ole = ole;
+        }
+        ole == 0
     }
 
     /// `CoGetApartmentType`: the type and qualifier, or `None` (`CO_E_NOTINITIALIZED`). An STA
@@ -326,6 +366,7 @@ impl ComState {
                 flags: block.add(layout.flags).cast::<u32>().read_unaligned(),
                 count: block.add(layout.count).cast::<u32>().read_unaligned(),
                 ole: block.add(layout.ole).cast::<u32>().read_unaligned(),
+                ole_used: block.add(layout.ole_used).cast::<u32>().read_unaligned() != 0,
             }
         }
     }
@@ -340,6 +381,7 @@ impl ComState {
             block.add(layout.flags).cast::<u32>().write_unaligned(self.flags);
             block.add(layout.count).cast::<u32>().write_unaligned(self.count);
             block.add(layout.ole).cast::<u32>().write_unaligned(self.ole);
+            block.add(layout.ole_used).cast::<u32>().write_unaligned(u32::from(self.ole_used));
         }
     }
 }
@@ -393,18 +435,18 @@ mod tests {
         let mut s = ComState::new();
         init(&mut s, InitKind::Com(6));
         init(&mut s, InitKind::Com(6));
-        s.uninitialize(false);
+        s.uninitialize();
         assert_eq!((s.flags, s.count), (0xC1, 1));
         assert!(s.model().is_some());
-        s.uninitialize(false);
+        s.uninitialize();
         assert_eq!((s.flags, s.count, s.ole), (0x1, 0, 0));
         assert_eq!(s.model(), None);
-        s.uninitialize(false); // an extra one changes nothing
+        s.uninitialize(); // an extra one changes nothing
         assert_eq!((s.flags, s.count), (0x1, 0));
         // Either model again.
         assert_eq!(init(&mut s, InitKind::Com(0)), S_OK);
         assert_eq!((s.flags, s.count), (0x141, 1));
-        s.uninitialize(false);
+        s.uninitialize();
         assert_eq!(init(&mut s, InitKind::Com(2)), S_OK);
         assert_eq!((s.flags, s.count), (0x81, 1));
     }
@@ -416,23 +458,48 @@ mod tests {
         assert_eq!((s.flags, s.count, s.ole), (0x81, 1, 1));
         assert_eq!(init(&mut s, InitKind::Ole), S_FALSE);
         assert_eq!((s.count, s.ole), (2, 2));
-        s.uninitialize(true);
+        s.ole_uninitialize();
         assert_eq!((s.flags, s.count, s.ole), (0x81, 1, 1));
-        s.uninitialize(true);
+        s.ole_uninitialize();
         assert_eq!((s.flags, s.count, s.ole), (0x1, 0, 0));
-        // OleInitialize on a thread made by CoInitializeEx(2).
+        // OleInitialize on a thread made by CoInitializeEx(2): the first OLE call is S_OK.
         init(&mut s, InitKind::Com(2));
-        assert_eq!(init(&mut s, InitKind::Ole), S_FALSE);
+        assert_eq!(init(&mut s, InitKind::Ole), S_OK);
         assert_eq!((s.flags, s.count, s.ole), (0x81, 2, 1));
-        s.uninitialize(true);
+        s.ole_uninitialize();
         assert_eq!((s.count, s.ole), (1, 0));
-        s.uninitialize(false);
+        s.uninitialize();
         assert_eq!(s.flags, 0x1);
         // On an MTA thread OleInitialize changes nothing.
         let mut m = ComState::new();
         init(&mut m, InitKind::Com(0));
         assert_eq!(init(&mut m, InitKind::Ole), RPC_E_CHANGED_MODE);
         assert_eq!((m.flags, m.count, m.ole), (0x141, 1, 0));
+        assert!(!m.ole_used);
+    }
+
+    #[test]
+    fn ole_is_a_state_of_its_own() {
+        let mut a = ComState::new();
+        assert_eq!(init(&mut a, InitKind::Ole), S_OK);
+        assert_eq!(init(&mut a, InitKind::Ole), S_FALSE);
+        assert!(!a.ole_uninitialize());
+        assert!(a.ole_uninitialize());
+        assert_eq!(a.model(), None);
+        assert!(a.ole_used);
+        // An unmatched call changes nothing, and the next OleInitialize is the first again.
+        assert!(!a.ole_uninitialize());
+        assert_eq!(a.count, 0);
+        assert_eq!(init(&mut a, InitKind::Ole), S_OK);
+        assert!(a.ole_uninitialize());
+        // On a thread that did CoInitializeEx: the apartment stays after OleUninitialize.
+        let mut b = ComState::new();
+        assert_eq!(init(&mut b, InitKind::Com(2)), S_OK);
+        assert_eq!(init(&mut b, InitKind::Ole), S_OK);
+        assert!(b.ole_uninitialize());
+        assert_eq!(b.model(), Some(Model::Sta));
+        b.uninitialize();
+        assert_eq!(b.model(), None);
     }
 
     #[test]
@@ -467,7 +534,7 @@ mod tests {
     fn block_round_trips_in_both_layouts() {
         for layout in [BLOCK_X64, BLOCK_X86] {
             let mut mem = [0u8; BLOCK_SIZE];
-            let s = ComState { flags: 0x2000C1, count: 3, ole: 2 };
+            let s = ComState { flags: 0x2000C1, count: 3, ole: 2, ole_used: true };
             // SAFETY: a block-sized buffer.
             let back = unsafe {
                 s.write(mem.as_mut_ptr(), layout);
@@ -526,6 +593,17 @@ mod tests {
         m.claim(9);
         assert!(m.is_main(9));
         assert!(!m.is_main(0));
+    }
+
+    #[test]
+    fn a_main_sta_that_ended_without_uninitialising_is_replaced() {
+        let m = MainSta::new();
+        assert!(m.claim_if_gone(7, |_| true));
+        assert!(m.claim_if_gone(7, |_| true));
+        assert!(!m.claim_if_gone(9, |t| t == 7));
+        assert!(m.is_main(7));
+        assert!(m.claim_if_gone(9, |_| false));
+        assert!(m.is_main(9));
     }
 
     #[test]
