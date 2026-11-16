@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WindowFromDC.yaml
+id: windows/api/user32.dll/WindowFromDC
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "WindowFromDC function (winuser.h)", "GetDC function", "GetWindowDC function", "GetDCEx function", "ReleaseDC function"; winuser.h and wingdi.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the window a device context belongs to: the window of a DC from GetDC, GetWindowDC and GetDCEx (cache DCs), the desktop window for the screen DC, NULL for everything else. Chrome's dependencies (the GPU process, ANGLE and the software compositing path) call it. Results are given as relations to the test's own window.
+interface:
+  signature: "HWND WindowFromDC(HDC hDC)"
+  constants: "DCX_WINDOW 1, DCX_CACHE 2 (winuser.h)"
+chrome:
+  calls: "used by Chrome's UI and GPU-process code to find the window of a DC (assumed; not seen by the tracer)"
+rules:
+  window_dc: "GetDC(window), a second GetDC(window) (a different DC value while the first is held), GetWindowDC(window), GetDCEx(window, NULL, DCX_CACHE), DCX_CACHE|DCX_CLIPCHILDREN, DCX_CACHE|DCX_WINDOW and DCX_PARENTCLIP: WindowFromDC returns that window; GetDCEx(window, NULL, DCX_WINDOW) alone returns a NULL DC (no cache flag, no CS_OWNDC); child window: the child itself (not the parent); a popup: itself"
+  screen_dc: "GetDC(NULL) gives a DC whose WindowFromDC is the desktop window (equal to GetDesktopWindow()); GetWindowDC(NULL) and GetDC(GetDesktopWindow()) too"
+  released_dc: "after ReleaseDC (which returns 1) the old DC value gives NULL; ReleaseDC again returns 0; a window destroyed while its DC was not released: NULL; GetDC of a destroyed window: a NULL DC and WindowFromDC(NULL) is NULL"
+  other_dcs: "memory DCs (CreateCompatibleDC of the screen, of a window DC, of NULL; with a bitmap selected; after DeleteDC), CreateDC(\"DISPLAY\") and CreateIC(\"DISPLAY\") give NULL"
+  invalid: "NULL, 0x1234, (HDC)-1, an event handle and a window handle used as a DC all give NULL, and the thread's last error is not changed by the call"
+errors:
+  argument: "E_INVALIDARG (0x80070057) for bad arguments and NULL output pointers"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  DCs from BeginPaint, windows of other processes or sessions, DCs of windows with CS_OWNDC or CS_CLASSDC, printer DCs, metafile DCs.

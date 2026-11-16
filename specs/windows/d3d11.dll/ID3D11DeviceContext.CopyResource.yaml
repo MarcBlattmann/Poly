@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.CopyResource.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.CopyResource
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::CopyResource", "ID3D11DeviceContext::CopySubresourceRegion", "ID3D11DeviceContext::UpdateSubresource", "ID3D11DeviceContext::ClearRenderTargetView", "ID3D11DeviceContext::ResolveSubresource", "ID3D11DeviceContext::Flush", "ID3D11DeviceContext::ClearState"; d3d11.h, d3d11_1.h, d3dcommon.h, dxgiformat.h, dxgi.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The immediate context's copies and clears, observed through the test's own pixels read back via a staging texture. Copies are done when the call returns (changing the source afterwards does not change the copy). ClearRenderTargetView converts float colours to 8-bit with round-to-nearest. CopySubresourceRegion and UpdateSubresource with a box that does not fit REMOVE THE DEVICE on WARP: GetDeviceRemovedReason becomes DXGI_ERROR_DEVICE_REMOVED (0x887A0005) and every later call that makes a resource or maps one fails with it; an empty box does nothing and keeps the device alive.
+interface:
+  signature: "void CopyResource(ID3D11Resource* dst, ID3D11Resource* src); void CopySubresourceRegion(dst, dstSub, x, y, z, src, srcSub, const D3D11_BOX*); void UpdateSubresource(dst, sub, const D3D11_BOX*, const void*, UINT rowPitch, UINT depthPitch); void ClearRenderTargetView(ID3D11RenderTargetView*, const FLOAT[4]); void ResolveSubresource(dst, dstSub, src, srcSub, DXGI_FORMAT)"
+  constants: "D3D11_BOX: left, top, front, right, bottom, back (6 UINT words)"
+chrome:
+  calls: "ANGLE copies between its textures and staging textures (CopyResource / CopySubresourceRegion), uploads with UpdateSubresource and clears render targets (assumed)"
+rules:
+  copy_resource: "staging -> default (B8G8R8A8, SRV|RTV) -> staging gives the source pixels back: (0,0) 0xFF000000, (5,3) 0xFF005003 for a source of 0xFF000000|(x*16)<<8|y; a later change of the source leaves the copy unchanged"
+  clear: "ClearRenderTargetView on a view made with a NULL description of a B8G8R8A8_UNORM texture; the pixel read back for the colour (r,g,b,a): (0,0,0,0) -> 0x00000000, (1,1,1,1) -> 0xFFFFFFFF, (0.25,0.5,0.75,1) -> 0xFF4080BF, (0.2,0.4,0.6,0.8) -> 0xCC336699, (2,-1,1.5,0.5) -> 0x80FF00FF (clamped), (NaN,0,0,1) -> 0xFF000000 (NaN is 0), (0.001,0.002,0.003,0.004) -> 0x01000101 (rounds to nearest; alpha 0.004 -> 1), (0.5/255, 1.5/255, 2.5/255, 127.5/255) -> 0x80000202; a R8G8B8A8_UNORM texture cleared with (1,0.5,0.25,0.75) reads 0xBF4080FF as a 32-bit word (bytes R G B A = FF 80 40 BF)"
+  format_mismatch: "CopyResource from an R8G8B8A8 texture to a B8G8R8A8 staging texture copies nothing (the destination stays 0) and does not fail visibly"
+  region: "CopySubresourceRegion with the box left 2, top 1, right 6, bottom 4 to destination (5,3): destination (5,3) gets source (2,1), (8,5) gets source (5,3); pixels outside the 4x3 rectangle are untouched; a NULL box copies the whole source to the destination point"
+  update: "UpdateSubresource with a NULL box writes the whole subresource (pitch 64 for 16 pixels): (0,0) 0xFF000000, (1,0) 0xFF000001, (0,1) 0xFF000010, (15,7) 0xFF00007F for data 0xFF000000|i; with the box (4,2)-(7,4) and a pitch of 12 the 3x2 data lands at (4..6, 2..3) and the neighbours (3,2), (7,2) are untouched; it also works on a staging texture"
+  flush_clearstate: "Flush and ClearState return without effect on resource contents"
+  resolve: "ResolveSubresource of a 4x multisampled B8G8R8A8 texture cleared with (0,1,0,1) into a single-sample default texture gives 0xFF00FF00 at every pixel"
+  invalid_boxes_remove_device: "on WARP each of these calls leaves the device removed (GetDeviceRemovedReason 0x887A0005 and a later CreateTexture2D returns 0x887A0005): a box wider (right 40) or taller (bottom 40) than the source, a box with right below left, a box with back 2 on a 2D texture, a destination point plus box size outside the destination (12,0 with 8 wide; 100,100), UpdateSubresource with a box wider than the resource; these keep the device alive: a whole copy to (0,0), a box inside with a destination (8,4), an empty box (left = right, top = bottom)"
+errors:
+  device_removed: "DXGI_ERROR_DEVICE_REMOVED (0x887A0005) from later calls after an invalid box"
+side_effects: "the copies change the destination resources"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  copies of compressed or depth formats, copies between different sizes with CopyResource (the debug layer reports it; the device state after it was not probed), deferred contexts, GPU timing.

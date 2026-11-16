@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dcomp.dll/DCompositionCreateSurfaceHandle.yaml
+id: windows/api/dcomp.dll/DCompositionCreateSurfaceHandle
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "DCompositionCreateSurfaceHandle function (dcomp.h)", "IDCompositionDevice::CreateSurfaceFromHandle", "IDXGIFactoryMedia::CreateSwapChainForCompositionSurfaceHandle"; dcomp.h, dcomptypes.h, dxgi1_2.h, dxgi1_3.h and winerror.h, dxgi1_3.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a kernel handle for a composition surface that a swap chain can be bound to (CreateSwapChainForCompositionSurfaceHandle) and that a device turns into a visual's content (CreateSurfaceFromHandle). Chrome uses the pattern for its video overlay swap chains (assumed). Observed: access masks, security attributes, the handle behaves as an ordinary kernel handle, and both consumers.
+interface:
+  signature: "HRESULT DCompositionCreateSurfaceHandle(DWORD desiredAccess, SECURITY_ATTRIBUTES* securityAttributes, HANDLE* surfaceHandle)"
+  constants: "COMPOSITIONOBJECT_READ 1, COMPOSITIONOBJECT_WRITE 2, COMPOSITIONOBJECT_ALL_ACCESS 3 (dcomptypes.h)"
+chrome:
+  calls: "Chrome's GPU process (DirectComposition path, assumed from its documented design; the tracer only sees the exports) makes a D3D11 device, takes its IDXGIDevice, calls DCompositionCreateDevice3 (or 2) and asks for IDCompositionDesktopDevice, creates a target for the browser window's HWND with topmost TRUE, a root visual and one visual per overlay layer, sets a flip swap chain made by CreateSwapChainForComposition as the content of a visual, calls Commit after each change and uses WaitForCommitCompletion / GetFrameStatistics for frame pacing."
+rules:
+  access: "desiredAccess 3, 1, 2, 0, 4, GENERIC_ALL (0x10000000), GENERIC_READ|GENERIC_WRITE, 0x1F0003, MAXIMUM_ALLOWED and SYNCHRONIZE all give S_OK and a handle; 0xFFFFFFFF gives 0xD0000061 (an NT-status-like value) and a NULL handle"
+  attributes: "NULL attributes S_OK, the handle is not inheritable; a SECURITY_ATTRIBUTES with bInheritHandle TRUE gives an inheritable handle (GetHandleInformation flag 1); a NULL output pointer: E_INVALIDARG"
+  handle: "the result is an ordinary kernel handle: DuplicateHandle works, CloseHandle works once and fails the second time, two calls give different values"
+  create_surface_from_handle: "IDCompositionDevice::CreateSurfaceFromHandle (v1 slot 10, desktop slot 25) with a handle from the function or any other new handle: S_OK with an object that answers IUnknown only (not IDCompositionSurface, not IDXGISurface); NULL handle: S_OK with an object (!); (HANDLE)-1 and an event handle: E_HANDLE-like 0x80070006 (ERROR_INVALID_HANDLE) with a NULL object; the surface as visual content: SetContent S_OK and Commit S_OK; a NULL output pointer E_INVALIDARG"
+  factory_media: "IDXGIFactory2's object answers IDXGIFactoryMedia (S_OK); CreateSwapChainForCompositionSurfaceHandle(device, handle, desc, NULL, &sc) (slot 3 of IDXGIFactoryMedia) with a handle of the function: S_OK, GetDesc1 reads back the description, Present(0,0) and Present(1,0) S_OK; with a NULL handle: S_OK too; with (HANDLE)-1: 0x80070006; the same handle for a second swap chain: DXGI_ERROR_ALREADY_EXISTS (0x887A0036) for the second; the swap chain's surface handle as content: CreateSurfaceFromHandle S_OK, SetContent S_OK, Commit S_OK, Present S_OK afterwards"
+errors:
+  invalid_handle: "0x80070006 (ERROR_INVALID_HANDLE as an HRESULT value)"
+  already_exists: "DXGI_ERROR_ALREADY_EXISTS (0x887A0036)"
+side_effects: "creates a kernel object"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  handles duplicated into another process, security descriptors other than NULL, decode swap chains (CreateDecodeSwapChainForCompositionSurfaceHandle).

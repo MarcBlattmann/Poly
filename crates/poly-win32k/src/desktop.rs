@@ -50,6 +50,9 @@ pub struct Surface {
     pub state: WindowState,
     /// The process of the window's app (0: not told).
     pub pid: u32,
+    /// The window's own borders around the surface that take input
+    /// (`ToCompositor::Margins`): left, top, right, bottom.
+    pub margins: [u16; 4],
 }
 
 /// The output as the compositor reported it.
@@ -160,6 +163,7 @@ impl Desktop {
                 buffer: None,
                 state: WindowState::Normal,
                 pid: 0,
+                margins: [0; 4],
             },
         );
         self.send(ToCompositor::Create { surface: id, kind, owner, framed });
@@ -191,6 +195,17 @@ impl Desktop {
             (pid != 0 && s.pid != pid).then(|| {
                 s.pid = pid;
                 ToCompositor::Process { surface: id, pid }
+            })
+        })
+    }
+
+    /// The window's own borders around the surface (left, top, right, bottom) that take input.
+    pub fn set_margins(&mut self, id: SurfaceId, margins: [u16; 4]) -> bool {
+        self.with(id, |s| {
+            (s.margins != margins).then(|| {
+                s.margins = margins;
+                let [left, top, right, bottom] = margins;
+                ToCompositor::Margins { surface: id, left, top, right, bottom }
             })
         })
     }
@@ -376,6 +391,10 @@ impl Desktop {
             put(ToCompositor::Create { surface: id, kind: s.kind, owner: s.owner, framed: s.framed });
             if s.pid != 0 {
                 put(ToCompositor::Process { surface: id, pid: s.pid });
+            }
+            if s.margins != [0; 4] {
+                let [left, top, right, bottom] = s.margins;
+                put(ToCompositor::Margins { surface: id, left, top, right, bottom });
             }
             let (x, y, width, height) = s.rect;
             put(ToCompositor::Geometry { surface: id, x, y, width, height });

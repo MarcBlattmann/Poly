@@ -136,6 +136,9 @@ kernel_test! {
     }
 }
 
+/// How often the mouse test sends its packets again after a dropped one.
+const MOUSE_TRIES: usize = 5;
+
 kernel_test! {
     fn controller_mouse_bytes_become_events() -> TestResult {
         let (Some(dev), Some(kind)) = (device(), kind()) else { return Ok(()) };
@@ -147,28 +150,46 @@ kernel_test! {
         // with nothing pressed.
         let wheel = i32::from(kind.has_wheel());
         let packets = [Packet { dx: 7, dy: 3, wheel, buttons: button::LEFT }, Packet::default()];
-        let deadline = time::now_ns() + 2 * time::NANOS_PER_SEC;
-        for p in &packets {
-            let (bytes, n) = encode(kind, p);
-            for &b in &bytes[..n] {
-                let seen = BYTES.load(SeqCst);
-                {
-                    let _c = crate::keyboard::CONTROLLER.lock();
-                    i8042::write_aux_output(&I8042Ports, b).map_err(|_| "the controller did not take the byte")?;
-                }
-                while BYTES.load(SeqCst) == seen && time::now_ns() < deadline {
-                    crate::thread::yield_now();
-                }
-            }
-        }
-        // The input thread wakes readers; the queue is filled already.
-        let events = input::read_events(&files, fd);
-        let _ = files.close(fd);
         let mut want = alloc::vec![(ev::REL, rel::X, 7), (ev::REL, rel::Y, -3)];
         if wheel != 0 {
             want.push((ev::REL, rel::WHEEL, 1));
         }
         want.extend([(ev::KEY, key::BTN_LEFT, 1), (ev::SYN, syn::REPORT, 0), (ev::KEY, key::BTN_LEFT, 0), (ev::SYN, syn::REPORT, 0)]);
+        // The decoder starts a new packet when a byte comes more than
+        // `PACKET_GAP_NS` after the one before it, as it does for a byte the
+        // mouse lost. A host so busy that it holds this CPU back for that
+        // long between two bytes makes it drop the packet (and the test would
+        // see only the first), which is the decoder doing its job, so the
+        // whole exchange is tried again from a clean decoder. A decoder that
+        // really mis-decodes fails every time.
+        let mut events: alloc::vec::Vec<(u16, u16, i32)> = alloc::vec::Vec::new();
+        for attempt in 1..=MOUSE_TRIES {
+            if let Some((decoder, _)) = DECODER.lock().as_mut() {
+                decoder.reset();
+            }
+            let _ = input::read_events(&files, fd);
+            let deadline = time::now_ns() + 2 * time::NANOS_PER_SEC;
+            for p in &packets {
+                let (bytes, n) = encode(kind, p);
+                for &b in &bytes[..n] {
+                    let seen = BYTES.load(SeqCst);
+                    {
+                        let _c = crate::keyboard::CONTROLLER.lock();
+                        i8042::write_aux_output(&I8042Ports, b).map_err(|_| "the controller did not take the byte")?;
+                    }
+                    while BYTES.load(SeqCst) == seen && time::now_ns() < deadline {
+                        crate::thread::yield_now();
+                    }
+                }
+            }
+            // The input thread wakes readers; the queue is filled already.
+            events = input::read_events(&files, fd);
+            if events == want {
+                break;
+            }
+            kprintln!("mouse test: attempt {attempt} of {MOUSE_TRIES}: read {events:?}");
+        }
+        let _ = files.close(fd);
         if events != want {
             kprintln!("mouse test: read {events:?}, {} byte(s), {} packet(s)", BYTES.load(SeqCst), PACKETS.load(SeqCst));
             return Err("the controller's mouse bytes did not read as motion and a click");

@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateTexture2D.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateTexture2D
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateTexture2D", "D3D11_TEXTURE2D_DESC", "D3D11_USAGE", "D3D11_BIND_FLAG", "D3D11_CPU_ACCESS_FLAG", "D3D11_RESOURCE_MISC_FLAG", "DXGI_FORMAT", "ID3D11Resource::GetType", "ID3D11Texture2D::GetDesc"; d3d11.h, d3d11_1.h, d3dcommon.h, dxgiformat.h, dxgi.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes a 2D texture (or an array, or a cube) on a WARP device (feature level 11_0). Chrome (ANGLE, the compositor and the swap chains) creates textures with format B8G8R8A8_UNORM or R8G8B8A8_UNORM and bind flags SHADER_RESOURCE and/or RENDER_TARGET (usage DEFAULT), staging textures with CPU read or write for read-back and upload (usage STAGING, bind 0), textures with the shared misc flags (SHARED_NTHANDLE with SHARED_KEYEDMUTEX to hand frames to another process) and multisampled render targets. The description is checked in full: an invalid one gives E_INVALIDARG and a NULL texture, with no debug layer message that matters. GetDesc returns what was made, with MipLevels 0 replaced by the full chain length.
+interface:
+  signature: "HRESULT ID3D11Device::CreateTexture2D(const D3D11_TEXTURE2D_DESC* desc, const D3D11_SUBRESOURCE_DATA* init, ID3D11Texture2D** tex)"
+  layout: "D3D11_TEXTURE2D_DESC (44 bytes, 11 words): Width, Height, MipLevels, ArraySize, Format, SampleDesc.Count, SampleDesc.Quality, Usage, BindFlags, CPUAccessFlags, MiscFlags. D3D11_SUBRESOURCE_DATA: pSysMem, SysMemPitch, SysMemSlicePitch (d3d11.h)"
+  constants: "usage DEFAULT 0 IMMUTABLE 1 DYNAMIC 2 STAGING 3; bind VERTEX_BUFFER 1 INDEX_BUFFER 2 CONSTANT_BUFFER 4 SHADER_RESOURCE 8 STREAM_OUTPUT 0x10 RENDER_TARGET 0x20 DEPTH_STENCIL 0x40 UNORDERED_ACCESS 0x80; cpu WRITE 0x10000 READ 0x20000; misc GENERATE_MIPS 1 SHARED 2 TEXTURECUBE 4 SHARED_KEYEDMUTEX 0x100 GDI_COMPATIBLE 0x200 SHARED_NTHANDLE 0x800 (d3d11.h)"
+chrome:
+  calls: "ANGLE and Chrome's D3D11 code create textures through the device pointer (invisible to the API tracer); the formats and flags above are what the GPU process needs for a swap-chain back buffer, a staging texture for read-back, a shared texture and a render target (from Learn's descriptions of those uses; the exact sets are not observed)"
+rules:
+  size: "Width or Height 0: E_INVALIDARG. 1 up to 16384 on a side succeed; 16384x16384, 16385x1, 1x16385 and 32768x1 also succeed on WARP (no limit below 32768 was found; sizes of the hardware adapter's limit differ)"
+  mips: "MipLevels 0 gives the full chain, and GetDesc returns that count: 64x64 gives 7, 64x16 gives 7, 100x30 gives 7, 1x1 gives 1, 5x1 gives 3, 32x32 gives 6; 1 and any count up to the chain length (64x64: 1, 3, 7) are kept; more than the chain (64x64 with 8, 1x1 with 2): E_INVALIDARG"
+  array: "ArraySize 0 or more than 2048 (2049): E_INVALIDARG; 1, 2, 6, 100 and 2048 succeed and GetDesc returns them; MiscFlags TEXTURECUBE needs ArraySize 6 (5 is E_INVALIDARG) and a shader-resource bind"
+  samples: "SampleDesc.Count 1 with Quality 0 is normal; Quality other than 0 (with count 1 or 4), Count 0 and Count 3 are E_INVALIDARG; Counts 2, 4, 8 and 16 with Quality 0 succeed for a B8G8R8A8 render target; a multisampled texture may have bind RENDER_TARGET|SHADER_RESOURCE; multisampled with MipLevels 2 or STAGING usage is E_INVALIDARG"
+  usage_default: "DEFAULT with bind 0, SHADER_RESOURCE, RENDER_TARGET, both, or UNORDERED_ACCESS succeeds with CPU access flags 0, READ (0x20000), WRITE (0x10000) or both on this device; the CPU flags 0x1 and 0x40000 are E_INVALIDARG; bind flags VERTEX_BUFFER, CONSTANT_BUFFER, STREAM_OUTPUT, 0x100 and 0x80000000 on a texture are E_INVALIDARG; DEPTH_STENCIL with a B8G8R8A8 format is E_INVALIDARG"
+  usage_immutable: "IMMUTABLE needs initial data for every subresource; without data every combination is E_INVALIDARG; with data (pitch 256 for a 64-wide B8G8R8A8) and SHADER_RESOURCE it succeeds and GetDesc returns usage 1"
+  usage_dynamic: "DYNAMIC succeeds only with bind SHADER_RESOURCE and CPU_WRITE (0x10000) exactly; every other bind or CPU combination is E_INVALIDARG (render targets cannot be dynamic)"
+  usage_staging: "STAGING needs bind 0 and a CPU flag: READ, WRITE or both succeed, 0 is E_INVALIDARG; any bind flag is E_INVALIDARG"
+  usage_other: "usage values 4 and 99 are E_INVALIDARG for every combination"
+  misc: "0, GENERATE_MIPS (needs bind RENDER_TARGET|SHADER_RESOURCE: with SRV alone E_INVALIDARG), SHARED (2), SHARED_KEYEDMUTEX (0x100), GDI_COMPATIBLE (0x200), SHARED_NTHANDLE|SHARED_KEYEDMUTEX (0x900), SHARED|SHARED_NTHANDLE (0x802) and 0x1000 succeed with the misc value read back unchanged; TEXTURECUBE alone, SHARED_NTHANDLE alone (0x800), SHARED|SHARED_KEYEDMUTEX (0x102), 0x2000 and 0x80000000 are E_INVALIDARG"
+  init_data: "initial data of the right size with usage DEFAULT or STAGING succeeds; SysMemPitch 0 and a NULL pSysMem with a pitch are E_INVALIDARG; a texture of 2 mips with data for one subresource is E_INVALIDARG"
+  null_output: "a valid description with a NULL output pointer checks it only: S_FALSE (1) and nothing is created; an invalid description with a NULL output: E_INVALIDARG; a NULL description: E_INVALIDARG and the output pointer is set to NULL; an invalid description with an output pointer: E_INVALIDARG and the output set to NULL"
+  formats_srv_rtv_uav: "(WARP, feature level 11_0, 64x32 texture) for every format below, usage DEFAULT with SHADER_RESOURCE, RENDER_TARGET, both, UNORDERED_ACCESS and usage STAGING and usage DYNAMIC with SRV all succeed: DXGI_FORMAT values 1, 2, 3, 4, 10, 11, 13, 16, 24, 25, 27, 28, 29, 30, 31, 34, 35, 36, 41, 48, 49, 54, 56, 57, 61, 62, 63, 65, 85, 86, 87, 89, 90, 91, 92, 103 (NV12), 104 (P010), 115; DEPTH_STENCIL is E_INVALIDARG for all of them"
+  formats_no_uav: "88 (B8G8R8X8_UNORM) and 93 (B8G8R8X8_TYPELESS): as the group above but UNORDERED_ACCESS is E_INVALIDARG"
+  formats_depth: "40 (D32_FLOAT), 45 (D24_UNORM_S8_UINT) and 55 (D16_UNORM): DEFAULT with DEPTH_STENCIL and STAGING succeed; SRV, RTV, UAV and DYNAMIC are E_INVALIDARG. 44 (R24G8_TYPELESS): SRV, DEPTH_STENCIL, STAGING and DYNAMIC succeed, RTV and UAV E_INVALIDARG"
+  formats_srv_only: "46 (R24_UNORM_X8_TYPELESS), 71 to 74, 77, 78, 80, 84, 94, 95, 97, 98, 99 (the block-compressed formats): SRV, STAGING and DYNAMIC succeed; RTV, DSV and UAV are E_INVALIDARG. 107 and 109: SRV, UAV, STAGING, DYNAMIC succeed; RTV and DSV E_INVALIDARG"
+  formats_unsupported: "0 (UNKNOWN), 106, 116, 130 to 133 and 188 to 192: E_INVALIDARG for every usage"
+  resource: "the texture's ID3D11Resource::GetType gives 3 (TEXTURE2D); its eviction priority starts at 0x78000000 and Set/GetEvictionPriority round-trips (0x50000000); it answers QueryInterface for ID3D11Resource (same pointer), IDXGISurface, IDXGIResource and ID3D11Texture2D1, and E_NOINTERFACE for ID3D11Buffer"
+errors:
+  argument: "E_INVALIDARG (0x80070057), output pointer set to NULL"
+side_effects: "allocates the texture's memory; nothing is shown"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  3D, 1D and cube-array textures, the hardware limit on size (a hardware adapter can refuse sizes WARP accepts), memory exhaustion (E_OUTOFMEMORY), D3D11_1/D3D11_3 texture descriptions, sharing across processes, the SDK layers' messages.

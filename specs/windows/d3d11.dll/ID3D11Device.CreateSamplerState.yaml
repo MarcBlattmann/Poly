@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateSamplerState.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateSamplerState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateSamplerState", "D3D11_SAMPLER_DESC", "D3D11_FILTER", "D3D11_TEXTURE_ADDRESS_MODE", "D3D11_COMPARISON_FUNC", "ID3D11SamplerState::GetDesc"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes (or returns the cached) sampler state. Chrome (ANGLE) makes one per GL sampler configuration. GetDesc returns a normalised description: the comparison function reads NEVER (1) unless the filter is a comparison filter, MaxAnisotropy reads 0 unless the filter is anisotropic, the border colour reads 0 unless some address mode is BORDER. At most 4096 distinct sampler states can be alive; the next one fails with D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001).
+interface:
+  signature: "HRESULT ID3D11Device::CreateSamplerState(const D3D11_SAMPLER_DESC*, ID3D11SamplerState**)"
+  layout: "D3D11_SAMPLER_DESC (60 bytes, 15 words): Filter, AddressU, AddressV, AddressW, MipLODBias (float), MaxAnisotropy, ComparisonFunc, BorderColor[4] (float), MinLOD, MaxLOD (float)"
+  constants: "D3D11_FILTER: MIN_MAG_MIP_POINT 0, MIN_MAG_POINT_MIP_LINEAR 1, MIN_POINT_MAG_LINEAR_MIP_POINT 4, MIN_POINT_MAG_MIP_LINEAR 5, MIN_LINEAR_MAG_MIP_POINT 0x10, MIN_LINEAR_MAG_POINT_MIP_LINEAR 0x11, MIN_MAG_LINEAR_MIP_POINT 0x14, MIN_MAG_MIP_LINEAR 0x15, ANISOTROPIC 0x55, COMPARISON_x = x + 0x80, MINIMUM_x = x + 0x100, MAXIMUM_x = x + 0x180; address WRAP 1, MIRROR 2, CLAMP 3, BORDER 4, MIRROR_ONCE 5"
+chrome:
+  calls: "ANGLE caches sampler states by GL sampler parameters (assumed)"
+rules:
+  default: "filter 0x15, CLAMP x3, bias 0, MaxAnisotropy 1, comparison NEVER, border 0, MinLOD -FLT_MAX, MaxLOD FLT_MAX: S_OK; GetDesc returns filter 0x15, address 3 3 3, bias 0, MaxAnisotropy 0 (normalised), comparison 1, border 0, LOD 0xFF7FFFFF / 0x7F7FFFFF"
+  filter: "accepted: 0, 1, 4, 5, 0x10, 0x11, 0x14, 0x15, 0x55, 0x80, 0x95, 0xD5, 0x100, 0x115, 0x155, 0x180, 0x195, 0x1D5; refused (E_INVALIDARG): 2, 3, 0x40, 0x56, 0x1FF, 0x200, 0xFFFFFFFF"
+  address: "AddressU, V and W accept 1 to 5 and refuse 0, 6, 0xFF"
+  comparison: "with a non-comparison filter ComparisonFunc is accepted for any value (0, 9, 0xFF) and reads back 1; with a comparison filter (0x95) 1 to 8 succeed and 0, 9, 0xFF are E_INVALIDARG; with filter 0x80 and comparison 5 GetDesc keeps 5"
+  anisotropy: "MaxAnisotropy 0 to 16 succeed with both the linear (0x15) and the anisotropic (0x55) filter; 17 and 100 are E_INVALIDARG for both; GetDesc keeps the value only for anisotropic filters (16 stays 16; with a point filter 7 reads back 0)"
+  border: "BorderColor values are kept only when an address mode is BORDER (U = 4: 0.5, 0.25, 0.125, 1.0 read back); with CLAMP they read 0"
+  bias_lod: "MipLODBias accepts -16.0 .. 15.99 and 2.5 / -2.5 and refuses 16.0, 16.5, -16.5, NaN; MinLOD > MaxLOD (3 and 2) is accepted and stored as given; MinLOD = MaxLOD, 0/0, +-1000 and MaxLOD +inf, MinLOD -inf are accepted; NaN for MinLOD or MaxLOD is E_INVALIDARG"
+  identity: "the same description twice: the same object (reference count 2); a different filter: a different object; a non-anisotropic filter with MaxAnisotropy 7 is the same object as one with MaxAnisotropy 1; the object answers ID3D11SamplerState and ID3D11DeviceChild with the same pointer"
+  null_output: "a NULL output pointer only validates: S_FALSE for a valid description, E_INVALIDARG for an invalid one (AddressU 99)"
+  limit: "keeping distinct descriptions alive (MipLODBias i/1000): the creation of the 4097th (after 4096 objects) fails with D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001); after releasing all, creation works again"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+  too_many: "D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001)"
+side_effects: "creates or shares a state object"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  sampling results (no shader), the MINIMUM / MAXIMUM filter families beyond 0x115, 0x155, 0x180, 0x195, 0x1D5, feature-level-9 limits.

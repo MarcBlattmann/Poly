@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "state_blend",
+      "exe_sha256": "d2e04ee59ee1b68cee2b6b8dc4a7c6bb8ea7497b2c0b22550f813bd08f055f9f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCBkZXNjcmlwdGlvbjogMHgwMDAwMDAwMCBHZXREZXNjIG1hdGNoZXMgdGhlIGlucHV0OiB0cnVlIChhMmMgMCBpbmRlcGVuZGVudCAwIHJ0MCAwIDIgMSAxIDIgMSAxIG1hc2sgMHhmOyBydDMgZW5hYmxlIDAgc3JjIDIgbWFzayAweGYpCnByZW11bHRpcGxpZWQtc3R5bGUgYmxlbmQgb24gcnQwOiAweDAwMDAwMDAwIEdldERlc2MgbWF0Y2hlcyB0aGUgaW5wdXQ6IGZhbHNlIChhMmMgMCBpbmRlcGVuZGVudCAwIHJ0MCAxIDUgNiAxIDIgNiAxIG1hc2sgMHhmOyBydDMgZW5hYmxlIDEgc3JjIDUgbWFzayAweGYpClNyY0JsZW5kIHZhbHVlcyAoYmxlbmQgZW5hYmxlZCk6IDA9MHg4MDA3MDA1NyAxPTB4MDAwMDAwMDAgMj0weDAwMDAwMDAwIDExPTB4MDAwMDAwMDAgMTI9MHg4MDA3MDA1NyAxMz0weDgwMDcwMDU3IDE0PTB4MDAwMDAwMDAgMTU9MHgwMDAwMDAwMCAxNj0weDAwMDAwMDAwIDE5PTB4MDAwMDAwMDAgMjA9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1NwpEZXN0QmxlbmRBbHBoYSB2YWx1ZXMgKGJsZW5kIGVuYWJsZWQpOiAwPTB4ODAwNzAwNTcgMT0weDAwMDAwMDAwIDI9MHgwMDAwMDAwMCAxMT0weDAwMDAwMDAwIDEyPTB4ODAwNzAwNTcgMTM9MHg4MDA3MDA1NyAxND0weDAwMDAwMDAwIDE1PTB4MDAwMDAwMDAgMTY9MHg4MDA3MDA1NyAxOT0weDAwMDAwMDAwIDIwPTB4ODAwNzAwNTcgMjU1PTB4ODAwNzAwNTcKaW52YWxpZCBTcmNCbGVuZCB3aXRoIEJsZW5kRW5hYmxlIGZhbHNlOiAweDAwMDAwMDAwIEdldERlc2MgbWF0Y2hlcyB0aGUgaW5wdXQ6IGZhbHNlIChhMmMgMCBpbmRlcGVuZGVudCAwIHJ0MCAwIDIgMSAxIDIgMSAxIG1hc2sgMHhmOyBydDMgZW5hYmxlIDAgc3JjIDIgbWFzayAweGYpCkFscGhhVG9Db3ZlcmFnZUVuYWJsZSA9IDI6IDB4MDAwMDAwMDAgR2V0RGVzYyBtYXRjaGVzIHRoZSBpbnB1dDogdHJ1ZSAoYTJjIDEgaW5kZXBlbmRlbnQgMCBydDAgMCAyIDEgMSAyIDEgMSBtYXNrIDB4ZjsgcnQzIGVuYWJsZSAwIHNyYyAyIG1hc2sgMHhmKQphIGRpZmZlcmVudCBkZXNjcmlwdGlvbiBnaXZlcyBhIGRpZmZlcmVudCBvYmplY3Q6IHRydWUKYmxlbmQgc3RhdGUgaW50ZXJmYWNlczogSUQzRDExQmxlbmRTdGF0ZT15ZXMoc2FtZSkgSUQzRDExQmxlbmRTdGF0ZTE9eWVzKHNhbWUpIElEM0QxMURldmljZUNoaWxkPXllcyhzYW1lKQpOVUxMIG91dHB1dCwgaW52YWxpZDogMHg4MDA3MDA1NyBwdHI9bnVsbApDcmVhdGVCbGVuZFN0YXRlMSBsb2dpYyBvcCAxNiBvbiBydDA6IDB4ODAwNzAwNTcgcHRyPW51bGwKQ3JlYXRlQmxlbmRTdGF0ZTEgbG9naWMgb3Agb24gcnQwIHdpdGggaW5kZXBlbmRlbnQgYmxlbmQsIHJ0MSB3aXRob3V0OiAweDgwMDcwMDU3IHB0cj1udWxsCmNyZWF0aW5nIGRpc3RpbmN0IGJsZW5kIHN0YXRlcyB3aGlsZSBrZWVwaW5nIHRoZW0gYWxpdmU6IHN0b3BwZWQgd2l0aCAweDg4N2MwMDAxIGFmdGVyIDQwOTUgb2JqZWN0cwphZnRlciByZWxlYXNpbmcgdGhlbSBhbGwsIGEgbmV3IGRlc2NyaXB0aW9uOiAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default description: 0x00000000 GetDesc matches the input: true (a2c 0 independent 0 rt0 0 2 1 1 2 1 1 mask 0xf; rt3 enable 0 src 2 mask 0xf)\npremultiplied-style blend on rt0: 0x00000000 GetDesc matches the input: false (a2c 0 independent 0 rt0 1 5 6 1 2 6 1 mask 0xf; rt3 enable 1 src 5 mask 0xf)\nSrcBlend values (blend enabled): 0=0x80070057 1=0x00000000 2=0x00000000 11=0x00000000 12=0x80070057 13=0x80070057 14=0x00000000 15=0x00000000 16=0x00000000 19=0x00000000 20=0x80070057 255=0x80070057\nDestBlendAlpha values (blend enabled): 0=0x80070057 1=0x00000000 2=0x00000000 11=0x00000000 12=0x80070057 13=0x80070057 14=0x00000000 15=0x00000000 16=0x80070057 19=0x00000000 20=0x80070057 255=0x80070057\ninvalid SrcBlend with BlendEnable false: 0x00000000 GetDesc matches the input: false (a2c 0 independent 0 rt0 0 2 1 1 2 1 1 mask 0xf; rt3 enable 0 src 2 mask 0xf)\nAlphaToCoverageEnable = 2: 0x00000000 GetDesc matches the input: true (a2c 1 independent 0 rt0 0 2 1 1 2 1 1 mask 0xf; rt3 enable 0 src 2 mask 0xf)\na different description gives a different object: true\nblend state interfaces: ID3D11BlendState=yes(same) ID3D11BlendState1=yes(same) ID3D11DeviceChild=yes(same)\nNULL output, invalid: 0x80070057 ptr=null\nCreateBlendState1 logic op 16 on rt0: 0x80070057 ptr=null\nCreateBlendState1 logic op on rt0 with independent blend, rt1 without: 0x80070057 ptr=null\ncreating distinct blend states while keeping them alive: stopped with 0x887c0001 after 4095 objects\nafter releasing them all, a new description: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 254
+    },
+    {
+      "name": "state_blend_b",
+      "exe_sha256": "400aa070c4dea09291bf0a335ca88725638c620cda28aeb2424487793e7f3f74",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWxwaGEgdG8gY292ZXJhZ2U6IDB4MDAwMDAwMDAgR2V0RGVzYyBtYXRjaGVzIHRoZSBpbnB1dDogdHJ1ZSAoYTJjIDEgaW5kZXBlbmRlbnQgMCBydDAgMCAyIDEgMSAyIDEgMSBtYXNrIDB4ZjsgcnQzIGVuYWJsZSAwIHNyYyAyIG1hc2sgMHhmKQpydDMgYmxlbmQgd2l0aCBpbmRlcGVuZGVudCBibGVuZCBvZmY6IDB4MDAwMDAwMDAgR2V0RGVzYyBtYXRjaGVzIHRoZSBpbnB1dDogZmFsc2UgKGEyYyAwIGluZGVwZW5kZW50IDAgcnQwIDAgMiAxIDEgMiAxIDEgbWFzayAweGY7IHJ0MyBlbmFibGUgMCBzcmMgMiBtYXNrIDB4ZikKRGVzdEJsZW5kIHZhbHVlcyAoYmxlbmQgZW5hYmxlZCk6IDA9MHg4MDA3MDA1NyAxPTB4MDAwMDAwMDAgMj0weDAwMDAwMDAwIDExPTB4MDAwMDAwMDAgMTI9MHg4MDA3MDA1NyAxMz0weDgwMDcwMDU3IDE0PTB4MDAwMDAwMDAgMTU9MHgwMDAwMDAwMCAxNj0weDAwMDAwMDAwIDE5PTB4MDAwMDAwMDAgMjA9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1NwpCbGVuZE9wIHZhbHVlcyAoYmxlbmQgZW5hYmxlZCk6IDA9MHg4MDA3MDA1NyAxPTB4MDAwMDAwMDAgMj0weDAwMDAwMDAwIDM9MHgwMDAwMDAwMCA0PTB4MDAwMDAwMDAgNT0weDAwMDAwMDAwIDY9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1NwpTcmNCbGVuZEFscGhhIFNSQ19DT0xPUiAoYSBjb2xvdXIgZmFjdG9yIGluIHRoZSBhbHBoYSBzbG90KTogMHg4MDA3MDA1NyBwdHI9bnVsbApCbGVuZEVuYWJsZSA9IDc6IDB4MDAwMDAwMDAgR2V0RGVzYyBtYXRjaGVzIHRoZSBpbnB1dDogZmFsc2UgKGEyYyAwIGluZGVwZW5kZW50IDAgcnQwIDEgMiAxIDEgMiAxIDEgbWFzayAweGY7IHJ0MyBlbmFibGUgMSBzcmMgMiBtYXNrIDB4ZikKYSBkaWZmZXJlbnQgcmVuZGVyIHRhcmdldCA1IHdpdGggaW5kZXBlbmRlbnQgYmxlbmQgb2ZmOiBzYW1lIG9iamVjdCBhcyB0aGUgZGVmYXVsdCB0cnVlCkdldERldmljZSBpcyB0aGUgZGV2aWNlOiB0cnVlCkNyZWF0ZUJsZW5kU3RhdGUxIGRlZmF1bHQ6IDB4MDAwMDAwMDAgYW5zd2VycyBJRDNEMTFCbGVuZFN0YXRlMSAweDAwMDAwMDAwIEdldERlc2MxIHJ0MCAwIDAgMiAxIDEgMiAxIDEgNCBtYXNrIDB4ZgpDcmVhdGVCbGVuZFN0YXRlMSBsb2dpYyBvcCAxNSBvbiBydDA6IDB4MDAwMDAwMDAgYW5zd2VycyBJRDNEMTFCbGVuZFN0YXRlMSAweDAwMDAwMDAwIEdldERlc2MxIHJ0MCAwIDEgMiAxIDEgMiAxIDEgMTUgbWFzayAweGYKQ3JlYXRlQmxlbmRTdGF0ZTEgbG9naWMgb3AgQ09QWV9JTlZFUlRFRCBvbiBydDAgd2l0aCBpbmRlcGVuZGVudCBibGVuZCBvZmY6IDB4MDAwMDAwMDAgYW5zd2VycyBJRDNEMTFCbGVuZFN0YXRlMSAweDAwMDAwMDAwIEdldERlc2MxIHJ0MCAwIDEgMiAxIDEgMiAxIDEgMyBtYXNrIDB4ZgphdCB0aGUgbGltaXQsIGEgZGVzY3JpcHRpb24gdGhhdCBhbHJlYWR5IGV4aXN0czogMHgwMDAwMDAwMApkZXZpY2UgcmVtb3ZlZCByZWFzb24gYXQgdGhlIGVuZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "alpha to coverage: 0x00000000 GetDesc matches the input: true (a2c 1 independent 0 rt0 0 2 1 1 2 1 1 mask 0xf; rt3 enable 0 src 2 mask 0xf)\nrt3 blend with independent blend off: 0x00000000 GetDesc matches the input: false (a2c 0 independent 0 rt0 0 2 1 1 2 1 1 mask 0xf; rt3 enable 0 src 2 mask 0xf)\nDestBlend values (blend enabled): 0=0x80070057 1=0x00000000 2=0x00000000 11=0x00000000 12=0x80070057 13=0x80070057 14=0x00000000 15=0x00000000 16=0x00000000 19=0x00000000 20=0x80070057 255=0x80070057\nBlendOp values (blend enabled): 0=0x80070057 1=0x00000000 2=0x00000000 3=0x00000000 4=0x00000000 5=0x00000000 6=0x80070057 255=0x80070057\nSrcBlendAlpha SRC_COLOR (a colour factor in the alpha slot): 0x80070057 ptr=null\nBlendEnable = 7: 0x00000000 GetDesc matches the input: false (a2c 0 independent 0 rt0 1 2 1 1 2 1 1 mask 0xf; rt3 enable 1 src 2 mask 0xf)\na different render target 5 with independent blend off: same object as the default true\nGetDevice is the device: true\nCreateBlendState1 default: 0x00000000 answers ID3D11BlendState1 0x00000000 GetDesc1 rt0 0 0 2 1 1 2 1 1 4 mask 0xf\nCreateBlendState1 logic op 15 on rt0: 0x00000000 answers ID3D11BlendState1 0x00000000 GetDesc1 rt0 0 1 2 1 1 2 1 1 15 mask 0xf\nCreateBlendState1 logic op COPY_INVERTED on rt0 with independent blend off: 0x00000000 answers ID3D11BlendState1 0x00000000 GetDesc1 rt0 0 1 2 1 1 2 1 1 3 mask 0xf\nat the limit, a description that already exists: 0x00000000\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 258
+    }
+  ]
+}

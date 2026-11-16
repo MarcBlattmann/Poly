@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "state_raster",
+      "exe_sha256": "85c0712a98a3d3ed1eda59aa15cb7f0702081e3d9e092e8ae61d93a62377a394",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCBkZXNjcmlwdGlvbjogMHgwMDAwMDAwMCBHZXREZXNjIGZpbGwgMyBjdWxsIDMgY2N3IDAgYmlhcyAwIGNsYW1wIDB4MCBzbG9wZSAweDAgY2xpcCAxIHNjaXNzb3IgMCBtc2FhIDAgYWFsaW5lIDAKc2Npc3NvciBhbmQgbXVsdGlzYW1wbGUgZW5hYmxlZDogMHgwMDAwMDAwMCBHZXREZXNjIGZpbGwgMyBjdWxsIDMgY2N3IDAgYmlhcyAwIGNsYW1wIDB4MCBzbG9wZSAweDAgY2xpcCAxIHNjaXNzb3IgMSBtc2FhIDEgYWFsaW5lIDAKRmlsbE1vZGUgdmFsdWVzOiAwPTB4ODAwNzAwNTcgMT0weDgwMDcwMDU3IDI9MHgwMDAwMDAwMCAzPTB4MDAwMDAwMDAgND0weDgwMDcwMDU3IDI1NT0weDgwMDcwMDU3CkRlcHRoQ2xpcEVuYWJsZSA9IDU6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMCBjbGFtcCAweDAgc2xvcGUgMHgwIGNsaXAgMSBzY2lzc29yIDAgbXNhYSAwIGFhbGluZSAwCkFudGlhbGlhc2VkTGluZUVuYWJsZSA9IDU6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMCBjbGFtcCAweDAgc2xvcGUgMHgwIGNsaXAgMSBzY2lzc29yIDAgbXNhYSAwIGFhbGluZSAxCmJpYXMgMTY3NzcyMTY6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMTY3NzcyMTYgY2xhbXAgMHgwIHNsb3BlIDB4MCBjbGlwIDEgc2Npc3NvciAwIG1zYWEgMCBhYWxpbmUgMApjbGFtcCAxLjA6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMCBjbGFtcCAweDNmODAwMDAwIHNsb3BlIDB4MCBjbGlwIDEgc2Npc3NvciAwIG1zYWEgMCBhYWxpbmUgMApjbGFtcCBpbmY6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMCBjbGFtcCAweDdmODAwMDAwIHNsb3BlIDB4MCBjbGlwIDEgc2Npc3NvciAwIG1zYWEgMCBhYWxpbmUgMApzbG9wZSBOYU46IDB4ODAwNzAwNTcgcHRyPW51bGwKdGhlIHNhbWUgZGVzY3JpcHRpb24gdHdpY2U6IHNhbWUgb2JqZWN0IHRydWUgOyBkaWZmZXJlbnQgZGVzY3JpcHRpb246IGRpZmZlcmVudCBvYmplY3QgdHJ1ZSA7IHJlZnMgMgpOVUxMIG91dHB1dCwgaW52YWxpZDogMHg4MDA3MDA1NyBwdHI9bnVsbApkZXZpY2UgcmVtb3ZlZCByZWFzb24gYXQgdGhlIGVuZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default description: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nscissor and multisample enabled: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 1 msaa 1 aaline 0\nFillMode values: 0=0x80070057 1=0x80070057 2=0x00000000 3=0x00000000 4=0x80070057 255=0x80070057\nDepthClipEnable = 5: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nAntialiasedLineEnable = 5: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 1\nbias 16777216: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 16777216 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nclamp 1.0: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x3f800000 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nclamp inf: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x7f800000 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nslope NaN: 0x80070057 ptr=null\nthe same description twice: same object true ; different description: different object true ; refs 2\nNULL output, invalid: 0x80070057 ptr=null\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    },
+    {
+      "name": "state_raster_b",
+      "exe_sha256": "4d281307df2170cddaf0f0e8a6e8cc2767ae9f94cbb51400b9cb335ca4ee45c6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2lyZWZyYW1lLCBubyBjdWxsaW5nOiAweDAwMDAwMDAwIEdldERlc2MgZmlsbCAyIGN1bGwgMSBjY3cgMCBiaWFzIDAgY2xhbXAgMHgwIHNsb3BlIDB4MCBjbGlwIDEgc2Npc3NvciAwIG1zYWEgMCBhYWxpbmUgMAphbnRpLWFsaWFzZWQgbGluZXM6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMCBjbGFtcCAweDAgc2xvcGUgMHgwIGNsaXAgMSBzY2lzc29yIDAgbXNhYSAwIGFhbGluZSAxCkN1bGxNb2RlIHZhbHVlczogMD0weDgwMDcwMDU3IDE9MHgwMDAwMDAwMCAyPTB4MDAwMDAwMDAgMz0weDAwMDAwMDAwIDQ9MHg4MDA3MDA1NyAyNTU9MHg4MDA3MDA1NwpTY2lzc29yRW5hYmxlID0gNTogMHgwMDAwMDAwMCBHZXREZXNjIGZpbGwgMyBjdWxsIDMgY2N3IDAgYmlhcyAwIGNsYW1wIDB4MCBzbG9wZSAweDAgY2xpcCAxIHNjaXNzb3IgMSBtc2FhIDAgYWFsaW5lIDAKYmlhcyAxMDA6IDB4MDAwMDAwMDAgR2V0RGVzYyBmaWxsIDMgY3VsbCAzIGNjdyAwIGJpYXMgMTAwIGNsYW1wIDB4MCBzbG9wZSAweDAgY2xpcCAxIHNjaXNzb3IgMCBtc2FhIDAgYWFsaW5lIDAKYmlhcyAweDdmZmZmZmZmOiAweDAwMDAwMDAwIEdldERlc2MgZmlsbCAzIGN1bGwgMyBjY3cgMCBiaWFzIDIxNDc0ODM2NDcgY2xhbXAgMHgwIHNsb3BlIDB4MCBjbGlwIDEgc2Npc3NvciAwIG1zYWEgMCBhYWxpbmUgMApjbGFtcCAtMS4wOiAweDAwMDAwMDAwIEdldERlc2MgZmlsbCAzIGN1bGwgMyBjY3cgMCBiaWFzIDAgY2xhbXAgMHhiZjgwMDAwMCBzbG9wZSAweDAgY2xpcCAxIHNjaXNzb3IgMCBtc2FhIDAgYWFsaW5lIDAKc2xvcGUgMi41OiAweDAwMDAwMDAwIEdldERlc2MgZmlsbCAzIGN1bGwgMyBjY3cgMCBiaWFzIDAgY2xhbXAgMHgwIHNsb3BlIDB4NDAyMDAwMDAgY2xpcCAxIHNjaXNzb3IgMCBtc2FhIDAgYWFsaW5lIDAKc2xvcGUgaW5mOiAweDAwMDAwMDAwIEdldERlc2MgZmlsbCAzIGN1bGwgMyBjY3cgMCBiaWFzIDAgY2xhbXAgMHgwIHNsb3BlIDB4N2Y4MDAwMDAgY2xpcCAxIHNjaXNzb3IgMCBtc2FhIDAgYWFsaW5lIDAKcmFzdGVyaXplciBzdGF0ZSBpbnRlcmZhY2VzOiBJRDNEMTFSYXN0ZXJpemVyU3RhdGU9eWVzKHNhbWUpIElEM0QxMVJhc3Rlcml6ZXJTdGF0ZTE9eWVzKHNhbWUpIElEM0QxMVJhc3Rlcml6ZXJTdGF0ZTI9eWVzKHNhbWUpIElEM0QxMURldmljZUNoaWxkPXllcyhzYW1lKQpDcmVhdGVSYXN0ZXJpemVyU3RhdGUxIEZvcmNlZFNhbXBsZUNvdW50IHZhbHVlczogMD0weDAwMDAwMDAwIDE9MHgwMDAwMDAwMCAyPTB4ODAwNzAwNTcgND0weDAwMDAwMDAwIDg9MHgwMDAwMDAwMCAxNj0weDgwMDcwMDU3IDM9MHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "wireframe, no culling: 0x00000000 GetDesc fill 2 cull 1 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nanti-aliased lines: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 1\nCullMode values: 0=0x80070057 1=0x00000000 2=0x00000000 3=0x00000000 4=0x80070057 255=0x80070057\nScissorEnable = 5: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x0 clip 1 scissor 1 msaa 0 aaline 0\nbias 100: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 100 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nbias 0x7fffffff: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 2147483647 clamp 0x0 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nclamp -1.0: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0xbf800000 slope 0x0 clip 1 scissor 0 msaa 0 aaline 0\nslope 2.5: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x40200000 clip 1 scissor 0 msaa 0 aaline 0\nslope inf: 0x00000000 GetDesc fill 3 cull 3 ccw 0 bias 0 clamp 0x0 slope 0x7f800000 clip 1 scissor 0 msaa 0 aaline 0\nrasterizer state interfaces: ID3D11RasterizerState=yes(same) ID3D11RasterizerState1=yes(same) ID3D11RasterizerState2=yes(same) ID3D11DeviceChild=yes(same)\nCreateRasterizerState1 ForcedSampleCount values: 0=0x00000000 1=0x00000000 2=0x80070057 4=0x00000000 8=0x00000000 16=0x80070057 3=0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 91
+    }
+  ]
+}

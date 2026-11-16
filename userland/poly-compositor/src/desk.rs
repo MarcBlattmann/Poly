@@ -973,7 +973,8 @@ fn internal_window(ev: &InternalEvent) -> Option<WindowId> {
         | InternalEvent::Button { window, .. }
         | InternalEvent::Axis { window, .. }
         | InternalEvent::Key { window, .. }
-        | InternalEvent::Resize { window, .. } => window,
+        | InternalEvent::Resize { window, .. }
+        | InternalEvent::Configure { window, .. } => window,
         InternalEvent::Leave(window) | InternalEvent::Close(window) => window,
     })
 }

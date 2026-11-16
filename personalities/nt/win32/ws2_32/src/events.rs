@@ -267,8 +267,9 @@ fn bytes_readable(s: Socket) -> u32 {
 }
 
 fn so_error(s: Socket) -> u32 {
+    let _one_at_a_time = afd::so_error_guard();
     let mut out = [0u8; 16];
-    match afd::ioctl(s as Handle, proto::GET_OPTION, &proto::option_header(SOL_SOCKET, SO_ERROR), &mut out) {
+    match afd::ioctl(s as Handle, proto::GET_OPTION, &proto::internal_option_header(SOL_SOCKET, SO_ERROR), &mut out) {
         (STATUS_SUCCESS, n) if n >= 4 => u32::from_le_bytes([out[0], out[1], out[2], out[3]]),
         _ => 0,
     }

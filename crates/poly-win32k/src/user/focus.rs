@@ -353,8 +353,7 @@ fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool, canc
     if st.capture != 0 && cancel_capture {
         send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
         if input(env).capture == st.capture {
-            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
-            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+            end_capture(env, st.capture);
         }
     }
     if st.active != 0
@@ -646,6 +645,31 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
 /// `WM_CAPTURECHANGED` (winuser.h).
 const WM_CAPTURECHANGED: u32 = 0x0215;
 
+/// Ends the capture `window` has (the thread's input state says so): the
+/// capture is gone first (inside the handler GetCapture is NULL),
+/// then `window` gets WM_CAPTURECHANGED (lParam NULL), and only after that
+/// the mouse move to the window under the cursor is synthesized
+/// (ReleaseCapture.yaml `rc_nocapture`, `attached`). Queueing the move
+/// first let a thread whose input is attached (the notification comes
+/// from the other thread) retrieve WM_NCHITTEST before the notification
+/// reached it. No move when the handler took a new capture.
+pub fn end_capture<E: Env + ?Sized>(env: &E, window: u32) {
+    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE_QUIET });
+    send(env, u64::from(window), WM_CAPTURECHANGED, 0, 0);
+    if input(env).capture == 0 {
+        env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE_MOVE });
+    }
+}
+
+/// `ReleaseCapture`: always 1, also with no capture (ReleaseCapture.yaml `return`).
+pub fn release_capture<E: Env + ?Sized>(env: &E) -> u64 {
+    let st = input(env);
+    if st.capture != 0 {
+        end_capture(env, st.capture);
+    }
+    1
+}
+
 /// `SetCapture` (SetCapture.yaml): the previous capture window of the
 /// thread's input. A window of another thread is refused (NULL, no error,
 /// nothing changes); a hidden, disabled or child window can have the
@@ -659,8 +683,7 @@ pub fn set_capture<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
     };
     if hwnd == 0 {
         if st.capture != 0 {
-            set(0);
-            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+            end_capture(env, st.capture);
         }
         return u64::from(st.capture);
     }
@@ -810,8 +833,7 @@ pub fn enable_window<E: Env + ?Sized>(env: &E, hwnd: u64, enable: bool) -> bool 
         let st = input(env);
         // Disabling the capture window releases the capture (SetCapture.yaml).
         if st.capture == i.hwnd {
-            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
-            send(env, hwnd, 0x0215, 0, 0); // WM_CAPTURECHANGED
+            end_capture(env, i.hwnd);
         }
         if st.focus == i.hwnd {
             send(env, hwnd, WM_KILLFOCUS, 0, 0);

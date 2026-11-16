@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dccontent_other",
+      "exe_sha256": "f240b475558c4d41766eed2b89d367b4530fae8f87ac7c9c79befdfd018e6c01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0Q29udGVudChOVUxMKSBvbiBhIGZyZXNoIHZpc3VhbDogMHgwMDAwMDAwMApTZXRDb250ZW50KHRoZSBEM0QxMSBkZXZpY2UpOiAweDgwMDcwMDU3ClNldENvbnRlbnQodGhlIERpcmVjdENvbXBvc2l0aW9uIGRldmljZSk6IDB4ODAwNzAwNTcKU2V0Q29udGVudChhIHRhcmdldCk6IDB4ODAwNzAwNTcKc3dhcCBjaGFpbiBHZXRCdWZmZXIoMCk6IDB4MDAwMDAwMDAgcHRyPXNldApTZXRDb250ZW50KHRoZSBJVW5rbm93biBvZiB0aGUgc3dhcCBjaGFpbik6IDB4MDAwMDAwMDAKICBTZXRDb250ZW50KHN1cmZhY2UpIDB4MDAwMDAwMDAgcmVmcyAxCiAgU2V0Q29udGVudChzdXJmYWNlKSAweDAwMDAwMDAwIHJlZnMgMQogIFNldENvbnRlbnQoc3VyZmFjZSkgMHgwMDAwMDAwMCByZWZzIDEKICBTZXRDb250ZW50KHN1cmZhY2UpIDB4MDAwMDAwMDAgcmVmcyAxCiAgU2V0Q29udGVudChzdXJmYWNlKSAweDAwMDAwMDAwIHJlZnMgMQogIFNldENvbnRlbnQoc3VyZmFjZSkgMHgwMDAwMDAwMCByZWZzIDEKdjEgZGV2aWNlIENyZWF0ZVN1cmZhY2UgNjR4NjQgUkdCQTg6IDB4MDAwMDAwMDAgcHRyPXNldAp2MSBkZXZpY2UgdmlzdWFsIFNldENvbnRlbnQoc3dhcCBjaGFpbik6IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetContent(NULL) on a fresh visual: 0x00000000\nSetContent(the D3D11 device): 0x80070057\nSetContent(the DirectComposition device): 0x80070057\nSetContent(a target): 0x80070057\nswap chain GetBuffer(0): 0x00000000 ptr=set\nSetContent(the IUnknown of the swap chain): 0x00000000\n  SetContent(surface) 0x00000000 refs 1\n  SetContent(surface) 0x00000000 refs 1\n  SetContent(surface) 0x00000000 refs 1\n  SetContent(surface) 0x00000000 refs 1\n  SetContent(surface) 0x00000000 refs 1\n  SetContent(surface) 0x00000000 refs 1\nv1 device CreateSurface 64x64 RGBA8: 0x00000000 ptr=set\nv1 device visual SetContent(swap chain): 0x00000000 Commit 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 80
+    },
+    {
+      "name": "dccontent_other_c",
+      "exe_sha256": "c47ef328f87293fbe6b02ff9c0efeee228fcca757127b8dd0f756df7c05d0364",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0Q29udGVudChhIHN0YWdpbmcgdGV4dHVyZSk6IDB4ODAwNzAwNTcKU2V0Q29udGVudCh0aGUgRDNEMTEgY29udGV4dCk6IDB4ODAwNzAwNTcKU2V0Q29udGVudChhbm90aGVyIHZpc3VhbCk6IDB4ODAwNzAwNTcKU2V0Q29udGVudCh0aGUgRFhHSSBhZGFwdGVyKTogMHg4MDA3MDA1NwpTZXRDb250ZW50KHRoZSBJRFhHSVN3YXBDaGFpbiBpbnRlcmZhY2Ugb2YgdGhlIHN3YXAgY2hhaW4pOiAweDAwMDAwMDAwCmRlc2t0b3AgZGV2aWNlIENyZWF0ZVN1cmZhY2UgNjR4NjQgQkdSQSBwcmVtdWx0aXBsaWVkOiAweDAwMDAwMDAwIHB0cj1zZXQKZGVza3RvcCBkZXZpY2UgQ3JlYXRlU3VyZmFjZSA2NHg2NCBCR1JBIGlnbm9yZTogMHgwMDAwMDAwMCBwdHI9c2V0CmRlc2t0b3AgZGV2aWNlIENyZWF0ZVN1cmZhY2UgMHgwOiAweDAwMDAwMDAwIHB0cj1zZXQKZGVza3RvcCBkZXZpY2UgQ3JlYXRlU3VyZmFjZSA2NHg2NCBSR0JBODogMHgwMDAwMDAwMCBwdHI9c2V0CnYxIGRldmljZSBDcmVhdGVTdXJmYWNlIDY0eDY0IEJHUkEgcHJlbXVsdGlwbGllZDogMHgwMDAwMDAwMCBwdHI9c2V0CnYxIGRldmljZSBDcmVhdGVTdXJmYWNlIDY0eDY0IEJHUkEgaWdub3JlOiAweDAwMDAwMDAwIHB0cj1zZXQKdjEgZGV2aWNlIENyZWF0ZVN1cmZhY2UgMHgwOiAweDgwMDcwMDU3IHB0cj1udWxsCiAgQ29tbWl0IDB4MDAwMDAwMDAKU2V0Um9vdCBvbiB0aGUgdjEgdGFyZ2V0IDB4MDAwMDAwMDAgU2V0Q29udGVudChzd2FwIGNoYWluKSBvbiB0aGUgcm9vdCAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetContent(a staging texture): 0x80070057\nSetContent(the D3D11 context): 0x80070057\nSetContent(another visual): 0x80070057\nSetContent(the DXGI adapter): 0x80070057\nSetContent(the IDXGISwapChain interface of the swap chain): 0x00000000\ndesktop device CreateSurface 64x64 BGRA premultiplied: 0x00000000 ptr=set\ndesktop device CreateSurface 64x64 BGRA ignore: 0x00000000 ptr=set\ndesktop device CreateSurface 0x0: 0x00000000 ptr=set\ndesktop device CreateSurface 64x64 RGBA8: 0x00000000 ptr=set\nv1 device CreateSurface 64x64 BGRA premultiplied: 0x00000000 ptr=set\nv1 device CreateSurface 64x64 BGRA ignore: 0x00000000 ptr=set\nv1 device CreateSurface 0x0: 0x80070057 ptr=null\n  Commit 0x00000000\nSetRoot on the v1 target 0x00000000 SetContent(swap chain) on the root 0x00000000 Commit 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    },
+    {
+      "name": "dccontent_swapchain",
+      "exe_sha256": "9af0d287a93c2fa9fd27a16120eeca019cad04c8ca6e560def844255a2499f2d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmFjdG9yeSBzZXQgYWRhcHRlciBzZXQKICBTZXRDb250ZW50IDB4MDAwMDAwMDAgcmVmcyAxIC0+IDEKc3dhcCBjaGFpbiBmbGlwIGRpc2NhcmQgMiBidWZmZXJzIEJHUkEgcHJlbXVsdGlwbGllZDogMHgwMDAwMDAwMCBwdHI9c2V0CiAgQ29tbWl0IDB4MDAwMDAwMDAgUHJlc2VudCgwLDApIDB4MDAwMDAwMDAgUHJlc2VudCgxLDApIDB4MDAwMDAwMDAgUHJlc2VudChURVNUKSAweDAwMDAwMDAwCiAgR2V0RGVzYzEgMHgwMDAwMDAwMCBzaXplIDY0eDQ4IGZvcm1hdCA4NyBidWZmZXJzIDMgZWZmZWN0IDQgYWxwaGEgMSBzY2FsaW5nIDAgZmxhZ3MgMHgwCiAgQ29tbWl0IDB4MDAwMDAwMDAgV2FpdEZvckNvbW1pdENvbXBsZXRpb24gMHgwMDAwMDAwMApzd2FwIGNoYWluIHNlcXVlbnRpYWwgKGJpdC1ibG9jayB0cmFuc2ZlciBtb2RlbCkgMiBidWZmZXJzOiAweDg4N2EwMDAxIHB0cj1udWxsCiAgU2V0Q29udGVudCAweDAwMDAwMDAwIHJlZnMgMSAtPiAxCnN3YXAgY2hhaW4gZmxpcCBkaXNjYXJkIFIxMEcxMEIxMEEyOiAweDAwMDAwMDAwIHB0cj1zZXQKICBDb21taXQgMHgwMDAwMDAwMCBQcmVzZW50KDAsMCkgMHgwMDAwMDAwMCBQcmVzZW50KDEsMCkgMHgwMDAwMDAwMCBQcmVzZW50KFRFU1QpIDB4MDAwMDAwMDAKICBHZXREZXNjMSAweDAwMDAwMDAwIHNpemUgNjR4NDggZm9ybWF0IDI4IGJ1ZmZlcnMgMiBlZmZlY3QgNCBhbHBoYSAzIHNjYWxpbmcgMCBmbGFncyAweDAKICBDb21taXQgMHgwMDAwMDAwMCBXYWl0Rm9yQ29tbWl0Q29tcGxldGlvbiAweDAwMDAwMDAwCmNvbXBvc2l0aW9uIHN3YXAgY2hhaW4gYWxwaGEgc3RyYWlnaHQ6IDB4ODg3YTAwMDEgcHRyPW51bGwKY29tcG9zaXRpb24gc3dhcCBjaGFpbiBzY2FsaW5nIG5vbmU6IDB4ODg3YTAwMDEgcHRyPW51bGwKTlVMTCBhcyB0aGUgc3dhcCBjaGFpbidzIGRldmljZTogMHg4ODdhMDAwMSBwdHI9bnVsbApTZXRDb250ZW50KHRoZSBzYW1lIHN3YXAgY2hhaW4gYWdhaW4gb24gdGhlIGZpcnN0KSAweDAwMDAwMDAwClNldENvbnRlbnQoTlVMTCBvbiB0aGUgc2Vjb25kIHZpc3VhbCkgMHgwMDAwMDAwMCByZWZzIDEKQWRkVmlzdWFsIDB4MDAwMDAwMDAgU2V0Q29udGVudCh0aGUgdXNlZCBzd2FwIGNoYWluIG9uIHRoZSBwYXJlbnQpIDB4MDAwMDAwMDAKc3dhcCBjaGFpbiByZWxlYXNlZCBieSB0aGUgdGVzdCB3aGlsZSB0aGUgdmlzdWFsIGhvbGRzIGl0OiBDb21taXQgMHgwMDAwMDAwMCBTZXRDb250ZW50KE5VTEwpIDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "factory set adapter set\n  SetContent 0x00000000 refs 1 -> 1\nswap chain flip discard 2 buffers BGRA premultiplied: 0x00000000 ptr=set\n  Commit 0x00000000 Present(0,0) 0x00000000 Present(1,0) 0x00000000 Present(TEST) 0x00000000\n  GetDesc1 0x00000000 size 64x48 format 87 buffers 3 effect 4 alpha 1 scaling 0 flags 0x0\n  Commit 0x00000000 WaitForCommitCompletion 0x00000000\nswap chain sequential (bit-block transfer model) 2 buffers: 0x887a0001 ptr=null\n  SetContent 0x00000000 refs 1 -> 1\nswap chain flip discard R10G10B10A2: 0x00000000 ptr=set\n  Commit 0x00000000 Present(0,0) 0x00000000 Present(1,0) 0x00000000 Present(TEST) 0x00000000\n  GetDesc1 0x00000000 size 64x48 format 28 buffers 2 effect 4 alpha 3 scaling 0 flags 0x0\n  Commit 0x00000000 WaitForCommitCompletion 0x00000000\ncomposition swap chain alpha straight: 0x887a0001 ptr=null\ncomposition swap chain scaling none: 0x887a0001 ptr=null\nNULL as the swap chain's device: 0x887a0001 ptr=null\nSetContent(the same swap chain again on the first) 0x00000000\nSetContent(NULL on the second visual) 0x00000000 refs 1\nAddVisual 0x00000000 SetContent(the used swap chain on the parent) 0x00000000\nswap chain released by the test while the visual holds it: Commit 0x00000000 SetContent(NULL) 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 276
+    },
+    {
+      "name": "dccontent_swapchain_b",
+      "exe_sha256": "ce263c593f2d0db1e344ec6397fd62f92bcc20d9e79f14a311ee4aabd17709a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3dhcCBjaGFpbiBmbGlwIHNlcXVlbnRpYWwgMiBidWZmZXJzIEJHUkEgcHJlbXVsdGlwbGllZDogMHgwMDAwMDAwMCBwdHI9c2V0CiAgQ29tbWl0IDB4MDAwMDAwMDAgUHJlc2VudCgwLDApIDB4MDAwMDAwMDAgUHJlc2VudCgxLDApIDB4MDAwMDAwMDAgUHJlc2VudChURVNUKSAweDAwMDAwMDAwCiAgR2V0RGVzYzEgMHgwMDAwMDAwMCBzaXplIDY0eDQ4IGZvcm1hdCA4NyBidWZmZXJzIDIgZWZmZWN0IDQgYWxwaGEgMSBzY2FsaW5nIDAgZmxhZ3MgMHgwCiAgQ29tbWl0IDB4MDAwMDAwMDAgV2FpdEZvckNvbW1pdENvbXBsZXRpb24gMHgwMDAwMDAwMAogIFNldENvbnRlbnQgMHgwMDAwMDAwMCByZWZzIDEgLT4gMQpzd2FwIGNoYWluIGZsaXAgc2VxdWVudGlhbCAxIGJ1ZmZlcjogMHg4ODdhMDAwMSBwdHI9bnVsbApzd2FwIGNoYWluIGZsaXAgZGlzY2FyZCBGUDE2OiAweDAwMDAwMDAwIHB0cj1zZXQKICBDb21taXQgMHgwMDAwMDAwMCBQcmVzZW50KDAsMCkgMHgwMDAwMDAwMCBQcmVzZW50KDEsMCkgMHgwMDAwMDAwMCBQcmVzZW50KFRFU1QpIDB4MDAwMDAwMDAKICBHZXREZXNjMSAweDAwMDAwMDAwIHNpemUgNjR4NDggZm9ybWF0IDI0IGJ1ZmZlcnMgMiBlZmZlY3QgNCBhbHBoYSAxIHNjYWxpbmcgMCBmbGFncyAweDAKICBDb21taXQgMHgwMDAwMDAwMCBXYWl0Rm9yQ29tbWl0Q29tcGxldGlvbiAweDAwMDAwMDAwCiAgU2V0Q29udGVudCAweDAwMDAwMDAwIHJlZnMgMSAtPiAxCmNvbXBvc2l0aW9uIHN3YXAgY2hhaW4gYWxwaGEgdW5zcGVjaWZpZWQ6IDB4MDAwMDAwMDAgcHRyPXNldApjb21wb3NpdGlvbiBzd2FwIGNoYWluIGFscGhhIGlnbm9yZTogMHgwMDAwMDAwMCBwdHI9c2V0CmNvbXBvc2l0aW9uIHN3YXAgY2hhaW4gYXNwZWN0IHJhdGlvIHN0cmV0Y2g6IDB4ODg3YTAwMDEgcHRyPW51bGwKU2V0Q29udGVudChmaXJzdCB2aXN1YWwpIDB4MDAwMDAwMDAgcmVmcyAxCkNvbW1pdCAweDAwMDAwMDAwIFByZXNlbnQgMHgwMDAwMDAwMApTZXRDb250ZW50KE5VTEwgYWdhaW4pIDB4MDAwMDAwMDAKQ29tbWl0IDB4MDAwMDAwMDAKU2V0Q29udGVudCB3aXRoIGEgc3dhcCBjaGFpbiBvZiBhbm90aGVyIEQzRCBkZXZpY2UgKGFuZCBhbm90aGVyIERpcmVjdENvbXBvc2l0aW9uIGRldmljZSk6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "swap chain flip sequential 2 buffers BGRA premultiplied: 0x00000000 ptr=set\n  Commit 0x00000000 Present(0,0) 0x00000000 Present(1,0) 0x00000000 Present(TEST) 0x00000000\n  GetDesc1 0x00000000 size 64x48 format 87 buffers 2 effect 4 alpha 1 scaling 0 flags 0x0\n  Commit 0x00000000 WaitForCommitCompletion 0x00000000\n  SetContent 0x00000000 refs 1 -> 1\nswap chain flip sequential 1 buffer: 0x887a0001 ptr=null\nswap chain flip discard FP16: 0x00000000 ptr=set\n  Commit 0x00000000 Present(0,0) 0x00000000 Present(1,0) 0x00000000 Present(TEST) 0x00000000\n  GetDesc1 0x00000000 size 64x48 format 24 buffers 2 effect 4 alpha 1 scaling 0 flags 0x0\n  Commit 0x00000000 WaitForCommitCompletion 0x00000000\n  SetContent 0x00000000 refs 1 -> 1\ncomposition swap chain alpha unspecified: 0x00000000 ptr=set\ncomposition swap chain alpha ignore: 0x00000000 ptr=set\ncomposition swap chain aspect ratio stretch: 0x887a0001 ptr=null\nSetContent(first visual) 0x00000000 refs 1\nCommit 0x00000000 Present 0x00000000\nSetContent(NULL again) 0x00000000\nCommit 0x00000000\nSetContent with a swap chain of another D3D device (and another DirectComposition device): 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 259
+    }
+  ]
+}

@@ -139,7 +139,7 @@ fn argument_errors() {
     let rw = PAGE_READWRITE;
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE | 0x1, rw).0, STATUS_INVALID_PARAMETER_5);
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_TOP_DOWN, rw).0, STATUS_INVALID_PARAMETER_5);
-    assert_eq!(allocate(&mut f, 0, 0, MEM_RESERVE, rw).0, STATUS_INVALID_PARAMETER_4);
+    assert_eq!(allocate(&mut f, 0, 0, MEM_RESERVE, rw).0, STATUS_INVALID_PARAMETER);
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE, PAGE_WRITECOPY).0, STATUS_INVALID_PAGE_PROTECTION);
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE, 0).0, STATUS_INVALID_PAGE_PROTECTION);
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_LARGE_PAGES, rw).0, STATUS_NOT_SUPPORTED);
@@ -153,6 +153,21 @@ fn argument_errors() {
     let (_, b, _) = allocate(&mut f, 0, 0x1000, MEM_COMMIT, rw);
     assert_eq!(allocate(&mut f, b, 0x1000, MEM_RESET, rw).0, STATUS_SUCCESS);
     assert_eq!(allocate(&mut f, b, 0x1000, MEM_RESET | MEM_COMMIT, rw).0, STATUS_INVALID_PARAMETER_5);
+}
+
+#[test]
+fn sizes_the_address_space_cannot_hold_and_the_commit_limit() {
+    let mut f = Fake::new();
+    let rw = PAGE_READWRITE;
+    // 128 TiB and more: invalid, whatever the request.
+    assert_eq!(allocate(&mut f, 0, 1 << 47, MEM_RESERVE, rw).0, STATUS_INVALID_PARAMETER);
+    assert_eq!(allocate(&mut f, 0, u64::MAX - 0xFFF, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_INVALID_PARAMETER);
+    // Just under it: no room for it (a conflict of addresses), but reserving 64 TiB works.
+    assert_eq!(allocate(&mut f, 0, (1 << 47) - 0x1_0000, MEM_RESERVE, rw).0, STATUS_CONFLICTING_ADDRESSES);
+    assert_eq!(allocate(&mut f, 0, 64 << 40, MEM_RESERVE, rw).0, STATUS_SUCCESS);
+    // Committing more than the system can back: the commit limit, nothing changes.
+    assert_eq!(allocate(&mut f, 0, 4 << 40, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_COMMITMENT_LIMIT);
+    assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_SUCCESS);
 }
 
 #[test]

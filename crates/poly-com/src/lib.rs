@@ -8,6 +8,7 @@
 //!   "CoInitializeEx", "RoInitialize": the first call sets the model, the
 //!   same model again returns `S_FALSE`, another one `RPC_E_CHANGED_MODE`,
 //!   every successful call is balanced by an uninitialize).
+//! - [`git`]: the registrations of the global interface table (cookies, owners).
 //! - [`guid`]: `GUID`s as text (`CLSIDFromString`, `StringFromCLSID`,
 //!   `StringFromGUID2`, `IIDFromString`).
 //! - [`propvariant`]: which `PROPVARIANT` types exist and what each owns
@@ -24,6 +25,7 @@
 extern crate alloc;
 
 pub mod apartment;
+pub mod git;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
@@ -43,6 +45,7 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoTaskMemRealloc",
     "CoTaskMemFree",
     "CoGetClassObject",
+    "CoGetObjectContext",
     "CoCreateInstance",
     "CoCreateInstanceEx",
     "RoGetActivationFactory",

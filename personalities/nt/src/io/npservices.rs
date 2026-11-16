@@ -201,6 +201,10 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                                 let len = bytes.len() as u64;
                                 finish_now(sys, irp, sync, status, bytes, len)
                             }
+                            // On an overlapped handle even the refusal of a
+                            // peek is an I/O request: the call says PENDING
+                            // and the status block carries the status.
+                            Err(s) if s == STATUS_INVALID_PIPE_STATE => finish_now(sys, irp, sync, s, Vec::new(), 0),
                             Err(s) => refuse(sys, irp, s),
                         };
                     }

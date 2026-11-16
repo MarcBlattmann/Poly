@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "ctx_bind_get",
+      "exe_sha256": "6ca19237982aef6267e149484534f336cb2153cd3bd2a3a0ad578ef6e4436be7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UFMgcmVzb3VyY2VzIG9uIGEgZnJlc2ggY29udGV4dDogW2ZhbHNlLCBmYWxzZV0KVlNTZXRTaGFkZXJSZXNvdXJjZXMoMCwgMSkgcm91bmQgdHJpcDogdHJ1ZSA7IFBTIHNsb3QgMCBpcyBzdGlsbCBudWxsOiB0cnVlCnNhbXBsZXIgYXQgc2xvdCAxNTogcm91bmQgdHJpcCB0cnVlIHJlZnMgMgp2ZXJ0ZXggYnVmZmVyIHNsb3QgMzE6IHJvdW5kIHRyaXAgdHJ1ZSBzdHJpZGUgMTYgb2Zmc2V0IDMyIHJlZnMgMgppbmRleCBidWZmZXIgdW5ib3VuZDogbnVsbCBmb3JtYXQgMCBvZmZzZXQgMAp0b3BvbG9neSBzZXQgNSAtPiBnZXQgNQp0b3BvbG9neSBzZXQgMyAtPiBnZXQgMwppbml0aWFsIGJsZW5kIHN0YXRlIG51bGwgZmFjdG9yIFsxLjAsIDEuMCwgMS4wLCAxLjBdIG1hc2sgMHhmZmZmZmZmZgppbml0aWFsIGRlcHRoLXN0ZW5jaWwgc3RhdGUgbnVsbCBzdGVuY2lsIHJlZiAwCnJhc3Rlcml6ZXIgc3RhdGUgc2V0OiByb3VuZCB0cmlwIHRydWUKZGV2aWNlIHJlbW92ZWQgcmVhc29uIGF0IHRoZSBlbmQ6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PS resources on a fresh context: [false, false]\nVSSetShaderResources(0, 1) round trip: true ; PS slot 0 is still null: true\nsampler at slot 15: round trip true refs 2\nvertex buffer slot 31: round trip true stride 16 offset 32 refs 2\nindex buffer unbound: null format 0 offset 0\ntopology set 5 -> get 5\ntopology set 3 -> get 3\ninitial blend state null factor [1.0, 1.0, 1.0, 1.0] mask 0xffffffff\ninitial depth-stencil state null stencil ref 0\nrasterizer state set: round trip true\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "ctx_bind_get_b",
+      "exe_sha256": "e59da0e47a2781040f2a77d0781869762b7fb5f60085f8cbb83b019f450735fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgUFNTZXRTaGFkZXJSZXNvdXJjZXMoMywgMik6IHZpZXcgcmVmcyAxIDEKc2xvdCAxMjcgcm91bmQgdHJpcDogdHJ1ZQpWUyBjb25zdGFudCBidWZmZXIgc2xvdCAxMyByb3VuZCB0cmlwIHRydWUgOyBidWZmZXIgcmVmcyAyCklBR2V0VmVydGV4QnVmZmVycyB3aXRoIE5VTEwgc3RyaWRlIGFuZCBvZmZzZXQgb3V0cHV0czogdHJ1ZQppbml0aWFsIHRvcG9sb2d5IDAKdG9wb2xvZ3kgc2V0IDEgLT4gZ2V0IDEKdG9wb2xvZ3kgc2V0IDEwIC0+IGdldCAxMApibGVuZCBzdGF0ZSBzZXQ6IHJvdW5kIHRyaXAgdHJ1ZSBmYWN0b3IgWzAuMjUsIDAuNSwgMC43NSwgMS4wXSBtYXNrIDB4ZjBmMCByZWZzIDIKZGVwdGgtc3RlbmNpbCBzdGF0ZSBzZXQ6IHJvdW5kIHRyaXAgdHJ1ZSBzdGVuY2lsIHJlZiAweDM0CmFmdGVyIENsZWFyU3RhdGU6IGNvbnN0YW50IGJ1ZmZlciBudWxsIHNhbXBsZXIgbnVsbCB2ZXJ0ZXggYnVmZmVyIG51bGwgKHN0cmlkZSAwIG9mZnNldCAwKSB0b3BvbG9neSAwIGJsZW5kIG51bGwgZmFjdG9yIFsxLjAsIDEuMCwgMS4wLCAxLjBdIG1hc2sgMHhmZmZmZmZmZiBkZXB0aCBzdGF0ZSBudWxsIHJlZiAwIHJhc3Rlcml6ZXIgbnVsbCBzcnYgYXQgc2xvdCAxMjcgbnVsbApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after PSSetShaderResources(3, 2): view refs 1 1\nslot 127 round trip: true\nVS constant buffer slot 13 round trip true ; buffer refs 2\nIAGetVertexBuffers with NULL stride and offset outputs: true\ninitial topology 0\ntopology set 1 -> get 1\ntopology set 10 -> get 10\nblend state set: round trip true factor [0.25, 0.5, 0.75, 1.0] mask 0xf0f0 refs 2\ndepth-stencil state set: round trip true stencil ref 0x34\nafter ClearState: constant buffer null sampler null vertex buffer null (stride 0 offset 0) topology 0 blend null factor [1.0, 1.0, 1.0, 1.0] mask 0xffffffff depth state null ref 0 rasterizer null srv at slot 127 null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    }
+  ]
+}

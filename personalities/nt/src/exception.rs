@@ -344,6 +344,9 @@ pub fn deliver<K: NtKernel>(
         return deliver32(k, record, ctx, dispatcher);
     }
     let frame = frame_below(ctx.rsp()).ok_or(Undeliverable::BadStack)?;
+    // Before the frame is written: the log may show what the thread's last calls left below its
+    // stack pointer, which the frame overwrites.
+    k.exception_delivered(record, ctx);
     let writes: [(u64, &[u8]); 3] =
         [(frame.context, &ctx.to_bytes()), (frame.record, &record.to_bytes()), (frame.rsp, &[0u8; CALL_SLOT as usize])];
     for (at, bytes) in writes {
@@ -351,7 +354,6 @@ pub fn deliver<K: NtKernel>(
     }
     let entry = dispatcher_entry(ctx, &frame, dispatcher);
     k.load_context(&entry, CONTEXT_CONTROL | CONTEXT_INTEGER).map_err(Undeliverable::NoContext)?;
-    k.exception_delivered(record, ctx);
     Ok(())
 }
 
