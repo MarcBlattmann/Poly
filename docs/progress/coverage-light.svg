@@ -890,7 +890,7 @@
 </g>
 <g><title>BSD syscalls: 0 / 455 done (0.0%)</title>
 <rect x="873.4" y="311.1" width="10.6" height="9.8" fill="#e6eaef"/>
-<rect x="873.4" y="311.1" width="1.0" height="9.8" fill="#218bff"/>
+<rect x="873.4" y="311.1" width="1.1" height="9.8" fill="#218bff"/>
 <rect x="872.4" y="310.1" width="12.6" height="11.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>Translation: 0 / 449 done (0.0%)</title>
