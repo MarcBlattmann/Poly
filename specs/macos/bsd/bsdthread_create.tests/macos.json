@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "create_einval_no_stack",
+      "source_sha256": "93f1cd0cfb7d0816d425fd6677b5a1396eb79f296754913ecc0279f24f89897c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7f664bf1b7d09279eb1f59bc566f0c8083dd6ca83fcbc077ecb64fa918979f04",
+          "exit_code": 0,
+          "stdout": "ok a start function only: EINVAL\nok with an argument: EINVAL\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "create_einval_zeros",
+      "source_sha256": "d489383df54e3b44712eb1bcddd16f91504e6949c2000e0a97af68c5a858a394",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ef8527ccd46b49117d4e06ed0d0666733cb1af4d161fee7c856cab817cc9d592",
+          "exit_code": 0,
+          "stdout": "ok all arguments 0: EINVAL\nok all arguments 0 again: EINVAL\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
