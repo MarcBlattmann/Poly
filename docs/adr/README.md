@@ -194,6 +194,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0213](0213-landing-work-on-main-hand-off-records-one-file-each-progress-files-written-on-main-ci-on-any-branch-fast-handoff-verify.md) | Landing work on main: hand-off records one file each, progress files written on main, CI on any branch, a fast `handoff verify` | Accepted |
 | [0214](0214-ci-runs-chrome-for-windows-stage-1-and-the-window-check-on-every-pull-request.md) | CI runs Chrome for Windows, stage 1 and the window check, on every pull request | Accepted |
 | [0216](0216-chrome-for-windows-on-the-desktop-to-try-by-hand.md) | Chrome for Windows on the desktop, to try by hand | Accepted |
+| [0217](0217-chrome-s2-failures-were-a-full-host-disk-the-buffer-cache-reads-past-an-unwritable-block.md) | Chrome's sandbox stage failed on a full host disk; the buffer cache reads past a block it cannot write | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
