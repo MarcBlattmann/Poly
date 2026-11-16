@@ -238,7 +238,13 @@ fn tv_item_of(t: &Tv, id: u32, mask: u32) -> TvItem {
         Some(n) => TvItem {
             mask,
             item: id as usize,
-            state: if mask & TVIF_STATE != 0 { n.state | if t.caret == id { TVIS_SELECTED } else { 0 } | if t.drop == id { TVIS_DROPHILITED } else { 0 } } else { 0 },
+            state: if mask & TVIF_STATE != 0 {
+                n.state
+                    | if t.caret == id { TVIS_SELECTED } else { 0 }
+                    | if t.drop == id { TVIS_DROPHILITED } else { 0 }
+            } else {
+                0
+            },
             state_mask: 0,
             text: 0,
             text_max: 0,
@@ -321,7 +327,9 @@ fn insert(hwnd: usize, p: usize, wide: bool) -> usize {
             TVI_FIRST => 0,
             TVI_LAST => siblings.len(),
             TVI_SORT => {
-                let lower = |s: &[u16]| -> Vec<u16> { s.iter().map(|&c| if (0x41..=0x5A).contains(&c) { c + 32 } else { c }).collect() };
+                let lower = |s: &[u16]| -> Vec<u16> {
+                    s.iter().map(|&c| if (0x41..=0x5A).contains(&c) { c + 32 } else { c }).collect()
+                };
                 let mine = lower(&text);
                 siblings.iter().position(|s| lower(&t.nodes[s].text) > mine).unwrap_or(siblings.len())
             }
@@ -415,7 +423,10 @@ fn delete(hwnd: usize, item: usize) -> bool {
 // ---- expansion and selection
 
 fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
-    let Some((has_kids, expanded)) = with(hwnd, |t| t.nodes.get(&id).map(|n| (!n.kids.is_empty() || n.children_flag != 0, n.state & TVIS_EXPANDED != 0))).flatten() else {
+    let Some((has_kids, expanded)) = with(hwnd, |t| {
+        t.nodes.get(&id).map(|n| (!n.kids.is_empty() || n.children_flag != 0, n.state & TVIS_EXPANDED != 0))
+    })
+    .flatten() else {
         return false;
     };
     let code = flags & 3;
@@ -572,11 +583,21 @@ fn text_of(hwnd: usize, id: u32) -> Vec<u16> {
             let mut buf = alloc::vec![0u16; 261];
             let mut nm = NmTvDispInfo {
                 hdr: NmHdr::default(),
-                item: TvItem { mask: TVIF_TEXT, item: id as usize, text: buf.as_mut_ptr() as usize, text_max: 260, ..TvItem::default() },
+                item: TvItem {
+                    mask: TVIF_TEXT,
+                    item: id as usize,
+                    text: buf.as_mut_ptr() as usize,
+                    text_max: 260,
+                    ..TvItem::default()
+                },
             };
             let own = buf.as_ptr() as usize;
             notify(hwnd, TVN_GETDISPINFOW, &mut nm);
-            if nm.item.text == own { buf.iter().take_while(|&&c| c != 0).copied().collect() } else { unsafe { wide_at(nm.item.text, -1) } }
+            if nm.item.text == own {
+                buf.iter().take_while(|&&c| c != 0).copied().collect()
+            } else {
+                unsafe { wide_at(nm.item.text, -1) }
+            }
         }
         None => Vec::new(),
     }
@@ -597,7 +618,11 @@ fn item_rects(hwnd: usize, id: u32) -> Option<(Rc, Rc)> {
     let ind = indent(hwnd);
     let (vis, first, level) = with(hwnd, |t| {
         let vis = visible(t);
-        let first = if t.first_visible != 0 && vis.contains(&t.first_visible) { t.first_visible } else { vis.first().copied().unwrap_or(0) };
+        let first = if t.first_visible != 0 && vis.contains(&t.first_visible) {
+            t.first_visible
+        } else {
+            vis.first().copied().unwrap_or(0)
+        };
         (vis, first, level_of(t, id))
     })?;
     let pos = vis.iter().position(|&v| v == id)?;
@@ -620,7 +645,13 @@ fn ensure_visible(hwnd: usize, id: u32) {
         let vis = visible(t);
         let Some(pos) = vis.iter().position(|&v| v == id) else { return };
         let first = if t.first_visible != 0 { vis.iter().position(|&v| v == t.first_visible).unwrap_or(0) } else { 0 };
-        let want = if pos < first { pos } else if pos >= first + rows as usize { pos + 1 - rows as usize } else { first };
+        let want = if pos < first {
+            pos
+        } else if pos >= first + rows as usize {
+            pos + 1 - rows as usize
+        } else {
+            first
+        };
         t.first_visible = vis.get(want).copied().unwrap_or(0);
     });
 }
@@ -640,7 +671,8 @@ fn hit_test(hwnd: usize, x: i32, y: i32) -> (u32, u32) {
         let level = with(hwnd, |t| level_of(t, id)).unwrap_or(0);
         let btn_x = base_x(hwnd) + level * ind - ind;
         let img = image_width(hwnd);
-        let has_kids = with(hwnd, |t| t.nodes.get(&id).is_some_and(|n| !n.kids.is_empty() || n.children_flag != 0)).unwrap_or(false);
+        let has_kids = with(hwnd, |t| t.nodes.get(&id).is_some_and(|n| !n.kids.is_empty() || n.children_flag != 0))
+            .unwrap_or(false);
         if style_of(hwnd) & TVS_HASBUTTONS != 0 && has_kids && x >= btn_x && x < btn_x + ind {
             return (id, TVHT_ONITEMBUTTON);
         }
@@ -740,7 +772,12 @@ fn draw(hwnd: usize, hdc: usize) {
         let _ = state;
         // SAFETY: the DC.
         unsafe { SetTextColor(hdc, color) };
-        draw_text(hdc, &text_of(hwnd, id), &[text[0] + 2, text[1], text[2], text[3]], DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+        draw_text(
+            hdc,
+            &text_of(hwnd, id),
+            &[text[0] + 2, text[1], text[2], text[3]],
+            DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX,
+        );
         if is_caret && focused {
             focus_rect(hdc, &text, sys_color(COLOR_WINDOWTEXT));
         }
@@ -784,12 +821,20 @@ fn get_next(hwnd: usize, kind: u32, item: usize) -> usize {
             let Some(n) = t.nodes.get(&id) else { return 0 };
             let sibs = kids_of(t, n.parent);
             let p = sibs.iter().position(|&s| s == id).unwrap_or(0);
-            if kind == TVGN_NEXT { sibs.get(p + 1).copied().unwrap_or(0) } else { p.checked_sub(1).map_or(0, |q| sibs[q]) }
+            if kind == TVGN_NEXT {
+                sibs.get(p + 1).copied().unwrap_or(0)
+            } else {
+                p.checked_sub(1).map_or(0, |q| sibs[q])
+            }
         }
         TVGN_PARENT => t.nodes.get(&id).map_or(0, |n| n.parent),
         TVGN_FIRSTVISIBLE => {
             let vis = visible(t);
-            if t.first_visible != 0 && vis.contains(&t.first_visible) { t.first_visible } else { vis.first().copied().unwrap_or(0) }
+            if t.first_visible != 0 && vis.contains(&t.first_visible) {
+                t.first_visible
+            } else {
+                vis.first().copied().unwrap_or(0)
+            }
         }
         TVGN_NEXTVISIBLE => next_visible(t, id, true),
         TVGN_PREVIOUSVISIBLE => next_visible(t, id, false),
@@ -819,7 +864,9 @@ fn key(hwnd: usize, vk: u32) {
         VK_PRIOR => pos.map_or(vis[0], |p| vis[p.saturating_sub(rows)]),
         VK_RIGHT | VK_ADD => {
             if caret != 0 {
-                let (exp, kids) = with(hwnd, |t| (t.nodes[&caret].state & TVIS_EXPANDED != 0, t.nodes[&caret].kids.clone())).unwrap_or((false, Vec::new()));
+                let (exp, kids) =
+                    with(hwnd, |t| (t.nodes[&caret].state & TVIS_EXPANDED != 0, t.nodes[&caret].kids.clone()))
+                        .unwrap_or((false, Vec::new()));
                 if !exp && (!kids.is_empty() || with(hwnd, |t| t.nodes[&caret].children_flag != 0).unwrap_or(false)) {
                     expand(hwnd, caret, TVE_EXPAND, TVC_BYKEYBOARD);
                     return;
@@ -835,7 +882,9 @@ fn key(hwnd: usize, vk: u32) {
         }
         VK_LEFT | VK_SUBTRACT => {
             if caret != 0 {
-                let (exp, parent) = with(hwnd, |t| (t.nodes[&caret].state & TVIS_EXPANDED != 0, t.nodes[&caret].parent)).unwrap_or((false, 0));
+                let (exp, parent) =
+                    with(hwnd, |t| (t.nodes[&caret].state & TVIS_EXPANDED != 0, t.nodes[&caret].parent))
+                        .unwrap_or((false, 0));
                 if exp {
                     expand(hwnd, caret, TVE_COLLAPSE, TVC_BYKEYBOARD);
                     return;
@@ -1004,7 +1053,8 @@ fn set_item(hwnd: usize, l: usize, wide: bool) -> bool {
 
 fn sort_children(hwnd: usize, parent: usize, recurse: bool) {
     let id = if parent == TVI_ROOT { 0 } else { parent as u32 };
-    let lower = |s: &[u16]| -> Vec<u16> { s.iter().map(|&c| if (0x41..=0x5A).contains(&c) { c + 32 } else { c }).collect() };
+    let lower =
+        |s: &[u16]| -> Vec<u16> { s.iter().map(|&c| if (0x41..=0x5A).contains(&c) { c + 32 } else { c }).collect() };
     fn go(t: &mut Tv, id: u32, recurse: bool, lower: &dyn Fn(&[u16]) -> Vec<u16>) {
         let mut ks = kids_of(t, id).clone();
         ks.sort_by_key(|k| lower(&t.nodes[k].text));
@@ -1076,7 +1126,11 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 let delta = hi(w as isize) / 120;
                 let first = with(hwnd, |t| {
                     let vis = visible(t);
-                    let p = if t.first_visible != 0 { vis.iter().position(|&v| v == t.first_visible).unwrap_or(0) } else { 0 };
+                    let p = if t.first_visible != 0 {
+                        vis.iter().position(|&v| v == t.first_visible).unwrap_or(0)
+                    } else {
+                        0
+                    };
                     let q = (p as i32 - delta * 3).clamp(0, (vis.len() as i32 - 1).max(0)) as usize;
                     t.first_visible = vis.get(q).copied().unwrap_or(0);
                 })
@@ -1124,7 +1178,8 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             }
             TVM_GETIMAGELIST => with(hwnd, |t| t.images.get(w).copied().unwrap_or(0)).unwrap_or(0) as isize,
             TVM_SETIMAGELIST => {
-                let old = with(hwnd, |t| t.images.get_mut(w).map(|s| core::mem::replace(s, l as usize)).unwrap_or(0)).unwrap_or(0);
+                let old = with(hwnd, |t| t.images.get_mut(w).map(|s| core::mem::replace(s, l as usize)).unwrap_or(0))
+                    .unwrap_or(0);
                 invalidate(hwnd);
                 old as isize
             }
@@ -1225,7 +1280,10 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             }
             TVM_GETBKCOLOR => with(hwnd, |t| t.bk).unwrap_or(CLR_NONE) as isize,
             TVM_GETTEXTCOLOR => with(hwnd, |t| t.text).unwrap_or(CLR_NONE) as isize,
-            TVM_GETITEMSTATE => with(hwnd, |t| if t.nodes.contains_key(&(w as u32)) { (state_of(t, w as u32) & l as u32) as isize } else { 0 }).unwrap_or(0),
+            TVM_GETITEMSTATE => with(hwnd, |t| {
+                if t.nodes.contains_key(&(w as u32)) { (state_of(t, w as u32) & l as u32) as isize } else { 0 }
+            })
+            .unwrap_or(0),
             TVM_SETEXTENDEDSTYLE | TVM_GETEXTENDEDSTYLE => 0,
             CCM_SETUNICODEFORMAT | CCM_GETUNICODEFORMAT => 1,
             _ => DefWindowProcW(hwnd, msg, w, l),

@@ -85,14 +85,13 @@ fn layout(hwnd: usize) {
     }
 }
 
-
 fn draw(hwnd: usize, hdc: usize) {
     let c = client_rect(hwnd);
     let (face, shadow, light, text_color) =
         (sys_color(COLOR_BTNFACE), sys_color(COLOR_BTNSHADOW), sys_color(COLOR_BTNHIGHLIGHT), sys_color(COLOR_BTNTEXT));
-    let Some((parts, texts, simple, simple_text, font, bk)) = with(hwnd, |s| {
-        (s.bar.edges.clone(), s.bar.texts.clone(), s.bar.simple, s.simple_text.clone(), s.font, s.bk)
-    }) else {
+    let Some((parts, texts, simple, simple_text, font, bk)) =
+        with(hwnd, |s| (s.bar.edges.clone(), s.bar.texts.clone(), s.bar.simple, s.simple_text.clone(), s.font, s.bk))
+    else {
         return;
     };
     fill(hdc, &c, if bk == CLR_DEFAULT { face } else { bk });
@@ -103,7 +102,8 @@ fn draw(hwnd: usize, hdc: usize) {
         SetBkMode(hdc, 1);
         SetTextColor(hdc, text_color);
     }
-    let rects = if simple { alloc::vec![[0, BORDERS[1], rc_w(&c), rc_h(&c)]] } else { part_rects(&parts, rc_w(&c), rc_h(&c)) };
+    let rects =
+        if simple { alloc::vec![[0, BORDERS[1], rc_w(&c), rc_h(&c)]] } else { part_rects(&parts, rc_w(&c), rc_h(&c)) };
     for (i, r) in rects.iter().enumerate() {
         let (text, kind) = if simple { (simple_text.clone(), 0) } else { texts.get(i).cloned().unwrap_or_default() };
         if kind & SBT_NOBORDERS == 0 {
@@ -263,7 +263,11 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             SB_GETRECT => {
                 let c = client_rect(hwnd);
                 let rects = with(hwnd, |s| {
-                    if s.bar.simple { alloc::vec![[0, BORDERS[1], rc_w(&c), rc_h(&c)]] } else { part_rects(&s.bar.edges, rc_w(&c), rc_h(&c)) }
+                    if s.bar.simple {
+                        alloc::vec![[0, BORDERS[1], rc_w(&c), rc_h(&c)]]
+                    } else {
+                        part_rects(&s.bar.edges, rc_w(&c), rc_h(&c))
+                    }
                 })
                 .unwrap_or_default();
                 match rects.get(w & 0xFF) {
@@ -302,7 +306,11 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             .unwrap_or(0),
             SB_GETTEXTA | SB_GETTEXTW => {
                 let found = with(hwnd, |s| {
-                    if w & 0xFF == SB_SIMPLEID { Some((s.simple_text.clone(), 0)) } else { s.bar.text(w & 0xFF).cloned() }
+                    if w & 0xFF == SB_SIMPLEID {
+                        Some((s.simple_text.clone(), 0))
+                    } else {
+                        s.bar.text(w & 0xFF).cloned()
+                    }
                 })
                 .flatten();
                 let Some((t, ty)) = found else { return 0 };

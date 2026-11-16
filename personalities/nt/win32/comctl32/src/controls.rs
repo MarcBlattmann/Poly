@@ -3,11 +3,11 @@
 //! serves all and keeps each window's state (`poly_comctl`); what this file does is decode the
 //! messages (numbers and structures from `commctrl.h`, x64 layouts) and call the models.
 
+use crate::{header, listview, statusbar, toolbar, treeview};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use crate::{header, listview, statusbar, toolbar, treeview};
 use poly_comctl::{Progress, Tab, Tabs, Trackbar, UpDown, class, class::Size};
 use poly_win32_gui::SpinLock;
 
@@ -339,7 +339,6 @@ fn size_on_create(hwnd: usize, size: Size) {
 fn lo(v: isize) -> i32 {
     v as i16 as i32
 }
-
 
 /// The messages of the models; `None` leaves a message to the default procedure.
 fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {

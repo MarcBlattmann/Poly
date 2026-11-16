@@ -169,7 +169,6 @@ pub fn rc_h(r: &Rc) -> i32 {
     r[3] - r[1]
 }
 
-
 pub fn client_rect(hwnd: usize) -> Rc {
     let mut r = [0i32; 4];
     // SAFETY: a RECT.
@@ -345,5 +344,3 @@ pub unsafe fn wr<T: Copy>(p: usize, off: usize, v: T) {
     // SAFETY: inside a structure of the caller's.
     unsafe { ((p + off) as *mut T).write_unaligned(v) }
 }
-
-

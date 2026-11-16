@@ -301,7 +301,20 @@ fn make_header(hwnd: usize) -> usize {
     let hidden = style_of(hwnd) & LVS_NOCOLUMNHEADER != 0;
     // SAFETY: a child window of the list view of a registered class.
     let h = unsafe {
-        CreateWindowExW(0, class.as_ptr(), core::ptr::null(), WS_CHILD | if hidden { 0 } else { WS_VISIBLE } | header::HDS_BUTTONS, 0, 0, 0, 0, hwnd, 0, 0, 0)
+        CreateWindowExW(
+            0,
+            class.as_ptr(),
+            core::ptr::null(),
+            WS_CHILD | if hidden { 0 } else { WS_VISIBLE } | header::HDS_BUTTONS,
+            0,
+            0,
+            0,
+            0,
+            hwnd,
+            0,
+            0,
+            0,
+        )
     };
     with(hwnd, |lv| lv.header = h);
     sync_header(hwnd);
@@ -313,7 +326,10 @@ fn sync_header(hwnd: usize) {
     let Some((h, items, font)) = with(hwnd, |lv| {
         (
             lv.header,
-            lv.cols.iter().map(|c| header::Item { text: c.text.clone(), width: c.width, fmt: c.fmt, image: c.image, param: 0 }).collect::<Vec<_>>(),
+            lv.cols
+                .iter()
+                .map(|c| header::Item { text: c.text.clone(), width: c.width, fmt: c.fmt, image: c.image, param: 0 })
+                .collect::<Vec<_>>(),
             lv.font,
         )
     }) else {
@@ -474,7 +490,9 @@ fn callbacks(hwnd: usize, item: i32, sub: i32) -> (bool, bool) {
 }
 
 fn cell_image(hwnd: usize, item: i32) -> i32 {
-    let img = with(hwnd, |lv| if lv.owner { I_IMAGECALLBACK } else { lv.items.get(item as usize).map_or(-1, |i| i.image) }).unwrap_or(-1);
+    let img =
+        with(hwnd, |lv| if lv.owner { I_IMAGECALLBACK } else { lv.items.get(item as usize).map_or(-1, |i| i.image) })
+            .unwrap_or(-1);
     if img == I_IMAGECALLBACK {
         let (_, image, _) = dispinfo(hwnd, item, 0, LVIF_IMAGE, 0);
         return image;
@@ -486,7 +504,8 @@ fn cell_image(hwnd: usize, item: i32) -> i32 {
 
 fn notify_item(hwnd: usize, code: i32, item: i32, sub: i32, new_state: u32, old_state: u32, changed: u32) -> isize {
     let param = with(hwnd, |lv| lv.items.get(item as usize).map_or(0, |i| i.param)).unwrap_or(0);
-    let mut nm = NmListView { hdr: NmHdr::default(), item, sub_item: sub, new_state, old_state, changed, pt: [0; 2], param };
+    let mut nm =
+        NmListView { hdr: NmHdr::default(), item, sub_item: sub, new_state, old_state, changed, pt: [0; 2], param };
     notify(hwnd, code, &mut nm)
 }
 
@@ -530,7 +549,13 @@ fn set_state(hwnd: usize, i: i32, bits: u32, mask: u32, defer: &mut Vec<(i32, u3
                     }
                 }
                 if mask & LVIS_FOCUSED != 0 {
-                    lv.focus = if new & LVIS_FOCUSED != 0 { i } else if lv.focus == i { -1 } else { lv.focus };
+                    lv.focus = if new & LVIS_FOCUSED != 0 {
+                        i
+                    } else if lv.focus == i {
+                        -1
+                    } else {
+                        lv.focus
+                    };
                 }
             } else if let Some(it) = lv.items.get_mut(i as usize) {
                 it.state = new;
@@ -603,7 +628,11 @@ fn insert_item(hwnd: usize, p: usize) -> isize {
     let ncols = with(hwnd, |lv| lv.cols.len()).unwrap_or(0).max(1);
     let mut texts: Vec<Option<Text>> = alloc::vec![None; ncols];
     if it.mask & LVIF_TEXT != 0 {
-        texts[0] = Some(if it.text == LPSTR_TEXTCALLBACK { Text::Callback } else { Text::Str(unsafe { wide_at(it.text, -1) }) });
+        texts[0] = Some(if it.text == LPSTR_TEXTCALLBACK {
+            Text::Callback
+        } else {
+            Text::Str(unsafe { wide_at(it.text, -1) })
+        });
     }
     let item = Item {
         texts,
@@ -686,7 +715,8 @@ fn get_item(hwnd: usize, p: usize) -> bool {
     let mut asked = None;
     if (it.mask & LVIF_TEXT != 0 && text_cb) || (it.mask & LVIF_IMAGE != 0 && image_cb) {
         // The parent is asked once for what the program wants of the cell.
-        let m = (if it.mask & LVIF_TEXT != 0 && text_cb { LVIF_TEXT } else { 0 }) | (if it.mask & LVIF_IMAGE != 0 && image_cb { LVIF_IMAGE } else { 0 });
+        let m = (if it.mask & LVIF_TEXT != 0 && text_cb { LVIF_TEXT } else { 0 })
+            | (if it.mask & LVIF_IMAGE != 0 && image_cb { LVIF_IMAGE } else { 0 });
         asked = Some(dispinfo(hwnd, it.item, it.sub_item, m, cap.max(1)));
     }
     if it.mask & LVIF_TEXT != 0 {
@@ -729,7 +759,8 @@ fn set_item(hwnd: usize, p: usize) -> bool {
         return false;
     }
     let old_state = item_state(hwnd, it.item);
-    let new_state = if it.mask & LVIF_STATE != 0 { (old_state & !it.state_mask) | (it.state & it.state_mask) } else { old_state };
+    let new_state =
+        if it.mask & LVIF_STATE != 0 { (old_state & !it.state_mask) | (it.state & it.state_mask) } else { old_state };
     if notify_item(hwnd, LVN_ITEMCHANGING, it.item, it.sub_item, new_state, old_state, it.mask) != 0 {
         return false;
     }
@@ -906,9 +937,9 @@ fn next_item(hwnd: usize, from: i32, flags: u32) -> i32 {
 
 fn draw(hwnd: usize, hdc: usize) {
     let c = client_rect(hwnd);
-    let Some((bk, text_clr, tbk, font, ex, small, top, focus_sel_always)) = with(hwnd, |lv| {
-        (lv.bk, lv.text, lv.text_bk, lv.font, lv.ex, lv.images[1], lv.top, true)
-    }) else {
+    let Some((bk, text_clr, tbk, font, ex, small, top, focus_sel_always)) =
+        with(hwnd, |lv| (lv.bk, lv.text, lv.text_bk, lv.font, lv.ex, lv.images[1], lv.top, true))
+    else {
         return;
     };
     let _ = focus_sel_always;
@@ -916,7 +947,15 @@ fn draw(hwnd: usize, hdc: usize) {
     fill(hdc, &c, if bk == CLR_NONE { sys_color(COLOR_WINDOW) } else { bk });
     // The custom draw round: one notification before anything is drawn.
     let mut cd = NmLvCustomDraw {
-        nmcd: NmCustomDraw { hdr: NmHdr::default(), stage: CDDS_PREPAINT, hdc, rc: c, item_spec: 0, item_state: 0, item_param: 0 },
+        nmcd: NmCustomDraw {
+            hdr: NmHdr::default(),
+            stage: CDDS_PREPAINT,
+            hdc,
+            rc: c,
+            item_spec: 0,
+            item_state: 0,
+            item_param: 0,
+        },
         text: CLR_DEFAULT,
         text_bk: CLR_DEFAULT,
         sub_item: 0,
@@ -938,7 +977,8 @@ fn draw(hwnd: usize, hdc: usize) {
     unsafe { SetBkMode(hdc, 1) };
     let focused = unsafe { GetFocus() } == hwnd;
     let ncols = with(hwnd, |lv| lv.cols.len()).unwrap_or(0).max(1);
-    let widths: Vec<(i32, i32)> = with(hwnd, |lv| lv.cols.iter().map(|c| (c.width, c.fmt)).collect()).unwrap_or_default();
+    let widths: Vec<(i32, i32)> =
+        with(hwnd, |lv| lv.cols.iter().map(|c| (c.width, c.fmt)).collect()).unwrap_or_default();
     let report = style & LVS_TYPEMASK == LVS_REPORT;
     let rh = row_height(hwnd);
     let icon = icon_width(hwnd);
@@ -954,7 +994,15 @@ fn draw(hwnd: usize, hdc: usize) {
         let mut row_bk = None;
         if want_items {
             let mut icd = NmLvCustomDraw {
-                nmcd: NmCustomDraw { hdr: NmHdr::default(), stage: CDDS_ITEMPREPAINT, hdc, rc: row, item_spec: i as usize, item_state: 0, item_param: 0 },
+                nmcd: NmCustomDraw {
+                    hdr: NmHdr::default(),
+                    stage: CDDS_ITEMPREPAINT,
+                    hdc,
+                    rc: row,
+                    item_spec: i as usize,
+                    item_state: 0,
+                    item_param: 0,
+                },
                 text: CLR_DEFAULT,
                 text_bk: CLR_DEFAULT,
                 sub_item: 0,
@@ -978,7 +1026,8 @@ fn draw(hwnd: usize, hdc: usize) {
         let _ = tbk;
         let full = ex & LVS_EX_FULLROWSELECT != 0;
         let label_w = text_extent_of(hwnd, i);
-        let sel_rect = if full || !report { row } else { [row[0] + 2, row[1], row[0] + icon + 2 + label_w + 2, row[3]] };
+        let sel_rect =
+            if full || !report { row } else { [row[0] + 2, row[1], row[0] + icon + 2 + label_w + 2, row[3]] };
         if let Some(b) = row_bk {
             fill(hdc, &row, b);
         }
@@ -1003,7 +1052,8 @@ fn draw(hwnd: usize, hdc: usize) {
                 let img;
                 if owner || (tcb && icb) {
                     // Text and image (and, for an owner data list, the indent) in one question.
-                    let (t, im, _) = dispinfo(hwnd, i, 0, LVIF_TEXT | LVIF_IMAGE | if owner { LVIF_INDENT } else { 0 }, 260);
+                    let (t, im, _) =
+                        dispinfo(hwnd, i, 0, LVIF_TEXT | LVIF_IMAGE | if owner { LVIF_INDENT } else { 0 }, 260);
                     shown_text = Some(t);
                     img = im;
                 } else {
@@ -1011,7 +1061,14 @@ fn draw(hwnd: usize, hdc: usize) {
                 }
                 if small != 0 && img >= 0 {
                     // SAFETY: our image list of the program.
-                    crate::imagelist::ImageList_Draw(small, img, hdc, cell[0] + 1, row[1] + (rh - icon.max(16)) / 2 + 1, 1);
+                    crate::imagelist::ImageList_Draw(
+                        small,
+                        img,
+                        hdc,
+                        cell[0] + 1,
+                        row[1] + (rh - icon.max(16)) / 2 + 1,
+                        1,
+                    );
                 }
                 tx = cell[0] + icon + 3;
             }
@@ -1024,7 +1081,12 @@ fn draw(hwnd: usize, hdc: usize) {
                 2 => DT_CENTER,
                 _ => DT_LEFT,
             };
-            draw_text(hdc, &t, &[tx, cell[1], cell[2] - 4, cell[3]], DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS | align);
+            draw_text(
+                hdc,
+                &t,
+                &[tx, cell[1], cell[2] - 4, cell[3]],
+                DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS | align,
+            );
             if ex & LVS_EX_GRIDLINES != 0 {
                 fill(hdc, &[cell[2] - 1, cell[1], cell[2], cell[3]], sys_color(COLOR_BTNFACE));
             }
@@ -1069,15 +1131,35 @@ fn navigate(hwnd: usize, vk: u32) {
     let page = visible_rows(hwnd);
     let target = match vk {
         VK_DOWN | VK_RIGHT => {
-            if focus < 0 { 0 } else { (focus + 1).min(n - 1) }
+            if focus < 0 {
+                0
+            } else {
+                (focus + 1).min(n - 1)
+            }
         }
         VK_UP | VK_LEFT => {
-            if focus < 0 { 0 } else { (focus - 1).max(0) }
+            if focus < 0 {
+                0
+            } else {
+                (focus - 1).max(0)
+            }
         }
         VK_HOME => 0,
         VK_END => n - 1,
-        VK_NEXT => if focus < 0 { 0 } else { (focus + page).min(n - 1) },
-        VK_PRIOR => if focus < 0 { 0 } else { (focus - page).max(0) },
+        VK_NEXT => {
+            if focus < 0 {
+                0
+            } else {
+                (focus + page).min(n - 1)
+            }
+        }
+        VK_PRIOR => {
+            if focus < 0 {
+                0
+            } else {
+                (focus - page).max(0)
+            }
+        }
         _ => return,
     };
     let single = style_of(hwnd) & LVS_SINGLESEL != 0;
@@ -1098,7 +1180,13 @@ fn navigate(hwnd: usize, vk: u32) {
         }
     }
     let mut d = Vec::new();
-    set_state(hwnd, target, if ctrl && !single { LVIS_FOCUSED } else { LVIS_FOCUSED | LVIS_SELECTED }, LVIS_FOCUSED | LVIS_SELECTED, &mut d);
+    set_state(
+        hwnd,
+        target,
+        if ctrl && !single { LVIS_FOCUSED } else { LVIS_FOCUSED | LVIS_SELECTED },
+        LVIS_FOCUSED | LVIS_SELECTED,
+        &mut d,
+    );
     flush(hwnd, d);
     with(hwnd, |lv| lv.mark = target);
     ensure_visible(hwnd, target);
@@ -1139,7 +1227,14 @@ fn click(hwnd: usize, x: i32, y: i32, double: bool) {
             flush(hwnd, d);
         }
         // The item has the focus.
-        let old = with(hwnd, |lv| if lv.owner { lv.focus } else { lv.items.iter().position(|x| x.state & LVIS_FOCUSED != 0).map_or(-1, |p| p as i32) }).unwrap_or(-1);
+        let old = with(hwnd, |lv| {
+            if lv.owner {
+                lv.focus
+            } else {
+                lv.items.iter().position(|x| x.state & LVIS_FOCUSED != 0).map_or(-1, |p| p as i32)
+            }
+        })
+        .unwrap_or(-1);
         if old != i {
             let mut d = Vec::new();
             if old >= 0 {
@@ -1160,10 +1255,28 @@ fn click(hwnd: usize, x: i32, y: i32, double: bool) {
             flush(hwnd, d);
         }
     }
-    let mut nm = NmListView { hdr: NmHdr::default(), item: i, sub_item: 0, new_state: 0, old_state: 0, changed: 0, pt: [x, y], param: 0 };
+    let mut nm = NmListView {
+        hdr: NmHdr::default(),
+        item: i,
+        sub_item: 0,
+        new_state: 0,
+        old_state: 0,
+        changed: 0,
+        pt: [x, y],
+        param: 0,
+    };
     notify(hwnd, if double { NM_DBLCLK } else { NM_CLICK }, &mut nm);
     if double && i >= 0 {
-        let mut nm = NmListView { hdr: NmHdr::default(), item: i, sub_item: 0, new_state: 0, old_state: 0, changed: 0, pt: [x, y], param: 0 };
+        let mut nm = NmListView {
+            hdr: NmHdr::default(),
+            item: i,
+            sub_item: 0,
+            new_state: 0,
+            old_state: 0,
+            changed: 0,
+            pt: [x, y],
+            param: 0,
+        };
         notify(hwnd, LVN_ITEMACTIVATE, &mut nm);
     }
     invalidate(hwnd);
@@ -1304,7 +1417,16 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             }
             WM_RBUTTONUP => {
                 let (i, _) = item_at(hwnd, lo(l), hi(l));
-                let mut nm = NmListView { hdr: NmHdr::default(), item: i, sub_item: 0, new_state: 0, old_state: 0, changed: 0, pt: [lo(l), hi(l)], param: 0 };
+                let mut nm = NmListView {
+                    hdr: NmHdr::default(),
+                    item: i,
+                    sub_item: 0,
+                    new_state: 0,
+                    old_state: 0,
+                    changed: 0,
+                    pt: [lo(l), hi(l)],
+                    param: 0,
+                };
                 notify(hwnd, NM_RCLICK, &mut nm);
                 0
             }
@@ -1318,12 +1440,21 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             }
             WM_NOTIFY => {
                 // From the header: a click on a heading is `LVN_COLUMNCLICK`, a changed width is passed on.
-                let code = rd::<i32>(l as usize, 2 * core::mem::size_of::<usize>()) ;
+                let code = rd::<i32>(l as usize, 2 * core::mem::size_of::<usize>());
                 let from = rd::<usize>(l as usize, 0);
                 let h = with(hwnd, |lv| lv.header).unwrap_or(0);
                 if from == h && h != 0 && code == HDN_ITEMCLICKW {
                     let item = rd::<i32>(l as usize, core::mem::size_of::<NmHdr>());
-                    let mut nm = NmListView { hdr: NmHdr::default(), item: -1, sub_item: item, new_state: 0, old_state: 0, changed: 0, pt: [0; 2], param: 0 };
+                    let mut nm = NmListView {
+                        hdr: NmHdr::default(),
+                        item: -1,
+                        sub_item: item,
+                        new_state: 0,
+                        old_state: 0,
+                        changed: 0,
+                        pt: [0; 2],
+                        param: 0,
+                    };
                     notify(hwnd, LVN_COLUMNCLICK, &mut nm);
                 }
                 0
@@ -1349,7 +1480,8 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             LVM_GETIMAGELIST => with(hwnd, |lv| lv.images.get(w).copied().unwrap_or(0)).unwrap_or(0) as isize,
             LVM_SETIMAGELIST => {
                 // LVSIL_NORMAL 0, LVSIL_SMALL 1, LVSIL_STATE 2.
-                let old = with(hwnd, |lv| lv.images.get_mut(w).map(|s| core::mem::replace(s, l as usize)).unwrap_or(0)).unwrap_or(0);
+                let old = with(hwnd, |lv| lv.images.get_mut(w).map(|s| core::mem::replace(s, l as usize)).unwrap_or(0))
+                    .unwrap_or(0);
                 invalidate(hwnd);
                 old as isize
             }
@@ -1376,10 +1508,15 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 let psz: usize = rd(l as usize, core::mem::size_of::<usize>());
                 let param: isize = rd(l as usize, 2 * core::mem::size_of::<usize>());
                 let n = item_count(hwnd);
-                let wanted = if flags & 2 != 0 { Some(if msg == LVM_FINDITEMW { wide_at(psz, -1) } else { ansi_to_wide(psz) }) } else { None };
+                let wanted = if flags & 2 != 0 {
+                    Some(if msg == LVM_FINDITEMW { wide_at(psz, -1) } else { ansi_to_wide(psz) })
+                } else {
+                    None
+                };
                 let eq = |a: &[u16], b: &[u16], partial: bool| -> bool {
                     let f = |c: u16| if (0x41..=0x5A).contains(&c) { c + 32 } else { c };
-                    let (a, b): (Vec<u16>, Vec<u16>) = (a.iter().map(|&c| f(c)).collect(), b.iter().map(|&c| f(c)).collect());
+                    let (a, b): (Vec<u16>, Vec<u16>) =
+                        (a.iter().map(|&c| f(c)).collect(), b.iter().map(|&c| f(c)).collect());
                     if partial { a.starts_with(&b) } else { a == b }
                 };
                 let start = (w as i32 + 1).max(0);
@@ -1408,7 +1545,10 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                     return isize::from(get_item_rect(hwnd, w as i32, code, l as usize));
                 }
                 let row = row_rect(hwnd, w as i32);
-                let (left, width) = (column_left(hwnd, sub as usize), with(hwnd, |lv| lv.cols.get(sub as usize).map_or(0, |c| c.width)).unwrap_or(0));
+                let (left, width) = (
+                    column_left(hwnd, sub as usize),
+                    with(hwnd, |lv| lv.cols.get(sub as usize).map_or(0, |c| c.width)).unwrap_or(0),
+                );
                 let r = [left, row[1], left + width, row[3]];
                 for (k, v) in r.iter().enumerate() {
                     wr(l as usize, 4 * k, *v);
@@ -1423,7 +1563,8 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 if msg == LVM_SUBITEMHITTEST {
                     let mut sub = 0;
                     let mut left = 0;
-                    let widths: Vec<i32> = with(hwnd, |lv| lv.cols.iter().map(|c| c.width).collect()).unwrap_or_default();
+                    let widths: Vec<i32> =
+                        with(hwnd, |lv| lv.cols.iter().map(|c| c.width).collect()).unwrap_or_default();
                     for (k, cw) in widths.iter().enumerate() {
                         if x >= left && x < left + cw {
                             sub = k as i32;
@@ -1461,7 +1602,14 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 1
             }
             LVM_SETITEMSTATE => {
-                let (bits, mask) = if l != 0 { (rd::<u32>(l as usize, core::mem::offset_of!(LvItem, state)), rd::<u32>(l as usize, core::mem::offset_of!(LvItem, state_mask))) } else { (0, 0) };
+                let (bits, mask) = if l != 0 {
+                    (
+                        rd::<u32>(l as usize, core::mem::offset_of!(LvItem, state)),
+                        rd::<u32>(l as usize, core::mem::offset_of!(LvItem, state_mask)),
+                    )
+                } else {
+                    (0, 0)
+                };
                 if (w as i32) < 0 {
                     // Every item.
                     let n = item_count(hwnd);
@@ -1568,7 +1716,11 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 (text_width(m.hdc, &t) + 12) as isize
             }
             LVM_GETHEADER => {
-                if style_of(hwnd) & LVS_TYPEMASK == LVS_REPORT { make_header(hwnd) as isize } else { 0 }
+                if style_of(hwnd) & LVS_TYPEMASK == LVS_REPORT {
+                    make_header(hwnd) as isize
+                } else {
+                    0
+                }
             }
             LVM_INSERTCOLUMNA | LVM_INSERTCOLUMNW => {
                 if l == 0 {

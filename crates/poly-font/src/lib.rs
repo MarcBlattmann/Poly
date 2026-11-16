@@ -45,7 +45,9 @@ mod render;
 mod testfont;
 
 pub use cache::{CacheStats, GlyphCache, GlyphKey, SUBPIXEL_STEPS, quantize};
-pub use font::{Error, Font, GdiMetrics, GlyphId, HMetrics, OtmValues, OutlineFormat, StyleInfo, VMetrics, font_count, name_id};
+pub use font::{
+    Error, Font, GdiMetrics, GlyphId, HMetrics, OtmValues, OutlineFormat, StyleInfo, VMetrics, font_count, name_id,
+};
 pub use layout::{LayoutOptions, Line, PositionedGlyph, TextLayout, layout, render_layout};
 pub use path::{Bounds, Path, Point, Segment};
 pub use raster::Rasterizer;

@@ -67,7 +67,15 @@ fn with<R>(h: usize, f: impl FnOnce(&mut State) -> R) -> Option<R> {
 }
 
 pub fn on_create(hwnd: usize) {
-    let st = State { t: Toolbar::default(), strings: Vec::new(), images: [0; 3], font: 0, hot: -1, down: -1, pad: (tb::PAD_X, tb::PAD_Y) };
+    let st = State {
+        t: Toolbar::default(),
+        strings: Vec::new(),
+        images: [0; 3],
+        font: 0,
+        hot: -1,
+        down: -1,
+        pad: (tb::PAD_X, tb::PAD_Y),
+    };
     STATES.with(|m| m.insert(hwnd, st));
     sync_style(hwnd);
 }
@@ -163,7 +171,11 @@ fn draw(hwnd: usize, hdc: usize) {
         };
         let text = &strings[i];
         let list = style & TBSTYLE_LIST != 0;
-        let img_x = if text.is_empty() || list { r[0] + (if text.is_empty() { (rc_w(&r) - iw) / 2 } else { 3 }) } else { r[0] + (rc_w(&r) - iw) / 2 };
+        let img_x = if text.is_empty() || list {
+            r[0] + (if text.is_empty() { (rc_w(&r) - iw) / 2 } else { 3 })
+        } else {
+            r[0] + (rc_w(&r) - iw) / 2
+        };
         let img_y = r[1] + if text.is_empty() || list { (rc_h(&r) - ih) / 2 } else { 3 };
         let has_image = b.image >= 0;
         if has_image {
@@ -177,8 +189,17 @@ fn draw(hwnd: usize, hdc: usize) {
         if !text.is_empty() {
             // SAFETY: the DC.
             unsafe { SetTextColor(hdc, if enabled { text_color } else { gray }) };
-            let tr = if list { [img_x + iw + 4 + off, r[1] + off, r[2] - 2, r[3] + off] } else { [r[0] + off, img_y + ih + 1 + off, r[2] + off, r[3] - 1 + off] };
-            draw_text(hdc, text, &tr, DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS | if list { DT_LEFT | DT_VCENTER } else { DT_CENTER });
+            let tr = if list {
+                [img_x + iw + 4 + off, r[1] + off, r[2] - 2, r[3] + off]
+            } else {
+                [r[0] + off, img_y + ih + 1 + off, r[2] + off, r[3] - 1 + off]
+            };
+            draw_text(
+                hdc,
+                text,
+                &tr,
+                DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS | if list { DT_LEFT | DT_VCENTER } else { DT_CENTER },
+            );
         }
     }
     // SAFETY: the font taken above.
@@ -479,12 +500,23 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 isize::from(ok)
             }
             TB_DELETEBUTTON => {
-                let removed = with(hwnd, |s| {
-                    if w < s.t.buttons.len() { Some((s.t.buttons[w], s.t.buttons.len())) } else { None }
-                })
-                .flatten();
+                let removed =
+                    with(
+                        hwnd,
+                        |s| {
+                            if w < s.t.buttons.len() { Some((s.t.buttons[w], s.t.buttons.len())) } else { None }
+                        },
+                    )
+                    .flatten();
                 let Some((b, _)) = removed else { return 0 };
-                let mut nm = NmToolbar { hdr: NmHdr::default(), item: b.command, button: b.into(), cch_text: 0, psz_text: 0, rect: [0; 4] };
+                let mut nm = NmToolbar {
+                    hdr: NmHdr::default(),
+                    item: b.command,
+                    button: b.into(),
+                    cch_text: 0,
+                    psz_text: 0,
+                    rect: [0; 4],
+                };
                 notify(hwnd, TBN_DELETINGBUTTON, &mut nm);
                 with(hwnd, |s| s.t.buttons.remove(w));
                 invalidate(hwnd);
@@ -532,9 +564,15 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
             }
             TB_GETITEMRECT | TB_GETRECT => {
                 let width = client_width(hwnd);
-                let index = if msg == TB_GETRECT { with(hwnd, |s| s.t.command_to_index(w as i32)).unwrap_or(-1) as isize } else { w as isize };
+                let index = if msg == TB_GETRECT {
+                    with(hwnd, |s| s.t.command_to_index(w as i32)).unwrap_or(-1) as isize
+                } else {
+                    w as isize
+                };
                 let r = with(hwnd, |s| {
-                    if index < 0 { return None }
+                    if index < 0 {
+                        return None;
+                    }
                     let rects = s.t.layout(width);
                     rects.get(index as usize).copied()
                 })
@@ -608,7 +646,9 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 0
             }
             TB_GETSTYLE => (style_of(hwnd) & 0xFFFF) as isize,
-            TB_SETEXTENDEDSTYLE => with(hwnd, |s| core::mem::replace(&mut s.t.ex_style, l as u32)).unwrap_or(0) as isize,
+            TB_SETEXTENDEDSTYLE => {
+                with(hwnd, |s| core::mem::replace(&mut s.t.ex_style, l as u32)).unwrap_or(0) as isize
+            }
             TB_GETEXTENDEDSTYLE => with(hwnd, |s| s.t.ex_style).unwrap_or(0) as isize,
             TB_GETPADDING => with(hwnd, |s| make_long(s.pad.0, s.pad.1)).unwrap_or(0),
             TB_SETPADDING => with(hwnd, |s| {

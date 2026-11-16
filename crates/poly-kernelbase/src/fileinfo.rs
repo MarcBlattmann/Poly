@@ -258,7 +258,14 @@ mod tests {
         assert_eq!(i("a.polytestxyz", Kind::File), i("noext", Kind::File));
         assert_eq!(i(".hidden", Kind::File), i("noext", Kind::File));
         assert_eq!(i("folder.txt", Kind::Directory), i("sub", Kind::Directory));
-        let all = [i("a.txt", Kind::File), i("a.exe", Kind::File), i("a.dll", Kind::File), i("x", Kind::File), i("d", Kind::Directory), i("C:\\", Kind::DriveRoot)];
+        let all = [
+            i("a.txt", Kind::File),
+            i("a.exe", Kind::File),
+            i("a.dll", Kind::File),
+            i("x", Kind::File),
+            i("d", Kind::Directory),
+            i("C:\\", Kind::DriveRoot),
+        ];
         for (n, a) in all.iter().enumerate() {
             assert!(all[n + 1..].iter().all(|b| a != b));
         }

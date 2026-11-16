@@ -13,8 +13,15 @@ use poly_kernelbase::shellicon;
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const u8, disposition: u32, flags: u32, template: isize)
-    -> isize;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const u8,
+        disposition: u32,
+        flags: u32,
+        template: isize,
+    ) -> isize;
     fn ReadFile(h: isize, buf: *mut u8, n: u32, read: *mut u32, overlapped: *mut u8) -> i32;
     fn CloseHandle(h: isize) -> i32;
 }
@@ -65,7 +72,8 @@ fn make_icon(kind: i32, size: i32) -> usize {
         }
     }
     // SAFETY: gdi32 copies the bits.
-    let (hc, hm) = unsafe { (CreateBitmap(size, size, 1, 32, color.as_ptr()), CreateBitmap(size, size, 1, 1, mask.as_ptr())) };
+    let (hc, hm) =
+        unsafe { (CreateBitmap(size, size, 1, 32, color.as_ptr()), CreateBitmap(size, size, 1, 1, mask.as_ptr())) };
     // ICONINFO: fIcon, the hot spot, the mask and the colour bitmap, each aligned to the pointer size.
     let ptr = core::mem::size_of::<usize>();
     let mut info = [0u8; 32];
@@ -118,7 +126,15 @@ pub fn system_image_list(small: bool) -> usize {
 fn exe_type_of(path: &[u16]) -> u32 {
     // SAFETY: a NUL-terminated path.
     let h = unsafe {
-        CreateFileW(z(path).as_ptr(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, core::ptr::null(), OPEN_EXISTING, 0, 0)
+        CreateFileW(
+            z(path).as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            core::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            0,
+        )
     };
     if h == -1 {
         return 0;

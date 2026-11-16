@@ -236,7 +236,12 @@ pub unsafe extern "system" fn SHGetFolderPathA(
 
 /// `SHGetSpecialFolderPathW(hwnd, pszPath, csidl, fCreate)`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SHGetSpecialFolderPathW(_hwnd: *mut u8, path: *mut u16, csidl_value: i32, create: i32) -> i32 {
+pub unsafe extern "system" fn SHGetSpecialFolderPathW(
+    _hwnd: *mut u8,
+    path: *mut u16,
+    csidl_value: i32,
+    create: i32,
+) -> i32 {
     let value = csidl_value | if create != 0 { csidl::FLAG_CREATE as i32 } else { 0 };
     // SAFETY: the caller's buffer.
     i32::from(unsafe { SHGetFolderPathW(core::ptr::null_mut(), value, core::ptr::null_mut(), 0, path) } == csidl::S_OK)
@@ -244,7 +249,12 @@ pub unsafe extern "system" fn SHGetSpecialFolderPathW(_hwnd: *mut u8, path: *mut
 
 /// `SHGetSpecialFolderPathA`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SHGetSpecialFolderPathA(_hwnd: *mut u8, path: *mut u8, csidl_value: i32, create: i32) -> i32 {
+pub unsafe extern "system" fn SHGetSpecialFolderPathA(
+    _hwnd: *mut u8,
+    path: *mut u8,
+    csidl_value: i32,
+    create: i32,
+) -> i32 {
     let value = csidl_value | if create != 0 { csidl::FLAG_CREATE as i32 } else { 0 };
     // SAFETY: the caller's buffer.
     i32::from(unsafe { SHGetFolderPathA(core::ptr::null_mut(), value, core::ptr::null_mut(), 0, path) } == csidl::S_OK)
