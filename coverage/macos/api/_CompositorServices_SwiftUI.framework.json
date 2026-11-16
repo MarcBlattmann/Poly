@@ -53,5 +53,11 @@
 {"symbol":"$sSo27CP_OBJECT_cp_layer_rendererC27_CompositorServices_SwiftUIE16onRemoteHIDEventyy0fG00L10CollectionVScMYccvM","src":["macos-sdk"]},
 {"symbol":"$sSo27CP_OBJECT_cp_layer_rendererC27_CompositorServices_SwiftUIE16onRemoteHIDEventyy0fG00L10CollectionVScMYccvg","src":["macos-sdk"]},
 {"symbol":"$sSo27CP_OBJECT_cp_layer_rendererC27_CompositorServices_SwiftUIE16onRemoteHIDEventyy0fG00L10CollectionVScMYccvpMV","src":["macos-sdk"]},
-{"symbol":"$sSo27CP_OBJECT_cp_layer_rendererC27_CompositorServices_SwiftUIE16onRemoteHIDEventyy0fG00L10CollectionVScMYccvs","src":["macos-sdk"]}
+{"symbol":"$sSo27CP_OBJECT_cp_layer_rendererC27_CompositorServices_SwiftUIE16onRemoteHIDEventyy0fG00L10CollectionVScMYccvs","src":["macos-sdk"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.CompositorLayer","src":["macos-swift-interface"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.CompositorLayer._ViewRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.CompositorLayer._viewRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.CompositorLayer.init(configuration:renderer:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.CompositorLayerConfiguration.default","src":["macos-swift-interface"]},
+{"symbol":"swift:_CompositorServices_SwiftUI.Event.trackingAreaIdentifier","src":["macos-swift-interface"]}
 ]

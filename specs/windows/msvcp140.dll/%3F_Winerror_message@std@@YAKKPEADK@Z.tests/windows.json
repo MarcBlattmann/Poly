@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "error_throw_c_xgetlasterror",
+      "exe_sha256": "4e73623274aafb1ed665456c74ae4271700983e687acecf8f483659cfc0a669e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgdGhyb3dfYyAxID0+IHN5c3RlbV9lcnJvciB2YWx1ZT0xMSBjYXRlZ29yeT0zIHdoYXQ9cmVzb3VyY2UgdW5hdmFpbGFibGUgdHJ5IGFnYWluOiByZXNvdXJjZSB1bmF2YWlsYWJsZSB0cnkgYWdhaW4KdmFsdWUgdGhyb3dfYyAyID0+IHN5c3RlbV9lcnJvciB2YWx1ZT0xMSBjYXRlZ29yeT0zIHdoYXQ9cmVzb3VyY2UgdW5hdmFpbGFibGUgdHJ5IGFnYWluOiByZXNvdXJjZSB1bmF2YWlsYWJsZSB0cnkgYWdhaW4KdmFsdWUgdGhyb3dfYyAzID0+IHN5c3RlbV9lcnJvciB2YWx1ZT0xNiBjYXRlZ29yeT0zIHdoYXQ9ZGV2aWNlIG9yIHJlc291cmNlIGJ1c3k6IGRldmljZSBvciByZXNvdXJjZSBidXN5CnZhbHVlIHRocm93X2MgNCA9PiBzeXN0ZW1fZXJyb3IgdmFsdWU9MjIgY2F0ZWdvcnk9MyB3aGF0PWludmFsaWQgYXJndW1lbnQ6IGludmFsaWQgYXJndW1lbnQKb2sgX1Rocm93X0NfZXJyb3IoMSkgKF9Ob21lbSkKb2sgX1Rocm93X0NfZXJyb3IoMikgKF9UaW1lZG91dCkKb2sgX1Rocm93X0NfZXJyb3IoMykgKF9CdXN5KQpvayBfVGhyb3dfQ19lcnJvcig0KSAoX0Vycm9yKQpvayB0aGUgY2F0ZWdvcnkgaXMgdGhlIGdlbmVyaWMgb25lCm9rIHRoZSBlcnJvciB2YWx1ZSBpcyBHZXRMYXN0RXJyb3IoKQpvayB0aGUgaWRlbnRpdHkgd29yZCBvZiB0aGUgY2F0ZWdvcnkgaXMgNyAoc3lzdGVtKQpvayBpdCBlcXVhbHMgdGhlIHByb2dyYW0ncyBzeXN0ZW1fY2F0ZWdvcnkoKQpvayBuYW1lKCkgdGhyb3VnaCB0aGUgbGlicmFyeSdzIGNhdGVnb3J5IG9iamVjdApvayB3aGF0KCkgaXMgdGhlIHN5c3RlbSBtZXNzYWdlIG9mIHRoZSBjb2RlCm9rIGRlZmF1bHRfZXJyb3JfY29uZGl0aW9uKDUpIHRocm91Z2ggdGhlIGxpYnJhcnkncyBjYXRlZ29yeTogdmFsdWUKb2sgZGVmYXVsdF9lcnJvcl9jb25kaXRpb24oNSk6IGdlbmVyaWMKb2sgZXF1aXZhbGVudChpbnQsIGVycm9yX2NvbmRpdGlvbikgaXMgdHJ1ZSBmb3IgcGVybWlzc2lvbl9kZW5pZWQKb2sgZXF1aXZhbGVudChlcnJvcl9jb2RlLCBpbnQpOiB0aGUgY29kZSBpdHNlbGYKb2sgZXF1aXZhbGVudChlcnJvcl9jb2RlLCBpbnQpOiBhbm90aGVyIHZhbHVlIGlzIGZhbHNlCm9rIG1lc3NhZ2UoMikgdGhyb3VnaCB0aGUgbGlicmFyeSdzIGNhdGVnb3J5IG9iamVjdApvayBtZXNzYWdlKDk5OTk5KQpvayBHZXRMYXN0RXJyb3IoKSAwIGdpdmVzIHZhbHVlIDAKb2sgYW5kIHRoZSB0ZXh0IG9mIHN1Y2Nlc3MKc3VtbWFyeSAxOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value throw_c 1 => system_error value=11 category=3 what=resource unavailable try again: resource unavailable try again\nvalue throw_c 2 => system_error value=11 category=3 what=resource unavailable try again: resource unavailable try again\nvalue throw_c 3 => system_error value=16 category=3 what=device or resource busy: device or resource busy\nvalue throw_c 4 => system_error value=22 category=3 what=invalid argument: invalid argument\nok _Throw_C_error(1) (_Nomem)\nok _Throw_C_error(2) (_Timedout)\nok _Throw_C_error(3) (_Busy)\nok _Throw_C_error(4) (_Error)\nok the category is the generic one\nok the error value is GetLastError()\nok the identity word of the category is 7 (system)\nok it equals the program's system_category()\nok name() through the library's category object\nok what() is the system message of the code\nok default_error_condition(5) through the library's category: value\nok default_error_condition(5): generic\nok equivalent(int, error_condition) is true for permission_denied\nok equivalent(error_code, int): the code itself\nok equivalent(error_code, int): another value is false\nok message(2) through the library's category object\nok message(99999)\nok GetLastError() 0 gives value 0\nok and the text of success\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "error_winerror_message",
+      "exe_sha256": "55ec39170e7d1806c9720ecde046751571ada19ed5020561bf569b2571770d18",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgd2luZXJyb3JfbWVzc2FnZSAwIGxlbj0zNyB0ZXh0PVRoZSBvcGVyYXRpb24gY29tcGxldGVkIHN1Y2Nlc3NmdWxseS4KdmFsdWUgd2luZXJyb3JfbWVzc2FnZSAyIGxlbj00MiB0ZXh0PVRoZSBzeXN0ZW0gY2Fubm90IGZpbmQgdGhlIGZpbGUgc3BlY2lmaWVkLgp2YWx1ZSB3aW5lcnJvcl9tZXNzYWdlIDUgbGVuPTE3IHRleHQ9QWNjZXNzIGlzIGRlbmllZC4KdmFsdWUgd2luZXJyb3JfbWVzc2FnZSA4NyBsZW49MjcgdGV4dD1UaGUgcGFyYW1ldGVyIGlzIGluY29ycmVjdC4KdmFsdWUgd2luZXJyb3JfbWVzc2FnZSAxMzE0IGxlbj00NyB0ZXh0PUEgcmVxdWlyZWQgcHJpdmlsZWdlIGlzIG5vdCBoZWxkIGJ5IHRoZSBjbGllbnQuCnZhbHVlIHdpbmVycm9yX21lc3NhZ2UgOTk5OTkgbGVuPTAgdGV4dD0Kb2sgdGhlIG1lc3NhZ2Ugb2YgNSBpcyAxNyBjaGFyYWN0ZXJzCm9rIHRoZSBjaGFyYWN0ZXIgYWZ0ZXIgdGhlIG1lc3NhZ2UgaXMgdGhlIGNhcnJpYWdlIHJldHVybiBvZiB0aGUgc3lzdGVtIHRleHQKb2sgdGhlIG1lc3NhZ2Ugb2YgNQpvayB0aGUgbWVzc2FnZSBvZiAyCm9rIGFuIHVua25vd24gY29kZSBnaXZlcyBsZW5ndGggMAp2YWx1ZSB3aW5lcnJvcl9tZXNzYWdlIGludG8gYSBidWZmZXIgb2YgODogbGVuPTAKc3VtbWFyeSA1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value winerror_message 0 len=37 text=The operation completed successfully.\nvalue winerror_message 2 len=42 text=The system cannot find the file specified.\nvalue winerror_message 5 len=17 text=Access is denied.\nvalue winerror_message 87 len=27 text=The parameter is incorrect.\nvalue winerror_message 1314 len=47 text=A required privilege is not held by the client.\nvalue winerror_message 99999 len=0 text=\nok the message of 5 is 17 characters\nok the character after the message is the carriage return of the system text\nok the message of 5\nok the message of 2\nok an unknown code gives length 0\nvalue winerror_message into a buffer of 8: len=0\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

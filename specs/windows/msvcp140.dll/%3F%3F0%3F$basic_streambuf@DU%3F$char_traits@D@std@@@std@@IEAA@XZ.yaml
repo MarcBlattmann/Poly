@@ -1,0 +1,103 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: |
+  windows/api/msvcp140.dll/??0?$basic_streambuf@DU?$char_traits@D@std@@@std@@IEAA@XZ
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::basic_streambuf<char>: the buffer base class, 104 bytes, with 11 virtual functions (plus the destructor) whose
+  default behaviour the library provides, and non-virtual members that work on the get and put areas and dispatch to the
+  virtual functions. Programs derive their own buffers (stringbuf, filebuf and user classes are compiled into programs)
+  and the library's streams call these through the table.
+interface:
+  layout: |
+    x64: 0 pointer to the virtual table; 8 char* _Gfirst; 16 char* _Pfirst; 24 char** _IGfirst; 32 char** _IPfirst; 40
+    char* _Gnext; 48 char* _Pnext; 56 char** _IGnext; 64 char** _IPnext; 72 int _Gcount; 76 int _Pcount; 80 int* _IGcount;
+    88 int* _IPcount; 96 locale* _Plocale (a heap locale object); size 104. The area pointers are used by name through the
+    I-pointers: the six I-pointers point at the member next to them in the default state (_IGfirst = this+8, _IPfirst =
+    this+16, _IGnext = this+40, _IPnext = this+48, _IGcount = this+72, _IPcount = this+76); _Init(six pointers) redirects
+    them to caller storage (used by the standard streams' file buffers). egptr() = *_IGnext + *_IGcount, epptr() =
+    *_IPnext + *_IPcount.
+  vtable: |
+    slot order (0 is the scalar deleting destructor): 1 _Lock(), 2 _Unlock(), 3 overflow(int c), 4 pbackfail(int c), 5
+    showmanyc() -> long long, 6 underflow(), 7 uflow(), 8 xsgetn(char*, long long), 9 xsputn(const char*, long long), 10
+    seekoff(long long off, int dir, int mode) -> fpos (24 bytes: returned through a hidden pointer), 11 seekpos(fpos, int
+    mode) -> fpos, 12 setbuf(char*, long long) -> streambuf*, 13 sync(), 14 imbue(const locale&). (Each public member
+    below reaches its function through this table, so a derived class's override is called; the tests override every slot
+    and observe which one each public member calls.)
+  types: |
+    int_type is int, EOF is -1; off_type is long long; pos_type is fpos<_Mbstatet>: 24 bytes (long long offset at 0 and
+    the stream position at 8, 8 bytes mbstate at 16).
+  signatures: |
+    streambuf() [protected: allocates a locale object (the global locale) and does _Init()]; streambuf(const streambuf&)
+    [protected]; streambuf(_Uninitialized) [protected]; operator= and swap [protected]; locale pubimbue(const locale&);
+    locale getloc() const; int in_avail(); int pubsync(); int sbumpc(); int sgetc(); long long sgetn(char*, long long);
+    int snextc(); int sputbackc(char); int sungetc(); int sputc(char); long long sputn(const char*, long long); fpos
+    pubseekoff(long long, int dir, int mode = in|out); fpos pubseekpos(fpos, int mode = in|out); streambuf*
+    pubsetbuf(char*, long long); protected: eback, gptr, egptr, pbase, pptr, epptr, gbump(int), pbump(int), setg(a,b,c),
+    setp(a,b), setp(a,b,c), _Gnavail, _Pnavail, _Gninc, _Gndec, _Gnpreinc, _Pninc, _Init().
+rules:
+  construct: |
+    The constructor leaves both areas empty (null pointers, zero counts) and _Plocale = a new locale equal to the global
+    locale (getloc() == std::locale() and == classic in a fresh program). The destructor deletes _Plocale.
+  defaults: |
+    Default virtual functions: overflow(c) -> EOF; pbackfail(c) -> EOF; showmanyc() -> 0; underflow() -> EOF; uflow() ->
+    EOF if underflow() is EOF, else the character at gptr() and gptr advances (so a derived class that overrides only
+    underflow and sets a get area works); xsgetn(p, n) copies from the get area and calls uflow() for each character
+    beyond it, stops at EOF, returns the count; xsputn(p, n) copies into the put area and calls overflow(next char) for
+    each character that does not fit, stops when overflow returns EOF, returns the count; seekoff and seekpos -> position
+    -1; setbuf -> this; sync -> 0; imbue does nothing; _Lock and _Unlock do nothing.
+  public_members: |
+    sgetc(): the character at gptr() if the get area is non-empty (gptr non-null and count > 0), else underflow().
+    sbumpc(): the character at gptr() and advance, else uflow(). snextc(): if more than one character is available advance
+    and return the next, else EOF if sbumpc() is EOF, else sgetc(). sungetc(): back up one if gptr > eback, else
+    pbackfail(). sputbackc(c): back up one if the previous character equals c, else pbackfail(c). sputc(c): store at
+    pptr() and advance if the put area has room, else overflow(c). sgetn(p, n) = xsgetn(p, n); sputn(p, n) = xsputn(p, n).
+    in_avail(): the number of characters left in the get area, or showmanyc() when there are none. pubsync() = sync();
+    pubsetbuf = setbuf; pubseekoff(off, dir, mode = in|out) = seekoff(off, dir, mode); pubseekpos(pos, mode = in|out) =
+    seekpos(pos, mode); pubimbue(l) copies the old locale, calls imbue(l), stores l in *_Plocale and returns the old one.
+  area_arithmetic: |
+    setg(first, next, last): *_IGfirst = first, *_IGnext = next, *_IGcount = last - next. setp(first, last): first = next
+    = first, count = last - first. setp(first, next, last): count = last - next. gbump(n): count -= n, next += n (negative
+    n moves back). pbump the same for the put area. _Gnavail() is the count if next is non-null, else 0; _Pnavail the
+    same. _Gninc: count--, returns the old next and advances; _Gnpreinc: count--, advances and returns the new next;
+    _Gndec: count++, steps back and returns the new next; _Pninc: count--, returns old and advances.
+errors:
+  none: "none of the members throws by itself."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 4  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

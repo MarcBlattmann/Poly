@@ -70,5 +70,16 @@
 {"symbol":"$s7SwiftUI5SceneP01_a5Data_aB0E14modelContaineryQr0aD005ModelF0CF","src":["macos-sdk"]},
 {"symbol":"$s7SwiftUI5SceneP01_a5Data_aB0E14modelContaineryQr0aD005ModelF0CFQOMQ","src":["macos-sdk"]},
 {"symbol":"$s9SwiftData12ModelContextC01_ab1_A2UIE16debugDescriptionSSvg","src":["macos-sdk"]},
-{"symbol":"$s9SwiftData12ModelContextC01_ab1_A2UIE16debugDescriptionSSvpMV","src":["macos-sdk"]}
+{"symbol":"$s9SwiftData12ModelContextC01_ab1_A2UIE16debugDescriptionSSvpMV","src":["macos-sdk"]},
+{"symbol":"swift:_SwiftData_SwiftUI.AppStorage.init(_:store:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.AppStorage.init(wrappedValue:_:store:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.DocumentGroup.init(editing:contentType:editor:prepareDocument:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.DocumentGroup.init(editing:migrationPlan:editor:prepareDocument:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.DocumentGroup.init(viewing:contentType:viewer:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.DocumentGroup.init(viewing:migrationPlan:viewer:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.EnvironmentValues.modelContext","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.ModelContext.debugDescription","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.ModelDocument","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.SceneStorage.init(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_SwiftData_SwiftUI.SceneStorage.init(wrappedValue:_:)","src":["macos-swift-interface"]}
 ]

@@ -6,5 +6,9 @@
 {"symbol":"$s7SwiftUI4ViewP013_Translation_aB0E15translationTask_6actionQr0D00D7SessionC13ConfigurationVSg_yAIYactF","src":["macos-sdk"]},
 {"symbol":"$s7SwiftUI4ViewP013_Translation_aB0E15translationTask_6actionQr0D00D7SessionC13ConfigurationVSg_yAIYactFQOMQ","src":["macos-sdk"]},
 {"symbol":"$s7SwiftUI4ViewP013_Translation_aB0E23translationPresentation11isPresented4text16attachmentAnchor9arrowEdge17replacementActionQrAA7BindingVySbG_SSAA017PopoverAttachmentK0OAA0M0OySScSgtF","src":["macos-sdk"]},
-{"symbol":"$s7SwiftUI4ViewP013_Translation_aB0E23translationPresentation11isPresented4text16attachmentAnchor9arrowEdge17replacementActionQrAA7BindingVySbG_SSAA017PopoverAttachmentK0OAA0M0OySScSgtFQOMQ","src":["macos-sdk"]}
+{"symbol":"$s7SwiftUI4ViewP013_Translation_aB0E23translationPresentation11isPresented4text16attachmentAnchor9arrowEdge17replacementActionQrAA7BindingVySbG_SSAA017PopoverAttachmentK0OAA0M0OySScSgtFQOMQ","src":["macos-sdk"]},
+{"symbol":"swift:_Translation_SwiftUI.View.translationPresentation(isPresented:text:attachmentAnchor:arrowEdge:replacementAction:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_Translation_SwiftUI.View.translationTask(_:action:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_Translation_SwiftUI.View.translationTask(source:target:action:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_Translation_SwiftUI.View.translationTask(source:target:preferredStrategy:action:)","src":["macos-swift-interface"]}
 ]

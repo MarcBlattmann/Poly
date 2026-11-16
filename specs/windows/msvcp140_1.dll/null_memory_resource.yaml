@@ -1,0 +1,73 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140_1.dll/null_memory_resource"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::pmr::null_memory_resource(): returns a pointer to a static memory_resource that never allocates: do_allocate
+  always throws std::bad_alloc, do_deallocate does nothing, do_is_equal is identity. `extern "C"`, undecorated, __cdecl,
+  noexcept. Used by programs as the 'no fallback' upstream of monotonic_buffer_resource and as a default that makes
+  accidental allocation an error.
+interface:
+  signatures: "memory_resource* null_memory_resource(void)"
+  memory_resource: |
+    std::pmr::memory_resource (the base class every resource derives from) is an abstract class with a virtual destructor
+    and three private virtual functions, and no data: an object is one pointer (its virtual-function table), 8 bytes,
+    alignment 8. The table has four slots in this order: slot 0 the destructor (the 'scalar deleting destructor': takes a
+    flags argument, bit 0 asks it to free the object), slot 1 do_allocate(size_t bytes, size_t alignment) returning void*,
+    slot 2 do_deallocate(void* p, size_t bytes, size_t alignment), slot 3 do_is_equal(const memory_resource& other) const
+    returning bool. All use the x64 calling convention with `this` first. The inline public wrappers of the header
+    (allocate, deallocate, is_equal, operator==) call these slots; a program that derives its own resource puts its own
+    functions in the same slots, and the library's code calls them through the table (set_default_resource accepts such an
+    object).
+rules:
+  identity: |
+    The same object every time; different from both new/delete resources; do_is_equal(r) is true only for itself.
+  allocate: |
+    do_allocate(bytes, align) throws std::bad_alloc for every argument (0, 1 and 100 bytes; alignments 1, 16, 64 tested);
+    what() is 'bad allocation'. It returns nothing and has no side effect.
+  deallocate: |
+    do_deallocate(p, bytes, align) does nothing for any pointer, including pointers it never handed out and null.
+  as_default: |
+    set_default_resource(null_memory_resource()) makes a default-constructed polymorphic_allocator throw std::bad_alloc on
+    allocate; a monotonic_buffer_resource with the null resource as upstream throws std::bad_alloc when its own buffer is
+    exhausted.
+errors:
+  bad_alloc: "do_allocate always throws std::bad_alloc."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

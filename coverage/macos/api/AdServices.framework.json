@@ -1,6 +1,7 @@
 [
 {"symbol":"AAAttributionErrorDomain","src":["macos-sdk"]},
 {"symbol":"kAAAttributionXPCMachServiceName","src":["macos-sdk"]},
-{"symbol":"objc:AAAttribution","src":["macos-sdk"]},
+{"symbol":"objc:AAAttribution","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:AAAttribution+attributionTokenWithError:","src":["macos-objc-api"]},
 {"symbol":"objc:AAAttributionResult","src":["macos-sdk"]}
 ]

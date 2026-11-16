@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "error_generic_category",
+      "exe_sha256": "233f9853dec11192e59138cb78bfacfda7f4b5413e3f8413373fd8f7e0842636",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKS5tZXNzYWdlKG4pIGlzIF9TeXNlcnJvcl9tYXAobikKb2sgZ2VuZXJpY19jYXRlZ29yeSgpLm1lc3NhZ2UobikgaXMgX1N5c2Vycm9yX21hcChuKQpvayBnZW5lcmljX2NhdGVnb3J5KCkubWVzc2FnZShuKSBpcyBfU3lzZXJyb3JfbWFwKG4pCm9rIG1lc3NhZ2UoMCkKb2sgbWVzc2FnZSgyKQpvayBtZXNzYWdlKDEzKQpvayBtZXNzYWdlKDIyKQpvayBtZXNzYWdlKDEyKQpvayBtZXNzYWdlKDE3KQpvayBtZXNzYWdlKDI4KQpvayBtZXNzYWdlKDM0KQpvayBtZXNzYWdlKDM2KQpvayBtZXNzYWdlKDk5OTkpCm9rIG5hbWUKb2sgdGhlIGdlbmVyaWMgY2F0ZWdvcnkncyBpZGVudGl0eSB3b3JkIGlzIDMKb2sgYW4gZXJyb3JfY2F0ZWdvcnkgaXMgMTYgYnl0ZXMgKHZwdHIgKyBpZGVudGl0eSkKb2sgZXJyb3JfY29kZSBpcyAxNiBieXRlcyAodmFsdWUsIGNhdGVnb3J5IHBvaW50ZXIpCm9rIGdlbmVyaWNfY2F0ZWdvcnkoKSByZXR1cm5zIHRoZSBzYW1lIG9iamVjdCBldmVyeSB0aW1lCm9rIGVycm9yX2NvZGU6Om1lc3NhZ2UoKQpvayBlcnJvcl9jb2RlKDIsIGdlbmVyaWMpID09IGVycmM6Om5vX3N1Y2hfZmlsZV9vcl9kaXJlY3RvcnkKb2sgLi4uIGFuZCAhPSBlcnJjOjpwZXJtaXNzaW9uX2RlbmllZApvayBtYWtlX2Vycm9yX2NvZGUoZXJyYykgdXNlcyB0aGUgZ2VuZXJpYyBjYXRlZ29yeQpvayBhbmQgdGhlIGdlbmVyaWMgdmFsdWUgb2YgZXJyYzo6aW52YWxpZF9hcmd1bWVudCBpcyAyMgpzdW1tYXJ5IDQwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok generic_category().message(n) is _Syserror_map(n)\nok message(0)\nok message(2)\nok message(13)\nok message(22)\nok message(12)\nok message(17)\nok message(28)\nok message(34)\nok message(36)\nok message(9999)\nok name\nok the generic category's identity word is 3\nok an error_category is 16 bytes (vptr + identity)\nok error_code is 16 bytes (value, category pointer)\nok generic_category() returns the same object every time\nok error_code::message()\nok error_code(2, generic) == errc::no_such_file_or_directory\nok ... and != errc::permission_denied\nok make_error_code(errc) uses the generic category\nok and the generic value of errc::invalid_argument is 22\nsummary 40 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

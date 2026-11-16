@@ -9,5 +9,9 @@
 {"symbol":"$sSo14QLPreviewReplyC11QuickLookUIE17dataOfContentType11contentSize15createDataUsingAB07UniformI11Identifiers6UTTypeV_So6CGSizeV10Foundation0M0VABKctcfc","src":["macos-sdk"]},
 {"symbol":"$sSo14QLPreviewReplyC11QuickLookUIE18forPDFWithPageSize19createDocumentUsingABSo6CGSizeV_So11PDFDocumentCABKctcfC","src":["macos-sdk"]},
 {"symbol":"$sSo14QLPreviewReplyC11QuickLookUIE18forPDFWithPageSize19createDocumentUsingABSo6CGSizeV_So11PDFDocumentCABKctcfc","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftQuickLookUI","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftQuickLookUI","src":["macos-sdk"]},
+{"symbol":"swift:QuickLookUI.QLPreviewReply.init(contextSize:isBitmap:drawUsing:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuickLookUI.QLPreviewReply.init(dataOfContentType:contentSize:createDataUsing:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuickLookUI.QLPreviewReply.init(forPDFWithPageSize:createDocumentUsing:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuickLookUI.QLPreviewReply.stringEncoding","src":["macos-swift-interface"]}
 ]

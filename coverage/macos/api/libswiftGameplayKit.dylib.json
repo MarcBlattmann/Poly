@@ -8,5 +8,10 @@
 {"symbol":"$sSo6GKPathC11GameplayKitE6points6radius8cyclicalABSays5SIMD3VySfGG_SfSbtcfc","src":["macos-sdk"]},
 {"symbol":"$sSo8GKEntityC11GameplayKitE15removeComponent6ofTypeyxm_tSo11GKComponentCRbzlF","src":["macos-sdk"]},
 {"symbol":"$sSo8GKEntityC11GameplayKitE9component6ofTypexSgxm_tSo11GKComponentCRbzlF","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftGameplayKit","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftGameplayKit","src":["macos-sdk"]},
+{"symbol":"swift:GameplayKit.GKEntity.component(ofType:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GameplayKit.GKEntity.removeComponent(ofType:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GameplayKit.GKPath.init(points:radius:cyclical:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GameplayKit.GKPolygonObstacle.init(points:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GameplayKit.GKStateMachine.state(forClass:)","src":["macos-swift-interface"]}
 ]
