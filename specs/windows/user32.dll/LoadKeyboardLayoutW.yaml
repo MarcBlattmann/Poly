@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/LoadKeyboardLayoutW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom (work area 0,0,1920,1032); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); the user's keyboard layouts: German (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID (HKL 0x04072000), and under English (United Kingdom) Swiss German (HKL 0x08070809) and German (HKL 0x04070809); Caps Lock and Num Lock off; other layouts are loaded for a test with LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unloaded again, the user's list is back as it was"
+  observed_by: spec-win-input
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of the functions
+  and messages named here, "Keyboard Input Overview", "About Keyboard Input", "About Mouse Input", "Using Mouse
+  Input", "Virtual-Key Codes", "Window Features", "Window Styles", "Keyboard identifiers and input method
+  editors", "NONCLIENTMETRICSW"; winuser.h, windef.h and winerror.h for constants and layouts. Wine's tests were
+  not read.
+summary: >
+  Loads a keyboard layout by KLID and returns its HKL: the HKL's form, what the list of layouts does, unknown
+  names, KLF_ACTIVATE and the installed layouts' substitutes.
+interface:
+  signature: "HKL LoadKeyboardLayoutW(LPCWSTR pwszKLID, UINT Flags)"
+rules:
+  what: "loads the layout named by an 8-hex-digit KLID string into the process and returns its HKL; the tests lkl_basic and lkl_values load layouts with KLF_NOTELLSHELL (0x80), look at GetKeyboardLayoutList and GetKeyboardLayout before and after and unload what they loaded"
+  hkl_value: "the HKL is (device identifier << 16) | language identifier: KLID 00000409 gives 0x04090409, 00000407 0x04070407, 0000040C 0x040C040C, 00000807 0x08070807, 00000809 0x08090809, 00000410 0x04100410, 0000040A 0x040A040A, 00000C0C 0x0C0C0C0C, 0000100C 0x100C100C, 00000813 0x08130813, 00000401 0x04010401, 00000419 0x04190419, 00000411 0x04110411, 00000412 0x04120412, 00000804 0x08040804; the layouts with a layout id in the high word of the KLID (00010409, 00020409, 0001040C) get HKLs whose high word is 0xF000 | an index (printed sign-extended 0xFFFFFFFFF0020409, 0xFFFFFFFFF0010409, 0xFFFFFFFFF0CE040C by the 64-bit test: the HKL is a handle, its low 32 bits are the number)"
+  list_effect: "a newly loaded layout is appended to the list GetKeyboardLayoutList returns (the list was [0x08070809, 0x04072000, 0x04070809] and the thread's layout 0x04072000 before; after loading US the list has 4 entries ending with 0x04090409); loading a layout that is already loaded returns the same HKL and does not add an entry; the thread's layout does not change unless KLF_ACTIVATE (1) is given: then WM_INPUTLANGCHANGE (charset 0, lParam the new HKL) goes to the focus window and the thread's layout is the loaded one; LoadKeyboardLayoutW(0000040C, KLF_ACTIVATE) = 0x040c040c / [A] WM_INPUTLANGCHANGE charset=0 hkl=0x040c040c / [A] WM_KEYUP vk=0x11 / after KLF_ACTIVATE: GetKeyboardLayout(0)=0x040c040c name(ret 1)=0000040C"
+  odd_names: "KLIDs that are not a known layout give the US layout: 00000fff, 409 (too short), zzzzzzzz, FFFFFFFF all return 0x04090409 (and add it to the list) with no last error; lower-case hex is accepted (0000040c gives 0x040C040C); LoadKeyboardLayoutW(00000fff) = 0x04090409 lasterror 0 / LoadKeyboardLayoutW(409) = 0x04090409 lasterror 0 / LoadKeyboardLayoutW(zzzzzzzz) = 0x04090409 lasterror 0 / LoadKeyboardLayoutW(FFFFFFFF) = 0x04090409 lasterror 0 / LoadKeyboardLayoutW(0000040c) = 0x040c040c lasterror 0"
+  substitutes: "the user's installed layouts are loaded with KLF_SUBSTITUTE_OK (2) from the KLIDs of the registry's Preload values (this user has 00002000, 00000809 and d0010809 whose Substitutes are 00000407, 00000407 and 00000807): d0010809 with KLF_SUBSTITUTE_OK returns 0x08070809, 00000809 returns 0x04070809, 00002000 returns 0x04072000, each the HKL already in the list (no new entry); without the flag d0010809 gives 0x04090409 and 00000809 gives 0x08090809 (a new layout): d0010809 flags 0x82 -> 0x08070809 / 00000809 flags 0x82 -> 0x04070809 / 00002000 flags 0x82 -> 0x04072000 / d0010809 flags 0x80 -> 0x04090409 / 00000809 flags 0x80 -> 0x08090809"
+  list_size: "GetKeyboardLayoutList(0, NULL) returns the number loaded (21 with the 18 test layouts loaded and 3 installed) while a 16-entry buffer receives 16"
+errors:
+  unknown_klid: "an unknown or malformed KLID string does not fail: it loads the US layout (see odd_names); NULL handles were not seen"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture, key state and the keyboard layout are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each carrying its own declarations (Learn
+  prototypes, header constants) and a message log; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md) because input, focus and sizing need the visible desktop. Window procedures log
+  documented messages only and the traces leave out painting, timers, WM_GETICON, IME messages and registered
+  messages; handles are printed as tag letters, never as values; numbers close to the monitor's work area are
+  printed relative to it (L-8, W+16) so the taskbar's place does not matter. Test windows are placed in the
+  top-left 1000x500 pixels (except where a test says otherwise), closed within seconds; the cursor is parked at
+  (1500, 600) and put back; keyboard input is sent only while a window of the test is in the foreground and
+  clicks only onto a window of the test. Keyboard layout tests load the layouts they use with
+  LoadKeyboardLayoutW(KLF_NOTELLSHELL) and unload them again; the user's own layouts are never unloaded or
+  reordered.
+not_covered: >
+  KLF_REORDER, KLF_REPLACELANG, KLF_NOTELLSHELL's effect on the shell, KLF_RESET, KLF_SETFORPROCESS in this
+  call, IME layouts, a NULL string, strings longer than 8 digits.
