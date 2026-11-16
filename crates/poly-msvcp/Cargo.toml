@@ -1,0 +1,11 @@
+[package]
+name = "poly-msvcp"
+description = "msvcp140.dll's logic that does not touch the process (ADR 0199): the C threading error codes, time arithmetic, the mutex state machine, the exception classes' RTTI and throw records, the fail-only export list"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

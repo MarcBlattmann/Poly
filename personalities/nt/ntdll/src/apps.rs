@@ -69,12 +69,8 @@ fail_exports!(
         RtlQueryInformationActiveActivationContext,
         RtlQueryProcessDebugInformation,
         RtlQueryRegistryValues,
-        RtlRunOnceExecuteOnce,
-        RtlSetCurrentDirectory_U,
-        RtlSleepConditionVariableSRW,
         RtlSubscribeWnfStateChangeNotification,
         RtlUnsubscribeWnfStateChangeNotification,
-        RtlWaitOnAddress,
     ]
 );
 
@@ -83,8 +79,6 @@ fail_exports!(
     [
         AlpcGetMessageAttribute,
         DbgBreakPoint,
-        RtlAcquireSRWLockExclusive,
-        RtlAcquireSRWLockShared,
         RtlClearBits,
         RtlCreateUnicodeStringFromAsciiz,
         RtlDeleteElementGenericTable,
@@ -99,15 +93,10 @@ fail_exports!(
         RtlLookupElementGenericTable,
         RtlQueryPerformanceCounter,
         RtlReleaseActivationContext,
-        RtlReleaseSRWLockExclusive,
-        RtlReleaseSRWLockShared,
-        RtlRunOnceInitialize,
         RtlSetBits,
         RtlSetCurrentTransaction,
         RtlUnicodeStringToAnsiSize,
         RtlUnwind,
-        RtlWakeAddressSingle,
-        RtlWakeAllConditionVariable,
         _wcsicmp,
         iswspace,
     ]

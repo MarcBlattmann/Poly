@@ -71,6 +71,7 @@ members = [
     "crates/poly-security",
     "crates/poly-seh",
     "crates/poly-cxxeh",
+    "crates/poly-msvcp",
     "crates/poly-smp",
     "crates/poly-squashfs",
     "crates/poly-stubs",
@@ -189,6 +190,7 @@ poly-terminal = { path = "userland/poly-terminal" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-cxxeh = { path = "crates/poly-cxxeh" }
+poly-msvcp = { path = "crates/poly-msvcp" }
 poly-smp = { path = "crates/poly-smp" }
 poly-squashfs = { path = "crates/poly-squashfs" }
 poly-term = { path = "crates/poly-term" }

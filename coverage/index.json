@@ -17,6 +17,10 @@
       "description": "Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82)",
       "revision": "Windows SDK 10.0.26100.0"
     },
+    "ms-learn-d3d11": {
+      "description": "Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method)",
+      "revision": "Windows SDK 10.0.26100.0"
+    },
     "ms-learn-dwrite": {
       "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
       "revision": "Windows SDK 10.0.26100.0"

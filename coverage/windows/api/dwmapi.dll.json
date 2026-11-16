@@ -28,7 +28,7 @@
 {"symbol":"DwmDetachMilContent","src":["wine-spec"]},
 {"symbol":"DwmEnableBlurBehindWindow","status":"stub","src":["wine-spec"]},
 {"symbol":"DwmEnableComposition","src":["wine-spec"]},
-{"symbol":"DwmEnableMMCSS","src":["wine-spec"]},
+{"symbol":"DwmEnableMMCSS","status":"claimed","claimed_by":"spec-chrome-win-s5","src":["wine-spec"]},
 {"symbol":"DwmExtendFrameIntoClientArea","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"DwmFlush","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:dwmapi/tests/dwmapi.c:test_DwmFlush"]},
 {"symbol":"DwmGetColorizationColor","status":"stub","src":["wine-spec"]},

@@ -1,8 +1,9 @@
 //! A thread's apartment (Learn: "CoInitializeEx", "OleInitialize",
 //! "RoInitialize", "CoGetApartmentType").
 //!
-//! One state per thread, packed in a `usize` so the DLL can keep it in a
-//! TLS slot: the model and the number of successful initialisations.
+//! One state per thread, kept in the block `TEB.ReservedForOle` points to
+//! (sheet `TEB.ReservedForOle`): [`ComState`] is what that block holds, and
+//! everything the DLL answers about the thread's apartment is derived from it.
 
 use crate::hresult::{Hresult, RPC_E_CHANGED_MODE, S_FALSE, S_OK};
 
@@ -30,6 +31,9 @@ pub const APTTYPE_MTA: i32 = 1;
 /// `APTTYPE_MAINSTA`: the first single-threaded apartment of the process.
 pub const APTTYPE_MAINSTA: i32 = 3;
 pub const APTTYPEQUALIFIER_NONE: i32 = 0;
+/// `APTTYPEQUALIFIER_IMPLICIT_MTA` (`objidl.h`): the thread never initialised COM but lives in the
+/// process's multithreaded apartment.
+pub const APTTYPEQUALIFIER_IMPLICIT_MTA: i32 = 1;
 
 /// Which thread owns the process's main STA (Learn, "APTTYPE": `APTTYPE_MAINSTA`
 /// is the first STA a process makes; it is gone when that thread's last
@@ -62,6 +66,39 @@ impl MainSta {
 }
 
 impl Default for MainSta {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// How many threads of the process hold the multithreaded apartment (sheet `TEB.ReservedForOle`,
+/// "implicit MTA"): while there is one, a thread that never initialised COM is in it too.
+#[derive(Debug)]
+pub struct MtaThreads(core::sync::atomic::AtomicU32);
+
+impl MtaThreads {
+    pub const fn new() -> MtaThreads {
+        MtaThreads(core::sync::atomic::AtomicU32::new(0))
+    }
+
+    /// A thread entered the MTA by initialising COM.
+    pub fn enter(&self) {
+        self.0.fetch_add(1, core::sync::atomic::Ordering::AcqRel);
+    }
+
+    /// A thread's MTA initialisations were all undone.
+    pub fn leave(&self) {
+        use core::sync::atomic::Ordering::{AcqRel, Acquire};
+        let _ = self.0.fetch_update(AcqRel, Acquire, |n| n.checked_sub(1));
+    }
+
+    /// Whether the process has a multithreaded apartment.
+    pub fn any(&self) -> bool {
+        self.0.load(core::sync::atomic::Ordering::Acquire) != 0
+    }
+}
+
+impl Default for MtaThreads {
     fn default() -> Self {
         Self::new()
     }
@@ -110,87 +147,200 @@ impl Model {
     }
 }
 
-/// A thread's apartment state.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Apartment {
-    model: Option<Model>,
-    count: u32,
+/// The per-thread block `TEB.ReservedForOle` points to (`winternl.h`; sheet `TEB.ReservedForOle`).
+/// Only three 32-bit fields are observable: the flags value, the count of initialisations not yet
+/// undone and the count of `OleInitialize` calls not yet undone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlockLayout {
+    /// Where the pointer is in the TEB.
+    pub teb_offset: usize,
+    /// Offsets of the three fields in the block.
+    pub flags: usize,
+    pub count: usize,
+    pub ole: usize,
 }
 
-impl Apartment {
-    pub const fn new() -> Apartment {
-        Apartment { model: None, count: 0 }
-    }
+/// The 64-bit layout: `TEB.ReservedForOle` at 0x1758; flags +0x14, count +0x28, OLE count +0x2c.
+pub const BLOCK_X64: BlockLayout = BlockLayout { teb_offset: 0x1758, flags: 0x14, count: 0x28, ole: 0x2C };
+/// The 32-bit layout (WOW64 and native 32-bit): at 0xF80; flags +0x0C, count +0x18, OLE count +0x1C.
+pub const BLOCK_X86: BlockLayout = BlockLayout { teb_offset: 0xF80, flags: 0x0C, count: 0x18, ole: 0x1C };
+/// Bytes of a block (zeroed when made; the dwords other than the three above stay 0).
+pub const BLOCK_SIZE: usize = 0x40;
 
-    /// Unpack the thread's TLS word.
-    pub fn from_word(w: usize) -> Apartment {
-        let count = (w >> 2) as u32;
-        let model = match w & 3 {
-            1 => Some(Model::Sta),
-            2 => Some(Model::Mta),
-            _ => None,
-        };
-        Apartment { model, count: if model.is_some() { count } else { 0 } }
-    }
+/// Bits of the flags value (sheet: the numbers are the contract, the reading of the bits a help).
+pub const FLAG_USED: u32 = 0x1;
+pub const FLAG_NO_OLE1DDE: u32 = 0x40;
+pub const FLAG_STA: u32 = 0x80;
+pub const FLAG_MTA: u32 = 0x100;
+pub const FLAG_WINRT: u32 = 0x20_0000;
 
-    /// The word for the TLS slot (0: not initialised).
-    pub fn to_word(self) -> usize {
-        match self.model {
-            None => 0,
-            Some(Model::Sta) => ((self.count as usize) << 2) | 1,
-            Some(Model::Mta) => ((self.count as usize) << 2) | 2,
+/// What asks to initialise the thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InitKind {
+    /// `CoInitializeEx` with its `dwCoInit` (`CoInitialize` is 2).
+    Com(u32),
+    /// `OleInitialize`: a single-threaded apartment (and one OLE count).
+    Ole,
+    /// `RoInitialize` with its `RO_INIT_TYPE`.
+    Ro(i32),
+}
+
+impl InitKind {
+    /// The model it asks for.
+    pub fn model(self) -> Model {
+        match self {
+            InitKind::Com(f) => Model::from_coinit(f),
+            InitKind::Ole => Model::Sta,
+            InitKind::Ro(t) => Model::from_ro(t),
         }
     }
 
+    /// The flags value of a thread this call initialises first (sheet table).
+    fn first_value(self) -> u32 {
+        match self {
+            InitKind::Com(f) => match Model::from_coinit(f) {
+                Model::Sta => FLAG_USED | FLAG_STA | if f & 4 != 0 { FLAG_NO_OLE1DDE } else { 0 },
+                Model::Mta => FLAG_USED | FLAG_MTA | FLAG_NO_OLE1DDE,
+            },
+            InitKind::Ole => FLAG_USED | FLAG_STA,
+            // The Windows Runtime's single-threaded kind behaves like the DISABLE_OLE1DDE one.
+            InitKind::Ro(t) => {
+                FLAG_WINRT
+                    | FLAG_USED
+                    | FLAG_NO_OLE1DDE
+                    | match Model::from_ro(t) {
+                        Model::Sta => FLAG_STA,
+                        Model::Mta => FLAG_MTA,
+                    }
+            }
+        }
+    }
+}
+
+/// What the block of a thread holds: the one truth about its apartment (`CoGetApartmentType` is
+/// derived from it).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ComState {
+    /// The 32-bit value at the flags offset.
+    pub flags: u32,
+    /// Initialisations not yet undone.
+    pub count: u32,
+    /// `OleInitialize` calls not yet undone.
+    pub ole: u32,
+}
+
+impl ComState {
+    /// A block just made: all zero.
+    pub const fn new() -> ComState {
+        ComState { flags: 0, count: 0, ole: 0 }
+    }
+
+    /// The model of an initialised thread; `None` when it has no apartment of its own.
     pub fn model(self) -> Option<Model> {
-        self.model
+        if self.count == 0 {
+            None
+        } else if self.flags & FLAG_STA != 0 {
+            Some(Model::Sta)
+        } else if self.flags & FLAG_MTA != 0 {
+            Some(Model::Mta)
+        } else {
+            None
+        }
     }
 
-    pub fn count(self) -> u32 {
-        self.count
+    /// The thread used COM in a way that fails (`CoCreateInstance` on an uninitialised thread):
+    /// the block exists and holds 0x1.
+    pub fn touch(&mut self) {
+        self.flags |= FLAG_USED;
     }
 
-    /// `CoInitializeEx` / `RoInitialize`: `S_OK` for the first call,
-    /// `S_FALSE` when the thread was already initialised in this model,
-    /// `RPC_E_CHANGED_MODE` (state unchanged) for another model.
-    pub fn initialize(&mut self, want: Model) -> Hresult {
-        match self.model {
+    /// `CoInitializeEx` / `OleInitialize` / `RoInitialize`: `S_OK` for the first call, `S_FALSE`
+    /// when the thread already is in this model (the count goes up), `RPC_E_CHANGED_MODE` (nothing
+    /// changes) for another model.
+    pub fn initialize(&mut self, kind: InitKind) -> Hresult {
+        let want = kind.model();
+        let hr = match self.model() {
             None => {
-                self.model = Some(want);
+                self.flags = kind.first_value();
                 self.count = 1;
+                self.ole = 0;
                 S_OK
             }
             Some(m) if m == want => {
                 self.count = self.count.saturating_add(1);
                 S_FALSE
             }
-            Some(_) => RPC_E_CHANGED_MODE,
+            Some(_) => return RPC_E_CHANGED_MODE,
+        };
+        if kind == InitKind::Ole {
+            self.ole = self.ole.saturating_add(1);
+        }
+        hr
+    }
+
+    /// `CoUninitialize` / `RoUninitialize` (and `OleUninitialize`, with `ole`): balances one call.
+    /// The last one leaves the block as it is with the flags value 0x1; on a thread that is not
+    /// initialised nothing changes.
+    pub fn uninitialize(&mut self, ole: bool) {
+        if self.count == 0 {
+            return;
+        }
+        self.count -= 1;
+        if ole && self.ole > 0 {
+            self.ole -= 1;
+        }
+        if self.ole > self.count {
+            self.ole = self.count;
+        }
+        if self.count == 0 {
+            self.flags = FLAG_USED;
+            self.ole = 0;
         }
     }
 
-    /// `CoUninitialize` / `RoUninitialize`: balances one successful call; a
-    /// call on a thread that is not initialised does nothing.
-    pub fn uninitialize(&mut self) {
-        if self.count > 1 {
-            self.count -= 1;
-        } else {
-            *self = Apartment::new();
+    /// `CoGetApartmentType`: the type and qualifier, or `None` (`CO_E_NOTINITIALIZED`). An STA
+    /// reports `APTTYPE_MAINSTA` (3) when `main`, the first STA of the process; a thread with no
+    /// apartment of its own is in the implicit MTA (qualifier 1) while `mta_exists`.
+    pub fn apartment_type_in(self, main: bool, mta_exists: bool) -> Option<(i32, i32)> {
+        match self.model() {
+            Some(Model::Sta) if main => Some((APTTYPE_MAINSTA, APTTYPEQUALIFIER_NONE)),
+            Some(m) => Some((m.apt_type(), APTTYPEQUALIFIER_NONE)),
+            None if mta_exists => Some((APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA)),
+            None => None,
         }
     }
 
-    /// `CoGetApartmentType`: the type and qualifier, or `None`
-    /// (`CO_E_NOTINITIALIZED`) when the thread has no apartment. An STA
-    /// reports `APTTYPE_MAINSTA` (3) when `main`, the first STA of the process.
-    pub fn apartment_type_in(self, main: bool) -> Option<(i32, i32)> {
-        self.model.map(|m| match m {
-            Model::Sta if main => (APTTYPE_MAINSTA, APTTYPEQUALIFIER_NONE),
-            m => (m.apt_type(), APTTYPEQUALIFIER_NONE),
-        })
+    /// Whether COM calls work on the thread: its own apartment or the implicit MTA.
+    pub fn is_usable(self, mta_exists: bool) -> bool {
+        self.model().is_some() || mta_exists
     }
 
-    /// [`Apartment::apartment_type_in`] for the main STA.
-    pub fn apartment_type(self) -> Option<(i32, i32)> {
-        self.apartment_type_in(true)
+    /// Read a block at `block`.
+    ///
+    /// # Safety
+    /// `block` points to a readable block of [`BLOCK_SIZE`] bytes laid out as `layout`.
+    pub unsafe fn read(block: *const u8, layout: BlockLayout) -> ComState {
+        // SAFETY: the caller's block.
+        unsafe {
+            ComState {
+                flags: block.add(layout.flags).cast::<u32>().read_unaligned(),
+                count: block.add(layout.count).cast::<u32>().read_unaligned(),
+                ole: block.add(layout.ole).cast::<u32>().read_unaligned(),
+            }
+        }
+    }
+
+    /// Write the three fields into `block`.
+    ///
+    /// # Safety
+    /// `block` points to a writable block of [`BLOCK_SIZE`] bytes laid out as `layout`.
+    pub unsafe fn write(self, block: *mut u8, layout: BlockLayout) {
+        // SAFETY: the caller's block.
+        unsafe {
+            block.add(layout.flags).cast::<u32>().write_unaligned(self.flags);
+            block.add(layout.count).cast::<u32>().write_unaligned(self.count);
+            block.add(layout.ole).cast::<u32>().write_unaligned(self.ole);
+        }
     }
 }
 
@@ -198,38 +348,148 @@ impl Apartment {
 mod tests {
     use super::*;
 
+    fn init(s: &mut ComState, k: InitKind) -> Hresult {
+        s.initialize(k)
+    }
+
+    /// The states of the sheet `TEB.ReservedForOle`: the flags value after a first call.
     #[test]
-    fn first_call_ok_same_model_false_other_model_changed() {
-        let mut a = Apartment::new();
-        assert_eq!(a.initialize(Model::from_coinit(COINIT_APARTMENTTHREADED)), S_OK);
-        assert_eq!(a.initialize(Model::Sta), S_FALSE);
-        assert_eq!(a.initialize(Model::Mta), RPC_E_CHANGED_MODE);
-        assert_eq!(a.count(), 2);
-        a.uninitialize();
-        assert_eq!(a.model(), Some(Model::Sta));
-        a.uninitialize();
-        assert_eq!(a.model(), None);
-        // The model can change once the thread is fully uninitialised.
-        assert_eq!(a.initialize(Model::Mta), S_OK);
+    fn first_call_values() {
+        for (kind, value) in [
+            (InitKind::Com(2), 0x81),
+            (InitKind::Com(6), 0xC1),
+            (InitKind::Com(0xA), 0x81),
+            (InitKind::Com(0xE), 0xC1),
+            (InitKind::Com(0), 0x141),
+            (InitKind::Com(4), 0x141),
+            (InitKind::Com(8), 0x141),
+            (InitKind::Com(0xC), 0x141),
+            (InitKind::Ole, 0x81),
+            (InitKind::Ro(RO_INIT_SINGLETHREADED), 0x2000C1),
+            (InitKind::Ro(RO_INIT_MULTITHREADED), 0x200141),
+        ] {
+            let mut s = ComState::new();
+            assert_eq!(init(&mut s, kind), S_OK, "{kind:?}");
+            assert_eq!((s.flags, s.count), (value, 1), "{kind:?}");
+        }
     }
 
     #[test]
-    fn uninitialize_without_initialize_is_harmless() {
-        let mut a = Apartment::new();
-        a.uninitialize();
-        assert_eq!(a, Apartment::new());
+    fn nested_calls_and_other_models() {
+        let mut s = ComState::new();
+        assert_eq!(init(&mut s, InitKind::Com(2)), S_OK);
+        assert_eq!(init(&mut s, InitKind::Com(2)), S_FALSE);
+        assert_eq!((s.flags, s.count), (0x81, 2));
+        assert_eq!(init(&mut s, InitKind::Com(0)), RPC_E_CHANGED_MODE);
+        assert_eq!(init(&mut s, InitKind::Ro(RO_INIT_MULTITHREADED)), RPC_E_CHANGED_MODE);
+        assert_eq!((s.flags, s.count), (0x81, 2));
+        // RoInitialize(STA) after CoInitializeEx(2): S_FALSE, the value stays, no WinRT bit.
+        assert_eq!(init(&mut s, InitKind::Ro(RO_INIT_SINGLETHREADED)), S_FALSE);
+        assert_eq!((s.flags, s.count), (0x81, 3));
     }
 
     #[test]
-    fn word_round_trip() {
-        let mut a = Apartment::new();
-        assert_eq!(a.to_word(), 0);
-        a.initialize(Model::Mta);
-        a.initialize(Model::Mta);
-        let b = Apartment::from_word(a.to_word());
-        assert_eq!(b, a);
-        assert_eq!(b.apartment_type(), Some((APTTYPE_MTA, APTTYPEQUALIFIER_NONE)));
-        assert_eq!(Apartment::from_word(0).apartment_type(), None);
+    fn the_last_uninitialise_leaves_one_and_the_block_is_reused() {
+        let mut s = ComState::new();
+        init(&mut s, InitKind::Com(6));
+        init(&mut s, InitKind::Com(6));
+        s.uninitialize(false);
+        assert_eq!((s.flags, s.count), (0xC1, 1));
+        assert!(s.model().is_some());
+        s.uninitialize(false);
+        assert_eq!((s.flags, s.count, s.ole), (0x1, 0, 0));
+        assert_eq!(s.model(), None);
+        s.uninitialize(false); // an extra one changes nothing
+        assert_eq!((s.flags, s.count), (0x1, 0));
+        // Either model again.
+        assert_eq!(init(&mut s, InitKind::Com(0)), S_OK);
+        assert_eq!((s.flags, s.count), (0x141, 1));
+        s.uninitialize(false);
+        assert_eq!(init(&mut s, InitKind::Com(2)), S_OK);
+        assert_eq!((s.flags, s.count), (0x81, 1));
+    }
+
+    #[test]
+    fn ole_counts() {
+        let mut s = ComState::new();
+        assert_eq!(init(&mut s, InitKind::Ole), S_OK);
+        assert_eq!((s.flags, s.count, s.ole), (0x81, 1, 1));
+        assert_eq!(init(&mut s, InitKind::Ole), S_FALSE);
+        assert_eq!((s.count, s.ole), (2, 2));
+        s.uninitialize(true);
+        assert_eq!((s.flags, s.count, s.ole), (0x81, 1, 1));
+        s.uninitialize(true);
+        assert_eq!((s.flags, s.count, s.ole), (0x1, 0, 0));
+        // OleInitialize on a thread made by CoInitializeEx(2).
+        init(&mut s, InitKind::Com(2));
+        assert_eq!(init(&mut s, InitKind::Ole), S_FALSE);
+        assert_eq!((s.flags, s.count, s.ole), (0x81, 2, 1));
+        s.uninitialize(true);
+        assert_eq!((s.count, s.ole), (1, 0));
+        s.uninitialize(false);
+        assert_eq!(s.flags, 0x1);
+        // On an MTA thread OleInitialize changes nothing.
+        let mut m = ComState::new();
+        init(&mut m, InitKind::Com(0));
+        assert_eq!(init(&mut m, InitKind::Ole), RPC_E_CHANGED_MODE);
+        assert_eq!((m.flags, m.count, m.ole), (0x141, 1, 0));
+    }
+
+    #[test]
+    fn a_failing_creation_gives_the_block_value_one() {
+        let mut s = ComState::new();
+        s.touch();
+        assert_eq!((s.flags, s.count, s.ole), (0x1, 0, 0));
+        assert_eq!(s.model(), None);
+        assert_eq!(s.apartment_type_in(true, false), None);
+        init(&mut s, InitKind::Com(2));
+        assert_eq!(s.flags, 0x81);
+    }
+
+    #[test]
+    fn apartment_type_is_derived_from_the_block() {
+        let mut s = ComState::new();
+        assert_eq!(s.apartment_type_in(true, false), None);
+        init(&mut s, InitKind::Com(2));
+        assert_eq!(s.apartment_type_in(true, false), Some((APTTYPE_MAINSTA, 0)));
+        assert_eq!(s.apartment_type_in(false, false), Some((APTTYPE_STA, 0)));
+        let mut m = ComState::new();
+        init(&mut m, InitKind::Com(0));
+        assert_eq!(m.apartment_type_in(true, true), Some((APTTYPE_MTA, 0)));
+        // A thread with no apartment while the process has an MTA: the implicit one.
+        let n = ComState::new();
+        assert_eq!(n.apartment_type_in(false, true), Some((APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA)));
+        assert!(n.is_usable(true));
+        assert!(!n.is_usable(false));
+    }
+
+    #[test]
+    fn block_round_trips_in_both_layouts() {
+        for layout in [BLOCK_X64, BLOCK_X86] {
+            let mut mem = [0u8; BLOCK_SIZE];
+            let s = ComState { flags: 0x2000C1, count: 3, ole: 2 };
+            // SAFETY: a block-sized buffer.
+            let back = unsafe {
+                s.write(mem.as_mut_ptr(), layout);
+                ComState::read(mem.as_ptr(), layout)
+            };
+            assert_eq!(back, s);
+        }
+        assert_eq!(BLOCK_X64.teb_offset, 0x1758);
+        assert_eq!(BLOCK_X86.teb_offset, 0xF80);
+    }
+
+    #[test]
+    fn the_mta_thread_count() {
+        let m = MtaThreads::new();
+        assert!(!m.any());
+        m.enter();
+        m.enter();
+        m.leave();
+        assert!(m.any());
+        m.leave();
+        m.leave(); // never below zero
+        assert!(!m.any());
     }
 
     #[test]
@@ -239,17 +499,6 @@ mod tests {
         assert_eq!(activation_failure(false, true), CO_E_NOTINITIALIZED);
         assert_eq!(activation_failure(true, false), REGDB_E_CLASSNOTREG);
         assert_eq!(activation_failure(true, true), CLASS_E_NOAGGREGATION);
-    }
-
-    #[test]
-    fn an_sta_reports_main_or_plain() {
-        let mut s = Apartment::new();
-        s.initialize(Model::Sta);
-        assert_eq!(s.apartment_type_in(true), Some((APTTYPE_MAINSTA, 0)));
-        assert_eq!(s.apartment_type_in(false), Some((APTTYPE_STA, 0)));
-        let mut m = Apartment::new();
-        m.initialize(Model::Mta);
-        assert_eq!(m.apartment_type_in(true), Some((APTTYPE_MTA, 0)));
     }
 
     #[test]

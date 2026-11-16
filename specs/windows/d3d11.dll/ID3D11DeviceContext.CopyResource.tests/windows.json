@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "copy_bounds",
+      "exe_sha256": "8ee75373b7de1cf5e0c99798aa017b236d018b732345dc1e682f63aa3c144025",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2hvbGUgY29weSwgZGVzdGluYXRpb24gKDAsMCk6IHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKYm94IHRhbGxlciB0aGFuIHRoZSBzb3VyY2U6IHJlbW92ZWQgcmVhc29uIDB4ODg3YTAwMDUgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4ODg3YTAwMDUKYm94IGRlcHRoIDIgb24gYSAyRCB0ZXh0dXJlOiByZW1vdmVkIHJlYXNvbiAweDg4N2EwMDA1IDsgYSBuZXcgdGV4dHVyZSBhZnRlcndhcmRzOiAweDg4N2EwMDA1ClVwZGF0ZVN1YnJlc291cmNlIHdpdGggYSBib3ggd2lkZXIgdGhhbiB0aGUgcmVzb3VyY2U6IHJlbW92ZWQgcmVhc29uIDB4ODg3YTAwMDUgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4ODg3YTAwMDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "whole copy, destination (0,0): removed reason 0x00000000 ; a new texture afterwards: 0x00000000\nbox taller than the source: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nbox depth 2 on a 2D texture: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nUpdateSubresource with a box wider than the resource: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 109
+    },
+    {
+      "name": "copy_bounds_b",
+      "exe_sha256": "ea069a60a2278b96587312766215192521e6c7e4927ac5bde82374f641aa88e9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Ym94IGluc2lkZSwgZGVzdGluYXRpb24gKDgsNCk6IHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKYm94IHdpdGggcmlnaHQgPCBsZWZ0OiByZW1vdmVkIHJlYXNvbiAweDg4N2EwMDA1IDsgYSBuZXcgdGV4dHVyZSBhZnRlcndhcmRzOiAweDg4N2EwMDA1CmRlc3RpbmF0aW9uIHBhcnRseSBvdXRzaWRlOiByZW1vdmVkIHJlYXNvbiAweDg4N2EwMDA1IDsgYSBuZXcgdGV4dHVyZSBhZnRlcndhcmRzOiAweDg4N2EwMDA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "box inside, destination (8,4): removed reason 0x00000000 ; a new texture afterwards: 0x00000000\nbox with right < left: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\ndestination partly outside: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 108
+    },
+    {
+      "name": "copy_bounds_c",
+      "exe_sha256": "e5a9e829fbc4f9ac61d1ba125b2b9a6e20ee28140effa6c19d0dfc01c085cafa",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Ym94IHdpZGVyIHRoYW4gdGhlIHNvdXJjZTogcmVtb3ZlZCByZWFzb24gMHg4ODdhMDAwNSA7IGEgbmV3IHRleHR1cmUgYWZ0ZXJ3YXJkczogMHg4ODdhMDAwNQplbXB0eSBib3g6IHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAKZGVzdGluYXRpb24gZmFyIG91dHNpZGU6IHJlbW92ZWQgcmVhc29uIDB4ODg3YTAwMDUgOyBhIG5ldyB0ZXh0dXJlIGFmdGVyd2FyZHM6IDB4ODg3YTAwMDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "box wider than the source: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nempty box: removed reason 0x00000000 ; a new texture afterwards: 0x00000000\ndestination far outside: removed reason 0x887a0005 ; a new texture afterwards: 0x887a0005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 103
+    },
+    {
+      "name": "copy_ops_c",
+      "exe_sha256": "479355c38069e72a23702b84084864fd0e0a8fdb8584c9e86464c7cf20eb0ebe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xlYXIgYmxhY2s6IDB4MDAwMDAwMDAgcGl4ZWwgKDMsMykgMHgwMDAwMDAwMApjbGVhciB0aGlyZHM6IDB4MDAwMDAwMDAgcGl4ZWwgKDMsMykgMHhjYzMzNjY5OQpjbGVhciB0aW55OiAweDAwMDAwMDAwIHBpeGVsICgzLDMpIDB4MDEwMDAxMDEKY29weSBSR0JBOCAtPiBCR1JBOCBzdGFnaW5nOiBieXRlcyAweDAwMDAwMDAwClVwZGF0ZVN1YnJlc291cmNlIHdob2xlOiAoMCwwKSAweGZmMDAwMDAwICgxLDApIDB4ZmYwMDAwMDEgKDAsMSkgMHhmZjAwMDAxMCAoMTUsNykgMHhmZjAwMDA3ZgpGbHVzaCBhbmQgQ2xlYXJTdGF0ZSByZXR1cm5lZDsgKDIsMSkgc3RpbGwgMHhmZjAwMDAxMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "clear black: 0x00000000 pixel (3,3) 0x00000000\nclear thirds: 0x00000000 pixel (3,3) 0xcc336699\nclear tiny: 0x00000000 pixel (3,3) 0x01000101\ncopy RGBA8 -> BGRA8 staging: bytes 0x00000000\nUpdateSubresource whole: (0,0) 0xff000000 (1,0) 0xff000001 (0,1) 0xff000010 (15,7) 0xff00007f\nFlush and ClearState returned; (2,1) still 0xff000012\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    }
+  ]
+}

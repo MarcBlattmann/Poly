@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "ctx_limits",
+      "exe_sha256": "6923ac9555cbbf187269a629d8e6edaf4dba1275f7f1719f1653a9574b16b2ae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UlNTZXRWaWV3cG9ydHMoOSk6IHN0b3JlZCBjb3VudCA5OiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwClJTU2V0Vmlld3BvcnRzKDMyKTogc3RvcmVkIGNvdW50IDA6IHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBhIG5ldyB0ZXh0dXJlIDB4MDAwMDAwMDAKUlNTZXRTY2lzc29yUmVjdHMoMzIpOiBzdG9yZWQgY291bnQgMDogcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IGEgbmV3IHRleHR1cmUgMHgwMDAwMDAwMAp0d28gdmlld3Mgb2Ygb25lIHRleHR1cmUgaW4gc2xvdHMgMCBhbmQgMTogR2V0IHNsb3QgMCBmYWxzZSBzbG90IDEgZmFsc2UKbWlzbWF0Y2hlZCB0YXJnZXQgYW5kIGRlcHRoIHNpemVzOiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwCnJlbmRlciB0YXJnZXQgYW5kIHNoYWRlciByZXNvdXJjZSBvZiBvbmUgdGV4dHVyZTogcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IGEgbmV3IHRleHR1cmUgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RSSetViewports(9): stored count 9: removed reason 0x00000000 ; a new texture 0x00000000\nRSSetViewports(32): stored count 0: removed reason 0x00000000 ; a new texture 0x00000000\nRSSetScissorRects(32): stored count 0: removed reason 0x00000000 ; a new texture 0x00000000\ntwo views of one texture in slots 0 and 1: Get slot 0 false slot 1 false\nmismatched target and depth sizes: removed reason 0x00000000 ; a new texture 0x00000000\nrender target and shader resource of one texture: removed reason 0x00000000 ; a new texture 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 110
+    },
+    {
+      "name": "ctx_limits_b",
+      "exe_sha256": "798225728f8f3902de832e7d32bcdc930892853222b2a365b2a5347a3b5f3f7a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UlNTZXRWaWV3cG9ydHMoMTYpOiBzdG9yZWQgY291bnQgMTY6IHJlbW92ZWQgcmVhc29uIDB4MDAwMDAwMDAgOyBhIG5ldyB0ZXh0dXJlIDB4MDAwMDAwMDAKUlNTZXRTY2lzc29yUmVjdHMoOSk6IHN0b3JlZCBjb3VudCA5OiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwCnRoZSBzYW1lIHZpZXcgaW4gc2xvdHMgMCBhbmQgMTogR2V0IHNsb3QgMCBmYWxzZSBzbG90IDEgZmFsc2UKdHdvIHZpZXdzIG9mIG9uZSB0ZXh0dXJlOiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwCnRleHR1cmUgYm91bmQgYXMgYSBzaGFkZXIgcmVzb3VyY2UsIHRoZW4gYXMgYSByZW5kZXIgdGFyZ2V0OiB0aGUgc2hhZGVyIHJlc291cmNlIHNsb3Qgbm93IGhvbGRzIG5vdGhpbmcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RSSetViewports(16): stored count 16: removed reason 0x00000000 ; a new texture 0x00000000\nRSSetScissorRects(9): stored count 9: removed reason 0x00000000 ; a new texture 0x00000000\nthe same view in slots 0 and 1: Get slot 0 false slot 1 false\ntwo views of one texture: removed reason 0x00000000 ; a new texture 0x00000000\ntexture bound as a shader resource, then as a render target: the shader resource slot now holds nothing\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 128
+    },
+    {
+      "name": "ctx_limits_c",
+      "exe_sha256": "7127568be2b88ca2c803fdbe72ebaeefe6d66a38bb0f26af9c581634f3b81d6b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UlNTZXRWaWV3cG9ydHMoMTcpOiBzdG9yZWQgY291bnQgMDogcmVtb3ZlZCByZWFzb24gMHgwMDAwMDAwMCA7IGEgbmV3IHRleHR1cmUgMHgwMDAwMDAwMApSU1NldFNjaXNzb3JSZWN0cygxNyk6IHN0b3JlZCBjb3VudCAwOiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwCnRoZSBzYW1lIHZpZXcgaW4gdHdvIHNsb3RzOiByZW1vdmVkIHJlYXNvbiAweDAwMDAwMDAwIDsgYSBuZXcgdGV4dHVyZSAweDAwMDAwMDAwCnJlbmRlciB0YXJnZXQgOHg4IHdpdGggYSAxNngxNiBkZXB0aCBidWZmZXI6IGJvdW5kIHRydWUgdHJ1ZQpyZW5kZXIgdGFyZ2V0IGJvdW5kIGZpcnN0LCB0aGVuIHRoZSBzaGFkZXIgcmVzb3VyY2U6IHJlbmRlciB0YXJnZXQgc2V0IHNoYWRlciByZXNvdXJjZSBudWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RSSetViewports(17): stored count 0: removed reason 0x00000000 ; a new texture 0x00000000\nRSSetScissorRects(17): stored count 0: removed reason 0x00000000 ; a new texture 0x00000000\nthe same view in two slots: removed reason 0x00000000 ; a new texture 0x00000000\nrender target 8x8 with a 16x16 depth buffer: bound true true\nrender target bound first, then the shader resource: render target set shader resource null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 111
+    },
+    {
+      "name": "ctx_rt_state_c",
+      "exe_sha256": "4b62086e7524376baa88ab545acc138a56fa511a7d59c797bb3f051263b92365",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZnJlc2ggY29udGV4dDogdmlld3BvcnRzIDAgc2Npc3NvciByZWN0cyAwCkdldCg4KTogc2xvdCAwIGlzIHZpZXcgMTogdHJ1ZSA7IG90aGVyIHNsb3RzIG51bGw6IHRydWUgOyBkZXB0aCBudWxsIDsgdmlldyByZWZzIG5vdyAyCkdldCgwKSB3aXRoIG9ubHkgdGhlIGRlcHRoIG91dHB1dDogZGVwdGggbnVsbApzbG90IDAgTlVMTCwgc2xvdCAxIHZpZXcgMjogR2V0IFtmYWxzZSwgdHJ1ZSwgZmFsc2UsIGZhbHNlLCBmYWxzZSwgZmFsc2UsIGZhbHNlLCBmYWxzZV0KYWZ0ZXIgdGhlIGNyZWF0b3IgcmVsZWFzZWQgdGhlIHRleHR1cmUgYW5kIHRoZSB2aWV3OiBzdGlsbCBib3VuZCBzZXQgOyBpdHMgcmVzb3VyY2UgdHlwZSAzCmNvdW50IHF1ZXJ5OiAxCnR3byB2aWV3cG9ydHMsIEdldCgyKTogY291bnQgMiBzZWNvbmQgMHg0MGEwMDAwMCAweDQxYTAwMDAwIDB4M2U4MDAwMDAgMHgzZjQwMDAwMAp2aWV3cG9ydCBodWdlOiBjb3VudCAxIHJlYWQgYmFjayBpZGVudGljYWw6IHRydWUgKDB4YzdjMzUwMDAgMHhjN2MzNTAwMCAweDQ4NDM1MDAwIDB4NDg0MzUwMDAgMHgwIDB4M2Y4MDAwMDApCnZpZXdwb3J0IE5hTjogY291bnQgMSByZWFkIGJhY2sgaWRlbnRpY2FsOiBmYWxzZSAoMHg0MGUwMDAwMCAweDQwZTAwMDAwIDB4NDBlMDAwMDAgMHg0MGUwMDAwMCAweDAgMHgzZjgwMDAwMCkKdmlld3BvcnQgd2lkdGggb25seSBuZWdhdGl2ZTogY291bnQgMSByZWFkIGJhY2sgaWRlbnRpY2FsOiBmYWxzZSAoMHg0MGUwMDAwMCAweDQwZTAwMDAwIDB4NDBlMDAwMDAgMHg0MGUwMDAwMCAweDAgMHgzZjgwMDAwMCkKdmlld3BvcnQgTWluRGVwdGggLTAuNTogY291bnQgMSByZWFkIGJhY2sgaWRlbnRpY2FsOiBmYWxzZSAoMHg0MGUwMDAwMCAweDQwZTAwMDAwIDB4NDBlMDAwMDAgMHg0MGUwMDAwMCAweDAgMHgzZjgwMDAwMCkKdmlld3BvcnQgd2lkdGggMTYzODQ6IGNvdW50IDEgcmVhZCBiYWNrIGlkZW50aWNhbDogdHJ1ZSAoMHgwIDB4MCAweDQ2ODAwMDAwIDB4NDEwMDAwMDAgMHgwIDB4M2Y4MDAwMDApCnZpZXdwb3J0IHggMzI3Njc6IGNvdW50IDEgcmVhZCBiYWNrIGlkZW50aWNhbDogdHJ1ZSAoMHg0NmZmZmUwMCAweDAgMHg0MTAwMDAwMCAweDQxMDAwMDAwIDB4MCAweDNmODAwMDAwKQpSU1NldFZpZXdwb3J0cygwLCBOVUxMKTogY291bnQgMApzY2lzc29yIGVtcHR5OiBjb3VudCAxIHJlYWQgYmFjayBpZGVudGljYWwgdHJ1ZSAoWzMsIDMsIDMsIDNdKQp0d28gc2Npc3NvciByZWN0czogY291bnQgMgpkZXZpY2UgcmVtb3ZlZCByZWFzb24gYXQgdGhlIGVuZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "fresh context: viewports 0 scissor rects 0\nGet(8): slot 0 is view 1: true ; other slots null: true ; depth null ; view refs now 2\nGet(0) with only the depth output: depth null\nslot 0 NULL, slot 1 view 2: Get [false, true, false, false, false, false, false, false]\nafter the creator released the texture and the view: still bound set ; its resource type 3\ncount query: 1\ntwo viewports, Get(2): count 2 second 0x40a00000 0x41a00000 0x3e800000 0x3f400000\nviewport huge: count 1 read back identical: true (0xc7c35000 0xc7c35000 0x48435000 0x48435000 0x0 0x3f800000)\nviewport NaN: count 1 read back identical: false (0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x0 0x3f800000)\nviewport width only negative: count 1 read back identical: false (0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x0 0x3f800000)\nviewport MinDepth -0.5: count 1 read back identical: false (0x40e00000 0x40e00000 0x40e00000 0x40e00000 0x0 0x3f800000)\nviewport width 16384: count 1 read back identical: true (0x0 0x0 0x46800000 0x41000000 0x0 0x3f800000)\nviewport x 32767: count 1 read back identical: true (0x46fffe00 0x0 0x41000000 0x41000000 0x0 0x3f800000)\nRSSetViewports(0, NULL): count 0\nscissor empty: count 1 read back identical true ([3, 3, 3, 3])\ntwo scissor rects: count 2\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    }
+  ]
+}

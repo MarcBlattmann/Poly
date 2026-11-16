@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.Draw.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.Draw
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::Draw", "ID3D11DeviceContext::DrawIndexed", "ID3D11DeviceContext::DrawInstanced", "ID3D11DeviceContext::DrawIndexedInstanced", "ID3D11DeviceContext::DrawAuto", "ID3D11DeviceContext::Dispatch", "ID3D11DeviceContext::IASetPrimitiveTopology"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Drawing with no shaders bound is harmless on WARP: every Draw, DrawIndexed, DrawInstanced, DrawIndexedInstanced, DrawAuto and Dispatch call returns, changes no pixel of the bound render target (the clear colour 0xFF00FF00 stays), leaves GetDeviceRemovedReason at S_OK and later calls work. Tested with each call on a device of its own (with and without a bound target, a viewport, the topologies 0, 4, 5, 1, 2, zero and 0xFFFFFFFF counts, an unbound index buffer, a vertex buffer bound) so that a removal would be seen.
+interface:
+  signature: "void Draw(UINT vertexCount, UINT start); void DrawIndexed(UINT, UINT, INT); void DrawInstanced(UINT, UINT, UINT, UINT); void DrawIndexedInstanced(UINT, UINT, UINT, INT, UINT); void DrawAuto(); void Dispatch(UINT, UINT, UINT)"
+chrome:
+  calls: "ANGLE issues Draw / DrawIndexed / DrawInstanced / Dispatch for GL draws (assumed); the real draws need compiled shaders and are outside this sheet"
+rules:
+  no_shaders: "Draw(3, 0) with no shaders, topology UNDEFINED (0) or TRIANGLELIST (4), TRIANGLESTRIP (5), POINTLIST (1), LINELIST (2), with the target bound and a 16x16 viewport or not: returns; the target's pixel stays 0xFF00FF00; removed reason S_OK; a new texture afterwards succeeds"
+  counts: "Draw(0, 0) and Draw(0xFFFFFFFF, 0) return and change nothing"
+  other_calls: "DrawInstanced(3, 5, 0, 0), DrawIndexed(3, 0, 0) with no index buffer, DrawIndexedInstanced(3, 2, 0, 0, 0), DrawAuto() with nothing bound, Dispatch(1, 1, 1) and Dispatch(0, 0, 0) with no compute shader, Draw(3, 0) with a 48-byte vertex buffer bound at slot 0 with stride 16: all return with no effect and no removal"
+  afterwards: "after a draw with no shaders, ClearRenderTargetView(1, 0, 0, 1) and a staging read-back give 0xFFFF0000"
+errors:
+  none: "the calls return nothing"
+side_effects: "none observable"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  draws with valid shaders (they need compiled bytecode: the real rendering behaviour of WARP is outside what can be written without a shader compiler), the debug-layer messages, DrawIndirect variants.

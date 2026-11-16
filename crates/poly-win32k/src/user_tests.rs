@@ -613,6 +613,48 @@ fn topmost_windows_stay_above_later_created_ones() {
 }
 
 #[test]
+fn a_release_queues_its_move_only_after_the_notification() {
+    // ReleaseCapture.yaml `rc_nocapture` (attached): another thread of the same
+    // input releases; the capture window must have heard WM_CAPTURECHANGED
+    // before the move to the window under the cursor can be retrieved. The
+    // release itself (SET_CAPTURE_QUIET) queues no move; SET_CAPTURE_MOVE does,
+    // exactly once, and `release_capture` ends with it.
+    use crate::wm::input::{SET_CAPTURE, SET_CAPTURE_MOVE, SET_CAPTURE_QUIET};
+    with_env(|e| {
+        register(e, "Cap");
+        let a = create(e, 'A', 0, "Cap", WS_POPUP | WS_VISIBLE, 0, 0, 200, 200, 0, 0);
+        e.call(Request::Cursor { set: true, x: 50, y: 50 });
+        let drain = || {
+            let mut n = 0;
+            while let Reply::Message { .. } =
+                e.call(Request::Peek { filter: 0, min: 0x200, max: 0x20E, flags: PM_REMOVE })
+            {
+                n += 1;
+            }
+            n
+        };
+        assert_eq!(drain(), 1);
+        let call = |capture: u32, which: u8| {
+            e.call(Request::SetInput { active: 0, focus: 0, capture, which });
+        };
+        call(a as u32, SET_CAPTURE);
+        call(0, SET_CAPTURE_QUIET);
+        assert_eq!(drain(), 0);
+        call(0, SET_CAPTURE_MOVE);
+        assert_eq!(drain(), 1);
+        assert_eq!(crate::user::focus::set_capture(e, a), 0);
+        take_log();
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), ["A WM_CAPTURECHANGED lparam=0"]);
+        assert_eq!(drain(), 1);
+        // No capture: nothing is sent and no move is queued.
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), Vec::<String>::new());
+        assert_eq!(drain(), 0);
+    });
+}
+
+#[test]
 fn a_new_capture_drops_the_synthesized_move_of_a_release() {
     with_env(|e| {
         register(e, "Cap");
@@ -1398,4 +1440,30 @@ fn a_layered_child_needs_a_windows_8_manifest() {
         let Reply::Window { info } = e.call(Request::Window { hwnd: c }) else { panic!() };
         assert_ne!(info.ex_style & 0x0008_0000, 0);
     });
+}
+
+/// Learn's `WM_NCHITTEST` codes on the sizing border of a resizable window: Chrome's 900x500
+/// window at 40,40 whose client area starts at its top (8 px borders left, right, below), and a
+/// captioned window with its band above the caption.
+#[test]
+fn the_sizing_border_of_a_resizable_window_has_its_hit_codes() {
+    let sizable = 0x16CF_0000; // WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN
+    let (w, c) = (Rect::new(40, 40, 940, 540), Rect::new(48, 40, 932, 532));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(44, 300), Some(frame::HTLEFT));
+    assert_eq!(hit(936, 300), Some(frame::HTRIGHT));
+    assert_eq!(hit(500, 536), Some(frame::HTBOTTOM));
+    assert_eq!(hit(44, 536), Some(frame::HTBOTTOMLEFT));
+    assert_eq!(hit(936, 536), Some(frame::HTBOTTOMRIGHT));
+    assert_eq!(hit(500, 300), None, "the client area is the window's");
+    // No sizing border: HTBORDER stays DefWindowProc's answer.
+    assert_eq!(sizing_hit(sizable & !0x0004_0000, w, c, 44, 300), None);
+    assert_eq!(sizing_hit(sizable | 0x0100_0000, w, c, 44, 300), None, "maximized");
+    // A captioned window: the band above the caption is the top border, the caption is not.
+    let (w, c) = (Rect::new(100, 50, 400, 250), Rect::new(108, 81, 392, 242));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(200, 52), Some(frame::HTTOP));
+    assert_eq!(hit(102, 52), Some(frame::HTTOPLEFT));
+    assert_eq!(hit(398, 52), Some(frame::HTTOPRIGHT));
+    assert_eq!(hit(200, 70), None, "the caption");
 }

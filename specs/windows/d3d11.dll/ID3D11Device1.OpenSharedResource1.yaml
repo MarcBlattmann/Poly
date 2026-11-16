@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device1.OpenSharedResource1.yaml
+id: windows/api/d3d11.dll/ID3D11Device1.OpenSharedResource1
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device1::OpenSharedResource1", "ID3D11Device::OpenSharedResource", "ID3D11Device1::OpenSharedResourceByName", "IDXGIResource::GetSharedHandle", "IDXGIResource::GetUsage", "Sharing Resources and Surfaces"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Opens a shared texture from an NT handle (or, with ID3D11Device::OpenSharedResource, a legacy shared handle) on a device. Chrome opens the handles it receives from the other process this way. Observed on two WARP devices of one process: the opened resource is a new object with the same description (including the misc flags) and the same storage: a pixel written through one is visible through the other (on the same device at once, on the second device after a Flush on the writer, without any keyed mutex for non-keyed textures). The opened object is returned as the interface asked for in the IID argument.
+interface:
+  signature: "HRESULT ID3D11Device1::OpenSharedResource1(HANDLE handle, REFIID iid, void** resource); HRESULT ID3D11Device::OpenSharedResource(HANDLE handle, REFIID iid, void** resource)"
+chrome:
+  calls: "the GPU process opens shared textures with OpenSharedResource1 (NT handle) or OpenSharedResource (legacy handle) before sampling them (assumed; not visible to the tracer)"
+rules:
+  same_device: "OpenSharedResource1(0x802 handle, IID_ID3D11Texture2D) on the creating device: S_OK, a different object from the original (the original has reference count 2 after QueryInterface for IDXGIResource1, the opened one 1), GetDesc equal (16x16, B8G8R8A8_UNORM 87, bind 0x28, misc 0x802); opening twice gives two distinct objects; a write through the original (UpdateSubresource 0xFF123456) reads back through the opened one and the reverse (0xFF654321)"
+  second_device: "on a second WARP device of the process: S_OK, GetDesc equal, GetDevice of the opened texture is the second device; after the first device writes (UpdateSubresource) and Flushes, the second device's CopyResource to staging reads the same pixel (0xFF0A0B0C), and a write + Flush on the second device is read on the first (0xFF0D0E0F)"
+  interfaces_opened: "the opened texture answers ID3D11Resource, ID3D11Texture2D, ID3D11Texture2D1, IDXGIResource and IDXGIResource1 (IDXGIKeyedMutex only if the texture had the keyed-mutex flag; ID3D11Buffer: no)"
+  requested_iid: "the IID argument selects the returned interface: ID3D11Resource, IDXGIResource1, IDXGIResource, IUnknown and ID3D11Texture2D succeed; IDXGIKeyedMutex (non-keyed texture), ID3D11Buffer, an unknown GUID and ID3D11Device give E_NOINTERFACE (0x80004002) with a NULL output"
+  keyed_second_device: "a 0x900 texture opened on the second device has GetDesc misc 0x900 and answers IDXGIKeyedMutex"
+  bad_handles: "a NULL handle, INVALID_HANDLE_VALUE, a handle value that is not open (0x1234), a handle of another kind of object (an event) and a handle after CloseHandle (on the same and on the second device) are E_INVALIDARG with a NULL output; the real handle still works afterwards and the original texture is unaffected"
+  legacy_get_handle: "IDXGIResource::GetSharedHandle of a SHARED (2) texture: S_OK, non-NULL, the same value on a second call; of a SHARED_KEYEDMUTEX (0x100) texture the same; of an NT-handle texture (0x802): E_INVALIDARG and NULL"
+  legacy_open: "ID3D11Device::OpenSharedResource(handle, IID_ID3D11Texture2D) of a legacy handle: S_OK on the same device (a different object, GetDesc equal, misc 0x2) and on a second device; pixel 0xFF112233 written before opening reads back on the second device; a write on the second device (0xFF445566) + Flush reads on the first; ID3D11Resource, IDXGIResource, IDXGIResource1 succeed, ID3D11Buffer, an unknown GUID and IDXGIKeyedMutex (non-keyed) are E_NOINTERFACE; a legacy keyed-mutex texture opened on the second device answers IDXGIKeyedMutex"
+  legacy_vs_nt: "OpenSharedResource1 with a legacy handle: E_INVALIDARG; OpenSharedResource with an NT handle: E_INVALIDARG; OpenSharedResource with NULL or 0x1234: E_INVALIDARG; CloseHandle on a legacy handle returns FALSE (last error 6) and the handle still opens afterwards; it also still opened after the original texture was released (S_OK) in the observed run"
+  usage: "IDXGIResource::GetUsage of a RENDER_TARGET|SHADER_RESOURCE texture: S_OK, 0x30 (SHADER_INPUT 0x10 | RENDER_TARGET_OUTPUT 0x20); IDXGIResource::GetEvictionPriority: S_OK, 0x78000000"
+  no_removal: "none of the cases removes either device"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+side_effects: "creates a resource object sharing the storage of the original"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  handles received from another process, opening on a device of another adapter, read-only access handles (access mask effects on the opened resource), the exact timing of visibility without Flush.

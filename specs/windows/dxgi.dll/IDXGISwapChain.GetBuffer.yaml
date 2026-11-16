@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGISwapChain.GetBuffer.yaml
+id: windows/api/dxgi.dll/IDXGISwapChain.GetBuffer
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGISwapChain::GetBuffer method (dxgi.h)", "IDXGISwapChain::GetDesc", "IDXGISwapChain1::GetDesc1", "IDXGISwapChain1::GetHwnd", "IDXGISwapChain::GetContainingOutput", "IDXGIDeviceSubObject::GetDevice", "IDXGISwapChain3::GetCurrentBackBufferIndex", "IDXGISwapChain3::CheckColorSpaceSupport", "IDXGISwapChain3::SetColorSpace1", "IDXGISwapChain1::SetBackgroundColor", "IDXGISwapChain1::SetRotation", "IDXGISurface", "IDXGIResource"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns a back buffer of the swap chain as a COM interface. Chrome (ANGLE) calls GetBuffer(0, ID3D11Texture2D) after every resize and creates a render target view from it. Observed on WARP: the accessible indexes depend on the effect: DISCARD and FLIP_DISCARD only index 0; SEQUENTIAL and FLIP_SEQUENTIAL every index below the buffer count; any other index gives DXGI_ERROR_INVALID_CALL with a NULL output. The returned object is the swap chain's own texture (the same object on repeated calls, reference count raised by one), usable as ID3D11Texture2D / ID3D11Resource / IDXGISurface / IDXGIResource; its description is DEFAULT usage, RENDER_TARGET binding (SHADER_RESOURCE too when the swap chain usage has SHADER_INPUT), one mip, the swap chain's size, format and sample count. This entry's tests also cover GetDesc, GetHwnd, GetContainingOutput, GetCurrentBackBufferIndex and the colour space and rotation setters.
+interface:
+  signature: "HRESULT IDXGISwapChain::GetBuffer(UINT Buffer, REFIID riid, void** ppSurface)"
+  constants: "D3D11_BIND_RENDER_TARGET 0x20, SHADER_RESOURCE 0x8; D3D11_RESOURCE_MISC_GDI_COMPATIBLE 0x200. DXGI_USAGE_BACK_BUFFER 0x40. DXGI_SWAP_EFFECT DISCARD 0, SEQUENTIAL 1, FLIP_SEQUENTIAL 3, FLIP_DISCARD 4"
+chrome:
+  calls: "ANGLE (SwapChain11) calls IDXGISwapChain::GetBuffer(0, ID3D11Texture2D) after creating or resizing a swap chain and creates the render target and shader resource views (assumed from ANGLE's documented behaviour)"
+rules:
+  index_discard: "DISCARD with 1 or 3 buffers: GetBuffer(0) S_OK, GetBuffer(1 .. 5, count, 16, 0xFFFFFFFF): DXGI_ERROR_INVALID_CALL with a NULL output"
+  index_sequential: "SEQUENTIAL with 2 buffers: indexes 0 and 1 S_OK, 2 and above INVALID_CALL; with 3 buffers: 0, 1, 2 S_OK, 3 and above INVALID_CALL; the accessible buffers are distinct objects"
+  index_flip_sequential: "FLIP_SEQUENTIAL with 2 buffers: indexes 0, 1; with 4 buffers: 0 .. 3; everything else INVALID_CALL"
+  index_flip_discard: "FLIP_DISCARD with 2 or 4 buffers: only index 0 is S_OK; 1 .. 5, count, 16 and 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL, NULL output"
+  interfaces_same_object: "riid ID3D11Texture2D, ID3D11Resource, ID3D11DeviceChild and ID3D11Texture2D1: S_OK and the same pointer as ID3D11Texture2D"
+  interfaces_other: "riid IUnknown, IDXGIObject, IDXGIDeviceSubObject, IDXGIResource, IDXGIResource1, IDXGISurface, IDXGISurface1, IDXGISurface2: S_OK with a different pointer (all of them also answered by QueryInterface of the texture); ID3D11Texture1D, ID3D11Buffer, IDXGIKeyedMutex and a made-up id: E_NOINTERFACE (0x80004002), NULL output"
+  references: "the first GetBuffer gives reference count 1; a second GetBuffer(0) returns the same pointer and count 2; while a buffer reference is held the swap chain's count is 2 (the buffer holds the swap chain); GetBuffer(0, IDXGISurface) equals QueryInterface(IDXGISurface) of the texture"
+  texture_desc: "ID3D11Texture2D::GetDesc: size = the swap chain's size, MipLevels 1, ArraySize 1 (2 for a stereo swap chain), Format = the swap chain's, SampleDesc = the swap chain's, Usage 0 (DEFAULT), BindFlags 0x20; usage SHADER_INPUT|RENDER_TARGET_OUTPUT (0x30) gives BindFlags 0x28; usage 0 gives BindFlags 0; CPUAccessFlags 0; MiscFlags 0, or 0x200 (GDI_COMPATIBLE) when the swap chain has the GDI_COMPATIBLE flag; the ALLOW_TEARING and FRAME_LATENCY_WAITABLE_OBJECT flags add nothing; formats R16G16B16A16_FLOAT, R10G10B10A2, R8G8B8A8 give those formats; a DISCARD swap chain with 4 samples gives samples 4/0"
+  surface: "IDXGISurface::GetDesc: the same size, format and samples; GetParent(IDXGISwapChain) is the swap chain (same pointer); GetDevice(ID3D11Device) is the device; IDXGIResource::GetUsage returns 0x60 (BACK_BUFFER | RENDER_TARGET_OUTPUT); GetSharedHandle: E_INVALIDARG (the output keeps its previous non-NULL value); GetEvictionPriority: S_OK 0x78000000 (DXGI_RESOURCE_PRIORITY_NORMAL); ID3D11DeviceChild::GetDevice is the device"
+  views: "CreateRenderTargetView on buffer 0: S_OK with a NULL description, with format B8G8R8A8_UNORM or B8G8R8A8_UNORM_SRGB (Texture2D, mip 0) when the swap chain is B8G8R8A8_UNORM; format R8G8B8A8_UNORM or B8G8R8A8_TYPELESS: E_INVALIDARG; CreateShaderResourceView on a swap chain with only RENDER_TARGET_OUTPUT usage: E_INVALIDARG"
+  get_desc: "legacy GetDesc: S_OK; BufferDesc width/height = the swap chain's, RefreshRate 0/1, format, ScanlineOrdering 0, Scaling 0, SampleDesc as created, BufferUsage 0x20, BufferCount as created, OutputWindow = the window, Windowed 1, SwapEffect as created, Flags as created; GetDesc1 equals what GetDesc reports for the shared fields; GetHwnd: S_OK and the window; GetCoreWindow: DXGI_ERROR_INVALID_CALL; GetFullscreenDesc: S_OK with Windowed 1"
+  containing_output: "GetContainingOutput of a swap chain on a WARP device: DXGI_ERROR_UNSUPPORTED (0x887A0004), NULL output; GetRestrictToOutput: S_OK with a NULL output; IsTemporaryMonoSupported: FALSE"
+  background_color: "GetBackgroundColor: S_OK {0, 0, 0, 1}; SetBackgroundColor({1,0,0,1}) S_OK and read back"
+  rotation: "DISCARD and SEQUENTIAL swap chains: GetRotation and SetRotation (1 .. 5) give DXGI_ERROR_INVALID_CALL; FLIP_SEQUENTIAL and FLIP_DISCARD: GetRotation S_OK and 1 (DXGI_MODE_ROTATION_IDENTITY), SetRotation(1 .. 4) S_OK and read back, SetRotation(5): INVALID_CALL"
+  back_buffer_index: "IDXGISwapChain3::GetCurrentBackBufferIndex returns 0 for every effect and stays 0 after presents (buffer 0 is always the current back buffer: buffers rotate instead)"
+  colour_space: "CheckColorSpaceSupport(cs, &flags): S_OK for every value tried (0, 1, 2, 12, 20, 99); support flag 1 (PRESENT) for cs 0 on B8G8R8A8 and R8G8B8A8 DISCARD/SEQUENTIAL chains, for cs 0, 2, 12 and 20 on a B8G8R8A8 FLIP_SEQUENTIAL chain, for cs 1 only on an R16G16B16A16_FLOAT FLIP_DISCARD chain; everything else 0; SetColorSpace1(cs) is S_OK exactly where the support flag is 1 (cs 0 on DISCARD, 0 and 12 on FLIP_SEQUENTIAL B8G8R8A8, 1 on FP16) and E_INVALIDARG elsewhere (also 99)"
+  fullscreen: "SetFullscreenState(FALSE) is S_OK, also twice; GetFullscreenState S_OK, FALSE, output NULL"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  SetFullscreenState(TRUE) (would switch the display), a hardware device's containing output, HDR colour spaces on real displays, SetHDRMetaData.

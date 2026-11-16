@@ -290,6 +290,12 @@ pub fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 
 /// The current directory.
 pub fn current_dir() -> Vec<u16> {
+    // The process parameters hold it (so does `ntdll`'s `RtlSetCurrentDirectory_U`); the state is
+    // the fallback before they do.
+    let in_parameters = crate::process::pp_current_dir();
+    if !in_parameters.is_empty() {
+        return in_parameters;
+    }
     with_state(|s| s.current_dir.clone())
 }
 

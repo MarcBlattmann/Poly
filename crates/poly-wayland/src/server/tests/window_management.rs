@@ -492,3 +492,97 @@ fn an_internal_window_moves_with_the_pointer_when_its_owner_asks_during_a_press(
     motion(&mut srv, x + 80, y + 50);
     assert_eq!(srv.scene().window(s).unwrap().position(), (x + 40, y + 30), "released: the move is over");
 }
+
+#[test]
+fn an_internal_window_is_resized_by_its_border_when_its_owner_asks_during_a_press() {
+    // A Windows window's own border: DefWindowProc answers SC_SIZE, the
+    // compositor asks the owner for each new rectangle; the scene keeps
+    // the old picture until the owner draws the new size.
+    let (mut srv, _) = server();
+    let s = srv.add_internal_window("Chrome", "windows", 200, 100);
+    srv.set_internal_pixels(s, 200, 100, &[0x12_3456; 200 * 100], None);
+    let (x, y) = srv.scene().window(s).unwrap().position();
+    // No button held: nothing.
+    srv.internal_start_resize(s, 8 | 2);
+    motion(&mut srv, x + 220, y + 130);
+    assert!(srv.take_internal_events().iter().all(|e| !matches!(e, InternalEvent::Configure { .. })));
+    // The bottom right corner.
+    motion(&mut srv, x + 199, y + 99);
+    srv.handle_input(InputEvent::PointerButton { time: 1, button: BTN_LEFT, pressed: true });
+    srv.take_internal_events();
+    srv.internal_start_resize(s, 8 | 2);
+    motion(&mut srv, x + 249, y + 139);
+    let asked: Vec<_> =
+        srv.take_internal_events().into_iter().filter(|e| matches!(e, InternalEvent::Configure { .. })).collect();
+    assert_eq!(asked, [InternalEvent::Configure { window: s, x, y, width: 250, height: 140 }]);
+    assert_eq!(srv.scene().window(s).unwrap().content().logical_size(), (200, 100), "not before the owner draws");
+    // The same place again asks nothing; the left edge keeps the right one.
+    motion(&mut srv, x + 249, y + 139);
+    assert!(srv.take_internal_events().iter().all(|e| !matches!(e, InternalEvent::Configure { .. })));
+    srv.handle_input(InputEvent::PointerButton { time: 2, button: BTN_LEFT, pressed: false });
+    motion(&mut srv, x + 300, y + 200);
+    assert!(srv.take_internal_events().iter().all(|e| !matches!(e, InternalEvent::Configure { .. })), "released");
+    motion(&mut srv, x, y + 50);
+    srv.handle_input(InputEvent::PointerButton { time: 3, button: BTN_LEFT, pressed: true });
+    srv.take_internal_events();
+    srv.internal_start_resize(s, 4);
+    motion(&mut srv, x - 30, y + 50);
+    let asked: Vec<_> =
+        srv.take_internal_events().into_iter().filter(|e| matches!(e, InternalEvent::Configure { .. })).collect();
+    assert_eq!(asked, [InternalEvent::Configure { window: s, x: x - 30, y, width: 230, height: 100 }]);
+    // Never smaller than the minimum.
+    motion(&mut srv, x + 500, y + 50);
+    let asked: Vec<_> =
+        srv.take_internal_events().into_iter().filter(|e| matches!(e, InternalEvent::Configure { .. })).collect();
+    assert_eq!(asked, [InternalEvent::Configure { window: s, x: x + 200 - 64, y, width: 64, height: 100 }]);
+    srv.handle_input(InputEvent::PointerButton { time: 4, button: BTN_LEFT, pressed: false });
+}
+
+#[test]
+fn an_internal_windows_margins_take_the_pointer_where_no_window_is_above() {
+    // A Windows window that draws its own frame keeps invisible sizing
+    // borders around its client area: a press there reaches its owner, at
+    // coordinates outside the content.
+    let (mut srv, _) = server();
+    let s = srv.add_internal_window("Chrome", "windows", 200, 100);
+    srv.set_internal_pixels(s, 200, 100, &[0x12_3456; 200 * 100], None);
+    let (x, y) = srv.scene().window(s).unwrap().position();
+    srv.take_internal_events();
+    // Without margins the left of the content is the desktop's.
+    motion(&mut srv, x - 4, y + 50);
+    assert!(!srv.take_internal_events().iter().any(|e| matches!(e, InternalEvent::Motion { .. })));
+    srv.set_internal_margins(s, [8, 0, 8, 8]);
+    motion(&mut srv, x - 4, y + 51);
+    assert!(srv.take_internal_events().contains(&InternalEvent::Motion { window: s, x: -4, y: 51 }));
+    srv.handle_input(InputEvent::PointerButton { time: 1, button: BTN_LEFT, pressed: true });
+    assert!(srv.take_internal_events().iter().any(|e| matches!(
+        e,
+        InternalEvent::Button { window, x: -4, y: 51, pressed: true, .. } if *window == s
+    )));
+    srv.handle_input(InputEvent::PointerButton { time: 2, button: BTN_LEFT, pressed: false });
+    // Below the content too; none above it, nothing beyond the margin.
+    motion(&mut srv, x + 100, y + 105);
+    assert!(srv.take_internal_events().contains(&InternalEvent::Motion { window: s, x: 100, y: 105 }));
+    srv.take_internal_events();
+    motion(&mut srv, x + 100, y - 3);
+    assert!(
+        !srv.take_internal_events().iter().any(|e| matches!(e, InternalEvent::Motion { window, .. } if *window == s))
+    );
+    motion(&mut srv, x - 12, y + 50);
+    assert!(
+        !srv.take_internal_events().iter().any(|e| matches!(e, InternalEvent::Motion { window, .. } if *window == s))
+    );
+}
+
+#[test]
+fn an_owned_internal_window_is_not_a_window_to_switch_to() {
+    // A Windows app's status bubble or menu: a popup owned by its window.
+    let (mut srv, _) = server();
+    let main = srv.add_internal_window("Chrome", "windows", 200, 100);
+    srv.set_internal_pixels(main, 200, 100, &[0x12_3456; 200 * 100], None);
+    let bubble = srv.add_internal_window("", "windows", 50, 20);
+    srv.set_internal_pixels(bubble, 50, 20, &[0x12_3456; 50 * 20], None);
+    srv.scene_mut().set_parent(bubble, Some(main));
+    let listed: Vec<WindowId> = srv.managed_windows().iter().map(|i| i.window).collect();
+    assert_eq!(listed, [main]);
+}
