@@ -182,9 +182,11 @@ pub struct BlockLayout {
 }
 
 /// The 64-bit layout: `TEB.ReservedForOle` at 0x1758; flags +0x14, count +0x28, OLE count +0x2c.
-pub const BLOCK_X64: BlockLayout = BlockLayout { teb_offset: 0x1758, flags: 0x14, count: 0x28, ole: 0x2C, ole_used: 0x30 };
+pub const BLOCK_X64: BlockLayout =
+    BlockLayout { teb_offset: 0x1758, flags: 0x14, count: 0x28, ole: 0x2C, ole_used: 0x30 };
 /// The 32-bit layout (WOW64 and native 32-bit): at 0xF80; flags +0x0C, count +0x18, OLE count +0x1C.
-pub const BLOCK_X86: BlockLayout = BlockLayout { teb_offset: 0xF80, flags: 0x0C, count: 0x18, ole: 0x1C, ole_used: 0x20 };
+pub const BLOCK_X86: BlockLayout =
+    BlockLayout { teb_offset: 0xF80, flags: 0x0C, count: 0x18, ole: 0x1C, ole_used: 0x20 };
 /// Bytes of a block (zeroed when made; the dwords other than the three above stay 0).
 pub const BLOCK_SIZE: usize = 0x40;
 
