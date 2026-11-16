@@ -131,6 +131,7 @@ mod asmlabels;
 mod busybox;
 mod chromecalls;
 mod chrometrace;
+mod chrometry;
 mod chromewin;
 mod chromium;
 mod compositor;

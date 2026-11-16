@@ -559,9 +559,46 @@ fn run_desktop_checked(
     let file = desktop_file(&o.name, &dos, &o.args);
     let extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
     let initrd = crate::desktop::image_with("poly-win-app-initramfs.cpio", false, extra)?;
+    let spec = DriveSpec {
+        out: o.out.clone(),
+        name: o.name.clone(),
+        query: format!("winapp {}", o.name),
+        steps: o.steps.clone(),
+        timeout: o.timeout,
+    };
+    boot_and_drive(kernel, image, &initrd, "virtio0:/mnt/root", res, more, log, &spec)
+}
+
+/// What a scripted desktop run does once the desktop is up.
+#[cfg(unix)]
+struct DriveSpec {
+    /// Where the screenshots go.
+    out: PathBuf,
+    /// Their names, and the `launch` step's window.
+    name: String,
+    /// What the `launch` step types into the launcher before Enter.
+    query: String,
+    steps: Vec<Step>,
+    timeout: u64,
+}
+
+/// Boot the desktop from `initrd` with `image` as its root disk (`mount` is the `poly.mount=`
+/// value), serial output into `log`, and run the steps of `spec` through QMP.
+#[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
+fn boot_and_drive(
+    kernel: &Path,
+    image: &Path,
+    initrd: &Path,
+    mount: &str,
+    res: &crate::resources::Resources,
+    more: &str,
+    log: &Path,
+    spec: &DriveSpec,
+) -> Result<(String, Option<String>)> {
     let socket = std::env::temp_dir().join(format!("poly-win-app-qmp-{}.sock", std::process::id()));
     let _ = std::fs::remove_file(&socket);
-    let append = crate::desktop::append(&format!("poly.mount=virtio0:/mnt/root console=ttyS0 poly.net=qemu{more}"));
+    let append = crate::desktop::append(&format!("poly.mount={mount} console=ttyS0 poly.net=qemu{more}"));
     let mut cmd = crate::qemu_with(
         kernel,
         &res.memory(MEMORY),
@@ -572,16 +609,43 @@ fn run_desktop_checked(
     );
     cmd.args(crate::rootdisk::drive_args(image));
     cmd.args(crate::net::nic_args(None, false));
-    cmd.arg("-initrd").arg(&initrd).args(crate::desktop::devices());
+    cmd.arg("-initrd").arg(initrd).args(crate::desktop::devices());
     cmd.args(["-display", "none", "-qmp", &format!("unix:{},server=on,wait=off", socket.display())])
         .stdin(std::process::Stdio::null());
     let mut child = cmd.spawn().map_err(|e| format!("qemu: {e}"))?;
-    let result = drive(o, &socket, log);
+    let result = drive(spec, &socket, log);
     let _ = std::fs::remove_file(&socket);
     let _ = child.kill();
     let _ = child.wait();
     let text = std::fs::read(log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
     Ok((text, result.err()))
+}
+
+/// A scripted run on the desktop with a disk and a launcher entry that are not `win-app`'s: boot
+/// `kernel` with `image` as the root disk (`mount`: its `poly.mount=` value) and `entry` (the
+/// files, path below the initramfs's root, mode and contents) in the initramfs, then type `query`
+/// into the launcher at the `launch` step and run `steps`. The cleaned serial log (also written to
+/// `log`) and the reason the steps stopped, if a step failed. For the boot check of what
+/// `cargo xtask start` boots (`chrometry.rs`).
+#[cfg(unix)]
+pub fn desktop_entry_check(
+    kernel: &Path,
+    image: &Path,
+    entry: Vec<(String, u16, Vec<u8>)>,
+    mount: &str,
+    query: &str,
+    steps: &str,
+    log: &Path,
+) -> Result<(String, Option<String>)> {
+    let steps = split_steps(steps).iter().map(|p| Step::parse(p)).collect::<Result<Vec<_>>>()?;
+    let out = log.parent().map_or_else(|| root().join("target"), Path::to_path_buf);
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let _ = std::fs::remove_file(log);
+    let initrd = crate::desktop::image_with("poly-chrome-try-initramfs.cpio", false, entry)?;
+    let res = crate::resources::Resources::from_args(&[])?;
+    let spec = DriveSpec { out, name: "chrome-try".into(), query: query.to_string(), steps, timeout: 900 };
+    let (text, stopped) = boot_and_drive(kernel, image, &initrd, mount, &res, "", log, &spec)?;
+    Ok((clean(&text), stopped))
 }
 
 #[cfg(not(unix))]
@@ -594,6 +658,20 @@ fn run_desktop_checked(
     _: &str,
 ) -> Result<(String, Option<String>)> {
     Err("--mode desktop needs a Unix host (QMP over a Unix socket); run it with polyd".into())
+}
+
+/// [`desktop_entry_check`] needs QMP over a Unix socket.
+#[cfg(not(unix))]
+pub fn desktop_entry_check(
+    _: &Path,
+    _: &Path,
+    _: Vec<(String, u16, Vec<u8>)>,
+    _: &str,
+    _: &str,
+    _: &str,
+    _: &Path,
+) -> Result<(String, Option<String>)> {
+    Err("a scripted desktop run needs a Unix host (QMP over a Unix socket); run it with polyd".into())
 }
 
 /// Boot `kernel` on the desktop with the program directory `dir` as `C:pps\<name>`, start
@@ -841,6 +919,7 @@ struct Driver {
     log: PathBuf,
     out: PathBuf,
     name: String,
+    query: String,
     shots: u32,
 }
 
@@ -903,8 +982,8 @@ impl Driver {
     fn step(&mut self, step: &Step) -> Result {
         match step {
             Step::Launch => {
-                let name = self.name.clone();
-                for c in format!("winapp {name}").chars() {
+                let query = self.query.clone();
+                for c in query.chars() {
                     let (q, shift) = qcode(c).ok_or(format!("cannot type {c:?}"))?;
                     if shift {
                         self.chord(&["shift".into(), q])?;
@@ -912,7 +991,7 @@ impl Driver {
                         self.chord(&[q])?;
                     }
                 }
-                self.wait(&format!("launcher query \"winapp {name}\""), 30)?;
+                self.wait(&format!("launcher query {query:?}"), 30)?;
                 std::thread::sleep(Duration::from_millis(800));
                 self.chord(&["ret".into()])?;
                 self.wait("poly-compositor: launched", 30)?;
@@ -985,9 +1064,16 @@ impl Driver {
 }
 
 #[cfg(unix)]
-fn drive(o: &Opts, socket: &Path, log: &Path) -> Result {
+fn drive(o: &DriveSpec, socket: &Path, log: &Path) -> Result {
     let qmp = crate::screen::Qmp::connect(socket, Duration::from_secs(30))?;
-    let mut d = Driver { qmp, log: log.to_path_buf(), out: o.out.clone(), name: o.name.clone(), shots: 0 };
+    let mut d = Driver {
+        qmp,
+        log: log.to_path_buf(),
+        out: o.out.clone(),
+        name: o.name.clone(),
+        query: o.query.clone(),
+        shots: 0,
+    };
     d.wait(crate::desktop::READY, 120)?;
     std::thread::sleep(Duration::from_secs(1));
     let started = Instant::now();
