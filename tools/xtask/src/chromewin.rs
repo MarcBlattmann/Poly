@@ -712,6 +712,11 @@ pub struct Summary {
     pub stdout_sha256: Option<String>,
     /// Lines of the kernel log that name a fault or an unsupported call.
     pub faults: Vec<String>,
+    /// Kernel lines saying a write to the guest's disk failed with `EIO` (`fs: writeback ...
+    /// failed: EIO`, the registry's hive saves): the disk image under QEMU could not be written,
+    /// as when the host's disk is full. Chrome's databases then fail and Chrome ends its network
+    /// service on purpose: a run with these says nothing about Poly (ADR 0217).
+    pub disk_errors: usize,
 }
 
 impl Summary {
@@ -755,6 +760,9 @@ impl Summary {
             if !expect.is_empty() && line.contains(expect) {
                 s.expected = true;
             }
+            if line.contains("failed: EIO") && (line.contains("fs: ") || line.contains("nt: registry: ")) {
+                s.disk_errors += 1;
+            }
         }
         // The launcher's markers again, from its console output alone: the kernel's own log
         // lines can land in the middle of a marker, and the console wraps long lines with cursor
@@ -793,12 +801,23 @@ impl Summary {
 pub fn console_stream(log: &str) -> String {
     const KERNEL: [&str; 6] = ["nt: pid ", "nt-waits: ", "nt-trace: ", "nt-trail: ", "nt-exc: ", "ptrace"];
     let mut kept = String::with_capacity(log.len());
-    let mut rest = log;
-    while let Some(at) = KERNEL.iter().filter_map(|k| rest.find(k)).min() {
-        kept.push_str(&rest[..at]);
-        rest = rest[at..].find('\n').map_or("", |nl| &rest[at + nl + 1..]);
+    // Where each prefix next occurs at or after `pos`: searched again only once `pos` has passed
+    // it, so the whole log is scanned about once per prefix. (Searching the rest of the log for
+    // every prefix after every kernel line took more than ten minutes for a 10 MB log of
+    // `--exceptions` runs.)
+    let mut next: [Option<usize>; KERNEL.len()] = KERNEL.map(|k| log.find(k));
+    let mut pos = 0;
+    loop {
+        for (n, k) in next.iter_mut().zip(KERNEL) {
+            if n.is_some_and(|at| at < pos) {
+                *n = log[pos..].find(k).map(|at| pos + at);
+            }
+        }
+        let Some(at) = next.iter().flatten().min().copied() else { break };
+        kept.push_str(&log[pos..at]);
+        pos = log[at..].find('\n').map_or(log.len(), |nl| at + nl + 1);
     }
-    kept.push_str(rest);
+    kept.push_str(&log[pos..]);
     crate::console::strip_ansi(&kept).chars().filter(|&c| c != '\n').collect()
 }
 
@@ -1068,6 +1087,14 @@ impl Outcome {
         if let Some(t) = &self.trace {
             println!("  poly-side call trace: {}", t.display());
         }
+        if self.summary.disk_errors > 0 {
+            println!(
+                "  DISK ERRORS: {} writes to the guest's disk failed with EIO: the disk image under QEMU \
+                 could not be written (is the host's disk full?). Chrome's databases fail then and Chrome ends \
+                 its network service on purpose, so this run says nothing about Poly (ADR 0217).",
+                self.summary.disk_errors
+            );
+        }
     }
 }
 
@@ -1199,9 +1226,25 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
     );
+    headless_boot_test(kernel, &STAGES[0], "headless", S1_REQUIRED)
+}
+
+/// The boot test group `chrome-win-sandbox` (ADR 0217): stage 2, the same headless `--dump-dom`
+/// with Chrome's sandbox on (its GPU, network and renderer children as AppContainers, ADR 0206),
+/// required like stage 1 ([`S2_REQUIRED`]). Skipped without the cached package, like `chrome-win`.
+pub fn sandbox_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    eprintln!(
+        "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom with the sandbox on (stage 2) (ADR 0206, ADR 0217)"
+    );
+    headless_boot_test(kernel, &STAGES[1], "sandbox", S2_REQUIRED)
+}
+
+/// Boot a headless stage `st` once and report it; with `required` (or `POLY_CHROME_REQUIRED=1`)
+/// a stage that does not pass fails the group.
+fn headless_boot_test(kernel: &Path, st: &Stage, what: &str, required: bool) -> Result {
     if !fetched() {
         if chrome_required() {
-            ci_annotation(1, "headless", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            ci_annotation(st.number, what, "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
             return Err(format!(
                 "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
                 cache_dir().display()
@@ -1213,7 +1256,6 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         );
         return Ok(());
     }
-    let st = &STAGES[0];
     let outcome = boot_stage(
         kernel,
         st,
@@ -1228,19 +1270,19 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         },
     )?;
     outcome.report(st);
-    let required = S1_REQUIRED || chrome_required();
+    let required = required || chrome_required();
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
     } else if required {
         ci_annotation(
             st.number,
-            "headless",
+            what,
             "Chrome's headless --dump-dom did not pass (the serial log is an artifact of the run)",
         );
         return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
-            "==> stage {} did not pass yet (not required: see S1_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
+            "==> stage {} did not pass yet (not required: see S1_REQUIRED/S2_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
             st.number,
             outcome.log.display()
         );
@@ -1355,6 +1397,11 @@ fn stage3_window(kernel: &Path) -> Result {
 /// pass. It passes every time since ADR 0155 step 13 (the failed check at
 /// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
 pub const S1_REQUIRED: bool = true;
+
+/// Whether the `chrome-win-sandbox` boot test group fails when stage 2 (the sandbox on) does not
+/// pass. Its failures under load were a full host disk under the guest's disk image (ADR 0217):
+/// with a disk that can be written it passes every time.
+pub const S2_REQUIRED: bool = true;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
@@ -1534,6 +1581,30 @@ mod tests {
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);
+    }
+
+    /// A log of an `--exceptions` run: tens of thousands of kernel lines between the
+    /// launcher's (each pass over the rest of the log per line made this take minutes).
+    #[test]
+    fn a_long_log_of_kernel_lines_is_read_in_one_pass() {
+        let mut log = String::from("LAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 stdout 7b79f8b475");
+        for i in 0..60_000 {
+            log.push_str(&format!("nt-exc: pid 7 tid {i} stack +0x0000: 0000000000000000 0000000000000001\n"));
+        }
+        log.push_str("542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b\x1b[22;1HLAUNCH-EXIT code=0x0\n");
+        let s = Summary::parse(&log, DOM_EXPECT);
+        assert_eq!(s.stdout_bytes, Some(440));
+        assert_eq!(
+            s.stdout_sha256.as_deref(),
+            Some("7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b")
+        );
+        assert_eq!(s.code, Some(0));
+        assert_eq!(console_stream("a\nnt: pid 1: x\nb ptrace q\nc"), "ab c");
+        assert_eq!(s.disk_errors, 0);
+        // A run whose disk could not be written (the host's disk was full) is counted.
+        let full = "fs: writeback to /mnt/root (virtio0) failed: EIO\n\
+                    nt: registry: writing hive SYSTEM to /mnt/root/poly/nt/registry failed: EIO\nLAUNCH-EXIT code=0x0\n";
+        assert_eq!(Summary::parse(full, DOM_EXPECT).disk_errors, 2);
     }
 
     #[test]
