@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gofn_errors",
+      "exe_sha256": "c4f8753cbeae6afdd0562c8dba2ea058bbf34636a20a8435a0b5d9c4259b28f1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZW9mIE9QRU5GSUxFTkFNRVcgMTUyCkNvbW1EbGdFeHRlbmRlZEVycm9yIGJlZm9yZSBhbnkgY2FsbDogMHgwCmxTdHJ1Y3RTaXplIDA6IEdldE9wZW5GaWxlTmFtZVcgPSAwLCBDb21tRGxnRXh0ZW5kZWRFcnJvciA9IDB4MQpsU3RydWN0U2l6ZSA0OiBHZXRPcGVuRmlsZU5hbWVXID0gMCwgQ29tbURsZ0V4dGVuZGVkRXJyb3IgPSAweDEKbFN0cnVjdFNpemUgMTAwMDogR2V0T3BlbkZpbGVOYW1lVyA9IDAsIENvbW1EbGdFeHRlbmRlZEVycm9yID0gMHgxCk9GTl9FTkFCTEVIT09LIHdpdGhvdXQgYSBob29rOiBHZXRPcGVuRmlsZU5hbWVXID0gMCwgQ29tbURsZ0V4dGVuZGVkRXJyb3IgPSAweGIKT0ZOX0VOQUJMRVRFTVBMQVRFIHdpdGhvdXQgYSB0ZW1wbGF0ZSBuYW1lOiBHZXRPcGVuRmlsZU5hbWVXID0gMCwgQ29tbURsZ0V4dGVuZGVkRXJyb3IgPSAweDYKT0ZOX0VOQUJMRVRFTVBMQVRFSEFORExFIHdpdGhvdXQgYSB0ZW1wbGF0ZTogR2V0T3BlbkZpbGVOYW1lVyA9IDAsIENvbW1EbGdFeHRlbmRlZEVycm9yID0gMHg4CmEgdGVtcGxhdGUgdGhhdCBpcyBub3QgaW4gdGhlIG1vZHVsZTogR2V0T3BlbkZpbGVOYW1lVyA9IDAsIENvbW1EbGdFeHRlbmRlZEVycm9yID0gMHg2Cmxwc3RyRmlsZSBOVUxMOiBHZXRPcGVuRmlsZU5hbWVXID0gMCwgQ29tbURsZ0V4dGVuZGVkRXJyb3IgPSAweDAKbk1heEZpbGUgMDogR2V0T3BlbkZpbGVOYW1lVyA9IDAsIENvbW1EbGdFeHRlbmRlZEVycm9yID0gMHgyCm5NYXhGaWxlIDE6IEdldE9wZW5GaWxlTmFtZVcgPSAwLCBDb21tRGxnRXh0ZW5kZWRFcnJvciA9IDB4MAphIGJhZCBvd25lciB3aW5kb3cgaGFuZGxlOiBHZXRPcGVuRmlsZU5hbWVXID0gMCwgQ29tbURsZ0V4dGVuZGVkRXJyb3IgPSAweGZmZmYKYWdhaW4gbFN0cnVjdFNpemUgMDogR2V0T3BlbkZpbGVOYW1lVyA9IDAsIENvbW1EbGdFeHRlbmRlZEVycm9yID0gMHgxCkNvbW1EbGdFeHRlbmRlZEVycm9yIHR3aWNlIGluIGEgcm93OiAweDEgMHgxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sizeof OPENFILENAMEW 152\nCommDlgExtendedError before any call: 0x0\nlStructSize 0: GetOpenFileNameW = 0, CommDlgExtendedError = 0x1\nlStructSize 4: GetOpenFileNameW = 0, CommDlgExtendedError = 0x1\nlStructSize 1000: GetOpenFileNameW = 0, CommDlgExtendedError = 0x1\nOFN_ENABLEHOOK without a hook: GetOpenFileNameW = 0, CommDlgExtendedError = 0xb\nOFN_ENABLETEMPLATE without a template name: GetOpenFileNameW = 0, CommDlgExtendedError = 0x6\nOFN_ENABLETEMPLATEHANDLE without a template: GetOpenFileNameW = 0, CommDlgExtendedError = 0x8\na template that is not in the module: GetOpenFileNameW = 0, CommDlgExtendedError = 0x6\nlpstrFile NULL: GetOpenFileNameW = 0, CommDlgExtendedError = 0x0\nnMaxFile 0: GetOpenFileNameW = 0, CommDlgExtendedError = 0x2\nnMaxFile 1: GetOpenFileNameW = 0, CommDlgExtendedError = 0x0\na bad owner window handle: GetOpenFileNameW = 0, CommDlgExtendedError = 0xffff\nagain lStructSize 0: GetOpenFileNameW = 0, CommDlgExtendedError = 0x1\nCommDlgExtendedError twice in a row: 0x1 0x1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 275
+    }
+  ]
+}

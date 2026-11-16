@@ -15,19 +15,22 @@ use poly_kernelbase::session::{self, Session};
 
 poly_win32_rt::process_heap_allocator!();
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SetLastError(error: u32);
     fn GetComputerNameW(buf: *mut u16, size: *mut u32) -> i32;
     fn GetSystemTimeAsFileTime(time: *mut u64);
 }
 
-#[link(name = "advapi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetUserNameW(buf: *mut u16, size: *mut u32) -> i32;
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn IsWindow(hwnd: usize) -> i32;
 }
@@ -50,14 +53,26 @@ fn fail(error: u32) -> i32 {
     0
 }
 
-/// This process's session (`PEB.SessionId`, PEB + 0x2C0, `winternl.h`; the PEB is at
-/// `gs:[0x60]`).
+/// This process's session (`PEB.SessionId`, `winternl.h`: PEB + 0x2C0 in 64 bits, + 0x1D4 in 32;
+/// the PEB is at `gs:[0x60]`, in 32 bits at `fs:[0x30]`).
 fn session_id() -> u32 {
-    let peb: u64;
-    // SAFETY: GS is the TEB in every NT thread; TEB + 0x60 is the PEB pointer.
-    unsafe {
-        core::arch::asm!("mov {}, gs:[0x60]", out(reg) peb, options(nostack, pure, readonly));
-        ((peb + 0x2C0) as *const u32).read()
+    #[cfg(target_arch = "x86_64")]
+    {
+        let peb: u64;
+        // SAFETY: GS is the TEB in every NT thread; TEB + 0x60 is the PEB pointer.
+        unsafe {
+            core::arch::asm!("mov {}, gs:[0x60]", out(reg) peb, options(nostack, pure, readonly));
+            ((peb + 0x2C0) as *const u32).read()
+        }
+    }
+    #[cfg(target_arch = "x86")]
+    {
+        let peb: u32;
+        // SAFETY: FS is the TEB in every 32-bit NT thread; TEB + 0x30 is the PEB pointer.
+        unsafe {
+            core::arch::asm!("mov {}, fs:[0x30]", out(reg) peb, options(nostack, pure, readonly));
+            ((peb + 0x1D4) as *const u32).read()
+        }
     }
 }
 
@@ -186,3 +201,6 @@ pub unsafe extern "system" fn WTSFreeMemory(memory: *mut u8) {
 pub extern "system" fn wtsapi32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

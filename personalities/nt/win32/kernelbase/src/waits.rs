@@ -40,8 +40,10 @@ struct Wait {
     thread_id: AtomicU32,
     running: AtomicU32,
     cancelled: AtomicBool,
-    /// A completion event to signal when the running callback ends.
+    /// A completion event to signal when the wait's thread is done.
     event: AtomicIsize,
+    /// The wait's thread is done (it signals the event after setting this).
+    done: AtomicBool,
     refs: AtomicU32,
 }
 
@@ -107,6 +109,7 @@ unsafe extern "system" fn wait_thread(param: *mut u8) -> u32 {
             break;
         }
     }
+    wr.done.store(true, Ordering::SeqCst);
     wr.signal_completion();
     // SAFETY: this thread's reference.
     unsafe { release(w) };
@@ -124,7 +127,7 @@ pub unsafe extern "system" fn RegisterWaitForSingleObject(
     ms: u32,
     flags: u32,
 ) -> i32 {
-    if new_wait.is_null() {
+    if new_wait.is_null() || object == 0 {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let spec = match waitreg::wait_spec(callback.is_none(), ms, flags) {
@@ -150,6 +153,7 @@ pub unsafe extern "system" fn RegisterWaitForSingleObject(
         running: AtomicU32::new(0),
         cancelled: AtomicBool::new(false),
         event: AtomicIsize::new(0),
+        done: AtomicBool::new(false),
         refs: AtomicU32::new(2),
     }));
     // SAFETY: a valid entry point; the thread gets `w`.
@@ -191,7 +195,7 @@ pub unsafe extern "system" fn UnregisterWaitEx(wait: Handle, completion_event: H
     let wr = unsafe { &*w };
     let completion = waitreg::completion(completion_event);
     if completion == Completion::Event {
-        wr.event.store(completion_event, Ordering::Release);
+        wr.event.store(completion_event, Ordering::SeqCst);
     }
     wr.cancelled.store(true, Ordering::Release);
     // SAFETY: our event.
@@ -203,8 +207,12 @@ pub unsafe extern "system" fn UnregisterWaitEx(wait: Handle, completion_event: H
         unsafe { nt::NtWaitForSingleObject(wr.thread.load(Ordering::Acquire), 0, core::ptr::null()) };
     }
     if !outcome.signal_later && completion == Completion::Event {
-        // Nothing to wait for: the event is not signaled.
+        // The call failed otherwise: the event is not signaled.
         let _ = wr.event.compare_exchange(completion_event, 0, Ordering::AcqRel, Ordering::Acquire);
+    } else if outcome.signal_later && wr.done.load(Ordering::SeqCst) {
+        // The wait's thread ended before the event was stored (a `WT_EXECUTEONLYONCE` wait
+        // that fired): nobody else will signal it. `signal_completion` takes the event once.
+        wr.signal_completion();
     }
     // SAFETY: the caller's reference.
     unsafe { release(w) };
@@ -257,7 +265,7 @@ fn thread_id(thread: Handle) -> Result<u32, u32> {
     let mut info = [0u8; 48];
     // SAFETY: valid pointers; ThreadBasicInformation (0) is 48 bytes.
     let st = unsafe { nt::NtQueryInformationThread(thread, 0, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
-    if st.is_success() { Ok(u64::from_le_bytes(info[24..32].try_into().unwrap()) as u32) } else { Err(from_status(st)) }
+    if st.is_success() { Ok(id_in(&info, TBI_UNIQUE_THREAD)) } else { Err(from_status(st)) }
 }
 
 /// `HRESULT_FROM_WIN32`.

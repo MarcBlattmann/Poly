@@ -13,6 +13,7 @@ extern crate alloc;
 
 mod acctrl;
 mod etw;
+mod lsa;
 
 use alloc::vec::Vec;
 use poly_security::sd::{self, SdPtr};
@@ -21,7 +22,8 @@ use poly_win32_rt as _;
 
 type Handle = isize;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn LocalFree(mem: *mut u8) -> *mut u8;
@@ -151,6 +153,16 @@ unsafe fn sid_bytes<'a>(p: *const u8) -> &'a [u8] {
 }
 
 // ----- the registry ---------------------------------------------------------------------
+
+/// `RegDisablePredefinedCache`: Learn: "Instructs the system to disable the predefined registry
+/// handle table cache for the current process"; the call returns `ERROR_SUCCESS` and leaves the
+/// last error alone (the sheet), also when it is repeated. Poly keeps no cache of
+/// `HKEY_CURRENT_USER`'s handle: a predefined key is resolved at each open, so the call only
+/// has to succeed.
+#[unsafe(no_mangle)]
+pub extern "system" fn RegDisablePredefinedCache() -> u32 {
+    0
+}
 
 /// `RegDeleteKeyW`: `RegDeleteKeyExW` without a view.
 #[unsafe(no_mangle)]
@@ -330,7 +342,8 @@ pub unsafe extern "system" fn ConvertSecurityDescriptorToStringSecurityDescripto
 
 // ----- security information through a handle --------------------------------------------
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> u32;
     fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> u32;
@@ -583,7 +596,10 @@ fn user_name() -> Result<&'static str, u32> {
     if ok == 0 {
         return Err(poly_security::error::ERROR_NO_TOKEN);
     }
-    let user = sid::Sid::from_bytes(&buf[16..]).ok_or(poly_security::error::ERROR_NONE_MAPPED)?;
+    // `TOKEN_USER` is a `SID_AND_ATTRIBUTES` (a pointer and a DWORD, padded to two pointers: 16
+    // bytes in 64 bits, 8 in 32), the SID right behind it.
+    let user = sid::Sid::from_bytes(&buf[2 * core::mem::size_of::<usize>()..])
+        .ok_or(poly_security::error::ERROR_NONE_MAPPED)?;
     if user == poly_security::poly_user_sid() {
         Ok(poly_security::POLY_USER_NAME)
     } else {
@@ -746,3 +762,6 @@ pub extern "system" fn advapi32_main(_module: *mut u8, _reason: u32, _reserved: 
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

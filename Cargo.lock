@@ -119,6 +119,14 @@ name = "poly-com"
 version = "0.0.1"
 
 [[package]]
+name = "poly-comctl"
+version = "0.0.1"
+
+[[package]]
+name = "poly-comdlg"
+version = "0.0.1"
+
+[[package]]
 name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
@@ -273,6 +281,10 @@ name = "poly-http"
 version = "0.0.1"
 
 [[package]]
+name = "poly-imagelist"
+version = "0.0.1"
+
+[[package]]
 name = "poly-input"
 version = "0.0.1"
 
@@ -339,6 +351,10 @@ version = "0.0.1"
 
 [[package]]
 name = "poly-mem"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvcp"
 version = "0.0.1"
 
 [[package]]
@@ -429,6 +445,7 @@ dependencies = [
  "poly-ntobj",
  "poly-pe",
  "poly-registry",
+ "poly-rtl",
  "poly-security",
  "poly-seh",
  "poly-vfs",
@@ -475,6 +492,7 @@ name = "poly-procfs"
 version = "0.0.1"
 dependencies = [
  "poly-vfs",
+ "poly-vm",
 ]
 
 [[package]]

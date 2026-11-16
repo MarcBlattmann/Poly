@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CheckFormatSupport.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CheckFormatSupport
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CheckFormatSupport", "D3D11_FORMAT_SUPPORT enumeration", "DXGI_FORMAT"; d3d11.h, d3d11_1.h, d3dcommon.h, dxgiformat.h, dxgi.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Returns the D3D11_FORMAT_SUPPORT bit mask of a DXGI format on this device. ANGLE and Chrome's GPU info collection ask for every format they might use. Observed on WARP for the formats 0 to 133, 188 to 192, 200, 1000 and 0xFFFFFFFF at feature levels 11_0, 11_1 and 10_0: S_OK with the mask for the 112 defined formats (0 to 115 except 66, 110, 111 and 112, and 188), E_FAIL (0x80004005) with a mask of 0 for the others (66, 110 to 112, 116 to 133, 189 to 192, 200, 1000, 0xFFFFFFFF); the whole table is the observation of the visible tests.
+interface:
+  signature: "HRESULT ID3D11Device::CheckFormatSupport(DXGI_FORMAT format, UINT* support)"
+  bits: "BUFFER 1, IA_VERTEX_BUFFER 2, IA_INDEX_BUFFER 4, SO_BUFFER 8, TEXTURE1D 0x10, TEXTURE2D 0x20, TEXTURE3D 0x40, TEXTURECUBE 0x80, SHADER_LOAD 0x100, SHADER_SAMPLE 0x200, SHADER_SAMPLE_COMPARISON 0x400, SHADER_SAMPLE_MONO_TEXT 0x800, MIP 0x1000, MIP_AUTOGEN 0x2000, RENDER_TARGET 0x4000, BLENDABLE 0x8000, DEPTH_STENCIL 0x10000, CPU_LOCKABLE 0x20000, MULTISAMPLE_RESOLVE 0x40000, DISPLAY 0x80000, CAST_WITHIN_BIT_LAYOUT 0x100000, MULTISAMPLE_RENDERTARGET 0x200000, MULTISAMPLE_LOAD 0x400000, SHADER_GATHER 0x800000, BACK_BUFFER_CAST 0x1000000, TYPED_UNORDERED_ACCESS_VIEW 0x2000000, SHADER_GATHER_COMPARISON 0x4000000 (d3d11.h)"
+chrome:
+  calls: "ANGLE queries the support flags of the formats it exposes (R8G8B8A8, B8G8R8A8, R16G16B16A16_FLOAT, depth formats, NV12 for video) when it starts; assumed from ANGLE's documented behaviour, not observed through the tracer"
+rules:
+  ok_range: "formats 0 to 115 give S_OK except 66, 110, 111 and 112 (E_FAIL), and 188 gives S_OK. Examples (WARP, 11_0): 0 (UNKNOWN) 0x00020001; 28 (R8G8B8A8_UNORM) 0x03FEF3F3; 87 (B8G8R8A8_UNORM) 0x03FEF3F3; 88 (B8G8R8X8_UNORM) 0x00F6F3F3; 103 (NV12) 0xC282C320; 106 0x00000020"
+  unknown_formats: "66, 110 to 112, 116 to 133, 189 to 192, 200, 1000 and 0xFFFFFFFF: E_FAIL (0x80004005) and the output is 0"
+  levels: "the table at feature level 11_0 and at 11_1 differ in one format only (67, R9G9B9E5_SHAREDEXP: 0x008213F0 at 11_0, 0x02E6D3F1 at 11_1); at 10_0 81 formats have fewer bits (for example 2, R32G32B32A32_FLOAT: 0x0076F3FB instead of 0x02F6F3FB: no typed UAV, no multisample)"
+  bgra_flag: "the BGRA_SUPPORT creation flag does not change the table (the 11_1 device without the flag has B8G8R8A8_UNORM support 0x03FEF3F3 too)"
+  devices: "the three devices are WARP devices created with the levels [11_0], [11_1] and [10_0]"
+errors:
+  unknown_format: "E_FAIL (0x80004005)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  a hardware adapter's table (differs), NULL output pointer (crashes), device-removed devices.

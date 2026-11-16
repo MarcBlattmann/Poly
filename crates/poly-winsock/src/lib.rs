@@ -43,6 +43,7 @@ pub mod dup;
 pub mod error;
 pub mod events;
 pub mod exports;
+pub mod known;
 pub mod poll;
 pub mod resolve;
 pub mod text;
@@ -50,18 +51,23 @@ pub mod text;
 /// `MAKEWORD(2, 2)`: the highest Winsock version Poly offers.
 pub const HIGHEST_VERSION: u16 = 0x0202;
 
-/// `WSAStartup`'s version negotiation (Learn: "WSAStartup"): `requested`
-/// is `MAKEWORD(major, minor)`. A request below 1.0 is
-/// `WSAVERNOTSUPPORTED`; otherwise the version used is the lower of the
-/// request and 2.2. Returns `(wVersion, wHighVersion)`.
+/// `WSAStartup`'s version negotiation (Learn: "WSAStartup"; as Windows answers it): `requested` is
+/// `MAKEWORD(major, minor)`. Major version 0 is `WSAVERNOTSUPPORTED`; a 1.x request gets what it
+/// asked for up to 1.1; a 2.x one up to 2.2; a higher major gets 2.2. Returns `(wVersion, wHighVersion)`.
 pub fn negotiate(requested: u16) -> Result<(u16, u16), u32> {
-    let major = requested & 0xff;
     let minor = requested >> 8;
-    if major == 0 {
-        return Err(consts::WSAVERNOTSUPPORTED);
+    match requested & 0xff {
+        0 => Err(consts::WSAVERNOTSUPPORTED),
+        1 => Ok((if minor > 1 { 0x0101 } else { requested }, HIGHEST_VERSION)),
+        2 => Ok((if minor > 2 { HIGHEST_VERSION } else { requested }, HIGHEST_VERSION)),
+        _ => Ok((HIGHEST_VERSION, HIGHEST_VERSION)),
     }
-    let used = if (major, minor) > (2, 2) { HIGHEST_VERSION } else { requested };
-    Ok((used, HIGHEST_VERSION))
+}
+
+/// `WSADATA.iMaxSockets` and `iMaxUdpDg` for the version negotiated: Windows fills them for a
+/// Winsock 1.1 client (32767 and 65467) and leaves them 0 for 2.x.
+pub fn wsadata_limits(version: u16) -> (u16, u16) {
+    if version & 0xff == 1 { (32767, 65467) } else { (0, 0) }
 }
 
 /// Byte-order swaps (`htons`, `htonl`, `ntohs`, `ntohl`): Windows on x64
@@ -81,13 +87,19 @@ mod tests {
     #[test]
     fn versions() {
         assert_eq!(negotiate(0x0202), Ok((0x0202, 0x0202)));
+        // A 1.x request gets what it asked for up to 1.1; a 2.x one up to 2.2.
         assert_eq!(negotiate(0x0101), Ok((0x0101, 0x0202)));
+        assert_eq!(negotiate(0x0001), Ok((0x0001, 0x0202)));
+        assert_eq!(negotiate(0x0201), Ok((0x0101, 0x0202)));
         assert_eq!(negotiate(0x0002), Ok((0x0002, 0x0202)));
-        // 2.3 and 3.0 are above what Poly has: 2.2.
+        assert_eq!(negotiate(0x0102), Ok((0x0102, 0x0202)));
         assert_eq!(negotiate(0x0302), Ok((0x0202, 0x0202)));
         assert_eq!(negotiate(0x0003), Ok((0x0202, 0x0202)));
         assert_eq!(negotiate(0x0100), Err(consts::WSAVERNOTSUPPORTED));
+        assert_eq!(negotiate(0x0200), Err(consts::WSAVERNOTSUPPORTED));
         assert_eq!(negotiate(0), Err(consts::WSAVERNOTSUPPORTED));
+        assert_eq!(wsadata_limits(0x0101), (32767, 65467));
+        assert_eq!(wsadata_limits(0x0202), (0, 0));
     }
 
     #[test]

@@ -371,8 +371,8 @@ an outline font of the height asked, as on any Windows.
 `rust-src`, `rust-lld`; the first build compiles `core`, about 30 s) and
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
-(`shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
-`kernelbase`; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
+(`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
+`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`, and `ucrtbase` for the C runtime entries; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
@@ -420,6 +420,21 @@ interactive run at a time may use the machine.
 POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2     --tests-dir specs/windows/user32.dll/InvalidateRect.tests --runner-arg -Interactive [--record]
 ```
 
+**Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
+accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that
+needs the resources of its own executable carries them as data: the resource directory
+(the PE format of Learn's "PE Format"; the templates in the formats of "Resource File
+Formats") is written in the test's source as a `core::arch::global_asm!` block in the
+sections `.rsrc$01` (directories) and `.rsrc$02` (data, each blob with an image-relative
+`.rva` entry), so the test stays one `.rs` file and `win build` needs no resource
+compiler (the section is kept by the linker as it is). These tests run in the SSH session
+(session 0): windows, menus, modal dialogs and message boxes work there without being
+visible, input never arrives, so a test ends a modal loop itself (`EndDialog` from
+`WM_INITDIALOG`, a posted message, or a window timer that calls `EndMenu` or finds the
+`#32770` window of a message box with `EnumThreadWindows`). Common controls are those of
+version 5.82 (no manifest); `comdlg32` is in `ALLOWED_DLLS` and the common dialogs are
+ended by a hook that posts IDCANCEL.
+
 **C++ tests** ([ADR 0098](adr/0098-cpp-windows-tests-and-the-cpp-exception-spec.md)):
 a test may also be one `.cpp` file, for what Rust cannot do (C++
 exceptions through `msvcrt.dll`). `win build` compiles it with `clang++
@@ -431,6 +446,24 @@ and links it with `lld-link` against import libraries made by
 A line `// poly-cxx: handler=__CxxFrameHandler magic=0x19930520
 ehflags=0 cflags=-fasync-exceptions` rewrites clang's exception tables the
 way older compilers write them (see `tools/pipeline/src/wincxx.rs`).
+
+**Tests built by Microsoft's compiler** (ADR 0199, spec-vcrt-1): what Visual C++ writes
+(`__CxxFrameHandler4`'s compressed tables, RTTI records, the layouts of `msvcp140`'s classes) cannot
+come from clang, and the container has no Microsoft compiler. A `.cpp` test with the line
+`// poly-cxx: compiler=msvc [cl=/EHa,/O2]` is built on the oracle machine (Visual Studio Build
+Tools in `C:\BuildTools`, the Visual C++ Redistributable installed in System32) by
+`tools/pipeline/windows/msvc-build.ps1` (`cl /EHsc /GS- /Zl /O1`, `link /NODEFAULTLIB
+/ENTRY:mainCRTStartup /Brepro`, import libraries made from `tests/windows/cxx/*.def` and, for
+`msvcp140`, from the DLL's own export table; `poly_wtest.h` takes `terminate`/`set_terminate` from
+`<eh.h>` and defines its own `??_7type_info@@6B@`), and the resulting `<name>.exe` is checked in
+beside `<name>.cpp` (a test artefact of about 10 KB; the pipeline's "no binary file" review rule
+has this one exception, by owner decision 2026-11-15). `win build` takes that executable as it is
+(it must import only from `ntdll`, `kernel32`, `msvcrt`, `vcruntime140`, `vcruntime140_1`,
+`ucrtbase`, `msvcp140`); `tests split` keeps a `.exe` with its `.cpp`, visible or held out
+together; `win remote`, `win diff`, `win poly` and `polycheck` need nothing else, so the same file
+runs on Windows and on Poly. A symbol that is a Visual C++ decorated name (`?_Xbad_alloc@std@@YAXXZ`)
+has file names with its `?` written `%3F` (any of `<>:"|?*%` is written `%XX`;
+`EntryId::file_symbol`), the entry id stays the export name.
 
 **Splitting a Windows entry's tests**: `pipeline tests split <entry> <dir>
 --spec-agent A --windows-results <results.json from the PC>` accepts only
@@ -612,6 +645,24 @@ cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write 
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
+
+## On a Windows host
+
+The pipeline tool builds and its tests pass on a Windows host with the same
+`cargo xtask pipeline ...` commands (ADR 0124); `ci lint` checks it with
+`clippy --target x86_64-pc-windows-msvc` next to xtask. What is Linux by
+nature is behind `cfg(unix)` and says so at run time instead of failing to
+build:
+
+| Command | On a Windows host |
+|---|---|
+| `spec`, `tests`, `handoff`, `initramfs`, `win ...` | work (`win build` cross-builds the Windows test programs; `win remote` needs ssh) |
+| `build`, `trace`, `diff`, `polyrun` | exit 1: `` `pipeline <cmd>` needs a Linux host (ADR 0124); run it through polyd `` |
+| `selfcheck`, `polycheck` | skip themselves with the same reason (exit 0), like without a C compiler |
+| `mac ...` | need a Mac, as before |
+
+Repository paths the tool records (spec sheets, visible tests, hand-off
+log, manifests) always use `/`, whatever the host.
 
 ## Safety rules
 

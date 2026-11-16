@@ -336,17 +336,47 @@ pub fn deliver<K: NtKernel>(
     record: &ExceptionRecord,
     ctx: &Context,
 ) -> core::result::Result<(), Undeliverable> {
-    let dispatcher = k.with_state(|_, proc, _| proc.exception_dispatcher);
+    let (dispatcher, wow64) = k.with_state(|_, proc, _| (proc.exception_dispatcher, proc.wow64));
     if dispatcher == 0 {
         return Err(Undeliverable::NoDispatcher);
     }
+    if wow64 {
+        return deliver32(k, record, ctx, dispatcher);
+    }
     let frame = frame_below(ctx.rsp()).ok_or(Undeliverable::BadStack)?;
+    // Before the frame is written: the log may show what the thread's last calls left below its
+    // stack pointer, which the frame overwrites.
+    k.exception_delivered(record, ctx);
     let writes: [(u64, &[u8]); 3] =
         [(frame.context, &ctx.to_bytes()), (frame.record, &record.to_bytes()), (frame.rsp, &[0u8; CALL_SLOT as usize])];
     for (at, bytes) in writes {
         k.write_user(at, bytes).map_err(|_| Undeliverable::BadStack)?;
     }
     let entry = dispatcher_entry(ctx, &frame, dispatcher);
+    k.load_context(&entry, CONTEXT_CONTROL | CONTEXT_INTEGER).map_err(Undeliverable::NoContext)?;
+    Ok(())
+}
+
+/// [`deliver`] in a 32-bit process (ADR 0186): the x86 `CONTEXT` and `EXCEPTION_RECORD` and the
+/// dispatcher's call frame on the thread's stack (`crate::wow64::context`), and the thread resumes
+/// in the i686 `ntdll`'s `KiUserExceptionDispatcher` with ESP at the frame.
+fn deliver32<K: NtKernel>(
+    k: &mut K,
+    record: &ExceptionRecord,
+    ctx: &Context,
+    dispatcher: u64,
+) -> core::result::Result<(), Undeliverable> {
+    use crate::wow64::context::{call_frame, frame32_below, to_context32, to_record32};
+    let frame = frame32_below(ctx.rsp()).ok_or(Undeliverable::BadStack)?;
+    let writes: [(u64, &[u8]); 3] =
+        [(frame.context, &to_context32(ctx)), (frame.record, &to_record32(record)), (frame.esp, &call_frame(&frame))];
+    for (at, bytes) in writes {
+        k.write_user(at, bytes).map_err(|_| Undeliverable::BadStack)?;
+    }
+    let mut entry = ctx.clone();
+    entry.rip = dispatcher;
+    entry.set_rsp(frame.esp);
+    entry.eflags &= !(RFLAGS_TF | RFLAGS_DF);
     k.load_context(&entry, CONTEXT_CONTROL | CONTEXT_INTEGER).map_err(Undeliverable::NoContext)?;
     k.exception_delivered(record, ctx);
     Ok(())

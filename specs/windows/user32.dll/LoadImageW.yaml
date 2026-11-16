@@ -4,7 +4,7 @@ id: windows/api/user32.dll/LoadImageW
 oracle:
   os: "Windows 11 Home 25H2 (build 26200.9711), x64"
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner \"keeper\" window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar at the top (work area 0,24,1920,1080); no mouse attached (SM_MOUSEPRESENT 0; mouse input comes from SendInput); keyboard: German layout (KLID 00000407) under the input language English (Switzerland), en-CH, which has no LCID, so HKL 0x04072000; Caps Lock and Num Lock off"
-  observed_by: spec-win-gui-c
+  observed_by: spec-win-gui-c, sharpened by spec-win-apps-3
   date: 2026-11-09
 sources: >
   Observations of our own test programs on the machine above. Microsoft
@@ -46,6 +46,10 @@ rules:
   wrong_kind: "A .bmp loaded as IMAGE_ICON and an .ico as IMAGE_BITMAP give NULL with the last error 0."
   resources: "Resource lookups in the (resource-less) executable: icon, bitmap and string name give NULL with ERROR_RESOURCE_DATA_NOT_FOUND (1812). A NULL module with an unknown numeric id: icon 1813, cursor and bitmap 1814. A NULL name: 1813."
   bad_type: "An unknown type (7, 0xFFFFFFFF) returns NULL and leaves the last error unchanged."
+  module_icon_sizes: "IMAGE_ICON of a group of two images (32x32 and 16x16) of the executable: 16x16 gives the 16 image (colour 16x16, mask 16x16); 32x32 and 0x0 (with or without LR_DEFAULTSIZE) give the 32 image; 24x24 gives a 24x24 icon scaled from the 32 image; 8x8 gives an 8x8 icon scaled from the 16 image; 64x64 gives a 64x64 icon of the 32 image's colours; 16x32 gives a 16x32 icon; colour 32 bits and mask 1 bit in each case"
+  module_icon_handles: "without LR_SHARED two loads give two handles and DestroyIcon is TRUE once and FALSE the second time; with LR_SHARED the same size gives the same handle, another size another handle"
+  module_bitmaps: "IMAGE_BITMAP of the executable's bitmap resource (a 4x3 24-bit bitmap): without flags a device-dependent bitmap of the screen's depth (32), width_bytes 16, no bits pointer; LR_CREATEDIBSECTION a DIB section of 24 bits with a bits pointer and the resource's pixels; sizes 8x6 stretch it; LR_MONOCHROME gives 1 bit; the pixels read back through a memory DC are the resource's"
+  module_errors: "a resource number that does not exist: NULL with 1814 (bitmaps); an unknown image type (7): NULL, the last error not changed"
 errors:
   1812: "ERROR_RESOURCE_DATA_NOT_FOUND: id or name not found in a module that has no resources"
   1813: "ERROR_RESOURCE_TYPE_NOT_FOUND: unknown id as icon from a NULL module; system icon ids without LR_SHARED; NULL name"
@@ -58,8 +62,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

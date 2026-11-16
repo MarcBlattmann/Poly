@@ -11,7 +11,8 @@ use poly_win32_gui::set_last_error;
 use poly_win32_rt as _;
 use poly_win32k::guic;
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn IsWindow(hwnd: usize) -> i32;
     fn GetDesktopWindow() -> usize;
@@ -23,13 +24,15 @@ unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
 }
 
-#[link(name = "gdi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> usize;
     fn DeleteObject(h: usize) -> i32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn Sleep(ms: u32);
 }
@@ -386,3 +389,6 @@ pub extern "system" fn dwmapi_main(_module: *mut u8, _reason: u32, _reserved: *m
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

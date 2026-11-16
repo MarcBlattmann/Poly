@@ -24,6 +24,7 @@ pub mod raw;
 pub const ERROR_ACCESS_DENIED: u32 = 5;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
+pub const ERROR_MORE_DATA: u32 = 234;
 pub const ERROR_INVALID_WINDOW_HANDLE: u32 = 1400;
 pub const ERROR_INVALID_MENU_HANDLE: u32 = 1401;
 pub const ERROR_TLW_WITH_WSCHILD: u32 = 1406;
@@ -69,6 +70,30 @@ const POINTER_MESSAGES: &[u32] = &[
     0x0081, // WM_NCCREATE
     0x0083, // WM_NCCALCSIZE
 ];
+
+/// The `msg` of an [`Incoming`] with no window procedure (`wndproc` 0) that
+/// the compositor's resize of a window hands its thread
+/// ([`Wm::configure_from_desktop`]): `user32` calls `SetWindowPos` for the
+/// window with the rectangle [`unpack_set_pos`] reads from `w` and `l`, and
+/// the app never sees the message itself. Not a window message (above
+/// 0xFFFF, where none is).
+pub const DESKTOP_SET_POS: u32 = 0x5059_0001;
+
+/// The sender of the desktop's requests: no thread (process 0 is the
+/// system's desktop, thread 0 none of it).
+const DESKTOP_SENDER: Key = (SYSTEM_DESKTOP_PID, 0);
+
+/// `w` and `l` of a [`DESKTOP_SET_POS`]: the left and top, the width and
+/// height, 32 bits each, the first in the low half.
+pub fn pack_set_pos(r: Rect) -> (u64, u64) {
+    let pair = |a: i32, b: i32| u64::from(a as u32) | (u64::from(b as u32) << 32);
+    (pair(r.left, r.top), pair(r.width(), r.height()))
+}
+
+/// The left, top, width and height of a [`DESKTOP_SET_POS`].
+pub fn unpack_set_pos(w: u64, l: u64) -> (i32, i32, i32, i32) {
+    (w as u32 as i32, (w >> 32) as u32 as i32, l as u32 as i32, (l >> 32) as u32 as i32)
+}
 
 /// Who is calling, and when (milliseconds of the monotonic clock).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -169,6 +194,8 @@ struct Window {
     /// Its thread's default IME window in the interactive session: in the
     /// z order it follows the thread's active window (`input`, ADR 0176).
     helper: bool,
+    /// The menu bar's height above the client area, inside the surface.
+    menu_bar: i32,
 }
 
 #[derive(Debug, Default)]
@@ -190,6 +217,8 @@ struct Queue {
     raw: VecDeque<Msg>,
     /// The thread's own key state after SetKeyboardState (`raw`).
     keys: Option<Vec<u8>>,
+    /// The queue's caret and caret position (`caret`).
+    caret: crate::caret::CaretQueue,
 }
 
 #[derive(Debug)]
@@ -214,6 +243,45 @@ struct Timer {
     flagged: bool,
 }
 
+impl Wm {
+    /// One line per thread queue that holds anything, for a wait report (`poly.nt.waits`, ADR
+    /// 0155 step 12): the posted messages (`msg@hwnd`, first eight), the `changed` wake bits,
+    /// the sends waiting and the input messages. A thread that waits on its queue event while
+    /// its queue holds a message is a lost wakeup.
+    pub fn queue_debug_lines(&self) -> Vec<alloc::string::String> {
+        self.queues
+            .iter()
+            .filter(|(_, q)| !q.posted.is_empty() || !q.sent.is_empty() || !q.raw.is_empty() || q.changed != 0)
+            .map(|(k, q)| {
+                let posted: Vec<alloc::string::String> =
+                    q.posted.iter().take(8).map(|m| alloc::format!("{:#x}@{:#x}", m.msg, m.hwnd)).collect();
+                alloc::format!(
+                    "queue p{} t{}: posted {} [{}] changed {:#x} sent {} receiving {} raw {} quit {:?}",
+                    k.0,
+                    k.1,
+                    q.posted.len(),
+                    posted.join(" "),
+                    q.changed,
+                    q.sent.len(),
+                    q.receiving.len(),
+                    q.raw.len(),
+                    q.quit
+                )
+            })
+            .collect()
+    }
+}
+
+/// Where a window goes in its parent's list ([`Wm::z_plan`]).
+struct ZPlan {
+    parent: u32,
+    was_below: bool,
+    old: Vec<u32>,
+    new: Vec<u32>,
+    below: bool,
+    raised: Vec<u32>,
+}
+
 /// The session's window manager.
 #[derive(Debug)]
 pub struct Wm {
@@ -229,6 +297,8 @@ pub struct Wm {
     timers: Vec<Timer>,
     next_thread_timer: u64,
     screen: (i32, i32),
+    /// The keyboard layout of the desktop (ADR 0209): German without one.
+    layout: crate::kbd::Layout,
     /// The session's screen (ADR 0131).
     display: Display,
     desktop: u32,
@@ -275,6 +345,9 @@ pub struct Wm {
     ime: crate::ime::Ime,
     /// DPI awareness: processes that set theirs, and threads' own (`guic`).
     proc_dpi: BTreeMap<u32, u8>,
+    /// Processes whose manifest declares Windows 8 or later
+    /// (`Request::LayeredChildren`): they may create layered child windows.
+    layered_children: alloc::collections::BTreeSet<u32>,
     thread_dpi: BTreeMap<Key, u8>,
 }
 
@@ -315,6 +388,7 @@ impl Wm {
             timers: Vec::new(),
             next_thread_timer: 0x7FEF,
             screen: DEFAULT_SCREEN,
+            layout: crate::kbd::Layout::German,
             display: Display::SERVICE,
             desktop: 0,
             message: 0,
@@ -339,6 +413,7 @@ impl Wm {
             clip: crate::clip::Clipboard::new(),
             ime: crate::ime::Ime::default(),
             proc_dpi: BTreeMap::new(),
+            layered_children: alloc::collections::BTreeSet::new(),
             thread_dpi: BTreeMap::new(),
         };
         // Index 0 is never a window.
@@ -347,7 +422,21 @@ impl Wm {
         // The system classes: found by every process (Learn: "About Window
         // Classes", system classes; `RegisterClassExW.yaml`: "Button" style
         // 0x8b, 8 extra bytes).
-        for (name, style, extra) in [("Button", 0x8b, 8), ("Static", 0x88, 0), ("Edit", 0x88, 6), ("#32769", 0x08, 0)] {
+        // The procedures are `dlg::sysproc` numbers `user32` runs; the desktop's (last) has none.
+        // Styles and extra bytes of the classes `Button` and the desktop are observed
+        // (`RegisterClassExW.yaml`); the others are `CS_DBLCLKS | CS_PARENTDC`-like guesses
+        // that no sheet contradicts.
+        for (name, style, extra, wndproc) in [
+            ("Button", 0x8b, 8, crate::dlg::sysproc::BUTTON),
+            ("Static", 0x88, 0, crate::dlg::sysproc::STATIC),
+            ("Edit", 0x88, 6, crate::dlg::sysproc::EDIT),
+            ("ListBox", 0x88, 8, crate::dlg::sysproc::LISTBOX),
+            ("ComboBox", 0x88, 8, crate::dlg::sysproc::COMBOBOX),
+            ("ScrollBar", 0x08, 8, crate::dlg::sysproc::SCROLLBAR),
+            ("ComboLBox", 0x808, 8, crate::dlg::sysproc::COMBOLBOX),
+            ("#32770", 0x808, 30, crate::dlg::sysproc::DIALOG),
+            ("#32769", 0x08, 0, 0),
+        ] {
             let name: Vec<u16> = name.encode_utf16().collect();
             let atom = wm.atom_for(&name);
             wm.classes.push(Some(Class {
@@ -355,7 +444,7 @@ impl Wm {
                 atom,
                 name,
                 style,
-                wndproc: 0,
+                wndproc,
                 cls_extra: 0,
                 wnd_extra: extra,
                 instance: 0,
@@ -581,6 +670,7 @@ impl Wm {
             creating: w.state == State::Creating,
             ime: w.ime,
             lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
+            menu_bar: w.menu_bar,
         })
     }
 
@@ -721,14 +811,11 @@ impl Wm {
             }
             (self.desktop, self.root(s.parent as u32))
         };
-        if !child && s.menu != 0 {
-            // No menus exist yet, so no value is a menu handle.
-            return err(ERROR_INVALID_MENU_HANDLE);
-        }
         // A layered child window needs a manifest that declares Windows 8
         // support: without one it is not created, and no last error is set
-        // (SetLayeredWindowAttributes.yaml `children`).
-        if child && s.ex_style & guic::WS_EX_LAYERED != 0 {
+        // (SetLayeredWindowAttributes.yaml `children`; Learn, "Layered
+        // Windows": Windows 8 supports them for child windows).
+        if child && s.ex_style & guic::WS_EX_LAYERED != 0 && !self.layered_children.contains(&ctx.pid) {
             return err(0);
         }
         // A message-only window of style 0 is overlapped too (its client
@@ -787,7 +874,9 @@ impl Wm {
         let (wndproc, unicode, extra, class_name) = {
             let c = self.classes[class].as_mut().expect("found");
             c.windows += 1;
-            (c.wndproc, c.unicode, c.wnd_extra.max(0) as usize, c.name.clone())
+            // A window of a system class made through an `A` function is an ANSI window.
+            let unicode = c.unicode && !(s.ansi && c.pid == SYSTEM_DESKTOP_PID);
+            (c.wndproc, unicode, c.wnd_extra.max(0) as usize, c.name.clone())
         };
         // WM_GETMINMAXINFO at creation only for a window that is not
         // WS_POPUP or has a sizing frame (ShowWindow.yaml
@@ -804,7 +893,8 @@ impl Wm {
         win.wndproc = wndproc;
         win.unicode = unicode;
         win.instance = s.instance;
-        win.id = if child { s.menu } else { 0 };
+        // A top-level window's `id` is its menu handle (user32 checks it is one).
+        win.id = s.menu;
         win.extra = vec![0; extra];
         win.state = State::Creating;
         win.dpi =
@@ -835,7 +925,21 @@ impl Wm {
                 flags |= crate::zorder::HELPER;
             }
             let new = crate::zorder::Top { hwnd, queue: self.input_key(ctx.key()), flags, owner };
-            crate::zorder::new_slot(&self.tops(), &new, self.barrier(ctx.key()))
+            let list = self.tops();
+            // The text services' window lies directly above the default IME window that owns it.
+            let ime_ui = self.display.interactive
+                && owner != 0
+                && upcase(&class_name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>());
+            let slot = match list.iter().position(|t| t.hwnd == owner) {
+                Some(i) if ime_ui => i,
+                _ => crate::zorder::new_slot(&list, &new, self.barrier(ctx.key())),
+            };
+            // `slot` counts the windows the z rules see; the text services' windows lie among them.
+            let real = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            match list.get(slot).and_then(|t| real.iter().position(|&c| c == t.hwnd)) {
+                Some(i) => i,
+                None => real.len(),
+            }
         } else {
             0
         };
@@ -929,6 +1033,9 @@ impl Wm {
         self.forget_input(hwnd);
         self.clip.window_gone(hwnd);
         for q in self.queues.values_mut() {
+            q.caret.window_gone(hwnd);
+        }
+        for q in self.queues.values_mut() {
             q.posted.retain(|m| m.hwnd != hwnd);
         }
         self.timers.retain(|t| t.hwnd != hwnd);
@@ -1005,12 +1112,7 @@ impl Wm {
                     u64::from(w.parent)
                 }
             }
-            -12 => {
-                if w.style & WS_CHILD == 0 && value != 0 {
-                    return err(ERROR_INVALID_MENU_HANDLE);
-                }
-                core::mem::replace(&mut w.id, value)
-            }
+            -12 => core::mem::replace(&mut w.id, value),
             -16 => u64::from(core::mem::replace(&mut w.style, value as u32)),
             -20 => {
                 let new = guic::filter_ex_style(w.style, w.ex_style, value as u32, &mut w.lay);
@@ -1065,14 +1167,66 @@ impl Wm {
     /// those of the window's band, owned windows come along above a raised
     /// owner, and a thread without the foreground right stays below the
     /// foreground process's windows.
+    /// The window `hwnd` would lie directly after if it were put at `after`: what a
+    /// `WM_WINDOWPOSCHANGING` of a top-level window reports as `hwndInsertAfter` (0: the top).
+    /// `HWND_TOP` of a window that is not topmost comes after the topmost ones, `HWND_BOTTOM`
+    /// after the last window (ShowWindow.yaml `chrome_show`, SetWindowPos.yaml `chrome_resize`).
+    fn z_report(&mut self, hwnd: u32, after: u64) -> Reply {
+        let Some(w) = self.get(u64::from(hwnd)) else { return Reply::Handle { hwnd: 0 } };
+        if w.parent != self.desktop || hwnd == self.desktop {
+            return Reply::Handle { hwnd: after as u32 };
+        }
+        if self.is_ime_ui(hwnd) {
+            // It lies directly above its owner: the window above it now.
+            let list = self.get(u64::from(self.desktop)).map(|d| d.children.clone()).unwrap_or_default();
+            let at = list.iter().position(|&c| c == hwnd);
+            return Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| list[i]) };
+        }
+        let Some(new) = self.z_plan(hwnd, after).map(|p| p.new) else { return Reply::Handle { hwnd: after as u32 } };
+        let at = new.iter().position(|&c| c == hwnd);
+        Reply::Handle { hwnd: at.and_then(|i| i.checked_sub(1)).map_or(0, |i| new[i]) }
+    }
+
     fn z_order(&mut self, hwnd: u32, after: u64, apply: bool) -> Reply {
-        let Some(w) = self.get(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let plan = match self.z_plan(hwnd, after) {
+            Some(p) => p,
+            None if self.get(u64::from(hwnd)).is_none() => return err(ERROR_INVALID_WINDOW_HANDLE),
+            None => return Reply::Bool { value: false },
+        };
+        let (parent, was_below) = (plan.parent, plan.was_below);
+        let (new, below, raised, old) = (plan.new, plan.below, plan.raised, plan.old);
+        // A process's only window in a session without other processes'
+        // windows (session 0): the list alone cannot say that it went to
+        // the bottom (ShowWindow.yaml `z_order`).
+        let changed = new != old || below != was_below;
+        if apply && changed {
+            let new = if parent == self.desktop { self.with_ui(new) } else { new };
+            self.get_mut(u64::from(parent)).expect("valid").children = new;
+            if let Some(w) = self.get_mut(u64::from(hwnd)) {
+                w.below_others = below;
+            }
+            for o in raised {
+                if let Some(w) = self.get_mut(u64::from(o)) {
+                    w.below_others = false;
+                }
+            }
+        }
+        Reply::Bool { value: changed }
+    }
+
+    /// Where `hwnd` would go for `after`: the new child list of its parent and what goes with it.
+    fn z_plan(&self, hwnd: u32, after: u64) -> Option<ZPlan> {
+        let w = self.get(u64::from(hwnd))?;
         let parent = w.parent;
         let thread = w.thread;
         let was_below = w.below_others;
-        let Some(p) = self.get(u64::from(parent)) else { return Reply::Bool { value: false } };
-        let old = p.children.clone();
+        let p = self.get(u64::from(parent))?;
         let top_level = parent == self.desktop;
+        let old: Vec<u32> = if top_level {
+            p.children.iter().copied().filter(|&c| !self.is_ime_ui(c)).collect()
+        } else {
+            p.children.clone()
+        };
         let mut raised: Vec<u32> = Vec::new();
         let (new, below) = match after {
             HWND_TOP | HWND_TOPMOST | HWND_NOTOPMOST => {
@@ -1100,32 +1254,13 @@ impl Wm {
             }
             a => {
                 let mut new: Vec<u32> = old.iter().copied().filter(|&c| c != hwnd).collect();
-                match new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF) {
-                    Some(i) => {
-                        let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
-                        new.insert(i + 1, hwnd);
-                        (new, below)
-                    }
-                    None => return Reply::Bool { value: false },
-                }
+                let i = new.iter().position(|&c| u64::from(c) == a & 0xFFFF_FFFF)?;
+                let below = top_level && self.get(u64::from(new[i])).is_some_and(|k| k.below_others);
+                new.insert(i + 1, hwnd);
+                (new, below)
             }
         };
-        // A process's only window in a session without other processes'
-        // windows (session 0): the list alone cannot say that it went to
-        // the bottom (ShowWindow.yaml `z_order`).
-        let changed = new != old || below != was_below;
-        if apply && changed {
-            self.get_mut(u64::from(parent)).expect("valid").children = new;
-            if let Some(w) = self.get_mut(u64::from(hwnd)) {
-                w.below_others = below;
-            }
-            for o in raised {
-                if let Some(w) = self.get_mut(u64::from(o)) {
-                    w.below_others = false;
-                }
-            }
-        }
-        Reply::Bool { value: changed }
+        Some(ZPlan { parent, was_below, old, new, below, raised })
     }
 
     fn set_parent(&mut self, hwnd: u32, parent: u64) -> Reply {
@@ -1431,23 +1566,63 @@ impl Wm {
     /// Post a message generated by the desktop link to the window's own
     /// thread. Unlike `PostMessageW`, this is trusted compositor input.
     pub fn post_system_message(&mut self, hwnd: u32, msg: u32, now: u64, fx: &mut Effects) -> bool {
+        self.post_system_message_with(hwnd, msg, 0, now, fx)
+    }
+
+    /// [`Wm::post_system_message`] with a `wParam`: the shell's minimize, maximize and restore
+    /// are `WM_SYSCOMMAND` with `SC_MINIMIZE`, `SC_MAXIMIZE`, `SC_RESTORE` (Learn,
+    /// "WM_SYSCOMMAND": what the window menu and the caption buttons send), which the window's
+    /// procedure handles or `DefWindowProc` turns into the matching `ShowWindow`.
+    pub fn post_system_message_with(&mut self, hwnd: u32, msg: u32, w: u64, now: u64, fx: &mut Effects) -> bool {
         let Some(window) = self.get(u64::from(hwnd)) else { return false };
         let to = window.thread;
         let ctx = Ctx { pid: to.0, tid: to.1, now };
-        matches!(self.post(ctx, to, hwnd, msg, 0, 0, fx), Reply::Ok {})
+        matches!(self.post(ctx, to, hwnd, msg, w, 0, fx), Reply::Ok {})
     }
 
     /// Apply a compositor-moved or resized client rectangle to a top-level
     /// window's Win32 geometry. `client` is in screen coordinates, as the
-    /// desktop link's `Configure` record is.
-    pub fn configure_from_desktop(&mut self, hwnd: u32, client: Rect, frame: FrameMetrics) -> bool {
-        if self.get(u64::from(hwnd)).is_none() {
-            return false;
-        }
+    /// desktop link's `Configure` record is. `surface` holds the menu bar (if
+    /// any) above the client area. A window that draws its own
+    /// caption (ADR 0183 addendum: `WS_CAPTION` and a client area its
+    /// `WM_NCCALCSIZE` answer put at the top) keeps the borders that answer
+    /// left around its client area; Poly's frame is around the others.
+    ///
+    /// A new **size** is not applied here: the window's thread is handed
+    /// [`DESKTOP_SET_POS`] (as a message sent from no thread), which makes
+    /// `user32` call `SetWindowPos` with the new window rectangle there, as
+    /// Windows' sizing loop does in the window's thread (Learn,
+    /// "WM_SIZING", "WM_WINDOWPOSCHANGED"): the app hears
+    /// `WM_WINDOWPOSCHANGING`, `WM_NCCALCSIZE`, `WM_WINDOWPOSCHANGED` and
+    /// `WM_SIZE` and draws the new size. A newer size for the same window
+    /// replaces one its thread has not taken yet.
+    pub fn configure_from_desktop(&mut self, hwnd: u32, surface: Rect, frame: FrameMetrics, fx: &mut Effects) -> bool {
+        let Some(w) = self.get(u64::from(hwnd)) else { return false };
+        let bar = w.menu_bar;
+        // The surface holds the menu bar above the client area.
+        let client = Rect::new(surface.left, (surface.top + bar).min(surface.bottom), surface.right, surface.bottom);
+        let own_caption = w.style & crate::metrics::WS_CAPTION == crate::metrics::WS_CAPTION
+            && !crate::surfaces::poly_frames(w.style, w.window_rel, w.client_rel);
+        let (old_w, old_c) = (w.window_rel, w.client_rel);
         let (ox, oy) = self.parent_origin(hwnd);
-        let outer = frame.window_from_surface(client);
+        let outer = if own_caption {
+            Rect::new(
+                client.left - (old_c.left - old_w.left),
+                client.top - (old_c.top - old_w.top),
+                client.right + (old_w.right - old_c.right),
+                client.bottom + (old_w.bottom - old_c.bottom),
+            )
+        } else {
+            frame.window_from_surface(surface)
+        };
         let window_rel = Rect::new(outer.left - ox, outer.top - oy, outer.right - ox, outer.bottom - oy);
         let client_rel = Rect::new(client.left - ox, client.top - oy, client.right - ox, client.bottom - oy);
+        let resized = (client_rel.width(), client_rel.height()) != (old_c.width(), old_c.height());
+        if resized && !w.maximized && !w.minimized && w.thread.0 != SYSTEM_DESKTOP_PID {
+            let to = w.thread;
+            self.desktop_set_pos(hwnd, to, window_rel, fx);
+            return true;
+        }
         let Some(window) = self.get_mut(u64::from(hwnd)) else { return false };
         window.window_rel = window_rel;
         window.client_rel = client_rel;
@@ -1455,6 +1630,43 @@ impl Wm {
             window.normal = window_rel;
         }
         true
+    }
+
+    /// Hand thread `to` a [`DESKTOP_SET_POS`] for window `hwnd` (`r`: the
+    /// window rectangle relative to its parent), or update the one it has
+    /// not taken yet.
+    fn desktop_set_pos(&mut self, hwnd: u32, to: Key, r: Rect, fx: &mut Effects) {
+        let (w, l) = pack_set_pos(r);
+        let waiting = self.queues.get(&to).map(|q| q.sent.clone()).unwrap_or_default();
+        for id in waiting {
+            if let Some(s) = self.sends.get_mut(&id)
+                && s.from == DESKTOP_SENDER
+                && s.incoming.hwnd == hwnd
+                && s.incoming.msg == DESKTOP_SET_POS
+            {
+                (s.incoming.w, s.incoming.l) = (w, l);
+                return;
+            }
+        }
+        let id = self.next_send;
+        self.next_send += 1;
+        let incoming = Incoming { id, hwnd, msg: DESKTOP_SET_POS, w, l, wndproc: 0 };
+        self.sends.insert(id, Send { from: DESKTOP_SENDER, to, incoming, result: None, collected: false });
+        let q = self.queue(to);
+        q.sent.push_back(id);
+        q.changed |= QS_SENDMESSAGE;
+        fx.wake.push(to);
+    }
+
+    /// The desktop's keyboard layout (its settings' name, ADR 0209): keys
+    /// become virtual keys, and `user32` characters, by it.
+    pub fn set_layout(&mut self, layout: crate::kbd::Layout) {
+        self.layout = layout;
+    }
+
+    /// The keyboard layout keys are read with.
+    pub fn layout(&self) -> crate::kbd::Layout {
+        self.layout
     }
 
     /// Mark the caller's timers that fell due (once each) in `changed`.
@@ -1635,6 +1847,11 @@ impl Wm {
         if let Some(i) = q.receiving.iter().rposition(|&r| r == id) {
             q.receiving.remove(i);
         }
+        if self.sends.get(&id).is_some_and(|s| s.from == DESKTOP_SENDER) {
+            // Nobody waits for the desktop's requests.
+            self.sends.remove(&id);
+            return;
+        }
         if let Some(s) = self.sends.get_mut(&id) {
             if s.result.is_none() {
                 s.result = Some(result);
@@ -1746,7 +1963,7 @@ impl Wm {
                 }
             }
         }
-        self.sends.retain(|_, s| s.from != key);
+        self.sends.retain(|_, s| s.from != key && !(s.from == DESKTOP_SENDER && s.to == key));
     }
 
     /// A process ended: its threads' state and its classes go.
@@ -1854,6 +2071,7 @@ impl Wm {
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
             Request::ZOrder { hwnd, after, apply } => self.z_order(hwnd, after, apply),
+            Request::ZReport { hwnd, after } => self.z_report(hwnd, after),
             Request::SetParent { hwnd, parent } => self.set_parent(hwnd, parent),
             Request::SetState { hwnd, visible, minimized, maximized, normal, size_move_pending } => {
                 let Some(w) = self.get_mut(u64::from(hwnd)) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
@@ -1929,13 +2147,23 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::Clip { op } => self.clip_op(ctx, op, fx),
+            // Window stations and desktops are objects of the NT personality's (ADR 0192).
+            Request::Winsta { .. } => Reply::Error { code: 87 },
             Request::Layered { hwnd, op, key, alpha, flags } => self.layered_op(hwnd, op, key, alpha, flags),
             Request::Ime { op } => Reply::Ime { res: self.ime.run(ctx.key(), op) },
             Request::ImeAssoc { hwnd, code } => match self.get_mut(u64::from(hwnd)) {
                 Some(w) => Reply::Value { value: u64::from(core::mem::replace(&mut w.ime, code)) },
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
-            Request::CursorShape { .. } | Request::ScreenPixel { .. } | Request::LayeredContent { .. } => Reply::Ok {},
+            Request::CursorShape { .. }
+            | Request::ScreenPixel { .. }
+            | Request::LayeredContent { .. }
+            | Request::MoveSize { .. } => Reply::Ok {},
+            Request::KeyboardLayout {} => Reply::Value { value: u64::from(self.layout.id()) },
+            Request::LayeredChildren {} => {
+                self.layered_children.insert(ctx.pid);
+                Reply::Ok {}
+            }
             Request::WindowRgn { hwnd, set, rects } => match self.get_mut(u64::from(hwnd)) {
                 Some(w) => {
                     w.region = set.then(|| {
@@ -1991,12 +2219,19 @@ impl Wm {
                 Reply::Ok {}
             }
             Request::InputState {} => self.input_reply(ctx.key()),
+            Request::Caret { op, hwnd, a, b, tid } => self.caret_op(ctx, op, hwnd, a, b, tid),
             Request::MayTakeForeground {} => Reply::Bool { value: self.may_take_foreground(ctx.key()) },
             Request::ActivationHistory {} => {
                 let k = self.input_key(ctx.key());
                 Reply::Windows { hwnds: self.queues.get(&k).map(|q| q.activated.clone()).unwrap_or_default() }
             }
             Request::SetInput { active, focus, capture, which } => {
+                if which & input::SET_CAPTURE_MOVE != 0 {
+                    // The capture release's mouse move, after WM_CAPTURECHANGED.
+                    self.queue_mouse(ctx, raw::WM_MOUSEMOVE, 0, fx);
+                    self.mark_synthetic_move(ctx.key());
+                    return Reply::Ok {};
+                }
                 let had_capture = self.input_of(ctx.key()).capture;
                 self.set_input(ctx.key(), active, focus, capture, which);
                 // Releasing the capture synthesizes a move to the window under
@@ -2026,6 +2261,13 @@ impl Wm {
                 }
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
+            Request::MenuBar { hwnd, height } => match self.get_mut(u64::from(hwnd)) {
+                Some(w) => {
+                    w.menu_bar = height.clamp(0, 256);
+                    Reply::Ok {}
+                }
+                None => err(ERROR_INVALID_WINDOW_HANDLE),
+            },
             Request::DefaultIme { tid } => {
                 let tid = if tid == 0 { ctx.tid } else { tid };
                 Reply::Handle { hwnd: self.default_ime(tid) }
@@ -2045,10 +2287,20 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
+            Request::ThreadHasWindows { tid } => {
+                Reply::Bool { value: tid != 0 && self.slots.iter().flatten().any(|w| w.thread.1 == tid) }
+            }
             Request::RegisterMessage { name } => {
                 // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
-                if name.is_empty() || name.len() > 255 {
-                    err(ERROR_INVALID_PARAMETER)
+                // Over that: ERROR_MORE_DATA; the empty string and "#1234" (an integer atom) give
+                // 0 and no error (RegisterWindowMessageW.yaml `length`, `special`).
+                let integer_atom = name.first() == Some(&(b'#' as u16))
+                    && name.len() > 1
+                    && name[1..].iter().all(|&c| (u16::from(b'0')..=u16::from(b'9')).contains(&c));
+                if name.len() > 255 {
+                    err(ERROR_MORE_DATA)
+                } else if name.is_empty() || integer_atom {
+                    Reply::Atom { atom: 0 }
                 } else {
                     Reply::Atom { atom: self.atom_for(&name) }
                 }
@@ -2142,6 +2394,7 @@ impl Window {
             restore_max: false,
             min_pos: (-1, -1),
             helper: false,
+            menu_bar: 0,
         }
     }
 }
@@ -2206,8 +2459,9 @@ mod tests {
         assert_eq!(reg(&mut wm, B, "CHROME_MESSAGEWINDOW"), Reply::Atom { atom: a });
         let Reply::Atom { atom: b } = reg(&mut wm, A, "TaskbarCreated") else { panic!() };
         assert_ne!(a, b);
-        assert_eq!(reg(&mut wm, A, ""), err(ERROR_INVALID_PARAMETER));
-        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_INVALID_PARAMETER));
+        assert_eq!(reg(&mut wm, A, ""), Reply::Atom { atom: 0 });
+        assert_eq!(reg(&mut wm, A, "#1234"), Reply::Atom { atom: 0 });
+        assert_eq!(reg(&mut wm, A, &"x".repeat(256)), err(ERROR_MORE_DATA));
     }
 
     #[test]
@@ -2291,12 +2545,37 @@ mod tests {
     }
 
     #[test]
+    fn the_surface_holds_the_menu_bar_above_the_client_area() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        assert!(matches!(wm.handle(A, Request::MenuBar { hwnd, height: 20 }, &mut Effects::default()), Reply::Ok {}));
+        assert_eq!(wm.info(hwnd).unwrap().menu_bar, 20);
+        // The window has that size already (a new size is the thread's to apply).
+        let (window_rel, client_rel) = (Some(Rect::new(0, 0, 386, 307)), Some(Rect::new(1, 45, 385, 306)));
+        wm.handle(A, Request::SetRects { hwnd, window_rel, client_rel }, &mut Effects::default());
+        // The compositor moves the surface; the client area is what is below the bar.
+        let surface = Rect::new(200, 300, 584, 581);
+        assert!(wm.configure_from_desktop(hwnd, surface, FrameMetrics::POLY, &mut Effects::default()));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, Rect::new(200, 320, 584, 581));
+        assert_eq!(info.window, Rect::new(199, 275, 585, 582));
+        // A window that is gone has no bar to set.
+        assert!(matches!(
+            wm.handle(A, Request::MenuBar { hwnd: 0x7777, height: 20 }, &mut Effects::default()),
+            Reply::Error { .. }
+        ));
+    }
+
+    #[test]
     fn desktop_moves_update_win32_geometry_and_close_is_posted_to_its_thread() {
         let mut wm = Wm::new();
         reg(&mut wm, "C");
         let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let (window_rel, client_rel) = (Some(Rect::new(0, 0, 386, 287)), Some(Rect::new(1, 25, 385, 286)));
+        wm.handle(A, Request::SetRects { hwnd, window_rel, client_rel }, &mut Effects::default());
         let client = Rect::new(200, 300, 584, 561);
-        assert!(wm.configure_from_desktop(hwnd, client, FrameMetrics::POLY));
+        assert!(wm.configure_from_desktop(hwnd, client, FrameMetrics::POLY, &mut Effects::default()));
         let info = wm.info(hwnd).unwrap();
         assert_eq!(info.client, client);
         assert_eq!(info.window, Rect::new(199, 275, 585, 562));
@@ -2311,6 +2590,122 @@ mod tests {
             panic!("the compositor close request was not queued")
         };
         assert_eq!((msg.hwnd, msg.msg, msg.time), (hwnd, crate::user::WM_CLOSE, 77));
+    }
+
+    /// A window that draws its own caption keeps its own borders when the compositor moves it
+    /// (ADR 0183 addendum): Chrome's 900x500 window with an 884x492 client area from its top.
+    #[test]
+    fn a_desktop_move_keeps_the_borders_of_a_window_that_draws_its_own_caption() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", 0x06CF_0000, 0, 0);
+        let mut fx = Effects::default();
+        let window_rel = Some(Rect::new(40, 40, 940, 540));
+        let client_rel = Some(Rect::new(48, 40, 932, 532));
+        wm.handle(A, Request::SetRects { hwnd, window_rel, client_rel }, &mut fx);
+        assert!(wm.configure_from_desktop(hwnd, Rect::new(148, 140, 1032, 632), FrameMetrics::POLY, &mut fx));
+        let info = wm.info(hwnd).unwrap();
+        assert_eq!(info.client, Rect::new(148, 140, 1032, 632));
+        assert_eq!(info.window, Rect::new(140, 140, 1040, 640));
+        assert!(!crate::surfaces::poly_frames(info.style, info.window_rel, info.client_rel));
+    }
+
+    /// A resize by the window's border (ADR 0155 addendum "browsing"): the compositor's new size
+    /// is the window's thread's to apply with `SetWindowPos`; win32k hands it over as a message
+    /// sent from no thread, a newer size replaces one not taken yet, and nobody waits for it.
+    #[test]
+    fn a_desktop_resize_is_handed_to_the_windows_thread() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", 0x06CF_0000, 0, 0);
+        let mut fx = Effects::default();
+        let window_rel = Some(Rect::new(40, 40, 940, 540));
+        let client_rel = Some(Rect::new(48, 40, 932, 532));
+        wm.handle(A, Request::SetRects { hwnd, window_rel, client_rel }, &mut fx);
+        let mut fx = Effects::default();
+        assert!(wm.configure_from_desktop(hwnd, Rect::new(48, 40, 1032, 632), FrameMetrics::POLY, &mut fx));
+        assert_eq!(fx.wake, [(A.pid, A.tid)]);
+        // Not applied yet: the thread does it.
+        assert_eq!(wm.info(hwnd).unwrap().client, Rect::new(48, 40, 932, 532));
+        // A newer size before the thread looked replaces it.
+        assert!(wm.configure_from_desktop(hwnd, Rect::new(48, 40, 1132, 652), FrameMetrics::POLY, &mut fx));
+        let peek = Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE };
+        let Reply::Incoming { incoming } = wm.handle(A, peek.clone(), &mut fx) else { panic!("no set-pos") };
+        assert_eq!((incoming.hwnd, incoming.msg, incoming.wndproc), (hwnd, DESKTOP_SET_POS, 0));
+        // The window rectangle keeps the window's own borders around the new client area.
+        assert_eq!(unpack_set_pos(incoming.w, incoming.l), (40, 40, 1100, 620));
+        assert!(!matches!(wm.handle(A, peek, &mut fx), Reply::Incoming { .. }), "one hand-over");
+        wm.handle(A, Request::SendDone { id: incoming.id, result: 0 }, &mut fx);
+        assert!(wm.sends.is_empty(), "nobody waits for it");
+        // A move alone is applied at once.
+        let mut fx = Effects::default();
+        assert!(wm.configure_from_desktop(hwnd, Rect::new(148, 140, 1032, 632), FrameMetrics::POLY, &mut fx));
+        assert!(fx.wake.is_empty());
+        assert_eq!(wm.info(hwnd).unwrap().client, Rect::new(148, 140, 1032, 632));
+    }
+
+    /// The desktop's wheel (`FromCompositor::Axis`) reaches the window under the pointer as
+    /// `WM_MOUSEWHEEL`, the delta in the high word of `wParam`; turns not yet retrieved add up.
+    #[test]
+    fn the_desktops_wheel_reaches_the_window_under_the_pointer() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let hwnd = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let mut fx = Effects::default();
+        let rect = Some(Rect::new(100, 100, 500, 400));
+        wm.handle(A, Request::SetRects { hwnd, window_rel: rect, client_rel: rect }, &mut fx);
+        let shown = Request::SetState {
+            hwnd,
+            visible: Some(true),
+            minimized: None,
+            maximized: None,
+            normal: None,
+            size_move_pending: None,
+        };
+        wm.handle(A, shown, &mut fx);
+        wm.link_pointer(200, 150, &mut fx);
+        let mut fx = Effects::default();
+        wm.link_wheel(-120, &mut fx);
+        wm.link_wheel(-120, &mut fx);
+        wm.link_wheel(0, &mut fx);
+        assert_eq!(fx.wake.first(), Some(&(A.pid, A.tid)));
+        let mut wheel = None;
+        while let Reply::Message { msg } =
+            wm.handle(A, Request::Peek { filter: 0, min: 0, max: 0, flags: PM_REMOVE }, &mut fx)
+        {
+            if msg.msg == crate::wm::raw::WM_MOUSEWHEEL {
+                assert!(wheel.is_none(), "one message for both turns");
+                wheel = Some(msg);
+            }
+        }
+        let msg = wheel.expect("no WM_MOUSEWHEEL");
+        assert_eq!((msg.hwnd, (msg.w >> 16) as u16 as i16, msg.x, msg.y), (hwnd, -240, 200, 150));
+    }
+
+    /// The desktop's keyboard layout (ADR 0209): `user32` asks for it, and keys are read with it.
+    #[test]
+    fn keys_are_read_with_the_desktops_layout() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let _ = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let mut fx = Effects::default();
+        let ask = |wm: &mut Wm| match wm.handle(A, Request::KeyboardLayout {}, &mut Effects::default()) {
+            Reply::Value { value } => crate::kbd::Layout::from_id(value),
+            r => panic!("{r:?}"),
+        };
+        assert_eq!(ask(&mut wm), crate::kbd::Layout::German);
+        wm.set_layout(crate::kbd::Layout::Us);
+        assert_eq!(ask(&mut wm), crate::kbd::Layout::Us);
+        // The key at Y's US place (scan 0x15) is Y, not the German Z.
+        wm.link_key(0x15, true, &mut fx);
+        assert_eq!(wm.async_keys[0x59] & 0x80, 0x80);
+        assert_eq!(wm.async_keys[0x5A] & 0x80, 0);
+    }
+
+    #[test]
+    fn set_pos_rectangles_round_trip() {
+        let (w, l) = pack_set_pos(Rect::new(-8, -3, 1000, 600));
+        assert_eq!(unpack_set_pos(w, l), (-8, -3, 1008, 603));
     }
 
     #[test]

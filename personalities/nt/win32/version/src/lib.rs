@@ -17,7 +17,8 @@ use poly_kernelbase::error::*;
 use poly_kernelbase::verinfo;
 use poly_win32_rt as _;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> *mut u8;
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
@@ -299,3 +300,6 @@ pub unsafe extern "system" fn VerQueryValueW(
 pub extern "system" fn version_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

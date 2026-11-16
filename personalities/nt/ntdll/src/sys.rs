@@ -7,7 +7,7 @@ use crate::heap::process_heap;
 use crate::syscalls::*;
 use crate::{NtStatus, lock::TID};
 use alloc::vec::Vec;
-use poly_ldr::Process;
+use poly_ldr::{ImageFile, Process};
 use poly_rtl::critsec::Waiter;
 use poly_rtl::heap::Platform;
 
@@ -23,43 +23,104 @@ const SHARE_READ: u32 = 0x01;
 const OPEN: u32 = 1;
 /// `FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT`.
 const OPTIONS: u32 = 0x40 | 0x20;
+/// Poly's bit in a protection that says the loader asks (the personality's `memory::PAGE_POLY_LOADER`).
+const PAGE_POLY_LOADER: u32 = 0x0100_0000;
+/// `FILE_LIST_DIRECTORY`, `FILE_DIRECTORY_FILE`.
+const FILE_LIST_DIRECTORY: u32 = 0x0001;
+const FILE_DIRECTORY_FILE: u32 = 0x01;
 /// `FileStandardInformation` (bytes 0..8: AllocationSize; 8..16: EndOfFile).
 const FILE_STANDARD_INFORMATION: u32 = 5;
 
 /// The loader's and heap's view of the running process.
 pub struct Sys;
 
+/// `FILE_EXECUTE` (`winnt.h`): an image section of the file may be made.
+const FILE_EXECUTE: u32 = 0x0020;
+/// `SECTION_ALL_ACCESS` (`winnt.h`).
+const SECTION_ALL_ACCESS: u32 = 0x000F_001F;
+const PAGE_READONLY: u32 = 0x02;
+const PAGE_EXECUTE: u32 = 0x10;
+/// `SEC_IMAGE` (`winnt.h`).
+const SEC_IMAGE: u32 = 0x0100_0000;
+/// `ViewShare` (`SECTION_INHERIT`, `wdm.h`).
+const VIEW_SHARE: u32 = 1;
+/// `STATUS_IMAGE_NOT_AT_BASE` (`ntstatus.h`): the view is not at the image's preferred base.
+const STATUS_IMAGE_NOT_AT_BASE: u32 = 0x4000_0003;
+
+/// Open the file at `nt_path` with `access` (shared for reading), for synchronous I/O.
+fn open_file(nt_path: &[u16], access: u32) -> Result<isize, NtStatus> {
+    // OBJECT_ATTRIBUTES with a UNICODE_STRING name (winternl.h).
+    let name = UnicodeName::new(nt_path);
+    let oa = ObjectAttributes::new(&name);
+    let mut handle: isize = 0;
+    // IO_STATUS_BLOCK: Status (pointer-sized union), Information.
+    let mut iosb = [0usize; 2];
+    // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
+    let st = unsafe {
+        NtCreateFile(
+            &mut handle,
+            access,
+            oa.as_ptr(),
+            iosb.as_mut_ptr().cast::<u8>(),
+            core::ptr::null(),
+            0,
+            SHARE_READ,
+            OPEN,
+            OPTIONS,
+            core::ptr::null(),
+            0,
+        )
+    };
+    if st.is_success() { Ok(handle) } else { Err(st) }
+}
+
+/// Open the directory at `nt_path` (to see that it exists): the handle, or the status.
+pub(crate) fn open_directory(nt_path: &[u16]) -> Result<isize, NtStatus> {
+    /// `FILE_LIST_DIRECTORY | SYNCHRONIZE`.
+    const ACCESS: u32 = 0x0001 | 0x0010_0000;
+    /// `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`.
+    const SHARE_ALL: u32 = 7;
+    /// `FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT`.
+    const DIRECTORY_OPTIONS: u32 = 0x01 | 0x20 | 0x4000;
+    let name = UnicodeName::new(nt_path);
+    let oa = ObjectAttributes::new(&name);
+    let mut handle: isize = 0;
+    let mut iosb = [0usize; 2];
+    // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
+    let st = unsafe {
+        NtCreateFile(
+            &mut handle,
+            ACCESS,
+            oa.as_ptr(),
+            iosb.as_mut_ptr().cast::<u8>(),
+            core::ptr::null(),
+            0,
+            SHARE_ALL,
+            OPEN,
+            DIRECTORY_OPTIONS,
+            core::ptr::null(),
+            0,
+        )
+    };
+    if st.is_success() { Ok(handle) } else { Err(st) }
+}
+
 impl Process for Sys {
     fn read_file(&mut self, nt_path: &[u16]) -> Result<Vec<u8>, NtStatus> {
-        // OBJECT_ATTRIBUTES with a UNICODE_STRING name (winternl.h).
-        let name = UnicodeName::new(nt_path);
-        let oa = ObjectAttributes::new(&name);
-        let mut handle: isize = 0;
-        let mut iosb = [0u8; 16];
-        // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
-        let st = unsafe {
-            NtCreateFile(
-                &mut handle,
-                FILE_READ,
-                oa.as_ptr(),
-                iosb.as_mut_ptr(),
-                core::ptr::null(),
-                0,
-                SHARE_READ,
-                OPEN,
-                OPTIONS,
-                core::ptr::null(),
-                0,
-            )
-        };
-        if !st.is_success() {
-            return Err(st);
-        }
+        let handle = open_file(nt_path, FILE_READ)?;
+        // IO_STATUS_BLOCK: Status (pointer-sized union), Information.
+        let mut iosb = [0usize; 2];
         let read = (|| {
             let mut info = [0u8; 24];
             // SAFETY: valid pointers; FileStandardInformation is 24 bytes.
             let st = unsafe {
-                NtQueryInformationFile(handle, iosb.as_mut_ptr(), info.as_mut_ptr(), 24, FILE_STANDARD_INFORMATION)
+                NtQueryInformationFile(
+                    handle,
+                    iosb.as_mut_ptr().cast::<u8>(),
+                    info.as_mut_ptr(),
+                    24,
+                    FILE_STANDARD_INFORMATION,
+                )
             };
             if !st.is_success() {
                 return Err(st);
@@ -76,7 +137,7 @@ impl Process for Sys {
                         0,
                         core::ptr::null(),
                         core::ptr::null(),
-                        iosb.as_mut_ptr(),
+                        iosb.as_mut_ptr().cast::<u8>(),
                         buf[done..].as_mut_ptr(),
                         (size - done) as u32,
                         &offset,
@@ -86,7 +147,7 @@ impl Process for Sys {
                 if !st.is_success() {
                     return Err(st);
                 }
-                let got = u64::from_le_bytes(iosb[8..16].try_into().unwrap()) as usize;
+                let got = iosb[1];
                 if got == 0 {
                     break;
                 }
@@ -98,6 +159,94 @@ impl Process for Sys {
         // SAFETY: a handle we opened.
         unsafe { NtClose(handle) };
         read
+    }
+
+    fn known_dll_access(&mut self) -> Result<(), NtStatus> {
+        // Opening the directory the known DLLs live in stands for opening `\KnownDlls\<name>`:
+        // the same descriptor, the same token (ADR 0192).
+        // (`UnicodeName` keeps a pointer: the units have to outlive it.)
+        let units: Vec<u16> = "\\??\\C:\\Windows\\System32".encode_utf16().collect();
+        let name = UnicodeName::new(&units);
+        let oa = ObjectAttributes::new(&name);
+        let mut handle: isize = 0;
+        let mut iosb = [0u8; 16];
+        // SAFETY: valid out-pointers and a well-formed OBJECT_ATTRIBUTES.
+        let st = unsafe {
+            NtCreateFile(
+                &mut handle,
+                FILE_LIST_DIRECTORY | 0x0010_0000,
+                oa.as_ptr(),
+                iosb.as_mut_ptr(),
+                core::ptr::null(),
+                0,
+                SHARE_READ | 0x2,
+                OPEN,
+                FILE_DIRECTORY_FILE | 0x20,
+                core::ptr::null(),
+                0,
+            )
+        };
+        if !st.is_success() {
+            // Only the refusals of the token count: a volume that has no `System32` is not one.
+            return if st.0 == 0xC000_0022 || st.0 == 0xC000_00A5 { Err(st) } else { Ok(()) };
+        }
+        // SAFETY: a handle we opened.
+        unsafe { NtClose(handle) };
+        Ok(())
+    }
+
+    /// Map the DLL as an image section view (ADR 0188): its clean pages are the same frames in
+    /// every process that maps the file. A file that is there but does not make an image section
+    /// (or a view) is read whole instead, so the loader reports why as before.
+    fn open_image(&mut self, nt_path: &[u16]) -> Result<ImageFile, NtStatus> {
+        let file = open_file(nt_path, FILE_READ | FILE_EXECUTE)?;
+        let mut section: isize = 0;
+        // SAFETY: a valid out-pointer and file handle; no name, no size (the file's).
+        let st = unsafe {
+            NtCreateSection(
+                &mut section,
+                SECTION_ALL_ACCESS,
+                core::ptr::null(),
+                core::ptr::null(),
+                PAGE_EXECUTE,
+                SEC_IMAGE,
+                file,
+            )
+        };
+        // SAFETY: a handle we opened; the section keeps the file.
+        unsafe { NtClose(file) };
+        if !st.is_success() {
+            return self.read_file(nt_path).map(ImageFile::Bytes);
+        }
+        let mut base: *mut u8 = core::ptr::null_mut();
+        let mut size = 0usize;
+        // SAFETY: valid in/out pointers; the kernel places the view.
+        let st = unsafe {
+            NtMapViewOfSection(
+                section,
+                CURRENT_PROCESS,
+                &mut base,
+                0,
+                0,
+                core::ptr::null(),
+                &mut size,
+                VIEW_SHARE,
+                0,
+                PAGE_READONLY,
+            )
+        };
+        // SAFETY: a handle we opened; the view keeps the section.
+        unsafe { NtClose(section) };
+        match st.0 {
+            0 => Ok(ImageFile::Mapped { base: base as u64, size: size as u64, relocate: false }),
+            STATUS_IMAGE_NOT_AT_BASE => Ok(ImageFile::Mapped { base: base as u64, size: size as u64, relocate: true }),
+            _ => self.read_file(nt_path).map(ImageFile::Bytes),
+        }
+    }
+
+    fn unmap_image(&mut self, base: u64) {
+        // SAFETY: a view `open_image` mapped in this process.
+        unsafe { NtUnmapViewOfSection(CURRENT_PROCESS, base as *const u8) };
     }
 
     fn allocate(&mut self, base: Option<u64>, size: u64) -> Result<u64, NtStatus> {
@@ -121,6 +270,9 @@ impl Process for Sys {
         let mut a = addr as *mut u8;
         let mut sz = size as usize;
         let mut old = 0u32;
+        // The loader maps a module's sections with ordinary memory: a process that prohibits dynamic
+        // code still loads modules (Poly's bit, `PAGE_POLY_LOADER` of the personality).
+        let protect = if protect & 0xF0 != 0 { protect | PAGE_POLY_LOADER } else { protect };
         // SAFETY: valid pointers; the range is ours.
         let st = unsafe { NtProtectVirtualMemory(CURRENT_PROCESS, &mut a, &mut sz, protect, &mut old) };
         if st.is_success() { Ok(()) } else { Err(st) }
@@ -198,25 +350,22 @@ impl Waiter for SysPlatform {
 struct UnicodeName {
     length: u16,
     maximum: u16,
-    _pad: u32,
     buffer: *const u16,
 }
 
 impl UnicodeName {
     fn new(units: &[u16]) -> UnicodeName {
         let bytes = (units.len() * 2).min(0xFFFE) as u16;
-        UnicodeName { length: bytes, maximum: bytes, _pad: 0, buffer: units.as_ptr() }
+        UnicodeName { length: bytes, maximum: bytes, buffer: units.as_ptr() }
     }
 }
 
 #[repr(C)]
 struct ObjectAttributes {
     length: u32,
-    _pad0: u32,
     root: isize,
     name: *const UnicodeName,
     attributes: u32,
-    _pad1: u32,
     security: *const u8,
     qos: *const u8,
 }
@@ -227,11 +376,9 @@ impl ObjectAttributes {
     fn new(name: &UnicodeName) -> ObjectAttributes {
         ObjectAttributes {
             length: core::mem::size_of::<ObjectAttributes>() as u32,
-            _pad0: 0,
             root: 0,
             name,
             attributes: Self::OBJ_CASE_INSENSITIVE,
-            _pad1: 0,
             security: core::ptr::null(),
             qos: core::ptr::null(),
         }

@@ -166,13 +166,21 @@ pub struct ThreadState {
     /// ring 3).
     fs_base: u64,
     gs_base: u64,
+    /// A 32-bit (WOW64) thread: it runs in compatibility mode (ADR 0186).
+    compat: bool,
 }
 
 impl ThreadState {
     /// A thread in `space` with the initial FPU state and zero FS/GS bases.
     /// `None` if there is no memory for the FPU state.
     pub fn new(space: Arc<AddressSpace>) -> Option<ThreadState> {
-        Some(ThreadState { space, fpu: FpuArea::new()?, fs_base: 0, gs_base: 0 })
+        Some(ThreadState { space, fpu: FpuArea::new()?, fs_base: 0, gs_base: 0, compat: false })
+    }
+
+    /// Make the thread a 32-bit one: every return to ring 3 is in
+    /// compatibility mode, with CS = `gdt::USER_CODE32` (ADR 0186).
+    pub fn set_compat(&mut self) {
+        self.compat = true;
     }
 
     pub fn space(&self) -> &Arc<AddressSpace> {
@@ -247,6 +255,19 @@ pub fn user_regs() -> UserRegs {
     regs
 }
 
+/// The user registers in the trap frame at the top of the kernel stack that ends at `top`,
+/// if the frame holds an entry from ring 3: what another thread's last system call, interrupt
+/// or fault from user mode saved. The caller makes sure that thread is not running (its frame
+/// does not change then: only the thread itself rewrites it, before it returns to ring 3).
+pub fn regs_at(top: u64) -> Option<UserRegs> {
+    let frame = (top - core::mem::size_of::<UserRegs>() as u64) as *const UserRegs;
+    // SAFETY: `top` is the end of a kernel stack the thread table owns (mapped while its
+    // thread exists, which the caller's lock keeps); the slot below it is where every entry
+    // from ring 3 writes its trap frame, and holds plain integers otherwise.
+    let regs = unsafe { frame.read() };
+    regs.in_user_mode().then_some(regs)
+}
+
 /// Replace the running user thread's registers for its return to ring 3
 /// (see [`user_regs`]). CS and SS stay the user selectors and RFLAGS is
 /// sanitised (interrupts on, nothing privileged); a non-canonical RIP makes
@@ -255,7 +276,7 @@ pub fn user_regs() -> UserRegs {
 pub fn set_user_regs(regs: &UserRegs) {
     let frame = syscall::user_frame();
     let mut new = *regs;
-    new.cs = u64::from(super::gdt::USER_CODE);
+    new.cs = u64::from(super::gdt::user_code(syscall::current_compat()));
     new.ss = u64::from(super::gdt::USER_DATA);
     new.rflags = syscall::user_rflags(regs.rflags);
     // SAFETY: as in `user_regs`; the vector and error code slots are
@@ -293,6 +314,7 @@ pub fn switch(from: Option<&mut ThreadState>, to: Option<&ThreadState>, to_stack
     };
     to.space.activate();
     to.fpu.make_current();
+    super::percpu::this().user_compat.store(to.compat, core::sync::atomic::Ordering::Relaxed);
     // SAFETY: the values were read from these MSRs or checked canonical by
     // `set_fs_base` / `set_gs_base`; the kernel uses neither FS nor (in
     // ring 0) IA32_KERNEL_GS_BASE.
@@ -301,6 +323,11 @@ pub fn switch(from: Option<&mut ThreadState>, to: Option<&ThreadState>, to_stack
         cpu::write_msr(cpu::MSR_KERNEL_GS_BASE, to.gs_base);
     }
     syscall::set_kernel_stack(to_stack_top.expect("a user thread has its own kernel stack"));
+}
+
+/// Whether the running user thread is a 32-bit one (compatibility mode, ADR 0186).
+pub fn compat() -> bool {
+    syscall::current_compat()
 }
 
 /// Whether `addr` is canonical (bits 63:47 equal).

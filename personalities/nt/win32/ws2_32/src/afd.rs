@@ -5,8 +5,10 @@ use crate::Handle;
 use core::sync::atomic::{AtomicIsize, Ordering};
 use poly_winsock::afd;
 use poly_winsock::error::{STATUS_PENDING, STATUS_SUCCESS};
+use poly_winsock::known::Known;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtCreateFile(
         handle: *mut Handle,
@@ -34,6 +36,7 @@ unsafe extern "system" {
         output_len: u32,
     ) -> u32;
     pub fn NtClose(handle: Handle) -> u32;
+    fn NtQueryEvent(handle: Handle, class: u32, info: *mut u8, len: u32, returned: *mut u32) -> u32;
 }
 
 /// `IO_STATUS_BLOCK` (`wdm.h`): the status in a pointer-sized slot, then
@@ -83,16 +86,79 @@ const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ_WRITE: u32 = 3;
 const FILE_OPEN_IF: u32 = 3;
 const OBJ_CASE_INSENSITIVE: u32 = 0x40;
+/// `OBJ_INHERIT` (`ntdef.h`): the handle is inheritable (Winsock's sockets are, unless
+/// `WSA_FLAG_NO_HANDLE_INHERIT` says not).
+const OBJ_INHERIT: u32 = 0x02;
 
-/// Open a new endpoint (no socket yet).
-pub fn open_endpoint() -> Result<Handle, u32> {
+/// The sockets this process made that `closesocket` has not closed (a `CloseHandle` leaves them).
+struct KnownSockets {
+    locked: core::sync::atomic::AtomicBool,
+    list: core::cell::UnsafeCell<Known>,
+}
+
+// SAFETY: access to `list` is serialised by `locked`.
+unsafe impl Sync for KnownSockets {}
+
+static KNOWN: KnownSockets = KnownSockets {
+    locked: core::sync::atomic::AtomicBool::new(false),
+    list: core::cell::UnsafeCell::new(Known::new()),
+};
+
+fn with_known<R>(f: impl FnOnce(&mut Known) -> R) -> R {
+    while KNOWN.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held.
+    let r = f(unsafe { &mut *KNOWN.list.get() });
+    KNOWN.locked.store(false, Ordering::Release);
+    r
+}
+
+/// `closesocket` of a value that is no socket any more: it was a socket of this process whose
+/// handle was closed some other way (the sheet of `WSASocketW`, rule `handle`). True once.
+pub fn forget_orphan(h: Handle) -> bool {
+    with_known(|k| k.take(h as usize))
+}
+
+/// `SO_ERROR` takes the stack's pending error and keeps it on the endpoint in two steps: two
+/// threads reading it at once (the event helper and the program) must not interleave, or the one
+/// that comes second reads 0 while the first has not stored the error yet (a refused connect
+/// seen as `FD_CONNECT`, then `SO_ERROR` 0).
+static SO_ERROR_LOCK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+pub struct SoErrorGuard;
+
+/// Wait for and take the `SO_ERROR` lock.
+pub fn so_error_guard() -> SoErrorGuard {
+    while SO_ERROR_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    SoErrorGuard
+}
+
+impl Drop for SoErrorGuard {
+    fn drop(&mut self) {
+        SO_ERROR_LOCK.store(false, Ordering::Release);
+    }
+}
+
+/// Is `h` an event object (`NtQueryEvent(EventBasicInformation)` answers)?
+pub fn is_event(h: Handle) -> bool {
+    let mut info = [0u8; 8];
+    let mut ret = 0u32;
+    // SAFETY: the buffers are live locals of the lengths given.
+    unsafe { NtQueryEvent(h, 0, info.as_mut_ptr(), info.len() as u32, &mut ret) == STATUS_SUCCESS }
+}
+
+/// Open a new endpoint (no socket yet); `inherit`: the handle is inheritable by child processes.
+pub fn open_endpoint(inherit: bool) -> Result<Handle, u32> {
     const _: () = assert!(afd::ENDPOINT.len() == 20);
     let name = UnicodeString { length: 40, maximum_length: 40, buffer: ENDPOINT.as_ptr() };
     let oa = ObjectAttributes {
         length: core::mem::size_of::<ObjectAttributes>() as u32,
         root: 0,
         name: &name,
-        attributes: OBJ_CASE_INSENSITIVE,
+        attributes: OBJ_CASE_INSENSITIVE | if inherit { OBJ_INHERIT } else { 0 },
         security: core::ptr::null(),
         qos: core::ptr::null(),
     };
@@ -117,11 +183,15 @@ pub fn open_endpoint() -> Result<Handle, u32> {
     if s != STATUS_SUCCESS {
         return Err(s);
     }
+    with_known(|k| k.add(h as usize));
     Ok(h)
 }
 
 /// Close a handle.
 pub fn close(h: Handle) {
+    with_known(|k| {
+        k.take(h as usize);
+    });
     // SAFETY: closing a handle has no memory preconditions.
     unsafe { NtClose(h) };
 }
@@ -196,7 +266,7 @@ pub fn control() -> Result<Handle, u32> {
     if h != 0 {
         return Ok(h);
     }
-    let new = open_endpoint()?;
+    let new = open_endpoint(false)?;
     match CONTROL.compare_exchange(0, new, Ordering::SeqCst, Ordering::SeqCst) {
         Ok(_) => Ok(new),
         Err(other) => {

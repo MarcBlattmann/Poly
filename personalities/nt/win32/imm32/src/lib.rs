@@ -18,19 +18,22 @@ use poly_win32k::ime::{Assoc, ImeOp, ImeRes};
 use poly_win32k::proto::{Reply, Request, WinInfo};
 use poly_win32k::wire;
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-#[link(name = "user32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
     fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32;
     fn PrivateLayoutInstalled(hkl: usize) -> i32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetCurrentThreadId() -> u32;
 }
@@ -47,9 +50,9 @@ const IMM_ERROR_GENERAL: i32 = -2;
 fn call(req: Request) -> Reply {
     let bytes = wire::encode(&req);
     let mut out = vec![0u8; 1024];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return Reply::Error { code: 87 };
     }
@@ -438,3 +441,6 @@ pub extern "system" fn ImmGetDefaultIMEWnd(hwnd: usize) -> usize {
 pub extern "system" fn imm32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

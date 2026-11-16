@@ -6,24 +6,31 @@
 //! - A pagefile section's pages are an [`AnonShared`] object, so every
 //!   view (shared, in any process) maps the same frames; a copy-on-write
 //!   view gets private copies that the first write forks.
-//! - An image section's pages, and those of a minimal file object of ADR
-//!   0063, are bytes the kernel holds (`MemoryImage`): views are private
-//!   copies.
+//! - An image section's pages are made as views touch them (ADR 0155). An
+//!   image of a file at its preferred base has one frame per page that
+//!   every view of that file, in every process, maps until one writes it
+//!   ([`SharedFrame`]s, ADR 0188); a relocated view's pages, and those of a
+//!   minimal file object of ADR 0063 (bytes the kernel holds,
+//!   `MemoryImage`), are private copies.
 //! - A data section of a file of NT file I/O maps the file itself
 //!   (`FileSource`, the page cache's pages on a cached file system): a
 //!   shared view writes the file (ADR 0079).
 //! - Committed private memory is demand-zero anonymous memory; a guard
 //!   page is committed `PROT_NONE` and made accessible when it fires.
 
+use crate::sync::SpinLock;
 use crate::user::Memory;
-use crate::user::memory::{AnonShared, FileRef, MemoryImage, PageSource, Placement, Prot};
+use crate::user::UserFrame;
+use crate::user::memory::{AnonShared, FileRef, IoError, MemoryImage, PageSource, Placement, Prot, SharedFrame};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 use poly_ntobj::NtStatus;
 use poly_ntobj::status::{STATUS_NO_MEMORY, STATUS_UNSUCCESSFUL};
 use poly_personality_nt::HwProt;
 use poly_personality_nt::backend::{Backend, SectionSource, ViewMap, ViewSource};
+use poly_personality_nt::imageshare::{Registry, SharedPages};
 
 /// The kernel's store of section pages, keyed by the id the NT model uses.
 #[derive(Default)]
@@ -60,15 +67,66 @@ fn prot(p: HwProt) -> Prot {
 
 /// The pages of an image, made when a view touches them (ADR 0155): a big
 /// image is never held in kernel memory, its pages are read from its file.
-struct ImagePages(Arc<dyn poly_personality_nt::image::ImageBytes>);
+/// An image of a file at its preferred base shares them with every other
+/// section of the same file ([`ImageShare`], ADR 0188).
+struct ImagePages {
+    image: Arc<dyn poly_personality_nt::image::ImageBytes>,
+    share: Option<Arc<ImageShare>>,
+}
+
+/// The frames of one image file's pages that some view maps.
+struct ImageShare {
+    pages: SpinLock<SharedPages<SharedFrame>>,
+}
+
+impl ImageShare {
+    fn new() -> ImageShare {
+        ImageShare { pages: SpinLock::new(SharedPages::new()) }
+    }
+}
+
+/// Every image file some section uses, with its shared pages.
+static IMAGE_SHARES: SpinLock<Registry<ImageShare>> = SpinLock::new(Registry::new());
+/// Image pages made since boot, and image page faults that found another view's frame
+/// (`poly.nt.mem`).
+static IMAGE_PAGES_MADE: AtomicU64 = AtomicU64::new(0);
+static IMAGE_PAGES_SHARED: AtomicU64 = AtomicU64::new(0);
+
+/// `(images in use, pages made, faults that found a shared page)` (`poly.nt.mem`).
+pub fn image_share_counts() -> (usize, u64, u64) {
+    (IMAGE_SHARES.lock().live(), IMAGE_PAGES_MADE.load(Ordering::Relaxed), IMAGE_PAGES_SHARED.load(Ordering::Relaxed))
+}
+
+impl ImagePages {
+    fn new(image: Arc<dyn poly_personality_nt::image::ImageBytes>) -> ImagePages {
+        let share = image.share_key().map(|key| IMAGE_SHARES.lock().get_or_insert_with(key, ImageShare::new));
+        ImagePages { image, share }
+    }
+}
 
 impl PageSource for ImagePages {
     fn len(&self) -> u64 {
-        self.0.len()
+        self.image.len()
     }
 
-    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, crate::user::memory::IoError> {
-        Ok(self.0.read_at(offset, buf))
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, IoError> {
+        Ok(self.image.read_at(offset, buf))
+    }
+
+    /// The image's shared frame for the page at `offset`: one a view of the same file maps, or a
+    /// new one read from the image (no lock held meanwhile; if another view made the page in the
+    /// meantime, that one wins and this frame is freed).
+    fn shared_frame(&self, offset: u64) -> Option<Result<Arc<SharedFrame>, IoError>> {
+        let share = self.share.as_ref()?;
+        let page = offset & !(crate::user::memory::PAGE_SIZE - 1);
+        if let Some(frame) = share.pages.lock().get(page) {
+            IMAGE_PAGES_SHARED.fetch_add(1, Ordering::Relaxed);
+            return Some(Ok(frame));
+        }
+        let Some(mut frame) = UserFrame::zeroed() else { return Some(Err(IoError)) };
+        self.image.read_at(page, frame.bytes_mut());
+        IMAGE_PAGES_MADE.fetch_add(1, Ordering::Relaxed);
+        Some(Ok(share.pages.lock().insert(page, Arc::new(SharedFrame::user(frame)))))
     }
 }
 
@@ -118,7 +176,7 @@ impl Backend for MemBackend<'_> {
                 self.map_source(addr, len, source, map.offset, map.prot, map.shared)
             }
             ViewSource::Image(image) => {
-                let source: Arc<dyn PageSource> = Arc::new(ImagePages(Arc::clone(image)));
+                let source: Arc<dyn PageSource> = Arc::new(ImagePages::new(Arc::clone(image)));
                 self.map_source(addr, len, source, map.offset, map.prot, false)
             }
         }
@@ -128,10 +186,14 @@ impl Backend for MemBackend<'_> {
         self.memory.write(addr, data).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        self.memory.read(addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
+    }
+
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
         let page_source: Arc<dyn PageSource> = match source {
             SectionSource::Pagefile { size, .. } => Arc::new(AnonShared::new(*size)),
-            SectionSource::Image(image) => Arc::new(ImagePages(Arc::clone(image))),
+            SectionSource::Image(image) => Arc::new(ImagePages::new(Arc::clone(image))),
             SectionSource::File { file } => {
                 let bytes = self.sections.files.get(file).ok_or(STATUS_UNSUCCESSFUL)?;
                 Arc::new(MemoryImage(Arc::clone(bytes)))

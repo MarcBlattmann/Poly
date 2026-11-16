@@ -987,3 +987,6 @@ pub extern "system" fn BCryptDestroySecret(h: Handle) -> NtStatus {
 pub extern "system" fn bcrypt_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

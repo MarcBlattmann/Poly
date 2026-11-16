@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "mwa_main",
+      "exe_sha256": "a5e571ad0ad049d506d28429a18ddb9dfbe5ecf9fd7d2c20462ddecea4d5c557",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0V2luZG93QXNzb2NpYXRpb24gb24gYSBuZXcgZmFjdG9yeTogMHgwMDAwMDAwMCBoYW5kbGUgbnVsbApNYWtlV2luZG93QXNzb2NpYXRpb24od2luZG93LCBOT19BTFRfRU5URVIpOiAweDAwMDAwMDAwIHRoZW4gR2V0IDB4MDAwMDAwMDAgaXMgdGhlIHdpbmRvdyBmYWxzZSBudWxsIHRydWUKTWFrZVdpbmRvd0Fzc29jaWF0aW9uKHdpbmRvdywgOCk6IDB4ODg3YTAwMDEgdGhlbiBHZXQgMHgwMDAwMDAwMCBpcyB0aGUgd2luZG93IGZhbHNlIG51bGwgdHJ1ZQpNYWtlV2luZG93QXNzb2NpYXRpb24od2luZG93LCAweGZmZmZmZmZmKTogMHg4ODdhMDAwMSB0aGVuIEdldCAweDAwMDAwMDAwIGlzIHRoZSB3aW5kb3cgZmFsc2UgbnVsbCB0cnVlCk1ha2VXaW5kb3dBc3NvY2lhdGlvbihtYWRlLXVwIGhhbmRsZSwgMCk6IDB4MDAwMDAwMDAgdGhlbiBHZXQgMHgwMDAwMDAwMCBoYW5kbGUgbnVsbApNYWtlV2luZG93QXNzb2NpYXRpb24obmV3IHdpbmRvdywgNCk6IDB4MDAwMDAwMDAKYXNzb2NpYXRpb24gb2YgdGhlIGRldmljZSdzIGZhY3RvcnkgYWZ0ZXJ3YXJkcyBpcyBzdGlsbCB0aGUgd2luZG93OiBmYWxzZQpDaGVja0ZlYXR1cmVTdXBwb3J0KDIsIHNpemUgNCk6IDB4ODg3YTAwMDEgZmlyc3QgZHdvcmQgdW50b3VjaGVkIGJ5dGUgNCB1bnRvdWNoZWQgdHJ1ZQpmYWN0b3J5IG9mIGEgV0FSUCBkZXZpY2U6IElEWEdJRmFjdG9yeTUgMHgwMDAwMDAwMCBDaGVja0ZlYXR1cmVTdXBwb3J0KHRlYXJpbmcpOiAweDAwMDAwMDAwIHZhbHVlIDEKQ2hlY2tGZWF0dXJlU3VwcG9ydCh0ZWFyaW5nLCBzaXplIDIpOiAweDg4N2EwMDAxIGZpcnN0IGR3b3JkIDB4YWFhYWFhYWEKQ2hlY2tGZWF0dXJlU3VwcG9ydCh0ZWFyaW5nLCBzaXplIDgpOiAweDg4N2EwMDAxIGZpcnN0IGR3b3JkIDB4YWFhYWFhYWEKQ2hlY2tGZWF0dXJlU3VwcG9ydCh0ZWFyaW5nLCBOVUxMLCBzaXplIDApOiAweDg4N2EwMDAxCklEWEdJRmFjdG9yeTQgMHgwMDAwMDAwMCBJRFhHSUZhY3Rvcnk1IDB4MDAwMDAwMDAgCklzQ3VycmVudCBhZnRlciBjcmVhdGluZyBhIFdBUlAgZGV2aWNlOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetWindowAssociation on a new factory: 0x00000000 handle null\nMakeWindowAssociation(window, NO_ALT_ENTER): 0x00000000 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(window, 8): 0x887a0001 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(window, 0xffffffff): 0x887a0001 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(made-up handle, 0): 0x00000000 then Get 0x00000000 handle null\nMakeWindowAssociation(new window, 4): 0x00000000\nassociation of the device's factory afterwards is still the window: false\nCheckFeatureSupport(2, size 4): 0x887a0001 first dword untouched byte 4 untouched true\nfactory of a WARP device: IDXGIFactory5 0x00000000 CheckFeatureSupport(tearing): 0x00000000 value 1\nCheckFeatureSupport(tearing, size 2): 0x887a0001 first dword 0xaaaaaaaa\nCheckFeatureSupport(tearing, size 8): 0x887a0001 first dword 0xaaaaaaaa\nCheckFeatureSupport(tearing, NULL, size 0): 0x887a0001\nIDXGIFactory4 0x00000000 IDXGIFactory5 0x00000000 \nIsCurrent after creating a WARP device: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 97
+    },
+    {
+      "name": "mwa_main_c",
+      "exe_sha256": "e98c425cf2eeebb91027340713d8f561c26630e1c4af8970d561b75fcbb52124",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TWFrZVdpbmRvd0Fzc29jaWF0aW9uKHdpbmRvdywgTk9fV0lORE9XX0NIQU5HRVMpOiAweDAwMDAwMDAwIHRoZW4gR2V0IDB4MDAwMDAwMDAgaXMgdGhlIHdpbmRvdyBmYWxzZSBudWxsIHRydWUKTWFrZVdpbmRvd0Fzc29jaWF0aW9uKHdpbmRvdywgYWxsIHZhbGlkIGJpdHMgKDcpKTogMHgwMDAwMDAwMCB0aGVuIEdldCAweDAwMDAwMDAwIGlzIHRoZSB3aW5kb3cgZmFsc2UgbnVsbCB0cnVlCk1ha2VXaW5kb3dBc3NvY2lhdGlvbih3aW5kb3csIDB4ODAwMDAwMDApOiAweDg4N2EwMDAxIHRoZW4gR2V0IDB4MDAwMDAwMDAgaXMgdGhlIHdpbmRvdyBmYWxzZSBudWxsIHRydWUKTWFrZVdpbmRvd0Fzc29jaWF0aW9uKE5VTEwsIDB4ZmZmZmZmZmYpIGFmdGVyIGFuIGFzc29jaWF0aW9uOiAweDg4N2EwMDAxIHRoZW4gR2V0IG51bGwgdHJ1ZQphZnRlciB0aGUgYXNzb2NpYXRlZCB3aW5kb3cgd2FzIGRlc3Ryb3llZDogR2V0IDB4MDAwMDAwMDAgaGFuZGxlIG51bGwKc3dhcCBjaGFpbiBvbiBhbiBhc3NvY2lhdGVkIHdpbmRvdzogMHgwMDAwMDAwMCBwdHI9c2V0CkNoZWNrRmVhdHVyZVN1cHBvcnQoMSwgc2l6ZSA0KTogMHg4ODdhMDAwMSBmaXJzdCBkd29yZCB1bnRvdWNoZWQgYnl0ZSA0IHVudG91Y2hlZCB0cnVlCkNoZWNrRmVhdHVyZVN1cHBvcnQoMHhmZmZmZmZmZiwgc2l6ZSA0KTogMHg4ODdhMDAwMSBmaXJzdCBkd29yZCB1bnRvdWNoZWQgYnl0ZSA0IHVudG91Y2hlZCB0cnVlCkNoZWNrRmVhdHVyZVN1cHBvcnQodGVhcmluZywgc2l6ZSAxKTogMHg4ODdhMDAwMSBmaXJzdCBkd29yZCAweGFhYWFhYWFhCkNoZWNrRmVhdHVyZVN1cHBvcnQodGVhcmluZywgc2l6ZSA1KTogMHg4ODdhMDAwMSBmaXJzdCBkd29yZCAweGFhYWFhYWFhCkNoZWNrRmVhdHVyZVN1cHBvcnQodGVhcmluZywgc2l6ZSA0Mjk0OTY3Mjk1KTogMHg4ODdhMDAwMSBmaXJzdCBkd29yZCAweGFhYWFhYWFhCkNoZWNrRmVhdHVyZVN1cHBvcnQodW5rbm93biBmZWF0dXJlLCBOVUxMLCBzaXplIDApOiAweDg4N2EwMDAxCklzQ3VycmVudDogMQpVbnJlZ2lzdGVyT2NjbHVzaW9uU3RhdHVzIGRvbmUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "MakeWindowAssociation(window, NO_WINDOW_CHANGES): 0x00000000 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(window, all valid bits (7)): 0x00000000 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(window, 0x80000000): 0x887a0001 then Get 0x00000000 is the window false null true\nMakeWindowAssociation(NULL, 0xffffffff) after an association: 0x887a0001 then Get null true\nafter the associated window was destroyed: Get 0x00000000 handle null\nswap chain on an associated window: 0x00000000 ptr=set\nCheckFeatureSupport(1, size 4): 0x887a0001 first dword untouched byte 4 untouched true\nCheckFeatureSupport(0xffffffff, size 4): 0x887a0001 first dword untouched byte 4 untouched true\nCheckFeatureSupport(tearing, size 1): 0x887a0001 first dword 0xaaaaaaaa\nCheckFeatureSupport(tearing, size 5): 0x887a0001 first dword 0xaaaaaaaa\nCheckFeatureSupport(tearing, size 4294967295): 0x887a0001 first dword 0xaaaaaaaa\nCheckFeatureSupport(unknown feature, NULL, size 0): 0x887a0001\nIsCurrent: 1\nUnregisterOcclusionStatus done\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 88
+    }
+  ]
+}

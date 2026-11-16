@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxcore.dll/DXCoreCreateAdapterFactory.yaml
+id: windows/api/dxcore.dll/DXCoreCreateAdapterFactory
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "DXCoreCreateAdapterFactory function (dxcore.h)", "IDXCoreAdapterFactory interface", "IDXCoreAdapterList interface", "IDXCoreAdapter interface", "DXCoreAdapterProperty enumeration"; dxcore.h, dxcore_interface.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates the DXCore adapter factory used to enumerate graphics adapters (Chrome's GPU info collection, assumed). Observed: the factory object and its interfaces, adapter lists for the D3D11, D3D12 and core-compute attributes, properties of the adapters as sizes and relations with DXGI's view of the same adapters. The vtable slots come from the order of the virtual methods in dxcore_interface.h (IDXCoreAdapterFactory: 3 CreateAdapterList, 4 GetAdapterByLuid, 5 IsNotificationTypeSupported, 6 RegisterEventNotification, 7 UnregisterEventNotification; IDXCoreAdapterList: 3 GetAdapter, 4 GetAdapterCount, 5 IsStale, 6 GetFactory, 7 Sort, 8 IsAdapterPreferenceSupported; IDXCoreAdapter: 3 IsValid, 4 IsAttributeSupported, 5 IsPropertySupported, 6 GetProperty, 7 GetPropertySize, 8 IsQueryStateSupported, 9 QueryState, 10 IsSetStateSupported, 11 SetState, 12 GetFactory). The bool-returning methods return a C++ bool in al.
+interface:
+  signature: "HRESULT DXCoreCreateAdapterFactory(REFIID riid, void** ppvFactory)"
+  constants: "IID_IDXCoreAdapterFactory 78EE5945-C36E-4B13-A669-005DD11C0F06, IDXCoreAdapterFactory1 D5682E19-6D21-401C-827A-9A51A4EA35D7, IDXCoreAdapterList 526C7776-40E9-459B-B711-F32AD76DFC28, IDXCoreAdapter F0DB4C7F-FE5A-42A2-BD62-F2A6CF6FC83E; DXCORE_ADAPTER_ATTRIBUTE_D3D11_GRAPHICS 8C47866B-7583-450D-F0F0-6BADA895AF4B, D3D12_GRAPHICS 0C9ECE4D-2F6E-4F01-8C96-E89E331B47B1, D3D12_CORE_COMPUTE 248E2800-A793-4724-ABAA-23A6DE1BE090"
+chrome:
+  calls: "Chrome's GPU info collection (gpu_info_collector_win) enumerates adapters through DXCore on Windows 10 and later (assumed from its documented behaviour)"
+rules:
+  factory: "riid IDXCoreAdapterFactory, IDXCoreAdapterFactory1 and IUnknown: S_OK; IDXCoreAdapterList, IDXCoreAdapter and a made-up id: E_NOINTERFACE (0x80004002). Two factories made one after the other are the SAME object (a second call adds a reference: count 2). QueryInterface on the factory: IDXCoreAdapterFactory (same pointer), IDXCoreAdapterFactory1 and IUnknown (different pointers), not IDXCoreAdapterList"
+  notifications: "IsNotificationTypeSupported(0..3) is true, 4 is false"
+  lists: "CreateAdapterList(1, [D3D11_GRAPHICS], IID_IDXCoreAdapterList): S_OK with at least one adapter, not stale; also for D3D12_GRAPHICS, D3D12_CORE_COMPUTE and the pair D3D11+D3D12 graphics (on the developer PC every list has at least one adapter); no attributes (0, NULL): E_INVALIDARG; a made-up attribute GUID: S_OK with an EMPTY list; asking for IUnknown: S_OK; asking for IDXCoreAdapter: E_NOINTERFACE"
+  list_methods: "GetAdapter(count) (index out of range): E_INVALIDARG; GetFactory returns the creating factory (same pointer); IsAdapterPreferenceSupported(0..2) true, 3 false"
+  adapters: "every adapter of the D3D11 graphics list: IsValid true, IsAttributeSupported(D3D11_GRAPHICS) true, GetProperty(InstanceLuid) and (IsHardware) S_OK; every adapter's InstanceLuid is found among IDXGIFactory1::EnumAdapters1's LUIDs; the list contains at least one hardware adapter and (on the developer PC) a software one (the Microsoft Basic Render Driver); IsHardware equals !(DXGI_ADAPTER_FLAG_SOFTWARE) of the same adapter's IDXGIAdapter1::GetDesc1 for all adapters; hardware adapters have a non-zero HardwareID vendor that is not 0x1414, software ones 0x1414"
+  property_sizes: "GetPropertySize/IsPropertySupported for properties 0..17 are the same for all adapters: InstanceLuid 8, DriverVersion 8, DriverDescription a string size (a NUL-terminated ANSI string of more than 1 byte; the size is machine dependent), HardwareID 16, KmdModelVersion 4, ComputePreemptionGranularity 4, GraphicsPreemptionGranularity 4, DedicatedAdapterMemory 8, DedicatedSystemMemory 8, SharedSystemMemory 8, AcgCompatible 1, IsHardware 1, IsIntegrated 1, IsDetachable 1, HardwareIDParts 20, PhysicalAdapterCount 4, AdapterEngineCount 4, AdapterEngineName (a size, machine dependent); all are 'supported' (IsPropertySupported true); property 99: IsPropertySupported false and GetPropertySize / GetProperty DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  get_property: "GetProperty(DriverDescription, 4-byte buffer): E_INVALIDARG; InstanceLuid in 4 bytes and in 0 bytes: E_INVALIDARG, in 16 bytes (larger than 8): S_OK; the DriverDescription string ends with a NUL at the last byte of its size"
+  adapter_object: "the adapter answers IDXCoreAdapter1 with the same pointer; GetAdapterByLuid(the first adapter's LUID) gives the same adapter object (S_OK) and a zero LUID E_INVALIDARG"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+  no_interface: "E_NOINTERFACE"
+  invalid_property: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the factory's event notifications (RegisterEventNotification), Sort, QueryState values, SetState, D3D12 core-compute and NPU attribute lists on machines without such devices.

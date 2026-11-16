@@ -77,6 +77,8 @@ pub const OUTPUTS: &[&str] = &[
     "secur32.dll",
     "dhcpcsvc.dll",
     "dnsapi.dll",
+    // ADR 0195.
+    "mswsock.dll",
     "dbghelp.dll",
     "b35test.exe",
     // ADR 0170.
@@ -89,12 +91,46 @@ pub const OUTPUTS: &[&str] = &[
     "shlwapi.dll",
     "wtsapi32.dll",
     "comctl32.dll",
+    "comdlg32.dll",
     "oleacc.dll",
     "uiautomationcore.dll",
     "mfplat.dll",
     "powrprof.dll",
     "uxtheme.dll",
+    // ADR 0155, step 12.
+    "setupapi.dll",
+    "pdh.dll",
+    "tbs.dll",
+    "cfgmgr32.dll",
+    "wintrust.dll",
+    "ncrypt.dll",
+    "propsys.dll",
+    "wevtapi.dll",
+    "hid.dll",
+    "dxgi.dll",
+    "d3d11.dll",
+    "dcomp.dll",
+    // ADR 0199.
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
 ];
+/// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
+/// embeds what it names.
+pub const STUB_LIST: &str = "stub-dlls.txt";
+
+/// Make the system DLLs of `poly_stubs::sysdlls::SYSTEM_DLLS` in `dir`, and the list that names them.
+fn write_stub_dlls(dir: &Path) -> Result {
+    let mut list = String::new();
+    for dll in poly_stubs::sysdlls::SYSTEM_DLLS {
+        let bytes = poly_stubs::system::build_system_dll(dll);
+        std::fs::write(dir.join(dll.file), bytes).map_err(|e| format!("{}: {e}", dll.file))?;
+        list.push_str(dll.file);
+        list.push('\n');
+    }
+    std::fs::write(dir.join(STUB_LIST), list).map_err(|e| format!("{STUB_LIST}: {e}"))
+}
+
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 
@@ -133,7 +169,7 @@ pub fn ensure() -> Result<PathBuf> {
     let key = cache_key(&root)?;
     let cache = cache_dir(&root);
     let cached = cache.join(format!("win32-{key:016x}"));
-    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) {
+    if OUTPUTS.iter().all(|f| cached.join(f).is_file()) && cached.join(STUB_LIST).is_file() {
         return Ok(cached);
     }
     let target = root.join("target").join("win32");
@@ -148,6 +184,7 @@ pub fn ensure() -> Result<PathBuf> {
     for f in OUTPUTS {
         std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
     }
+    write_stub_dlls(&tmp)?;
     if std::fs::rename(&tmp, &cached).is_err() {
         // Another worktree cached the same version first.
         let _ = std::fs::remove_dir_all(&tmp);
@@ -206,6 +243,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/netapi32",
             "personalities/nt/win32/secur32",
             "personalities/nt/win32/dhcpcsvc",
+            "personalities/nt/win32/mswsock",
             "personalities/nt/win32/dnsapi",
             "personalities/nt/win32/dbghelp",
             "personalities/nt/win32/b35test",
@@ -220,11 +258,31 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/shlwapi",
             "personalities/nt/win32/wtsapi32",
             "personalities/nt/win32/comctl32",
+            "personalities/nt/win32/comdlg32",
             "personalities/nt/win32/oleacc",
             "personalities/nt/win32/uiautomationcore",
             "personalities/nt/win32/mfplat",
             "personalities/nt/win32/powrprof",
             "personalities/nt/win32/uxtheme",
+            // The generated system DLLs (ADR 0155, step 10).
+            "crates/poly-stubs",
+            "crates/poly-ldr",
+            "personalities/nt/win32/setupapi",
+            "personalities/nt/win32/pdh",
+            "personalities/nt/win32/tbs",
+            "personalities/nt/win32/cfgmgr32",
+            "personalities/nt/win32/wintrust",
+            "personalities/nt/win32/ncrypt",
+            "personalities/nt/win32/propsys",
+            "personalities/nt/win32/wevtapi",
+            "personalities/nt/win32/hid",
+            "personalities/nt/win32/dxgi",
+            "personalities/nt/win32/d3d11",
+            "personalities/nt/win32/dcomp",
+            // ADR 0199.
+            "personalities/nt/win32/vcruntime140",
+            "personalities/nt/win32/vcruntime140_1",
+            "personalities/nt/win32/msvcp140",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -359,6 +417,7 @@ fn verify(dir: &Path) -> Result {
     verify_ole32(dir)?;
     verify_crypto(dir)?;
     verify_ws2_32(dir)?;
+    verify_mswsock(dir)?;
     verify_gui(dir)
 }
 
@@ -436,6 +495,21 @@ fn verify_crypto(dir: &Path) -> Result {
         }
     }
     verify_exe(dir, "cryptest.exe", &["bcrypt.dll", "crypt32.dll", "kernel32.dll"])
+}
+
+/// `mswsock.dll` exports `AcceptEx`, `GetAcceptExSockaddrs`, `ConnectEx` and `DisconnectEx` by name,
+/// as code (ADR 0195).
+fn verify_mswsock(dir: &Path) -> Result {
+    use poly_pe::ExportTarget;
+    let bytes = read(&dir.join("mswsock.dll"))?;
+    let dll = parse(&bytes)?;
+    let exports = dll.exports().map_err(|e| format!("mswsock exports: {e:?}"))?.ok_or("mswsock: no exports")?;
+    for name in ["AcceptEx", "GetAcceptExSockaddrs", "ConnectEx", "DisconnectEx", "TransmitFile"] {
+        if !matches!(exports.by_name(name.as_bytes()).map_err(|e| format!("{e:?}"))?, Some(ExportTarget::Rva(_))) {
+            return Err(format!("mswsock.dll lacks {name}"));
+        }
+    }
+    Ok(())
 }
 
 /// `ws2_32` exports every function of `poly_winsock::exports` by name, as

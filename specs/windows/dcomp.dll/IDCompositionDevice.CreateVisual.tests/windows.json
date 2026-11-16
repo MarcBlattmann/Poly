@@ -1,0 +1,99 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dcnull_outputs_b",
+      "exe_sha256": "85f4218f31d6e9b97641fef1281593020fd7189808f4760dc57a2b3597450fc5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RENvbXBvc2l0aW9uQ3JlYXRlRGV2aWNlMihkZXZpY2UsIGlpZCwgTlVMTCBvdXQpIDB4ODAwNzAwNTcKRENvbXBvc2l0aW9uQ3JlYXRlU3VyZmFjZUhhbmRsZShOVUxMIG91dCkgMHg4MDA3MDA1NwpDcmVhdGVTdXJmYWNlKE5VTEwgb3V0KSAweDgwMDcwMDU3IENyZWF0ZVZpcnR1YWxTdXJmYWNlKE5VTEwgb3V0KSAweDgwMDcwMDU3CkNyZWF0ZVRyYW5zZm9ybUdyb3VwKE5VTEwgYXJyYXksIDAsIE5VTEwgb3V0KSAweDgwMDcwMDU3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DCompositionCreateDevice2(device, iid, NULL out) 0x80070057\nDCompositionCreateSurfaceHandle(NULL out) 0x80070057\nCreateSurface(NULL out) 0x80070057 CreateVirtualSurface(NULL out) 0x80070057\nCreateTransformGroup(NULL array, 0, NULL out) 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    },
+    {
+      "name": "dcnull_outputs_c",
+      "exe_sha256": "3d186e6bde87d2cb869792948a7acabc25109f5859f6bb340f46ff534ab4104f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RENvbXBvc2l0aW9uQ3JlYXRlRGV2aWNlMyhkZXZpY2UsIGlpZCwgTlVMTCBvdXQpIDB4ODAwNzAwNTcKdjEgQ3JlYXRlVmlzdWFsKE5VTEwgb3V0KSAweDgwMDcwMDU3IGRlc2t0b3AgQ3JlYXRlVmlzdWFsKE5VTEwgb3V0KSAweDgwMDcwMDU3CkNyZWF0ZVN1cmZhY2VGcm9tSGFuZGxlKE5VTEwsIE5VTEwgb3V0KSAweDgwMDcwMDU3IENyZWF0ZVN1cmZhY2VGcm9tSHduZCh3aW5kb3csIE5VTEwgb3V0KSAweDgwMDcwMDU3CkdldEZyYW1lU3RhdGlzdGljcyhOVUxMKSAweDgwMDcwMDU3IENoZWNrRGV2aWNlU3RhdGUoTlVMTCkgMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DCompositionCreateDevice3(device, iid, NULL out) 0x80070057\nv1 CreateVisual(NULL out) 0x80070057 desktop CreateVisual(NULL out) 0x80070057\nCreateSurfaceFromHandle(NULL, NULL out) 0x80070057 CreateSurfaceFromHwnd(window, NULL out) 0x80070057\nGetFrameStatistics(NULL) 0x80070057 CheckDeviceState(NULL) 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 90
+    },
+    {
+      "name": "dcvis_ifaces",
+      "exe_sha256": "82561a94ea8842f033b0a943a13e365eeaf90c754495e89c77c2f5ced6301a20",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "djEgZGV2aWNlIENyZWF0ZVZpc3VhbDogc2V0CnYxIGRldmljZSB2aXN1YWwgUUkgSURDb21wb3NpdGlvblZpc3VhbDM6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKdjEgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uQ2xpcDogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQp2MSBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25UYXJnZXQ6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKdjEgZGV2aWNlIHZpc3VhbCBRSSBJRFhHSVN1cmZhY2U6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKZGVza3RvcCBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25WaXN1YWw6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uVmlzdWFsRGVidWc6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRWZmZWN0OiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRGV2aWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBub3RoaW5nOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRldmljZTMgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25WaXN1YWwyOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1hcy1vYmplY3Q9dHJ1ZQpkZXZpY2UzIHZpc3VhbCBRSSBJVW5rbm93bjogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtYXMtb2JqZWN0PXRydWUKZGV2aWNlMyB2aXN1YWwgUUkgSURDb21wb3NpdGlvblRyYW5zZm9ybTogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXZpY2UzIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRGV2aWNlMjogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpmcmVzaCB2aXN1YWwgcmVmcyAxCmFmdGVyIHJlbGVhc2luZyB0aGVtIHJlZnMgMQp2aXN1YWwgdXNlZCB3aGlsZSBpdHMgZGV2aWNlIGlzIGFsaXZlOiBTZXRPZmZzZXRYIDB4MDAwMDAwMDAKdmlzdWFscyBtYWRlIGluIGEgcm93OiA1MTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "v1 device CreateVisual: set\nv1 device visual QI IDCompositionVisual3: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDCompositionClip: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDCompositionTarget: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDXGISurface: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDCompositionVisual: 0x00000000 ptr=set same-as-object=true\ndesktop device visual QI IDCompositionVisualDebug: 0x00000000 ptr=set same-as-object=true\ndesktop device visual QI IDCompositionEffect: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDCompositionDevice: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI nothing: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDCompositionVisual2: 0x00000000 ptr=set same-as-object=true\ndevice3 visual QI IUnknown: 0x00000000 ptr=set same-as-object=true\ndevice3 visual QI IDCompositionTransform: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDCompositionDevice2: 0x80004002 ptr=null same-as-object=false\nfresh visual refs 1\nafter releasing them refs 1\nvisual used while its device is alive: SetOffsetX 0x00000000\nvisuals made in a row: 512\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 80
+    },
+    {
+      "name": "dcvis_ifaces_b",
+      "exe_sha256": "f21451302818e7dd3475e8498abfc4040f9a287931b73b804a1e3351e316232c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "djEgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uVmlzdWFsOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1hcy1vYmplY3Q9dHJ1ZQp2MSBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25WaXN1YWxEZWJ1ZzogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQp2MSBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25FZmZlY3Q6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKdjEgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRGV2aWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCnYxIGRldmljZSB2aXN1YWwgUUkgbm90aGluZzogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXNrdG9wIGRldmljZSB2aXN1YWwgUUkgSURDb21wb3NpdGlvblZpc3VhbDI6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBJVW5rbm93bjogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtYXMtb2JqZWN0PXRydWUKZGVza3RvcCBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25UcmFuc2Zvcm06IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKZGVza3RvcCBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25EZXZpY2UyOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRldmljZTMgQ3JlYXRlVmlzdWFsOiAweDAwMDAwMDAwIHB0cj1zZXQKZGV2aWNlMyB2aXN1YWwgUUkgSURDb21wb3NpdGlvblZpc3VhbDM6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRldmljZTMgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25DbGlwOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRldmljZTMgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25UYXJnZXQ6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKZGV2aWNlMyB2aXN1YWwgUUkgSURYR0lTdXJmYWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlClZpc3VhbC9WaXN1YWwyL1Zpc3VhbDMvVmlzdWFsRGVidWcgcG9pbnRlcnM6IGFsbCBlcXVhbCB0cnVlIHJlZnMgNQp0d28gdmlzdWFscyBvZiBvbmUgZGV2aWNlIGFyZSBkaWZmZXJlbnQgb2JqZWN0czogdHJ1ZQp2aXN1YWwgdXNlZCBhZnRlciB0aGUgZGV2aWNlJ3MgY3JlYXRpb24gcmVmZXJlbmNlIHdhcyByZWxlYXNlZDogU2V0T2Zmc2V0WCAweDAwMDAwMDAwIHJlZnMgMQpDb21taXQgYWZ0ZXIgcmVsZWFzaW5nIHRoZW06IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "v1 device visual QI IDCompositionVisual: 0x00000000 ptr=set same-as-object=true\nv1 device visual QI IDCompositionVisualDebug: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDCompositionEffect: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDCompositionDevice: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI nothing: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDCompositionVisual2: 0x00000000 ptr=set same-as-object=true\ndesktop device visual QI IUnknown: 0x00000000 ptr=set same-as-object=true\ndesktop device visual QI IDCompositionTransform: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDCompositionDevice2: 0x80004002 ptr=null same-as-object=false\ndevice3 CreateVisual: 0x00000000 ptr=set\ndevice3 visual QI IDCompositionVisual3: 0x00000000 ptr=set same-as-object=true\ndevice3 visual QI IDCompositionClip: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDCompositionTarget: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDXGISurface: 0x80004002 ptr=null same-as-object=false\nVisual/Visual2/Visual3/VisualDebug pointers: all equal true refs 5\ntwo visuals of one device are different objects: true\nvisual used after the device's creation reference was released: SetOffsetX 0x00000000 refs 1\nCommit after releasing them: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 81
+    },
+    {
+      "name": "dcvis_ifaces_c",
+      "exe_sha256": "08010a16adc8f17b9a94a139c5bfdd198bc0a267af005eae4d805f11af1ce534",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "djEgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uVmlzdWFsMjogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQp2MSBkZXZpY2UgdmlzdWFsIFFJIElVbmtub3duOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1hcy1vYmplY3Q9dHJ1ZQp2MSBkZXZpY2UgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25UcmFuc2Zvcm06IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKdjEgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRGV2aWNlMjogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXNrdG9wIGRldmljZSBDcmVhdGVWaXN1YWw6IHNldApkZXNrdG9wIGRldmljZSB2aXN1YWwgUUkgSURDb21wb3NpdGlvblZpc3VhbDM6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRlc2t0b3AgZGV2aWNlIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uQ2xpcDogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXNrdG9wIGRldmljZSB2aXN1YWwgUUkgSURDb21wb3NpdGlvblRhcmdldDogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXNrdG9wIGRldmljZSB2aXN1YWwgUUkgSURYR0lTdXJmYWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRldmljZTMgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25WaXN1YWw6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLWFzLW9iamVjdD10cnVlCmRldmljZTMgdmlzdWFsIFFJIElEQ29tcG9zaXRpb25WaXN1YWxEZWJ1ZzogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtYXMtb2JqZWN0PXRydWUKZGV2aWNlMyB2aXN1YWwgUUkgSURDb21wb3NpdGlvbkVmZmVjdDogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLWFzLW9iamVjdD1mYWxzZQpkZXZpY2UzIHZpc3VhbCBRSSBJRENvbXBvc2l0aW9uRGV2aWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtYXMtb2JqZWN0PWZhbHNlCmRldmljZTMgdmlzdWFsIFFJIG5vdGhpbmc6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1hcy1vYmplY3Q9ZmFsc2UKdGhlIHZpc3VhbCBwb2ludGVycyBlcXVhbCB0aGUgb25lIENyZWF0ZVZpc3VhbCBnYXZlOiB0cnVlIHRydWUgdHJ1ZSB0cnVlCklVbmtub3duIG9mIGEgdmlzdWFsOiBzYW1lIHR3aWNlIHRydWUKYWZ0ZXIgdGhlIHJlbmRlcmluZyBkZXZpY2Ugd2FzIHJlbGVhc2VkIHRvbzogU2V0T2Zmc2V0WCAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "v1 device visual QI IDCompositionVisual2: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IUnknown: 0x00000000 ptr=set same-as-object=true\nv1 device visual QI IDCompositionTransform: 0x80004002 ptr=null same-as-object=false\nv1 device visual QI IDCompositionDevice2: 0x80004002 ptr=null same-as-object=false\ndesktop device CreateVisual: set\ndesktop device visual QI IDCompositionVisual3: 0x00000000 ptr=set same-as-object=true\ndesktop device visual QI IDCompositionClip: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDCompositionTarget: 0x80004002 ptr=null same-as-object=false\ndesktop device visual QI IDXGISurface: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDCompositionVisual: 0x00000000 ptr=set same-as-object=true\ndevice3 visual QI IDCompositionVisualDebug: 0x00000000 ptr=set same-as-object=true\ndevice3 visual QI IDCompositionEffect: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI IDCompositionDevice: 0x80004002 ptr=null same-as-object=false\ndevice3 visual QI nothing: 0x80004002 ptr=null same-as-object=false\nthe visual pointers equal the one CreateVisual gave: true true true true\nIUnknown of a visual: same twice true\nafter the rendering device was released too: SetOffsetX 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 96
+    },
+    {
+      "name": "dcvis_slots_c",
+      "exe_sha256": "b3a79ccba4dea588b01d690afb323e0cf2295da092c178e5b6371e65330f4247",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "djEgZGV2aWNlIHZpc3VhbDogc2xvdCA1IHdpdGggZmxvYXQgNS4wIGFuZCBhIE5VTEwgcG9pbnRlcjogMHg4MDA3MDA1Nwp2MSBkZXZpY2UgdmlzdWFsOiBzbG90IDggd2l0aCBhIG1hdHJpeCBwb2ludGVyOiAweDAwMDAwMDAwCnYxIGRldmljZSB2aXN1YWw6IHNsb3QgMTQgd2l0aCBhIHJlY3QgcG9pbnRlcjogMHgwMDAwMDAwMApkZXNrdG9wIGRldmljZSB2aXN1YWw6IHNsb3QgNCB3aXRoIGZsb2F0IDUuMCBhbmQgYSBOVUxMIHBvaW50ZXI6IDB4MDAwMDAwMDAKZGVza3RvcCBkZXZpY2UgdmlzdWFsOiBzbG90IDcgd2l0aCBOVUxMOiAweDAwMDAwMDAwCmRlc2t0b3AgZGV2aWNlIHZpc3VhbDogc2xvdCAxMyB3aXRoIE5VTEw6IDB4MDAwMDAwMDAKVmlzdWFsMyBzbG90IDI3IHdpdGggZmxvYXQgMC41IGFuZCBhIE5VTEwgcG9pbnRlcjogMHg4MDA3MDA1NwpWaXN1YWwzIHNsb3QgMzAgd2l0aCBmbG9hdCAwLjUgYW5kIGEgTlVMTCBwb2ludGVyOiAweDAwMDAwMDAwClZpc3VhbDMgc2xvdCAzMSB3aXRoIGEgNHg0IG1hdHJpeCBwb2ludGVyIChub3QgYW4gb2JqZWN0KTogMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "v1 device visual: slot 5 with float 5.0 and a NULL pointer: 0x80070057\nv1 device visual: slot 8 with a matrix pointer: 0x00000000\nv1 device visual: slot 14 with a rect pointer: 0x00000000\ndesktop device visual: slot 4 with float 5.0 and a NULL pointer: 0x00000000\ndesktop device visual: slot 7 with NULL: 0x00000000\ndesktop device visual: slot 13 with NULL: 0x00000000\nVisual3 slot 27 with float 0.5 and a NULL pointer: 0x80070057\nVisual3 slot 30 with float 0.5 and a NULL pointer: 0x00000000\nVisual3 slot 31 with a 4x4 matrix pointer (not an object): 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    }
+  ]
+}

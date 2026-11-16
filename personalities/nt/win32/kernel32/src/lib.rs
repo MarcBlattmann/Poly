@@ -14,7 +14,8 @@ use poly_win32_rt as _;
 
 extern crate alloc;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn LocalFree(mem: *mut u8) -> *mut u8;
@@ -175,7 +176,8 @@ pub unsafe extern "system" fn lstrcmpiA(a: *const u8, b: *const u8) -> i32 {
     unsafe { ansi_cmp(a, b, true) }
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetStartupInfoW(info: *mut u8);
 }
@@ -187,23 +189,24 @@ unsafe extern "system" {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
     use core::sync::atomic::{AtomicPtr, Ordering};
-    use poly_kernelbase::process::{SI_DESKTOP, SI_RESERVED, SI_TITLE, STARTUPINFO_SIZE};
+    // This process's own `STARTUPINFO` layout (68 bytes in a 32-bit process, ADR 0186).
+    use poly_kernelbase::process::{SI_NATIVE as SL, STARTUPINFO_SIZE};
     static ANSI: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
     let mut p = ANSI.load(Ordering::Acquire);
     if p.is_null() {
         let mut si = alloc::boxed::Box::new([0u8; STARTUPINFO_SIZE]);
-        // SAFETY: a STARTUPINFOW-sized buffer.
+        // SAFETY: a buffer at least as large as this process's STARTUPINFOW.
         unsafe { GetStartupInfoW(si.as_mut_ptr()) };
-        for field in [SI_RESERVED, SI_DESKTOP, SI_TITLE] {
-            let w = u64::from_le_bytes(si[field..field + 8].try_into().unwrap()) as *const u16;
+        for field in [SL.reserved, SL.desktop, SL.title] {
+            let w = SL.pointer(&si[..], field) as usize as *const u16;
             if w.is_null() {
                 continue;
             }
             // SAFETY: a NUL-terminated string in the process parameters.
             let mut a = poly_kernelbase::text::to_ansi(unsafe { poly_kernelbase::text::wide_at(w) });
             a.push(0);
-            let at = alloc::boxed::Box::leak(a.into_boxed_slice()).as_ptr() as u64;
-            si[field..field + 8].copy_from_slice(&at.to_le_bytes());
+            let at = alloc::boxed::Box::leak(a.into_boxed_slice()).as_ptr() as usize;
+            si[field..field + SL.ptr].copy_from_slice(&at.to_le_bytes());
         }
         let leaked = alloc::boxed::Box::leak(si).as_mut_ptr();
         p = match ANSI.compare_exchange(core::ptr::null_mut(), leaked, Ordering::AcqRel, Ordering::Acquire) {
@@ -212,10 +215,11 @@ pub unsafe extern "system" fn GetStartupInfoA(info: *mut u8) {
         };
     }
     // SAFETY: the caller's STARTUPINFOA; `p` holds one.
-    unsafe { core::ptr::copy_nonoverlapping(p, info, STARTUPINFO_SIZE) };
+    unsafe { core::ptr::copy_nonoverlapping(p, info, SL.size) };
 }
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetSystemInfo(info: *mut u8);
 }
@@ -256,3 +260,121 @@ pub extern "system" fn GetActiveProcessorCount(group: u16) -> u32 {
 pub extern "system" fn kernel32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+// ----- the global atom table (poly_kernelbase::atoms)
+
+struct AtomTable {
+    locked: core::sync::atomic::AtomicBool,
+    table: core::cell::UnsafeCell<poly_kernelbase::atoms::Atoms>,
+}
+
+// SAFETY: the table is reached only with `locked` held.
+unsafe impl Sync for AtomTable {}
+
+static ATOMS: AtomTable = AtomTable {
+    locked: core::sync::atomic::AtomicBool::new(false),
+    table: core::cell::UnsafeCell::new(poly_kernelbase::atoms::Atoms::new()),
+};
+
+fn with_atoms<R>(f: impl FnOnce(&mut poly_kernelbase::atoms::Atoms) -> R) -> R {
+    use core::sync::atomic::Ordering;
+    while ATOMS.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        core::hint::spin_loop();
+    }
+    // SAFETY: the lock is held, so this is the only reference.
+    let r = f(unsafe { &mut *ATOMS.table.get() });
+    ATOMS.locked.store(false, Ordering::Release);
+    r
+}
+
+/// The atom a `LPCWSTR` that is `MAKEINTATOM` names (1..=0xBFFF), else the string.
+unsafe fn atom_arg(p: *const u16) -> Result<alloc::vec::Vec<u16>, u16> {
+    if (p as usize) >> 16 == 0 {
+        return Err(p as usize as u16);
+    }
+    let mut v = alloc::vec::Vec::new();
+    let mut q = p;
+    // SAFETY: a NUL-terminated string (the caller's promise); stops one past the longest name.
+    unsafe {
+        while *q != 0 && v.len() <= poly_kernelbase::atoms::MAX_NAME {
+            v.push(*q);
+            q = q.add(1);
+        }
+    }
+    Ok(v)
+}
+
+/// `GlobalAddAtomW`: the atom, 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalAddAtomW(name: *const u16) -> u16 {
+    // SAFETY: as `atom_arg`.
+    match unsafe { atom_arg(name) } {
+        Err(a) if (1..poly_kernelbase::atoms::FIRST_STRING_ATOM).contains(&a) => a,
+        Err(_) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_PARAMETER) };
+            0
+        }
+        Ok(n) => with_atoms(|t| t.add(&n)).unwrap_or_else(|e| {
+            // SAFETY: as above.
+            unsafe { SetLastError(e) };
+            0
+        }),
+    }
+}
+
+/// `GlobalFindAtomW`: the atom of a name, 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalFindAtomW(name: *const u16) -> u16 {
+    // SAFETY: as `atom_arg`.
+    match unsafe { atom_arg(name) } {
+        Err(a) if (1..poly_kernelbase::atoms::FIRST_STRING_ATOM).contains(&a) => a,
+        Err(_) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_PARAMETER) };
+            0
+        }
+        Ok(n) => with_atoms(|t| t.find(&n)).unwrap_or_else(|e| {
+            // SAFETY: as above.
+            unsafe { SetLastError(e) };
+            0
+        }),
+    }
+}
+
+/// `GlobalDeleteAtom`: 0 on success, the atom on failure.
+#[unsafe(no_mangle)]
+pub extern "system" fn GlobalDeleteAtom(atom: u16) -> u16 {
+    match with_atoms(|t| t.delete(atom)) {
+        Ok(()) => 0,
+        Err(e) => {
+            // SAFETY: a kernelbase export without preconditions.
+            unsafe { SetLastError(e) };
+            atom
+        }
+    }
+}
+
+/// `GlobalGetAtomNameW`: the length of the name written (without the NUL), 0 with the last error.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GlobalGetAtomNameW(atom: u16, buffer: *mut u16, size: i32) -> u32 {
+    let Some(name) = with_atoms(|t| t.name(atom)) else {
+        // SAFETY: a kernelbase export without preconditions.
+        unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INVALID_HANDLE) };
+        return 0;
+    };
+    if buffer.is_null() || size <= 0 {
+        // SAFETY: as above.
+        unsafe { SetLastError(poly_kernelbase::atoms::ERROR_INSUFFICIENT_BUFFER) };
+        return 0;
+    }
+    let n = name.len().min(size as usize - 1);
+    // SAFETY: the caller's buffer of `size` characters.
+    unsafe {
+        core::ptr::copy_nonoverlapping(name.as_ptr(), buffer, n);
+        *buffer.add(n) = 0;
+    }
+    n as u32
+}
+#[cfg(target_arch = "x86_64")]
+mod apps;

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "ire_chrome",
+      "exe_sha256": "cb740a8af2ad4bd9e65478002267147dbb1a02f48c4da98ffb80d497beb0cd1f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xpZW50IG9mIHRoZSBuZXZlci1zaXplZCBob2xkZXI6IDAsMCwwLDAgZW1wdHkgMQp3aW5kb3cgb2YgdGhlIGhvbGRlcjogMCwwLDAsMCBlbXB0eSAxCnVwZGF0ZSByZWN0YW5nbGUgb2YgdGhlIGhpZGRlbiB0b3AtbGV2ZWwgd2luZG93OiBoYXM9MCAwLDAsMCwwIGVtcHR5IDEKdXBkYXRlIHJlY3RhbmdsZSByaWdodCBhZnRlciBzaG93aW5nOiBoYXM9MSAwLDAsNjI0LDM5MiBlbXB0eSAwCnVwZGF0ZSByZWN0YW5nbGUgYWZ0ZXIgdGhlIHBhaW50OiBoYXM9MCAwLDAsMCwwIGVtcHR5IDEKY2xpZW50IG9mIHRoZSBtaW5pbWl6ZWQgd2luZG93OiAwLDAsMCwwIGVtcHR5IDEKSW50ZXJzZWN0UmVjdCBvZiB0b3VjaGluZyByZWN0YW5nbGVzID0gMDogMCwwLDAsMCBlbXB0eSAxCkludGVyc2VjdFJlY3Qgb2Ygb3ZlcmxhcHBpbmcgcmVjdGFuZ2xlcyA9IDE6IDUwLDUwLDEwMCwxMDAgZW1wdHkgMApTZXRSZWN0RW1wdHk6IDAsMCwwLDAgZW1wdHkgMQpvZmZzZXQgcmVjdGFuZ2xlOiAtMTUwLDIwLC01MCwxMjAgZW1wdHkgMApjbGlwIGJveCBraW5kIDE6IGVtcHR5IDEKY2xpcCBib3ggd2l0aCBhbiBlbXB0eSBjbGlwIHJlZ2lvbjoga2luZCAxIDAsMCwwLDAgZW1wdHkgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "client of the never-sized holder: 0,0,0,0 empty 1\nwindow of the holder: 0,0,0,0 empty 1\nupdate rectangle of the hidden top-level window: has=0 0,0,0,0 empty 1\nupdate rectangle right after showing: has=1 0,0,624,392 empty 0\nupdate rectangle after the paint: has=0 0,0,0,0 empty 1\nclient of the minimized window: 0,0,0,0 empty 1\nIntersectRect of touching rectangles = 0: 0,0,0,0 empty 1\nIntersectRect of overlapping rectangles = 1: 50,50,100,100 empty 0\nSetRectEmpty: 0,0,0,0 empty 1\noffset rectangle: -150,20,-50,120 empty 0\nclip box kind 1: empty 1\nclip box with an empty clip region: kind 1 0,0,0,0 empty 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 621
+    }
+  ]
+}

@@ -462,8 +462,9 @@ unsafe fn iphlp() {
         check_got(WaitForSingleObject(ev, 0) == WAIT_TIMEOUT, 1);
         check(CancelIPChangeNotify(ov.as_mut_ptr().cast()) == 1);
         check_got(WaitForSingleObject(ev, 0) == 0, 2);
+        // Windows' own: a second cancel returns FALSE and leaves the last error alone (the spec sheet of
+        // CancelIPChangeNotify).
         check(CancelIPChangeNotify(ov.as_mut_ptr().cast()) == 0);
-        is(GetLastError(), ERROR_NOT_FOUND);
         CloseHandle(ev);
     }
 }
@@ -509,7 +510,12 @@ unsafe fn identity() {
         check(GetUserNameExW(8, name.as_mut_ptr(), &mut n) == 0);
         is(GetLastError(), ERROR_NONE_MAPPED);
         n = 64;
+        // NameUnknown (0) is a format without a directory; one outside the enumeration is invalid
+        // (specs/windows/secur32.dll/GetUserNameExW.yaml, rule `formats`).
         check(GetUserNameExW(0, name.as_mut_ptr(), &mut n) == 0);
+        is(GetLastError(), ERROR_NONE_MAPPED);
+        n = 64;
+        check(GetUserNameExW(99, name.as_mut_ptr(), &mut n) == 0);
         is(GetLastError(), ERROR_INVALID_PARAMETER);
 
         // SSPI: no security packages.
@@ -561,9 +567,11 @@ unsafe fn dhcp_and_symbols() {
                 &mut size,
                 core::ptr::null(),
             ),
-            0,
+            // An adapter the system does not have: ERROR_INVALID_PARAMETER, as Windows answers (the spec
+            // sheet of DhcpRequestParams); the entries of the array are left alone.
+            87,
         );
-        check(rd64(&param, 16) == 0 && rd32(&param, 24) == 0);
+        check(rd64(&param, 16) == 0xDEAD && rd32(&param, 24) == 9);
 
         check(SymInitialize(-1, core::ptr::null(), 0) == 1);
         check(SymSetOptions(0x1) == 0x1);
@@ -594,14 +602,16 @@ unsafe fn certs_and_memory() {
         check(CertAddStoreToCollection(coll, 0x1234, 0, 0) == 0);
         is(GetLastError(), ERROR_INVALID_HANDLE);
         check(CertEnumCertificatesInStore(coll, 0) == 0);
-        // CertControlStore: change notification gets an event, resync and commit succeed.
+        // CertControlStore (the spec sheet): a memory store has no notification (ERROR_CALL_NOT_IMPLEMENTED), a
+        // collection takes an event that the call does not signal; an unknown control is refused.
         let mut ev: isize = 0;
-        check(CertControlStore(mem, 0, 2, &mut ev) == 1 && ev != 0);
+        check(CertControlStore(mem, 0, 2, &mut ev) == 0);
+        is(GetLastError(), 120);
+        check(CertControlStore(coll, 0, 2, &mut ev) == 1 && ev != 0);
         check_got(WaitForSingleObject(ev, 0) == WAIT_TIMEOUT, 1);
+        check(CertControlStore(coll, 0, 1, &mut ev) == 1);
         CloseHandle(ev);
-        check(CertControlStore(coll, 0, 1, core::ptr::null_mut()) == 1);
-        check(CertControlStore(coll, 0, 3, core::ptr::null_mut()) == 1);
-        check(CertControlStore(mem, 0, 99, core::ptr::null_mut()) == 0);
+        check(CertControlStore(coll, 0, 99, core::ptr::null_mut()) == 0);
         // The collection keeps its own reference to the sibling.
         check(CertCloseStore(mem, 0) == 1);
         check(CertEnumCertificatesInStore(coll, 0) == 0);

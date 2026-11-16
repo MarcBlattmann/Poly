@@ -360,6 +360,8 @@ impl IoState {
     ) -> core::result::Result<(u64, u64), NtStatus> {
         let exists = self.np.pipes.contains_key(key);
         match (c.disposition, exists) {
+            // A server end is created or opened, never superseded (the sheet's `parameters`).
+            (FILE_SUPERSEDE, _) => return Err(STATUS_INVALID_PARAMETER),
             (FILE_CREATE, true) => return Err(STATUS_ACCESS_DENIED),
             (FILE_OPEN, false) => return Err(STATUS_OBJECT_NAME_NOT_FOUND),
             _ => {}
@@ -628,8 +630,15 @@ impl IoState {
         let inst = self.np.instances.get(&end.instance).ok_or(STATUS_PIPE_BROKEN)?;
         let chan = if end.server { &inst.to_server } else { &inst.to_client };
         let has_data = !chan.entries.is_empty();
-        if end.server && inst.state == PipeState::Listening {
-            return Err(STATUS_INVALID_PIPE_STATE);
+        if end.server {
+            // The server end of an instance nobody is connected to (listening
+            // or disconnected) is an invalid state for a peek; one whose
+            // client has gone (closing) still answers, with state 4, while
+            // data is left (specs/windows/ntdll.dll/NtFsControlFile.yaml,
+            // `peek_states`; without data it is a broken pipe).
+            if matches!(inst.state, PipeState::Listening | PipeState::Disconnected) {
+                return Err(STATUS_INVALID_PIPE_STATE);
+            }
         }
         if let Some(s) = end_error(inst, &end, file, false, has_data) {
             return Err(s);
@@ -861,6 +870,40 @@ impl IoState {
     }
 
     /// The instance count and state of pipe `key`, for tests.
+    /// One line per pipe instance for a wait report (`poly.nt.waits`, ADR 0155 step 12): its
+    /// name, state, the two ends' processes, and per direction the unread bytes, the queued
+    /// messages and the reads waiting. A direction with data *and* a waiting read is a lost
+    /// wakeup.
+    pub fn np_debug_lines(&self, objects: &poly_ntobj::ObjectManager) -> Vec<alloc::string::String> {
+        // Which processes hold a handle to an end's file object, and its handle values.
+        let holders = |file: Option<u64>| -> alloc::string::String {
+            let Some(rec) = file.and_then(|f| self.files.get(&f)) else { return "-".into() };
+            let h = objects.holders(rec.object);
+            if h.is_empty() {
+                return "none".into();
+            }
+            h.iter().map(|(p, h)| alloc::format!("p{}:{:#x}", p.0, h.0)).collect::<Vec<_>>().join(",")
+        };
+        self.np
+            .instances
+            .values()
+            .map(|i| {
+                let chan = |c: &Chan| alloc::format!("{}B/{}m/{}r", c.available(), c.entries.len(), c.readers.len());
+                alloc::format!(
+                    "pipe #{} {} {:?} server [{}] client [{}] to-server {} to-client {} listeners {}",
+                    i.id,
+                    alloc::string::String::from_utf16_lossy(&i.name),
+                    i.state,
+                    holders(i.server_file),
+                    holders(i.client_file),
+                    chan(&i.to_server),
+                    chan(&i.to_client),
+                    i.listeners.len()
+                )
+            })
+            .collect()
+    }
+
     pub fn np_instance_count(&self, key: &[u16]) -> usize {
         self.np.pipes.get(key).map_or(0, |p| p.instances.len())
     }

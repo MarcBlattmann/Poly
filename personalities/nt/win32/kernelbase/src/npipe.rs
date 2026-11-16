@@ -50,7 +50,7 @@ pub(crate) unsafe fn fsctl(
         // SAFETY: the caller's OVERLAPPED; its first two fields are the
         // IO_STATUS_BLOCK the kernel completes.
         unsafe {
-            (*ov).internal = nt::STATUS_PENDING.0 as u64;
+            (*ov).internal = nt::STATUS_PENDING.0 as usize;
             let e = (*ov).event;
             (ov as *mut IoStatusBlock, e & !1, if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 })
         }
@@ -77,7 +77,7 @@ pub(crate) unsafe fn fsctl(
         st = NtStatus(unsafe { (*iosb).status } as u32);
     }
     // SAFETY: the status block is ours or the caller's.
-    (st, unsafe { (*iosb).information })
+    (st, unsafe { (*iosb).information } as u64)
 }
 
 fn query(handle: Handle, class: u32, out: &mut [u8]) -> Result<(), NtStatus> {
@@ -91,6 +91,41 @@ fn local_info(handle: Handle) -> Result<Local, NtStatus> {
     let mut b = [0u8; 36];
     query(handle, FILE_PIPE_LOCAL_INFORMATION, &mut b)?;
     Ok(Local::parse(&b).expect("36 bytes"))
+}
+
+/// `CreateNamedPipeA`: the name converted from the ANSI code page, then `CreateNamedPipeW`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateNamedPipeA(
+    name: *const u8,
+    open_mode: u32,
+    pipe_mode: u32,
+    max_instances: u32,
+    out_size: u32,
+    in_size: u32,
+    default_timeout: u32,
+    security: *const u8,
+) -> Handle {
+    // SAFETY: the caller's string.
+    let Some(wide) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE) };
+    // An empty ANSI name is `ERROR_PATH_NOT_FOUND` here (CreateNamedPipeA.yaml); the wide
+    // function says `ERROR_INVALID_NAME` for the same name (CreateNamedPipeW.yaml).
+    if wide.is_empty() {
+        return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE);
+    }
+    let wide = with_nul(&wide);
+    // SAFETY: a NUL-terminated string made above; the rest are the caller's.
+    unsafe {
+        CreateNamedPipeW(
+            wide.as_ptr(),
+            open_mode,
+            pipe_mode,
+            max_instances,
+            out_size,
+            in_size,
+            default_timeout,
+            security,
+        )
+    }
 }
 
 /// `CreateNamedPipeW`.
@@ -107,11 +142,8 @@ pub unsafe extern "system" fn CreateNamedPipeW(
 ) -> Handle {
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE) };
-    if let Err(e) = np::pipe_name(name) {
-        // A path that is no device path is the file system's to refuse.
-        if e != ERROR_BAD_PATHNAME {
-            return fail(e, INVALID_HANDLE_VALUE);
-        }
+    if let Some(e) = np::create_name_error(name) {
+        return fail(e, INVALID_HANDLE_VALUE);
     }
     let p = match np::server_params(open_mode, pipe_mode, max_instances, out_size, in_size, default_timeout) {
         Ok(p) => p,
@@ -122,9 +154,8 @@ pub unsafe extern "system" fn CreateNamedPipeW(
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
     let mut oa = nt_name.attributes();
-    // SECURITY_ATTRIBUTES.bInheritHandle (minwinbase.h: at 16 on x64).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() && unsafe { (security.add(16) as *const i32).read_unaligned() } != 0 {
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;
     }
     let mut h: Handle = 0;
@@ -151,7 +182,7 @@ pub unsafe extern "system" fn CreateNamedPipeW(
     if !st.is_success() {
         return fail_status(st, INVALID_HANDLE_VALUE);
     }
-    set_last_error(np::created_error(iosb.information));
+    set_last_error(np::created_error(iosb.information as u64));
     h
 }
 

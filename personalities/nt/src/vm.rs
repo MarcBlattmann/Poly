@@ -372,8 +372,52 @@ impl VirtualMemory {
         }
         let limit = zero_bits_limit(zero_bits)?;
         let size = page_up(size).ok_or(STATUS_INVALID_PARAMETER_4)?;
-        let base = self.find_free(size, top_down, limit).ok_or(STATUS_NO_MEMORY)?;
+        let base = self.find_free(size, top_down, limit).ok_or(if size > self.end - self.lowest {
+            // More than the whole address space has room for (Windows: `ERROR_INVALID_ADDRESS`).
+            STATUS_CONFLICTING_ADDRESSES
+        } else {
+            STATUS_NO_MEMORY
+        })?;
         Ok((base, size))
+    }
+
+    /// The bytes of private memory committed in this address space (what job memory limits count).
+    pub fn private_committed_bytes(&self) -> u64 {
+        self.allocations
+            .values()
+            .filter(|a| matches!(a.kind, AllocKind::Private) && a.placeholder != Placeholder::Is)
+            .map(|a| {
+                let committed: usize = a
+                    .pages
+                    .runs_in(0..a.pages.len())
+                    .filter(|(_, s)| matches!(s, PageState::Committed(_)))
+                    .map(|(r, _)| r.len())
+                    .sum();
+                committed as u64 * PAGE_SIZE
+            })
+            .sum()
+    }
+
+    /// The bytes a `NtAllocateVirtualMemory` of `MEM_COMMIT` would newly commit: the whole size for
+    /// a new allocation, the reserved pages of the range for a commit inside one.
+    pub fn commit_charge(&self, base: u64, size: u64, alloc_type: u32) -> u64 {
+        let whole = page_up(size).unwrap_or(u64::MAX);
+        if alloc_type & MEM_RESERVE != 0 || base == 0 {
+            return whole;
+        }
+        let Some(a) = self.allocation(page_down(base)) else { return 0 };
+        let start = page_down(base);
+        let end = base.saturating_add(size).min(a.end());
+        if end <= start {
+            return 0;
+        }
+        let reserved: usize = a
+            .pages
+            .runs_in(a.index(start)..a.index(end - 1) + 1)
+            .filter(|(_, s)| matches!(s, PageState::Reserved))
+            .map(|(r, _)| r.len())
+            .sum();
+        reserved as u64 * PAGE_SIZE
     }
 
     /// `NtAllocateVirtualMemory` on this address space. Returns the base
@@ -850,6 +894,14 @@ impl VirtualMemory {
     /// [`AccessFault`]. A guard page loses its guard status first and is
     /// mapped with its protection.
     pub fn access_fault(&mut self, b: &mut dyn Backend, addr: u64) -> AccessFault {
+        self.access_fault_in_stack(b, addr, None)
+    }
+
+    /// [`access_fault`](Self::access_fault) for a thread whose TEB says its
+    /// stack ends at `stack_base` (`NT_TIB.StackBase`): a guard page below it,
+    /// in the allocation that holds the stack, grows that stack as a stack
+    /// Poly made does.
+    pub fn access_fault_in_stack(&mut self, b: &mut dyn Backend, addr: u64, stack_base: Option<u64>) -> AccessFault {
         let page = page_down(addr);
         let Some(a) = self.allocation_mut(page) else {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
@@ -864,7 +916,8 @@ impl VirtualMemory {
         let unguarded = p.without_guard();
         a.pages.fill(i..i + 1, PageState::Committed(unguarded));
         let shared = a.shared();
-        let (stack, base) = (a.stack, a.base);
+        let teb_stack = stack_base.is_some_and(|top| addr < top && top > a.base && a.contains(top - 1));
+        let (stack, base) = (a.stack || teb_stack, a.base);
         b.protect(page, PAGE_SIZE, unguarded.hw(shared));
         if !stack {
             return AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION);

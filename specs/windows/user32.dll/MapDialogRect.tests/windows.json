@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "mdr_errors",
+      "exe_sha256": "7078e815ee17694586d4e3f9a6fed970ca98a245e0e8a15214d5b8e909984ca5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkRm9udE1lbVJlc291cmNlRXggZm9yIFBvbHlEbGcgTWl4ZWQ6IGhhbmRsZSB0cnVlIGZvbnRzIDEKQWRkRm9udE1lbVJlc291cmNlRXggZm9yIFBvbHlEbGcgRXZlbjogaGFuZGxlIHRydWUgZm9udHMgMQpkaWFsb2c6IE1hcERpYWxvZ1JlY3QoNCwgOCwgNDAsIDgwKSA9IDEgZXJyIC0yOiAoNywgMTEsIDcwLCAxMTApCmNoaWxkIG9mIHRoZSBkaWFsb2c6IE1hcERpYWxvZ1JlY3QoNCwgOCwgNDAsIDgwKSA9IDAgZXJyIDE0MjA6ICg0LCA4LCA0MCwgODApCk5VTEwgd2luZG93OiBNYXBEaWFsb2dSZWN0KDQsIDgsIDQwLCA4MCkgPSAwIGVyciAxNDAwOiAoNCwgOCwgNDAsIDgwKQptYWRlLXVwIHdpbmRvdzogTWFwRGlhbG9nUmVjdCg0LCA4LCA0MCwgODApID0gMCBlcnIgMTQwMDogKDQsIDgsIDQwLCA4MCkKcGxhaW4gd2luZG93IHdpdGhvdXQgYSBmb250OiBNYXBEaWFsb2dSZWN0KDQsIDgsIDQwLCA4MCkgPSAwIGVyciAxNDAwOiAoNCwgOCwgNDAsIDgwKQpzeXN0ZW0gZm9udDogdG1IZWlnaHQgMTYgdG1BdmVDaGFyV2lkdGggNyB3aWR0aCBvZiB0aGUgNTIgbGV0dGVycyA0MjkKR2V0RGlhbG9nQmFzZVVuaXRzID0gKDgsIDE2KQpwbGFpbiB3aW5kb3cgd2l0aCBXTV9TRVRGT05UIG9mIGFuIDExIHBpeGVsIFBvbHlEbGcgRXZlbjogTWFwRGlhbG9nUmVjdCg0LCA4LCA0MCwgODApID0gMCBlcnIgMTQwMDogKDQsIDgsIDQwLCA4MCkKICB0aGF0IGZvbnQ6IHRtSGVpZ2h0IDExIHRtQXZlQ2hhcldpZHRoIDcgd2lkdGggb2YgdGhlIDUyIGxldHRlcnMgMzY0CmRpYWxvZyBhZnRlciBXTV9TRVRGT05UIHdpdGggYSAxNiBwaXhlbCBQb2x5RGxnIEV2ZW46IE1hcERpYWxvZ1JlY3QoNCwgOCwgNDAsIDgwKSA9IDEgZXJyIC0yOiAoNywgMTEsIDcwLCAxMTApCiAgdGhhdCBmb250OiB0bUhlaWdodCAxNiB0bUF2ZUNoYXJXaWR0aCAxMCB3aWR0aCBvZiB0aGUgNTIgbGV0dGVycyA1MjAKZGlhbG9nIGFmdGVyIFdNX1NFVEZPTlQgd2l0aCBOVUxMOiBNYXBEaWFsb2dSZWN0KDQsIDgsIDQwLCA4MCkgPSAxIGVyciAtMjogKDcsIDExLCA3MCwgMTEwKQpkZXN0cm95ZWQgZGlhbG9nOiBNYXBEaWFsb2dSZWN0KDQsIDgsIDQwLCA4MCkgPSAwIGVyciAxNDAwOiAoNCwgOCwgNDAsIDgwKQp0d28gZGlhbG9nczogYmFzZSB1bml0cyAoNywgMTEpIGFuZCAoOCwgMTIpOyBkaWZmZXJlbnQ6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "AddFontMemResourceEx for PolyDlg Mixed: handle true fonts 1\nAddFontMemResourceEx for PolyDlg Even: handle true fonts 1\ndialog: MapDialogRect(4, 8, 40, 80) = 1 err -2: (7, 11, 70, 110)\nchild of the dialog: MapDialogRect(4, 8, 40, 80) = 0 err 1420: (4, 8, 40, 80)\nNULL window: MapDialogRect(4, 8, 40, 80) = 0 err 1400: (4, 8, 40, 80)\nmade-up window: MapDialogRect(4, 8, 40, 80) = 0 err 1400: (4, 8, 40, 80)\nplain window without a font: MapDialogRect(4, 8, 40, 80) = 0 err 1400: (4, 8, 40, 80)\nsystem font: tmHeight 16 tmAveCharWidth 7 width of the 52 letters 429\nGetDialogBaseUnits = (8, 16)\nplain window with WM_SETFONT of an 11 pixel PolyDlg Even: MapDialogRect(4, 8, 40, 80) = 0 err 1400: (4, 8, 40, 80)\n  that font: tmHeight 11 tmAveCharWidth 7 width of the 52 letters 364\ndialog after WM_SETFONT with a 16 pixel PolyDlg Even: MapDialogRect(4, 8, 40, 80) = 1 err -2: (7, 11, 70, 110)\n  that font: tmHeight 16 tmAveCharWidth 10 width of the 52 letters 520\ndialog after WM_SETFONT with NULL: MapDialogRect(4, 8, 40, 80) = 1 err -2: (7, 11, 70, 110)\ndestroyed dialog: MapDialogRect(4, 8, 40, 80) = 0 err 1400: (4, 8, 40, 80)\ntwo dialogs: base units (7, 11) and (8, 12); different: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    }
+  ]
+}

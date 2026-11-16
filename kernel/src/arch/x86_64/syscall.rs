@@ -59,7 +59,7 @@
 
 use super::addrspace::LOWER_HALF_END;
 use super::cpu;
-use super::gdt::{KERNEL_CODE, KERNEL_DATA, USER_CODE, USER_DATA};
+use super::gdt::{KERNEL_CODE, KERNEL_DATA, USER_CODE, USER_CODE32, USER_DATA};
 use super::idt::TrapFrame;
 use core::arch::{asm, global_asm};
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -178,8 +178,79 @@ enter_user_frame:
     handler = sym syscall_handler,
 );
 
+// The 32-bit system-call entries (ADR 0186). A 32-bit (WOW64) thread runs
+// in compatibility mode, where Intel CPUs refuse `syscall`; Poly's i686
+// `ntdll` enters with `int SYSCALL32_VECTOR` (a DPL 3 interrupt gate) with
+// the service number in EAX and EDX pointing at the arguments on its
+// stack. The CPU has pushed SS, RSP, RFLAGS, CS and RIP on the thread's
+// kernel stack (TSS.rsp0, interrupts off); the stub completes the frame as
+// the `syscall` entry does and runs the same handler, then leaves through
+// the common exit (IRETQ: SYSRET cannot return to compatibility mode with
+// Poly's selector layout).
+//
+// `syscall32_cstar_entry` is IA32_CSTAR: AMD CPUs take `syscall` in
+// compatibility mode there (Intel ones raise #UD). Poly's `ntdll` never
+// does it; it is treated like the gate (same registers: EAX and EDX), so a
+// program that tries gets the same answer on either CPU and the kernel
+// never jumps to an unset entry point.
+global_asm!(
+    r#"
+    .section .text.syscall, "ax", @progbits
+    .global syscall32_entry
+syscall32_entry:
+    push 0
+    push {vector}
+    swapgs
+    jmp 2f
+
+    .global syscall32_cstar_entry
+syscall32_cstar_entry:
+    swapgs
+    mov gs:[8], rsp
+    mov rsp, gs:[0]
+    push {user_ss}
+    push qword ptr gs:[8]
+    push r11
+    push {user_cs32}
+    push rcx
+    push 0
+    push {vector}
+2:
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+    cmp byte ptr [rip + {smap}], 0
+    je 3f
+    clac
+3:
+    mov rdi, rsp
+    xor ebp, ebp
+    call {handler}
+    jmp trap_return
+"#,
+    user_ss = const USER_DATA,
+    user_cs32 = const USER_CODE32,
+    vector = const SYSCALL_VECTOR,
+    smap = sym super::usercopy::SMAP,
+    handler = sym syscall32_handler,
+);
+
 unsafe extern "sysv64" {
     static syscall_entry: u8;
+    static syscall32_entry: u8;
+    static syscall32_cstar_entry: u8;
     fn enter_user_frame(frame: *const TrapFrame) -> !;
 }
 
@@ -198,6 +269,7 @@ pub(super) unsafe fn init() {
     unsafe {
         cpu::write_msr(cpu::MSR_STAR, star);
         cpu::write_msr(cpu::MSR_LSTAR, (&raw const syscall_entry) as u64);
+        cpu::write_msr(cpu::MSR_CSTAR, (&raw const syscall32_cstar_entry) as u64);
         cpu::write_msr(cpu::MSR_FMASK, SYSCALL_MASK);
         cpu::write_msr(cpu::MSR_KERNEL_GS_BASE, 0);
         cpu::write_msr(cpu::MSR_EFER, cpu::read_msr(cpu::MSR_EFER) | cpu::EFER_SCE);
@@ -259,6 +331,24 @@ extern "sysv64" fn syscall_handler(frame: *mut TrapFrame) -> bool {
     sysret
 }
 
+/// The Rust half of the 32-bit entries (ADR 0186), like
+/// [`syscall_handler`], always leaving through IRETQ.
+extern "sysv64" fn syscall32_handler(frame: *mut TrapFrame) {
+    crate::cputime::entered_kernel();
+    let _ = system_call(frame);
+}
+
+/// Where the 32-bit system-call gate enters (the IDT's
+/// `SYSCALL32_VECTOR` entry, `idt.rs`).
+pub(super) fn syscall32_gate() -> u64 {
+    (&raw const syscall32_entry) as u64
+}
+
+/// Whether the running user thread returns to ring 3 in compatibility mode.
+pub(super) fn current_compat() -> bool {
+    super::percpu::this().user_compat.load(Ordering::Relaxed)
+}
+
 /// The system call itself, for [`syscall_handler`]: whether to leave with
 /// SYSRET.
 fn system_call(frame: *mut TrapFrame) -> bool {
@@ -293,7 +383,9 @@ fn system_call(frame: *mut TrapFrame) -> bool {
         frame.ss = u64::from(KERNEL_DATA);
         return false;
     }
-    frame.rip < LOWER_HALF_END
+    // A 32-bit thread entered by the gate (or CSTAR): SYSRETQ would return
+    // in 64-bit mode.
+    frame.rip < LOWER_HALF_END && frame.cs == u64::from(USER_CODE)
 }
 
 /// Kernel stack top of the thread whose next return from a system call
@@ -342,7 +434,7 @@ pub fn enter_user(entry: &Entry) -> ! {
         vector: 0,
         error_code: 0,
         rip: entry.rip,
-        cs: u64::from(USER_CODE),
+        cs: u64::from(super::gdt::user_code(current_compat())),
         rflags: user_rflags(0),
         rsp: entry.rsp,
         ss: u64::from(USER_DATA),
@@ -362,7 +454,7 @@ pub fn enter_user_regs(regs: &TrapFrame) -> ! {
     let mut frame = *regs;
     frame.vector = 0;
     frame.error_code = 0;
-    frame.cs = u64::from(USER_CODE);
+    frame.cs = u64::from(super::gdt::user_code(current_compat()));
     frame.ss = u64::from(USER_DATA);
     frame.rflags = user_rflags(regs.rflags);
     // SAFETY: as in `enter_user`: a complete ring-3 frame on this stack. A

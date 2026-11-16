@@ -10,7 +10,7 @@
 //! `DefWindowProcW.yaml`, the message functions' sheets. Structures passed
 //! to procedures are the `winuser.h` layouts, in this process's memory.
 
-use crate::frame::Rect;
+use crate::frame::{self, Rect};
 use crate::metrics::{self, *};
 use crate::proto::*;
 use crate::wm::{ERROR_INVALID_WINDOW_HANDLE, PM_REMOVE, WM_QUIT, WM_TIMER};
@@ -96,6 +96,37 @@ pub const SIZE_MINIMIZED: u64 = 1;
 pub const SIZE_MAXIMIZED: u64 = 2;
 
 pub const SC_CLOSE: u64 = 0xF060;
+pub const SC_MINIMIZE: u64 = 0xF020;
+pub const SC_MAXIMIZE: u64 = 0xF030;
+pub const SC_RESTORE: u64 = 0xF120;
+pub const SC_SIZE: u64 = 0xF000;
+pub const SC_MOVE: u64 = 0xF010;
+pub const WM_NCLBUTTONDOWN: u32 = 0x00A1;
+pub const WM_NCLBUTTONUP: u32 = 0x00A2;
+pub const WM_NCLBUTTONDBLCLK: u32 = 0x00A3;
+
+/// The compositor's edges (`link::Edges`) of a `WMSZ_*` side or corner
+/// (winuser.h: `WMSZ_LEFT` 1 .. `WMSZ_BOTTOMRIGHT` 8); 0 for none.
+pub fn wmsz_edges(wmsz: u64) -> u8 {
+    use crate::link::Edges;
+    let e = match wmsz {
+        1 => Edges::LEFT,
+        2 => Edges::RIGHT,
+        3 => Edges::TOP,
+        4 => Edges::TOP.union(Edges::LEFT),
+        5 => Edges::TOP.union(Edges::RIGHT),
+        6 => Edges::BOTTOM,
+        7 => Edges::BOTTOM.union(Edges::LEFT),
+        8 => Edges::BOTTOM.union(Edges::RIGHT),
+        _ => Edges(0),
+    };
+    e.0
+}
+
+/// The caption button (`HTMINBUTTON`, `HTMAXBUTTON`, `HTCLOSE`) pressed
+/// in a window: (window, hit code); its command goes when the button is
+/// released over it (DefWindowProc, `WM_NCLBUTTONDOWN` / `WM_NCLBUTTONUP`).
+pub static NC_PRESSED: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 pub const ERROR_ACCESS_DENIED: u32 = 5;
 
 /// `RECT` (`windef.h`).
@@ -128,21 +159,22 @@ pub struct CPoint {
     pub y: i32,
 }
 
-/// `CREATESTRUCTW`.
+/// `CREATESTRUCTW` (pointer-sized fields are `usize`: the same structure serves the 32-bit
+/// `user32`, ADR 0186).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CreateStructW {
-    pub create_params: u64,
-    pub instance: u64,
-    pub menu: u64,
-    pub parent: u64,
+    pub create_params: usize,
+    pub instance: usize,
+    pub menu: usize,
+    pub parent: usize,
     pub cy: i32,
     pub cx: i32,
     pub y: i32,
     pub x: i32,
     pub style: u32,
-    pub name: u64,
-    pub class: u64,
+    pub name: usize,
+    pub class: usize,
     pub ex_style: u32,
 }
 
@@ -161,8 +193,8 @@ pub struct MinMaxInfo {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowPos {
-    pub hwnd: u64,
-    pub insert_after: u64,
+    pub hwnd: usize,
+    pub insert_after: usize,
     pub x: i32,
     pub y: i32,
     pub cx: i32,
@@ -190,10 +222,10 @@ pub struct StyleStruct {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CMsg {
-    pub hwnd: u64,
+    pub hwnd: usize,
     pub message: u32,
-    pub w: u64,
-    pub l: u64,
+    pub w: usize,
+    pub l: usize,
     pub time: u32,
     pub pt: CPoint,
     pub private: u32,
@@ -231,9 +263,9 @@ pub trait Env {
     /// Make `cursor` the calling thread's cursor shape (what DefWindowProc's
     /// `WM_SETCURSOR` does with the class cursor).
     fn set_cursor(&self, _cursor: u64) {}
-    /// A window of the calling thread was made (its creation messages are
-    /// through, it is not shown yet): `user32` gives the thread its
-    /// default IME window with its first window (GetFocus.yaml `ime_window`).
+    /// A window of the calling thread got through `WM_NCCREATE`: `user32`
+    /// gives the thread its default IME window with its first window
+    /// (GetFocus.yaml `ime_window`).
     fn window_created(&self, _hwnd: u32) {}
     /// The rectangles of GDI region `rgn` (`None`: not a region: deleted, or
     /// another kind of object).
@@ -246,6 +278,47 @@ pub trait Env {
     fn set_region_rects(&self, _rgn: u64, _rects: &[Rect]) -> i32 {
         0
     }
+    /// Whether menu `menu` (a top-level window's `GWLP_ID`) has a row of
+    /// items to show: the menu bar takes room from the client area only then
+    /// (`SetMenu.yaml` `client_area`).
+    fn menu_bar_shown(&self, _menu: u64) -> bool {
+        false
+    }
+    /// Whether screen point (`x`, `y`) is on the window's menu bar (`HTMENU`).
+    fn menu_hit(&self, _hwnd: u32, _x: i32, _y: i32) -> bool {
+        false
+    }
+    /// A click on the menu bar (`WM_NCLBUTTONDOWN` with `HTMENU`): runs the menu loop.
+    fn menu_click(&self, _hwnd: u32, _x: i32, _y: i32) {}
+    /// `DefWindowProc`'s `WM_SYSKEYDOWN`, `WM_SYSKEYUP` and `WM_SYSCHAR`: Alt, F10 and
+    /// mnemonics open the menu bar; true when used.
+    fn menu_sys_key(&self, _hwnd: u32, _msg: u32, _w: u64, _l: u64) -> bool {
+        false
+    }
+    /// `WM_NCPAINT`: draw the window's menu bar.
+    fn menu_paint(&self, _hwnd: u32) {}
+    /// A window is going (after its `WM_NCDESTROY`): `user32` destroys the
+    /// menu `menu` it owned (a top-level window's `GWLP_ID`, 0: none) and its
+    /// system menu.
+    fn window_freed(&self, _hwnd: u32, _menu: u64) {}
+    /// A message is about to be sent to a window procedure of this process (`SendMessage` of
+    /// this thread, `same_thread`, or one another thread sent, received while waiting): the
+    /// `WH_CALLWNDPROC` hooks run now.
+    fn sent_hook(&self, _hwnd: u32, _msg: u32, _w: u64, _l: u64, _same_thread: bool) {}
+    /// `GetMessage` or `PeekMessage` took (`remove`) or looked at a message: the
+    /// `WH_GETMESSAGE` hooks may read and change it.
+    fn message_hook(&self, _msg: &mut CMsg, _remove: bool) {}
+    /// Make the `MSCTFIME UI` window of default IME window `ime` (the text services' own helper
+    /// window, owned by it; made with the first activation of the thread): its handle, 0 if
+    /// the process makes none.
+    fn ime_ui_window(&self, _ime: u32) -> u32 {
+        0
+    }
+    /// A WinEvent happened (`EVENT_OBJECT_*` of window `hwnd`): the hooks that want it are told
+    /// when their thread next looks into its queue.
+    fn win_event(&self, _event: u32, _hwnd: u32, _id_object: i32, _id_child: i32) {}
+    /// The calling thread looks into its queue: the WinEvent callbacks queued for it run.
+    fn pump_events(&self) {}
 }
 
 /// `MAKELPARAM(lo, hi)`.
@@ -346,6 +419,15 @@ fn ptr<T>(v: &mut T) -> u64 {
 
 /// Run a message another thread sent to us, and report its result.
 pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
+    // The compositor resized the window by its border: this thread applies the size, as
+    // Windows' sizing loop calls `SetWindowPos` in the window's thread (`Wm::configure_from_desktop`).
+    if inc.wndproc == 0 && inc.msg == crate::wm::DESKTOP_SET_POS {
+        let (x, y, cx, cy) = crate::wm::unpack_set_pos(inc.w, inc.l);
+        set_window_pos(env, u64::from(inc.hwnd), 0, x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+        env.call(Request::SendDone { id: inc.id, result: 0 });
+        return;
+    }
+    env.sent_hook(inc.hwnd, inc.msg, inc.w, inc.l, false);
     let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, inc.l);
     env.call(Request::SendDone { id: inc.id, result: r });
 }
@@ -354,7 +436,10 @@ pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
 /// thread's runs there while we wait (receiving what is sent to us).
 pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u64 {
     match env.call(Request::SendStart { hwnd, msg, w, l }) {
-        Reply::SameThread { wndproc, hwnd, .. } => env.call_proc(wndproc, hwnd, msg, w, l),
+        Reply::SameThread { wndproc, hwnd, .. } => {
+            env.sent_hook(hwnd, msg, w, l, true);
+            env.call_proc(wndproc, hwnd, msg, w, l)
+        }
         Reply::Started { id } => loop {
             match env.call(Request::SendWait { id }) {
                 Reply::Done { result } => return result,
@@ -466,17 +551,17 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         (cx, cy)
     };
     let mut cs = CreateStructW {
-        create_params: param,
-        instance,
-        menu,
-        parent: c.cs_parent,
+        create_params: param as usize,
+        instance: instance as usize,
+        menu: menu as usize,
+        parent: c.cs_parent as usize,
         cy: cs_cy,
         cx: cs_cx,
         y,
         x,
         style,
-        name,
-        class: class_name.as_ptr() as u64,
+        name: name as usize,
+        class: (class_name.as_ptr() as u64) as usize,
         ex_style: c.ex_style,
     };
     if send(env, h, WM_NCCREATE, 0, ptr(&mut cs)) == 0 {
@@ -484,6 +569,13 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         env.call(Request::Free { hwnd });
         env.set_last_error(0);
         return 0;
+    }
+    // The thread's default IME window is made between WM_NCCREATE and WM_NCCALCSIZE of its first
+    // window (CreateWindowExW.yaml, cw_chrome_widget).
+    // (For a popup; the other windows make it once they are through, as the earlier sheets observed.)
+    let early_ime = style & WS_POPUP != 0;
+    if early_ime {
+        env.window_created(hwnd);
     }
     let mut rect = CRect::from(i.window);
     send(env, h, WM_NCCALCSIZE, 0, ptr(&mut rect));
@@ -511,7 +603,10 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     if notify {
         send(env, u64::from(i.parent), WM_PARENTNOTIFY, u64::from(WM_CREATE) | ((menu & 0xFFFF) << 16), h);
     }
-    env.window_created(hwnd);
+    if !early_ime {
+        env.window_created(hwnd);
+    }
+    env.win_event(crate::winevent::EVENT_OBJECT_CREATE, hwnd, 0, 0);
     if style & (WS_MINIMIZE | WS_MAXIMIZE) != 0 {
         // Created minimized or maximized: the rectangle asked for is its
         // restored one (MonitorFromWindow.yaml `state`: a window created
@@ -536,6 +631,10 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     } else if style & WS_VISIBLE != 0 {
         show(env, &i, ShowKind::Create);
         discharge_size_move(env, hwnd);
+    } else if style & (WS_POPUP | WS_CHILD) == 0 && screen(env).interactive {
+        // A top-level window that is no popup, made hidden, is told too, once its creation is through
+        // (CreateWindowExW.yaml `chrome_widget`: one WM_DWMNCRENDERINGCHANGED waits in the queue).
+        env.call(Request::Post { hwnd: h, msg: WM_DWMNCRENDERINGCHANGED, w: 1, l: 0 });
     }
     hwnd
 }
@@ -601,10 +700,7 @@ pub fn destroy_window<E: Env + ?Sized>(env: &E, hwnd: u64) -> bool {
 
 /// Whether a window is the "IME" window `imm32` made for its thread.
 fn is_ime_window<E: Env + ?Sized>(env: &E, hwnd: u32) -> bool {
-    match env.call(Request::ClassName { hwnd: u64::from(hwnd) }) {
-        Reply::Text { text } => text.len() == 3 && text.iter().zip([73u16, 77, 69]).all(|(a, b)| *a == b),
-        _ => false,
-    }
+    is_class(env, u64::from(hwnd), "IME") || is_class(env, u64::from(hwnd), "MSCTFIME UI")
 }
 
 fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
@@ -652,6 +748,7 @@ fn send_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
         env.call(Request::Clip { op: crate::clip::ClipOp::RenderedAll { hwnd } });
     }
     focus::focus_to_parent(env, hwnd);
+    env.win_event(crate::winevent::EVENT_OBJECT_DESTROY, hwnd, 0, 0);
     send(env, u64::from(hwnd), WM_DESTROY, 0, 0);
     if let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) {
         for c in children {
@@ -668,10 +765,11 @@ fn nc_destroy<E: Env + ?Sized>(env: &E, hwnd: u32) {
         }
     }
     send(env, u64::from(hwnd), WM_NCDESTROY, 0, 0);
-    if let Some(i) = info(env, u64::from(hwnd))
-        && i.own_dc != 0
-    {
-        env.delete_dc(i.own_dc);
+    if let Some(i) = info(env, u64::from(hwnd)) {
+        if i.own_dc != 0 {
+            env.delete_dc(i.own_dc);
+        }
+        env.window_freed(hwnd, if i.style & WS_CHILD == 0 { i.id } else { 0 });
     }
     env.call(Request::Free { hwnd });
 }
@@ -707,6 +805,9 @@ struct Opts {
     destroying: bool,
     /// The call brings a minimized window back (a restore, a maximize).
     from_minimized: bool,
+    /// The thread's default IME window (and its UI window) the window owns are asked first and
+    /// told the z-order change before it (a minimize, a restore: swp_chrome_resize).
+    carry_ime: bool,
 }
 
 /// `SWP_NOCOPYBITS` (winuser.h).
@@ -863,13 +964,13 @@ fn show<E: Env + ?Sized>(env: &E, i: &WinInfo, kind: ShowKind) {
         // the same (GetActiveWindow.yaml `show_activates`).
         ShowKind::Command(_) => {}
     }
-    if flags & SWP_NOZORDER == 0
-        && let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd: i.hwnd })
-    {
+    if flags & SWP_NOZORDER == 0 {
         // Owned windows come along above their owner.
-        for o in owned {
+        for o in owned_chain(env, i.hwnd) {
+            let after = if interactive { report_after(env, o, HWND_TOP) } else { 0 };
             let mut wp = WindowPos {
-                hwnd: u64::from(o),
+                hwnd: u64::from(o) as usize,
+                insert_after: after as usize,
                 flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
                 ..WindowPos::default()
             };
@@ -968,6 +1069,7 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
     if interactive && was_active && st.focus != 0 {
         send(env, u64::from(st.focus), focus::WM_KILLFOCUS, 0, 0);
         env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: crate::wm::input::SET_FOCUS });
+        env.win_event(crate::winevent::EVENT_OBJECT_FOCUS, 0, -4, 0);
     }
     let extra = shown_bit(env, i);
     // The place it gets is what GetWindowPlacement reports as ptMinPosition
@@ -1026,7 +1128,17 @@ fn minimize<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
             Reply::Bool { value: false }
         );
     let flags = if stays { flags | SWP_NOZORDER } else { flags };
-    swp(env, i.hwnd, after, x, y, w, h, flags, Opts { extra, activate, keep_z, ..Opts::default() });
+    swp(
+        env,
+        i.hwnd,
+        after,
+        x,
+        y,
+        w,
+        h,
+        flags,
+        Opts { extra, activate, keep_z, carry_ime: interactive, ..Opts::default() },
+    );
     if interactive && cmd == SW_MINIMIZE {
         // "Minimizes the specified window and activates the next top-level
         // window" (Learn), also when the minimized window was not the
@@ -1179,6 +1291,7 @@ fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
             activate: !no_activate && focus::input(env).active != i.hwnd,
             fit,
             from_minimized: i.minimized,
+            carry_ime: interactive,
             ..Opts::default()
         }
     };
@@ -1222,6 +1335,28 @@ pub fn set_window_pos<E: Env + ?Sized>(
     swp(env, i.hwnd, after, x, y, cx, cy, flags, Opts::default())
 }
 
+/// The windows `hwnd` owns, the newest first, those of the thread's default IME window (its UI
+/// window) before it: the order the windows that come along with an owner are asked in.
+pub(crate) fn owned_chain<E: Env + ?Sized>(env: &E, hwnd: u32) -> Vec<u32> {
+    let Reply::Relatives { owned, .. } = env.call(Request::Relatives { hwnd }) else { return Vec::new() };
+    let mut chain = Vec::new();
+    for o in owned {
+        if is_class(env, u64::from(o), "IME") {
+            chain.extend(owned_chain(env, o));
+        }
+        chain.push(o);
+    }
+    chain
+}
+
+/// `WINDOWPOS.hwndInsertAfter` of a top-level window put at `after` (see `Request::ZReport`).
+fn report_after<E: Env + ?Sized>(env: &E, hwnd: u32, after: u64) -> u64 {
+    match env.call(Request::ZReport { hwnd, after }) {
+        Reply::Handle { hwnd: h } => u64::from(h),
+        _ => after,
+    }
+}
+
 /// The work of `SetWindowPos` and of every `ShowWindow` command.
 ///
 /// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
@@ -1246,7 +1381,49 @@ fn swp<E: Env + ?Sized>(
 ) -> bool {
     let h = u64::from(hwnd);
     let Some(i) = info(env, h) else { return false };
-    let mut wp = WindowPos { hwnd: h, insert_after: after, x, y, cx: cx.max(0), cy: cy.max(0), flags };
+    // The messages name the window the target position follows, not HWND_TOP (WINDOWPOS.hwndInsertAfter
+    // of a top-level window in the interactive session, where windows are always topmost above it).
+    let reported = if i.style & WS_CHILD == 0 && !i.desktop && flags & SWP_NOZORDER == 0 && screen(env).interactive {
+        report_after(env, hwnd, after)
+    } else {
+        after
+    };
+    let mut wp =
+        WindowPos { hwnd: h as usize, insert_after: reported as usize, x, y, cx: cx.max(0), cy: cy.max(0), flags };
+    let carried: Vec<u32> = if opts.carry_ime && i.style & WS_CHILD == 0 && flags & SWP_NOZORDER == 0 {
+        owned_chain(env, hwnd)
+            .into_iter()
+            .filter(|&o| is_class(env, u64::from(o), "IME") || is_class(env, u64::from(o), "MSCTFIME UI"))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for &o in &carried {
+        let after = report_after(env, o, HWND_TOP);
+        let mut ow = WindowPos {
+            hwnd: u64::from(o) as usize,
+            insert_after: after as usize,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            ..WindowPos::default()
+        };
+        send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut ow));
+    }
+    // Hiding a window that owns the thread's default IME window asks that one (and its UI window) too, first
+    // (DestroyWindow.yaml `chrome_close`).
+    if flags & SWP_HIDEWINDOW != 0 && i.style & WS_VISIBLE != 0 && i.style & WS_CHILD == 0 && !i.desktop {
+        for o in owned_chain(env, hwnd) {
+            if is_class(env, u64::from(o), "IME") || is_class(env, u64::from(o), "MSCTFIME UI") {
+                let after = report_after(env, o, HWND_TOP);
+                let mut ow = WindowPos {
+                    hwnd: u64::from(o) as usize,
+                    insert_after: after as usize,
+                    flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+                    ..WindowPos::default()
+                };
+                send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut ow));
+            }
+        }
+    }
     if flags & SWP_NOSENDCHANGING == 0 {
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
@@ -1264,18 +1441,16 @@ fn swp<E: Env + ?Sized>(
     // Whether the window moves in the z order: asked before an activation
     // below brings it to the top, which is a move all the same.
     let styled_visible = i.style & WS_VISIBLE != 0;
+    let apply_after = if wp.insert_after as u64 == reported { after } else { wp.insert_after as u64 };
     let zchanged = f & SWP_NOZORDER == 0
         && !opts.keep_z
-        && matches!(
-            env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: false }),
-            Reply::Bool { value: true }
-        );
+        && matches!(env.call(Request::ZOrder { hwnd, after: apply_after, apply: false }), Reply::Bool { value: true });
     let hide = f & SWP_HIDEWINDOW != 0 && styled_visible;
     let was_active = top && focus::input(env).active == hwnd;
     if hide && f & SWP_NOACTIVATE == 0 && interactive && i.owner != 0 && was_active {
         // The owner is the next window to activate: it is asked first.
         let mut o = WindowPos {
-            hwnd: u64::from(i.owner),
+            hwnd: (u64::from(i.owner)) as usize,
             flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
             ..WindowPos::default()
         };
@@ -1338,7 +1513,7 @@ fn swp<E: Env + ?Sized>(
     let old_client = i.client_rel;
     let new_client = if sized || frame {
         let mut calc = WindowPos {
-            hwnd: h,
+            hwnd: h as usize,
             insert_after: wp.insert_after,
             x: nx,
             y: ny,
@@ -1385,7 +1560,7 @@ fn swp<E: Env + ?Sized>(
             if !behind || noactivate {
                 if i.owner != 0 {
                     let mut o = WindowPos {
-                        hwnd: u64::from(i.owner),
+                        hwnd: (u64::from(i.owner)) as usize,
                         flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
                         ..WindowPos::default()
                     };
@@ -1410,7 +1585,10 @@ fn swp<E: Env + ?Sized>(
     }
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
-        env.call(Request::ZOrder { hwnd, after: wp.insert_after, apply: true });
+        env.call(Request::ZOrder { hwnd, after: apply_after, apply: true });
+        if zchanged && top {
+            env.win_event(crate::winevent::EVENT_OBJECT_REORDER, hwnd, 0, 0);
+        }
     }
     if show || hide {
         env.call(Request::SetState {
@@ -1421,6 +1599,12 @@ fn swp<E: Env + ?Sized>(
             normal: None,
             size_move_pending: None,
         });
+        env.win_event(
+            if show { crate::winevent::EVENT_OBJECT_SHOW } else { crate::winevent::EVENT_OBJECT_HIDE },
+            hwnd,
+            0,
+            0,
+        );
     }
     // An interactive session paints (slice B): what a shown window, a
     // moved, resized or hidden child, or a grown window leaves to repaint,
@@ -1452,8 +1636,22 @@ fn swp<E: Env + ?Sized>(
             paint::moved_paint(env, &now, cur, f & SWP_NOCOPYBITS != 0 && f & SWP_STATECHANGED == 0);
         }
     }
-    let mut done = WindowPos { hwnd: h, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
+    for &o in &carried {
+        let after = report_after(env, o, HWND_TOP);
+        let mut od = WindowPos {
+            hwnd: u64::from(o) as usize,
+            insert_after: after as usize,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCLIENTSIZE | SWP_NOCLIENTMOVE,
+            ..WindowPos::default()
+        };
+        send(env, u64::from(o), WM_WINDOWPOSCHANGED, 0, ptr(&mut od));
+    }
+    let mut done =
+        WindowPos { hwnd: h as usize, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+    if (moved || sized) && vis_after {
+        env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, hwnd, 0, 0);
+    }
     if hide && vis_before && top {
         focus::after_hide(env, &i, was_active && f & SWP_NOACTIVATE == 0, opts.destroying);
     } else if hide && vis_before && interactive {
@@ -1468,6 +1666,15 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
     };
+    // A visible window is hidden and shown again around the move (SetParent.yaml `messages`).
+    let visible_bit = i.style & WS_VISIBLE != 0 && screen(env).interactive;
+    if visible_bit {
+        if i.visible {
+            hide(env, &i);
+        } else {
+            send(env, hwnd, WM_SHOWWINDOW, 0, 0);
+        }
+    }
     let old = match env.call(Request::SetParent { hwnd: i.hwnd, parent }) {
         Reply::Handle { hwnd } => hwnd,
         Reply::Error { code } => {
@@ -1476,9 +1683,54 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
         }
         _ => return 0,
     };
-    let mut wp = WindowPos { hwnd, flags: SWP_NOSIZE | SWP_NOZORDER, ..WindowPos::default() };
+    let now = info(env, hwnd).unwrap_or(i.clone());
+    env.win_event(crate::winevent::EVENT_OBJECT_PARENTCHANGE, i.hwnd, 0, 0);
+    env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, i.hwnd, 0, 0);
+    let rel = now.window_rel;
+    let mut wp = WindowPos {
+        hwnd: hwnd as usize,
+        x: rel.left,
+        y: rel.top,
+        flags: SWP_NOSIZE | SWP_NOZORDER,
+        ..WindowPos::default()
+    };
     send(env, hwnd, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     send(env, hwnd, WM_CHILDACTIVATE, 0, 0);
+    if visible_bit {
+        let mut done = WindowPos {
+            hwnd: hwnd as usize,
+            x: rel.left,
+            y: rel.top,
+            cx: rel.width(),
+            cy: rel.height(),
+            flags: SWP_NOSIZE | SWP_NOZORDER | SWP_NOREDRAW | SWP_NOCLIENTSIZE,
+            ..WindowPos::default()
+        };
+        send(env, hwnd, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+        let parent_visible = info(env, u64::from(now.parent)).is_some_and(|p| p.visible || p.desktop);
+        if parent_visible {
+            // The bit may still be set (the window was invisible under its old parent): clear it so the show reports.
+            env.call(Request::SetState {
+                hwnd: i.hwnd,
+                visible: Some(false),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            });
+            show(env, &now, ShowKind::Command(SW_SHOW));
+        } else {
+            send(env, hwnd, WM_SHOWWINDOW, 1, 0);
+            env.call(Request::SetState {
+                hwnd: i.hwnd,
+                visible: Some(true),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            });
+        }
+    }
     u64::from(old)
 }
 
@@ -1493,12 +1745,18 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 let cs = unsafe { &*(l as *const CreateStructW) };
                 if cs.name != 0 && cs.name >> 16 != 0 {
                     // SAFETY: a NUL-terminated string the creator passed.
-                    let text = unsafe { read_wstr(cs.name) };
+                    let text = unsafe { read_wstr(cs.name as u64) };
                     env.call(Request::SetText { hwnd: hwnd as u32, text });
                 }
             }
             1
         }
+        // A press on the menu bar (HTMENU) runs the menu loop.
+        0x00A1 if w == 5 => {
+            env.menu_click(hwnd as u32, l as u16 as i16 as i32, (l >> 16) as u16 as i16 as i32);
+            0
+        }
+        WM_SYSKEYDOWN | WM_SYSKEYUP | WM_SYSCHAR => u64::from(env.menu_sys_key(hwnd as u32, msg, w, l)),
         0x00A0 => {
             // WM_NCMOUSEMOVE: DefWindowProc tracks the non-client area
             // until the cursor leaves it (WM_NCMOUSELEAVE).
@@ -1510,7 +1768,8 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             if l != 0 {
                 // SAFETY: lParam starts with a RECT (NCCALCSIZE_PARAMS for TRUE).
                 let r = unsafe { &mut *(l as *mut CRect) };
-                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, false));
+                let bar = i.style & WS_CHILD == 0 && i.id != 0 && env.menu_bar_shown(i.id);
+                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, bar));
             }
             0
         }
@@ -1557,11 +1816,90 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             0
         }
         WM_SYSCOMMAND => {
-            if w & 0xFFF0 == SC_CLOSE {
-                send(env, hwnd, WM_CLOSE, 0, 0);
+            match w & 0xFFF0 {
+                SC_CLOSE => {
+                    send(env, hwnd, WM_CLOSE, 0, 0);
+                }
+                // The window commands act as the matching ShowWindow command (IsZoomed.yaml `chrome`).
+                SC_MAXIMIZE => {
+                    show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    // The window has no minimized position any more (GetWindowPlacement.yaml `chrome`).
+                    env.call(Request::SetMinPos { hwnd: hwnd as u32, x: -1, y: -1 });
+                }
+                SC_MINIMIZE => {
+                    show_window(env, hwnd, SW_SHOWMINIMIZED);
+                }
+                SC_RESTORE => {
+                    show_window(env, hwnd, SW_RESTORE);
+                }
+                // An interactive move or resize of a top-level window: the
+                // compositor runs it with the pointer (ADR 0128), where
+                // Windows runs a modal loop. A maximized or minimized
+                // window stays where it is.
+                cmd @ (SC_MOVE | SC_SIZE) => {
+                    let Some(i) = info(env, hwnd) else { return 0 };
+                    if i.style & (WS_CHILD | WS_MAXIMIZE | WS_MINIMIZE) != 0 {
+                        return 0;
+                    }
+                    let edges = if cmd == SC_MOVE { 0 } else { wmsz_edges(w & 0xF) };
+                    if cmd == SC_SIZE && edges == 0 {
+                        return 0;
+                    }
+                    env.call(Request::MoveSize { hwnd: hwnd as u32, edges });
+                }
+                _ => {}
             }
             0
         }
+        // A press in the non-client area (Learn, WM_NCLBUTTONDOWN): the
+        // caption moves the window, a border sizes it (WM_SYSCOMMAND
+        // SC_MOVE / SC_SIZE with the side), a caption button acts when it
+        // is released over it.
+        WM_NCLBUTTONDOWN => {
+            let hit = w as i32;
+            match hit {
+                frame::HTCAPTION => {
+                    send(env, hwnd, WM_SYSCOMMAND, SC_MOVE | 2, l);
+                }
+                frame::HTLEFT..=frame::HTBOTTOMRIGHT => {
+                    send(env, hwnd, WM_SYSCOMMAND, SC_SIZE | (hit - frame::HTLEFT + 1) as u64, l);
+                }
+                frame::HTMINBUTTON | frame::HTMAXBUTTON | frame::HTCLOSE => {
+                    NC_PRESSED.store((hwnd << 8) | hit as u64, core::sync::atomic::Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            0
+        }
+        WM_NCLBUTTONUP => {
+            let pressed = NC_PRESSED.swap(0, core::sync::atomic::Ordering::Relaxed);
+            let hit = w as i32;
+            if pressed == (hwnd << 8) | (hit as u64 & 0xFF) {
+                let zoomed = info(env, hwnd).is_some_and(|i| i.style & WS_MAXIMIZE != 0);
+                let cmd = match hit {
+                    frame::HTMINBUTTON => SC_MINIMIZE,
+                    frame::HTMAXBUTTON if zoomed => SC_RESTORE,
+                    frame::HTMAXBUTTON => SC_MAXIMIZE,
+                    _ => SC_CLOSE,
+                };
+                send(env, hwnd, WM_SYSCOMMAND, cmd, l);
+            }
+            0
+        }
+        // A double click on the caption maximizes or restores the window.
+        WM_NCLBUTTONDBLCLK => {
+            if w as i32 == frame::HTCAPTION
+                && let Some(i) = info(env, hwnd)
+                && i.style & WS_MAXIMIZEBOX != 0
+            {
+                let cmd = if i.style & WS_MAXIMIZE != 0 { SC_RESTORE } else { SC_MAXIMIZE };
+                send(env, hwnd, WM_SYSCOMMAND, cmd, l);
+            }
+            0
+        }
+        // The window procedure of a window with no say passes IME messages on to the thread's
+        // default IME window, which hands them to its UI window (DestroyWindow.yaml `chrome_close`).
+        focus::WM_IME_SETCONTEXT | focus::WM_IME_NOTIFY => forward_ime(env, hwnd, msg, w, l),
         WM_QUERYENDSESSION => 1,
         WM_NOTIFYFORMAT => 2,
         // The parent has the first say (WindowFromPoint.yaml `child_activate`).
@@ -1599,8 +1937,16 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             let (px, py) = (l as u16 as i16 as i32, (l >> 16) as u16 as i16 as i32);
             if i.client.contains(px, py) {
                 1
+            } else if env.menu_hit(i.hwnd, px, py) {
+                5
             } else if i.window.contains(px, py) {
-                if has_caption(i.style) && py < i.client.top { 2 } else { 18 }
+                if let Some(code) = sizing_hit(i.style, i.window, i.client, px, py) {
+                    code as u64
+                } else if has_caption(i.style) && py < i.client.top {
+                    2
+                } else {
+                    18
+                }
             } else {
                 0
             }
@@ -1612,8 +1958,11 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             end_paint(env, hwnd, &ps);
             0
         }
-        // Poly's frame is the compositor's: nothing to draw here.
-        paint::WM_NCPAINT => 0,
+        // Poly's frame is the compositor's; the menu bar is the app's own to draw.
+        paint::WM_NCPAINT => {
+            env.menu_paint(hwnd as u32);
+            0
+        }
         WM_ERASEBKGND => {
             let Some(i) = info(env, hwnd) else { return 0 };
             if i.class_brush == 0 || w == 0 {
@@ -1644,6 +1993,46 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
     }
 }
 
+/// Whether window `hwnd` is of the class `name`.
+fn is_class<E: Env + ?Sized>(env: &E, hwnd: u64, name: &str) -> bool {
+    matches!(env.call(Request::ClassName { hwnd }), Reply::Text { text } if text.iter().copied().eq(name.encode_utf16()))
+}
+
+/// What `DefWindowProc` does with `WM_IME_SETCONTEXT` and `WM_IME_NOTIFY`: a window sends it on to
+/// the default IME window of its thread; that window sends it to its UI windows (made when the
+/// first context is set active).
+fn forward_ime<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u64 {
+    let Some(i) = info(env, hwnd) else { return 0 };
+    if is_class(env, hwnd, "IME") {
+        let mut ui: Vec<u32> = match env.call(Request::Relatives { hwnd: i.hwnd }) {
+            Reply::Relatives { owned, .. } => {
+                owned.into_iter().filter(|&o| is_class(env, u64::from(o), "MSCTFIME UI")).collect()
+            }
+            _ => Vec::new(),
+        };
+        if ui.is_empty() && msg == focus::WM_IME_SETCONTEXT && w == 1 {
+            let made = env.ime_ui_window(i.hwnd);
+            if made != 0 {
+                ui.push(made);
+            }
+        }
+        for u in ui {
+            send(env, u64::from(u), msg, w, l);
+        }
+        return 0;
+    }
+    if is_class(env, hwnd, "MSCTFIME UI") {
+        return 0;
+    }
+    if let Reply::Handle { hwnd: ime } = env.call(Request::DefaultIme { tid: i.tid })
+        && ime != 0
+        && u64::from(ime) != hwnd
+    {
+        send(env, u64::from(ime), msg, w, l);
+    }
+    0
+}
+
 /// A NUL-terminated UTF-16 string.
 ///
 /// # Safety
@@ -1665,18 +2054,51 @@ pub unsafe fn read_wstr(p: u64) -> Vec<u16> {
 
 fn to_cmsg(m: &Msg) -> CMsg {
     CMsg {
-        hwnd: u64::from(m.hwnd),
+        hwnd: (u64::from(m.hwnd)) as usize,
         message: m.msg,
-        w: m.w,
-        l: m.l,
+        w: m.w as usize,
+        l: m.l as usize,
         time: m.time,
         pt: CPoint { x: m.x, y: m.y },
         private: m.private,
     }
 }
 
+/// `DefWindowProc`'s `WM_NCHITTEST` on the sizing border of a resizable window (Learn,
+/// "WM_NCHITTEST": `HTLEFT` "in the left border of a resizable window", `HTBOTTOMRIGHT` "in the
+/// lower-right corner of a border of a resizable window", ...; `HTBORDER` is for a window without
+/// a sizing border). The border is what lies outside the client area at the sides and below it,
+/// and above it the band as thick as the side border (the caption is below that band); a point on
+/// two sides is the corner. `None` for a window without `WS_THICKFRAME`, a maximized one, or a
+/// point that is not on the border (the caption, a menu).
+pub fn sizing_hit(style: u32, window: Rect, client: Rect, x: i32, y: i32) -> Option<i32> {
+    if style & crate::metrics::WS_THICKFRAME == 0 || style & (WS_MAXIMIZE | WS_CHILD) != 0 {
+        return None;
+    }
+    let side = (client.left - window.left).max(window.right - client.right);
+    if side <= 0 {
+        return None;
+    }
+    let left = x < client.left;
+    let right = x >= client.right;
+    let bottom = y >= client.bottom;
+    let top = y < client.top && y < window.top + side;
+    Some(match (left, right, top, bottom) {
+        (true, _, true, _) => frame::HTTOPLEFT,
+        (_, true, true, _) => frame::HTTOPRIGHT,
+        (true, _, _, true) => frame::HTBOTTOMLEFT,
+        (_, true, _, true) => frame::HTBOTTOMRIGHT,
+        (true, ..) => frame::HTLEFT,
+        (_, true, ..) => frame::HTRIGHT,
+        (_, _, true, _) => frame::HTTOP,
+        (.., true) => frame::HTBOTTOM,
+        _ => return None,
+    })
+}
+
 /// `PeekMessageW`: messages sent by other threads run first.
 pub fn peek_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u32, max: u32, flags: u32) -> bool {
+    env.pump_events();
     loop {
         match env.call(Request::Peek { filter, min, max, flags }) {
             Reply::Incoming { incoming } => run_incoming(env, &incoming),
@@ -1685,6 +2107,7 @@ pub fn peek_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: 
                 if (0x0200..=0x020E).contains(&msg.msg) && flags & PM_REMOVE != 0 && !input::mouse_retrieved(env, out) {
                     continue;
                 }
+                env.message_hook(out, flags & PM_REMOVE != 0);
                 return true;
             }
             Reply::Error { code } => {
@@ -1699,6 +2122,7 @@ pub fn peek_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: 
 /// `GetMessageW`: 0 for `WM_QUIT`, -1 for a bad filter window.
 pub fn get_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u32, max: u32) -> i32 {
     loop {
+        env.pump_events();
         match env.call(Request::Peek { filter, min, max, flags: PM_REMOVE }) {
             Reply::Incoming { incoming } => run_incoming(env, &incoming),
             Reply::Message { msg } => {
@@ -1706,7 +2130,8 @@ pub fn get_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u
                 if (0x0200..=0x020E).contains(&msg.msg) && !input::mouse_retrieved(env, out) {
                     continue;
                 }
-                return if msg.msg == WM_QUIT { 0 } else { 1 };
+                env.message_hook(out, true);
+                return if out.message == WM_QUIT { 0 } else { 1 };
             }
             Reply::Empty { next_timer_ms } => env.wait_queue(next_timer_ms),
             Reply::Error { code } => {
@@ -1722,11 +2147,11 @@ pub fn get_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u
 pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
     if m.message == WM_TIMER && m.l != 0 {
         let valid = matches!(
-            env.call(Request::TimerProc { hwnd: m.hwnd, id: m.w, timer_proc: m.l }),
+            env.call(Request::TimerProc { hwnd: m.hwnd as u64, id: m.w as u64, timer_proc: m.l as u64 }),
             Reply::Bool { value: true }
         );
         if valid {
-            env.call_proc(m.l, m.hwnd as u32, WM_TIMER, m.w, u64::from(env.tick()));
+            env.call_proc(m.l as u64, m.hwnd as u32, WM_TIMER, m.w as u64, u64::from(env.tick()));
             // The value the oracle returned after a timer callback.
             return 22;
         }
@@ -1735,11 +2160,11 @@ pub fn dispatch_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> u64 {
     if m.hwnd == 0 {
         return 0;
     }
-    let Some(i) = info(env, m.hwnd) else {
+    let Some(i) = info(env, m.hwnd as u64) else {
         env.set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
     };
-    env.call_proc(i.wndproc, i.hwnd, m.message, m.w, m.l)
+    env.call_proc(i.wndproc, i.hwnd, m.message, m.w as u64, m.l as u64)
 }
 
 /// The character a key makes with no modifier down on the US layout, for
@@ -1783,7 +2208,7 @@ pub fn translate_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> bool {
         _ => return false,
     };
     if let Some(c) = key_char(m.w as u32) {
-        env.call(Request::Post { hwnd: m.hwnd, msg: out, w: u64::from(c), l: m.l });
+        env.call(Request::Post { hwnd: m.hwnd as u64, msg: out, w: u64::from(c), l: m.l as u64 });
     }
     true
 }

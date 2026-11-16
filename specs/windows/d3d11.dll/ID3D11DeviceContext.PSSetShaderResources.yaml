@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.PSSetShaderResources.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.PSSetShaderResources
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::PSSetShaderResources", "ID3D11DeviceContext::PSGetShaderResources", "ID3D11DeviceContext::PSSetSamplers", "ID3D11DeviceContext::VSSetConstantBuffers", "ID3D11DeviceContext::IASetVertexBuffers", "ID3D11DeviceContext::IASetIndexBuffer", "ID3D11DeviceContext::IASetPrimitiveTopology", "ID3D11DeviceContext::OMSetBlendState", "ID3D11DeviceContext::OMSetDepthStencilState", "ID3D11DeviceContext::RSSetState"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  The immediate context's bindable state round-trips: what Set stores Get returns (same pointer, with a new public reference), unset slots are NULL, state objects are held without changing their public counts, ClearState empties all of it. Chrome (ANGLE) sets all of these before every draw. The slot counts are 128 shader-resource slots, 16 sampler slots, 14 constant-buffer slots and 32 vertex-buffer slots; the last slot of each works.
+interface:
+  signature: "void PSSetShaderResources(UINT start, UINT n, ID3D11ShaderResourceView* const*); void PSGetShaderResources(UINT start, UINT n, ID3D11ShaderResourceView**); likewise VS..., PSSetSamplers, VSSetConstantBuffers / PSSetConstantBuffers, IASetVertexBuffers(start, n, buffers, strides, offsets) / IAGetVertexBuffers, IASetIndexBuffer(buffer, format, offset) / IAGetIndexBuffer, IASetPrimitiveTopology / IAGetPrimitiveTopology, OMSetBlendState(state, factor, mask) / OMGetBlendState, OMSetDepthStencilState(state, stencilRef) / OMGetDepthStencilState, RSSetState / RSGetState"
+chrome:
+  calls: "ANGLE sets resources, samplers, constant buffers, vertex / index buffers, topology, blend, depth-stencil and rasterizer states before each draw (assumed from its documented design)"
+rules:
+  fresh: "PS slots read NULL; topology reads UNDEFINED (0); blend state NULL with factor (1, 1, 1, 1) and sample mask 0xFFFFFFFF; depth-stencil state NULL with stencil reference 0; rasterizer state NULL"
+  shader_resources: "PSSetShaderResources(3, 2, [v1, v2]): the views' public counts stay 1; PSGetShaderResources(2, 4): slot 2 NULL, 3 is v1, 4 is v2, 5 NULL, each non-NULL result adds a public reference; VS and PS tables are separate (VSSetShaderResources(0, 1) round trips and PS slot 0 stays NULL); slot 127 works; binding NULL to slots 3 and 4 reads back NULL"
+  samplers: "PSSetSamplers(15, 1) round trips at the last slot (count 2 while Get's reference is held)"
+  constant_buffers: "VSSetConstantBuffers(13, 1) and PSSetConstantBuffers(0, 1) round trip (the last VS slot is 13)"
+  vertex_buffers: "IASetVertexBuffers(31, 1, [vb], strides [16], offsets [32]) round trips with stride 16 and offset 32; IAGetVertexBuffers with NULL stride and offset pointers works"
+  index_buffer: "IASetIndexBuffer(vb, R16_UINT (57), 8) reads back (vb, 57, 8); IASetIndexBuffer(NULL, 0, 0) reads back NULL, format 0, offset 0"
+  topology: "IASetPrimitiveTopology(4, 5, 1, 2, 3, 10, 0xFFFF) is read back unchanged (no validation of the value)"
+  blend_state: "OMSetBlendState(bs, (0.25, 0.5, 0.75, 1.0), 0xF0F0) reads back the same pointer, the factor and the mask; with a NULL factor the factor reads (1, 1, 1, 1) and the mask 0xFFFFFFFF as given"
+  depth_state: "OMSetDepthStencilState(ds, 0x1234) reads back the same pointer with stencil reference 0x34 (only the low 8 bits are kept)"
+  raster_state: "RSSetState(rs) / RSGetState return the same pointer"
+  clear_state: "after ClearState: constant buffer, sampler, vertex buffer and the shader-resource slot 127 read NULL (vertex stride and offset 0), topology 0, blend state NULL with factor (1,1,1,1) and mask 0xFFFFFFFF, depth state NULL with reference 0, rasterizer state NULL; the public counts of the blend, depth and rasterizer objects are 1 before and after"
+errors:
+  none: "the setters return nothing"
+side_effects: "changes the immediate context's state"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  slots past the end (they would be debug-layer errors; not tried), unordered-access and stream-output bindings, geometry / hull / domain / compute stage tables other than a VS resource round trip, deferred contexts, state sharing between contexts.

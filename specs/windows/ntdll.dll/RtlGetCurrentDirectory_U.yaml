@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlGetCurrentDirectory_U.yaml
+id: windows/api/ntdll.dll/RtlGetCurrentDirectory_U
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (and, for the MSYS2 calls, the API trace of PortableGit 2.56.1's sh.exe and msys-2.0.dll made with the repository's trace kit: only the calls the runtime makes into kernel32 and ntdll, with their arguments and results; no Microsoft or MSYS2 code was read). Microsoft Learn for the documented calls named in each sheet; constants and layouts from winnt.h, winbase.h, winternl.h, ntstatus.h, winerror.h, ntsecapi.h, stdio.h.
+summary: >
+  Copies the process's current directory (UTF-16, no trailing backslash except for a root) into a caller buffer; the result is a length in bytes. The MSYS2 runtime looks it up in ntdll by name at start-up; Poly does not export it.
+interface:
+  signature: "ULONG RtlGetCurrentDirectory_U(ULONG bufferBytes, PWSTR buffer); NTSTATUS RtlSetCurrentDirectory_U(PUNICODE_STRING)"
+rules:
+  length: "the result is the length of the text in BYTES without the terminating NUL (twice GetCurrentDirectoryW's character count); the text is the same as GetCurrentDirectoryW's; a NUL is written after it when the buffer has room for it (bufferBytes >= length + 2)."
+  too_small: "a buffer of 0, 2 or length - 2 bytes, and one of exactly the text's length (no room for the NUL): the result is the required size in bytes WITH the NUL (length + 2) and nothing is written; GetCurrentDirectoryW with a 2-unit buffer likewise returns the count with the NUL."
+  change: "SetCurrentDirectoryW changes what it returns; a directory set with a trailing backslash is returned without it; the root of a drive is returned with its backslash (C:\\ is 6 bytes); the path starts with a drive letter, a colon and a backslash."
+  set_u: "RtlSetCurrentDirectory_U with the start directory's UNICODE_STRING: STATUS_SUCCESS and the length matches the original; for a directory that does not exist: STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034), the current directory is unchanged."
+errors:
+  not_found: "0xC0000034 for RtlSetCurrentDirectory_U"
+side_effects: "none for the get call"
+threading: "the current directory is process-wide"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, importing the DLLs named by the sheet by name. Observations are statuses, error codes, counts and offsets; never addresses, handles, process or thread ids, file names or times. Tests that need a process to survive a fault run the case in a child process of the same image (--child <case>) whose exit code is the answer (0x6000_0000 | status: the call returned; otherwise the exception code). Each test is kept in three files that make the same calls and write every third observation line, so one test serves as visible and held-out tests.
+not_covered: >
+  Long paths over MAX_PATH, directories on UNC shares, per-drive current directories in the environment.

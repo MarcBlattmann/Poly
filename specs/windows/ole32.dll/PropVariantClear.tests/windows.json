@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "deb764914fc7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:02:47Z",
+  "tests": [
+    {
+      "name": "pvc_errors",
+      "exe_sha256": "da3f289f6b3a900a242515016609a0e41b96569a8e9c75050156d0b78b6c3a09",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBOVUxMIHBvaW50ZXI6IDB4MApWVF9JMjogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX1I0OiByZXR1cm5zIDB4MCwgdnQgbm93IDAsIHZhbHVlIHdvcmRzIDB4MCAweDAKVlRfUjg6IHJldHVybnMgMHgwLCB2dCBub3cgMCwgdmFsdWUgd29yZHMgMHgwIDB4MApWVF9DWTogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX0RBVEU6IHJldHVybnMgMHgwLCB2dCBub3cgMCwgdmFsdWUgd29yZHMgMHgwIDB4MApWVF9FUlJPUjogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX0JPT0w6IHJldHVybnMgMHgwLCB2dCBub3cgMCwgdmFsdWUgd29yZHMgMHgwIDB4MApWVF9JMTogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX1VJMTogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX1VJMjogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX0k4OiByZXR1cm5zIDB4MCwgdnQgbm93IDAsIHZhbHVlIHdvcmRzIDB4MCAweDAKVlRfVUk4OiByZXR1cm5zIDB4MCwgdnQgbm93IDAsIHZhbHVlIHdvcmRzIDB4MCAweDAKVlRfSU5UOiByZXR1cm5zIDB4MCwgdnQgbm93IDAsIHZhbHVlIHdvcmRzIDB4MCAweDAKVlRfVUlOVDogcmV0dXJucyAweDAsIHZ0IG5vdyAwLCB2YWx1ZSB3b3JkcyAweDAgMHgwClZUX0ZJTEVUSU1FOiByZXR1cm5zIDB4MCwgdnQgbm93IDAsIHZhbHVlIHdvcmRzIDB4MCAweDAKdnQgMHg3RiAobm90IGRlZmluZWQpOiByZXR1cm5zIDB4ODAwMzAwNTcsIHZ0IGFmdGVyd2FyZHMgMHgwLCB2YWx1ZSB3b3JkcyBrZXB0IGZhbHNlCnZ0IDB4MjAwIChub3QgZGVmaW5lZCk6IHJldHVybnMgMHg4MDAzMDA1NywgdnQgYWZ0ZXJ3YXJkcyAweDAsIHZhbHVlIHdvcmRzIGtlcHQgZmFsc2UKVlRfUkVTRVJWRUQgMHg4MDAwOiByZXR1cm5zIDB4ODAwMzAwNTcsIHZ0IGFmdGVyd2FyZHMgMHgwLCB2YWx1ZSB3b3JkcyBrZXB0IGZhbHNlCnZ0IDB4RkZGRjogcmV0dXJucyAweDAsIHZ0IGFmdGVyd2FyZHMgMHgwLCB2YWx1ZSB3b3JkcyBrZXB0IGZhbHNlClZUX0JZUkVGIHwgVlRfQlNUUiB3aXRoIGEgTlVMTCBwb2ludGVyOiByZXR1cm5zIDB4MCwgdnQgbm93IDAKVlRfVkVDVE9SIHwgVlRfSTQgd2l0aCBubyBlbGVtZW50czogcmV0dXJucyAweDAsIHZ0IG5vdyAwClZUX1ZFQ1RPUiB8IFZUX0xQV1NUUiB3aXRoIG5vIGVsZW1lbnRzOiByZXR1cm5zIDB4MCwgdnQgbm93IDAKVlRfVkVDVE9SIHwgVlRfTFBXU1RSIHdpdGggdHdvIG93bmVkIHN0cmluZ3M6IHJldHVybnMgMHgwLCB2dCBub3cgMCwgd29yZHMgMHgwIDB4MApWVF9BUlJBWSB8IFZUX0k0IHdpdGggYSBOVUxMIFNBRkVBUlJBWTogcmV0dXJucyAweDAsIHZ0IG5vdyAwCnRocmVlIHBsYWluIHZhbHVlcyBpbiBhbiBhcnJheTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a NULL pointer: 0x0\nVT_I2: returns 0x0, vt now 0, value words 0x0 0x0\nVT_R4: returns 0x0, vt now 0, value words 0x0 0x0\nVT_R8: returns 0x0, vt now 0, value words 0x0 0x0\nVT_CY: returns 0x0, vt now 0, value words 0x0 0x0\nVT_DATE: returns 0x0, vt now 0, value words 0x0 0x0\nVT_ERROR: returns 0x0, vt now 0, value words 0x0 0x0\nVT_BOOL: returns 0x0, vt now 0, value words 0x0 0x0\nVT_I1: returns 0x0, vt now 0, value words 0x0 0x0\nVT_UI1: returns 0x0, vt now 0, value words 0x0 0x0\nVT_UI2: returns 0x0, vt now 0, value words 0x0 0x0\nVT_I8: returns 0x0, vt now 0, value words 0x0 0x0\nVT_UI8: returns 0x0, vt now 0, value words 0x0 0x0\nVT_INT: returns 0x0, vt now 0, value words 0x0 0x0\nVT_UINT: returns 0x0, vt now 0, value words 0x0 0x0\nVT_FILETIME: returns 0x0, vt now 0, value words 0x0 0x0\nvt 0x7F (not defined): returns 0x80030057, vt afterwards 0x0, value words kept false\nvt 0x200 (not defined): returns 0x80030057, vt afterwards 0x0, value words kept false\nVT_RESERVED 0x8000: returns 0x80030057, vt afterwards 0x0, value words kept false\nvt 0xFFFF: returns 0x0, vt afterwards 0x0, value words kept false\nVT_BYREF | VT_BSTR with a NULL pointer: returns 0x0, vt now 0\nVT_VECTOR | VT_I4 with no elements: returns 0x0, vt now 0\nVT_VECTOR | VT_LPWSTR with no elements: returns 0x0, vt now 0\nVT_VECTOR | VT_LPWSTR with two owned strings: returns 0x0, vt now 0, words 0x0 0x0\nVT_ARRAY | VT_I4 with a NULL SAFEARRAY: returns 0x0, vt now 0\nthree plain values in an array: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

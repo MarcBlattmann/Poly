@@ -126,6 +126,9 @@ pub struct ProcessStart {
     pub ntdll_base: u64,
     pub stack_base: u64,
     pub stack_limit: u64,
+    /// A 32-bit process (ADR 0186): the thread runs in compatibility mode with FS (not GS)
+    /// based at its TEB, and its start arguments are on its stack ([`crate::wow64`]).
+    pub wow64: bool,
 }
 
 /// Where a new thread of a running process starts ([`create_thread`]).
@@ -141,6 +144,8 @@ pub struct ThreadStart {
     pub teb: u64,
     pub stack_base: u64,
     pub stack_limit: u64,
+    /// A thread of a 32-bit process (see [`ProcessStart::wow64`]).
+    pub wow64: bool,
 }
 
 /// A thread's stack, laid out in the process's address space.
@@ -171,23 +176,31 @@ fn make_stack(proc: &mut NtProcess, b: &mut dyn Backend, reserve: u64, commit: u
 }
 
 /// Write a thread's TEB: the `NT_TIB` stack fields and self pointer, the
-/// `ClientId`, and the PEB pointer (the fields ADR 0063 and 0065 list).
+/// `ClientId`, and the PEB pointer (the fields ADR 0063 and 0065 list), at
+/// the offsets of the process's layout (a 32-bit TEB has 4-byte pointers and
+/// starts its SEH chain empty, `ExceptionList` = -1, ADR 0186).
 fn write_teb(
     b: &mut dyn Backend,
+    l: &poly_rtl::layout::Layout,
     teb: u64,
     peb: u64,
     stack: &ThreadStack,
     client: crate::kernel::ClientId,
 ) -> Result<(), NtStatus> {
+    let n = l.ptr as usize;
     let mut tib = [0u8; 0x68];
-    tib[TEB_STACK_BASE as usize..][..8].copy_from_slice(&stack.top.to_le_bytes());
-    tib[TEB_STACK_LIMIT as usize..][..8].copy_from_slice(&stack.limit.to_le_bytes());
-    tib[TEB_SELF as usize..][..8].copy_from_slice(&teb.to_le_bytes());
-    tib[TEB_CLIENT_ID as usize..][..8].copy_from_slice(&u64::from(client.process.0).to_le_bytes());
-    tib[TEB_CLIENT_ID as usize + 8..][..8].copy_from_slice(&client.thread.0.to_le_bytes());
-    tib[TEB_PEB as usize..][..8].copy_from_slice(&peb.to_le_bytes());
-    b.write(teb, &tib)?;
-    b.write(teb + TEB_DEALLOCATION_STACK, &stack.alloc.to_le_bytes())
+    let mut put = |at: u64, v: u64| tib[at as usize..][..n].copy_from_slice(&v.to_le_bytes()[..n]);
+    if l.ptr == 4 {
+        put(l.teb_exception_list, 0xFFFF_FFFF);
+    }
+    put(l.teb_stack_base, stack.top);
+    put(l.teb_stack_limit, stack.limit);
+    put(l.teb_self, teb);
+    put(l.teb_client_id, u64::from(client.process.0));
+    put(l.teb_client_id + l.ptr, client.thread.0);
+    put(l.teb_peb, peb);
+    b.write(teb, &tib[..(l.teb_peb + l.ptr) as usize])?;
+    b.write(teb + l.teb_deallocation_stack, &stack.alloc.to_le_bytes()[..n])
 }
 
 /// Map `image` as an image section view in `proc` (at its preferred base,
@@ -276,16 +289,19 @@ pub fn start_process_from(
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
-    start_process_listed(sys, proc, b, file, ntdll, file_object, thread, inherit_from, None)
+    let image = ImageSection::from_file(file)?;
+    start_process_listed(sys, proc, b, image, ntdll, file_object, thread, inherit_from, None)
 }
 
-/// [`start_process_from`] inheriting only the handles of `only` (ADR 0169).
+/// [`start_process_from`] for an executable already laid out as an image
+/// section (a big one reads its pages from its file as they are touched,
+/// ADR 0155), inheriting only the handles of `only` (ADR 0169).
 #[allow(clippy::too_many_arguments)] // what a new process is made of
 pub fn start_process_listed(
     sys: &mut NtSystem,
     proc: &mut NtProcess,
     b: &mut dyn Backend,
-    file: &[u8],
+    image: ImageSection,
     ntdll: &[u8],
     file_object: Option<ObjectId>,
     thread: ThreadRef,
@@ -300,15 +316,28 @@ pub fn start_process_listed(
     proc.object = Some(pid_object);
     om.set_process_object(proc.pid, pid_object)?;
 
-    let image = ImageSection::from_file(file)?;
-    let ntdll = ImageSection::from_file(ntdll)?;
+    // A PE32 executable runs in a 32-bit process (ADR 0186): its address space ends at 2 GiB,
+    // or 4 GiB if it is large-address aware, and it gets the i686 `ntdll`.
+    if image.is_x86() {
+        if sys.ntdll32.is_empty() {
+            return Err(STATUS_INVALID_IMAGE_FORMAT);
+        }
+        proc.wow64 = true;
+        proc.vm = crate::vm::VirtualMemory::with_range(
+            crate::vm::LOWEST_ADDRESS,
+            crate::wow64::address_end(image.info.file_header.characteristics),
+        );
+    }
+    let l = proc.layout();
+    let ntdll = ImageSection::from_file(if proc.wow64 { sys.ntdll32 } else { ntdll })?;
     let entries = NtdllEntries::of(&ntdll)?;
     let (entry_rva, reserve, commit) = (
         u64::from(image.info.entry_point()),
         image.info.optional.size_of_stack_reserve,
         image.info.optional.size_of_stack_commit,
     );
-    let ntdll_name = sys.io.dos_file_name(&"C:\\Windows\\System32\\ntdll.dll".encode_utf16().collect::<Vec<u16>>());
+    let ntdll_path = if proc.wow64 { crate::wow64::NTDLL_PATH } else { "C:\\Windows\\System32\\ntdll.dll" };
+    let ntdll_name = sys.io.dos_file_name(&ntdll_path.encode_utf16().collect::<Vec<u16>>());
     let image_name = proc.image_name.take();
     let (image_base, preferred) = map_image(sys, proc, b, image, file_object, thread, image_name)?;
     let (ntdll_base, _) = map_image(sys, proc, b, ntdll, None, thread, ntdll_name)?;
@@ -318,20 +347,34 @@ pub fn start_process_listed(
     proc.ntdll_base = ntdll_base;
 
     let rw = PAGE_READWRITE;
-    let anywhere_top = MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN;
+    // Top down in a 64-bit process. A 32-bit one's space ends right above `KUSER_SHARED_DATA`
+    // (0x7FFE0000), which the kernel maps after this: bottom up there.
+    let anywhere_top = if proc.wow64 { MEM_RESERVE | MEM_COMMIT } else { MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN };
     let (peb, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
-    b.write(peb + PEB_IMAGE_BASE_ADDRESS, &image_base.to_le_bytes())?;
+    b.write(peb + l.peb_image_base, &image_base.to_le_bytes()[..l.ptr as usize])?;
 
     let stack = make_stack(proc, b, reserve, commit)?;
     let client = crate::kernel::ClientId { process: proc.pid, thread };
-    write_teb(b, teb, peb, &stack, client)?;
-    let rsp = start_rsp(b, &stack)?;
+    write_teb(b, &l, teb, peb, &stack, client)?;
+    let start_routine = image_base + entry_rva;
+    let rsp = if proc.wow64 {
+        crate::wow64::start_esp(b, stack.top, [start_routine, peb, image_base])?
+    } else {
+        start_rsp(b, &stack)?
+    };
 
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    proc.threads.push(NtThread { thread, object: thread_object, teb, stack: stack.alloc });
+    proc.threads.push(NtThread {
+        thread,
+        object: thread_object,
+        teb,
+        stack: stack.alloc,
+        start: start_routine,
+        base_priority: 0,
+    });
     proc.peb = peb;
     proc.image_base = image_base;
     proc.default_stack_reserve = reserve;
@@ -340,7 +383,7 @@ pub fn start_process_listed(
     Ok(ProcessStart {
         entry: proc.thread_start,
         rsp,
-        start_routine: image_base + entry_rva,
+        start_routine,
         argument: peb,
         teb,
         peb,
@@ -349,6 +392,7 @@ pub fn start_process_listed(
         ntdll_base,
         stack_base: stack.top,
         stack_limit: stack.limit,
+        wow64: proc.wow64,
     })
 }
 
@@ -378,13 +422,13 @@ pub fn start_child(
     sys: &mut NtSystem,
     proc: &mut NtProcess,
     b: &mut dyn Backend,
-    file: &[u8],
+    image: ImageSection,
     ntdll: &[u8],
     params: &crate::params::Parameters,
     thread: ThreadRef,
     inherit_from: Option<poly_ntobj::ProcessId>,
 ) -> Result<ProcessStart, NtStatus> {
-    let ps = start_process_from(sys, proc, b, file, ntdll, None, thread, inherit_from)?;
+    let ps = start_process_listed(sys, proc, b, image, ntdll, None, thread, inherit_from, None)?;
     crate::params::write(proc, b, ps.peb, params)?;
     Ok(ps)
 }
@@ -447,13 +491,25 @@ pub fn create_thread(
     // "Thread Stack Size").
     proc.vm.set_stack(stack.alloc);
     let client = crate::kernel::ClientId { process: proc.pid, thread };
-    write_teb(b, teb, peb_of(proc), &stack, client)?;
-    let rsp = start_rsp(b, &stack)?;
+    let l = proc.layout();
+    write_teb(b, &l, teb, peb_of(proc), &stack, client)?;
+    let rsp = if proc.wow64 {
+        crate::wow64::start_esp(b, stack.top, [req.start_routine, req.argument, proc.image_base])?
+    } else {
+        start_rsp(b, &stack)?
+    };
 
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    proc.threads.push(NtThread { thread, object: thread_object, teb, stack: stack.alloc });
+    proc.threads.push(NtThread {
+        thread,
+        object: thread_object,
+        teb,
+        stack: stack.alloc,
+        start: req.start_routine,
+        base_priority: 0,
+    });
 
     Ok(ThreadStart {
         entry: proc.thread_start,
@@ -463,6 +519,7 @@ pub fn create_thread(
         teb,
         stack_base: stack.top,
         stack_limit: stack.limit,
+        wow64: proc.wow64,
     })
 }
 
@@ -493,6 +550,7 @@ pub fn thread_exit(
     // waits), then signal its object so waiters on it wake.
     sys.objects.thread_terminated(thread);
     sys.objects.forget_thread_token(thread);
+    sys.winsta.thread_exited(&mut sys.objects, thread);
     let _ = sys.objects.set_signaled(t.object, true);
     let _ = sys.objects.set_thread_object(thread, None);
     let _ = sys.objects.dereference(t.object);
@@ -513,6 +571,7 @@ pub fn thread_exit(
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
     sys.job_process_exited(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
     sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
+    sys.winsta.process_exited(&mut sys.objects, proc.pid);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
             let _ = sys.objects.dereference(v.object);
@@ -520,6 +579,7 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
     }
     for t in core::mem::take(&mut proc.threads) {
         sys.objects.forget_thread_token(t.thread);
+        sys.winsta.thread_exited(&mut sys.objects, t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);
         let _ = sys.objects.set_signaled(t.object, true);
         let _ = sys.objects.dereference(t.object);
@@ -539,12 +599,23 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
 /// A page fault at `addr` that the kernel's memory map could not resolve:
 /// a guard page fires (and a stack grows: the thread's TEB gets its new
 /// `StackLimit`), or it is an access violation.
+///
+/// The stack that grows is the one the faulting thread's TEB names
+/// (`NT_TIB.StackBase`, `winnt.h`) as well as a stack Poly made: a program
+/// that runs a thread on memory it allocated itself and points the TEB at
+/// it (the MSYS2 runtime does, ADR 0194) gets the growth Learn's "Thread
+/// Stack Size" describes there too.
 pub fn access_fault(proc: &mut NtProcess, b: &mut dyn Backend, thread: ThreadRef, addr: u64) -> AccessFault {
-    let fault = proc.vm.access_fault(b, addr);
+    let stack_base = proc.thread(thread).and_then(|t| {
+        let mut v = [0u8; 8];
+        b.read(t.teb + TEB_STACK_BASE, &mut v).ok().map(|()| u64::from_le_bytes(v))
+    });
+    let fault = proc.vm.access_fault_in_stack(b, addr, stack_base);
     if let AccessFault::StackGrown { limit } = fault
         && let Some(t) = proc.thread(thread)
     {
-        let _ = b.write(t.teb + TEB_STACK_LIMIT, &limit.to_le_bytes());
+        let l = proc.layout();
+        let _ = b.write(t.teb + l.teb_stack_limit, &limit.to_le_bytes()[..l.ptr as usize]);
     }
     fault
 }

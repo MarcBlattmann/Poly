@@ -89,6 +89,7 @@ jobs:
         run: |
           echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
           echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "wow64=$(cargo xtask wow64 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: target/ntdll-cache
@@ -98,6 +99,11 @@ jobs:
         with:
           path: target/win32-cache
           key: ${{ steps.keys.outputs.win32 }}
+      # The 32-bit modules (ADR 0186).
+      - uses: actions/cache@v4
+        with:
+          path: target/wow64-cache
+          key: ${{ steps.keys.outputs.wow64 }}
       - run: cargo xtask ci lint
       # The coverage map's checks (README and ROADMAP against coverage/) are
       # a minute: with lint, which ends sooner than the boots.
@@ -170,6 +176,7 @@ jobs:
         run: |
           echo "ntdll=$(cargo xtask ntdll --cache-key)" >> "$GITHUB_OUTPUT"
           echo "win32=$(cargo xtask win32 --cache-key)" >> "$GITHUB_OUTPUT"
+          echo "wow64=$(cargo xtask wow64 --cache-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         if: matrix.part == 'kernel'
         with:
@@ -180,6 +187,11 @@ jobs:
         with:
           path: target/win32-cache
           key: ${{ steps.keys.outputs.win32 }}
+      - uses: actions/cache@v4
+        if: matrix.part == 'kernel'
+        with:
+          path: target/wow64-cache
+          key: ${{ steps.keys.outputs.wow64 }}
       # 7-Zip's 7za.exe for the traced scenario's kit and the 7-Zip
       # scenario's driver (ADR 0087, 0091), kept in a cache by version.
       - name: 7-Zip's cache
@@ -244,6 +256,7 @@ jobs:
             shards: sevenzip-b
             accel: auto
             sevenzip: true
+            mingit: true
           - boot: shell
             shards: desktop-shell
             accel: auto
@@ -302,6 +315,17 @@ jobs:
       - name: Fetch 7-Zip (the 7zip and wintrace boot tests)
         if: matrix.sevenzip
         run: target/debug/xtask win fetch-7zip || echo "::warning::could not fetch 7-Zip; the 7zip boot test is skipped"
+      # MinGit (Git for Windows) for the `git-win` boot test (ADR 0194): the
+      # pinned zip, checked and unpacked by xtask, kept in a cache by version.
+      - name: MinGit's cache
+        if: matrix.mingit
+        uses: actions/cache@v4
+        with:
+          path: target/mingit
+          key: mingit-2.56.1
+      - name: Fetch MinGit (the git-win boot test)
+        if: matrix.mingit
+        run: target/debug/xtask win fetch-git || echo "::warning::could not fetch MinGit; the git-win boot test is skipped"
       - run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
       - name: Keep the boot logs
         if: failure()

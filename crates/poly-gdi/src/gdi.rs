@@ -11,6 +11,7 @@ use crate::fonttab::{self, FontTable};
 use crate::outline::{FaceStyle, FontFiles, Outline, Src as FontSrc, Typeface};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
+use crate::xform::{GM_ADVANCED, GM_COMPATIBLE, Xform};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -31,6 +32,9 @@ pub const OBJ_MEMDC: u32 = 10;
 pub const ERROR_INVALID_HANDLE: u32 = 6;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
 pub const CLR_INVALID: u32 = 0xFFFF_FFFF;
+/// `SetStretchBltMode` modes (wingdi.h): `BLACKONWHITE` .. `HALFTONE`.
+pub const BLACKONWHITE: i32 = 1;
+pub const HALFTONE: i32 = 4;
 
 /// `ExtTextOutW` options (`wingdi.h`).
 pub const ETO_OPAQUE: u32 = 0x0002;
@@ -282,12 +286,63 @@ struct DcState {
     /// origin + viewport origin.
     viewport_org: (i32, i32),
     window_org: (i32, i32),
+    /// Where a child window's client origin is in its top-level window's
+    /// surface (user32 sets it, [`Gdi::set_display_base`]): added to every
+    /// logical coordinate, not visible through `GetViewportOrgEx`.
+    base_org: (i32, i32),
+    /// `SetGraphicsMode`: `GM_COMPATIBLE` (1) or `GM_ADVANCED` (2).
+    graphics_mode: i32,
+    /// `SetWorldTransform`: world space to page space (identity unless
+    /// the graphics mode is advanced).
+    xform: Xform,
+    /// `SetStretchBltMode` (`BLACKONWHITE` at first).
+    stretch_mode: i32,
 }
 
 impl DcState {
-    /// What to add to logical coordinates for device ones.
+    /// What to add to page coordinates for device ones.
     fn to_device(&self) -> (i32, i32) {
-        (self.viewport_org.0.wrapping_sub(self.window_org.0), self.viewport_org.1.wrapping_sub(self.window_org.1))
+        (
+            self.viewport_org.0.wrapping_sub(self.window_org.0).wrapping_add(self.base_org.0),
+            self.viewport_org.1.wrapping_sub(self.window_org.1).wrapping_add(self.base_org.1),
+        )
+    }
+
+    /// A logical (world) point in device coordinates: the world
+    /// transformation, then the window and viewport origins.
+    fn map(&self, x: i32, y: i32) -> (i32, i32) {
+        let (dx, dy) = self.to_device();
+        let (x, y) = if self.xform.is_identity() { (x, y) } else { self.xform.apply(x, y) };
+        (x.wrapping_add(dx), y.wrapping_add(dy))
+    }
+
+    /// A logical rectangle in device coordinates (the box around its
+    /// corners when the world transformation turns it).
+    fn map_rect(&self, r: Rect) -> Rect {
+        let (dx, dy) = self.to_device();
+        if self.xform.is_identity() {
+            return r.offset(dx, dy);
+        }
+        let (l, t, rr, b) = self.xform.apply_rect(r.left, r.top, r.right, r.bottom);
+        Rect::new(l, t, rr, b).offset(dx, dy)
+    }
+
+    /// A device rectangle in logical coordinates (`GetClipBox`).
+    fn unmap_rect(&self, r: Rect) -> Rect {
+        let (dx, dy) = self.to_device();
+        let r = r.offset(dx.wrapping_neg(), dy.wrapping_neg());
+        match self.xform.inverse() {
+            Some(inv) if !self.xform.is_identity() => {
+                let (l, t, rr, b) = inv.apply_rect(r.left, r.top, r.right, r.bottom);
+                Rect::new(l, t, rr, b)
+            }
+            _ => r,
+        }
+    }
+
+    /// Whether the world transformation mirrors x / y.
+    fn flips(&self) -> (bool, bool) {
+        (self.xform.m11 < 0.0, self.xform.m22 < 0.0)
     }
 }
 
@@ -373,6 +428,8 @@ enum Obj {
     },
     Region(Region),
     Palette,
+    /// The stock colour space (`GetStockObject(20)`, `OBJ_COLORSPACE`).
+    ColorSpace,
 }
 
 /// Stock object indexes (`GetStockObject`, `wingdi.h`).
@@ -424,7 +481,9 @@ pub const DC_BRUSH: u32 = 18;
 pub const DC_PEN: u32 = 19;
 /// Poly's own index for the default 1x1 monochrome bitmap.
 const STOCK_BITMAP: u32 = 20;
-const STOCK_COUNT: u32 = 21;
+/// Poly's slot of the stock colour space (`GetStockObject(20)`; the bitmap is 21 in Windows' numbering).
+const STOCK_COLORSPACE: u32 = 21;
+const STOCK_COUNT: u32 = 22;
 
 /// Handles are `generation << 24 | index << 2`: a slot used again gets a
 /// new generation (1 to 127), so a deleted object's handle stays invalid
@@ -461,6 +520,9 @@ pub struct Gdi {
     /// the same HDC). Released, the handle names nothing meanwhile.
     parked: Option<(u64, usize)>,
     pub screen: Screen,
+    /// The region deleted last, which still answers `GetRgnBox`, `PtInRegion` and a second
+    /// `DeleteObject` until the next region is made (CreateRectRgnIndirect.yaml, crri_basic).
+    ghost_region: Option<(u32, Region)>,
     /// The font files and the rendered glyphs of outline fonts.
     text: TextState,
 }
@@ -530,9 +592,23 @@ impl FontSel {
 }
 
 /// A pixel source for blits: a bitmap and its DC's colours.
-struct Src<'a> {
-    bmp: &'a Bitmap,
-    bk: Rgb,
+/// Where a blit's pixels come from.
+enum BlitSrc<'a> {
+    /// A DC's bitmap.
+    Dc(u64),
+    /// A caller's DIB.
+    Bitmap(&'a Bitmap),
+}
+
+/// The source pixels of a blit, one per destination pixel: (colour, raw
+/// value, whether it is the source's background colour); `None` outside
+/// the source. With the source's format.
+struct Cells {
+    px: Vec<Option<(Rgb, u32, bool)>>,
+    bpp: u16,
+    dib: bool,
+    colors: Vec<u32>,
+    mono: bool,
 }
 
 impl Gdi {
@@ -543,6 +619,7 @@ impl Gdi {
             free: VecDeque::new(),
             parked: None,
             screen: Screen { width: 1024, height: 768 },
+            ghost_region: None,
             text: TextState {
                 files: RefCell::new(FontFiles::new()),
                 table: FontTable::new(),
@@ -563,7 +640,7 @@ impl Gdi {
         };
         let pen = |c: u32, style: u32| Obj::Pen {
             style,
-            width: 1,
+            width: 0,
             color: c,
             stock: true,
             delete_pending: false,
@@ -585,7 +662,7 @@ impl Gdi {
             brush(0, BS_NULL),            // NULL_BRUSH
             pen(0x00FF_FFFF, 0),          // WHITE_PEN
             pen(0, 0),                    // BLACK_PEN
-            pen(0, PS_NULL),              // NULL_PEN
+            Obj::Pen { style: PS_NULL, width: 1, color: 0, stock: true, delete_pending: false, kept: false }, // NULL_PEN
             Obj::Palette,                 // 9: unused
             font(Face::OemFixed),         // OEM_FIXED_FONT
             font(Face::AnsiFixed),        // ANSI_FIXED_FONT
@@ -598,6 +675,7 @@ impl Gdi {
             brush(0x00FF_FFFF, BS_SOLID), // DC_BRUSH
             pen(0, 0),                    // DC_PEN
             Obj::Bitmap { bmp: Bitmap::ddb(1, 1, 1), selected_in: 0, delete_pending: false, stock: true },
+            Obj::ColorSpace, // 20 in Windows' numbering
         ];
         for o in stock {
             g.objs.push(Some(o));
@@ -654,10 +732,14 @@ impl Gdi {
 
     /// `GetStockObject`.
     pub fn stock(&self, i: u32) -> u32 {
-        if i >= STOCK_COUNT - 1 || i == 9 {
-            return 0;
-        }
-        self.handle_of(1 + i as usize)
+        // Windows' 20 is the colour space and 21 the 1x1 bitmap; Poly keeps them the other way round.
+        let slot = match i {
+            20 => STOCK_COLORSPACE,
+            21 => STOCK_BITMAP,
+            9 | 22.. => return 0,
+            _ => i,
+        };
+        self.handle_of(1 + slot as usize)
     }
 
     fn obj(&self, h: u64) -> Option<&Obj> {
@@ -708,6 +790,10 @@ impl Gdi {
             clip: None,
             viewport_org: (0, 0),
             window_org: (0, 0),
+            base_org: (0, 0),
+            graphics_mode: GM_COMPATIBLE,
+            xform: Xform::IDENTITY,
+            stretch_mode: BLACKONWHITE,
         }
     }
 
@@ -719,6 +805,24 @@ impl Gdi {
         let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
         self.add(Obj::Dc(Dc {
             kind: DcKind::Memory,
+            state,
+            saved: Vec::new(),
+            bitmap,
+            surface: None,
+            vis: None,
+            vis_origin: (0, 0),
+            sys_clip: None,
+        }))
+    }
+
+    /// `CreateDCW("DISPLAY")` / `CreateICW("DISPLAY")` (CreateDCW.yaml): a DC of
+    /// the whole screen that stays until `DeleteDC`, with the stock 1x1
+    /// bitmap selected (a `GetDC(NULL)` DC has none).
+    pub fn create_device_dc(&mut self) -> u32 {
+        let state = self.default_state();
+        let bitmap = self.handle_of(1 + STOCK_BITMAP as usize);
+        self.add(Obj::Dc(Dc {
+            kind: DcKind::Display { hwnd: 0, persistent: true },
             state,
             saved: Vec::new(),
             bitmap,
@@ -808,12 +912,30 @@ impl Gdi {
     /// A display DC's origin on the screen (`None`: not a display DC).
     pub fn display_origin(&self, h: u64) -> Option<(i32, i32)> {
         let d = self.dc(h)?;
-        matches!(d.kind, DcKind::Display { .. }).then_some(d.vis_origin)
+        matches!(d.kind, DcKind::Display { .. })
+            .then_some((d.vis_origin.0 + d.state.base_org.0, d.vis_origin.1 + d.state.base_org.1))
+    }
+
+    /// A child window's DC draws into its top-level window's surface: its logical
+    /// origin is `base` from the surface's (and `vis_origin` is the surface's on the screen).
+    pub fn set_display_base(&mut self, dc: u64, base: (i32, i32)) -> bool {
+        let Some(d) = self.dc_mut(dc) else { return false };
+        if d.kind == DcKind::Memory {
+            return false;
+        }
+        d.state.base_org = base;
+        for s in &mut d.saved {
+            s.base_org = base;
+        }
+        true
     }
 
     /// The handles of deleted objects of type `ty` stop answering
     /// `GetObjectType` (their slots wait for reuse as before).
     fn forget_dead(&mut self, ty: u32) {
+        if ty == OBJ_REGION {
+            self.ghost_region = None;
+        }
         for o in self.objs.iter_mut() {
             if matches!(o, Some(Obj::Dead(t)) if *t == ty) {
                 *o = None;
@@ -872,7 +994,7 @@ impl Gdi {
         // deletion waited go now.
         for st in core::iter::once(&d.state).chain(d.saved.iter()) {
             for o in [st.brush, st.pen, st.font] {
-                self.finish_pending(u64::from(o));
+                self.finish_pending_ex(u64::from(o), true);
             }
         }
         if let Some(Obj::Bitmap { selected_in, .. }) = self.obj_mut(u64::from(d.bitmap)) {
@@ -891,11 +1013,17 @@ impl Gdi {
     /// bitmap keep answering their type (DeleteObject.yaml `after_deselect`,
     /// `selected_bitmap`).
     fn finish_pending(&mut self, h: u64) {
+        self.finish_pending_ex(h, false);
+    }
+
+    /// As [`Gdi::finish_pending`]; `dc_gone`: a DC was deleted with the object selected, which makes a
+    /// pen read as no object at all (ddc_basic: types 0 0), where deselecting it leaves OBJ_PEN.
+    fn finish_pending_ex(&mut self, h: u64, dc_gone: bool) {
         let held = self.held(h);
         let Some(i) = self.index_of(h) else { return };
         let (pending, ty) = match &self.objs[i] {
             Some(Obj::Brush { delete_pending, dead, .. }) => (*delete_pending || *dead, 0),
-            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, OBJ_PEN),
+            Some(Obj::Pen { delete_pending, .. }) => (*delete_pending, if dc_gone { 0 } else { OBJ_PEN }),
             Some(Obj::Font { delete_pending, .. }) => (*delete_pending, OBJ_FONT),
             Some(Obj::Bitmap { delete_pending, selected_in, .. }) => (*delete_pending && *selected_in == 0, OBJ_BITMAP),
             _ => (false, 0),
@@ -969,7 +1097,9 @@ impl Gdi {
                 self.free_dc(h, true);
                 (true, 0)
             }
-            _ => (false, 0),
+            // A DC deleted before: nothing to report (DeleteDC.yaml `result`); no DC at all: 6.
+            Some(Obj::DeadDc) => (false, 0),
+            _ => (false, ERROR_INVALID_HANDLE),
         }
     }
 
@@ -996,6 +1126,9 @@ impl Gdi {
             // had them stop answering (`handle_after_delete`).
             self.age_deleted_brushes(true);
         }
+        if matches!(self.ghost_region, Some((gh, _)) if u64::from(gh) == h) {
+            return true;
+        }
         let Some(i) = self.index_of(h) else { return false };
         let stock_slot = i <= STOCK_COUNT as usize;
         let Some(o) = self.objs[i].as_mut() else { return false };
@@ -1008,7 +1141,7 @@ impl Gdi {
             Obj::Brush { stock: true, .. } | Obj::Pen { stock: true, .. } | Obj::Font { stock: true, .. } => true,
             Obj::Brush { kept: true, .. } | Obj::Pen { kept: true, .. } => true,
             Obj::Bitmap { stock: true, .. } => true,
-            Obj::Palette if stock_slot => true,
+            Obj::Palette | Obj::ColorSpace if stock_slot => true,
             Obj::Brush { deleted, delete_pending, dead, kept, .. } => {
                 if *deleted || *delete_pending || *dead {
                     return false;
@@ -1055,8 +1188,10 @@ impl Gdi {
                 }
                 true
             }
-            Obj::Region(_) => {
+            Obj::Region(r) => {
+                let r = r.clone();
                 self.release(i, OBJ_REGION);
+                self.ghost_region = Some((h as u32, r));
                 true
             }
             Obj::Palette => {
@@ -1068,6 +1203,8 @@ impl Gdi {
                 self.release(i, OBJ_PAL);
                 true
             }
+            // Only the stock one exists; it is not deleted.
+            Obj::ColorSpace => false,
         }
     }
 
@@ -1090,6 +1227,7 @@ impl Gdi {
             Some(Obj::Font { .. }) => OBJ_FONT,
             Some(Obj::Region(_)) => OBJ_REGION,
             Some(Obj::Palette) => OBJ_PAL,
+            Some(Obj::ColorSpace) => 14,
             None => 0,
         }
     }
@@ -1512,6 +1650,11 @@ impl Gdi {
     // ----- regions (`CreateRectRgn.yaml`, `CombineRgn.yaml`, `GetRgnBox.yaml`, `PtInRegion.yaml`)
 
     /// The region behind a handle.
+    /// The region deleted last, while its handle still answers.
+    fn ghost(&self, h: u64) -> Option<&Region> {
+        self.ghost_region.as_ref().filter(|(gh, _)| u64::from(*gh) == h).map(|(_, r)| r)
+    }
+
     pub fn region(&self, h: u64) -> Option<&Region> {
         match self.obj(h) {
             Some(Obj::Region(r)) => Some(r),
@@ -1597,7 +1740,7 @@ impl Gdi {
 
     /// `GetRgnBox`: (kind, box); `None` when `h` is not a region.
     pub fn rgn_box(&self, h: u64) -> Option<(i32, Rect)> {
-        self.region(h).map(|r| (r.kind(), r.bounds()))
+        self.region(h).or_else(|| self.ghost(h)).map(|r| (r.kind(), r.bounds()))
     }
 
     /// `OffsetRgn`: the kind, or ERROR (0) when `h` is not a region or a
@@ -1643,7 +1786,7 @@ impl Gdi {
 
     /// `PtInRegion`: whether the point is in it, or the error.
     pub fn pt_in_region(&self, h: u64, x: i32, y: i32) -> Result<bool, u32> {
-        self.region(h).map(|r| r.contains_point(x, y)).ok_or(ERROR_INVALID_HANDLE)
+        self.region(h).or_else(|| self.ghost(h)).map(|r| r.contains_point(x, y)).ok_or(ERROR_INVALID_HANDLE)
     }
 
     /// `RectInRegion`: `None` when `h` is not a region (no error set).
@@ -1690,8 +1833,7 @@ impl Gdi {
         if r.is_empty() {
             return (NULLREGION, Rect::default());
         }
-        let (dx, dy) = d.state.to_device();
-        (r.kind(), r.bounds().offset(dx.wrapping_neg(), dy.wrapping_neg()))
+        (r.kind(), d.state.unmap_rect(r.bounds()))
     }
 
     /// `PtVisible`: whether the logical point is within what the DC draws
@@ -1700,16 +1842,15 @@ impl Gdi {
     /// a bad DC.
     pub fn pt_visible(&self, dc: u64, x: i32, y: i32) -> Option<bool> {
         let d = self.dc(dc)?;
-        let (dx, dy) = d.state.to_device();
-        Some(self.drawable(d).contains_point(x.wrapping_add(dx), y.wrapping_add(dy)))
+        let (x, y) = d.state.map(x, y);
+        Some(self.drawable(d).contains_point(x, y))
     }
 
     /// `RectVisible`: whether any part of the logical rectangle is within
     /// what the DC draws on; `None` for a bad DC.
     pub fn rect_visible(&self, dc: u64, r: Rect) -> Option<bool> {
         let d = self.dc(dc)?;
-        let (dx, dy) = d.state.to_device();
-        Some(self.drawable(d).intersects_rect(r.normalized().offset(dx, dy)))
+        Some(self.drawable(d).intersects_rect(d.state.map_rect(r.normalized())))
     }
 
     /// The kind of what a DC draws on now (the clip calls' result).
@@ -1765,8 +1906,7 @@ impl Gdi {
     /// (COMPLEXREGION, or NULLREGION when nothing is left, observed; error).
     pub fn clip_rect(&mut self, dc: u64, r: Rect, exclude: bool) -> (i32, u32) {
         let Some(d) = self.dc(dc) else { return (0, ERROR_INVALID_HANDLE) };
-        let (dx, dy) = d.state.to_device();
-        let r = Region::from_rect(r.normalized().offset(dx, dy));
+        let r = Region::from_rect(d.state.map_rect(r.normalized()));
         let base = d.state.clip.clone().unwrap_or_else(|| self.surface_region(d));
         let new = if exclude { base.subtract(&r) } else { base.intersect(&r) };
         self.dc_mut(dc).expect("checked").state.clip = Some(new);
@@ -1826,7 +1966,8 @@ impl Gdi {
         if d.kind == DcKind::Memory {
             return false;
         }
-        d.sys_clip = clip;
+        let base = d.state.base_org;
+        d.sys_clip = clip.map(|c| c.offset_by(base.0, base.1));
         true
     }
 
@@ -1946,14 +2087,12 @@ impl Gdi {
 
     /// Logical point (`x`, `y`) of a DC in device coordinates.
     fn device_point(&self, dc: u64, x: i32, y: i32) -> (i32, i32) {
-        let (dx, dy) = self.dc(dc).map_or((0, 0), |d| d.state.to_device());
-        (x.wrapping_add(dx), y.wrapping_add(dy))
+        self.dc(dc).map_or((x, y), |d| d.state.map(x, y))
     }
 
     /// A logical rectangle of a DC in device coordinates.
     fn device_rect(&self, dc: u64, r: Rect) -> Rect {
-        let (dx, dy) = self.dc(dc).map_or((0, 0), |d| d.state.to_device());
-        r.offset(dx, dy)
+        self.dc(dc).map_or(r, |d| d.state.map_rect(r))
     }
 
     /// `SetPixel`: the colour stored, `CLR_INVALID` outside.
@@ -2130,7 +2269,10 @@ impl Gdi {
         true
     }
 
-    /// `BitBlt` (`BitBlt.yaml`): (result, error).
+    /// `BitBlt` (`BitBlt.yaml`): (result, error). With world
+    /// transformations (Learn, `BitBlt`): a rotation or shear in the source
+    /// DC fails; otherwise the source rectangle is stretched or compressed
+    /// to the destination's when the two DCs transform it differently.
     #[allow(clippy::too_many_arguments)]
     pub fn bit_blt(
         &mut self,
@@ -2155,10 +2297,10 @@ impl Gdi {
             return (true, 0);
         }
         let Some(sdc) = self.dc(src) else { return (false, 0) };
-        let sbk = Rgb::from_colorref(sdc.state.bk);
-        let pattern = self.brush_color(dstate.brush, &dstate);
-        let (x, y) = self.device_point(dst, x, y);
-        let (sx, sy) = self.device_point(src, sx, sy);
+        let sstate = sdc.state.clone();
+        if !sstate.xform.is_axis_aligned() {
+            return (false, 0);
+        }
         let (mut x, mut y, mut sx, mut sy, mut w, mut h) = (x, y, sx, sy, w, h);
         if w < 0 {
             x += w;
@@ -2173,44 +2315,152 @@ impl Gdi {
         if w == 0 || h == 0 {
             return (true, 0);
         }
-        // Copy the source pixels first (one DC may be both).
-        let Some(s) = self.target(sdc) else { return (true, 0) };
-        let src_view = Src { bmp: s, bk: sbk };
-        let mut cells: Vec<Option<(Rgb, u32, bool)>> = Vec::with_capacity((w * h) as usize);
-        for j in 0..h {
-            for i in 0..w {
-                let (px, py) = (sx + i, sy + j);
-                cells.push(if src_view.bmp.contains(px, py) {
-                    let raw = src_view.bmp.raw(px, py);
-                    let rgb = src_view.bmp.to_rgb(raw);
-                    let is_bk = rgb == src_view.bk;
-                    Some((rgb, raw, is_bk))
-                } else {
-                    None
-                });
-            }
+        let drect = dstate.map_rect(Rect::new(x, y, x.wrapping_add(w), y.wrapping_add(h)));
+        let srect = sstate.map_rect(Rect::new(sx, sy, sx.wrapping_add(w), sy.wrapping_add(h)));
+        let (dfx, dfy) = dstate.flips();
+        let (sfx, sfy) = sstate.flips();
+        self.blit(dst, drect, (dfx != sfx, dfy != sfy), BlitSrc::Dc(src), srect, code);
+        (true, 0)
+    }
+
+    /// `StretchBlt` (Learn): the source rectangle (`sx`, `sy`, `sw`, `sh`)
+    /// stretched or compressed into the destination's, mirrored where the
+    /// signs of the widths or heights differ; (result, error).
+    #[allow(clippy::too_many_arguments)]
+    pub fn stretch_blt(
+        &mut self,
+        dst: u64,
+        (x, y, w, h): (i32, i32, i32, i32),
+        src: u64,
+        (sx, sy, sw, sh): (i32, i32, i32, i32),
+        rop: u32,
+    ) -> (bool, u32) {
+        let Some(d) = self.dc(dst) else { return (false, ERROR_INVALID_HANDLE) };
+        let dstate = d.state.clone();
+        let code = (rop >> 16) as u8;
+        let uses_source = (code >> 2) & 0x33 != code & 0x33;
+        if !uses_source {
+            let pattern = self.brush_color(dstate.brush, &dstate);
+            let r = self.device_rect(dst, normalize(x, y, w, h));
+            self.with_target(dst, |b, _, clip, _| Self::fill(b, clip, r, code, pattern));
+            return (true, 0);
         }
-        let src_bpp = s.bpp;
-        let src_dib = s.dib;
-        let src_colors = s.colors.clone();
-        let src_mono = !s.dib && s.bpp == 1;
+        let Some(sdc) = self.dc(src) else { return (false, ERROR_INVALID_HANDLE) };
+        let sstate = sdc.state.clone();
+        if !sstate.xform.is_axis_aligned() {
+            return (false, 0);
+        }
+        if w == 0 || h == 0 || sw == 0 || sh == 0 {
+            return (true, 0);
+        }
+        let drect = dstate.map_rect(normalize(x, y, w, h));
+        let srect = sstate.map_rect(normalize(sx, sy, sw, sh));
+        let (dfx, dfy) = dstate.flips();
+        let (sfx, sfy) = sstate.flips();
+        let flip = (((w < 0) != (sw < 0)) != (dfx != sfx), ((h < 0) != (sh < 0)) != (dfy != sfy));
+        self.blit(dst, drect, flip, BlitSrc::Dc(src), srect, code);
+        (true, 0)
+    }
+
+    /// `StretchDIBits` / `SetDIBitsToDevice` (Learn): `bmp` (the caller's
+    /// DIB, or the rows of it the caller passed) copied from its rectangle
+    /// `s` (top-down rows; what is outside `bmp` is not drawn) into the
+    /// destination rectangle (logical; `flip` mirrors). False for a bad DC.
+    #[allow(clippy::too_many_arguments)]
+    pub fn dib_to_device(
+        &mut self,
+        dst: u64,
+        (x, y, w, h): (i32, i32, i32, i32),
+        bmp: &Bitmap,
+        s: Rect,
+        flip: (bool, bool),
+        rop: u32,
+    ) -> bool {
+        let Some(d) = self.dc(dst) else { return false };
+        let dstate = d.state.clone();
+        let code = (rop >> 16) as u8;
+        if w == 0 || h == 0 || s.is_empty() {
+            return true;
+        }
+        let drect = dstate.map_rect(normalize(x, y, w, h));
+        let (dfx, dfy) = dstate.flips();
+        let flip = (flip.0 != dfx, flip.1 != dfy);
+        self.blit(dst, drect, flip, BlitSrc::Bitmap(bmp), s, code);
+        true
+    }
+
+    /// Copy `s` of the source (device coordinates) onto the destination's
+    /// device rectangle `d` with raster operation `code`, stretched or
+    /// compressed to its size (nearest pixel) and mirrored per `flip`.
+    fn blit(&mut self, dst: u64, d: Rect, flip: (bool, bool), src: BlitSrc<'_>, s: Rect, code: u8) {
+        let (sw, sh) = (s.right.wrapping_sub(s.left), s.bottom.wrapping_sub(s.top));
+        let (dw, dh) = (d.right.wrapping_sub(d.left), d.bottom.wrapping_sub(d.top));
+        if sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 {
+            return;
+        }
+        let Some(dd) = self.dc(dst) else { return };
+        let dstate = dd.state.clone();
+        // What the destination can be drawn on bounds the work (a huge
+        // rectangle on a small surface costs only the surface).
+        let reach = self.drawable(dd).bounds().intersect(&d);
+        if reach.is_empty() {
+            return;
+        }
+        // The source pixels each destination pixel takes, read first (one
+        // DC may be both).
+        let col = |i: i32| -> i32 {
+            let v = if dw == sw { i } else { ((2 * i64::from(i) + 1) * i64::from(sw) / (2 * i64::from(dw))) as i32 };
+            if flip.0 { sw - 1 - v } else { v }
+        };
+        let row = |j: i32| -> i32 {
+            let v = if dh == sh { j } else { ((2 * i64::from(j) + 1) * i64::from(sh) / (2 * i64::from(dh))) as i32 };
+            if flip.1 { sh - 1 - v } else { v }
+        };
+        let (rw, rh) = (reach.right - reach.left, reach.bottom - reach.top);
+        let read = |sb: &Bitmap, bk: Rgb| -> Cells {
+            let mut px = Vec::with_capacity((rw as usize) * (rh as usize));
+            for j in 0..rh {
+                let py = s.top.wrapping_add(row(reach.top + j - d.top));
+                for i in 0..rw {
+                    let qx = s.left.wrapping_add(col(reach.left + i - d.left));
+                    px.push(if sb.contains(qx, py) {
+                        let raw = sb.raw(qx, py);
+                        let rgb = sb.to_rgb(raw);
+                        Some((rgb, raw, rgb == bk))
+                    } else {
+                        None
+                    });
+                }
+            }
+            Cells { px, bpp: sb.bpp, dib: sb.dib, colors: sb.colors.clone(), mono: !sb.dib && sb.bpp == 1 }
+        };
+        let cells = match src {
+            BlitSrc::Dc(h) => {
+                let Some(sdc) = self.dc(h) else { return };
+                let bk = Rgb::from_colorref(sdc.state.bk);
+                let Some(sb) = self.target(sdc) else { return };
+                read(sb, bk)
+            }
+            BlitSrc::Bitmap(sb) => read(sb, Rgb::WHITE),
+        };
+        let pattern = self.brush_color(dstate.brush, &dstate);
         let text = Rgb::from_colorref(dstate.text);
         let bk = Rgb::from_colorref(dstate.bk);
         self.with_target(dst, |b, _, clip, _| {
             let p = pattern.map_or(0, |c| b.from_rgb(c));
             let mask = b.raw_mask();
-            for j in 0..h {
-                for i in 0..w {
-                    let (dx, dy) = (x + i, y + j);
+            for j in 0..rh {
+                for i in 0..rw {
+                    let (dx, dy) = (reach.left + i, reach.top + j);
                     if !clip.contains_point(dx, dy) {
                         continue;
                     }
-                    let Some((rgb, raw, is_bk)) = cells[(j * w + i) as usize] else { continue };
-                    let s = if src_mono && !(b.bpp == 1 && !b.dib) {
+                    let Some((rgb, raw, is_bk)) = cells.px[(j * rw + i) as usize] else { continue };
+                    let s = if cells.mono && !(b.bpp == 1 && !b.dib) {
                         b.from_rgb(if raw & 1 == 0 { text } else { bk })
-                    } else if b.bpp == 1 && !b.dib && !src_mono {
+                    } else if b.bpp == 1 && !b.dib && !cells.mono {
                         u32::from(is_bk)
-                    } else if src_bpp == b.bpp && (b.bpp >= 16 || (src_dib == b.dib && src_colors == b.colors)) {
+                    } else if cells.bpp == b.bpp && (b.bpp >= 16 || (cells.dib == b.dib && cells.colors == b.colors)) {
                         raw
                     } else {
                         b.from_rgb(rgb)
@@ -2220,7 +2470,72 @@ impl Gdi {
                 }
             }
         });
-        (true, 0)
+    }
+
+    // ----- coordinate spaces
+
+    /// `SetGraphicsMode`: (old mode, error). Going back to
+    /// `GM_COMPATIBLE` fails while the world transformation is not the
+    /// identity (Learn).
+    pub fn set_graphics_mode(&mut self, dc: u64, mode: i32) -> (i32, u32) {
+        let Some(s) = self.state(dc) else { return (0, ERROR_INVALID_HANDLE) };
+        if mode != GM_COMPATIBLE && mode != GM_ADVANCED {
+            return (0, ERROR_INVALID_PARAMETER);
+        }
+        if mode == GM_COMPATIBLE && !s.xform.is_identity() {
+            return (0, 0);
+        }
+        (core::mem::replace(&mut s.graphics_mode, mode), 0)
+    }
+
+    /// `GetGraphicsMode`: 0 for a bad DC.
+    pub fn graphics_mode(&self, dc: u64) -> i32 {
+        self.dc(dc).map_or(0, |d| d.state.graphics_mode)
+    }
+
+    /// `SetWorldTransform`: fails unless the DC is in `GM_ADVANCED`, and
+    /// for a transformation that cannot be inverted.
+    pub fn set_world_transform(&mut self, dc: u64, x: Xform) -> bool {
+        let Some(s) = self.state(dc) else { return false };
+        if s.graphics_mode != GM_ADVANCED || !x.invertible() {
+            return false;
+        }
+        s.xform = x;
+        true
+    }
+
+    /// `GetWorldTransform`.
+    pub fn world_transform(&self, dc: u64) -> Option<Xform> {
+        self.dc(dc).map(|d| d.state.xform)
+    }
+
+    /// `ModifyWorldTransform`: as `SetWorldTransform`, with the new
+    /// transformation made of the current one and `x` by `mode`.
+    pub fn modify_world_transform(&mut self, dc: u64, x: Xform, mode: u32) -> bool {
+        let Some(s) = self.state(dc) else { return false };
+        if s.graphics_mode != GM_ADVANCED {
+            return false;
+        }
+        match s.xform.modify(&x, mode) {
+            Some(n) if n.invertible() => {
+                s.xform = n;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// `SetStretchBltMode`: the old mode, 0 for a bad DC or mode.
+    pub fn set_stretch_mode(&mut self, dc: u64, mode: i32) -> i32 {
+        if !(BLACKONWHITE..=HALFTONE).contains(&mode) {
+            return 0;
+        }
+        self.state(dc).map_or(0, |s| core::mem::replace(&mut s.stretch_mode, mode))
+    }
+
+    /// `GetStretchBltMode`: 0 for a bad DC.
+    pub fn stretch_mode(&self, dc: u64) -> i32 {
+        self.dc(dc).map_or(0, |d| d.state.stretch_mode)
     }
 
     // ----- text

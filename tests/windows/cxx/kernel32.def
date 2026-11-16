@@ -11,3 +11,18 @@ EXPORTS
     RaiseException
     SetUnhandledExceptionFilter
     WriteFile
+    EnumSystemCodePagesW
+    QueryPerformanceFrequency
+    QueryPerformanceCounter
+    GetSystemTimeAsFileTime
+    GetSystemTimePreciseAsFileTime
+    Sleep
+    GetCurrentThreadId
+    GetCurrentProcessId
+    CreateThread
+    WaitForSingleObject
+    GetCurrentThread
+    SetEvent
+    CreateEventW
+    GetLastError
+    TlsAlloc

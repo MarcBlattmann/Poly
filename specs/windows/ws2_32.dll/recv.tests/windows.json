@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "recv_reset_udp",
+      "exe_sha256": "4b23d46d557a82fe410c3527bb477ea18611afb36e6c46d97a67d0759b5727ee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVjdiBhZnRlciBhIHJlc2V0IHdpdGggNiBieXRlcyBxdWV1ZWQgLTEvV1NBRUNPTk5SRVNFVApzZW5kIC0xL1dTQUVDT05OUkVTRVQKc2Vjb25kIHNlbmQgLTEvV1NBRUNPTk5SRVNFVApGSU9OUkVBRCB3aXRoIGEgNDAtYnl0ZSBkYXRhZ3JhbSAoMCwgNDApCmRhdGFncmFtIGlzIGdvbmU6IC0xL1dTQUVXT1VMREJMT0NLCnJlY3Zmcm9tIDIgbGVuIDE2IGZhbWlseSAyIHBvcnQtaXMtYSAxIGFkZHIgWzEyNywgMCwgMCwgMV0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "recv after a reset with 6 bytes queued -1/WSAECONNRESET\nsend -1/WSAECONNRESET\nsecond send -1/WSAECONNRESET\nFIONREAD with a 40-byte datagram (0, 40)\ndatagram is gone: -1/WSAEWOULDBLOCK\nrecvfrom 2 len 16 family 2 port-is-a 1 addr [127, 0, 0, 1]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2537
+    },
+    {
+      "name": "recv_reset_udp_c",
+      "exe_sha256": "f6dda9f404caed73684616d89344155b3ba2f7471efa63331723a6e7d620ee9e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVjdiBhIHRoaXJkIHRpbWUgLTEvV1NBRUNPTk5SRVNFVApmaXJzdCBzZW5kIGFmdGVyIHRoZSByZXNldCAtMS9XU0FFQ09OTlJFU0VUCnJlY3Ygb24gYW4gZW1wdHkgbm9uLWJsb2NraW5nIFVEUCBzb2NrZXQgLTEvV1NBRVdPVUxEQkxPQ0sKcmVjdiB3aXRoIGEgMTAtYnl0ZSBidWZmZXIgLTEvV1NBRU1TR1NJWkUKdGhlbiAtMS9XU0FFV09VTERCTE9DSwpieXRlcyBzdGlsbCBxdWV1ZWQgYWZ0ZXIgdGhlIGZhaWxlZCByZWN2ZnJvbSAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "recv a third time -1/WSAECONNRESET\nfirst send after the reset -1/WSAECONNRESET\nrecv on an empty non-blocking UDP socket -1/WSAEWOULDBLOCK\nrecv with a 10-byte buffer -1/WSAEMSGSIZE\nthen -1/WSAEWOULDBLOCK\nbytes still queued after the failed recvfrom 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2532
+    },
+    {
+      "name": "recv_stream_edges",
+      "exe_sha256": "72b2ccbb49c04f7bd6d85e6c3702cc894aee25bcea65789b4f0bdada9f236da2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2V0IG5vbi1ibG9ja2luZyAwCnBlZWsgMiB3aXRoIG5vIGRhdGEgLTEvV1NBRVdPVUxEQkxPQ0sKemVyby1sZW5ndGggcmVjdiB3aXRoIGRhdGEgMApyZWN2IDQgNCBbNDgsIDQ5LCA1MCwgNTFdCnJlY3YgdGhlIHJlc3QgNgpNU0dfT09CIHdpdGggbm9uZSAtMS9XU0FFV09VTERCTE9DSwpwZWVrIGF0IEVPRiAwCnNodXRkb3duKFNEX1JFQ0VJVkUpIDAKc2h1dGRvd24oU0RfQk9USCkgMApyZWN2IG9uIGFuIHVuY29ubmVjdGVkIFRDUCBzb2NrZXQgLTEvV1NBRU5PVENPTk4KcmVjdiBvbiBhIG5vbi1zb2NrZXQgLTEvV1NBRU5PVFNPQ0sKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "set non-blocking 0\npeek 2 with no data -1/WSAEWOULDBLOCK\nzero-length recv with data 0\nrecv 4 4 [48, 49, 50, 51]\nrecv the rest 6\nMSG_OOB with none -1/WSAEWOULDBLOCK\npeek at EOF 0\nshutdown(SD_RECEIVE) 0\nshutdown(SD_BOTH) 0\nrecv on an unconnected TCP socket -1/WSAENOTCONN\nrecv on a non-socket -1/WSAENOTSOCK\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "recv_stream_edges_b",
+      "exe_sha256": "9907a9ddea8f3423b3bf29d592a8eea5424766710abc297a6ee5c2c4e626cf70",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGVlayAwIHdpdGggbm8gZGF0YSAtMS9XU0FFV09VTERCTE9DSwpyZWN2IHdpdGggbm8gZGF0YSAtMS9XU0FFV09VTERCTE9DSwpGSU9OUkVBRCBzdGlsbCAoMCwgMTApCkZJT05SRUFEICgwLCA2KQpNU0dfV0FJVEFMTCBmb3IgOCBieXRlcyB3aXRoIDMgYXZhaWxhYmxlIC0xL1dTQUVPUE5PVFNVUFAKcmVjdiBhZnRlciB0aGUgcGVlcidzIHNodXRkb3duIDAKemVyby1sZW5ndGggcmVjdiBhdCBFT0YgMApyZWN2IGFmdGVyIFNEX1JFQ0VJVkUgd2l0aCBkYXRhIHF1ZXVlZCAtMS9XU0FFQ09OTkFCT1JURUQKcmVjdiBhZnRlciBTRF9CT1RIIC0xL1dTQUVDT05OQUJPUlRFRApzZW5kIG9uIGFuIHVuY29ubmVjdGVkIFRDUCBzb2NrZXQgLTEvV1NBRU5PVENPTk4KcmVjdiB3aXRoIGEgTlVMTCBidWZmZXIgLTEvV1NBRU5PVENPTk4Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "peek 0 with no data -1/WSAEWOULDBLOCK\nrecv with no data -1/WSAEWOULDBLOCK\nFIONREAD still (0, 10)\nFIONREAD (0, 6)\nMSG_WAITALL for 8 bytes with 3 available -1/WSAEOPNOTSUPP\nrecv after the peer's shutdown 0\nzero-length recv at EOF 0\nrecv after SD_RECEIVE with data queued -1/WSAECONNABORTED\nrecv after SD_BOTH -1/WSAECONNABORTED\nsend on an unconnected TCP socket -1/WSAENOTCONN\nrecv with a NULL buffer -1/WSAENOTCONN\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

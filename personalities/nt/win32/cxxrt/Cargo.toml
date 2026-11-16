@@ -1,0 +1,17 @@
+[package]
+name = "poly-win32-cxxrt"
+description = "C++ exception handling for the Win32 C runtimes (ADR 0099, ADR 0199): the glue msvcrt.dll and vcruntime140.dll share"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "poly_win32_cxxrt"
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-cxxeh = { path = "../../../../crates/poly-cxxeh" }
+
+[lints]
+workspace = true

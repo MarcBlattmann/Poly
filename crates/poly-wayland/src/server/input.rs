@@ -57,6 +57,30 @@ pub(crate) struct Focus {
     pub window: WindowId,
 }
 
+/// The smallest content an interactive resize of an internal window makes.
+pub const MIN_INTERNAL_SIZE: (i32, i32) = (64, 32);
+
+/// Rectangle `from` with `edges` (`xdg_toplevel.resize_edge` bits) moved by
+/// the pointer's (`dx`, `dy`): the opposite edges stay where they are, and
+/// it is no smaller than [`MIN_INTERNAL_SIZE`].
+pub(crate) fn resized(from: Rect, edges: u32, dx: i32, dy: i32) -> Rect {
+    let (mut w, mut h) = (from.width, from.height);
+    if edges & RESIZE_RIGHT != 0 {
+        w += dx;
+    } else if edges & RESIZE_LEFT != 0 {
+        w -= dx;
+    }
+    if edges & RESIZE_BOTTOM != 0 {
+        h += dy;
+    } else if edges & RESIZE_TOP != 0 {
+        h -= dy;
+    }
+    let (w, h) = (w.max(MIN_INTERNAL_SIZE.0), h.max(MIN_INTERNAL_SIZE.1));
+    let x = if edges & RESIZE_LEFT != 0 { from.right() - w } else { from.x };
+    let y = if edges & RESIZE_TOP != 0 { from.bottom() - h } else { from.y };
+    Rect::new(x, y, w, h)
+}
+
 /// What a held button does instead of reaching a client.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Grab {
@@ -77,6 +101,12 @@ pub(crate) enum Grab {
         right: i32,
         bottom: i32,
     },
+    /// Resizing internal window `window` by `edges` (a Windows window's
+    /// `SC_SIZE`, ADR 0155 addendum "browsing"): from the pointer at
+    /// `start` and the content rectangle `from`; `last` is the rectangle
+    /// asked for last. The owner hears [`InternalEvent::Configure`] and
+    /// draws the new size; the scene changes when it has.
+    InternalResize { window: WindowId, edges: u32, start: (i32, i32), from: Rect, last: Rect },
     /// A drag and drop (`data_device.rs`).
     Drag,
 }
@@ -193,16 +223,42 @@ impl Server {
         (Fixed(x.0 - wx * 256), Fixed(y.0 - wy * 256))
     }
 
-    /// What is under the pointer, surfaces' input regions considered.
+    /// What is under the pointer, surfaces' input regions considered; an
+    /// internal window's margins ([`Server::set_internal_margins`]) count
+    /// as its content where no window above it is.
     fn hit(&self, x: i32, y: i32) -> Hit {
         let clients = &self.clients;
-        self.scene.hit_test_where(x, y, |w, sx, sy| {
+        let hit = self.scene.hit_test_where(x, y, |w, sx, sy| {
             let (c, s) = owner_of(w.owner());
             match clients.get(&c).and_then(|cl| cl.data(s)) {
                 Some(Data::Surface(surface)) => surface.accepts_input(sx, sy),
                 _ => true,
             }
-        })
+        });
+        let windows = self.scene.windows();
+        let below = match hit {
+            Hit::Desktop => 0,
+            Hit::Surface { window, .. }
+            | Hit::Close(window)
+            | Hit::Maximize(window)
+            | Hit::Minimize(window)
+            | Hit::TitleBar(window)
+            | Hit::Border(window) => windows.iter().position(|w| w.id() == window).map_or(windows.len(), |i| i + 1),
+        };
+        for w in windows[below.min(windows.len())..].iter().rev().filter(|w| w.is_visible()) {
+            let Some(i) = self.internal.get(&w.id()) else { continue };
+            let [l, t, r, b] = i.margins;
+            if l | t | r | b == 0 {
+                continue;
+            }
+            let c = w.surface_rect();
+            let outer = Rect::new(c.x - l, c.y - t, c.width + l + r, c.height + t + b);
+            if outer.contains(x, y) {
+                let (wx, wy) = w.position();
+                return Hit::Surface { window: w.id(), x: x - wx, y: y - wy };
+            }
+        }
+        hit
     }
 
     fn pointer_moved(&mut self, time: u32) {
@@ -229,6 +285,10 @@ impl Server {
             }
             Some(Grab::Resize { .. }) => {
                 self.resize_motion(x, y);
+                return;
+            }
+            Some(Grab::InternalResize { .. }) => {
+                self.internal_resize_motion(x, y);
                 return;
             }
             Some(Grab::Drag) => {
@@ -323,7 +383,7 @@ impl Server {
                 match grab {
                     Grab::Drag => self.drag_drop(),
                     Grab::Resize { .. } => self.end_resize(),
-                    Grab::Move { .. } => {}
+                    Grab::Move { .. } | Grab::InternalResize { .. } => {}
                 }
                 self.seat.input.grab = None;
                 self.seat.input.unsnap_at = None;
@@ -455,6 +515,70 @@ impl Server {
             client.send(p, wl_pointer::Event::Axis { time, axis: axis.0, value });
             client.send(p, wl_pointer::Event::Frame);
         }
+    }
+
+    /// The owner of internal window `w` asks to move it with the pointer
+    /// (a Windows window's `SC_MOVE` after a press on its caption): a
+    /// move while the press that went to it is held. Nothing when no
+    /// button is held any more.
+    pub fn internal_start_move(&mut self, w: WindowId) {
+        if self.seat.input.buttons.is_empty() || self.seat.input.grab.is_some() || !self.internal.contains_key(&w) {
+            return;
+        }
+        // The rest of the press is the move's, not the window's.
+        if self.seat.input.internal_grab == Some(w) {
+            self.seat.input.internal_grab = None;
+        }
+        self.start_move(w);
+    }
+
+    /// The owner of internal window `w` asks to resize it with the pointer
+    /// by `edges` (`xdg_toplevel.resize_edge` bits: top 1, bottom 2, left 4,
+    /// right 8; a Windows window's `SC_SIZE` after a press on its border):
+    /// while the press that went to it is held, each move of the pointer
+    /// asks the owner for a new content rectangle
+    /// ([`InternalEvent::Configure`]). Nothing when no button is held any
+    /// more, or for a maximized window.
+    pub fn internal_start_resize(&mut self, w: WindowId, edges: u32) {
+        let edges = edges & (RESIZE_TOP | RESIZE_BOTTOM | RESIZE_LEFT | RESIZE_RIGHT);
+        if edges == 0
+            || self.seat.input.buttons.is_empty()
+            || self.seat.input.grab.is_some()
+            || !self.internal.contains_key(&w)
+        {
+            return;
+        }
+        let Some(win) = self.scene.window(w) else { return };
+        if win.is_maximized() {
+            return;
+        }
+        let (wx, wy) = win.position();
+        let (cw, ch) = win.content().logical_size();
+        let from = Rect::new(wx, wy, cw, ch);
+        if self.seat.input.internal_grab == Some(w) {
+            self.seat.input.internal_grab = None;
+        }
+        let start = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
+        self.set_pointer_focus(None);
+        self.seat.input.grab = Some(Grab::InternalResize { window: w, edges, start, from, last: from });
+    }
+
+    /// The pointer moved while an internal window is resized: the rectangle
+    /// its edges follow, no smaller than [`MIN_INTERNAL_SIZE`].
+    fn internal_resize_motion(&mut self, x: i32, y: i32) {
+        let Some(Grab::InternalResize { window, edges, start, from, last }) = self.seat.input.grab else { return };
+        let r = resized(from, edges, x - start.0, y - start.1);
+        if r == last {
+            return;
+        }
+        self.seat.input.grab = Some(Grab::InternalResize { window, edges, start, from, last: r });
+        self.internal_events.push(InternalEvent::Configure {
+            window,
+            x: r.x,
+            y: r.y,
+            width: r.width,
+            height: r.height,
+        });
     }
 
     /// Start moving window `w` with the pointer (while a button is held).

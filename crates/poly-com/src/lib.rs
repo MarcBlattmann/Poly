@@ -8,8 +8,11 @@
 //!   "CoInitializeEx", "RoInitialize": the first call sets the model, the
 //!   same model again returns `S_FALSE`, another one `RPC_E_CHANGED_MODE`,
 //!   every successful call is balanced by an uninitialize).
+//! - [`git`]: the registrations of the global interface table (cookies, owners).
 //! - [`guid`]: `GUID`s as text (`CLSIDFromString`, `StringFromCLSID`,
 //!   `StringFromGUID2`, `IIDFromString`).
+//! - [`propvariant`]: which `PROPVARIANT` types exist and what each owns
+//!   (`PropVariantClear`, `PropVariantCopy`).
 //! - [`hstring`]: `HSTRING`s (`WindowsCreateString` and friends, Learn:
 //!   "HSTRING", "Windows Runtime strings").
 //!
@@ -22,9 +25,11 @@
 extern crate alloc;
 
 pub mod apartment;
+pub mod git;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
+pub mod propvariant;
 
 /// What `ole32.dll` must export, as code (`cargo xtask win32` checks it).
 pub const OLE32_EXPORTS: &[&str] = &[
@@ -40,6 +45,7 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoTaskMemRealloc",
     "CoTaskMemFree",
     "CoGetClassObject",
+    "CoGetObjectContext",
     "CoCreateInstance",
     "CoCreateInstanceEx",
     "RoGetActivationFactory",
@@ -57,6 +63,7 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "StringFromIID",
     "CoCreateGuid",
     "PropVariantClear",
+    "PropVariantCopy",
     "WindowsCreateString",
     "WindowsCreateStringReference",
     "WindowsDeleteString",

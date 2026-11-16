@@ -46,7 +46,12 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `shlwapi`, `shell32`, `comctl32`, `powrprof`, `wtsapi32`, `netapi32`,
 /// `iphlpapi`, `oleacc`, `uiautomationcore`, with `ole32` and `oleaut32`
 /// for the COM objects they hand out, and `kernelbase` for the functions
-/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`).
+/// kernel32 does not export (`QueryUnbiasedInterruptTimePrecise`); and the
+/// network DLLs of Chrome's stage 4 (spec-chrome-win-s4): `ws2_32` and
+/// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
+/// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
+/// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -62,6 +67,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "shlwapi.dll",
     "shell32.dll",
     "comctl32.dll",
+    "comdlg32.dll",
     "powrprof.dll",
     "wtsapi32.dll",
     "netapi32.dll",
@@ -71,6 +77,17 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "ole32.dll",
     "oleaut32.dll",
     "kernelbase.dll",
+    "ws2_32.dll",
+    "mswsock.dll",
+    "winhttp.dll",
+    "crypt32.dll",
+    "secur32.dll",
+    "dhcpcsvc.dll",
+    "d3d11.dll",
+    "dxgi.dll",
+    "dcomp.dll",
+    "dxcore.dll",
+    "ucrtbase.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -313,6 +330,17 @@ fn rel(repo: &Path, path: &Path) -> String {
 /// compiles `core` for the target (about half a minute), later ones only
 /// the tests.
 pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Result<Manifest> {
+    build_runtime(repo, out, extra, only, None)
+}
+
+/// [`build`] with every C++ test taking its runtime from `runtime` (ADR 0199) when given.
+pub fn build_runtime(
+    repo: &Path,
+    out: &Path,
+    extra: &[PathBuf],
+    only: &[String],
+    runtime: Option<wincxx::Runtime>,
+) -> Result<Manifest> {
     let mut srcs = sources(repo, extra)?;
     if !only.is_empty() {
         for name in only {
@@ -353,7 +381,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     for src in &srcs {
         let exe = format!("{}.exe", src.name);
         let (built, allowed) = if src.is_cpp() {
-            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir)?, wincxx::ALLOWED_DLLS)
+            (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir, runtime)?, wincxx::ALLOWED_DLLS)
         } else {
             (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
         };
@@ -368,7 +396,7 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
             exe_sha256: sha256::hex(&bytes),
             size: bytes.len() as u64,
             imports,
-            session: session_of(&src.path),
+            session: session_of(&src.path, &src.name),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -377,12 +405,26 @@ pub fn build(repo: &Path, out: &Path, extra: &[PathBuf], only: &[String]) -> Res
     Ok(m)
 }
 
-/// The session a test's reference was recorded in: `system.session` of
-/// the `windows.json` in the source's directory, if there is one.
-fn session_of(source: &Path) -> Option<String> {
+/// The session a test's reference was recorded in: the test's own `session` in the
+/// `windows.json` in the source's directory (a directory can hold tests recorded in both
+/// kinds of session), else that file's `system.session`, if there is one.
+fn session_of(source: &Path, name: &str) -> Option<String> {
     let reference = source.parent()?.join("windows.json");
     let bytes = std::fs::read(reference).ok()?;
-    RunFile::parse(&bytes).ok()?.system.session
+    let own = serde_json::from_slice::<serde_json::Value>(&bytes).ok().and_then(|v| {
+        let t = v.get("tests")?.as_array()?.iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some(name))?;
+        Some(t.get("session")?.as_str()?.to_string())
+    });
+    let session = own.or_else(|| RunFile::parse(&bytes).ok()?.system.session);
+    // From build 26200.9974 the oracle's taskbar is at the bottom (48 pixels): work area 0,0,1920,1032.
+    let bottom = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .and_then(|v| v.get("system")?.get("build")?.as_str()?.rsplit('.').next()?.parse::<u32>().ok())
+        .is_some_and(|minor| minor >= 9974);
+    match session.as_deref() {
+        Some("interactive") if bottom => Some("interactive-bottom".to_string()),
+        _ => session,
+    }
 }
 
 /// The kernel arguments for a test recorded in `session` (ADR 0131):
@@ -391,6 +433,7 @@ fn session_of(source: &Path) -> Option<String> {
 pub fn session_kernel_args(session: Option<&str>) -> &'static str {
     match session {
         Some("interactive") => " poly.win32k.session=interactive",
+        Some("interactive-bottom") => " poly.win32k.session=interactive-bottom",
         _ => "",
     }
 }
@@ -737,16 +780,25 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 // ---------------------------------------------------------------------------
 // Poly: boot the test and read what the kernel reports.
 
+/// Where a Windows test runs on Poly: `C:\PolyTests`, the VFS directory
+/// `/nt/c/PolyTests`. The system DLLs are on `C:` too, so a test and
+/// `ntdll.dll` share a volume device as on Windows, where a program and the
+/// system directory are usually on the same volume (ADR 0185).
+pub const TEST_DIR: &str = "/nt/c/PolyTests";
+/// The test executable on Poly (`C:\PolyTests\test-binary.exe`).
+pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary.exe";
+
 /// Kernel arguments: the test-run protocol (ADR 0027) plus the
 /// observation file, which the kernel reports as standard output
 /// (`POLY-OUT: fd=1`) when the program has ended.
 pub fn poly_kernel_args() -> String {
-    format!("{} poly.test.stdout=/{OUTPUT_FILE}", poly::KERNEL_ARGS)
+    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(TEST_EXE))
 }
 
-/// A test's run from Poly's serial log. The executable is `/test-binary`
-/// in the initramfs root, which Poly's NT personality names
-/// `Z:\test-binary`, so the observation file is `/poly-test.out`.
+/// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
+/// (`/nt/c/PolyTests/test-binary.exe` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\test-binary.exe`, so the observation file is
+/// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
         name: name.into(),
@@ -894,12 +946,15 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     } else {
         Vec::new()
     };
+    /// The processors a Windows test boots with: `GetCurrentProcessorNumber`'s recorded test pins a
+    /// thread to each of the first four.
+    const WINDOWS_TEST_CPUS: u32 = 4;
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
-        let image = poly::initramfs_with(&bytes, &fonts)?;
+        let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
         let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
-        let (done, log, _) = target.boot_log(&t.name, &image, work, &args)?;
+        let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
@@ -1143,10 +1198,13 @@ pub fn check_split_files(files: &[String]) -> Result<()> {
     for f in files {
         let path = Path::new(f);
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-        if f.contains(['/', '\\']) || !is_test_source(path) || !valid_name(&stem) {
+        // `<name>.exe` is allowed beside `<name>.cpp`: a test built by Microsoft's compiler
+        // (`poly-cxx: compiler=msvc`, `wincxx::Compiler::Msvc`).
+        let prebuilt = path.extension().is_some_and(|x| x == "exe") && files.contains(&format!("{stem}.cpp"));
+        if f.contains(['/', '\\']) || !(is_test_source(path) || prebuilt) || !valid_name(&stem) {
             return Err(format!(
-                "{f}: a Windows entry's generated tests are .rs or .cpp files named in lower-case letters, digits \
-                 and _, directly in the directory"
+                "{f}: a Windows entry's generated tests are .rs or .cpp files (and the .exe of a compiler=msvc \
+                 .cpp) named in lower-case letters, digits and _, directly in the directory"
             ));
         }
     }
@@ -1346,8 +1404,28 @@ mod tests {
         // Chrome's first-stage DLLs (spec-chrome-win-5).
         let shell = image(&[("SHELL32.dll", &["SHGetKnownFolderPath"]), ("SHLWAPI.dll", &["PathMatchSpecW"])], 3);
         assert_eq!(check_image(&shell).unwrap()["shell32.dll"], ["SHGetKnownFolderPath"]);
-        let other = image(&[("winhttp.dll", &["WinHttpOpen"])], 3);
-        assert!(check_image(&other).unwrap_err().contains("winhttp.dll"));
+        // The common dialogs' tests import comdlg32 (spec-win-apps-2).
+        let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
+        assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
+        let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
+        assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
+        // Chrome's network stage (spec-chrome-win-s4).
+        let net = image(&[("WS2_32.dll", &["WSAStartup"]), ("crypt32.dll", &["CertOpenStore"])], 3);
+        assert_eq!(check_image(&net).unwrap()["ws2_32.dll"], ["WSAStartup"]);
+        // Chrome's GPU stage (spec-chrome-win-s5).
+        let gpu = image(
+            &[
+                ("d3d11.dll", &["D3D11CreateDevice"]),
+                ("DXGI.dll", &["CreateDXGIFactory1"]),
+                ("dcomp.dll", &["DCompositionCreateDevice"]),
+            ],
+            3,
+        );
+        assert_eq!(check_image(&gpu).unwrap()["d3d11.dll"], ["D3D11CreateDevice"]);
+        assert_eq!(check_image(&gpu).unwrap()["dxgi.dll"], ["CreateDXGIFactory1"]);
+        let other = image(&[("wininet.dll", &["InternetOpenW"])], 3);
+        assert!(check_image(&other).unwrap_err().contains("wininet.dll"));
         let gui = image(&[("ntdll.dll", &["NtClose"])], 2);
         assert!(check_image(&gui).unwrap_err().contains("subsystem 2"));
         assert!(check_image(b"MZ not really").is_err());
@@ -1360,6 +1438,10 @@ mod tests {
     #[test]
     fn windows_split_checks_files_and_divides_results() {
         assert!(check_split_files(&["a_b.cpp".into(), "c.rs".into()]).is_ok());
+        // The executable of a compiler=msvc test goes with its source (only then).
+        assert!(check_split_files(&["a_b.cpp".into(), "a_b.exe".into()]).is_ok());
+        assert!(check_split_files(&["a_b.exe".into()]).is_err());
+        assert!(check_split_files(&["c.rs".into(), "c.exe".into()]).is_err());
         for bad in ["x.h", "sub/a.cpp", "Bad.cpp", "a-b.rs", "windows.json"] {
             assert!(check_split_files(&[bad.into()]).is_err(), "{bad}");
         }
@@ -1497,7 +1579,8 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/poly-test.out"));
+        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary.exe "));
+        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 
     #[test]

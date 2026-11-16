@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/SetParent
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Makes new_parent (NULL = the desktop) the parent of the window and returns the previous parent (the desktop
+  window handle when it was top-level). Chrome's browser calls it 5 times a run (S3): the page child is moved
+  under the hidden holder window when the top-level window is minimized and back when it is restored, and
+  under the holder when the window closes.
+interface:
+  signature: "HWND SetParent(HWND child, HWND new_parent)"
+rules:
+  return_value: "the previous parent: P when the child was under P; the desktop window for a top-level window (SetParent(T, P) returned the desktop handle)"
+  messages: "the window is hidden and shown again around the move: WM_SHOWWINDOW(0), WM_WINDOWPOSCHANGING(0,0, 0x0, flags 0x97), WM_WINDOWPOSCHANGED(flags 0x1897 or 0x2000 bits), WM_WINDOWPOSCHANGING(flags 0x5), WM_CHILDACTIVATE, WM_WINDOWPOSCHANGED(0x80d), WM_MOVE(client origin in the new parent), WM_SHOWWINDOW(1), WM_WINDOWPOSCHANGING(flags 0x57), WM_WINDOWPOSCHANGED(0x1857), all to the moved window; moving to the same parent again sends them as well (without the first pair)"
+  position: "the window keeps its coordinates relative to the new parent (a child at 20,30 of P is at 20,30 of Q: its screen rectangle changes with the parent's); its children move with it"
+  visibility: "the WS_VISIBLE bit is kept: moved under a hidden window it is IsWindowVisible 0, under a shown one 1; the window is shown again in the new parent"
+  style: "SetParent does not change WS_CHILD or WS_POPUP in the style: a child moved to the desktop keeps WS_CHILD (and gets WS_CLIPSIBLINGS: style 0x54000000), moved back it is a child of the new parent again; a top-level popup moved under P keeps WS_POPUP (0x94000000) and GetParent still says NULL for it (it is owned by the desktop, positioned relative to P)"
+  thread: "allowed between windows of different threads of one process"
+  chrome: "the child of the top-level window: SetParent(rwh, hid) returns main and gives hid as parent (IsChild(hid, rwh) 1, IsWindowVisible 0), SetParent(rwh, main) returns hid; Chrome's own minimize (its WM_SIZE handler on SIZE_MINIMIZED) and restore do the same at the right moments: the child's messages come after the top-level window's WM_SIZE; the position of the child in client coordinates (0,100, 624x261) stays, its screen position follows the parent"
+errors:
+  into_itself: "a window under itself or under its own descendant: NULL with ERROR_INVALID_PARAMETER (87)"
+  bad_window: "a NULL or made-up window and a made-up new parent: NULL with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

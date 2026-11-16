@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHGetPathFromIDListW.yaml
+id: windows/api/shell32.dll/SHGetPathFromIDListW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (paths are shown with the user profile, ProgramData, Public, Windows and Program Files directories replaced by %USERPROFILE%, %PUBLIC%, %ProgramData%, %SystemRoot% and %ProgramFiles%, so no machine or user name is in the tests; files the tests make live in the temp directory and are removed). Microsoft Learn: "SHGetFileInfoW function", "SHGetSpecialFolderLocation function", "SHGetSpecialFolderPathW function", "SHGetFolderPathW function", "SHGetFolderPathA function", "SHGetPathFromIDListW function", "ILCreateFromPathW function", "ILFree function", "CSIDL", "SFGAO"; shlobj.h, shlobj_core.h, shellapi.h and shtypes.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Converts an item identifier list to a file system path (MAX_PATH characters). TRUE for file system items, FALSE for virtual folders and the empty list. 7-Zip's file manager converts every list it gets from the shell with it.
+interface:
+  signature: "BOOL SHGetPathFromIDListW(PCIDLIST_ABSOLUTE pidl, LPWSTR pszPath)"
+rules:
+  round_trip: "a list made with ILCreateFromPathW from the path of an existing file gives the same path back with TRUE (87 characters in the test, the text equal); a path spelt in capitals gives the path in the case the file system has; two lists made for the same path are not byte equal in the test (the lists hold file attributes and times) while a copy made with ILClone is; ILGetSize of a list is larger than 2"
+  special: "the lists of the special folders give the path of the table in the SHGetSpecialFolderLocation sheet (equal to SHGetFolderPathW's text except for the case of the last parts of the Windows folders: System32 against system32, the Fonts folder), FALSE with the empty string for the virtual folders"
+  empty_list: "the empty list (zero bytes where the first item size is) is the desktop: TRUE and the desktop directory is written (the list of CSIDL_DESKTOP is the 2 byte empty list); the list of DRIVES (this computer) gives FALSE and the empty string"
+  null: "a NULL list gives FALSE and the empty string"
+  parse: "SHParseDisplayName of an existing file gives S_OK and a list that round-trips; of a missing file HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) (0x80070002) and no list; ILCreateFromPathW of a path with forward slashes or of a missing file returns NULL"
+  clone: "ILClone gives another list of the same size and bytes"
+errors:
+  not_file_system: "FALSE, the buffer holds the empty string for virtual folders and NULL"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Folders redirected to other drives or to OneDrive and domain roaming profiles (the oracle is a workgroup computer with a local profile), other languages (the type names are English), other users and tokens, network and removable drives, junctions and links, 32-bit processes (the %ProgramFiles% answers differ), the contents of virtual folders. Lists of items in a zip file or a junction, relative lists, ILFree of lists not made by the shell.

@@ -362,7 +362,8 @@ unsafe fn com() {
     // The model can change once the thread is balanced.
     check_hr(CoInitializeEx(core::ptr::null_mut(), 2), S_OK);
     check_hr(CoGetApartmentType(&mut kind, &mut qual), S_OK);
-    check_eq(kind as usize, 0); // APTTYPE_STA
+    // The first apartment-threaded apartment of a process is the main one (the `CoInitializeEx` sheet).
+    check_eq(kind as usize, 3); // APTTYPE_MAINSTA
     check_hr(OleInitialize(core::ptr::null_mut()), S_FALSE);
     OleUninitialize();
 
@@ -510,7 +511,8 @@ unsafe fn windows() {
     let m2 = RegisterWindowMessageW(w::<6>("Other").as_ptr());
     check_got(m2 != m1 && (0xC000..=0xFFFF).contains(&m2), m2);
     SetLastError(0);
-    check_fail(RegisterWindowMessageW(w::<1>("").as_ptr()) as usize, ERROR_INVALID_PARAMETER);
+    // The empty string gives 0 and no error (RegisterWindowMessageW.yaml `length`).
+    check_eq(RegisterWindowMessageW(w::<1>("").as_ptr()) as usize, 0);
 
     // A message-only window.
     let title = w::<7>("hidden");
@@ -576,7 +578,7 @@ unsafe fn windows() {
     li[0] = 4;
     SetLastError(0);
     check_fail(GetLastInputInfo(li.as_mut_ptr()) as usize, ERROR_INVALID_PARAMETER);
-    check_eq(GetCaretBlinkTime() as usize, 530);
+    check_eq(GetCaretBlinkTime() as usize, 500);
 
     // Display devices: one adapter, one monitor under it.
     let mut dd = [0u8; 840];
@@ -1329,7 +1331,7 @@ unsafe fn step9() {
         let name = w::<48>("\\StringFileInfo\\040904B0\\ProductVersion");
         let (mut text, mut chars) = (core::ptr::null(), 0u32);
         check_eq(query(block.as_ptr(), name.as_ptr(), &mut text, &mut chars) as usize, 1);
-        check_got(chars == 16 && wide_is(text.cast(), "10.0.19045.2006"), chars);
+        check_got(chars == 16 && wide_is(text.cast(), "10.0.26200.9974"), chars);
     }
 
     // userenv: the profile is a local one.

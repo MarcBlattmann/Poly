@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "mbi_errors",
+      "exe_sha256": "7efa223673dd021767a817248f6e4026c308f9093a2a68f9cbacb0247fb2b966",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2JTaXplIDA6IE1lc3NhZ2VCb3hJbmRpcmVjdFcgPSAxIGVycj0tMgogICAgIGJveDogY2FwdGlvbiAnYycgSXNXaW5kb3dVbmljb2RlIDEgdG9wLWxldmVsIDEgdmlzaWJsZSAwCiAgICAgYm94OiBvd25lciBlbmFibGVkIC0xCiAgICAgYm94OiBjaGlsZHJlbiBbQnV0dG9uIGlkIDIgJ09LJ10gW1N0YXRpYyBpZCA2NTUzNSAndCddCmNiU2l6ZSA4OiBNZXNzYWdlQm94SW5kaXJlY3RXID0gMSBlcnI9LTIKICAgICBib3g6IGNhcHRpb24gJ2MnIElzV2luZG93VW5pY29kZSAxIHRvcC1sZXZlbCAxIHZpc2libGUgMAogICAgIGJveDogb3duZXIgZW5hYmxlZCAtMQogICAgIGJveDogY2hpbGRyZW4gW0J1dHRvbiBpZCAyICdPSyddIFtTdGF0aWMgaWQgNjU1MzUgJ3QnXQpjYlNpemUgbGFyZ2VyIHRoYW4gdGhlIHN0cnVjdHVyZTogTWVzc2FnZUJveEluZGlyZWN0VyA9IDEgZXJyPS0yCiAgICAgYm94OiBjYXB0aW9uICdjJyBJc1dpbmRvd1VuaWNvZGUgMSB0b3AtbGV2ZWwgMSB2aXNpYmxlIDAKICAgICBib3g6IG93bmVyIGVuYWJsZWQgLTEKICAgICBib3g6IGNoaWxkcmVuIFtCdXR0b24gaWQgMiAnT0snXSBbU3RhdGljIGlkIDY1NTM1ICd0J10KTlVMTCB0ZXh0IGFuZCBjYXB0aW9uOiBNZXNzYWdlQm94SW5kaXJlY3RXID0gMSBlcnI9LTIKICAgICBib3g6IGNhcHRpb24gJ0Vycm9yJyBJc1dpbmRvd1VuaWNvZGUgMSB0b3AtbGV2ZWwgMSB2aXNpYmxlIDAKICAgICBib3g6IG93bmVyIGVuYWJsZWQgLTEKICAgICBib3g6IGNoaWxkcmVuIFtCdXR0b24gaWQgMiAnT0snXSBbU3RhdGljIGlkIDY1NTM1ICcnXQpiYWQgb3duZXIgd2luZG93OiBNZXNzYWdlQm94SW5kaXJlY3RXID0gMCBlcnI9MTQwMAptYWRlLXVwIGluc3RhbmNlIHdpdGggc3RyaW5nIGlkczogTWVzc2FnZUJveEluZGlyZWN0VyA9IDEgZXJyPS0yCiAgICAgYm94OiBjYXB0aW9uICcnIElzV2luZG93VW5pY29kZSAxIHRvcC1sZXZlbCAxIHZpc2libGUgMAogICAgIGJveDogb3duZXIgZW5hYmxlZCAtMQogICAgIGJveDogY2hpbGRyZW4gW0J1dHRvbiBpZCAyICdPSyddIFtTdGF0aWMgaWQgNjU1MzUgJyddCk1CX1VTRVJJQ09OIHdpdGggbm8gaWNvbiBuYW1lOiBNZXNzYWdlQm94SW5kaXJlY3RXID0gMSBlcnI9LTIKICAgICBib3g6IGNhcHRpb24gJ2MnIElzV2luZG93VW5pY29kZSAxIHRvcC1sZXZlbCAxIHZpc2libGUgMAogICAgIGJveDogb3duZXIgZW5hYmxlZCAtMQogICAgIGJveDogY2hpbGRyZW4gW0J1dHRvbiBpZCAyICdPSyddIFtTdGF0aWMgaWQgMjAgJyddIFtTdGF0aWMgaWQgNjU1MzUgJ3QnXQpNQl9VU0VSSUNPTiB3aXRoIGFuIGljb24gdGhhdCBpcyBub3QgdGhlcmU6IE1lc3NhZ2VCb3hJbmRpcmVjdFcgPSAxIGVycj0tMgogICAgIGJveDogY2FwdGlvbiAnYycgSXNXaW5kb3dVbmljb2RlIDEgdG9wLWxldmVsIDEgdmlzaWJsZSAwCiAgICAgYm94OiBvd25lciBlbmFibGVkIC0xCiAgICAgYm94OiBjaGlsZHJlbiBbQnV0dG9uIGlkIDIgJ09LJ10gW1N0YXRpYyBpZCAyMCAnJ10gW1N0YXRpYyBpZCA2NTUzNSAndCddCmxhbmd1YWdlIGlkIDB4MDQwNyAoR2VybWFuKTogTWVzc2FnZUJveEluZGlyZWN0VyA9IDEgZXJyPS0yCiAgICAgYm94OiBjYXB0aW9uICdjJyBJc1dpbmRvd1VuaWNvZGUgMSB0b3AtbGV2ZWwgMSB2aXNpYmxlIDAKICAgICBib3g6IG93bmVyIGVuYWJsZWQgLTEKICAgICBib3g6IGNoaWxkcmVuIFtCdXR0b24gaWQgMiAnT0snXSBbU3RhdGljIGlkIDY1NTM1ICd0J10KbGFuZ3VhZ2UgaWQgMHhGRkZGOiBNZXNzYWdlQm94SW5kaXJlY3RXID0gMSBlcnI9LTIKICAgICBib3g6IGNhcHRpb24gJ2MnIElzV2luZG93VW5pY29kZSAxIHRvcC1sZXZlbCAxIHZpc2libGUgMAogICAgIGJveDogb3duZXIgZW5hYmxlZCAtMQogICAgIGJveDogY2hpbGRyZW4gW0J1dHRvbiBpZCAyICdPSyddIFtTdGF0aWMgaWQgNjU1MzUgJ3QnXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "cbSize 0: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 't']\ncbSize 8: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 't']\ncbSize larger than the structure: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 't']\nNULL text and caption: MessageBoxIndirectW = 1 err=-2\n     box: caption 'Error' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 '']\nbad owner window: MessageBoxIndirectW = 0 err=1400\nmade-up instance with string ids: MessageBoxIndirectW = 1 err=-2\n     box: caption '' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 '']\nMB_USERICON with no icon name: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 20 ''] [Static id 65535 't']\nMB_USERICON with an icon that is not there: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 20 ''] [Static id 65535 't']\nlanguage id 0x0407 (German): MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 't']\nlanguage id 0xFFFF: MessageBoxIndirectW = 1 err=-2\n     box: caption 'c' IsWindowUnicode 1 top-level 1 visible 0\n     box: owner enabled -1\n     box: children [Button id 2 'OK'] [Static id 65535 't']\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1203
+    }
+  ]
+}

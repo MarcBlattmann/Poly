@@ -17,7 +17,8 @@ use poly_winsock::afd as proto;
 
 pub type Handle = isize;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn GetLastError() -> u32;
     pub fn SetLastError(e: u32);
@@ -30,7 +31,8 @@ unsafe extern "system" {
     pub fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtCreateFile(
         handle: *mut Handle,

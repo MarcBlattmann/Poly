@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "wsaenumnetworkevents_reset_args",
+      "exe_sha256": "5f67325d5f31fe2341351e82eb2cd05ea64a3dfafdde96ee12db7258ae010162",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV2ZXIgc2VsZWN0ZWQsIE5VTEwgZXZlbnQ6IDAgLSBbc2xvdHMgbGVmdCBhbG9uZTogMTBdCnNpZ25hbGxlZCAxCnRoZW4gd2l0aCB0aGUgZXZlbnQ6IDAgLSBbc2xvdHMgbGVmdCBhbG9uZTogMTBdCmEgZGlmZmVyZW50IGV2ZW50IGhhbmRsZTogLSBbc2xvdHMgbGVmdCBhbG9uZTogMTBdIHJlc2V0IDEKbm90IGEgc29ja2V0IC0xL1dTQUVOT1RTT0NLCmEgY2xvc2VkIGV2ZW50IGhhbmRsZSAtMS9XU0FFTk9UU09DSwpVRFAgZW51bSBXUklURT0wIFtzbG90cyBsZWZ0IGFsb25lOiA5XQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "never selected, NULL event: 0 - [slots left alone: 10]\nsignalled 1\nthen with the event: 0 - [slots left alone: 10]\na different event handle: - [slots left alone: 10] reset 1\nnot a socket -1/WSAENOTSOCK\na closed event handle -1/WSAENOTSOCK\nUDP enum WRITE=0 [slots left alone: 9]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 166
+    },
+    {
+      "name": "wsaenumnetworkevents_reset_args_c",
+      "exe_sha256": "acb8b7a124d0b5265cbb43e0fe937a5cc4c6c46beba0cceed83a97250a8bca34",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV2ZXIgc2VsZWN0ZWQsIGFuIGV2ZW50OiAwIC0gW3Nsb3RzIGxlZnQgYWxvbmU6IDEwXQp0aGUgZXZlbnQgaXMgc3RpbGwgc2lnbmFsbGVkIDEKdGhpcmQgY2FsbCAtIFtzbG90cyBsZWZ0IGFsb25lOiAxMF0KYSBib2d1cyBldmVudCBoYW5kbGUgLTEvV1NBRU5PVFNPQ0sKTlVMTCBvdXRwdXQgLTEvV1NBRUlOVkFMClVEUCBzZWxlY3RlZCwgc2lnbmFsbGVkIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "never selected, an event: 0 - [slots left alone: 10]\nthe event is still signalled 1\nthird call - [slots left alone: 10]\na bogus event handle -1/WSAENOTSOCK\nNULL output -1/WSAEINVAL\nUDP selected, signalled 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 169
+    }
+  ]
+}

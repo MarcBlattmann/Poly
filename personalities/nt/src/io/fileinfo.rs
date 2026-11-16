@@ -111,6 +111,16 @@ impl IoState {
         }
     }
 
+    /// The object manager's name of volume `volume`'s device
+    /// (`\Device\HarddiskVolume<N>`, ADR 0185).
+    pub fn volume_device_path(&self, volume: usize) -> Vec<u16> {
+        let mut p = wide("\\Device\\");
+        if let Some(v) = self.volumes.get(volume) {
+            p.extend_from_slice(&v.device);
+        }
+        p
+    }
+
     /// The parts of a file object's full name (`ObjectNameInformation`):
     /// its device's name and the path on the device, `None` where the file
     /// has no path there (an anonymous pipe). `None` for files that are on
@@ -119,10 +129,11 @@ impl IoState {
     pub fn object_name_parts(&self, cookie: u64) -> Option<(Vec<u16>, Option<Vec<u16>>)> {
         let pipe_device = || wide("\\Device\\NamedPipe");
         match self.files.get(&cookie).map(|f| &f.target)? {
-            Target::Disk(d) => Some((wide(&alloc::format!("\\Device\\PolyFs{}", d.volume)), Some(d.path.clone()))),
+            Target::Disk(d) => Some((self.volume_device_path(d.volume), Some(d.path.clone()))),
             Target::NamedPipe(_) | Target::PipeRoot => Some((pipe_device(), Some(self.file_name(cookie)))),
             Target::PipeDevice => Some((pipe_device(), Some(Vec::new()))),
             Target::Pipe(_) => Some((pipe_device(), None)),
+            Target::Null => Some((wide(super::NULL_DEVICE), Some(Vec::new()))),
             Target::Console(_) | Target::Host(_) | Target::Socket(_) => None,
         }
     }
@@ -145,7 +156,8 @@ impl IoState {
             | Target::Socket(_)
             | Target::NamedPipe(_)
             | Target::PipeRoot
-            | Target::PipeDevice => info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() },
+            | Target::PipeDevice
+            | Target::Null => info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() },
         };
         let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
         let fixed = |bytes: Vec<u8>| {
@@ -505,6 +517,8 @@ impl IoState {
                     FILE_DEVICE_NAMED_PIPE
                 }
                 Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
+                // GetFileType's FILE_TYPE_CHAR.
+                Target::Null => FILE_DEVICE_NULL,
                 // A socket (ADR 0095): GetFileType's FILE_TYPE_PIPE.
                 Target::Socket(_) => FILE_DEVICE_NAMED_PIPE,
                 Target::Host(open) => match open.kind() {

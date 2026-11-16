@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "24852d2ee536",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:40:47Z",
+  "tests": [
+    {
+      "name": "output_desc",
+      "exe_sha256": "075d02d0cda80d9c2af99bff8cef4a809dd707693992baab669b3c2cfda1f6ad",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RW51bU91dHB1dHMgZW5kcyB3aXRoIDB4ODg3YTAwMDIgcHRyPW51bGwKbmFtZSBzdGFydHMgd2l0aCBcXC5cRElTUExBWTogdHJ1ZQpHZXREZXNjIHR3aWNlIGVxdWFsOiB0cnVlCm91dHB1dCBhcyBJVW5rbm93bjogMHgwMDAwMDAwMCBzYW1lLXBvaW50ZXI9dHJ1ZQpvdXRwdXQgYXMgSURYR0lPdXRwdXQyOiAweDAwMDAwMDAwIHNhbWUtcG9pbnRlcj10cnVlCm91dHB1dCBhcyBJRFhHSU91dHB1dDU6IDB4MDAwMDAwMDAgc2FtZS1wb2ludGVyPXRydWUKR2V0RGlzcGxheU1vZGVMaXN0KEI4RzhSOEE4X1VOT1JNLCBmbGFncyAwKTogMHgwMDAwMDAwMCBjb3VudCB3cml0dGVuIHRydWUKR2V0RGlzcGxheU1vZGVMaXN0KFIxNkcxNkIxNkExNl9GTE9BVCwgZmxhZ3MgMCk6IDB4MDAwMDAwMDAgY291bnQgd3JpdHRlbiB0cnVlCkdldERpc3BsYXlNb2RlTGlzdChOVjEyLCBmbGFncyAwKTogMHgwMDAwMDAwMCBjb3VudCB3cml0dGVuIHRydWUKR2V0RGlzcGxheU1vZGVMaXN0KEI4RzhSOEE4LCBmbGFncyAweDEpOiAweDAwMDAwMDAwIGNvdW50LXdyaXR0ZW4gdHJ1ZQpHZXREaXNwbGF5TW9kZUxpc3QoQjhHOFI4QTgsIGZsYWdzIDB4OCk6IDB4MDAwMDAwMDAgY291bnQtd3JpdHRlbiB0cnVlCkdldERpc3BsYXlNb2RlTGlzdCB3aXRoIGFuIGFycmF5IG9mIHRoZSB3aG9sZSBsaXN0ICh0aGUgY291bnQgaXMgYXQgbW9zdCAyNTYgKTogMHgwMDAwMDAwMCB3cml0dGVuIHRydWUKbW9kZXMgc29ydGVkIGJ5IHdpZHRoIHRoZW4gaGVpZ2h0OiB0cnVlCkZpbmRDbG9zZXN0TWF0Y2hpbmdNb2RlKGxhcmdlc3QgbW9kZSBzaXplLCBCOEc4UjhBOCwgbm8gZGV2aWNlKTogMHgwMDAwMDAwMCByZXN1bHQgaXMgdGhhdCBzaXplIHRydWUgZm9ybWF0IDg3IHJlZnJlc2ggc2V0IHRydWUKRmluZENsb3Nlc3RNYXRjaGluZ01vZGUoZm9ybWF0IFVOS05PV04sIG5vIGRldmljZSk6IDB4ODg3YTAwMDEKR2V0RnJhbWVTdGF0aXN0aWNzOiAweDg4N2EwMDAxIChmaWVsZHMgd3JpdHRlbiBmYWxzZSkKR2V0RGVzYzEgMHgwMDAwMDAwMDogZmlyc3QgOTYgYnl0ZXMgZXF1YWwgR2V0RGVzYzogdHJ1ZSBCaXRzUGVyQ29sb3IgYXQgbGVhc3QgOCB0cnVlIENvbG9yU3BhY2UgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "EnumOutputs ends with 0x887a0002 ptr=null\nname starts with \\\\.\\DISPLAY: true\nGetDesc twice equal: true\noutput as IUnknown: 0x00000000 same-pointer=true\noutput as IDXGIOutput2: 0x00000000 same-pointer=true\noutput as IDXGIOutput5: 0x00000000 same-pointer=true\nGetDisplayModeList(B8G8R8A8_UNORM, flags 0): 0x00000000 count written true\nGetDisplayModeList(R16G16B16A16_FLOAT, flags 0): 0x00000000 count written true\nGetDisplayModeList(NV12, flags 0): 0x00000000 count written true\nGetDisplayModeList(B8G8R8A8, flags 0x1): 0x00000000 count-written true\nGetDisplayModeList(B8G8R8A8, flags 0x8): 0x00000000 count-written true\nGetDisplayModeList with an array of the whole list (the count is at most 256 ): 0x00000000 written true\nmodes sorted by width then height: true\nFindClosestMatchingMode(largest mode size, B8G8R8A8, no device): 0x00000000 result is that size true format 87 refresh set true\nFindClosestMatchingMode(format UNKNOWN, no device): 0x887a0001\nGetFrameStatistics: 0x887a0001 (fields written false)\nGetDesc1 0x00000000: first 96 bytes equal GetDesc: true BitsPerColor at least 8 true ColorSpace 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 95
+    },
+    {
+      "name": "output_desc_b",
+      "exe_sha256": "356bb6486fc3732faa6cbbd1a72a2d202cb23a0099b2c16b25b07f02ddbe608a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3V0cHV0IDA6IHJlZnMgMQpkZXNrdG9wIHJlY3Qgc2l6ZSBlcXVhbHMgdGhlIHByaW1hcnkgc2NyZWVuIHNpemUgKFNNX0NYU0NSRUVOLCBTTV9DWVNDUkVFTik6IHRydWUsIG9yaWdpbiBpcyAwLDA6IHRydWUKbmFtZSBwYWRkZWQgd2l0aCB6ZXJvczogdHJ1ZQpvdXRwdXQgYXMgSURYR0lPdXRwdXQ6IDB4MDAwMDAwMDAgc2FtZS1wb2ludGVyPXRydWUKb3V0cHV0IGFzIElEWEdJT3V0cHV0MzogMHgwMDAwMDAwMCBzYW1lLXBvaW50ZXI9dHJ1ZQpvdXRwdXQgYXMgSURYR0lPdXRwdXQ2OiAweDAwMDAwMDAwIHNhbWUtcG9pbnRlcj10cnVlCkdldERpc3BsYXlNb2RlTGlzdChSOEc4QjhBOF9VTk9STSwgZmxhZ3MgMCk6IDB4MDAwMDAwMDAgY291bnQgd3JpdHRlbiB0cnVlCkdldERpc3BsYXlNb2RlTGlzdChCOEc4UjhYOF9VTk9STSwgZmxhZ3MgMCk6IDB4MDAwMDAwMDAgY291bnQgd3JpdHRlbiB0cnVlCkdldERpc3BsYXlNb2RlTGlzdChEMzJfRkxPQVQsIGZsYWdzIDApOiAweDAwMDAwMDAwIGNvdW50IHdyaXR0ZW4gdHJ1ZQpHZXREaXNwbGF5TW9kZUxpc3QoQjhHOFI4QTgsIGZsYWdzIDB4Mik6IDB4MDAwMDAwMDAgY291bnQtd3JpdHRlbiB0cnVlCkdldERpc3BsYXlNb2RlTGlzdChCOEc4UjhBOCwgZmxhZ3MgMHgzKTogMHgwMDAwMDAwMCBjb3VudC13cml0dGVuIHRydWUKZmlyc3QgbW9kZTogZm9ybWF0IDg3IG9yZGVyIDEgc2NhbGluZyAwIHJlZnJlc2ggZGVuIG5vbnplcm8gdHJ1ZQphcnJheSB0b28gc21hbGw6IDB4ODg3YTAwMDMgY291bnQgd3JpdHRlbiBiYWNrOiB1bmNoYW5nZWQgdHJ1ZSByZWFsIGNvdW50IGZhbHNlCkZpbmRDbG9zZXN0TWF0Y2hpbmdNb2RlKDB4MCk6IDB4MDAwMDAwMDAgcmVzdWx0IG5vbnplcm8gc2l6ZSB0cnVlCkZpbmRDbG9zZXN0TWF0Y2hpbmdNb2RlKGZvcm1hdCBVTktOT1dOLCBXQVJQIGRldmljZSk6IDB4MDAwMDAwMDAKV2FpdEZvclZCbGFuazogMHgwMDAwMDAwMApHZXREZXNjMTogY29sb3VyIGRhdGEgYWxsIHplcm8sIG9yIHdoaXRlIHBvaW50IGluICgwLDEpIGFuZCBtYXggbHVtaW5hbmNlID4gbWluIGx1bWluYW5jZTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "output 0: refs 1\ndesktop rect size equals the primary screen size (SM_CXSCREEN, SM_CYSCREEN): true, origin is 0,0: true\nname padded with zeros: true\noutput as IDXGIOutput: 0x00000000 same-pointer=true\noutput as IDXGIOutput3: 0x00000000 same-pointer=true\noutput as IDXGIOutput6: 0x00000000 same-pointer=true\nGetDisplayModeList(R8G8B8A8_UNORM, flags 0): 0x00000000 count written true\nGetDisplayModeList(B8G8R8X8_UNORM, flags 0): 0x00000000 count written true\nGetDisplayModeList(D32_FLOAT, flags 0): 0x00000000 count written true\nGetDisplayModeList(B8G8R8A8, flags 0x2): 0x00000000 count-written true\nGetDisplayModeList(B8G8R8A8, flags 0x3): 0x00000000 count-written true\nfirst mode: format 87 order 1 scaling 0 refresh den nonzero true\narray too small: 0x887a0003 count written back: unchanged true real count false\nFindClosestMatchingMode(0x0): 0x00000000 result nonzero size true\nFindClosestMatchingMode(format UNKNOWN, WARP device): 0x00000000\nWaitForVBlank: 0x00000000\nGetDesc1: colour data all zero, or white point in (0,1) and max luminance > min luminance: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    }
+  ]
+}

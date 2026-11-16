@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoInitializeEx.yaml
+id: windows/api/ole32.dll/CoInitializeEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "CoInitializeEx function (combaseapi.h)", "CoUninitialize", "CoGetApartmentType", "CoRegisterMessageFilter", "CoCreateInstance", "CoGetClassObject", "CLSIDFromString", "StringFromCLSID", "CoTaskMemAlloc", "CoTaskMemFree", "PropVariantClear", "COINIT enumeration"; objbase.h, combaseapi.h, wtypes.h, propidl.h, winerror.h (S_FALSE 1, RPC_E_CHANGED_MODE 0x80010106, CO_E_NOTINITIALIZED 0x800401F0, REGDB_E_CLASSNOTREG 0x80040154, CO_E_CLASSSTRING 0x800401F3, E_INVALIDARG 0x80070057) for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Initialises COM for the calling thread. Chrome calls it 10 times in the browser, GPU process and utility processes (COINIT flags 6 on the UI thread: apartment threaded with DISABLE_OLE1DDE; 4 on the others: multithreaded with DISABLE_OLE1DDE), CoUninitialize 5 times, CoGetApartmentType and CoRegisterMessageFilter from the browser. The first call on a thread returns S_OK (0), a repeat with the same model S_FALSE (1) (the other COINIT flags - DISABLE_OLE1DDE, SPEED_OVER_MEMORY - are not compared), the other model RPC_E_CHANGED_MODE (0x80010106) and does not change the thread's model. CoUninitialize must be called once per successful call (S_OK and S_FALSE both count); an extra one is harmless. An apartment-threaded thread reports apartment type 3 (main STA) in CoGetApartmentType, a multithreaded one type 1; a thread that did not initialise gets CO_E_NOTINITIALIZED (0x800401F0) and leaves the outputs untouched. This sheet also holds the rules of CoUninitialize, CoGetApartmentType and CoRegisterMessageFilter.
+interface:
+  signature: "HRESULT CoInitializeEx(LPVOID reserved, DWORD coinit); void CoUninitialize(void); HRESULT CoGetApartmentType(APTTYPE* type, APTTYPEQUALIFIER* qualifier); HRESULT CoRegisterMessageFilter(LPMESSAGEFILTER filter, LPMESSAGEFILTER* old)"
+  coinit: "COINIT_MULTITHREADED 0, APARTMENTTHREADED 2, DISABLE_OLE1DDE 4, SPEED_OVER_MEMORY 8"
+chrome:
+  calls: "CoInitializeEx 10 (browser, GPU, network, utility), CoUninitialize 5, CoGetApartmentType 2, CoRegisterMessageFilter 4 (stage 2); the HRESULTs are not in the committed traces: the tests give every result"
+rules:
+  first_call: "an apartment-threaded call (flags 6): 0; CoGetApartmentType then 0 with type 3 and qualifier 0; before it: 0x800401F0 and the outputs are untouched"
+  repeat: "the same model again with any combination of the optional flags (6, 2, 10): 1 (S_FALSE); the other model (0): 0x80010106, the thread stays apartment threaded"
+  balance: "four successful calls need four CoUninitialize calls: after the first three the apartment type is still 3, after the fourth CoGetApartmentType gives 0x800401F0; an extra CoUninitialize changes nothing"
+  multithreaded: "flags 4: 0, type 1, qualifier 0; then flags 2: 0x80010106"
+  message_filter: "CoRegisterMessageFilter(NULL, NULL) on a multithreaded thread: 0x80004021 (CO_E_NOT_SUPPORTED); on an apartment-threaded thread CoRegisterMessageFilter(NULL, &old) = 0 and the old filter is NULL"
+  bad_arguments: "flags 1, 0x10, 0x100, 0xFFFFFFFF, or a non-NULL reserved pointer: 0x80070057 (E_INVALIDARG); the thread stays uninitialised"
+  other_threads: "a new thread calling flags 2, 0, 6, 4 twice and CoGetApartmentType: first S_OK, second S_FALSE; type 3 for flags 2 and 6, type 1 for flags 0 and 4"
+errors:
+  changed_mode: "RPC_E_CHANGED_MODE 0x80010106"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  bad_flags: "E_INVALIDARG 0x80070057"
+side_effects: "initialises COM for the thread (a per-thread reference count)"
+threading: "all state is per thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Apartment types 2 (neutral) and the qualifiers of implicit multithreaded apartments (a thread that never initialised but uses COM through another), message filter objects, OleInitialize (see OleInitialize/OleUninitialize).

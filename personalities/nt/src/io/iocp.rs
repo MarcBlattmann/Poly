@@ -38,6 +38,42 @@ use poly_ntobj::{Handle, NewObject, NoParse, NtStatus, ObjectId, ObjectManager, 
 
 pub type Result<T> = core::result::Result<T, NtStatus>;
 
+impl super::IoState {
+    /// One line per completion port that holds packets or is abandoned, for a wait report
+    /// (`poly.nt.waits`): a port with packets and a thread waiting on it is a lost wakeup.
+    pub fn port_debug_lines(&self, objects: &ObjectManager) -> Vec<alloc::string::String> {
+        self.ports
+            .iter()
+            .filter(|(_, p)| !p.queue.is_empty() || p.abandoned)
+            .map(|(cookie, p)| {
+                let held: Vec<alloc::string::String> =
+                    objects.holders(p.object).iter().map(|(pid, h)| alloc::format!("p{}:{:#x}", pid.0, h.0)).collect();
+                alloc::format!(
+                    "port cookie {cookie:#x} packets {} abandoned {} held by [{}] first {:?}",
+                    p.queue.len(),
+                    p.abandoned,
+                    held.join(","),
+                    p.queue.front()
+                )
+            })
+            .collect()
+    }
+
+    /// Requests waiting, by process, for a wait report: `(pid, count)`.
+    pub fn pending_by_process(&self) -> Vec<(u32, usize)> {
+        let mut by: alloc::collections::BTreeMap<u32, usize> = alloc::collections::BTreeMap::new();
+        for irp in self.irps.values() {
+            *by.entry(irp.process.0).or_insert(0) += 1;
+        }
+        by.into_iter().collect()
+    }
+
+    /// Completions queued and not yet delivered (they are delivered after every system call).
+    pub fn queued_completions(&self) -> usize {
+        self.completions.len()
+    }
+}
+
 /// One queued completion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Packet {
@@ -100,8 +136,10 @@ impl IoState {
         }
     }
 
+    /// The port's last handle was closed, or the port is gone altogether (a waiter that was woken
+    /// by the close releases the last reference: the port object is deleted before it looks again).
     pub fn port_is_abandoned(&self, cookie: u64) -> bool {
-        self.ports.get(&cookie).is_some_and(|p| p.abandoned)
+        self.ports.get(&cookie).is_none_or(|p| p.abandoned)
     }
 
     /// The port object was deleted: its queue goes.
@@ -356,4 +394,26 @@ pub fn query_io_completion<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         abi::write_u32(k, ret, 4)?;
     }
     Ok(STATUS_SUCCESS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use poly_ntobj::{NewObject, ThreadRef};
+
+    #[test]
+    fn a_port_that_is_gone_counts_as_abandoned_for_a_waiter_that_looks_again() {
+        let mut io = IoState::new();
+        let mut om = ObjectManager::new();
+        let new = NewObject::Opaque { kind: ObjectType::IoCompletion, cookie: 9, signaled: Some(false), parse: false };
+        let object = om.new_object(new, ThreadRef(1)).unwrap();
+        io.port_create(9, object, 0);
+        assert!(!io.port_is_abandoned(9));
+        // The last handle closed: abandoned and signalled.
+        io.port_abandon(&mut om, 9);
+        assert!(io.port_is_abandoned(9));
+        // The woken waiter drops the last reference: the object and its port record go.
+        io.port_deleted(9);
+        assert!(io.port_is_abandoned(9), "gone: the waiter gets STATUS_ABANDONED_WAIT_0, not an invalid handle");
+    }
 }

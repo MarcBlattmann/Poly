@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SystemTimeToTzSpecificLocalTime.yaml
+id: windows/api/kernel32.dll/SystemTimeToTzSpecificLocalTime
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SystemTimeToTzSpecificLocalTime", "TzSpecificLocalTimeToSystemTime", "GetTimeZoneInformation", "GetDynamicTimeZoneInformation", "TIME_ZONE_INFORMATION", "SYSTEMTIME"; timezoneapi.h, minwinbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Converts a UTC SYSTEMTIME to local time in a given time zone (or the system's zone when the zone is NULL). Chrome's browser calls it 151 times (and TzSpecificLocalTimeToSystemTime 123). The zone of most tests is made by the test (UTC-8, standard time from the first Sunday of November 02:00, daylight time from the second Sunday of March 02:00 with a daylight bias of -60), so the answers do not depend on the machine. The rules of the zone apply to every year; the transition is decided on the UTC instant; the result's day of week is computed (the input's is ignored) and milliseconds are kept; invalid times (month 13, 30 February, hour 24) and the years 1600 and 30828 fail with error 87 and leave the output untouched. A NULL pointer for the time makes Windows crash, so no test passes one.
+interface:
+  signature: "BOOL SystemTimeToTzSpecificLocalTime(const TIME_ZONE_INFORMATION* tz, const SYSTEMTIME* utc, LPSYSTEMTIME local)"
+chrome:
+  calls: "browser, 151 calls in stage 2 (the arguments are not in the committed traces; the tests cover fixed zones and the NULL zone)"
+rules:
+  winter_summer: "UTC 2020-01-15 12:00 -> local 04:00 (bias 480); UTC 2020-07-15 12:00 -> local 05:00 (bias 480 - 60)"
+  spring_change_2020: "UTC 2020-03-08 09:59:59 -> local 01:59:59; UTC 10:00:00 -> local 03:00:00 (the hour 02:00 to 03:00 does not exist)"
+  autumn_change_2020: "UTC 2020-11-01 08:59:59 -> 01:59:59 (daylight time); UTC 09:00:00 -> local 01:00:00 (standard time: the hour repeats); UTC 09:59:59 -> 01:59:59; UTC 10:00:00 -> 02:00:00"
+  day_boundaries: "UTC 2021-01-01 07:59:59 -> local 2020-12-31 23:59:59 (day of week 4); UTC 08:00:00 -> 2021-01-01 00:00:00 (5); UTC 2024-02-29 03:00 -> 2024-02-28 19:00"
+  old_years: "the rule applies to every year: UTC 1999-10-31 08:00 -> local 01:00 (daylight time still: the November rule's first Sunday of November 1999 is the 7th, the date is before the change)"
+  ignored_input_fields: "milliseconds 999 and a wrong day of week in the input: the result keeps the milliseconds and has the right day of week"
+  last_sunday_zone: "a zone UTC+1 with daylight time from the last Sunday of March 02:00 and standard time from the last Sunday of October 03:00 (occurrence 5 = last): UTC 2020-03-29 00:59:59 -> local 01:59:59; 01:00:00 -> 03:00:00; UTC 2020-10-25 00:59:59 -> 02:59:59; 01:00:00 -> 02:00:00"
+  no_daylight_time: "a zone UTC+5:30 with empty rule dates: always bias; a zone with bias 0, standard bias 7 and empty dates: the local time equals UTC (the standard bias is not applied without a date)"
+  absolute_date: "a standard date with a year (2020-11-01 02:00) in place of the weekday rule gives the same result in that year"
+  invalid_input: "month 13, 30 February, hour 24, the year 1600 and the year 30828: FALSE, error 87, the output is untouched"
+  null_zone: "a NULL zone uses the system's zone: TRUE and the local time is within a day of the UTC time"
+errors:
+  invalid_time: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Dynamic zones (DYNAMIC_TIME_ZONE_INFORMATION in the other functions), the system's own zone's values, years outside 1601 to 30827 beyond the two limits, NULL time pointers (Windows crashes).

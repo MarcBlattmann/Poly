@@ -152,6 +152,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("netapi32.dll", super::NETAPI32),
         ("secur32.dll", super::SECUR32),
         ("dhcpcsvc.dll", super::DHCPCSVC),
+        ("mswsock.dll", super::MSWSOCK),
         ("dnsapi.dll", super::DNSAPI),
         ("dbghelp.dll", super::DBGHELP),
         // ADR 0170.
@@ -164,12 +165,57 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("shlwapi.dll", super::SHLWAPI),
         ("wtsapi32.dll", super::WTSAPI32),
         ("comctl32.dll", super::COMCTL32),
+        ("comdlg32.dll", super::COMDLG32),
         ("oleacc.dll", super::OLEACC),
         ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
         ("mfplat.dll", super::MFPLAT),
         ("powrprof.dll", super::POWRPROF),
         ("uxtheme.dll", super::UXTHEME),
+        // ADR 0155, step 12.
+        ("setupapi.dll", super::SETUPAPI),
+        ("pdh.dll", super::PDH),
+        ("tbs.dll", super::TBS),
+        ("cfgmgr32.dll", super::CFGMGR32),
+        ("wintrust.dll", super::WINTRUST),
+        ("ncrypt.dll", super::NCRYPT),
+        ("propsys.dll", super::PROPSYS),
+        ("wevtapi.dll", super::WEVTAPI),
+        ("hid.dll", super::HID),
+        ("dxgi.dll", super::DXGI),
+        ("d3d11.dll", super::D3D11),
+        ("dcomp.dll", super::DCOMP),
     ] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\System32", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
+    // Poly's own Visual C++ runtime (ADR 0199). A user who installs
+    // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
+    // is not rewritten (owner decision 5).
+    for (name, bytes) in [
+        ("vcruntime140.dll", super::VCRUNTIME140),
+        ("vcruntime140_1.dll", super::VCRUNTIME140_1),
+        ("msvcp140.dll", super::MSVCP140),
+    ] {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_own_copy(&vr, &root, "Windows\\System32", name, bytes, create::OWN_COPY_MARKER) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
+            Ok(create::Installed::Yielded) => {
+                crate::kprintln!("nt: layout: {name} in System32 is not Poly's (an installed runtime): kept")
+            }
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
+    // The generated stub DLLs of the Windows applications (ADR 0155, step 10).
+    for &(name, bytes) in super::STUB_DLLS {
         if bytes.is_empty() {
             continue;
         }
@@ -185,6 +231,18 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Ok(create::Installed::Written) => crate::kprintln!("nt: layout: advapi32.dll written to System32"),
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install advapi32.dll ({:#x})", e.0),
+        }
+    }
+    // The 32-bit modules go into SysWOW64, the System32 of a 32-bit program (ADR 0186; Learn:
+    // "File System Redirector").
+    for &(name, bytes) in super::WOW64_DLLS {
+        if bytes.is_empty() {
+            continue;
+        }
+        match create::install_file(&vr, &root, "Windows\\SysWOW64", name, bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to SysWOW64"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install the 32-bit {name} ({:#x})", e.0),
         }
     }
     let synced = sync::sync(&mut sys.registry.reg, &POLY_USER, super::registry::filetime_now());

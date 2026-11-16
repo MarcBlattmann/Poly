@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/EnumWindows
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Calls proc(hwnd, lparam) for every top-level window of the desktop (every process, hidden ones included,
+  owned popups included, no children, no message-only windows) in z order from the top; stops when proc
+  returns 0 (the function then returns 0, no error). Chrome's browser calls it 6 times a run (S3).
+interface:
+  signature: "BOOL EnumWindows(WNDENUMPROC proc, LPARAM lparam)"
+rules:
+  ime_windows: "EnumWindows and EnumThreadWindows do not list in the order of the z order walk for the IME windows: every window of the classes IME and MSCTFIME UI (of every process: all the IME windows of the desktop) is listed after all the other windows, keeping their order among themselves; the others are in z order. So where the walk says ctf ime main holder the enumeration says main holder ctf ime, minimized holder main ctf ime, and after the main window was destroyed holder ime ctf (the walk: ime ctf holder). The rule follows the class: a window of the class MSCTFIME UI created by a test is listed with that group (the class IME cannot be created by a program). Test: ew_ime_last (EnumWindows) and etw_ime_last (EnumThreadWindows)."
+  set: "our top-level windows E (topmost), C (popup owned by A), A and the hidden B are reported: 'E C A B~'; the child D and the message-only window M are not; windows of other processes are reported too (the order among ours is the z order)"
+  lparam: "the lParam is passed to every call"
+  stop: "the callback returning 0 after the first (third) of our windows stops the enumeration: EnumWindows returns 0 with last error 0"
+  created_during: "a window created during the enumeration (by the callback) is reported by the next enumeration (E Z~ C A B~), not by the one in progress"
+  z_order: "SetWindowPos(B, NULL, ..., SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) puts B on top of the non-topmost windows: E B~ Z~ C A"
+  chrome: "Chrome's four kinds of windows of the thread are reported once each in z order (built: main~ hid~ ime~; shown and focused: main hid~ ctf~ ime~; minimized: hid~ main ctf~ ime~; top-level destroyed: hid~ ime~ ctf~), the child is not; a message-only window of class Chrome_MessageWindow is found by FindWindowExW(HWND_MESSAGE, NULL, class, NULL) and not by FindWindowExW(NULL, ...)"
+errors:
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
+  -Interactive (see docs/AGENT_PIPELINE.md) because visibility, painting, focus and input need the visible
+  desktop. The tests of the Chrome scenarios record sent messages with a WH_CALLWNDPROC hook and posted ones
+  with a WH_GETMESSAGE hook of the thread (as the Chrome recording did), print windows as roles (main, rwh,
+  hid, ime, ctf) or tag letters, never handles, times or ids, and leave out the shell's traffic (WM_GETICON,
+  WM_TIMER, the undocumented 0x60, 0x90, 0x96, 0xAE, 0x272, 0x287 and registered messages). Test windows are
+  placed in the top-left 1000x500 pixels; the cursor is parked at (1500, 600) and put back; keyboard input is
+  sent only while a window of the test is in the foreground and clicks only onto a window of the test.
+not_covered: >
+  Several monitors, DPI awareness other than unaware (the tests have no manifest), other keyboard layouts, IME
+  composition, touch and pen.

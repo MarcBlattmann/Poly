@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGISwapChain.ResizeBuffers.yaml
+id: windows/api/dxgi.dll/IDXGISwapChain.ResizeBuffers
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGISwapChain::ResizeBuffers method (dxgi.h)", "IDXGISwapChain::ResizeTarget method (dxgi.h)", "IDXGISwapChain3::ResizeBuffers1 method (dxgi1_4.h)", "DXGI_SWAP_CHAIN_FLAG", "DXGI_MODE_DESC"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Changes the size, format, buffer count or flags of the swap chain's buffers. Chrome (ANGLE) calls it when the window is resized, with the new size and DXGI_FORMAT_UNKNOWN / buffer count 0 to keep the format and count. Observed on WARP: the call fails with DXGI_ERROR_INVALID_CALL while any reference to a back buffer (the texture, or a render target view of it) is still held; it succeeds when only the context still has the view bound. Width 0 or Height 0 (either) takes both from the window's client area; the format UNKNOWN keeps the format, the count 0 keeps the count. After a successful call GetDesc1 and GetBuffer show the new size, format, count and flags. A failed call can leave the stored description changed (see rules). ResizeBuffers1 always fails with INVALID_CALL on a D3D11 device. ResizeTarget resizes the window of a windowed swap chain. This entry's tests cover ResizeTarget and ResizeBuffers1.
+interface:
+  signature: "HRESULT IDXGISwapChain::ResizeBuffers(UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags)"
+  constants: "DXGI_FORMAT_UNKNOWN 0. DXGI_SWAP_EFFECT DISCARD 0, SEQUENTIAL 1, FLIP_SEQUENTIAL 3, FLIP_DISCARD 4"
+chrome:
+  calls: "ANGLE's SwapChain11::resize calls IDXGISwapChain::ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, flags) after releasing the back buffer texture and its views (assumed from ANGLE's documented behaviour)"
+rules:
+  references: "ResizeBuffers(0, 0, 0, UNKNOWN, 0) with buffer 0 referenced (GetBuffer result held): DXGI_ERROR_INVALID_CALL; with only a render target view of buffer 0 left alive: INVALID_CALL; after the view is released but while it is still bound to the immediate context with OMSetRenderTargets: S_OK; also S_OK after ClearState (same for DISCARD, SEQUENTIAL, FLIP_SEQUENTIAL, FLIP_DISCARD)"
+  keep_all: "ResizeBuffers(0, 0, 0, UNKNOWN, 0): S_OK; the swap chain takes the window's client size and keeps count, format and flags; GetBuffer(0) texture has the same size"
+  size: "(100, 80): S_OK, GetDesc1 and the texture are 100x80; (0,0), (0,50), (50,0): S_OK and both become the client size; (1,1), (4096,4096), (16385,4): S_OK; (0xFFFFFFFF, 4): E_INVALIDARG (0x80070057), and the stored description then reports width 0xFFFFFFFF while GetBuffer(0) fails (the buffers are gone) until a later successful ResizeBuffers"
+  count: "BufferCount 0 keeps the count (DISCARD 1, SEQUENTIAL and flip 2); DISCARD and SEQUENTIAL: 1, 2, 3, 4, 16: S_OK and GetDesc1 reports the new count; FLIP_SEQUENTIAL and FLIP_DISCARD: 1 gives E_INVALIDARG with the count unchanged; 17 and 0xFFFFFFFF: E_INVALIDARG for every effect, the count is unchanged (stays 16 in the test)"
+  format_discard: "DISCARD and SEQUENTIAL: R8G8B8A8_UNORM, R16G16B16A16_FLOAT, R10G10B10A2_UNORM, B8G8R8A8_UNORM_SRGB, R8G8B8A8_UNORM_SRGB, B8G8R8A8_UNORM: S_OK and GetDesc1 reports the new format; B8G8R8X8_UNORM, NV12, R8_UNORM and 999: E_INVALIDARG, but GetDesc1 then reports the requested (rejected) format (88, 103, 61, 999) until the next successful resize"
+  format_flip: "FLIP_SEQUENTIAL and FLIP_DISCARD: R8G8B8A8_UNORM, R16G16B16A16_FLOAT, R10G10B10A2_UNORM, B8G8R8A8_UNORM: S_OK; B8G8R8A8_UNORM_SRGB, R8G8B8A8_UNORM_SRGB, B8G8R8X8_UNORM, NV12, R8_UNORM and 999: E_INVALIDARG and the stored format is unchanged"
+  flags: "a chain created with flags 0: ALLOW_MODE_SWITCH (2) and GDI_COMPATIBLE (4) accepted and read back, 0 accepted, FRAME_LATENCY_WAITABLE_OBJECT (0x40), ALLOW_TEARING (0x800) and 0xFFFFFFFF: E_INVALIDARG with the flags unchanged; a flip chain created with 0x840: the same flags 0x840 and 0x842 (adding ALLOW_MODE_SWITCH) are S_OK, flags 0, 0x40 and 0x800 alone (dropping one of the two) are E_INVALIDARG with the flags unchanged"
+  window_resized: "when the window is resized (SetWindowPos) the swap chain keeps its old buffer size (GetDesc1 and the texture are unchanged); ResizeBuffers(0,0,0,UNKNOWN,0) then makes them the new client size; ResizeBuffers(0, 0, 0, B8G8R8A8_UNORM, 0) works the same; Present afterwards is S_OK"
+  resize_target: "IDXGISwapChain::ResizeTarget(&mode) on a windowed swap chain: S_OK (also for format UNKNOWN, refresh 60/1, an undefined Scaling 9 and format 999) and the window's client area becomes Width x Height of the mode; a mode of 0x0 is S_OK and does not resize the window to 0x0; the swap chain's buffers keep their size (the window and the buffers differ until ResizeBuffers)"
+  resize_buffers1: "IDXGISwapChain3::ResizeBuffers1(count, w, h, UNKNOWN, 0, nodeMasks, queues) is DXGI_ERROR_INVALID_CALL on a D3D11 swap chain for NULL arrays, for arrays with mask 1 and the device as queue, for mask 0, for NULL masks with queues, and with a buffer referenced; the description is unchanged"
+  present_after: "Present after the resizes: S_OK"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "ResizeTarget changes the size of the swap chain's window"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  resizing a swap chain that is in fullscreen, SetWindowPos on a window of another thread, a hardware device, DISCARD swap chains with outstanding buffer 1 references, ResizeBuffers with a swap chain that has the maximum latency set.

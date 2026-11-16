@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ole32.dll/PropVariantClear
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Frees what a PROPVARIANT owns and sets it to VT_EMPTY. Chrome's COM code calls it for the values of the
+  property and device APIs it uses (S3).
+interface:
+  signature: "HRESULT PropVariantClear(PROPVARIANT *pvar)"
+rules:
+  clear: "returns S_OK and sets vt to 0 and the value words to 0 for VT_EMPTY, VT_NULL, VT_I4, VT_UI4, VT_I2, VT_R4, VT_R8, VT_CY, VT_DATE, VT_ERROR, VT_BOOL, VT_I1, VT_UI1, VT_UI2, VT_I8, VT_UI8, VT_INT, VT_UINT, VT_FILETIME and for VT_LPWSTR, VT_LPSTR, VT_CLSID, VT_BSTR, VT_BLOB and VT_VECTOR|VT_I4 that own memory (freed with CoTaskMemFree, SysFreeString for the BSTR and the blob's or vector's data pointer); a VT_LPWSTR with a NULL pointer, a vector with no elements, a vector of two owned strings (the strings and the array are freed), VT_BYREF with a NULL pointer and VT_ARRAY with a NULL SAFEARRAY all return S_OK with vt 0"
+  twice: "a second clear of the same value does nothing and returns S_OK; two hundred strings cleared in a row work"
+  pointer: "a NULL pointer returns S_OK (no crash)"
+  bad_vt: "an undefined vt (0x7F, 0x200, the reserved flag 0x8000) returns STG_E_INVALIDPARAMETER 0x80030057 and the value is zeroed all the same (vt 0, words 0); vt 0xFFFF returns S_OK and zeroes the value"
+errors:
+  invalid_parameter: "STG_E_INVALIDPARAMETER 0x80030057: undefined vt"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  VT_STREAM, VT_STORAGE, VT_UNKNOWN (Release is called), VT_SAFEARRAY element freeing, VT_VARIANT vectors.

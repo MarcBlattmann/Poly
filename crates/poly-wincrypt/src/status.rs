@@ -27,8 +27,10 @@ pub const ERROR_NOT_ENOUGH_MEMORY: u32 = 8;
 pub const ERROR_INVALID_DATA: u32 = 13;
 pub const ERROR_NOT_SUPPORTED: u32 = 50;
 pub const ERROR_INVALID_PARAMETER: u32 = 87;
+pub const ERROR_CALL_NOT_IMPLEMENTED: u32 = 120;
 pub const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 pub const ERROR_MORE_DATA: u32 = 234;
+pub const ERROR_NOACCESS: u32 = 998;
 
 // CryptoAPI HRESULTs (`winerror.h`).
 pub const NTE_BAD_DATA: u32 = 0x8009_0005;
@@ -44,6 +46,7 @@ pub const CRYPT_E_EXISTS: u32 = 0x8009_2005;
 pub const CRYPT_E_SELF_SIGNED: u32 = 0x8009_2007;
 pub const CRYPT_E_NO_MATCH: u32 = 0x8009_2009;
 pub const CRYPT_E_UNEXPECTED_MSG_TYPE: u32 = 0x8009_200A;
+pub const CRYPT_E_PENDING_CLOSE: u32 = 0x8009_200F;
 pub const CRYPT_E_REVOKED: u32 = 0x8009_2010;
 pub const CRYPT_E_NO_REVOCATION_CHECK: u32 = 0x8009_2012;
 pub const CRYPT_E_REVOCATION_OFFLINE: u32 = 0x8009_2013;
@@ -70,3 +73,5 @@ pub const CERT_E_CN_NO_MATCH: u32 = 0x800B_010F;
 pub const CERT_E_WRONG_USAGE: u32 = 0x800B_0110;
 pub const CERT_E_INVALID_NAME: u32 = 0x800B_0114;
 pub const E_INVALIDARG: u32 = 0x8007_0057;
+/// `HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED)`, the form CryptoAPI's store calls put in the last error.
+pub const E_ACCESSDENIED: u32 = 0x8007_0005;

@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/user32.dll/GetSystemMenu
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Returns the window menu (the system menu) of a window, or with bRevert TRUE gives the default menu back and
+  returns NULL. Chrome's browser calls it once in a run (S3) for its top-level window to read and change its
+  items.
+interface:
+  signature: "HMENU GetSystemMenu(HWND hWnd, BOOL bRevert)"
+rules:
+  existence: "a window with WS_SYSMENU (a caption, or a popup with WS_SYSMENU only) has a menu; a window without WS_SYSMENU and a plain popup have none (NULL, last error left alone); a child window with WS_SYSMENU gets one; the desktop window has none; a NULL or invalid window returns NULL with the last error 1400, also with bRevert TRUE"
+  items: "the default menu has seven items in this order: SC_RESTORE 0xF120, SC_MOVE 0xF010, SC_SIZE 0xF000, SC_MINIMIZE 0xF020, SC_MAXIMIZE 0xF030, a separator (type MFT_SEPARATOR 0x800, state 3: grayed and disabled), SC_CLOSE 0xF060; the items are all enabled (state 0) whatever the window style and state: the system does not gray them in GetSystemMenu (not by thick frame, maximize or minimize boxes, maximized or minimized state, tool window or dialog frame style); a class with CS_NOCLOSE leaves out the separator and close (five items)"
+  handle: "not NULL, the same handle on every call for a window, IsMenu is TRUE, GetMenu of the window is still NULL; two windows have separate menus; the menu of a destroyed window is not a menu any more"
+  changes: "the menu can be changed (AppendMenuW, EnableMenuItem): the changes stay for later calls of GetSystemMenu, through maximize and restore, and style changes (removing WS_MAXIMIZEBOX does not touch the menu); changing one window's menu leaves the other's alone"
+  revert: "GetSystemMenu(hwnd, TRUE) returns NULL with the last error left alone, destroys the changed menu (the old handle is no menu) and the next call gives a new default menu with seven items and nothing grayed"
+  commands: "WM_SYSCOMMAND with SC_MAXIMIZE, SC_RESTORE and SC_MINIMIZE sent to the window change its state whether or not the menu item is grayed"
+errors:
+  invalid_window_handle: "1400: NULL or invalid window"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  Showing the menu (TrackPopupMenu through the caption), the item texts (language dependent), accelerators.

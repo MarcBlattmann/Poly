@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "04c812707009",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T13:02:31Z",
+  "tests": [
+    {
+      "name": "srw_try_matrix",
+      "exe_sha256": "0c6611412844a4041305369add147a67010cb8252aca627284ad787d16d37cbf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhdGljIHplcm8gd29yZDogMAp3b3JkIHdoaWxlIGV4Y2x1c2l2ZTogMHgxCndvcmQgYWZ0ZXIgcmVsZWFzZTogMAp0cnkgc2hhcmVkIChzZWNvbmQpOiAxCnRyeSBleGNsdXNpdmUgd2l0aCBvbmUgcmVhZGVyIGxlZnQ6IDAKZWlnaHQgc2hhcmVkIGFjcXVpc2l0aW9ucyB0b29rOiA4Cm1vZGUgMDogaG9sZGVyIGhhcyB0aGUgbG9jazogMQptb2RlIDA6IGhvbGRlciBlbmRlZDogMQptb2RlIDE6IGhvbGRlciBzdGFydGVkIDEKbW9kZSAxOiB0cnkgc2hhcmVkOiAxCm1vZGUgMTogd29yZCBhdCB0aGUgZW5kOiAwCnRyeSBleGNsdXNpdmUgYWZ0ZXIgdGhpcyB0aHJlYWQgcmVsZWFzZWQgaXQ6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "static zero word: 0\nword while exclusive: 0x1\nword after release: 0\ntry shared (second): 1\ntry exclusive with one reader left: 0\neight shared acquisitions took: 8\nmode 0: holder has the lock: 1\nmode 0: holder ended: 1\nmode 1: holder started 1\nmode 1: try shared: 1\nmode 1: word at the end: 0\ntry exclusive after this thread released it: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 99
+    },
+    {
+      "name": "srw_try_matrix_c",
+      "exe_sha256": "44bc178c6cc5f674bb11ce17fe1d11980a114b1f9c65031daa168366859cb2d2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHJ5IGV4Y2x1c2l2ZSBvbiBhIHplcm8gbG9jazogMQp0cnkgc2hhcmVkIHdoaWxlIGV4Y2x1c2l2ZTogMAp3b3JkIHdpdGggb25lIHJlYWRlcjogMHgxMQp0cnkgZXhjbHVzaXZlIHdpdGggcmVhZGVyczogMAp0cnkgZXhjbHVzaXZlIHdoZW4gZnJlZTogMQptb2RlIDA6IGhvbGRlciBzdGFydGVkIDEKbW9kZSAwOiB0cnkgc2hhcmVkOiAwCm1vZGUgMDogd29yZCBhdCB0aGUgZW5kOiAwCm1vZGUgMTogdHJ5IGV4Y2x1c2l2ZTogMAptb2RlIDE6IHRyeSBleGNsdXNpdmUgYWZ0ZXI6IDEKdHJ5IGV4Y2x1c2l2ZSB3aGlsZSBhIGRlYWQgdGhyZWFkIGhvbGRzIGl0OiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "try exclusive on a zero lock: 1\ntry shared while exclusive: 0\nword with one reader: 0x11\ntry exclusive with readers: 0\ntry exclusive when free: 1\nmode 0: holder started 1\nmode 0: try shared: 0\nmode 0: word at the end: 0\nmode 1: try exclusive: 0\nmode 1: try exclusive after: 1\ntry exclusive while a dead thread holds it: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    }
+  ]
+}

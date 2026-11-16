@@ -5,7 +5,6 @@
 
 use crate::base::*;
 use crate::nt::{self, Handle, ObjectAttributes, UnicodeString};
-use core::sync::atomic::AtomicUsize;
 use poly_kernelbase::error::*;
 use poly_kernelbase::sync::{self, *};
 use poly_ntobj::NtStatus;
@@ -42,7 +41,7 @@ pub unsafe extern "system" fn CreateThread(
     // `lpThreadAttributes->lpSecurityDescriptor` is the new thread object's descriptor.
     // SAFETY: the caller's structure when non-null.
     let mut oa = ObjectAttributes::new(None, 0);
-    oa.security_descriptor = unsafe { crate::spawn::descriptor_of(security) };
+    oa.security_descriptor = unsafe { sa_descriptor(security) };
     let oa_ptr: *const ObjectAttributes = if oa.security_descriptor.is_null() { core::ptr::null() } else { &oa };
     let suspended = flags & CREATE_SUSPENDED != 0;
     let (commit, reserve) = if flags & STACK_SIZE_PARAM_IS_A_RESERVATION != 0 { (0, stack) } else { (stack, 0) };
@@ -72,7 +71,7 @@ pub unsafe extern "system" fn CreateThread(
         let q = unsafe {
             nt::NtQueryInformationThread(h, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut())
         };
-        let id = if q.is_success() { u64::from_le_bytes(info[24..32].try_into().unwrap()) as u32 } else { 0 };
+        let id = if q.is_success() { crate::base::id_in(&info, crate::base::TBI_UNIQUE_THREAD) } else { 0 };
         // SAFETY: the caller's out-pointer.
         unsafe { thread_id.write(id) };
     }
@@ -92,9 +91,7 @@ pub extern "system" fn ExitThread(code: u32) -> ! {
 pub unsafe extern "system" fn GetExitCodeThread(thread: Handle, code: *mut u32) -> i32 {
     let mut info = [0u8; 48];
     // SAFETY: valid pointers.
-    let st = unsafe {
-        nt::NtQueryInformationThread(thread, THREAD_BASIC_INFORMATION, info.as_mut_ptr(), 48, core::ptr::null_mut())
-    };
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0x1001, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
@@ -195,18 +192,14 @@ pub(crate) unsafe fn create_named(
     let full = unsafe { wide_arg(name) }.and_then(sync::object_name);
     let string = full.as_ref().map(|f| UnicodeString::new(f));
     let mut attrs = nt::OBJ_OPENIF;
-    // SECURITY_ATTRIBUTES.bInheritHandle at 16 (minwinbase.h).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() && unsafe { (security.add(16) as *const i32).read() } != 0 {
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    if unsafe { sa_inherits(security) } {
         attrs |= nt::OBJ_INHERIT;
     }
     let mut oa = ObjectAttributes::new(string.as_ref(), attrs);
-    // SECURITY_ATTRIBUTES.lpSecurityDescriptor at 8: the new object's
-    // descriptor (ADR 0171).
-    // SAFETY: the caller's structure when non-null.
-    if !security.is_null() {
-        oa.security_descriptor = unsafe { (security.add(8) as *const *const u8).read() };
-    }
+    // The new object's descriptor (ADR 0171).
+    // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
+    oa.security_descriptor = unsafe { sa_descriptor(security) };
     let oa_ptr = if string.is_some() || attrs & nt::OBJ_INHERIT != 0 || !oa.security_descriptor.is_null() {
         &oa as *const ObjectAttributes
     } else {
@@ -381,163 +374,110 @@ pub unsafe extern "system" fn DeleteCriticalSection(cs: *mut CriticalSection) {
     unsafe { nt::RtlDeleteCriticalSection(cs) };
 }
 
-// ----- SRW locks -------------------------------------------------------------------------------
-
-/// How a thread waits for an SRW lock: spin briefly, then yield, then sleep
-/// a millisecond at a time (Poly's first SRW lock has no wait queue, ADR
-/// 0079).
-struct Backoff;
-
-impl Pause for Backoff {
-    fn pause(&self, attempt: u32) {
-        if attempt < 64 {
-            core::hint::spin_loop();
-        } else if attempt < 128 {
-            // SAFETY: no arguments.
-            unsafe { nt::NtYieldExecution() };
-        } else {
-            let t = -10_000i64;
-            // SAFETY: a valid pointer.
-            unsafe { nt::NtDelayExecution(0, &t) };
-        }
-    }
-}
-
-fn word<'a>(lock: *mut usize) -> &'a AtomicUsize {
-    // SAFETY: an SRWLOCK is one pointer-sized, pointer-aligned word that is
-    // only accessed atomically.
-    unsafe { AtomicUsize::from_ptr(lock) }
-}
+// ----- SRW locks, condition variables, one-time initialisation ---------------------------------
+//
+// One implementation for the process: `ntdll`'s `Rtl*` exports (`poly_rtl::sync`), which Learn
+// documents as the same functions (kernel32's `AcquireSRWLockExclusive` is
+// `RtlAcquireSRWLockExclusive`); these only convert the arguments and results.
 
 /// `InitializeSRWLock`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitializeSRWLock(lock: *mut usize) {
     // SAFETY: the caller's SRWLOCK.
-    unsafe { lock.write(0) };
+    unsafe { nt::RtlInitializeSRWLock(lock) };
 }
 
 /// `AcquireSRWLockExclusive`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AcquireSRWLockExclusive(lock: *mut usize) {
-    sync::acquire_exclusive(word(lock), &Backoff);
+    // SAFETY: as above.
+    unsafe { nt::RtlAcquireSRWLockExclusive(lock) };
 }
 
 /// `AcquireSRWLockShared`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AcquireSRWLockShared(lock: *mut usize) {
-    sync::acquire_shared(word(lock), &Backoff);
+    // SAFETY: as above.
+    unsafe { nt::RtlAcquireSRWLockShared(lock) };
 }
 
 /// `ReleaseSRWLockExclusive`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ReleaseSRWLockExclusive(lock: *mut usize) {
-    sync::release_exclusive(word(lock));
+    // SAFETY: as above.
+    unsafe { nt::RtlReleaseSRWLockExclusive(lock) };
 }
 
 /// `ReleaseSRWLockShared`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ReleaseSRWLockShared(lock: *mut usize) {
-    sync::release_shared(word(lock));
+    // SAFETY: as above.
+    unsafe { nt::RtlReleaseSRWLockShared(lock) };
 }
 
 /// `TryAcquireSRWLockExclusive`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn TryAcquireSRWLockExclusive(lock: *mut usize) -> u8 {
-    sync::try_acquire_exclusive(word(lock)) as u8
+    // SAFETY: as above.
+    unsafe { nt::RtlTryAcquireSRWLockExclusive(lock) }
 }
 
 /// `TryAcquireSRWLockShared`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn TryAcquireSRWLockShared(lock: *mut usize) -> u8 {
-    sync::try_acquire_shared(word(lock)) as u8
+    // SAFETY: as above.
+    unsafe { nt::RtlTryAcquireSRWLockShared(lock) }
 }
 
-// ----- condition variables ---------------------------------------------------------------------
-
-/// The deadline of a wait of `ms` milliseconds, as a "has it passed" test
-/// on the performance counter (`INFINITE` never passes).
-fn deadline(ms: u32) -> impl Fn() -> bool {
-    let (mut start, mut freq) = (0i64, 0i64);
-    // SAFETY: valid pointers.
-    unsafe { nt::NtQueryPerformanceCounter(&mut start, &mut freq) };
-    let ticks = if ms == INFINITE { None } else { Some(i128::from(ms) * i128::from(freq.max(1)) / 1000) };
-    move || {
-        let Some(t) = ticks else { return false };
-        let mut now = 0i64;
-        // SAFETY: a valid pointer.
-        unsafe { nt::NtQueryPerformanceCounter(&mut now, core::ptr::null_mut()) };
-        i128::from(now) - i128::from(start) >= t
+/// The result of a condition-variable sleep: TRUE, or FALSE with `ERROR_TIMEOUT` (Learn) or the
+/// error of the failure.
+fn slept(status: NtStatus) -> i32 {
+    match status.0 {
+        0 => TRUE,
+        0x102 => fail(ERROR_TIMEOUT, FALSE),
+        _ => fail_status(status, FALSE),
     }
-}
-
-/// The result of a condition-variable sleep: TRUE, or FALSE with
-/// `ERROR_TIMEOUT` (Learn).
-fn slept(woken: bool) -> i32 {
-    if woken { TRUE } else { fail(ERROR_TIMEOUT, FALSE) }
 }
 
 /// `InitializeConditionVariable`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitializeConditionVariable(cv: *mut usize) {
     // SAFETY: the caller's CONDITION_VARIABLE.
-    unsafe { cv.write(0) };
+    unsafe { nt::RtlInitializeConditionVariable(cv) };
 }
 
-/// `SleepConditionVariableCS`: the critical section is left while asleep
-/// and entered again before returning.
+/// `SleepConditionVariableCS`: the critical section is left once while asleep and entered again
+/// before returning.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SleepConditionVariableCS(cv: *mut usize, cs: *mut CriticalSection, ms: u32) -> i32 {
-    let expired = deadline(ms);
-    let woken = sync::condition_sleep(
-        word(cv),
-        // SAFETY: the caller's critical section, which it holds.
-        &mut || unsafe {
-            nt::RtlLeaveCriticalSection(cs);
-        },
-        // SAFETY: as above.
-        &mut || unsafe {
-            nt::RtlEnterCriticalSection(cs);
-        },
-        &expired,
-        &Backoff,
-    );
-    slept(woken)
+    let t = sync::timeout(ms);
+    let tp = t.as_ref().map_or(core::ptr::null(), |t| t as *const i64);
+    // SAFETY: the caller's objects; a valid or null timeout.
+    slept(unsafe { nt::RtlSleepConditionVariableCS(cv, cs, tp) })
 }
 
-/// `SleepConditionVariableSRW`: `CONDITION_VARIABLE_LOCKMODE_SHARED` says
-/// the lock is held shared.
+/// `SleepConditionVariableSRW`: `CONDITION_VARIABLE_LOCKMODE_SHARED` says the lock is held shared.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SleepConditionVariableSRW(cv: *mut usize, lock: *mut usize, ms: u32, flags: u32) -> i32 {
-    if flags & !sync::CONDITION_VARIABLE_LOCKMODE_SHARED != 0 {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    let shared = flags & sync::CONDITION_VARIABLE_LOCKMODE_SHARED != 0;
-    let expired = deadline(ms);
-    let l = word(lock);
-    let woken = sync::condition_sleep(
-        word(cv),
-        &mut || if shared { sync::release_shared(l) } else { sync::release_exclusive(l) },
-        &mut || if shared { sync::acquire_shared(l, &Backoff) } else { sync::acquire_exclusive(l, &Backoff) },
-        &expired,
-        &Backoff,
-    );
-    slept(woken)
+    let t = sync::timeout(ms);
+    let tp = t.as_ref().map_or(core::ptr::null(), |t| t as *const i64);
+    // SAFETY: as above.
+    slept(unsafe { nt::RtlSleepConditionVariableSRW(cv, lock, tp, flags) })
 }
 
-/// `WakeConditionVariable`: wakes the sleepers (Poly wakes all of them,
-/// which Learn's spurious-wakeup rule allows, ADR 0079).
+/// `WakeConditionVariable`: the sleeper that has waited longest.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WakeConditionVariable(cv: *mut usize) {
-    sync::condition_wake(word(cv));
+    // SAFETY: the caller's CONDITION_VARIABLE.
+    unsafe { nt::RtlWakeConditionVariable(cv) };
 }
 
 /// `WakeAllConditionVariable`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WakeAllConditionVariable(cv: *mut usize) {
-    sync::condition_wake(word(cv));
+    // SAFETY: as above.
+    unsafe { nt::RtlWakeAllConditionVariable(cv) };
 }
-
-// ----- one-time initialisation -----------------------------------------------------------------
 
 /// `PINIT_ONCE_FN`.
 type InitOnceFn = unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> i32;
@@ -546,11 +486,14 @@ type InitOnceFn = unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitOnceInitialize(once: *mut usize) {
     // SAFETY: the caller's INIT_ONCE.
-    unsafe { once.write(0) };
+    unsafe { nt::RtlRunOnceInitialize(once) };
 }
 
-/// `InitOnceExecuteOnce`: run `f` unless it has succeeded before; other
-/// callers wait while it runs. A failed `f` lets a later call try again.
+/// `STATUS_UNSUCCESSFUL`: the callback of `InitOnceExecuteOnce` returned FALSE.
+const STATUS_UNSUCCESSFUL: u32 = 0xC000_0001;
+
+/// `InitOnceExecuteOnce`: run `f` unless it has succeeded before; other callers wait while it
+/// runs. A failing `f` gives FALSE with the last error untouched and lets a later call try again.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitOnceExecuteOnce(
     once: *mut usize,
@@ -558,33 +501,28 @@ pub unsafe extern "system" fn InitOnceExecuteOnce(
     parameter: *mut u8,
     context: *mut *mut u8,
 ) -> i32 {
-    let w = word(once);
-    let ctx = match sync::once_begin(w, 0, &Backoff) {
-        Ok(sync::Begin::Done(c)) => c,
-        Ok(sync::Begin::Pending) => {
-            let mut c: *mut u8 = core::ptr::null_mut();
-            // SAFETY: the caller's callback with its documented arguments.
-            if unsafe { f(once, parameter, &mut c) } == 0 {
-                let _ = sync::once_complete(w, sync::INIT_ONCE_INIT_FAILED, 0);
-                return FALSE;
-            }
-            if let Err(e) = sync::once_complete(w, 0, c as usize) {
-                let _ = sync::once_complete(w, sync::INIT_ONCE_INIT_FAILED, 0);
-                return fail(e, FALSE);
-            }
-            c as usize
-        }
-        Ok(sync::Begin::NotDone) => return fail(ERROR_GEN_FAILURE, FALSE),
-        Err(e) => return fail(e, FALSE),
+    // SAFETY: the caller's object and callback (`BOOL` and `ULONG` are both 32 bits).
+    let st = unsafe {
+        nt::RtlRunOnceExecuteOnce(
+            once,
+            Some(
+                core::mem::transmute::<InitOnceFn, unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> u32>(
+                    f,
+                ),
+            ),
+            parameter,
+            context,
+        )
     };
-    if !context.is_null() {
-        // SAFETY: the caller's out-pointer.
-        unsafe { context.write(ctx as *mut u8) };
+    match st.0 {
+        0 => TRUE,
+        STATUS_UNSUCCESSFUL => FALSE,
+        _ => fail_status(st, FALSE),
     }
-    TRUE
 }
 
-/// `InitOnceBeginInitialize` (synchronous only).
+/// `InitOnceBeginInitialize`: TRUE with `*pending` TRUE when the caller must initialise (and call
+/// `InitOnceComplete`), TRUE with `*pending` FALSE (done, with the context) otherwise.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitOnceBeginInitialize(
     once: *mut usize,
@@ -592,32 +530,51 @@ pub unsafe extern "system" fn InitOnceBeginInitialize(
     pending: *mut i32,
     context: *mut *mut u8,
 ) -> i32 {
-    match sync::once_begin(word(once), flags, &Backoff) {
-        Ok(sync::Begin::Pending) => {
+    if pending.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's object and out-pointers.
+    let st = unsafe { nt::RtlRunOnceBeginInitialize(once, flags, context) };
+    match st.0 {
+        0 | 0x103 => {
             // SAFETY: the caller's out-pointer.
-            unsafe { pending.write(TRUE) };
+            unsafe { pending.write(if st.0 == 0 { FALSE } else { TRUE }) };
             TRUE
         }
-        Ok(sync::Begin::Done(c)) => {
-            // SAFETY: the caller's out-pointers.
-            unsafe {
-                pending.write(FALSE);
-                if !context.is_null() {
-                    context.write(c as *mut u8);
-                }
-            }
-            TRUE
-        }
-        Ok(sync::Begin::NotDone) => fail(ERROR_GEN_FAILURE, FALSE),
-        Err(e) => fail(e, FALSE),
+        _ => fail_status(st, FALSE),
     }
 }
 
 /// `InitOnceComplete`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn InitOnceComplete(once: *mut usize, flags: u32, context: *mut u8) -> i32 {
-    match sync::once_complete(word(once), flags, context as usize) {
-        Ok(()) => TRUE,
-        Err(e) => fail(e, FALSE),
-    }
+    // SAFETY: the caller's object.
+    let st = unsafe { nt::RtlRunOnceComplete(once, flags, context) };
+    if st.0 == 0 { TRUE } else { fail_status(st, FALSE) }
+}
+
+// ----- WaitOnAddress ---------------------------------------------------------------------------
+
+/// `WaitOnAddress(address, compare, size, milliseconds)`: sleeps while the 1, 2, 4 or 8 bytes at
+/// `address` equal those at `compare`; FALSE with `ERROR_TIMEOUT` when the time ran out.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WaitOnAddress(address: *mut u8, compare: *mut u8, size: usize, ms: u32) -> i32 {
+    let t = sync::timeout(ms);
+    let tp = t.as_ref().map_or(core::ptr::null(), |t| t as *const i64);
+    // SAFETY: the caller's pointers; a valid or null timeout.
+    slept(unsafe { nt::RtlWaitOnAddress(address, compare, size, tp) })
+}
+
+/// `WakeByAddressSingle`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WakeByAddressSingle(address: *mut u8) {
+    // SAFETY: only the address is used.
+    unsafe { nt::RtlWakeAddressSingle(address) };
+}
+
+/// `WakeByAddressAll`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WakeByAddressAll(address: *mut u8) {
+    // SAFETY: only the address is used.
+    unsafe { nt::RtlWakeAddressAll(address) };
 }

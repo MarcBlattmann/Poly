@@ -24,6 +24,8 @@ struct TestEnv {
     /// Give each thread its default IME window with its first window, as
     /// `user32` does (`replay`).
     ime: Cell<bool>,
+    /// The interactive moves and resizes asked of the compositor: (window, edges).
+    moves: RefCell<Vec<(u32, u8)>>,
 }
 
 thread_local! {
@@ -47,6 +49,9 @@ fn take_log() -> Vec<String> {
 impl Env for TestEnv {
     fn call(&self, req: Request) -> Reply {
         let ctx = Ctx { pid: 7, tid: self.tid.get(), now: 0 };
+        if let Request::MoveSize { hwnd, edges } = req {
+            self.moves.borrow_mut().push((hwnd, edges));
+        }
         self.wm.borrow_mut().handle(ctx, req, &mut Effects::default())
     }
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
@@ -111,6 +116,7 @@ fn with_env(f: impl FnOnce(&TestEnv)) {
         cursor: Cell::new(0),
         regions: RefCell::new(Vec::new()),
         ime: Cell::new(false),
+        moves: RefCell::new(Vec::new()),
     };
     ENV.with(|p| p.set(&e));
     take_log();
@@ -216,6 +222,7 @@ extern "system" fn logging_proc(h: u64, msg: u32, w: u64, l: u64) -> u64 {
         0x00A0 => log(format!("{t} WM_NCMOUSEMOVE hit={w}")),
         0x02A3 => log(format!("{t} WM_MOUSELEAVE")),
         0x02A2 => log(format!("{t} WM_NCMOUSELEAVE")),
+        WM_SYSCOMMAND => log(format!("{t} WM_SYSCOMMAND w={w:#x}")),
         WM_DESTROY => log(format!("{t} WM_DESTROY")),
         WM_NCDESTROY => log(format!("{t} WM_NCDESTROY")),
         _ => {}
@@ -259,6 +266,7 @@ fn create(
         parent,
         menu,
         instance: 0x1_4000_0000,
+        ansi: false,
     };
     let h = u64::from(create_window(e, spec, 0, 0));
     NEXT.with(|n| n.set('?'));
@@ -478,13 +486,17 @@ fn client_mouse_move_sends_nchittest_before_setcursor() {
         register(e, "MouseMove");
         let h = create(e, 'A', 0, "MouseMove", WS_POPUP | WS_VISIBLE, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_NCHITTEST screen=50,50", "A WM_SETCURSOR window=A hit=1 msg=512"]);
-        assert_eq!(message.l, makelparam(50, 50));
+        assert_eq!(message.l, (makelparam(50, 50)) as usize);
     });
 }
 
@@ -494,15 +506,19 @@ fn nonclient_mouse_move_uses_geometric_hit_without_nchittest_callout() {
         register(e, "MouseMoveNc");
         let h = create(e, 'A', 0, "MouseMoveNc", WS_POPUP | WS_VISIBLE | WS_CAPTION, 0, 0, 100, 100, 0, 0);
         take_log();
-        let mut message =
-            CMsg { hwnd: h, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 5), ..CMsg::default() };
+        let mut message = CMsg {
+            hwnd: h as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 5)) as usize,
+            ..CMsg::default()
+        };
 
         assert!(input::mouse_retrieved(e, &mut message));
 
         assert_eq!(take_log(), ["A WM_SETCURSOR window=A hit=2 msg=512"]);
         assert_eq!(message.message, 0x00A0);
         assert_eq!(message.w, 2);
-        assert_eq!(message.l, makelparam(50, 5));
+        assert_eq!(message.l, (makelparam(50, 5)) as usize);
     });
 }
 
@@ -593,6 +609,48 @@ fn topmost_windows_stay_above_later_created_ones() {
         // A window answering HTTRANSPARENT passes to the one below it.
         assert_eq!(u64::from(from_point(e, 50, 50, top as u32)), plain);
         assert_ne!(from_point(e, 50, 50, plain as u32), plain as u32);
+    });
+}
+
+#[test]
+fn a_release_queues_its_move_only_after_the_notification() {
+    // ReleaseCapture.yaml `rc_nocapture` (attached): another thread of the same
+    // input releases; the capture window must have heard WM_CAPTURECHANGED
+    // before the move to the window under the cursor can be retrieved. The
+    // release itself (SET_CAPTURE_QUIET) queues no move; SET_CAPTURE_MOVE does,
+    // exactly once, and `release_capture` ends with it.
+    use crate::wm::input::{SET_CAPTURE, SET_CAPTURE_MOVE, SET_CAPTURE_QUIET};
+    with_env(|e| {
+        register(e, "Cap");
+        let a = create(e, 'A', 0, "Cap", WS_POPUP | WS_VISIBLE, 0, 0, 200, 200, 0, 0);
+        e.call(Request::Cursor { set: true, x: 50, y: 50 });
+        let drain = || {
+            let mut n = 0;
+            while let Reply::Message { .. } =
+                e.call(Request::Peek { filter: 0, min: 0x200, max: 0x20E, flags: PM_REMOVE })
+            {
+                n += 1;
+            }
+            n
+        };
+        assert_eq!(drain(), 1);
+        let call = |capture: u32, which: u8| {
+            e.call(Request::SetInput { active: 0, focus: 0, capture, which });
+        };
+        call(a as u32, SET_CAPTURE);
+        call(0, SET_CAPTURE_QUIET);
+        assert_eq!(drain(), 0);
+        call(0, SET_CAPTURE_MOVE);
+        assert_eq!(drain(), 1);
+        assert_eq!(crate::user::focus::set_capture(e, a), 0);
+        take_log();
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), ["A WM_CAPTURECHANGED lparam=0"]);
+        assert_eq!(drain(), 1);
+        // No capture: nothing is sent and no move is queued.
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), Vec::<String>::new());
+        assert_eq!(drain(), 0);
     });
 }
 
@@ -860,13 +918,18 @@ fn a_disabled_popup_gets_wm_setcursor_with_a_hit_error_and_nothing_else() {
         let d = create(e, 'D', 0, "Dis", WS_POPUP | WS_VISIBLE | WS_DISABLED, 0, 0, 100, 100, 0, 0);
         take_log();
         for (msg, hit_msg) in [(crate::wm::raw::WM_LBUTTONDOWN, 513), (crate::wm::raw::WM_MOUSEMOVE, 512)] {
-            let mut m = CMsg { hwnd: d, message: msg, l: makelparam(50, 50), ..CMsg::default() };
+            let mut m = CMsg { hwnd: d as usize, message: msg, l: (makelparam(50, 50)) as usize, ..CMsg::default() };
             assert!(!input::mouse_retrieved(e, &mut m), "the message is dropped");
             assert_eq!(take_log(), [format!("D WM_SETCURSOR window=D hit=65534 msg={hit_msg}")]);
         }
         // Enabled again it is hit-tested and delivered as usual.
         e.call(Request::SetStyle { hwnd: d as u32, which: -16, value: WS_POPUP | WS_VISIBLE });
-        let mut m = CMsg { hwnd: d, message: crate::wm::raw::WM_MOUSEMOVE, l: makelparam(50, 50), ..CMsg::default() };
+        let mut m = CMsg {
+            hwnd: d as usize,
+            message: crate::wm::raw::WM_MOUSEMOVE,
+            l: (makelparam(50, 50)) as usize,
+            ..CMsg::default()
+        };
         assert!(input::mouse_retrieved(e, &mut m));
         assert_eq!(take_log().first().map(String::as_str), Some("D WM_NCHITTEST screen=50,50"));
     });
@@ -910,6 +973,58 @@ fn def_window_proc_sets_the_class_cursor_for_a_client_hit_only_for_itself() {
         e.call(Request::SetLong { hwnd: b, index: -4, size: 8, value: truthy_proc as *const () as u64 });
         assert_eq!(def_window_proc(e, c, input::WM_SETCURSOR, c, hit(1)), 1);
         assert_eq!(e.cursor.get(), 0x60001);
+    });
+}
+
+#[test]
+fn a_press_on_the_caption_or_a_border_moves_or_sizes_through_the_compositor() {
+    // Learn: WM_NCLBUTTONDOWN, WM_NCLBUTTONDBLCLK, WM_SYSCOMMAND (SC_MOVE, SC_SIZE).
+    with_env(|e| {
+        register(e, "Own");
+        let h = create(
+            e,
+            'A',
+            0,
+            "Own",
+            WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000 | WS_VISIBLE,
+            100,
+            100,
+            300,
+            200,
+            0,
+            0,
+        );
+        let screen = makelparam(150, 105);
+        take_log();
+        let sys = |hit: i32| {
+            def_window_proc(e, h, WM_NCLBUTTONDOWN, hit as u64, screen);
+            take_log().into_iter().filter(|l| l.contains("SYSCOMMAND")).collect::<Vec<_>>()
+        };
+        assert_eq!(sys(frame::HTCAPTION), ["A WM_SYSCOMMAND w=0xf012"]);
+        assert_eq!(e.moves.borrow().as_slice(), [(h as u32, 0)]);
+        assert_eq!(sys(frame::HTBOTTOMRIGHT), ["A WM_SYSCOMMAND w=0xf008"]);
+        assert_eq!(sys(frame::HTLEFT), ["A WM_SYSCOMMAND w=0xf001"]);
+        let edges = |v: &[(u32, u8)]| v.iter().map(|m| m.1).collect::<Vec<_>>();
+        assert_eq!(edges(&e.moves.borrow()), [0, 8 | 4, 1]);
+        // A caption button acts when released over it, not when pressed.
+        assert!(sys(frame::HTMAXBUTTON).is_empty());
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTCAPTION as u64, screen);
+        assert!(take_log().iter().all(|l| !l.contains("SYSCOMMAND")), "released elsewhere: nothing");
+        // A double click on the caption maximizes; a maximized window is not dragged.
+        def_window_proc(e, h, WM_NCLBUTTONDBLCLK, frame::HTCAPTION as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf030")));
+        e.moves.borrow_mut().clear();
+        assert_eq!(sys(frame::HTCAPTION), ["A WM_SYSCOMMAND w=0xf012"]);
+        assert!(e.moves.borrow().is_empty());
+        // The maximize button of a maximized window restores it.
+        sys(frame::HTMAXBUTTON);
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTMAXBUTTON as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf120")));
+        sys(frame::HTMINBUTTON);
+        def_window_proc(e, h, WM_NCLBUTTONUP, frame::HTMINBUTTON as u64, screen);
+        assert!(take_log().contains(&String::from("A WM_SYSCOMMAND w=0xf020")));
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        assert_ne!(info.style & WS_MINIMIZE, 0);
     });
 }
 
@@ -1306,3 +1421,49 @@ mod input_hunt;
 mod paint_hunt;
 #[path = "user_tests/replay.rs"]
 mod replay;
+
+#[test]
+fn a_layered_child_needs_a_windows_8_manifest() {
+    // SetLayeredWindowAttributes.yaml `children` (no manifest: refused, no
+    // last error); Learn, "Layered Windows": with Windows 8 declared, child
+    // windows may be layered (Chrome's GPU process makes one).
+    with_env(|e| {
+        register(e, "L");
+        let p = create(e, 'P', 0, "L", WS_POPUP, 0, 0, 100, 100, 0, 0);
+        let layered = 0x0008_0000 | 0x20;
+        e.err.set(1234);
+        assert_eq!(create(e, 'C', layered, "L", WS_CHILD, 0, 0, 1, 1, p, 0), 0);
+        assert_eq!(e.err.get(), 1234, "no last error");
+        assert_eq!(e.call(Request::LayeredChildren {}), Reply::Ok {});
+        let c = create(e, 'C', layered, "L", WS_CHILD, 0, 0, 1, 1, p, 0);
+        assert_ne!(c, 0);
+        let Reply::Window { info } = e.call(Request::Window { hwnd: c }) else { panic!() };
+        assert_ne!(info.ex_style & 0x0008_0000, 0);
+    });
+}
+
+/// Learn's `WM_NCHITTEST` codes on the sizing border of a resizable window: Chrome's 900x500
+/// window at 40,40 whose client area starts at its top (8 px borders left, right, below), and a
+/// captioned window with its band above the caption.
+#[test]
+fn the_sizing_border_of_a_resizable_window_has_its_hit_codes() {
+    let sizable = 0x16CF_0000; // WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN
+    let (w, c) = (Rect::new(40, 40, 940, 540), Rect::new(48, 40, 932, 532));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(44, 300), Some(frame::HTLEFT));
+    assert_eq!(hit(936, 300), Some(frame::HTRIGHT));
+    assert_eq!(hit(500, 536), Some(frame::HTBOTTOM));
+    assert_eq!(hit(44, 536), Some(frame::HTBOTTOMLEFT));
+    assert_eq!(hit(936, 536), Some(frame::HTBOTTOMRIGHT));
+    assert_eq!(hit(500, 300), None, "the client area is the window's");
+    // No sizing border: HTBORDER stays DefWindowProc's answer.
+    assert_eq!(sizing_hit(sizable & !0x0004_0000, w, c, 44, 300), None);
+    assert_eq!(sizing_hit(sizable | 0x0100_0000, w, c, 44, 300), None, "maximized");
+    // A captioned window: the band above the caption is the top border, the caption is not.
+    let (w, c) = (Rect::new(100, 50, 400, 250), Rect::new(108, 81, 392, 242));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(200, 52), Some(frame::HTTOP));
+    assert_eq!(hit(102, 52), Some(frame::HTTOPLEFT));
+    assert_eq!(hit(398, 52), Some(frame::HTTOPRIGHT));
+    assert_eq!(hit(200, 70), None, "the caption");
+}

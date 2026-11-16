@@ -11,52 +11,31 @@ poly_win32_rt::fail_exports!(
         BringWindowToTop,
         CharToOemBuffW,
         ClipCursor,
-        CloseDesktop,
         CloseTouchInputHandle,
-        CloseWindowStation,
-        CreateDesktopW,
-        CreatePopupMenu,
-        CreateWindowExA,
-        CreateWindowStationW,
         DdeClientTransaction,
         DdeConnect,
         DdeCreateStringHandleW,
         DdeDisconnect,
         DdeFreeStringHandle,
         DdeUninitialize,
-        DestroyMenu,
         DrawEdge,
         DrawFocusRect,
         DrawFrameControl,
         FlashWindowEx,
         FrameRect,
         GetGuiResources,
-        GetMenuInfo,
-        GetMenuItemInfoW,
         GetMonitorInfoA,
         GetPointerDevice,
         GetPointerPenInfo,
         GetPointerType,
-        GetProcessWindowStation,
-        GetUserObjectInformationW,
-        InsertMenuItemW,
         InvertRect,
-        LoadStringW,
         OemToCharA,
         OemToCharBuffA,
         OpenInputDesktop,
         PrintWindow,
         RegisterHotKey,
         RegisterRawInputDevices,
-        SetMenuDefaultItem,
-        SetMenuInfo,
-        SetMenuItemInfoW,
-        SetProcessWindowStation,
-        SetThreadDesktop,
-        TrackPopupMenu,
         UnregisterHotKey,
-        MessageBoxW,
-        UnregisterClassA
     ]
 );
 
@@ -64,7 +43,7 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!(
     "user32",
     win32_minus_one,
-    [EnableMenuItem, GetMenuItemCount, GetRawInputData, GetRawInputDeviceInfoW, GetRawInputDeviceList]
+    [GetRawInputData, GetRawInputDeviceInfoW, GetRawInputDeviceList]
 );
 
 // `DdeInitializeW` returns a `DMLERR_*` value: `DMLERR_SYS_ERROR` (`ddeml.h`).

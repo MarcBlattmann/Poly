@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msvcp140.dll/_Thrd_create # must match coverage.json
+oracle:                                       # where the behaviour was observed
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32 (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll all 14.44.35211.0)"
+  machine: "homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\\\BuildTools) with /EHsc /GS- /Zl /O1, no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from tests/windows/cxx/*.def and from the DLL's own export table, run by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical"
+  observed_by: spec-vcrt-1
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes,
+  offsets and constants read from Microsoft's STL and vcruntime headers that ship with the Build Tools
+  (Apache-2.0 with LLVM exception; owner decision 2026-11-15: spec agents may read them for layouts, sizes,
+  offsets, vtable order and member meaning; nothing of them is copied here); the compiler's own output for our
+  own probe programs (cl /FAs listings: the arguments of the calls the compiler writes, the RTTI records it
+  emits). No Microsoft binary was disassembled or debugged, no vcruntime or CRT source was read.
+summary: >
+  The C thread functions of msvcp140.dll: _Thrd_create(_Thrd_t*, int (*)(void*), void*), _Thrd_join(_Thrd_t,
+  int*), _Thrd_detach(_Thrd_t), _Thrd_current(), _Thrd_equal(_Thrd_t, _Thrd_t), _Thrd_id(), _Thrd_yield(),
+  _Thrd_sleep(const xtime*), _Thrd_hardware_concurrency(). _Thrd_t is {void* _Hnd (the Win32 thread handle);
+  unsigned _Id (the thread id)} (16 bytes, returned through a hidden pointer by _Thrd_current). The start
+  function returns an int that _Thrd_join stores.
+interface:
+  signatures: "_Thrd_result _Thrd_create(_Thrd_t*, int(__cdecl*)(void*), void*); _Thrd_result _Thrd_join(_Thrd_t, int*); _Thrd_result _Thrd_detach(_Thrd_t); _Thrd_t _Thrd_current(void); int _Thrd_equal(_Thrd_t, _Thrd_t); unsigned _Thrd_id(void); void _Thrd_yield(void); unsigned _Thrd_hardware_concurrency(void); void _Thrd_sleep(const xtime*) with xtime {__time64_t sec; long nsec} = an ABSOLUTE time (the sleep ends when the system clock reaches it)"
+rules:
+  create_join: "_Thrd_create returns _Success with a handle in _Hnd; the start function runs on a new thread with the argument; _Thrd_join waits, returns _Success and the start function's int; _Thrd_t::_Id equals the id the new thread sees with GetCurrentThreadId"
+  current: "_Thrd_current()._Id and _Thrd_id() equal GetCurrentThreadId(); _Thrd_equal is 1 for the same thread, 0 for different ones"
+  detach: "_Thrd_detach returns _Success; the detached thread still runs to its end"
+  concurrency: "_Thrd_hardware_concurrency() is at least 1"
+  sleep: "_Thrd_sleep with now + 50 ms (an xtime made from _Xtime_get_ticks) returns after 40 ms .. 2 s; a time in the past (xtime 0) returns at once"
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  The tests are C++ with the line `// poly-cxx: compiler=msvc`: their executables were built on the oracle
+  machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, ucrtbase.dll and kernel32.dll only.

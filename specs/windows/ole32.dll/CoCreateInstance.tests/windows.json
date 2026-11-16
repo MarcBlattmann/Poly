@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "com_create",
+      "exe_sha256": "23f28a9e08e2822453ef224c26193800db40641ca5015b3204450bcf1b91d00d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29DcmVhdGVJbnN0YW5jZShhbiB1bmtub3duIGNsYXNzLCBDT00gbm90IGluaXRpYWxpc2VkIG9uIHRoaXMgdGhyZWFkKSA9IDB4ODAwNDAxZjAsIG91dHB1dCBzZXQgdG8gTlVMTApDb0NyZWF0ZUluc3RhbmNlKGFuIHVua25vd24gY2xhc3MsIENMU0NUWF9BTEwpID0gMHg4MDA0MDE1NCwgb3V0cHV0IHNldCB0byBOVUxMCkNvQ3JlYXRlSW5zdGFuY2UoYW4gdW5rbm93biBjbGFzcywgY29udGV4dCAwKSA9IDB4ODAwNDAxNTQsIG91dHB1dCBzZXQgdG8gTlVMTApDb0NyZWF0ZUluc3RhbmNlKGFuIHVua25vd24gY2xhc3Mgd2l0aCBhbiBvdXRlciB1bmtub3duKSA9IDB4ODAwNDAxMTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoCreateInstance(an unknown class, COM not initialised on this thread) = 0x800401f0, output set to NULL\nCoCreateInstance(an unknown class, CLSCTX_ALL) = 0x80040154, output set to NULL\nCoCreateInstance(an unknown class, context 0) = 0x80040154, output set to NULL\nCoCreateInstance(an unknown class with an outer unknown) = 0x80040110\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "com_create_c",
+      "exe_sha256": "c8f32471536c1a884d8ebc3e73b71622b48ce7b544d0769f3da7152ca5dc4008",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXgoTlVMTCwgMikgPSAweDAKQ29DcmVhdGVJbnN0YW5jZShhbiB1bmtub3duIGNsYXNzLCBDTFNDVFhfTE9DQUxfU0VSVkVSKSA9IDB4ODAwNDAxNTQsIG91dHB1dCBzZXQgdG8gTlVMTApDb0dldENsYXNzT2JqZWN0KGFuIHVua25vd24gY2xhc3MpID0gMHg4MDA0MDE1NCwgb3V0cHV0IHNldCB0byBOVUxMCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx(NULL, 2) = 0x0\nCoCreateInstance(an unknown class, CLSCTX_LOCAL_SERVER) = 0x80040154, output set to NULL\nCoGetClassObject(an unknown class) = 0x80040154, output set to NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

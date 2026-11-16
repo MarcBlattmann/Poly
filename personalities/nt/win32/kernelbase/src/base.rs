@@ -52,6 +52,7 @@ pub const INVALID_HANDLE_VALUE: Handle = -1;
 // ----- TEB and PEB ----------------------------------------------------------------
 
 /// The current TEB (`NtCurrentTeb`: `gs:[0x30]`, `winnt.h`).
+#[cfg(target_arch = "x86_64")]
 pub fn teb() -> u64 {
     let teb: u64;
     // SAFETY: GS is the TEB in every NT thread (ADR 0063).
@@ -59,16 +60,121 @@ pub fn teb() -> u64 {
     teb
 }
 
-/// The PEB (`TEB.ProcessEnvironmentBlock`, TEB + 0x60, `winternl.h`).
-pub fn peb() -> u64 {
-    // SAFETY: the TEB holds the PEB pointer.
-    unsafe { ((teb() + 0x60) as *const u64).read() }
+/// The current TEB of a 32-bit thread (`NtCurrentTeb`: `fs:[0x18]`, ADR 0186).
+#[cfg(target_arch = "x86")]
+pub fn teb() -> u64 {
+    let teb: u32;
+    // SAFETY: FS is the TEB in every 32-bit NT thread (ADR 0186).
+    unsafe { core::arch::asm!("mov {}, fs:[0x18]", out(reg) teb, options(nostack, pure, readonly)) };
+    u64::from(teb)
 }
 
-/// `RTL_USER_PROCESS_PARAMETERS` (`PEB.ProcessParameters`, PEB + 0x20).
+/// A pointer-sized value in process memory (8 bytes in a 64-bit process, 4 in a 32-bit one).
+///
+/// # Safety
+/// `at` is readable.
+pub unsafe fn ptr_at(at: u64) -> u64 {
+    // SAFETY: the caller's contract.
+    unsafe { (at as *const usize).read() as u64 }
+}
+
+/// `THREAD_BASIC_INFORMATION.ClientId.UniqueThread` and `PROCESS_BASIC_INFORMATION.UniqueProcessId`
+/// (`winternl.h`), at their offsets for this build's pointer width (ADR 0186).
+pub const TBI_UNIQUE_THREAD: usize = if cfg!(target_pointer_width = "32") { 12 } else { 24 };
+pub const PBI_UNIQUE_PROCESS_ID: usize = if cfg!(target_pointer_width = "32") { 16 } else { 32 };
+
+/// The pointer-sized value at `at` of an information buffer, as a `u32` (an id).
+pub fn id_in(info: &[u8], at: usize) -> u32 {
+    let mut b = [0u8; 4];
+    b.copy_from_slice(&info[at..at + 4]);
+    u32::from_le_bytes(b)
+}
+
+/// `SECURITY_ATTRIBUTES` (`minwinbase.h`): `nLength`, `lpSecurityDescriptor`, `bInheritHandle`.
+/// The layout is the build's own: the descriptor at 8 and the BOOL at 16 in a 64-bit process,
+/// at 4 and 8 in a 32-bit one (ADR 0186).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SecurityAttributesRaw {
+    pub length: u32,
+    pub descriptor: *const u8,
+    pub inherit: i32,
+}
+
+/// The `lpSecurityDescriptor` of a caller's `SECURITY_ATTRIBUTES`, or null.
+///
+/// # Safety
+/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
+pub unsafe fn sa_descriptor(sa: *const u8) -> *const u8 {
+    if sa.is_null() {
+        return core::ptr::null();
+    }
+    // SAFETY: the caller's structure when non-null.
+    unsafe { (sa as *const SecurityAttributesRaw).read_unaligned() }.descriptor
+}
+
+/// `SECURITY_ATTRIBUTES.bInheritHandle` of a caller's structure (false for null).
+///
+/// # Safety
+/// `sa` is null or the caller's `SECURITY_ATTRIBUTES`.
+pub unsafe fn sa_inherits(sa: *const u8) -> bool {
+    if sa.is_null() {
+        return false;
+    }
+    // SAFETY: the caller's structure when non-null.
+    unsafe { (sa as *const SecurityAttributesRaw).read_unaligned() }.inherit != 0
+}
+
+/// `MEMORY_BASIC_INFORMATION` (`winnt.h`) in this build's layout (ADR 0186): 48 bytes in a
+/// 64-bit process (the `PartitionId` field exists there only), 28 in a 32-bit one.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct MemoryBasicInformation {
+    pub base_address: usize,
+    pub allocation_base: usize,
+    pub allocation_protect: u32,
+    #[cfg(target_pointer_width = "64")]
+    pub partition_id: u16,
+    pub region_size: usize,
+    pub state: u32,
+    pub protect: u32,
+    pub ty: u32,
+}
+
+/// `MemoryBasicInformation` of the address `at` of this process.
+pub fn query_memory(at: usize) -> Option<MemoryBasicInformation> {
+    let mut mbi = MemoryBasicInformation::default();
+    let mut got = 0usize;
+    // SAFETY: a buffer of the stated length.
+    let st = unsafe {
+        nt::NtQueryVirtualMemory(
+            nt::CURRENT_PROCESS,
+            at as *const u8,
+            0,
+            (&mut mbi as *mut MemoryBasicInformation).cast(),
+            core::mem::size_of::<MemoryBasicInformation>(),
+            &mut got,
+        )
+    };
+    st.is_success().then_some(mbi)
+}
+
+/// Where the loader keeps its lists (`PEB.Ldr`, `LDR_DATA_TABLE_ENTRY`) in this build's process.
+#[cfg(target_arch = "x86")]
+pub const LDR: &poly_ldr::LdrLayout = poly_ldr::Bitness::X86.layout();
+#[cfg(not(target_arch = "x86"))]
+pub const LDR: &poly_ldr::LdrLayout = poly_ldr::Bitness::X64.layout();
+
+/// The PEB (`TEB.ProcessEnvironmentBlock`, `winternl.h`; `poly_rtl::layout`).
+pub fn peb() -> u64 {
+    // SAFETY: the TEB holds the PEB pointer.
+    unsafe { ptr_at(teb() + poly_rtl::layout::NATIVE.teb_peb) }
+}
+
+/// `RTL_USER_PROCESS_PARAMETERS` (`PEB.ProcessParameters`).
 pub fn parameters() -> u64 {
     // SAFETY: the kernel wrote the pointer (ADR 0073).
-    unsafe { ((peb() + 0x20) as *const u64).read() }
+    unsafe { ptr_at(peb() + poly_rtl::layout::NATIVE.peb_process_parameters) }
 }
 
 /// A `UNICODE_STRING` in process memory as a slice (empty if unset).
@@ -79,7 +185,7 @@ pub unsafe fn unicode_at<'a>(at: u64) -> &'a [u16] {
     // SAFETY: the caller's contract.
     unsafe {
         let len = usize::from((at as *const u16).read()) / 2;
-        let buf = ((at + 8) as *const *const u16).read();
+        let buf = ((at + poly_rtl::layout::NATIVE.ptr) as *const *const u16).read();
         if buf.is_null() { &[] } else { core::slice::from_raw_parts(buf, len) }
     }
 }
@@ -142,6 +248,8 @@ pub struct State {
     pub parent_console: u32,
     /// `SetConsoleCtrlHandler`'s list.
     pub ctrl: poly_console::ctrl::CtrlHandlers,
+    /// The bases of the modules loaded as data files or image resources (`resource.rs`).
+    pub datafiles: Vec<u64>,
 }
 
 struct Shared {
@@ -161,6 +269,7 @@ static SHARED: Shared = Shared {
         console: 0,
         parent_console: 0,
         ctrl: poly_console::ctrl::CtrlHandlers::new(),
+        datafiles: Vec::new(),
     }),
 };
 
@@ -181,6 +290,12 @@ pub fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 
 /// The current directory.
 pub fn current_dir() -> Vec<u16> {
+    // The process parameters hold it (so does `ntdll`'s `RtlSetCurrentDirectory_U`); the state is
+    // the fallback before they do.
+    let in_parameters = crate::process::pp_current_dir();
+    if !in_parameters.is_empty() {
+        return in_parameters;
+    }
     with_state(|s| s.current_dir.clone())
 }
 

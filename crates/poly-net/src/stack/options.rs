@@ -14,6 +14,15 @@ impl Stack {
         }
     }
 
+    /// Everything queued for reading: a TCP socket's bytes, the sum of a datagram socket's
+    /// datagrams (Winsock's `FIONREAD`; [`bytes_readable`](Self::bytes_readable) is Linux's).
+    pub fn queued_bytes(&self, h: SocketHandle) -> Result<usize, Errno> {
+        match &self.entry_ref(h)?.sock {
+            Sock::Dgram(s) => Ok(s.rx.iter().map(|d| d.data.len()).sum()),
+            Sock::Tcp(_) => self.bytes_readable(h),
+        }
+    }
+
     /// Bytes queued for sending and not yet acknowledged (TCP) or not yet
     /// sent (datagrams): `SIOCOUTQ`.
     pub fn send_queued(&self, h: SocketHandle) -> Result<usize, Errno> {
@@ -53,6 +62,17 @@ impl Stack {
             Sock::Tcp(t) => (t.ttl, t.tos),
             Sock::Dgram(s) => (s.ttl, s.tos),
         })
+    }
+
+    /// `IP_MTU` (ip(7)): the path MTU towards the peer of a connected
+    /// socket; `ENOTCONN` for one that is not.
+    pub fn path_mtu_to_peer(&self, h: SocketHandle) -> Result<usize, Errno> {
+        let peer = match &self.entry_ref(h)?.sock {
+            Sock::Tcp(t) if t.state != TcpState::Closed && t.state != TcpState::Listen => Some(t.remote),
+            Sock::Dgram(s) => s.remote,
+            Sock::Tcp(_) => None,
+        };
+        peer.map(|p| self.path_mtu(p.ip())).ok_or(Errno::ENOTCONN)
     }
 
     /// `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, `TCP_KEEPCNT`: the keepalive
@@ -123,6 +143,36 @@ impl Stack {
             }
             _ => self.close(h),
         }
+    }
+
+    /// Winsock's `shutdown(SD_RECEIVE)` (set before the shutdown itself): data that is queued or
+    /// arrives later resets the connection instead of being dropped; the next call fails with
+    /// `ECONNABORTED`.
+    pub fn set_rd_shut_aborts(&mut self, h: SocketHandle, on: bool) -> Result<(), Errno> {
+        let idx = h.index as usize;
+        if let Sock::Tcp(t) = &mut self.entry(h)?.sock {
+            t.rd_shut_aborts = on;
+            if on && t.recv_queued() > 0 {
+                t.abort();
+                t.error = Some(Errno::ECONNABORTED);
+                self.settle(idx);
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset the connection (send RST) and keep the socket: the next call reports `ECONNABORTED`.
+    pub fn reset_connection(&mut self, h: SocketHandle) -> Result<(), Errno> {
+        let idx = h.index as usize;
+        if let Sock::Tcp(t) = &mut self.entry(h)?.sock
+            && t.state != TcpState::Closed
+            && t.listen.is_none()
+        {
+            t.abort();
+            t.error = Some(Errno::ECONNABORTED);
+            self.settle(idx);
+        }
+        Ok(())
     }
 
     /// Take the pending error (`getsockopt(SO_ERROR)`).

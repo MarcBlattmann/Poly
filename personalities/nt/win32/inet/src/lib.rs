@@ -27,7 +27,8 @@ use poly_http::url::{self, Cracked, Parts};
 
 pub type Handle = isize;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn GetLastError() -> u32;
     pub fn SetLastError(e: u32);
@@ -36,7 +37,8 @@ unsafe extern "system" {
     fn HeapFree(heap: Handle, flags: u32, mem: *mut u8) -> i32;
 }
 
-#[link(name = "ws2_32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ws2_32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ws2_32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn WSAStartup(version: u16, data: *mut u8) -> i32;
     fn WSAGetLastError() -> i32;
@@ -510,7 +512,11 @@ pub struct UrlComponents {
     pub extra_info_length: u32,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(core::mem::size_of::<UrlComponents>() == 104);
+// `URL_COMPONENTSW` with 4-byte pointers (`wininet.h`; ADR 0186).
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(core::mem::size_of::<UrlComponents>() == 60);
 
 /// The caller's URL as units (`len` 0: NUL-terminated).
 unsafe fn url_units<'a>(url: *const u16, len: u32) -> Option<&'a [u16]> {

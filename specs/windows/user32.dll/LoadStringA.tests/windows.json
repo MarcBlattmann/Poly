@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d335c49dcc3c",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T12:17:39Z",
+  "tests": [
+    {
+      "name": "lsa_strings",
+      "exe_sha256": "037e1679e4a206e48df2b1dd9fb048b3430bccf4c526aca7cbb8ebc8b1c79412",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QU5TSSBjb2RlIHBhZ2UgMTI1MgppZCAxOiA1IGVycj0tMiBieXRlcyAnSGVsbG8nIHdyaXR0ZW49NgppZCAyOiA1IGVycj0tMiBieXRlcyAnV29ybGQnIHdyaXR0ZW49NgppZCAzICh3aXRoICYgYW5kIGEgZm9ybWF0KTogMjggZXJyPS0yIGJ5dGVzICdXaXRoICZtbmVtb25pYyBhbmQgJXMgZm9ybWF0JyB3cml0dGVuPTI5CmlkIDQgKGEgdGFiKTogOCBlcnI9LTIgYnl0ZXMgJ1RhYjwwOT5oZXJlJyB3cml0dGVuPTkKaWQgNSAobm9uLUFTQ0lJIGNoYXJhY3RlcnMpOiA3IGVycj0tMiBieXRlcyAnPGM0PjxmNj48ZmM+IDw4MD4gPycgd3JpdHRlbj04CmlkIDYgKDMwMCBjaGFyYWN0ZXJzKSwgc2l6ZSA0MDA6IDMwMCBlcnI9LTIgYnl0ZXMgJ2FiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ubwppZCA2LCBzaXplIDEwMDogOTkgZXJyPS0yIGJ5dGVzICdhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5emFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXphYmNkZWZnaGlqa2xtbm9wcXJzdHUnIHdyaXR0ZW49MTAwCmlkIDcgKG9uZSBjaGFyYWN0ZXIpOiAxIGVycj0tMiBieXRlcyAnQScgd3JpdHRlbj0yCmlkIDE2IChzZWNvbmQgYmxvY2spOiAxMyBlcnI9LTIgYnl0ZXMgJ0Jsb2NrIDIgZmlyc3QnIHdyaXR0ZW49MTQKaWQgMTc6IDE0IGVycj0tMiBieXRlcyAnQmxvY2sgMiBzZWNvbmQnIHdyaXR0ZW49MTUKaWQgMTggKGEgaG9sZSBpbiB0aGUgYmxvY2spOiAwIGVycj0tMSBieXRlcyAnJyB3cml0dGVuPTEKaWQgMzAwOiAxMyBlcnI9LTIgYnl0ZXMgJ1RocmVlIGh1bmRyZWQnIHdyaXR0ZW49MTQKaWQgNjU1MzU6IDE0IGVycj0tMiBieXRlcyAnVGhlIGhpZ2hlc3QgaWQnIHdyaXR0ZW49MTUKaWQgNSB3aXRoIHNpemUgNDogMyBlcnI9LTIgYnl0ZXMgJzxjND48ZjY+PGZjPicgd3JpdHRlbj00CmlkIDUgd2l0aCBzaXplIDY6IDUgZXJyPS0yIGJ5dGVzICc8YzQ+PGY2PjxmYz4gPDgwPicgd3JpdHRlbj02CmlkIDEgd2l0aCBzaXplIDUgKGV4YWN0bHkgdGhlIGxlbmd0aCBwbHVzIE5VTCk6IDUgZXJyPS0yIGJ5dGVzICdIZWxsbycgd3JpdHRlbj02CmlkIDEgd2l0aCBzaXplIDU6IDQgZXJyPS0yIGJ5dGVzICdIZWxsJyB3cml0dGVuPTUKaWQgMSB3aXRoIHNpemUgMTogMCBlcnI9LTEgYnl0ZXMgJycgd3JpdHRlbj0xCmlkIDEgd2l0aCBzaXplIDA6IC0xIGVycj0tMiBieXRlcyAnJyB3cml0dGVuPTAKaWQgMSB3aXRoIHNpemUgLTE6IC0yIGVycj0tMiBieXRlcyAnJyB3cml0dGVuPTAKaWQgOTk5IChhYnNlbnQpOiAwIGVycj0xODE0IGJ5dGVzICcnIHdyaXR0ZW49MQppZCAwOiAwIGVycj0tMSBieXRlcyAnJyB3cml0dGVuPTEKaWQgMHgxMDAwMDogMCBlcnI9LTEgYnl0ZXMgJycgd3JpdHRlbj0xCk5VTEwgbW9kdWxlICh0aGUgZXhlY3V0YWJsZSk6IDUKbWFkZS11cCBtb2R1bGU6IDAgZXJyPTE4MTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ANSI code page 1252\nid 1: 5 err=-2 bytes 'Hello' written=6\nid 2: 5 err=-2 bytes 'World' written=6\nid 3 (with & and a format): 28 err=-2 bytes 'With &mnemonic and %s format' written=29\nid 4 (a tab): 8 err=-2 bytes 'Tab<09>here' written=9\nid 5 (non-ASCII characters): 7 err=-2 bytes '<c4><f6><fc> <80> ?' written=8\nid 6 (300 characters), size 400: 300 err=-2 bytes 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmno\nid 6, size 100: 99 err=-2 bytes 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu' written=100\nid 7 (one character): 1 err=-2 bytes 'A' written=2\nid 16 (second block): 13 err=-2 bytes 'Block 2 first' written=14\nid 17: 14 err=-2 bytes 'Block 2 second' written=15\nid 18 (a hole in the block): 0 err=-1 bytes '' written=1\nid 300: 13 err=-2 bytes 'Three hundred' written=14\nid 65535: 14 err=-2 bytes 'The highest id' written=15\nid 5 with size 4: 3 err=-2 bytes '<c4><f6><fc>' written=4\nid 5 with size 6: 5 err=-2 bytes '<c4><f6><fc> <80>' written=6\nid 1 with size 5 (exactly the length plus NUL): 5 err=-2 bytes 'Hello' written=6\nid 1 with size 5: 4 err=-2 bytes 'Hell' written=5\nid 1 with size 1: 0 err=-1 bytes '' written=1\nid 1 with size 0: -1 err=-2 bytes '' written=0\nid 1 with size -1: -2 err=-2 bytes '' written=0\nid 999 (absent): 0 err=1814 bytes '' written=1\nid 0: 0 err=-1 bytes '' written=1\nid 0x10000: 0 err=-1 bytes '' written=1\nNULL module (the executable): 5\nmade-up module: 0 err=1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

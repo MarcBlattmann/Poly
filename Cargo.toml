@@ -14,6 +14,7 @@ members = [
     "crates/poly-binfmt",
     "crates/poly-block",
     "crates/poly-bpf",
+    "crates/poly-comdlg",
     "crates/poly-compress",
     "crates/poly-console",
     "crates/poly-crt",
@@ -36,6 +37,8 @@ members = [
     "crates/poly-hda",
     "crates/poly-heap",
     "crates/poly-http",
+    "crates/poly-comctl",
+    "crates/poly-imagelist",
     "crates/poly-input",
     "crates/poly-iphlp",
     "crates/poly-irq",
@@ -68,6 +71,7 @@ members = [
     "crates/poly-security",
     "crates/poly-seh",
     "crates/poly-cxxeh",
+    "crates/poly-msvcp",
     "crates/poly-smp",
     "crates/poly-squashfs",
     "crates/poly-stubs",
@@ -106,7 +110,7 @@ members = [
     "userland/poly-terminal",
     "userland/poly-wl-demo",
 ]
-exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
+exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/msvc32", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
 [workspace.package]
 version = "0.0.1"
@@ -124,6 +128,7 @@ poly-backtrace = { path = "crates/poly-backtrace" }
 poly-binfmt = { path = "crates/poly-binfmt" }
 poly-block = { path = "crates/poly-block" }
 poly-bpf = { path = "crates/poly-bpf" }
+poly-comdlg = { path = "crates/poly-comdlg" }
 poly-compress = { path = "crates/poly-compress" }
 poly-console = { path = "crates/poly-console" }
 poly-crt = { path = "crates/poly-crt" }
@@ -145,6 +150,8 @@ poly-gfx = { path = "crates/poly-gfx" }
 poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }
+poly-comctl = { path = "crates/poly-comctl" }
+poly-imagelist = { path = "crates/poly-imagelist" }
 poly-input = { path = "crates/poly-input" }
 poly-iphlp = { path = "crates/poly-iphlp" }
 poly-irq = { path = "crates/poly-irq" }
@@ -183,6 +190,7 @@ poly-terminal = { path = "userland/poly-terminal" }
 poly-security = { path = "crates/poly-security" }
 poly-seh = { path = "crates/poly-seh" }
 poly-cxxeh = { path = "crates/poly-cxxeh" }
+poly-msvcp = { path = "crates/poly-msvcp" }
 poly-smp = { path = "crates/poly-smp" }
 poly-squashfs = { path = "crates/poly-squashfs" }
 poly-term = { path = "crates/poly-term" }

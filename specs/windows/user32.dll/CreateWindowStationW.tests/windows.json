@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "winsta_create_b",
+      "exe_sha256": "646ca4df14821b37dd1dbd3bec8405551e09c32a75e68c914c42d0367a944aeb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmFtZSBtYXRjaGVzPTEgdHlwZT1XaW5kb3dTdGF0aW9uCmNyZWF0ZSB0aGUgc2FtZSBuYW1lIGFnYWluOiBvcGVuZWQ9MSBlcnI9MApjcmVhdGUgdGhlIHNhbWUgbmFtZSB3aXRoIENXRl9DUkVBVEVfT05MWTogb3BlbmVkPTAgZXJyPTE4MwpjcmVhdGUgZmxhZ3MgMHgxMDA6IG9wZW5lZD0xIGVycj0wCiAgVU9JX05BTUUgb24gdGhhdCBoYW5kbGU6IG9rPTEgZXJyPXVuY2hhbmdlZApjcmVhdGUgYWNjZXNzIDA6IG9wZW5lZD0xIGVycj0wCiAgVU9JX05BTUUgb24gdGhhdCBoYW5kbGU6IG9rPTEgZXJyPXVuY2hhbmdlZApjcmVhdGUgd2l0aCBhIE5VTEwgbmFtZTogb3BlbmVkPTAgZXJyPTUKY3JlYXRlIHdpdGggYSBzZXBhcmF0b3IgaW4gdGhlIG5hbWU6IG9wZW5lZD0wIGVycj0zCiAgbmFtZSBtYXRjaGVzPTEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "name matches=1 type=WindowStation\ncreate the same name again: opened=1 err=0\ncreate the same name with CWF_CREATE_ONLY: opened=0 err=183\ncreate flags 0x100: opened=1 err=0\n  UOI_NAME on that handle: ok=1 err=unchanged\ncreate access 0: opened=1 err=0\n  UOI_NAME on that handle: ok=1 err=unchanged\ncreate with a NULL name: opened=0 err=5\ncreate with a separator in the name: opened=0 err=3\n  name matches=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "winsta_create_c",
+      "exe_sha256": "243653f92265e355f1820e06ef404c83801d78aca2ddef143b55cd53e9a45da7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VU9JX0ZMQUdTIG9rIG5lZWQgMTIgYnl0ZXMgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAgMDAKc2Vjb25kIGhhbmRsZSBpcyBhIGRpZmZlcmVudCBoYW5kbGUgdmFsdWU9MQpjcmVhdGUgYSBuZXcgbmFtZSB3aXRoIENXRl9DUkVBVEVfT05MWTogb3BlbmVkPTEgZXJyPTAKY3JlYXRlIGZsYWdzIDB4ODAwMDAwMDA6IG9wZW5lZD0xIGVycj0wCmNyZWF0ZSBhY2Nlc3MgQ1JFQVRFREVTS1RPUHxSRUFEQVRUUklCVVRFUzogb3BlbmVkPTEgZXJyPTAKICBVT0lfTkFNRSBvbiB0aGF0IGhhbmRsZTogb2s9MCBlcnI9NQpjcmVhdGUgYWNjZXNzIFJFQURfQ09OVFJPTHxXUklURV9EQUM6IG9wZW5lZD0xIGVycj0wCmNyZWF0ZSB3aXRoIGFuIGVtcHR5IG5hbWU6IG9wZW5lZD0wIGVycj01CmNyZWF0ZSB0aGUgbmFtZSBpbiB1cHBlciBjYXNlIHdpdGggQ1dGX0NSRUFURV9PTkxZOiBvcGVuZWQ9MCBlcnI9MTgzCk9wZW5XaW5kb3dTdGF0aW9uVyBvZiBhIG1pc3NpbmcgbmFtZTogb3BlbmVkPTAgZXJyPTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "UOI_FLAGS ok need 12 bytes 00 00 00 00 00 00 00 00 00 00 00 00\nsecond handle is a different handle value=1\ncreate a new name with CWF_CREATE_ONLY: opened=1 err=0\ncreate flags 0x80000000: opened=1 err=0\ncreate access CREATEDESKTOP|READATTRIBUTES: opened=1 err=0\n  UOI_NAME on that handle: ok=0 err=5\ncreate access READ_CONTROL|WRITE_DAC: opened=1 err=0\ncreate with an empty name: opened=0 err=5\ncreate the name in upper case with CWF_CREATE_ONLY: opened=0 err=183\nOpenWindowStationW of a missing name: opened=0 err=2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

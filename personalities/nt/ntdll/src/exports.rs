@@ -42,71 +42,75 @@ fn heap_result(r: Result<*mut u8, HeapError>, flags: u32, heap_flags: u32) -> *m
 // ----- strings (ntdef.h; Learn's Rtl*String* pages) -------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitUnicodeString(dest: *mut UnicodeString, src: *const u16) {
+pub unsafe extern "system" fn RtlInitUnicodeString(dest: *mut UnicodeString, src: *const u16) {
     // SAFETY: the caller's pointers (the Rtl* contract).
     unsafe { string::init_unicode_string(dest, src) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitUnicodeStringEx(dest: *mut UnicodeString, src: *const u16) -> NtStatus {
+pub unsafe extern "system" fn RtlInitUnicodeStringEx(dest: *mut UnicodeString, src: *const u16) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::init_unicode_string_ex(dest, src) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitAnsiString(dest: *mut AnsiString, src: *const u8) {
+pub unsafe extern "system" fn RtlInitAnsiString(dest: *mut AnsiString, src: *const u8) {
     // SAFETY: as above.
     unsafe { string::init_ansi_string(dest, src) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitString(dest: *mut AnsiString, src: *const u8) {
+pub unsafe extern "system" fn RtlInitString(dest: *mut AnsiString, src: *const u8) {
     // SAFETY: as above.
     unsafe { string::init_ansi_string(dest, src) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCopyUnicodeString(dest: *mut UnicodeString, src: *const UnicodeString) {
+pub unsafe extern "system" fn RtlCopyUnicodeString(dest: *mut UnicodeString, src: *const UnicodeString) {
     // SAFETY: as above.
     unsafe { string::copy_unicode_string(dest, src) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCompareUnicodeString(a: *const UnicodeString, b: *const UnicodeString, ci: u8) -> i32 {
+pub unsafe extern "system" fn RtlCompareUnicodeString(a: *const UnicodeString, b: *const UnicodeString, ci: u8) -> i32 {
     // SAFETY: as above.
     unsafe { string::compare_unicode_string(a, b, ci != 0) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlEqualUnicodeString(a: *const UnicodeString, b: *const UnicodeString, ci: u8) -> u8 {
+pub unsafe extern "system" fn RtlEqualUnicodeString(a: *const UnicodeString, b: *const UnicodeString, ci: u8) -> u8 {
     // SAFETY: as above.
     unsafe { string::equal_unicode_string(a, b, ci != 0) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlPrefixUnicodeString(p: *const UnicodeString, s: *const UnicodeString, ci: u8) -> u8 {
+pub unsafe extern "system" fn RtlPrefixUnicodeString(p: *const UnicodeString, s: *const UnicodeString, ci: u8) -> u8 {
     // SAFETY: as above.
     unsafe { string::prefix_unicode_string(p, s, ci != 0) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlUpcaseUnicodeChar(c: u16) -> u16 {
+pub extern "system" fn RtlUpcaseUnicodeChar(c: u16) -> u16 {
     string::upcase_char(c)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlDowncaseUnicodeChar(c: u16) -> u16 {
+pub extern "system" fn RtlDowncaseUnicodeChar(c: u16) -> u16 {
     string::downcase_char(c)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUpcaseUnicodeString(d: *mut UnicodeString, s: *const UnicodeString, alloc: u8) -> NtStatus {
+pub unsafe extern "system" fn RtlUpcaseUnicodeString(
+    d: *mut UnicodeString,
+    s: *const UnicodeString,
+    alloc: u8,
+) -> NtStatus {
     // SAFETY: the Rtl* contract.
     unsafe { string::case_unicode_string(d, s, alloc != 0, true, &HeapAlloc) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlDowncaseUnicodeString(
+pub unsafe extern "system" fn RtlDowncaseUnicodeString(
     d: *mut UnicodeString,
     s: *const UnicodeString,
     alloc: u8,
@@ -116,7 +120,7 @@ pub unsafe extern "C" fn RtlDowncaseUnicodeString(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAnsiStringToUnicodeString(
+pub unsafe extern "system" fn RtlAnsiStringToUnicodeString(
     d: *mut UnicodeString,
     s: *const AnsiString,
     alloc: u8,
@@ -126,7 +130,7 @@ pub unsafe extern "C" fn RtlAnsiStringToUnicodeString(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUnicodeStringToAnsiString(
+pub unsafe extern "system" fn RtlUnicodeStringToAnsiString(
     d: *mut AnsiString,
     s: *const UnicodeString,
     alloc: u8,
@@ -136,37 +140,40 @@ pub unsafe extern "C" fn RtlUnicodeStringToAnsiString(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAnsiStringToUnicodeSize(s: *const AnsiString) -> u32 {
+pub unsafe extern "system" fn RtlAnsiStringToUnicodeSize(s: *const AnsiString) -> u32 {
     // SAFETY: as above.
     unsafe { string::ansi_to_unicode_size(s) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlFreeUnicodeString(s: *mut UnicodeString) {
+pub unsafe extern "system" fn RtlFreeUnicodeString(s: *mut UnicodeString) {
     // SAFETY: a string an alloc call made.
     unsafe { string::free_unicode_string(s, &HeapAlloc) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlFreeAnsiString(s: *mut AnsiString) {
+pub unsafe extern "system" fn RtlFreeAnsiString(s: *mut AnsiString) {
     // SAFETY: as above.
     unsafe { string::free_ansi_string(s, &HeapAlloc) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAppendUnicodeToString(d: *mut UnicodeString, s: *const u16) -> NtStatus {
+pub unsafe extern "system" fn RtlAppendUnicodeToString(d: *mut UnicodeString, s: *const u16) -> NtStatus {
     // SAFETY: the Rtl* contract.
     unsafe { string::append_unicode_to_string(d, s) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAppendUnicodeStringToString(d: *mut UnicodeString, s: *const UnicodeString) -> NtStatus {
+pub unsafe extern "system" fn RtlAppendUnicodeStringToString(
+    d: *mut UnicodeString,
+    s: *const UnicodeString,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::append_unicode_string_to_string(d, s) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const u16) -> u8 {
+pub unsafe extern "system" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const u16) -> u8 {
     // SAFETY: as above.
     unsafe { string::create_unicode_string(d, s, &HeapAlloc) as u8 }
 }
@@ -175,7 +182,7 @@ pub unsafe extern "C" fn RtlCreateUnicodeString(d: *mut UnicodeString, s: *const
 /// user, in a string the caller frees with `RtlFreeUnicodeString`. Poly has
 /// one user (`poly_security::poly_user_sid`, ADR 0066, 0073, 0171).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> NtStatus {
+pub unsafe extern "system" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> NtStatus {
     if d.is_null() {
         return NtStatus(0xC000_000D); // STATUS_INVALID_PARAMETER
     }
@@ -190,7 +197,7 @@ pub unsafe extern "C" fn RtlFormatCurrentUserKeyPath(d: *mut UnicodeString) -> N
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlMultiByteToUnicodeN(
+pub unsafe extern "system" fn RtlMultiByteToUnicodeN(
     out: *mut u16,
     max: u32,
     written: *mut u32,
@@ -207,7 +214,7 @@ pub unsafe extern "C" fn RtlMultiByteToUnicodeN(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUnicodeToMultiByteN(
+pub unsafe extern "system" fn RtlUnicodeToMultiByteN(
     out: *mut u8,
     max: u32,
     written: *mut u32,
@@ -224,71 +231,81 @@ pub unsafe extern "C" fn RtlUnicodeToMultiByteN(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCompareString(a: *const AnsiString, b: *const AnsiString, ci: u8) -> i32 {
+pub unsafe extern "system" fn RtlCompareString(a: *const AnsiString, b: *const AnsiString, ci: u8) -> i32 {
     // SAFETY: the Rtl* contract.
     unsafe { string::compare_string(a, b, ci != 0) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlEqualString(a: *const AnsiString, b: *const AnsiString, ci: u8) -> u8 {
+pub unsafe extern "system" fn RtlEqualString(a: *const AnsiString, b: *const AnsiString, ci: u8) -> u8 {
     // SAFETY: as above.
     unsafe { string::equal_string(a, b, ci != 0) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlIntegerToUnicodeString(value: u32, base: u32, d: *mut UnicodeString) -> NtStatus {
+pub unsafe extern "system" fn RtlIntegerToUnicodeString(value: u32, base: u32, d: *mut UnicodeString) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::integer_to_unicode_string(value, base, d) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUnicodeStringToInteger(s: *const UnicodeString, base: u32, value: *mut u32) -> NtStatus {
+pub unsafe extern "system" fn RtlUnicodeStringToInteger(
+    s: *const UnicodeString,
+    base: u32,
+    value: *mut u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { string::unicode_string_to_integer(s, base, value) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlUpperChar(c: u8) -> u8 {
+pub extern "system" fn RtlUpperChar(c: u8) -> u8 {
     codepage::upcase(c)
 }
 
 // ----- status and last error ------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlNtStatusToDosError(status: NtStatus) -> u32 {
+pub extern "system" fn RtlNtStatusToDosError(status: NtStatus) -> u32 {
     status::nt_status_to_dos_error(status)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlNtStatusToDosErrorNoTeb(status: NtStatus) -> u32 {
+pub extern "system" fn RtlNtStatusToDosErrorNoTeb(status: NtStatus) -> u32 {
     status::nt_status_to_dos_error(status)
 }
 
-/// `TEB.LastErrorValue` (TEB + 0x68, `winternl.h`).
+/// `TEB.LastErrorValue` (TEB + 0x68 on x64, + 0x34 in a 32-bit process; the WDK's `ntpebteb.h`).
+#[cfg(target_arch = "x86_64")]
 const TEB_LAST_ERROR: u64 = 0x68;
-/// `TEB.LastStatusValue` (TEB + 0x1250 on x64).
+#[cfg(target_arch = "x86")]
+const TEB_LAST_ERROR: u64 = 0x34;
+/// `TEB.LastStatusValue` (TEB + 0x1250 on x64, + 0xBF4 in a 32-bit process).
+#[cfg(target_arch = "x86_64")]
 const TEB_LAST_STATUS: u64 = 0x1250;
+#[cfg(target_arch = "x86")]
+const TEB_LAST_STATUS: u64 = 0xBF4;
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlGetLastWin32Error() -> u32 {
+pub extern "system" fn RtlGetLastWin32Error() -> u32 {
     // SAFETY: the TEB is valid.
     unsafe { ((crate::lock::teb() + TEB_LAST_ERROR) as *const u32).read() }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlSetLastWin32Error(err: u32) {
+pub extern "system" fn RtlSetLastWin32Error(err: u32) {
     // SAFETY: the TEB is valid and writable.
     unsafe { ((crate::lock::teb() + TEB_LAST_ERROR) as *mut u32).write(err) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlGetLastNtStatus() -> NtStatus {
+pub extern "system" fn RtlGetLastNtStatus() -> NtStatus {
     // SAFETY: the TEB is valid.
     NtStatus(unsafe { ((crate::lock::teb() + TEB_LAST_STATUS) as *const u32).read() })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlSetLastWin32ErrorAndNtStatusFromNtStatus(status: NtStatus) {
+pub extern "system" fn RtlSetLastWin32ErrorAndNtStatusFromNtStatus(status: NtStatus) {
     // SAFETY: the TEB is valid and writable.
     unsafe {
         ((crate::lock::teb() + TEB_LAST_STATUS) as *mut u32).write(status.0);
@@ -299,69 +316,106 @@ pub extern "C" fn RtlSetLastWin32ErrorAndNtStatusFromNtStatus(status: NtStatus) 
 // ----- version --------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlGetVersion(info: *mut u8) -> NtStatus {
+pub unsafe extern "system" fn RtlGetVersion(info: *mut u8) -> NtStatus {
     // SAFETY: the RtlGetVersion contract: the size field is readable.
     unsafe { version::get_version(info) }
+}
+
+/// `RtlGetDeviceFamilyInfoEnum(pullUAPInfo, pulDeviceFamily, pulDeviceForm)` (`winnt.h`): the
+/// version Poly reports as the UAP version, a desktop of unknown form. Chrome asks on a
+/// Windows 11 build.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGetDeviceFamilyInfoEnum(uap: *mut u64, family: *mut u32, form: *mut u32) {
+    // SAFETY: the callers' out-pointers (null ones are skipped).
+    unsafe { version::get_device_family_info_enum(uap, family, form) }
+}
+
+/// `RtlConvertDeviceFamilyInfoToString(pulDeviceFamilyBufferSize, pulDeviceFormBufferSize,
+/// DeviceFamily, DeviceForm)`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlConvertDeviceFamilyInfoToString(
+    family_size: *mut u32,
+    form_size: *mut u32,
+    family: *mut u16,
+    form: *mut u16,
+) -> u32 {
+    // SAFETY: the callers' sizes and buffers.
+    unsafe { version::convert_device_family_info_to_string(family_size, form_size, family, form) }
+}
+
+/// `RtlGetNtVersionNumbers(major, minor, build)`: the real version; the build has its high
+/// nibble set (`specs/windows/ntdll.dll/RtlGetNtVersionNumbers.yaml`). Git's bash calls it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn RtlGetNtVersionNumbers(major: *mut u32, minor: *mut u32, build: *mut u32) {
+    // SAFETY: the callers' out-pointers (null ones are skipped).
+    unsafe { version::get_nt_version_numbers(major, minor, build) }
 }
 
 // ----- critical sections ----------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitializeCriticalSection(cs: *mut CriticalSection) -> NtStatus {
+pub unsafe extern "system" fn RtlInitializeCriticalSection(cs: *mut CriticalSection) -> NtStatus {
     // SAFETY: `cs` points at writable RTL_CRITICAL_SECTION storage.
     unsafe { (*cs).init(0) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitializeCriticalSectionAndSpinCount(cs: *mut CriticalSection, spin: u32) -> NtStatus {
+pub unsafe extern "system" fn RtlInitializeCriticalSectionAndSpinCount(
+    cs: *mut CriticalSection,
+    spin: u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).init(u64::from(spin)) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlInitializeCriticalSectionEx(cs: *mut CriticalSection, spin: u32, _flags: u32) -> NtStatus {
+pub unsafe extern "system" fn RtlInitializeCriticalSectionEx(
+    cs: *mut CriticalSection,
+    spin: u32,
+    _flags: u32,
+) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).init(u64::from(spin)) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlEnterCriticalSection(cs: *mut CriticalSection) -> NtStatus {
+pub unsafe extern "system" fn RtlEnterCriticalSection(cs: *mut CriticalSection) -> NtStatus {
     // SAFETY: `cs` is an initialised critical section.
     unsafe { (*cs).enter(&SysPlatform) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlLeaveCriticalSection(cs: *mut CriticalSection) -> NtStatus {
+pub unsafe extern "system" fn RtlLeaveCriticalSection(cs: *mut CriticalSection) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).leave(&SysPlatform) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlTryEnterCriticalSection(cs: *mut CriticalSection) -> u8 {
+pub unsafe extern "system" fn RtlTryEnterCriticalSection(cs: *mut CriticalSection) -> u8 {
     // SAFETY: as above.
     unsafe { (*cs).try_enter(&SysPlatform) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlDeleteCriticalSection(cs: *mut CriticalSection) -> NtStatus {
+pub unsafe extern "system" fn RtlDeleteCriticalSection(cs: *mut CriticalSection) -> NtStatus {
     // SAFETY: as above.
     unsafe { (*cs).delete(&SysPlatform) };
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlIsCriticalSectionLocked(cs: *mut CriticalSection) -> u8 {
+pub unsafe extern "system" fn RtlIsCriticalSectionLocked(cs: *mut CriticalSection) -> u8 {
     // SAFETY: as above.
     unsafe { (*cs).is_locked() as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlIsCriticalSectionLockedByThread(cs: *mut CriticalSection) -> u8 {
+pub unsafe extern "system" fn RtlIsCriticalSectionLockedByThread(cs: *mut CriticalSection) -> u8 {
     // SAFETY: as above.
     unsafe { (*cs).is_owned_by(SysPlatform.current_thread_id()) as u8 }
 }
@@ -375,7 +429,7 @@ impl SysPlatform {
 // ----- the heap -------------------------------------------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCreateHeap(
+pub unsafe extern "system" fn RtlCreateHeap(
     flags: u32,
     base: *mut u8,
     reserve: usize,
@@ -389,14 +443,14 @@ pub unsafe extern "C" fn RtlCreateHeap(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlDestroyHeap(handle: *mut u8) -> *mut u8 {
+pub unsafe extern "system" fn RtlDestroyHeap(handle: *mut u8) -> *mut u8 {
     // SAFETY: `handle` is a heap this crate made; it is gone afterwards.
     unsafe { Heap(handle).destroy(&SysPlatform) };
     core::ptr::null_mut()
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlAllocateHeap(handle: *mut u8, flags: u32, size: usize) -> *mut u8 {
+pub unsafe extern "system" fn RtlAllocateHeap(handle: *mut u8, flags: u32, size: usize) -> *mut u8 {
     // SAFETY: `handle` is a valid heap.
     let heap_flags = unsafe { Heap(handle).flags() };
     // SAFETY: as above.
@@ -404,13 +458,13 @@ pub unsafe extern "C" fn RtlAllocateHeap(handle: *mut u8, flags: u32, size: usiz
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlFreeHeap(handle: *mut u8, flags: u32, ptr: *mut u8) -> u8 {
+pub unsafe extern "system" fn RtlFreeHeap(handle: *mut u8, flags: u32, ptr: *mut u8) -> u8 {
     // SAFETY: `handle` is a valid heap; `ptr` is any value.
     unsafe { Heap(handle).free(&SysPlatform, flags, ptr) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlReAllocateHeap(handle: *mut u8, flags: u32, ptr: *mut u8, size: usize) -> *mut u8 {
+pub unsafe extern "system" fn RtlReAllocateHeap(handle: *mut u8, flags: u32, ptr: *mut u8, size: usize) -> *mut u8 {
     // SAFETY: as above.
     let heap_flags = unsafe { Heap(handle).flags() };
     // SAFETY: as above.
@@ -418,38 +472,38 @@ pub unsafe extern "C" fn RtlReAllocateHeap(handle: *mut u8, flags: u32, ptr: *mu
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlSizeHeap(handle: *mut u8, flags: u32, ptr: *const u8) -> usize {
+pub unsafe extern "system" fn RtlSizeHeap(handle: *mut u8, flags: u32, ptr: *const u8) -> usize {
     // SAFETY: as above.
     unsafe { Heap(handle).size(&SysPlatform, flags, ptr) }.unwrap_or(usize::MAX)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlValidateHeap(handle: *mut u8, flags: u32, ptr: *const u8) -> u8 {
+pub unsafe extern "system" fn RtlValidateHeap(handle: *mut u8, flags: u32, ptr: *const u8) -> u8 {
     // SAFETY: as above.
     unsafe { Heap(handle).validate(&SysPlatform, flags, ptr) as u8 }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlLockHeap(handle: *mut u8) -> u8 {
+pub unsafe extern "system" fn RtlLockHeap(handle: *mut u8) -> u8 {
     // SAFETY: a valid heap.
     unsafe { Heap(handle).lock(&SysPlatform) };
     1
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUnlockHeap(handle: *mut u8) -> u8 {
+pub unsafe extern "system" fn RtlUnlockHeap(handle: *mut u8) -> u8 {
     // SAFETY: a valid heap the caller locked.
     unsafe { Heap(handle).unlock(&SysPlatform) };
     1
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlProcessHeap() -> *mut u8 {
+pub extern "system" fn RtlProcessHeap() -> *mut u8 {
     process_heap().0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn RtlGetProcessHeaps(count: u32, heaps: *mut *mut u8) -> u32 {
+pub extern "system" fn RtlGetProcessHeaps(count: u32, heaps: *mut *mut u8) -> u32 {
     if count >= 1 && !heaps.is_null() {
         // SAFETY: room for at least one handle.
         unsafe { heaps.write(process_heap().0) };
@@ -460,31 +514,31 @@ pub extern "C" fn RtlGetProcessHeaps(count: u32, heaps: *mut *mut u8) -> u32 {
 // ----- memory intrinsics (winnt.h macros) -----------------------------------
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlZeroMemory(dst: *mut u8, len: usize) {
+pub unsafe extern "system" fn RtlZeroMemory(dst: *mut u8, len: usize) {
     // SAFETY: the caller's buffer of `len` bytes.
     unsafe { core::ptr::write_bytes(dst, 0, len) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlFillMemory(dst: *mut u8, len: usize, fill: u8) {
+pub unsafe extern "system" fn RtlFillMemory(dst: *mut u8, len: usize, fill: u8) {
     // SAFETY: as above.
     unsafe { core::ptr::write_bytes(dst, fill, len) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlMoveMemory(dst: *mut u8, src: *const u8, len: usize) {
+pub unsafe extern "system" fn RtlMoveMemory(dst: *mut u8, src: *const u8, len: usize) {
     // SAFETY: overlapping is allowed; both buffers hold `len` bytes.
     unsafe { core::ptr::copy(src, dst, len) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCopyMemory(dst: *mut u8, src: *const u8, len: usize) {
+pub unsafe extern "system" fn RtlCopyMemory(dst: *mut u8, src: *const u8, len: usize) {
     // SAFETY: non-overlapping buffers of `len` bytes.
     unsafe { core::ptr::copy_nonoverlapping(src, dst, len) }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlCompareMemory(a: *const u8, b: *const u8, len: usize) -> usize {
+pub unsafe extern "system" fn RtlCompareMemory(a: *const u8, b: *const u8, len: usize) -> usize {
     // SAFETY: both buffers hold `len` bytes.
     let (a, b) = unsafe { (core::slice::from_raw_parts(a, len), core::slice::from_raw_parts(b, len)) };
     a.iter().zip(b).take_while(|(x, y)| x == y).count()
@@ -510,7 +564,7 @@ fn to_wide(s: *const UnicodeString) -> alloc::vec::Vec<u16> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrLoadDll(
+pub unsafe extern "system" fn LdrLoadDll(
     search_path: *const u16,
     _flags: *mut u32,
     name: *const UnicodeString,
@@ -553,7 +607,7 @@ pub unsafe extern "C" fn LdrLoadDll(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrUnloadDll(handle: *mut u8) -> NtStatus {
+pub unsafe extern "system" fn LdrUnloadDll(handle: *mut u8) -> NtStatus {
     LOADER_LOCK.enter(&SysPlatform);
     let unload = with_loader(|l, _| l.unload(handle as u64));
     let status = match unload {
@@ -569,7 +623,7 @@ pub unsafe extern "C" fn LdrUnloadDll(handle: *mut u8) -> NtStatus {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrGetDllHandle(
+pub unsafe extern "system" fn LdrGetDllHandle(
     _path: *const u16,
     _flags: *mut u32,
     name: *const UnicodeString,
@@ -589,7 +643,7 @@ pub unsafe extern "C" fn LdrGetDllHandle(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrGetProcedureAddress(
+pub unsafe extern "system" fn LdrGetProcedureAddress(
     handle: *mut u8,
     name: *const AnsiString,
     ordinal: u32,
@@ -632,17 +686,17 @@ pub unsafe extern "C" fn LdrGetProcedureAddress(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrAddRefDll(flags: u32, handle: *mut u8) -> NtStatus {
+pub unsafe extern "system" fn LdrAddRefDll(flags: u32, handle: *mut u8) -> NtStatus {
     with_loader(|l, _| l.add_ref(handle as u64, flags)).err().unwrap_or(SUCCESS)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrDisableThreadCalloutsForDll(handle: *mut u8) -> NtStatus {
+pub unsafe extern "system" fn LdrDisableThreadCalloutsForDll(handle: *mut u8) -> NtStatus {
     with_loader(|l, _| l.disable_thread_calls(handle as u64)).err().unwrap_or(SUCCESS)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrFindEntryForAddress(addr: *mut u8, entry: *mut u64) -> NtStatus {
+pub unsafe extern "system" fn LdrFindEntryForAddress(addr: *mut u8, entry: *mut u64) -> NtStatus {
     match with_loader(|l, _| l.find(addr as u64)) {
         Some(m) => {
             if !entry.is_null() {
@@ -656,7 +710,7 @@ pub unsafe extern "C" fn LdrFindEntryForAddress(addr: *mut u8, entry: *mut u64) 
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrLockLoaderLock(_flags: u32, disposition: *mut u32, cookie: *mut usize) -> NtStatus {
+pub unsafe extern "system" fn LdrLockLoaderLock(_flags: u32, disposition: *mut u32, cookie: *mut usize) -> NtStatus {
     LOADER_LOCK.enter(&SysPlatform);
     if !disposition.is_null() {
         // SAFETY: a valid out-pointer. 1 = LOCK_ACQUIRED.
@@ -670,13 +724,13 @@ pub unsafe extern "C" fn LdrLockLoaderLock(_flags: u32, disposition: *mut u32, c
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrUnlockLoaderLock(_flags: u32, _cookie: usize) -> NtStatus {
+pub unsafe extern "system" fn LdrUnlockLoaderLock(_flags: u32, _cookie: usize) -> NtStatus {
     LOADER_LOCK.leave(&SysPlatform);
     SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrShutdownProcess() -> NtStatus {
+pub unsafe extern "system" fn LdrShutdownProcess() -> NtStatus {
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.process_detach());
     let _ = run_callouts(&callouts);
@@ -685,7 +739,7 @@ pub unsafe extern "C" fn LdrShutdownProcess() -> NtStatus {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrShutdownThread() -> NtStatus {
+pub unsafe extern "system" fn LdrShutdownThread() -> NtStatus {
     let teb = crate::lock::teb();
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.thread_detach());
@@ -696,7 +750,7 @@ pub unsafe extern "C" fn LdrShutdownThread() -> NtStatus {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn LdrResolveDelayLoadedAPI(
+pub unsafe extern "system" fn LdrResolveDelayLoadedAPI(
     parent: *mut u8,
     descriptor: *const u8,
     _dllhook: *mut u8,
@@ -733,7 +787,7 @@ pub unsafe extern "C" fn LdrResolveDelayLoadedAPI(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn ApiSetQueryApiSetPresence(name: *const UnicodeString, present: *mut u8) -> NtStatus {
+pub extern "system" fn ApiSetQueryApiSetPresence(name: *const UnicodeString, present: *mut u8) -> NtStatus {
     let n = to_wide(name);
     if !present.is_null() {
         // SAFETY: a valid out-pointer.

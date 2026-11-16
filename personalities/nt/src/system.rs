@@ -75,6 +75,16 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// The window stations and desktops and who is on them (ADR 0192).
+    pub winsta: crate::winsta::WinSta,
+    /// What a process keeps that another can set and a child inherits: error mode, memory
+    /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
+    /// defaults.
+    pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
+    /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
+    /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
+    pub ntdll32: &'static [u8],
+
     sections: BTreeMap<u64, Section>,
     next_key: u64,
 }
@@ -112,6 +122,9 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            winsta: crate::winsta::WinSta::default(),
+            proc_attrs: BTreeMap::new(),
+            ntdll32: &[],
             sections: BTreeMap::new(),
             next_key: 1,
         }
@@ -176,9 +189,11 @@ impl NtSystem {
                 ObjectType::IoCompletion => self.io.port_deleted(d.cookie),
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
+                    self.proc_attrs.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
+                ObjectType::WindowStation | ObjectType::Desktop => self.winsta.deleted(&mut self.objects, d.id),
                 _ => {}
             }
             // A closed file object's or a deleted job's reference on its
@@ -200,6 +215,12 @@ pub struct NtThread {
     pub teb: u64,
     /// Its stack allocation.
     pub stack: u64,
+    /// Where it started: the entry point of the image, or the start routine `CreateThread` was given
+    /// (`ThreadQuerySetWin32StartAddress`).
+    pub start: u64,
+    /// Its priority relative to its process's class, as `ThreadBasePriority` gives it: -2 to 2, and
+    /// -16 and 16 for the idle and time-critical ends.
+    pub base_priority: i32,
 }
 
 /// The NT state of one process.
@@ -230,6 +251,8 @@ pub struct NtProcess {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// memory cannot be made executable (ADR 0169).
     pub dynamic_code_blocked: bool,
+    /// Its mitigation policies (ADR 0192): the creation attributes and `SetProcessMitigationPolicy`.
+    pub mitigation: poly_kernelbase::mitigation::State,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
     /// sets it, else its last thread's end ([`crate::exec::thread_exit`]);
     /// a running process is pending.
@@ -244,9 +267,23 @@ pub struct NtProcess {
     /// The file its executable was started from, as `(device name, path below the volume)`
     /// (set by the kernel before the process starts).
     pub image_name: Option<(Vec<u16>, Vec<u16>)>,
+    /// A 32-bit process (WOW64, ADR 0186): its executable is a PE32 image, it runs Poly's i686
+    /// `ntdll`, its address space ends at 2 or 4 GiB, its PEB, TEBs and parameters have the
+    /// 32-bit layout and its system calls go through [`crate::wow64`].
+    pub wow64: bool,
+    /// Its priority class as `ProcessPriorityClass` gives it (1 idle, 2 normal, 3 high, 4 real-time,
+    /// 5 below normal, 6 above normal).
+    pub priority_class: u8,
+    /// The process that created it (0: the kernel started it).
+    pub parent: u32,
 }
 
 impl NtProcess {
+    /// Where its PEB, TEBs and parameters keep their fields.
+    pub fn layout(&self) -> poly_rtl::layout::Layout {
+        if self.wow64 { poly_rtl::layout::X86 } else { poly_rtl::layout::X64 }
+    }
+
     pub fn new(pid: ProcessId) -> NtProcess {
         NtProcess {
             pid,
@@ -263,10 +300,22 @@ impl NtProcess {
             default_stack_commit: 0x1000,
             exit_status: None,
             dynamic_code_blocked: false,
+            mitigation: poly_kernelbase::mitigation::State::new(),
             exception_dispatcher: 0,
             win32k_disabled: false,
             image_name: None,
+            wow64: false,
+            priority_class: 2,
+            parent: 0,
         }
+    }
+
+    /// Take `state` as the process's mitigation policies and update what the kernel enforces
+    /// from them: the dynamic-code and win32k policies only go on (a policy that is on stays).
+    pub fn set_mitigation(&mut self, state: poly_kernelbase::mitigation::State) {
+        self.dynamic_code_blocked |= state.dynamic_code_blocked();
+        self.win32k_disabled |= state.win32k_disabled();
+        self.mitigation = state;
     }
 
     pub fn thread(&self, thread: ThreadRef) -> Option<&NtThread> {

@@ -32,6 +32,7 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
  "poly-wincrypt",
 ]
 
@@ -43,10 +44,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfgmgr32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
+ "poly-comctl",
+ "poly-imagelist",
  "poly-kernelbase",
+ "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "comdlg32"
+version = "0.0.1"
+dependencies = [
+ "poly-comdlg",
+ "poly-win32-gui",
  "poly-win32-rt",
 ]
 
@@ -84,12 +104,20 @@ version = "0.0.1"
 dependencies = [
  "poly-crypto",
  "poly-win32-cryptrt",
+ "poly-win32-rt",
  "poly-wincrypt",
  "poly-x509",
 ]
 
 [[package]]
 name = "cryptest"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "d3d11"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
@@ -104,9 +132,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dcomp"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "dhcpcsvc"
 version = "0.0.1"
 dependencies = [
+ "poly-iphlp",
  "poly-win32-netrt",
  "poly-win32-rt",
 ]
@@ -139,6 +175,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dxgi"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "gdi32"
 version = "0.0.1"
 dependencies = [
@@ -146,6 +189,13 @@ dependencies = [
  "poly-win32-gui",
  "poly-win32-rt",
  "poly-win32k",
+]
+
+[[package]]
+name = "hid"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
 ]
 
 [[package]]
@@ -194,6 +244,7 @@ version = "0.0.1"
 dependencies = [
  "poly-console",
  "poly-kernelbase",
+ "poly-ldr",
  "poly-ntobj",
  "poly-pe",
  "poly-rtl",
@@ -209,12 +260,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "msvcp140"
+version = "0.0.1"
+dependencies = [
+ "poly-msvcp",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "msvcrt"
 version = "0.0.1"
 dependencies = [
  "poly-crt",
- "poly-cxxeh",
  "poly-win32-crt",
+ "poly-win32-cxxrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "mswsock"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-netrt",
+ "poly-win32-rt",
+ "poly-winsock",
+]
+
+[[package]]
+name = "ncrypt"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -232,6 +307,7 @@ name = "ole32"
 version = "0.0.1"
 dependencies = [
  "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 
@@ -251,7 +327,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdh"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-com"
+version = "0.0.1"
+
+[[package]]
+name = "poly-comctl"
+version = "0.0.1"
+
+[[package]]
+name = "poly-comdlg"
 version = "0.0.1"
 
 [[package]]
@@ -309,6 +400,10 @@ name = "poly-http"
 version = "0.0.1"
 
 [[package]]
+name = "poly-imagelist"
+version = "0.0.1"
+
+[[package]]
 name = "poly-iphlp"
 version = "0.0.1"
 
@@ -323,7 +418,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-ldr"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+ "poly-pe",
+]
+
+[[package]]
 name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvc32"
+version = "0.0.1"
+
+[[package]]
+name = "poly-msvcp"
 version = "0.0.1"
 
 [[package]]
@@ -381,6 +492,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-win32-cxxrt"
+version = "0.0.1"
+dependencies = [
+ "poly-cxxeh",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "poly-win32-gui"
 version = "0.0.1"
 
@@ -403,6 +522,9 @@ dependencies = [
 [[package]]
 name = "poly-win32-rt"
 version = "0.0.1"
+dependencies = [
+ "poly-msvc32",
+]
 
 [[package]]
 name = "poly-win32k"
@@ -439,6 +561,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "propsys"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "s1test"
 version = "0.0.1"
 dependencies = [
@@ -451,6 +580,13 @@ version = "0.0.1"
 dependencies = [
  "poly-netapi",
  "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "setupapi"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -475,6 +611,13 @@ name = "shlwapi"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "tbs"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -522,10 +665,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "vcruntime140"
+version = "0.0.1"
+dependencies = [
+ "poly-cxxeh",
+ "poly-win32-cxxrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "vcruntime140_1"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "version"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wevtapi"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 
@@ -559,6 +725,13 @@ name = "winmm"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "wintrust"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

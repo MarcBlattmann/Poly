@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/RegisterWindowMessageA.yaml
+id: windows/api/user32.dll/RegisterWindowMessageA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Gives a name a window message number that is the same for every caller on the window station: PuTTY registers 'PuTTY' and 'MSWHEEL_ROLLMSG'-style names at start-up. Numbers lie in 0xC000..0xFFFF; the same text always gives the same number.
+interface:
+  signature: "UINT RegisterWindowMessageA(LPCSTR lpString)"
+rules:
+  range: "the result lies in 0xC000..0xFFFF (above the WM_APP range 0x8000..0xBFFF); two different texts give two different numbers"
+  same_text: "the same text gives the same number again, also from another thread and through RegisterWindowMessageW with the same characters (the A text is converted with the ANSI code page: 'PolyTest_caf\\xE9' and U+00E9 give the same number)"
+  case: "the text is compared without regard to case for the ASCII letters: 'PolyTestMessage_One' and 'polytestmessage_one' give the same number; other letters are not folded (U+00C9 and U+00E9 give two numbers); a trailing blank makes a different text"
+  length: "texts of up to 255 characters are accepted (254 and 255 work, the number for 255 stays the same), 256 characters and more are refused; the W form has the same limit"
+  content: "any characters: names of messages ('WM_NULL', 'WM_PAINT') are ordinary names here, a backslash and a quote are fine, a surrogate pair in the W form works"
+  delivery: "a window procedure sees the number as the message of SendMessageW (the result of the procedure comes back, wParam and lParam intact) and of PostMessageW"
+  well_known_names: "'commdlg_FindReplace', 'commdlg_help' and 'TaskbarCreated' are registered by the system or by common controls and give numbers in the range like any other name"
+errors:
+  empty: "an empty string: 0, the last error is not changed"
+  too_long: "256 characters or more: 0 with ERROR_MORE_DATA (234) in the A form and in the W form"
+side_effects: "adds the name to the window station's table the first time it is seen"
+threading: "the table is shared by all threads of the window station"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  NULL pointers (the call faults, not tested), the relation to GetClipboardFormatName (a separate table), the numbers themselves (they depend on what was registered before).

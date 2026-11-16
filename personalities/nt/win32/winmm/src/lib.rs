@@ -10,7 +10,8 @@
 use poly_kernelbase::winmm;
 use poly_win32_rt as _;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetTickCount64() -> u64;
     fn GetProcessHeap() -> *mut u8;
@@ -63,3 +64,6 @@ pub extern "system" fn timeEndPeriod(period: u32) -> u32 {
 pub extern "system" fn winmm_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

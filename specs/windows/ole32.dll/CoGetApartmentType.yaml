@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/ole32.dll/CoGetApartmentType
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
+  observed_by: spec-chrome-win-s3b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above, and the recording of Chrome for Testing
+  157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
+  calls it makes and how often. Microsoft Learn reference pages of the functions and messages named here;
+  winuser.h, wingdi.h, windef.h, dwmapi.h and winerror.h for constants and layouts. Wine's tests and
+  Chromium's source were not read.
+summary: >
+  Tells the type of the calling thread's apartment: APTTYPE_STA 0, MTA 1, NA 2, MAINSTA 3, with a qualifier.
+  Chrome's browser calls it once in a run (S3).
+interface:
+  signature: "HRESULT CoGetApartmentType(APTTYPE *pAptType, APTTYPEQUALIFIER *pAptQualifier)"
+rules:
+  states: "no COM: CO_E_NOTINITIALIZED with the outputs set to type -1 (APTTYPE_CURRENT) and qualifier 0; first STA thread (also after OleInitialize): S_OK, 3, 0; MTA: S_OK, 1, 0; a thread that never initialized in a process that has an MTA: S_OK, 1, qualifier 1 (APTTYPEQUALIFIER_IMPLICIT_MTA)"
+  arguments: "a NULL type pointer, a NULL qualifier pointer or both return E_INVALIDARG"
+  threads: "each thread sees its own apartment, constant over a hundred calls: a first STA thread 3, a second STA thread while it lives 0, an MTA thread 1; a thread without COM while an MTA exists S_OK and 1"
+errors:
+  not_initialized: "CO_E_NOTINITIALIZED 0x800401F0"
+  invalid_arg: "E_INVALIDARG for NULL pointers"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
+ordering: []
+timing:                                       # envelopes, never exact values
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, gdi32.dll, ole32.dll and oleaut32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants) and printing booleans, counts and error codes, never
+  handles, addresses, times or machine ids; run with poly-oracle.ps1 -Interactive (see
+  docs/AGENT_PIPELINE.md), twice per run, with identical output. Test windows are placed in the top-left
+  1000x500 pixels and the cursor is parked at (1500, 600). The COM tests run each sequence on a thread of its
+  own (every thread starts without COM state). Where a call crashes on the oracle (a NULL path count in
+  QueryDisplayConfig, a garbage handle in UnregisterPowerSettingNotification, CoRegisterMessageFilter on a
+  thread without COM) the case is left out.
+not_covered: >
+  The neutral apartment (type 2) and the other qualifiers.

@@ -15,7 +15,8 @@ use poly_kernelbase::session;
 
 poly_win32_rt::process_heap_allocator!();
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetSystemInfo(info: *mut u8);
 }
@@ -110,3 +111,6 @@ pub extern "system" fn PowerReadDCValue(
 pub extern "system" fn powrprof_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

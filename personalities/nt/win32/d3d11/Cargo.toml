@@ -1,0 +1,17 @@
+[package]
+name = "d3d11"
+description = "Our d3d11.dll (ADR 0155): a software Direct3D 11 device whose textures live in memory and whose swap chains present through GDI, for Chrome's software compositing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "d3d11"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

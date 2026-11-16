@@ -15,7 +15,8 @@ use poly_kernelbase::file::*;
 use poly_kernelbase::fileex::{self, QueryPlan, ReplaceStep, SetPlan};
 use poly_ntobj::NtStatus;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQueryFullAttributesFile(attributes: *const ObjectAttributes, info: *mut u8) -> NtStatus;
     fn NtLockFile(
@@ -180,7 +181,7 @@ pub unsafe extern "system" fn SetFileInformationByHandle(handle: Handle, class: 
     }
     // SAFETY: the caller's buffer of `size` bytes.
     let bytes = unsafe { core::slice::from_raw_parts(buf, size as usize) };
-    match fileex::set_plan(class, bytes, &|win32| nt_path(win32)) {
+    match fileex::set_plan_in(core::mem::size_of::<usize>(), class, bytes, &|win32| nt_path(win32)) {
         Ok(SetPlan::Nt { nt_class, bytes }) => match set_info(handle, nt_class, &bytes) {
             Ok(()) => TRUE,
             Err(st) => fail_status(st, FALSE),
@@ -223,7 +224,7 @@ pub unsafe extern "system" fn LockFileEx(
     // SAFETY: not null (the range was checked); the first fields of an
     // OVERLAPPED are the IO_STATUS_BLOCK the kernel completes.
     let (iosb, event) = unsafe {
-        (*overlapped).internal = nt::STATUS_PENDING.0 as u64;
+        (*overlapped).internal = nt::STATUS_PENDING.0 as usize;
         (overlapped as *mut IoStatusBlock, (*overlapped).event)
     };
     // SAFETY: valid pointers.
@@ -348,6 +349,9 @@ pub unsafe extern "system" fn ReplaceFileW(
 
 // ----- GetFinalPathNameByHandleW ---------------------------------------------------------------------
 
+/// `ObjectNameInformation` (`OBJECT_INFORMATION_CLASS`, `ntifs.h`).
+const OBJECT_NAME_INFORMATION: u32 = 1;
+
 /// `FileNameInformation` (`wdm.h`): `FileNameLength` and `FileName`.
 fn name_below_volume(h: Handle) -> Result<Vec<u16>, NtStatus> {
     let mut buf = alloc::vec![0u8; 4 + 2 * 4096];
@@ -375,17 +379,41 @@ fn drive_with_serial(serial: u32) -> Option<u16> {
 
 /// `GetFinalPathNameByHandleW`: Learn: the length without the NUL, or the
 /// size needed (with it) when the buffer is too small, 0 on failure. Poly
-/// answers `VOLUME_NAME_DOS` (`\\?\C:\...`) and `VOLUME_NAME_NONE`; the GUID
-/// and NT forms are `ERROR_NOT_SUPPORTED` (Poly's volumes have neither
-/// name).
+/// answers `VOLUME_NAME_DOS` (`\\?\C:\...`), `VOLUME_NAME_NT`
+/// (`\Device\HarddiskVolume1\...`, the file's object name, ADR 0185) and
+/// `VOLUME_NAME_NONE`; the GUID form is `ERROR_NOT_SUPPORTED` (Poly's volumes
+/// have no GUID name).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetFinalPathNameByHandleW(handle: Handle, buf: *mut u16, size: u32, flags: u32) -> u32 {
     let volume = match fileex::final_path_volume(flags) {
         Ok(v) => v,
         Err(e) => return fail(e, 0),
     };
-    if volume == fileex::VOLUME_NAME_GUID || volume == fileex::VOLUME_NAME_NT {
+    if volume == fileex::VOLUME_NAME_GUID {
         return fail(ERROR_NOT_SUPPORTED, 0);
+    }
+    if volume == fileex::VOLUME_NAME_NT {
+        // The file object's name: the volume's device and the path on it.
+        let mut name = alloc::vec![0u8; 16 + 2 * 4096];
+        let mut ret = 0u32;
+        // SAFETY: a buffer of the stated length.
+        let st = unsafe {
+            crate::handles::NtQueryObject(
+                handle,
+                OBJECT_NAME_INFORMATION,
+                name.as_mut_ptr(),
+                name.len() as u32,
+                &mut ret,
+            )
+        };
+        if !st.is_success() {
+            return fail_status(st, 0);
+        }
+        // A UNICODE_STRING (Length at 0) followed by its characters at offset 16.
+        let len = usize::from(u16::from_le_bytes([name[0], name[1]])).min(name.len() - 16);
+        let path: Vec<u16> = name[16..16 + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        // SAFETY: the caller's buffer.
+        return unsafe { return_sized(&path, buf, size) };
     }
     let below = match name_below_volume(handle) {
         Ok(n) => n,
@@ -468,4 +496,45 @@ pub unsafe extern "system" fn GetWindowsDirectoryW(buf: *mut u16, size: u32) -> 
 pub unsafe extern "system" fn GetSystemWindowsDirectoryW(buf: *mut u16, size: u32) -> u32 {
     // SAFETY: as above.
     unsafe { GetWindowsDirectoryW(buf, size) }
+}
+
+/// The ANSI form of a directory: the "size" convention in bytes.
+///
+/// # Safety
+/// `buf` holds `size` bytes (or is null with size 0).
+unsafe fn return_ansi(dir: &[u16], buf: *mut u8, size: u32) -> u32 {
+    let bytes = poly_kernelbase::text::to_ansi(dir);
+    match poly_kernelbase::text::sized(bytes.len(), size) {
+        poly_kernelbase::text::Sized::Copy(n) => {
+            // SAFETY: the caller's buffer holds more than `bytes.len()` bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+                buf.add(bytes.len()).write(0);
+            }
+            n
+        }
+        poly_kernelbase::text::Sized::Needed(n) => n,
+    }
+}
+
+/// `GetSystemDirectoryA`: the wide function's text in the ANSI code page; sizes in bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSystemDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    let mut dir = windows_dir();
+    dir.extend("\\System32".encode_utf16());
+    // SAFETY: the caller's buffer.
+    unsafe { return_ansi(&dir, buf, size) }
+}
+
+/// `GetWindowsDirectoryA`, `GetSystemWindowsDirectoryA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetWindowsDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: the caller's buffer.
+    unsafe { return_ansi(&windows_dir(), buf, size) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetSystemWindowsDirectoryA(buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: as above.
+    unsafe { GetWindowsDirectoryA(buf, size) }
 }

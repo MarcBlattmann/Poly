@@ -325,6 +325,11 @@ pub const SYSTEM32_ON_DISK: &str = "poly/nt/c/Windows/System32";
 pub const S1_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s1.html";
 /// What the dumped DOM holds when the script ran.
 pub const DOM_EXPECT: &str = "<p id=\"p\">script-ran 42</p>";
+/// The spec's network page (stage 4), `specs/windows/apps/chrome/pages/s4.html`: two frames, one
+/// `http://example.com/`, one `https://www.iana.org/`; the paragraph says which loaded.
+pub const S4_PAGE_PATH: &str = "specs/windows/apps/chrome/pages/s4.html";
+/// What the dumped DOM holds when both frames loaded.
+pub const S4_EXPECT: &str = "<p id=\"r\">http=1 https=1</p>";
 /// The recorded results of the stages, with the SHA-256 of the page and of
 /// each stage's standard output.
 pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
@@ -332,7 +337,16 @@ pub const SPEC_RESULTS_PATH: &str = "specs/windows/apps/chrome/windows.json";
 /// The page's bytes with LF line ends whatever the checkout did to them
 /// (the recorded DOM depends on them).
 pub fn s1_page() -> Result<Vec<u8>> {
-    let path = crate::root().join(S1_PAGE_PATH);
+    lf_page(S1_PAGE_PATH)
+}
+
+/// The network page's bytes (stage 4), with LF line ends.
+pub fn s4_page() -> Result<Vec<u8>> {
+    lf_page(S4_PAGE_PATH)
+}
+
+fn lf_page(relative: &str) -> Result<Vec<u8>> {
+    let path = crate::root().join(relative);
     let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut out = Vec::with_capacity(bytes.len());
     for (i, &b) in bytes.iter().enumerate() {
@@ -376,7 +390,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 3] = [
+pub const STAGES: [Stage; 5] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -414,6 +428,42 @@ pub const STAGES: [Stage; 3] = [
         expect: "PROBE file C:\\Program Files\\Chrome\\chrome_elf.dll",
         seconds: 60,
     },
+    // S3 (the spec's ladder: a visible window with `--disable-gpu`): Chrome stays open, so the launcher
+    // stops it after `seconds` and the stage reports what Chrome printed. The page is stage 1's; the
+    // window itself is what `cargo xtask win-app run --mode desktop` shows on the desktop.
+    Stage {
+        number: 3,
+        name: "a visible window, no sandbox, no GPU (ends after the launcher's wait)",
+        program: None,
+        args: &[
+            "--disable-gpu",
+            "--no-sandbox",
+            "--no-first-run",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--window-position=40,40",
+            "--window-size=900,500",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: "LAUNCH-EXIT",
+        seconds: 120,
+    },
+    // The network stage, headless (the spec's `s4-headless`): the page loads an http and an https
+    // frame; the guest has QEMU's user networking.
+    Stage {
+        number: 4,
+        name: "headless dump-dom of the network page (http and https frames), no sandbox, no GPU",
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s4.html",
+        ],
+        expect: S4_EXPECT,
+        seconds: 300,
+    },
 ];
 
 /// The probe of stage 9 (`tests/windows/chrome_probe.rs`).
@@ -433,12 +483,16 @@ pub struct Debugging {
     pub trace_ring: Option<u32>,
     /// The kernel keeps every process's last N NT calls for a breakpoint (`--trail`).
     pub trail: Option<u32>,
+    /// NT services the trail leaves out, comma separated (`--trail-skip`).
+    pub trail_skip: Option<String>,
     /// The call tracer writes each function's first call with each outcome only
     /// (`--trace-first`: `POLYTRACE_FIRST`).
     pub trace_first: bool,
     /// The call tracer also writes its ring this many seconds after a process started
     /// (`--ring-at`): what a process that went quiet did last.
     pub ring_at: Option<u32>,
+    /// The kernel logs where the frames are every N seconds (`--mem[=N]`: `poly.nt.mem`, ADR 0188).
+    pub mem: Option<u32>,
 }
 
 static DEBUGGING: std::sync::Mutex<Option<Debugging>> = std::sync::Mutex::new(None);
@@ -531,6 +585,7 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
     }
     tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
+    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
     for stage in &STAGES {
         let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
         tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
@@ -693,18 +748,64 @@ impl Summary {
                 s.expected = true;
             }
         }
+        // The launcher's markers again, from its console output alone: the kernel's own log
+        // lines can land in the middle of a marker, and the console wraps long lines with cursor
+        // moves (a SHA-256 line is 85 columns), so the lines above may have missed them.
+        let stream = console_stream(log);
+        let after = |marker: &str| stream.find(marker).map(|at| &stream[at + marker.len()..]);
+        if let Some(rest) = after("LAUNCH-EXIT code=0x") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).collect();
+            if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                s.code = Some(code);
+                s.exit = Some(format!("code=0x{hex}"));
+            }
+        }
+        if s.stdout_bytes.is_none()
+            && let Some(rest) = after("LAUNCH-DIGEST stdout bytes=")
+        {
+            s.stdout_bytes = rest.chars().take_while(char::is_ascii_digit).collect::<String>().parse().ok();
+        }
+        if let Some(rest) = after("LAUNCH-SHA256 stdout ") {
+            let hex: String = rest.chars().take_while(char::is_ascii_hexdigit).take(64).collect();
+            if hex.len() == 64 {
+                s.stdout_sha256 = Some(hex);
+            }
+        }
+        if !expect.is_empty() && stream.contains(expect) {
+            s.expected = true;
+        }
         s
     }
 }
 
-/// Guest memory: Chrome's browser, GPU, network and renderer processes.
+/// The launcher's console output in a serial log as one stream: the kernel's own log lines
+/// (`nt: pid ...`, `nt-waits: ...`, written whole and ending in a line break, possibly in the
+/// middle of a console line) cut out, then the escape sequences (the console's cursor moves,
+/// with which it also wraps long lines) and the line breaks removed.
+pub fn console_stream(log: &str) -> String {
+    const KERNEL: [&str; 6] = ["nt: pid ", "nt-waits: ", "nt-trace: ", "nt-trail: ", "nt-exc: ", "ptrace"];
+    let mut kept = String::with_capacity(log.len());
+    let mut rest = log;
+    while let Some(at) = KERNEL.iter().filter_map(|k| rest.find(k)).min() {
+        kept.push_str(&rest[..at]);
+        rest = rest[at..].find('\n').map_or("", |nl| &rest[at + nl + 1..]);
+    }
+    kept.push_str(rest);
+    crate::console::strip_ansi(&kept).chars().filter(|&c| c != '\n').collect()
+}
+
+/// Guest memory: Chrome's browser, GPU, network and renderer processes. Stage 1 starts about
+/// ten Chrome processes; they share `chrome.dll`'s clean pages since DLLs are image section views
+/// (ADR 0188): about 360 MiB of user pages at the most, where every process had its own 300 MB
+/// copy before and the 4 GiB guest ran out of frames (ADR 0155 steps 12 and 13).
 pub const MEMORY: &str = "4G";
 /// Virtual CPUs of a stage.
 pub const CPUS: u32 = 4;
 
 /// `cargo xtask chrome-win run [--stage N] [--trace] [--exceptions[=N]] [--waits[=SECS]] [--release]
 /// [--fresh-disk] [--timeout SECS] [--chrome-arg ARG]... [--launch-seconds N] [--trace-only TEXT]
-/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--memory=SIZE] [--cpus=N]`: boot a
+/// [--trace-ring N] [--ring-at SECS] [--trace-first] [--trail N] [--trail-skip NAMES] [--mem[=SECS]] [--memory=SIZE]
+/// [--cpus=N]`: boot a
 /// stage headless (the kernel mounts the disk and runs the launcher as its
 /// first program), collect the serial log, print what it says. Works on
 /// every host (no QMP). `--exceptions` asks the kernel to log every exception
@@ -741,6 +842,11 @@ fn run(args: &[String]) -> Result {
             "--chrome-arg" => debugging.chrome_args.push(it.next().ok_or("--chrome-arg needs an argument")?.clone()),
             "--trace-only" => debugging.trace_only = Some(it.next().ok_or("--trace-only needs a text")?.clone()),
             "--trace-first" => debugging.trace_first = true,
+            "--mem" => debugging.mem = Some(5),
+            m if m.starts_with("--mem=") => {
+                debugging.mem = Some(m["--mem=".len()..].parse().map_err(|e| format!("--mem: {e}"))?)
+            }
+            "--trail-skip" => debugging.trail_skip = Some(it.next().ok_or("--trail-skip needs names")?.clone()),
             "--ring-at" => {
                 debugging.ring_at =
                     Some(it.next().ok_or("--ring-at needs seconds")?.parse().map_err(|e| format!("--ring-at: {e}"))?)
@@ -838,6 +944,13 @@ pub fn debugging_kernel_arguments(d: &Debugging) -> String {
     }
     if let Some(n) = d.trail {
         more.push_str(&format!(" poly.nt.trail={n}"));
+    }
+    if let Some(skip) = &d.trail_skip {
+        more.push_str(" poly.nt.trail.skip=");
+        more.push_str(skip);
+    }
+    if let Some(n) = d.mem {
+        more.push_str(&format!(" poly.nt.mem={n}"));
     }
     more
 }
@@ -956,7 +1069,9 @@ fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
     if st.program.is_some() {
         return None;
     }
-    let (want_bytes, want_sha) = match spec_stdout(&format!("s{}", st.number)) {
+    // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
+    let key = if st.number == 4 { "s4-headless".to_string() } else { format!("s{}", st.number) };
+    let (want_bytes, want_sha) = match spec_stdout(&key) {
         Ok(v) => v,
         Err(e) => return Some(e),
     };
@@ -1045,11 +1160,9 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 does not pass yet
-/// ([`S1_REQUIRED`]): until it does the group reports how far Chrome got
-/// and succeeds, so `cargo xtask ci` on a machine with the cache keeps
-/// passing for everyone else's changes; `POLY_CHROME_REQUIRED=1` makes the
-/// outcome the group's result.
+/// downloads the 210 MB package; CI has none). Stage 1 must pass
+/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
+/// unless `POLY_CHROME_REQUIRED=1`.
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
@@ -1079,22 +1192,105 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
-        Ok(())
     } else if required {
-        Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()))
+        return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
             "==> stage {} did not pass yet (not required: see S1_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
             st.number,
             outcome.log.display()
         );
-        Ok(())
+    }
+    stage3_window(kernel)
+}
+
+/// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
+const S3_PAGE: &str =
+    "data:text/html,<title>poly-s3</title><style>body{background:green;color:white}</style><h1>HelloPoly</h1>";
+
+/// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
+/// (a slow start still finishes loading, so the component updater's download task runs, which
+/// stopped the browser about 35 s after its first page before ADR 0207); at about
+/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000). Then a
+/// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
+/// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
+/// (ADR 0155 addendum "browsing").
+const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
+                        chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
+                        pixel:200|400|0000ff";
+
+/// What one stage 3 run showed.
+#[derive(Debug, PartialEq, Eq)]
+enum S3Verdict {
+    /// The page is painted and the browser threw no exception.
+    Pass,
+    /// The page area is still blank white: a slow start whose page never finished loading (the
+    /// component updater does not even run then), so the run says nothing either way.
+    Inconclusive,
+    Fail,
+}
+
+/// Judge a run: an exception delivered to user mode, a window that never came, or any colour but
+/// the page's or blank white at the pixel is a failure.
+fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
+    match stopped {
+        _ if !exceptions.is_empty() => S3Verdict::Fail,
+        None => S3Verdict::Pass,
+        // White where the first page should be green; white after the navigation is a failure.
+        Some(why) if why.contains("is [ff, ff, ff], wanted [00, 80, 00]") => S3Verdict::Inconclusive,
+        Some(_) => S3Verdict::Fail,
     }
 }
 
+/// The stage 3 boot check: the browser's window, with the GPU off, shows its page and is still up
+/// after the component updater's BITS download was refused (ADR 0207: the apartment of a COM
+/// thread is in `TEB.ReservedForOle`). Skipped where there is no Unix host or no cached Chrome.
+/// An exception or a missing window fails it at once; a page that never finished loading (blank
+/// white, the slow start that sometimes happens under load) repeats the run, up to three times,
+/// and is reported as inconclusive after that: such a run cannot show the browser's break.
+fn stage3_window(kernel: &Path) -> Result {
+    eprintln!("==> boot test: Chrome for Testing {VERSION}, a window with its page painted after 125 s (stage 3)");
+    if !cfg!(unix) {
+        eprintln!("==> skipped: a desktop run needs a Unix host (QMP over a Unix socket)");
+        return Ok(());
+    }
+    let dir = cache_dir().join(TOP);
+    let args = format!(
+        "--disable-gpu --no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+    );
+    let log = crate::root().join("target/win-app/s3-boot/chrome.serial.log");
+    for attempt in 1..=3 {
+        let (text, stopped) =
+            crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S3_STEPS, &log)?;
+        let exceptions: Vec<&str> = text.lines().filter(|l| l.contains("nt-exc:")).take(3).collect();
+        match s3_verdict(stopped.as_deref(), &exceptions) {
+            S3Verdict::Pass => {
+                println!("STAGE 3 PASSED");
+                return Ok(());
+            }
+            S3Verdict::Inconclusive => {
+                eprintln!(
+                    "==> stage 3, attempt {attempt}: the page was still loading (slow start); log {}",
+                    log.display()
+                );
+            }
+            S3Verdict::Fail => {
+                return Err(format!(
+                    "stage 3 did not pass: {}; exceptions: {exceptions:?} (see {})",
+                    stopped.unwrap_or_else(|| "the steps ran".into()),
+                    log.display()
+                ));
+            }
+        }
+    }
+    println!("STAGE 3 INCONCLUSIVE: the page never finished loading in 3 runs (slow start); no exception either");
+    Ok(())
+}
+
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
-/// pass. Set to `true` by the change that makes stage 1 pass.
-pub const S1_REQUIRED: bool = false;
+/// pass. It passes every time since ADR 0155 step 13 (the failed check at
+/// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
+pub const S1_REQUIRED: bool = true;
 
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
@@ -1109,8 +1305,31 @@ pub fn command(args: &[String]) -> Result {
     }
 }
 
+/// Whether [`S3_STEPS`] are steps `win-app` takes (for the test).
+#[cfg(test)]
+fn crate_steps_parse() -> bool {
+    crate::winapps::steps_parse(S3_STEPS)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stage_3_is_judged_by_exceptions_and_the_pixel() {
+        use super::{S3Verdict, s3_verdict};
+        let white = "Pixel(200, 400, [0, 128, 0]): pixel 200,400 is [ff, ff, ff], wanted [00, 80, 00]";
+        let wallpaper = "Pixel(200, 400, [0, 128, 0]): pixel 200,400 is [30, 30, 30], wanted [00, 80, 00]";
+        assert_eq!(s3_verdict(None, &[]), S3Verdict::Pass);
+        assert_eq!(s3_verdict(None, &["nt-exc: pid 2 tid 21 code 0x80000003"]), S3Verdict::Fail);
+        assert_eq!(s3_verdict(Some(white), &[]), S3Verdict::Inconclusive);
+        assert_eq!(s3_verdict(Some(white), &["nt-exc: pid 2"]), S3Verdict::Fail);
+        assert_eq!(s3_verdict(Some(wallpaper), &[]), S3Verdict::Fail);
+        // After the first page was green, a navigation that leaves the page white failed.
+        let not_navigated = "Pixel(200, 400, [0, 0, 255]): pixel 200,400 is [ff, ff, ff], wanted [00, 00, ff]";
+        assert_eq!(s3_verdict(Some(not_navigated), &[]), S3Verdict::Fail);
+        assert!(super::crate_steps_parse());
+        assert_eq!(s3_verdict(Some("Launch: no \"poly-compositor: launched\" in the log"), &[]), S3Verdict::Fail);
+    }
+
     #[test]
     fn debugging_options_become_kernel_arguments() {
         assert_eq!(kernel_arguments(false, None, None), "");
@@ -1213,6 +1432,8 @@ mod tests {
         assert_eq!(trace_env(&ring), "POLYTRACE_RING=500 POLYTRACE_ONLY=--type=renderer");
         let kernel = Debugging { trail: Some(128), ..ring };
         assert_eq!(debugging_kernel_arguments(&kernel), " poly.nt.only=--type=renderer poly.nt.trail=128");
+        let mem = Debugging { mem: Some(3), ..Debugging::default() };
+        assert_eq!(debugging_kernel_arguments(&mem), " poly.nt.mem=3");
     }
 
     #[test]
@@ -1231,6 +1452,21 @@ mod tests {
         );
         assert!(ok.expected && ok.code == Some(0));
         assert_eq!((ok.stdout_bytes, ok.stdout_sha256.as_deref()), (Some(440), Some("abc123")));
+        // The kernel's lines inside the console's, and the console's own wrap (ADR 0155 step 12:
+        // the first stage 1 run that printed the DOM).
+        let mixed = "LAUNCH-BEGIN stdout\x1b[3;1H<p id=\"p\">script-ran 42</p>\x1b[18;1HLAUNCH-END stdout\x1b[19;1H\
+                     LAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 nt: pid 3: stub: kernel32!GetThreadPriority\r\n\
+                     stdout 7b79f8b475nt: pid 3: ldr: LdrLoadDll(x) failed (0xc0000135)\r\n\
+                     542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea1\x1b[21;1H3807b\x1b[22;1H\
+                     LAUNCH-EXIT code=0nt-waits: p3 ends a thread status 0x0\r\nx0\x1b[23;1H\n";
+        let m = Summary::parse(mixed, DOM_EXPECT);
+        assert_eq!(m.stdout_bytes, Some(440));
+        assert_eq!(
+            m.stdout_sha256.as_deref(),
+            Some("7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b")
+        );
+        assert_eq!((m.code, m.expected), (Some(0), true));
+        assert!(m.loader.iter().any(|l| l.contains("LdrLoadDll(x)")));
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);
@@ -1252,11 +1488,32 @@ mod tests {
 
     #[test]
     fn stage_one_and_two_run_the_specs_page() {
-        for st in STAGES.iter().filter(|s| s.program.is_none()) {
+        for st in STAGES.iter().filter(|s| s.program.is_none() && s.number <= 2) {
             assert!(st.args.contains(&"file:///C:/poly-test/s1.html"));
             assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
             assert!(st.expect.contains("script-ran 42"));
         }
+    }
+
+    #[test]
+    fn stage_four_runs_the_network_page_and_the_spec_records_its_output() {
+        let st = STAGES.iter().find(|s| s.number == 4).unwrap();
+        assert!(st.args.contains(&"file:///C:/poly-test/s4.html"));
+        assert!(st.args.contains(&"--no-sandbox"));
+        assert_eq!(st.expect, S4_EXPECT);
+        // The page the spec recorded the digest of, and the digest: 831 bytes.
+        let text = std::fs::read_to_string(crate::root().join(SPEC_RESULTS_PATH)).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(crate::sha256::hex(&s4_page().unwrap()), json["pages"]["s4.html"].as_str().unwrap());
+        assert_eq!(spec_stdout("s4-headless").unwrap().0, 831);
+        let mut s = Summary {
+            stdout_bytes: Some(831),
+            stdout_sha256: Some(spec_stdout("s4-headless").unwrap().1),
+            ..Summary::default()
+        };
+        assert_eq!(digest_note(st, &s), None);
+        s.stdout_bytes = Some(440);
+        assert!(digest_note(st, &s).unwrap().contains("the spec records 831 bytes"));
     }
 
     #[test]

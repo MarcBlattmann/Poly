@@ -54,32 +54,62 @@ impl EntryId {
         format!("{}/{}/{}/{}", self.os, self.layer, self.component, self.symbol)
     }
 
-    /// The spec sheet, relative to the repository root.
-    pub fn spec_path(&self) -> PathBuf {
-        PathBuf::from("specs").join(&self.os).join(&self.component).join(format!("{}.yaml", self.symbol))
+    /// The symbol as a file name. Visual C++ decorated names (`?_Xbad_alloc@std@@YAXXZ`) contain
+    /// characters a Windows file name cannot hold (`< > : " | ? *`); those, and `%` itself, are
+    /// written `%XX` (two hex digits of the byte), so every symbol has one name on every host
+    /// (ADR 0124, ADR 0199). Other symbols are unchanged.
+    pub fn file_symbol(&self) -> String {
+        let mut out = String::new();
+        for c in self.symbol.chars() {
+            if "<>:\"|?*%".contains(c) {
+                out.push_str(&format!("%{:02X}", c as u32));
+            } else {
+                out.push(c);
+            }
+        }
+        out
     }
 
-    /// The visible tests directory, relative to the repository root.
+    /// The spec sheet, relative to the repository root, with `/` between
+    /// the components on every host: the path is recorded in the hand-off
+    /// log and given to git.
+    pub fn spec_path(&self) -> PathBuf {
+        PathBuf::from(format!("specs/{}/{}/{}.yaml", self.os, self.component, self.file_symbol()))
+    }
+
+    /// The visible tests directory, relative to the repository root, with
+    /// `/` (as [`EntryId::spec_path`]).
     pub fn tests_dir(&self) -> PathBuf {
-        PathBuf::from("specs").join(&self.os).join(&self.component).join(format!("{}.tests", self.symbol))
+        PathBuf::from(format!("specs/{}/{}/{}.tests", self.os, self.component, self.file_symbol()))
+    }
+
+    /// The visible test file `name` (itself `/`-separated), relative to the
+    /// repository root, with `/` throughout.
+    pub fn test_file(&self, name: &str) -> PathBuf {
+        PathBuf::from(format!("{}/{name}", self.tests_dir().display()))
     }
 
     /// This entry's directory in the held-out store.
     pub fn heldout_dir(&self, heldout: &Path) -> PathBuf {
-        heldout.join(&self.os).join(&self.layer).join(&self.component).join(&self.symbol)
+        heldout.join(&self.os).join(&self.layer).join(&self.component).join(self.file_symbol())
     }
 }
 
 /// The held-out store: `$POLY_HELDOUT_DIR`, else `~/.poly-heldout`. It must
 /// not be inside the repository.
 pub fn heldout_root(repo: &Path) -> Result<PathBuf> {
-    heldout_root_from(repo, std::env::var_os(HELDOUT_ENV), std::env::var_os("HOME"))
+    // HOME is a Unix variable; a Windows host has USERPROFILE.
+    heldout_root_from(
+        repo,
+        std::env::var_os(HELDOUT_ENV),
+        std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")),
+    )
 }
 
 fn heldout_root_from(repo: &Path, var: Option<OsString>, home: Option<OsString>) -> Result<PathBuf> {
     let dir = match var {
         Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => PathBuf::from(home.ok_or("neither POLY_HELDOUT_DIR nor HOME is set")?).join(".poly-heldout"),
+        _ => PathBuf::from(home.ok_or("neither POLY_HELDOUT_DIR nor HOME (USERPROFILE) is set")?).join(".poly-heldout"),
     };
     let dir = util::absolute(&dir);
     if util::is_inside(&dir, repo) || util::is_inside(repo, &dir) {
@@ -265,7 +295,17 @@ pub fn split_tests(repo: &Path, heldout: &Path, req: &SplitRequest<'_>) -> Resul
         return Err(format!("no test files in {}", generated.display()));
     }
     let names: Vec<String> = files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-    let held: Vec<String> = choose_held_out(&entry.id(), &names, ratio);
+    // A prebuilt executable (`<name>.exe` beside `<name>.cpp`, a test built by Microsoft's compiler)
+    // goes the way of its source: the split chooses among the others and the executable follows.
+    let is_companion = |n: &String| n.strip_suffix(".exe").is_some_and(|stem| names.contains(&format!("{stem}.cpp")));
+    let chosen: Vec<String> = names.iter().filter(|n| !is_companion(n)).cloned().collect();
+    let mut held: Vec<String> = choose_held_out(&entry.id(), &chosen, ratio);
+    for n in &names {
+        if is_companion(n) && held.contains(&format!("{}.cpp", n.trim_end_matches(".exe"))) {
+            held.push(n.clone());
+        }
+    }
+    held.sort();
 
     let mut hashes = BTreeMap::new();
     for name in &names {
@@ -311,7 +351,7 @@ pub fn split_tests(repo: &Path, heldout: &Path, req: &SplitRequest<'_>) -> Resul
             manifest.held_out.push(FileHash { path: name.clone(), sha256: hashes[name].clone() });
             held_out.push(name.clone());
         } else {
-            let rel = entry.tests_dir().join(name);
+            let rel = entry.test_file(name);
             util::write(&repo.join(&rel), &data)?;
             manifest.visible.push(FileHash { path: rel.to_string_lossy().into_owned(), sha256: hashes[name].clone() });
             visible.push(name.clone());
@@ -355,6 +395,16 @@ mod tests {
         assert_eq!(e.spec_path(), Path::new("specs/linux/x86_64/write.yaml"));
         assert_eq!(e.tests_dir(), Path::new("specs/linux/x86_64/write.tests"));
         assert_eq!(e.heldout_dir(Path::new("/h")), Path::new("/h/linux/syscall/x86_64/write"));
+        // Decorated C++ names get file names a Windows host can hold.
+        let d = EntryId::parse("windows/api/msvcp140.dll/?_Xbad_alloc@std@@YAXXZ").unwrap();
+        assert_eq!(d.file_symbol(), "%3F_Xbad_alloc@std@@YAXXZ");
+        assert_eq!(d.spec_path(), Path::new("specs/windows/msvcp140.dll/%3F_Xbad_alloc@std@@YAXXZ.yaml"));
+        assert_eq!(d.tests_dir(), Path::new("specs/windows/msvcp140.dll/%3F_Xbad_alloc@std@@YAXXZ.tests"));
+        let w =
+            EntryId::parse("windows/api/msvcp140.dll/??6?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAAAEAV01@H@Z")
+                .unwrap();
+        assert!(!w.file_symbol().contains('?'));
+        assert_eq!(EntryId::parse("windows/api/a.dll/100%").unwrap().file_symbol(), "100%25");
         assert!(EntryId::parse("linux/syscall/write").is_err());
         assert!(EntryId::parse("plan9/syscall/x/y").is_err());
         assert!(EntryId::parse("linux/syscall/../x").is_err());
@@ -412,6 +462,34 @@ mod tests {
         assert_eq!(choose_held_out("e", &names[..2], 0.01).len(), 1, "at least one");
         assert_eq!(choose_held_out("e", &names[..2], 0.99).len(), 1, "never all");
         assert!(choose_held_out("e", &names[..1], 0.3).is_empty());
+    }
+
+    #[test]
+    fn a_prebuilt_executable_follows_its_source() {
+        let base = temp("split-exe");
+        let (repo, heldout, generated) = (base.join("repo"), base.join("heldout"), base.join("gen"));
+        for i in 0..10 {
+            util::write(&generated.join(format!("t{i}.cpp")), format!("test {i}")).unwrap();
+            util::write(&generated.join(format!("t{i}.exe")), format!("MZ {i}")).unwrap();
+        }
+        let e = EntryId::parse("windows/api/vcruntime140_1.dll/__CxxFrameHandler4").unwrap();
+        let req = SplitRequest {
+            entry: &e,
+            generated: &generated,
+            ratio: 0.3,
+            spec_agent: "spec-1",
+            revision: "abc",
+            replace: false,
+        };
+        let s = split_tests(&repo, &heldout, &req).unwrap();
+        // 3 of 10 tests held out, each with its executable: 6 held-out files, 14 visible.
+        assert_eq!((s.visible.len(), s.held_out.len()), (14, 6));
+        for h in s.held_out.iter().filter(|h| h.ends_with(".cpp")) {
+            assert!(s.held_out.contains(&h.replace(".cpp", ".exe")), "{h}");
+        }
+        for v in s.visible.iter().filter(|v| v.ends_with(".cpp")) {
+            assert!(s.visible.contains(&v.replace(".cpp", ".exe")), "{v}");
+        }
     }
 
     #[test]

@@ -8,6 +8,7 @@ fn main() {
     build_vdso(Path::new(&dir));
     embed_ntdll();
     embed_win32();
+    embed_wow64();
 }
 
 /// Where `cargo xtask` names the directory with our `kernelbase.dll`,
@@ -72,6 +73,8 @@ fn embed_win32() {
         "secur32.dll",
         "dhcpcsvc.dll",
         "dnsapi.dll",
+        // ADR 0195.
+        "mswsock.dll",
         "dbghelp.dll",
         "b35test.exe",
         // ADR 0170.
@@ -84,21 +87,145 @@ fn embed_win32() {
         "shlwapi.dll",
         "wtsapi32.dll",
         "comctl32.dll",
+        "comdlg32.dll",
         "oleacc.dll",
         "uiautomationcore.dll",
         "mfplat.dll",
         "powrprof.dll",
         "uxtheme.dll",
+        // ADR 0155, step 12.
+        "setupapi.dll",
+        "pdh.dll",
+        "tbs.dll",
+        "cfgmgr32.dll",
+        "wintrust.dll",
+        "ncrypt.dll",
+        "propsys.dll",
+        "wevtapi.dll",
+        "hid.dll",
+        "dxgi.dll",
+        "d3d11.dll",
+        "dcomp.dll",
+        // ADR 0199.
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
     ] {
         match &dir {
             Some(d) => {
                 let path = d.join(name);
                 println!("cargo:rerun-if-changed={}", path.display());
                 std::fs::copy(&path, out.join(name)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                // ADR 0199: a DLL the user's installer may replace carries Poly's marker, which the
+                // layout looks for (`create::OWN_COPY_MARKER`).
+                if name.starts_with("vcruntime140") || name.starts_with("msvcp140") {
+                    let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                    assert!(
+                        bytes.windows(OWN_COPY_MARKER.len()).any(|w| w == OWN_COPY_MARKER),
+                        "{name} lacks Poly's own-copy marker (ADR 0199)"
+                    );
+                }
             }
             None => std::fs::write(out.join(name), []).expect("write an empty module"),
         }
     }
+    embed_stub_dlls(&out, dir.as_deref());
+}
+
+/// The generated system DLLs (ADR 0155, step 10: `poly-stubs`' `system` module): `xtask` writes them next to
+/// the Win32 modules and lists their file names in `stub-dlls.txt`. The kernel gets one table of
+/// `(file name, bytes)` (`nt::STUB_DLLS`), empty without `xtask`.
+fn embed_stub_dlls(out: &Path, dir: Option<&Path>) {
+    let mut table = String::from("pub static STUB_DLLS: &[(&str, &[u8])] = &[\n");
+    if let Some(d) = dir {
+        let list = d.join("stub-dlls.txt");
+        println!("cargo:rerun-if-changed={}", list.display());
+        for name in std::fs::read_to_string(&list).unwrap_or_default().lines().map(str::trim).filter(|l| !l.is_empty())
+        {
+            let path = d.join(name);
+            println!("cargo:rerun-if-changed={}", path.display());
+            let embedded = format!("stub-{name}");
+            std::fs::copy(&path, out.join(&embedded)).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            table.push_str(&format!("    ({name:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/{embedded}\"))),\n"));
+        }
+    }
+    table.push_str("];\n");
+    std::fs::write(out.join("stub_dlls.rs"), table).expect("write stub_dlls.rs");
+}
+
+/// Where `cargo xtask` names the directory with the 32-bit modules (ADR 0186): the i686
+/// `ntdll.dll`, `kernelbase.dll`, `kernel32.dll` and the 32-bit test programs
+/// (`tools/xtask/src/wow64.rs`).
+const WOW64_ENV: &str = "POLY_WOW64_DIR";
+
+/// Copy the 32-bit modules to `$OUT_DIR/wow64-<name>`, which the kernel embeds
+/// (`nt::NTDLL32`, ...). Without `xtask` they are empty files: that kernel refuses 32-bit
+/// programs as before.
+fn embed_wow64() {
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    println!("cargo:rerun-if-env-changed={WOW64_ENV}");
+    let dir = std::env::var_os(WOW64_ENV).map(PathBuf::from);
+    if dir.is_none() {
+        println!(
+            "cargo:warning={WOW64_ENV} is not set: this kernel runs no 32-bit programs (build with `cargo xtask`)"
+        );
+    }
+    // The modules the kernel names (`nt::NTDLL32`, ...) and the test programs; always present
+    // (empty without `xtask`).
+    let mut names: Vec<String> = [
+        "ntdll.dll",
+        "kernelbase.dll",
+        "kernel32.dll",
+        "win32u.dll",
+        "gdi32.dll",
+        "user32.dll",
+        "hello32.exe",
+        "gui32.exe",
+        "sys32.exe",
+        "safeseh32.exe",
+    ]
+    .iter()
+    .map(|n| n.to_string())
+    .collect();
+    // Every other DLL of the directory (ADR 0186 stage 3: advapi32, ole32, ...) goes into
+    // SysWOW64 by the layout, through the generated table `WOW64_DLLS`.
+    if let Some(d) = &dir {
+        let mut extra: Vec<String> = std::fs::read_dir(d)
+            .unwrap_or_else(|e| panic!("{}: {e}", d.display()))
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".dll") && !names.contains(n))
+            .collect();
+        extra.sort();
+        names.extend(extra);
+    }
+    let mut table = String::from(
+        "/// Every 32-bit system DLL `cargo xtask wow64` built (generated by `kernel/build.rs`).
+pub static WOW64_DLLS: &[(&str, &[u8])] = &[
+",
+    );
+    for name in &names {
+        let to = out.join(format!("wow64-{name}"));
+        match &dir {
+            Some(d) => {
+                let path = d.join(name);
+                println!("cargo:rerun-if-changed={}", path.display());
+                std::fs::copy(&path, &to).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            }
+            None => std::fs::write(&to, []).expect("write an empty module"),
+        }
+        if name.ends_with(".dll") {
+            table.push_str(&format!(
+                "    ({name:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/wow64-{name}\"))),
+"
+            ));
+        }
+    }
+    table.push_str(
+        "];
+",
+    );
+    std::fs::write(out.join("wow64_dlls.rs"), table).expect("write the 32-bit module table");
 }
 
 /// Where `cargo xtask` names our `ntdll.dll` (ADR 0071): built once per
@@ -237,3 +364,7 @@ fn check_vdso(b: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// `poly_personality_nt::layout::create::OWN_COPY_MARKER` (ADR 0199), which Poly's own
+/// `vcruntime140*.dll` and `msvcp140.dll` must contain.
+const OWN_COPY_MARKER: &[u8] = b"Poly's own copy of a Visual C++ runtime DLL (ADR 0199)";

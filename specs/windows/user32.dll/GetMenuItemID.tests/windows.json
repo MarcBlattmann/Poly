@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "212d2b020390",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T22:25:19Z",
+  "tests": [
+    {
+      "name": "gmid_after",
+      "exe_sha256": "be415b27d9bedda1d80e28239e3f4d3708c1bde9ad34d5f7074546fb3d98c515",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IDB4NjQgMHg2NSAweDY2IDB4NjcKYWZ0ZXIgYW4gaW5zZXJ0IGF0IDE6IDB4NjQgMHg3IDB4NjUgMHg2NiAweDY3CmFmdGVyIGRlbGV0aW5nIHBvc2l0aW9uIDA6IDB4NyAweDY1IDB4NjYgMHg2NwphZnRlciB0dXJuaW5nIHBvc2l0aW9uIDAgaW50byBhIHBvcHVwOiAweGZmZmZmZmZmIDB4NjUgMHg2NiAweDY3CmFuZCBiYWNrOiAweGZmZmZmZmZmIDB4NjUgMHg2NiAweDY3CmFmdGVyIFNldE1lbnVJdGVtSW5mb1coaWQgNzcpIGF0IDE6IDB4ZmZmZmZmZmYgMHg0ZCAweDY2IDB4NjcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: 0x64 0x65 0x66 0x67\nafter an insert at 1: 0x64 0x7 0x65 0x66 0x67\nafter deleting position 0: 0x7 0x65 0x66 0x67\nafter turning position 0 into a popup: 0xffffffff 0x65 0x66 0x67\nand back: 0xffffffff 0x65 0x66 0x67\nafter SetMenuItemInfoW(id 77) at 1: 0xffffffff 0x4d 0x66 0x67\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

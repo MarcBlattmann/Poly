@@ -11,6 +11,7 @@
 use crate::exports::{LOADER_LOCK, LOADER_LOCK_DEBUG};
 use crate::sys::SysPlatform;
 use crate::{heap, lock, params, run_callouts, syscalls, with_loader, with_slot};
+#[cfg(target_arch = "x86_64")]
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_ldr::{Config, LoadOp, Loader};
@@ -22,7 +23,8 @@ const STATUS_DLL_INIT_FAILED: NtStatus = NtStatus(0xC000_0142);
 // The entry stub: move Poly's start registers into the x64 argument
 // registers and call `ntdll_thread_init`, which never returns. It has unwind
 // data (`.seh_*`) so a stack walk passes through it to the zero return
-// address the kernel left above it.
+// address the kernel left above it. (The i686 one is in `x86.rs`.)
+#[cfg(target_arch = "x86_64")]
 global_asm!(
     r#"
     .text
@@ -48,7 +50,8 @@ static STARTED: AtomicBool = AtomicBool::new(false);
 
 /// Where `LdrInitializeThunk` goes: initialise the process (first thread)
 /// or the thread, then run the thread's routine.
-unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u64) -> ! {
+pub(crate) unsafe extern "C" fn ntdll_thread_init(routine: usize, argument: usize, exe_base: usize) -> ! {
+    let (routine, argument, exe_base) = (routine as u64, argument as u64, exe_base as u64);
     let teb = lock::teb();
     if STARTED.swap(true, Ordering::AcqRel) {
         // A later thread: its TLS, then DLL_THREAD_ATTACH, under the
@@ -62,6 +65,13 @@ unsafe extern "C" fn ntdll_thread_init(routine: u64, argument: u64, exe_base: u6
         // SAFETY: the process cannot start: end it with the status.
         unsafe { syscalls::NtTerminateProcess(syscalls::CURRENT_PROCESS, status) };
     }
+    // A user APC queued to this thread before it ran (a DLL's `DllMain` may queue one to its own
+    // thread) is delivered now: Windows starts every thread with `NtContinue(..., TestAlert = TRUE)`
+    // (Learn, `QueueUserAPC`: "If an application queues an APC before the thread begins running,
+    // the thread begins by calling the APC function"). The MSYS2 runtime starts its signal thread
+    // this way.
+    // SAFETY: a service without arguments; the routines are the program's own.
+    unsafe { syscalls::NtTestAlert() };
     // SAFETY: hand off to the thread's start routine; it never returns here.
     unsafe { RtlUserThreadStart(routine, argument) }
 }
@@ -75,14 +85,20 @@ unsafe extern "system" {
 /// heap, the reported OS version, the processor count, the executable's subsystem and the
 /// loader-lock pointer.
 fn init_peb(peb: u64, exe_base: u64) {
+    use poly_rtl::layout::NATIVE;
+    // SystemBasicInformation (class 0): 64 bytes with NumberOfProcessors at 56, or 44 bytes with
+    // it at 40 in a 32-bit process.
+    let (basic_size, processors_at) = if NATIVE.ptr == 4 { (44u32, 40usize) } else { (64, 56) };
     // SAFETY: the PEB is the process's own page; the executable's headers are mapped.
     unsafe {
-        ((peb + poly_rtl::peb::PROCESS_HEAP as u64) as *mut u64).write(heap::process_heap().0 as u64);
-        // SystemBasicInformation (class 0): NumberOfProcessors is the byte at offset 56.
+        ((peb + NATIVE.peb_process_heap) as *mut usize).write(heap::process_heap().0 as usize);
         let mut basic = [0u8; 64];
         let mut got = 0u32;
-        let processors =
-            if NtQuerySystemInformation(0, basic.as_mut_ptr(), 64, &mut got).0 == 0 { u32::from(basic[56]) } else { 1 };
+        let processors = if NtQuerySystemInformation(0, basic.as_mut_ptr(), basic_size, &mut got).0 == 0 {
+            u32::from(basic[processors_at])
+        } else {
+            1
+        };
         let nt = exe_base + u64::from(((exe_base + 0x3c) as *const u32).read_unaligned());
         let opt = nt + 24;
         let subsystem = (
@@ -94,7 +110,7 @@ fn init_peb(peb: u64, exe_base: u64) {
         // every DllMain and TLS callback; it is set here, before any of them runs.
         LOADER_LOCK.make_static(&LOADER_LOCK_DEBUG);
         let loader_lock = (&raw const LOADER_LOCK) as u64;
-        for f in poly_rtl::peb::fields(poly_rtl::peb::Facts { processors, subsystem, loader_lock }) {
+        for f in poly_rtl::peb::fields_for(&NATIVE, poly_rtl::peb::Facts { processors, subsystem, loader_lock }) {
             let at = (peb + f.at as u64) as *mut u8;
             core::ptr::copy_nonoverlapping(f.value.to_le_bytes().as_ptr(), at, f.width);
         }
@@ -110,7 +126,7 @@ fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
     let peb = lock::peb();
     init_peb(peb, exe_base);
     let image = params::image_path(peb);
-    let config = Config { dirs: params::dirs(peb) };
+    let config = Config { dirs: params::dirs(peb), bitness: crate::BITNESS };
     with_slot(|slot| *slot = Some(Loader::new(config)));
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, p| {
@@ -118,7 +134,7 @@ fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
         // The executable heads the load and memory order lists, then comes ntdll, as in every
         // Windows process (programs that walk `PEB.Ldr` take the first entry for the image).
         let exe = l.add_mapped(p, exe_base, &image, false)?;
-        let ntdll = poly_ldr::path::wide("C:\\Windows\\System32\\ntdll.dll");
+        let ntdll = poly_ldr::path::wide(&alloc::format!("{}\\ntdll.dll", params::SYSTEM_DIR));
         l.add_mapped(p, ntdll_base(), &ntdll, true)?;
         l.process_init(p, exe, teb)
     });
@@ -143,10 +159,9 @@ fn process_init(teb: u64, exe_base: u64) -> Result<(), NtStatus> {
 /// `RtlUserThreadStart`: call the thread's routine and, when it returns, end
 /// the thread with its result (Learn: the base thread entry).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlUserThreadStart(routine: u64, argument: u64) -> ! {
-    type Start = unsafe extern "system" fn(u64) -> u32;
+pub unsafe extern "system" fn RtlUserThreadStart(routine: u64, argument: u64) -> ! {
     // SAFETY: `routine` is the entry point the kernel gave us.
-    let code = unsafe { core::mem::transmute::<u64, Start>(routine)(argument) };
+    let code = unsafe { call_start(routine, argument) };
     // SAFETY: never returns.
     unsafe { RtlExitUserThread(NtStatus(code)) }
 }
@@ -154,7 +169,7 @@ pub unsafe extern "C" fn RtlUserThreadStart(routine: u64, argument: u64) -> ! {
 /// `RtlExitUserThread`: `DLL_THREAD_DETACH` (under the loader lock), free
 /// this thread's TLS, then `NtTerminateThread`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlExitUserThread(status: NtStatus) -> ! {
+pub unsafe extern "system" fn RtlExitUserThread(status: NtStatus) -> ! {
     let teb = lock::teb();
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.thread_detach());
@@ -171,7 +186,7 @@ pub unsafe extern "C" fn RtlExitUserThread(status: NtStatus) -> ! {
 /// `RtlExitUserProcess`: run every module's `DLL_PROCESS_DETACH` in reverse
 /// initialisation order under the loader lock, then `NtTerminateProcess`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn RtlExitUserProcess(status: NtStatus) -> ! {
+pub unsafe extern "system" fn RtlExitUserProcess(status: NtStatus) -> ! {
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.process_detach());
     let _ = run_callouts(&callouts);
@@ -191,4 +206,27 @@ unsafe extern "C" {
 /// The base of `ntdll` itself (wherever the kernel mapped it).
 fn ntdll_base() -> u64 {
     (&raw const __ImageBase) as u64
+}
+
+/// Call a thread's start routine with its argument (`routine(argument)`, `WINAPI`).
+///
+/// # Safety
+/// `routine` is code taking one pointer-sized argument.
+#[cfg(target_arch = "x86_64")]
+unsafe fn call_start(routine: u64, argument: u64) -> u32 {
+    type Start = unsafe extern "system" fn(u64) -> u32;
+    // SAFETY: the caller's contract.
+    unsafe { core::mem::transmute::<u64, Start>(routine)(argument) }
+}
+
+/// Call a thread's start routine with its argument. A 32-bit executable's entry point is
+/// `cdecl` with no arguments, a thread's routine `stdcall` with one: the call keeps its own
+/// stack pointer, so either kind returns cleanly (`x86.rs`).
+///
+/// # Safety
+/// `routine` is 32-bit code.
+#[cfg(target_arch = "x86")]
+unsafe fn call_start(routine: u64, argument: u64) -> u32 {
+    // SAFETY: the caller's contract.
+    unsafe { crate::x86::poly_call_start(routine as usize, argument as usize) }
 }

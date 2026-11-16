@@ -295,8 +295,6 @@ pub fn open_thread_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs, ex: bool) -
     Ok(STATUS_SUCCESS)
 }
 
-const STATUS_BAD_IMPERSONATION_LEVEL: NtStatus = NtStatus(0xC000_00A5);
-
 // ----- querying ----------------------------------------------------------------------------
 
 /// `NtQueryInformationToken`.
@@ -315,6 +313,9 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
             token_of(k, h, token::query_right(info_class))?;
         }
         if let Some(n) = token::exact_query_length(info_class, before_rights) {
+            // `TOKEN_LINKED_TOKEN` is a handle: 4 bytes in a 32-bit process (ADR 0186).
+            let n =
+                if info_class == class::TOKEN_LINKED_TOKEN { k.with_state(|_, p, _| p.layout().ptr as u32) } else { n };
             if ret == 0 {
                 return Err(STATUS_ACCESS_VIOLATION);
             }
@@ -326,7 +327,9 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     }
     let id = token_of(k, h, token::query_right(info_class))?;
     let t = copy_of(k, id)?;
-    let bytes = t.query(info_class, buf)?;
+    // Pointers and `SID_AND_ATTRIBUTES` in the caller's width (ADR 0186).
+    let w = k.with_state(|_, p, _| p.layout().ptr as usize);
+    let bytes = t.query_width(info_class, buf, w)?;
     if ret == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
     }
@@ -500,15 +503,17 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         return Err(STATUS_INVALID_INFO_CLASS);
     }
     let id = token_of(k, h, token::set_rights(info_class))?;
-    if !token::set_length_ok(info_class, length) {
+    // The structures' pointers are the caller's width (4 bytes in a 32-bit process, ADR 0186).
+    let w = k.with_state(|_, p, _| p.layout().ptr as usize);
+    if !token::set_length_ok_width(info_class, length, w) {
         return Err(token::STATUS_INFO_LENGTH_MISMATCH);
     }
+    let read_ptr = |k: &mut K, at: u64| -> Result<u64> {
+        if w == 4 { abi::read_u32(k, at).map(u64::from) } else { abi::read_u64(k, at) }
+    };
     let data = match info_class {
         class::TOKEN_OWNER | class::TOKEN_PRIMARY_GROUP => {
-            if length < 8 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Sid(None)
             } else {
@@ -517,10 +522,7 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
             }
         }
         class::TOKEN_INTEGRITY_LEVEL => {
-            if length < 16 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Sid(None)
             } else {
@@ -529,10 +531,7 @@ pub fn set_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
             }
         }
         class::TOKEN_DEFAULT_DACL => {
-            if length < 8 {
-                return Err(token::STATUS_INFO_LENGTH_MISMATCH);
-            }
-            let p = abi::read_u64(k, info)?;
+            let p = read_ptr(k, info)?;
             if p == 0 {
                 SetData::Acl(None)
             } else {
@@ -835,6 +834,33 @@ pub fn access_check<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
 pub fn set_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, info_class, info, length] = abi::args::<K, 4>(k, regs)?;
     const THREAD_IMPERSONATION_TOKEN: u64 = 5;
+    /// `ThreadBasePriority`: the priority relative to the process's class, -16 to 16 (a 32-bit value).
+    const THREAD_BASE_PRIORITY: u64 = 3;
+    if info_class == THREAD_BASE_PRIORITY {
+        // `THREAD_SET_LIMITED_INFORMATION` or `THREAD_SET_INFORMATION` set it.
+        let tid = crate::threads::thread_of_any(
+            k,
+            Handle(h),
+            &[poly_ntobj::access::THREAD_SET_LIMITED_INFORMATION, poly_ntobj::access::THREAD_SET_INFORMATION],
+        )?;
+        if length as u32 != 4 {
+            return Err(token::STATUS_INFO_LENGTH_MISMATCH);
+        }
+        let value = abi::read_u32(k, info)? as i32;
+        if !(-16..=16).contains(&value) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        k.with_state(|_, proc, _| {
+            if let Some(t) = proc.threads.iter_mut().find(|t| t.thread == tid) {
+                t.base_priority = value;
+            }
+        });
+        return Ok(STATUS_SUCCESS);
+    }
+    // `ThreadAffinityMask` (4): the thread's affinity, `crate::threads`.
+    if info_class == crate::threads::THREAD_AFFINITY_MASK {
+        return crate::threads::set_thread_affinity(k, Handle(h), info, length);
+    }
     if info_class != THREAD_IMPERSONATION_TOKEN {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -985,6 +1011,16 @@ pub fn set_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// The `CheckToken` of a token (for the personality's own checks).
 pub fn check_view(t: &Token) -> CheckToken<'_> {
     t.check_view()
+}
+
+/// `NtAllocateLocallyUniqueId(Luid*)` (Learn: `ZwAllocateLocallyUniqueId`, `AllocateLocallyUniqueId`): a
+/// `LUID` (`winnt.h`: `LowPart` then `HighPart`, 8 bytes) no other call or token of this boot
+/// has; the same counter as the tokens' ids.
+pub fn allocate_locally_unique_id<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [out] = abi::args::<K, 1>(k, regs)?;
+    let luid = k.with_state(|sys, _, _| sys.objects.security.new_luid());
+    abi::write_u64(k, out, luid)?;
+    Ok(STATUS_SUCCESS)
 }
 
 #[cfg(test)]

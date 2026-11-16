@@ -127,6 +127,9 @@ fn console_for(sys: &mut NtSystem, tty: Option<&Arc<Tty>>) -> u32 {
 #[derive(Clone, Copy, Default)]
 pub(super) struct FromCreator {
     pub given: Option<[u64; 3]>,
+    /// The creator's own standard handles, which the child inherits when it
+    /// chose none and has them in its table (ADR 0194); zeros if none.
+    pub inherited: [u64; 3],
     pub console: Option<u32>,
 }
 
@@ -149,7 +152,13 @@ pub(super) fn setup(
     let caller = Caller::user(pid, thread);
     let mut std = [0u64; 3];
     let mut connection = 0u64;
-    let given = |i: usize| creator.given.map(|g| g[i]);
+    let from_creator = {
+        let objects = &sys.objects;
+        poly_personality_nt::params::creator_std_handles(creator.given, creator.inherited, &|h| {
+            objects.handle_flags(&caller, Handle(h)).is_ok()
+        })
+    };
+    let given = |i: usize| from_creator[i];
     let inheritable = poly_ntobj::HandleFlags { inherit: true, protect_from_close: false };
     if console_app {
         let tty = sources.iter().find_map(|s| match s {

@@ -224,4 +224,6 @@ height of about 1.4 million pixels after a relayout, the shm pool's
 `ftruncate` gets a negative length and fails with `EINVAL` (as on Linux),
 and GDK crashes. CI fetches the fonts. The boot test now fetches them
 itself and skips the GTK apps, saying why, when it cannot
-(`fonts_ready` in `tools/xtask/src/toolkits.rs`).
+(`fonts_ready` in `tools/xtask/src/toolkits.rs`). With the server's frame
+(ADR 0183) GTK 3 takes that path already at its start; `cargo xtask
+toolkits` fetches the fonts too since then (track `gtk-huge-window`).

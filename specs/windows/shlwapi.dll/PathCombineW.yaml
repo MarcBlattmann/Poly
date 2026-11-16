@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/PathCombineW.yaml
+id: windows/api/shlwapi.dll/PathCombineW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-1
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above: every function was called on the same four sets of strings (relative paths, paths with a drive letter, UNC and device paths, paths with the long prefix; 36 to 40 strings each, edge cases first) and each run was repeated with identical output. Microsoft Learn: "PathCombineW function (shlwapi.h)". Wine's tests were not read. No Microsoft binary was decompiled or disassembled. The rules below were read from the observed tables and are not checked line by line by a model (the visible tests and their recorded results are the complete data). Pairs: 10-13 directory strings with each of 23 second parts per test file.
+summary: >
+  Joins a directory and a file or relative path into a separate buffer and canonicalizes the result. 9 packages import it. The second part replaces the directory when it is an absolute path; a second part with one leading backslash keeps only the root of the directory.
+interface:
+  signature: "LPWSTR PathCombineW(LPWSTR pszDest, LPCWSTR pszDir, LPCWSTR pszFile)"
+  returns: "pszDest on success; NULL on failure, with pszDest holding an empty string"
+  buffer: "pszDest must hold MAX_PATH units"
+rules:
+  join: "the result is the canonical form (see PathCanonicalizeW: dot segments, `\\\\?\\` prefix, trailing dots; doubled backslashes are kept) of `dir`, a backslash unless `dir` is empty or already ends with one, and `file`: `a` + `b` -> `a\\b`; `a\\` + `b` -> `a\\b`; `C:` + `b` -> `C:\\b`; `C:\\\\` + `b` -> `C:\\\\b`; '' + `b` -> `b`; `\\` + `b` -> `\\b`; `\\\\s\\sh` + `b\\c` -> `\\\\s\\sh\\b\\c`; `\\\\?\\C:\\a` + `b` -> `C:\\a\\b`; `C:\\a` + `b\\` -> `C:\\a\\b\\`; `C:` + ` b` -> `C:\\ b`; `C:` + `/b` -> `C:\\/b`"
+  empty_file: "an empty `file` gives the canonical form of `dir`: `C:` + '' -> `C:\\`; '' + '' -> `\\`; `a` + '' -> `a`; `C:\\\\` + '' -> `C:\\\\`; `\\\\?\\C:\\a` + '' -> `C:\\a`"
+  dots: "`.` changes nothing (`C:\\a` + `.` -> `C:\\a`), `..` removes a segment of the directory (`C:\\a` + `..` -> `C:\\`, `a` + `..` -> `\\`, `\\\\s\\sh` + `..` -> `\\\\s`), never above the root; `b\\..` comes back to the directory, `..\\b` goes up and in (`C:\\a` + `..\\b` -> `C:\\b`)"
+  absolute_file: "when `file` is an absolute path it replaces `dir` (and is canonicalized): a drive path `C:\\b`, a drive-relative `C:b` (result `C:b`), a UNC path `\\\\s\\x`, a doubled-backslash start `\\\\b`, a long-prefix drive path `\\\\?\\C:\\x` (result `C:\\x`): `C:\\a` + `C:\\b` -> `C:\\b`; `a` + `C:b` -> `C:b`; `C:` + `\\\\b` -> `\\\\b`; `C:\\a` + `\\\\?\\C:\\x` -> `C:\\x`"
+  rooted_file: "when `file` starts with ONE backslash it is taken from the root of `dir`: `C:\\a` + `\\b` -> `C:\\b`; `C:` + `\\b` -> `C:\\b`; `C:\\\\` + `\\b` -> `C:\\b`; `\\\\s\\sh` + `\\b` -> `\\\\s\\sh\\b`; `\\\\s` + `\\b` -> `\\\\s\\b`; `\\\\?\\C:\\a` + `\\b` -> `C:\\b`; '' + `\\b` -> `\\b`; `\\` + `\\b` -> `\\b`; `C:\\a` + `\\..` -> `C:\\`; `C:\\a` + `\\` -> `C:\\`. A directory with no root cannot take it: `a` + `\\b`, `a\\` + `\\b`, `a` + `\\..` fail (NULL). `C:` + `\\` -> `C:\\`"
+  limit: "a result of 259 units or fewer works; 260 or more (260, 261, 270) fails: NULL and the destination is the empty string (its first unit is NUL); a long absolute `file` of 262 units fails the same way. The last error is not changed"
+errors:
+  none: "the failure is NULL; the last error is not set"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per group of strings; they import shlwapi.dll (kernelbase.dll for the PathCch functions). Each line is one call: "<input>" -> <result>. A test string is a path as UTF-16; backslashes are written as they are (so `\\s` is two backslashes and an s); a string longer than 70 units is shown by its first 12 and its length. The last error is set to a marker before each call and shown only when a call changed it. Result strings are read up to their NUL; destination buffers are prefilled with 0xAAAA.
+not_covered: >
+  NULL pointers, `dir` and `file` the same buffer as the destination, destinations smaller than MAX_PATH, the A function.

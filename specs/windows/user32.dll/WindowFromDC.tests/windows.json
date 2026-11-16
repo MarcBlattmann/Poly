@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "wfdc_basic",
+      "exe_sha256": "19456bc5eca862f892c189ac2d3de30f447ea92ef15f96cc4cb7724c75ca5c84",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0REMod2luZG93KTogREMgc2V0IC0+IHRoZSB3aW5kb3cKR2V0RENFeChEQ1hfV0lORE9XKTogREMgbnVsbCAtPiBOVUxMCkdldERDRXgoRENYX0NBQ0hFfERDWF9XSU5ET1cpOiBEQyBzZXQgLT4gdGhlIHdpbmRvdwpSZWxlYXNlREMgYWdhaW46IDAKR2V0REMoR2V0RGVza3RvcFdpbmRvdygpKTogLT4gdGhlIGRlc2t0b3Agd2luZG93CnRoZSBtZW1vcnkgREMgYWZ0ZXIgRGVsZXRlREM6IC0+IE5VTEwKQ3JlYXRlREMoRElTUExBWSk6IHNldCAtPiBOVUxMCldpbmRvd0Zyb21EQygweDEyMzQpOiAtPiBOVUxMIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCldpbmRvd0Zyb21EQyhhIHdpbmRvdyBoYW5kbGUgdXNlZCBhcyBhIERDKTogLT4gTlVMTCBsYXN0IGVycm9yIHVuY2hhbmdlZApXaW5kb3dGcm9tREMgb2YgYSBEQyB3aG9zZSB3aW5kb3cgd2FzIGRlc3Ryb3llZDogTlVMTApHZXREQyhkZXN0cm95ZWQgd2luZG93KTogREMgbnVsbCAtPiBOVUxMCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetDC(window): DC set -> the window\nGetDCEx(DCX_WINDOW): DC null -> NULL\nGetDCEx(DCX_CACHE|DCX_WINDOW): DC set -> the window\nReleaseDC again: 0\nGetDC(GetDesktopWindow()): -> the desktop window\nthe memory DC after DeleteDC: -> NULL\nCreateDC(DISPLAY): set -> NULL\nWindowFromDC(0x1234): -> NULL last error unchanged\nWindowFromDC(a window handle used as a DC): -> NULL last error unchanged\nWindowFromDC of a DC whose window was destroyed: NULL\nGetDC(destroyed window): DC null -> NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 83
+    },
+    {
+      "name": "wfdc_basic_b",
+      "exe_sha256": "2fb59d293cac3c4fde13cfd9f3713aed03f9dee8d024cb41954b8abe8f5c06d9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBzZWNvbmQgR2V0REMod2luZG93KTogdGhlIHNhbWUgREMgdmFsdWUgZmFsc2UgLT4gdGhlIHdpbmRvdwpHZXREQ0V4KERDWF9DQUNIRSk6IERDIHNldCAtPiB0aGUgd2luZG93CkdldERDRXgoRENYX1BBUkVOVENMSVApOiBEQyBzZXQgLT4gdGhlIHdpbmRvdwpHZXREQyhOVUxMKTogREMgc2V0IC0+IHRoZSBkZXNrdG9wIHdpbmRvdyBlcXVhbHMgR2V0RGVza3RvcFdpbmRvdyB0cnVlCm1lbW9yeSBEQyAoY29tcGF0aWJsZSB3aXRoIHRoZSBzY3JlZW4pOiBzZXQgLT4gTlVMTAptZW1vcnkgREMgY29tcGF0aWJsZSB3aXRoIGEgd2luZG93IERDOiAtPiBOVUxMCkNyZWF0ZUlDKERJU1BMQVkpOiBzZXQgLT4gTlVMTApXaW5kb3dGcm9tREMoLTEpOiAtPiBOVUxMIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCkdldERDKGNoaWxkIHdpbmRvdyk6IC0+IHRoZSBjaGlsZAogIElzV2luZG93IG9mIHRoYXQgcmVzdWx0OiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a second GetDC(window): the same DC value false -> the window\nGetDCEx(DCX_CACHE): DC set -> the window\nGetDCEx(DCX_PARENTCLIP): DC set -> the window\nGetDC(NULL): DC set -> the desktop window equals GetDesktopWindow true\nmemory DC (compatible with the screen): set -> NULL\nmemory DC compatible with a window DC: -> NULL\nCreateIC(DISPLAY): set -> NULL\nWindowFromDC(-1): -> NULL last error unchanged\nGetDC(child window): -> the child\n  IsWindow of that result: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 76
+    }
+  ]
+}

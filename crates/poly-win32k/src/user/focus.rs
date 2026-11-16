@@ -111,6 +111,10 @@ pub fn thread_input<E: Env + ?Sized>(env: &E, tid: u32) -> Input {
 
 fn set<E: Env + ?Sized>(env: &E, active: u32, focus: u32, which: u8) {
     env.call(Request::SetInput { active, focus, capture: 0, which });
+    if which & SET_FOCUS != 0 {
+        // EVENT_OBJECT_FOCUS: the client object of the window that has the focus now (NULL: none).
+        env.win_event(crate::winevent::EVENT_OBJECT_FOCUS, focus, -4, 0);
+    }
 }
 
 /// The top-level window above `h` (itself if it is one).
@@ -161,23 +165,31 @@ pub fn tops_of<E: Env + ?Sized>(env: &E, tid: u32) -> Vec<u32> {
 /// below (`changed`: also send WM_WINDOWPOSCHANGED when the z order moved).
 fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, destroyed: u32) {
     let h = u64::from(y.hwnd);
-    let owned = match env.call(Request::Relatives { hwnd: y.hwnd }) {
-        Reply::Relatives { owned, .. } => owned,
-        _ => Vec::new(),
-    };
+    let owned = owned_chain(env, y.hwnd);
     for &o in &owned {
-        let mut wp =
-            WindowPos { hwnd: u64::from(o), flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+        let after = report_after(env, o, HWND_TOP);
+        let mut wp = WindowPos {
+            hwnd: u64::from(o) as usize,
+            insert_after: after as usize,
+            flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            ..WindowPos::default()
+        };
         send(env, u64::from(o), WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
-    let mut wp = WindowPos { hwnd: h, flags: SWP_NOMOVE | SWP_NOSIZE, ..WindowPos::default() };
+    let after = report_after(env, y.hwnd, HWND_TOP);
+    let mut wp = WindowPos {
+        hwnd: h as usize,
+        insert_after: after as usize,
+        flags: SWP_NOMOVE | SWP_NOSIZE,
+        ..WindowPos::default()
+    };
     send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     // A hidden window changes no z order the screen shows: no
     // WM_WINDOWPOSCHANGED (SetActiveWindow.yaml `hidden`).
     let changed = changed && y.style & WS_VISIBLE != 0;
     if y.owner != 0 {
         let mut ow = WindowPos {
-            hwnd: u64::from(y.owner),
+            hwnd: (u64::from(y.owner)) as usize,
             flags: SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
             ..WindowPos::default()
         };
@@ -198,7 +210,7 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, dest
                 let Some(oi) = info(env, u64::from(o)) else { continue };
                 let hidden = if oi.style & WS_VISIBLE == 0 { SWP_NOREDRAW } else { 0 };
                 let mut od = WindowPos {
-                    hwnd: u64::from(o),
+                    hwnd: (u64::from(o)) as usize,
                     x: oi.window_rel.left,
                     y: oi.window_rel.top,
                     cx: oi.window_rel.width(),
@@ -209,7 +221,7 @@ fn raise<E: Env + ?Sized>(env: &E, y: &WinInfo, changed: bool, force: bool, dest
                 send(env, u64::from(o), WM_WINDOWPOSCHANGED, 0, ptr(&mut od));
             }
             let mut done = WindowPos {
-                hwnd: h,
+                hwnd: h as usize,
                 x: y.window_rel.left,
                 y: y.window_rel.top,
                 cx: y.window_rel.width(),
@@ -283,11 +295,12 @@ pub fn activate_with<E: Env + ?Sized>(env: &E, y: u32, how: How) -> u32 {
     // even at the top already (SetActiveWindow.yaml saw_special `O`, SetForegroundWindow.yaml
     // sfw_owned); SetForegroundWindow, clicks and shows do not.
     raise(env, &yi, !in_show && !behind_sibling, !foreground && yi.owner != 0, destroyed);
+    // The windows are told in the order they lie in now: the default IME window moves above the
+    // new active window only with the change below (sw_chrome_show).
+    let tops_now = if x == 0 { thread_tops(env) } else { Vec::new() };
     set(env, y, 0, SET_ACTIVE | if background { 0 } else { SET_FOREGROUND });
-    if x == 0 {
-        for t in thread_tops(env) {
-            send(env, u64::from(t), WM_ACTIVATEAPP, 1, 0);
-        }
+    for t in tops_now {
+        send(env, u64::from(t), WM_ACTIVATEAPP, 1, 0);
     }
     let yi = info(env, u64::from(y)).unwrap_or(yi);
     let other = if xi.is_some() { u64::from(x) } else { 0 };
@@ -340,8 +353,7 @@ fn deactivate<E: Env + ?Sized>(env: &E, focus_done: bool, names_next: bool, canc
     if st.capture != 0 && cancel_capture {
         send(env, u64::from(st.capture), WM_CANCELMODE, 0, 0);
         if input(env).capture == st.capture {
-            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
-            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+            end_capture(env, st.capture);
         }
     }
     if st.active != 0
@@ -468,7 +480,7 @@ pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool, ask: u32) 
         send(env, u64::from(x), WM_ACTIVATE, WA_INACTIVE | min_bits(xi), h);
     }
     if x != 0 {
-        let mut wp = WindowPos { hwnd: h, flags: ask, ..WindowPos::default() };
+        let mut wp = WindowPos { hwnd: h as usize, flags: ask, ..WindowPos::default() };
         send(env, h, WM_WINDOWPOSCHANGING, 0, ptr(&mut wp));
     }
     if !in_swp {
@@ -476,7 +488,7 @@ pub fn activate_local<E: Env + ?Sized>(env: &E, y: u32, in_swp: bool, ask: u32) 
             matches!(env.call(Request::ZOrder { hwnd: y, after: HWND_TOP, apply: true }), Reply::Bool { value: true });
         if moved && x != 0 && yi.style & WS_VISIBLE != 0 {
             let mut done = WindowPos {
-                hwnd: h,
+                hwnd: h as usize,
                 x: yi.window_rel.left,
                 y: yi.window_rel.top,
                 cx: yi.window_rel.width(),
@@ -633,6 +645,31 @@ fn is_within<E: Env + ?Sized>(env: &E, h: u32, root: u32) -> bool {
 /// `WM_CAPTURECHANGED` (winuser.h).
 const WM_CAPTURECHANGED: u32 = 0x0215;
 
+/// Ends the capture `window` has (the thread's input state says so): the
+/// capture is gone first (inside the handler GetCapture is NULL),
+/// then `window` gets WM_CAPTURECHANGED (lParam NULL), and only after that
+/// the mouse move to the window under the cursor is synthesized
+/// (ReleaseCapture.yaml `rc_nocapture`, `attached`). Queueing the move
+/// first let a thread whose input is attached (the notification comes
+/// from the other thread) retrieve WM_NCHITTEST before the notification
+/// reached it. No move when the handler took a new capture.
+pub fn end_capture<E: Env + ?Sized>(env: &E, window: u32) {
+    env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE_QUIET });
+    send(env, u64::from(window), WM_CAPTURECHANGED, 0, 0);
+    if input(env).capture == 0 {
+        env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE_MOVE });
+    }
+}
+
+/// `ReleaseCapture`: always 1, also with no capture (ReleaseCapture.yaml `return`).
+pub fn release_capture<E: Env + ?Sized>(env: &E) -> u64 {
+    let st = input(env);
+    if st.capture != 0 {
+        end_capture(env, st.capture);
+    }
+    1
+}
+
 /// `SetCapture` (SetCapture.yaml): the previous capture window of the
 /// thread's input. A window of another thread is refused (NULL, no error,
 /// nothing changes); a hidden, disabled or child window can have the
@@ -646,8 +683,7 @@ pub fn set_capture<E: Env + ?Sized>(env: &E, hwnd: u64) -> u64 {
     };
     if hwnd == 0 {
         if st.capture != 0 {
-            set(0);
-            send(env, u64::from(st.capture), WM_CAPTURECHANGED, 0, 0);
+            end_capture(env, st.capture);
         }
         return u64::from(st.capture);
     }
@@ -790,14 +826,14 @@ pub fn enable_window<E: Env + ?Sized>(env: &E, hwnd: u64, enable: bool) -> bool 
         if was_disabled {
             env.call(Request::SetStyle { hwnd: i.hwnd, which: GWL_STYLE, value: i.style & !WS_DISABLED });
             send(env, hwnd, WM_ENABLE, 1, 0);
+            env.win_event(crate::winevent::EVENT_OBJECT_STATECHANGE, i.hwnd, 0, 0);
         }
     } else {
         send(env, hwnd, WM_CANCELMODE, 0, 0);
         let st = input(env);
         // Disabling the capture window releases the capture (SetCapture.yaml).
         if st.capture == i.hwnd {
-            env.call(Request::SetInput { active: 0, focus: 0, capture: 0, which: SET_CAPTURE });
-            send(env, hwnd, 0x0215, 0, 0); // WM_CAPTURECHANGED
+            end_capture(env, i.hwnd);
         }
         if st.focus == i.hwnd {
             send(env, hwnd, WM_KILLFOCUS, 0, 0);
@@ -806,6 +842,7 @@ pub fn enable_window<E: Env + ?Sized>(env: &E, hwnd: u64, enable: bool) -> bool 
         if !was_disabled {
             env.call(Request::SetStyle { hwnd: i.hwnd, which: GWL_STYLE, value: i.style | WS_DISABLED });
             send(env, hwnd, WM_ENABLE, 0, 0);
+            env.win_event(crate::winevent::EVENT_OBJECT_STATECHANGE, i.hwnd, 0, 0);
         }
     }
     was_disabled

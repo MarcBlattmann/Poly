@@ -10,7 +10,8 @@ use poly_rtl::critsec::CriticalSection;
 
 pub type Handle = isize;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn NtClose(handle: Handle) -> NtStatus;
     pub fn NtCreateFile(
@@ -250,6 +251,20 @@ unsafe extern "system" {
         length: usize,
         returned: *mut usize,
     ) -> NtStatus;
+    pub fn NtReadVirtualMemory(
+        process: Handle,
+        base: *const u8,
+        buf: *mut u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
+    pub fn NtWriteVirtualMemory(
+        process: Handle,
+        base: *mut u8,
+        buf: *const u8,
+        len: usize,
+        done: *mut usize,
+    ) -> NtStatus;
 
     pub fn NtCreateSection(
         handle: *mut Handle,
@@ -318,6 +333,9 @@ unsafe extern "system" {
     ) -> NtStatus;
     pub fn NtSuspendThread(handle: Handle, previous: *mut u32) -> NtStatus;
     pub fn NtResumeThread(handle: Handle, previous: *mut u32) -> NtStatus;
+    pub fn NtTerminateThread(handle: Handle, status: u32) -> NtStatus;
+    pub fn NtGetContextThread(handle: Handle, context: *mut u8) -> NtStatus;
+    pub fn NtSetContextThread(handle: Handle, context: *const u8) -> NtStatus;
     pub fn NtOpenEvent(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn RtlRaiseException(record: *const u8);
     pub fn NtQueryInformationThread(
@@ -327,12 +345,18 @@ unsafe extern "system" {
         length: u32,
         returned: *mut u32,
     ) -> NtStatus;
+    pub fn NtSetInformationThread(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
+    pub fn NtGetCurrentProcessorNumber() -> u32;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;
     pub fn NtQueryPerformanceCounter(counter: *mut i64, frequency: *mut i64) -> NtStatus;
     pub fn RtlAddVectoredExceptionHandler(first: u32, handler: *mut u8) -> *mut u8;
     pub fn RtlRemoveVectoredExceptionHandler(handle: *mut u8) -> u32;
+    pub fn RtlAddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8;
+    pub fn RtlRemoveVectoredContinueHandler(handle: *mut u8) -> u32;
     pub fn NtQuerySystemInformation(class: u32, info: *mut u8, length: u32, returned: *mut u32) -> NtStatus;
 
     pub fn RtlNtStatusToDosError(status: NtStatus) -> u32;
@@ -363,6 +387,31 @@ unsafe extern "system" {
     pub fn RtlLeaveCriticalSection(cs: *mut CriticalSection) -> NtStatus;
     pub fn RtlTryEnterCriticalSection(cs: *mut CriticalSection) -> u8;
     pub fn RtlDeleteCriticalSection(cs: *mut CriticalSection) -> NtStatus;
+
+    pub fn RtlInitializeSRWLock(lock: *mut usize);
+    pub fn RtlAcquireSRWLockExclusive(lock: *mut usize);
+    pub fn RtlAcquireSRWLockShared(lock: *mut usize);
+    pub fn RtlReleaseSRWLockExclusive(lock: *mut usize);
+    pub fn RtlReleaseSRWLockShared(lock: *mut usize);
+    pub fn RtlTryAcquireSRWLockExclusive(lock: *mut usize) -> u8;
+    pub fn RtlTryAcquireSRWLockShared(lock: *mut usize) -> u8;
+    pub fn RtlInitializeConditionVariable(cv: *mut usize);
+    pub fn RtlWakeConditionVariable(cv: *mut usize);
+    pub fn RtlWakeAllConditionVariable(cv: *mut usize);
+    pub fn RtlSleepConditionVariableCS(cv: *mut usize, cs: *mut CriticalSection, timeout: *const i64) -> NtStatus;
+    pub fn RtlSleepConditionVariableSRW(cv: *mut usize, lock: *mut usize, timeout: *const i64, flags: u32) -> NtStatus;
+    pub fn RtlRunOnceInitialize(once: *mut usize);
+    pub fn RtlRunOnceBeginInitialize(once: *mut usize, flags: u32, context: *mut *mut u8) -> NtStatus;
+    pub fn RtlRunOnceComplete(once: *mut usize, flags: u32, context: *mut u8) -> NtStatus;
+    pub fn RtlRunOnceExecuteOnce(
+        once: *mut usize,
+        function: Option<unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> u32>,
+        parameter: *mut u8,
+        context: *mut *mut u8,
+    ) -> NtStatus;
+    pub fn RtlWaitOnAddress(address: *const u8, compare: *const u8, size: usize, timeout: *const i64) -> NtStatus;
+    pub fn RtlWakeAddressSingle(address: *const u8);
+    pub fn RtlWakeAddressAll(address: *const u8);
 
     pub fn LdrLoadDll(path: *const u16, flags: *mut u32, name: *const UnicodeString, handle: *mut *mut u8) -> NtStatus;
     pub fn LdrUnloadDll(handle: *mut u8) -> NtStatus;
@@ -438,12 +487,13 @@ impl ObjectAttributes {
     }
 }
 
-/// `IO_STATUS_BLOCK` (`wdm.h`).
+/// `IO_STATUS_BLOCK` (`wdm.h`): a pointer-sized status union and `Information` (`ULONG_PTR`),
+/// 16 bytes in a 64-bit process and 8 in a 32-bit one (ADR 0186).
 #[repr(C)]
 #[derive(Default)]
 pub struct IoStatusBlock {
-    pub status: u64,
-    pub information: u64,
+    pub status: usize,
+    pub information: usize,
 }
 
 /// `STATUS_*` values `kernelbase` looks at (`ntstatus.h`).

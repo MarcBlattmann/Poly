@@ -1,6 +1,6 @@
 //! The version `GetVersion` / `GetVersionExW` report, and `SYSTEM_INFO`.
 //!
-//! The real version is [`poly_rtl::version`]'s (Windows 10, build 19045,
+//! The real version is [`poly_rtl::version`]'s (Windows 10, build 26200,
 //! as `RtlGetVersion` and the default registry report). Learn's
 //! `GetVersionExW` page ("Operating System Version", "Targeting your
 //! application for Windows"): from Windows 8.1 on, an application that is
@@ -30,6 +30,65 @@ pub enum Compat {
 pub const GUID_WIN10: &str = "{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}";
 /// `supportedOS Id` of Windows 8.1.
 pub const GUID_WIN81: &str = "{1f676c76-80e1-4239-95bb-83d0f6d0da78}";
+/// `supportedOS Id` of Windows 8 (Learn, "Application manifests").
+pub const GUID_WIN8: &str = "{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}";
+
+/// Whether a manifest declares Windows 8 or a later version (`supportedOS`
+/// of 8, 8.1 or 10): what layered child windows need (Learn, "Layered
+/// Windows": Windows 8 supports `WS_EX_LAYERED` for child windows).
+pub fn declares_win8(text: &[u8]) -> bool {
+    manifest_compat(text) != Compat::Legacy
+        || lower_ascii(text).windows(GUID_WIN8.len()).any(|w| w == GUID_WIN8.as_bytes())
+}
+
+/// The manifest of the image mapped at `base` (its resource directory is
+/// data directory 2 of the optional header, PE format).
+///
+/// # Safety
+/// `base` is 0 or the base of an image mapped in this process.
+pub unsafe fn image_manifest(base: u64) -> Option<alloc::vec::Vec<u8>> {
+    if base == 0 {
+        return None;
+    }
+    // SAFETY: a mapped image's headers and its resource section are
+    // readable; RVAs are bounded by the sizes the headers give.
+    unsafe {
+        let nt_off = ((base + 0x3C) as *const u32).read() as u64;
+        let opt = base + nt_off + 24;
+        // PE32+ (0x20B): the data directories start at optional header + 112, their count at 108;
+        // PE32 (0x10B, a 32-bit image): at 96 and 92. The resource table is entry 2.
+        let dirs: u64 = match (opt as *const u16).read() {
+            0x20B => 112,
+            0x10B => 96,
+            _ => return None,
+        };
+        let count = ((opt + dirs - 4) as *const u32).read();
+        if count < 3 {
+            return None;
+        }
+        let rva = ((opt + dirs + 16) as *const u32).read() as u64;
+        let size = ((opt + dirs + 20) as *const u32).read() as usize;
+        let image_size = ((opt + 56) as *const u32).read() as u64;
+        if rva == 0 || rva + size as u64 > image_size {
+            return None;
+        }
+        let rsrc = core::slice::from_raw_parts((base + rva) as *const u8, size);
+        let (data, len) = find_manifest(rsrc)?;
+        if u64::from(data) + u64::from(len) > image_size {
+            return None;
+        }
+        Some(core::slice::from_raw_parts((base + u64::from(data)) as *const u8, len as usize).to_vec())
+    }
+}
+
+/// A manifest's text in lower-case ASCII (UTF-16 LE read as its low bytes).
+fn lower_ascii(text: &[u8]) -> alloc::vec::Vec<u8> {
+    if text.len() >= 2 && (text[1] == 0 || text.starts_with(&[0xFF, 0xFE])) {
+        text.chunks(2).map(|c| c[0].to_ascii_lowercase()).collect()
+    } else {
+        text.iter().map(|c| c.to_ascii_lowercase()).collect()
+    }
+}
 
 /// `(major, minor, build)` reported to a program with `compat`.
 pub fn reported(compat: Compat) -> (u32, u32, u32) {
@@ -48,36 +107,60 @@ pub fn get_version(v: (u32, u32, u32)) -> u32 {
     ((v.2 & 0x7FFF) << 16) | ((v.1 & 0xFF) << 8) | (v.0 & 0xFF)
 }
 
-/// Fill an `OSVERSIONINFOW` (276 bytes) or `OSVERSIONINFOEXW` (284 bytes,
-/// `winnt.h`) whose size field says which it is. Another size fails
-/// (Learn: "The function fails if you specify an invalid value for the
-/// dwOSVersionInfoSize member"; the error is `ERROR_INSUFFICIENT_BUFFER`,
-/// to be confirmed).
-pub fn fill(buf: &mut [u8], v: (u32, u32, u32)) -> Result<(), u32> {
-    let size = u32::from_le_bytes(buf.get(..4).ok_or(ERROR_INSUFFICIENT_BUFFER)?.try_into().unwrap());
-    if size != poly_rtl::version::INFO_SIZE && size != poly_rtl::version::INFO_EX_SIZE {
+/// `OSVERSIONINFOW`, `OSVERSIONINFOEXW`, `OSVERSIONINFOA` and `OSVERSIONINFOEXA` sizes (`winnt.h`).
+pub const INFO_W: usize = 276;
+pub const INFO_EX_W: usize = 284;
+pub const INFO_A: usize = 148;
+pub const INFO_EX_A: usize = 156;
+
+/// `VER_SUITE_SINGLEUSERTS | VER_SUITE_PERSONAL` (`winnt.h`): the suite mask of a Home edition,
+/// as `GetVersionEx` shows it (`specs/windows/kernel32.dll/GetVersionExW.yaml`).
+pub const SUITE_HOME: u16 = 0x0300;
+
+/// Fill an `OSVERSIONINFOW` (276 bytes) or `OSVERSIONINFOEXW` (284 bytes), or with
+/// `ansi` an `OSVERSIONINFOA` (148) or `OSVERSIONINFOEXA` (156), whose size field says which it
+/// is. Another size fails (Learn: "The function fails if you specify an invalid value for the
+/// dwOSVersionInfoSize member": `ERROR_INSUFFICIENT_BUFFER`, as observed on Windows).
+///
+/// What is written is what Windows writes (`GetVersionExA/W.yaml`): the four numbers and the first
+/// character of an empty service pack string (the rest of the string is left as it was), and for
+/// the extended form the service pack numbers (0.0), the suite mask ([`SUITE_HOME`]), the product
+/// type (workstation) and the reserved byte (0).
+pub fn fill_info(buf: &mut [u8], v: (u32, u32, u32), ansi: bool) -> Result<(), u32> {
+    let size = u32::from_le_bytes(buf.get(..4).ok_or(ERROR_INSUFFICIENT_BUFFER)?.try_into().unwrap()) as usize;
+    let (basic, extended, csd) = if ansi { (INFO_A, INFO_EX_A, 128) } else { (INFO_W, INFO_EX_W, 256) };
+    if size != basic && size != extended {
         return Err(ERROR_INSUFFICIENT_BUFFER);
     }
-    let size = size as usize;
     if buf.len() < size {
         return Err(ERROR_INSUFFICIENT_BUFFER);
     }
-    // SAFETY: `buf` holds `size` bytes, one of the two structures' sizes.
-    unsafe { poly_rtl::version::get_version(buf.as_mut_ptr()) };
     buf[4..8].copy_from_slice(&v.0.to_le_bytes());
     buf[8..12].copy_from_slice(&v.1.to_le_bytes());
     buf[12..16].copy_from_slice(&v.2.to_le_bytes());
+    buf[16..20].copy_from_slice(&poly_rtl::version::PLATFORM_WIN32_NT.to_le_bytes());
+    // szCSDVersion: an empty string; one character is written.
+    let unit = if ansi { 1 } else { 2 };
+    buf[20..20 + unit].fill(0);
+    if size == extended {
+        let at = 20 + csd;
+        buf[at..at + 4].fill(0); // wServicePackMajor, wServicePackMinor
+        buf[at + 4..at + 6].copy_from_slice(&SUITE_HOME.to_le_bytes());
+        buf[at + 6] = poly_rtl::version::NT_WORKSTATION;
+        buf[at + 7] = 0;
+    }
     Ok(())
+}
+
+/// [`fill_info`] for the wide structures (`GetVersionExW`).
+pub fn fill(buf: &mut [u8], v: (u32, u32, u32)) -> Result<(), u32> {
+    fill_info(buf, v, false)
 }
 
 /// What a manifest's text declares (UTF-8, or UTF-16 LE as some resource
 /// compilers write it). GUIDs are compared without case.
 pub fn manifest_compat(text: &[u8]) -> Compat {
-    let ascii: alloc::vec::Vec<u8> = if text.len() >= 2 && (text[1] == 0 || text.starts_with(&[0xFF, 0xFE])) {
-        text.chunks(2).map(|c| c[0].to_ascii_lowercase()).collect()
-    } else {
-        text.iter().map(|c| c.to_ascii_lowercase()).collect()
-    };
+    let ascii = lower_ascii(text);
     let has = |g: &str| ascii.windows(g.len()).any(|w| w == g.as_bytes());
     if has(GUID_WIN10) {
         Compat::Win10
@@ -150,23 +233,63 @@ pub fn system_info(cpus: u32) -> [u8; 48] {
     b
 }
 
+/// `SYSTEM_INFO` as a 32-bit process gets it (ADR 0186; `sysinfoapi.h` with 4-byte pointers:
+/// 36 bytes). `GetSystemInfo` describes the process's view (Learn: "To retrieve accurate
+/// information for an application running on WOW64, call the GetNativeSystemInfo function"):
+/// an x86 processor (`PROCESSOR_ARCHITECTURE_INTEL`, `PROCESSOR_INTEL_PENTIUM`) and its own
+/// address range; `GetNativeSystemInfo` (`native`) the machine's architecture (x64), with the
+/// same 32-bit range (what the 4-byte fields hold there is to be confirmed by the spec agent).
+pub fn system_info_32(cpus: u32, native: bool, max_address: u32) -> [u8; 36] {
+    let mut b = [0u8; 36];
+    let (arch, ty) = if native { (9u16, 8664u32) } else { (0u16, 586u32) };
+    b[0..2].copy_from_slice(&arch.to_le_bytes());
+    b[4..8].copy_from_slice(&4096u32.to_le_bytes());
+    b[8..12].copy_from_slice(&0x1_0000u32.to_le_bytes());
+    b[12..16].copy_from_slice(&max_address.to_le_bytes());
+    let cpus = cpus.clamp(1, 32);
+    let mask = if cpus == 32 { u32::MAX } else { (1u32 << cpus) - 1 };
+    b[16..20].copy_from_slice(&mask.to_le_bytes());
+    b[20..24].copy_from_slice(&cpus.to_le_bytes());
+    b[24..28].copy_from_slice(&ty.to_le_bytes());
+    b[28..32].copy_from_slice(&0x1_0000u32.to_le_bytes());
+    b[32..34].copy_from_slice(&6u16.to_le_bytes());
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     extern crate std;
+
+    #[test]
+    fn the_32_bit_system_info_is_an_x86_view_and_the_native_one_x64() {
+        let b = system_info_32(4, false, 0x7FFE_FFFF);
+        assert_eq!(u16::from_le_bytes([b[0], b[1]]), 0);
+        assert_eq!(u32::from_le_bytes(b[12..16].try_into().unwrap()), 0x7FFE_FFFF);
+        assert_eq!(u32::from_le_bytes(b[16..20].try_into().unwrap()), 0xF);
+        assert_eq!(u32::from_le_bytes(b[20..24].try_into().unwrap()), 4);
+        assert_eq!(u32::from_le_bytes(b[24..28].try_into().unwrap()), 586);
+        let n = system_info_32(4, true, 0x7FFE_FFFF);
+        assert_eq!((u16::from_le_bytes([n[0], n[1]]), u32::from_le_bytes(n[24..28].try_into().unwrap())), (9, 8664));
+    }
     use std::vec::Vec;
 
     #[test]
     fn the_manifest_rule() {
-        assert_eq!(reported(Compat::Win10), (10, 0, 19045));
+        assert_eq!(reported(Compat::Win10), (10, 0, 26200));
         assert_eq!(reported(Compat::Legacy), (6, 2, 9200));
-        assert_eq!(get_version((10, 0, 19045)), (19045 << 16) | 10);
+        assert_eq!(get_version((10, 0, 26200)), (26200 << 16) | 10);
         assert_eq!(get_version((6, 2, 9200)), (9200 << 16) | (2 << 8) | 6);
         let m = br#"<compatibility><application><supportedOS Id="{8E0F7A12-BFB3-4FE8-B9A5-48FD50A15A9A}"/></application></compatibility>"#;
         assert_eq!(manifest_compat(m), Compat::Win10);
         let m81: Vec<u8> = GUID_WIN81.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
         assert_eq!(manifest_compat(&m81), Compat::Win81);
         assert_eq!(manifest_compat(b"<assembly/>"), Compat::Legacy);
+        let m8 = br#"<supportedOS Id="{4A2F28E3-53B9-4441-BA9C-D69D4A4A6E38}"/>"#;
+        assert_eq!(manifest_compat(m8), Compat::Legacy, "8 reports as legacy");
+        assert!(declares_win8(m8));
+        assert!(declares_win8(m));
+        assert!(!declares_win8(b"<assembly/>"));
     }
 
     #[test]
@@ -180,7 +303,7 @@ mod tests {
         assert_eq!(b[282], 1);
         let mut s = [0u8; 276];
         s[..4].copy_from_slice(&276u32.to_le_bytes());
-        assert!(fill(&mut s, (10, 0, 19045)).is_ok());
+        assert!(fill(&mut s, (10, 0, 26200)).is_ok());
         let mut bad = [0u8; 300];
         bad[..4].copy_from_slice(&300u32.to_le_bytes());
         assert_eq!(fill(&mut bad, (10, 0, 1)), Err(ERROR_INSUFFICIENT_BUFFER));
@@ -252,23 +375,9 @@ pub const VER_OR: u8 = 7;
 pub const PLATFORM_WIN32_NT: u32 = 2;
 pub const NT_WORKSTATION: u8 = 1;
 
-/// Bit 63 of every condition mask `VerSetConditionMask` returns: the call-site trace of Chrome on
-/// Windows 11 shows `0x8000000000000018` for `VerSetConditionMask(0, VER_MAJORVERSION,
-/// VER_GREATER_EQUAL)` (the three bits of the condition at bit 3, and this one).
-pub const CONDITION_MASK_FLAG: u64 = 1 << 63;
-
-/// `VerSetConditionMask`: three bits per version field, at the position of
-/// the field's type bit (bit 0 for the minor version ... bit 7 for the
-/// product type), and [`CONDITION_MASK_FLAG`].
-pub fn set_condition(mask: u64, type_mask: u32, condition: u8) -> u64 {
-    let mut m = mask | CONDITION_MASK_FLAG;
-    for bit in 0..8 {
-        if type_mask & (1 << bit) != 0 {
-            m = (m & !(7u64 << (3 * bit))) | (u64::from(condition & 7) << (3 * bit));
-        }
-    }
-    m
-}
+// `VerSetConditionMask` lives in `poly_rtl::version`: `ntdll.dll` exports it (`kernelbase.dll` and
+// `kernel32.dll` too).
+pub use poly_rtl::version::{CONDITION_MASK_FLAG, set_condition};
 
 /// The version fields of the system, in `OSVERSIONINFOEXW`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -394,7 +503,7 @@ pub fn verify(actual: &Fields, wanted: &Fields, type_mask: u32, condition_mask: 
 mod verify_tests {
     use super::*;
 
-    const WIN10: (u32, u32, u32) = (10, 0, 19045);
+    const WIN10: (u32, u32, u32) = (10, 0, 26200);
 
     fn want(major: u32, minor: u32) -> Fields {
         Fields { major, minor, ..Fields::of(WIN10) }

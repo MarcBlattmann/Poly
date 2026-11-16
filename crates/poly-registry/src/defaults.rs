@@ -115,12 +115,12 @@ const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> Defau
     DefaultKey { path, values }
 }
 
-/// The version Poly reports: Windows 10 (`CurrentMajorVersionNumber` 10),
-/// build 19045, the last Windows 10 build (Learn: "Windows 10 release
-/// information"). Programs compare build numbers to decide which APIs they
-/// may use, so this states the API level Poly aims at; `RtlGetVersion`
-/// and the PEB report the same numbers when they exist.
-pub const BUILD: &str = "19045";
+/// The version Poly reports: Windows 11 (`CurrentMajorVersionNumber` 10, as on Windows 11),
+/// build 26200 (25H2, Learn: "Windows 11 release information"), the build of the machine the
+/// spec sheets were observed on (ADR 0189). Programs compare build numbers to decide which APIs
+/// they may use, so this states the API level Poly aims at; `RtlGetVersion` and the PEB report
+/// the same numbers when they exist.
+pub const BUILD: &str = "26200";
 
 pub const SYSTEM_KEYS: &[DefaultKey] = &[
     k("Select", &[("Current", Dword(1)), ("Default", Dword(1)), ("Failed", Dword(0)), ("LastKnownGood", Dword(1))]),
@@ -157,11 +157,11 @@ pub const SOFTWARE_KEYS: &[DefaultKey] = &[
             ("CurrentVersion", Sz("6.3")),
             ("CurrentBuild", Sz(BUILD)),
             ("CurrentBuildNumber", Sz(BUILD)),
-            // The release the build belongs to (Windows 10 22H2, `19045.2006` and later): programs
+            // The release the build belongs to (Windows 11 25H2, `26200.9974`): programs
             // that report the OS version read these (Chrome's browser process, on Windows,
             // queries `UBR`, `DisplayVersion` and `ReleaseId`, the traces of ADR 0155).
-            ("UBR", Dword(2006)),
-            ("DisplayVersion", Sz("22H2")),
+            ("UBR", Dword(9974)),
+            ("DisplayVersion", Sz("25H2")),
             ("ReleaseId", Sz("2009")),
             ("InstallationType", Sz("Client")),
             ("SystemRoot", Sz("C:\\Windows")),
@@ -295,6 +295,13 @@ pub fn install(
         if loaded.is_none() {
             let root = reg.hive(id).root;
             populate(reg, root, spec, now)?;
+        }
+        if spec.file == "SOFTWARE" {
+            // The 32-bit view of `HKLM\SOFTWARE` (ADR 0186, stage 2) lives here: a machine
+            // whose hive file is older than that gets the empty key too (Learn: "Registry
+            // Redirector").
+            let root = reg.hive(id).root;
+            make_path(reg, root, WOW6432_NODE, false, now)?;
         }
         out.push(outcome);
     }

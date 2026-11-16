@@ -3,13 +3,41 @@
   "system": {
     "name": "windows",
     "version": "10.0.26200.0",
-    "build": "26200.9711",
+    "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "791f723a83b8",
+  "bundle": "a1cf84e98d3a",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-09T11:00:13Z",
+  "started": "2026-11-15T17:48:34Z",
   "tests": [
+    {
+      "name": "image_views",
+      "exe_sha256": "49a12b490c62b81bdfabf6d3946ac5ea076448ee7642faa951e03cea33a136f8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29waWVzIG1hZGUsIGhlYWRlcnMgZWRpdGVkOiB0cnVlIHRydWUKZHluYW1pYyBiYXNlOiB2aWV3IHNpemUgPSBTaXplT2ZJbWFnZSByb3VuZGVkIHRvIHBhZ2VzOiB0cnVlIGhlYWRlcnMnIEltYWdlQmFzZSA9IHRoZSB2aWV3J3MgYmFzZTogdHJ1ZQpkeW5hbWljIGJhc2U6IHNlY3Rpb24gLnJkYXRhIChjaGFyYWN0ZXJpc3RpY3MgMHg0MDAwMDAwMCkgcGFnZSBwcm90ZWN0PTB4MiBzdGF0ZT0weDEwMDAgdHlwZT0weDEwMDAwMDAKZHluYW1pYyBiYXNlOiBzZWN0aW9uIC5yZWxvYyAoY2hhcmFjdGVyaXN0aWNzIDB4NDAwMDAwMDApIHBhZ2UgcHJvdGVjdD0weDIgc3RhdGU9MHgxMDAwIHR5cGU9MHgxMDAwMDAwCmR5bmFtaWMgYmFzZTogdmlldyBhdCBvZmZzZXQgMHgxMDAwMDogc3RhdHVzPTB4YzAwMDAwMWYKZHluYW1pYyBiYXNlOiB1bm1hcCBzZWNvbmQgc3RhdHVzPTB4MApmaXhlZCBiYXNlOiBmaWxlIG9wZW5lZD0xIE50Q3JlYXRlU2VjdGlvbihTRUNfSU1BR0UpIHN0YXR1cz0weDAKZml4ZWQgYmFzZTogaGVhZGVycyBwYWdlIHR5cGU9TUVNX0lNQUdFIHN0YXRlPTB4MTAwMCBwcm90ZWN0PTB4MiBhbGxvY3Byb3RlY3Q9MHg4MCByZWdpb24gc2l6ZSAweDEwMDAgYWxsb2NhdGlvbiBiYXNlID0gdmlldyB0cnVlCmZpeGVkIGJhc2U6IHNlY3Rpb24gLmRhdGEgKGNoYXJhY3RlcmlzdGljcyAweGMwMDAwMDAwKSBwYWdlIHByb3RlY3Q9MHg4IHN0YXRlPTB4MTAwMCB0eXBlPTB4MTAwMDAwMApmaXhlZCBiYXNlOiBzZWNvbmQgdmlldyBzdGF0dXM9MHg0MDAwMDAwMyBub24tbnVsbD10cnVlIG90aGVyIGJhc2U9dHJ1ZSBzYW1lIHNpemU9dHJ1ZQpmaXhlZCBiYXNlOiB2aWV3IGluIGEgY2hpbGQgc3RhdHVzPTB4MCBzYW1lIGJhc2UgYXMgdGhlIGZpcnN0IHZpZXc9dHJ1ZSBzYW1lIHNpemU9dHJ1ZSB0eXBlPU1FTV9JTUFHRSBzdGF0ZT0weDEwMDAgcHJvdGVjdD0weDIgYWxsb2Nwcm90ZWN0PTB4ODAKZml4ZWQgYmFzZTogdW5tYXAgZmlyc3Qgc3RhdHVzPTB4MCB0aGVuIHJlZ2lvbiBzdGF0ZT0weDEwMDAwCmZpeGVkIGJhc2UsIHJlbG9jYXRpb25zIHN0cmlwcGVkOiBmaXJzdCB2aWV3IHN0YXR1cz0weDAgNjRLaUItYWxpZ25lZD10cnVlIGF0IHRoZSBmaXhlZCBiYXNlPXRydWUKZml4ZWQgYmFzZSwgcmVsb2NhdGlvbnMgc3RyaXBwZWQ6IHNlY3Rpb24gLnRleHQgKGNoYXJhY3RlcmlzdGljcyAweDYwMDAwMDAwKSBwYWdlIHByb3RlY3Q9MHgyMCBzdGF0ZT0weDEwMDAgdHlwZT0weDEwMDAwMDAKZml4ZWQgYmFzZSwgcmVsb2NhdGlvbnMgc3RyaXBwZWQ6IHNlY3Rpb24gLnBkYXRhIChjaGFyYWN0ZXJpc3RpY3MgMHg0MDAwMDAwMCkgcGFnZSBwcm90ZWN0PTB4MiBzdGF0ZT0weDEwMDAgdHlwZT0weDEwMDAwMDAKZml4ZWQgYmFzZSwgcmVsb2NhdGlvbnMgc3RyaXBwZWQ6IHNlY29uZCB2aWV3J3MgaGVhZGVycycgSW1hZ2VCYXNlID0gaXRzIGJhc2U6IGZhbHNlCmZpeGVkIGJhc2UsIHJlbG9jYXRpb25zIHN0cmlwcGVkOiB1bm1hcCBpbiB0aGUgY2hpbGQgc3RhdHVzPTB4MApmaXhlZCBiYXNlLCByZWxvY2F0aW9ucyBzdHJpcHBlZDogdW5tYXAgYWdhaW4gc3RhdHVzPTB4YzAwMDAwMTkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "copies made, headers edited: true true\ndynamic base: view size = SizeOfImage rounded to pages: true headers' ImageBase = the view's base: true\ndynamic base: section .rdata (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\ndynamic base: section .reloc (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\ndynamic base: view at offset 0x10000: status=0xc000001f\ndynamic base: unmap second status=0x0\nfixed base: file opened=1 NtCreateSection(SEC_IMAGE) status=0x0\nfixed base: headers page type=MEM_IMAGE state=0x1000 protect=0x2 allocprotect=0x80 region size 0x1000 allocation base = view true\nfixed base: section .data (characteristics 0xc0000000) page protect=0x8 state=0x1000 type=0x1000000\nfixed base: second view status=0x40000003 non-null=true other base=true same size=true\nfixed base: view in a child status=0x0 same base as the first view=true same size=true type=MEM_IMAGE state=0x1000 protect=0x2 allocprotect=0x80\nfixed base: unmap first status=0x0 then region state=0x10000\nfixed base, relocations stripped: first view status=0x0 64KiB-aligned=true at the fixed base=true\nfixed base, relocations stripped: section .text (characteristics 0x60000000) page protect=0x20 state=0x1000 type=0x1000000\nfixed base, relocations stripped: section .pdata (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\nfixed base, relocations stripped: second view's headers' ImageBase = its base: false\nfixed base, relocations stripped: unmap in the child status=0x0\nfixed base, relocations stripped: unmap again status=0xc0000019\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 139
+    },
+    {
+      "name": "image_views_b",
+      "exe_sha256": "97a4d6023fba53db6cf91501b15fa6398e0a774f4d630d51050ea3d14d030b87",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZHluYW1pYyBiYXNlOiBmaWxlIG9wZW5lZD0xIE50Q3JlYXRlU2VjdGlvbihTRUNfSU1BR0UpIHN0YXR1cz0weDAKZHluYW1pYyBiYXNlOiBoZWFkZXJzIHBhZ2UgdHlwZT1NRU1fSU1BR0Ugc3RhdGU9MHgxMDAwIHByb3RlY3Q9MHgyIGFsbG9jcHJvdGVjdD0weDgwIHJlZ2lvbiBzaXplIDB4MTAwMCBhbGxvY2F0aW9uIGJhc2UgPSB2aWV3IHRydWUKZHluYW1pYyBiYXNlOiBzZWN0aW9uIC5kYXRhIChjaGFyYWN0ZXJpc3RpY3MgMHhjMDAwMDAwMCkgcGFnZSBwcm90ZWN0PTB4OCBzdGF0ZT0weDEwMDAgdHlwZT0weDEwMDAwMDAKZHluYW1pYyBiYXNlOiBzZWNvbmQgdmlldyBzdGF0dXM9MHg0MDAwMDAwMyBub24tbnVsbD10cnVlIG90aGVyIGJhc2U9dHJ1ZSBzYW1lIHNpemU9dHJ1ZQpkeW5hbWljIGJhc2U6IHZpZXcgaW4gYSBjaGlsZCBzdGF0dXM9MHgwIHNhbWUgYmFzZSBhcyB0aGUgZmlyc3Qgdmlldz10cnVlIHNhbWUgc2l6ZT10cnVlIHR5cGU9TUVNX0lNQUdFIHN0YXRlPTB4MTAwMCBwcm90ZWN0PTB4MiBhbGxvY3Byb3RlY3Q9MHg4MApkeW5hbWljIGJhc2U6IHVubWFwIGZpcnN0IHN0YXR1cz0weDAgdGhlbiByZWdpb24gc3RhdGU9MHgxMDAwMApmaXhlZCBiYXNlOiBmaXJzdCB2aWV3IHN0YXR1cz0weDAgNjRLaUItYWxpZ25lZD10cnVlIGF0IHRoZSBmaXhlZCBiYXNlPXRydWUKZml4ZWQgYmFzZTogc2VjdGlvbiAudGV4dCAoY2hhcmFjdGVyaXN0aWNzIDB4NjAwMDAwMDApIHBhZ2UgcHJvdGVjdD0weDIwIHN0YXRlPTB4MTAwMCB0eXBlPTB4MTAwMDAwMApmaXhlZCBiYXNlOiBzZWN0aW9uIC5wZGF0YSAoY2hhcmFjdGVyaXN0aWNzIDB4NDAwMDAwMDApIHBhZ2UgcHJvdGVjdD0weDIgc3RhdGU9MHgxMDAwIHR5cGU9MHgxMDAwMDAwCmZpeGVkIGJhc2U6IHNlY29uZCB2aWV3J3MgaGVhZGVycycgSW1hZ2VCYXNlID0gaXRzIGJhc2U6IGZhbHNlCmZpeGVkIGJhc2U6IHVubWFwIGluIHRoZSBjaGlsZCBzdGF0dXM9MHgwCmZpeGVkIGJhc2U6IHVubWFwIGFnYWluIHN0YXR1cz0weGMwMDAwMDE5CmZpeGVkIGJhc2UsIHJlbG9jYXRpb25zIHN0cmlwcGVkOiB2aWV3IHNpemUgPSBTaXplT2ZJbWFnZSByb3VuZGVkIHRvIHBhZ2VzOiB0cnVlIGhlYWRlcnMnIEltYWdlQmFzZSA9IHRoZSB2aWV3J3MgYmFzZTogdHJ1ZQpmaXhlZCBiYXNlLCByZWxvY2F0aW9ucyBzdHJpcHBlZDogc2VjdGlvbiAucmRhdGEgKGNoYXJhY3RlcmlzdGljcyAweDQwMDAwMDAwKSBwYWdlIHByb3RlY3Q9MHgyIHN0YXRlPTB4MTAwMCB0eXBlPTB4MTAwMDAwMApmaXhlZCBiYXNlLCByZWxvY2F0aW9ucyBzdHJpcHBlZDogc2VjdGlvbiAucmVsb2MgKGNoYXJhY3RlcmlzdGljcyAweDQwMDAwMDAwKSBwYWdlIHByb3RlY3Q9MHgyIHN0YXRlPTB4MTAwMCB0eXBlPTB4MTAwMDAwMApmaXhlZCBiYXNlLCByZWxvY2F0aW9ucyBzdHJpcHBlZDogdmlldyBhdCBvZmZzZXQgMHgxMDAwMDogc3RhdHVzPTB4YzAwMDAwMWYKZml4ZWQgYmFzZSwgcmVsb2NhdGlvbnMgc3RyaXBwZWQ6IHVubWFwIHNlY29uZCBzdGF0dXM9MHgwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "dynamic base: file opened=1 NtCreateSection(SEC_IMAGE) status=0x0\ndynamic base: headers page type=MEM_IMAGE state=0x1000 protect=0x2 allocprotect=0x80 region size 0x1000 allocation base = view true\ndynamic base: section .data (characteristics 0xc0000000) page protect=0x8 state=0x1000 type=0x1000000\ndynamic base: second view status=0x40000003 non-null=true other base=true same size=true\ndynamic base: view in a child status=0x0 same base as the first view=true same size=true type=MEM_IMAGE state=0x1000 protect=0x2 allocprotect=0x80\ndynamic base: unmap first status=0x0 then region state=0x10000\nfixed base: first view status=0x0 64KiB-aligned=true at the fixed base=true\nfixed base: section .text (characteristics 0x60000000) page protect=0x20 state=0x1000 type=0x1000000\nfixed base: section .pdata (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\nfixed base: second view's headers' ImageBase = its base: false\nfixed base: unmap in the child status=0x0\nfixed base: unmap again status=0xc0000019\nfixed base, relocations stripped: view size = SizeOfImage rounded to pages: true headers' ImageBase = the view's base: true\nfixed base, relocations stripped: section .rdata (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\nfixed base, relocations stripped: section .reloc (characteristics 0x40000000) page protect=0x2 state=0x1000 type=0x1000000\nfixed base, relocations stripped: view at offset 0x10000: status=0xc000001f\nfixed base, relocations stripped: unmap second status=0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 126
+    },
     {
       "name": "ntsec_protect",
       "exe_sha256": "4f834e25a3d0d19adfed3f0164594873dac60cd193626f04c8bcd13b46d6bcb8",

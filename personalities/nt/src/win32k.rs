@@ -103,10 +103,11 @@ impl Win32k {
                 // buttons and keys (ADR 0136).
                 FromCompositor::Pointer { surface, x, y, .. } => {
                     if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
-                        self.wm.link_pointer(i.client.left + x, i.client.top + y, &mut fx);
+                        self.wm.link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
                     }
                 }
                 FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
+                FromCompositor::Axis { vertical, .. } => self.wm.link_wheel(vertical, &mut fx),
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.
@@ -115,18 +116,35 @@ impl Win32k {
                         self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
                     }
                 }
-                // The compositor moved or resized the window's surface.
+                // The shell minimizes, maximizes or restores the window (a minimized window
+                // picked in the window switcher): the window command, as from its caption.
+                FromCompositor::Request { surface, request } => {
+                    let sc = match request {
+                        DesktopRequest::Minimize => poly_win32k::user::SC_MINIMIZE,
+                        DesktopRequest::Maximize => poly_win32k::user::SC_MAXIMIZE,
+                        _ => poly_win32k::user::SC_RESTORE,
+                    };
+                    if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
+                        self.wm.post_system_message_with(hwnd, poly_win32k::user::WM_SYSCOMMAND, sc, 0, &mut fx);
+                    }
+                }
+                // The compositor moved or resized the window's surface (a new size: its
+                // thread applies it with `SetWindowPos`).
                 FromCompositor::Configure { surface, x, y, width, height } => {
                     if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
                         let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
                         let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
-                        self.wm.configure_from_desktop(hwnd, client, frame);
+                        self.wm.configure_from_desktop(hwnd, client, frame, &mut fx);
                     }
                 }
                 _ => {}
             }
         }
         self.wake(objects, &fx);
+        // Windows programs type with the desktop's keyboard layout (ADR 0209).
+        if let Some(name) = self.desktop.layout() {
+            self.wm.set_layout(poly_win32k::kbd::Layout::for_desktop(name));
+        }
         // With a compositor the session is interactive, its screen the
         // output, the work area below Poly's 24-pixel ridge.
         if let Some(o) = self.desktop.output()
@@ -151,6 +169,17 @@ impl Win32k {
     /// The device's `READ_BUFFER`: rows of a buffer.
     pub fn link_rows(&self, buffer: u32, row: u32, rows: u32) -> Option<alloc::vec::Vec<u8>> {
         self.surfaces.rows(buffer, row, rows)
+    }
+
+    /// The window manager's thread queues for a wait report (`poly.nt.waits`), each with the
+    /// state of the event the thread registered (`set` / `clear` / `none`).
+    pub fn queue_debug_lines(&self, objects: &poly_ntobj::ObjectManager) -> alloc::vec::Vec<alloc::string::String> {
+        let mut lines = self.wm.queue_debug_lines();
+        for (k, (id, handle)) in &self.events {
+            let state = objects.event_info(*id).map_or("gone", |e| if e.signaled { "set" } else { "clear" });
+            lines.push(alloc::format!("queue event p{} t{} handle {handle:#x} {state}", k.0, k.1));
+        }
+        lines
     }
 
     fn wake(&self, objects: &mut poly_ntobj::ObjectManager, fx: &Effects) {
@@ -202,12 +231,35 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
     let req: Request = wire::decode(&bytes).ok_or(STATUS_INVALID_PARAMETER)?;
     let caller = k.caller();
     let ctx = Ctx { pid: caller.process.0, tid: caller.thread.0 as u32, now: k.monotonic_100ns() / 10_000 };
-    let reply = k.with_state(|sys, _, _| {
+    // Window stations and desktops make handles and read the caller's descriptors: the NT side's.
+    let reply = if let Request::Winsta { op } = &req {
+        Reply::Winsta { res: crate::winsta::handle_call(k, op) }
+    } else {
+        call_wm(k, &caller, ctx, req)
+    };
+    let out = wire::encode(&reply);
+    abi::write_u64(k, out_len_ptr, out.len() as u64)?;
+    if out.len() as u64 > out_cap {
+        return Ok(STATUS_BUFFER_TOO_SMALL);
+    }
+    abi::write(k, out_ptr, &out)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// One request for the window manager.
+fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: Request) -> Reply {
+    k.with_state(|sys, _, _| {
         match req {
-            Request::RegisterEvent { handle } => return register_event(sys, &caller, ctx, handle),
+            Request::RegisterEvent { handle } => return register_event(sys, caller, ctx, handle),
             Request::Surface { hwnd } => {
                 let w = &sys.win32k;
-                let size = w.surfaces.size(&w.desktop, hwnd).map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
+                // A child draws into its top-level window's surface, through a bitmap of its
+                // client size (`commit`).
+                let size = w
+                    .surfaces
+                    .size(&w.desktop, hwnd)
+                    .or_else(|| w.surfaces.child_area(&w.wm, &w.desktop, hwnd).map(|a| (a.width, a.height)))
+                    .map_or(0, |(x, y)| u64::from(x) | (u64::from(y) << 32));
                 return Reply::Value { value: size };
             }
             // A layered window passes the hit through where it shows nothing.
@@ -245,6 +297,17 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
                     Reply::Error { code: 87 }
                 };
             }
+            // DefWindowProc's SC_MOVE / SC_SIZE: the compositor drags the surface (ADR 0128).
+            Request::MoveSize { hwnd, edges } => {
+                let w = &mut sys.win32k;
+                let Some(id) = w.surfaces.surface(hwnd) else { return Reply::Error { code: 1400 } };
+                if edges == 0 {
+                    w.desktop.begin_move(id);
+                } else {
+                    w.desktop.begin_resize(id, poly_win32k::link::Edges(edges));
+                }
+                return Reply::Ok {};
+            }
             // A system cursor over a top-level window's surface (ADR 0172).
             Request::CursorShape { hwnd, idc } => {
                 let w = &mut sys.win32k;
@@ -260,14 +323,7 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
         sys.win32k.wake(&mut sys.objects, &fx);
         sys.win32k.sync();
         reply
-    });
-    let out = wire::encode(&reply);
-    abi::write_u64(k, out_len_ptr, out.len() as u64)?;
-    if out.len() as u64 > out_cap {
-        return Ok(STATUS_BUFFER_TOO_SMALL);
-    }
-    abi::write(k, out_ptr, &out)?;
-    Ok(STATUS_SUCCESS)
+    })
 }
 
 /// `PolyUserCommitSurface(hwnd, pixels, width, height, stride)`: the app
@@ -279,6 +335,9 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     let [hwnd, pixels, width, height, stride] = abi::args::<K, 5>(k, regs)?;
     let (hwnd, width, height) = (hwnd as u32, width as u32, height as u32);
     let size = k.with_state(|sys, _, _| sys.win32k.surfaces.size(&sys.win32k.desktop, hwnd));
+    if size.is_none() {
+        return commit_child(k, hwnd, pixels, width, height, stride);
+    }
     if size != Some((width, height)) || width > MAX_SIDE || height > MAX_SIDE || stride < u64::from(width) * 4 {
         return Err(STATUS_INVALID_PARAMETER);
     }
@@ -306,6 +365,54 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     let ok = k.with_state(|sys, _, _| {
         let w = &mut sys.win32k;
         w.surfaces.committed(&mut w.desktop, hwnd)
+    });
+    Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
+}
+
+/// A commit of a child window: its picture into its top-level window's surface where the child
+/// is (`Surfaces::child_area`), in pieces of whole rows as `commit`.
+fn commit_child<K: NtKernel>(
+    k: &mut K,
+    hwnd: u32,
+    pixels: u64,
+    width: u32,
+    height: u32,
+    stride: u64,
+) -> Result<NtStatus, NtStatus> {
+    let area = k.with_state(|sys, _, _| {
+        let w = &sys.win32k;
+        w.surfaces.child_area(&w.wm, &w.desktop, hwnd)
+    });
+    let Some(area) = area else { return Err(STATUS_INVALID_PARAMETER) };
+    if (area.width, area.height) != (width, height)
+        || width > MAX_SIDE
+        || height > MAX_SIDE
+        || stride < u64::from(width) * 4
+    {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let row = width as usize * 4;
+    let piece = (BAND_BYTES / row.max(1)).max(1) as u32;
+    let mut bytes = vec![0u8; row * piece.min(height) as usize];
+    let mut y = 0u32;
+    while y < height {
+        let n = piece.min(height - y) as usize;
+        let part = &mut bytes[..n * row];
+        for (i, chunk) in part.chunks_mut(row).enumerate() {
+            abi::read(k, pixels + (u64::from(y) + i as u64) * stride, chunk)?;
+        }
+        let ok = k.with_state(|sys, _, _| {
+            let w = &mut sys.win32k;
+            w.surfaces.write_child_rows(&w.desktop, &area, y, part)
+        });
+        if !ok {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        y += n as u32;
+    }
+    let ok = k.with_state(|sys, _, _| {
+        let w = &mut sys.win32k;
+        w.surfaces.child_committed(&mut w.desktop, &area)
     });
     Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
 }

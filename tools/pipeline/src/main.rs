@@ -1,6 +1,12 @@
 //! `pipeline`: the deterministic, model-free parts of the agent pipeline
 //! (docs/AGENT_PIPELINE.md). Run it as `cargo xtask pipeline <command>`.
 //!
+//! On a Windows host the tool builds and everything that is not Linux's runs:
+//! `spec`, `tests`, `handoff`, `win`, `initramfs`. `build`, `trace`, `diff` and
+//! `polyrun` (the Linux reference: ptrace, namespaces, the Linux test corpus)
+//! report that they need a Linux host (ADR 0124; run them through polyd), and
+//! `selfcheck` and `polycheck` skip themselves.
+//!
 //! ```text
 //! build [--cc CC] [--out DIR]                    compile the test corpus in tests/linux/
 //! trace <test|path>... [--all] [--tracer ptrace|strace|none] [--out-dir DIR] [--print]
@@ -27,7 +33,7 @@
 //! handoff record <entry> --spec-agent A --implementer B [--allow-dirty]
 //! handoff bundle <entry>... --out DIR            what the implementer receives (one or more entries)
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
-//! win build [--tests-dir DIR]... [--tests a,b] [--out DIR]
+//! win build [--tests-dir DIR]... [--tests a,b] [--out DIR] [--cxx-runtime msvcrt|vcruntime140]
 //!                                                Windows test programs (tests/windows/*.rs, ADR 0075, and
 //!                                                *.cpp, ADR 0098) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
@@ -41,7 +47,8 @@
 //!                                                compare Windows results with Poly (or another result file)
 //! win show <results.json> [--tests a,b]          print a result file's observations
 //! win polycheck [--kernel ELF] [--jobs N]         the visible tests of every green Windows entry on Poly
-//!                                                against their recorded windows.json: all must pass (CI)
+//!                                                against their recorded windows.json: all must pass (CI);
+//!                                                the msvcrt.dll C++ tests again built for vcruntime140 (ADR 0199)
 //! win scenario poly [--bin-dir DIR] [--data-dir DIR] [--tests a,b] [--kernel ELF] [--build-kernel]
 //!                   [--timeout SECS] [--out FILE]
 //!                                                run scenario drivers (ADR 0088) on Poly with their data files
@@ -227,7 +234,12 @@ fn link_latest(runs: &Path, run: &Path) {
     let latest = runs.join("latest");
     let _ = std::fs::remove_file(&latest);
     if let Some(name) = run.file_name() {
+        #[cfg(unix)]
         let _ = std::os::unix::fs::symlink(name, &latest);
+        // Symbolic links need a privilege on Windows; the link is a
+        // convenience, so it is made where it can be.
+        #[cfg(windows)]
+        let _ = std::os::windows::fs::symlink_dir(name, &latest);
     }
 }
 
@@ -551,6 +563,10 @@ fn selfcheck(repo: &Path) -> Result<u8> {
         println!("pipeline selfcheck: skipped (implementer agents do not run programs on the reference OS)");
         return Ok(0);
     }
+    if cfg!(not(unix)) {
+        println!("pipeline selfcheck: skipped (needs a Linux host, ADR 0124; run it through polyd)");
+        return Ok(0);
+    }
     let cc = corpus::compiler(None);
     if corpus::compiler_version(&cc).is_err() {
         println!("pipeline selfcheck: skipped (no C compiler; install gcc or set CC)");
@@ -632,6 +648,10 @@ fn polycheck(repo: &Path, a: &Args) -> Result<u8> {
     let shard = a.opt("shard").map(parse_shard).transpose()?;
     if oracle_guard("polycheck").is_err() {
         println!("pipeline polycheck: skipped (implementer agents do not run programs on the reference OS)");
+        return Ok(0);
+    }
+    if cfg!(not(unix)) {
+        println!("pipeline polycheck: skipped (needs a Linux host, ADR 0124; run it through polyd)");
         return Ok(0);
     }
     let cc = corpus::compiler(None);
@@ -884,7 +904,8 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
             util::files_under(Path::new(generated))?.iter().map(|p| p.to_string_lossy().into_owned()).collect();
         windows::check_split_files(&files)?;
         if let Some(r) = &results {
-            let names: Vec<String> = files.iter().map(|f| windows::test_name(f)).collect();
+            let names: Vec<String> =
+                files.iter().filter(|f| !f.ends_with(".exe")).map(|f| windows::test_name(f)).collect();
             windows::split_results(r, &names, &[])?;
         }
     }
@@ -901,7 +922,9 @@ fn tests_cmd(repo: &Path, a: &Args) -> Result<u8> {
     };
     let s = store::split_tests(repo, &heldout, &req)?;
     if let Some(r) = &results {
-        let names = |files: &[String]| files.iter().map(|f| windows::test_name(f)).collect::<Vec<_>>();
+        let names = |files: &[String]| {
+            files.iter().filter(|f| !f.ends_with(".exe")).map(|f| windows::test_name(f)).collect::<Vec<_>>()
+        };
         let (visible, held) = windows::split_results(r, &names(&s.visible), &names(&s.held_out))?;
         let v = repo.join(entry.tests_dir()).join(windows::RECORDED_RESULTS);
         let h = entry.heldout_dir(&heldout).join(windows::RECORDED_RESULTS);
@@ -1094,6 +1117,13 @@ fn run(args: &[String]) -> Result<u8> {
     let (cmd, rest) = args.split_first().ok_or("usage: pipeline <command> (see tools/pipeline/src/main.rs)")?;
     let switches = ["all", "print", "strict", "build-kernel", "replace", "allow-dirty", "record", "diff"];
     let a = Args::parse(rest, &switches)?;
+    // The reference system is Linux: its test corpus is built for Linux, run
+    // under ptrace and in namespaces, and handed to Poly. A Windows host
+    // builds this tool and says so instead (ADR 0124); `selfcheck` and
+    // `polycheck` skip themselves, as they do without a compiler.
+    if cfg!(not(unix)) && matches!(cmd.as_str(), "build" | "trace" | "diff" | "polyrun") {
+        return Err(util::needs_linux(cmd));
+    }
     match cmd.as_str() {
         "build" => build(&repo, &a),
         "trace" => trace_cmd(&repo, &a),

@@ -31,11 +31,11 @@ impl Pending {
     }
 }
 
-/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64.
+/// `PAINTSTRUCT` (winuser.h): 72 bytes on x64, 64 in a 32-bit process (ADR 0186).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PaintStruct {
-    pub hdc: u64,
+    pub hdc: usize,
     pub erase: i32,
     pub paint: CRect,
     pub restore: i32,
@@ -155,7 +155,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         // A hidden window: a DC with nothing to paint, no message; fErase
         // is the window's state (`hidden`).
         let dc = env.paint_dc(h, Some(&[]));
-        ps.hdc = dc;
+        ps.hdc = dc as usize;
         ps.erase = i32::from(p.ferase);
         return dc;
     }
@@ -172,7 +172,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         if i.minimized {
             flush_frames_below(env, h);
         }
-        ps.hdc = dc;
+        ps.hdc = dc as usize;
         ps.erase = i32::from(!p.erase && p.ferase);
         return dc;
     }
@@ -184,7 +184,7 @@ pub fn begin_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &mut PaintStruct) ->
         p.ferase
     };
     painted(env, h, PAINTED_VALIDATE, if p.erase { if erase { 1 } else { 2 } } else { 0 });
-    ps.hdc = dc;
+    ps.hdc = dc as usize;
     ps.erase = i32::from(erase);
     // rcPaint is cut to what is on the screen; the update region was not
     // (`offscreen`).
@@ -217,7 +217,7 @@ pub fn end_paint<E: Env + ?Sized>(env: &E, hwnd: u64, ps: &PaintStruct) -> bool 
         return false;
     };
     if ps.hdc != 0 {
-        env.release_dc(i.hwnd, ps.hdc);
+        env.release_dc(i.hwnd, ps.hdc as u64);
     }
     true
 }
@@ -234,7 +234,7 @@ pub fn invalidate<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>, e
         return true;
     };
     let rects: Option<Vec<Rect>> = rects.map(|r| r.iter().map(|&x| normalized(x)).collect());
-    redraw(env, i.hwnd, rects.as_deref(), RDW_INVALIDATE | if erase { RDW_ERASE } else { 0 });
+    redraw(env, i.hwnd, rects.as_deref(), RDW_USER | RDW_INVALIDATE | if erase { RDW_ERASE } else { 0 });
     true
 }
 
@@ -359,7 +359,7 @@ pub fn redraw_window<E: Env + ?Sized>(env: &E, hwnd: u64, rects: Option<&[Rect]>
     };
     let region_flags = flags & !(RDW_UPDATENOW | RDW_ERASENOW);
     if region_flags != 0 {
-        redraw(env, i.hwnd, rects, region_flags);
+        redraw(env, i.hwnd, rects, region_flags | RDW_USER);
     }
     // The children the immediate repaint reaches (RDW_UPDATENOW "paints the
     // parent, then its invalid children, unless RDW_NOCHILDREN").
@@ -429,6 +429,24 @@ pub fn shown_paint<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     }
     if !child || parent.is_some_and(|p| p.style & WS_CLIPCHILDREN != 0) {
         erase_now(env, i.hwnd);
+        erase_children(env, i.hwnd);
+    }
+}
+
+/// The children of `hwnd` that became visible with it get their frame and erase at once too, when
+/// `hwnd` clips them (ShowWindow.yaml `chrome_show`: the child's WM_NCPAINT and WM_ERASEBKGND follow
+/// the top-level window's, inside the call).
+fn erase_children<E: Env + ?Sized>(env: &E, hwnd: u32) {
+    let Some(p) = info(env, u64::from(hwnd)) else { return };
+    if p.style & WS_CLIPCHILDREN == 0 {
+        return;
+    }
+    let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) else { return };
+    for c in children {
+        if info(env, u64::from(c)).is_some_and(|ci| ci.visible) {
+            erase_now(env, c);
+            erase_children(env, c);
+        }
     }
 }
 

@@ -97,7 +97,11 @@
 //!                       --cache-key: print the name it is cached under
 //!   win32               the same for kernelbase.dll, kernel32.dll, ucrtbase.dll, msvcrt.dll and
 //!                       the test programs (win32.rs)
+//!   wow64               the same for the 32-bit (i686) ntdll.dll, kernelbase.dll, kernel32.dll
+//!                       and the 32-bit test programs of tests/windows/wow64 (wow64.rs, ADR 0186)
 //!   win fetch-7zip      download the pinned 7-Zip 7za.exe (x64) into the cache, checked (sevenzip.rs)
+//!   win fetch-git       download and unpack the pinned MinGit (Git for Windows) into the cache,
+//!                       checked, for the `git-win` boot test (gitwin.rs, ADR 0194)
 //!   win imports <exe | 7zip> [--markdown <file>] [--check]
 //!                       what a Windows program imports and what of it our DLLs lack
 //!                       (winimports.rs, ADR 0087); --check fails unless every import binds
@@ -140,6 +144,7 @@ mod ext2disk;
 mod ext4disk;
 mod font;
 mod fonts;
+mod gitwin;
 mod hostfs;
 mod hostscreen;
 mod initramfs;
@@ -181,6 +186,7 @@ mod winapp;
 mod winapps;
 mod winimports;
 mod wintrace;
+mod wow64;
 mod xwayland;
 
 use hostfs::UnixStream;
@@ -271,6 +277,7 @@ const COMMANDS: &[&str] = &[
     "system-messages",
     "ntdll",
     "win32",
+    "wow64",
     "win",
     "dynamic-initramfs",
     "busybox-initramfs",
@@ -309,6 +316,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("wayland") => wayland::run(&root(), rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
+        Some("wow64") => wow64::command(rest),
         Some("win") => sevenzip::command(rest),
         Some("dynamic-initramfs") => dynamic::command(),
         Some("busybox-initramfs") => busybox::command(),
@@ -357,14 +365,22 @@ fn step(name: &str, cmd: &mut Command) -> Result {
 /// 0071). The two are made at the same time (each its own cargo build in a
 /// target directory of its own, or taken from the cache).
 fn kernel_cargo() -> Result<Command> {
-    let (dll, win32) = thread::scope(|s| {
+    let (dll, win32, wow64) = thread::scope(|s| {
         let dll = s.spawn(ntdll::ensure);
+        let wow64 = s.spawn(wow64::ensure);
         let win32 = win32::ensure();
-        (dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())), win32)
+        (
+            dll.join().unwrap_or_else(|_| Err("building ntdll.dll panicked".into())),
+            win32,
+            wow64.join().unwrap_or_else(|_| Err("building the 32-bit modules panicked".into())),
+        )
     });
-    let (dll, win32) = (dll?, win32?);
+    let (dll, win32, wow64) = (dll?, win32?, wow64?);
     let mut cmd = cargo();
-    cmd.current_dir(kernel_dir()).env(ntdll::KERNEL_ENV, dll).env(win32::KERNEL_ENV, win32);
+    cmd.current_dir(kernel_dir())
+        .env(ntdll::KERNEL_ENV, dll)
+        .env(win32::KERNEL_ENV, win32)
+        .env(wow64::KERNEL_ENV, wow64);
     Ok(cmd)
 }
 
@@ -1644,6 +1660,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Chrome for Testing's headless --dump-dom on the NT personality, skipped
     // without the cached package (chromewin.rs, ADR 0155).
     ("chrome-win", chromewin::boot_test),
+    // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
+    // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
+    // ADR 0194).
+    ("git-win", gitwin::boot_test),
     // The 7-Zip scenario under the Windows API tracer, each step's trace
     // compared with the committed Windows reference, required (ADR 0114:
     // TRACE_REQUIRED; sevenzip_trace.rs, ADR 0110).
@@ -1776,7 +1796,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
-    ("sevenzip-b", &["7zip-b"]),
+    ("sevenzip-b", &["7zip-b", "git-win"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
@@ -2158,25 +2178,44 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
                 }
                 step("clippy (changed host packages)", cmd.args(["--all-targets", "--", "-D", "warnings"]))?;
             }
-            if !plan.xtask_windows {
-                return Ok(());
-            }
             // xtask itself on Windows, so building and booting work on a Windows
             // host too (hostfs.rs has the stand-ins for what needs Linux).
-            step(
-                "clippy (xtask for Windows)",
-                cargo().current_dir(root()).args([
-                    "clippy",
-                    "--package",
-                    "xtask",
-                    "--all-targets",
-                    "--target",
-                    "x86_64-pc-windows-msvc",
-                    "--",
-                    "-D",
-                    "warnings",
-                ]),
-            )
+            if plan.xtask_windows {
+                step(
+                    "clippy (xtask for Windows)",
+                    cargo().current_dir(root()).args([
+                        "clippy",
+                        "--package",
+                        "xtask",
+                        "--all-targets",
+                        "--target",
+                        "x86_64-pc-windows-msvc",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ]),
+                )?;
+            }
+            // The pipeline tool (`cargo xtask pipeline ...`) too: what needs Linux
+            // (the tracer, the diff runner's reference runs, the app trees) is
+            // behind `cfg(unix)` and reports that at run time (ADR 0124).
+            if plan.pipeline_windows {
+                step(
+                    "clippy (pipeline for Windows)",
+                    cargo().current_dir(root()).args([
+                        "clippy",
+                        "--package",
+                        "poly-pipeline",
+                        "--all-targets",
+                        "--target",
+                        "x86_64-pc-windows-msvc",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ]),
+                )?;
+            }
+            Ok(())
         });
         let kernel = s.spawn(|| -> Result {
             if !plan.kernel {
@@ -2209,6 +2248,8 @@ fn source_checks(changed: Option<&[String]>) -> Result {
     wayland::run(&root(), &["--check".into()])?;
     eprintln!("==> global_asm! labels");
     asmlabels::check(&kernel_dir().join("src"))?;
+    eprintln!("==> 32-bit forms of the Win32 modules' raw-dylib links");
+    wow64::check_links(&root())?;
     eprintln!("==> merge conflict markers");
     conflicts::check(&root(), changed)?;
     eprintln!("==> the CI workflow runs every part and boot test shard");
@@ -2452,6 +2493,7 @@ fn pipeline(args: &[String]) -> Result {
     {
         cmd.env(ntdll::KERNEL_ENV, ntdll::ensure()?);
         cmd.env(win32::KERNEL_ENV, win32::ensure()?);
+        cmd.env(wow64::KERNEL_ENV, wow64::ensure()?);
     }
     step("pipeline", &mut cmd)
 }

@@ -17,17 +17,26 @@
 
 extern crate alloc;
 
+#[cfg(target_arch = "x86_64")]
 mod chkstk;
+mod curdir;
 mod exports;
 mod heap;
 mod lock;
 mod params;
 mod rtlsec;
+mod rtlsync;
+#[cfg(target_arch = "x86_64")]
 mod seh;
 mod start;
 mod sys;
 mod syscalls;
 mod veh;
+#[cfg(target_arch = "x86")]
+mod x86;
+
+// The i686 build's `__chkstk` and 64-bit arithmetic helpers (ADR 0186).
+extern crate poly_msvc32;
 
 use poly_ldr::{Callout, CalloutKind, Config, Loader};
 use poly_ntobj::NtStatus;
@@ -67,6 +76,12 @@ pub(crate) fn report_load_failure(what: &str, status: NtStatus) {
         None => debug_print(&format!("ldr: {what} failed ({:#x})", status.0)),
     }
 }
+
+/// The kind of process this `ntdll` runs in (ADR 0186).
+#[cfg(target_arch = "x86")]
+pub(crate) const BITNESS: poly_ldr::Bitness = poly_ldr::Bitness::X86;
+#[cfg(not(target_arch = "x86"))]
+pub(crate) const BITNESS: poly_ldr::Bitness = poly_ldr::Bitness::X64;
 
 #[global_allocator]
 static ALLOC: heap::ProcessHeapAlloc = heap::ProcessHeapAlloc;
@@ -115,7 +130,7 @@ fn with_slot<R>(f: impl FnOnce(&mut Option<Loader>) -> R) -> R {
 /// callout must not be run while this is held (it is not).
 fn with_loader<R>(f: impl FnOnce(&mut Loader, &mut sys::Sys) -> R) -> R {
     with_slot(|slot| {
-        let loader = slot.get_or_insert_with(|| Loader::new(Config::default()));
+        let loader = slot.get_or_insert_with(|| Loader::new(Config { bitness: BITNESS, ..Config::default() }));
         f(loader, &mut sys::Sys)
     })
 }
@@ -126,10 +141,13 @@ fn with_loader<R>(f: impl FnOnce(&mut Loader, &mut sys::Sys) -> R) -> R {
 /// Returns the `BOOL` the entry point returned (TLS callbacks return void;
 /// their result is ignored).
 fn run_callout(c: &Callout) -> i32 {
-    type Fn3 = unsafe extern "system" fn(u64, u32, u64) -> i32;
+    type Fn3 = unsafe extern "system" fn(usize, u32, usize) -> i32;
     // SAFETY: the loader resolved `routine` to code in a mapped image; the
-    // ABI is the documented `DllMain` / TLS-callback signature.
-    let r = unsafe { core::mem::transmute::<u64, Fn3>(c.routine)(c.base, c.reason, c.reserved) };
+    // ABI is the documented `DllMain` / TLS-callback signature (`WINAPI`,
+    // `stdcall` in a 32-bit process).
+    let r = unsafe {
+        core::mem::transmute::<usize, Fn3>(c.routine as usize)(c.base as usize, c.reason, c.reserved as usize)
+    };
     match c.kind {
         CalloutKind::Entry => r,
         CalloutKind::Tls => 1,
@@ -149,3 +167,7 @@ fn run_callouts(callouts: &[Callout]) -> Result<(), usize> {
     }
     Ok(())
 }
+
+// The 32-bit ntdll (ADR 0186) has its own exports (`RtlUnwind` ...): a stub that takes no arguments would also leave them.
+#[cfg(target_arch = "x86_64")]
+mod apps;

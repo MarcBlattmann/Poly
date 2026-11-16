@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetDynamicTimeZoneInformation.yaml
+id: windows/api/kernel32.dll/GetDynamicTimeZoneInformation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  The same observations as the GetTimeZoneInformation entry of this DLL; the tests of that entry call both functions.
+summary: >
+  Returns the system's time zone as a DYNAMIC_TIME_ZONE_INFORMATION (432 bytes): the fields of GetTimeZoneInformation plus the zone's registry key name and the flag that says daylight time is disabled. No tests of its own.
+same_as: "windows/api/kernel32.dll/GetTimeZoneInformation"
+interface:
+  signature: "DWORD GetDynamicTimeZoneInformation(PDYNAMIC_TIME_ZONE_INFORMATION tz)"
+rules:
+  in_short: "same return value and same shared fields as GetTimeZoneInformation; TimeZoneKeyName is non-empty and NUL-terminated; DynamicDaylightTimeDisabled is 0 or 1"
+errors:
+  see_sheet: "the sheet of GetTimeZoneInformation"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+not_covered: >
+  Everything the GetTimeZoneInformation sheet lists as not covered.

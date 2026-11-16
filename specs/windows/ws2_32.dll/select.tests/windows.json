@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "ba4dd99e3069",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T00:07:52Z",
+  "tests": [
+    {
+      "name": "select_basic",
+      "exe_sha256": "3ea4e61d72d198248630d174ef5a75838c3dbc61340103c0ddb23421f9f4f4fa",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGlzdGVuZXIsIG5vdGhpbmcgcGVuZGluZyAoMCwgMCwgMCwgOSwgOSkKY2xpZW50IHJlYWRhYmxlLCBubyBkYXRhICgwLCAwLCAwLCA5LCA5KQpmYWlsZWQgY29ubmVjdDogcmVhZC93cml0ZS9leGNlcHQgKDEsIDAsIDAsIDAsIDEpCnRocmVlIE5VTEwgc2V0cyAtMS9XU0FFSU5WQUwKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "listener, nothing pending (0, 0, 0, 9, 9)\nclient readable, no data (0, 0, 0, 9, 9)\nfailed connect: read/write/except (1, 0, 0, 0, 1)\nthree NULL sets -1/WSAEINVAL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2475
+    },
+    {
+      "name": "select_basic_c",
+      "exe_sha256": "3ba7c58a2c9244352aa81d0920ed55350d00250d8941bb8abb15bda612f6a8e9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xpZW50IHdyaXRhYmxlICgxLCAwLCA5LCAxLCA5KQpjbGllbnQgcmVhZGFibGUgYWZ0ZXIgdGhlIHBlZXIgY2xvc2VkICgxLCAwLCAxLCA5LCA5KQphbiBlbXB0eSByZWFkIHNldCAtMS9XU0FFSU5WQUwKdHdvIHNvY2tldHMgaW4gdGhlIHdyaXRlIHNldDogY291bnQgMSBsZWZ0IDEgZmlyc3QtaXMtY2xpZW50IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "client writable (1, 0, 9, 1, 9)\nclient readable after the peer closed (1, 0, 1, 9, 9)\nan empty read set -1/WSAEINVAL\ntwo sockets in the write set: count 1 left 1 first-is-client 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2479
+    }
+  ]
+}

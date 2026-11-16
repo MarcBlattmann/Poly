@@ -189,6 +189,8 @@ pub const STATUS_ACCESS_VIOLATION: NtStatus = NtStatus(0xC000_0005);
 pub const STATUS_NO_MEMORY: NtStatus = NtStatus(0xC000_0017);
 pub const STATUS_CONFLICTING_ADDRESSES: NtStatus = NtStatus(0xC000_0018);
 pub const STATUS_NOT_MAPPED_VIEW: NtStatus = NtStatus(0xC000_0019);
+/// The commit limit would be exceeded (`ntstatus.h`).
+pub const STATUS_COMMITMENT_LIMIT: NtStatus = NtStatus(0xC000_012D);
 pub const STATUS_UNABLE_TO_FREE_VM: NtStatus = NtStatus(0xC000_001A);
 pub const STATUS_UNABLE_TO_DELETE_SECTION: NtStatus = NtStatus(0xC000_001B);
 pub const STATUS_INVALID_SYSTEM_SERVICE: NtStatus = NtStatus(0xC000_001C);
@@ -205,6 +207,8 @@ pub const STATUS_INVALID_IMAGE_FORMAT: NtStatus = NtStatus(0xC000_007B);
 pub const STATUS_FREE_VM_NOT_AT_BASE: NtStatus = NtStatus(0xC000_009F);
 pub const STATUS_MEMORY_NOT_ALLOCATED: NtStatus = NtStatus(0xC000_00A0);
 pub const STATUS_NOT_SUPPORTED: NtStatus = NtStatus(0xC000_00BB);
+/// `STATUS_BAD_IMPERSONATION_LEVEL` (`ntstatus.h`).
+pub const STATUS_BAD_IMPERSONATION_LEVEL: NtStatus = NtStatus(0xC000_00A5);
 pub const STATUS_INVALID_PARAMETER_1: NtStatus = NtStatus(0xC000_00EF);
 pub const STATUS_INVALID_PARAMETER_2: NtStatus = NtStatus(0xC000_00F0);
 pub const STATUS_INVALID_PARAMETER_3: NtStatus = NtStatus(0xC000_00F1);

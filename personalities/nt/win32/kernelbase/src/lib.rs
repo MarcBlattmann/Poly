@@ -19,9 +19,13 @@
 extern crate alloc;
 use poly_win32_rt as _;
 
+mod ansi;
 mod attrlist;
 mod base;
 mod console;
+mod copy;
+mod errmode;
+mod everyday;
 mod except;
 mod file;
 mod fileex;
@@ -37,17 +41,22 @@ mod mitigation;
 mod nls;
 mod npipe;
 mod nt;
+mod pathcch;
 mod pipe;
+mod priority;
 mod privilege;
 mod process;
 mod procinfo;
 mod registry;
+mod resource;
+mod sched;
 mod secdata;
 mod security;
 mod spawn;
 mod sync;
 mod sysex;
 mod system;
+mod threadpool;
 mod tls;
 mod waits;
 
@@ -84,3 +93,9 @@ pub extern "system" fn kernelbase_main(_module: *mut u8, reason: u32, _reserved:
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+#[cfg(target_arch = "x86_64")]
+mod apps_impl;

@@ -34,7 +34,11 @@ unsafe extern "system" {
     pub fn NtCreateEvent(handle: *mut isize, access: u32, attributes: *const u8, kind: u32, initial: u8) -> NtStatus;
     pub fn NtSetEvent(handle: isize, previous: *mut i32) -> NtStatus;
     pub fn NtWaitForSingleObject(handle: isize, alertable: u8, timeout: *const i64) -> NtStatus;
+    pub fn NtYieldExecution() -> NtStatus;
+    pub fn NtTestAlert() -> NtStatus;
+    #[cfg_attr(target_arch = "x86", allow(dead_code))]
     pub fn NtContinue(context: *mut u8, test_alert: u8) -> NtStatus;
+    #[cfg_attr(target_arch = "x86", allow(dead_code))]
     pub fn NtRaiseException(record: *const u8, context: *mut u8, first_chance: u8) -> NtStatus;
     pub fn NtCreateFile(
         handle: *mut isize,
@@ -89,6 +93,28 @@ unsafe extern "system" {
         returned: *mut usize,
     ) -> NtStatus;
     pub fn NtQueryInformationFile(handle: isize, iosb: *mut u8, info: *mut u8, len: u32, class: u32) -> NtStatus;
+    pub fn NtCreateSection(
+        section: *mut isize,
+        access: u32,
+        attributes: *const u8,
+        maximum_size: *const i64,
+        page_protection: u32,
+        allocation_attributes: u32,
+        file: isize,
+    ) -> NtStatus;
+    pub fn NtMapViewOfSection(
+        section: isize,
+        process: isize,
+        base: *mut *mut u8,
+        zero_bits: usize,
+        commit_size: usize,
+        offset: *const i64,
+        view_size: *mut usize,
+        inherit: u32,
+        allocation_type: u32,
+        protect: u32,
+    ) -> NtStatus;
+    pub fn NtUnmapViewOfSection(process: isize, base: *const u8) -> NtStatus;
 }
 
 /// The current process pseudo-handle (`NtCurrentProcess()`).

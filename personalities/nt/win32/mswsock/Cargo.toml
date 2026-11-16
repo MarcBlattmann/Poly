@@ -1,0 +1,19 @@
+[package]
+name = "mswsock"
+description = "Our mswsock.dll (ADR 0195): AcceptEx, ConnectEx and the other Microsoft extensions to Winsock, over the AFD device"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "mswsock"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-win32-netrt = { path = "../netrt" }
+poly-winsock = { path = "../../../../crates/poly-winsock" }
+
+[lints]
+workspace = true

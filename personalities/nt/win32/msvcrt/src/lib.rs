@@ -14,8 +14,9 @@
 //!   thunks that hand the arguments on as a `va_list`;
 //! - `time` and its family as 64-bit-`time_t` functions, the two-argument
 //!   `wcstok`, and the C++-named `terminate` / `set_terminate`;
-//! - C++ exception handling (`cxx`, ADR 0099): `_CxxThrowException`,
-//!   `__CxxFrameHandler3` and `__CxxFrameHandler`.
+//! - C++ exception handling (`cxx`, ADR 0099; the code is `poly-win32-cxxrt`'s, shared with
+//!   `vcruntime140.dll`, ADR 0199): `_CxxThrowException`, `__CxxFrameHandler3` and
+//!   `__CxxFrameHandler`.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -95,6 +96,7 @@ pub static _sys_nerr: Global<i32> = Global::new(43);
 #[unsafe(no_mangle)]
 pub extern "system" fn msvcrt_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {
     if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
+        cxx::attach();
         // SAFETY: process attach, before anything reads the cells.
         unsafe { *_fmode.get() = poly_crt::fmode::O_TEXT };
         startup::bind(Cells {
@@ -561,3 +563,13 @@ v_exports! {
 }
 
 mod positional;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;
+
+/// `ceilf` (C99; the classic runtime exports it too): exact, so `poly_crt::math` (host-tested).
+/// Doc-derived (Learn: "ceil, ceilf, ceill"), ADR 0155 addendum, step 10.
+#[unsafe(no_mangle)]
+pub extern "C" fn ceilf(x: f32) -> f32 {
+    poly_crt::math::ceil(f64::from(x)) as f32
+}

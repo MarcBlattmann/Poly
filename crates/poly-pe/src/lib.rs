@@ -53,6 +53,7 @@ mod plan;
 mod read;
 mod reloc;
 mod resource;
+mod safeseh;
 mod tls;
 mod view;
 
@@ -76,6 +77,7 @@ pub use reloc::{Reloc, RelocBlock, RelocBlocks, RelocEntries, RelocStats, reloca
 pub use resource::{
     ResourceData, ResourceDirectory, ResourceEntries, ResourceEntry, ResourceKey, ResourceName, Utf16Str,
 };
+pub use safeseh::handler_is_safe;
 pub use tls::{TlsCallbacks, TlsDirectory};
 
 /// Longest NUL-terminated name (DLL, import, export, forwarder, PDB path)

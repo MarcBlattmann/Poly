@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAEventSelect.yaml
+id: windows/api/ws2_32.dll/WSAEventSelect
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "connect function (winsock2.h)", "WSAEventSelect function", "WSAEnumNetworkEvents function", "recv function", "WSASend function", "sendto function", "WSARecv function", "WSAGetOverlappedResult function", "AcceptEx function (mswsock.h)", "Winsock Error Codes", "I/O Completion Ports"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Associates an event object with network events of a socket and makes the socket non-blocking. This is the heart of Chrome's network service (Chrome's network service makes every TCP connection like this (39 sockets in five traced runs, 7 to 9 per run): socket (WSASocketW, WSA_FLAG_OVERLAPPED) or a socket the browser made and duplicated (WSASocketW with a WSAPROTOCOL_INFOW), FIONBIO 1, TCP_NODELAY, SIO_KEEPALIVE_VALS, two WSACreateEvent, WSAEventSelect(s, ev, FD_CONNECT), SO_RANDOMIZE_PORT 1, connect (WSAEWOULDBLOCK), then WSAEnumNetworkEvents (FD_CONNECT, error 0), getsockname, recv(MSG_PEEK) three times (WSAEWOULDBLOCK), WSASend with an OVERLAPPED whose event is the second event (returns 0), WSAResetEvent, WSAEventSelect(s, ev, FD_READ|FD_CLOSE) with the same first event, recv(4096 or 17408) until WSAEWOULDBLOCK, more WSASend, getsockname, shutdown(SD_SEND), closesocket, WSACloseEvent twice.). The recording rules are edge-like and easy to get wrong: FD_ACCEPT is posted when a connection is pending and posted again after an accept that leaves another one; FD_READ is posted when data arrives and again after any recv or peek that leaves data; FD_WRITE is posted when the socket is selected for it (once) and again only after a send hit WSAEWOULDBLOCK and the buffer drained; FD_CLOSE comes with an error code of 0 for a graceful close but WSAECONNABORTED (10053) for a reset (while recv then fails with WSAECONNRESET 10054).
+interface:
+  signature: "int WSAEventSelect(SOCKET s, WSAEVENT hEventObject, long lNetworkEvents)"
+  result: "0, or SOCKET_ERROR with WSAGetLastError"
+  mask: "FD_READ 1, FD_WRITE 2, FD_OOB 4, FD_ACCEPT 8, FD_CONNECT 0x10, FD_CLOSE 0x20, FD_QOS 0x40, FD_GROUP_QOS 0x80, FD_ROUTING_INTERFACE_CHANGE 0x100, FD_ADDRESS_LIST_CHANGE 0x200"
+chrome:
+  calls: "WSAEventSelect 42 calls, all returning 0: in five argument-level runs: mask 0x10 (FD_CONNECT, right after the socket is made, 37 times), 0x21 (FD_READ|FD_CLOSE, after the connect, same event, 37 times), 0x03 (FD_READ|FD_WRITE for UDP, 8 times); WSAEnumNetworkEvents 395 calls (always the socket's own event); WSACreateEvent 53, WSAResetEvent 60, WSACloseEvent 47"
+rules:
+  listener: "WSAEventSelect(listener, ev, FD_ACCEPT): not signalled with no connection pending; signalled after two clients connected; WSAEnumNetworkEvents gives FD_ACCEPT with error 0 and resets the event; after accept of the first connection the event is signalled AGAIN because a second one is pending; after the last accept it is not; accept with nothing pending returns -1/WSAEWOULDBLOCK (the listener is non-blocking)"
+  blocking_mode: "while an event is selected ioctlsocket(FIONBIO, 0) fails with -1/WSAEINVAL; WSAEventSelect(s, NULL, 0) cancels the selection and returns 0, but the socket stays non-blocking (accept/recv still give WSAEWOULDBLOCK); only then ioctlsocket(FIONBIO, 0) works (0)"
+  connect_and_write: "mask FD_CONNECT|FD_WRITE|FD_READ on a new unconnected socket: not signalled; after connect (-1/WSAEWOULDBLOCK) signalled; the record is FD_WRITE|FD_CONNECT, both with error 0; no further event; a second WSAEnumNetworkEvents gives no events"
+  initial_fd_write: "selecting FD_READ|FD_WRITE|FD_CLOSE on a connected, writable socket signals at once; the record is FD_WRITE (error 0); the event is not signalled again after the enum call"
+  fd_read: "10 bytes arrive: signalled, record FD_READ; 5 more bytes arrive while the first 10 are unread: signalled again, record FD_READ; recv of 4 bytes with more data left: signalled again; a MSG_PEEK recv also posts it again; after the data is fully read nothing is signalled; recv does not reset the event (only WSAEnumNetworkEvents does)"
+  reselect: "re-selecting FD_READ|FD_CLOSE with the same event while data is unread and FD_READ was already consumed by an enum call: NOT signalled; with a mask that did not contain FD_READ (FD_CLOSE only), data that arrives gives no event, and selecting FD_READ afterwards signals at once; re-selecting FD_WRITE on a writable socket that already reported FD_WRITE: not signalled"
+  fd_write: "after repeated sends return -1/WSAEWOULDBLOCK (buffers full, peer not reading) there is no FD_WRITE; after the peer reads everything FD_WRITE is signalled (record FD_WRITE, error 0)"
+  fd_close: "peer closesocket with no data: FD_CLOSE, error 0, no FD_READ; recv then returns 0; no further event. Peer sends 3 bytes then shutdown(SD_SEND): ONE record with FD_READ|FD_CLOSE (both error 0); recv returns 3 then 0. Peer reset (SO_LINGER 0 then closesocket): FD_CLOSE with iErrorCode[FD_CLOSE_BIT] = WSAECONNABORTED (10053); recv returns -1/WSAECONNRESET (10054) twice; send -1/WSAECONNRESET. The local shutdown(SD_BOTH) does not signal FD_CLOSE"
+  arguments: "NULL event with a non-zero mask: -1/WSAEINVAL; a socket value used as the event handle: -1/WSAENOTSOCK; unknown bit 0x8000: -1/WSAEINVAL; the QoS/routing/address-list bits (0x40, 0x100, 0x200) are accepted (0); mask 0 with an event: 0 (cancels; the socket stays non-blocking: recv gives WSAEWOULDBLOCK); a non-socket value, INVALID_SOCKET, a closed socket: -1/WSAENOTSOCK (10038)"
+  event_objects: "selecting the same event on a second socket or the old event again is allowed (0); only the most recent selection of a socket counts: after selecting event A then event B on a socket, data signals B, not A"
+errors:
+  inval: "WSAEINVAL 10022"
+  notsock: "WSAENOTSOCK 10038"
+side_effects: "makes the socket non-blocking until closed; the event is signalled by network events"
+threading: "the event may be waited on from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6
+  held_out: 3
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  FD_OOB, FD_ACCEPT with a backlog overflow, FD_ADDRESS_LIST_CHANGE and FD_ROUTING_INTERFACE_CHANGE events themselves, WSAAsyncSelect, a closed event handle used in the selection, event objects shared by many sockets.

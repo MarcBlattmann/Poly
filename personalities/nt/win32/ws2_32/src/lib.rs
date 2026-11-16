@@ -29,6 +29,7 @@ extern crate alloc;
 
 pub mod afd;
 pub mod events;
+pub mod ext;
 pub mod names;
 pub mod sock;
 
@@ -38,7 +39,8 @@ use poly_winsock::consts::*;
 
 pub type Handle = isize;
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn GetLastError() -> u32;
     pub fn SetLastError(e: u32);
@@ -144,6 +146,12 @@ pub unsafe extern "system" fn WSAStartup(version: u16, data: *mut u8) -> i32 {
     };
     // SAFETY: the caller's WSADATA.
     unsafe { write_wsadata(data, used, high) };
+    let (sockets, dg) = poly_winsock::wsadata_limits(used);
+    // SAFETY: the same WSADATA (`iMaxSockets` at 4, `iMaxUdpDg` at 6).
+    unsafe {
+        core::ptr::write_unaligned(data.add(4).cast::<u16>(), sockets);
+        core::ptr::write_unaligned(data.add(6).cast::<u16>(), dg);
+    }
     STARTED.fetch_add(1, Ordering::SeqCst);
     0
 }
@@ -211,3 +219,6 @@ pub unsafe fn wstr(p: *const u16) -> Option<alloc::string::String> {
 pub extern "system" fn ws2_32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

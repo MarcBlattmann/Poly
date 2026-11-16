@@ -18,15 +18,19 @@ use poly_gdi::region::Region;
 use poly_win32_gui::{SpinLock, last_error, set_last_error, wide};
 use poly_win32_rt as _;
 
-#[link(name = "win32u", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn PolyUserCall(req: *const u8, len: u64, out: *mut u8, cap: u64, out_len: *mut u64) -> u32;
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-#[link(name = "kernel32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn VirtualAlloc(addr: *mut u8, size: usize, kind: u32, protect: u32) -> *mut u8;
     fn VirtualFree(addr: *mut u8, size: usize, kind: u32) -> i32;
+    fn MapViewOfFile(section: usize, access: u32, high: u32, low: u32, size: usize) -> *mut u8;
+    fn UnmapViewOfFile(base: *const u8) -> i32;
     fn CreateFileW(
         name: *const u16,
         access: u32,
@@ -181,6 +185,143 @@ pub extern "system" fn DeleteDC(hdc: H) -> i32 {
     i32::from(ok)
 }
 
+/// The display DC `CreateDCW` and `CreateICW` make (CreateDCW.yaml): the whole screen.
+unsafe fn create_device_dc(driver: *const u16, device: *const u16) -> H {
+    // SAFETY: NUL-terminated strings or NULL.
+    let (d, v) = unsafe { (wide(driver, -1), wide(device, -1)) };
+    match poly_gdi::device::open_display(
+        (!driver.is_null()).then_some(d.as_slice()),
+        (!device.is_null()).then_some(v.as_slice()),
+    ) {
+        Ok(()) => {
+            let size = display_size();
+            gdi(|g| {
+                if let Some((width, height)) = size {
+                    g.screen = poly_gdi::gdi::Screen { width, height };
+                }
+                let dc = g.create_device_dc();
+                let s = g.screen;
+                g.set_display_geometry(dc as u64, (0, 0), &[Rect::new(0, 0, s.width, s.height)], &[]);
+                dc as H
+            })
+        }
+        Err(code) => {
+            if let Some(e) = code {
+                set_last_error(e);
+            }
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateDCW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
+    // SAFETY: as `create_device_dc`.
+    unsafe { create_device_dc(driver, device) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateICW(
+    driver: *const u16,
+    device: *const u16,
+    _port: *const u16,
+    _mode: *const u8,
+) -> H {
+    // SAFETY: as `create_device_dc`.
+    unsafe { create_device_dc(driver, device) }
+}
+
+/// `GetDCOrgEx`: the DC's origin on the screen.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDCOrgEx(hdc: H, pt: *mut i32) -> i32 {
+    let Some((x, y)) = gdi(|g| g.is_dc(hdc as u64).then(|| g.display_origin(hdc as u64).unwrap_or((0, 0)))) else {
+        return 0;
+    };
+    if !pt.is_null() {
+        // SAFETY: the caller's POINT.
+        unsafe {
+            *pt = x;
+            *pt.add(1) = y;
+        }
+    }
+    1
+}
+
+/// `GetROP2`: no `SetROP2` yet, so every DC draws with R2_COPYPEN (13).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetROP2(hdc: H) -> i32 {
+    if gdi(|g| g.is_dc(hdc as u64)) {
+        13
+    } else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        0
+    }
+}
+
+/// `GetMapMode`: no `SetMapMode` yet, so every DC is MM_TEXT (1).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetMapMode(hdc: H) -> i32 {
+    if gdi(|g| g.is_dc(hdc as u64)) {
+        1
+    } else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        0
+    }
+}
+
+/// The DCs `GetICMProfileW` has answered and whether any call was the first of the process
+/// (GetICMProfileW.yaml `basic`: the first success of a DC clears the last error, the first of all
+/// leaves 2012).
+static ICM_SEEN: SpinLock<(bool, Vec<u64>)> = SpinLock::new((false, Vec::new()));
+
+/// `GetICMProfileW`: the colour profile of a DC of the display.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetICMProfileW(hdc: H, size: *mut u32, name: *mut u16) -> i32 {
+    const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const ERROR_ICM_COLORSPACE: u32 = 2012;
+    if size.is_null() || !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's size.
+    let size_in = unsafe { *size };
+    match poly_gdi::device::icm_profile(size_in, !name.is_null()) {
+        poly_gdi::device::IcmAnswer::TooSmall(need) => {
+            // SAFETY: the caller's size.
+            unsafe { *size = need };
+            set_last_error(ERROR_INSUFFICIENT_BUFFER);
+            0
+        }
+        poly_gdi::device::IcmAnswer::Path(path) => {
+            // SAFETY: the buffer holds `size_in` characters, at least `path.len()`.
+            unsafe {
+                core::ptr::copy_nonoverlapping(path.as_ptr(), name, path.len());
+                *size = path.len() as u32;
+            }
+            let (first_ever, first_of_dc) = ICM_SEEN.with(|s| {
+                let fresh = !s.1.contains(&(hdc as u64));
+                if fresh {
+                    s.1.push(hdc as u64);
+                }
+                let first = !s.0;
+                s.0 = true;
+                (first, fresh)
+            });
+            if first_ever {
+                set_last_error(ERROR_ICM_COLORSPACE);
+            } else if first_of_dc {
+                set_last_error(0);
+            }
+            1
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn DeleteObject(h: H) -> i32 {
     let (ok, freed) = gdi(|g| {
@@ -190,8 +331,16 @@ pub extern "system" fn DeleteObject(h: H) -> i32 {
         (ok, if gone { mem } else { None })
     });
     if let Some((addr, _)) = freed {
-        // SAFETY: pages this DLL allocated for the DIB section.
-        unsafe { VirtualFree(addr as *mut u8, 0, MEM_RELEASE) };
+        let view = world::SECTION_VIEWS.with(|v| {
+            let i = v.iter().position(|e| e.0 == addr)?;
+            Some(v.swap_remove(i).1)
+        });
+        match view {
+            // SAFETY: the view CreateDIBSection mapped for this DIB section.
+            Some(base) => unsafe { UnmapViewOfFile(base as *const u8) },
+            // SAFETY: pages this DLL allocated for the DIB section.
+            None => unsafe { VirtualFree(addr as *mut u8, 0, MEM_RELEASE) },
+        };
     }
     if !ok {
         set_last_error(0);
@@ -323,8 +472,8 @@ pub unsafe extern "system" fn CreateDIBSection(
     info: *const u8,
     _usage: u32,
     bits: *mut *mut u8,
-    _section: H,
-    _offset: u32,
+    section: H,
+    offset: u32,
 ) -> H {
     let fail = |code: u32| {
         if !bits.is_null() {
@@ -352,11 +501,39 @@ pub unsafe extern "system" fn CreateDIBSection(
         Ok(v) => v,
         Err(code) => return fail(code),
     };
-    // SAFETY: fresh zeroed pages.
-    let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len.max(1), MEM_COMMIT_RESERVE, PAGE_READWRITE) };
-    if mem.is_null() {
-        return fail(8);
-    }
+    let mem = if section != 0 {
+        // The bits are the file mapping's (Learn: `hSection`, `dwOffset`, a
+        // multiple of a DWORD): a view from the allocation granularity at
+        // or below the offset.
+        if offset % 4 != 0 {
+            return fail(87);
+        }
+        const GRANULARITY: u32 = 0x1_0000;
+        const FILE_MAP_READ_WRITE: u32 = 0x6;
+        const FILE_MAP_COPY: u32 = 0x1;
+        let start = offset & !(GRANULARITY - 1);
+        let skip = (offset - start) as usize;
+        // SAFETY: a section handle of the caller; the view is ours.
+        let mut base = unsafe { MapViewOfFile(section, FILE_MAP_READ_WRITE, 0, start, len + skip) };
+        if base.is_null() {
+            // SAFETY: as above, for a copy-on-write section.
+            base = unsafe { MapViewOfFile(section, FILE_MAP_COPY, 0, start, len + skip) };
+        }
+        if base.is_null() {
+            return fail(8);
+        }
+        // SAFETY: `skip` bytes into the view.
+        let bits_at = unsafe { base.add(skip) };
+        world::SECTION_VIEWS.with(|v| v.push((bits_at as u64, base as u64)));
+        bits_at
+    } else {
+        // SAFETY: fresh zeroed pages.
+        let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len.max(1), MEM_COMMIT_RESERVE, PAGE_READWRITE) };
+        if mem.is_null() {
+            return fail(8);
+        }
+        mem
+    };
     let handle = gdi(|g| g.create_dib(w, h, bpp, colors, mem as u64, len));
     if !bits.is_null() {
         // SAFETY: the caller's out-pointer.
@@ -554,67 +731,50 @@ pub unsafe extern "system" fn CreateRectRgnIndirect(rect: *const i32) -> H {
     CreateRectRgn(r.left, r.top, r.right, r.bottom)
 }
 
-/// `CreateEllipticRgn`: the ellipse inscribed in the rectangle, one pixel
-/// narrower and shorter than the bounds given (GDI's regions of ellipses are
-/// 59x39 for 0,0,60,40; `GetWindowRgnBox.yaml`).
+/// A new region object holding `region`, or NULL with `ERROR_INVALID_PARAMETER`
+/// when the shape had a coordinate outside -2^27 .. 2^27-1.
+fn region_or_invalid(region: Option<Region>) -> H {
+    let Some(region) = region else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    let rgn = CreateRectRgn(0, 0, 1, 1);
+    if rgn != 0 {
+        gdi(|g| g.set_region(rgn as u64, region));
+    }
+    rgn
+}
+
+/// `CreateEllipticRgn`: the region of the rectangle's size, made as the
+/// sheet describes (Bezier quarter arcs flattened in sixteenths of a pixel,
+/// [`Region::ellipse`]); it is one pixel narrower and shorter than the bounds
+/// (0,0,60,40 gives the box 0,0,59,39).
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateEllipticRgn(l: i32, t: i32, r: i32, b: i32) -> H {
-    let (w, h) = (i64::from(r) - i64::from(l) - 1, i64::from(b) - i64::from(t) - 1);
-    let rgn = CreateRectRgn(0, 0, 1, 1);
-    if rgn == 0 {
-        return 0;
-    }
-    let mut rects = Vec::new();
-    if w > 0 && h > 0 {
-        // Integer arithmetic on twice the coordinates keeps the rounding exact.
-        let (a2, b2) = (w, h); // semi-axes times two
-        for y in 0..h {
-            let dy = 2 * y + 1 - h; // twice the distance of the row's centre from the middle
-            // x extent: |2x+1-w| <= a2 * sqrt(1 - (dy/b2)^2)
-            let num = (b2 * b2 - dy * dy).max(0);
-            // half-width squared, times b2^2: a2^2 * num / b2^2
-            let hw2 = (a2 * a2 * num) as f64 / (b2 * b2) as f64;
-            let hw = libm_sqrt(hw2);
-            let left = ((w as f64 - hw) / 2.0 + 0.5) as i64;
-            let right = ((w as f64 + hw) / 2.0 + 0.5) as i64;
-            if right > left {
-                rects.push(Rect::new(
-                    l.wrapping_add(left as i32),
-                    t.wrapping_add(y as i32),
-                    l.wrapping_add(right as i32),
-                    t.wrapping_add(y as i32 + 1),
-                ));
-            }
-        }
-    }
-    let region = Region::from_rects(&rects);
-    gdi(|g| g.set_region(rgn as u64, region));
-    rgn
+    region_or_invalid(Region::ellipse(l, t, r, b))
 }
 
-/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)` (Learn): a rectangle whose
-/// corners are rounded by an ellipse `w` wide and `h` high
-/// ([`Region::round_rect`]).
+/// `CreateEllipticRgnIndirect(&RECT)`: [`CreateEllipticRgn`] with the RECT's
+/// four values.
+///
+/// # Safety
+/// `rect` is NULL or points at a `RECT`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateEllipticRgnIndirect(rect: *const i32) -> H {
+    if rect.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's RECT.
+    let r = unsafe { read_rect(rect) };
+    CreateEllipticRgn(r.left, r.top, r.right, r.bottom)
+}
+
+/// `CreateRoundRectRgn(x1, y1, x2, y2, w, h)`: a rectangle whose corners are
+/// rounded by an ellipse `w` wide and `h` high ([`Region::round_rect`]).
 #[unsafe(no_mangle)]
 pub extern "system" fn CreateRoundRectRgn(l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> H {
-    let rgn = CreateRectRgn(0, 0, 1, 1);
-    if rgn == 0 {
-        return 0;
-    }
-    gdi(|g| g.set_region(rgn as u64, Region::round_rect(l, t, r, b, w, h)));
-    rgn
-}
-
-/// A square root without `std` (Newton's method on a positive double).
-fn libm_sqrt(x: f64) -> f64 {
-    if x <= 0.0 {
-        return 0.0;
-    }
-    let mut g = if x > 1.0 { x / 2.0 } else { 1.0 };
-    for _ in 0..40 {
-        g = 0.5 * (g + x / g);
-    }
-    g
+    region_or_invalid(Region::round_rect(l, t, r, b, w, h))
 }
 
 #[unsafe(no_mangle)]
@@ -790,7 +950,10 @@ pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
         g.device_caps(hdc as u64, index)
     });
     caps.unwrap_or_else(|| {
-        set_last_error(ERROR_INVALID_HANDLE);
+        // A deleted DC still answers GetObjectType with OBJ_DC: ERROR_INVALID_PARAMETER for it
+        // (GetDeviceCaps.yaml `invalid_dc`), ERROR_INVALID_HANDLE for what is no DC.
+        let deleted = gdi(|g| g.object_type(hdc as u64)) == 3;
+        set_last_error(if deleted { ERROR_INVALID_PARAMETER } else { ERROR_INVALID_HANDLE });
         0
     })
 }
@@ -800,9 +963,9 @@ fn display_size() -> Option<(i32, i32)> {
     use poly_win32k::proto::{Reply, Request};
     let req = poly_win32k::wire::encode(&Request::Desktop {});
     let mut out = [0u8; 256];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(req.as_ptr(), req.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return None;
     }
@@ -936,9 +1099,9 @@ fn screen_pixel(x: i32, y: i32) -> u32 {
     use poly_win32k::proto::{Reply, Request};
     let bytes = poly_win32k::wire::encode(&Request::ScreenPixel { x, y });
     let mut out = [0u8; 64];
-    let mut len = 0u64;
+    let mut len = 0usize;
     // SAFETY: the buffers are ours and sized as passed.
-    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len() as u64, out.as_mut_ptr(), out.len() as u64, &mut len) };
+    let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
     if s != 0 {
         return 0xFFFF_FFFF;
     }
@@ -1517,21 +1680,21 @@ static SURFACES: SpinLock<Vec<SurfaceDib>> = SpinLock::new(Vec::new());
 /// nowhere. 1 on success.
 #[unsafe(no_mangle)]
 pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> i32 {
-    let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
-    if width == 0 || height == 0 {
-        gdi(|g| g.set_surface(hdc as u64, None));
-        return 1;
-    }
-    let hwnd = hwnd as H;
+    PolyGdiAttachSurfaceRows(hdc, width, height, 0, height)
+}
+
+/// Window `hwnd`'s surface DIB of `width` x `height`, made or remade for a new size
+/// (its handle, its pixels).
+fn surface_dib(hwnd: H, width: u32, height: u32) -> Option<(u64, usize)> {
     let current = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied());
-    let bitmap = match current {
-        Some((_, b, _, w, h)) if (w, h) == (width, height) => b,
+    match current {
+        Some((_, b, mem, w, h)) if (w, h) == (width, height) => Some((b, mem)),
         old => {
             let len = width as usize * height as usize * 4;
             // SAFETY: fresh zeroed pages.
             let mem = unsafe { VirtualAlloc(core::ptr::null_mut(), len, MEM_COMMIT_RESERVE, PAGE_READWRITE) };
             if mem.is_null() {
-                return 0;
+                return None;
             }
             // White, as the compositor shows a surface before it is drawn.
             // SAFETY: `len` bytes just allocated.
@@ -1557,11 +1720,81 @@ pub extern "system" fn PolyGdiAttachSurface(hdc: H, width: u32, height: u32) -> 
                 s.retain(|e| e.0 != hwnd);
                 s.push((hwnd, b, mem as usize, width, height));
             });
+            // The views onto the old pixels go with them.
+            let views = VIEWS.with(|v| {
+                let (gone, keep): (Vec<_>, Vec<_>) = v.drain(..).partition(|e| e.0 == hwnd);
+                *v = keep;
+                gone
+            });
+            for (_, _, _, _, vb) in views {
+                DeleteObject(vb as H);
+            }
             if let Some((_, ob, _, _, _)) = old {
                 // DCs still pointing at it draw nowhere until attached again.
                 DeleteObject(ob as H);
             }
-            b
+            Some((b, mem as usize))
+        }
+    }
+}
+
+/// Views of a surface DIB onto some of its rows (a window's client area below
+/// its menu bar): (hwnd, first row, rows, view bitmap).
+type SurfaceView = (H, u32, u32, usize, u64);
+static VIEWS: SpinLock<Vec<SurfaceView>> = SpinLock::new(Vec::new());
+
+/// As [`PolyGdiAttachSurface`] for a surface of `width` x `total` rows, the DC
+/// drawing on the `rows` rows from row `skip` (the rows above are the window's
+/// menu bar, drawn with a DC of their own).
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurfaceRows(hdc: H, width: u32, total: u32, skip: u32, rows: u32) -> i32 {
+    let Some(hwnd) = gdi(|g| g.display_hwnd(hdc as u64)) else { return 0 };
+    attach_rows(hdc, hwnd as H, width, total, skip, rows)
+}
+
+/// As [`PolyGdiAttachSurfaceRows`] for the surface of window `surface_hwnd`: a child window's DC
+/// draws into its top-level window's surface (with [`PolyGdiSetDisplayBase`] at the child's place).
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiAttachSurfaceRowsTo(
+    hdc: H,
+    surface_hwnd: H,
+    width: u32,
+    total: u32,
+    skip: u32,
+    rows: u32,
+) -> i32 {
+    if gdi(|g| g.display_hwnd(hdc as u64)).is_none() {
+        return 0;
+    }
+    attach_rows(hdc, surface_hwnd, width, total, skip, rows)
+}
+
+/// Where a child window's client (or window) origin is in the surface its DC draws into.
+#[unsafe(no_mangle)]
+pub extern "system" fn PolyGdiSetDisplayBase(hdc: H, x: i32, y: i32) -> i32 {
+    i32::from(gdi(|g| g.set_display_base(hdc as u64, (x, y))))
+}
+
+fn attach_rows(hdc: H, hwnd: H, width: u32, total: u32, skip: u32, rows: u32) -> i32 {
+    if width == 0 || total == 0 || rows == 0 || skip.saturating_add(rows) > total {
+        gdi(|g| g.set_surface(hdc as u64, None));
+        return 1;
+    }
+    let Some((full, mem)) = surface_dib(hwnd, width, total) else { return 0 };
+    let bitmap = if skip == 0 && rows == total {
+        full
+    } else {
+        let found = VIEWS.with(|v| v.iter().find(|e| e.0 == hwnd && e.1 == skip && e.2 == rows).map(|e| e.4));
+        match found {
+            Some(b) => b,
+            None => {
+                let at = mem + skip as usize * width as usize * 4;
+                let len = rows as usize * width as usize * 4;
+                let b = gdi(|g| g.create_dib(width as i32, -(rows as i32), 32, Vec::new(), at as u64, len));
+                let b = u64::from(b);
+                VIEWS.with(|v| v.push((hwnd, skip, rows, mem, b)));
+                b
+            }
         }
     };
     gdi(|g| g.set_surface(hdc as u64, Some(bitmap as u32)));
@@ -1924,3 +2157,7 @@ pub extern "system" fn gdi32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+mod world;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

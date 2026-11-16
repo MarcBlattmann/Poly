@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/GetAppContainerNamedObjectPath.yaml
+id: windows/api/kernelbase.dll/GetAppContainerNamedObjectPath
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2b
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn and the SDK headers winnt.h (SECURITY_CAPABILITIES, token classes, S-1-15-2 and S-1-15-3 constants), userenv.h, securityappcontainer.h, securitybaseapi.h, winerror.h and mdmregistration.h. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed. kernel32.dll exports it as well (a forwarder).
+summary: >
+  Gives the object-manager directory in which an AppContainer's named objects live (Local\... names of a container), from a token or from a container SID. In session 0 of the oracle the text is AppContainerNamedObjects\<SID text> without a \Sessions\n prefix (the call is documented in securityappcontainer.h; in an interactive session the prefix differs and was not observed). Chrome's sandbox needs it to give a target its object namespace.
+interface:
+  signature: "BOOL GetAppContainerNamedObjectPath(HANDLE token, PSID container_sid, ULONG length, LPWSTR buffer, PULONG needed)"
+  result: "TRUE with the path in the buffer; FALSE with the last error 122 (needed length in *needed, counted with the NUL), 4250, 87, 6"
+rules:
+  sid: "NULL token and a container SID (S-1-15-2, 8 sub-authorities): TRUE, the path AppContainerNamedObjects\\<SID text>, *needed = the number of characters plus 1 for the NUL (108 for the tests' SIDs; SID texts differ in length with their digits)"
+  token: "an AppContainer token (also an impersonation copy) and a NULL SID: TRUE and the same path as for the SID; a token and a SID together: FALSE, error 87; an AppContainer token with another SID: 87"
+  ordinary_caller: "an ordinary token and a NULL SID, NULL and NULL (the caller's own process is no container): FALSE, error 4250 (ERROR_NOT_APPCONTAINER); an ordinary token with a SID: error 87"
+  bad_sid: "a SID that is not a package SID (Administrators, S-1-15-2-1, a capability SID, 9 sub-authorities): FALSE, error 4250"
+  length: "a length smaller than the needed one (0, 1, 10, needed - 1): FALSE, error 122, *needed set, nothing written; exactly the needed length or more: TRUE"
+  handle: "an invalid token handle: FALSE, error 6"
+  different_sids: "another SID gives another path of the same shape"
+errors:
+  insufficient_buffer: "122"
+  not_appcontainer: "4250"
+  invalid_parameter: "87"
+  invalid_handle: "6"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed. AppContainer profiles and registrations the tests create (names polys2b.*) are deleted again at the end of each test; where a test needs the registry mapping it reads HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Mappings\<SID text> (values Moniker and DisplayName). SIDs derived from the tests' own names are printed (they are the same on every machine); the user's, the logon and the machine's SIDs and the numbers the system hands out (AppContainerNumber) are never printed, only compared. The tests run in the oracle's session 0 (SSH).
+not_covered: >
+  The interactive session's prefix, the buffer contents on failure beyond the first characters, NULL buffer with length 0 (not tried), tokens of other sessions.

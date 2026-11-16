@@ -1,0 +1,55 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4e50bc609e5a",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T20:17:03Z",
+  "tests": [
+    {
+      "name": "cie_modes",
+      "exe_sha256": "97626ea3c7a11b4abbd80ad2f52841ee0fdc0e905c1a041bb4205f3e5903ddd1",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "Q09JTklUX0FQQVJUTUVOVFRIUkVBREVEOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCkNPSU5JVF9NVUxUSVRIUkVBREVEOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MSwgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCkFQQVJUTUVOVFRIUkVBREVEIHwgRElTQUJMRV9PTEUxRERFOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCk1VTFRJVEhSRUFERUQgfCBESVNBQkxFX09MRTFEREUgfCBTUEVFRF9PVkVSX01FTU9SWTogZmlyc3QgMHgwLCBhcGFydG1lbnQgdHlwZSAweDEsIGFnYWluIDB4MSwgb3RoZXIgbW9kZWwgMHg4MDAxMDEwNiwgYWZ0ZXIgdHdvIHVuaW5pdGlhbGl6ZSAweGZmZmYwMWYwLCBhZnRlciB0aGUgdGhpcmQgMHhmZmZmMDFmMApBUEFSVE1FTlRUSFJFQURFRCB8IFNQRUVEX09WRVJfTUVNT1JZOiBmaXJzdCAweDAsIGFwYXJ0bWVudCB0eXBlIDB4MywgYWdhaW4gMHgxLCBvdGhlciBtb2RlbCAweDgwMDEwMTA2LCBhZnRlciB0d28gdW5pbml0aWFsaXplIDB4ZmZmZjAxZjAsIGFmdGVyIHRoZSB0aGlyZCAweGZmZmYwMWYwCnJlc2VydmVkIHBhcmFtZXRlciBub3QgTlVMTDogMHg4MDA3MDA1NywgYXBhcnRtZW50IGFmdGVyd2FyZHMgMHhmZmZmMDFmMCAoMHhmZmZmLi4gbWVhbnMgbm90IGluaXRpYWxpemVkOiBsb3cgYml0cyBvZiB0aGUgSFJFU1VMVCkKZmxhZ3MgMSwgMywgMHgxMCwgMHgyMCwgMHgxMDAsIDB4RkZGRkZGRkYgaW4gdHVybiAoSFJFU1VMVCBhbmQsIHdoZW4gaXQgd29ya2VkLCB0aGUgYXBhcnRtZW50IHR5cGUpOiAweDgwMDcwMDU3IDB4ODAwNzAwNTcgMHg4MDA3MDA1NyAweDgwMDcwMDU3IDB4ODAwNzAwNTcgMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "COINIT_APARTMENTTHREADED: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nCOINIT_MULTITHREADED: first 0x0, apartment type 0x1, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nAPARTMENTTHREADED | DISABLE_OLE1DDE: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nMULTITHREADED | DISABLE_OLE1DDE | SPEED_OVER_MEMORY: first 0x0, apartment type 0x1, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nAPARTMENTTHREADED | SPEED_OVER_MEMORY: first 0x0, apartment type 0x3, again 0x1, other model 0x80010106, after two uninitialize 0xffff01f0, after the third 0xffff01f0\nreserved parameter not NULL: 0x80070057, apartment afterwards 0xffff01f0 (0xffff.. means not initialized: low bits of the HRESULT)\nflags 1, 3, 0x10, 0x20, 0x100, 0xFFFFFFFF in turn (HRESULT and, when it worked, the apartment type): 0x80070057 0x80070057 0x80070057 0x80070057 0x80070057 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    },
+    {
+      "name": "com_apartments",
+      "exe_sha256": "a5275bb11b3445fcb65943e9a781622ca307ad8f034e9875142174bfb4dfeaf4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIGFueSBpbml0aWFsaXNhdGlvbjogQ29HZXRBcGFydG1lbnRUeXBlID0gMHg4MDA0MDFmMCAob3V0cHV0cyB1bnRvdWNoZWQgMCkKQ29Jbml0aWFsaXplRXgoTlVMTCwgMHg2KSBhZ2FpbiwgdGhlIHNhbWUgZmxhZ3MgPSAweDEKYWZ0ZXIgdGhlIHJlZnVzZWQgY2FsbDogQ29HZXRBcGFydG1lbnRUeXBlID0gMHgwLCB0eXBlIDMsIHF1YWxpZmllciAwCmFmdGVyIHR3bzogQ29HZXRBcGFydG1lbnRUeXBlID0gMHgwLCB0eXBlIDMsIHF1YWxpZmllciAwCmFmdGVyIGFuIGV4dHJhIENvVW5pbml0aWFsaXplOiBDb0dldEFwYXJ0bWVudFR5cGUgPSAweDgwMDQwMWYwIChvdXRwdXRzIHVudG91Y2hlZCAwKQpDb0luaXRpYWxpemVFeChOVUxMLCAweDIpIGFwYXJ0bWVudCB0aHJlYWRlZCBvbiBhIG11bHRpdGhyZWFkZWQgdGhyZWFkID0gMHg4MDAxMDEwNgpDb0luaXRpYWxpemVFeChOVUxMLCAweDEwKSB3aXRoIGludmFsaWQgZmxhZ3MgPSAweDgwMDcwMDU3CkNvSW5pdGlhbGl6ZUV4KHJlc2VydmVkID0gMSwgMCkgPSAweDgwMDcwMDU3CmEgdGhyZWFkIHdpdGggZmxhZ3MgMjogZmlyc3QgcmVzdWx0IDAsIHNlY29uZCByZXN1bHQgMSwgYXBhcnRtZW50IHR5cGUgMywgcXVhbGlmaWVyIDAgKDAgU19PSywgMSBTX0ZBTFNFLCAyIFJQQ19FX0NIQU5HRURfTU9ERSwgMyBvdGhlcikKZmxhZ3MgNDogZmlyc3QgcmVzdWx0IDAsIHNlY29uZCByZXN1bHQgMSwgYXBhcnRtZW50IHR5cGUgMSwgcXVhbGlmaWVyIDAgKDAgU19PSywgMSBTX0ZBTFNFLCAyIFJQQ19FX0NIQU5HRURfTU9ERSwgMyBvdGhlcikKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before any initialisation: CoGetApartmentType = 0x800401f0 (outputs untouched 0)\nCoInitializeEx(NULL, 0x6) again, the same flags = 0x1\nafter the refused call: CoGetApartmentType = 0x0, type 3, qualifier 0\nafter two: CoGetApartmentType = 0x0, type 3, qualifier 0\nafter an extra CoUninitialize: CoGetApartmentType = 0x800401f0 (outputs untouched 0)\nCoInitializeEx(NULL, 0x2) apartment threaded on a multithreaded thread = 0x80010106\nCoInitializeEx(NULL, 0x10) with invalid flags = 0x80070057\nCoInitializeEx(reserved = 1, 0) = 0x80070057\na thread with flags 2: first result 0, second result 1, apartment type 3, qualifier 0 (0 S_OK, 1 S_FALSE, 2 RPC_E_CHANGED_MODE, 3 other)\nflags 4: first result 0, second result 1, apartment type 1, qualifier 0 (0 S_OK, 1 S_FALSE, 2 RPC_E_CHANGED_MODE, 3 other)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    },
+    {
+      "name": "com_apartments_c",
+      "exe_sha256": "bf264b3e373f4854807266802c0f4d9faefa0421683102713d2f5079a9f24860",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgaXQ6IENvR2V0QXBhcnRtZW50VHlwZSA9IDB4MCwgdHlwZSAzLCBxdWFsaWZpZXIgMApDb0luaXRpYWxpemVFeChOVUxMLCAweDApIGFnYWluLCBtdWx0aXRocmVhZGVkID0gMHg4MDAxMDEwNgphZnRlciBvbmUgQ29VbmluaXRpYWxpemU6IENvR2V0QXBhcnRtZW50VHlwZSA9IDB4MCwgdHlwZSAzLCBxdWFsaWZpZXIgMAphZnRlciB0aGUgZm91cnRoLCB3aGljaCBiYWxhbmNlcyB0aGUgZm91ciBzdWNjZXNzZnVsIGNhbGxzOiBDb0dldEFwYXJ0bWVudFR5cGUgPSAweDgwMDQwMWYwIChvdXRwdXRzIHVudG91Y2hlZCAwKQphZnRlciBpdDogQ29HZXRBcGFydG1lbnRUeXBlID0gMHgwLCB0eXBlIDEsIHF1YWxpZmllciAwCkNvSW5pdGlhbGl6ZUV4KE5VTEwsIDB4MSkgd2l0aCBpbnZhbGlkIGZsYWdzID0gMHg4MDA3MDA1NwpDb0luaXRpYWxpemVFeChOVUxMLCAweGZmZmZmZmZmKSB3aXRoIGludmFsaWQgZmxhZ3MgPSAweDgwMDcwMDU3CkNvUmVnaXN0ZXJNZXNzYWdlRmlsdGVyKE5VTEwsICZvbGQpIG9uIGFuIGFwYXJ0bWVudCB0aHJlYWQgPSAweDAsIG9sZCBmaWx0ZXIgTlVMTCAxCmZsYWdzIDY6IGZpcnN0IHJlc3VsdCAwLCBzZWNvbmQgcmVzdWx0IDEsIGFwYXJ0bWVudCB0eXBlIDMsIHF1YWxpZmllciAwICgwIFNfT0ssIDEgU19GQUxTRSwgMiBSUENfRV9DSEFOR0VEX01PREUsIDMgb3RoZXIpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after it: CoGetApartmentType = 0x0, type 3, qualifier 0\nCoInitializeEx(NULL, 0x0) again, multithreaded = 0x80010106\nafter one CoUninitialize: CoGetApartmentType = 0x0, type 3, qualifier 0\nafter the fourth, which balances the four successful calls: CoGetApartmentType = 0x800401f0 (outputs untouched 0)\nafter it: CoGetApartmentType = 0x0, type 1, qualifier 0\nCoInitializeEx(NULL, 0x1) with invalid flags = 0x80070057\nCoInitializeEx(NULL, 0xffffffff) with invalid flags = 0x80070057\nCoRegisterMessageFilter(NULL, &old) on an apartment thread = 0x0, old filter NULL 1\nflags 6: first result 0, second result 1, apartment type 3, qualifier 0 (0 S_OK, 1 S_FALSE, 2 RPC_E_CHANGED_MODE, 3 other)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

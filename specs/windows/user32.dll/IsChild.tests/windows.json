@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "4fdcffe1843d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-14T21:06:44Z",
+  "tests": [
+    {
+      "name": "ic_chrome",
+      "exe_sha256": "0550b0299be61915c4ef60c4152f3b7b52972e313c20726bd0317925daa66296",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YnVpbHQ6IHJ3aCBpbiBtYWluIDEgaW4gaGlkIDAgfCBpbWUgaW4gbWFpbiAwIGluIGhpZCAwIHwgY3RmIGluIGltZSAwIGluIG1haW4gMCB8IG1haW4gaW4gaGlkIDAgKGxhc3QgZXJyb3IgMTQwMCkKc2hvd24gYW5kIGZvY3VzZWQ6IHJ3aCBpbiBtYWluIDEgaW4gaGlkIDAgfCBpbWUgaW4gbWFpbiAwIGluIGhpZCAwIHwgY3RmIGluIGltZSAwIGluIG1haW4gMCB8IG1haW4gaW4gaGlkIDAgKGxhc3QgZXJyb3IgMTQwMCkKbWluaW1pemVkOiByd2ggaW4gbWFpbiAwIGluIGhpZCAxIHwgaW1lIGluIG1haW4gMCBpbiBoaWQgMCB8IGN0ZiBpbiBpbWUgMCBpbiBtYWluIDAgfCBtYWluIGluIGhpZCAwIChsYXN0IGVycm9yIDE0MDApCnJlc3RvcmVkOiByd2ggaW4gbWFpbiAxIGluIGhpZCAwIHwgaW1lIGluIG1haW4gMCBpbiBoaWQgMCB8IGN0ZiBpbiBpbWUgMCBpbiBtYWluIDAgfCBtYWluIGluIGhpZCAwIChsYXN0IGVycm9yIDE0MDApCnJ3aCBkZXN0cm95ZWQgZmlyc3Q6IElzQ2hpbGQobWFpbiwgcndoKSA9IDAgKGxhc3QgZXJyb3IgMTQwMCkKbWFpbiBkZXN0cm95ZWQ6IElzQ2hpbGQobWFpbiwgcndoKSA9IDAgKGxhc3QgZXJyb3IgMTQwMCkKbWFpbiBkZXN0cm95ZWQ6IElzQ2hpbGQoaGlkLCBtYWluKSA9IDAgKGxhc3QgZXJyb3IgMTQwMCkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "built: rwh in main 1 in hid 0 | ime in main 0 in hid 0 | ctf in ime 0 in main 0 | main in hid 0 (last error 1400)\nshown and focused: rwh in main 1 in hid 0 | ime in main 0 in hid 0 | ctf in ime 0 in main 0 | main in hid 0 (last error 1400)\nminimized: rwh in main 0 in hid 1 | ime in main 0 in hid 0 | ctf in ime 0 in main 0 | main in hid 0 (last error 1400)\nrestored: rwh in main 1 in hid 0 | ime in main 0 in hid 0 | ctf in ime 0 in main 0 | main in hid 0 (last error 1400)\nrwh destroyed first: IsChild(main, rwh) = 0 (last error 1400)\nmain destroyed: IsChild(main, rwh) = 0 (last error 1400)\nmain destroyed: IsChild(hid, main) = 0 (last error 1400)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 635
+    }
+  ]
+}

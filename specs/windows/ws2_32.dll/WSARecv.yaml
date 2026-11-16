@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSARecv.yaml
+id: windows/api/ws2_32.dll/WSARecv
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "connect function (winsock2.h)", "WSAEventSelect function", "WSAEnumNetworkEvents function", "recv function", "WSASend function", "sendto function", "WSARecv function", "WSAGetOverlappedResult function", "AcceptEx function (mswsock.h)", "Winsock Error Codes", "I/O Completion Ports"; winsock2.h, ws2def.h, ws2ipdef.h, mswsock.h, mstcpip.h, winerror.h and ntstatus.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Receives data, optionally overlapped. Chrome's network service uses recv, not WSARecv (it is on the map for Chrome's other overlapped I/O); the tests give the I/O completion port rules an implementation of overlapped sockets must have: a request with no data returns -1/WSA_IO_PENDING and completes later with a packet (bytes, key, the OVERLAPPED pointer), data already there completes at once and STILL queues a packet unless FILE_SKIP_COMPLETION_PORT_ON_SUCCESS is set, a zero-byte receive completes when data arrives and consumes nothing, closesocket / peer close / peer reset / CancelIoEx complete the request with distinct statuses.
+interface:
+  signature: "int WSARecv(SOCKET s, LPWSABUF bufs, DWORD count, LPDWORD received, LPDWORD flags, LPWSAOVERLAPPED ov, LPWSAOVERLAPPED_COMPLETION_ROUTINE routine)"
+  result: "0 (completed), or SOCKET_ERROR with WSA_IO_PENDING (997)"
+chrome:
+  calls: "not called in S4 (the ws2_32 recv/WSASend calls are); specified because the brief and any overlapped socket user need it"
+rules:
+  pending: "a socket (created with WSA_FLAG_OVERLAPPED) associated with a completion port (CreateIoCompletionPort returns the port; a second association fails): WSARecv with no data returns -1/WSA_IO_PENDING (*received and the OVERLAPPED's Internal 0x103 = STATUS_PENDING while pending); GetQueuedCompletionStatus with 100 ms returns FALSE with error 258 and a NULL OVERLAPPED; WSAGetOverlappedResult(wait FALSE) is FALSE"
+  completion: "the peer sends 5 bytes: one packet: TRUE, bytes 5, the key of the association, the OVERLAPPED pointer of the request; Internal 0, InternalHigh 5; WSAGetOverlappedResult TRUE with 5 bytes, flags 0; no second packet"
+  immediate: "data already queued: WSARecv returns 0 with *received 3, Internal 0, InternalHigh 3 and a packet is queued as well (TRUE, bytes 3, key, the OVERLAPPED)"
+  skip_on_success: "SetFileCompletionNotificationModes(socket, FILE_SKIP_COMPLETION_PORT_ON_SUCCESS|FILE_SKIP_SET_EVENT_ON_HANDLE) returns TRUE; then data already queued: WSARecv returns 0, got 3, NO packet; a request that has to wait (WSA_IO_PENDING) still gets its packet when it completes"
+  zero_byte: "a zero-length buffer with no data returns -1/WSA_IO_PENDING; no packet until data arrives; then a packet with 0 bytes; the byte stays queued (FIONREAD 1)"
+  peek: "WSARecv with MSG_PEEK flags and data waiting: returns 0 with the bytes, the data stays queued; the flags value stays 0"
+  scatter: "10 bytes queued, two buffers of 4 and 16: returns 0 with 10 bytes, 4 in the first and 6 in the second"
+  close_socket: "closesocket while a request is pending: GetQueuedCompletionStatus returns FALSE with error 1236 (ERROR_CONNECTION_ABORTED), the OVERLAPPED pointer, bytes 0, the key; Internal 0xC0000241 (STATUS_CONNECTION_ABORTED); with an event instead of a port the event is signalled, WSAGetOverlappedResult on the closed socket is FALSE/WSAENOTSOCK and GetOverlappedResult FALSE with error 1236"
+  peer_close: "the peer closes gracefully: TRUE with 0 bytes, Internal 0, InternalHigh 0"
+  peer_reset: "the peer resets (SO_LINGER 0): FALSE with error 64 (ERROR_NETNAME_DELETED), bytes 0, Internal 0xC000020D (STATUS_CONNECTION_RESET); WSAGetOverlappedResult FALSE/WSAECONNRESET; a new WSARecv fails at once with -1/WSAECONNRESET"
+  cancel: "CancelIoEx with nothing pending: FALSE, error 1168 (ERROR_NOT_FOUND); CancelIoEx(socket, &ov) returns TRUE and the packet is FALSE with error 995 (ERROR_OPERATION_ABORTED), Internal 0xC0000120 (STATUS_CANCELLED); CancelIoEx(socket, NULL) cancels both of two pending requests (two packets with error 995 and different OVERLAPPED pointers); a WSARecv afterwards works (pending, then data arrives with the packet), and a plain recv on a non-blocking socket gives WSAEWOULDBLOCK"
+errors:
+  pending: "WSA_IO_PENDING 997"
+  aborted: "ERROR_CONNECTION_ABORTED 1236 (closesocket)"
+  cancelled: "ERROR_OPERATION_ABORTED 995"
+  netname_deleted: "ERROR_NETNAME_DELETED 64 (reset)"
+  not_found: "ERROR_NOT_FOUND 1168 (CancelIoEx)"
+side_effects: "consumes data (not with MSG_PEEK); queues completion packets"
+threading: "any thread; the OVERLAPPED and the buffers must live until completion"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  Completion routines, MSG_PARTIAL on stream sockets, WSARecvFrom, WSARecv on a socket that is event-selected, packets of a socket associated with more than one port (not possible), SetFileCompletionNotificationModes on its own (its entry is green).

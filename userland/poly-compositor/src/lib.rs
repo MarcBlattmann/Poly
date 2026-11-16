@@ -959,6 +959,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         }
         // Input to Windows windows goes to win32k (ADR 0136).
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
+            // Windows apps type with the desktop's keyboard layout (ADR 0209).
+            l.set_layout(d.layout.name);
             for ev in core::mem::take(&mut d.foreign) {
                 l.input(&ev);
             }

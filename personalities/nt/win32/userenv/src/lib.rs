@@ -17,7 +17,8 @@
 use poly_crypto::sha256::Sha256;
 use poly_win32_cryptrt as _;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn SetLastError(error: u32);
@@ -125,3 +126,6 @@ pub extern "system" fn userenv_main(_module: *mut u8, _reason: u32, _reserved: *
 }
 
 mod delayed;
+
+#[cfg(target_arch = "x86_64")]
+mod apps;

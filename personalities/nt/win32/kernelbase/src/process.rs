@@ -20,10 +20,12 @@ use core::sync::atomic::{AtomicPtr, Ordering};
 use poly_kernelbase::error::*;
 use poly_kernelbase::{env, text};
 
-const PP_COMMAND_LINE: u64 = 0x70;
-const PP_IMAGE_PATH: u64 = 0x60;
-const PP_ENVIRONMENT: u64 = 0x80;
-const PP_ENVIRONMENT_SIZE: u64 = 0x88;
+// The parameters' fields, at the offsets of this build's process (ADR 0186, `poly_rtl::layout`).
+const PP_COMMAND_LINE: u64 = NATIVE.pp_command_line;
+const PP_IMAGE_PATH: u64 = NATIVE.pp_image_path_name;
+const PP_ENVIRONMENT: u64 = NATIVE.pp_environment;
+const PP_ENVIRONMENT_SIZE: u64 = NATIVE.pp_environment_size;
+use poly_rtl::layout::NATIVE;
 
 // ----- the environment ---------------------------------------------------------------
 
@@ -39,7 +41,7 @@ unsafe fn block<'a>() -> &'a [u16] {
     // SAFETY: the kernel (or `set_block`) wrote a valid pointer and size.
     unsafe {
         let at = ((pp + PP_ENVIRONMENT) as *const *const u16).read();
-        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const u64).read() as usize;
+        let bytes = ((pp + PP_ENVIRONMENT_SIZE) as *const usize).read();
         if at.is_null() || bytes < 4 { &[0, 0] } else { core::slice::from_raw_parts(at, bytes / 2) }
     }
 }
@@ -72,7 +74,7 @@ fn set_block(state: &mut State, new: &[u16]) -> bool {
     unsafe {
         core::ptr::copy_nonoverlapping(new.as_ptr(), p, new.len());
         ((pp + PP_ENVIRONMENT) as *mut *mut u16).write(p);
-        ((pp + PP_ENVIRONMENT_SIZE) as *mut u64).write((new.len() * 2) as u64);
+        ((pp + PP_ENVIRONMENT_SIZE) as *mut usize).write(new.len() * 2);
     }
     if !state.env_alloc.is_null() {
         // SAFETY: the block we allocated before.
@@ -106,6 +108,11 @@ pub unsafe extern "system" fn SetEnvironmentVariableW(name: *const u16, value: *
     let (Some(name), value) = (unsafe { wide_arg(name) }, unsafe { wide_arg(value) }) else {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     };
+    set_env(name, value)
+}
+
+/// `SetEnvironmentVariable` on UTF-16 text: the block is rebuilt and put in the process parameters.
+fn set_env(name: &[u16], value: Option<&[u16]>) -> i32 {
     with_state(|s| {
         // SAFETY: under the lock.
         let new = match env::set(unsafe { block() }, name, value) {
@@ -114,6 +121,41 @@ pub unsafe extern "system" fn SetEnvironmentVariableW(name: *const u16, value: *
         };
         if set_block(s, &new) { TRUE } else { fail(ERROR_NOT_ENOUGH_MEMORY, FALSE) }
     })
+}
+
+/// `SetEnvironmentVariableA`: name and value are converted from the ANSI code page, then as the
+/// wide function (`specs/windows/kernel32.dll/SetEnvironmentVariableA.yaml`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetEnvironmentVariableA(name: *const u8, value: *const u8) -> i32 {
+    // SAFETY: the caller's strings.
+    let (Some(name), value) = (unsafe { ansi_arg(name) }, unsafe { ansi_arg(value) }) else {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    };
+    set_env(&name, value.as_deref())
+}
+
+/// `GetEnvironmentVariableA`: the value converted to the ANSI code page; sizes count bytes. A
+/// buffer that is too small is not written (the result is the size needed, with the NUL); a
+/// successful call leaves the last error alone, also for an empty value; a name that is NULL,
+/// empty or has an equal sign after its first character is not found
+/// (`specs/windows/kernel32.dll/GetEnvironmentVariableA.yaml`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetEnvironmentVariableA(name: *const u8, buf: *mut u8, size: u32) -> u32 {
+    // SAFETY: the caller's string.
+    let Some(name) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_ENVVAR_NOT_FOUND, 0) };
+    let Some(value) = env_var(&name) else { return fail(ERROR_ENVVAR_NOT_FOUND, 0) };
+    let bytes = text::to_ansi(&value);
+    match text::sized(bytes.len(), size) {
+        text::Sized::Copy(n) => {
+            // SAFETY: the caller's buffer holds more than `bytes.len()` bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, bytes.len());
+                buf.add(bytes.len()).write(0);
+            }
+            n
+        }
+        text::Sized::Needed(n) => n,
+    }
 }
 
 /// `GetEnvironmentStringsW`: a copy of the block, freed with
@@ -168,7 +210,7 @@ pub extern "system" fn GetCommandLineW() -> *const u16 {
         return EMPTY.as_ptr();
     }
     // SAFETY: a UNICODE_STRING the kernel wrote, NUL-terminated (ADR 0073).
-    let buf = unsafe { ((pp + PP_COMMAND_LINE + 8) as *const *const u16).read() };
+    let buf = unsafe { ((pp + PP_COMMAND_LINE + NATIVE.ptr) as *const *const u16).read() };
     if buf.is_null() { EMPTY.as_ptr() } else { buf }
 }
 
@@ -206,12 +248,57 @@ pub fn image_path() -> Vec<u16> {
 
 /// Poly's own: the starting current directory in the process parameters
 /// (`UNICODE_STRING`, ADR 0079, `poly_kernelbase::process`).
-const PP_CURRENT_DIRECTORY: u64 = poly_kernelbase::process::PP_CURRENT_DIRECTORY as u64;
+const PP_CURRENT_DIRECTORY: u64 = NATIVE.pp_current_directory;
 
 /// The initial current directory: the one the creator passed
 /// (`CreateProcessW`'s `lpCurrentDirectory`, or the creator's own), else
 /// the executable's directory (a process the kernel started, ADR 0079).
 pub fn init_current_dir() {
+    init_current_dir_state();
+    publish_current_dir(&current_dir());
+}
+
+/// The directory the parameters hold, as a program sees it (empty if they hold none): `ntdll`'s
+/// `RtlSetCurrentDirectory_U` writes it too.
+pub fn pp_current_dir() -> Vec<u16> {
+    let pp = parameters();
+    if pp == 0 {
+        return Vec::new();
+    }
+    // SAFETY: the parameters' UNICODE_STRING (zero if not set).
+    let given = unsafe { unicode_at(pp + PP_CURRENT_DIRECTORY) };
+    if given.is_empty() { Vec::new() } else { poly_kernelbase::path::as_current_dir(given) }
+}
+
+/// Write `dir` into the parameters (the string's own buffer when it fits, else a new one), where
+/// `ntdll`'s `RtlGetCurrentDirectory_U` reads it.
+pub fn publish_current_dir(dir: &[u16]) {
+    let pp = parameters();
+    if pp == 0 || dir.len() > 0x7FFE {
+        return;
+    }
+    // SAFETY: the parameters' UNICODE_STRING (`Length`, `MaximumLength`, the buffer one pointer in),
+    // writable process memory.
+    unsafe {
+        let us = pp + PP_CURRENT_DIRECTORY;
+        let max = usize::from((us as *const u16).add(1).read()) / 2;
+        let slot = (us + NATIVE.ptr) as *mut *mut u16;
+        let mut buf = slot.read();
+        if buf.is_null() || max < dir.len() + 1 {
+            let mut v = alloc::vec![0u16; dir.len() + 1];
+            v[..dir.len()].copy_from_slice(dir);
+            buf = alloc::boxed::Box::leak(v.into_boxed_slice()).as_mut_ptr();
+            slot.write(buf);
+            (us as *mut u16).add(1).write(((dir.len() + 1) * 2) as u16);
+        } else {
+            core::ptr::copy_nonoverlapping(dir.as_ptr(), buf, dir.len());
+            buf.add(dir.len()).write(0);
+        }
+        (us as *mut u16).write((dir.len() * 2) as u16);
+    }
+}
+
+fn init_current_dir_state() {
     let pp = parameters();
     // SAFETY: the parameters' UNICODE_STRING (zero if not set).
     let given = if pp == 0 { Vec::new() } else { unsafe { unicode_at(pp + PP_CURRENT_DIRECTORY).to_vec() } };
@@ -268,6 +355,7 @@ pub unsafe extern "system" fn SetCurrentDirectoryW(path: *const u16) -> i32 {
     }
     close(h);
     let dir = poly_kernelbase::path::as_current_dir(&full);
+    publish_current_dir(&dir);
     with_state(|s| s.current_dir = dir);
     TRUE
 }
@@ -290,8 +378,8 @@ fn std_index(which: u32) -> Option<usize> {
 /// Poly's own places of the console connection and the standard handles
 /// in `RTL_USER_PROCESS_PARAMETERS` (ADR 0080: `winternl.h`'s
 /// `Reserved2[0]`, `[2]`, `[3]`, `[4]`).
-const PP_CONSOLE_HANDLE: u64 = 0x10;
-const PP_STANDARD_INPUT: u64 = 0x20;
+const PP_CONSOLE_HANDLE: u64 = NATIVE.pp_console_handle;
+const PP_STANDARD_INPUT: u64 = NATIVE.pp_standard_input;
 
 /// At `DLL_PROCESS_ATTACH`: the standard handles and the console
 /// connection the kernel (or the creating process) put in the parameters
@@ -307,7 +395,7 @@ pub fn init_std_handles() -> Handle {
     let (console, std) = unsafe {
         let console = ((pp + PP_CONSOLE_HANDLE) as *const isize).read();
         let std: [Handle; 3] =
-            core::array::from_fn(|i| ((pp + PP_STANDARD_INPUT + 8 * i as u64) as *const isize).read());
+            core::array::from_fn(|i| ((pp + PP_STANDARD_INPUT + NATIVE.ptr * i as u64) as *const isize).read());
         (console, std)
     };
     with_state(|s| {
@@ -325,6 +413,12 @@ pub extern "system" fn GetStdHandle(which: u32) -> Handle {
         Some(i) => with_state(|s| s.std[i]),
         None => fail(ERROR_INVALID_HANDLE, INVALID_HANDLE_VALUE),
     }
+}
+
+/// The process's three standard handles (input, output, error), as
+/// `GetStdHandle` returns them.
+pub(crate) fn std_handles() -> [Handle; 3] {
+    with_state(|s| s.std)
 }
 
 /// `SetStdHandle`.
@@ -358,14 +452,14 @@ pub extern "system" fn GetCurrentThread() -> Handle {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetCurrentProcessId() -> u32 {
     // SAFETY: the TEB is valid.
-    unsafe { ((teb() + 0x40) as *const u64).read() as u32 }
+    unsafe { crate::base::ptr_at(teb() + NATIVE.teb_client_id) as u32 }
 }
 
 /// `GetCurrentThreadId`: `TEB.ClientId.UniqueThread` (TEB + 0x48).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetCurrentThreadId() -> u32 {
     // SAFETY: the TEB is valid.
-    unsafe { ((teb() + 0x48) as *const u64).read() as u32 }
+    unsafe { crate::base::ptr_at(teb() + NATIVE.teb_client_id + NATIVE.ptr) as u32 }
 }
 
 /// `GetCurrentThreadStackLimits`: the thread's stack reservation and top, from the TEB
@@ -379,9 +473,9 @@ pub unsafe extern "system" fn GetCurrentThreadStackLimits(low: *mut usize, high:
     // SAFETY: the TEB is valid; the caller's pointers are writable.
     unsafe {
         let (lo, hi) = poly_kernelbase::process::stack_limits(
-            ((t + 0x1478) as *const u64).read(),
-            ((t + 0x10) as *const u64).read(),
-            ((t + 0x08) as *const u64).read(),
+            crate::base::ptr_at(t + NATIVE.teb_deallocation_stack),
+            crate::base::ptr_at(t + NATIVE.teb_stack_limit),
+            crate::base::ptr_at(t + NATIVE.teb_stack_base),
         );
         low.write(lo as usize);
         high.write(hi as usize);
@@ -415,18 +509,19 @@ fn modules() -> Vec<(u64, Vec<u16>)> {
     // SAFETY: ntdll keeps the loader data in process memory (ADR 0071);
     // the list is circular through its head.
     unsafe {
-        let ldr = ((peb() + 0x18) as *const u64).read();
+        let l = crate::base::LDR;
+        let ldr = crate::base::ptr_at(peb() + NATIVE.peb_ldr);
         if ldr == 0 {
             return out;
         }
-        let head = ldr + 0x20;
-        let mut link = (head as *const u64).read();
+        let head = ldr + l.ldr_in_memory_order;
+        let mut link = crate::base::ptr_at(head);
         let mut guard = 0;
         while link != head && link != 0 && guard < 4096 {
-            let entry = link - 0x10;
-            let base = ((entry + 0x30) as *const u64).read();
-            out.push((base, unicode_at(entry + 0x48).to_vec()));
-            link = (link as *const u64).read();
+            let entry = link - l.entry_in_memory_order;
+            let base = crate::base::ptr_at(entry + l.entry_dll_base);
+            out.push((base, unicode_at(entry + l.entry_full_name).to_vec()));
+            link = crate::base::ptr_at(link);
             guard += 1;
         }
     }
@@ -485,13 +580,20 @@ pub unsafe extern "system" fn GetModuleFileNameW(module: *mut u8, buf: *mut u16,
 
 /// `LoadLibraryExW`: `LdrLoadDll`. A name with a relative path is made
 /// absolute against the current directory first. The data-file and
-/// search-path flags are not supported yet (Poly loads the module as an
-/// image either way, ADR 0079).
+/// image-resource flags map only what the resource functions read
+/// (`resource.rs`); the search-path flags are not supported yet.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, flags: u32) -> *mut u8 {
-    let _ = (file, flags);
+    let _ = file;
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, core::ptr::null_mut()) };
+    // A data file or image resource: no image is loaded, only what the resource functions read.
+    let resource_only = crate::resource::LOAD_LIBRARY_AS_DATAFILE
+        | crate::resource::LOAD_LIBRARY_AS_IMAGE_RESOURCE
+        | crate::resource::LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE;
+    if flags & resource_only != 0 {
+        return crate::resource::load_library_datafile(name, flags);
+    }
     let has_path = name.iter().any(|&c| c == u16::from(b'\\') || c == u16::from(b'/'));
     let owned: Vec<u16> = if has_path {
         match full_path(name) {
@@ -503,9 +605,48 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     };
     let s = nt::UnicodeString::new(&owned);
     let mut h = core::ptr::null_mut();
-    // SAFETY: valid pointers.
-    let st = unsafe { nt::LdrLoadDll(core::ptr::null(), core::ptr::null_mut(), &s, &mut h) };
-    if st.is_success() { h } else { fail_status(st, core::ptr::null_mut()) }
+    // A name without a path is looked for in the directories the search flags name: the call's
+    // own, else the process's default (`SetDefaultDllDirectories`); none: the standard order.
+    let search = if has_path { None } else { search_path_for(flags) };
+    let search_ptr = search.as_ref().map_or(core::ptr::null(), |v| v.as_ptr());
+    let loaded_before: Vec<u64> = modules().into_iter().map(|(b, _)| b).collect();
+    // SAFETY: valid pointers; the search path is NUL-terminated.
+    let st = unsafe { nt::LdrLoadDll(search_ptr, core::ptr::null_mut(), &s, &mut h) };
+    if !st.is_success() {
+        return fail_status(st, core::ptr::null_mut());
+    }
+    // A module the call newly loaded leaves the last error 0 (its initialisation runs code that
+    // sets it: the sheets of `SetDefaultDllDirectories` and `LoadLibraryExW`); one that was
+    // loaded already leaves it alone.
+    if !loaded_before.contains(&(h as u64)) {
+        set_last_error(0);
+    }
+    h
+}
+
+/// The `;`-separated, NUL-terminated search path a load with `flags` uses, or `None` for the
+/// standard search order (`poly_kernelbase::system::dll_search_dirs`).
+fn search_path_for(flags: u32) -> Option<Vec<u16>> {
+    let eff = poly_kernelbase::system::effective_search_flags(
+        flags,
+        DEFAULT_DLL_DIRECTORIES.load(core::sync::atomic::Ordering::Relaxed),
+    );
+    // The application's directory: the executable's path up to its last separator.
+    let mut exe = [0u16; 520];
+    // SAFETY: a 520-unit buffer; a NULL module is the executable.
+    let n = unsafe { GetModuleFileNameW(core::ptr::null_mut(), exe.as_mut_ptr(), 519) } as usize;
+    let end = exe[..n].iter().rposition(|&c| c == u16::from(b'\\')).unwrap_or(0);
+    let system32: Vec<u16> = "C:\\Windows\\System32".encode_utf16().collect();
+    let dirs = poly_kernelbase::system::dll_search_dirs(eff, &exe[..end], &system32)?;
+    let mut out: Vec<u16> = Vec::new();
+    for (i, d) in dirs.iter().enumerate() {
+        if i != 0 {
+            out.push(u16::from(b';'));
+        }
+        out.extend_from_slice(d);
+    }
+    out.push(0);
+    Some(out)
 }
 
 /// The process's default DLL directories (`SetDefaultDllDirectories`), 0
@@ -533,9 +674,21 @@ pub unsafe extern "system" fn LoadLibraryW(name: *const u16) -> *mut u8 {
     unsafe { LoadLibraryExW(name, 0, 0) }
 }
 
+/// `FreeLibraryAndExitThread(module, exitCode)`: unload the module, then end the calling thread
+/// (a thread of the module's own code uses it so it never returns into unloaded code).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FreeLibraryAndExitThread(module: *mut u8, code: u32) -> ! {
+    // SAFETY: the caller's module handle; the thread ends right after.
+    unsafe { FreeLibrary(module) };
+    crate::sync::ExitThread(code)
+}
+
 /// `FreeLibrary`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FreeLibrary(module: *mut u8) -> i32 {
+    if let Some(r) = crate::resource::free_datafile(module) {
+        return r;
+    }
     // SAFETY: a module handle; ntdll checks it.
     let st = unsafe { nt::LdrUnloadDll(module) };
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }

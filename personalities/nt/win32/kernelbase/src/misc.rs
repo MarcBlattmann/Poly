@@ -201,39 +201,10 @@ fn compat() -> Compat {
     c
 }
 
-/// The manifest of the image mapped at `base` (its resource directory is
-/// data directory 2 of the optional header, PE format).
+/// The manifest of the image mapped at `base`.
 fn manifest_of(base: u64) -> Option<Vec<u8>> {
-    if base == 0 {
-        return None;
-    }
-    // SAFETY: a mapped image's headers and its resource section are
-    // readable; RVAs are bounded by the sizes the headers give.
-    unsafe {
-        let nt_off = ((base + 0x3C) as *const u32).read() as u64;
-        let opt = base + nt_off + 24;
-        if (opt as *const u16).read() != 0x20B {
-            return None;
-        }
-        // PE32+: the data directories start at optional header + 112; the
-        // resource table is entry 2.
-        let count = ((opt + 108) as *const u32).read();
-        if count < 3 {
-            return None;
-        }
-        let rva = ((opt + 112 + 16) as *const u32).read() as u64;
-        let size = ((opt + 112 + 20) as *const u32).read() as usize;
-        let image_size = ((opt + 56) as *const u32).read() as u64;
-        if rva == 0 || rva + size as u64 > image_size {
-            return None;
-        }
-        let rsrc = core::slice::from_raw_parts((base + rva) as *const u8, size);
-        let (data, len) = version::find_manifest(rsrc)?;
-        if u64::from(data) + u64::from(len) > image_size {
-            return None;
-        }
-        Some(core::slice::from_raw_parts((base + u64::from(data)) as *const u8, len as usize).to_vec())
-    }
+    // SAFETY: the executable's base, mapped in this process (or 0).
+    unsafe { version::image_manifest(base) }
 }
 
 /// `GetVersion`.
@@ -261,35 +232,82 @@ pub unsafe extern "system" fn GetVersionExW(info: *mut u8) -> i32 {
     }
 }
 
+/// `GetVersionExA`: the same version as `GetVersionExW`, in the ANSI structures (148 and 156
+/// bytes); the string is empty.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetVersionExA(info: *mut u8) -> i32 {
+    if info.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's structure: its first DWORD is its size.
+    let size = unsafe { (info as *const u32).read_unaligned() } as usize;
+    if size != version::INFO_A && size != version::INFO_EX_A {
+        return fail(ERROR_INSUFFICIENT_BUFFER, FALSE);
+    }
+    // SAFETY: `size` bytes of the caller's structure.
+    let buf = unsafe { core::slice::from_raw_parts_mut(info, size) };
+    match version::fill_info(buf, version::reported(compat()), true) {
+        Ok(()) => TRUE,
+        Err(e) => fail(e, FALSE),
+    }
+}
+
 /// The processor count (`NtQuerySystemInformation(SystemBasicInformation)`).
-pub(crate) fn processors() -> u32 {
+/// `SystemBasicInformation`: 64 bytes with `NumberOfProcessors` at 56, or 44 with it at 40 and
+/// `MaximumUserModeAddress` at 32 in a 32-bit process (ADR 0186).
+fn basic_information() -> Option<[u8; 64]> {
     let mut info = [0u8; 64];
+    let size = if cfg!(target_pointer_width = "32") { 44 } else { 64 };
     // SAFETY: a valid buffer of the class's size.
-    let st = unsafe { nt::NtQuerySystemInformation(0, info.as_mut_ptr(), 64, core::ptr::null_mut()) };
-    if st.is_success() { u32::from(info[56]).max(1) } else { 1 }
+    let st = unsafe { nt::NtQuerySystemInformation(0, info.as_mut_ptr(), size, core::ptr::null_mut()) };
+    st.is_success().then_some(info)
+}
+
+pub(crate) fn processors() -> u32 {
+    let at = if cfg!(target_pointer_width = "32") { 40 } else { 56 };
+    basic_information().map_or(1, |info| u32::from(info[at]).max(1))
 }
 
 /// `GetSystemInfo`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetSystemInfo(out: *mut u8) {
+    // SAFETY: the caller's SYSTEM_INFO.
+    unsafe { system_info(out, false) }
+}
+
+/// `GetNativeSystemInfo`: the same in a 64-bit process; in a 32-bit one the machine's x64
+/// architecture (Learn: `GetNativeSystemInfo`, ADR 0186).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetNativeSystemInfo(out: *mut u8) {
+    // SAFETY: as above.
+    unsafe { system_info(out, true) }
+}
+
+/// # Safety
+/// `out` is a writable `SYSTEM_INFO`.
+#[cfg(target_pointer_width = "64")]
+unsafe fn system_info(out: *mut u8, _native: bool) {
     let info = version::system_info(processors());
     // SAFETY: the caller's SYSTEM_INFO (48 bytes).
     unsafe { core::ptr::copy_nonoverlapping(info.as_ptr(), out, info.len()) };
 }
 
-/// `GetNativeSystemInfo`: the same for a 64-bit process.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn GetNativeSystemInfo(out: *mut u8) {
-    // SAFETY: as above.
-    unsafe { GetSystemInfo(out) }
+/// # Safety
+/// `out` is a writable `SYSTEM_INFO`.
+#[cfg(target_pointer_width = "32")]
+unsafe fn system_info(out: *mut u8, native: bool) {
+    let max = basic_information().map_or(0x7FFE_FFFF, |b| u32::from_le_bytes([b[32], b[33], b[34], b[35]]));
+    let info = version::system_info_32(processors(), native, max);
+    // SAFETY: the caller's SYSTEM_INFO (36 bytes in a 32-bit process).
+    unsafe { core::ptr::copy_nonoverlapping(info.as_ptr(), out, info.len()) };
 }
 
 // ----- FormatMessageW / FormatMessageA -------------------------------------------------------
 
-/// The insert arguments: a `va_list` (on x64 a pointer to 8-byte slots) or,
-/// with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of `DWORD_PTR` — the same
-/// layout here.
-struct Slots(*const u64);
+/// The insert arguments: a `va_list` (a pointer to pointer-sized slots: 8 bytes in a 64-bit
+/// process, 4 in a 32-bit one) or, with `FORMAT_MESSAGE_ARGUMENT_ARRAY`, an array of
+/// `DWORD_PTR` — the same layout here.
+struct Slots(*const usize);
 
 impl message::Args for Slots {
     fn slot(&self, index: usize) -> Option<u64> {
@@ -297,7 +315,7 @@ impl message::Args for Slots {
             return None;
         }
         // SAFETY: the caller promised an argument for every insert.
-        Some(unsafe { self.0.add(index - 1).read_unaligned() })
+        Some(unsafe { self.0.add(index - 1).read_unaligned() } as u64)
     }
     fn wide(&self, address: u64) -> Vec<u16> {
         // SAFETY: a wide string insert is a NUL-terminated string.
@@ -355,7 +373,7 @@ unsafe fn format_message(
     string: Option<&[u16]>,
     id: u32,
     lang: u32,
-    args: *const u64,
+    args: *const usize,
     ansi: bool,
 ) -> Result<Vec<u16>, u32> {
     let ignore = flags & FORMAT_MESSAGE_IGNORE_INSERTS != 0;
@@ -368,7 +386,7 @@ unsafe fn format_message(
         Some(Slots(args))
     } else {
         // SAFETY: a `va_list*`: the address of the slot pointer.
-        Some(Slots(unsafe { (args as *const *const u64).read() }))
+        Some(Slots(unsafe { (args as *const *const usize).read_unaligned() }))
     };
     let a = slots.as_ref().map(|s| s as &dyn message::Args);
     if flags & FORMAT_MESSAGE_FROM_STRING != 0 {
@@ -454,7 +472,7 @@ pub unsafe extern "system" fn FormatMessageW(
     lang: u32,
     buffer: *mut u16,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { wide_arg(source as *const u16) } } else { None };
@@ -477,7 +495,7 @@ pub unsafe extern "system" fn FormatMessageA(
     lang: u32,
     buffer: *mut u8,
     size: u32,
-    args: *const u64,
+    args: *const usize,
 ) -> u32 {
     // SAFETY: with FROM_STRING the source is the caller's ANSI string.
     let string = if flags & FORMAT_MESSAGE_FROM_STRING != 0 { unsafe { ansi_arg(source) } } else { None };
@@ -522,15 +540,101 @@ pub unsafe extern "system" fn VerifyVersionInfoW(info: *const u8, type_mask: u32
     }
 }
 
-/// `IsWow64Process`: Poly runs 64-bit programs only, so never.
+/// Whether `process` runs as a 32-bit process on the 64-bit system
+/// (`NtQueryInformationProcess(ProcessWow64Information)`, ADR 0186); `Err` with the status.
+pub(crate) fn is_wow64(process: nt::Handle) -> Result<bool, poly_ntobj::NtStatus> {
+    let mut value = 0usize;
+    let size = core::mem::size_of::<usize>() as u32;
+    // SAFETY: a valid out-pointer of the class's size.
+    let st =
+        unsafe { nt::NtQueryInformationProcess(process, 26, (&raw mut value).cast(), size, core::ptr::null_mut()) };
+    if st.is_success() { Ok(value != 0) } else { Err(st) }
+}
+
+/// `IsWow64Process` (Learn): TRUE in `*wow64` for a 32-bit process on Poly's 64-bit system.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn IsWow64Process(_process: nt::Handle, wow64: *mut i32) -> i32 {
+pub unsafe extern "system" fn IsWow64Process(process: nt::Handle, wow64: *mut i32) -> i32 {
     if wow64.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the caller's BOOL.
-    unsafe { wow64.write(FALSE) };
-    TRUE
+    match is_wow64(process) {
+        Ok(w) => {
+            // SAFETY: the caller's BOOL.
+            unsafe { wow64.write(i32::from(w)) };
+            TRUE
+        }
+        Err(st) => crate::base::fail_status(st, FALSE),
+    }
+}
+
+// ----- WOW64 file-system redirection ------------------------------------------------------
+
+/// The calling thread's redirection flag (in its TEB; `poly_rtl::layout::TEB_FS_REDIRECTION_OFF`).
+#[cfg(target_pointer_width = "32")]
+fn fs_redirection_flag() -> *mut u32 {
+    (teb() + poly_rtl::layout::TEB_FS_REDIRECTION_OFF) as *mut u32
+}
+
+/// `Wow64DisableWow64FsRedirection` (Learn): switch the redirection of `%windir%\System32` off
+/// for the calling thread only; `*old_value` is what `Wow64RevertWow64FsRedirection` takes. A
+/// 64-bit process has no redirection to switch: `ERROR_INVALID_FUNCTION` (to be confirmed by the
+/// spec agent; Learn names no error). ADR 0186, stage 2.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64DisableWow64FsRedirection(old_value: *mut usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        if old_value.is_null() {
+            return fail(ERROR_INVALID_PARAMETER, FALSE);
+        }
+        let flag = fs_redirection_flag();
+        // SAFETY: the calling thread's TEB, readable and writable; the caller's out-pointer.
+        unsafe {
+            let (new, old) = poly_kernelbase::wow64::disable(flag.read());
+            flag.write(new);
+            old_value.write(old);
+        }
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64RevertWow64FsRedirection` (Learn): restore the redirection `old_value` (from
+/// `Wow64DisableWow64FsRedirection`) describes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64RevertWow64FsRedirection(old_value: usize) -> i32 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::revert(old_value)) };
+        TRUE
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = old_value;
+        fail(ERROR_INVALID_FUNCTION, FALSE)
+    }
+}
+
+/// `Wow64EnableWow64FsRedirection` (Learn; the older call): TRUE switches the redirection on for
+/// the calling thread, FALSE off. Returns a `BOOLEAN`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Wow64EnableWow64FsRedirection(enable: u8) -> u8 {
+    #[cfg(target_pointer_width = "32")]
+    {
+        // SAFETY: the calling thread's TEB.
+        unsafe { fs_redirection_flag().write(poly_kernelbase::wow64::enable(enable != 0)) };
+        1
+    }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let _ = enable;
+        set_last_error(ERROR_INVALID_FUNCTION);
+        0
+    }
 }
 
 /// `PRODUCT_PROFESSIONAL` (`winnt.h`).
@@ -564,4 +668,17 @@ pub unsafe extern "system" fn AddVectoredExceptionHandler(first: u32, handler: *
 pub unsafe extern "system" fn RemoveVectoredExceptionHandler(handle: *mut u8) -> u32 {
     // SAFETY: as above.
     unsafe { nt::RtlRemoveVectoredExceptionHandler(handle) }
+}
+
+/// `AddVectoredContinueHandler`, `RemoveVectoredContinueHandler`: ntdll's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn AddVectoredContinueHandler(first: u32, handler: *mut u8) -> *mut u8 {
+    // SAFETY: ntdll's export, which only records the pointer.
+    unsafe { nt::RtlAddVectoredContinueHandler(first, handler) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RemoveVectoredContinueHandler(handle: *mut u8) -> u32 {
+    // SAFETY: ntdll's export, which only compares the handle.
+    unsafe { nt::RtlRemoveVectoredContinueHandler(handle) }
 }

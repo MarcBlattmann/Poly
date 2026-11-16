@@ -38,13 +38,21 @@ pub const SET_CAPTURE_QUIET: u8 = 16;
 /// SetForegroundWindow on a window of its own: GetForegroundWindow.yaml
 /// `foreground_right`).
 pub const SET_FG_GRANT: u8 = 32;
+/// The capture was released and its WM_CAPTURECHANGED delivered: synthesize
+/// the mouse move to the window under the cursor now, so that it never can
+/// be retrieved before the capture window's notification (ReleaseCapture.yaml
+/// `rc_nocapture`: WM_CAPTURECHANGED, then WM_NCHITTEST). The sender of the
+/// notification may be another thread whose input is attached to the owner
+/// of the queue: queueing the move first let the owner see it while the
+/// notification was still on its way.
+pub const SET_CAPTURE_MOVE: u8 = 64;
 
 /// The keeper's key: a thread of no process of ours.
-pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FFF0);
+pub(super) const KEEPER: Key = (0xFFFF_FFF0, 0xFFFF_FF50);
 /// The key of the other process's plain window (on the oracle a console
 /// window): what a minimize hands the foreground to (GetActiveWindow.yaml
 /// `next_active`).
-pub(super) const CONSOLE: Key = (0xFFFF_FFF1, 0xFFFF_FFF1);
+pub(super) const CONSOLE: Key = (0xFFFF_FFF1, 0xFFFF_FF51);
 
 /// Whether a thread is one of the stand-ins for other processes' threads.
 pub(super) fn foreign(key: Key) -> bool {
@@ -126,7 +134,28 @@ impl Wm {
     /// sees them.
     pub(super) fn tops(&self) -> Vec<zorder::Top> {
         let Some(d) = self.get(u64::from(self.desktop)) else { return Vec::new() };
-        d.children.iter().filter_map(|&h| self.top_of(h)).collect()
+        d.children.iter().filter(|&&h| !self.is_ime_ui(h)).filter_map(|&h| self.top_of(h)).collect()
+    }
+
+    /// Whether `h` is the text services' window (`MSCTFIME UI`, owned by the default IME window):
+    /// it lies directly above its owner and takes no part in the z-order rules of the others.
+    pub(super) fn is_ime_ui(&self, h: u32) -> bool {
+        let Some(w) = self.get(u64::from(h)) else { return false };
+        w.owner != 0
+            && self.classes[w.class]
+                .as_ref()
+                .is_some_and(|c| upcase(&c.name) == upcase(&"MSCTFIME UI".encode_utf16().collect::<Vec<u16>>()))
+    }
+
+    /// `order` (a list without the text services' windows) with them put back directly above their owners.
+    pub(super) fn with_ui(&self, mut order: Vec<u32>) -> Vec<u32> {
+        let Some(d) = self.get(u64::from(self.desktop)) else { return order };
+        for &u in d.children.iter().filter(|&&h| self.is_ime_ui(h)) {
+            let owner = self.get(u64::from(u)).map_or(0, |w| w.owner);
+            let at = order.iter().position(|&h| h == owner).unwrap_or(0);
+            order.insert(at, u);
+        }
+        order
     }
 
     pub(super) fn top_of(&self, h: u32) -> Option<zorder::Top> {
@@ -171,6 +200,7 @@ impl Wm {
 
     /// Give the desktop's children a new order.
     pub(super) fn set_order(&mut self, order: Vec<u32>) {
+        let order = self.with_ui(order);
         let d = self.desktop;
         if let Some(dw) = self.get_mut(u64::from(d)) {
             dw.children = order;
@@ -515,5 +545,86 @@ impl Wm {
             dw.children.insert(at, hwnd);
         }
         hwnd
+    }
+}
+
+// ----- carets (`crate::caret`)
+
+impl Wm {
+    fn caret_reply(snap: crate::caret::Snapshot) -> Reply {
+        Reply::Caret {
+            ok: true,
+            code: 0,
+            hwnd: snap.hwnd,
+            width: snap.width,
+            height: snap.height,
+            x: snap.x,
+            y: snap.y,
+            shown: snap.shown,
+        }
+    }
+
+    fn caret_fail(code: u32) -> Reply {
+        Reply::Caret { ok: false, code, hwnd: 0, width: 0, height: 0, x: 0, y: 0, shown: false }
+    }
+
+    /// One caret call of the calling thread's queue (`Request::Caret`). The window checks follow
+    /// the sheets: a missing window is 1400, no caret is 5 (`ERROR_ACCESS_DENIED`), a window that
+    /// is not the caret's owner (another window of the thread, the desktop window) or a window of
+    /// another thread for `CreateCaret` fails without touching the last error.
+    pub(super) fn caret_op(&mut self, ctx: Ctx, op: u8, hwnd: u32, a: i32, b: i32, tid: u32) -> Reply {
+        use crate::caret::{self as c, UNCHANGED};
+        let k = self.input_key(ctx.key());
+        match op {
+            c::OP_CREATE => {
+                if hwnd == 0 || !self.is_window(u64::from(hwnd)) {
+                    return Self::caret_fail(ERROR_INVALID_WINDOW_HANDLE);
+                }
+                let mine = self.thread_of(hwnd).is_some_and(|t| self.input_key(t) == k);
+                if hwnd == self.desktop || !mine {
+                    return Self::caret_fail(UNCHANGED);
+                }
+                let q = self.queue(k);
+                q.caret.create(hwnd, a, b);
+                Self::caret_reply(q.caret.snapshot())
+            }
+            c::OP_DESTROY | c::OP_SHOW | c::OP_HIDE | c::OP_SET_POS => {
+                if hwnd != 0 && !self.is_window(u64::from(hwnd)) && op != c::OP_DESTROY && op != c::OP_SET_POS {
+                    return Self::caret_fail(ERROR_INVALID_WINDOW_HANDLE);
+                }
+                let q = self.queue(k);
+                let Some(caret) = q.caret.caret else { return Self::caret_fail(ERROR_ACCESS_DENIED) };
+                if hwnd != 0 && caret.hwnd != hwnd && (op == c::OP_SHOW || op == c::OP_HIDE) {
+                    return Self::caret_fail(UNCHANGED);
+                }
+                match op {
+                    c::OP_DESTROY => {
+                        q.caret.destroy();
+                    }
+                    c::OP_SHOW => {
+                        q.caret.show();
+                    }
+                    c::OP_HIDE => {
+                        q.caret.hide();
+                    }
+                    _ => {
+                        q.caret.set_pos(a, b);
+                    }
+                }
+                Self::caret_reply(q.caret.snapshot())
+            }
+            c::OP_GET => Self::caret_reply(self.queue(k).caret.snapshot()),
+            c::OP_QUERY => {
+                let key = if tid == 0 || tid == ctx.tid {
+                    k
+                } else {
+                    let key = self.queues.keys().find(|q| q.1 == tid).copied().unwrap_or((ctx.pid, tid));
+                    self.input_key(key)
+                };
+                let snap = self.queues.get(&key).map(|q| q.caret.snapshot()).unwrap_or_default();
+                Self::caret_reply(snap)
+            }
+            _ => Self::caret_fail(ERROR_INVALID_PARAMETER),
+        }
     }
 }

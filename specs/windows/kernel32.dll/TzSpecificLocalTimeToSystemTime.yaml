@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/TzSpecificLocalTimeToSystemTime.yaml
+id: windows/api/kernel32.dll/TzSpecificLocalTimeToSystemTime
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s2
+  date: 2026-11-14
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: the counts and failures of specs/windows/apps/chrome/traces/s2.trace.json and s2-sandboxed.trace.json (the committed traces have counts, not arguments, for these calls) and section 4 and 4a of specs/windows/apps/chrome/gap-map.md. Microsoft Learn: "SystemTimeToTzSpecificLocalTime", "TzSpecificLocalTimeToSystemTime", "GetTimeZoneInformation", "GetDynamicTimeZoneInformation", "TIME_ZONE_INFORMATION", "SYSTEMTIME"; timezoneapi.h, minwinbase.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Converts a local SYSTEMTIME in a time zone to UTC. The zone of most tests is made by the test (UTC-8, standard time from the first Sunday of November 02:00, daylight time from the second Sunday of March 02:00 with a daylight bias of -60), so the answers do not depend on the machine. A local time inside the hour that does not exist at the spring change is converted with the standard bias (the whole skipped hour maps to the hour before the change in UTC); a local time inside the hour that occurs twice at the autumn change is taken as the first occurrence (daylight time). Round trips through SystemTimeToTzSpecificLocalTime give the same second. Invalid times fail with error 87. A NULL time pointer crashes Windows, so no test passes one.
+interface:
+  signature: "BOOL TzSpecificLocalTimeToSystemTime(const TIME_ZONE_INFORMATION* tz, const SYSTEMTIME* local, LPSYSTEMTIME utc)"
+chrome:
+  calls: "browser, 123 calls in stage 2"
+rules:
+  winter_summer: "local 2020-01-15 04:00 -> UTC 12:00; local 2020-07-15 05:00 -> UTC 12:00"
+  spring_2020: "local 2020-03-08 01:59:59 -> UTC 09:59:59; local 02:00:00 -> UTC 09:00:00 (the standard bias); 02:30:00 -> 09:30:00; 02:59:59 -> 09:59:59; 03:00:00 -> UTC 10:00:00"
+  autumn_2020: "local 2020-11-01 00:59:59 -> UTC 07:59:59; local 01:00:00 -> UTC 08:00:00 (daylight time, the first occurrence); 01:30:00 -> 08:30:00; 01:59:59 -> 08:59:59; local 02:00:00 -> UTC 10:00:00"
+  day_boundaries: "local 2021-01-01 00:00:00 -> UTC 08:00:00 (day of week 5); local 2024-02-28 19:00 -> UTC 2024-02-29 03:00 (day of week 4)"
+  ignored_input_fields: "milliseconds are kept, the day of week is computed (input 5 -> result 3)"
+  last_sunday_zone: "UTC+1 zone with the last-Sunday rules: local 2020-03-29 01:59:59 -> UTC 00:59:59; inside the skipped hour 02:30 -> UTC 00:30; inside the repeated hour 2020-10-25 02:30 -> UTC 00:30"
+  no_daylight_time: "UTC+5:30 without rules: local 17:30 -> UTC 12:00"
+  limits: "local 1601-01-01 00:00 -> UTC 08:00 (UTC-8); local 30827-12-31 23:59:59 -> UTC 30828-01-01 07:59:59 (accepted)"
+  round_trip: "UTC -> local -> UTC returns the same second"
+  invalid_input: "month 13, 30 February, hour 24: FALSE, error 87, output untouched; a NULL zone is the system's zone: TRUE"
+errors:
+  invalid_time: "ERROR_INVALID_PARAMETER (87)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are statuses, error codes, counts and booleans, never handles, process ids, times or names of the machine. A test that needs a second process starts its own image again with CreateProcessW or CreateProcessAsUserW and the arguments --child <args>; the child reports through an inherited anonymous pipe or through its exit code and is ended by the test (it also ends by itself after about 10 s). Every wait is bounded. The tests run in the SSH logon session of the oracle (session 0, a service window station): objects they create have names of their own (polyws_*, polydesk_*), the process's own station name is never printed.
+not_covered: >
+  Years below 1601 or above 30828, the system's own zone's values, NULL time pointers.

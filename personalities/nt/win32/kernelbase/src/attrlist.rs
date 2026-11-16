@@ -15,10 +15,12 @@ pub const MITIGATION_POLICY: usize = 0x0002_0007;
 pub const SECURITY_CAPABILITIES: usize = 0x0002_0009;
 pub const JOB_LIST: usize = 0x0002_000D;
 pub const CHILD_PROCESS_POLICY: usize = 0x0002_000E;
+/// `PROC_THREAD_ATTRIBUTE_COMPONENT_FILTER` (`winbase.h`, number 0x1A): accepted, nothing in the child shows it.
+pub const COMPONENT_FILTER: usize = 0x0002_001A;
 
 /// The header and one record.
 const HEADER: usize = 8;
-const RECORD: usize = 24;
+const RECORD: usize = 3 * core::mem::size_of::<usize>();
 
 fn needed(count: u32) -> usize {
     HEADER + RECORD * count as usize
@@ -67,11 +69,13 @@ pub unsafe extern "system" fn UpdateProcThreadAttribute(
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let size_ok = match attribute {
-        PARENT_PROCESS => Some(size == 8),
-        HANDLE_LIST | JOB_LIST => Some(size != 0 && size % 8 == 0),
+        // A HANDLE (8 bytes, 4 in a 32-bit process) or an array of them.
+        PARENT_PROCESS => Some(size == core::mem::size_of::<usize>()),
+        HANDLE_LIST | JOB_LIST => Some(size != 0 && size % core::mem::size_of::<usize>() == 0),
         MITIGATION_POLICY => Some(size == 4 || size == 8 || size == 16),
-        CHILD_PROCESS_POLICY => Some(size == 4),
-        SECURITY_CAPABILITIES => Some(size == 24),
+        CHILD_PROCESS_POLICY | COMPONENT_FILTER => Some(size == 4),
+        // SECURITY_CAPABILITIES (`winnt.h`): two pointers and two DWORDs (24 bytes, 16 in a 32-bit process).
+        SECURITY_CAPABILITIES => Some(size == 2 * core::mem::size_of::<usize>() + 8),
         _ => None,
     };
     let Some(size_ok) = size_ok else { return fail(ERROR_NOT_SUPPORTED, FALSE) };
@@ -112,7 +116,12 @@ pub unsafe extern "system" fn DeleteProcThreadAttributeList(list: *mut u8) {
 #[derive(Default)]
 pub struct Parsed {
     pub handle_list: Option<Vec<usize>>,
-    pub mitigation: u64,
+    /// The two mitigation words (the second is 0 for a value of 8 bytes or less) and whether the
+    /// attribute was given.
+    pub mitigation: [u64; 2],
+    pub has_mitigation: bool,
+    /// `PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY`'s value, if given.
+    pub child_policy: Option<u32>,
     pub jobs: Vec<usize>,
 }
 
@@ -133,8 +142,11 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
         for i in 0..count {
             let (attribute, size, value) =
                 (records.add(i * 3).read(), records.add(i * 3 + 1).read(), records.add(i * 3 + 2).read());
-            let words =
-                || -> Vec<usize> { (0..size / 8).map(|j| (value as *const usize).add(j).read_unaligned()).collect() };
+            let words = || -> Vec<usize> {
+                (0..size / core::mem::size_of::<usize>())
+                    .map(|j| (value as *const usize).add(j).read_unaligned())
+                    .collect()
+            };
             match attribute {
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),
@@ -142,30 +154,26 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
                     if value == 0 {
                         return Err(ERROR_INVALID_PARAMETER);
                     }
-                    // 16 bytes are two policy words (`PROCESS_CREATION_MITIGATION_POLICY2`);
-                    // only the first is looked at.
-                    out.mitigation = if size == 4 {
+                    // 16 bytes are two policy words (`PROCESS_CREATION_MITIGATION_POLICY2`).
+                    out.has_mitigation = true;
+                    out.mitigation[0] = if size == 4 {
                         u64::from((value as *const u32).read_unaligned())
                     } else {
                         (value as *const u64).read_unaligned()
                     };
+                    if size == 16 {
+                        out.mitigation[1] = (value as *const u64).add(1).read_unaligned();
+                    }
+                }
+                CHILD_PROCESS_POLICY => {
+                    if value == 0 {
+                        return Err(ERROR_INVALID_PARAMETER);
+                    }
+                    out.child_policy = Some((value as *const u32).read_unaligned());
                 }
                 _ => {}
             }
         }
     }
     Ok(out)
-}
-
-/// Whether `v` holds only `PROCESS_CREATION_MITIGATION_POLICY_*` values
-/// Windows defines (`winbase.h`): the one-bit flags at bits 0 to 2 and
-/// two-bit fields at every fourth bit from 8 to 60.
-pub fn mitigation_defined(v: u64) -> bool {
-    let mut ok: u64 = 0b111;
-    let mut shift = 8;
-    while shift <= 60 {
-        ok |= 0b11 << shift;
-        shift += 4;
-    }
-    v & !ok == 0
 }

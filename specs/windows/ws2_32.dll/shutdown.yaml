@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/shutdown.yaml
+id: windows/api/ws2_32.dll/shutdown
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s4
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed with a trace kit that logs arguments (polytrace-sync) on stage S4 (headless, http://example.com/ and https://www.iana.org/) on the owner's PC, plus the counts and failures of specs/windows/apps/chrome/traces/s4.trace.json (the committed traces have counts, not arguments, for these calls). Microsoft Learn: "WSAStartup function (winsock2.h)", "WSACleanup", "WSAGetLastError", "WSASocketW", "setsockopt", "getsockopt", "ioctlsocket", "WSAIoctl", "closesocket", "shutdown", "getsockname", "getpeername", "SOL_SOCKET Socket Options", "IPPROTO_TCP Socket Options", "IPPROTO_IPV6 Socket Options", "Winsock Error Codes", "SIO_KEEPALIVE_VALS", "SIO_GET_EXTENSION_FUNCTION_POINTER"; winsock2.h, ws2def.h, ws2ipdef.h, ws2tcpip.h, mstcpip.h, mswsock.h and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  shutdown(s, SD_SEND=1) is how Chrome ends every TCP socket before closesocket (6 to 37 calls per run). Observed: on a TCP socket that is not connected (fresh, listening, refused) it is -1/WSAENOTCONN (10057, as in the committed S4 trace); on a fresh UDP socket it is 0; how 3 and -1: WSAEINVAL. On a connected socket SD_SEND returns 0 (again: 0), the peer's recv returns 0 (end of stream), a later send is -1/WSAESHUTDOWN (10058), the other direction keeps working and recv still gets the peer's data; after both directions shut down sending recv returns 0 and getpeername still works. SD_RECEIVE returns 0 and recv is then -1/WSAESHUTDOWN; if the peer then sends data the connection is reset: recv -1/WSAECONNABORTED and the peer's recv -1/WSAECONNRESET. SD_BOTH returns 0, the peer sees end of stream, send is -1/WSAESHUTDOWN, closesocket afterwards returns 0. SD_SEND after the peer closed: 0.
+interface:
+  signature: "int shutdown(SOCKET s, int how)"
+  result: "0 or SOCKET_ERROR"
+chrome:
+  calls: "shutdown (#22) (s, 1 /*SD_SEND*/) 37 times -> 0, then getsockname, closesocket; one WSAENOTCONN (10057) in the committed trace"
+rules:
+  unconnected: "fresh TCP socket with SD_SEND, SD_RECEIVE, SD_BOTH: -1/WSAENOTCONN; listener: -1/WSAENOTCONN; fresh UDP socket SD_SEND: 0; not a socket and INVALID_SOCKET: WSAENOTSOCK"
+  invalid: "how 3 and how -1: -1/WSAEINVAL"
+  sd_send: "returns 0, repeated 0; peer recv 0; send -1/WSAESHUTDOWN; peer sends 4 bytes and the shut-down side still receives them; after the peer's SD_SEND too: recv 0 and getpeername 0"
+  sd_receive: "returns 0; recv with nothing sent: -1/WSAESHUTDOWN; data sent by the peer afterwards resets the connection (recv -1/WSAECONNABORTED, send -1, peer recv -1/WSAECONNRESET)"
+  sd_both: "returns 0; peer recv 0; send -1/WSAESHUTDOWN; closesocket 0"
+  peer_gone: "SD_SEND after the peer closed: 0; SD_SEND on the accepted side: 0 and the client's recv returns 0"
+errors:
+  not_connected: "WSAENOTCONN 10057"
+  shutdown: "WSAESHUTDOWN 10058"
+  how: "WSAEINVAL 10022"
+  socket: "WSAENOTSOCK 10038"
+side_effects: "sends a FIN (SD_SEND, SD_BOTH); data arriving after SD_RECEIVE resets the connection"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, WSA error codes, counts, flags and booleans, never socket or handle values, ports, addresses other than loopback, process ids, times or names of the machine. Every test is self-contained and offline: it binds its own listener on 127.0.0.1 or ::1 with port 0 (the system chooses the port, which is never printed) and talks to it from the same process (a thread of the test) or from a child (the test's own image started again with --child). Every wait is bounded (at most about 10 s) and nothing leaves the machine. The tests run in the SSH logon session of the oracle (session 0).
+not_covered: >
+  shutdown on sockets with pending overlapped I/O, timing of the FIN on the wire, SD_RECEIVE data discarding rules beyond the reset.

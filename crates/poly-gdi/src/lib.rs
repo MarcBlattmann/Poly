@@ -18,6 +18,8 @@
 //! - [`text`]: `DrawTextW`'s layout.
 //! - [`region`]: region algebra (rectangles in canonical bands), for
 //!   `HRGN`s, clipping, and the window manager's update regions.
+//! - `rgnshape`: the rows of elliptic and round-rectangle regions (Bezier
+//!   arcs flattened to a polygon, one run per row).
 //!
 //! Behaviour follows the slice's spec sheets (`specs/windows/gdi32.dll/`,
 //! `user32.dll/FillRect`, `DrawTextW`, `GetDC`, `ReleaseDC`).
@@ -31,14 +33,17 @@ extern crate std;
 mod bitfont;
 pub mod bitmap;
 pub mod builtin;
+pub mod device;
 pub mod font;
 pub mod fontmap;
 pub mod fonttab;
 pub mod gdi;
 pub mod outline;
 pub mod region;
+mod rgnshape;
 mod sysfont;
 pub mod text;
+pub mod xform;
 
 #[cfg(test)]
 mod testfonts;
