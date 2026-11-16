@@ -94,11 +94,20 @@ enum Start {
 
 impl CreateHook<'_> {
     fn run(&mut self, om: &mut ObjectManager, r: &ParseRequest<'_>) -> Result<ObjectId, NtStatus> {
+        // A name relative to a handle of the pipe device or of its root
+        // directory (`NtOpenFile` of the pipe device's `\Device\NamedPipe\`) continues in the pipe
+        // file system, as the MSYS2/Cygwin runtime's `pipe()` uses it (ADR 0215).
+        let pipe_dir = r.kind == ObjectType::File
+            && matches!(self.io.file(r.cookie).map(|f| &f.target), Some(Target::PipeRoot | Target::PipeDevice));
         // `NtCreateNamedPipeFile` only works below the pipe device.
         if self.np.is_some()
+            && !pipe_dir
             && !(r.kind == ObjectType::Device && matches!(self.io.device(r.cookie), Some(Device::NamedPipe)))
         {
             return Err(STATUS_INVALID_DEVICE_REQUEST);
+        }
+        if pipe_dir {
+            return self.open_named_pipe(om, r);
         }
         let start = match r.kind {
             ObjectType::Device => match self.io.device(r.cookie) {

@@ -362,7 +362,13 @@ impl IoState {
         match (c.disposition, exists) {
             // A server end is created or opened, never superseded (the sheet's `parameters`).
             (FILE_SUPERSEDE, _) => return Err(STATUS_INVALID_PARAMETER),
-            (FILE_CREATE, true) => return Err(STATUS_ACCESS_DENIED),
+            // ... and an existing name whose instances are all taken says so first
+            // (the relative create of the MSYS2 runtime's `pipe()`, ADR 0215).
+            (FILE_CREATE, true) => {
+                let p = &self.np.pipes[key];
+                let full = p.max_instances != u32::MAX && p.instances.len() as u32 >= p.max_instances;
+                return Err(if full { STATUS_INSTANCE_NOT_AVAILABLE } else { STATUS_ACCESS_DENIED });
+            }
             (FILE_OPEN, false) => return Err(STATUS_OBJECT_NAME_NOT_FOUND),
             _ => {}
         }

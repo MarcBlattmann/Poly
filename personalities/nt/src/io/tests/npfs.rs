@@ -653,3 +653,49 @@ fn a_pipe_handle_reports_the_name_its_creator_spelled() {
         (STATUS_OBJECT_PATH_INVALID, 0, String::from(BS) + "Device" + BS + "NamedPipe")
     );
 }
+
+/// The MSYS2/Cygwin runtime's `pipe()` (ADR 0215): `NtOpenFile` of the pipe
+/// device, then a read end made and a write end opened with names relative
+/// to that handle.
+#[test]
+fn a_pipe_pair_is_made_with_names_relative_to_the_pipe_device() {
+    let mut t = setup();
+    let dev = |t: &mut T, name: &str| {
+        let out = t.f.alloc(8);
+        let iosb = t.f.alloc(16);
+        let oa = t.f.attrs(name, CI);
+        let s = t.f.call(Service::OpenFile, &[out, 0x0010_0080, oa, iosb, 3, 0]);
+        (s, t.f.u64_at(out), t.f.u64_at(iosb + 8))
+    };
+    let (s, root, info) = dev(&mut t, r"\Device\NamedPipe\");
+    assert_eq!((s, info), (STATUS_SUCCESS, FILE_OPENED));
+    let (s, device, _) = dev(&mut t, r"\Device\NamedPipe");
+    assert_eq!(s, STATUS_SUCCESS);
+    for dir in [root, device] {
+        let mk = |t: &mut T, disp: u32| {
+            let out = t.f.alloc(8);
+            let iosb = t.f.alloc(16);
+            let oa = t.f.attrs_in(dir, "poly-pipe-0x1", CI);
+            let timeout = t.f.put_u64((-500_000i64) as u64);
+            let s = t.f.call(
+                Service::CreateNamedPipeFile,
+                &[out, 0x8010_0100, oa, iosb, 3, u64::from(disp), 0, 0, 0, 0, 1, 4096, 4096, timeout],
+            );
+            (s, t.f.u64_at(out), t.f.u64_at(iosb + 8))
+        };
+        let (s, rd, info) = mk(&mut t, FILE_CREATE);
+        assert_eq!((s, info), (STATUS_SUCCESS, FILE_CREATED), "relative create");
+        // The same name again: the one instance is taken.
+        assert_eq!(mk(&mut t, FILE_CREATE).0, STATUS_INSTANCE_NOT_AVAILABLE);
+        let out = t.f.alloc(8);
+        let iosb = t.f.alloc(16);
+        let oa = t.f.attrs_in(dir, "poly-pipe-0x1", CI);
+        let s = t.f.call(Service::OpenFile, &[out, 0x4010_0080, oa, iosb, 3, 0]);
+        assert_eq!((s, t.f.u64_at(iosb + 8)), (STATUS_SUCCESS, FILE_OPENED), "relative open");
+        let wr = t.f.u64_at(out);
+        assert_eq!(t.write(wr, b"0123456789", None), (STATUS_SUCCESS, 10));
+        assert_eq!(t.npread(rd, 16, None), (STATUS_SUCCESS, b"0123456789".to_vec()));
+        t.close(wr);
+        t.close(rd);
+    }
+}
