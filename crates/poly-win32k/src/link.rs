@@ -185,6 +185,14 @@ pub enum ToCompositor {
     /// replayed with it): the compositor ends the startup feedback of the
     /// app it launched when this process shows its first window (ADR 0167).
     Process { surface: SurfaceId, pid: u32 },
+    /// The window's own non-client borders around the surface, in pixels:
+    /// a window that draws its own caption (ADR 0183) keeps the sizing
+    /// borders its `WM_NCCALCSIZE` answer left (invisible, as on Windows),
+    /// so the compositor passes the pointer there to it as well (negative or
+    /// beyond-the-surface coordinates) and its `WM_NCHITTEST` can answer
+    /// `HTLEFT` and the others (ADR 0155 addendum "browsing"). All 0 for
+    /// none. A compositor that does not know the record skips it.
+    Margins { surface: SurfaceId, left: u16, top: u16, right: u16, bottom: u16 },
 }
 
 /// compositor → win32k.
@@ -353,6 +361,7 @@ mod kind {
     pub const STATE: u16 = 0x000C;
     pub const DESTROY: u16 = 0x000D;
     pub const PROCESS: u16 = 0x000E;
+    pub const MARGINS: u16 = 0x000F;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -436,6 +445,9 @@ impl Record for ToCompositor {
             State { surface, state } => Out::new(out, kind::STATE).u32(*surface).u8(state_of(*state)).done(),
             Destroy { surface } => Out::new(out, kind::DESTROY).u32(*surface).done(),
             Process { surface, pid } => Out::new(out, kind::PROCESS).u32(*surface).u32(*pid).done(),
+            Margins { surface, left, top, right, bottom } => {
+                Out::new(out, kind::MARGINS).u32(*surface).u16(*left).u16(*top).u16(*right).u16(*bottom).done()
+            }
         }
     }
 
@@ -494,6 +506,9 @@ impl Record for ToCompositor {
             },
             kind::DESTROY => Destroy { surface: b.u32()? },
             kind::PROCESS => Process { surface: b.u32()?, pid: b.u32()? },
+            kind::MARGINS => {
+                Margins { surface: b.u32()?, left: b.u16()?, top: b.u16()?, right: b.u16()?, bottom: b.u16()? }
+            }
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -667,6 +682,7 @@ mod tests {
             State { surface: 1, state: WindowState::Maximized },
             Destroy { surface: 2 },
             Process { surface: 1, pid: 4242 },
+            Margins { surface: 1, left: 8, top: 0, right: 8, bottom: 8 },
         ]
     }
 
