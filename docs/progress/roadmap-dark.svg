@@ -248,10 +248,10 @@
 <g><title>✔ Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app) (ADR 0096)</title>
 <rect x="744.6" y="203.0" width="21.8" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>✔ Our own vcruntime140 and vcruntime140_1 (ADR 0199, taking up ADR 0055's fallback; FH4 and RTTI wait for spec sheets)</title>
+<g><title>✔ Our own vcruntime140 and vcruntime140_1 (ADR 0199, taking up ADR 0055's fallback; FH4, RTTI and type_info::name from spec-vcrt-1)</title>
 <rect x="768.4" y="203.0" width="21.8" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199)</title>
+<g><title>Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199; first names: threads, time, the throw helpers, _Lockit; the stream classes and locale next)</title>
 <rect x="792.2" y="203.0" width="21.8" height="16.0" fill="#4493f8" rx="3" stroke="#30363d"/>
 </g>
 <text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">19/20</text>
