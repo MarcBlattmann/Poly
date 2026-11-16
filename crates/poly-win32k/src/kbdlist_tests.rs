@@ -99,7 +99,7 @@ fn activate_walks_the_list_as_the_akl_sheet() {
     // list: 08070809 04072000 04070809 04090409 08070807
     let a = set.activate(T, us, 0).unwrap();
     assert_eq!((a.previous, a.current, a.changed()), (ORACLE, us, true));
-    assert_eq!(set.activate(T, us, 0).unwrap().changed(), false);
+    assert!(!set.activate(T, us, 0).unwrap().changed());
     // Not loaded: nothing.
     assert_eq!(set.activate(T, 0x1234_5678, 0), None);
     assert_eq!(set.thread_hkl(T), us);

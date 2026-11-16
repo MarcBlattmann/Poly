@@ -199,15 +199,13 @@ pub unsafe extern "system" fn GetKeyboardLayoutNameW(buf: *mut u16) -> i32 {
         set_last_error(998);
         return 0;
     }
+    let klid = poly_win32k::kbdlist::hkl_to_klid(crate::kbdlayout::thread_hkl());
+    let mut name = [0u16; 8];
+    for (d, s) in name.iter_mut().zip(klid) {
+        *d = u16::from(s);
+    }
     // SAFETY: the caller's buffer of KL_NAMELENGTH (9) characters.
-    unsafe { {
-        let klid = poly_win32k::kbdlist::hkl_to_klid(crate::kbdlayout::thread_hkl());
-        let mut w = [0u16; 8];
-        for (d, s) in w.iter_mut().zip(klid) {
-            *d = u16::from(s);
-        }
-        put_wide_units(buf as *mut u8, &w)
-    } };
+    unsafe { put_wide_units(buf as *mut u8, &name) };
     1
 }
 

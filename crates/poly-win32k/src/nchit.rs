@@ -168,7 +168,7 @@ pub fn nc_hit(style: u32, ex_style: u32, window: Rect, client: Rect, x: i32, y: 
         }
     }
     if rx < BOTTOM_LEFT {
-        if ry >= h - SIDE_BOTTOM || rx >= f + 1 { HTBOTTOMLEFT } else { HTLEFT }
+        if ry >= h - SIDE_BOTTOM || rx > f { HTBOTTOMLEFT } else { HTLEFT }
     } else if rx >= w - BOTTOM_RIGHT {
         HTBOTTOMRIGHT
     } else {
