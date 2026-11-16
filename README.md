@@ -126,7 +126,7 @@ start downloads about 230 MB once. To try a Windows program, choose
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,404 | 752 | 3,596 | 3,711 | 53,049 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,404 | 765 | 3,592 | 3,710 | 53,041 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 

@@ -180,11 +180,13 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0192](0192-chrome-s2-window-stations-per-process-mitigations-and-known-dlls-under-a-token.md) | What Chrome's sandbox needs of the NT personality: window stations and desktops as objects, mitigation policies per process, known DLLs under a token | Accepted |
 | [0194](0194-git-for-windows-and-the-msys2-runtime-on-poly.md) | Git for Windows and the MSYS2 runtime on Poly | Accepted |
 | [0195](0195-winsock-for-chromes-network-stage-dual-stack-overlapped-accept-and-connect-and-windows-connection-errors.md) | Winsock for Chrome's network stage: dual-stack sockets, overlapped `AcceptEx` / `ConnectEx`, and Windows' connection errors on Poly's stack | Accepted |
+| [0196](0196-appcontainers-lowbox-tokens-two-pass-access-checks-and-image-views-under-prohibit-dynamic-code.md) | AppContainers: lowbox tokens, two-pass access checks, and image views under prohibit-dynamic-code | Accepted |
 | [0199](0199-poly-s-own-visual-c-runtime-vcruntime140-now-msvcp140-by-what-apps-import.md) | Poly's own Visual C++ runtime: `vcruntime140` now, `msvcp140` in the order apps import it, nothing of Microsoft's | Accepted |
 | [0200](0200-chrome-s3b-notifications-display-configuration-ole-state-and-the-order-of-the-ime-windows.md) | Chrome S3b: notification registrations, display configuration, OLE state and the order of the IME windows | Accepted |
 | [0201](0201-ansi-windows-and-the-form-of-messages.md) | ANSI windows and the form of messages; carets; the common control classes | Accepted |
 | [0202](0202-thread-locks-the-thread-pool-and-a-thread-s-first-apc.md) | Thread locks, the thread pool and a thread's first APC | Accepted |
 | [0203](0203-job-objects-nest-and-the-job-information-classes-answer-as-observed.md) | Job objects nest, and the job information classes answer as the sheets observed | Accepted |
+| [0206](0206-random-numbers-come-from-a-poly-system-call-not-from-a-device-file.md) | Random numbers come from a Poly system call, not from a device file (and so do the memory sizes) | Accepted |
 | [0207](0207-the-com-apartment-lives-in-teb-reservedforole-the-global-interface-table-and-bits-is-not-registered.md) | The COM apartment lives in `TEB.ReservedForOle`; the global interface table; BITS is not registered | Accepted |
 | [0209](0209-windows-programs-type-with-the-desktop-s-keyboard-layout.md) | Windows programs type with the desktop's keyboard layout | Accepted |
 | [0210](0210-nt-ids-are-multiples-of-4-a-main-thread-has-its-own-id-and-an-exception-out-of-a-guarded-call-unwinds-first.md) | NT ids are multiples of 4, a main thread has its own id, and an exception out of a guarded call unwinds first | Accepted |
