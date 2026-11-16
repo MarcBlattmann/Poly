@@ -5,6 +5,8 @@
 //! coverage import linux <syscall_64.tbl> --revision <rev>
 //! coverage import xnu <syscalls.master> <syscall_sw.c> --revision <rev>
 //! coverage import macos-sdk <MacOSX.sdk> --revision <sdk version>   (run on a Mac)
+//! coverage import macos-objc <dir of symbol graphs> --revision <sdk version>   (ADR 0187)
+//! coverage import macos-swift <MacOSX.sdk> --revision <sdk version>            (ADR 0187)
 //! coverage claim <id>... [--from-file FILE] --agent <agent-id>
 //! coverage release <id>... [--from-file FILE]
 //! coverage set-status <id>... [--from-file FILE] <missing|stub|green|blocked-by-design|app-provided>
@@ -22,10 +24,12 @@
 
 mod import;
 mod model;
+mod objc;
 mod readme;
 mod roadmap;
 mod seeds;
 mod svg;
+mod swift;
 
 use model::{Coverage, Entry, Source, Status};
 use roadmap::Roadmap;
@@ -105,10 +109,33 @@ fn import(args: &[String]) -> Result<(), String> {
             vec![(import::MACOS_SDK, "macOS SDK .tbd stubs (exported symbols and Objective-C classes)")],
             import::macos_sdk(Path::new(sdk))?,
         ),
+        ["macos-objc", dir] => (
+            vec![(
+                objc::MACOS_OBJC,
+                "Objective-C classes, protocols, methods and properties of the macOS SDK frameworks, by name, from \
+                 clang -extract-api symbol graphs of the public headers (ADR 0187)",
+            )],
+            objc::macos_objc(Path::new(dir))?,
+        ),
+        ["macos-swift", sdk] => {
+            let known: BTreeSet<String> = c
+                .entries
+                .iter()
+                .filter(|e| e.os == model::Os::Macos && e.layer == model::Layer::Api)
+                .map(|e| e.component.clone())
+                .collect();
+            (
+                vec![(
+                    swift::MACOS_SWIFT,
+                    "Public Swift API of the macOS SDK modules, by name, from the .swiftinterface files (ADR 0187)",
+                )],
+                swift::macos_swift(Path::new(sdk), &known)?,
+            )
+        }
         _ => {
-            return Err(
-                "usage: coverage import <wine DIR | linux TBL | xnu MASTER SW | macos-sdk SDK> --revision REV".into()
-            );
+            return Err("usage: coverage import <wine DIR | linux TBL | xnu MASTER SW | macos-sdk SDK | macos-objc \
+                        GRAPHS | macos-swift SDK> --revision REV"
+                .into());
         }
     };
     for (id, description) in sources {

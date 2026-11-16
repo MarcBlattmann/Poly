@@ -1,4 +1,5 @@
 [
 {"symbol":"$s14SafariServices08SFSafariB9AvailableySbSo0cB7VersionVF","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftSafariServices","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftSafariServices","src":["macos-sdk"]},
+{"symbol":"swift:SafariServices.SFSafariServicesAvailable(_:)","src":["macos-swift-interface"]}
 ]

@@ -1,5 +1,10 @@
 [
 {"symbol":"EPErrorDomain","src":["macos-sdk"]},
-{"symbol":"objc:EPDeveloperTool","src":["macos-sdk"]},
-{"symbol":"objc:EPExecutionPolicy","src":["macos-sdk"]}
+{"symbol":"objc:EPDeveloperTool","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:EPDeveloperTool.@authorizationStatus","src":["macos-objc-api"]},
+{"symbol":"objc:EPDeveloperTool.init","src":["macos-objc-api"]},
+{"symbol":"objc:EPDeveloperTool.requestDeveloperToolAccessWithCompletionHandler:","src":["macos-objc-api"]},
+{"symbol":"objc:EPExecutionPolicy","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:EPExecutionPolicy.addPolicyExceptionForURL:error:","src":["macos-objc-api"]},
+{"symbol":"objc:EPExecutionPolicy.init","src":["macos-objc-api"]}
 ]
