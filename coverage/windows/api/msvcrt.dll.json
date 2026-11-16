@@ -154,7 +154,7 @@
 {"symbol":"__CxxExceptionFilter","src":["wine-spec"]},
 {"symbol":"__CxxFrameHandler","status":"green","tests_visible":11,"tests_held_out":5,"src":["wine-spec"]},
 {"symbol":"__CxxFrameHandler2","src":["wine-spec"]},
-{"symbol":"__CxxFrameHandler3","status":"green","tests_visible":17,"tests_held_out":8,"src":["wine-spec"]},
+{"symbol":"__CxxFrameHandler3","status":"claimed","claimed_by":"impl-vcrt","tests_visible":17,"tests_held_out":8,"src":["wine-spec"]},
 {"symbol":"__CxxLongjmpUnwind","arch":["i386"],"src":["wine-spec"]},
 {"symbol":"__CxxQueryExceptionSize","src":["wine-spec"]},
 {"symbol":"__CxxRegisterExceptionObject","src":["wine-spec"]},
