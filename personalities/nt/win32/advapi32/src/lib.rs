@@ -737,7 +737,8 @@ pub unsafe extern "system" fn SystemFunction036(buffer: *mut u8, length: u32) ->
     u8::from(unsafe { PolyRandomBytes(buffer, length as usize) } >= 0)
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     /// Poly's own: random bytes of the kernel's generator (ADR 0206); an `NTSTATUS`.
     fn PolyRandomBytes(buffer: *mut u8, length: usize) -> i32;
