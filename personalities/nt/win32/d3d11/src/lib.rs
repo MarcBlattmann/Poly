@@ -247,7 +247,16 @@ pub extern "system" fn d3d11_main(_module: *mut u8, reason: u32, _reserved: *mut
             i += 1;
         }
         let kind = text.split(' ').find_map(|w| w.strip_prefix("--type=")).unwrap_or("main");
-        log(&alloc::format!("d3d11: loaded (process type {kind})"));
+        // The names of the switches (no values) tell the kinds of GPU process apart.
+        let switches: alloc::vec::Vec<&str> = text
+            .split(' ')
+            .filter_map(|w| w.strip_prefix("--"))
+            .map(|w| w.split('=').next().unwrap_or(""))
+            .filter(|w| !w.is_empty() && *w != "type")
+            .collect();
+        let mut names = switches.join(",");
+        names.truncate(400);
+        log(&alloc::format!("d3d11: loaded (process type {kind}) switches {names}"));
     }
     1
 }

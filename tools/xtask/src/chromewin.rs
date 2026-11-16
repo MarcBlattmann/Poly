@@ -390,7 +390,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 5] = [
+pub const STAGES: [Stage; 7] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -463,6 +463,39 @@ pub const STAGES: [Stage; 5] = [
         ],
         expect: S4_EXPECT,
         seconds: 300,
+    },
+    // S5 (the spec's `s5`, specs/windows/apps/chrome/s5-gpu.md): stage 1's page with Chrome's
+    // default GPU flags, so the GPU process starts on Poly's software Direct3D device (ADR 0211).
+    Stage {
+        number: 5,
+        name: "headless dump-dom, no sandbox, default GPU flags (the software D3D11 device)",
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: DOM_EXPECT,
+        seconds: 300,
+    },
+    // S5 in a window: stage 3 without `--disable-gpu`; the launcher stops Chrome after `seconds`.
+    // The desktop check of `boot-tests chrome-win` counts its GPU processes (one is the goal).
+    Stage {
+        number: 6,
+        name: "a visible window, no sandbox, default GPU flags (ends after the launcher's wait)",
+        program: None,
+        args: &[
+            "--no-sandbox",
+            "--no-first-run",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--window-position=40,40",
+            "--window-size=900,500",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: "LAUNCH-EXIT",
+        seconds: 120,
     },
 ];
 
@@ -1070,7 +1103,11 @@ fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
         return None;
     }
     // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
-    let key = if st.number == 4 { "s4-headless".to_string() } else { format!("s{}", st.number) };
+    let key = match st.number {
+        4 => "s4-headless".to_string(),
+        6 => return None,
+        n => format!("s{n}"),
+    };
     let (want_bytes, want_sha) = match spec_stdout(&key) {
         Ok(v) => v,
         Err(e) => return Some(e),
@@ -1201,7 +1238,68 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
             outcome.log.display()
         );
     }
-    stage3_window(kernel)
+    stage3_window(kernel)?;
+    stage5(kernel)
+}
+
+/// Whether the S5 checks (stage 5 headless, the S5 window) fail the `chrome-win` group. Off until
+/// they passed three runs in a row on CI-like load (the brief of ADR 0211's track).
+pub const S5_REQUIRED: bool = false;
+
+/// The S5 window's steps: start, the same stop/reload at 50 s as stage 3 (a slow start still
+/// loads), and at about 125 s the green page at (200, 400).
+const S5_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000";
+
+/// How many GPU processes a run's log shows: `d3d11.dll` says once per process which kind of
+/// process loaded it (ADR 0211).
+pub fn gpu_processes(log: &str) -> usize {
+    log.lines().filter(|l| l.contains("d3d11: loaded (process type gpu-process)")).count()
+}
+
+/// The S5 checks: stage 5 (headless, default GPU flags) must print stage 1's DOM; the window run
+/// with default GPU flags must paint its page from the first GPU process (ADR 0211). Reported, and
+/// required only with [`S5_REQUIRED`] or `POLY_CHROME_S5_REQUIRED=1`.
+fn stage5(kernel: &Path) -> Result {
+    let required = S5_REQUIRED || std::env::var("POLY_CHROME_S5_REQUIRED").is_ok_and(|v| v == "1");
+    let st = STAGES.iter().find(|s| s.number == 5).expect("stage 5");
+    eprintln!("==> boot test: Chrome for Testing {VERSION}, headless --dump-dom with the default GPU flags (stage 5)");
+    let outcome = boot_stage(
+        kernel,
+        st,
+        &Options { trace: false, exceptions: None, waits: None, fresh: false, timeout: 600, rest: Vec::new(), kit: None },
+    )?;
+    outcome.report(st);
+    let headless = outcome.passed;
+    if headless {
+        println!("STAGE 5 PASSED");
+    } else {
+        eprintln!("==> stage 5 did not pass (see {})", outcome.log.display());
+    }
+    let window = if cfg!(unix) {
+        eprintln!("==> boot test: Chrome for Testing {VERSION}, a window with the default GPU flags (S5)");
+        let dir = cache_dir().join(TOP);
+        let args = format!(
+            "--no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+        );
+        let log = crate::root().join("target/win-app/s5-boot/chrome.serial.log");
+        let (text, stopped) = crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S5_STEPS, &log)?;
+        let gpus = gpu_processes(&text);
+        let exceptions = text.lines().filter(|l| l.contains("nt-exc:")).count();
+        let ok = stopped.is_none() && gpus == 1 && exceptions == 0;
+        println!(
+            "STAGE 5 WINDOW {}: {gpus} GPU process(es), {exceptions} exception(s){}",
+            if ok { "PASSED" } else { "DID NOT PASS" },
+            stopped.map(|s| format!(", {s}")).unwrap_or_default()
+        );
+        ok
+    } else {
+        eprintln!("==> S5 window skipped: a desktop run needs a Unix host (QMP over a Unix socket)");
+        true
+    };
+    if required && !(headless && window) {
+        return Err("the S5 checks did not pass (POLY_CHROME_S5_REQUIRED)".into());
+    }
+    Ok(())
 }
 
 /// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
@@ -1313,6 +1411,16 @@ fn crate_steps_parse() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gpu_processes_are_counted_by_the_d3d11_load_line() {
+        let log = "nt: pid 9: d3d11: loaded (process type gpu-process)\nnt: pid 4: d3d11: loaded (process type main)\n\
+                   nt: pid 12: d3d11: loaded (process type gpu-process)\n";
+        assert_eq!(super::gpu_processes(log), 2);
+        assert!(crate::winapps::steps_parse(super::S5_STEPS));
+        let s5 = super::STAGES.iter().find(|s| s.number == 5).unwrap();
+        assert!(!s5.args.contains(&"--disable-gpu") && s5.args.contains(&"--headless"));
+    }
+
     #[test]
     fn stage_3_is_judged_by_exceptions_and_the_pixel() {
         use super::{S3Verdict, s3_verdict};
