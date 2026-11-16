@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "hstring_reference",
+      "exe_sha256": "83cdb597126b63fbaab84b612cd5ef2914f214d6a177c163f9e02eb2a227a999",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVmKGFiYywzKSA9IDB4MDAwMDAwMDAgb3V0X251bGwgZmFsc2UKICBkZWxldGUocmVmKSA9IDB4MDAwMDAwMDAKICB0aGUgY29weSBwb2ludHMgZWxzZXdoZXJlOiB0cnVlCnJlZihOVUxMLDIpID0gMHg4MDAwNDAwMyBvdXRfbnVsbCB0cnVlCnJlZihhYmMsMyxOVUxMIGhlYWRlcikgPSAweDgwMDcwMDU3CiAgSGFzRW1iZWRkZWROdWxsIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ref(abc,3) = 0x00000000 out_null false\n  delete(ref) = 0x00000000\n  the copy points elsewhere: true\nref(NULL,2) = 0x80004003 out_null true\nref(abc,3,NULL header) = 0x80070057\n  HasEmbeddedNull 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "hstring_reference_c",
+      "exe_sha256": "0f94bcecd058aff5fbba049a35667ae00751feb214a692feb646278d601eb99d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBHZXRTdHJpbmdMZW4gMyBJc0VtcHR5IDAKICBkdXBsaWNhdGUocmVmKSA9IDB4MDAwMDAwMDAgc2FtZV9oYW5kbGUgZmFsc2UgdGV4dCBhYmMKcmVmKE5VTEwsMCkgPSAweDAwMDAwMDAwIG91dF9udWxsIHRydWUKcmVmKGVtcHR5IHRleHQsMCkgPSAweDAwMDAwMDAwIG91dF9udWxsIHRydWUKcmVmKGEgTlVMIGIsMykgPSAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  GetStringLen 3 IsEmpty 0\n  duplicate(ref) = 0x00000000 same_handle false text abc\nref(NULL,0) = 0x00000000 out_null true\nref(empty text,0) = 0x00000000 out_null true\nref(a NUL b,3) = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

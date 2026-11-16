@@ -215,30 +215,13 @@ pub unsafe extern "system" fn RtlSleepConditionVariableSRW(
     let shared = flags & rs::CONDITION_VARIABLE_LOCKMODE_SHARED != 0;
     // SAFETY: the caller's objects.
     let (cv, l) = unsafe { (word(cv), word(lock)) };
-    if shared && l.load(Ordering::Relaxed) == 0 {
-        // Nothing to give up: raised before the thread is queued.
-        raise(rs::STATUS_RESOURCE_NOT_OWNED);
+    match LOT.sleep_srw(&Host, cv, l, timeout(time), shared) {
+        Ok(woken) => NtStatus(if woken { 0 } else { STATUS_TIMEOUT }),
+        Err(status) => {
+            raise(status);
+            NtStatus(status)
+        }
     }
-    let woken = LOT.sleep(
-        &Host,
-        cv,
-        timeout(time),
-        &mut || {
-            if shared {
-                let _ = LOT.release_shared(&Host, l);
-            } else {
-                LOT.release_exclusive(&Host, l);
-            }
-        },
-        &mut || {
-            if shared {
-                LOT.acquire_shared(&Host, l);
-            } else {
-                LOT.acquire_exclusive(&Host, l);
-            }
-        },
-    );
-    NtStatus(if woken { 0 } else { STATUS_TIMEOUT })
 }
 
 // ----- run-once ----------------------------------------------------------------------------------

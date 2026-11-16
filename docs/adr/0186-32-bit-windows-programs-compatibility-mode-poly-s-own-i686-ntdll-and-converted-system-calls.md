@@ -511,3 +511,58 @@ the `A` forms of `Char*Buff`, `GetLocaleInfoA`, `GetStringTypeA` and `LCMapStrin
 candidates: they are stubs that return 0), the `oleaut32` ordinals the Delphi `Variants` unit
 probes (`VariantChangeTypeEx`, `VarNeg`), then the comctl32 controls (`SysListView32`,
 `SysTreeView32`, toolbars, status bars) that its forms create.
+
+## Addendum: stage 4 — WinSCP runs its start-up; what the hunt found (`nt-wow64-4`)
+
+Stage 3 ended with WinSCP (32-bit, C++ Builder) crashing at `WinSCP.exe+0x3a90ca`. This stage found why, and
+the next dozen reasons it did not get further. Every one is a place where a function written for the 64-bit
+build had a layout or a width in it that a 32-bit program sees differently; each now has a test in
+`tests/windows/wow64/ansi32.rs` (boot test `nt_wow64_32_bit_program_uses_the_ansi_and_locale_calls`) or a host test.
+
+### The tool that found them: `poly.nt.apitrace`
+
+A 32-bit program that fails inside its own code leaves no system call to read. `poly.nt.apitrace=<text>` starts
+at the first system call whose object name contains `<text>` (`msctf`: the program's probe for `Msctf.dll`) and
+single-steps that thread (`RFLAGS.TF`; the `#DB` of a traced thread is handled in `trap_dispatch`, `kernel/src/nt/apitrace.rs`).
+The kernel logs every entry into an export of the process's other modules, read from Poly's own export tables
+(`nt-api: kernel32.dll!Name ret=... args ...`, and `-> result` when the call returns), the string a program looks a
+function, a DLL or a resource up by, and, at an exception, the last 64 instructions' registers. It reads no byte of
+the program's code. `poly.nt.apitrace.after=<name>` then logs the registers of the first 400 steps after the
+named call returns, and every 2,000,000th. The exception reports of 32-bit threads now name modules
+(`WinSCP.exe+0xc004b0`), print the stack in 32-bit words and dump what the registers and the parameters point at
+(`diag::modules32`, `exception_report_words`).
+
+### What was wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The crash at `+0x3a90ca`: a hash loop over 4 GiB | The `RTL_CRITICAL_SECTION` was the 64-bit layout (40 bytes): `RtlInitializeCriticalSection` of a Delphi object's embedded section zeroed the 16 bytes after its 24, the `Word` field that held the resource manager's data size | `poly_rtl::critsec::CriticalSection` has pointer-sized fields (24 bytes in 32 bits); the section's offsets are the 32-bit ones |
+| Calls through a NULL pointer after `WSAStartup` | `WSADATA` was written in the 64-bit layout (408 bytes) into a 400-byte structure, over the caller's saved registers | `write_wsadata` knows both layouts |
+| Every `FindResourceW`, `LoadStringW`, `LoadIconW` failed (`EResNotFound` for the main form) | `kernelbase`'s resource functions read `VirtualQuery`'s answer as a 48-byte `MEMORY_BASIC_INFORMATION` | `resource.rs` reads the 28-byte one in a 32-bit process |
+| `GetObject` of a bitmap, brush or DIB section gave a 64-bit structure | `BITMAP` is 24 bytes (`bmBits` at 20), `LOGBRUSH` 12 and `DIBSECTION` 84 in 32 bits | `Gdi::object_bytes_for_width` |
+| Delay loads and `GetProcAddress` probes ended in a NULL call or `0xC06D007F` | The 32-bit modules export no fail-only stubs (a fail-only function takes no arguments and `stdcall` would leave them) | The functions that were reached are real, with their prototype's argument count: `uxtheme` (`BufferedPaint*`, the `GetTheme*` family), `SHGetSpecialFolderLocation`/`SHGetPathFromIDListW`/`ILCreateFromPathW`/`SHGetMalloc`/`CoGetMalloc` (`IMalloc`), `CryptAcquireContext*`/`CryptGenRandom`, `SetClassLong*`, `GetNearestColor`, `CreateBrushIndirect`, `CreatePenIndirect`, `SetROP2`, `UnrealizeObject`, `WSAAsyncSelect` (a helper thread and `PostMessage` over the `WSAEventSelect` machinery), `wsprintfA/W` (`poly_kernelbase::wsprintf`), `GetShortPathNameW`, `CreateToolhelp32Snapshot`/`Process32FirstW`/`Process32NextW` (the calling process only), `FindFirstFileA`/`FindNextFileA`/`FindFirstFileExA` |
+| `shfolder.dll` not found | A redistributable whose functions live in `shell32` | The loader maps the name to `shell32.dll` (`poly_ldr::apiset::resolve`), with `SHGetFolderPathA` |
+| Pointer encoding broke on a 32-bit cookie | `EncodePointer` rotated 64 bits and cut the result | `encode_pointer32` |
+
+The ANSI and locale family the stage-3 notes suspected (`GetLocaleInfoA`, `GetStringType*`, `LCMapStringA`, `CompareStringA`,
+`GetCPInfoEx*`, `EnumCalendarInfo*`, `GetCalendarInfoW`, `CharUpperBuffW` and the other `Char*`/`IsChar*` functions, `MulDiv`)
+was implemented too, from Learn, with host tests and `ansi32.exe`; it was not the cause of the crash. `msi.dll` functions fail
+with a non-zero code (`HRESULT_DLLS`); `msi!#205` (`MsiEnumRelatedProductsW`) has its signature.
+
+### Where WinSCP stands
+
+WinSCP runs its Borland start-up and its VCL unit initialisation, creates its application windows, loads
+`TGlyphsModule`, opens the cryptographic random source and Winsock, and builds its image lists (`GetDIBits` and
+`SetDIBits` are implemented). Its first window is its own exception dialog, "Error - WinSCP" (a VCL form with
+OK, Help and Report buttons: `nt-wow64-4-winscp-d1.png`), the first 32-bit window that is not ours. The
+exception is a call through a NULL pointer (`WinSCP.exe+0x525737`) right after the Delphi MSXML vendor unit has
+tried `CoCreateInstance` for `Msxml2.DOMDocument` 6.0, 4.0, 3.0, 2.6 and the older class and none is registered
+(`{88D96A05-...}`, `{88D969C0-...}`, `{F5078F32-...}`, `{F5078F1B-...}`, `{F6D90F11-...}`); pressing OK ends the program.
+So the next stopper is an XML DOM: either MSXML's `DOMDocument` (an `IDispatch` object) or a way for the
+Delphi unit to see "no DOM" without crashing. After it: the `oleaut32` `Var*` functions, `ws2_32`'s `addrinfo`,
+`hostent` and `WSABUF` structures (still the 64-bit layouts in the 32-bit module), and the comctl32 controls
+(`SysListView32`, `SysTreeView32`) its forms create.
+
+### The C runtime
+
+Not started in this stage; the blockers of stage 3 stand (setjmp/longjmp, `LegacyInfo`, `FILE`, `va_list`, start-up).

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/WindowsDeleteStringBuffer.yaml
+id: windows/api/combase.dll/WindowsDeleteStringBuffer
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  Discards a preallocated buffer; NULL is S_OK.
+same_as: "the tests of WindowsPreallocateStringBuffer cover this call"
+interface:
+  signature: "HRESULT WindowsDeleteStringBuffer(HSTRING_BUFFER bufferHandle)"
+rules:
+  tests: "No test of its own: the visible and held-out tests of WindowsPreallocateStringBuffer exercise it; the behaviour above is observed there."
+errors:
+  none: "see the sheet named above"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "see the sheet named above"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  See the sheet that holds the tests.
+not_covered: >
+  Anything the named tests do not do.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "timer_create",
+      "exe_sha256": "37275e1a2926ca7a9ae701da326ae803faeaccd51b1be93d53b4baa9e8a25e3e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlV2FpdGFibGVUaW1lckV4VyhmbGFncyAweDAsIGFjY2VzcyAweDFmMDAwMyk6IGhhbmRsZSAxIGVyciAwCiAgIFNldFdhaXRhYmxlVGltZXIoMSBtcykgPSAxIGVyciAwIHdhaXQgMApDcmVhdGVXYWl0YWJsZVRpbWVyRXhXKGZsYWdzIDB4MywgYWNjZXNzIDB4MWYwMDAzKTogaGFuZGxlIDEgZXJyIDAKICAgU2V0V2FpdGFibGVUaW1lcigxIG1zKSA9IDEgZXJyIDAgd2FpdCAwCkNyZWF0ZVdhaXRhYmxlVGltZXJFeFcoZmxhZ3MgMHgwLCBhY2Nlc3MgMHgwKTogaGFuZGxlIDEgZXJyIDAKICAgU2V0V2FpdGFibGVUaW1lcigxIG1zKSA9IDAgZXJyIDUgd2FpdCA0Mjk0OTY3Mjk1Cm1hbnVhbC1yZXNldCB0aW1lcjogd2FpdHMgMCAwIDAKQ2FuY2VsV2FpdGFibGVUaW1lciA9IDEKcGVyaW9kaWMgdGltZXIgKDEwIG1zLCB0aGVuIGV2ZXJ5IDIwIG1zKTogZm91ciB3YWl0cyBhbGwgc2lnbmFsbGVkIHRydWUKU2V0V2FpdGFibGVUaW1lcihOVUxMIGR1ZSkgPSAwIGVyciA4NwpDYW5jZWxXYWl0YWJsZVRpbWVyKGFuIGV2ZW50IGhhbmRsZSkgPSAwIGVyciA2CkNhbmNlbFdhaXRhYmxlVGltZXIgd2l0aG91dCBUSU1FUl9NT0RJRllfU1RBVEUgPSAwIGVyciA1CmNvbXBsZXRpb24gcm91dGluZTogc2V0IDEgU2xlZXBFeCAxOTIgY2FsbHMgMSBhcmd1bWVudCAweDEyMzQKICBzYW1lIG5hbWUgYWdhaW46IGhhbmRsZSAxIGVyciAxODMKICBhIHRpbWVyIG5hbWVkIGxpa2UgYW4gZXZlbnQ6IGhhbmRsZSAwIGVyciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateWaitableTimerExW(flags 0x0, access 0x1f0003): handle 1 err 0\n   SetWaitableTimer(1 ms) = 1 err 0 wait 0\nCreateWaitableTimerExW(flags 0x3, access 0x1f0003): handle 1 err 0\n   SetWaitableTimer(1 ms) = 1 err 0 wait 0\nCreateWaitableTimerExW(flags 0x0, access 0x0): handle 1 err 0\n   SetWaitableTimer(1 ms) = 0 err 5 wait 4294967295\nmanual-reset timer: waits 0 0 0\nCancelWaitableTimer = 1\nperiodic timer (10 ms, then every 20 ms): four waits all signalled true\nSetWaitableTimer(NULL due) = 0 err 87\nCancelWaitableTimer(an event handle) = 0 err 6\nCancelWaitableTimer without TIMER_MODIFY_STATE = 0 err 5\ncompletion routine: set 1 SleepEx 192 calls 1 argument 0x1234\n  same name again: handle 1 err 183\n  a timer named like an event: handle 0 err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 306
+    },
+    {
+      "name": "timer_create_c",
+      "exe_sha256": "ffb003a197742dfc5b9c4c5a680c343705ed48f088a4ada5fd2673e451003810",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlV2FpdGFibGVUaW1lckV4VyhmbGFncyAweDEsIGFjY2VzcyAweDFmMDAwMyk6IGhhbmRsZSAxIGVyciAwCiAgIFNldFdhaXRhYmxlVGltZXIoMSBtcykgPSAxIGVyciAwIHdhaXQgMApDcmVhdGVXYWl0YWJsZVRpbWVyRXhXKGZsYWdzIDB4MCwgYWNjZXNzIDB4MTAwMDAyKTogaGFuZGxlIDEgZXJyIDAKQ3JlYXRlV2FpdGFibGVUaW1lckV4VyhmbGFncyAweDgwLCBhY2Nlc3MgMHgxZjAwMDMpOiBoYW5kbGUgMCBlcnIgODcKQ3JlYXRlV2FpdGFibGVUaW1lckV4VyhmbGFncyAweDAsIGFjY2VzcyAweDEwMDAwMSk6IGhhbmRsZSAxIGVyciAwCiAgc2Vjb25kIHdhaXQgKDAgbXMpIDI1OAogIHRoZW4gd2FpdCgwKSAyNTgKQ2FuY2VsV2FpdGFibGVUaW1lciBvZiBhIHRpbWVyIHRoYXQgaXMgbm90IHNldCA9IDEKZHVlIHRpbWUgMDogd2FpdCAwClNldFdhaXRhYmxlVGltZXIoYW4gZXZlbnQgaGFuZGxlKSA9IDAgZXJyIDYKU2V0V2FpdGFibGVUaW1lciB3aXRob3V0IFRJTUVSX01PRElGWV9TVEFURSA9IDAgZXJyIDUKICB3YWl0IDAKbmFtZWQgdGltZXI6IGhhbmRsZSAxIGVyciAwCiAgT3BlbldhaXRhYmxlVGltZXJXKG1pc3NpbmcpIGhhbmRsZSAwIGVyciAyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateWaitableTimerExW(flags 0x1, access 0x1f0003): handle 1 err 0\n   SetWaitableTimer(1 ms) = 1 err 0 wait 0\nCreateWaitableTimerExW(flags 0x0, access 0x100002): handle 1 err 0\nCreateWaitableTimerExW(flags 0x80, access 0x1f0003): handle 0 err 87\nCreateWaitableTimerExW(flags 0x0, access 0x100001): handle 1 err 0\n  second wait (0 ms) 258\n  then wait(0) 258\nCancelWaitableTimer of a timer that is not set = 1\ndue time 0: wait 0\nSetWaitableTimer(an event handle) = 0 err 6\nSetWaitableTimer without TIMER_MODIFY_STATE = 0 err 5\n  wait 0\nnamed timer: handle 1 err 0\n  OpenWaitableTimerW(missing) handle 0 err 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 314
+    }
+  ]
+}

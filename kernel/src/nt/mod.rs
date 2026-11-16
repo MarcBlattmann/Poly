@@ -29,6 +29,7 @@ mod tests;
 
 mod sched;
 
+pub mod apitrace;
 mod exception;
 mod test_seh;
 pub use exception::{fault, last_unhandled};
@@ -63,6 +64,7 @@ pub static USER32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-us
 pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.exe"));
 pub static SYS32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-sys32.exe"));
 pub static SAFESEH32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-safeseh32.exe"));
+pub static ANSI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ansi32.exe"));
 
 include!(concat!(env!("OUT_DIR"), "/wow64_dlls.rs"));
 mod test_wow64;
@@ -642,6 +644,7 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
     }
+    apitrace::configure(boot);
     let memory = boot.arg(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG);
     if memory.is_some() || boot.has_flag(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG) {
         let bytes = poly_personality_nt::diag::exception_memory_bytes(memory);
@@ -1105,13 +1108,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
     let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
     note_command_line(process.pid);
-    let traced = (trace != 0 || trail != 0).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
-        if crate::arch::user::compat() {
-            poly_personality_nt::trace::begin32(&mut k, regs)
-        } else {
-            poly_personality_nt::trace::begin(&mut k, regs)
-        }
-    });
+    let traced =
+        (trace != 0 || trail != 0 || apitrace::wanted()).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
+            if crate::arch::user::compat() {
+                poly_personality_nt::trace::begin32(&mut k, regs)
+            } else {
+                poly_personality_nt::trace::begin(&mut k, regs)
+            }
+        });
     // A 32-bit thread's call comes in the 32-bit convention and is converted (ADR 0186).
     let outcome = if crate::arch::user::compat() {
         poly_personality_nt::wow64::dispatch32(&mut k, regs, |k, regs| poly_personality_nt::dispatch_with(k, regs))
@@ -1120,6 +1124,12 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     if let Some(call) = traced {
         let status = regs.rax as u32;
+        if crate::arch::user::compat() && apitrace::wanted() {
+            let teb =
+                with(|s| s.processes.get(&ProcessId(process.pid))?.thread(ThreadRef(u64::from(tid))).map(|t| t.teb))
+                    .unwrap_or(0);
+            apitrace::arm_if_match(process.pid, tid, call.object.as_deref(), teb, regs);
+        }
         if trace != 0 && poly_personality_nt::trace::wanted(&call, status, trace == 2) {
             crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
         }
@@ -1164,6 +1174,10 @@ pub struct Start {
     pub entry: crate::arch::user::Entry,
     /// The GS base the thread runs with (its TEB).
     pub teb: u64,
+    /// The thread id the first thread runs under (its TEB, thread object and `ClientId` were made
+    /// for it). Not the process id for a process made by `NtCreateUserProcess`: Windows gives
+    /// the first thread an id of its own.
+    pub tid: u32,
 }
 
 /// How an NT process was started: its executable's DOS path and its
@@ -1384,6 +1398,7 @@ fn start_params(
                         args: [ps.start_routine, ps.argument, ps.image_base],
                     },
                     teb: ps.teb,
+                    tid,
                 },
                 opened,
             )),
@@ -1423,7 +1438,9 @@ fn create_process(
         Some(p) => console::std_sources(p),
         None => [console::StdSource::None, console::StdSource::None, console::StdSource::None],
     };
-    let pid = crate::process::alloc_pid();
+    let pid = crate::process::alloc_nt_id();
+    // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
+    let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
     let process = Arc::new(Process::new_nt(pid, format, traced));
     let want = HandlesFor {
@@ -1441,9 +1458,9 @@ fn create_process(
         process_security: req.process_security,
         thread_security: req.thread_security,
     };
-    let (start, handles) = start_params(&process, &memory, req.image, pid, &req.params, &sources, Some(&want))?;
+    let (start, handles) = start_params(&process, &memory, req.image, tid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
-    let first = ThreadRef(u64::from(pid));
+    let first = ThreadRef(u64::from(tid));
     let created = poly_personality_nt::ProcessCreated {
         process: ph,
         thread: th,
@@ -1504,7 +1521,7 @@ pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, s
     // The job notifications count the first thread as run from here on (ADR 0169).
     let pid = ProcessId(process.pid);
     with(|s| s.sys.jobs.started(pid));
-    match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, None) {
+    match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, Some(start.tid)) {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.
             let _ = thread::detach(kthread);
@@ -1651,10 +1668,12 @@ pub fn spawn_pe_with(
         let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
         poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys))
     });
-    let start = start_params(process, &memory, image, pid, &params, &sources, None)
+    // Its main thread has an id of its own, not the process id.
+    let tid = crate::process::alloc_nt_id();
+    let start = start_params(process, &memory, image, tid, &params, &sources, None)
         .map(|(start, _)| start)
         .map_err(SpawnError::Image)?;
-    match spawn_thread(process, &memory, start.entry, start.teb, hook, None) {
+    match spawn_thread(process, &memory, start.entry, start.teb, hook, Some(start.tid)) {
         Ok(tid) => {
             let _ = thread::detach(tid);
             Ok(())

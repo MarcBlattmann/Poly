@@ -159,6 +159,16 @@ fn top_slot(list: &[Top], order: &[u32], topmost: bool, barrier: Option<u32>, di
 /// the order they had. The new order; the window moved when it differs
 /// from the old one.
 pub fn raise(list: &[Top], hwnd: u32, barrier: Option<Barrier>) -> Vec<u32> {
+    // An owned window comes up with its owners: the family of the owner at the root goes to the top.
+    let mut hwnd = hwnd;
+    for _ in 0..16 {
+        match find(list, hwnd) {
+            Some(t) if t.owner != 0 && !t.is(HELPER) && find(list, t.owner).is_some_and(|o| !o.is(HELPER)) => {
+                hwnd = t.owner
+            }
+            _ => break,
+        }
+    }
     let Some(w) = find(list, hwnd) else { return handles(list) };
     // What it owns, and what those own (an owned popup's helper: gaw_owner).
     let owned: Vec<u32> = list.iter().filter(|t| t.hwnd != hwnd && owned_by(list, t, hwnd)).map(|t| t.hwnd).collect();

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/QueryDosDeviceW.yaml
+id: windows/api/kernel32.dll/QueryDosDeviceW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  The NT device behind a DOS device name (a drive letter, NUL, CON, PIPE ...), or the list of all DOS device names (a MULTI_SZ). Every MSYS2 process enumerates the whole list at start-up.
+interface:
+  signature: "DWORD QueryDosDeviceW(LPCWSTR lpDeviceName, LPWSTR lpTargetPath, DWORD ucchMax)"
+rules:
+  list: "QueryDosDeviceW(NULL, buf, 131072) returns the count of units written including the final NULs (about 55,000 on the oracle, which has many devices); the buffer is a MULTI_SZ ending with two NULs and names, among others, C:, NUL, CON, PIPE, PhysicalDrive0, Global and GLOBALROOT (case as the system writes them; more than 20 names)."
+  list_small_buffer: "a buffer too small for the list (0, 1, 16, 64 units): returns 0 with ERROR_INSUFFICIENT_BUFFER (122)."
+  one_name: "\"C:\" and \"c:\": the first string is \"\\Device\\HarddiskVolume<n>\"; \"NUL\": \"\\Device\\Null\"; \"CON\": \"\\Device\\ConDrv\\Console\"; \"PIPE\": \"\\Device\\NamedPipe\"; names are case insensitive. The count returned includes the string's NUL and the final NUL (\"\\Device\\Null\" is 14)."
+  small_buffer: "for \"NUL\" a buffer of 0..13 units: 0 and ERROR_INSUFFICIENT_BUFFER (122); 14 or more: 14."
+  failures: "\"Z:\", \"NoSuchDeviceName\", \"C\", \"C::\": 0, ERROR_FILE_NOT_FOUND (2); \"\", \"C:\\\" and \"C:\\Windows\": 0, ERROR_INVALID_HANDLE (6); \"\\\\.\\C:\": 0, 161 (ERROR_BAD_PATHNAME); a NULL buffer: 0, ERROR_NOACCESS (998)."
+errors:
+  insufficient_buffer: "122"
+  not_found: "2"
+  invalid_name: "6"
+  bad_pathname: "161"
+  null_buffer: "998"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Devices that come and go; the order of the list; per-session names.

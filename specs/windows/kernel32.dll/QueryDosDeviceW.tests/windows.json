@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "dos_devices_b",
+      "exe_sha256": "8fbe7fe2ac86410834dac1c1471e6d02a9c12185546b849e304577d3442b488d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgbGlzdCBuYW1lcyBDOjogdHJ1ZQogIHRoZSBsaXN0IG5hbWVzIFBJUEU6IHRydWUKICB0aGUgbGlzdCBuYW1lcyBHTE9CQUxST09UOiB0cnVlClF1ZXJ5RG9zRGV2aWNlVyhOVUxMLCAxKSA9IDAgZXJyIDEyMgpRdWVyeURvc0RldmljZVcoIkM6IikgPSB0cnVlIGVyciAwIGZpcnN0IHN0cmluZyBcRGV2aWNlXEhhcmRkaXNrVm9sdW1lPG4+IGVuZHMgd2l0aCB0d28gTlVMcyB0cnVlCiAgdGhlIGNvdW50IGluY2x1ZGVzIHRoZSBmaW5hbCB0d28gTlVMczogdHJ1ZQpRdWVyeURvc0RldmljZVcoIm51bCIpID0gdHJ1ZSBlcnIgMCBmaXJzdCBzdHJpbmcgXERldmljZVxOdWxsIGVuZHMgd2l0aCB0d28gTlVMcyB0cnVlClF1ZXJ5RG9zRGV2aWNlVygiQzpcXCIpID0gMCBlcnIgNgpRdWVyeURvc0RldmljZVcoIkM6XFxXaW5kb3dzIikgPSAwIGVyciA2ClF1ZXJ5RG9zRGV2aWNlVygiTlVMIiwgMCkgPSAwIGVyciAxMjIgZmlyc3QgdW5pdCBhYWFhClF1ZXJ5RG9zRGV2aWNlVygiTlVMIiwgMTEpID0gMCBlcnIgMTIyIGZpcnN0IHVuaXQgYWFhYQpRdWVyeURvc0RldmljZVcoIk5VTCIsIDE0KSA9IDE0IGVyciB1bmNoYW5nZWQgZmlyc3QgdW5pdCA1YwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the list names C:: true\n  the list names PIPE: true\n  the list names GLOBALROOT: true\nQueryDosDeviceW(NULL, 1) = 0 err 122\nQueryDosDeviceW(\"C:\") = true err 0 first string \\Device\\HarddiskVolume<n> ends with two NULs true\n  the count includes the final two NULs: true\nQueryDosDeviceW(\"nul\") = true err 0 first string \\Device\\Null ends with two NULs true\nQueryDosDeviceW(\"C:\\\\\") = 0 err 6\nQueryDosDeviceW(\"C:\\\\Windows\") = 0 err 6\nQueryDosDeviceW(\"NUL\", 0) = 0 err 122 first unit aaaa\nQueryDosDeviceW(\"NUL\", 11) = 0 err 122 first unit aaaa\nQueryDosDeviceW(\"NUL\", 14) = 14 err unchanged first unit 5c\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "dos_devices_c",
+      "exe_sha256": "7fe8e6bca8117b963584042d6f5a94fd8aacdce9607f86107eb5cc3124796c28",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICB0aGUgbGlzdCBuYW1lcyBOVUw6IHRydWUKICB0aGUgbGlzdCBuYW1lcyBQaHlzaWNhbERyaXZlMDogdHJ1ZQogIG1vcmUgdGhhbiAyMCBuYW1lcyB0cnVlClF1ZXJ5RG9zRGV2aWNlVyhOVUxMLCAxNikgPSAwIGVyciAxMjIKUXVlcnlEb3NEZXZpY2VXKCJjOiIpID0gdHJ1ZSBlcnIgMCBmaXJzdCBzdHJpbmcgXERldmljZVxIYXJkZGlza1ZvbHVtZTxuPiBlbmRzIHdpdGggdHdvIE5VTHMgdHJ1ZQpRdWVyeURvc0RldmljZVcoIkNPTiIpID0gdHJ1ZSBlcnIgMCBmaXJzdCBzdHJpbmcgXERldmljZVxDb25EcnZcQ29uc29sZSBlbmRzIHdpdGggdHdvIE5VTHMgdHJ1ZQpRdWVyeURvc0RldmljZVcoIlo6IikgPSAwIGVyciAyClF1ZXJ5RG9zRGV2aWNlVygiQyIpID0gMCBlcnIgMgpRdWVyeURvc0RldmljZVcoIlxcXFwuXFxDOiIpID0gMCBlcnIgMTYxClF1ZXJ5RG9zRGV2aWNlVygiTlVMIiwgMSkgPSAwIGVyciAxMjIgZmlyc3QgdW5pdCBhYWFhClF1ZXJ5RG9zRGV2aWNlVygiTlVMIiwgMTIpID0gMCBlcnIgMTIyIGZpcnN0IHVuaXQgYWFhYQpRdWVyeURvc0RldmljZVcoIk5VTCIsIE5VTEwgYnVmZmVyLCAxMCkgPSAwIGVyciA5OTgKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  the list names NUL: true\n  the list names PhysicalDrive0: true\n  more than 20 names true\nQueryDosDeviceW(NULL, 16) = 0 err 122\nQueryDosDeviceW(\"c:\") = true err 0 first string \\Device\\HarddiskVolume<n> ends with two NULs true\nQueryDosDeviceW(\"CON\") = true err 0 first string \\Device\\ConDrv\\Console ends with two NULs true\nQueryDosDeviceW(\"Z:\") = 0 err 2\nQueryDosDeviceW(\"C\") = 0 err 2\nQueryDosDeviceW(\"\\\\\\\\.\\\\C:\") = 0 err 161\nQueryDosDeviceW(\"NUL\", 1) = 0 err 122 first unit aaaa\nQueryDosDeviceW(\"NUL\", 12) = 0 err 122 first unit aaaa\nQueryDosDeviceW(\"NUL\", NULL buffer, 10) = 0 err 998\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

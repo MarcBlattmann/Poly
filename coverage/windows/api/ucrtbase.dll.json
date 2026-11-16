@@ -377,7 +377,7 @@
 {"symbol":"_get_pgmptr","status":"claimed","claimed_by":"crt","src":["wine-spec"]},
 {"symbol":"_get_printf_count_output","status":"claimed","claimed_by":"crt","src":["wine-spec"]},
 {"symbol":"_get_purecall_handler","status":"claimed","claimed_by":"crt","src":["wine-spec"]},
-{"symbol":"_get_stream_buffer_pointers","status":"claimed","claimed_by":"spec-win-apps-4","src":["wine-spec"],"seeds":["wine:ucrtbase/tests/file.c:test_iobuf_layout"]},
+{"symbol":"_get_stream_buffer_pointers","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:ucrtbase/tests/file.c:test_iobuf_layout"]},
 {"symbol":"_get_terminate","status":"claimed","claimed_by":"crt","src":["wine-spec"]},
 {"symbol":"_get_thread_local_invalid_parameter_handler","status":"claimed","claimed_by":"crt","src":["wine-spec"],"seeds":["wine:ucrtbase/tests/misc.c:test_invalid_parameter_handler"]},
 {"symbol":"_get_timezone","status":"claimed","claimed_by":"crt","src":["wine-spec"]},

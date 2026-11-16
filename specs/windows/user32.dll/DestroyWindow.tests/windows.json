@@ -40,6 +40,7 @@
     },
     {
       "name": "dw_ime_after",
+      "session": "interactive-bottom",
       "exe_sha256": "a0b58e91749e68c068bda20c445794e1acfc0ed8bd86b5500f103a9b50fc9568",
       "status": "ran",
       "exit_code": 0,

@@ -467,6 +467,21 @@ pub unsafe extern "system" fn GetLongPathNameW(short: *const u16, long: *mut u16
     }
 }
 
+/// `GetShortPathNameW(lpszLongPath, lpszShortPath, cchBuffer)`: Poly's volumes have no 8.3 names, so the short
+/// path is the long path (Learn: "If the volume has no short name for the file ... the function returns the long
+/// path"; and 0 with the error of the lookup for a file that does not exist, as `GetLongPathNameW`). Sized like
+/// it: the length without the NUL, or the size needed with it.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetShortPathNameW(long: *const u16, short: *mut u16, size: u32) -> u32 {
+    // SAFETY: the caller's string.
+    let Some(long) = (unsafe { wide_arg(long) }) else { return fail(ERROR_INVALID_PARAMETER, 0) };
+    match fileex::long_path(long, &mut find_name) {
+        // SAFETY: the caller's buffer.
+        Ok(p) => unsafe { return_sized(&p, short, size) },
+        Err(e) => fail(e, 0),
+    }
+}
+
 // ----- the system directories ----------------------------------------------------------------------
 
 /// `%SystemRoot%`, else `C:\Windows`.
