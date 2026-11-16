@@ -3,7 +3,8 @@
 Everything Poly needs, in the order it has to be built. Each milestone only
 depends on milestones above it. Tick a box (`- [x]`) when the milestone is
 merged with tests; `cargo xtask coverage readme` turns this file into the
-progress chart in the README.
+progress chart in the README (regenerated on `main` after every merge, ADR 0213:
+do not commit its output in a pull request).
 
 **Rules for this file**
 - One line per milestone, written so a reviewer can say "done" or "not done".

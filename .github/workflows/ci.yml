@@ -20,12 +20,19 @@ name: CI
 # "Let QEMU use KVM" step); one boot job runs the self-test boots on QEMU's
 # emulator (TCG) as well.
 
+# `workflow_dispatch` runs the whole CI on any branch without a pull request:
+# `gh workflow run ci.yml --ref <branch>` (ADR 0213).
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
-# A newer push to a pull request cancels the run of the older one.
+# A newer push to a pull request cancels the run of the older one. A manual
+# run has the group of its branch (`ci-refs/heads/<branch>`): it cancels
+# nothing of another branch, a pull request or main (their groups differ),
+# and is not cancelled by them; a second manual run of the same branch waits
+# for the first.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -38,7 +45,9 @@ jobs:
   # A pull request that only changes prose (ADRs, Markdown files, the
   # generated progress charts) skips the jobs that run programs: host tests,
   # the boot tests and the pipeline. Lint and coverage always run (the
-  # lint job checks README.md and docs/ROADMAP.md against coverage/).
+  # coverage step checks that a pull request leaves the generated progress
+  # files alone, ADR 0213). Any other event, a push to main or a manual run
+  # (`workflow_dispatch`), runs everything.
   changes:
     name: changes (code or prose)
     runs-on: ubuntu-24.04
@@ -72,6 +81,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull request's merge commit and its first parent, the base it
+          # was merged into: the coverage step compares the generated files
+          # with it.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
       - name: Install Rust (version from rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -105,9 +119,15 @@ jobs:
           path: target/wow64-cache
           key: ${{ steps.keys.outputs.wow64 }}
       - run: cargo xtask ci lint
-      # The coverage map's checks (README and ROADMAP against coverage/) are
-      # a minute: with lint, which ends sooner than the boots.
+      # The coverage map's checks are a minute: with lint, which ends sooner
+      # than the boots. In a pull request they also fail if the change
+      # rewrites what main generates (the README's progress section, the
+      # graphics, the ADR index), compared with the merge commit's first
+      # parent. Those files are not checked for being out of date: main
+      # regenerates them after every merge (progress.yml, ADR 0213).
       - run: cargo xtask ci coverage
+        env:
+          POLY_PR_BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
 
   host-tests:
     name: host tests
@@ -405,6 +425,104 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Chrome for Windows on Poly (ADR 0155, ADR 0214), one job per stage so each
+  # shows on its own which stage broke: `s1-headless` (headless --dump-dom,
+  # required) and `s3-window` (Chrome's window on the desktop: the page painted,
+  # a typed URL; QMP clicks). Chrome for Testing is downloaded here, from
+  # Google's public bucket, by `xtask chrome-win fetch` (pinned version, size
+  # and SHA-256 checked), and kept only in this repository's Actions cache,
+  # keyed by version: never committed, never an artifact. The stages load
+  # `data:` pages, so they use no network. `POLY_CHROME_REQUIRED=1` makes a
+  # missing package a failure, not a skip. Only the serial logs are kept when a
+  # stage fails, never screenshots (a page's pixels).
+  chrome:
+    name: chrome (${{ matrix.chrome }})
+    needs: [changes, build]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # `shards:` are xtask's CI_BOOT_SHARDS (`ci lint` checks that every
+        # shard of the boot job and of this one is run exactly once).
+        include:
+          - chrome: s1-headless
+            shards: chrome-win
+          - chrome: s3-window
+            shards: chrome-win-window
+    env:
+      POLY_QEMU_ACCEL: auto
+      POLY_PREBUILT: 1
+      POLY_CHROME_REQUIRED: 1
+    steps:
+      - uses: actions/checkout@v4
+      # The launcher and the probe are Windows programs built with cargo here
+      # (not in the build jobs): Rust installs while the packages and the
+      # artifacts come in.
+      - name: Start installing Rust
+        run: .github/scripts/rust-start.sh
+      - name: Install QEMU
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-x86
+      - name: Let QEMU use KVM
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+            sudo udevadm control --reload-rules
+            sudo udevadm trigger --name-match=kvm
+            sudo udevadm settle
+            ls -l /dev/kvm
+          else
+            echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (Chrome is several times slower)"
+          fi
+      - name: Wait for Rust
+        run: .github/scripts/rust-wait.sh
+      - uses: ./.github/actions/prebuilt
+      # The fonts of the disk (ADR 0181): the same pinned DejaVu as host tests.
+      - name: The fonts' cache
+        uses: actions/cache@v4
+        with:
+          path: target/fonts
+          key: fonts-dejavu-2.37
+      - name: Fetch the fonts
+        run: target/debug/xtask fonts fetch
+      # Only the archive is cached (210 MB): xtask checks it against the pinned
+      # SHA-256 on every run and unpacks it, so a bad cache entry is not used.
+      # `main` saves it; a pull request restores main's, or downloads it once.
+      - name: Chrome for Testing's cache
+        uses: actions/cache@v4
+        with:
+          path: target/chrome-win/157.0.8103.38/chrome-win64.zip
+          key: chrome-win-157.0.8103.38
+      - name: Fetch Chrome for Testing 157.0.8103.38 (checked against its pinned SHA-256)
+        run: target/debug/xtask chrome-win fetch
+      - name: Chrome stage ${{ matrix.chrome }}
+        run: target/debug/xtask boot-tests --shard ${{ matrix.shards }}
+      - name: Keep the serial logs
+        id: logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-logs-${{ matrix.chrome }}
+          path: |
+            target/chrome-win/*.log
+            target/win-app/s3-boot/*.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Say which stage failed, and where its log is
+        if: failure()
+        env:
+          STAGE: ${{ matrix.chrome }}
+          LOGS: ${{ steps.logs.outputs.artifact-url }}
+        run: |
+          {
+            echo "### Chrome for Windows: stage \`$STAGE\` failed"
+            echo
+            echo "The step \"Chrome stage $STAGE\" has the stage's report; the serial logs are kept as an artifact: ${LOGS:-none found}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   aarch64:
     name: aarch64 stub (unit tests, QEMU virt on TCG)
     needs: changes
@@ -436,7 +554,7 @@ jobs:
   # only when the change is prose alone (`changes`).
   ci:
     if: always()
-    needs: [changes, lint, host-tests, build, boot, pipeline, aarch64]
+    needs: [changes, lint, host-tests, build, boot, pipeline, chrome, aarch64]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -450,4 +568,4 @@ jobs:
             to_entries | all(
               .value.result == "success"
               or (.value.result == "skipped" and $code == "false"
-                  and (.key | IN("host-tests", "build", "boot", "pipeline", "aarch64"))))' > /dev/null
+                  and (.key | IN("host-tests", "build", "boot", "pipeline", "chrome", "aarch64"))))' > /dev/null

@@ -312,7 +312,7 @@ pub const DISK_FILE: &str = "poly-chrome-win-disk.img";
 pub const APP_ON_DISK: &str = "poly/nt/c/Program Files/Chrome";
 pub const APP_DOS: &str = "C:\\Program Files\\Chrome";
 /// Changes when what the disk carries of Poly's fonts changes (the disk is made again).
-const FONTS_STAMP: &str = "fonts-0181-dejavu";
+pub(crate) const FONTS_STAMP: &str = "fonts-0181-dejavu";
 /// The test directory on the disk (`C:\poly-test`): the launcher, the
 /// stages, the pages.
 pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
@@ -559,6 +559,22 @@ pub fn trace_env(debugging: &Debugging) -> String {
 /// The tree of the disk: Chrome, the launcher, the stages, the test
 /// pages, the hives' directory and, when given, `polystub.dll`.
 pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::RootTree> {
+    let mut tree = app_tree(polystub, kit)?;
+    tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
+    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
+    for stage in &STAGES {
+        let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
+        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
+    }
+    tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
+    tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
+    Ok(tree)
+}
+
+/// What a disk with Chrome on it needs, without the test files (`cargo xtask start`'s "Desktop
+/// with Chrome for Windows" uses this alone, `chrometry.rs`): the hives' directory, Chrome under
+/// [`APP_ON_DISK`], `polystub.dll` and Poly's fonts.
+pub fn app_tree(polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::RootTree> {
     let app = fetch()?;
     let mut tree = crate::rootdisk::RootTree::default();
     tree.dir("poly", 0o755);
@@ -584,14 +600,6 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
         let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
     }
-    tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
-    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
-    for stage in &STAGES {
-        let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
-        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
-    }
-    tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
-    tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
     tree.file(&format!("{SYSTEM32_ON_DISK}/{}", poly_stubs::STUB_DLL), 0o755, polystub);
     // Poly's fonts (ADR 0181): Windows programs get DirectWrite's system collection and GDI's faces from
     // `C:\Windows\Fonts`. Without them Chrome's UI font set-up found no face and started over until its
@@ -627,7 +635,7 @@ pub fn polystub() -> Result<Vec<u8>> {
 }
 
 /// A fingerprint of what the disk is made of besides Chrome (FNV-1a).
-fn fingerprint(parts: &[&[u8]]) -> String {
+pub(crate) fn fingerprint(parts: &[&[u8]]) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for p in parts {
         for &b in p.iter().chain(&(p.len() as u64).to_le_bytes()) {
@@ -1157,17 +1165,48 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     Ok(Outcome { summary, elapsed: started.elapsed(), timed_out, log, passed, digest_note, trace })
 }
 
+/// Whether a missing Chrome fails the boot test groups instead of skipping them
+/// (`POLY_CHROME_REQUIRED=1`; CI's `chrome` job sets it, ADR 0214).
+fn chrome_required() -> bool {
+    std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1")
+}
+
+/// On GitHub Actions, an error annotation that names the stage (shown on the run's summary page
+/// and in the pull request's checks), with the run's address; elsewhere nothing.
+fn ci_annotation(stage: u32, what: &str, message: &str) {
+    if std::env::var("GITHUB_ACTIONS").is_ok_and(|v| v == "true") {
+        let run = match (
+            std::env::var("GITHUB_SERVER_URL"),
+            std::env::var("GITHUB_REPOSITORY"),
+            std::env::var("GITHUB_RUN_ID"),
+        ) {
+            (Ok(server), Ok(repo), Ok(id)) => format!(" Logs: {server}/{repo}/actions/runs/{id}"),
+            _ => String::new(),
+        };
+        println!("::error title=Chrome for Windows, stage {stage} ({what}) failed::{message}.{run}");
+    }
+}
+
 /// The boot test group `chrome-win` (ADR 0155): stage 1, Chrome's headless
 /// `--dump-dom`, on the NT personality. Like the 7-Zip group it is skipped
 /// when the program is not in the cache (`cargo xtask chrome-win fetch`
-/// downloads the 210 MB package; CI has none). Stage 1 must pass
-/// ([`S1_REQUIRED`]); with it off the group only reports how far Chrome got,
-/// unless `POLY_CHROME_REQUIRED=1`.
+/// downloads the 210 MB package); CI's `chrome` job fetches it and sets
+/// `POLY_CHROME_REQUIRED=1`, so there a missing package fails instead (ADR 0214).
+/// Stage 1 must pass ([`S1_REQUIRED`]); with it off the group only reports how
+/// far Chrome got, unless `POLY_CHROME_REQUIRED=1`. The window check (stage 3)
+/// is the group `chrome-win-window` ([`window_boot_test`]).
 pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
     );
     if !fetched() {
+        if chrome_required() {
+            ci_annotation(1, "headless", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            return Err(format!(
+                "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
+                cache_dir().display()
+            ));
+        }
         eprintln!(
             "==> skipped: Chrome {VERSION} is not in the cache ({}); `cargo xtask chrome-win fetch` downloads it",
             cache_dir().display()
@@ -1189,10 +1228,15 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         },
     )?;
     outcome.report(st);
-    let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
+    let required = S1_REQUIRED || chrome_required();
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
     } else if required {
+        ci_annotation(
+            st.number,
+            "headless",
+            "Chrome's headless --dump-dom did not pass (the serial log is an artifact of the run)",
+        );
         return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
@@ -1201,11 +1245,28 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
             outcome.log.display()
         );
     }
+    Ok(())
+}
+
+/// The boot test group `chrome-win-window`: stage 3, Chrome's window on the desktop
+/// ([`stage3_window`]). Skipped without the cached package, like `chrome-win`.
+pub fn window_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    if !fetched() {
+        if chrome_required() {
+            ci_annotation(3, "window", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            return Err(format!(
+                "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
+                cache_dir().display()
+            ));
+        }
+        eprintln!("==> skipped: Chrome {VERSION} is not in the cache; `cargo xtask chrome-win fetch` downloads it");
+        return Ok(());
+    }
     stage3_window(kernel)
 }
 
 /// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
-const S3_PAGE: &str =
+pub(crate) const S3_PAGE: &str =
     "data:text/html,<title>poly-s3</title><style>body{background:green;color:white}</style><h1>HelloPoly</h1>";
 
 /// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
@@ -1215,13 +1276,13 @@ const S3_PAGE: &str =
 /// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
 /// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
 /// (ADR 0155 addendum "browsing").
-const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
+pub(crate) const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
                         chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
                         pixel:200|400|0000ff";
 
 /// What one stage 3 run showed.
 #[derive(Debug, PartialEq, Eq)]
-enum S3Verdict {
+pub(crate) enum S3Verdict {
     /// The page is painted and the browser threw no exception.
     Pass,
     /// The page area is still blank white: a slow start whose page never finished loading (the
@@ -1232,7 +1293,7 @@ enum S3Verdict {
 
 /// Judge a run: an exception delivered to user mode, a window that never came, or any colour but
 /// the page's or blank white at the pixel is a failure.
-fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
+pub(crate) fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
     match stopped {
         _ if !exceptions.is_empty() => S3Verdict::Fail,
         None => S3Verdict::Pass,
@@ -1255,8 +1316,10 @@ fn stage3_window(kernel: &Path) -> Result {
         return Ok(());
     }
     let dir = cache_dir().join(TOP);
+    // Chrome's switches are in one place (`chrometry::FLAGS`).
     let args = format!(
-        "--disable-gpu --no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+        "{} --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}",
+        crate::chrometry::FLAGS.join(" ")
     );
     let log = crate::root().join("target/win-app/s3-boot/chrome.serial.log");
     for attempt in 1..=3 {
@@ -1275,6 +1338,7 @@ fn stage3_window(kernel: &Path) -> Result {
                 );
             }
             S3Verdict::Fail => {
+                ci_annotation(3, "window", "Chrome's window did not show its page, or the browser raised an exception");
                 return Err(format!(
                     "stage 3 did not pass: {}; exceptions: {exceptions:?} (see {})",
                     stopped.unwrap_or_else(|| "the steps ran".into()),

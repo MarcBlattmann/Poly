@@ -221,6 +221,82 @@ pub fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     Ok(out.stdout)
 }
 
+/// The blobs named by `requests` (`<revision>:<path>`, as `git show` takes
+/// them), read through ONE `git cat-file --batch` process instead of one
+/// `git show` each: a process start costs milliseconds on a host and tens of
+/// milliseconds in a container that reads the git directory over a network
+/// file system (9p), and a hand-off verification reads thousands of files.
+/// `each` gets the index of the request and the blob's bytes, or `None`
+/// where the revision or the path does not exist (or is not a file). It runs
+/// in the order of `requests`, one blob at a time, so the caller can hash
+/// and drop it instead of keeping every file in memory. A request must not
+/// contain a newline.
+pub fn git_blobs(repo: &Path, requests: &[String], mut each: impl FnMut(usize, Option<Vec<u8>>)) -> Result {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::process::Stdio;
+    if requests.is_empty() {
+        return Ok(());
+    }
+    if let Some(bad) = requests.iter().find(|r| r.contains(['\n', '\r'])) {
+        return Err(format!("git cat-file: {bad:?} contains a line break"));
+    }
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["cat-file", "--batch"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("git: {e} (is git installed?)"))?;
+    let mut stdin = child.stdin.take().expect("stdin was piped");
+    let mut out = BufReader::new(child.stdout.take().expect("stdout was piped"));
+    let result = std::thread::scope(|scope| {
+        // Feed the requests from a thread: git answers while it reads, and
+        // writing everything first would block once the pipes are full.
+        scope.spawn(move || {
+            let mut input = std::io::BufWriter::new(&mut stdin);
+            for r in requests {
+                if input.write_all(r.as_bytes()).and_then(|()| input.write_all(b"\n")).is_err() {
+                    break;
+                }
+            }
+            let _ = input.flush();
+        });
+        let mut read_all = || -> Result {
+            let mut header = String::new();
+            for i in 0..requests.len() {
+                header.clear();
+                let got = out.read_line(&mut header).map_err(|e| format!("git cat-file: {e}"))?;
+                if got == 0 {
+                    return Err("git cat-file ended before answering every request".to_string());
+                }
+                // `<oid> <type> <size>`, or `<request> missing` / `<request> ambiguous`.
+                let mut words = header.trim_end().rsplitn(3, ' ');
+                let (size, kind) = (words.next().unwrap_or(""), words.next().unwrap_or(""));
+                let Ok(size) = size.parse::<usize>() else {
+                    each(i, None);
+                    continue;
+                };
+                let mut data = vec![0u8; size + 1];
+                out.read_exact(&mut data).map_err(|e| format!("git cat-file: {e}"))?;
+                data.pop(); // the line feed after the contents
+                each(i, (kind == "blob").then_some(data));
+            }
+            Ok(())
+        };
+        let r = read_all();
+        // The feeder thread is joined when the scope ends: stop git first, or
+        // it could wait for us to read while we wait for the feeder.
+        if r.is_err() {
+            let _ = child.kill();
+        }
+        r
+    });
+    let _ = child.wait();
+    result
+}
+
 pub fn git_text(repo: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&git(repo, args)?).trim().to_string())
 }
@@ -301,5 +377,36 @@ mod tests {
     fn inside_resolves_dots() {
         assert!(is_inside(Path::new("/a/b/../b/c"), Path::new("/a/b")));
         assert!(!is_inside(Path::new("/a/b/../c"), Path::new("/a/b")));
+    }
+
+    #[test]
+    fn git_blobs_match_git_show() {
+        let dir = std::env::temp_dir().join(format!("poly-util-blobs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let big: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+        write(&dir.join("big.bin"), &big).unwrap();
+        write(&dir.join("empty"), b"").unwrap();
+        write(&dir.join("sub/a b.txt"), b"two words\r\nand a CRLF\n").unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["add", "."],
+            &["-c", "user.name=t", "-c", "user.email=t@e.x", "commit", "-q", "-m", "x"],
+        ] {
+            git(&dir, args).unwrap();
+        }
+        let requests: Vec<String> =
+            ["HEAD:big.bin", "HEAD:empty", "HEAD:nope", "HEAD:sub/a b.txt", "HEAD:sub", "0000000:x", "HEAD:big.bin"]
+                .map(String::from)
+                .to_vec();
+        let mut got = vec![None; requests.len()];
+        git_blobs(&dir, &requests, |i, data| got[i] = data).unwrap();
+        for (r, g) in requests.iter().zip(&got) {
+            // A directory is not a file for us (`git show` would list it).
+            let expected = if r == "HEAD:sub" { None } else { git(&dir, &["show", r]).ok() };
+            assert_eq!(*g, expected, "{r}");
+        }
+        assert!(git_blobs(&dir, &["HEAD:a\nb".to_string()], |_, _| {}).is_err());
+        assert!(git_blobs(&dir.join("not-a-repo"), &["HEAD:x".to_string()], |_, _| {}).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

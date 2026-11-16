@@ -44,8 +44,9 @@ third-party source.
 2. The **implementer agent** runs in a separate context and only ever receives the
    spec sheet and the visible tests. It never sees the real OS, the held-out
    tests, or any third-party source.
-3. Every hand-off is logged in `specs/HANDOFF_LOG.md` (who, when, which spec
-   revision, which files), so the separation can be proven later.
+3. Every hand-off is logged, one file per record under `specs/handoffs/` (and,
+   for older ones, in the legacy `specs/HANDOFF_LOG.md`): who, when, which spec
+   revision, which files, so the separation can be proven later.
 4. One agent identity never plays both roles for the same entry.
 
 ## Licences of what we read

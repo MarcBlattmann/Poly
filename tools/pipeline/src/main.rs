@@ -976,7 +976,14 @@ fn handoff_cmd(repo: &Path, a: &Args) -> Result<u8> {
                 heldout: heldout.as_deref(),
             };
             let r = handoff::record(repo, &req)?;
-            println!("logged hand-off of {} at {} ({} files) in {}", r.entry, r.revision, r.files.len(), handoff::LOG);
+            println!(
+                "logged hand-off of {} at {} ({} files) in {}/{}",
+                r.entry,
+                r.revision,
+                r.files.len(),
+                handoff::DIR,
+                r.file_name()
+            );
             Ok(0)
         }
         Some("bundle") => {
