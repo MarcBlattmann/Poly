@@ -78,6 +78,44 @@ fn is_own<K: NtKernel>(k: &mut K, process: u64) -> bool {
     k.with_state(|sys, proc, _| matches!(target_of(sys, proc, &caller, Handle(process), 0), Ok(Target::Own)))
 }
 
+/// 128 TiB: the size of the user address space, which no request may reach.
+const USER_SPACE_SIZE: u64 = 1 << 47;
+
+/// What the system can back with committed memory: far more than any machine Poly runs on has
+/// (Windows: RAM plus page files), so a request beyond it fails as `STATUS_COMMITMENT_LIMIT`.
+const SYSTEM_COMMIT_LIMIT: u64 = 1 << 40;
+
+/// `JOB_OBJECT_LIMIT_PROCESS_MEMORY`, `JOB_OBJECT_LIMIT_JOB_MEMORY` (`winnt.h`).
+const JOB_LIMIT_PROCESS_MEMORY: u32 = 0x100;
+const JOB_LIMIT_JOB_MEMORY: u32 = 0x200;
+
+/// Whether `charge` more committed bytes fit: the system's commit limit, and the memory limits of
+/// the jobs the process is in (`JOBOBJECT_EXTENDED_LIMIT_INFORMATION`'s `ProcessMemoryLimit` and
+/// `JobMemoryLimit`, which count the committed private bytes; a job's limit counts this process
+/// alone here).
+fn check_commit(sys: &NtSystem, proc: &NtProcess, charge: u64) -> Result<()> {
+    if charge == 0 {
+        return Ok(());
+    }
+    let used = proc.vm.private_committed_bytes();
+    let over = |limit: u64| charge > limit || used.saturating_add(charge) > limit;
+    if over(SYSTEM_COMMIT_LIMIT) {
+        return Err(STATUS_COMMITMENT_LIMIT);
+    }
+    for &cookie in sys.jobs.jobs_of(proc.pid) {
+        let Some(job) = sys.jobs.job(cookie) else { continue };
+        let tail = job.extended_tail;
+        let limit_at = |from: usize| u64::from_le_bytes(tail[from..from + 8].try_into().expect("8 bytes"));
+        let flags = job.limit_flags();
+        if (flags & JOB_LIMIT_PROCESS_MEMORY != 0 && over(limit_at(48)))
+            || (flags & JOB_LIMIT_JOB_MEMORY != 0 && over(limit_at(56)))
+        {
+            return Err(STATUS_COMMITMENT_LIMIT);
+        }
+    }
+    Ok(())
+}
+
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
 pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
@@ -87,6 +125,17 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
         if own && proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
+        }
+        let at = alloc_type as u32;
+        const SPECIAL: u32 = MEM_RESET | MEM_RESET_UNDO | MEM_RESERVE_PLACEHOLDER | MEM_REPLACE_PLACEHOLDER;
+        if at & SPECIAL == 0 && at & (MEM_COMMIT | MEM_RESERVE) != 0 {
+            // No size, or one the address space can never hold (128 TiB and more).
+            if size == 0 || size >= USER_SPACE_SIZE {
+                return Err(STATUS_INVALID_PARAMETER);
+            }
+            if at & MEM_COMMIT != 0 {
+                check_commit(sys, proc, proc.vm.commit_charge(base, size, at))?;
+            }
         }
         let r = proc.vm.allocate(b, base, size, zero_bits, alloc_type as u32, protect as u32)?;
         if alloc_type as u32 & MEM_COMMIT != 0 {
@@ -316,7 +365,7 @@ fn mapped_filename<K: NtKernel>(
 }
 
 /// The device name and the path of the file the view or image at `addr` of `proc` maps.
-fn mapped_file_of(sys: &NtSystem, proc: &NtProcess, addr: u64) -> Result<(Vec<u16>, Option<Vec<u16>>)> {
+pub(crate) fn mapped_file_of(sys: &NtSystem, proc: &NtProcess, addr: u64) -> Result<(Vec<u16>, Option<Vec<u16>>)> {
     let view = proc.vm.allocation(addr).and_then(|a| a.view()).ok_or(STATUS_INVALID_ADDRESS)?;
     let file = match &sys.section(view.section).ok_or(STATUS_INVALID_ADDRESS)?.kind {
         crate::system::SectionKind::File { file } => Some(*file),

@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/D3D11CreateDevice.yaml
+id: windows/api/d3d11.dll/D3D11CreateDevice
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "D3D11CreateDevice function (d3d11.h)", "D3D_DRIVER_TYPE enumeration", "D3D_FEATURE_LEVEL enumeration", "D3D11_CREATE_DEVICE_FLAG enumeration", "Direct3D feature levels", "ID3D11Device::GetFeatureLevel", "ID3D11Device::GetCreationFlags", "IDXGIDevice::GetAdapter", "IDXGIObject::GetParent"; d3d11.h, d3dcommon.h, dxgi.h, dxgi1_4.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a Direct3D 11 device and its immediate context. Chrome's GPU process calls it with the hardware adapter to read the GPU's capabilities and (through ANGLE) to render; on a machine whose only adapter is the software one, Windows gives the WARP device (Microsoft Basic Render Driver). Observed with D3D_DRIVER_TYPE_WARP: the call succeeds with a NULL adapter and a NULL feature-level list and gives feature level 11_0 (0xB000); with a list it gives the first level of the list (in list order) the device supports; WARP supports every level from 9_1 to 12_1 (0xC100). Every output pointer is optional; with all three NULL the call only checks and returns S_FALSE.
+interface:
+  signature: "HRESULT D3D11CreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE type, HMODULE software, UINT flags, const D3D_FEATURE_LEVEL* levels, UINT n, UINT sdk, ID3D11Device** device, D3D_FEATURE_LEVEL* level, ID3D11DeviceContext** context)"
+  constants: "D3D_DRIVER_TYPE: UNKNOWN 0, HARDWARE 1, REFERENCE 2, NULL 3, SOFTWARE 4, WARP 5. D3D_FEATURE_LEVEL: 9_1 0x9100, 9_2 0x9200, 9_3 0x9300, 10_0 0xA000, 10_1 0xA100, 11_0 0xB000, 11_1 0xB100, 12_0 0xC000, 12_1 0xC100. D3D11_SDK_VERSION 7. D3D11_CREATE_DEVICE_FLAG: SINGLETHREADED 1, DEBUG 2, SWITCH_TO_REFERENCE 4, PREVENT_INTERNAL_THREADING_OPTIMIZATIONS 8, BGRA_SUPPORT 0x20, DEBUGGABLE 0x40, VIDEO_SUPPORT 0x800 (d3d11.h)"
+chrome:
+  calls: "chrome.dll imports D3D11CreateDevice (GPU process, once with the default flags to read adapter and feature level information, also with --disable-gpu); ANGLE (libGLESv2.dll) resolves it with GetProcAddress and creates the rendering device with a list of levels starting at 11_1 and the BGRA_SUPPORT flag (assumed from ANGLE's documented behaviour; the tracer does not see the arguments of calls made through pointers)"
+rules:
+  driver_wrap_null_adapter: "driver type WARP (5) with a NULL adapter: S_OK, device and context set, level 0xB000 for a NULL list"
+  driver_with_adapter: "WARP with a non-NULL adapter, HARDWARE (1) with an adapter, SOFTWARE (4) without a module, an unknown driver type (6, 99): E_INVALIDARG (0x80070057), all outputs set to NULL, level 0"
+  driver_unknown: "UNKNOWN (0) needs an adapter: NULL gives E_INVALIDARG; the WARP adapter of IDXGIFactory4::EnumWarpAdapter gives S_OK with level 0xB000"
+  driver_other: "REFERENCE (2): DXGI_ERROR_UNSUPPORTED (0x887A0004) on a machine without the reference rasteriser (the oracle); NULL (3) with a NULL adapter: S_OK, a device"
+  level_list: "with a list the level chosen is the first entry the device can do, in list order, not the highest: [11_1] gives 0xB100, [10_0, 11_0] gives 0xA000, [9_1, 11_0] gives 0x9100, [12_1, 11_0] gives 0xC100, [11_0, 11_1] gives 0xB000; the list of the documentation (11_1 first) gives 0xB100"
+  level_default: "a NULL list gives 0xB000 on WARP, not 11_1 (an explicit [11_1] gives 0xB100)"
+  level_12: "12_0 and 12_1 are accepted in the list and returned (0xC000, 0xC100)"
+  level_errors: "any list entry that is not a known level (0, 0x1234, 0xFFFF), also after or before a valid one: E_INVALIDARG for the whole call, even if a valid level comes first; a repeated level is fine; a NULL list with a count of 3: E_INVALIDARG; a non-NULL list with a count of 0: DXGI_ERROR_UNSUPPORTED"
+  level_matches: "the level written to the output is the one ID3D11Device::GetFeatureLevel returns"
+  flags: "0, SINGLETHREADED, BGRA_SUPPORT, PREVENT_INTERNAL_THREADING_OPTIMIZATIONS and the undefined bit 0x80000000 are accepted (S_OK) and read back unchanged by ID3D11Device::GetCreationFlags; VIDEO_SUPPORT (0x800), alone or combined with BGRA|SINGLETHREADED: DXGI_ERROR_UNSUPPORTED (0x887A0004) on WARP"
+  flags_need_sdk_layers: "the flags 0x4 (SWITCH_TO_REFERENCE) and the undefined bit 0x10 give DXGI_ERROR_SDK_COMPONENT_MISSING (0x887A002D) on a machine without the Graphics Tools optional feature (the oracle) and succeed on one that has it (the owner's PC); 0xFFFFFFFF gives DXGI_ERROR_UNSUPPORTED (0x887A0004) on the oracle and E_INVALIDARG on the PC; Poly is a machine without the layers: the oracle's values are the reference"
+  sdk_version: "only 7 is accepted; 0, 1, 6, 8, 0x10000000, 0xFFFFFFFF: E_INVALIDARG"
+  outputs: "every output is optional: all NULL gives S_FALSE (1) and nothing is created; only the level pointer gives S_FALSE and the level; only the device gives S_OK and a device with reference count 1 (and no context object kept alive that the caller owns); only the context pointer gives S_OK and a context; on failure the caller's pointers are set to NULL and the level to 0"
+  references: "a device made with both outputs has reference count 2 (the caller's reference and the immediate context's), the context 1; the count after QueryInterface for IDXGIDevice adds one"
+  interfaces_device: "the device answers QueryInterface for ID3D11Device .. ID3D11Device5 (the same pointer), IDXGIObject, IDXGIDevice .. IDXGIDevice4 and ID3D11Multithread (different pointers, all S_OK) and fails with E_NOINTERFACE (0x80004002, output NULL) for ID3D11Debug, ID3D11InfoQueue (no debug layer), ID3D11VideoDevice (not created with VIDEO_SUPPORT), ID3D11DeviceContext, ID3DUserDefinedAnnotation, IDXGIAdapter, IDXGIFactory, IDXGISurface, IDXGIKeyedMutex and unknown ids; IUnknown gives the same pointer every time but not the device pointer"
+  interfaces_context: "the immediate context answers ID3D11DeviceContext .. ID3D11DeviceContext4 and ID3D11DeviceChild (same pointer) and ID3DUserDefinedAnnotation, ID3D11VideoContext and ID3D11Multithread (different pointers); not ID3D11Device"
+  context_device: "ID3D11Device::GetImmediateContext returns the creation context (same pointer, one more reference); ID3D11DeviceChild::GetDevice of the context returns the device; the context's GetType is 0 (immediate) and GetContextFlags 0; the context stays obtainable after the creation reference is released"
+  dxgi_chain: "IDXGIDevice::GetAdapter gives an adapter; IDXGIObject::GetParent(IDXGIAdapter) of the IDXGIDevice gives the same adapter pointer; the adapter's GetParent(IDXGIFactory1) and (IDXGIFactory2) give the same factory pointer; GetParent for ID3D11Device fails with E_NOINTERFACE"
+errors:
+  argument: "E_INVALIDARG"
+  unsupported: "DXGI_ERROR_UNSUPPORTED (0x887A0004)"
+side_effects: "creates a device; with WARP no GPU is touched"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6
+  held_out: 3
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the DEBUG flag (needs the SDK layers), driver types REFERENCE and SOFTWARE with a module, NULL for the SDK-version argument cases that crash, hardware adapters (the oracle's GPU is not WARP: they are in the DXGI entries as relations), D3D11CreateDevice from several threads, the order in which the feature levels of a hardware adapter are chosen.

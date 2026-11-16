@@ -407,8 +407,52 @@ impl VirtualMemory {
         }
         let limit = zero_bits_limit(zero_bits)?;
         let size = page_up(size).ok_or(STATUS_INVALID_PARAMETER_4)?;
-        let base = self.find_free(size, top_down, limit).ok_or(STATUS_NO_MEMORY)?;
+        let base = self.find_free(size, top_down, limit).ok_or(if size > self.end - self.lowest {
+            // More than the whole address space has room for (Windows: `ERROR_INVALID_ADDRESS`).
+            STATUS_CONFLICTING_ADDRESSES
+        } else {
+            STATUS_NO_MEMORY
+        })?;
         Ok((base, size))
+    }
+
+    /// The bytes of private memory committed in this address space (what job memory limits count).
+    pub fn private_committed_bytes(&self) -> u64 {
+        self.allocations
+            .values()
+            .filter(|a| matches!(a.kind, AllocKind::Private) && a.placeholder != Placeholder::Is)
+            .map(|a| {
+                let committed: usize = a
+                    .pages
+                    .runs_in(0..a.pages.len())
+                    .filter(|(_, s)| matches!(s, PageState::Committed(_)))
+                    .map(|(r, _)| r.len())
+                    .sum();
+                committed as u64 * PAGE_SIZE
+            })
+            .sum()
+    }
+
+    /// The bytes a `NtAllocateVirtualMemory` of `MEM_COMMIT` would newly commit: the whole size for
+    /// a new allocation, the reserved pages of the range for a commit inside one.
+    pub fn commit_charge(&self, base: u64, size: u64, alloc_type: u32) -> u64 {
+        let whole = page_up(size).unwrap_or(u64::MAX);
+        if alloc_type & MEM_RESERVE != 0 || base == 0 {
+            return whole;
+        }
+        let Some(a) = self.allocation(page_down(base)) else { return 0 };
+        let start = page_down(base);
+        let end = base.saturating_add(size).min(a.end());
+        if end <= start {
+            return 0;
+        }
+        let reserved: usize = a
+            .pages
+            .runs_in(a.index(start)..a.index(end - 1) + 1)
+            .filter(|(_, s)| matches!(s, PageState::Reserved))
+            .map(|(r, _)| r.len())
+            .sum();
+        reserved as u64 * PAGE_SIZE
     }
 
     /// `NtAllocateVirtualMemory` on this address space. Returns the base

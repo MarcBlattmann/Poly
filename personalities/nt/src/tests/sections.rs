@@ -121,10 +121,13 @@ fn named_sections_and_offsets() {
     let ro = f.u64_at(out);
     let (_, rw_view, _, _) = map(&mut f, h, 0, None, 0, PAGE_READWRITE);
     f.mem.write_bytes(rw_view + 0x1_0010, b"at 64k").unwrap();
-    // The offset is rounded down to 64 KiB and the size grows by the difference.
-    let (s, v, n, o) = map(&mut f, ro, 0, Some(0x1_0010), 0x10, PAGE_READONLY);
+    // An offset that is no multiple of 64 KiB is refused (the sheet's `offset_rules`).
+    assert_eq!(map(&mut f, ro, 0, Some(0x1_0010), 0x10, PAGE_READONLY).0, STATUS_MAPPED_ALIGNMENT);
+    let (s, v, n, o) = map(&mut f, ro, 0, Some(0x1_0000), 0x10, PAGE_READONLY);
     assert_eq!((s, n, o), (STATUS_SUCCESS, 0x1000, 0x1_0000));
     assert_eq!(f.mem.bytes_at(v + 0x10, 6), b"at 64k");
+    // A negative offset and one at the end are bad view sizes.
+    assert_eq!(map(&mut f, ro, 0, Some(u64::MAX - 0xFFFF), 0x10, PAGE_READONLY).0, STATUS_INVALID_VIEW_SIZE);
     // The read-only handle cannot map for writing.
     assert_eq!(map(&mut f, ro, 0, None, 0, PAGE_READWRITE).0, STATUS_ACCESS_DENIED);
     // Views past the end.

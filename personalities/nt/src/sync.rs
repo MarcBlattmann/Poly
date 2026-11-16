@@ -317,6 +317,10 @@ fn signal_object(sys: &mut crate::system::NtSystem, caller: &poly_ntobj::Caller,
 pub fn queue_apc_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, routine, arg1, arg2, arg3] = abi::args::<K, 5>(k, regs)?;
     let thread = crate::threads::thread_of(k, Handle(h), THREAD_SET_CONTEXT)?;
+    // A thread that has ended takes no routine (Win32: `ERROR_GEN_FAILURE`).
+    if k.with_state(|_, proc, _| proc.exited.contains_key(&thread)) {
+        return Err(STATUS_UNSUCCESSFUL);
+    }
     k.queue_apc(thread, Apc { routine, arg1, arg2, arg3 })?;
     Ok(STATUS_SUCCESS)
 }

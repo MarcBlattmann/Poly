@@ -127,7 +127,7 @@ pub unsafe extern "system" fn RegisterWaitForSingleObject(
     ms: u32,
     flags: u32,
 ) -> i32 {
-    if new_wait.is_null() {
+    if new_wait.is_null() || object == 0 {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
     let spec = match waitreg::wait_spec(callback.is_none(), ms, flags) {

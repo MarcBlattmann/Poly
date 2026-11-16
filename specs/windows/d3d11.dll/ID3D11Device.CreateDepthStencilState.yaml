@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateDepthStencilState.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateDepthStencilState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateDepthStencilState", "D3D11_DEPTH_STENCIL_DESC", "D3D11_DEPTH_STENCILOP_DESC", "D3D11_COMPARISON_FUNC", "D3D11_STENCIL_OP", "ID3D11DepthStencilState::GetDesc"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes (or returns the cached) depth-stencil state. Chrome (ANGLE) makes one per GL depth / stencil configuration. GetDesc returns a normalised description: when the depth test is off, DepthWriteMask and DepthFunc read back as the defaults (ALL, LESS); when the stencil test is off the masks read 0xFF and the face operations the defaults (KEEP, KEEP, KEEP, ALWAYS). Descriptions that normalise equal give the same object.
+interface:
+  signature: "HRESULT ID3D11Device::CreateDepthStencilState(const D3D11_DEPTH_STENCIL_DESC*, ID3D11DepthStencilState**)"
+  layout: "D3D11_DEPTH_STENCIL_DESC (52 bytes, 13 words): DepthEnable, DepthWriteMask, DepthFunc, StencilEnable, StencilReadMask | StencilWriteMask << 8 (two UINT8 in one word), FrontFace {StencilFailOp, StencilDepthFailOp, StencilPassOp, StencilFunc}, BackFace {same four}"
+  constants: "DepthWriteMask ZERO 0, ALL 1; D3D11_COMPARISON_FUNC NEVER 1, LESS 2, EQUAL 3, LESS_EQUAL 4, GREATER 5, NOT_EQUAL 6, GREATER_EQUAL 7, ALWAYS 8; D3D11_STENCIL_OP KEEP 1, ZERO 2, REPLACE 3, INCR_SAT 4, DECR_SAT 5, INVERT 6, INCR 7, DECR 8"
+chrome:
+  calls: "ANGLE caches depth-stencil states by GL state (assumed)"
+rules:
+  default: "depth on, write ALL, LESS, stencil off, masks 0xFF, KEEP/KEEP/KEEP/ALWAYS on both faces: S_OK; GetDesc matches"
+  depth_off_normalised: "DepthEnable FALSE: GetDesc returns DepthWriteMask 1 and DepthFunc 2 whatever was given (mask ZERO + ALWAYS, or an invalid DepthFunc 99, are accepted and normalised); two such descriptions that differ only in DepthFunc are the same object"
+  stencil_off_normalised: "StencilEnable FALSE: the read and write masks read back 0xFF and both faces KEEP, KEEP, KEEP, ALWAYS whatever was given (even 3, 3, 3, 3 / 6, 6, 6, 5 or masks 0); two such descriptions that differ only in the face operations are the same object; with StencilEnable TRUE the masks (0x0F / 0xF0) and the two faces are kept separately"
+  validation: "with the depth test on: DepthWriteMask 0 and 1 succeed, 2 and 0xFF are E_INVALIDARG; DepthFunc 1 to 8 succeed, 0, 9 and 0xFF are E_INVALIDARG; with the stencil test on: StencilFailOp, DepthFailOp, PassOp and StencilFunc (front; StencilFunc of the back face) accept 1 and 8 (2 to 7 not tried individually) and refuse 0 and 9; with the stencil test off the same values are all accepted"
+  bool_normalised: "DepthEnable = 7 and StencilEnable = 7 read back 1"
+  identity: "the same description twice: the same object (reference count 2); a different DepthFunc: a different object; the object answers ID3D11DepthStencilState and ID3D11DeviceChild with the same pointer"
+  null_output: "a NULL output pointer only validates: S_FALSE for a valid description, E_INVALIDARG for DepthFunc 99 with the depth test on"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "creates or shares a state object"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the limit of unique depth-stencil states, stencil behaviour in a draw (no shader).

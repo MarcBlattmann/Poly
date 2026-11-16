@@ -346,8 +346,8 @@ unsafe extern "system" {
         length: u32,
         returned: *mut u32,
     ) -> NtStatus;
-    #[cfg(not(target_arch = "x86"))]
     pub fn NtSetInformationThread(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
+    pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
     pub fn NtGetCurrentProcessorNumber() -> u32;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
@@ -388,6 +388,31 @@ unsafe extern "system" {
     pub fn RtlLeaveCriticalSection(cs: *mut CriticalSection) -> NtStatus;
     pub fn RtlTryEnterCriticalSection(cs: *mut CriticalSection) -> u8;
     pub fn RtlDeleteCriticalSection(cs: *mut CriticalSection) -> NtStatus;
+
+    pub fn RtlInitializeSRWLock(lock: *mut usize);
+    pub fn RtlAcquireSRWLockExclusive(lock: *mut usize);
+    pub fn RtlAcquireSRWLockShared(lock: *mut usize);
+    pub fn RtlReleaseSRWLockExclusive(lock: *mut usize);
+    pub fn RtlReleaseSRWLockShared(lock: *mut usize);
+    pub fn RtlTryAcquireSRWLockExclusive(lock: *mut usize) -> u8;
+    pub fn RtlTryAcquireSRWLockShared(lock: *mut usize) -> u8;
+    pub fn RtlInitializeConditionVariable(cv: *mut usize);
+    pub fn RtlWakeConditionVariable(cv: *mut usize);
+    pub fn RtlWakeAllConditionVariable(cv: *mut usize);
+    pub fn RtlSleepConditionVariableCS(cv: *mut usize, cs: *mut CriticalSection, timeout: *const i64) -> NtStatus;
+    pub fn RtlSleepConditionVariableSRW(cv: *mut usize, lock: *mut usize, timeout: *const i64, flags: u32) -> NtStatus;
+    pub fn RtlRunOnceInitialize(once: *mut usize);
+    pub fn RtlRunOnceBeginInitialize(once: *mut usize, flags: u32, context: *mut *mut u8) -> NtStatus;
+    pub fn RtlRunOnceComplete(once: *mut usize, flags: u32, context: *mut u8) -> NtStatus;
+    pub fn RtlRunOnceExecuteOnce(
+        once: *mut usize,
+        function: Option<unsafe extern "system" fn(*mut usize, *mut u8, *mut *mut u8) -> u32>,
+        parameter: *mut u8,
+        context: *mut *mut u8,
+    ) -> NtStatus;
+    pub fn RtlWaitOnAddress(address: *const u8, compare: *const u8, size: usize, timeout: *const i64) -> NtStatus;
+    pub fn RtlWakeAddressSingle(address: *const u8);
+    pub fn RtlWakeAddressAll(address: *const u8);
 
     pub fn LdrLoadDll(path: *const u16, flags: *mut u32, name: *const UnicodeString, handle: *mut *mut u8) -> NtStatus;
     pub fn LdrUnloadDll(handle: *mut u8) -> NtStatus;

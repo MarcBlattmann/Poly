@@ -377,7 +377,8 @@ unsafe extern "system" fn io_apc(context: usize, iosb: *mut IoStatusBlock, _rese
         let rec = Box::from_raw(context as *mut ApcRecord);
         let status = NtStatus((*iosb).status as u32);
         let bytes = (*iosb).information as u32;
-        let error = if status.0 == 0 { 0 } else { nt::RtlNtStatusToDosError(status) };
+        let error =
+            poly_kernelbase::file::ex_completion_error(status.0).unwrap_or_else(|| nt::RtlNtStatusToDosError(status));
         (rec.routine)(error, bytes, rec.overlapped);
     }
 }
@@ -429,7 +430,7 @@ unsafe fn read_write_ex(
             )
         }
     };
-    if st == nt::STATUS_PENDING || st.is_success() || st == nt::STATUS_END_OF_FILE {
+    if poly_kernelbase::file::ex_request_accepted(st.0) {
         return TRUE;
     }
     // SAFETY: the request did not start: nobody else has the record.
@@ -506,7 +507,7 @@ pub extern "system" fn GetThreadId(thread: Handle) -> u32 {
     let mut b = [0u8; 48];
     let mut ret = 0u32;
     // SAFETY: valid pointers; THREAD_BASIC_INFORMATION is 48 bytes.
-    let st = unsafe { nt::NtQueryInformationThread(thread, 0, b.as_mut_ptr(), 48, &mut ret) };
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0x1001, b.as_mut_ptr(), 48, &mut ret) };
     if st.is_success() { crate::base::id_in(&b, crate::base::TBI_UNIQUE_THREAD) } else { fail_status(st, 0) }
 }
 

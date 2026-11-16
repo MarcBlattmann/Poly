@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/IDXGIResource1.CreateSharedHandle.yaml
+id: windows/api/d3d11.dll/IDXGIResource1.CreateSharedHandle
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIResource1::CreateSharedHandle", "IDXGIResource::GetSharedHandle", "D3D11_RESOURCE_MISC_FLAG", "ID3D11Device1::OpenSharedResource1", "ID3D11Device1::OpenSharedResourceByName", "DXGI_SHARED_RESOURCE_READ", "Sharing Resources and Surfaces"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes an NT handle (optionally named) for a texture created with SHARED_NTHANDLE. Chrome's GPU process shares frames with the browser process this way (an NT handle with a keyed mutex; the handle is duplicated into the other process). Only textures made with a misc flag combination that includes SHARED_NTHANDLE can give a handle: SHARED|SHARED_NTHANDLE (0x802) or SHARED_KEYEDMUTEX|SHARED_NTHANDLE (0x900); SHARED_NTHANDLE alone and SHARED|SHARED_KEYEDMUTEX are refused at texture creation. The handle is a kernel handle that CloseHandle closes; the resource lives on while a handle exists.
+interface:
+  signature: "HRESULT IDXGIResource1::CreateSharedHandle(const SECURITY_ATTRIBUTES* attributes, DWORD access, LPCWSTR name, HANDLE* handle)"
+  constants: "DXGI_SHARED_RESOURCE_READ 0x80000000, DXGI_SHARED_RESOURCE_WRITE 1; misc SHARED 2, SHARED_KEYEDMUTEX 0x100, GDI_COMPATIBLE 0x200, SHARED_NTHANDLE 0x800; DXGI_ERROR_NAME_ALREADY_EXISTS 0x887A002C (dxgi.h)"
+chrome:
+  calls: "the GPU process creates a texture with SHARED_NTHANDLE|SHARED_KEYEDMUTEX and shares it with the browser process by NT handle (assumed from Chrome's documented DXGI shared-image design; the tracer does not see these calls)"
+rules:
+  misc_matrix: "texture 16x16 B8G8R8A8_UNORM, RENDER_TARGET|SHADER_RESOURCE, default usage: MiscFlags 0 succeeds; SHARED (2) succeeds; SHARED_KEYEDMUTEX (0x100) succeeds; SHARED_NTHANDLE (0x800) alone is E_INVALIDARG; SHARED|SHARED_NTHANDLE (0x802) succeeds; SHARED_KEYEDMUTEX|SHARED_NTHANDLE (0x900) succeeds; SHARED|SHARED_KEYEDMUTEX and all three are E_INVALIDARG; SHARED|GDI_COMPATIBLE (0x202) and SHARED|0x2000 (RESTRICT_SHARED_RESOURCE) succeed; SHARED_NTHANDLE with GDI_COMPATIBLE, GENERATE_MIPS or 0x2000 is E_INVALIDARG; GetDesc returns the flags as given"
+  interfaces: "every texture (also misc 0) answers IDXGIResource and IDXGIResource1; IDXGIKeyedMutex only with the KEYEDMUTEX flag (0x100, 0x900)"
+  get_shared_handle: "IDXGIResource::GetSharedHandle: misc 0: S_OK with a NULL handle; SHARED, SHARED_KEYEDMUTEX and SHARED|GDI_COMPATIBLE, SHARED|0x2000: S_OK and a non-NULL handle; the NT-handle textures (0x802, 0x900): E_INVALIDARG and a NULL handle (they only share through CreateSharedHandle)"
+  needs_nthandle: "CreateSharedHandle on a texture of misc 0, SHARED or SHARED_KEYEDMUTEX is E_INVALIDARG and the handle is NULL; on 0x802 and 0x900 it is S_OK with a non-NULL handle that CloseHandle closes (returns TRUE)"
+  access: "with attributes NULL: access 0x80000001 (READ|WRITE), READ (0x80000000), WRITE (1), 0, GENERIC_ALL (0x10000000), 1, SYNCHRONIZE (0x100000), 0x1F0000 and 0x80000003 succeed; 0xFFFFFFFF is E_FAIL (0x80004005) with a NULL handle; two unnamed handles of one texture are distinct values"
+  names: "name \"PolySpecShare1\": S_OK; the same name again for the same texture while the first handle is open: DXGI_ERROR_NAME_ALREADY_EXISTS (0x887A002C), handle NULL; the same name for another texture: also 0x887A002C; after every handle with that name is closed the name can be used again; \"Local\\PolySpecShare2\", an empty name and a 299-character name succeed"
+  by_name: "ID3D11Device1::OpenSharedResourceByName(name, access 0x80000001, IID_ID3D11Texture2D) of a live name: S_OK, a texture object that is not the original pointer; a name nobody made: E_INVALIDARG (0x80070057); access 0: 0x8876086A; access READ (0x80000000): S_OK; after the handle is closed: E_INVALIDARG"
+  close: "CloseHandle returns TRUE the first time and FALSE the second (last error ERROR_INVALID_HANDLE 6); a texture opened from the handle before it was closed is unaffected (desc equal to the original, reference count 1); after the original texture was released while the handle was still open the handle still opens (S_OK): the handle keeps the resource alive"
+  no_removal: "no case removes the device"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+  name_exists: "DXGI_ERROR_NAME_ALREADY_EXISTS (0x887A002C)"
+  bad_access: "E_FAIL (0x80004005)"
+side_effects: "creates a kernel handle (and a named object when a name is given)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  handles used from a second process (duplicated or inherited), security attributes other than NULL, names with Global\ (needs a privilege), handle inheritance, shared buffers (they cannot have NT handles).

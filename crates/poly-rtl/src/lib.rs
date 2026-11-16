@@ -7,6 +7,7 @@
 //!   commits virtual memory.
 //! - [`critsec`]: `RTL_CRITICAL_SECTION` (`winnt.h` layout): recursive
 //!   ownership, spinning, and waiting on an event created when first needed.
+//! - [`sync`]: SRW locks, condition variables, run-once and `RtlWaitOnAddress`.
 //! - [`string`]: `UNICODE_STRING` and `ANSI_STRING` (`ntdef.h`) and the
 //!   `Rtl*String*` functions over them.
 //! - [`codepage`]: Poly's ANSI code page, Windows-1252.
@@ -36,6 +37,7 @@ pub mod peb;
 pub mod status;
 pub mod string;
 pub mod unload;
+pub mod sync;
 pub mod version;
 
 pub use poly_ntobj::NtStatus;

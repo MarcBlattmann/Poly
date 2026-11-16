@@ -1192,17 +1192,99 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     let required = S1_REQUIRED || std::env::var("POLY_CHROME_REQUIRED").is_ok_and(|v| v == "1");
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
-        Ok(())
     } else if required {
-        Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()))
+        return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
             "==> stage {} did not pass yet (not required: see S1_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
             st.number,
             outcome.log.display()
         );
-        Ok(())
     }
+    stage3_window(kernel)
+}
+
+/// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
+const S3_PAGE: &str =
+    "data:text/html,<title>poly-s3</title><style>body{background:green;color:white}</style><h1>HelloPoly</h1>";
+
+/// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
+/// (a slow start still finishes loading, so the component updater's download task runs, which
+/// stopped the browser about 35 s after its first page before ADR 0207); at about
+/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000). Then a
+/// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
+/// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
+/// (ADR 0155 addendum "browsing").
+const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
+                        chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
+                        pixel:200|400|0000ff";
+
+/// What one stage 3 run showed.
+#[derive(Debug, PartialEq, Eq)]
+enum S3Verdict {
+    /// The page is painted and the browser threw no exception.
+    Pass,
+    /// The page area is still blank white: a slow start whose page never finished loading (the
+    /// component updater does not even run then), so the run says nothing either way.
+    Inconclusive,
+    Fail,
+}
+
+/// Judge a run: an exception delivered to user mode, a window that never came, or any colour but
+/// the page's or blank white at the pixel is a failure.
+fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
+    match stopped {
+        _ if !exceptions.is_empty() => S3Verdict::Fail,
+        None => S3Verdict::Pass,
+        // White where the first page should be green; white after the navigation is a failure.
+        Some(why) if why.contains("is [ff, ff, ff], wanted [00, 80, 00]") => S3Verdict::Inconclusive,
+        Some(_) => S3Verdict::Fail,
+    }
+}
+
+/// The stage 3 boot check: the browser's window, with the GPU off, shows its page and is still up
+/// after the component updater's BITS download was refused (ADR 0207: the apartment of a COM
+/// thread is in `TEB.ReservedForOle`). Skipped where there is no Unix host or no cached Chrome.
+/// An exception or a missing window fails it at once; a page that never finished loading (blank
+/// white, the slow start that sometimes happens under load) repeats the run, up to three times,
+/// and is reported as inconclusive after that: such a run cannot show the browser's break.
+fn stage3_window(kernel: &Path) -> Result {
+    eprintln!("==> boot test: Chrome for Testing {VERSION}, a window with its page painted after 125 s (stage 3)");
+    if !cfg!(unix) {
+        eprintln!("==> skipped: a desktop run needs a Unix host (QMP over a Unix socket)");
+        return Ok(());
+    }
+    let dir = cache_dir().join(TOP);
+    let args = format!(
+        "--disable-gpu --no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+    );
+    let log = crate::root().join("target/win-app/s3-boot/chrome.serial.log");
+    for attempt in 1..=3 {
+        let (text, stopped) =
+            crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S3_STEPS, &log)?;
+        let exceptions: Vec<&str> = text.lines().filter(|l| l.contains("nt-exc:")).take(3).collect();
+        match s3_verdict(stopped.as_deref(), &exceptions) {
+            S3Verdict::Pass => {
+                println!("STAGE 3 PASSED");
+                return Ok(());
+            }
+            S3Verdict::Inconclusive => {
+                eprintln!(
+                    "==> stage 3, attempt {attempt}: the page was still loading (slow start); log {}",
+                    log.display()
+                );
+            }
+            S3Verdict::Fail => {
+                return Err(format!(
+                    "stage 3 did not pass: {}; exceptions: {exceptions:?} (see {})",
+                    stopped.unwrap_or_else(|| "the steps ran".into()),
+                    log.display()
+                ));
+            }
+        }
+    }
+    println!("STAGE 3 INCONCLUSIVE: the page never finished loading in 3 runs (slow start); no exception either");
+    Ok(())
 }
 
 /// Whether the `chrome-win` boot test group fails when stage 1 does not
@@ -1223,8 +1305,31 @@ pub fn command(args: &[String]) -> Result {
     }
 }
 
+/// Whether [`S3_STEPS`] are steps `win-app` takes (for the test).
+#[cfg(test)]
+fn crate_steps_parse() -> bool {
+    crate::winapps::steps_parse(S3_STEPS)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stage_3_is_judged_by_exceptions_and_the_pixel() {
+        use super::{S3Verdict, s3_verdict};
+        let white = "Pixel(200, 400, [0, 128, 0]): pixel 200,400 is [ff, ff, ff], wanted [00, 80, 00]";
+        let wallpaper = "Pixel(200, 400, [0, 128, 0]): pixel 200,400 is [30, 30, 30], wanted [00, 80, 00]";
+        assert_eq!(s3_verdict(None, &[]), S3Verdict::Pass);
+        assert_eq!(s3_verdict(None, &["nt-exc: pid 2 tid 21 code 0x80000003"]), S3Verdict::Fail);
+        assert_eq!(s3_verdict(Some(white), &[]), S3Verdict::Inconclusive);
+        assert_eq!(s3_verdict(Some(white), &["nt-exc: pid 2"]), S3Verdict::Fail);
+        assert_eq!(s3_verdict(Some(wallpaper), &[]), S3Verdict::Fail);
+        // After the first page was green, a navigation that leaves the page white failed.
+        let not_navigated = "Pixel(200, 400, [0, 0, 255]): pixel 200,400 is [ff, ff, ff], wanted [00, 00, ff]";
+        assert_eq!(s3_verdict(Some(not_navigated), &[]), S3Verdict::Fail);
+        assert!(super::crate_steps_parse());
+        assert_eq!(s3_verdict(Some("Launch: no \"poly-compositor: launched\" in the log"), &[]), S3Verdict::Fail);
+    }
+
     #[test]
     fn debugging_options_become_kernel_arguments() {
         assert_eq!(kernel_arguments(false, None, None), "");

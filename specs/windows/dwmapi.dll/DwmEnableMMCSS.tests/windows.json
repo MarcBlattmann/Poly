@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dwm_mmcss_b",
+      "exe_sha256": "18a6d95fea06849dbaa7bbade7e58660ff56ed41cc40b0d3ea87bbf225d91ed8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RHdtRW5hYmxlTU1DU1MoVFJVRSBhZ2Fpbik6IDB4MDAwMDAwMDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKRHdtRW5hYmxlTU1DU1MoVFJVRSk6IDB4MDAwMDAwMDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKRHdtRW5hYmxlTU1DU1MoRkFMU0UpOiAweDAwMDAwMDAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9uIGFub3RoZXIgdGhyZWFkOiBUUlVFIDB4MDAwMDAwMDAgRkFMU0UgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DwmEnableMMCSS(TRUE again): 0x00000000 last error unchanged\nDwmEnableMMCSS(TRUE): 0x00000000 last error unchanged\nDwmEnableMMCSS(FALSE): 0x00000000 last error unchanged\non another thread: TRUE 0x00000000 FALSE 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "dwm_mmcss_c",
+      "exe_sha256": "91018f864083f9a2878b57caba080dbdddf0dc396ef82f5b7f13672a3b65e787",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RHdtRW5hYmxlTU1DU1MoRkFMU0UpOiAweDAwMDAwMDAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCkR3bUVuYWJsZU1NQ1NTKDIpOiAweDAwMDAwMDAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCkR3bUVuYWJsZU1NQ1NTKDB4MTAwMDApOiAweDAwMDAwMDAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCnRoZSByZXN1bHQgaXMgYSBzdWNjZXNzIGNvZGUgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DwmEnableMMCSS(FALSE): 0x00000000 last error unchanged\nDwmEnableMMCSS(2): 0x00000000 last error unchanged\nDwmEnableMMCSS(0x10000): 0x00000000 last error unchanged\nthe result is a success code true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

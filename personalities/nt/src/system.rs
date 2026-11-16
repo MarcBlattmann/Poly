@@ -91,9 +91,6 @@ pub struct NtSystem {
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
     /// defaults.
     pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
-    /// Who created each process (`InheritedFromUniqueProcessId` of `ProcessBasicInformation`), kept
-    /// while the process object exists.
-    pub process_parents: BTreeMap<ProcessId, ProcessId>,
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],
@@ -151,7 +148,6 @@ impl NtSystem {
             lowbox_sids: Vec::new(),
             winsta: crate::winsta::WinSta::default(),
             proc_attrs: BTreeMap::new(),
-            process_parents: BTreeMap::new(),
             ntdll32: &[],
             sections: BTreeMap::new(),
             next_key: 1,
@@ -218,7 +214,6 @@ impl NtSystem {
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
                     self.proc_attrs.remove(&ProcessId(d.cookie as u32));
-                    self.process_parents.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
@@ -244,6 +239,12 @@ pub struct NtThread {
     pub teb: u64,
     /// Its stack allocation.
     pub stack: u64,
+    /// Where it started: the entry point of the image, or the start routine `CreateThread` was given
+    /// (`ThreadQuerySetWin32StartAddress`).
+    pub start: u64,
+    /// Its priority relative to its process's class, as `ThreadBasePriority` gives it: -2 to 2, and
+    /// -16 and 16 for the idle and time-critical ends.
+    pub base_priority: i32,
 }
 
 /// The NT state of one process.
@@ -294,6 +295,11 @@ pub struct NtProcess {
     /// `ntdll`, its address space ends at 2 or 4 GiB, its PEB, TEBs and parameters have the
     /// 32-bit layout and its system calls go through [`crate::wow64`].
     pub wow64: bool,
+    /// Its priority class as `ProcessPriorityClass` gives it (1 idle, 2 normal, 3 high, 4 real-time,
+    /// 5 below normal, 6 above normal).
+    pub priority_class: u8,
+    /// The process that created it (0: the kernel started it).
+    pub parent: u32,
 }
 
 impl NtProcess {
@@ -323,6 +329,8 @@ impl NtProcess {
             win32k_disabled: false,
             image_name: None,
             wow64: false,
+            priority_class: 2,
+            parent: 0,
         }
     }
 

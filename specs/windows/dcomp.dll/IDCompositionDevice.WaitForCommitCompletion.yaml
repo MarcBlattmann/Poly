@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dcomp.dll/IDCompositionDevice.WaitForCommitCompletion.yaml
+id: windows/api/dcomp.dll/IDCompositionDevice.WaitForCommitCompletion
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "DCompositionCreateDevice function (dcomp.h)", "DCompositionCreateDevice2 function (dcomp.h)", "DCompositionCreateDevice3 function (dcomp.h)", "IDCompositionDevice interface", "IDCompositionDevice2 interface", "IDCompositionDesktopDevice interface", "IDCompositionVisual interface", "IDCompositionTarget interface", "IDXGIFactory2::CreateSwapChainForComposition"; dcomp.h, dcomptypes.h, dxgi1_2.h, dxgi1_3.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Pointer sheet. Slot 4. Observed by the tests dccommit_basic, dccommit_surfaces and dccommit_huge of IDCompositionDevice.Commit.
+interface:
+  signature: "see dcomp.h"
+  constants: "see the sheet of IDCompositionDevice.Commit"
+chrome:
+  calls: "Chrome's GPU process (DirectComposition path, assumed from its documented design; the tracer only sees the exports) makes a D3D11 device, takes its IDXGIDevice, calls DCompositionCreateDevice3 (or 2) and asks for IDCompositionDesktopDevice, creates a target for the browser window's HWND with topmost TRUE, a root visual and one visual per overlay layer, sets a flip swap chain made by CreateSwapChainForComposition as the content of a visual, calls Commit after each change and uses WaitForCommitCompletion / GetFrameStatistics for frame pacing."
+rules:
+  wait: "WaitForCommitCompletion (slot 4) is S_OK after Commit, twice in a row, on a device that never committed and on a device with no changes (it does not block when there is nothing to wait for); it also follows 300 commits"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  

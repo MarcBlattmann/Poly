@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dcsurfh_basic",
+      "exe_sha256": "bdd3ffae6ff65d130291a10b831d24c644bdf4a795eb1585d36e3ad00f5497af",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWNjZXNzIENPTVBPU0lUSU9OT0JKRUNUX0FMTF9BQ0NFU1MgMywgTlVMTCBhdHRyaWJ1dGVzOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQKYWNjZXNzIDAsIE5VTEwgYXR0cmlidXRlczogMHgwMDAwMDAwMCBoYW5kbGUgc2V0CmFjY2VzcyBHRU5FUklDX1JFQUR8R0VORVJJQ19XUklURSwgTlVMTCBhdHRyaWJ1dGVzOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQKYWNjZXNzIE1BWElNVU1fQUxMT1dFRCwgTlVMTCBhdHRyaWJ1dGVzOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQKTlVMTCBhdHRyaWJ1dGVzOiBHZXRIYW5kbGVJbmZvcm1hdGlvbiAxIGluaGVyaXQgZmxhZyAwCnR3byBoYW5kbGVzIGFyZSBkaWZmZXJlbnQgdmFsdWVzOiB0cnVlCiAgc3VyZmFjZSBRSSBJRFhHSVN1cmZhY2U6IDB4ODAwMDQwMDIgcHRyPW51bGwKZGVza3RvcCBkZXZpY2UgQ3JlYXRlU3VyZmFjZUZyb21IYW5kbGUoYSBzZWNvbmQgc3VyZmFjZSBoYW5kbGUpOiAweDAwMDAwMDAwIHB0cj1zZXQKZGVza3RvcCBkZXZpY2UgQ3JlYXRlU3VyZmFjZUZyb21IYW5kbGUoYW4gZXZlbnQgaGFuZGxlKTogMHg4MDA3MDAwNiBwdHI9bnVsbAp2MSBkZXZpY2UgQ3JlYXRlU3VyZmFjZUZyb21IYW5kbGUoTlVMTCk6IDB4MDAwMDAwMDAgcHRyPXNldApmYWN0b3J5IFFJIElEWEdJRmFjdG9yeU1lZGlhOiAweDAwMDAwMDAwIHB0cj1zZXQKICBQcmVzZW50KDAsMCkgMHgwMDAwMDAwMCBQcmVzZW50KDEsMCkgMHgwMDAwMDAwMAogIEdldERlc2MxIDB4MDAwMDAwMDAgc2l6ZSA2NHg0OCBmb3JtYXQgODcgZWZmZWN0IDMKQ3JlYXRlU3dhcENoYWluRm9yQ29tcG9zaXRpb25TdXJmYWNlSGFuZGxlKE5VTEwgaGFuZGxlKTogMHgwMDAwMDAwMCBwdHI9c2V0CiAgQ3JlYXRlU3VyZmFjZUZyb21IYW5kbGUgMHgwMDAwMDAwMCBwdHI9c2V0IFNldENvbnRlbnQgMHgwMDAwMDAwMCBDb21taXQgMHgwMDAwMDAwMCBQcmVzZW50IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "access COMPOSITIONOBJECT_ALL_ACCESS 3, NULL attributes: 0x00000000 handle set\naccess 0, NULL attributes: 0x00000000 handle set\naccess GENERIC_READ|GENERIC_WRITE, NULL attributes: 0x00000000 handle set\naccess MAXIMUM_ALLOWED, NULL attributes: 0x00000000 handle set\nNULL attributes: GetHandleInformation 1 inherit flag 0\ntwo handles are different values: true\n  surface QI IDXGISurface: 0x80004002 ptr=null\ndesktop device CreateSurfaceFromHandle(a second surface handle): 0x00000000 ptr=set\ndesktop device CreateSurfaceFromHandle(an event handle): 0x80070006 ptr=null\nv1 device CreateSurfaceFromHandle(NULL): 0x00000000 ptr=set\nfactory QI IDXGIFactoryMedia: 0x00000000 ptr=set\n  Present(0,0) 0x00000000 Present(1,0) 0x00000000\n  GetDesc1 0x00000000 size 64x48 format 87 effect 3\nCreateSwapChainForCompositionSurfaceHandle(NULL handle): 0x00000000 ptr=set\n  CreateSurfaceFromHandle 0x00000000 ptr=set SetContent 0x00000000 Commit 0x00000000 Present 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 221
+    },
+    {
+      "name": "dcsurfh_basic_c",
+      "exe_sha256": "0083bef7eba04d1c8893559a80440a283044b8fb917d3eb5e5f654c4aab3e737",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWNjZXNzIFdSSVRFIDIsIE5VTEwgYXR0cmlidXRlczogMHgwMDAwMDAwMCBoYW5kbGUgc2V0CmFjY2VzcyBHRU5FUklDX0FMTCAweDEwMDAwMDAwLCBOVUxMIGF0dHJpYnV0ZXM6IDB4MDAwMDAwMDAgaGFuZGxlIHNldAphY2Nlc3MgMHhGRkZGRkZGRiwgTlVMTCBhdHRyaWJ1dGVzOiAweGQwMDAwMDYxIGhhbmRsZSBudWxsCmF0dHJpYnV0ZXMgd2l0aCBiSW5oZXJpdEhhbmRsZSBUUlVFOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQgR2V0SGFuZGxlSW5mb3JtYXRpb24gMSBpbmhlcml0IGZsYWcgMQpDbG9zZUhhbmRsZSBvZiB0aGUgZHVwbGljYXRlOiAxIHR3aWNlOiAwCiAgc3VyZmFjZSBRSSBJRENvbXBvc2l0aW9uU3VyZmFjZTogMHg4MDAwNDAwMiBwdHI9bnVsbAogIFNldENvbnRlbnQodGhlIHN1cmZhY2UgZnJvbSB0aGUgaGFuZGxlKSAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwCmRlc2t0b3AgZGV2aWNlIENyZWF0ZVN1cmZhY2VGcm9tSGFuZGxlKC0xKTogMHg4MDA3MDAwNiBwdHI9bnVsbAp2MSBkZXZpY2UgQ3JlYXRlU3VyZmFjZUZyb21IYW5kbGUoYSBzZWNvbmQgc3VyZmFjZSBoYW5kbGUpOiAweDAwMDAwMDAwIHB0cj1zZXQKdjEgZGV2aWNlIENyZWF0ZVN1cmZhY2VGcm9tSGFuZGxlKGFuIGV2ZW50IGhhbmRsZSk6IDB4ODAwNzAwMDYgcHRyPW51bGwKICBHZXREZXNjMSAweDAwMDAwMDAwIHNpemUgNjR4NDggZm9ybWF0IDg3IGVmZmVjdCAzCkNyZWF0ZVN3YXBDaGFpbkZvckNvbXBvc2l0aW9uU3VyZmFjZUhhbmRsZShhIHNlY29uZCBoYW5kbGUpOiAweDAwMDAwMDAwIHB0cj1zZXQKICBDcmVhdGVTdXJmYWNlRnJvbUhhbmRsZSAweDAwMDAwMDAwIHB0cj1zZXQgU2V0Q29udGVudCAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwIFByZXNlbnQgMHgwMDAwMDAwMAogIFByZXNlbnQoMCwwKSAweDAwMDAwMDAwIFByZXNlbnQoMSwwKSAweDAwMDAwMDAwCnR3byBzd2FwIGNoYWlucyBmb3Igb25lIGhhbmRsZTogMHgwMDAwMDAwMCAweDg4N2EwMDM2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "access WRITE 2, NULL attributes: 0x00000000 handle set\naccess GENERIC_ALL 0x10000000, NULL attributes: 0x00000000 handle set\naccess 0xFFFFFFFF, NULL attributes: 0xd0000061 handle null\nattributes with bInheritHandle TRUE: 0x00000000 handle set GetHandleInformation 1 inherit flag 1\nCloseHandle of the duplicate: 1 twice: 0\n  surface QI IDCompositionSurface: 0x80004002 ptr=null\n  SetContent(the surface from the handle) 0x00000000 Commit 0x00000000\ndesktop device CreateSurfaceFromHandle(-1): 0x80070006 ptr=null\nv1 device CreateSurfaceFromHandle(a second surface handle): 0x00000000 ptr=set\nv1 device CreateSurfaceFromHandle(an event handle): 0x80070006 ptr=null\n  GetDesc1 0x00000000 size 64x48 format 87 effect 3\nCreateSwapChainForCompositionSurfaceHandle(a second handle): 0x00000000 ptr=set\n  CreateSurfaceFromHandle 0x00000000 ptr=set SetContent 0x00000000 Commit 0x00000000 Present 0x00000000\n  Present(0,0) 0x00000000 Present(1,0) 0x00000000\ntwo swap chains for one handle: 0x00000000 0x887a0036\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 255
+    }
+  ]
+}

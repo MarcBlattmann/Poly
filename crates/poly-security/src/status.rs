@@ -189,6 +189,8 @@ pub const STATUS_ACCESS_VIOLATION: NtStatus = NtStatus(0xC000_0005);
 pub const STATUS_NO_MEMORY: NtStatus = NtStatus(0xC000_0017);
 pub const STATUS_CONFLICTING_ADDRESSES: NtStatus = NtStatus(0xC000_0018);
 pub const STATUS_NOT_MAPPED_VIEW: NtStatus = NtStatus(0xC000_0019);
+/// The commit limit would be exceeded (`ntstatus.h`).
+pub const STATUS_COMMITMENT_LIMIT: NtStatus = NtStatus(0xC000_012D);
 pub const STATUS_UNABLE_TO_FREE_VM: NtStatus = NtStatus(0xC000_001A);
 pub const STATUS_UNABLE_TO_DELETE_SECTION: NtStatus = NtStatus(0xC000_001B);
 pub const STATUS_INVALID_SYSTEM_SERVICE: NtStatus = NtStatus(0xC000_001C);

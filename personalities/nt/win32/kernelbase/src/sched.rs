@@ -39,22 +39,32 @@ fn own_process(process: Handle) -> Option<bool> {
 
 /// `SetThreadPriority` (Learn): one of the `THREAD_PRIORITY_*` levels, or
 /// `THREAD_MODE_BACKGROUND_BEGIN/END` for the calling thread.
-#[unsafe(no_mangle)]
-pub extern "system" fn SetThreadPriority(thread: Handle, value: i32) -> i32 {
+/// The level this process's table holds for the thread `thread` names (`THREAD_PRIORITY_NORMAL`
+/// when none was set), and a way to record a level there: the kernel keeps a live thread's
+/// priority, the table also the one of a thread that has ended.
+pub(crate) fn table_priority(thread: Handle) -> i32 {
+    let error = last_error();
+    let level = thread_id(thread).map_or(0, |tid| with(|p| p.thread(tid)));
+    set_last_error(error);
+    level
+}
+
+pub(crate) fn remember_priority(thread: Handle, level: i32) {
+    // The handle may not be one `GetThreadId` can read: the caller's last error stays as it is.
+    let error = last_error();
+    if let Some(tid) = thread_id(thread) {
+        let _ = with(|p| p.set_thread(tid, level, tid == crate::process::GetCurrentThreadId()));
+    }
+    set_last_error(error);
+}
+
+pub(crate) fn set_thread_priority_mode(thread: Handle, value: i32) -> i32 {
     let Some(tid) = thread_id(thread) else { return FALSE };
     let current = tid == crate::process::GetCurrentThreadId();
     match with(|p| p.set_thread(tid, value, current)) {
         Ok(()) => TRUE,
         Err(e) => fail(e, FALSE),
     }
-}
-
-/// `GetThreadPriority` (Learn): the level set last, `THREAD_PRIORITY_NORMAL`
-/// at first; `THREAD_PRIORITY_ERROR_RETURN` for a bad handle.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetThreadPriority(thread: Handle) -> i32 {
-    let Some(tid) = thread_id(thread) else { return priority::THREAD_PRIORITY_ERROR_RETURN };
-    with(|p| p.thread(tid))
 }
 
 /// `SetThreadPriorityBoost` (Learn): `disable` TRUE turns dynamic boosting off.
@@ -114,24 +124,12 @@ pub unsafe extern "system" fn GetProcessPriorityBoost(process: Handle, disabled:
 /// `SetPriorityClass` (Learn): a `*_PRIORITY_CLASS`, or
 /// `PROCESS_MODE_BACKGROUND_BEGIN/END` for the calling process. Another
 /// process's class is accepted and not kept (its settings are its own).
-#[unsafe(no_mangle)]
-pub extern "system" fn SetPriorityClass(process: Handle, class: u32) -> i32 {
+pub(crate) fn set_priority_class_mode(process: Handle, class: u32) -> i32 {
     let Some(own) = own_process(process) else { return FALSE };
     let r = if own { with(|p| p.set_class(class, true)) } else { Priorities::<1>::new().set_class(class, false) };
     match r {
         Ok(()) => TRUE,
         Err(e) => fail(e, FALSE),
-    }
-}
-
-/// `GetPriorityClass` (Learn): 0 on failure; `NORMAL_PRIORITY_CLASS` for
-/// another process.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetPriorityClass(process: Handle) -> u32 {
-    match own_process(process) {
-        None => 0,
-        Some(true) => with(|p| p.class()),
-        Some(false) => priority::NORMAL_PRIORITY_CLASS,
     }
 }
 

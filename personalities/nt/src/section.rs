@@ -444,8 +444,13 @@ pub fn map_section(
         let offset = req.offset.unwrap_or(0);
         let start = offset & !(ALLOCATION_GRANULARITY - 1);
         let total = page_up(section.size).expect("bounded");
-        if start >= total {
+        // A negative offset or one at or past the end is a bad view size; one that is not a
+        // multiple of 64 KiB is `STATUS_MAPPED_ALIGNMENT` (the sheet's `offset_rules`).
+        if (offset as i64) < 0 || start >= total {
             return Err(STATUS_INVALID_VIEW_SIZE);
+        }
+        if offset != start {
+            return Err(STATUS_MAPPED_ALIGNMENT);
         }
         let size = if req.view_size == 0 {
             total - start
