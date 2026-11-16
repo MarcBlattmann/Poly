@@ -368,12 +368,14 @@ pub fn split_tests(repo: &Path, heldout: &Path, req: &SplitRequest<'_>) -> Resul
 
 /// Content hash of every held-out test in the store -> where it is.
 pub fn held_out_hashes(heldout: &Path) -> Result<BTreeMap<String, String>> {
+    let files: Vec<PathBuf> =
+        util::files_under(heldout)?.into_iter().filter(|rel| !rel.file_name().is_some_and(|n| n == MANIFEST)).collect();
+    let hashes = util::parallel_map(&files, util::default_jobs(8), |rel| {
+        util::read(&heldout.join(rel)).map(|d| sha256::hex(&d))
+    });
     let mut out = BTreeMap::new();
-    for rel in util::files_under(heldout)? {
-        if rel.file_name().is_some_and(|n| n == MANIFEST) {
-            continue;
-        }
-        out.insert(sha256::hex(&util::read(&heldout.join(&rel))?), rel.to_string_lossy().into_owned());
+    for (rel, hash) in files.iter().zip(hashes) {
+        out.insert(hash?, rel.to_string_lossy().into_owned());
     }
     Ok(out)
 }

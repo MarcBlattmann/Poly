@@ -1,0 +1,105 @@
+name: Regenerate progress
+
+# The README's progress section and phase table, docs/progress/*.svg and the
+# ADR index in docs/adr/README.md are generated (ADR 0213), and only here, on
+# main: a pull request must not change them (`cargo xtask ci coverage`), so
+# merging one never makes the next conflict in them.
+#
+# After every push to main this runs `cargo xtask coverage readme` and, if
+# something changed, pushes the commit "Regenerate progress" with `[skip ci]`.
+#
+# The ruleset on main requires the `ci` status and lets nobody push directly.
+# The one exception is the deploy key "progress workflow" (write access, in
+# the ruleset's bypass list; its private key is the Actions secret
+# PROGRESS_DEPLOY_KEY). The push goes over SSH with it. The default
+# GITHUB_TOKEN cannot bypass the ruleset (GitHub does not let the Actions app
+# bypass one on a user-owned repository) and has no write permission here.
+#
+# It cannot loop: the commit message says `[skip ci]`, so GitHub starts no
+# workflow for the push (this one included), and the job also ends at once
+# when the commit it was started for is its own "Regenerate progress" commit.
+# (A push with a deploy key, unlike one with GITHUB_TOKEN, would otherwise
+# start workflows.)
+
+on:
+  push:
+    branches: [main]
+
+# One run at a time, the newest waiting: each run regenerates from the latest
+# main anyway.
+concurrency:
+  group: progress
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  progress:
+    name: regenerate progress files
+    # Not for the commit this workflow pushes itself.
+    if: "!startsWith(github.event.head_commit.message, 'Regenerate progress')"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # The deploy key is the checkout's credential: `git push` below uses it.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          ssh-key: ${{ secrets.PROGRESS_DEPLOY_KEY }}
+          persist-credentials: true
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lint
+          save-if: false
+      - name: Regenerate
+        run: cargo xtask coverage readme
+      - name: Commit and push
+        run: |
+          if git diff --quiet -- README.md docs/progress docs/adr/README.md \
+             && [ -z "$(git ls-files --others --exclude-standard -- docs/progress)" ]; then
+            echo "Nothing to regenerate: the progress files are up to date." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- README.md docs/progress docs/adr/README.md
+          git commit -m "Regenerate progress" -m "[skip ci]" -m "Written by .github/workflows/progress.yml (ADR 0213)."
+          # main may have moved while this ran: rebase our commit on it and
+          # try again a few times (only generated files, so no conflicts; a
+          # later run regenerates anyway).
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main 2> push.log; then
+              cat push.log
+              echo "Pushed the regenerated progress files to main (\`Regenerate progress\`)." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            cat push.log
+            # A refusal by the ruleset (or the key) will not change by trying
+            # again; a push that lost a race with a merge to main will.
+            if grep -qiE "GH013|rule violations|protected branch|permission denied|deploy key" push.log; then
+              break
+            fi
+            git pull --rebase origin main || break
+          done
+          {
+            echo "### The progress files were not pushed"
+            echo
+            echo "The push to \`main\` was refused:"
+            echo
+            echo '```'
+            tail -n 20 push.log
+            echo '```'
+            echo
+            echo "The ruleset on \`main\` must let the deploy key **progress workflow** bypass it, and the"
+            echo "Actions secret \`PROGRESS_DEPLOY_KEY\` must hold that key's private half (ADR 0213)."
+            echo "Until then the README progress section, \`docs/progress/\` and the ADR index are not updated."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=Progress files not pushed::The push to main was refused. The ruleset must let the deploy key 'progress workflow' bypass it (ADR 0213); see the job summary."
+          exit 1

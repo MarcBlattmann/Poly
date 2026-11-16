@@ -64,11 +64,12 @@ cargo xtask coverage import macos-objc "$GRAPHS" --revision "$REVISION"
 echo "==> Swift: reading the .swiftinterface files"
 cargo xtask coverage import macos-swift "$SDK" --revision "$REVISION"
 
-echo "==> Regenerating the README progress section"
-cargo xtask coverage readme
+# The README's progress section and docs/progress are regenerated on main
+# after every merge (ADR 0213); do not commit them. `cargo xtask coverage
+# readme` previews them.
 
 echo
 echo "Done. Check the result, then commit and push:"
-echo "    git add coverage README.md docs/progress"
+echo "    git add coverage"
 echo "    git commit -m \"Map the Objective-C and Swift API from $REVISION\""
 echo "    git push"
