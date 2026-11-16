@@ -330,7 +330,7 @@
 {"symbol":"GetAcceptLanguagesW","src":["wine-spec"]},
 {"symbol":"GetAce","status":"claimed","claimed_by":"advapi32","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_inherited_dacl","wine:shlwapi/tests/ordinal.c:test_GetShellSecurityDescriptor","wine:advapi32/tests/security.c:test_child_token_sd","wine:advapi32/tests/security.c:test_default_dacl_owner_group_sid","wine:advapi32/tests/security.c:test_AddMandatoryAce","wine:advapi32/tests/security.c:test_token_security_descriptor","wine:advapi32/tests/security.c:test_GetSecurityInfo","wine:advapi32/tests/security.c:test_GetNamedSecurityInfoA"]},
 {"symbol":"GetAclInformation","status":"claimed","claimed_by":"advapi32","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_inherited_dacl","wine:shlwapi/tests/ordinal.c:test_GetShellSecurityDescriptor","wine:advapi32/tests/security.c:test_AddMandatoryAce","wine:advapi32/tests/security.c:test_CreateDirectoryA","wine:advapi32/tests/security.c:test_GetSecurityInfo","wine:advapi32/tests/security.c:test_GetNamedSecurityInfoA"]},
-{"symbol":"GetAppContainerNamedObjectPath","status":"claimed","claimed_by":"spec-chrome-win-s2b","src":["windows-export-probe"]},
+{"symbol":"GetAppContainerNamedObjectPath","status":"green","tests_visible":2,"tests_held_out":1,"src":["windows-export-probe"]},
 {"symbol":"GetApplicationRestartSettings","src":["wine-spec"]},
 {"symbol":"GetCPFileNameFromRegistry","src":["wine-spec"]},
 {"symbol":"GetCPHashNode","src":["wine-spec"]},
