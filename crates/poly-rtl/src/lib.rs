@@ -37,6 +37,7 @@ pub mod peb;
 pub mod status;
 pub mod string;
 pub mod sync;
+pub mod unload;
 pub mod version;
 
 pub use poly_ntobj::NtStatus;

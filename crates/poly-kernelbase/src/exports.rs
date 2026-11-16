@@ -121,11 +121,11 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentThreadStackLimits", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitProcess", "api-ms-win-core-processthreads-l1-1-0"),
     ("TerminateProcess", "api-ms-win-core-processthreads-l1-1-0"),
-    ("CreateThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("ExitThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetExitCodeThread", "api-ms-win-core-processthreads-l1-1-0"),
     // Synchronisation (synchapi.h).
     ("CreateEventW", "api-ms-win-core-synch-l1-1-0"),
+    ("CreateWaitableTimerW", "api-ms-win-core-synch-l1-1-0"),
     ("SetEvent", "api-ms-win-core-synch-l1-1-0"),
     ("ResetEvent", "api-ms-win-core-synch-l1-1-0"),
     ("CreateMutexW", "api-ms-win-core-synch-l1-1-0"),
@@ -175,6 +175,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("VirtualFreeEx", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualProtectEx", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualQueryEx", "api-ms-win-core-memory-l1-1-0"),
+    ("FlushInstructionCache", "api-ms-win-core-processthreads-l1-1-0"),
     ("ReadProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("WriteProcessMemory", "api-ms-win-core-memory-l1-1-0"),
     ("HeapCreate", "api-ms-win-core-heap-l1-1-0"),
@@ -318,6 +319,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetProcessAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
     ("SetThreadAffinityMask", "api-ms-win-core-processtopology-obsolete-l1-1-0"),
     ("OpenEventW", "api-ms-win-core-synch-l1-1-0"),
+    ("OpenMutexW", "api-ms-win-core-synch-l1-1-0"),
     ("RaiseException", "api-ms-win-core-errorhandling-l1-1-0"),
     ("SetUnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
     ("UnhandledExceptionFilter", "api-ms-win-core-errorhandling-l1-1-0"),
@@ -528,6 +530,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetCurrentProcessorNumber", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetCurrentProcessorNumberEx", "api-ms-win-core-processthreads-l1-1-1"),
     ("GetProcessHandleCount", "api-ms-win-core-processthreads-l1-1-0"),
+    // ADR 0196: the page of `GetAppContainerNamedObjectPath` names kernel32.dll and no API set (the contract is a guess).
+    ("GetAppContainerNamedObjectPath", "api-ms-win-core-processthreads-l1-1-0"),
     // Chrome S3 hunt: scheduling settings and thread times (the browser, its GPU process and
     // crash handler call them all the time; Learn's "API set" rows).
     ("SetThreadPriority", "api-ms-win-core-processthreads-l1-1-0"),
@@ -622,6 +626,10 @@ pub const KERNEL32_OWN: &[&str] = &[
     // (winbase.h) name no API set.
     "GetActiveProcessorGroupCount",
     "GetActiveProcessorCount",
+    // Chrome S2c: Chrome's sandboxed children take `CreateThread`'s address from
+    // kernel32's export table and run the bytes there, so it is code in kernel32 (a forwarder's
+    // text is no instructions): the sheet `kernel32.dll/CreateThread`, rule `export_code`.
+    "CreateThread",
     // Chrome batch 2: the ANSI comparisons (winbase.h) name no API set.
     "lstrcmpA",
     "lstrcmpiA",

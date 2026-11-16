@@ -533,6 +533,7 @@ version = "0.0.1"
 name = "poly-security"
 version = "0.0.1"
 dependencies = [
+ "poly-crypto",
  "poly-registry",
 ]
 

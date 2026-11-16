@@ -280,6 +280,14 @@ impl ObjectManager {
         self.processes.get(&process).map(|r| r.table.len())
     }
 
+    /// The values of the open handles in a process's table, in ascending order (each a non-zero
+    /// multiple of 4): `NtQueryInformationProcess(ProcessHandleTable)`. `None` for a process with no
+    /// table.
+    pub fn process_handle_values(&self, process: ProcessId) -> Option<Vec<u64>> {
+        let r = self.processes.get(&process)?;
+        Some(r.table.iter().map(|(i, _)| Handle::from_index(i, false).0).collect())
+    }
+
     /// Open kernel handles.
     pub fn kernel_handle_count(&self) -> usize {
         self.kernel_handles.len()

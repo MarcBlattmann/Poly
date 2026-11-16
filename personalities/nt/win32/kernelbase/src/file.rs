@@ -53,6 +53,14 @@ pub unsafe extern "system" fn CreateFileW(
     if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;
     }
+    // The descriptor of the structure is the new file's (SECURITY_ATTRIBUTES.lpSecurityDescriptor
+    // at 8; a file that exists keeps its own).
+    // SAFETY: the caller's structure when non-null.
+    oa.security_descriptor = if security.is_null() {
+        core::ptr::null()
+    } else {
+        unsafe { (security.add(8) as *const *const u8).read_unaligned() }
+    };
     let mut h: Handle = 0;
     let mut iosb = IoStatusBlock::default();
     // SAFETY: valid pointers.

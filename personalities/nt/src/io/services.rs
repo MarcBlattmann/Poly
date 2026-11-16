@@ -310,6 +310,14 @@ pub fn open_in_with(
     let (information, made) = (hook.information, hook.made);
     sys.reap(b);
     let h = r?;
+    // A file or directory this call made has the descriptor the caller gave
+    // (`SECURITY_ATTRIBUTES` of `CreateFileW`), if any (ADR 0196).
+    if information == FILE_CREATED
+        && let (Some(sd), Some(cookie)) = (attrs.security.as_deref(), made)
+        && let Some(object) = sys.io.files.get(&cookie).map(|r| r.object)
+    {
+        sys.objects.set_creation_security(object, ObjectType::File, sd);
+    }
     Ok((h, information, made.unwrap_or(0)))
 }
 

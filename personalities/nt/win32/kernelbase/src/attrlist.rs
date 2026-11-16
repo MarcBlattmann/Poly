@@ -123,6 +123,8 @@ pub struct Parsed {
     /// `PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY`'s value, if given.
     pub child_policy: Option<u32>,
     pub jobs: Vec<usize>,
+    /// `PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES`: the caller's `SECURITY_CAPABILITIES` (ADR 0196).
+    pub security_capabilities: Option<usize>,
 }
 
 /// The attributes `CreateProcessW` uses, read from `list`.
@@ -150,6 +152,12 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
             match attribute {
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),
+                SECURITY_CAPABILITIES => {
+                    if value == 0 {
+                        return Err(ERROR_INVALID_PARAMETER);
+                    }
+                    out.security_capabilities = Some(value);
+                }
                 MITIGATION_POLICY => {
                     if value == 0 {
                         return Err(ERROR_INVALID_PARAMETER);

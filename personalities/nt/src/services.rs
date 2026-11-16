@@ -307,6 +307,17 @@ pub enum Service {
     /// import did not bind; a debugging aid, not an interface). Returns
     /// `STATUS_SUCCESS`.
     PolyDebugPrint,
+    /// `PolyRandomBytes(Buffer, Length)`: fills the buffer with random bytes from the kernel's
+    /// generator (ADR 0206). `ProcessPrng`, `RtlGenRandom` and `rand_s` need no file: a sandboxed
+    /// process whose token cannot open the random device file still draws random numbers, as on
+    /// Windows (where a driver, not a file, gives them). `STATUS_SUCCESS`, or `STATUS_NOT_IMPLEMENTED`
+    /// from a kernel without a generator.
+    PolyRandomBytes,
+    /// `PolyPhysicalMemory(Out*)`: writes the physical memory the system has and what is available
+    /// as two 64-bit values (bytes), for `GlobalMemoryStatusEx` (ADR 0206: system information comes
+    /// from a system call, not from a `/proc` file a sandboxed token cannot open).
+    /// `STATUS_NOT_IMPLEMENTED` from a kernel that does not count memory.
+    PolyPhysicalMemory,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -365,6 +376,9 @@ pub enum Service {
     /// `NtFilterToken(ExistingToken, Flags, SidsToDisable*,
     /// PrivilegesToDelete*, RestrictedSids*, NewToken*)`.
     FilterToken,
+    /// `NtCreateLowBoxToken(NewToken*, ExistingToken, DesiredAccess, ObjectAttributes*,
+    /// PackageSid*, CapabilityCount, Capabilities*, HandleCount, Handles*)` (ADR 0196).
+    CreateLowBoxToken,
     /// `NtAdjustGroupsToken(TokenHandle, ResetToDefault, NewState*,
     /// BufferLength, PreviousState*, ReturnLength*)`.
     AdjustGroupsToken,
@@ -467,7 +481,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 77] = [
+pub const SERVICES: [(Service, u32, &str); 79] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -545,6 +559,8 @@ pub const SERVICES: [(Service, u32, &str); 77] = [
     (Service::PolyTrace, TABLE_POLY << 12, "PolyTrace"),
     (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
     (Service::PolyDebugPrint, (TABLE_POLY << 12) | 2, "PolyDebugPrint"),
+    (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
+    (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the
@@ -587,7 +603,7 @@ pub const HANDLE_SERVICES: [(Service, u32, &str); 1] =
     [(Service::SetInformationObject, 0x011, "NtSetInformationObject")];
 
 /// Access tokens (ADR 0083).
-pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
+pub const SECURITY_SERVICES: [(Service, u32, &str); 17] = [
     (Service::OpenProcessToken, 0x180, "NtOpenProcessToken"),
     (Service::OpenProcessTokenEx, 0x181, "NtOpenProcessTokenEx"),
     (Service::OpenThreadToken, 0x182, "NtOpenThreadToken"),
@@ -604,6 +620,7 @@ pub const SECURITY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::QuerySecurityObject, 0x18D, "NtQuerySecurityObject"),
     (Service::SetSecurityObject, 0x18E, "NtSetSecurityObject"),
     (Service::SetInformationThread, 0x18F, "NtSetInformationThread"),
+    (Service::CreateLowBoxToken, 0x190, "NtCreateLowBoxToken"),
 ];
 
 /// Named pipes and I/O completion ports (ADR 0169), in the file I/O group.

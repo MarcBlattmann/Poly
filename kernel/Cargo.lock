@@ -56,6 +56,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-crypto"
+version = "0.0.1"
+
+[[package]]
 name = "poly-drm"
 version = "0.0.1"
 
@@ -333,6 +337,9 @@ version = "0.0.1"
 [[package]]
 name = "poly-security"
 version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
 
 [[package]]
 name = "poly-seh"

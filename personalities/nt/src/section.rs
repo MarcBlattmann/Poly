@@ -129,7 +129,7 @@ pub fn create_section(
         caller,
         req.attrs,
         req.desired,
-        Section { size, protect, attributes: a, backing: 0, kind },
+        Section { size, protect, attributes: a, backing: 0, kind, chosen_base: None },
         &source,
     )
 }
@@ -376,13 +376,15 @@ pub fn map_section(
     let section = sys.section(key).ok_or(STATUS_INVALID_HANDLE)?.clone();
     let top_down = req.allocation_type & MEM_TOP_DOWN != 0;
 
+    let mut reloc_to_view = false;
     let (view, source, status) = if let Some(img) = section.image() {
         // Learn ("MapViewOfFile3"): only data views replace placeholders.
         if req.allocation_type & MEM_REPLACE_PLACEHOLDER != 0 {
             return Err(STATUS_INVALID_PARAMETER_9);
         }
+        // The sheet: an image view with a section offset is `STATUS_INVALID_VIEW_SIZE`.
         if req.offset.is_some_and(|o| o != 0) {
-            return Err(STATUS_INVALID_PARAMETER_6);
+            return Err(STATUS_INVALID_VIEW_SIZE);
         }
         let pages = page_states(img.pages.len(), |i| PageState::Committed(img.pages[i]))?;
         let pages = crate::pagemap::PageMap::from_states(&pages);
@@ -409,13 +411,29 @@ pub fn map_section(
         let mut status = STATUS_SUCCESS;
         if req.base == 0 {
             let preferred = img.image_base();
-            let free = preferred % ALLOCATION_GRANULARITY == 0 && proc.vm.place(preferred, img.size, false, 0).is_ok();
-            if free {
-                view.base = preferred;
-            } else if !img.relocatable() {
-                return Err(STATUS_CONFLICTING_ADDRESSES);
-            } else {
-                status = STATUS_IMAGE_NOT_AT_BASE;
+            let free_at =
+                |at: u64| at.is_multiple_of(ALLOCATION_GRANULARITY) && proc.vm.place(at, img.size, false, 0).is_ok();
+            match section.chosen_base {
+                // Every view of the section goes where its first one went, where that is free
+                // (relocated for it): an image is at one address in every process.
+                Some(chosen) if free_at(chosen) => {
+                    view.base = chosen;
+                    reloc_to_view = chosen != preferred;
+                }
+                // Taken in this process (the sheet's `image_second_view`): `STATUS_IMAGE_NOT_AT_BASE`,
+                // made anyway at another base and not relocated, whether the image has relocations
+                // or not (a success status, `NT_SUCCESS`).
+                Some(_) => status = STATUS_IMAGE_NOT_AT_BASE,
+                // The first view: the image's own base where that is free.
+                None if free_at(preferred) => view.base = preferred,
+                // Else anywhere, relocated: the section's base from now on.
+                None if img.relocatable() => {
+                    status = STATUS_IMAGE_NOT_AT_BASE;
+                    reloc_to_view = true;
+                }
+                // The kernel starts an executable that cannot move: nowhere to put it.
+                None if relocate => return Err(STATUS_CONFLICTING_ADDRESSES),
+                None => status = STATUS_IMAGE_NOT_AT_BASE,
             }
         }
         (view, ViewSource::Section(section.backing), status)
@@ -487,7 +505,7 @@ pub fn map_section(
     let base = proc.vm.insert_view(view)?;
     let mut source = source;
     let mut status = status;
-    if status == STATUS_IMAGE_NOT_AT_BASE && relocate {
+    if reloc_to_view || (status == STATUS_IMAGE_NOT_AT_BASE && relocate) {
         let img = section.image().expect("an image");
         match img.relocated(base) {
             Ok(bytes) => {
@@ -504,6 +522,13 @@ pub fn map_section(
     if let Err(e) = map_view_pages(b, &a, &source) {
         proc.vm.remove(base);
         return Err(e);
+    }
+    if section.image().is_some()
+        && section.chosen_base.is_none()
+        && status == STATUS_SUCCESS
+        && let Some(s) = sys.section_mut(key)
+    {
+        s.chosen_base = Some(base);
     }
     sys.objects.reference(object).expect("live");
     Ok(Mapped { base, size: a.size, offset, status })

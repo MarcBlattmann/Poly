@@ -91,6 +91,8 @@ pub struct CheckToken<'a> {
     /// The integrity level (the label SID's last sub-authority).
     pub integrity: u32,
     pub write_restricted: bool,
+    /// The container SID and the capabilities of a lowbox token (ADR 0196).
+    pub app_container: Option<(&'a Sid, &'a [(Sid, u32)])>,
 }
 
 /// The mandatory label's `RID` of an untrusted, medium token...: the
@@ -260,9 +262,29 @@ pub fn check(sd: &Parts, token: &CheckToken<'_>, desired: u32, mapping: &Generic
             granted &= second;
         }
     }
-    // Mandatory integrity control.
+    // A lowbox token (ADR 0196): a second pass whose principals are the container's own SID
+    // (for an allow entry only), `ALL APPLICATION PACKAGES`, `ALL RESTRICTED APPLICATION
+    // PACKAGES` and the capabilities (sheet of `CreateAppContainerToken`: a descriptor of
+    // Everyone alone is refused, a deny entry for the container's SID does not match).
+    if let Some((container, capabilities)) = token.app_container {
+        let second = if everything {
+            u32::MAX
+        } else {
+            let owner_ok = owner.as_ref().is_some_and(|o| token_has(token, o, true));
+            walk(&aces, want, max, owner_ok, owner_rights_ace, &|s, allow| {
+                (allow && s == container)
+                    || *s == crate::appcontainer::all_application_packages()
+                    || *s == crate::appcontainer::all_restricted_application_packages()
+                    || capabilities.iter().any(|(c, a)| c == s && a & SE_GROUP_ENABLED != 0)
+            })
+        };
+        granted &= second;
+    }
+    // Mandatory integrity control. A container is not stopped by a Medium no-write-up label
+    // (the sheet): its level counts as Medium there, and a High no-read-up label still stops it.
+    let integrity = if token.app_container.is_some() { token.integrity.max(DEFAULT_LABEL) } else { token.integrity };
     let (label, policy) = object_label(sd.sacl.as_deref().filter(|_| sd.control & sd::SE_SACL_PRESENT != 0));
-    if token.integrity < label {
+    if integrity < label {
         let mut allowed = mapping.read | mapping.execute | READ_CONTROL | SYNCHRONIZE;
         if policy & acl::SYSTEM_MANDATORY_LABEL_NO_READ_UP != 0 {
             allowed &= !(mapping.read | READ_CONTROL);
@@ -302,7 +324,16 @@ mod tests {
         restricted: &'a [(Sid, u32)],
         integrity: u32,
     ) -> CheckToken<'a> {
-        CheckToken { user, user_attrs: 0, groups, restricted, privileges: &[], integrity, write_restricted: false }
+        CheckToken {
+            user,
+            user_attrs: 0,
+            groups,
+            restricted,
+            privileges: &[],
+            integrity,
+            write_restricted: false,
+            app_container: None,
+        }
     }
 
     fn sd_with(owner: &Sid, dacl: Option<Vec<u8>>, sacl: Option<Vec<u8>>) -> Parts {
@@ -399,6 +430,40 @@ mod tests {
         assert_eq!(check(&nx, &med, MAXIMUM_ALLOWED, &MAP).granted, 0x20001);
         let nall = sd_with(&owner, Some(all), Some(label(0x3000, 7)));
         assert_eq!(check(&nall, &med, MAXIMUM_ALLOWED, &MAP).status, Err(SecErr::AccessDenied));
+    }
+
+    #[test]
+    fn a_container_needs_both_passes() {
+        use crate::appcontainer::{all_application_packages, package_sid};
+        let user = Sid::new(5, &[21, 1, 2, 3, 1000]);
+        let groups = vec![(world(), SE_GROUP_ENABLED)];
+        let owner = Sid::new(5, &[18]);
+        let me = package_sid(&[b'a' as u16]);
+        let other = package_sid(&[b'b' as u16]);
+        let cap = Sid::new(15, &[3, 1]);
+        let caps = vec![(cap.clone(), SE_GROUP_ENABLED)];
+        let t = CheckToken { app_container: Some((&me, &caps)), ..token(&user, &groups, &[], 0x1000) };
+        let granted = |entries: &[(u8, u32, &Sid)]| {
+            let list: Vec<(u8, u8, u32, &Sid)> = entries.iter().map(|&(k, m, s)| (k, 0, m, s)).collect();
+            check(&sd_with(&owner, Some(acl::build(2, &list)), None), &t, MAXIMUM_ALLOWED, &MAP).granted
+        };
+        let ac = all_application_packages();
+        assert_eq!(granted(&[(0, 7, &world())]), 0, "Everyone alone");
+        assert_eq!(granted(&[(0, 7, &world()), (0, 7, &ac)]), 7);
+        assert_eq!(granted(&[(0, 7, &ac)]), 0, "the container alone: the ordinary pass grants nothing");
+        assert_eq!(granted(&[(0, 7, &world()), (0, 7, &me)]), 7);
+        assert_eq!(granted(&[(0, 7, &world()), (0, 7, &other)]), 0);
+        assert_eq!(granted(&[(0, 7, &world()), (0, 7, &cap)]), 7);
+        assert_eq!(granted(&[(0, 7, &world()), (0, 1, &ac)]), 1, "both passes: the smaller set");
+        // A deny entry for the container's SID does not match; one for AC does.
+        assert_eq!(granted(&[(1, 7, &me), (0, 7, &world()), (0, 7, &ac)]), 7);
+        assert_eq!(granted(&[(1, 7, &ac), (0, 7, &world())]), 0);
+        // A Medium no-write-up label does not stop a container; a High no-read-up label does.
+        let all = acl::build(2, &[(0, 0, 7, &world()), (0, 0, 7, &ac)]);
+        let medium = acl::build(3, &[(0x11, 0, 1, &mandatory(0x2000))]);
+        let high = acl::build(3, &[(0x11, 0, 3, &mandatory(0x3000))]);
+        assert_eq!(check(&sd_with(&owner, Some(all.clone()), Some(medium)), &t, MAXIMUM_ALLOWED, &MAP).granted, 7);
+        assert_eq!(check(&sd_with(&owner, Some(all), Some(high)), &t, MAXIMUM_ALLOWED, &MAP).granted, 4);
     }
 
     #[test]

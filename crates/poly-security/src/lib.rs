@@ -15,6 +15,7 @@
 //!   validate, add, insert, delete and walk ACEs, `ACL_*_INFORMATION`.
 //! - [`sd`]: `SECURITY_DESCRIPTOR` (absolute, x64 layout) and
 //!   `SECURITY_DESCRIPTOR_RELATIVE`, their control bits and conversion.
+//! - [`appcontainer`]: AppContainer SIDs and capability SIDs from names, profile name rules.
 //! - [`token`]: the single user's access token and the
 //!   `TOKEN_INFORMATION_CLASS` structures `NtQueryInformationToken`
 //!   returns, laid out at the caller's buffer address.
@@ -34,6 +35,7 @@ extern crate alloc;
 pub mod access;
 pub mod account;
 pub mod acl;
+pub mod appcontainer;
 pub mod buildsd;
 pub mod condace;
 pub mod err;

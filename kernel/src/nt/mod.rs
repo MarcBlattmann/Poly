@@ -151,6 +151,8 @@ pub static NCRYPT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ncrypt.dll"
 pub static PROPSYS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/propsys.dll"));
 pub static WEVTAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wevtapi.dll"));
 pub static HID: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hid.dll"));
+/// Our `mdmregistration.dll` (ADR 0196): a device that is not enrolled.
+pub static MDMREGISTRATION: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mdmregistration.dll"));
 /// `dxgi`: a factory with one software adapter (the S3 hunt, ADR 0155).
 pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
 /// `d3d11`: a software device whose swap chains present through GDI (the S3 hunt, ADR 0155).
@@ -1012,6 +1014,21 @@ impl NtKernel for Kernel {
 
     fn debug_print(&mut self, text: &[u8]) {
         crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
+    }
+
+    fn physical_memory(&self) -> Option<(u64, u64)> {
+        const PAGE: u64 = 4096;
+        let (total, free) =
+            crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
+        // As `/proc/meminfo`'s MemAvailable: free memory and the clean pages of the cache.
+        let c = crate::fs::cache::cache().stats();
+        let clean = (c.pages as u64).saturating_sub(c.dirty as u64) * PAGE;
+        (total != 0).then_some((total, (free + clean).min(total)))
+    }
+
+    fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
+        crate::random::fill(buf);
+        true
     }
 
     fn system_time(&self) -> u64 {

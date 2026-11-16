@@ -5,7 +5,8 @@
 //! to a process object with the right access, the caller's own or another
 //! one (ADR 0169 for views, ADR 0194 for allocation, protection, queries and
 //! `NtReadVirtualMemory` / `NtWriteVirtualMemory`, which `ReadProcessMemory`
-//! and `WriteProcessMemory` are). A null handle is `STATUS_INVALID_HANDLE`.
+//! and `WriteProcessMemory` are; ADR 0196 for the image-view exemption of
+//! prohibit-dynamic-code). A null handle is `STATUS_INVALID_HANDLE`.
 
 use crate::abi;
 use crate::consts::*;
@@ -63,16 +64,18 @@ fn on_process<K: NtKernel, R>(
 /// prohibit-dynamic-code mitigation cannot make memory executable.
 const STATUS_DYNAMIC_CODE_BLOCKED: NtStatus = NtStatus(0xC000_0604);
 
-/// Poly's own bit in the protection `ntdll`'s loader passes when it makes the sections of a module
-/// it maps executable. Windows maps modules as image sections, which the prohibit-dynamic-code
-/// mitigation lets be (Learn, "Process Mitigation Policies"); Poly's loader maps them with
-/// ordinary memory, so it asks for the exemption this way (ADR 0192). No `PAGE_*` value of Windows
-/// uses the bit.
-pub const PAGE_POLY_LOADER: u32 = 0x0100_0000;
-
 /// Whether a `PAGE_*` protection allows execution.
 fn executable(protect: u32) -> bool {
     protect & 0xF0 != 0
+}
+
+/// Whether `process` names the caller's own process: the prohibit-dynamic-code mitigation binds
+/// the process itself, not what another process does to its memory from outside (the sheets of
+/// `VirtualAllocEx` and `VirtualProtectEx`; the sandbox's broker makes executable memory in its
+/// targets).
+fn is_own<K: NtKernel>(k: &mut K, process: u64) -> bool {
+    let caller = k.caller();
+    k.with_state(|sys, proc, _| matches!(target_of(sys, proc, &caller, Handle(process), 0), Ok(Target::Own)))
 }
 
 /// 128 TiB: the size of the user address space, which no request may reach.
@@ -118,8 +121,9 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
+    let own = is_own(k, process);
     let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
-        if proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
+        if own && proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
         let at = alloc_type as u32;
@@ -167,13 +171,32 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if old_ptr == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
     }
-    let (loader, new) = (new as u32 & PAGE_POLY_LOADER != 0, new as u32 & !PAGE_POLY_LOADER);
-    let (base, size, old) = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
-        if proc.dynamic_code_blocked && executable(new) && !loader {
+    let new = new as u32;
+    // A protection that is no `PAGE_*` value (0, two at once) is refused before the memory is
+    // looked at, and `*OldProtect` stays as it was (the sheet of `VirtualProtectEx`).
+    crate::protect::Protection::new(new, false)?;
+    let own = is_own(k, process);
+    let changed = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
+        // What the mitigation lets be executable are the views of image sections (Learn,
+        // "Process Mitigation Policies": modules are mapped, not made): the loader's own
+        // modules, nothing a program makes out of private memory (ADR 0196).
+        if own && proc.dynamic_code_blocked && executable(new) && !proc.vm.is_image_view(base, size) {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
-        proc.vm.protect(b, base, size, new)
+        Ok(proc.vm.protect(b, base, size, new))
     })?;
+    let (base, size, old) = match changed {
+        Ok(done) => done,
+        Err(e) => {
+            // A range the protection could not be applied to leaves `PAGE_NOACCESS` as the old one
+            // (the sheet of `VirtualProtectEx`: a private page made `PAGE_WRITECOPY`, a reserved
+            // page), where a call refused before it looked at the memory writes nothing.
+            if size != 0 {
+                abi::write_u32(k, old_ptr, PAGE_NOACCESS)?;
+            }
+            return Err(e);
+        }
+    };
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     abi::write_u32(k, old_ptr, old)?;
@@ -240,8 +263,13 @@ pub fn read_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
         let n = (len as usize - done).min(COPY_CHUNK);
         chunk.resize(n, 0);
         let at = base.wrapping_add(done as u64);
-        let got = on_process(k, process, PROCESS_VM_READ, |_, _, b| {
-            Ok(page_steps(at, n, |addr, r| b.read(addr, &mut chunk[r]).is_ok()))
+        let got = on_process(k, process, PROCESS_VM_READ, |_, proc, b| {
+            Ok(page_steps(at, n, |addr, r| {
+                proc.vm
+                    .query(addr)
+                    .is_ok_and(|q| q.state == MEM_COMMIT && q.protect & (PAGE_NOACCESS | PAGE_GUARD) == 0)
+                    && b.read(addr, &mut chunk[r]).is_ok()
+            }))
         })?;
         if got > 0 {
             abi::write(k, buf + done as u64, &chunk[..got])?;
@@ -271,8 +299,15 @@ pub fn write_virtual<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
         chunk.resize(n, 0);
         abi::read(k, buf + done as u64, &mut chunk)?;
         let at = base.wrapping_add(done as u64);
-        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, _, b| {
-            Ok(page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok()))
+        // Only writable pages: `WriteProcessMemory` (kernelbase) changes a code page's protection
+        // for the copy and puts it back (the sheet: `NtWriteVirtualMemory` of an execute-read page
+        // is `STATUS_PARTIAL_COPY`).
+        let put = on_process(k, process, PROCESS_VM_WRITE | PROCESS_VM_OPERATION, |_, proc, b| {
+            let put = page_steps(at, n, |addr, r| b.write(addr, &chunk[r]).is_ok());
+            // A copy-on-write page that was written is a private page of its own now: it reports
+            // `PAGE_READWRITE` (the sheet of `VirtualProtectEx`).
+            proc.vm.mark_written(at, put as u64);
+            Ok(put)
         })?;
         done += put;
         if put < n {

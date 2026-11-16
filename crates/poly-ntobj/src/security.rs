@@ -63,15 +63,19 @@ pub struct ObjectSecurity {
 /// Users and RESTRICTED read (and execute for files). Files also let
 /// Authenticated Users modify (a folder under the user profile or the temp
 /// folder) and Everyone read and execute (what `KnownDlls` gives a
-/// restricted token on Windows: the system DLLs load for any token).
+/// restricted token on Windows: the system DLLs load for any token), and `ALL APPLICATION
+/// PACKAGES` and `ALL RESTRICTED APPLICATION PACKAGES` read and execute (what `C:\Windows` gives
+/// an AppContainer on Windows: its processes load the system DLLs, ADR 0196; Poly's volumes keep no
+/// descriptors of their own, so a container reads what Everyone reads).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DefaultSd {
     File,
     Key,
 }
 
-const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)";
-const KEY_SDDL: &str = "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)";
+const FILE_SDDL: &str = "O:BAG:SYD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;AU)(A;OICI;FRFX;;;BU)(A;OICI;FRFX;;;RC)(A;OICI;FRFX;;;WD)(A;OICI;FRFX;;;AC)(A;OICI;FRFX;;;S-1-15-2-2)";
+const KEY_SDDL: &str =
+    "O:BAG:SYD:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;S-1-15-2-2)";
 
 fn sddl(s: &str) -> Vec<u8> {
     let w: Vec<u16> = s.encode_utf16().collect();
@@ -386,6 +390,16 @@ impl ObjectManager {
         self.assign_security(id, kind, creator, explicit);
     }
 
+    /// A file or key just made with the descriptor of its creator's `SECURITY_ATTRIBUTES` or
+    /// `OBJECT_ATTRIBUTES`: what the descriptor names is kept for its path as if it had been
+    /// set on it (`replace_security`), the rest stays what the parents pass down. A descriptor
+    /// that does not parse is left out.
+    pub fn set_creation_security(&mut self, id: ObjectId, kind: ObjectType, explicit: &[u8]) {
+        if let Some(parts) = Parts::from_relative(explicit) {
+            self.replace_security(id, kind, parts);
+        }
+    }
+
     /// Replace the stored descriptor of `id` (generic rights mapped).
     pub fn replace_security(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts) {
         let mapping = mapping_of(kind);
@@ -547,5 +561,28 @@ mod tests {
         // Without the thread token the process's own decides.
         om.set_thread_token(c.thread, None).unwrap();
         assert!(matches!(om.dacl_grant(&c, id, 1, false), Some(Ok(_))));
+    }
+
+    /// A container's process token opens a file with the default descriptor for reading, as
+    /// Chrome's sandboxed children open the random device (ADR 0196).
+    #[test]
+    fn a_container_reads_what_the_default_file_descriptor_gives_everyone() {
+        let src = token(0x2000, false);
+        let name: alloc::vec::Vec<u16> = "poly.test".encode_utf16().collect();
+        let container = poly_security::appcontainer::package_sid(&name);
+        let lowbox = src.lowbox(container, 1, Vec::new(), 77).unwrap();
+        let mut om = ObjectManager::new();
+        let (p, _) = om.new_token(lowbox, ThreadRef(1)).unwrap();
+        om.set_process_token(ProcessId(5), p).unwrap();
+        let c = Caller::user(ProcessId(5), ThreadRef(6));
+        let id = om
+            .new_object(NewObject::Opaque { kind: ObjectType::File, cookie: 1, signaled: None, parse: false }, c.thread)
+            .unwrap();
+        om.assign_default_security(id, DefaultSd::File);
+        // FILE_READ_ATTRIBUTES | SYNCHRONIZE | GENERIC_READ, what `NtCreateFile` asked for.
+        let got = om.dacl_grant(&c, id, 0x8010_0080, false);
+        assert!(matches!(got, Some(Ok(_))), "{got:?}");
+        // Writing is not given.
+        assert!(matches!(om.dacl_grant(&c, id, 0x4000_0000, false), Some(Err(_))));
     }
 }

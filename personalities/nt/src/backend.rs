@@ -77,8 +77,8 @@ pub trait Backend {
     fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus>;
 
     /// Read the process's memory at `addr` (committed, readable pages: a
-    /// thread's TEB). A backend that cannot read answers
-    /// `STATUS_ACCESS_VIOLATION`.
+    /// thread's TEB, another process's memory for `NtReadVirtualMemory`). A backend that cannot
+    /// read answers `STATUS_ACCESS_VIOLATION`.
     fn read(&mut self, _addr: u64, _buf: &mut [u8]) -> Result<(), NtStatus> {
         Err(poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }

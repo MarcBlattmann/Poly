@@ -71,6 +71,14 @@ pub const PEB_BEING_DEBUGGED: u64 = 0x02;
 /// `PEB.ImageBaseAddress` (`winternl.h`): where the executable is mapped. Programs read it
 /// straight from the PEB (Chrome's `chrome_elf.dll` does; with 0 it faulted at address 0x10).
 pub const PEB_IMAGE_BASE_ADDRESS: u64 = 0x10;
+/// The x64 PEB's pointer-sized field at 0x2D8 (no public name: `winternl.h` ends at `SessionId`,
+/// 0x2C0): on Windows a pointer to a private, committed, zero-filled read-write region of 8 KiB
+/// of its own, present in a just-created suspended process (specs/windows/apps/chrome/
+/// s2-interception.md, `NtQueryInformationProcess` rule `peb_0x2d8_*`). Chrome's sandbox broker
+/// writes into the field of some of its targets from outside; nothing reads it back.
+pub const PEB_SLOT_2D8: u64 = 0x2D8;
+/// The size of the region [`PEB_SLOT_2D8`] points to.
+pub const PEB_SLOT_2D8_SIZE: u64 = 0x2000;
 
 /// The `ntdll` exports the kernel enters (ADR 0071).
 pub const NTDLL_THREAD_START: &[u8] = b"LdrInitializeThunk";
@@ -230,6 +238,7 @@ fn map_image(
         attributes: SEC_IMAGE,
         backing,
         kind: SectionKind::Image { image: alloc::boxed::Box::new(image), file: file_object },
+        chosen_base: None,
     });
     let new = NewObject::Opaque { kind: ObjectType::Section, cookie: key, signaled: None, parse: false };
     let section_object = match sys.objects.new_object(new, thread) {
@@ -353,6 +362,10 @@ pub fn start_process_listed(
     let (peb, _) = proc.vm.allocate(b, 0, PAGE_SIZE, 0, anywhere_top, rw)?;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, rw)?;
     b.write(peb + l.peb_image_base, &image_base.to_le_bytes()[..l.ptr as usize])?;
+    if !proc.wow64 {
+        let (slot, _) = proc.vm.allocate(b, 0, PEB_SLOT_2D8_SIZE, 0, anywhere_top, rw)?;
+        b.write(peb + PEB_SLOT_2D8, &slot.to_le_bytes())?;
+    }
 
     let stack = make_stack(proc, b, reserve, commit)?;
     let client = crate::kernel::ClientId { process: proc.pid, thread };

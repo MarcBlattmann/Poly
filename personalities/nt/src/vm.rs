@@ -334,6 +334,41 @@ impl VirtualMemory {
         self.allocations.range(..=addr).next_back().map(|(_, a)| a).filter(|a| a.contains(addr))
     }
 
+    /// `[addr, addr + len)` was written through the kernel (`NtWriteVirtualMemory`): every
+    /// copy-on-write page it touches became a private copy and reports the writable protection
+    /// (`PAGE_WRITECOPY` -> `PAGE_READWRITE`, `PAGE_EXECUTE_WRITECOPY` -> `PAGE_EXECUTE_READWRITE`),
+    /// as on Windows (the sheet of `VirtualProtectEx`).
+    pub fn mark_written(&mut self, addr: u64, len: u64) {
+        if len == 0 {
+            return;
+        }
+        let end = addr.saturating_add(len);
+        let mut page = page_down(addr);
+        while page < end {
+            if let Some(a) = self.allocation_mut(page) {
+                let i = a.index(page);
+                if let PageState::Committed(p) = a.pages.get(i)
+                    && p.is_copy_on_write()
+                {
+                    let writable = if p.base() == PAGE_WRITECOPY { PAGE_READWRITE } else { PAGE_EXECUTE_READWRITE };
+                    let value = (p.value() & !0xFF) | writable;
+                    if let Ok(q) = Protection::new(value, false) {
+                        a.pages.fill(i..i + 1, PageState::Committed(q));
+                    }
+                }
+            }
+            page += PAGE_SIZE;
+        }
+    }
+
+    /// Whether `[addr, addr + size)` lies in one view of an image section (`MEM_IMAGE`): what
+    /// the prohibit-dynamic-code mitigation lets be executable, as Windows maps modules as
+    /// image sections (ADR 0196).
+    pub fn is_image_view(&self, addr: u64, size: u64) -> bool {
+        let Some(a) = self.allocation(page_down(addr)) else { return false };
+        a.type_value() == MEM_IMAGE && addr.checked_add(size).is_some_and(|end| end <= a.end())
+    }
+
     fn allocation_mut(&mut self, addr: u64) -> Option<&mut Allocation> {
         self.allocations.range_mut(..=addr).next_back().map(|(_, a)| a).filter(|a| a.contains(addr))
     }
@@ -855,7 +890,22 @@ impl VirtualMemory {
         if end > a.end() {
             return Err(STATUS_CONFLICTING_ADDRESSES);
         }
-        let prot = Protection::new(new, a.kind == AllocKind::Private)?;
+        let mut prot = Protection::new(new, a.kind == AllocKind::Private)?;
+        // A page of an image view that is made writable stays copy-on-write until it is written:
+        // it reports `PAGE_WRITECOPY` (the sheet of `VirtualProtectEx`: `PAGE_READWRITE` on an
+        // image page).
+        if a.type_value() == MEM_IMAGE {
+            let cow = match prot.base() {
+                PAGE_READWRITE => Some(PAGE_WRITECOPY),
+                PAGE_EXECUTE_READWRITE => Some(PAGE_EXECUTE_WRITECOPY),
+                _ => None,
+            };
+            if let Some(cow) = cow
+                && let Ok(q) = Protection::new((prot.value() & !0xFF) | cow, false)
+            {
+                prot = q;
+            }
+        }
         if let Some(v) = a.view()
             && let Some(max) = v.max
             && !crate::protect::view_allowed(max, prot)

@@ -1,0 +1,17 @@
+[package]
+name = "mdmregistration"
+description = "Our mdmregistration.dll (ADR 0196): a device that is not enrolled with a management service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "mdmregistration"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true
