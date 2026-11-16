@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_vm_protect_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_vm_protect_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_vm_protect_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 14;
+  arm64 `svc #0x80` with x16 = -14. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  vm_protect(task, address, size, set maximum, protection) sets the
+  current protection (set maximum 0) or the maximum (1) of the range.
+  Read-only makes a write fatal to a child (SIGBUS 10, a value); read-
+  write again keeps the content. After the maximum is lowered to read-
+  only, raising the current protection to read-write is
+  KERN_PROTECTION_FAILURE (2) and mprotect to read-write fails too (EACCES
+  13, a value). An address that is not page aligned or not mapped is
+  KERN_INVALID_ADDRESS (1); an invalid task MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  protection_failure: "KERN_PROTECTION_FAILURE (2): above the maximum protection"
+  bad_address: "KERN_INVALID_ADDRESS (1): unaligned or not mapped"
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the protection changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
