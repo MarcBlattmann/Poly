@@ -59,6 +59,7 @@ unsafe extern "system" {
 #[cfg_attr(not(target_arch = "x86"), link(name = "ole32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CoTaskMemAlloc(bytes: usize) -> *mut u8;
+    fn CoGetMalloc(context: u32, out: *mut *mut u8) -> i32;
 }
 
 /// The process heap (16-byte aligned) for `alloc`.
@@ -163,6 +164,35 @@ pub unsafe extern "system" fn SHGetFolderPathW(
     }
     // SAFETY: Learn: the caller's buffer is MAX_PATH characters.
     unsafe { core::ptr::copy_nonoverlapping(out.as_ptr(), path, n + suffix + 1) };
+    shell::S_OK
+}
+
+/// `SHGetFolderPathA`: `SHGetFolderPathW` with the path in the ANSI code page (1252: a path of the
+/// profile has no character it lacks).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetFolderPathA(
+    hwnd: *mut u8,
+    folder: i32,
+    token: *mut u8,
+    flags: u32,
+    path: *mut u8,
+) -> u32 {
+    if path.is_null() {
+        return shell::E_INVALIDARG;
+    }
+    let mut wide = [0u16; MAX_PATH];
+    // SAFETY: a MAX_PATH buffer.
+    let hr = unsafe { SHGetFolderPathW(hwnd, folder, token, flags, wide.as_mut_ptr()) };
+    if hr != shell::S_OK {
+        return hr;
+    }
+    let n = wide.iter().position(|&c| c == 0).unwrap_or(MAX_PATH - 1);
+    let ansi = poly_kernelbase::text::to_ansi(&wide[..n]);
+    // SAFETY: Learn: the caller's buffer is MAX_PATH bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(ansi.as_ptr(), path, ansi.len());
+        path.add(ansi.len()).write(0);
+    }
     shell::S_OK
 }
 
@@ -528,6 +558,100 @@ pub unsafe extern "system" fn ILFree(pidl: *mut u8) {
     }
 }
 
+// ----- item ID lists ------------------------------------------------------------------------------
+
+/// Poly's `ITEMIDLIST` (`shtypes.h`) for a file system object: one `SHITEMID` (`cb`, a `USHORT` that
+/// counts itself, then `cb - 2` bytes) holding the object's full path in UTF-16 without the NUL, then
+/// the `cb` 0 that ends a list. The Shell's lists are opaque to programs: they pass them back to the
+/// functions here (`SHGetPathFromIDListW`) and free them (`ILFree`).
+unsafe fn pidl_of_path(path: &[u16]) -> *mut u8 {
+    let cb = 2 + 2 * path.len();
+    if cb > 0xFFFF {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: the process heap; the block holds the item and the terminator.
+    unsafe {
+        let p = HeapAlloc(GetProcessHeap(), 0, cb + 2);
+        if p.is_null() {
+            return p;
+        }
+        p.cast::<u16>().write_unaligned(cb as u16);
+        core::ptr::copy_nonoverlapping(path.as_ptr().cast::<u8>(), p.add(2), 2 * path.len());
+        p.add(cb).cast::<u16>().write_unaligned(0);
+        p
+    }
+}
+
+/// `SHGetSpecialFolderLocation(hwnd, csidl, ppidl)`: the list of a `CSIDL_*` folder, `S_OK`, or the
+/// `HRESULT` `SHGetFolderPathW` gives for a folder Poly lacks.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetSpecialFolderLocation(_hwnd: *mut u8, csidl: i32, out: *mut *mut u8) -> u32 {
+    if out.is_null() {
+        return shell::E_INVALIDARG;
+    }
+    let mut path = [0u16; MAX_PATH];
+    // SAFETY: a MAX_PATH buffer.
+    let hr = unsafe { SHGetFolderPathW(core::ptr::null_mut(), csidl, core::ptr::null_mut(), 0, path.as_mut_ptr()) };
+    if hr != shell::S_OK {
+        // SAFETY: the caller's out parameter.
+        unsafe { *out = core::ptr::null_mut() };
+        return hr;
+    }
+    let n = path.iter().position(|&c| c == 0).unwrap_or(MAX_PATH);
+    // SAFETY: the process heap; the caller's out parameter.
+    let pidl = unsafe { pidl_of_path(&path[..n]) };
+    unsafe { *out = pidl };
+    if pidl.is_null() { 0x8007_000E } else { shell::S_OK }
+}
+
+/// `SHGetPathFromIDListW(pidl, pszPath)`: the path of one of Poly's lists into a `MAX_PATH` buffer;
+/// FALSE for a list that is not one (an empty list, or an item with no room for a path).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetPathFromIDListW(pidl: *const u8, path: *mut u16) -> i32 {
+    if pidl.is_null() || path.is_null() {
+        return 0;
+    }
+    // SAFETY: a list the Shell functions here made.
+    unsafe {
+        let cb = usize::from(pidl.cast::<u16>().read_unaligned());
+        if cb < 4 || (cb - 2) / 2 >= MAX_PATH {
+            return 0;
+        }
+        let units = (cb - 2) / 2;
+        core::ptr::copy_nonoverlapping(pidl.add(2), path.cast::<u8>(), 2 * units);
+        path.add(units).write(0);
+    }
+    1
+}
+
+/// `ILCreateFromPathW(pszPath)`: the list of a path, NULL for a path of 0 characters or more than `MAX_PATH`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ILCreateFromPathW(path: *const u16) -> *mut u8 {
+    if path.is_null() {
+        return core::ptr::null_mut();
+    }
+    let mut n = 0;
+    // SAFETY: a NUL-terminated path.
+    unsafe {
+        while n < MAX_PATH && *path.add(n) != 0 {
+            n += 1;
+        }
+        if n == 0 || n >= MAX_PATH {
+            return core::ptr::null_mut();
+        }
+        pidl_of_path(core::slice::from_raw_parts(path, n))
+    }
+}
+
+/// `SHGetSpecialFolderPathW(hwnd, pszPath, csidl, fCreate)`: the path of a `CSIDL_*` folder into a
+/// `MAX_PATH` buffer, TRUE on success.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetSpecialFolderPathW(_hwnd: *mut u8, path: *mut u16, csidl: i32, create: i32) -> i32 {
+    let folder = if create != 0 { csidl | shell::CSIDL_FLAG_CREATE as i32 } else { csidl };
+    // SAFETY: the caller's MAX_PATH buffer.
+    i32::from(unsafe { SHGetFolderPathW(core::ptr::null_mut(), folder, core::ptr::null_mut(), 0, path) } == shell::S_OK)
+}
+
 /// `Shell_NotifyIconW(dwMessage, lpData)`: "Returns TRUE if successful, or FALSE otherwise"
 /// (Learn). Poly's panel has no notification area for Windows programs yet, so no icon can be
 /// added, changed or removed.
@@ -546,3 +670,11 @@ mod delayed;
 
 #[cfg(target_arch = "x86_64")]
 mod apps;
+
+/// `SHGetMalloc(ppMalloc)`: the shell's allocator is the task allocator (Learn: "Retrieves a pointer to
+/// the Shell's IMalloc interface", which `CoGetMalloc` with `MEMCTX_TASK` returns too).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SHGetMalloc(out: *mut *mut u8) -> i32 {
+    // SAFETY: the caller's out parameter.
+    unsafe { CoGetMalloc(1, out) }
+}

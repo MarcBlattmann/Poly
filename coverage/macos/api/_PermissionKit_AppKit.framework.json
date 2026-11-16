@@ -12,5 +12,7 @@
 {"symbol":"$s13PermissionKit9AskCenterC01_ab4_AppB0E3ask_2inyAA0A8QuestionCyAA18CommunicationTopicVG_So8NSWindowCtYaKF","src":["macos-sdk"]},
 {"symbol":"$s13PermissionKit9AskCenterC01_ab4_AppB0E3ask_2inyAA0A8QuestionCyAA18CommunicationTopicVG_So8NSWindowCtYaKFTu","src":["macos-sdk"]},
 {"symbol":"$s13PermissionKit9AskCenterC01_ab4_AppB0E4_ask_2inyAA0A8QuestionCyxG_So8NSWindowCtYaKAA0H5TopicRzlF","src":["macos-sdk"]},
-{"symbol":"$s13PermissionKit9AskCenterC01_ab4_AppB0E4_ask_2inyAA0A8QuestionCyxG_So8NSWindowCtYaKAA0H5TopicRzlFTu","src":["macos-sdk"]}
+{"symbol":"$s13PermissionKit9AskCenterC01_ab4_AppB0E4_ask_2inyAA0A8QuestionCyxG_So8NSWindowCtYaKAA0H5TopicRzlFTu","src":["macos-sdk"]},
+{"symbol":"swift:_PermissionKit_AppKit.AskCenter.ask(_:in:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_PermissionKit_AppKit.CommunicationLimits.ask(_:in:)","src":["macos-swift-interface"]}
 ]

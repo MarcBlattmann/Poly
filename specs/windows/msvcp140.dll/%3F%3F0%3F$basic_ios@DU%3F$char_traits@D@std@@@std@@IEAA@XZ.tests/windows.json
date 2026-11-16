@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "basic_ios_copyfmt_imbue",
+      "exe_sha256": "d2b453e368361681edd196367b66afa02ac41f1b87c45504e17a5dea2079913a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY29weWZtdCBjb3BpZXMgdGhlIGZpbGwKb2sgY29weWZtdCBjb3BpZXMgdGhlIHRpZQpvayBjb3B5Zm10IGNvcGllcyB0aGUgd2lkdGgKb2sgY29weWZtdCBjb3BpZXMgdGhlIHByZWNpc2lvbgpvayBjb3B5Zm10IGNvcGllcyB0aGUgZmxhZ3MKb2sgY29weWZtdCBkb2VzIG5vdCBjb3B5IHRoZSBzdGF0ZQpvayBjb3B5Zm10IGRvZXMgbm90IGNvcHkgdGhlIGJ1ZmZlcgpvayBjb3B5Zm10IGNhbGxlZCB0aGUgY29waWVkIGNhbGxiYWNrIHdpdGggY29weWZtdF9ldmVudApvayBjb3B5Zm10IG9udG8gaXRzZWxmIGlzIGEgbm8tb3AKb2sgY29weWZtdCB0aHJvd3Mgd2hlbiB0aGUgY29waWVkIGV4Y2VwdGlvbiBtYXNrIG1hdGNoZXMgdGhlIHRhcmdldCdzIHN0YXRlCm9rIHRoZSBtYXNrIHdhcyBjb3BpZWQKb2sgdGhlIG5ldyBsb2NhbGUgZGlmZmVycyBmcm9tIGNsYXNzaWMKb2sgaW1idWUgcmV0dXJucyB0aGUgcHJldmlvdXMgbG9jYWxlCm9rIGdldGxvYygpIGlzIHRoZSBuZXcgb25lCm9rIHRoZSBzdHJlYW0gYnVmZmVyJ3MgaW1idWUoKSB3YXMgY2FsbGVkIG9uY2UKb2sgdGhlIGJ1ZmZlcidzIG93biBsb2NhbGUgaXMgdGhlIG5ldyBvbmUKb2sgdGhlIGltYnVlX2V2ZW50IGNhbGxiYWNrIHJhbgpvayB0aGUgb3RoZXIgYnVmZmVyIGlzIHVudG91Y2hlZApvayBzd2FwOiBmaWxsCm9rIHN3YXA6IGZpbGwgKDIpCm9rIHN3YXA6IHdpZHRoCm9rIHN3YXA6IHRpZQpvayBzd2FwOiBidWZmZXJzIHN0YXkKb2sgc3dhcDogc3RhdGUgaXMgZXhjaGFuZ2VkCm9rIHN3YXA6IHN0YXRlIGlzIGV4Y2hhbmdlZCAoMikKb2sgc3dhcDogdGhlIGxvY2FsZSBwb2ludGVycyBhcmUgZXhjaGFuZ2VkCm9rIG1vdmU6IHRoZSB0YXJnZXQga2VlcHMgbm8gYnVmZmVyCm9rIG1vdmU6IHRoZSB0YXJnZXQgdG9vayB0aGUgdGllCm9rIG1vdmU6IHRoZSB0YXJnZXQgdG9vayB0aGUgZmlsbApvayBtb3ZlOiB0aGUgc291cmNlIGtlZXBzIGl0cyBidWZmZXIKb2sgc2V0X3JkYnVmIGluc3RhbGxzIHRoZSBidWZmZXIKb2sgc2V0X3JkYnVmIGxlYXZlcyB0aGUgc3RhdGUgYXMgaXQgaXMgKGJhZGJpdCBmcm9tIGNsZWFyKCkgd2l0aCBubyBidWZmZXIpCnN1bW1hcnkgMzIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok copyfmt copies the fill\nok copyfmt copies the tie\nok copyfmt copies the width\nok copyfmt copies the precision\nok copyfmt copies the flags\nok copyfmt does not copy the state\nok copyfmt does not copy the buffer\nok copyfmt called the copied callback with copyfmt_event\nok copyfmt onto itself is a no-op\nok copyfmt throws when the copied exception mask matches the target's state\nok the mask was copied\nok the new locale differs from classic\nok imbue returns the previous locale\nok getloc() is the new one\nok the stream buffer's imbue() was called once\nok the buffer's own locale is the new one\nok the imbue_event callback ran\nok the other buffer is untouched\nok swap: fill\nok swap: fill (2)\nok swap: width\nok swap: tie\nok swap: buffers stay\nok swap: state is exchanged\nok swap: state is exchanged (2)\nok swap: the locale pointers are exchanged\nok move: the target keeps no buffer\nok move: the target took the tie\nok move: the target took the fill\nok move: the source keeps its buffer\nok set_rdbuf installs the buffer\nok set_rdbuf leaves the state as it is (badbit from clear() with no buffer)\nsummary 32 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

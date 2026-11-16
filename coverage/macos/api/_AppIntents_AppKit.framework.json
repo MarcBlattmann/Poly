@@ -122,5 +122,6 @@
 {"symbol":"$sSo8NSWindowC012_AppIntents_B3KitE19appEntityIdentifier0bC00fG0VSgvs","src":["macos-sdk"]},
 {"symbol":"$sSo8NSWindowC10AppIntents0B17EntityAnnotatable01_bc1_B3KitMc","src":["macos-sdk"]},
 {"symbol":"objc:_AppIntentsAppKitBridgeLoader","src":["macos-sdk"]},
-{"symbol":"objc:_TtC18_AppIntents_AppKit23AppEntityViewAnnotation","src":["macos-sdk"]}
+{"symbol":"objc:_TtC18_AppIntents_AppKit23AppEntityViewAnnotation","src":["macos-sdk"]},
+{"symbol":"swift:_AppIntents_AppKit.Image.init(systemName:tintColor:symbolConfiguration:)","src":["macos-swift-interface"]}
 ]

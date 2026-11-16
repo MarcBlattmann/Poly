@@ -83,6 +83,13 @@ pub trait Backend {
         Err(poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
+    /// Whether the page at `addr` of a copy-on-write view was written through its mapping, so
+    /// that it holds a private copy (`VirtualQuery` then shows it read-write). A backend that
+    /// cannot tell says no.
+    fn page_written(&mut self, _addr: u64) -> bool {
+        false
+    }
+
     /// Make the pages of a new section; returns the kernel's id for them.
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus>;
 

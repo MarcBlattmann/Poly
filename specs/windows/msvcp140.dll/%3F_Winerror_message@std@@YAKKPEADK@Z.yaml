@@ -1,0 +1,104 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/?_Winerror_message@std@@YAKKPEADK@Z"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::_Winerror_message(unsigned long code, char* buffer, unsigned long size) (__cdecl, returns the length),
+  std::_Throw_C_error(int) (?_Throw_C_error@std@@YAXH@Z) and std::_XGetLastError() (?_XGetLastError@std@@YAXXZ), and the
+  error_category objects the library creates itself. These are what the library's own code throws or returns, so their
+  exceptions, categories and texts are the interface.
+interface:
+  category: |
+    std::error_category (16 bytes, alignment 8): 0 pointer to the virtual table, 8 a 64-bit identity word `_Addr`. The
+    table (read from the compiler's own listing of a class that derives from it; overloaded virtuals come in REVERSE
+    declaration order): slot 0 scalar deleting destructor, 1 name() const -> const char*, 2 message(int) const ->
+    std::string (hidden result pointer), 3 default_error_condition(int) const -> error_condition (16 bytes, hidden result
+    pointer), 4 equivalent(const error_code&, int) const -> bool, 5 equivalent(int, const error_condition&) const -> bool.
+    EQUALITY of two categories compares the identity words only (operator== is `_Addr == other._Addr`, operator< orders
+    them as unsigned integers), not the object addresses. A category made by a program of its own has its own address as
+    the identity word. The three standard categories carry fixed small identity words: generic_category 3,
+    iostream_category 5, system_category 7 (the future category 1). That is what makes the category object that the
+    library creates inside msvcp140.dll (in _Throw_Cpp_error, in ios_base::failure, in _XGetLastError, in _Throw_C_error)
+    compare equal to the program's own std::generic_category() / iostream_category() / system_category(): there are
+    several objects (one per module that uses them), all with these words. An error_code is 16 bytes: 0 int value, 8
+    pointer to the category; error_condition is the same layout.
+  signatures: |
+    unsigned long _Winerror_message(unsigned long code, char* buf, unsigned long size); [[noreturn]] void
+    _Throw_C_error(int code); [[noreturn]] void _XGetLastError(void)
+rules:
+  winerror_message: |
+    _Winerror_message(code, buf, size) writes the system's English message text for the Windows error `code` into buf
+    (FormatMessage-like: the text of the message table, e.g. 5 'Access is denied.', 2 'The system cannot find the file
+    specified.', 87 'The parameter is incorrect.', 1314 'A required privilege is not held by the client.', 0 'The
+    operation completed successfully.') and returns the length WITHOUT the trailing CR LF; the buffer holds the text
+    followed by CR (0x0D) and LF (the text is not terminated at the returned length). An unknown code (99999) returns 0.
+    With a buffer too small for the text (size 8 for code 5) the result is 0 (nothing is written).
+  throw_c_error: |
+    _Throw_C_error(code) throws std::system_error with the GENERIC category (identity word 3), the value and the text 'X:
+    X' where X is the generic text of the value: code 1 (_Thrd_nomem) value 11 'resource unavailable try again: resource
+    unavailable try again'; code 2 (_Thrd_timedout) value 11 (same text); code 3 (_Thrd_busy) value 16 'device or resource
+    busy: device or resource busy'; code 4 (_Thrd_error) value 22 'invalid argument: invalid argument'. Codes 0 and above
+    4 are not specified (0 ends the process by a fast fail in the library's version).
+  xgetlasterror: |
+    _XGetLastError() throws std::system_error(error_code(GetLastError(), system_category())): the error value is the
+    calling thread's last error (5 -> value 5), the category is the system one (identity word 7, name 'system'; equal to
+    the program's std::system_category()), what() is the system message text of the code ('Access is denied.', no prefix;
+    code 0 -> 'The operation completed successfully.'). Through this library-made category object:
+    default_error_condition(5) is generic 13; equivalent(5, error_condition(permission_denied)) is true;
+    equivalent(error_code(5, system), 5) is true and with 6 false; message(2) is 'The system cannot find the file
+    specified.' and message(99999) is 'unknown error'.
+  iostream_category: |
+    The category inside ios_base::failure (see ??0ios_base): identity word 5, name 'iostream', message(1) 'iostream stream
+    error', any other value its generic text (message(2) 'no such file or directory'), default_error_condition(1) is
+    error_condition(1, the same category), the code equals io_errc::stream (value 1), what() 'ios_base::failbit set:
+    iostream stream error'. It is equal to the program's std::iostream_category() and to no other standard category; the
+    order of the identity words is generic (3) < iostream (5) < system (7).
+  generic_from_throw_cpp_error: |
+    The category inside the system_error thrown by std::_Throw_Cpp_error (see ?_Throw_Cpp_error@std@@YAXH@Z): identity
+    word 3, name 'generic', message(22) 'invalid argument', equal to the program's std::generic_category(). This identity
+    is what the test msvcp_throw_cpp_error compares: `e.code().category() == std::generic_category()` must be true
+    although the two objects are different objects.
+  user_categories: |
+    A program's own category derived from error_category has its own address as identity word, is equal only to itself, is
+    not equal to any standard category, message() and default_error_condition() are its own; error_code equality needs the
+    same category.
+errors:
+  system_error: "std::system_error with the categories above."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 4  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

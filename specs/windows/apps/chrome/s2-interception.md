@@ -207,3 +207,33 @@ the rest to api-ms-win-* contracts).
 * Windows, Chrome's processes: start `chrome.exe --headless --user-data-dir=<new> about:blank`, wait 12 s, read each
   `chrome.exe` process's PEB (`NtQueryInformationProcess` class 0), 8 bytes at PEB + 0x2d8, `VirtualQueryEx` of what
   they point to, and the modules' bases (PowerShell as the same user; no elevation was needed).
+
+## 9. Class 0x3a of `NtQueryInformationProcess`: what ends every sandboxed child (S2d)
+
+Poly's children ended themselves with `NtTerminateProcess(-1, 0x1b62)` after
+`NtQueryInformationProcess(-1, 0x3a, buffer, 0x1068)` returned `STATUS_INVALID_INFO_CLASS` (impl-chrome-s2-r3). The
+class has no name in the public headers (`winternl.h` ends at 29); third-party headers call it `ProcessHandleTable`.
+The rules are in the sheet `specs/windows/ntdll.dll/NtQueryInformationProcess.yaml` (`handle_list_*`), the tests
+`h58_lists`, `h58_entries`, `h58_child`, `h58_locked` (with their `_b`/`_c` parts) beside it.
+
+* **What it is:** an array of 4-byte handle values, one per open handle of the process, ascending, as many as
+  `ProcessHandleCount`. No header. A short buffer (4 bytes or more) is not an error: the first whole entries are
+  written and the returned length says how many bytes. Below 4 bytes: `0xC0000004`. The buffer must be 4-byte aligned.
+  Another process needs access `0x440` (QUERY_INFORMATION and DUP_HANDLE together).
+* **A lowered token changes nothing:** restricted token, Low integrity, both, and an AppContainer child all get the
+  plain answer for themselves (the call reads the caller's own table).
+* **What Chrome does with it** (Poly's call trace with a faithful answer; experiment patch
+  `experiments/experiment-class58.patch` in the kit, not committed): `NtQueryInformationProcess(-1, 20)` for the
+  count, class 0x3a with a buffer of about count + 1000 entries (0x1068), then `NtQueryObject(handle,
+  ObjectTypeInformation, 0x80 bytes)` for every listed value in order (again with the returned length after
+  `0xC0000004`), `NtQueryObject(handle, ObjectNameInformation, 0x200 bytes)` for some, and the child carries on and
+  ends normally. This is the target-side handle closer of Chromium's sandbox (published sources, read for
+  behaviour); the types it closes are its policy, and no `NtClose` followed in the three traced processes.
+* **What was not tested here:** WOW64 callers only by a one-off probe (same answers); which types a real Windows child
+  closes (it would need an API trace of a sandboxed child on Windows).
+
+Reproducing: Windows tests with `lib/oracle.sh` (two container builds, identical results); Chrome's counts and
+types from outside with `probes/c3c.ps1` (access `0x440` on each `chrome.exe`); the Poly side with an experiment
+worktree at `origin/impl-chrome-s2-r3`, the patch above (and the two `raw-dylib` 32-bit forms that branch needed in
+`userenv` and `winmm`), `cargo xtask chrome-win run --stage 2 --release --trace --trace-only --type=
+--chrome-arg=--disable-component-update --launch-seconds 70`.

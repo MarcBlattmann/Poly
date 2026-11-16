@@ -6,7 +6,13 @@
 //! thread owns at a time, recursively (each enter by the owner needs its
 //! own leave), that a waiting thread may spin on before it blocks.
 //!
-//! # Fields (`winnt.h` layout, 40 bytes on x64)
+//! # Fields (`winnt.h` layout: 40 bytes on x64, 24 on x86)
+//!
+//! The pointer-sized fields (`DebugInfo`, `OwningThread`, `LockSemaphore`, `SpinCount`) are 4 bytes
+//! in a 32-bit process, so every offset after `DebugInfo` is the x86 one there: `LockCount` at 4,
+//! `RecursionCount` at 8, `OwningThread` at 12, `LockSemaphore` at 16, `SpinCount` at 20 (ADR 0186:
+//! a Delphi object embeds the structure, and a write past its 24 bytes lands in the next field).
+//! The table is the x64 form.
 //!
 //! | Offset | Field | Poly's use |
 //! |---|---|---|
@@ -24,15 +30,15 @@
 //! = -2) are those of a Windows 11 process (spec-chrome-elf-null); the
 //! values with waiters are Poly's own continuation of the scheme.
 
-use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 
 /// `RTL_CRITICAL_SECTION_ALL_FLAG_BITS` (`winnt.h`): the top byte of
 /// `SpinCount`.
-pub const FLAG_BITS: u64 = 0xFF00_0000;
+pub const FLAG_BITS: usize = 0xFF00_0000;
 
 /// `RTL_CRITICAL_SECTION_FLAG_STATIC_INIT` (`winnt.h`): the section was not made by
 /// `RtlInitializeCriticalSection` but is part of an image's data (the loader lock is one).
-pub const FLAG_STATIC_INIT: u64 = 0x0400_0000;
+pub const FLAG_STATIC_INIT: usize = 0x0400_0000;
 
 /// `LockCount` of a free section.
 pub const FREE: i32 = -1;
@@ -59,12 +65,12 @@ pub trait Waiter {
 #[repr(C)]
 #[derive(Debug)]
 pub struct CriticalSection {
-    pub debug_info: AtomicU64,
+    pub debug_info: AtomicUsize,
     pub lock_count: AtomicI32,
     pub recursion_count: AtomicI32,
-    pub owning_thread: AtomicU64,
-    pub lock_semaphore: AtomicU64,
-    pub spin_count: AtomicU64,
+    pub owning_thread: AtomicUsize,
+    pub lock_semaphore: AtomicUsize,
+    pub spin_count: AtomicUsize,
 }
 
 /// `RTL_CRITICAL_SECTION_DEBUG` (`winnt.h`; 48 bytes on x64): what `DebugInfo` points to.
@@ -77,9 +83,9 @@ pub struct CriticalSectionDebug {
     pub kind: u16,
     pub creator_back_trace_index: u16,
     /// `CriticalSection`: back to the section.
-    pub critical_section: AtomicU64,
+    pub critical_section: AtomicUsize,
     /// `ProcessLocksList` (`LIST_ENTRY`: `Flink`, `Blink`); an empty list points at itself.
-    pub process_locks_list: [AtomicU64; 2],
+    pub process_locks_list: [AtomicUsize; 2],
     pub entry_count: u32,
     pub contention_count: u32,
     pub flags: u32,
@@ -98,8 +104,8 @@ impl CriticalSectionDebug {
         CriticalSectionDebug {
             kind: 0,
             creator_back_trace_index: 0,
-            critical_section: AtomicU64::new(0),
-            process_locks_list: [AtomicU64::new(0), AtomicU64::new(0)],
+            critical_section: AtomicUsize::new(0),
+            process_locks_list: [AtomicUsize::new(0), AtomicUsize::new(0)],
             entry_count: 0,
             contention_count: 0,
             flags: 0,
@@ -119,18 +125,18 @@ impl CriticalSection {
     /// A free critical section with no spinning.
     pub const fn new() -> CriticalSection {
         CriticalSection {
-            debug_info: AtomicU64::new(0),
+            debug_info: AtomicUsize::new(0),
             lock_count: AtomicI32::new(FREE),
             recursion_count: AtomicI32::new(0),
-            owning_thread: AtomicU64::new(0),
-            lock_semaphore: AtomicU64::new(0),
-            spin_count: AtomicU64::new(0),
+            owning_thread: AtomicUsize::new(0),
+            lock_semaphore: AtomicUsize::new(0),
+            spin_count: AtomicUsize::new(0),
         }
     }
 
     /// `RtlInitializeCriticalSectionAndSpinCount`: reset to free with this
     /// spin count (flag bits kept in the top byte).
-    pub fn init(&self, spin_count: u64) {
+    pub fn init(&self, spin_count: usize) {
         self.debug_info.store(0, Ordering::Relaxed);
         self.lock_count.store(FREE, Ordering::Relaxed);
         self.recursion_count.store(0, Ordering::Relaxed);
@@ -144,19 +150,19 @@ impl CriticalSection {
     /// empty, and `SpinCount` gets `RTL_CRITICAL_SECTION_FLAG_STATIC_INIT`. The lock state
     /// is not touched. Both must stay where they are (statics).
     pub fn make_static(&self, debug: &CriticalSectionDebug) {
-        let list = (&raw const debug.process_locks_list) as u64;
-        debug.critical_section.store(self as *const CriticalSection as u64, Ordering::Relaxed);
+        let list = (&raw const debug.process_locks_list) as usize;
+        debug.critical_section.store(self as *const CriticalSection as usize, Ordering::Relaxed);
         debug.process_locks_list[0].store(list, Ordering::Relaxed);
         debug.process_locks_list[1].store(list, Ordering::Relaxed);
-        self.debug_info.store(debug as *const CriticalSectionDebug as u64, Ordering::Relaxed);
+        self.debug_info.store(debug as *const CriticalSectionDebug as usize, Ordering::Relaxed);
         self.spin_count.fetch_or(FLAG_STATIC_INIT, Ordering::Release);
     }
 
-    fn spins(&self) -> u64 {
+    fn spins(&self) -> usize {
         self.spin_count.load(Ordering::Relaxed) & 0x00FF_FFFF
     }
 
-    fn own(&self, me: u64) {
+    fn own(&self, me: usize) {
         self.owning_thread.store(me, Ordering::Relaxed);
         self.recursion_count.store(1, Ordering::Relaxed);
     }
@@ -166,18 +172,18 @@ impl CriticalSection {
         loop {
             let e = self.lock_semaphore.load(Ordering::Acquire);
             if e != 0 {
-                return e;
+                return e as u64;
             }
             let new = w.create_event();
             if new == 0 {
                 w.yield_now();
                 continue;
             }
-            match self.lock_semaphore.compare_exchange(0, new, Ordering::AcqRel, Ordering::Acquire) {
+            match self.lock_semaphore.compare_exchange(0, new as usize, Ordering::AcqRel, Ordering::Acquire) {
                 Ok(_) => return new,
                 Err(theirs) => {
                     w.close(new);
-                    return theirs;
+                    return theirs as u64;
                 }
             }
         }
@@ -185,7 +191,7 @@ impl CriticalSection {
 
     /// `RtlEnterCriticalSection`.
     pub fn enter(&self, w: &dyn Waiter) {
-        let me = w.current_thread();
+        let me = w.current_thread() as usize;
         for _ in 0..self.spins() {
             if self.lock_count.compare_exchange(FREE, HELD, Ordering::Acquire, Ordering::Relaxed).is_ok() {
                 self.own(me);
@@ -212,7 +218,7 @@ impl CriticalSection {
 
     /// `RtlTryEnterCriticalSection`.
     pub fn try_enter(&self, w: &dyn Waiter) -> bool {
-        let me = w.current_thread();
+        let me = w.current_thread() as usize;
         if self.lock_count.compare_exchange(FREE, HELD, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             self.own(me);
             return true;
@@ -228,7 +234,7 @@ impl CriticalSection {
     /// `RtlLeaveCriticalSection`. Leaving a section the caller does not own
     /// is a program error that Learn leaves undefined; Poly ignores it.
     pub fn leave(&self, w: &dyn Waiter) {
-        if self.owning_thread.load(Ordering::Relaxed) != w.current_thread() {
+        if self.owning_thread.load(Ordering::Relaxed) != w.current_thread() as usize {
             return;
         }
         if self.recursion_count.fetch_sub(1, Ordering::Relaxed) > 1 {
@@ -247,7 +253,7 @@ impl CriticalSection {
     pub fn delete(&self, w: &dyn Waiter) {
         let e = self.lock_semaphore.swap(0, Ordering::AcqRel);
         if e != 0 {
-            w.close(e);
+            w.close(e as u64);
         }
     }
 
@@ -258,7 +264,7 @@ impl CriticalSection {
 
     /// `RtlIsCriticalSectionLockedByThread`: owned by the calling thread.
     pub fn is_owned_by(&self, thread: u64) -> bool {
-        self.owning_thread.load(Ordering::Relaxed) == thread
+        self.owning_thread.load(Ordering::Relaxed) == thread as usize
     }
 }
 
@@ -267,7 +273,8 @@ mod tests {
     extern crate std;
     use super::*;
     use std::collections::HashMap;
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::AtomicUsize as StdAtomicUsize;
     use std::sync::{Arc, Condvar, Mutex};
     use std::vec::Vec;
 
@@ -279,7 +286,7 @@ mod tests {
     struct Host {
         events: Mutex<HashMap<u64, Event>>,
         next: AtomicU64,
-        made: AtomicUsize,
+        made: StdAtomicUsize,
     }
 
     std::thread_local!(static TID: u64 = {
@@ -323,12 +330,18 @@ mod tests {
 
     #[test]
     fn layout_is_winnt_h() {
+        // The x64 layout (this test runs on a 64-bit host), then the rule that gives the x86 one.
         assert_eq!(core::mem::size_of::<CriticalSection>(), 40);
         assert_eq!(core::mem::offset_of!(CriticalSection, lock_count), 0x08);
         assert_eq!(core::mem::offset_of!(CriticalSection, recursion_count), 0x0C);
         assert_eq!(core::mem::offset_of!(CriticalSection, owning_thread), 0x10);
         assert_eq!(core::mem::offset_of!(CriticalSection, lock_semaphore), 0x18);
         assert_eq!(core::mem::offset_of!(CriticalSection, spin_count), 0x20);
+        // `winnt.h` for a 32-bit process: 24 bytes, `DebugInfo` 0, `LockCount` 4, `RecursionCount` 8,
+        // `OwningThread` 12, `LockSemaphore` 16, `SpinCount` 20 (pointer-sized fields are 4 bytes).
+        let p = 4usize;
+        let (lock, recursion, owning) = (p, p + 4, 2 * p + 4 - (p % 4));
+        assert_eq!((lock, recursion, owning, owning + p, owning + 2 * p, owning + 3 * p), (4, 8, 12, 16, 20, 24));
     }
 
     /// The values a Windows 11 process shows for its loader lock (spec-chrome-elf-null items 4
@@ -346,11 +359,11 @@ mod tests {
         };
         assert_eq!(at(&cs), (-1, 0, 0));
         cs.enter(&h);
-        assert_eq!(at(&cs), (-2, 1, h.current_thread()));
+        assert_eq!(at(&cs), (-2, 1, h.current_thread() as usize));
         cs.enter(&h);
-        assert_eq!(at(&cs), (-3, 2, h.current_thread()));
+        assert_eq!(at(&cs), (-3, 2, h.current_thread() as usize));
         cs.leave(&h);
-        assert_eq!(at(&cs), (-2, 1, h.current_thread()));
+        assert_eq!(at(&cs), (-2, 1, h.current_thread() as usize));
         cs.leave(&h);
         assert_eq!(at(&cs), (-1, 0, 0));
     }
@@ -368,9 +381,9 @@ mod tests {
         let cs = CriticalSection::new();
         let debug = CriticalSectionDebug::new();
         cs.make_static(&debug);
-        assert_eq!(cs.debug_info.load(Ordering::Relaxed), &raw const debug as u64);
-        assert_eq!(debug.critical_section.load(Ordering::Relaxed), &raw const cs as u64);
-        let list = &raw const debug.process_locks_list as u64;
+        assert_eq!(cs.debug_info.load(Ordering::Relaxed), &raw const debug as usize);
+        assert_eq!(debug.critical_section.load(Ordering::Relaxed), &raw const cs as usize);
+        let list = &raw const debug.process_locks_list as usize;
         assert_eq!(debug.process_locks_list[0].load(Ordering::Relaxed), list);
         assert_eq!(debug.process_locks_list[1].load(Ordering::Relaxed), list);
         assert_eq!(cs.spin_count.load(Ordering::Relaxed), 0x0400_0000);
@@ -427,7 +440,7 @@ mod tests {
 
     #[test]
     fn mutual_exclusion_under_contention() {
-        for spin in [0u64, 4000] {
+        for spin in [0usize, 4000] {
             let h = Arc::new(Host::default());
             let cs = Arc::new(CriticalSection::new());
             cs.init(spin);

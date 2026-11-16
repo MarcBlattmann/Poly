@@ -367,8 +367,13 @@ struct CatchInfo {
 /// A record whose first parameter is [`catch_callback`] was made by
 /// [`frame_handler`] with a live [`CatchInfo`] as the second.
 unsafe fn consolidation(exc: &Exception) -> Option<&'static CatchInfo> {
-    let ours = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
-    if exc.code == STATUS_UNWIND_CONSOLIDATE && exc.count >= 2 && exc.params[0] == ours && exc.params[1] != 0 {
+    let catching = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
+    let terminating = terminate_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
+    if exc.code == STATUS_UNWIND_CONSOLIDATE
+        && exc.count >= 2
+        && (exc.params[0] == catching || exc.params[0] == terminating)
+        && exc.params[1] != 0
+    {
         // SAFETY: the caller's contract.
         Some(unsafe { &*(exc.params[1] as *const CatchInfo) })
     } else {
@@ -395,6 +400,14 @@ unsafe extern "C" fn catch_callback(record: *mut u8) -> u64 {
         destroy(&e);
     }
     next
+}
+
+/// `ntdll` calls this after the unwind of an exception that left a destructor, unwind action or
+/// copy constructor, to the frame of [`poly_cxx_call_guarded`]: everything below the guard has
+/// been unwound (its destructors and a `noexcept` scope's terminate action have run), now the
+/// runtime terminates.
+unsafe extern "C" fn terminate_callback(_record: *mut u8) -> u64 {
+    terminate()
 }
 
 /// The frame handler of [`poly_cxx_call_catch`]: during a search it
@@ -438,11 +451,34 @@ unsafe extern "C" fn throw_frame_handler(record: *mut u8, frame: u64, _context: 
 
 /// The frame handler of [`poly_cxx_call_guarded`]: an exception leaving a
 /// destructor, unwind action or copy constructor is `terminate()`.
-unsafe extern "C" fn guard_frame_handler(record: *mut u8, _frame: u64, _context: *mut u8, _dc: *mut u8) -> u32 {
+///
+/// The frames below the guard are unwound first, as on Windows (the exception goes out of the
+/// call, the unwind reaches the runtime's frame, which terminates): a destructor's own
+/// `noexcept` scope runs its terminate action (`__std_terminate`, the program's) during that
+/// unwind, and what it holds is destroyed; nothing above the guard is touched.
+unsafe extern "C" fn guard_frame_handler(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
     // SAFETY: the dispatcher's record.
     let exc = unsafe { read_exception(record) };
     if exc.flags & EXCEPTION_UNWIND == 0 {
-        terminate();
+        // SAFETY: the dispatcher's context for the guard's frame.
+        let d = unsafe { Dispatch::read(dc) };
+        let info = CatchInfo {
+            target_frame: frame,
+            function: 0,
+            state: 0,
+            try_low: 0,
+            funclet: 0,
+            parent_frame: 0,
+            exception: exc,
+            record,
+            context,
+            continuations: [0; 2],
+            num_continuations: 0,
+        };
+        let callback = terminate_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
+        // SAFETY: the guard's frame is the target; `info` lives in this handler's frame, which is
+        // below everything unwound, as in `unwind_to_catch`.
+        unsafe { unwind_to_callback(frame, &d, &info, callback) }
     }
     CONTINUE_SEARCH
 }
@@ -602,11 +638,20 @@ fn make_catch_object(handler: &HandlerType, matched: &Match, exc: &Exception, pa
 /// `d` is the dispatcher's context of `frame`; `info` lives in the caller's frame, which stays
 /// in place (below the target) until the catch block ends.
 unsafe fn unwind_to_catch(frame: u64, d: &Dispatch, info: &CatchInfo) -> ! {
+    let callback = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
+    // SAFETY: the caller's contract.
+    unsafe { unwind_to_callback(frame, d, info, callback) }
+}
+
+/// [`unwind_to_catch`] with the callback `ntdll` calls after the unwind named.
+///
+/// # Safety
+/// As [`unwind_to_catch`]; `callback` is [`catch_callback`] or [`terminate_callback`].
+unsafe fn unwind_to_callback(frame: u64, d: &Dispatch, info: &CatchInfo, callback: u64) -> ! {
     let mut unwind = [0u8; RECORD_SIZE];
     unwind[0..4].copy_from_slice(&STATUS_UNWIND_CONSOLIDATE.to_le_bytes());
     unwind[4..8].copy_from_slice(&EXCEPTION_NONCONTINUABLE.to_le_bytes());
     unwind[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
-    let callback = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
     unwind[0x20..0x28].copy_from_slice(&callback.to_le_bytes());
     unwind[0x28..0x30].copy_from_slice(&(info as *const CatchInfo as u64).to_le_bytes());
     // SAFETY: unwind to this frame (its control PC keeps the stack walk of

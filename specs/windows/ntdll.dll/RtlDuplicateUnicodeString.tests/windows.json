@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "dup_unicode",
+      "exe_sha256": "2f3f920550d5a9f5dfbc5df3862061d4d7e528ee840e4fe525741b8e49a0e7ca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJjLCBmbGFncyAwOiAweDAwMDAwMDAwIGxlbmd0aCA2IG1heGltdW0gNiBidWZmZXI6IGFsbG9jYXRlZCB0ZXh0IFthYmNdIG51bCBmYWxzZQphYmMsIGZsYWdzIDM6IDB4MDAwMDAwMDAgbGVuZ3RoIDYgbWF4aW11bSA4IGJ1ZmZlcjogYWxsb2NhdGVkIHRleHQgW2FiY10gbnVsIHRydWUKZW1wdHkgd2l0aCBhIGJ1ZmZlciwgZmxhZ3MgMDogMHgwMDAwMDAwMCBsZW5ndGggMCBtYXhpbXVtIDAgYnVmZmVyOiBOVUxMIAplbXB0eSwgTlVMTCBidWZmZXIsIGZsYWdzIDE6IDB4MDAwMDAwMDAgbGVuZ3RoIDAgbWF4aW11bSAwIGJ1ZmZlcjogTlVMTCAKZW1wdHkgd2l0aCBhIGJ1ZmZlciwgZmxhZ3MgMzogMHgwMDAwMDAwMCBsZW5ndGggMCBtYXhpbXVtIDIgYnVmZmVyOiBhbGxvY2F0ZWQgdGV4dCBbXSBudWwgdHJ1ZQpzb3VyY2UgdW5jaGFuZ2VkOiA2IDggdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "abc, flags 0: 0x00000000 length 6 maximum 6 buffer: allocated text [abc] nul false\nabc, flags 3: 0x00000000 length 6 maximum 8 buffer: allocated text [abc] nul true\nempty with a buffer, flags 0: 0x00000000 length 0 maximum 0 buffer: NULL \nempty, NULL buffer, flags 1: 0x00000000 length 0 maximum 0 buffer: NULL \nempty with a buffer, flags 3: 0x00000000 length 0 maximum 2 buffer: allocated text [] nul true\nsource unchanged: 6 8 true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "dup_unicode_c",
+      "exe_sha256": "a6f5d8ed850093d01f9a74bc67f936901d3d8be4c646e8d5615dd30fde93f188",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJjLCBmbGFncyAyOiAweGMwMDAwMDBkIGxlbmd0aCA0MzY5IG1heGltdW0gODczOCBidWZmZXI6IHVudG91Y2hlZCAKYWJjLCBmbGFncyA0Mjk0OTY3Mjk1OiAweGMwMDAwMDBkIGxlbmd0aCA0MzY5IG1heGltdW0gODczOCBidWZmZXI6IHVudG91Y2hlZCAKZW1wdHkgd2l0aCBhIGJ1ZmZlciwgZmxhZ3MgMTogMHgwMDAwMDAwMCBsZW5ndGggMCBtYXhpbXVtIDAgYnVmZmVyOiBOVUxMIAplbXB0eSwgTlVMTCBidWZmZXIsIGZsYWdzIDI6IDB4YzAwMDAwMGQgbGVuZ3RoIDQzNjkgbWF4aW11bSA4NzM4IGJ1ZmZlcjogdW50b3VjaGVkIApsZW5ndGggNSAob2RkKSwgZmxhZ3MgMDogMHhjMDAwMDAwZCBsZW5ndGggNDM2OSBtYXhpbXVtIDg3MzggYnVmZmVyOiB1bnRvdWNoZWQgCmFiYywgbWF4aW11bSA9IGxlbmd0aCwgZmxhZ3MgMTogMHgwMDAwMDAwMCBsZW5ndGggNiBtYXhpbXVtIDggYnVmZmVyOiBhbGxvY2F0ZWQgdGV4dCBbYWJjXSBudWwgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "abc, flags 2: 0xc000000d length 4369 maximum 8738 buffer: untouched \nabc, flags 4294967295: 0xc000000d length 4369 maximum 8738 buffer: untouched \nempty with a buffer, flags 1: 0x00000000 length 0 maximum 0 buffer: NULL \nempty, NULL buffer, flags 2: 0xc000000d length 4369 maximum 8738 buffer: untouched \nlength 5 (odd), flags 0: 0xc000000d length 4369 maximum 8738 buffer: untouched \nabc, maximum = length, flags 1: 0x00000000 length 6 maximum 8 buffer: allocated text [abc] nul true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

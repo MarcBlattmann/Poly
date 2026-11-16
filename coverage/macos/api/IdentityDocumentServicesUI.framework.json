@@ -108,5 +108,6 @@
 {"symbol":"$s26IdentityDocumentServicesUI0aB8ProviderPAAE13configuration12ExtensionKit03AppG18SceneConfigurationVvg","src":["macos-sdk"]},
 {"symbol":"$s26IdentityDocumentServicesUI0aB8ProviderPAAE13configuration12ExtensionKit03AppG18SceneConfigurationVvpMV","src":["macos-sdk"]},
 {"symbol":"$s26IdentityDocumentServicesUI0aB8ProviderTL","src":["macos-sdk"]},
-{"symbol":"$s4Body26IdentityDocumentServicesUI0bC8ProviderPTl","src":["macos-sdk"]}
+{"symbol":"$s4Body26IdentityDocumentServicesUI0bC8ProviderPTl","src":["macos-sdk"]},
+{"symbol":"swift:IdentityDocumentServicesUI.IdentityDocumentPresentationAnchor","src":["macos-swift-interface"]}
 ]

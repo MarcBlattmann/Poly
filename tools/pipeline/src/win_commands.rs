@@ -82,7 +82,7 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
 /// The tests directory of a green `msvcrt.dll` entry (ADR 0199's parity pass).
 const MSVCRT_SPECS: &str = "specs/windows/msvcrt.dll";
 /// The corpus tests of `vcruntime140.dll`'s own exports (ADR 0199), in `tests/windows`.
-const VCRT_TESTS: &[&str] = &["vcrt_exception_state", "vcrt_typeinfo_exception"];
+const VCRT_TESTS: &[&str] = &["vcrt_exception_state", "vcrt_typeinfo_exception", "vcrt_noexcept_destructor"];
 
 /// ADR 0199: `vcruntime140.dll` runs the C++ exception code `msvcrt.dll` has (ADR 0099), so
 /// the C++ tests of the green `msvcrt.dll` entries, built to take their runtime from

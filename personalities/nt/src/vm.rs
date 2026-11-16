@@ -229,6 +229,33 @@ impl MemoryBasicInformation {
     }
 }
 
+impl MemoryBasicInformation {
+    /// A copy-on-write page that was written through its view is a private, read-write page from
+    /// then on (the sheet of `NtMapViewOfSection`, rule `copy_on_write`): `written(addr)` says
+    /// whether the page at `addr` was. The run stops where that changes.
+    pub fn with_copied_pages(mut self, mut written: impl FnMut(u64) -> bool) -> Self {
+        let rw = match self.protect {
+            PAGE_WRITECOPY => PAGE_READWRITE,
+            PAGE_EXECUTE_WRITECOPY => PAGE_EXECUTE_READWRITE,
+            _ => return self,
+        };
+        if self.state != MEM_COMMIT || self.type_ == MEM_PRIVATE {
+            return self;
+        }
+        let pages = self.region_size / PAGE_SIZE;
+        let first = written(self.base_address);
+        let mut n = 1;
+        while n < pages && written(self.base_address + n * PAGE_SIZE) == first {
+            n += 1;
+        }
+        self.region_size = n * PAGE_SIZE;
+        if first {
+            self.protect = rw;
+        }
+        self
+    }
+}
+
 /// What a fault on a page the kernel could not resolve means.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AccessFault {

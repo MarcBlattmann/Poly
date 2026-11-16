@@ -15,3 +15,24 @@ EXPORTS
     bsearch_s
     strlen
     _invoke_watson
+    calloc
+    realloc
+    wcslen
+    strcmp
+    memcpy
+    memmove
+    memset
+    memcmp
+    strcspn
+    strchr
+    localeconv
+    frexp
+    fabs
+    abs
+    __acrt_iob_func
+    fputc
+    fputs
+    fflush
+    fwrite
+    putchar
+    puts

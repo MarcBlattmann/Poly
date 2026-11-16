@@ -25,5 +25,7 @@
 {"symbol":"$s22_PermissionKit_SwiftUI25CommunicationLimitsButtonVMn","src":["macos-sdk"]},
 {"symbol":"$s22_PermissionKit_SwiftUI25CommunicationLimitsButtonVyxG0cD04ViewAAMc","src":["macos-sdk"]},
 {"symbol":"$s7SwiftUI17EnvironmentValuesV015_PermissionKit_aB0E03askE0AD03AskE6ActionVvg","src":["macos-sdk"]},
-{"symbol":"$s7SwiftUI17EnvironmentValuesV015_PermissionKit_aB0E03askE0AD03AskE6ActionVvpMV","src":["macos-sdk"]}
+{"symbol":"$s7SwiftUI17EnvironmentValuesV015_PermissionKit_aB0E03askE0AD03AskE6ActionVvpMV","src":["macos-sdk"]},
+{"symbol":"swift:_PermissionKit_SwiftUI.AskPermissionAction","src":["macos-swift-interface"]},
+{"symbol":"swift:_PermissionKit_SwiftUI.EnvironmentValues.askPermission","src":["macos-swift-interface"]}
 ]

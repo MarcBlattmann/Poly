@@ -55,24 +55,43 @@ impl Module {
     }
 }
 
-/// `MEMORY_BASIC_INFORMATION` (`winnt.h`): the fields used here, as offsets.
-const MBI_ALLOCATION_BASE: usize = 8;
-const MBI_STATE: usize = 32;
-const MBI_PROTECT: usize = 36;
+/// `MEMORY_BASIC_INFORMATION` (`winnt.h`): the fields used here, as offsets and the structure's size. The
+/// base and the region size are pointer sized: `AllocationBase` at 8 (64-bit) or 4, `State` at 32 or 16,
+/// `Protect` at 36 or 20, 48 or 28 bytes in all.
+#[cfg(target_pointer_width = "64")]
+mod mbi {
+    pub const SIZE: usize = 48;
+    pub const ALLOCATION_BASE: usize = 8;
+    pub const POINTER: usize = 8;
+    pub const STATE: usize = 32;
+    pub const PROTECT: usize = 36;
+}
+#[cfg(target_pointer_width = "32")]
+mod mbi {
+    pub const SIZE: usize = 28;
+    pub const ALLOCATION_BASE: usize = 4;
+    pub const POINTER: usize = 4;
+    pub const STATE: usize = 16;
+    pub const PROTECT: usize = 20;
+}
 
 /// Whether `address` is committed, readable memory; with `allocation_base`, also the start of its
 /// allocation.
 fn readable(address: u64, allocation_base: Option<u64>) -> bool {
-    let mut mbi = [0u8; 48];
+    let mut info = [0u8; mbi::SIZE];
     // SAFETY: a buffer of the structure's size.
-    let n = unsafe { VirtualQuery(address as *const u8, mbi.as_mut_ptr(), mbi.len()) };
-    if n < mbi.len() {
+    let n = unsafe { VirtualQuery(address as usize as *const u8, info.as_mut_ptr(), info.len()) };
+    if n < info.len() {
         return false;
     }
-    let u32_at = |o: usize| u32::from_le_bytes(mbi[o..o + 4].try_into().unwrap());
-    let alloc = u64::from_le_bytes(mbi[MBI_ALLOCATION_BASE..MBI_ALLOCATION_BASE + 8].try_into().unwrap());
-    let protect = u32_at(MBI_PROTECT);
-    u32_at(MBI_STATE) == MEM_COMMIT
+    let u32_at = |o: usize| u32::from_le_bytes(info[o..o + 4].try_into().unwrap());
+    let alloc = if mbi::POINTER == 8 {
+        u64::from_le_bytes(info[mbi::ALLOCATION_BASE..mbi::ALLOCATION_BASE + 8].try_into().unwrap())
+    } else {
+        u64::from(u32_at(mbi::ALLOCATION_BASE))
+    };
+    let protect = u32_at(mbi::PROTECT);
+    u32_at(mbi::STATE) == MEM_COMMIT
         && protect != 0
         && protect & (PAGE_NOACCESS | PAGE_GUARD) == 0
         && allocation_base.is_none_or(|b| alloc == b)

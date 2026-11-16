@@ -18,8 +18,9 @@
 //!   `poly_ldr::apiset`): `RoInitialize`/`RoUninitialize` (the same
 //!   apartment), `RoGetActivationFactory` and `RoActivateInstance` (no class
 //!   is registered) and the `HSTRING` functions ([`poly_com::hstring`]).
+//! - Drag and drop: `RegisterDragDrop`/`RevokeDragDrop` keep the target as the window's
+//!   `OleDropTargetInterface` property while the thread has OLE.
 //! - Small stand-ins that succeed without effect: `CoInitializeSecurity`,
-//!   `CoRegisterMessageFilter`, `RegisterDragDrop`/`RevokeDragDrop`,
 //!   `CoCreateFreeThreadedMarshaler` (an object that is only `IUnknown`).
 //!
 //! Sources: Microsoft Learn's page for each function, `combaseapi.h`,
@@ -31,7 +32,7 @@
 extern crate alloc;
 
 use core::ffi::c_void;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 #[cfg(target_arch = "x86_64")]
 use poly_com::apartment::BLOCK_X64;
 #[cfg(target_arch = "x86")]
@@ -56,11 +57,17 @@ unsafe extern "system" {
     fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
     fn HeapReAlloc(heap: *mut u8, flags: u32, p: *mut u8, bytes: usize) -> *mut u8;
     fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
+    fn HeapSize(heap: *mut u8, flags: u32, p: *const u8) -> usize;
     fn TlsAlloc() -> u32;
     fn TlsFree(index: u32) -> i32;
     fn TlsGetValue(index: u32) -> *mut u8;
     fn TlsSetValue(index: u32, value: *mut u8) -> i32;
     fn GetCurrentThreadId() -> u32;
+    fn OpenThread(access: u32, inherit: i32, tid: u32) -> usize;
+    fn CloseHandle(handle: usize) -> i32;
+    fn WaitForSingleObject(handle: usize, ms: u32) -> u32;
+    fn LoadLibraryW(name: *const u16) -> usize;
+    fn GetProcAddress(module: usize, name: *const u8) -> usize;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "bcryptprimitives", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -264,13 +271,28 @@ fn filter_slot() -> Option<u32> {
     }
 }
 
+/// Whether thread `tid` still runs (a thread that ended without `CoUninitialize` is not the main
+/// STA any more).
+fn thread_alive(tid: u32) -> bool {
+    // SAFETY: SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION; the handle is closed at once.
+    unsafe {
+        let h = OpenThread(0x0010_0000 | 0x0800, 0, tid);
+        if h == 0 {
+            return false;
+        }
+        let r = WaitForSingleObject(h, 0);
+        CloseHandle(h);
+        r == 0x102
+    }
+}
+
 /// `CoInitializeEx` / `RoInitialize` / `OleInitialize` on this thread.
 fn initialize(kind: InitKind) -> Hresult {
     let Some(hr) = update(|st| st.initialize(kind)) else { return E_OUTOFMEMORY };
     if hr == S_OK {
         match kind.model() {
             // SAFETY: no arguments.
-            Model::Sta => MAIN_STA.claim(unsafe { GetCurrentThreadId() }),
+            Model::Sta => drop(MAIN_STA.claim_if_gone(unsafe { GetCurrentThreadId() }, thread_alive)),
             Model::Mta => MTA_THREADS.enter(),
         }
     }
@@ -283,12 +305,20 @@ fn uninitialize(ole: bool) {
         return;
     }
     let before = state().model();
-    let Some(after) = update(|st| {
-        st.uninitialize(ole);
-        st.model()
+    let Some((after, last_ole)) = update(|st| {
+        let last = if ole {
+            st.ole_uninitialize()
+        } else {
+            st.uninitialize();
+            false
+        };
+        (st.model(), last)
     }) else {
         return;
     };
+    if last_ole {
+        release_drop_targets();
+    }
     if before.is_none() || after.is_some() {
         return;
     }
@@ -412,6 +442,191 @@ pub extern "system" fn RoInitialize(init_type: i32) -> Hresult {
 #[unsafe(no_mangle)]
 pub extern "system" fn RoUninitialize() {
     uninitialize(false);
+}
+
+// ----- drag and drop -------------------------------------------------------------------
+
+/// A spin lock around a value (no `std` here).
+struct Locked<T> {
+    flag: core::sync::atomic::AtomicBool,
+    value: core::cell::UnsafeCell<T>,
+}
+
+// SAFETY: the flag serialises every access to the value.
+unsafe impl<T> Sync for Locked<T> {}
+
+impl<T> Locked<T> {
+    const fn new(v: T) -> Locked<T> {
+        Locked { flag: core::sync::atomic::AtomicBool::new(false), value: core::cell::UnsafeCell::new(v) }
+    }
+    fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        while self.flag.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            core::hint::spin_loop();
+        }
+        // SAFETY: the lock is held.
+        let r = f(unsafe { &mut *self.value.get() });
+        self.flag.store(false, Ordering::Release);
+        r
+    }
+}
+
+/// The drop targets of the process: window, target, the registering thread.
+static TARGETS: Locked<alloc::vec::Vec<(usize, usize, u32)>> = Locked::new(alloc::vec::Vec::new());
+
+/// The window property a registration leaves (Learn: "RegisterDragDrop"): `OleDropTargetInterface`.
+const DROP_PROP: &[u16] = &[
+    b'O' as u16,
+    b'l' as u16,
+    b'e' as u16,
+    b'D' as u16,
+    b'r' as u16,
+    b'o' as u16,
+    b'p' as u16,
+    b'T' as u16,
+    b'a' as u16,
+    b'r' as u16,
+    b'g' as u16,
+    b'e' as u16,
+    b't' as u16,
+    b'I' as u16,
+    b'n' as u16,
+    b't' as u16,
+    b'e' as u16,
+    b'r' as u16,
+    b'f' as u16,
+    b'a' as u16,
+    b'c' as u16,
+    b'e' as u16,
+    0,
+];
+
+static USER32: [AtomicUsize; 4] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+
+/// A function of `user32.dll`, looked up when first used (a program with no windows never loads it).
+fn user32_fn(which: usize, name: &[u8]) -> usize {
+    let cached = USER32[which].load(Ordering::Acquire);
+    if cached != 0 {
+        return cached;
+    }
+    let lib: [u16; 11] = [117, 115, 101, 114, 51, 50, 46, 100, 108, 108, 0];
+    // SAFETY: kernel32 calls with NUL-terminated names.
+    let p = unsafe { GetProcAddress(LoadLibraryW(lib.as_ptr()), name.as_ptr()) };
+    USER32[which].store(p, Ordering::Release);
+    p
+}
+
+unsafe fn is_window(hwnd: usize) -> bool {
+    let p = user32_fn(0, b"IsWindow\0");
+    // SAFETY: user32's IsWindow, or `p` is 0 (checked).
+    p != 0 && unsafe { core::mem::transmute::<usize, unsafe extern "system" fn(usize) -> i32>(p)(hwnd) } != 0
+}
+
+unsafe fn get_prop(hwnd: usize) -> usize {
+    let p = user32_fn(1, b"GetPropW\0");
+    if p == 0 {
+        return 0;
+    }
+    // SAFETY: user32's GetPropW.
+    unsafe {
+        core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16) -> usize>(p)(
+            hwnd,
+            DROP_PROP.as_ptr(),
+        )
+    }
+}
+
+unsafe fn set_prop(hwnd: usize, value: usize) {
+    let p = user32_fn(2, b"SetPropW\0");
+    if p != 0 {
+        // SAFETY: user32's SetPropW.
+        unsafe {
+            core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16, usize) -> i32>(p)(
+                hwnd,
+                DROP_PROP.as_ptr(),
+                value,
+            )
+        };
+    }
+}
+
+unsafe fn remove_prop(hwnd: usize) {
+    let p = user32_fn(3, b"RemovePropW\0");
+    if p != 0 {
+        // SAFETY: user32's RemovePropW.
+        unsafe {
+            core::mem::transmute::<usize, unsafe extern "system" fn(usize, *const u16) -> usize>(p)(
+                hwnd,
+                DROP_PROP.as_ptr(),
+            )
+        };
+    }
+}
+
+/// `RegisterDragDrop`: the target is AddRef'ed and kept (as the window's `OleDropTargetInterface`
+/// property) until `RevokeDragDrop` or the last `OleUninitialize` of this thread; it needs OLE on
+/// the thread; `DestroyWindow` does not revoke.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
+    // SAFETY: user32's functions on a handle value; the target is the caller's COM object.
+    unsafe {
+        if hwnd == 0 || !is_window(hwnd) {
+            return DRAGDROP_E_INVALIDHWND;
+        }
+        if target.is_null() {
+            return E_INVALIDARG;
+        }
+        let a = state();
+        if a.ole == 0 {
+            return if a.ole_used { CO_E_NOTINITIALIZED } else { E_OUTOFMEMORY };
+        }
+        if get_prop(hwnd) != 0 {
+            return DRAGDROP_E_ALREADYREGISTERED;
+        }
+        add_ref_unknown(target);
+        set_prop(hwnd, target as usize);
+        let me = GetCurrentThreadId();
+        TARGETS.with(|t| t.push((hwnd, target as usize, me)));
+    }
+    S_OK
+}
+
+/// `RevokeDragDrop`: the target is released once and the property goes.
+#[unsafe(no_mangle)]
+pub extern "system" fn RevokeDragDrop(hwnd: usize) -> Hresult {
+    // SAFETY: user32's functions on a handle value; the target we AddRef'ed.
+    unsafe {
+        if hwnd == 0 || !is_window(hwnd) {
+            return DRAGDROP_E_INVALIDHWND;
+        }
+        let target = get_prop(hwnd);
+        if target == 0 {
+            return DRAGDROP_E_NOTREGISTERED;
+        }
+        remove_prop(hwnd);
+        TARGETS.with(|t| t.retain(|e| e.0 != hwnd));
+        release_unknown(target as *mut c_void);
+    }
+    S_OK
+}
+
+/// The last `OleUninitialize` of the thread: its drop targets are released.
+fn release_drop_targets() {
+    // SAFETY: no preconditions.
+    let me = unsafe { GetCurrentThreadId() };
+    let mine: alloc::vec::Vec<(usize, usize, u32)> = TARGETS.with(|t| {
+        let (mine, rest) = t.drain(..).partition(|e| e.2 == me);
+        *t = rest;
+        mine
+    });
+    for (hwnd, target, _) in mine {
+        // SAFETY: the registration's target and window handle.
+        unsafe {
+            if is_window(hwnd) && get_prop(hwnd) == target {
+                remove_prop(hwnd);
+            }
+            release_unknown(target as *mut c_void);
+        }
+    }
 }
 
 // ----- activation ----------------------------------------------------------------------
@@ -799,38 +1014,60 @@ pub unsafe extern "system" fn RoActivateInstance(_class_id: HString, instance: *
     REGDB_E_CLASSNOTREG
 }
 
-// ----- objects that do nothing ---------------------------------------------------------
+// ----- the task allocator (IMalloc) ----------------------------------------------------
 
-/// The IUnknown-only object `CoCreateFreeThreadedMarshaler` hands out.
+/// `IMalloc` (`objidl.h`): the interface `CoGetMalloc` and `SHGetMalloc` hand out; its methods
+/// are the task-memory functions above.
 #[repr(C)]
-struct Unknown {
-    vtbl: *const UnknownVtbl,
-    refs: AtomicU32,
+struct Malloc {
+    vtbl: *const MallocVtbl,
 }
 
 #[repr(C)]
-struct UnknownVtbl {
-    query_interface: unsafe extern "system" fn(*mut Unknown, *const Guid, *mut *mut c_void) -> Hresult,
-    add_ref: unsafe extern "system" fn(*mut Unknown) -> u32,
-    release: unsafe extern "system" fn(*mut Unknown) -> u32,
+struct MallocVtbl {
+    query_interface: unsafe extern "system" fn(*mut Malloc, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut Malloc) -> u32,
+    release: unsafe extern "system" fn(*mut Malloc) -> u32,
+    alloc: unsafe extern "system" fn(*mut Malloc, usize) -> *mut c_void,
+    realloc: unsafe extern "system" fn(*mut Malloc, *mut c_void, usize) -> *mut c_void,
+    free: unsafe extern "system" fn(*mut Malloc, *mut c_void),
+    get_size: unsafe extern "system" fn(*mut Malloc, *mut c_void) -> usize,
+    did_alloc: unsafe extern "system" fn(*mut Malloc, *mut c_void) -> i32,
+    heap_minimize: unsafe extern "system" fn(*mut Malloc),
 }
 
 // SAFETY: a table of function pointers.
-unsafe impl Sync for UnknownVtbl {}
+unsafe impl Sync for MallocVtbl {}
+// SAFETY: the object holds only the table's address and never changes.
+unsafe impl Sync for Malloc {}
 
-/// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
-const IID_IUNKNOWN: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+/// `IID_IMalloc` (`objidl.h`): {00000002-0000-0000-C000-000000000046}.
+const IID_IMALLOC: Guid = Guid { data1: 2, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 
-static UNKNOWN_VTBL: UnknownVtbl = UnknownVtbl { query_interface: unk_qi, add_ref: unk_add_ref, release: unk_release };
+static MALLOC_VTBL: MallocVtbl = MallocVtbl {
+    query_interface: malloc_qi,
+    add_ref: malloc_add_ref,
+    release: malloc_release,
+    alloc: malloc_alloc,
+    realloc: malloc_realloc,
+    free: malloc_free,
+    get_size: malloc_get_size,
+    did_alloc: malloc_did_alloc,
+    heap_minimize: malloc_heap_minimize,
+};
 
-unsafe extern "system" fn unk_qi(this: *mut Unknown, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+/// The one allocator object of the process: it never goes away, so the reference counts are
+/// those of a static (Learn: `IMalloc::Release`'s count is the object's own; callers only
+/// release what they were given).
+static TASK_MALLOC: Malloc = Malloc { vtbl: &MALLOC_VTBL };
+
+unsafe extern "system" fn malloc_qi(this: *mut Malloc, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }
     // SAFETY: the caller's IID and out parameter.
     unsafe {
-        if !iid.is_null() && *iid == IID_IUNKNOWN {
-            (*this).refs.fetch_add(1, Ordering::AcqRel);
+        if !iid.is_null() && (*iid == IID_IUNKNOWN || *iid == IID_IMALLOC) {
             *out = this.cast();
             S_OK
         } else {
@@ -840,12 +1077,159 @@ unsafe extern "system" fn unk_qi(this: *mut Unknown, iid: *const Guid, out: *mut
     }
 }
 
-unsafe extern "system" fn unk_add_ref(this: *mut Unknown) -> u32 {
+unsafe extern "system" fn malloc_add_ref(_this: *mut Malloc) -> u32 {
+    1
+}
+
+unsafe extern "system" fn malloc_release(_this: *mut Malloc) -> u32 {
+    1
+}
+
+unsafe extern "system" fn malloc_alloc(_this: *mut Malloc, cb: usize) -> *mut c_void {
+    // SAFETY: the process heap.
+    unsafe { CoTaskMemAlloc(cb) }
+}
+
+unsafe extern "system" fn malloc_realloc(_this: *mut Malloc, pv: *mut c_void, cb: usize) -> *mut c_void {
+    // SAFETY: the process heap, a block from this allocator.
+    unsafe { CoTaskMemRealloc(pv, cb) }
+}
+
+unsafe extern "system" fn malloc_free(_this: *mut Malloc, pv: *mut c_void) {
+    // SAFETY: a block from this allocator.
+    unsafe { CoTaskMemFree(pv) }
+}
+
+/// `IMalloc::GetSize`: the block's size, or -1 (`(SIZE_T)-1`) for a pointer that is no block (NULL too).
+unsafe extern "system" fn malloc_get_size(_this: *mut Malloc, pv: *mut c_void) -> usize {
+    if pv.is_null() {
+        return usize::MAX;
+    }
+    // SAFETY: the process heap.
+    unsafe { HeapSize(GetProcessHeap(), 0, pv.cast()) }
+}
+
+/// `IMalloc::DidAlloc`: 1 if the block is this allocator's, 0 if not, -1 if it cannot say (NULL).
+unsafe extern "system" fn malloc_did_alloc(_this: *mut Malloc, pv: *mut c_void) -> i32 {
+    if pv.is_null() {
+        return -1;
+    }
+    // SAFETY: the process heap.
+    i32::from(unsafe { HeapSize(GetProcessHeap(), 0, pv.cast()) } != usize::MAX)
+}
+
+unsafe extern "system" fn malloc_heap_minimize(_this: *mut Malloc) {}
+
+/// `CoGetMalloc(dwMemContext, ppMalloc)`: the task allocator (Learn: the context must be 1,
+/// `MEMCTX_TASK`; 2 (`MEMCTX_SHARED`) and 3 (`MEMCTX_MACSYSTEM`) are `E_INVALIDARG`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoGetMalloc(context: u32, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    if context != 1 {
+        // SAFETY: the caller's out parameter.
+        unsafe { *out = core::ptr::null_mut() };
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *out = (&raw const TASK_MALLOC).cast_mut().cast() };
+    S_OK
+}
+
+// ----- objects that do nothing ---------------------------------------------------------
+
+/// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
+const IID_IUNKNOWN: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+/// `IID_IMarshal` (`objidl.h`): {00000003-0000-0000-C000-000000000046}.
+const IID_IMARSHAL: Guid = Guid { data1: 3, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+
+type UnkFn = unsafe extern "system" fn(*mut c_void) -> u32;
+type QiFn = unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult;
+
+/// The free-threaded marshaler `CoCreateFreeThreadedMarshaler` hands out: the inner `IUnknown`
+/// (this struct's first field is its vtable pointer) and, inside the same block, its `IMarshal`
+/// interface. Without an outer object it counts its own references; aggregated, the `IMarshal`
+/// interface delegates `QueryInterface`, `AddRef` and `Release` to the outer unknown.
+#[repr(C)]
+struct Marshaler {
+    vtbl: *const UnknownVtbl,
+    refs: AtomicU32,
+    outer: *mut c_void,
+    marshal: MarshalIface,
+}
+
+#[repr(C)]
+struct MarshalIface {
+    vtbl: *const MarshalVtbl,
+    owner: *mut Marshaler,
+}
+
+#[repr(C)]
+struct UnknownVtbl {
+    query_interface: unsafe extern "system" fn(*mut Marshaler, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut Marshaler) -> u32,
+    release: unsafe extern "system" fn(*mut Marshaler) -> u32,
+}
+
+/// `IMarshal`: the three `IUnknown` methods and the six of the interface (all `E_NOTIMPL`: there is no
+/// other process to marshal to).
+#[repr(C)]
+struct MarshalVtbl {
+    query_interface: unsafe extern "system" fn(*mut MarshalIface, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut MarshalIface) -> u32,
+    release: unsafe extern "system" fn(*mut MarshalIface) -> u32,
+    rest: [unsafe extern "system" fn() -> Hresult; 6],
+}
+
+// SAFETY: tables of function pointers.
+unsafe impl Sync for UnknownVtbl {}
+// SAFETY: as above.
+unsafe impl Sync for MarshalVtbl {}
+
+static UNKNOWN_VTBL: UnknownVtbl = UnknownVtbl { query_interface: unk_qi, add_ref: unk_add_ref, release: unk_release };
+static MARSHAL_VTBL: MarshalVtbl =
+    MarshalVtbl { query_interface: mar_qi, add_ref: mar_add_ref, release: mar_release, rest: [not_impl; 6] };
+
+unsafe extern "system" fn not_impl() -> Hresult {
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn unk_qi(this: *mut Marshaler, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's IID and out parameter; a live object.
+    unsafe {
+        *out = core::ptr::null_mut();
+        if iid.is_null() {
+            return E_INVALIDARG;
+        }
+        if *iid == IID_IUNKNOWN {
+            (*this).refs.fetch_add(1, Ordering::AcqRel);
+            *out = this.cast();
+            S_OK
+        } else if *iid == IID_IMARSHAL {
+            // The interface counts with the outer object when there is one.
+            if (*this).outer.is_null() {
+                (*this).refs.fetch_add(1, Ordering::AcqRel);
+            } else {
+                add_ref_unknown((*this).outer);
+            }
+            *out = core::ptr::addr_of_mut!((*this).marshal).cast();
+            S_OK
+        } else {
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn unk_add_ref(this: *mut Marshaler) -> u32 {
     // SAFETY: a live object.
     unsafe { (*this).refs.fetch_add(1, Ordering::AcqRel) + 1 }
 }
 
-unsafe extern "system" fn unk_release(this: *mut Unknown) -> u32 {
+unsafe extern "system" fn unk_release(this: *mut Marshaler) -> u32 {
     // SAFETY: a live object from CoTaskMemAlloc.
     unsafe {
         let n = (*this).refs.fetch_sub(1, Ordering::AcqRel) - 1;
@@ -856,31 +1240,140 @@ unsafe extern "system" fn unk_release(this: *mut Unknown) -> u32 {
     }
 }
 
-/// A new object that is `IUnknown` and no more (one reference, the caller's), or
-/// `E_OUTOFMEMORY`.
-unsafe fn new_unknown(out: *mut *mut c_void) -> Hresult {
+unsafe extern "system" fn mar_qi(this: *mut MarshalIface, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_qi(owner, iid, out)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const QiFn);
+            (*vtbl)(outer, iid, out)
+        }
+    }
+}
+
+unsafe extern "system" fn mar_add_ref(this: *mut MarshalIface) -> u32 {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_add_ref(owner)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const UnkFn);
+            (*vtbl.add(1))(outer)
+        }
+    }
+}
+
+unsafe extern "system" fn mar_release(this: *mut MarshalIface) -> u32 {
+    // SAFETY: the interface lives inside its owner.
+    unsafe {
+        let owner = (*this).owner;
+        if (*owner).outer.is_null() {
+            unk_release(owner)
+        } else {
+            let outer = (*owner).outer;
+            let vtbl = *(outer as *const *const UnkFn);
+            (*vtbl.add(2))(outer)
+        }
+    }
+}
+
+/// `CoCreateFreeThreadedMarshaler`: the inner `IUnknown` of an object that is `IMarshal` too (there
+/// are no other processes to marshal to that it could serve). Creating it does not call the outer
+/// object.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoCreateFreeThreadedMarshaler(outer: *mut c_void, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_INVALIDARG;
+    }
     // SAFETY: the caller's out parameter; a fresh block.
     unsafe {
-        let p = CoTaskMemAlloc(core::mem::size_of::<Unknown>()).cast::<Unknown>();
+        let p = CoTaskMemAlloc(core::mem::size_of::<Marshaler>()).cast::<Marshaler>();
         if p.is_null() {
             *out = core::ptr::null_mut();
             return E_OUTOFMEMORY;
         }
-        p.write(Unknown { vtbl: &UNKNOWN_VTBL, refs: AtomicU32::new(1) });
+        p.write(Marshaler {
+            vtbl: &UNKNOWN_VTBL,
+            refs: AtomicU32::new(1),
+            outer,
+            marshal: MarshalIface { vtbl: &MARSHAL_VTBL, owner: p },
+        });
         *out = p.cast();
     }
     S_OK
 }
 
-/// `CoCreateFreeThreadedMarshaler`: an object that is `IUnknown` and no
-/// more (there are no other processes to marshal to that it could serve).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CoCreateFreeThreadedMarshaler(_outer: *mut c_void, out: *mut *mut c_void) -> Hresult {
+/// The stand-in `GetInterfaceFromGlobal` hands out in another apartment (Windows makes a proxy;
+/// there is no marshalling here): `IUnknown` and no more, one reference, the caller's.
+#[repr(C)]
+struct ProxyObject {
+    vtbl: *const ProxyVtbl,
+    refs: AtomicU32,
+}
+
+#[repr(C)]
+struct ProxyVtbl {
+    query_interface: unsafe extern "system" fn(*mut ProxyObject, *const Guid, *mut *mut c_void) -> Hresult,
+    add_ref: unsafe extern "system" fn(*mut ProxyObject) -> u32,
+    release: unsafe extern "system" fn(*mut ProxyObject) -> u32,
+}
+
+// SAFETY: a table of function pointers.
+unsafe impl Sync for ProxyVtbl {}
+
+static PROXY_VTBL: ProxyVtbl = ProxyVtbl { query_interface: proxy_qi, add_ref: proxy_add_ref, release: proxy_release };
+
+unsafe extern "system" fn proxy_qi(this: *mut ProxyObject, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }
-    // SAFETY: the caller's out parameter.
-    unsafe { new_unknown(out) }
+    // SAFETY: the caller's IID and out parameter.
+    unsafe {
+        if is_guid(iid, &IID_IUNKNOWN) {
+            (*this).refs.fetch_add(1, Ordering::AcqRel);
+            *out = this.cast();
+            S_OK
+        } else {
+            *out = core::ptr::null_mut();
+            E_NOINTERFACE
+        }
+    }
+}
+
+unsafe extern "system" fn proxy_add_ref(this: *mut ProxyObject) -> u32 {
+    // SAFETY: a live object.
+    unsafe { (*this).refs.fetch_add(1, Ordering::AcqRel) + 1 }
+}
+
+unsafe extern "system" fn proxy_release(this: *mut ProxyObject) -> u32 {
+    // SAFETY: a live object from CoTaskMemAlloc.
+    unsafe {
+        let n = (*this).refs.fetch_sub(1, Ordering::AcqRel) - 1;
+        if n == 0 {
+            CoTaskMemFree(this.cast());
+        }
+        n
+    }
+}
+
+/// A new proxy stand-in (one reference), or `E_OUTOFMEMORY`.
+unsafe fn new_unknown(out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the caller's out parameter; a fresh block.
+    unsafe {
+        let p = CoTaskMemAlloc(core::mem::size_of::<ProxyObject>()).cast::<ProxyObject>();
+        if p.is_null() {
+            *out = core::ptr::null_mut();
+            return E_OUTOFMEMORY;
+        }
+        p.write(ProxyObject { vtbl: &PROXY_VTBL, refs: AtomicU32::new(1) });
+        *out = p.cast();
+    }
+    S_OK
 }
 
 /// `CoInitializeSecurity`: accepted, nothing enforced.
@@ -940,23 +1433,6 @@ pub unsafe extern "system" fn CoRegisterMessageFilter(new: *mut c_void, old: *mu
         }
     }
     S_OK
-}
-
-/// `RegisterDragDrop`: accepted for a window and a target, nothing kept.
-#[unsafe(no_mangle)]
-pub extern "system" fn RegisterDragDrop(hwnd: usize, target: *mut c_void) -> Hresult {
-    if hwnd == 0 {
-        DRAGDROP_E_INVALIDHWND
-    } else if target.is_null() {
-        E_INVALIDARG
-    } else {
-        S_OK
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn RevokeDragDrop(hwnd: usize) -> Hresult {
-    if hwnd == 0 { DRAGDROP_E_INVALIDHWND } else { S_OK }
 }
 
 // ----- GUIDs ---------------------------------------------------------------------------
@@ -1041,7 +1517,7 @@ pub unsafe extern "system" fn StringFromGUID2(guid: *const Guid, buf: *mut u16, 
 
 /// `StringFromCLSID` / `StringFromIID`: the text in task memory.
 unsafe fn string_from_guid(guid: *const Guid, out: *mut *mut u16) -> Hresult {
-    // The sheet: a NULL id or a NULL output is E_INVALIDARG.
+    // The sheets: a NULL id or a NULL output is E_INVALIDARG.
     if out.is_null() || guid.is_null() {
         return E_INVALIDARG;
     }
@@ -1185,7 +1661,10 @@ pub unsafe extern "system" fn PropVariantClear(pv: *mut u8) -> Hresult {
     // SAFETY: a 24-byte PROPVARIANT.
     unsafe {
         let vt = (pv as *const u16).read_unaligned();
-        let hr = if propvariant::classify(vt).is_some() {
+        // `VT_ILLEGAL` (0xFFFF) is accepted and owns nothing (PropVariantClear.yaml `pvc_errors`).
+        let hr = if vt == 0xFFFF {
+            S_OK
+        } else if propvariant::classify(vt).is_some() {
             clear_owned(pv);
             S_OK
         } else {

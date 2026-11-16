@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "ios_base_flags_width",
+      "exe_sha256": "16788d57e10ba202838c9d27ce0d693b04bc56b68f1806546b7c24baba0986bf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW5pdGlhbCBmbGFncwpvayBmbGFncyh4KSByZXR1cm5zIHRoZSBvbGQgZmxhZ3MKb2sgZmxhZ3MoKSBub3cKb2sgZmxhZ3MoYWxsIG9uZXMpIHJldHVybnMgdGhlIG9sZCBmbGFncwpvayBvbmx5IHRoZSBsb3cgMTYgYml0cyBhcmUga2VwdApvayBzZXRmKGYpIHJldHVybnMgdGhlIG9sZCBmbGFncwpvayBzZXRmKGYpIG1lcmdlZApvayBzZXRmKGYsIG1hc2spIHJldHVybnMgdGhlIG9sZCBmbGFncwpvayBzZXRmKGYsIG1hc2spIHJlcGxhY2VkIHRoZSBtYXNrZWQgYml0cwpvayBhIHNlY29uZCBtYXNrZWQgc2V0ZiBjbGVhcnMgdGhlIG90aGVyIGJpdHMgb2YgdGhlIG1hc2sKb2sgc2V0ZiBpZ25vcmVzIGJpdHMgYWJvdmUgMTYKb2sgdW5zZXRmIGNsZWFycyBiaXRzCm9rIHNldGYoZiwgbWFzaykgb25seSBjaGFuZ2VzIGJpdHMgaW4gbWFzawpvayB3aWR0aCgpIGlzIDAKb2sgd2lkdGgoMTApIHJldHVybnMgMApvayB3aWR0aCgpIGlzIDEwCm9rIHdpZHRoKC0zKSByZXR1cm5zIDEwCm9rIG5lZ2F0aXZlIHdpZHRocyBhcmUgc3RvcmVkCm9rIHByZWNpc2lvbigpIGlzIDYKb2sgcHJlY2lzaW9uKDApIHJldHVybnMgNgpvayBwcmVjaXNpb24oKSBpcyAwCm9rIHByZWNpc2lvbigxPDw0MCkgcmV0dXJucyAwCm9rIDY0LWJpdCBwcmVjaXNpb24gaXMgc3RvcmVkCm9rIDY0LWJpdCB3aWR0aCBpcyBzdG9yZWQKb2sgZXhjZXB0aW9ucygpIGtlZXBzIHRoZSBsb3cgc3RhdHVzIGJpdHMKb2sgZXhjZXB0aW9ucygwKQpvayBnZXRsb2MgcmV0dXJucyBhIGNvcHkgb2YgdGhlIGdsb2JhbCBsb2NhbGUKb2sgaW1idWUgcmV0dXJucyB0aGUgcHJldmlvdXMgbG9jYWxlCnN1bW1hcnkgMjggcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok initial flags\nok flags(x) returns the old flags\nok flags() now\nok flags(all ones) returns the old flags\nok only the low 16 bits are kept\nok setf(f) returns the old flags\nok setf(f) merged\nok setf(f, mask) returns the old flags\nok setf(f, mask) replaced the masked bits\nok a second masked setf clears the other bits of the mask\nok setf ignores bits above 16\nok unsetf clears bits\nok setf(f, mask) only changes bits in mask\nok width() is 0\nok width(10) returns 0\nok width() is 10\nok width(-3) returns 10\nok negative widths are stored\nok precision() is 6\nok precision(0) returns 6\nok precision() is 0\nok precision(1<<40) returns 0\nok 64-bit precision is stored\nok 64-bit width is stored\nok exceptions() keeps the low status bits\nok exceptions(0)\nok getloc returns a copy of the global locale\nok imbue returns the previous locale\nsummary 28 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "ios_base_init_fields",
+      "exe_sha256": "5448cba062ca309f3f70f090c6284deff917cc97cc0423c74f522a0e996142e2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKGlvc19iYXNlKSA3Mgp2YWx1ZSBhbGlnbm9mKGlvc19iYXNlKSA4CnZhbHVlIHNpemVvZihJQikgNzIKdmFsdWUgYWZ0ZXItY3RvciBzdGRzdHI9MCBzdGF0ZT0wIGV4Y2VwdD0wIGZtdGZsPTB4MCBwcmVjPTAgd2lkZT0wIGFycj0wIGNhbGxzPTAgcGxvYz0wCm9rIHRoZSBjb25zdHJ1Y3RvciBhbG9uZSBsZWF2ZXMgdGhlIGxvY2FsZSBwb2ludGVyIG51bGwKb2sgYW5kIF9TdGRzdHIgMCwgc3RhdGUgMApvayB0aGUgb2JqZWN0IHN0YXJ0cyB3aXRoIGEgdnRhYmxlIHBvaW50ZXIKdmFsdWUgYWZ0ZXItaW5pdCBzdGRzdHI9MCBzdGF0ZT0wIGV4Y2VwdD0wIGZtdGZsPTB4MjAxIHByZWM9NiB3aWRlPTAgYXJyPTAgY2FsbHM9MCBwbG9jPTEKb2sgc3RhdGUgaXMgZ29vZGJpdApvayBleGNlcHRpb25zIG1hc2sgaXMgMApvayBmb3JtYXQgZmxhZ3MgYXJlIHNraXB3c3xkZWMKb2sgcHJlY2lzaW9uIGlzIDYKb2sgd2lkdGggaXMgMApvayBfU3Rkc3RyIGlzIDAKb2sgbm8gaXdvcmQvcHdvcmQgYXJyYXksIG5vIGNhbGxiYWNrcwpvayBhIGxvY2FsZSBvYmplY3Qgd2FzIGFsbG9jYXRlZApvayBpdCBob2xkcyB0aGUgZ2xvYmFsIGxvY2FsZQpvayBpdCBpcyB0aGUgY2xhc3NpYyBsb2NhbGUKb2sgaXRzIG5hbWUgaXMgQwpvayBnb29kKCkgaXMgdHJ1ZQpvayBlb2YoKSBpcyBmYWxzZQpvayBmYWlsKCkgaXMgZmFsc2UKb2sgYmFkKCkgaXMgZmFsc2UKb2sgb3BlcmF0b3IgYm9vbCBpcyB0cnVlCm9rIG9wZXJhdG9yISBpcyBmYWxzZQpvayBmbGFncyBiYWNrIHRvIHNraXB3c3xkZWMgYWZ0ZXIgYW5vdGhlciBfSW5pdApvayBwcmVjaXNpb24gNiBhZ2FpbgpvayB3aWR0aCAwIGFnYWluCm9rIHN0YXRlIGNsZWFyZWQgYWdhaW4Kb2sgdGhlIGRlc3RydWN0b3IgcmFuCnN1bW1hcnkgMjUgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(ios_base) 72\nvalue alignof(ios_base) 8\nvalue sizeof(IB) 72\nvalue after-ctor stdstr=0 state=0 except=0 fmtfl=0x0 prec=0 wide=0 arr=0 calls=0 ploc=0\nok the constructor alone leaves the locale pointer null\nok and _Stdstr 0, state 0\nok the object starts with a vtable pointer\nvalue after-init stdstr=0 state=0 except=0 fmtfl=0x201 prec=6 wide=0 arr=0 calls=0 ploc=1\nok state is goodbit\nok exceptions mask is 0\nok format flags are skipws|dec\nok precision is 6\nok width is 0\nok _Stdstr is 0\nok no iword/pword array, no callbacks\nok a locale object was allocated\nok it holds the global locale\nok it is the classic locale\nok its name is C\nok good() is true\nok eof() is false\nok fail() is false\nok bad() is false\nok operator bool is true\nok operator! is false\nok flags back to skipws|dec after another _Init\nok precision 6 again\nok width 0 again\nok state cleared again\nok the destructor ran\nsummary 25 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "ios_base_state_exceptions",
+      "exe_sha256": "6e704aeb9e30a778e0d8be77792b6283aad534a633ca8c6c31203a9bc53ab8f0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY2xlYXIoMHhGRikga2VlcHMgZW9mYml0fGZhaWxiaXR8YmFkYml0IGFuZCBiaXQgNCAoMHgxNykKb2sgY2xlYXIoKSByZXNldHMKb2sgZW9mKCkgYWZ0ZXIgc2V0c3RhdGUoZW9mYml0KQpvayBvcGVyYXRvciBib29sIHN0aWxsIHRydWUgd2l0aCBvbmx5IGVvZmJpdApvayBlb2ZiaXQgYW5kIGZhaWxiaXQKb2sgZmFpbCgpIHRydWUsIG9wZXJhdG9yIGJvb2wgZmFsc2UKb2sgY2xlYXIoYmFkYml0KSByZXBsYWNlcyB0aGUgc3RhdGUKb2sgdGhlIGJpdCBpbiB0aGUgbWFzayB0aHJvd3MgaW9zX2Jhc2U6OmZhaWx1cmUKb2sgaXRzIGVycm9yIGNvZGUgdmFsdWUgaXMgMSAoaW9fZXJyYzo6c3RyZWFtKQpvayBpdHMgY2F0ZWdvcnkgaXMgdGhlIGlvc3RyZWFtIGNhdGVnb3J5IChpZGVudGl0eSA1KQp2YWx1ZSB3aGF0IGlvc19iYXNlOjpmYWlsYml0IHNldCA9PiBpb3NfYmFzZTo6ZmFpbGJpdCBzZXQ6IGlvc3RyZWFtIHN0cmVhbSBlcnJvcgpvayB3aGF0KCkgc3RhcnRzIHdpdGggdGhlIG1lc3NhZ2UKb2sgdGhlIHN0YXRlIHdhcyBzdG9yZWQgYmVmb3JlIHRoZSB0aHJvdwpvayB0aGUgYml0IGluIHRoZSBtYXNrIHRocm93cyBpb3NfYmFzZTo6ZmFpbHVyZQpvayBpdHMgZXJyb3IgY29kZSB2YWx1ZSBpcyAxIChpb19lcnJjOjpzdHJlYW0pCm9rIGl0cyBjYXRlZ29yeSBpcyB0aGUgaW9zdHJlYW0gY2F0ZWdvcnkgKGlkZW50aXR5IDUpCnZhbHVlIHdoYXQgaW9zX2Jhc2U6OmJhZGJpdCBzZXQgPT4gaW9zX2Jhc2U6OmJhZGJpdCBzZXQ6IGlvc3RyZWFtIHN0cmVhbSBlcnJvcgpvayB3aGF0KCkgc3RhcnRzIHdpdGggdGhlIG1lc3NhZ2UKb2sgdGhlIHN0YXRlIHdhcyBzdG9yZWQgYmVmb3JlIHRoZSB0aHJvdwpvayB0aGUgYml0IGluIHRoZSBtYXNrIHRocm93cyBpb3NfYmFzZTo6ZmFpbHVyZQpvayBpdHMgZXJyb3IgY29kZSB2YWx1ZSBpcyAxIChpb19lcnJjOjpzdHJlYW0pCm9rIGl0cyBjYXRlZ29yeSBpcyB0aGUgaW9zdHJlYW0gY2F0ZWdvcnkgKGlkZW50aXR5IDUpCnZhbHVlIHdoYXQgaW9zX2Jhc2U6OmVvZmJpdCBzZXQgPT4gaW9zX2Jhc2U6OmVvZmJpdCBzZXQ6IGlvc3RyZWFtIHN0cmVhbSBlcnJvcgpvayB3aGF0KCkgc3RhcnRzIHdpdGggdGhlIG1lc3NhZ2UKb2sgdGhlIHN0YXRlIHdhcyBzdG9yZWQgYmVmb3JlIHRoZSB0aHJvdwpvayBiYWRiaXQgd2lucyBvdmVyIGZhaWxiaXQgYW5kIGVvZmJpdApvayBmYWlsYml0IHdpbnMgb3ZlciBlb2ZiaXQKb2sgZmFpbGJpdCBub3QgaW4gdGhlIG1hc2s6IG5vIGV4Y2VwdGlvbgpvayBmYWlsYml0IGlzIHN0b3JlZApvayBzZXR0aW5nIHRoZSBtYXNrIHdoaWxlIHRoZSBzdGF0ZSBtYXRjaGVzIGl0IHRocm93cwpvayB0aGUgbWFzayBpcyBzdG9yZWQgZXZlbiB0aG91Z2ggaXQgdGhyZXcKb2sgY2xlYXIoc3RhdGUsIHRydWUpIHJldGhyb3dzIHRoZSBjdXJyZW50IGV4Y2VwdGlvbgpzdW1tYXJ5IDI5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok clear(0xFF) keeps eofbit|failbit|badbit and bit 4 (0x17)\nok clear() resets\nok eof() after setstate(eofbit)\nok operator bool still true with only eofbit\nok eofbit and failbit\nok fail() true, operator bool false\nok clear(badbit) replaces the state\nok the bit in the mask throws ios_base::failure\nok its error code value is 1 (io_errc::stream)\nok its category is the iostream category (identity 5)\nvalue what ios_base::failbit set => ios_base::failbit set: iostream stream error\nok what() starts with the message\nok the state was stored before the throw\nok the bit in the mask throws ios_base::failure\nok its error code value is 1 (io_errc::stream)\nok its category is the iostream category (identity 5)\nvalue what ios_base::badbit set => ios_base::badbit set: iostream stream error\nok what() starts with the message\nok the state was stored before the throw\nok the bit in the mask throws ios_base::failure\nok its error code value is 1 (io_errc::stream)\nok its category is the iostream category (identity 5)\nvalue what ios_base::eofbit set => ios_base::eofbit set: iostream stream error\nok what() starts with the message\nok the state was stored before the throw\nok badbit wins over failbit and eofbit\nok failbit wins over eofbit\nok failbit not in the mask: no exception\nok failbit is stored\nok setting the mask while the state matches it throws\nok the mask is stored even though it threw\nok clear(state, true) rethrows the current exception\nsummary 29 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

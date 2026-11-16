@@ -1,0 +1,89 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: |
+  windows/api/msvcp140.dll/??0?$basic_ios@DU?$char_traits@D@std@@@std@@IEAA@XZ
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::basic_ios<char>: the class between ios_base and the stream classes, 96 bytes. Covers its protected default
+  constructor, the constructor from a stream buffer, the destructor (??1?$basic_ios@...UEAA@XZ), the vtable (??_7), and
+  the members init (protected), clear (two forms), setstate (two forms), rdbuf (two), set_rdbuf, tie (two), fill (two),
+  imbue, narrow, widen, copyfmt, move (two), swap.
+interface:
+  layout: |
+    x64: the ios_base part (72 bytes, see ??0ios_base) at 0; then 72 pointer _Mystrbuf (the stream buffer); 80 pointer
+    _Tiestr (the tied ostream); 88 char _Fillch; size 96 (alignment 8). The object has its own vtable (the scalar deleting
+    destructor as its only slot).
+  signatures: |
+    basic_ios() [protected, sets only the table]; void init(streambuf* sb, bool isstd) [protected]; void clear(int state,
+    bool reraise); void setstate(int state, bool reraise); streambuf* rdbuf() const; streambuf* rdbuf(streambuf*); void
+    set_rdbuf(streambuf*); ostream* tie() const; ostream* tie(ostream*); char fill() const; char fill(char); locale
+    imbue(const locale&); char narrow(char, char dflt) const; char widen(char) const; basic_ios& copyfmt(const
+    basic_ios&); void move(basic_ios&); void move(basic_ios&&); void swap(basic_ios&).
+rules:
+  init: |
+    init(sb, isstd) does ios_base::_Init(), then _Mystrbuf = sb, _Tiestr = null, _Fillch = widen(' ') (a blank), and if sb
+    is null setstate(badbit); if isstd is true it calls _Addstd(this) (the stream gets the next _Stdstr index: 1 for the
+    first, 2 for the second).
+  clear: |
+    basic_ios::clear(s, reraise) is ios_base::clear(s | (rdbuf() ? goodbit : badbit), reraise): a stream without a buffer
+    keeps badbit however it is cleared (clear() gives 4, clear(eofbit) 5, setstate(failbit) 7). setstate(s) is
+    clear(rdstate() | s).
+  rdbuf: |
+    rdbuf(sb) stores sb, calls clear() (which resets the state, or leaves badbit when sb is null; it throws if badbit is
+    in the exception mask and sb is null), and returns the old buffer; rdbuf(same buffer) clears failbit too.
+    set_rdbuf(sb) only stores the pointer, no state change.
+  tie_fill: |
+    tie(p) stores p and returns the old tie; fill(c) stores c and returns the old fill character (a blank initially).
+  narrow_widen: |
+    widen(c) and narrow(c, dflt) use the ctype<char> facet of getloc(): in the classic locale both are the identity for
+    every byte value including 0x80-0xFF.
+  imbue: |
+    imbue(l) is ios_base::imbue(l) (callbacks run, the old locale is returned) followed by rdbuf()->pubimbue(l) when there
+    is a buffer (the buffer's virtual imbue is called once and its own locale becomes l).
+  copyfmt: |
+    copyfmt(r) copies tie and fill, then ios_base::copyfmt (flags, precision, width, locale, iword/pword, callbacks, then
+    the exception mask, which may throw when the new mask matches the target's state); the state and the buffer are not
+    copied; onto itself it does nothing.
+  swap_move: |
+    swap(r) exchanges everything ios_base::swap does plus fill and tie (not the buffer pointers, not the state exchanged
+    separately: ios_base::swap exchanges the state). move(r) sets this->_Mystrbuf and _Tiestr to null and then swaps.
+errors:
+  failure: "as ios_base::clear."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

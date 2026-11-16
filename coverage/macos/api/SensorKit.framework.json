@@ -652,6 +652,8 @@
 {"symbol":"SRShowResearchData","src":["macos-sdk"]},
 {"symbol":"SRShowStudyAuthorization","src":["macos-sdk"]},
 {"symbol":"kTCCOverrideDummyBundleId","src":["macos-sdk"]},
+{"symbol":"objc:SRAmbientLightChromaticity.@x","src":["macos-objc-api"]},
+{"symbol":"objc:SRAmbientLightChromaticity.@y","src":["macos-objc-api"]},
 {"symbol":"objc:SRAuthExtensionContext","src":["macos-sdk"]},
 {"symbol":"objc:SRAuthHostExtensionContext","src":["macos-sdk"]},
 {"symbol":"objc:SRAuthorizationClient","src":["macos-sdk"]},

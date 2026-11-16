@@ -194,6 +194,12 @@ pub fn alloc_pid() -> u32 {
     NEXT_PID.fetch_add(1, Ordering::Relaxed)
 }
 
+/// A new id for an NT process or thread: a non-zero multiple of 4, as Windows gives them out,
+/// from the same counter as [`alloc_pid`] (so it never repeats one of those).
+pub fn alloc_nt_id() -> u32 {
+    poly_personality_nt::ids::alloc_multiple_of_4(&NEXT_PID)
+}
+
 impl Process {
     /// A bare process record for a personality and format decided
     /// elsewhere, without personality state (kernel tests).

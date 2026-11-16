@@ -153,6 +153,187 @@ pub fn ctype1(unit: u16) -> u16 {
     f
 }
 
+/// `CT_CTYPE2`, `CT_CTYPE3` (`winnls.h`).
+pub const CT_CTYPE2: u32 = 2;
+pub const CT_CTYPE3: u32 = 4;
+
+// Character type 2 values (`winnls.h`: "Character Type 2 Flags": the directional type; one value,
+// not a set).
+pub const C2_NOTAPPLICABLE: u16 = 0x0;
+pub const C2_LEFTTORIGHT: u16 = 0x1;
+pub const C2_EUROPENUMBER: u16 = 0x3;
+pub const C2_EUROPESEPARATOR: u16 = 0x4;
+pub const C2_EUROPETERMINATOR: u16 = 0x5;
+pub const C2_COMMONSEPARATOR: u16 = 0x7;
+pub const C2_BLOCKSEPARATOR: u16 = 0x8;
+pub const C2_SEGMENTSEPARATOR: u16 = 0x9;
+pub const C2_WHITESPACE: u16 = 0xA;
+pub const C2_OTHERNEUTRAL: u16 = 0xB;
+
+/// The `CT_CTYPE2` value of one unit: letters read left to right, digits are European numbers,
+/// `+` and `-` separate them, `#$%` and the currency signs end them, `,.:/` are common
+/// separators, a line or paragraph break a block separator, a tab a segment separator, the
+/// spaces white space, other printable characters are neutral and the controls have no
+/// direction.
+pub fn ctype2(unit: u16) -> u16 {
+    let Some(c) = char::from_u32(u32::from(unit)) else { return C2_NOTAPPLICABLE };
+    match c {
+        '\n' | '\r' | '\u{1c}'..='\u{1e}' | '\u{85}' | '\u{2029}' => C2_BLOCKSEPARATOR,
+        '\t' | '\u{b}' | '\u{1f}' => C2_SEGMENTSEPARATOR,
+        ' ' | '\u{c}' | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{3000}' => C2_WHITESPACE,
+        '+' | '-' => C2_EUROPESEPARATOR,
+        '#' | '$' | '%' | '\u{a2}'..='\u{a5}' | '\u{b0}' | '\u{b1}' | '\u{20a0}'..='\u{20cf}' => C2_EUROPETERMINATOR,
+        ',' | '.' | '/' | ':' | '\u{a0}' => C2_COMMONSEPARATOR,
+        '0'..='9' => C2_EUROPENUMBER,
+        _ if c.is_control() => C2_NOTAPPLICABLE,
+        _ if c.is_alphabetic() => C2_LEFTTORIGHT,
+        _ => C2_OTHERNEUTRAL,
+    }
+}
+
+// Character type 3 flags (`winnls.h`).
+pub const C3_NONSPACING: u16 = 0x1;
+pub const C3_DIACRITIC: u16 = 0x2;
+pub const C3_SYMBOL: u16 = 0x8;
+pub const C3_KATAKANA: u16 = 0x10;
+pub const C3_HIRAGANA: u16 = 0x20;
+pub const C3_FULLWIDTH: u16 = 0x80;
+pub const C3_IDEOGRAPH: u16 = 0x100;
+pub const C3_HIGHSURROGATE: u16 = 0x800;
+pub const C3_LOWSURROGATE: u16 = 0x1000;
+pub const C3_ALPHA: u16 = 0x8000;
+pub const C3_NOTAPPLICABLE: u16 = 0x0;
+
+/// The `CT_CTYPE3` flags of one unit: the combining marks (U+0300 to U+036F) are non-spacing
+/// diacritics, the ASCII symbols and the currency signs symbols, letters alpha (kana and
+/// ideographs with their own flag too), and the halves of surrogate pairs say so.
+pub fn ctype3(unit: u16) -> u16 {
+    match unit {
+        0xD800..=0xDBFF => return C3_HIGHSURROGATE,
+        0xDC00..=0xDFFF => return C3_LOWSURROGATE,
+        0x0300..=0x036F => return C3_NONSPACING | C3_DIACRITIC,
+        0x3040..=0x309F => return C3_HIRAGANA | C3_ALPHA,
+        0x30A0..=0x30FF => return C3_KATAKANA | C3_ALPHA,
+        0x4E00..=0x9FFF | 0x3400..=0x4DBF => return C3_IDEOGRAPH | C3_ALPHA,
+        0xFF01..=0xFF5E => {
+            let mut f = C3_FULLWIDTH;
+            if char::from_u32(u32::from(unit)).is_some_and(char::is_alphabetic) {
+                f |= C3_ALPHA;
+            }
+            return f;
+        }
+        _ => {}
+    }
+    let Some(c) = char::from_u32(u32::from(unit)) else { return C3_NOTAPPLICABLE };
+    if c.is_alphabetic() {
+        C3_ALPHA
+    } else if matches!(c, '$' | '+' | '<' | '=' | '>' | '^' | '`' | '|' | '~' | '\u{a2}'..='\u{a9}' | '\u{ac}' | '\u{ae}'..='\u{b1}' | '\u{b4}' | '\u{b8}' | '\u{d7}' | '\u{f7}' | '\u{20a0}'..='\u{20cf}')
+    {
+        C3_SYMBOL
+    } else {
+        C3_NOTAPPLICABLE
+    }
+}
+
+/// `GetStringType` for the information type `info_type` (`CT_CTYPE1`, `CT_CTYPE2` or
+/// `CT_CTYPE3`, one at a time), for one unit; `None` for any other type.
+pub fn string_type(info_type: u32, unit: u16) -> Option<u16> {
+    match info_type {
+        CT_CTYPE1 => Some(ctype1(unit)),
+        CT_CTYPE2 => Some(ctype2(unit)),
+        CT_CTYPE3 => Some(ctype3(unit)),
+        _ => None,
+    }
+}
+
+/// `LOCALE_USE_CP_ACP` (`winnls.h`): "use the ANSI code page of the system for the `A` form";
+/// the `A` forms convert with it anyway.
+pub const LOCALE_USE_CP_ACP: u32 = 0x4000_0000;
+
+// Calendar types (`winnls.h`).
+pub const CAL_GREGORIAN: u32 = 1;
+pub const ENUM_ALL_CALENDARS: u32 = 0xFFFF_FFFF;
+pub const CAL_RETURN_NUMBER: u32 = LOCALE_RETURN_NUMBER;
+pub const CAL_USE_CP_ACP: u32 = LOCALE_USE_CP_ACP;
+pub const CAL_NOUSEROVERRIDE: u32 = LOCALE_NOUSEROVERRIDE;
+pub const CAL_ICALINTVALUE: u32 = 0x01;
+pub const CAL_SCALNAME: u32 = 0x02;
+pub const CAL_IYEAROFFSETRANGE: u32 = 0x03;
+pub const CAL_SERASTRING: u32 = 0x04;
+pub const CAL_SSHORTDATE: u32 = 0x05;
+pub const CAL_SLONGDATE: u32 = 0x06;
+pub const CAL_SDAYNAME1: u32 = 0x07;
+pub const CAL_SABBREVDAYNAME1: u32 = 0x0E;
+pub const CAL_SMONTHNAME1: u32 = 0x15;
+pub const CAL_SABBREVMONTHNAME1: u32 = 0x22;
+pub const CAL_SYEARMONTH: u32 = 0x2F;
+pub const CAL_ITWODIGITYEARMAX: u32 = 0x30;
+
+const DAY_NAMES: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAY_ABBREVS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTH_NAMES: [&str; 13] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+    "",
+];
+const MONTH_ABBREVS: [&str; 13] =
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", ""];
+
+/// `GetCalendarInfo` / `EnumCalendarInfo` answer for the Gregorian calendar of English (United
+/// States) (the one calendar Poly has): the `CAL_*` types of `winnls.h`. Day 1 is Monday and
+/// month 13 empty, as the header numbers them. `None` for a type Poly does not answer.
+pub fn calendar_info(caltype: u32) -> Option<Info> {
+    use Info::{Number as N, Text as T};
+    let caltype = caltype & !(CAL_RETURN_NUMBER | CAL_USE_CP_ACP | CAL_NOUSEROVERRIDE);
+    Some(match caltype {
+        CAL_ICALINTVALUE => N(CAL_GREGORIAN),
+        CAL_SCALNAME => T("Gregorian Calendar"),
+        CAL_IYEAROFFSETRANGE => N(0),
+        CAL_SERASTRING => T("A.D."),
+        CAL_SSHORTDATE => T("M/d/yyyy"),
+        CAL_SLONGDATE => T("dddd, MMMM d, yyyy"),
+        CAL_SYEARMONTH => T("MMMM yyyy"),
+        CAL_ITWODIGITYEARMAX => N(2029),
+        t if (CAL_SDAYNAME1..CAL_SDAYNAME1 + 7).contains(&t) => T(DAY_NAMES[(t - CAL_SDAYNAME1) as usize]),
+        t if (CAL_SABBREVDAYNAME1..CAL_SABBREVDAYNAME1 + 7).contains(&t) => {
+            T(DAY_ABBREVS[(t - CAL_SABBREVDAYNAME1) as usize])
+        }
+        t if (CAL_SMONTHNAME1..CAL_SMONTHNAME1 + 13).contains(&t) => T(MONTH_NAMES[(t - CAL_SMONTHNAME1) as usize]),
+        t if (CAL_SABBREVMONTHNAME1..CAL_SABBREVMONTHNAME1 + 13).contains(&t) => {
+            T(MONTH_ABBREVS[(t - CAL_SABBREVMONTHNAME1) as usize])
+        }
+        _ => return None,
+    })
+}
+
+/// Whether `EnumCalendarInfo` / `GetCalendarInfo` knows the calendar: Gregorian, or "all"
+/// (`ENUM_ALL_CALENDARS`) for the enumeration.
+pub fn is_known_calendar(cal: u32, all_allowed: bool) -> bool {
+    cal == CAL_GREGORIAN || (all_allowed && cal == ENUM_ALL_CALENDARS)
+}
+
+/// One byte of the ANSI code page mapped by `LCMapStringA`: the mapping of its character if the
+/// code page has that character, else the byte itself (µ uppercases to a Greek letter the code
+/// page lacks, and stays).
+pub fn map_ansi_byte(kind: MapKind, b: u8) -> u8 {
+    let unit = poly_rtl::codepage::to_unicode(b);
+    let mapped = map_unit(kind, unit);
+    match poly_rtl::codepage::from_unicode(mapped) {
+        poly_rtl::codepage::DEFAULT_CHAR if mapped != u16::from(poly_rtl::codepage::DEFAULT_CHAR) => b,
+        m => m,
+    }
+}
+
 // `LCMapString` flags (`winnls.h`).
 pub const LCMAP_LOWERCASE: u32 = 0x100;
 pub const LCMAP_UPPERCASE: u32 = 0x200;
@@ -237,5 +418,55 @@ mod tests {
         assert_eq!(info(0x1004 | LOCALE_RETURN_NUMBER), Some(Info::Number(1252)));
         assert_eq!(info(0x0E), Some(Info::Text(".")));
         assert_eq!(info(0x7777), None);
+    }
+
+    #[test]
+    fn types_two_and_three() {
+        assert_eq!(string_type(CT_CTYPE2, 'a' as u16), Some(C2_LEFTTORIGHT));
+        assert_eq!(string_type(CT_CTYPE2, '5' as u16), Some(C2_EUROPENUMBER));
+        assert_eq!(ctype2('-' as u16), C2_EUROPESEPARATOR);
+        assert_eq!(ctype2('$' as u16), C2_EUROPETERMINATOR);
+        assert_eq!(ctype2(',' as u16), C2_COMMONSEPARATOR);
+        assert_eq!(ctype2(char::from(10) as u16), C2_BLOCKSEPARATOR);
+        assert_eq!(ctype2(char::from(9) as u16), C2_SEGMENTSEPARATOR);
+        assert_eq!(ctype2(' ' as u16), C2_WHITESPACE);
+        assert_eq!(ctype2('@' as u16), C2_OTHERNEUTRAL);
+        assert_eq!(ctype2(0), C2_NOTAPPLICABLE);
+        assert_eq!(string_type(CT_CTYPE3, 'q' as u16), Some(C3_ALPHA));
+        assert_eq!(ctype3('+' as u16), C3_SYMBOL);
+        assert_eq!(ctype3(0x0301), C3_NONSPACING | C3_DIACRITIC);
+        assert_eq!(ctype3(0xD83D), C3_HIGHSURROGATE);
+        assert_eq!(ctype3(0xDE00), C3_LOWSURROGATE);
+        assert_eq!(ctype3(0x4E2D), C3_IDEOGRAPH | C3_ALPHA);
+        assert_eq!(ctype3('5' as u16), C3_NOTAPPLICABLE);
+        assert_eq!(string_type(8, 'a' as u16), None, "only the three types");
+    }
+
+    #[test]
+    fn the_gregorian_calendar_of_english() {
+        assert_eq!(calendar_info(CAL_SDAYNAME1), Some(Info::Text("Monday")));
+        assert_eq!(calendar_info(CAL_SDAYNAME1 + 6), Some(Info::Text("Sunday")));
+        assert_eq!(calendar_info(CAL_SABBREVDAYNAME1 + 2), Some(Info::Text("Wed")));
+        assert_eq!(calendar_info(CAL_SMONTHNAME1), Some(Info::Text("January")));
+        assert_eq!(calendar_info(CAL_SMONTHNAME1 + 11), Some(Info::Text("December")));
+        assert_eq!(calendar_info(CAL_SMONTHNAME1 + 12), Some(Info::Text("")), "month 13 is empty");
+        assert_eq!(calendar_info(CAL_SABBREVMONTHNAME1 + 8), Some(Info::Text("Sep")));
+        assert_eq!(calendar_info(CAL_SERASTRING), Some(Info::Text("A.D.")));
+        assert_eq!(calendar_info(CAL_ICALINTVALUE | CAL_RETURN_NUMBER), Some(Info::Number(1)));
+        assert_eq!(calendar_info(CAL_SYEARMONTH), Some(Info::Text("MMMM yyyy")));
+        assert_eq!(calendar_info(0x7777), None);
+        assert!(is_known_calendar(1, false) && !is_known_calendar(ENUM_ALL_CALENDARS, false));
+        assert!(is_known_calendar(ENUM_ALL_CALENDARS, true) && !is_known_calendar(3, true));
+    }
+
+    #[test]
+    fn ansi_bytes_map_inside_the_code_page() {
+        assert_eq!(map_ansi_byte(MapKind::Upper, b'a'), b'A');
+        assert_eq!(map_ansi_byte(MapKind::Lower, b'Q'), b'q');
+        assert_eq!(map_ansi_byte(MapKind::Upper, 0xE9), 0xC9, "é");
+        assert_eq!(map_ansi_byte(MapKind::Lower, 0xC9), 0xE9);
+        assert_eq!(map_ansi_byte(MapKind::Upper, 0xB5), 0xB5, "µ uppercases outside the code page: unchanged");
+        assert_eq!(map_ansi_byte(MapKind::Upper, 0xDF), 0xDF, "ß");
+        assert_eq!(map_ansi_byte(MapKind::Upper, b'7'), b'7');
     }
 }

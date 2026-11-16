@@ -2,5 +2,7 @@
 {"symbol":"AppTrackingTransparencyVersionNumber","src":["macos-sdk"]},
 {"symbol":"AppTrackingTransparencyVersionString","src":["macos-sdk"]},
 {"symbol":"objc:ATTrackingEnforcementManager","src":["macos-sdk"]},
-{"symbol":"objc:ATTrackingManager","src":["macos-sdk"]}
+{"symbol":"objc:ATTrackingManager","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:ATTrackingManager+@trackingAuthorizationStatus","src":["macos-objc-api"]},
+{"symbol":"objc:ATTrackingManager+requestTrackingAuthorizationWithCompletionHandler:","src":["macos-objc-api"]}
 ]

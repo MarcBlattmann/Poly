@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "volume_path",
+      "exe_sha256": "4e8b0bdff0d0f74a3dd53ccc0e4228b0798096ffecc4118f9e58cee72604ef7c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Vm9sdW1lUGF0aE5hbWVXKCJDOlxcV2luZG93c1xcU3lzdGVtMzJcXG5vdGVwYWQuZXhlIikgPSAxIGVyciAwIC0+IEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIkM6IikgPSAxIGVyciAwIC0+IEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIkM6L1dpbmRvd3MvU3lzdGVtMzIiKSA9IDEgZXJyIDAgLT4gQzpcCkdldFZvbHVtZVBhdGhOYW1lVygiXFxcXD9cXEM6XFwiKSA9IDEgZXJyIDAgLT4gXFw/XEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIlxcXFxzZXJ2ZXJcXHNoYXJlXFxkaXJcXGZpbGUiKSA9IDAgZXJyIDEyMyAtPiAKR2V0Vm9sdW1lUGF0aE5hbWVXKCIuIikgPSAxIGVyciAwIC0+IEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIlxcV2luZG93cyIpID0gMSBlcnIgMCAtPiBDOlwKR2V0Vm9sdW1lUGF0aE5hbWVXKCJDOlxcYSBiXFxjIikgPSAxIGVyciAwIC0+IEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIiIpID0gMCBlcnIgMTIzIC0+IApidWZmZXIgb2YgMiB1bml0czogMCBlcnIgMjA2IGZpcnN0IHVuaXRzIDAgYWFhYSBhYWFhCk5VTEwgbmFtZSA9IDAgZXJyIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetVolumePathNameW(\"C:\\\\Windows\\\\System32\\\\notepad.exe\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"C:\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"C:/Windows/System32\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"\\\\\\\\?\\\\C:\\\\\") = 1 err 0 -> \\\\?\\C:\\\nGetVolumePathNameW(\"\\\\\\\\server\\\\share\\\\dir\\\\file\") = 0 err 123 -> \nGetVolumePathNameW(\".\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"\\\\Windows\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"C:\\\\a b\\\\c\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"\") = 0 err 123 -> \nbuffer of 2 units: 0 err 206 first units 0 aaaa aaaa\nNULL name = 0 err 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2760
+    },
+    {
+      "name": "volume_path_c",
+      "exe_sha256": "3a9b52428f98633a08081e6508cde0f3a7529b144eda25caee7734c1ff0b6525",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Vm9sdW1lUGF0aE5hbWVXKCJDOlxcbm9cXHN1Y2hcXGRpclxcZmlsZS50eHQiKSA9IDEgZXJyIDAgLT4gQzpcCkdldFZvbHVtZVBhdGhOYW1lVygiYzpcXHdpbmRvd3MiKSA9IDEgZXJyIDAgLT4gYzpcCkdldFZvbHVtZVBhdGhOYW1lVygiXFxcXD9cXEM6XFxXaW5kb3dzIikgPSAxIGVyciAwIC0+IFxcP1xDOlwKR2V0Vm9sdW1lUGF0aE5hbWVXKCJcXFxcP1xcVm9sdW1lezAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMH1cXHgiKSA9IDAgZXJyIDEyMyAtPiAKR2V0Vm9sdW1lUGF0aE5hbWVXKCJyZWxhdGl2ZVxccGF0aCIpID0gMSBlcnIgMCAtPiBDOlwKR2V0Vm9sdW1lUGF0aE5hbWVXKCJcXCIpID0gMSBlcnIgMCAtPiBDOlwKR2V0Vm9sdW1lUGF0aE5hbWVXKCJDOlxcV2luZG93c1xcIikgPSAxIGVyciAwIC0+IEM6XApHZXRWb2x1bWVQYXRoTmFtZVcoIkM6ZmlsZSIpID0gMSBlcnIgMCAtPiBDOlwKYnVmZmVyIG9mIDEgdW5pdHM6IDAgZXJyIDIwNiBmaXJzdCB1bml0cyAwIGFhYWEgYWFhYQpidWZmZXIgb2YgNCB1bml0czogMSBlcnIgMCBmaXJzdCB1bml0cyA0MyAzYSA1YwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetVolumePathNameW(\"C:\\\\no\\\\such\\\\dir\\\\file.txt\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"c:\\\\windows\") = 1 err 0 -> c:\\\nGetVolumePathNameW(\"\\\\\\\\?\\\\C:\\\\Windows\") = 1 err 0 -> \\\\?\\C:\\\nGetVolumePathNameW(\"\\\\\\\\?\\\\Volume{00000000-0000-0000-0000-000000000000}\\\\x\") = 0 err 123 -> \nGetVolumePathNameW(\"relative\\\\path\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"\\\\\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"C:\\\\Windows\\\\\") = 1 err 0 -> C:\\\nGetVolumePathNameW(\"C:file\") = 1 err 0 -> C:\\\nbuffer of 1 units: 0 err 206 first units 0 aaaa aaaa\nbuffer of 4 units: 1 err 0 first units 43 3a 5c\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

@@ -30,7 +30,11 @@
 {"symbol":"LAAuthenticationMechanismUserPassword","src":["macos-sdk"]},
 {"symbol":"objc:LAAuthenticationSheetController","src":["macos-sdk"]},
 {"symbol":"objc:LAAuthenticationSheetControllerPAMConfiguration","src":["macos-sdk"]},
-{"symbol":"objc:LAAuthenticationView","src":["macos-sdk"]},
+{"symbol":"objc:LAAuthenticationView","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:LAAuthenticationView.@context","src":["macos-objc-api"]},
+{"symbol":"objc:LAAuthenticationView.@controlSize","src":["macos-objc-api"]},
+{"symbol":"objc:LAAuthenticationView.initWithContext:","src":["macos-objc-api"]},
+{"symbol":"objc:LAAuthenticationView.initWithContext:controlSize:","src":["macos-objc-api"]},
 {"symbol":"objc:LAContextUITrampoline","src":["macos-sdk"]},
 {"symbol":"objc:_TtC29LocalAuthenticationEmbeddedUI36LAAuthenticationSheetControllerProxy","src":["macos-sdk"]}
 ]

@@ -42,6 +42,16 @@ pub fn decode_pointer(encoded: u64, cookie: u64) -> u64 {
     (encoded ^ cookie).rotate_left((cookie & 63) as u32)
 }
 
+/// The same for a 32-bit process (the rotation is within 32 bits, so the pointer comes back whole).
+pub fn encode_pointer32(ptr: u32, cookie: u32) -> u32 {
+    ptr.rotate_right(cookie & 31) ^ cookie
+}
+
+/// The inverse of [`encode_pointer32`].
+pub fn decode_pointer32(encoded: u32, cookie: u32) -> u32 {
+    (encoded ^ cookie).rotate_left(cookie & 31)
+}
+
 /// `SEM_FAILCRITICALERRORS`, `SEM_NOGPFAULTERRORBOX`, `SEM_NOALIGNMENTFAULTEXCEPT`,
 /// `SEM_NOOPENFILEERRORBOX` (`errhandlingapi.h`).
 pub const SEM_FLAGS: u32 = 0x0001 | 0x0002 | 0x0004 | 0x8000;
@@ -103,6 +113,17 @@ mod tests {
         assert_ne!(encode_pointer(0x1000, cookie), 0x1000);
         // Another cookie decodes it to something else.
         assert_ne!(decode_pointer(encode_pointer(0x1000, cookie), cookie ^ 1), 0x1000);
+    }
+
+    #[test]
+    fn encoded_pointers_of_a_32_bit_process_round_trip() {
+        let cookie = 0x9E37_79B9u32;
+        for p in [0u32, 1, 0x7FF0_1000, 0xFFFF_FFFF, 0xDEAD_BEEF] {
+            assert_eq!(decode_pointer32(encode_pointer32(p, cookie), cookie), p);
+        }
+        assert_ne!(encode_pointer32(0, cookie), 0);
+        // The 64-bit form, cut to 32 bits, is not invertible for every cookie: why there is a 32-bit form.
+        assert_ne!(encode_pointer32(0x1000, cookie), 0x1000);
     }
 
     #[test]

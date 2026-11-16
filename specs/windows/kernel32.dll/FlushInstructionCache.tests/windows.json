@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "flush_icache",
+      "exe_sha256": "00fbc10b7e178df90e9ab12e5be105cfd5456e30749d1f94714d7b5c826bb3a5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Rmx1c2hJbnN0cnVjdGlvbkNhY2hlKHNlbGYsIGNvZGUsIDEwMCBieXRlcykgPSAxIGVyciAwCkZsdXNoSW5zdHJ1Y3Rpb25DYWNoZShzZWxmLCBjb2RlLCB1c2l6ZTo6TUFYKSA9IDEgZXJyIDAKcHNldWRvIGhhbmRsZSAtMSA9IDEgZXJyIHVuY2hhbmdlZApoYW5kbGUgd2l0aCBvbmx5IFBST0NFU1NfVk1fV1JJVEUgPSAxIGVyciAwCmhhbmRsZSB3aXRoIG9ubHkgU1lOQ0hST05JWkUgPSAxIGVyciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FlushInstructionCache(self, code, 100 bytes) = 1 err 0\nFlushInstructionCache(self, code, usize::MAX) = 1 err 0\npseudo handle -1 = 1 err unchanged\nhandle with only PROCESS_VM_WRITE = 1 err 0\nhandle with only SYNCHRONIZE = 1 err 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    },
+    {
+      "name": "flush_icache_b",
+      "exe_sha256": "01c1628c86a2fa799632c0fb399aa83a0129719c8dc109c80952c057e669955c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Rmx1c2hJbnN0cnVjdGlvbkNhY2hlKHNlbGYsIE5VTEwsIDApID0gMSBlcnIgMApGbHVzaEluc3RydWN0aW9uQ2FjaGUoc2VsZiwgdW5tYXBwZWQgYWRkcmVzcywgMSBNaUIpID0gMSBlcnIgMApOVUxMIGhhbmRsZSA9IDEgZXJyIHVuY2hhbmdlZApoYW5kbGUgd2l0aCBvbmx5IFBST0NFU1NfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTiA9IDEgZXJyIDAKaGFuZGxlIHdpdGggb25seSBQUk9DRVNTX0FMTF9BQ0NFU1MgPSAxIGVyciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FlushInstructionCache(self, NULL, 0) = 1 err 0\nFlushInstructionCache(self, unmapped address, 1 MiB) = 1 err 0\nNULL handle = 1 err unchanged\nhandle with only PROCESS_QUERY_LIMITED_INFORMATION = 1 err 0\nhandle with only PROCESS_ALL_ACCESS = 1 err 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

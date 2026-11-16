@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoIncrementMTAUsage.yaml
+id: windows/api/ole32.dll/CoIncrementMTAUsage
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  Keeps a multithreaded apartment alive without a CoInitializeEx call (an 'implicit MTA'): Firefox's start-up calls it. The cookie is released with CoDecrementMTAUsage.
+interface:
+  signature: "HRESULT CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE *pCookie)"
+rules:
+  before: "a thread that never initialised COM: CoGetApartmentType gives CO_E_NOTINITIALIZED (0x800401F0), type -1."
+  increment: "S_OK with a non-NULL cookie. The calling thread then reports apartment type 1 (APTTYPE_MTA) with qualifier 1, and so does a new thread that never initialised COM (the implicit MTA); a second increment gives S_OK and another cookie value (the second is not the first)."
+  decrement: "CoDecrementMTAUsage(second cookie) = S_OK: new threads still see the MTA; after the first cookie too: a new thread is NOT initialised again (CO_E_NOTINITIALIZED)."
+  sta_thread: "on a thread that called CoInitializeEx(STA): CoIncrementMTAUsage is S_OK and the thread stays type 3 (APTTYPE_STA), qualifier 0."
+errors:
+  none: "never fails in the observations; a NULL cookie pointer raises"
+side_effects: "creates the process's MTA if there is none"
+threading: "process-wide"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  The cookie's value, the MTA's thread pool, cross-apartment calls.

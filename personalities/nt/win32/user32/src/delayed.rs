@@ -25,7 +25,6 @@ poly_win32_rt::fail_exports!(
         FrameRect,
         GetGuiResources,
         GetMonitorInfoA,
-        GetPointerDevice,
         GetPointerPenInfo,
         GetPointerType,
         InvertRect,
