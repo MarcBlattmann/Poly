@@ -823,9 +823,84 @@ struct OutputVtbl {
     set_display_surface: unsafe extern "system" fn(*mut c_void, *mut c_void) -> HRESULT,
     get_display_surface_data: unsafe extern "system" fn(*mut c_void, *mut c_void) -> HRESULT,
     get_frame_statistics: unsafe extern "system" fn(*mut c_void, *mut c_void) -> HRESULT,
+    // IDXGIOutput1 .. IDXGIOutput6 (dxgi1_2.h .. dxgi1_6.h)
+    get_display_mode_list1: unsafe extern "system" fn(*mut c_void, u32, u32, *mut u32, *mut c_void) -> HRESULT,
+    find_closest_matching_mode1:
+        unsafe extern "system" fn(*mut c_void, *const c_void, *mut c_void, *mut c_void) -> HRESULT,
+    get_display_surface_data1: unsafe extern "system" fn(*mut c_void, *mut c_void) -> HRESULT,
+    duplicate_output: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> HRESULT,
+    supports_overlays: unsafe extern "system" fn(*mut c_void) -> i32,
+    check_overlay_support: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut u32) -> HRESULT,
+    check_overlay_color_space_support: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, *mut u32) -> HRESULT,
+    duplicate_output1:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *const u32, *mut *mut c_void) -> HRESULT,
+    get_desc1: unsafe extern "system" fn(*mut c_void, *mut u8) -> HRESULT,
+    check_hardware_composition_support: unsafe extern "system" fn(*mut c_void, *mut u32) -> HRESULT,
 }
 
-static OUTPUT_IIDS: [Guid; 1] = [IID_IDXGIOUTPUT];
+static OUTPUT_IIDS: [Guid; 7] = [
+    IID_IDXGIOUTPUT,
+    guid(0x00cddea8, 0x939b, 0x4b83, [0xa3, 0x40, 0xa6, 0x85, 0x22, 0x66, 0x66, 0xcc]),
+    guid(0x595e39d1, 0x2724, 0x4663, [0x99, 0xb1, 0xda, 0x96, 0x9d, 0xe2, 0x83, 0x64]),
+    guid(0x8a6bb301, 0x7e7e, 0x41f4, [0xa8, 0xe0, 0x5b, 0x32, 0xf7, 0xf9, 0x9b, 0x18]),
+    guid(0xdc7dca35, 0x2196, 0x414d, [0x9f, 0x53, 0x61, 0x78, 0x84, 0x03, 0x2a, 0x60]),
+    guid(0x80a07424, 0xab52, 0x42eb, [0x83, 0x3c, 0x0c, 0x42, 0xfd, 0x28, 0x2d, 0x98]),
+    guid(0x068346e8, 0xaaec, 0x4b84, [0xad, 0xd7, 0x13, 0x7f, 0x51, 0x3f, 0x77, 0xa1]),
+];
+
+unsafe extern "system" fn no_duplicate(_: *mut c_void, _: *mut c_void, out: *mut *mut c_void) -> HRESULT {
+    if !out.is_null() {
+        // SAFETY: the caller's output.
+        unsafe { *out = core::ptr::null_mut() };
+    }
+    DXGI_ERROR_UNSUPPORTED
+}
+
+unsafe extern "system" fn no_duplicate1(_: *mut c_void, _: *mut c_void, _: u32, _: u32, _: *const u32, out: *mut *mut c_void) -> HRESULT {
+    // SAFETY: as above.
+    unsafe { no_duplicate(core::ptr::null_mut(), core::ptr::null_mut(), out) }
+}
+
+unsafe extern "system" fn no_overlays(_: *mut c_void) -> i32 {
+    0
+}
+
+unsafe extern "system" fn overlay_support(_: *mut c_void, _: u32, _: *mut c_void, out: *mut u32) -> HRESULT {
+    if !out.is_null() {
+        // SAFETY: the caller's flags.
+        unsafe { *out = 0 };
+    }
+    S_OK
+}
+
+unsafe extern "system" fn overlay_color_space_support(_: *mut c_void, _: u32, _: u32, _: *mut c_void, out: *mut u32) -> HRESULT {
+    // SAFETY: as above.
+    unsafe { overlay_support(core::ptr::null_mut(), 0, core::ptr::null_mut(), out) }
+}
+
+/// `IDXGIOutput6::GetDesc1`: GetDesc's 96 bytes, 8 bits per colour, colour space 0 (RGB full range
+/// G22 P709), no primaries or luminances (IDXGIOutput.GetDesc.yaml `desc1`).
+unsafe extern "system" fn output_desc1(this: *mut c_void, desc: *mut u8) -> HRESULT {
+    if desc.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's DXGI_OUTPUT_DESC1 (152 bytes).
+    unsafe {
+        core::ptr::write_bytes(desc, 0, 152);
+        let hr = output_desc(this, desc);
+        (desc.add(96) as *mut u32).write(8);
+        hr
+    }
+}
+
+unsafe extern "system" fn hardware_composition_support(_: *mut c_void, out: *mut u32) -> HRESULT {
+    if out.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's flags: none.
+    unsafe { *out = 0 };
+    S_OK
+}
 
 unsafe extern "system" fn unsupported1(_: *mut c_void, _: *mut c_void) -> HRESULT {
     DXGI_ERROR_UNSUPPORTED
@@ -876,6 +951,16 @@ static OUTPUT_VTBL: OutputVtbl = OutputVtbl {
     set_display_surface: unsupported1,
     get_display_surface_data: unsupported1,
     get_frame_statistics: unsupported1,
+    get_display_mode_list1: mode_list,
+    find_closest_matching_mode1: closest_mode,
+    get_display_surface_data1: unsupported1,
+    duplicate_output: no_duplicate,
+    supports_overlays: no_overlays,
+    check_overlay_support: overlay_support,
+    check_overlay_color_space_support: overlay_color_space_support,
+    duplicate_output1: no_duplicate1,
+    get_desc1: output_desc1,
+    check_hardware_composition_support: hardware_composition_support,
 };
 
 /// `DXGI_OUTPUT_DESC` (96 bytes): `\\.\DISPLAY1`, the screen's rectangle, attached, not rotated,

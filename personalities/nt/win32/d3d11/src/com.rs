@@ -456,3 +456,6 @@ macro_rules! stubs {
         }
     };
 }
+pub const IID_IDXGISWAPCHAIN2: Guid = guid(0xa8be2ac4, 0x199f, 0x4946, 0xb331, 0x79599fb98de7);
+pub const IID_IDXGISWAPCHAIN3: Guid = guid(0x94d99bdb, 0xf1f8, 0x4ab0, 0xb236, 0x7da0170edab1);
+pub const IID_IDXGISWAPCHAIN4: Guid = guid(0x3d585d5a, 0xbd4a, 0x489e, 0xb1f4, 0x3dbcb6452ffb);

@@ -190,7 +190,9 @@ pub fn support2(format: u32, level: u32) -> u32 {
     match format {
         R32_FLOAT => 0x0000_06c8,
         NV12 => 0x0001_0480,
-        _ if mask & support::TYPED_UNORDERED_ACCESS_VIEW != 0 && is_display_8bit(format) => 0x0001_06c0,
+        // Without typed UAVs (10_0) only the UAV atomic and tiled bits stay.
+        _ if is_display_8bit(format) && mask & support::TYPED_UNORDERED_ACCESS_VIEW == 0 => 0x0001_0400,
+        _ if is_display_8bit(format) => 0x0001_06c0,
         _ => 0,
     }
 }
@@ -352,6 +354,7 @@ mod tests {
         assert_eq!(support2(28, 0xB000), 0x106C0);
         assert_eq!(support2(41, 0xB000), 0x6C8);
         assert_eq!(support2(103, 0xB000), 0x10480);
+        assert_eq!(support2(87, 0xA000), 0x10400);
     }
 
     #[test]
