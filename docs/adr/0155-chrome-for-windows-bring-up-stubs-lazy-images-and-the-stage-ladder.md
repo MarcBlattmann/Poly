@@ -1092,3 +1092,43 @@ no apartment, a single-threaded and a multithreaded one. That value is in no pub
 it has to come from a spec sheet (observed on Windows: the field before `CoInitializeEx`, after
 it with each model, after `CoUninitialize`, for `OleInitialize` and `RoInitialize`). Until then
 S3 window runs that have to stay up pass `--disable-component-update`.
+
+## Addendum (2026-11-16): browsing in the window (`chrome-win-browse`)
+
+**Context.** With the page painted and the window up (ADR 0207), Chrome was driven on the
+desktop as a user would: type a URL into the address field, load `http://example.com/` and
+`https://www.iana.org/` over the network, click a link, scroll with the wheel and the keyboard,
+go back, open and close a tab, resize the window by its borders, minimize and restore it. The
+network, the omnibox, links, keyboard scrolling, back and tabs worked at once. What did not:
+
+| Step | What Poly did | Fix |
+|---|---|---|
+| typing a URL | `http://` arrived as `httpÖ--`: win32k read keys with the German layout while the desktop's was US | ADR 0209 |
+| the wheel | the compositor's `Axis` record was dropped by win32k | `Wm::link_wheel`: a `MOUSEEVENTF_WHEEL` event (Learn, "MOUSEINPUT"), `WM_MOUSEWHEEL` to the window under the pointer |
+| restore from the window switcher | win32k never sent `State` (minimized), the switcher showed the stale picture and win32k still thought the window minimized; the switcher also listed Chrome's status bubble (an owned popup) and switched to it | win32k sends `State`; the compositor asks win32k for `Request::Restore` / `Minimize` when the shell shows or hides an application window itself, win32k posts `WM_SYSCOMMAND` `SC_RESTORE` / `SC_MINIMIZE` (Learn, "WM_SYSCOMMAND"); owned internal windows are not in the switcher |
+| resize by a border | the compositor ignored `BeginResize` for Windows surfaces; a window that draws its own frame keeps its sizing borders outside its surface, where no pointer reached it; `DefWindowProc` answered `HTBORDER` on a sizable window's border | below |
+
+**Decision (resizing a Windows window by its border).**
+
+1. The compositor runs the resize: `Server::internal_start_resize` (a grab like an xdg
+   toplevel's resize) asks the owner for each new content rectangle
+   (`InternalEvent::Configure`), never smaller than 64x32; the scene keeps the old picture until
+   the app has drawn the new size.
+2. win32k gives a new size to the window's own thread: `Wm::configure_from_desktop` hands it a
+   message sent from no thread (`DESKTOP_SET_POS`, never seen by the app), on which `user32`
+   calls `SetWindowPos` there, as Windows' sizing loop does in the window's thread (the app gets
+   `WM_WINDOWPOSCHANGING`, `WM_NCCALCSIZE`, `WM_WINDOWPOSCHANGED`, `WM_SIZE` and draws). A newer
+   size replaces one the thread has not taken; a move alone is still applied at once.
+   `WM_ENTERSIZEMOVE`/`WM_SIZING`/`WM_EXITSIZEMOVE` are not sent (no program needed them yet).
+3. A window that draws its own caption tells the compositor its own borders around the surface
+   (the new link record `Margins`, skipped by a compositor that does not know it); the pointer
+   there is the window's (`Server::set_internal_margins`) where no window above it is, so its
+   `WM_NCHITTEST` decides.
+4. `DefWindowProc`'s `WM_NCHITTEST` gives Learn's sizing codes on a `WS_THICKFRAME` window's
+   border (`HTLEFT`, `HTRIGHT`, `HTTOP` above the caption, `HTBOTTOM`, the corners), `HTBORDER`
+   only for a window without a sizing border (Learn, "WM_NCHITTEST").
+
+**Consequences.** Every step of the flow works in one run (hand-off `chrome-win-browse.md`).
+`boot-tests chrome-win` stage 3 now also types a `data:` URL into the address field after the
+green page and checks its blue background. `win-app` has the steps `wheel:X|Y|N`, `move:X|Y`,
+`wtype:TEXT` (win32k's German positions) and lets a typed text contain commas.

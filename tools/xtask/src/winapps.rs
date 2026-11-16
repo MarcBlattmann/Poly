@@ -190,7 +190,7 @@ fn parse(args: &[String]) -> Result<Opts> {
         flag(args, n).map_or(Ok(d), |v| v.parse().map_err(|e| format!("{n}: {e}")))
     };
     let steps = match flag(args, "--steps") {
-        Some(s) => s.split(',').filter(|p| !p.is_empty()).map(Step::parse).collect::<Result<Vec<_>>>()?,
+        Some(s) => split_steps(&s).iter().map(|p| Step::parse(p)).collect::<Result<Vec<_>>>()?,
         None => ["launch", "sleep:20", "shot:window", "sleep:20", "shot:later"]
             .iter()
             .map(|s| Step::parse(s))
@@ -610,7 +610,7 @@ pub fn desktop_check(
     steps: &str,
     log: &Path,
 ) -> Result<(String, Option<String>)> {
-    let steps = steps.split(',').filter(|p| !p.is_empty()).map(Step::parse).collect::<Result<Vec<_>>>()?;
+    let steps = split_steps(steps).iter().map(|p| Step::parse(p)).collect::<Result<Vec<_>>>()?;
     let out = log.parent().map_or_else(|| root().join("target"), Path::to_path_buf);
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let o = Opts {
@@ -636,6 +636,36 @@ pub fn desktop_check(
     let res = crate::resources::Resources::from_args(&[])?;
     let (text, stopped) = run_desktop_checked(&o, kernel, &image, log, &res, &kernel_arguments(&o))?;
     Ok((clean(&text), stopped))
+}
+
+/// The steps of `--steps`, comma separated. A piece that does not start a step continues the text
+/// of the `type` or `wtype` step before it, comma and all, so a typed URL may have commas
+/// (`type:data:text/html,<b>x</b>`).
+fn split_steps(s: &str) -> Vec<String> {
+    const KINDS: &[&str] = &[
+        "launch", "sleep", "wait", "shot", "pixel", "type", "wtype", "key", "chord", "click", "dclick", "rclick",
+        "drag", "wheel", "move",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for piece in s.split(',') {
+        let kind = piece.split_once(':').map_or(piece, |p| p.0);
+        let typing = out.last().is_some_and(|l| l.starts_with("type:") || l.starts_with("wtype:"));
+        if typing && !KINDS.contains(&kind) {
+            if let Some(last) = out.last_mut() {
+                last.push(',');
+                last.push_str(piece);
+            }
+        } else if !piece.is_empty() {
+            out.push(piece.to_string());
+        }
+    }
+    out
+}
+
+/// Whether `steps` (as `--steps` takes them) are all steps, for the boot tests' own checks.
+#[cfg(test)]
+pub fn steps_parse(steps: &str) -> bool {
+    split_steps(steps).iter().all(|p| Step::parse(p).is_ok())
 }
 
 /// One step of a desktop run.
@@ -997,6 +1027,10 @@ mod tests {
         assert!(Step::parse("wheel:300|400").is_err());
         assert_eq!(Step::parse("move:5|6"), Ok(Step::Move(5, 6)));
         assert_eq!(Step::parse("wtype:a/b"), Ok(Step::WType("a/b".into())));
+        assert_eq!(
+            split_steps("launch,type:data:text/html,<p>a,b</p>,key:ret,,sleep:2"),
+            ["launch", "type:data:text/html,<p>a,b</p>", "key:ret", "sleep:2"]
+        );
         assert_eq!(qcodes_de('z'), Some(vec!["y".to_string()]));
         assert_eq!(qcodes_de(':'), Some(vec!["shift".to_string(), "dot".to_string()]));
         assert_eq!(qcodes_de('/'), Some(vec!["shift".to_string(), "7".to_string()]));

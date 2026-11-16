@@ -1940,7 +1940,13 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             } else if env.menu_hit(i.hwnd, px, py) {
                 5
             } else if i.window.contains(px, py) {
-                if has_caption(i.style) && py < i.client.top { 2 } else { 18 }
+                if let Some(code) = sizing_hit(i.style, i.window, i.client, px, py) {
+                    code as u64
+                } else if has_caption(i.style) && py < i.client.top {
+                    2
+                } else {
+                    18
+                }
             } else {
                 0
             }
@@ -2056,6 +2062,38 @@ fn to_cmsg(m: &Msg) -> CMsg {
         pt: CPoint { x: m.x, y: m.y },
         private: m.private,
     }
+}
+
+/// `DefWindowProc`'s `WM_NCHITTEST` on the sizing border of a resizable window (Learn,
+/// "WM_NCHITTEST": `HTLEFT` "in the left border of a resizable window", `HTBOTTOMRIGHT` "in the
+/// lower-right corner of a border of a resizable window", ...; `HTBORDER` is for a window without
+/// a sizing border). The border is what lies outside the client area at the sides and below it,
+/// and above it the band as thick as the side border (the caption is below that band); a point on
+/// two sides is the corner. `None` for a window without `WS_THICKFRAME`, a maximized one, or a
+/// point that is not on the border (the caption, a menu).
+pub fn sizing_hit(style: u32, window: Rect, client: Rect, x: i32, y: i32) -> Option<i32> {
+    if style & crate::metrics::WS_THICKFRAME == 0 || style & (WS_MAXIMIZE | WS_CHILD) != 0 {
+        return None;
+    }
+    let side = (client.left - window.left).max(window.right - client.right);
+    if side <= 0 {
+        return None;
+    }
+    let left = x < client.left;
+    let right = x >= client.right;
+    let bottom = y >= client.bottom;
+    let top = y < client.top && y < window.top + side;
+    Some(match (left, right, top, bottom) {
+        (true, _, true, _) => frame::HTTOPLEFT,
+        (_, true, true, _) => frame::HTTOPRIGHT,
+        (true, _, _, true) => frame::HTBOTTOMLEFT,
+        (_, true, _, true) => frame::HTBOTTOMRIGHT,
+        (true, ..) => frame::HTLEFT,
+        (_, true, ..) => frame::HTRIGHT,
+        (_, _, true, _) => frame::HTTOP,
+        (.., true) => frame::HTBOTTOM,
+        _ => return None,
+    })
 }
 
 /// `PeekMessageW`: messages sent by other threads run first.
