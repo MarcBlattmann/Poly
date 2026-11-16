@@ -779,8 +779,8 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 /// `ntdll.dll` share a volume device as on Windows, where a program and the
 /// system directory are usually on the same volume (ADR 0185).
 pub const TEST_DIR: &str = "/nt/c/PolyTests";
-/// The test executable on Poly (`C:\PolyTests\test-binary`).
-pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary";
+/// The test executable on Poly (`C:\PolyTests\test-binary.exe`).
+pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary.exe";
 
 /// Kernel arguments: the test-run protocol (ADR 0027) plus the
 /// observation file, which the kernel reports as standard output
@@ -790,8 +790,8 @@ pub fn poly_kernel_args() -> String {
 }
 
 /// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
-/// (`/nt/c/PolyTests/test-binary` in the initramfs), which Poly's NT
-/// personality names `C:\PolyTests\test-binary`, so the observation file is
+/// (`/nt/c/PolyTests/test-binary.exe` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\test-binary.exe`, so the observation file is
 /// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
@@ -1562,7 +1562,7 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary "));
+        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary.exe "));
         assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 

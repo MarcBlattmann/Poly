@@ -254,6 +254,51 @@ const PP_CURRENT_DIRECTORY: u64 = NATIVE.pp_current_directory;
 /// (`CreateProcessW`'s `lpCurrentDirectory`, or the creator's own), else
 /// the executable's directory (a process the kernel started, ADR 0079).
 pub fn init_current_dir() {
+    init_current_dir_state();
+    publish_current_dir(&current_dir());
+}
+
+/// The directory the parameters hold, as a program sees it (empty if they hold none): `ntdll`'s
+/// `RtlSetCurrentDirectory_U` writes it too.
+pub fn pp_current_dir() -> Vec<u16> {
+    let pp = parameters();
+    if pp == 0 {
+        return Vec::new();
+    }
+    // SAFETY: the parameters' UNICODE_STRING (zero if not set).
+    let given = unsafe { unicode_at(pp + PP_CURRENT_DIRECTORY) };
+    if given.is_empty() { Vec::new() } else { poly_kernelbase::path::as_current_dir(given) }
+}
+
+/// Write `dir` into the parameters (the string's own buffer when it fits, else a new one), where
+/// `ntdll`'s `RtlGetCurrentDirectory_U` reads it.
+pub fn publish_current_dir(dir: &[u16]) {
+    let pp = parameters();
+    if pp == 0 || dir.len() > 0x7FFE {
+        return;
+    }
+    // SAFETY: the parameters' UNICODE_STRING (`Length`, `MaximumLength`, the buffer one pointer in),
+    // writable process memory.
+    unsafe {
+        let us = pp + PP_CURRENT_DIRECTORY;
+        let max = usize::from((us as *const u16).add(1).read()) / 2;
+        let slot = (us + NATIVE.ptr) as *mut *mut u16;
+        let mut buf = slot.read();
+        if buf.is_null() || max < dir.len() + 1 {
+            let mut v = alloc::vec![0u16; dir.len() + 1];
+            v[..dir.len()].copy_from_slice(dir);
+            buf = alloc::boxed::Box::leak(v.into_boxed_slice()).as_mut_ptr();
+            slot.write(buf);
+            (us as *mut u16).add(1).write(((dir.len() + 1) * 2) as u16);
+        } else {
+            core::ptr::copy_nonoverlapping(dir.as_ptr(), buf, dir.len());
+            buf.add(dir.len()).write(0);
+        }
+        (us as *mut u16).write((dir.len() * 2) as u16);
+    }
+}
+
+fn init_current_dir_state() {
     let pp = parameters();
     // SAFETY: the parameters' UNICODE_STRING (zero if not set).
     let given = if pp == 0 { Vec::new() } else { unsafe { unicode_at(pp + PP_CURRENT_DIRECTORY).to_vec() } };
@@ -310,6 +355,7 @@ pub unsafe extern "system" fn SetCurrentDirectoryW(path: *const u16) -> i32 {
     }
     close(h);
     let dir = poly_kernelbase::path::as_current_dir(&full);
+    publish_current_dir(&dir);
     with_state(|s| s.current_dir = dir);
     TRUE
 }
@@ -626,6 +672,15 @@ pub extern "system" fn SetDefaultDllDirectories(flags: u32) -> i32 {
 pub unsafe extern "system" fn LoadLibraryW(name: *const u16) -> *mut u8 {
     // SAFETY: as `LoadLibraryExW`.
     unsafe { LoadLibraryExW(name, 0, 0) }
+}
+
+/// `FreeLibraryAndExitThread(module, exitCode)`: unload the module, then end the calling thread
+/// (a thread of the module's own code uses it so it never returns into unloaded code).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn FreeLibraryAndExitThread(module: *mut u8, code: u32) -> ! {
+    // SAFETY: the caller's module handle; the thread ends right after.
+    unsafe { FreeLibrary(module) };
+    crate::sync::ExitThread(code)
 }
 
 /// `FreeLibrary`.

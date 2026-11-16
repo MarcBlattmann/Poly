@@ -425,7 +425,7 @@ unsafe fn tcp_one_thread() {
         let mut set = [0u8; 16];
         set[0] = 1;
         set[8..16].copy_from_slice(&a.to_le_bytes());
-        let tv = [1i32, 0];
+        let tv = [10i32, 0];
         check(select(0, set.as_mut_ptr(), core::ptr::null_mut(), core::ptr::null_mut(), tv.as_ptr()) == 1);
         let mut fds = [0u8; 32];
         fds[0..8].copy_from_slice(&a.to_le_bytes());
@@ -643,7 +643,7 @@ unsafe fn errors() {
         let mut set = [0u8; 16];
         set[0] = 1;
         set[8..16].copy_from_slice(&s.to_le_bytes());
-        let tv = [2i32, 0];
+        let tv = [10i32, 0];
         check(select(0, core::ptr::null_mut(), set.as_mut_ptr(), core::ptr::null_mut(), tv.as_ptr()) == 1);
         // A handle that is not a socket, and empty sets.
         check_fail(closesocket(0x7ffc), WSAENOTSOCK);
@@ -712,10 +712,11 @@ unsafe fn net_events(s: Socket, ev: Handle) -> (i32, [i32; 10]) {
     (i32::from_le_bytes([b[0], b[1], b[2], b[3]]), errs)
 }
 
-/// Wait for the event object to be set (2 s at most).
+/// Wait for the event object to be set (10 s at most: it returns as soon as it is, and a host that
+/// is very busy can hold the helper thread back for seconds).
 unsafe fn signalled(ev: Handle) -> bool {
     // SAFETY: a kernel32 call on our event.
-    unsafe { WaitForSingleObject(ev, 2000) == 0 }
+    unsafe { WaitForSingleObject(ev, 10_000) == 0 }
 }
 
 /// `WSAEventSelect` and `WSAEnumNetworkEvents` (ADR 0155): the events a loopback connection

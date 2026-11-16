@@ -306,7 +306,7 @@
 {"symbol":"LsaLookupSids","src":["wine-spec"],"seeds":["wine:advapi32/tests/lsa.c:test_LsaLookupSids"]},
 {"symbol":"LsaNtStatusToWinError","status":"stub","src":["wine-spec"]},
 {"symbol":"LsaOpenAccount","src":["wine-spec"]},
-{"symbol":"LsaOpenPolicy","status":"claimed","claimed_by":"spec-win-apps-4","src":["wine-spec"],"seeds":["wine:advapi32/tests/lsa.c:test_LsaLookupPrivilegeName","wine:advapi32/tests/lsa.c:test_LsaLookupNames2","wine:advapi32/tests/lsa.c:test_lsa","wine:advapi32/tests/lsa.c:test_LsaLookupSids","wine:advapi32/tests/security.c:test_LookupAccountSid"]},
+{"symbol":"LsaOpenPolicy","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:advapi32/tests/lsa.c:test_LsaLookupPrivilegeName","wine:advapi32/tests/lsa.c:test_LsaLookupNames2","wine:advapi32/tests/lsa.c:test_lsa","wine:advapi32/tests/lsa.c:test_LsaLookupSids","wine:advapi32/tests/security.c:test_LookupAccountSid"]},
 {"symbol":"LsaOpenSecret","src":["wine-spec"]},
 {"symbol":"LsaOpenTrustedDomain","src":["wine-spec"]},
 {"symbol":"LsaOpenTrustedDomainByName","src":["wine-spec"]},

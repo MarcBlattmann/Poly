@@ -2343,12 +2343,7 @@ pub unsafe extern "system" fn GetGUIThreadInfo(tid: u32, gti: *mut u8) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn ReleaseCapture() -> i32 {
-    let st = u::focus::input(&SYS);
-    if st.capture != 0 {
-        call(Request::SetInput { active: 0, focus: 0, capture: 0, which: poly_win32k::wm::input::SET_CAPTURE });
-        u::send(&SYS, u64::from(st.capture), 0x0215, 0, 0); // WM_CAPTURECHANGED
-    }
-    1
+    u::focus::release_capture(&SYS) as i32
 }
 
 /// `GetCursorPos`: (0, 0) until input exists.

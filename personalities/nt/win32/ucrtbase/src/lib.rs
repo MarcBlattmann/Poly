@@ -23,11 +23,29 @@ mod files_console;
 /// `DllMain`.
 #[unsafe(no_mangle)]
 pub extern "system" fn ucrtbase_main(_module: *mut u8, reason: u32, reserved: *mut u8) -> i32 {
+    if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
+        // The UCRT's `FILE` starts with the buffer slots programs' inline `getc` use.
+        stdio::enable_buffer_slots();
+    }
     let r = poly_win32_crt::dll_main(reason, !reserved.is_null());
     if reason == poly_win32_crt::DLL_PROCESS_ATTACH {
         locale::bind();
     }
     r
+}
+
+/// `_get_stream_buffer_pointers(stream, &base, &ptr, &cnt)`: where the stream's buffer base, position
+/// and byte count slots are (inside the `FILE` itself); programs' inline `getc`/`putc` read and move
+/// them. Returns 0; a NULL stream is an invalid parameter.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn _get_stream_buffer_pointers(
+    stream: *mut File,
+    base: *mut *mut usize,
+    ptr: *mut *mut usize,
+    cnt: *mut *mut i32,
+) -> i32 {
+    // SAFETY: the caller's pointers (null ones are skipped).
+    unsafe { stdio::buffer_pointers(stream, base, ptr, cnt) }
 }
 
 // ----- functions of the shared runtime only the UCRT exports ------------------------------

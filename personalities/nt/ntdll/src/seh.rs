@@ -314,6 +314,8 @@ pub extern "system" fn RtlSetUnhandledExceptionFilter(filter: u64) {
 pub unsafe extern "system" fn KiUserExceptionDispatcher(record_ptr: *mut u8, context_ptr: *mut u8) -> ! {
     // SAFETY: the kernel wrote a valid record and context below our RSP.
     if unsafe { crate::veh::call_handlers(record_ptr, context_ptr) } {
+        // SAFETY: the same record and context, which the handlers may look at.
+        unsafe { crate::veh::call_continue_handlers(record_ptr, context_ptr) };
         // SAFETY: resume the context a vectored handler fixed up.
         unsafe { syscalls::NtContinue(context_ptr, 0) };
     }
@@ -324,7 +326,10 @@ pub unsafe extern "system" fn KiUserExceptionDispatcher(record_ptr: *mut u8, con
     let result = dispatch_exception(&Proc, &mut CallHandlers, &mut record, &mut ctx);
     match result {
         DispatchResult::ContinueExecution => {
+            let mut rec = record.to_bytes();
             let mut bytes = ctx.to_bytes();
+            // SAFETY: a valid record and context (copies); the continue handlers may fix the context up.
+            unsafe { crate::veh::call_continue_handlers(rec.as_mut_ptr(), bytes.as_mut_ptr()) };
             // SAFETY: NtContinue resumes the (fixed-up) context; never returns.
             unsafe { syscalls::NtContinue(bytes.as_mut_ptr(), 0) };
         }

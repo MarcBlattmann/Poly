@@ -158,6 +158,8 @@ pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"))
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
+/// Poly's own `msvcp140.dll` (ADR 0199): its first names, the rest fail-only.
+pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -907,6 +909,12 @@ impl NtKernel for Kernel {
     }
 
     fn wait(&mut self, id: WaitId, timeout: NtTimeout, alertable: bool) -> NtStatus {
+        // What this call completed for other threads is delivered before it
+        // blocks, not after it ends: `TransactNamedPipe` writes the request
+        // that wakes the server's pending read and then waits for the reply,
+        // and the reply only comes once the server has seen the request
+        // (a zero-length request met a pending read: both sides waited for ever).
+        io::after_call();
         sched::wait(self.pid, self.tid, id, timeout, alertable)
     }
 
@@ -1272,6 +1280,7 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
+        proc.parent = handles.map_or(0, |h| h.caller.process.0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());
