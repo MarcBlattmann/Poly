@@ -28,7 +28,6 @@
 extern crate alloc;
 
 pub mod afd;
-pub mod asyncsel;
 pub mod events;
 pub mod ext;
 pub mod names;
