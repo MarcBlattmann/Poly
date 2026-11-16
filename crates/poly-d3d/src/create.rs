@@ -139,6 +139,9 @@ mod tests {
         assert_eq!(f(&[0]), Err(E_INVALIDARG));
         assert_eq!(f(&[0xB000, 0x1234]), Err(E_INVALIDARG));
         assert_eq!(level(&Args { levels: None, count: 3, ..args(driver::WARP) }), Err(E_INVALIDARG));
-        assert_eq!(level(&Args { levels: Some(&[0xB000]), count: 0, ..args(driver::WARP) }), Err(DXGI_ERROR_UNSUPPORTED));
+        assert_eq!(
+            level(&Args { levels: Some(&[0xB000]), count: 0, ..args(driver::WARP) }),
+            Err(DXGI_ERROR_UNSUPPORTED)
+        );
     }
 }

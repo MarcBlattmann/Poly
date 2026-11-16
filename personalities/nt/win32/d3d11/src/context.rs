@@ -137,7 +137,8 @@ unsafe fn slice<'a, T>(p: *const T, n: u32) -> &'a [T] {
 /// The resource a shader-resource or render-target view sees.
 unsafe fn view_res(p: P) -> P {
     // SAFETY: as `texture::view`.
-    unsafe { texture::view(p, ViewKind::Srv).or_else(|| texture::view(p, ViewKind::Rtv)) }.map_or(core::ptr::null_mut(), |v| v.res)
+    unsafe { texture::view(p, ViewKind::Srv).or_else(|| texture::view(p, ViewKind::Rtv)) }
+        .map_or(core::ptr::null_mut(), |v| v.res)
 }
 
 // ----- the shader stages: VS 0, HS 1, DS 2, GS 3, PS 4, CS 5
@@ -155,7 +156,11 @@ unsafe fn set_srvs(this: P, stage: usize, start: u32, n: u32, v: *const P) {
                 }
                 // A resource bound as a render target is not bound for reading (the hazard rule).
                 let r = view_res(p);
-                let p = if !r.is_null() && s.rtv.iter().any(|&t| !t.is_null() && view_res(t) == r) { core::ptr::null_mut() } else { p };
+                let p = if !r.is_null() && s.rtv.iter().any(|&t| !t.is_null() && view_res(t) == r) {
+                    core::ptr::null_mut()
+                } else {
+                    p
+                };
                 set(&mut s.srv[stage][slot], p);
             }
         })
@@ -276,7 +281,14 @@ pub unsafe extern "system" fn ia_get_input_layout(this: P, out: *mut P) {
     unsafe { with_state(this, |s| put(out, give(s.layout))) }
 }
 
-pub unsafe extern "system" fn ia_set_vertex_buffers(this: P, start: u32, n: u32, v: *const P, strides: *const u32, offs: *const u32) {
+pub unsafe extern "system" fn ia_set_vertex_buffers(
+    this: P,
+    start: u32,
+    n: u32,
+    v: *const P,
+    strides: *const u32,
+    offs: *const u32,
+) {
     // SAFETY: the caller's arrays of `n`.
     unsafe {
         let (v, st, of) = (slice(v, n), slice(strides, n), slice(offs, n));
@@ -293,7 +305,14 @@ pub unsafe extern "system" fn ia_set_vertex_buffers(this: P, start: u32, n: u32,
     }
 }
 
-pub unsafe extern "system" fn ia_get_vertex_buffers(this: P, start: u32, n: u32, out: *mut P, strides: *mut u32, offs: *mut u32) {
+pub unsafe extern "system" fn ia_get_vertex_buffers(
+    this: P,
+    start: u32,
+    n: u32,
+    out: *mut P,
+    strides: *mut u32,
+    offs: *mut u32,
+) {
     // SAFETY: the caller's optional arrays of `n`.
     unsafe {
         with_state(this, |s| {
@@ -371,7 +390,11 @@ pub unsafe extern "system" fn om_set_render_targets(this: P, n: u32, v: *const P
     unsafe {
         with_state(this, |s| {
             for i in 0..8 {
-                let p = if refused { core::ptr::null_mut() } else { views.get(i).copied().unwrap_or(core::ptr::null_mut()) };
+                let p = if refused {
+                    core::ptr::null_mut()
+                } else {
+                    views.get(i).copied().unwrap_or(core::ptr::null_mut())
+                };
                 set(&mut s.rtv[i], p);
                 // Unbind the shader-resource views of a resource now written.
                 if !p.is_null() {
@@ -391,7 +414,16 @@ pub unsafe extern "system" fn om_set_render_targets(this: P, n: u32, v: *const P
     }
 }
 
-pub unsafe extern "system" fn om_set_rt_and_uavs(this: P, n: u32, v: *const P, dsv: P, _: u32, _: u32, _: *const P, _: *const u32) {
+pub unsafe extern "system" fn om_set_rt_and_uavs(
+    this: P,
+    n: u32,
+    v: *const P,
+    dsv: P,
+    _: u32,
+    _: u32,
+    _: *const P,
+    _: *const u32,
+) {
     // D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL (0xffffffff) keeps the targets.
     if n != u32::MAX {
         // SAFETY: the caller's arguments.
@@ -409,7 +441,15 @@ pub unsafe extern "system" fn om_get_render_targets(this: P, n: u32, out: *mut P
     }
 }
 
-pub unsafe extern "system" fn om_get_rt_and_uavs(this: P, n: u32, out: *mut P, dsv: *mut P, _: u32, nu: u32, uavs: *mut P) {
+pub unsafe extern "system" fn om_get_rt_and_uavs(
+    this: P,
+    n: u32,
+    out: *mut P,
+    dsv: *mut P,
+    _: u32,
+    nu: u32,
+    uavs: *mut P,
+) {
     // SAFETY: the caller's optional outputs.
     unsafe {
         om_get_render_targets(this, n, out, dsv);
@@ -483,7 +523,12 @@ pub unsafe extern "system" fn rs_set_viewports(this: P, n: u32, v: *const [f32; 
         return;
     }
     let ok = vps.iter().all(|v| {
-        v.iter().all(|x| x.is_finite()) && v[2] >= 0.0 && v[3] >= 0.0 && (0.0..=1.0).contains(&v[4]) && (0.0..=1.0).contains(&v[5]) && v[4] <= v[5]
+        v.iter().all(|x| x.is_finite())
+            && v[2] >= 0.0
+            && v[3] >= 0.0
+            && (0.0..=1.0).contains(&v[4])
+            && (0.0..=1.0).contains(&v[5])
+            && v[4] <= v[5]
     });
     if ok {
         // SAFETY: a live context.
@@ -619,7 +664,11 @@ pub unsafe extern "system" fn map(this: P, res: P, sub: u32, kind: u32, flags: u
         Kind::Tex2d(d) => (d.usage, d.cpu),
     };
     let allowed = match usage {
-        resource::usage::STAGING => (1..=3).contains(&kind) && (kind != 1 || cpu & resource::cpu::READ != 0) && (kind == 1 || cpu & resource::cpu::WRITE != 0),
+        resource::usage::STAGING => {
+            (1..=3).contains(&kind)
+                && (kind != 1 || cpu & resource::cpu::READ != 0)
+                && (kind == 1 || cpu & resource::cpu::WRITE != 0)
+        }
         resource::usage::DYNAMIC => kind == 4 || (kind == 5 && t.is_buffer()),
         _ => false,
     };
@@ -669,7 +718,17 @@ pub unsafe extern "system" fn copy_resource(this: P, dst: P, src: P) {
 
 /// `CopySubresourceRegion(pDst, DstSubresource, DstX, DstY, DstZ, pSrc, SrcSubresource, pSrcBox)`.
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "system" fn copy_subresource_region(this: P, dst: P, ds: u32, dx: u32, dy: u32, dz: u32, src: P, ss: u32, bx: *const [u32; 6]) {
+pub unsafe extern "system" fn copy_subresource_region(
+    this: P,
+    dst: P,
+    ds: u32,
+    dx: u32,
+    dy: u32,
+    dz: u32,
+    src: P,
+    ss: u32,
+    bx: *const [u32; 6],
+) {
     // SAFETY: the caller's resources.
     let (Some(d), Some(s)) = (unsafe { texture::res(dst) }, unsafe { texture::res(src) }) else { return };
     // SAFETY: a live context.
@@ -704,7 +763,15 @@ pub unsafe extern "system" fn copy_subresource_region(this: P, dst: P, ds: u32, 
 }
 
 /// `UpdateSubresource(pDstResource, DstSubresource, pDstBox, pSrcData, SrcRowPitch, SrcDepthPitch)`.
-pub unsafe extern "system" fn update_subresource(this: P, dst: P, sub: u32, bx: *const [u32; 6], data: *const u8, pitch: u32, _: u32) {
+pub unsafe extern "system" fn update_subresource(
+    this: P,
+    dst: P,
+    sub: u32,
+    bx: *const [u32; 6],
+    data: *const u8,
+    pitch: u32,
+    _: u32,
+) {
     // SAFETY: the caller's resource.
     let Some(t) = (unsafe { texture::res(dst) }) else { return };
     // SAFETY: a live context.
@@ -747,13 +814,33 @@ pub unsafe extern "system" fn update_subresource(this: P, dst: P, sub: u32, bx: 
     }
 }
 
-pub unsafe extern "system" fn update_subresource1(this: P, dst: P, sub: u32, bx: *const [u32; 6], data: *const u8, pitch: u32, dp: u32, _: u32) {
+pub unsafe extern "system" fn update_subresource1(
+    this: P,
+    dst: P,
+    sub: u32,
+    bx: *const [u32; 6],
+    data: *const u8,
+    pitch: u32,
+    dp: u32,
+    _: u32,
+) {
     // SAFETY: the caller's arguments.
     unsafe { update_subresource(this, dst, sub, bx, data, pitch, dp) }
 }
 
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "system" fn copy_subresource_region1(this: P, dst: P, ds: u32, dx: u32, dy: u32, dz: u32, src: P, ss: u32, bx: *const [u32; 6], _: u32) {
+pub unsafe extern "system" fn copy_subresource_region1(
+    this: P,
+    dst: P,
+    ds: u32,
+    dx: u32,
+    dy: u32,
+    dz: u32,
+    src: P,
+    ss: u32,
+    bx: *const [u32; 6],
+    _: u32,
+) {
     // SAFETY: the caller's arguments.
     unsafe { copy_subresource_region(this, dst, ds, dx, dy, dz, src, ss, bx) }
 }
@@ -868,7 +955,8 @@ pub unsafe extern "system" fn generate_mips(_: P, srv: P) {
                     for c in 0..4 {
                         let mut sum = 0.0f64;
                         let mut n = 0.0;
-                        for (sy, sx) in [(2 * y, 2 * x), (2 * y, 2 * x + 1), (2 * y + 1, 2 * x), (2 * y + 1, 2 * x + 1)] {
+                        for (sy, sx) in [(2 * y, 2 * x), (2 * y, 2 * x + 1), (2 * y + 1, 2 * x), (2 * y + 1, 2 * x + 1)]
+                        {
                             if sy < ss.height as usize && sx < ss.width as usize {
                                 let b = bytes[ss.offset + sy * ss.pitch + sx * 4 + c];
                                 sum += if srgb && c != 3 { clear::srgb_to_linear(b) } else { b as f64 / 255.0 };
@@ -876,7 +964,8 @@ pub unsafe extern "system" fn generate_mips(_: P, srv: P) {
                             }
                         }
                         let avg = (sum / n) as f32;
-                        out[y * ds.pitch + x * 4 + c] = if srgb && c != 3 { clear::srgb8(avg) } else { clear::unorm8(avg) };
+                        out[y * ds.pitch + x * 4 + c] =
+                            if srgb && c != 3 { clear::srgb8(avg) } else { clear::unorm8(avg) };
                     }
                 }
             }

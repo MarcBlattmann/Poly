@@ -29,7 +29,6 @@ use poly_win32_rt as _;
 
 poly_win32_rt::process_heap_allocator!();
 
-
 /// `D3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels,
 /// SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext)`: a device of the first level asked
 /// for that is 11_0 or lower (all of them when none is asked for).
@@ -80,7 +79,8 @@ pub unsafe extern "system" fn D3D11CreateDevice(
         // Learn: only the feature level was asked for.
         return S_FALSE;
     }
-    let dev = device::new(flags, level, if driver_type == create::driver::UNKNOWN { adapter } else { core::ptr::null_mut() });
+    let dev =
+        device::new(flags, level, if driver_type == create::driver::UNKNOWN { adapter } else { core::ptr::null_mut() });
     // SAFETY: a new device; the caller's optional outputs.
     unsafe {
         if !out_context.is_null() {

@@ -136,7 +136,9 @@ unsafe fn make_view(
     let Some(t) = (unsafe { texture::res(res) }) else { return E_INVALIDARG };
     let r = texture::view_res(t);
     let done = match kind {
-        ViewKind::Rtv => view::rtv(&r, desc.map(|d| [d[0], d[1], d[2], d[3], d[4]])).map(|d| [d[0], d[1], d[2], d[3], d[4], 0]),
+        ViewKind::Rtv => {
+            view::rtv(&r, desc.map(|d| [d[0], d[1], d[2], d[3], d[4]])).map(|d| [d[0], d[1], d[2], d[3], d[4], 0])
+        }
         ViewKind::Srv => view::srv(&r, desc),
         ViewKind::Dsv => view::dsv(&r, desc),
         ViewKind::Uav => uav(&r, desc),
@@ -189,22 +191,42 @@ unsafe fn desc_words<const N: usize>(p: *const u32) -> Option<[u32; 6]> {
     Some(w)
 }
 
-pub unsafe extern "system" fn create_rtv(this: *mut c_void, res: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_rtv(
+    this: *mut c_void,
+    res: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { make_view(this, res, ViewKind::Rtv, desc_words::<5>(desc), out) }
 }
 
-pub unsafe extern "system" fn create_srv(this: *mut c_void, res: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_srv(
+    this: *mut c_void,
+    res: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { make_view(this, res, ViewKind::Srv, desc_words::<6>(desc), out) }
 }
 
-pub unsafe extern "system" fn create_dsv(this: *mut c_void, res: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_dsv(
+    this: *mut c_void,
+    res: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { make_view(this, res, ViewKind::Dsv, desc_words::<6>(desc), out) }
 }
 
-pub unsafe extern "system" fn create_uav(this: *mut c_void, res: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_uav(
+    this: *mut c_void,
+    res: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { make_view(this, res, ViewKind::Uav, desc_words::<5>(desc), out) }
 }
@@ -345,7 +367,12 @@ unsafe fn state(this: *mut c_void, kind: StateKind, words: &[u32], out: *mut *mu
         };
         // SAFETY: a live device.
         unsafe { add_ref(this) };
-        let p = into_raw(StateObj { obj: Obj::new(STATE_VTBL.ptr(), iids, drop_state, name), kind, words: words.to_vec(), device: this });
+        let p = into_raw(StateObj {
+            obj: Obj::new(STATE_VTBL.ptr(), iids, drop_state, name),
+            kind,
+            words: words.to_vec(),
+            device: this,
+        });
         cache.push((kind, words.to_vec(), p as usize));
         // SAFETY: the caller's output.
         unsafe { *out = p };
@@ -418,7 +445,11 @@ unsafe fn read<const N: usize>(p: *const u32) -> Option<[u32; N]> {
     Some(w)
 }
 
-pub unsafe extern "system" fn create_blend_state(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_blend_state(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's output and description.
     unsafe { null_out(out) };
     let Some(d) = (unsafe { read::<66>(desc) }) else { return E_INVALIDARG };
@@ -429,7 +460,11 @@ pub unsafe extern "system" fn create_blend_state(this: *mut c_void, desc: *const
     }
 }
 
-pub unsafe extern "system" fn create_blend_state1(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_blend_state1(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's output and description.
     unsafe { null_out(out) };
     let Some(d) = (unsafe { read::<82>(desc) }) else { return E_INVALIDARG };
@@ -440,7 +475,11 @@ pub unsafe extern "system" fn create_blend_state1(this: *mut c_void, desc: *cons
     }
 }
 
-pub unsafe extern "system" fn create_depth_stencil_state(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_depth_stencil_state(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's output and description.
     unsafe { null_out(out) };
     let Some(d) = (unsafe { read::<13>(desc) }) else { return E_INVALIDARG };
@@ -464,22 +503,38 @@ unsafe fn raster_n<const N: usize>(this: *mut c_void, desc: *const u32, out: *mu
     }
 }
 
-pub unsafe extern "system" fn create_rasterizer_state(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_rasterizer_state(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { raster_n::<10>(this, desc, out) }
 }
 
-pub unsafe extern "system" fn create_rasterizer_state1(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_rasterizer_state1(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { raster_n::<11>(this, desc, out) }
 }
 
-pub unsafe extern "system" fn create_rasterizer_state2(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_rasterizer_state2(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's arguments.
     unsafe { raster_n::<12>(this, desc, out) }
 }
 
-pub unsafe extern "system" fn create_sampler_state(this: *mut c_void, desc: *const u32, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn create_sampler_state(
+    this: *mut c_void,
+    desc: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's output and description.
     unsafe { null_out(out) };
     let Some(d) = (unsafe { read::<13>(desc) }) else { return E_INVALIDARG };
@@ -583,7 +638,18 @@ pub unsafe extern "system" fn check_counter_info(_: *mut c_void, out: *mut [u32;
     unsafe { put(out, [0, 0, 1]) };
 }
 
-pub unsafe extern "system" fn check_counter(_: *mut c_void, _: *const u32, _: *mut u32, _: *mut u32, _: *mut u8, _: *mut u32, _: *mut u8, _: *mut u32, _: *mut u8, _: *mut u32) -> HRESULT {
+pub unsafe extern "system" fn check_counter(
+    _: *mut c_void,
+    _: *const u32,
+    _: *mut u32,
+    _: *mut u32,
+    _: *mut u8,
+    _: *mut u32,
+    _: *mut u8,
+    _: *mut u32,
+    _: *mut u8,
+    _: *mut u32,
+) -> HRESULT {
     E_INVALIDARG
 }
 
@@ -634,7 +700,12 @@ pub unsafe extern "system" fn check_format_support(this: *mut c_void, f: u32, ou
 
 /// `CheckMultisampleQualityLevels(Format, SampleCount, pNumQualityLevels)`
 /// (ID3D11Device.CheckMultisampleQualityLevels.yaml).
-pub unsafe extern "system" fn check_multisample_quality_levels(this: *mut c_void, f: u32, count: u32, out: *mut u32) -> HRESULT {
+pub unsafe extern "system" fn check_multisample_quality_levels(
+    this: *mut c_void,
+    f: u32,
+    count: u32,
+    out: *mut u32,
+) -> HRESULT {
     // SAFETY: a live device.
     let level = unsafe { device_of(this) }.level;
     let mask = format::support_mask(f, level);
@@ -661,7 +732,12 @@ pub unsafe extern "system" fn check_multisample_quality_levels(this: *mut c_void
 
 /// `CheckFeatureSupport(Feature, pFeatureSupportData, FeatureSupportDataSize)`
 /// (ID3D11Device.CheckFeatureSupport.yaml): the data of a WARP device of the device's level.
-pub unsafe extern "system" fn check_feature_support(this: *mut c_void, feature: u32, data: *mut u8, size: u32) -> HRESULT {
+pub unsafe extern "system" fn check_feature_support(
+    this: *mut c_void,
+    feature: u32,
+    data: *mut u8,
+    size: u32,
+) -> HRESULT {
     // SAFETY: a live device.
     let level = unsafe { device_of(this) }.level;
     let need: &[u32] = match feature {
@@ -710,7 +786,16 @@ pub unsafe extern "system" fn check_feature_support(this: *mut c_void, feature: 
         7 | 9 | 11 | 12 | 15 | 17 => words(buf, &[1]),
         8 => words(buf, &[3, 3]),
         // D3D11_OPTIONS1: tiled resources tier, min/max filtering, clear view, map on default.
-        10 => words(buf, &if l111 { [2, 1, 1, 1] } else if low { [0, 1, 1, 0] } else { [1, 1, 1, 1] }),
+        10 => words(
+            buf,
+            &if l111 {
+                [2, 1, 1, 1]
+            } else if low {
+                [0, 1, 1, 0]
+            } else {
+                [1, 1, 1, 1]
+            },
+        ),
         13 => words(buf, &[1, 1, 1, 1]),
         // D3D11_OPTIONS2 (ID3D11Device.CheckFeatureSupport.yaml `levels`).
         14 => {
@@ -759,7 +844,12 @@ pub fn removed(d: &Device) -> bool {
 }
 
 /// A new resource of this device over `store`, as interface `riid`.
-unsafe fn open_store(this: *mut c_void, store: alloc::sync::Arc<texture::Store>, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+unsafe fn open_store(
+    this: *mut c_void,
+    store: alloc::sync::Arc<texture::Store>,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     let Some(kind) = texture::kind_of_store(&store) else { return E_INVALIDARG };
     // SAFETY: a live device; a new object over the shared storage.
     let p = unsafe { texture::make(this, kind, Some(store)) };
@@ -772,7 +862,12 @@ unsafe fn open_store(this: *mut c_void, store: alloc::sync::Arc<texture::Store>,
 
 /// `OpenSharedResource1(hResource, returnedInterface, ppResource)`: an NT handle of
 /// `CreateSharedHandle`; a legacy handle, a closed or foreign handle: E_INVALIDARG.
-pub unsafe extern "system" fn open_shared_resource1(this: *mut c_void, handle: usize, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn open_shared_resource1(
+    this: *mut c_void,
+    handle: usize,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's output.
     unsafe { null_out(out) };
     match texture::nt_share(handle) {

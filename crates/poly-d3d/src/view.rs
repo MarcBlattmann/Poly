@@ -270,7 +270,19 @@ mod tests {
     use super::*;
 
     fn tex(format: u32, mips: u32, array: u32, samples: u32, bind: u32, misc: u32) -> Res {
-        Res::Tex2d(Tex2dDesc { width: 16, height: 16, mips, array, format, samples, quality: 0, usage: 0, bind, cpu: 0, misc })
+        Res::Tex2d(Tex2dDesc {
+            width: 16,
+            height: 16,
+            mips,
+            array,
+            format,
+            samples,
+            quality: 0,
+            usage: 0,
+            bind,
+            cpu: 0,
+            misc,
+        })
     }
 
     #[test]

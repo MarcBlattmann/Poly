@@ -222,7 +222,8 @@ fn guid_bytes(g: &Guid) -> [u8; 16] {
 unsafe fn com_add_ref(p: *mut c_void) -> u32 {
     // SAFETY: a live COM object: AddRef is entry 1.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(1));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(1));
         f(p)
     }
 }
@@ -230,7 +231,8 @@ unsafe fn com_add_ref(p: *mut c_void) -> u32 {
 unsafe fn com_release(p: *mut c_void) -> u32 {
     // SAFETY: a live COM object: Release is entry 2.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(2));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(2));
         f(p)
     }
 }
@@ -243,13 +245,19 @@ fn store<'a>(this: *mut c_void) -> &'a mut poly_d3d::privdata::Store {
     unsafe { &mut *obj(this).private.get() }
 }
 
-unsafe extern "system" fn set_private_data(this: *mut c_void, guid: *const Guid, size: u32, data: *const c_void) -> HRESULT {
+unsafe extern "system" fn set_private_data(
+    this: *mut c_void,
+    guid: *const Guid,
+    size: u32,
+    data: *const c_void,
+) -> HRESULT {
     if guid.is_null() {
         return E_INVALIDARG;
     }
     // SAFETY: the caller's GUID and `size` bytes.
     let (g, bytes) = unsafe {
-        let bytes = if data.is_null() { None } else { Some(core::slice::from_raw_parts(data as *const u8, size as usize)) };
+        let bytes =
+            if data.is_null() { None } else { Some(core::slice::from_raw_parts(data as *const u8, size as usize)) };
         (guid_bytes(&*guid), bytes)
     };
     let (hr, old) = store(this).set(g, bytes, size);
@@ -277,7 +285,12 @@ unsafe extern "system" fn set_private_data_interface(this: *mut c_void, guid: *c
     S_OK
 }
 
-unsafe extern "system" fn get_private_data(this: *mut c_void, guid: *const Guid, size: *mut u32, data: *mut c_void) -> HRESULT {
+unsafe extern "system" fn get_private_data(
+    this: *mut c_void,
+    guid: *const Guid,
+    size: *mut u32,
+    data: *mut c_void,
+) -> HRESULT {
     use poly_d3d::privdata::Got;
     if guid.is_null() || size.is_null() {
         return E_INVALIDARG;
@@ -447,7 +460,12 @@ unsafe fn adapter_as(this: *mut c_void, warp: bool, riid: *const Guid, out: *mut
 }
 
 /// `EnumAdapterByLuid(AdapterLuid, riid, ppvAdapter)`: the one adapter has the one LUID.
-unsafe extern "system" fn enum_adapter_by_luid(this: *mut c_void, luid: u64, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn enum_adapter_by_luid(
+    this: *mut c_void,
+    luid: u64,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if luid != ADAPTER_LUID {
         if !out.is_null() {
             // SAFETY: the caller's output.
@@ -671,7 +689,8 @@ struct AdapterVtbl {
     get_desc3: unsafe extern "system" fn(*mut c_void, *mut u8) -> HRESULT,
 }
 
-static ADAPTER_IIDS: [Guid; 5] = [IID_IDXGIADAPTER, IID_IDXGIADAPTER1, IID_IDXGIADAPTER2, IID_IDXGIADAPTER3, IID_IDXGIADAPTER4];
+static ADAPTER_IIDS: [Guid; 5] =
+    [IID_IDXGIADAPTER, IID_IDXGIADAPTER1, IID_IDXGIADAPTER2, IID_IDXGIADAPTER3, IID_IDXGIADAPTER4];
 
 static ADAPTER_VTBL: AdapterVtbl = AdapterVtbl {
     query_interface,
@@ -713,7 +732,12 @@ unsafe extern "system" fn adapter_desc2(_: *mut c_void, desc: *mut u8) -> HRESUL
 
 /// `QueryVideoMemoryInfo(NodeIndex, MemorySegmentGroup, pVideoMemoryInfo)`: node 0 only; the local
 /// group has a budget, the non-local none (IDXGIAdapter3.QueryVideoMemoryInfo.yaml).
-unsafe extern "system" fn query_video_memory_info(_: *mut c_void, node: u32, group: u32, out: *mut [u64; 4]) -> HRESULT {
+unsafe extern "system" fn query_video_memory_info(
+    _: *mut c_void,
+    node: u32,
+    group: u32,
+    out: *mut [u64; 4],
+) -> HRESULT {
     if node != 0 || group > 1 || out.is_null() {
         return E_INVALIDARG;
     }
@@ -831,7 +855,8 @@ struct OutputVtbl {
     duplicate_output: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> HRESULT,
     supports_overlays: unsafe extern "system" fn(*mut c_void) -> i32,
     check_overlay_support: unsafe extern "system" fn(*mut c_void, u32, *mut c_void, *mut u32) -> HRESULT,
-    check_overlay_color_space_support: unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, *mut u32) -> HRESULT,
+    check_overlay_color_space_support:
+        unsafe extern "system" fn(*mut c_void, u32, u32, *mut c_void, *mut u32) -> HRESULT,
     duplicate_output1:
         unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *const u32, *mut *mut c_void) -> HRESULT,
     get_desc1: unsafe extern "system" fn(*mut c_void, *mut u8) -> HRESULT,
@@ -856,7 +881,14 @@ unsafe extern "system" fn no_duplicate(_: *mut c_void, _: *mut c_void, out: *mut
     DXGI_ERROR_UNSUPPORTED
 }
 
-unsafe extern "system" fn no_duplicate1(_: *mut c_void, _: *mut c_void, _: u32, _: u32, _: *const u32, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn no_duplicate1(
+    _: *mut c_void,
+    _: *mut c_void,
+    _: u32,
+    _: u32,
+    _: *const u32,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: as above.
     unsafe { no_duplicate(core::ptr::null_mut(), core::ptr::null_mut(), out) }
 }
@@ -873,7 +905,13 @@ unsafe extern "system" fn overlay_support(_: *mut c_void, _: u32, _: *mut c_void
     S_OK
 }
 
-unsafe extern "system" fn overlay_color_space_support(_: *mut c_void, _: u32, _: u32, _: *mut c_void, out: *mut u32) -> HRESULT {
+unsafe extern "system" fn overlay_color_space_support(
+    _: *mut c_void,
+    _: u32,
+    _: u32,
+    _: *mut c_void,
+    out: *mut u32,
+) -> HRESULT {
     // SAFETY: as above.
     unsafe { overlay_support(core::ptr::null_mut(), 0, core::ptr::null_mut(), out) }
 }
@@ -999,7 +1037,8 @@ unsafe fn create_factory_with(riid: *const Guid, out: *mut *mut c_void, flags: u
     if out.is_null() {
         return E_POINTER;
     }
-    let f = new_obj_with(&FACTORY_VTBL as *const FactoryVtbl as *const c_void, &FACTORY_IIDS, core::ptr::null_mut(), flags);
+    let f =
+        new_obj_with(&FACTORY_VTBL as *const FactoryVtbl as *const c_void, &FACTORY_IIDS, core::ptr::null_mut(), flags);
     // SAFETY: a new object; the caller's output pointer.
     let hr = unsafe { query_interface(f, riid, out) };
     // SAFETY: the creation reference.

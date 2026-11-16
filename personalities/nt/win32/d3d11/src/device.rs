@@ -140,7 +140,8 @@ unsafe extern "system" fn ctx_part_release(this: *mut c_void) -> u32 {
 unsafe fn device_more(p: *mut c_void, iid: &Guid) -> *mut c_void {
     // SAFETY: a live device.
     let d = unsafe { &mut *(p as *mut Device) };
-    let dxgi = [IID_IDXGIOBJECT, IID_IDXGIDEVICE, IID_IDXGIDEVICE1, IID_IDXGIDEVICE2, IID_IDXGIDEVICE3, IID_IDXGIDEVICE4];
+    let dxgi =
+        [IID_IDXGIOBJECT, IID_IDXGIDEVICE, IID_IDXGIDEVICE1, IID_IDXGIDEVICE2, IID_IDXGIDEVICE3, IID_IDXGIDEVICE4];
     let part = if dxgi.contains(iid) {
         &mut d.dxgi as *mut Part
     } else if *iid == IID_IUNKNOWN {

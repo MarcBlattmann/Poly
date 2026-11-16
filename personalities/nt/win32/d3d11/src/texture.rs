@@ -281,11 +281,12 @@ pub unsafe fn make(device: *mut c_void, kind: Kind, store: Option<Arc<Store>>) -
     let mut obj = Obj::new(vtbl, iids, drop_tex, name);
     obj.more = Some(tex_more);
     let store = store.unwrap_or_else(|| Store::new(len, kind));
-    let shared = if shared_misc & (misc::SHARED | misc::SHARED_KEYEDMUTEX) != 0 && shared_misc & misc::SHARED_NTHANDLE == 0 {
-        Arc::as_ptr(&store) as usize
-    } else {
-        0
-    };
+    let shared =
+        if shared_misc & (misc::SHARED | misc::SHARED_KEYEDMUTEX) != 0 && shared_misc & misc::SHARED_NTHANDLE == 0 {
+            Arc::as_ptr(&store) as usize
+        } else {
+            0
+        };
     let p = into_raw(Tex {
         obj,
         resource: Part { vtbl: RESOURCE_VTBL.ptr(), owner: core::ptr::null_mut() },
@@ -714,7 +715,8 @@ pub struct View {
     device: *mut c_void,
 }
 
-static RTV_IIDS: [Guid; 4] = [IID_ID3D11RENDERTARGETVIEW, IID_ID3D11RENDERTARGETVIEW1, IID_ID3D11VIEW, IID_ID3D11DEVICECHILD];
+static RTV_IIDS: [Guid; 4] =
+    [IID_ID3D11RENDERTARGETVIEW, IID_ID3D11RENDERTARGETVIEW1, IID_ID3D11VIEW, IID_ID3D11DEVICECHILD];
 static SRV_IIDS: [Guid; 4] =
     [IID_ID3D11SHADERRESOURCEVIEW, IID_ID3D11SHADERRESOURCEVIEW1, IID_ID3D11VIEW, IID_ID3D11DEVICECHILD];
 static DSV_IIDS: [Guid; 3] = [IID_ID3D11DEPTHSTENCILVIEW, IID_ID3D11VIEW, IID_ID3D11DEVICECHILD];
@@ -853,7 +855,18 @@ pub fn view_res(t: &Tex) -> view::Res {
 /// Copy the rectangle `(sx, sy, w, h)` of subresource `ss` of `src` to `(dx, dy)` of subresource
 /// `ds` of `dst`; nothing when the texel sizes differ (CopyResource.yaml `format_mismatch`).
 #[allow(clippy::too_many_arguments)]
-pub fn copy_region(dst: &Tex, ds: u32, dx: usize, dy: usize, src: &Tex, ss: u32, sx: usize, sy: usize, w: usize, h: usize) {
+pub fn copy_region(
+    dst: &Tex,
+    ds: u32,
+    dx: usize,
+    dy: usize,
+    src: &Tex,
+    ss: u32,
+    sx: usize,
+    sy: usize,
+    w: usize,
+    h: usize,
+) {
     let (Some(d), Some(s)) = (dst.sub(ds), src.sub(ss)) else { return };
     if dst.is_buffer() || src.is_buffer() {
         // Bytes: x is a byte offset.
@@ -943,7 +956,13 @@ unsafe fn wide(p: *const u16) -> Vec<u16> {
 
 /// `CreateSharedHandle(pAttributes, dwAccess, lpName, pHandle)`: only a resource made with
 /// SHARED_NTHANDLE has one; a name already in use is DXGI_ERROR_NAME_ALREADY_EXISTS.
-pub unsafe extern "system" fn create_shared_handle(this: *mut c_void, attrs: *const c_void, access: u32, name: *const u16, out: *mut usize) -> HRESULT {
+pub unsafe extern "system" fn create_shared_handle(
+    this: *mut c_void,
+    attrs: *const c_void,
+    access: u32,
+    name: *const u16,
+    out: *mut usize,
+) -> HRESULT {
     // SAFETY: a live resource.
     let t = unsafe { part_tex(this) };
     let m = match &t.kind {
@@ -962,7 +981,9 @@ pub unsafe extern "system" fn create_shared_handle(this: *mut c_void, attrs: *co
     let n = unsafe { wide(name) };
     let mut z = n.clone();
     z.push(0);
-    let h = unsafe { CreateEventW(attrs, 1, 0, if name.is_null() || n.is_empty() { core::ptr::null() } else { z.as_ptr() }) };
+    let h = unsafe {
+        CreateEventW(attrs, 1, 0, if name.is_null() || n.is_empty() { core::ptr::null() } else { z.as_ptr() })
+    };
     if h == 0 {
         return E_FAIL;
     }

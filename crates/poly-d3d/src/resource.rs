@@ -75,7 +75,8 @@ pub fn check_buffer(d: &BufferDesc, data: Option<bool>) -> Result<BufferDesc, HR
     }
     let shader = SHADER_RESOURCE | UNORDERED_ACCESS;
     if d.bind & CONSTANT_BUFFER != 0
-        && (d.byte_width % 16 != 0 || d.bind & (VERTEX_BUFFER | INDEX_BUFFER | shader | STREAM_OUTPUT | RENDER_TARGET) != 0)
+        && (!d.byte_width.is_multiple_of(16)
+            || d.bind & (VERTEX_BUFFER | INDEX_BUFFER | shader | STREAM_OUTPUT | RENDER_TARGET) != 0)
     {
         return bad;
     }
@@ -111,13 +112,15 @@ pub fn check_buffer(d: &BufferDesc, data: Option<bool>) -> Result<BufferDesc, HR
         | misc::GUARDED
         | misc::TILED
         | 0x10_0000;
-    if d.misc & !known != 0 || d.misc & (misc::SHARED | misc::SHARED_KEYEDMUTEX) == misc::SHARED | misc::SHARED_KEYEDMUTEX {
+    if d.misc & !known != 0
+        || d.misc & (misc::SHARED | misc::SHARED_KEYEDMUTEX) == misc::SHARED | misc::SHARED_KEYEDMUTEX
+    {
         return bad;
     }
     let structured = d.misc & misc::BUFFER_STRUCTURED != 0;
     let raw = d.misc & misc::BUFFER_ALLOW_RAW_VIEWS != 0;
     if structured {
-        if d.stride == 0 || d.stride > 2048 || d.byte_width % d.stride != 0 {
+        if d.stride == 0 || d.stride > 2048 || !d.byte_width.is_multiple_of(d.stride) {
             return bad;
         }
         if d.bind & (VERTEX_BUFFER | INDEX_BUFFER | CONSTANT_BUFFER | RENDER_TARGET | STREAM_OUTPUT) != 0 {
@@ -127,7 +130,9 @@ pub fn check_buffer(d: &BufferDesc, data: Option<bool>) -> Result<BufferDesc, HR
     if raw && (structured || d.bind & shader == 0 || d.usage == usage::STAGING) {
         return bad;
     }
-    if d.misc & misc::DRAWINDIRECT_ARGS != 0 && (structured || d.usage == usage::STAGING || d.byte_width % 4 != 0) {
+    if d.misc & misc::DRAWINDIRECT_ARGS != 0
+        && (structured || d.usage == usage::STAGING || !d.byte_width.is_multiple_of(4))
+    {
         return bad;
     }
     Ok(BufferDesc { stride: if structured { d.stride } else { 0 }, ..*d })
@@ -267,15 +272,23 @@ pub fn check_tex2d(d: &Tex2dDesc, data: Option<bool>) -> Result<Tex2dDesc, HRESU
 fn check_tex_misc(d: &Tex2dDesc) -> Result<(), HRESULT> {
     use misc::*;
     let bad = Err(E_INVALIDARG);
-    let known =
-        GENERATE_MIPS | SHARED | TEXTURECUBE | SHARED_KEYEDMUTEX | GDI_COMPATIBLE | SHARED_NTHANDLE | RESTRICTED_CONTENT | RESTRICT_SHARED_RESOURCE;
+    let known = GENERATE_MIPS
+        | SHARED
+        | TEXTURECUBE
+        | SHARED_KEYEDMUTEX
+        | GDI_COMPATIBLE
+        | SHARED_NTHANDLE
+        | RESTRICTED_CONTENT
+        | RESTRICT_SHARED_RESOURCE;
     if d.misc & !known != 0 {
         return bad;
     }
-    if d.misc & GENERATE_MIPS != 0 && d.bind & (bind::RENDER_TARGET | bind::SHADER_RESOURCE) != bind::RENDER_TARGET | bind::SHADER_RESOURCE {
+    if d.misc & GENERATE_MIPS != 0
+        && d.bind & (bind::RENDER_TARGET | bind::SHADER_RESOURCE) != bind::RENDER_TARGET | bind::SHADER_RESOURCE
+    {
         return bad;
     }
-    if d.misc & TEXTURECUBE != 0 && (d.array % 6 != 0 || d.bind & bind::SHADER_RESOURCE == 0) {
+    if d.misc & TEXTURECUBE != 0 && (!d.array.is_multiple_of(6) || d.bind & bind::SHADER_RESOURCE == 0) {
         return bad;
     }
     let shared = d.misc & (SHARED | SHARED_KEYEDMUTEX | SHARED_NTHANDLE);
@@ -328,7 +341,9 @@ mod tests {
         assert_eq!(buf(64, 0, VERTEX_BUFFER, cpu::WRITE, 0, 0), Err(E_INVALIDARG));
         assert!(buf(64, 0, SHADER_RESOURCE, cpu::WRITE, 0, 0).is_ok());
         assert_eq!(buf(64, usage::IMMUTABLE, VERTEX_BUFFER, 0, 0, 0), Err(E_INVALIDARG));
-        assert!(check_buffer(&BufferDesc { byte_width: 64, usage: 1, bind: 1, ..Default::default() }, Some(true)).is_ok());
+        assert!(
+            check_buffer(&BufferDesc { byte_width: 64, usage: 1, bind: 1, ..Default::default() }, Some(true)).is_ok()
+        );
         assert!(buf(64, usage::DYNAMIC, VERTEX_BUFFER, cpu::WRITE, 0, 0).is_ok());
         assert_eq!(buf(64, usage::DYNAMIC, VERTEX_BUFFER, cpu::READ | cpu::WRITE, 0, 0), Err(E_INVALIDARG));
         assert_eq!(buf(64, usage::DYNAMIC, UNORDERED_ACCESS, cpu::WRITE, 0, 0), Err(E_INVALIDARG));
@@ -358,7 +373,19 @@ mod tests {
 
     fn tex(format: u32, usage: u32, bind: u32, cpu: u32, misc: u32) -> Result<Tex2dDesc, HRESULT> {
         check_tex2d(
-            &Tex2dDesc { width: 64, height: 32, mips: 1, array: 1, format, samples: 1, quality: 0, usage, bind, cpu, misc },
+            &Tex2dDesc {
+                width: 64,
+                height: 32,
+                mips: 1,
+                array: 1,
+                format,
+                samples: 1,
+                quality: 0,
+                usage,
+                bind,
+                cpu,
+                misc,
+            },
             None,
         )
     }
@@ -366,7 +393,19 @@ mod tests {
     #[test]
     fn texture_mips_and_sizes() {
         let t = |w, h, mips| {
-            check_tex2d(&Tex2dDesc { width: w, height: h, mips, array: 1, format: 87, samples: 1, bind: 8, ..Default::default() }, None)
+            check_tex2d(
+                &Tex2dDesc {
+                    width: w,
+                    height: h,
+                    mips,
+                    array: 1,
+                    format: 87,
+                    samples: 1,
+                    bind: 8,
+                    ..Default::default()
+                },
+                None,
+            )
         };
         assert_eq!(t(64, 64, 0).unwrap().mips, 7);
         assert_eq!(t(100, 30, 0).unwrap().mips, 7);

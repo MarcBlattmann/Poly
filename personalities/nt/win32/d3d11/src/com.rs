@@ -246,7 +246,8 @@ pub unsafe fn drop_obj(this: *mut c_void) {
 pub unsafe fn com_add_ref(p: *mut c_void) -> u32 {
     // SAFETY: a live COM object: AddRef is entry 1.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(1));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(1));
         f(p)
     }
 }
@@ -254,7 +255,8 @@ pub unsafe fn com_add_ref(p: *mut c_void) -> u32 {
 pub unsafe fn com_release(p: *mut c_void) -> u32 {
     // SAFETY: a live COM object: Release is entry 2.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(2));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(2));
         f(p)
     }
 }
@@ -370,7 +372,8 @@ pub unsafe extern "system" fn set_private_data(
     }
     // SAFETY: the caller's GUID and `size` bytes of data.
     let (g, bytes) = unsafe {
-        let bytes = if data.is_null() { None } else { Some(core::slice::from_raw_parts(data as *const u8, size as usize)) };
+        let bytes =
+            if data.is_null() { None } else { Some(core::slice::from_raw_parts(data as *const u8, size as usize)) };
         (guid_bytes(&*guid), bytes)
     };
     // SAFETY: an object of this DLL.
@@ -383,7 +386,11 @@ pub unsafe extern "system" fn set_private_data(
 }
 
 /// `SetPrivateDataInterface(guid, pUnknown)`: the object holds a reference to it.
-pub unsafe extern "system" fn set_private_data_interface(this: *mut c_void, guid: *const Guid, p: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn set_private_data_interface(
+    this: *mut c_void,
+    guid: *const Guid,
+    p: *mut c_void,
+) -> HRESULT {
     if guid.is_null() {
         return E_INVALIDARG;
     }
@@ -422,7 +429,11 @@ pub unsafe extern "system" fn part_set_private_data(
     unsafe { set_private_data(part_owner(this), g, size, data) }
 }
 
-pub unsafe extern "system" fn part_set_private_data_interface(this: *mut c_void, g: *const Guid, p: *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn part_set_private_data_interface(
+    this: *mut c_void,
+    g: *const Guid,
+    p: *mut c_void,
+) -> HRESULT {
     // SAFETY: a part of a live object.
     unsafe { set_private_data_interface(part_owner(this), g, p) }
 }

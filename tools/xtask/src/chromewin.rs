@@ -1250,10 +1250,21 @@ pub const S5_REQUIRED: bool = false;
 /// loads), and at about 125 s the green page at (200, 400).
 const S5_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000";
 
-/// How many GPU processes a run's log shows: `d3d11.dll` says once per process which kind of
-/// process loaded it (ADR 0211).
+/// How many rendering GPU processes a run's log shows: `d3d11.dll` says once per process which
+/// kind of process loaded it and the names of its switches (ADR 0211). A `gpu-process` started
+/// with the GPU's identity on its command line (`--gpu-vendor-id`, observed on Poly with
+/// `--disable-gpu-sandbox --use-gl`) is Chrome's GPU-information process, which runs once beside
+/// the rendering one; it is counted by [`gpu_info_processes`].
 pub fn gpu_processes(log: &str) -> usize {
-    log.lines().filter(|l| l.contains("d3d11: loaded (process type gpu-process)")).count()
+    gpu_lines(log).filter(|l| !l.contains("gpu-vendor-id")).count()
+}
+
+pub fn gpu_info_processes(log: &str) -> usize {
+    gpu_lines(log).filter(|l| l.contains("gpu-vendor-id")).count()
+}
+
+fn gpu_lines(log: &str) -> impl Iterator<Item = &str> {
+    log.lines().filter(|l| l.contains("d3d11: loaded (process type gpu-process)"))
 }
 
 /// The S5 checks: stage 5 (headless, default GPU flags) must print stage 1's DOM; the window run
@@ -1266,7 +1277,15 @@ fn stage5(kernel: &Path) -> Result {
     let outcome = boot_stage(
         kernel,
         st,
-        &Options { trace: false, exceptions: None, waits: None, fresh: false, timeout: 600, rest: Vec::new(), kit: None },
+        &Options {
+            trace: false,
+            exceptions: None,
+            waits: None,
+            fresh: false,
+            timeout: 600,
+            rest: Vec::new(),
+            kit: None,
+        },
     )?;
     outcome.report(st);
     let headless = outcome.passed;
@@ -1282,12 +1301,14 @@ fn stage5(kernel: &Path) -> Result {
             "--no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
         );
         let log = crate::root().join("target/win-app/s5-boot/chrome.serial.log");
-        let (text, stopped) = crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S5_STEPS, &log)?;
+        let (text, stopped) =
+            crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S5_STEPS, &log)?;
         let gpus = gpu_processes(&text);
+        let info = gpu_info_processes(&text);
         let exceptions = text.lines().filter(|l| l.contains("nt-exc:")).count();
         let ok = stopped.is_none() && gpus == 1 && exceptions == 0;
         println!(
-            "STAGE 5 WINDOW {}: {gpus} GPU process(es), {exceptions} exception(s){}",
+            "STAGE 5 WINDOW {}: {gpus} rendering GPU process(es), {info} GPU-information process(es), {exceptions} exception(s){}",
             if ok { "PASSED" } else { "DID NOT PASS" },
             stopped.map(|s| format!(", {s}")).unwrap_or_default()
         );
@@ -1413,9 +1434,11 @@ fn crate_steps_parse() -> bool {
 mod tests {
     #[test]
     fn gpu_processes_are_counted_by_the_d3d11_load_line() {
-        let log = "nt: pid 9: d3d11: loaded (process type gpu-process)\nnt: pid 4: d3d11: loaded (process type main)\n\
-                   nt: pid 12: d3d11: loaded (process type gpu-process)\n";
-        assert_eq!(super::gpu_processes(log), 2);
+        let log = "nt: pid 9: d3d11: loaded (process type gpu-process) switches no-sandbox,gpu-preferences\n\
+                   nt: pid 4: d3d11: loaded (process type main) switches no-sandbox\n\
+                   nt: pid 12: d3d11: loaded (process type gpu-process) switches disable-gpu-sandbox,use-gl,gpu-vendor-id\n";
+        assert_eq!(super::gpu_processes(log), 1);
+        assert_eq!(super::gpu_info_processes(log), 1);
         assert!(crate::winapps::steps_parse(super::S5_STEPS));
         let s5 = super::STAGES.iter().find(|s| s.number == 5).unwrap();
         assert!(!s5.args.contains(&"--disable-gpu") && s5.args.contains(&"--headless"));
