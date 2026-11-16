@@ -190,6 +190,10 @@ impl Backend for MemBackend<'_> {
         self.memory.read(addr, buf).map_err(|_| poly_ntobj::status::STATUS_ACCESS_VIOLATION)
     }
 
+    fn page_written(&mut self, addr: u64) -> bool {
+        self.memory.page_written(addr)
+    }
+
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
         let page_source: Arc<dyn PageSource> = match source {
             SectionSource::Pagefile { size, .. } => Arc::new(AnonShared::new(*size)),

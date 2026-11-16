@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "locinfo_c_locale",
+      "exe_sha256": "d725e55e0017e4bec2720665897c954e1138214b6cf4da7b7b2012419d08feba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKF9Mb2NpbmZvKSAxMDQKb2sgdGhlIGRlZmF1bHQgbG9jYWxlIGlzIEMKb2sgX0dldGZhbHNlKCkKb2sgX0dldHRydWUoKQpvayBfR2V0ZGF5cygpCm9rIF9HZXRtb250aHMoKQp2YWx1ZSBfR2V0ZGF0ZW9yZGVyKCkgMgpvayBfR2V0bGNvbnYoKSBpcyBhIHRhYmxlCm9rIGRlY2ltYWxfcG9pbnQKb2sgdGhvdXNhbmRzX3NlcApvayBncm91cGluZwpvayBpbnRfY3Vycl9zeW1ib2wKb2sgY3VycmVuY3lfc3ltYm9sCm9rIG1vbl9kZWNpbWFsX3BvaW50Cm9rIG1vbl90aG91c2FuZHNfc2VwCm9rIG1vbl9ncm91cGluZwpvayBwb3NpdGl2ZV9zaWduCm9rIG5lZ2F0aXZlX3NpZ24Kb2sgaW50X2ZyYWNfZGlnaXRzIGlzIENIQVJfTUFYCm9rIGZyYWNfZGlnaXRzIGlzIENIQVJfTUFYCm9rIHBfY3NfcHJlY2VkZXMKb2sgcF9zZXBfYnlfc3BhY2UKb2sgbl9jc19wcmVjZWRlcwpvayBuX3NlcF9ieV9zcGFjZQpvayBwX3NpZ25fcG9zbgpvayBuX3NpZ25fcG9zbgp2YWx1ZSBfQ3R5cGV2ZWMuX1BhZ2UgMApvayBfQ3R5cGV2ZWMuX1RhYmxlIGlzIGEgMjU2LWVudHJ5IHRhYmxlCnZhbHVlIF9DdHlwZXZlYy5fRGVsZmwgMQp2YWx1ZSBfQ3R5cGV2ZWMuX0xvY2FsZU5hbWUgaXMgbnVsbCAxCm9rIHRhYmxlWycgJ10Kb2sgdGFibGVbJ2EnXQpvayB0YWJsZVsnQSddCm9rIHRhYmxlWycwJ10KdmFsdWUgX0N2dHZlYyBzaXplIDQ0CnZhbHVlIF9DdnR2ZWMuX1BhZ2UgMAp2YWx1ZSBfQ3Z0dmVjLl9NYmN1cm1heCAxCnZhbHVlIF9DdnR2ZWMuX0lzY2xvY2FsZSAxCnZhbHVlIF9Db2xsdmVjIHNpemUgMTYKdmFsdWUgX0NvbGx2ZWMuX1BhZ2UgMAp2YWx1ZSBfQ29sbHZlYy5fTG9jYWxlTmFtZSBpcyBudWxsIDEKb2sgZXhwbGljaXQgQwpvayAoY2F0ZWdvcnksIG5hbWUpCm9rIChhbGwsIEMpCm9rIF9BZGRjYXRzIHdpdGggdGhlIHNhbWUgbmFtZSBrZWVwcyB0aGUgbmFtZQpvayBhIG51bGwgbmFtZSB0aHJvd3Mgc3RkOjpydW50aW1lX2Vycm9yCm9rIGl0cyB0ZXh0Cm9rIGEgbnVsbCBuYW1lIHdpdGggYSBjYXRlZ29yeSB0aHJvd3MgYXMgd2VsbApvayBfQWRkY2F0cyB3aXRoIGEgbnVsbCBuYW1lIHRocm93cwpvayBhbiB1bmtub3duIG5hbWUgZ2l2ZXMgdGhlIG5hbWUgIioiCm9rIGFsc28gd2l0aCBhIGNhdGVnb3J5Cm9rIHRoZSBDIGxvY2FsZSBpcyBzdGlsbCB0aGUgcHJvZ3JhbSdzCnN1bW1hcnkgNDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(_Locinfo) 104\nok the default locale is C\nok _Getfalse()\nok _Gettrue()\nok _Getdays()\nok _Getmonths()\nvalue _Getdateorder() 2\nok _Getlconv() is a table\nok decimal_point\nok thousands_sep\nok grouping\nok int_curr_symbol\nok currency_symbol\nok mon_decimal_point\nok mon_thousands_sep\nok mon_grouping\nok positive_sign\nok negative_sign\nok int_frac_digits is CHAR_MAX\nok frac_digits is CHAR_MAX\nok p_cs_precedes\nok p_sep_by_space\nok n_cs_precedes\nok n_sep_by_space\nok p_sign_posn\nok n_sign_posn\nvalue _Ctypevec._Page 0\nok _Ctypevec._Table is a 256-entry table\nvalue _Ctypevec._Delfl 1\nvalue _Ctypevec._LocaleName is null 1\nok table[' ']\nok table['a']\nok table['A']\nok table['0']\nvalue _Cvtvec size 44\nvalue _Cvtvec._Page 0\nvalue _Cvtvec._Mbcurmax 1\nvalue _Cvtvec._Isclocale 1\nvalue _Collvec size 16\nvalue _Collvec._Page 0\nvalue _Collvec._LocaleName is null 1\nok explicit C\nok (category, name)\nok (all, C)\nok _Addcats with the same name keeps the name\nok a null name throws std::runtime_error\nok its text\nok a null name with a category throws as well\nok _Addcats with a null name throws\nok an unknown name gives the name \"*\"\nok also with a category\nok the C locale is still the program's\nsummary 40 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}

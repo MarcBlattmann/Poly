@@ -1,0 +1,130 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/??0ios_base@std@@IEAA@XZ"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::ios_base: the base class of every stream, 72 bytes (alignment 8), with a virtual destructor. The sheet covers its
+  protected constructor ??0ios_base@std@@IEAA@XZ, the destructor (??1ios_base@std@@UEAA@XZ, with the private static
+  _Ios_base_dtor it calls), _Init, the format/state/locale/extension members, the data exports _Index and _Sync, and the
+  family of exported member functions (good, eof, fail, bad, rdstate, clear (three forms), setstate (three forms),
+  exceptions, flags, setf (two), unsetf, width, precision, getloc, imbue, iword, pword, xalloc, register_callback,
+  _Callfns, _Findarr, _Tidy, copyfmt, swap, sync_with_stdio, _Addstd, operator bool, operator!). A program compiled
+  against the STL headers reads and writes the fields directly where the header defines a member inline, and calls the
+  exported function otherwise (always, when compiled without optimisation); the functions therefore have to agree with
+  the layout below to the byte.
+interface:
+  layout: |
+    x64, offsets in bytes: 0 pointer to the virtual table (ios_base's table has the scalar deleting destructor as its only
+    slot); 8 size_t _Stdstr (index of a standard stream, 0 for other streams); 16 int _Mystate (stream state bits); 20 int
+    _Except (exception mask); 24 int _Fmtfl (format flags); 32 long long _Prec; 40 long long _Wide (width); 48 pointer
+    _Arr (first node of the iword/pword list); 56 pointer _Calls (first node of the callback list); 64 pointer _Ploc
+    (pointer to a heap std::locale object); size 72. The type `iostate`, `fmtflags`, `openmode`, `seekdir` are all int.
+  constants: |
+    fmtflags: skipws 0x1, unitbuf 0x2, uppercase 0x4, showbase 0x8, showpoint 0x10, showpos 0x20, left 0x40, right 0x80,
+    internal 0x100, dec 0x200, oct 0x400, hex 0x800, scientific 0x1000, fixed 0x2000, boolalpha 0x4000; adjustfield 0x1C0,
+    basefield 0xE00, floatfield 0x3000; the stored flags are masked with 0xFFFF. iostate: goodbit 0, eofbit 1, failbit 2,
+    badbit 4; the state and the exception mask are masked with 0x17. openmode: in 1, out 2, ate 4, app 8, trunc 0x10,
+    binary 0x20. seekdir: beg 0, cur 1, end 2. event: erase_event 0, imbue_event 1, copyfmt_event 2.
+  nodes: |
+    iword/pword node (16+ bytes, allocated with operator new): next pointer 0, int index 8, long _Lo 12 (4 bytes), void*
+    _Vp 16; callback node: next 0, int index 8, function pointer 16.
+  data_exports: |
+    ?_Index@ios_base@std@@0HA (int, next index xalloc hands out; 0 in a fresh process) and ?_Sync@ios_base@std@@0_NA
+    (bool, the sync_with_stdio flag; true in a fresh process).
+  signatures: |
+    ios_base() [protected, does nothing but set the virtual table and the default values 0/null]; void _Init()
+    [protected]; ios_base* _Addstd(ios_base*) [static]; void clear(int state, bool reraise); void clear(int state); void
+    setstate(int, bool); void setstate(int); void exceptions(int); int exceptions() const; int flags() const; int
+    flags(int); int setf(int); int setf(int, int); void unsetf(int); long long width() const; long long width(long long);
+    long long precision() const; long long precision(long long); locale getloc() const (by value, hidden result pointer);
+    locale imbue(const locale&); static int xalloc(); long& iword(int); void*& pword(int); void
+    register_callback(void(*)(event, ios_base&, int), int); ios_base& copyfmt(const ios_base&); static bool
+    sync_with_stdio(bool); void swap(ios_base&).
+rules:
+  init: |
+    _Init() (called by basic_ios::init, not by the constructor) sets: _Ploc = a new heap locale object copying the global
+    locale (std::locale()), _Stdstr 0, _Except 0, _Fmtfl skipws|dec (0x201), _Prec 6, _Wide 0, _Arr and _Calls null, state
+    goodbit (through clear(goodbit)). Calling it again on a used object resets all of those (a previous locale object is
+    not freed by _Init). After the constructor alone (no _Init) every field is zero/null. The destructor (through
+    _Ios_base_dtor) runs the erase_event callbacks, frees the iword/pword nodes and the callback nodes, and frees the
+    locale object.
+  state: |
+    clear(s, reraise) stores s & 0x17 as the state. If (s & 0x17 & exception mask) is non-zero: with reraise true it
+    rethrows the exception being handled (throw;); otherwise it throws std::ios_base::failure with the text
+    'ios_base::badbit set' if badbit is in the filtered bits, else 'ios_base::failbit set' if failbit is, else
+    'ios_base::eofbit set' (badbit wins over failbit over eofbit). The state is stored before the throw. setstate(s) is
+    clear(rdstate() | s). good() is state == 0; eof() state & 1; fail() state & 6; bad() state & 4; operator bool is
+    !fail(); operator! is fail(). exceptions(mask) stores mask & 0x17 and then clear(rdstate()) (so it may throw, the mask
+    stays stored). The failure exception is a std::system_error (std::runtime_error) with error_code(1,
+    iostream_category()) (io_errc::stream), what() = '<text>: iostream stream error', e.g. 'ios_base::failbit set:
+    iostream stream error'.
+  format: |
+    flags(f) stores f & 0xFFFF and returns the old flags. setf(f) ORs (f & 0xFFFF) in and returns the old flags; setf(f,
+    mask) stores (old & ~mask) | (f & mask & 0xFFFF) and returns the old flags; unsetf(mask) clears the bits. width(w) and
+    precision(p) store and return the old 64-bit values (negative and 64-bit values are kept as given). Defaults after
+    _Init: flags 0x201, precision 6, width 0.
+  locale: |
+    getloc() returns a copy of *_Ploc. imbue(l) copies the old locale, stores l, calls the imbue_event callbacks and
+    returns the old locale.
+  arrays: |
+    xalloc() returns _Index and increments it (0, 1, 2, ... in a fresh process; the increment is taken under the locale
+    lock). iword(i)/pword(i) find the node with that index in the list starting at _Arr, or reuse the first node whose
+    long and pointer are both zero (changing its index), or allocate a new node in front; they return a reference to its
+    long / pointer. Untouched indexes read as 0/null, any index (also 100000) works; the reference stays valid while the
+    object lives (the same call returns the same address).
+  callbacks: |
+    register_callback(f, i) pushes a node in front of the list, so the list runs in reverse order of registration.
+    _Callfns(ev) calls f(ev, *this, i) for each node from the front: imbue() calls with imbue_event (1); copyfmt() first
+    calls erase_event (0) for the target's existing callbacks, then frees them, copies the source's flags, precision,
+    width, locale, the non-zero iword/pword values and re-registers the source's callbacks (which reverses their order),
+    calls copyfmt_event (2) for the new list, then stores the exception mask (exceptions(other mask): may throw) - the
+    state is not copied; copyfmt of an object onto itself does nothing. The destructor calls erase_event (0) for each
+    callback, from the front.
+  swap: |
+    swap(other) exchanges state, exception mask, flags, precision, width, the iword/pword list, the callback list and the
+    locale pointer (not the _Stdstr, not the virtual table); onto itself it does nothing.
+  sync_with_stdio: |
+    sync_with_stdio(b) stores b in _Sync and returns the old value (true in a fresh process).
+  addstd: |
+    _Addstd(p) registers a standard stream: sets p->_Stdstr to a small positive index (1 for the first call, 2 for the
+    second, ...); it is called by basic_ios::init(sb, true).
+errors:
+  failure: "std::ios_base::failure as above; no other function fails."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 6  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

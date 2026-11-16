@@ -5,5 +5,9 @@
 {"symbol":"$s6Darwin7SIG_ERRyys5Int32VXCvg","src":["macos-sdk"]},
 {"symbol":"$s6Darwin7SIG_IGNyys5Int32VXCvg","src":["macos-sdk"]},
 {"symbol":"$s6Darwin8SIG_HOLDyys5Int32VXCvg","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swift_DarwinFoundation3","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swift_DarwinFoundation3","src":["macos-sdk"]},
+{"symbol":"swift:_DarwinFoundation3.SIG_DFL","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation3.SIG_ERR","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation3.SIG_HOLD","src":["macos-swift-interface"]},
+{"symbol":"swift:_DarwinFoundation3.SIG_IGN","src":["macos-swift-interface"]}
 ]
