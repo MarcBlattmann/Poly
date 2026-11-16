@@ -15,8 +15,6 @@ use poly_win32_gui::SpinLock;
 
 const LVS_TYPEMASK: u32 = 3;
 const LVS_REPORT: u32 = 1;
-const LVS_SMALLICON: u32 = 2;
-const LVS_LIST: u32 = 3;
 const LVS_SINGLESEL: u32 = 4;
 const LVS_SHOWSELALWAYS: u32 = 8;
 const LVS_OWNERDATA: u32 = 0x1000;
@@ -34,7 +32,6 @@ const LVIS_FOCUSED: u32 = 1;
 const LVIS_SELECTED: u32 = 2;
 const LVIS_CUT: u32 = 4;
 const LVIS_DROPHILITED: u32 = 8;
-const LVIS_STATEIMAGEMASK: u32 = 0xF000;
 
 const LVCF_FMT: u32 = 1;
 const LVCF_WIDTH: u32 = 2;
@@ -46,9 +43,7 @@ const LVCF_ORDER: u32 = 0x20;
 const LVIR_BOUNDS: i32 = 0;
 const LVIR_ICON: i32 = 1;
 const LVIR_LABEL: i32 = 2;
-const LVIR_SELECTBOUNDS: i32 = 3;
 
-const LVNI_ALL: u32 = 0;
 const LVNI_FOCUSED: u32 = 1;
 const LVNI_SELECTED: u32 = 2;
 const LVNI_CUT: u32 = 4;
@@ -64,8 +59,6 @@ const LVHT_ONITEMLABEL: u32 = 4;
 const LVHT_ONITEMSTATEICON: u32 = 8;
 const LVHT_ABOVE: u32 = 8;
 const LVHT_BELOW: u32 = 0x10;
-const LVHT_TORIGHT: u32 = 0x20;
-const LVHT_TOLEFT: u32 = 0x40;
 
 const LVN_FIRST: i32 = -100;
 const LVN_ITEMCHANGING: i32 = LVN_FIRST;
@@ -238,8 +231,6 @@ struct Lv {
     header: usize,
     font: usize,
     top: i32,
-    redraw: bool,
-    hot: i32,
 }
 
 static STATES: SpinLock<BTreeMap<usize, Lv>> = SpinLock::new(BTreeMap::new());
@@ -270,8 +261,6 @@ pub fn on_create(hwnd: usize) {
                 header: 0,
                 font: 0,
                 top: 0,
-                redraw: true,
-                hot: -1,
             },
         )
     });
@@ -470,6 +459,20 @@ fn cell_text(hwnd: usize, item: i32, sub: i32, cap: usize) -> Vec<u16> {
     dispinfo(hwnd, item, sub, LVIF_TEXT, cap).0
 }
 
+/// Whether the text and the image of a cell come from the parent.
+fn callbacks(hwnd: usize, item: i32, sub: i32) -> (bool, bool) {
+    with(hwnd, |lv| {
+        if lv.owner {
+            return (true, true);
+        }
+        match lv.items.get(item as usize) {
+            Some(it) => (!matches!(it.texts.get(sub as usize), Some(Some(Text::Str(_)))), it.image == I_IMAGECALLBACK),
+            None => (false, false),
+        }
+    })
+    .unwrap_or((false, false))
+}
+
 fn cell_image(hwnd: usize, item: i32) -> i32 {
     let img = with(hwnd, |lv| if lv.owner { I_IMAGECALLBACK } else { lv.items.get(item as usize).map_or(-1, |i| i.image) }).unwrap_or(-1);
     if img == I_IMAGECALLBACK {
@@ -511,7 +514,8 @@ fn item_state(hwnd: usize, i: i32) -> u32 {
 fn set_state(hwnd: usize, i: i32, bits: u32, mask: u32, defer: &mut Vec<(i32, u32, u32)>) -> bool {
     let old = item_state(hwnd, i);
     let new = (old & !mask) | (bits & mask);
-    let refused = notify_item(hwnd, LVN_ITEMCHANGING, i, 0, new, old, LVIF_STATE) != 0;
+    // The notifications carry the bits the call is about.
+    let refused = notify_item(hwnd, LVN_ITEMCHANGING, i, 0, new & mask, old & mask, LVIF_STATE) != 0;
     if refused {
         return false;
     }
@@ -532,7 +536,7 @@ fn set_state(hwnd: usize, i: i32, bits: u32, mask: u32, defer: &mut Vec<(i32, u3
                 it.state = new;
             }
         });
-        defer.push((i, new, old));
+        defer.push((i, new & mask, old & mask));
     }
     true
 }
@@ -677,14 +681,27 @@ fn get_item(hwnd: usize, p: usize) -> bool {
     if it.item < 0 || it.item >= n {
         return false;
     }
+    let (text_cb, image_cb) = callbacks(hwnd, it.item, it.sub_item);
+    let cap = it.text_max.max(0) as usize;
+    let mut asked = None;
+    if (it.mask & LVIF_TEXT != 0 && text_cb) || (it.mask & LVIF_IMAGE != 0 && image_cb) {
+        // The parent is asked once for what the program wants of the cell.
+        let m = (if it.mask & LVIF_TEXT != 0 && text_cb { LVIF_TEXT } else { 0 }) | (if it.mask & LVIF_IMAGE != 0 && image_cb { LVIF_IMAGE } else { 0 });
+        asked = Some(dispinfo(hwnd, it.item, it.sub_item, m, cap.max(1)));
+    }
     if it.mask & LVIF_TEXT != 0 {
-        let cap = it.text_max.max(0) as usize;
-        let t = cell_text(hwnd, it.item, it.sub_item, cap.max(1));
+        let t = match (&asked, text_cb) {
+            (Some(a), true) => a.0.clone(),
+            _ => cell_text(hwnd, it.item, it.sub_item, cap.max(1)),
+        };
         // SAFETY: the caller's buffer of `text_max` units.
         unsafe { put_text(it.text, cap, &t) };
     }
     if it.mask & LVIF_IMAGE != 0 {
-        it.image = cell_image(hwnd, it.item);
+        it.image = match (&asked, image_cb) {
+            (Some(a), true) => a.1,
+            _ => cell_image(hwnd, it.item),
+        };
     }
     if it.mask & LVIF_PARAM != 0 {
         it.param = with(hwnd, |lv| lv.items.get(it.item as usize).map_or(0, |x| x.param)).unwrap_or(0);
@@ -925,6 +942,7 @@ fn draw(hwnd: usize, hdc: usize) {
     let report = style & LVS_TYPEMASK == LVS_REPORT;
     let rh = row_height(hwnd);
     let icon = icon_width(hwnd);
+    let owner = with(hwnd, |lv| lv.owner).unwrap_or(false);
     for i in top..last {
         let row = row_rect(hwnd, i);
         if row[1] >= rc_h(&c) {
@@ -979,15 +997,25 @@ fn draw(hwnd: usize, hdc: usize) {
                 break;
             }
             let mut tx = cell[0] + 3;
+            let mut shown_text: Option<Vec<u16>> = None;
             if sub == 0 {
-                let img = cell_image(hwnd, i);
+                let (tcb, icb) = callbacks(hwnd, i, 0);
+                let img;
+                if owner || (tcb && icb) {
+                    // Text and image (and, for an owner data list, the indent) in one question.
+                    let (t, im, _) = dispinfo(hwnd, i, 0, LVIF_TEXT | LVIF_IMAGE | if owner { LVIF_INDENT } else { 0 }, 260);
+                    shown_text = Some(t);
+                    img = im;
+                } else {
+                    img = cell_image(hwnd, i);
+                }
                 if small != 0 && img >= 0 {
                     // SAFETY: our image list of the program.
-                    unsafe { crate::imagelist::ImageList_Draw(small, img, hdc, cell[0] + 1, row[1] + (rh - icon.max(16)) / 2 + 1, 1) };
+                    crate::imagelist::ImageList_Draw(small, img, hdc, cell[0] + 1, row[1] + (rh - icon.max(16)) / 2 + 1, 1);
                 }
                 tx = cell[0] + icon + 3;
             }
-            let t = cell_text(hwnd, i, sub as i32, 260);
+            let t = shown_text.unwrap_or_else(|| cell_text(hwnd, i, sub as i32, 260));
             // SAFETY: the DC.
             unsafe { SetTextColor(hdc, text_color) };
             let fmt = widths.get(sub).map_or(0, |c| c.1) & 3;
@@ -1466,6 +1494,9 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 let cap = it.text_max.max(0) as usize;
                 let t = cell_text(hwnd, w as i32, it.sub_item, cap.max(1));
                 if msg == LVM_GETITEMTEXTW {
+                    if cap == 0 && it.text != 0 {
+                        *(it.text as *mut u16) = 0;
+                    }
                     put_text(it.text, cap, &t) as isize
                 } else {
                     let a = poly_kernelbase::text::to_ansi(&t);

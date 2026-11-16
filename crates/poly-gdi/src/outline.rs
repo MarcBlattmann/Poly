@@ -441,8 +441,12 @@ impl Outline {
         // Observed (the sheet records the mapping as unexplained): at every size the cap height
         // was the x-height of the OS/2 table and the x height half of it.
         let x_units = i(v.x_height);
+        // The structure's TEXTMETRIC starts two characters below the one GetTextMetrics reports
+        // (the sheet: first 0x1E for a font whose first character is the space).
+        let mut tm = self.tm;
+        tm.first_char = tm.first_char.saturating_sub(2);
         Otm {
-            tm: self.tm,
+            tm,
             panose: v.panose,
             fs_selection: v.fs_selection,
             fs_type: v.fs_type,

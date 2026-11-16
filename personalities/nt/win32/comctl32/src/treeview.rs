@@ -13,7 +13,6 @@ const TVS_HASBUTTONS: u32 = 1;
 const TVS_HASLINES: u32 = 2;
 const TVS_LINESATROOT: u32 = 4;
 const TVS_SHOWSELALWAYS: u32 = 0x20;
-const TVS_FULLROWSELECT: u32 = 0x1000;
 const TVS_NONEVENHEIGHT: u32 = 0x4000;
 
 const TVIF_TEXT: u32 = 1;
@@ -453,7 +452,7 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
     with(hwnd, |t| {
         if let Some(n) = t.nodes.get_mut(&id) {
             if want_expand {
-                n.state |= TVIS_EXPANDED | TVIS_EXPANDEDONCE;
+                n.state |= TVIS_EXPANDED;
             } else {
                 n.state &= !TVIS_EXPANDED;
             }
@@ -461,6 +460,13 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
         // A selected item below a collapsed one moves the selection up to it.
     });
     node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
+    if want_expand {
+        with(hwnd, |t| {
+            if let Some(n) = t.nodes.get_mut(&id) {
+                n.state |= TVIS_EXPANDEDONCE;
+            }
+        });
+    }
     if !want_expand {
         let caret = with(hwnd, |t| t.caret).unwrap_or(0);
         let below = with(hwnd, |t| is_ancestor(t, id, caret)).unwrap_or(false);
@@ -487,9 +493,8 @@ fn select(hwnd: usize, id: u32, action: u32) -> bool {
     if old == id {
         return true;
     }
-    let new_mask = 0x1C;
-    let old_mask = if old != 0 { 0x1C } else { 0 };
-    if node_notify(hwnd, TVN_SELCHANGINGW, action, Some((old, old_mask)).filter(|_| true), Some((id, if id != 0 { new_mask } else { 0 }))) != 0 {
+    let (new_mask, old_mask) = (0x1C, 0x1C);
+    if node_notify(hwnd, TVN_SELCHANGINGW, action, Some((old, old_mask)), Some((id, new_mask))) != 0 {
         return false;
     }
     // Show the item: its collapsed ancestors expand.
@@ -511,7 +516,7 @@ fn select(hwnd: usize, id: u32, action: u32) -> bool {
         expand(hwnd, a, TVE_EXPAND, 0);
     }
     with(hwnd, |t| t.caret = id);
-    node_notify(hwnd, TVN_SELCHANGEDW, action, Some((old, old_mask)), Some((id, if id != 0 { new_mask } else { 0 })));
+    node_notify(hwnd, TVN_SELCHANGEDW, action, Some((old, old_mask)), Some((id, new_mask)));
     ensure_visible(hwnd, id);
     invalidate(hwnd);
     true
@@ -719,7 +724,7 @@ fn draw(hwnd: usize, hdc: usize) {
         if il != 0 {
             let which = if is_caret { simg } else { img };
             // SAFETY: our image list of the program.
-            unsafe { crate::imagelist::ImageList_Draw(il, which, hdc, x0 + 1, row[1] + (rh - 16) / 2, 1) };
+            crate::imagelist::ImageList_Draw(il, which, hdc, x0 + 1, row[1] + (rh - 16) / 2, 1);
         }
         let selected = is_caret && (focused || always);
         let mut color = if tcolor == CLR_NONE { sys_color(COLOR_WINDOWTEXT) } else { tcolor };

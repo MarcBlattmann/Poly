@@ -101,14 +101,11 @@ impl Toolbar {
         self.button_size = (cx + PAD_X, cy + PAD_Y);
     }
 
-    /// `TB_INSERTBUTTON`: the button goes before `index`; a negative index puts it first and one
-    /// past the end appends (`ToolbarWindow32.yaml`); the index it got.
+    /// `TB_INSERTBUTTON`: the button goes before `index`; a negative index and one
+    /// past the end append (`ToolbarWindow32.yaml`); the index it got.
     pub fn insert(&mut self, index: i32, b: Button) -> Option<usize> {
-        if index < 0 {
-            self.buttons.insert(0, b);
-            return Some(0);
-        }
-        let at = (index as usize).min(self.buttons.len());
+        // A negative index is a huge unsigned one: the button goes last.
+        let at = if index < 0 { self.buttons.len() } else { (index as usize).min(self.buttons.len()) };
         self.buttons.insert(at, b);
         Some(at)
     }

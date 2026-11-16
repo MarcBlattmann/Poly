@@ -20,7 +20,6 @@ const BORDERS: [i32; 3] = [0, 2, 2];
 
 const SBT_NOBORDERS: u32 = 0x100;
 const SBT_POPOUT: u32 = 0x200;
-const SBT_RTLREADING: u32 = 0x400;
 const SBT_OWNERDRAW: u32 = 0x1000;
 const SB_SIMPLEID: usize = 0xFF;
 
@@ -86,10 +85,6 @@ fn layout(hwnd: usize) {
     }
 }
 
-/// The size a bar takes when it is made (the same layout).
-pub fn place_at_create(hwnd: usize) {
-    layout(hwnd);
-}
 
 fn draw(hwnd: usize, hdc: usize) {
     let c = client_rect(hwnd);

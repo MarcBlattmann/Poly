@@ -8,9 +8,7 @@ use alloc::vec::Vec;
 use poly_win32_gui::SpinLock;
 
 pub const HDS_BUTTONS: u32 = 0x0002;
-pub const HDS_HIDDEN: u32 = 0x0008;
 
-const HDF_LEFT: i32 = 0;
 const HDF_RIGHT: i32 = 1;
 const HDF_CENTER: i32 = 2;
 const HDF_JUSTIFYMASK: i32 = 3;

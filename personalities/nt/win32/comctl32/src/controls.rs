@@ -54,8 +54,6 @@ const WM_NCCREATE: u32 = 0x0081;
 const WM_CREATE: u32 = 0x0001;
 const WM_NCDESTROY: u32 = 0x0082;
 const WM_SETTEXT: u32 = 0x000C;
-const WM_GETTEXT: u32 = 0x000D;
-const WM_GETTEXTLENGTH: u32 = 0x000E;
 const CCS_NORESIZE: u32 = 0x0004;
 const CCS_NOPARENTALIGN: u32 = 0x0008;
 
@@ -68,8 +66,6 @@ enum Model {
     Track(Trackbar),
     UpDown(UpDown),
     Tabs(Tabs),
-    /// The header and toolbar start with no items; this counts them.
-    Count(i32),
     /// The rebar's bands.
     Rebar(i32),
 }
@@ -344,9 +340,6 @@ fn lo(v: isize) -> i32 {
     v as i16 as i32
 }
 
-fn hi(v: isize) -> i32 {
-    (v >> 16) as i16 as i32
-}
 
 /// The messages of the models; `None` leaves a message to the default procedure.
 fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
@@ -357,7 +350,6 @@ fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
             Model::Track(t) => track(t, msg, w, l),
             Model::UpDown(u) => updown(u, msg, w, l),
             Model::Tabs(t) => tabs(t, msg, w, l),
-            Model::Count(n) => count(n, msg, w, l),
             Model::Rebar(n) => rebar(n, msg, w),
             Model::Plain | Model::Ext(_) => None,
         }
@@ -579,47 +571,6 @@ unsafe fn tabs(t: &mut Tabs, msg: u32, w: usize, l: isize) -> Option<isize> {
                 }
             }
             1
-        }
-        _ => return None,
-    })
-}
-
-unsafe fn count(n: &mut i32, msg: u32, w: usize, l: isize) -> Option<isize> {
-    // The header's, the toolbar's and the rebar's messages that change how many items there are
-    // (they are told apart by their numbers: the toolbar's and rebar's are in the user range).
-    const HDM_GETITEMCOUNT: u32 = 0x1200;
-    const HDM_DELETEITEM: u32 = 0x1202;
-    const HDM_INSERTITEMW: u32 = 0x120A;
-    const TB_ADDBITMAP: u32 = 0x413;
-    const TB_ADDBUTTONSA: u32 = 0x414;
-    const TB_DELETEBUTTON: u32 = 0x416;
-    const TB_BUTTONCOUNT: u32 = 0x418;
-    const TB_BUTTONSTRUCTSIZE: u32 = 0x41E;
-    const TB_AUTOSIZE: u32 = 0x421;
-    const TB_ADDBUTTONSW: u32 = 0x444;
-    Some(match msg {
-        HDM_GETITEMCOUNT | TB_BUTTONCOUNT => *n as isize,
-        HDM_INSERTITEMW => {
-            let at = w as i32;
-            *n += 1;
-            at.clamp(0, *n - 1) as isize
-        }
-        TB_ADDBITMAP => 0,
-        TB_ADDBUTTONSA | TB_ADDBUTTONSW => {
-            *n += w as i32;
-            1
-        }
-        HDM_DELETEITEM | TB_DELETEBUTTON => {
-            if (w as i32) < *n {
-                *n -= 1;
-                1
-            } else {
-                0
-            }
-        }
-        TB_BUTTONSTRUCTSIZE | TB_AUTOSIZE => {
-            let _ = l;
-            0
         }
         _ => return None,
     })

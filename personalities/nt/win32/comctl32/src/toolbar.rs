@@ -169,7 +169,7 @@ fn draw(hwnd: usize, hdc: usize) {
         if has_image {
             if il != 0 {
                 // SAFETY: the image list of the program.
-                unsafe { crate::imagelist::ImageList_Draw(il, b.image, hdc, img_x + off, img_y + off, 1) };
+                crate::imagelist::ImageList_Draw(il, b.image, hdc, img_x + off, img_y + off, 1);
             } else {
                 draw_strip_image(hdc, &bmps, b.image, img_x + off, img_y + off, iw, ih);
             }

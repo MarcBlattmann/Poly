@@ -9,7 +9,6 @@ use alloc::vec::Vec;
 #[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     pub fn SendMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
-    pub fn PostMessageW(hwnd: usize, msg: u32, w: usize, l: isize) -> i32;
     pub fn DefWindowProcW(hwnd: usize, msg: u32, w: usize, l: isize) -> isize;
     pub fn GetParent(hwnd: usize) -> usize;
     pub fn GetDlgCtrlID(hwnd: usize) -> i32;
@@ -26,19 +25,11 @@ unsafe extern "system" {
     pub fn FillRect(hdc: usize, rect: *const i32, brush: usize) -> i32;
     pub fn DrawTextW(hdc: usize, text: *const u16, count: i32, rect: *mut i32, format: u32) -> i32;
     pub fn GetSysColor(index: i32) -> u32;
-    pub fn GetSysColorBrush(index: i32) -> usize;
     pub fn GetFocus() -> usize;
     pub fn SetFocus(hwnd: usize) -> usize;
     pub fn GetKeyState(vk: i32) -> i16;
     pub fn SetCapture(hwnd: usize) -> usize;
     pub fn ReleaseCapture() -> i32;
-    pub fn GetCapture() -> usize;
-    pub fn MapWindowPoints(from: usize, to: usize, points: *mut i32, count: u32) -> i32;
-    pub fn IsWindowEnabled(hwnd: usize) -> i32;
-    pub fn SetTimer(hwnd: usize, id: usize, ms: u32, proc_: usize) -> usize;
-    pub fn KillTimer(hwnd: usize, id: usize) -> i32;
-    pub fn GetCursorPos(p: *mut i32) -> i32;
-    pub fn ScreenToClient(hwnd: usize, p: *mut i32) -> i32;
     pub fn CreateWindowExW(
         ex: u32,
         class: *const u16,
@@ -54,9 +45,6 @@ unsafe extern "system" {
         param: usize,
     ) -> usize;
     pub fn DestroyWindow(hwnd: usize) -> i32;
-    pub fn IsWindow(hwnd: usize) -> i32;
-    pub fn MoveWindow(hwnd: usize, x: i32, y: i32, w: i32, h: i32, repaint: i32) -> i32;
-    pub fn ShowWindow(hwnd: usize, cmd: i32) -> i32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -65,7 +53,6 @@ unsafe extern "system" {
     pub fn SelectObject(hdc: usize, obj: usize) -> usize;
     pub fn GetStockObject(index: i32) -> usize;
     pub fn SetTextColor(hdc: usize, color: u32) -> u32;
-    pub fn SetBkColor(hdc: usize, color: u32) -> u32;
     pub fn SetBkMode(hdc: usize, mode: i32) -> i32;
     pub fn GetTextExtentPoint32W(hdc: usize, text: *const u16, count: i32, size: *mut i32) -> i32;
     pub fn GetTextMetricsW(hdc: usize, tm: *mut u8) -> i32;
@@ -74,65 +61,41 @@ unsafe extern "system" {
     pub fn CreateCompatibleDC(hdc: usize) -> usize;
     pub fn DeleteDC(hdc: usize) -> i32;
     pub fn BitBlt(dst: usize, x: i32, y: i32, w: i32, h: i32, src: usize, sx: i32, sy: i32, rop: u32) -> i32;
-    pub fn GetObjectW(h: usize, size: i32, out: *mut u8) -> i32;
-    pub fn SetViewportOrgEx(hdc: usize, x: i32, y: i32, old: *mut i32) -> i32;
-    pub fn IntersectClipRect(hdc: usize, l: i32, t: i32, r: i32, b: i32) -> i32;
-    pub fn SaveDC(hdc: usize) -> i32;
-    pub fn RestoreDC(hdc: usize, saved: i32) -> i32;
 }
 
-pub const WM_CREATE: u32 = 0x0001;
-pub const WM_DESTROY: u32 = 0x0002;
 pub const WM_SIZE: u32 = 0x0005;
 pub const WM_SETFOCUS: u32 = 0x0007;
 pub const WM_KILLFOCUS: u32 = 0x0008;
-pub const WM_ENABLE: u32 = 0x000A;
 pub const WM_PAINT: u32 = 0x000F;
 pub const WM_ERASEBKGND: u32 = 0x0014;
 pub const WM_SETFONT: u32 = 0x0030;
 pub const WM_GETFONT: u32 = 0x0031;
 pub const WM_NOTIFY: u32 = 0x004E;
 pub const WM_NCCALCSIZE: u32 = 0x0083;
-pub const WM_NCHITTEST: u32 = 0x0084;
 pub const WM_GETDLGCODE: u32 = 0x0087;
 pub const WM_KEYDOWN: u32 = 0x0100;
-pub const WM_KEYUP: u32 = 0x0101;
-pub const WM_CHAR: u32 = 0x0102;
 pub const WM_COMMAND: u32 = 0x0111;
-pub const WM_TIMER: u32 = 0x0113;
-pub const WM_VSCROLL: u32 = 0x0115;
-pub const WM_HSCROLL: u32 = 0x0114;
 pub const WM_MOUSEMOVE: u32 = 0x0200;
 pub const WM_LBUTTONDOWN: u32 = 0x0201;
 pub const WM_LBUTTONUP: u32 = 0x0202;
 pub const WM_LBUTTONDBLCLK: u32 = 0x0203;
-pub const WM_RBUTTONDOWN: u32 = 0x0204;
 pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
-pub const WM_CAPTURECHANGED: u32 = 0x0215;
 pub const WM_PRINT: u32 = 0x0317;
 pub const WM_PRINTCLIENT: u32 = 0x0318;
-pub const WM_SETCURSOR: u32 = 0x0020;
-pub const WM_CONTEXTMENU: u32 = 0x007B;
 pub const WM_STYLECHANGED: u32 = 0x007D;
-pub const WM_SETREDRAW: u32 = 0x000B;
 pub const WM_SETTEXT: u32 = 0x000C;
 pub const WM_GETTEXT: u32 = 0x000D;
 pub const WM_GETTEXTLENGTH: u32 = 0x000E;
 
 pub const NM_FIRST: i32 = 0;
-pub const NM_OUTOFMEMORY: i32 = NM_FIRST - 1;
 pub const NM_CLICK: i32 = NM_FIRST - 2;
 pub const NM_DBLCLK: i32 = NM_FIRST - 3;
-pub const NM_RETURN: i32 = NM_FIRST - 4;
 pub const NM_RCLICK: i32 = NM_FIRST - 5;
-pub const NM_RDBLCLK: i32 = NM_FIRST - 6;
 pub const NM_SETFOCUS: i32 = NM_FIRST - 7;
 pub const NM_KILLFOCUS: i32 = NM_FIRST - 8;
 pub const NM_CUSTOMDRAW: i32 = NM_FIRST - 12;
-pub const NM_HOVER: i32 = NM_FIRST - 13;
 
-pub const COLOR_SCROLLBAR: i32 = 0;
 pub const COLOR_WINDOW: i32 = 5;
 pub const COLOR_WINDOWTEXT: i32 = 8;
 pub const COLOR_HIGHLIGHT: i32 = 13;
@@ -142,7 +105,6 @@ pub const COLOR_BTNSHADOW: i32 = 16;
 pub const COLOR_GRAYTEXT: i32 = 17;
 pub const COLOR_BTNTEXT: i32 = 18;
 pub const COLOR_BTNHIGHLIGHT: i32 = 20;
-pub const COLOR_3DDKSHADOW: i32 = 21;
 pub const COLOR_3DLIGHT: i32 = 22;
 
 pub const CLR_NONE: u32 = 0xFFFF_FFFF;
@@ -158,18 +120,12 @@ pub const DT_VCENTER: u32 = 4;
 pub const DT_SINGLELINE: u32 = 0x20;
 pub const DT_NOPREFIX: u32 = 0x800;
 pub const DT_END_ELLIPSIS: u32 = 0x8000;
-pub const DT_NOCLIP: u32 = 0x100;
-pub const DT_CALCRECT: u32 = 0x400;
 
 pub const WS_VISIBLE: u32 = 0x1000_0000;
 pub const WS_CHILD: u32 = 0x4000_0000;
-pub const WS_DISABLED: u32 = 0x0800_0000;
 
-pub const VK_LBUTTON: i32 = 1;
 pub const VK_SHIFT: i32 = 0x10;
 pub const VK_CONTROL: i32 = 0x11;
-pub const VK_RETURN: u32 = 0x0D;
-pub const VK_SPACE: u32 = 0x20;
 pub const VK_PRIOR: u32 = 0x21;
 pub const VK_NEXT: u32 = 0x22;
 pub const VK_END: u32 = 0x23;
@@ -178,11 +134,8 @@ pub const VK_LEFT: u32 = 0x25;
 pub const VK_UP: u32 = 0x26;
 pub const VK_RIGHT: u32 = 0x27;
 pub const VK_DOWN: u32 = 0x28;
-pub const VK_DELETE: u32 = 0x2E;
-pub const VK_F2: u32 = 0x71;
 pub const VK_ADD: u32 = 0x6B;
 pub const VK_SUBTRACT: u32 = 0x6D;
-pub const VK_MULTIPLY: u32 = 0x6A;
 
 /// `NMHDR` (`commctrl.h`).
 #[repr(C)]
@@ -216,9 +169,6 @@ pub fn rc_h(r: &Rc) -> i32 {
     r[3] - r[1]
 }
 
-pub fn rc_contains(r: &Rc, x: i32, y: i32) -> bool {
-    x >= r[0] && x < r[2] && y >= r[1] && y < r[3]
-}
 
 pub fn client_rect(hwnd: usize) -> Rc {
     let mut r = [0i32; 4];
@@ -396,15 +346,4 @@ pub unsafe fn wr<T: Copy>(p: usize, off: usize, v: T) {
     unsafe { ((p + off) as *mut T).write_unaligned(v) }
 }
 
-/// Whether a window of the control is under the text colour `COLOR_*` as the system has it for
-/// the client background: the colour a list or tree view clears with.
-pub fn window_color() -> u32 {
-    sys_color(COLOR_WINDOW)
-}
 
-/// Ask the parent for the notification format (`CCM_GETUNICODEFORMAT`): the controls here always
-/// speak Unicode.
-pub fn enabled(hwnd: usize) -> bool {
-    // SAFETY: a plain call.
-    unsafe { IsWindowEnabled(hwnd) != 0 }
-}
