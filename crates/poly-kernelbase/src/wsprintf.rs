@@ -34,7 +34,7 @@ pub fn format(
 ) -> Vec<u16> {
     let mut out: Vec<u16> = Vec::new();
     let mut next = 0usize;
-    let mut take = |next: &mut usize| {
+    let take = |next: &mut usize| {
         let v = args.get(*next).copied().unwrap_or(0);
         *next += 1;
         v

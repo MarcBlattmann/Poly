@@ -172,7 +172,12 @@ pub unsafe extern "system" fn GetLocaleInfoW(lcid: u32, lctype: u32, buf: *mut u
 /// that follow); any other information type is `ERROR_INVALID_PARAMETER`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetStringTypeW(info_type: u32, src: *const u16, cch: i32, out: *mut u16) -> i32 {
-    if src.is_null() || out.is_null() || cch == 0 || cch < -1 || !matches!(info_type, locale::CT_CTYPE1 | locale::CT_CTYPE2 | locale::CT_CTYPE3) {
+    if src.is_null()
+        || out.is_null()
+        || cch == 0
+        || cch < -1
+        || !matches!(info_type, locale::CT_CTYPE1 | locale::CT_CTYPE2 | locale::CT_CTYPE3)
+    {
         return fail(ERROR_INVALID_PARAMETER, 0);
     }
     let n = if cch == -1 {

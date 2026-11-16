@@ -21,20 +21,7 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!(
     "uxtheme",
     value(0),
-    [
-        BeginBufferedAnimation,
-        BeginPanningFeedback,
-        OpenThemeDataForDpi,
-        ord_133,
-        ord_135,
-    ]
+    [BeginBufferedAnimation, BeginPanningFeedback, OpenThemeDataForDpi, ord_133, ord_135,]
 );
 
-poly_win32_rt::fail_exports!(
-    "uxtheme",
-    value(0x80070006),
-    [
-        DrawThemeTextEx,
-        GetThemeTransitionDuration,
-    ]
-);
+poly_win32_rt::fail_exports!("uxtheme", value(0x80070006), [DrawThemeTextEx, GetThemeTransitionDuration,]);

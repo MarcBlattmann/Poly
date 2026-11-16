@@ -174,7 +174,7 @@ pub fn step(frame: &mut TrapFrame) -> bool {
     let sampling = SAMPLING.load(Ordering::Relaxed);
     if sampling != 0 {
         SAMPLING.store(sampling + 1, Ordering::Relaxed);
-        if sampling < 400 || sampling % 2_000_000 == 0 {
+        if sampling < 400 || sampling.is_multiple_of(2_000_000) {
             crate::kprintln!(
                 "nt-api: step {sampling}: eip={at:#x} eax={:#x} ecx={:#x} edx={:#x} ebx={:#x} esi={:#x} edi={:#x} esp={:#x}",
                 frame.rax as u32,

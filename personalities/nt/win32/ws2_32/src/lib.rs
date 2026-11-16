@@ -151,7 +151,8 @@ pub unsafe extern "system" fn WSAStartup(version: u16, data: *mut u8) -> i32 {
     // SAFETY: the same WSADATA; `iMaxSockets` and `iMaxUdpDg` are at 4 and 6 in the 64-bit layout, at 390 and
     // 392 (after the two strings) in the 32-bit one.
     unsafe {
-        let (at_sockets, at_dg) = if cfg!(target_pointer_width = "32") { (WSADATA32_MAX_SOCKETS, WSADATA32_MAX_SOCKETS + 2) } else { (4, 6) };
+        let (at_sockets, at_dg) =
+            if cfg!(target_pointer_width = "32") { (WSADATA32_MAX_SOCKETS, WSADATA32_MAX_SOCKETS + 2) } else { (4, 6) };
         core::ptr::write_unaligned(data.add(at_sockets).cast::<u16>(), sockets);
         core::ptr::write_unaligned(data.add(at_dg).cast::<u16>(), dg);
     }

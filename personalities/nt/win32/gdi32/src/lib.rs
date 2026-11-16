@@ -300,13 +300,19 @@ pub unsafe extern "system" fn CreateBrushIndirect(lb: *const u8) -> H {
     }
     // SAFETY: the caller's LOGBRUSH: two 32-bit fields and the pointer-sized hatch.
     let (style, color, hatch) = unsafe {
-        let hatch = if PTR == 4 { u64::from(lb.add(8).cast::<u32>().read_unaligned()) } else { lb.add(8).cast::<u64>().read_unaligned() };
+        let hatch = if PTR == 4 {
+            u64::from(lb.add(8).cast::<u32>().read_unaligned())
+        } else {
+            lb.add(8).cast::<u64>().read_unaligned()
+        };
         (lb.cast::<u32>().read_unaligned(), lb.add(4).cast::<u32>().read_unaligned(), hatch)
     };
     match style {
         0 => gdi(|g| g.create_solid_brush(color)) as H,
         1 => gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_NULL, 0, 0)) as H,
-        2 if (0..=5).contains(&(hatch as i64)) => gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_HATCHED, color, hatch)) as H,
+        2 if (0..=5).contains(&(hatch as i64)) => {
+            gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_HATCHED, color, hatch)) as H
+        }
         3 if gdi(|g| g.object_type(hatch)) == poly_gdi::gdi::OBJ_BITMAP => {
             gdi(|g| g.create_styled_brush(poly_gdi::gdi::BS_PATTERN, 0, hatch)) as H
         }
@@ -323,7 +329,11 @@ pub unsafe extern "system" fn CreatePenIndirect(lp: *const u8) -> H {
     }
     // SAFETY: the caller's 16-byte LOGPEN.
     let (style, width, color) = unsafe {
-        (lp.cast::<u32>().read_unaligned(), lp.add(4).cast::<i32>().read_unaligned(), lp.add(12).cast::<u32>().read_unaligned())
+        (
+            lp.cast::<u32>().read_unaligned(),
+            lp.add(4).cast::<i32>().read_unaligned(),
+            lp.add(12).cast::<u32>().read_unaligned(),
+        )
     };
     gdi(|g| g.create_pen(style, width, color)) as H
 }

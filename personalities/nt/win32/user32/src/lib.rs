@@ -620,13 +620,7 @@ pub unsafe extern "C" fn wsprintfW(
     let args = [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11];
     // SAFETY: the format is a NUL-terminated string.
     let fmt = unsafe { poly_kernelbase::text::wide_at(format) };
-    let out = poly_kernelbase::wsprintf::format(
-        fmt,
-        true,
-        &args,
-        core::mem::size_of::<usize>(),
-        &read_printf_string,
-    );
+    let out = poly_kernelbase::wsprintf::format(fmt, true, &args, core::mem::size_of::<usize>(), &read_printf_string);
     // SAFETY: the buffer holds 1024 units; the output is at most 1023.
     unsafe {
         core::ptr::copy_nonoverlapping(out.as_ptr(), buffer, out.len());
@@ -658,14 +652,10 @@ pub unsafe extern "C" fn wsprintfA(
 ) -> i32 {
     let args = [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11];
     // SAFETY: the format is a NUL-terminated string.
-    let fmt = poly_kernelbase::text::from_ansi(unsafe { core::slice::from_raw_parts(format, poly_kernelbase::text::strlen(format)) });
-    let out = poly_kernelbase::wsprintf::format(
-        &fmt,
-        false,
-        &args,
-        core::mem::size_of::<usize>(),
-        &read_printf_string,
-    );
+    let fmt = poly_kernelbase::text::from_ansi(unsafe {
+        core::slice::from_raw_parts(format, poly_kernelbase::text::strlen(format))
+    });
+    let out = poly_kernelbase::wsprintf::format(&fmt, false, &args, core::mem::size_of::<usize>(), &read_printf_string);
     let bytes = poly_kernelbase::text::to_ansi(&out);
     // SAFETY: the buffer holds 1024 bytes; the output is at most 1023.
     unsafe {
