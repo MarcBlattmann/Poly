@@ -1242,9 +1242,10 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     stage5(kernel)
 }
 
-/// Whether the S5 checks (stage 5 headless, the S5 window) fail the `chrome-win` group. Off until
-/// they passed three runs in a row on CI-like load (the brief of ADR 0211's track).
-pub const S5_REQUIRED: bool = false;
+/// Whether the S5 checks (stage 5 headless, the S5 window) fail the `chrome-win` group. On since
+/// they passed three runs in a row (2026-11-16, ADR 0211: one rendering GPU process, the page
+/// green, no exception); like the group, they are skipped where Chrome is not fetched.
+pub const S5_REQUIRED: bool = true;
 
 /// The S5 window's steps: start, the same stop/reload at 50 s as stage 3 (a slow start still
 /// loads), and at about 125 s the green page at (200, 400).
