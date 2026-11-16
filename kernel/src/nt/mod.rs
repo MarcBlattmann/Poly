@@ -737,20 +737,16 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
 /// The NT state of the first NT use, made in a frame of its own: `with`
 /// runs on deep paths (a page fault while an exception is dispatched, ADR
 /// 0091), and the state built inline would make each of its frames large.
+/// The state itself is built by [`build_state`], whose large frame is gone
+/// again before the folder and file set-up below runs its deep VFS calls: a
+/// debug kernel's 16 KiB stack overflowed when the desktop's compositor made
+/// the first NT use with its first write to the desktop link (ADR 0155
+/// addendum "browsing").
 #[cold]
 #[inline(never)]
 fn make_state(slot: &mut Option<NtState>) {
-    let mut state = NtState {
-        sys: registry::boot_system(),
-        processes: BTreeMap::new(),
-        sections: Sections::default(),
-        ctl: BTreeMap::new(),
-        timers: BTreeMap::new(),
-        created: BTreeMap::new(),
-        finished: BTreeMap::new(),
-        peak: BTreeMap::new(),
-        private_peak: BTreeMap::new(),
-    };
+    build_state(slot);
+    let Some(state) = slot.as_mut() else { return };
     // The i686 ntdll every 32-bit process maps (ADR 0186).
     state.sys.ntdll32 = NTDLL32;
     // The Windows folders on C: and the registry values that follow
@@ -766,7 +762,23 @@ fn make_state(slot: &mut Option<NtState>) {
         };
         state.sys.win32k.wm.set_display(display);
     }
-    *slot = Some(state);
+}
+
+/// The NT state with nothing set up yet, into `slot` (see [`make_state`]).
+#[cold]
+#[inline(never)]
+fn build_state(slot: &mut Option<NtState>) {
+    *slot = Some(NtState {
+        sys: registry::boot_system(),
+        processes: BTreeMap::new(),
+        sections: Sections::default(),
+        ctl: BTreeMap::new(),
+        timers: BTreeMap::new(),
+        created: BTreeMap::new(),
+        finished: BTreeMap::new(),
+        peak: BTreeMap::new(),
+        private_peak: BTreeMap::new(),
+    });
 }
 
 /// Run `f` on the NT state if the first NT use made it already.
@@ -1280,6 +1292,7 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
+        proc.parent = handles.map_or(0, |h| h.caller.process.0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());

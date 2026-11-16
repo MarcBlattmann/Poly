@@ -367,7 +367,14 @@ pub fn start_process_listed(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    proc.threads.push(NtThread { thread, object: thread_object, teb, stack: stack.alloc });
+    proc.threads.push(NtThread {
+        thread,
+        object: thread_object,
+        teb,
+        stack: stack.alloc,
+        start: start_routine,
+        base_priority: 0,
+    });
     proc.peb = peb;
     proc.image_base = image_base;
     proc.default_stack_reserve = reserve;
@@ -495,7 +502,14 @@ pub fn create_thread(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    proc.threads.push(NtThread { thread, object: thread_object, teb, stack: stack.alloc });
+    proc.threads.push(NtThread {
+        thread,
+        object: thread_object,
+        teb,
+        stack: stack.alloc,
+        start: req.start_routine,
+        base_priority: 0,
+    });
 
     Ok(ThreadStart {
         entry: proc.thread_start,

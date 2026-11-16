@@ -37,7 +37,7 @@ Windows', and the two prefixes differed from each other
    `ERROR_NOT_SUPPORTED`. `QueryDosDeviceW` does not exist on Poly yet; when it
    does it asks the object namespace and so answers the same names.
 3. **Windows tests run from `C:\PolyTests`.** `pipeline win poly` puts the test
-   executable at `/nt/c/PolyTests/test-binary` (`poly.init=` that path,
+   executable at `/nt/c/PolyTests/test-binary.exe` (`poly.init=` that path,
    `poly.test.stdout=/nt/c/PolyTests/poly-test.out`), so the program and the system
    DLLs share the volume device. Nothing in the pipeline needs `Z:`: the
    observation file is read by VFS path, and the test support library finds it
