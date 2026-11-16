@@ -1661,6 +1661,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Chrome for Testing's headless --dump-dom on the NT personality, skipped
     // without the cached package (chromewin.rs, ADR 0155).
     ("chrome-win", chromewin::boot_test),
+    // Chrome's window on the desktop with its page painted, a URL typed into the address field
+    // (stage 3; chromewin.rs, ADR 0155, ADR 0214).
+    ("chrome-win-window", chromewin::window_boot_test),
     // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
     // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
     // ADR 0194).
@@ -1774,7 +1777,7 @@ const BOOT_GROUPS: &[BootGroup] = &[
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 13] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
@@ -1786,7 +1789,6 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
             "dynamic",
             "busybox",
             "rootdisk",
-            "chrome-win",
             "toolkits",
             "chromium",
             "chromium-desktop",
@@ -1798,6 +1800,10 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 11] = [
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
     ("sevenzip-b", &["7zip-b", "git-win"]),
+    // Chrome for Windows, each stage its own job so a flaky window check can never hide stage 1
+    // (the `chrome` job of the workflow fetches the package; ADR 0214).
+    ("chrome-win", &["chrome-win"]),
+    ("chrome-win-window", &["chrome-win-window"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.
@@ -2359,11 +2365,12 @@ fn check_workflow(path: &Path) -> Result {
     workflow_problems(&text).map_err(|p| format!("{}: {}", path.display(), p.join("; ")))
 }
 
-/// The matrix entries of the boot job: `(accelerator, shards)`.
+/// The matrix entries of the boot job and of the `chrome` job (`- chrome: <name>`, ADR 0214):
+/// `(accelerator, shards)`.
 fn workflow_boot_entries(text: &str) -> Vec<(String, Vec<String>)> {
     let mut entries: Vec<(String, Vec<String>)> = Vec::new();
     for line in text.lines().map(str::trim) {
-        if line.starts_with("- boot:") {
+        if line.starts_with("- boot:") || line.starts_with("- chrome:") {
             entries.push(("auto".into(), Vec::new()));
         } else if let Some(entry) = entries.last_mut() {
             if let Some(list) = line.strip_prefix("shards:") {
@@ -2427,6 +2434,18 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
     // The 7zip boot test's binary is fetched and cached by version (ADR 0087).
     if !text.contains("cargo xtask win fetch-7zip") || !text.contains(&format!("key: 7zip-{}", sevenzip::VERSION)) {
         problems.push(format!("no job fetches 7-Zip {} into a cache keyed 7zip-{0}", sevenzip::VERSION));
+    }
+    // Chrome for Windows runs in its own job, with the package fetched and cached by version, and a
+    // missing package is a failure there, not a skip (ADR 0214).
+    if !text.contains("xtask chrome-win fetch") || !text.contains(&format!("key: chrome-win-{}", chromewin::VERSION)) {
+        problems.push(format!("no job fetches Chrome {} into a cache keyed chrome-win-{0}", chromewin::VERSION));
+    }
+    if !text.contains("POLY_CHROME_REQUIRED: 1") {
+        problems
+            .push("the `chrome` job must set POLY_CHROME_REQUIRED: 1 (a missing Chrome is not a skip in CI)".into());
+    }
+    if !text.lines().any(|l| l.trim().starts_with("needs: [changes, lint") && l.contains("chrome")) {
+        problems.push("the `ci` job does not need the `chrome` job".into());
     }
     if problems.is_empty() { Ok(()) } else { Err(problems) }
 }
