@@ -510,7 +510,12 @@ unsafe fn identity() {
         check(GetUserNameExW(8, name.as_mut_ptr(), &mut n) == 0);
         is(GetLastError(), ERROR_NONE_MAPPED);
         n = 64;
+        // NameUnknown (0) is a format without a directory; one outside the enumeration is invalid
+        // (specs/windows/secur32.dll/GetUserNameExW.yaml, rule `formats`).
         check(GetUserNameExW(0, name.as_mut_ptr(), &mut n) == 0);
+        is(GetLastError(), ERROR_NONE_MAPPED);
+        n = 64;
+        check(GetUserNameExW(99, name.as_mut_ptr(), &mut n) == 0);
         is(GetLastError(), ERROR_INVALID_PARAMETER);
 
         // SSPI: no security packages.

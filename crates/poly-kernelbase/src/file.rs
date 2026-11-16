@@ -200,6 +200,26 @@ pub fn fits_low(position: u64) -> bool {
     position < 0xFFFF_FFFF
 }
 
+/// Whether `ReadFileEx` / `WriteFileEx` accept a request whose `NtReadFile` /
+/// `NtWriteFile` answered `status` at once: the request is queued (pending), done, at the
+/// end of the file, or a message pipe's read buffer was too short
+/// (`STATUS_BUFFER_OVERFLOW`, 0x80000005: the routine still runs, with error 0 and the bytes
+/// that fit; specs/windows/kernel32.dll/ReadFileEx.yaml, `message_mode_short_buffer`).
+pub fn ex_request_accepted(status: u32) -> bool {
+    const STATUS_PENDING: u32 = 0x103;
+    const STATUS_END_OF_FILE: u32 = 0xC000_0011;
+    const STATUS_BUFFER_OVERFLOW: u32 = 0x8000_0005;
+    status < 0x8000_0000 || status == STATUS_PENDING || status == STATUS_END_OF_FILE || status == STATUS_BUFFER_OVERFLOW
+}
+
+/// The error the completion routine of `ReadFileEx` / `WriteFileEx` gets for the final
+/// `status` of its request: 0 for a success and for the short-buffer warning of a message
+/// pipe, else `None` (the caller converts the status).
+pub fn ex_completion_error(status: u32) -> Option<u32> {
+    const STATUS_BUFFER_OVERFLOW: u32 = 0x8000_0005;
+    (status == 0 || status == STATUS_BUFFER_OVERFLOW).then_some(0)
+}
+
 /// The byte offset an `OVERLAPPED` structure gives (`Offset`, `OffsetHigh`).
 pub fn overlapped_offset(low: u32, high: u32) -> i64 {
     ((u64::from(high) << 32) | u64::from(low)) as i64
@@ -525,6 +545,13 @@ mod tests {
         assert!(fits_low(0xFFFF_FFFE));
         assert!(!fits_low(0xFFFF_FFFF));
         assert_eq!(overlapped_offset(1, 1), (1 << 32) + 1);
+        // A short buffer on a message pipe is accepted and completes with error 0.
+        assert!(ex_request_accepted(0x8000_0005));
+        assert!(ex_request_accepted(0x103) && ex_request_accepted(0) && ex_request_accepted(0xC000_0011));
+        assert!(!ex_request_accepted(0xC000_0008));
+        assert_eq!(ex_completion_error(0x8000_0005), Some(0));
+        assert_eq!(ex_completion_error(0), Some(0));
+        assert_eq!(ex_completion_error(0xC000_0011), None);
     }
 
     fn entry(name: &str, attrs: u32, size: u64, next: u32) -> Vec<u8> {

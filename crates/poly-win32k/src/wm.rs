@@ -2133,6 +2133,12 @@ impl Wm {
                 Reply::Windows { hwnds: self.queues.get(&k).map(|q| q.activated.clone()).unwrap_or_default() }
             }
             Request::SetInput { active, focus, capture, which } => {
+                if which & input::SET_CAPTURE_MOVE != 0 {
+                    // The capture release's mouse move, after WM_CAPTURECHANGED.
+                    self.queue_mouse(ctx, raw::WM_MOUSEMOVE, 0, fx);
+                    self.mark_synthetic_move(ctx.key());
+                    return Reply::Ok {};
+                }
                 let had_capture = self.input_of(ctx.key()).capture;
                 self.set_input(ctx.key(), active, focus, capture, which);
                 // Releasing the capture synthesizes a move to the window under

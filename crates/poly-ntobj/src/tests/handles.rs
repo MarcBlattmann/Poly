@@ -414,6 +414,28 @@ fn duplicate_close_source() {
 }
 
 #[test]
+fn duplicate_close_source_within_one_process_keeps_the_value() {
+    let (mut om, c) = setup();
+    // A lower free slot must not be taken: the new handle gets the value the source had.
+    let low = unnamed(&mut om, &c, EVENT_ALL_ACCESS, 0);
+    let ev = unnamed(&mut om, &c, EVENT_ALL_ACCESS, 0);
+    om.nt_close(&c, low.handle).unwrap();
+    let dup = om
+        .nt_duplicate_object(&c, P1, ev.handle, Some(P1), 0, 0, DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE)
+        .unwrap()
+        .unwrap();
+    assert_eq!(dup, ev.handle);
+    assert_eq!(om.handle_count(ev.object), Some(1));
+    // The freed lower value is still free for the next handle.
+    let next = unnamed(&mut om, &c, EVENT_ALL_ACCESS, 0);
+    assert_eq!(next.handle, low.handle);
+    // No `TargetHandle` pointer in one process: nothing happens, the source stays open.
+    assert_eq!(om.nt_duplicate_object_discarded(&c, P1, dup), Ok(()));
+    assert_eq!(om.handle_count(ev.object), Some(1));
+    assert_eq!(om.nt_duplicate_object_discarded(&c, P1, Handle(0x400)), Err(STATUS_INVALID_HANDLE));
+}
+
+#[test]
 fn duplicate_errors_and_attributes() {
     let (mut om, c) = setup();
     let ev = unnamed(&mut om, &c, EVENT_ALL_ACCESS, OBJ_INHERIT);

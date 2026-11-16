@@ -37,11 +37,13 @@ extern crate alloc;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_cxxeh::catches::Catches;
 use poly_cxxeh::consts::{CXX_EXCEPTION, MAGIC_V1, STATUS_UNWIND_CONSOLIDATE};
+use poly_cxxeh::fh4::{Action4, Func4, Search4};
 use poly_cxxeh::frame::{
     FrameKind, Search, frame_kind, parent_frame_offset, search, state_during_catch, unwind_actions,
 };
 use poly_cxxeh::tables::Func;
-use poly_cxxeh::throw::{CatchObject, Exception, ThrowInfo, catch_object};
+use poly_cxxeh::tables::HandlerType;
+use poly_cxxeh::throw::{CatchObject, Exception, Match, ThrowInfo, catch_object};
 use poly_cxxeh::{Bad, BadAddress, Memory};
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -97,6 +99,12 @@ impl Memory for Proc {
         unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, buf.as_mut_ptr(), buf.len()) };
         Ok(())
     }
+}
+
+/// This process's memory, for the decisions of `poly_cxxeh` other DLLs call (RTTI in
+/// `vcruntime140.dll`).
+pub fn memory() -> &'static dyn Memory {
+    &Proc
 }
 
 fn read_u32(addr: u64) -> Result<u32, Bad> {
@@ -347,6 +355,10 @@ struct CatchInfo {
     /// below the catch block, while it runs.
     record: *mut u8,
     context: *mut u8,
+    /// The continuation addresses the clause lists (FH4): the funclet returns an index into
+    /// them; with none it returns the address.
+    continuations: [u64; 2],
+    num_continuations: u64,
 }
 
 /// The catch an unwind record leads to, if it is ours.
@@ -378,6 +390,7 @@ unsafe extern "C" fn catch_callback(record: *mut u8) -> u64 {
     add_uncaught(-1);
     // SAFETY: the catch funclet of the clause, with its frame.
     let next = unsafe { poly_cxx_call_catch(info.funclet, info.parent_frame, id) };
+    let next = if next < info.num_continuations { info.continuations[next as usize] } else { next };
     if let Some(e) = with_catches(|c| c.finish(id)) {
         destroy(&e);
     }
@@ -542,21 +555,7 @@ unsafe fn search_frame(
     };
     let parent = parent_of(&f, kind, frame)?;
     if exc.is_cxx() {
-        match catch_object(&Proc, &handler, &matched, &exc, parent)? {
-            CatchObject::None => {}
-            CatchObject::Value { at, value } => {
-                // SAFETY: the catch object's slot in the function's frame.
-                unsafe { (at as *mut u64).write_unaligned(value) };
-            }
-            CatchObject::Bytes { at, from, size } => {
-                // SAFETY: the exception object and the catch object's slot,
-                // `size` bytes each (the catchable type's size).
-                unsafe { core::ptr::copy_nonoverlapping(from as *const u8, at as *mut u8, size as usize) };
-            }
-            CatchObject::Copy { at, from, function, virtual_bases } => {
-                guarded(function, at, from, u64::from(virtual_bases));
-            }
-        }
+        make_catch_object(&handler, &matched, &exc, parent)?;
     }
     let tb = f.try_block(try_index)?;
     let info = CatchInfo {
@@ -569,17 +568,50 @@ unsafe fn search_frame(
         exception: exc,
         record,
         context,
+        continuations: [0; 2],
+        num_continuations: 0,
     };
+    // SAFETY: the dispatcher's context for this frame; `info` stays in this frame.
+    unsafe { unwind_to_catch(frame, d, &info) }
+}
+
+/// Make the catch object of clause `handler` in the function's frame `parent`.
+fn make_catch_object(handler: &HandlerType, matched: &Match, exc: &Exception, parent: u64) -> Result<(), Bad> {
+    match catch_object(&Proc, handler, matched, exc, parent)? {
+        CatchObject::None => {}
+        CatchObject::Value { at, value } => {
+            // SAFETY: the catch object's slot in the function's frame.
+            unsafe { (at as *mut u64).write_unaligned(value) };
+        }
+        CatchObject::Bytes { at, from, size } => {
+            // SAFETY: the exception object and the catch object's slot,
+            // `size` bytes each (the catchable type's size).
+            unsafe { core::ptr::copy_nonoverlapping(from as *const u8, at as *mut u8, size as usize) };
+        }
+        CatchObject::Copy { at, from, function, virtual_bases } => {
+            guarded(function, at, from, u64::from(virtual_bases));
+        }
+    }
+    Ok(())
+}
+
+/// Unwind to the catch's frame with a `STATUS_UNWIND_CONSOLIDATE` record naming
+/// [`catch_callback`] and `info`; does not return.
+///
+/// # Safety
+/// `d` is the dispatcher's context of `frame`; `info` lives in the caller's frame, which stays
+/// in place (below the target) until the catch block ends.
+unsafe fn unwind_to_catch(frame: u64, d: &Dispatch, info: &CatchInfo) -> ! {
     let mut unwind = [0u8; RECORD_SIZE];
     unwind[0..4].copy_from_slice(&STATUS_UNWIND_CONSOLIDATE.to_le_bytes());
     unwind[4..8].copy_from_slice(&EXCEPTION_NONCONTINUABLE.to_le_bytes());
     unwind[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
     let callback = catch_callback as unsafe extern "C" fn(*mut u8) -> u64 as usize as u64;
     unwind[0x20..0x28].copy_from_slice(&callback.to_le_bytes());
-    unwind[0x28..0x30].copy_from_slice(&(&raw const info as u64).to_le_bytes());
+    unwind[0x28..0x30].copy_from_slice(&(info as *const CatchInfo as u64).to_le_bytes());
     // SAFETY: unwind to this frame (its control PC keeps the stack walk of
-    // a later exception in the function); `info` stays in place, as this
-    // frame does, until the catch block ends.
+    // a later exception in the function); `info` stays in place, as the
+    // caller's frame does, until the catch block ends.
     unsafe { RtlUnwindEx(frame, d.control_pc, unwind.as_mut_ptr(), 0, d.context, d.history) }
 }
 
@@ -608,6 +640,135 @@ unsafe fn unwind_frame(frame: u64, d: &Dispatch, exc: &Exception) -> Result<(), 
     for a in actions {
         let funclet = d.image_base.wrapping_add(u64::from(a));
         guarded(funclet, funclet, parent, FUNCLET_R8);
+    }
+    Ok(())
+}
+
+// ----- __CxxFrameHandler4 ---------------------------------------------------------------
+
+/// `__CxxFrameHandler4(record, establisher_frame, context, dispatcher)` (ADR 0199, the spec
+/// `vcruntime140_1.dll/__CxxFrameHandler4.yaml`): the handler of functions whose tables are in
+/// Visual C++'s compressed form. The same catch and unwind machinery as [`frame_handler`];
+/// `poly_cxxeh::fh4` decodes the tables and decides.
+///
+/// # Safety
+/// Called by the exception dispatcher with valid arguments.
+pub unsafe extern "C" fn frame_handler4(record: *mut u8, frame: u64, context: *mut u8, dc: *mut u8) -> u32 {
+    // SAFETY: the dispatcher's DISPATCHER_CONTEXT and record.
+    let (d, exc) = unsafe { (Dispatch::read(dc), read_exception(record)) };
+    let r = if exc.flags & EXCEPTION_UNWIND == 0 {
+        // SAFETY: as above.
+        unsafe { search_frame4(record, frame, context, &d, exc) }
+    } else {
+        unwind_frame4(frame, &d, &exc)
+    };
+    let _ = r;
+    CONTINUE_SEARCH
+}
+
+/// The frame's FH4 tables and its function's start (absolute).
+fn tables4(d: &Dispatch) -> Result<(Func4, u64), Bad> {
+    let begin = read_u32(d.function_entry)?;
+    let f = Func4::read(&Proc, d.image_base, read_u32(d.handler_data)?, begin)?;
+    Ok((f, d.image_base.wrapping_add(u64::from(begin))))
+}
+
+/// The frame's state: the one kept while a catch block of one of its try blocks runs, else its
+/// control PC's.
+fn locate4(f: &Func4, d: &Dispatch, frame: u64, function: u64) -> i32 {
+    with_catches(|c| c.state_of(frame, function)).unwrap_or_else(|| f.state_at(d.rva(d.control_pc)))
+}
+
+/// The function's establisher frame: a catch funclet's table names the slot that holds it.
+fn parent_of4(f: &Func4, frame: u64) -> Result<u64, Bad> {
+    match f.parent_frame_offset {
+        Some(off) => read_u64(frame.wrapping_add(u64::from(off))),
+        None => Ok(frame),
+    }
+}
+
+/// The search of an FH4 frame.
+///
+/// # Safety
+/// The dispatcher's record and dispatcher context.
+unsafe fn search_frame4(
+    record: *mut u8,
+    frame: u64,
+    context: *mut u8,
+    d: &Dispatch,
+    mut exc: Exception,
+) -> Result<(), Bad> {
+    // SAFETY: the caller's record.
+    unsafe { complete_rethrow(record, &mut exc) };
+    let (f, function) = tables4(d)?;
+    let state = locate4(&f, d, frame, function);
+    let (try_index, handler_index, matched) = match f.search(&Proc, d.image_base, state, &exc)? {
+        Search4::Continue => return Ok(()),
+        Search4::Terminate => terminate(),
+        Search4::Catch { try_index, handler_index, matched } => (try_index, handler_index, matched),
+    };
+    let tb = f.tries.get(try_index).ok_or(Bad::Index(try_index as u32))?;
+    let h = *tb.handlers.get(handler_index).ok_or(Bad::Index(handler_index as u32))?;
+    let parent = parent_of4(&f, frame)?;
+    if exc.is_cxx() {
+        make_catch_object(&h.clause, &matched, &exc, parent)?;
+    }
+    let mut continuations = [0u64; 2];
+    for (c, &off) in continuations.iter_mut().zip(h.continuations.iter()) {
+        *c = function.wrapping_add(u64::from(off));
+    }
+    let info = CatchInfo {
+        target_frame: frame,
+        function,
+        state: f.state_during_catch(tb),
+        try_low: tb.try_low,
+        funclet: d.image_base.wrapping_add(u64::from(h.clause.handler)),
+        parent_frame: parent,
+        exception: exc,
+        record,
+        context,
+        continuations,
+        num_continuations: u64::from(h.num_continuations),
+    };
+    // SAFETY: the dispatcher's context of this frame; `info` stays in this frame.
+    unsafe { unwind_to_catch(frame, d, &info) }
+}
+
+/// The unwind of an FH4 frame: its actions down to the target state.
+fn unwind_frame4(frame: u64, d: &Dispatch, exc: &Exception) -> Result<(), Bad> {
+    // SAFETY: an unwind record; ours only if it names our callback.
+    let ours = unsafe { consolidation(exc) };
+    let underlying = ours.map_or(*exc, |i| i.exception);
+    let (f, function) = tables4(d)?;
+    if !underlying.is_cxx() && f.synchronous_only() {
+        return Ok(());
+    }
+    let state = locate4(&f, d, frame, function);
+    let target = exc.flags & EXCEPTION_TARGET_UNWIND != 0;
+    let to = match (target, ours) {
+        (false, _) => -1,
+        (true, Some(i)) => i.try_low,
+        (true, None) => f.state_at_target(d.rva(d.target_ip)),
+    };
+    let actions = f.unwind_actions(state, to)?;
+    let parent = parent_of4(&f, frame)?;
+    with_catches(|c| c.prune(frame, !target));
+    let base = d.image_base;
+    for a in actions {
+        match a {
+            Action4::None => {}
+            Action4::Destroy { function, offset } => {
+                guarded(base.wrapping_add(u64::from(function)), parent.wrapping_add(u64::from(offset)), 0, 0);
+            }
+            Action4::DestroyIndirect { function, offset } => {
+                let object = read_u64(parent.wrapping_add(u64::from(offset)))?;
+                guarded(base.wrapping_add(u64::from(function)), object, 0, 0);
+            }
+            Action4::Funclet { function } => {
+                let funclet = base.wrapping_add(u64::from(function));
+                guarded(funclet, funclet, parent, FUNCLET_R8);
+            }
+        }
     }
     Ok(())
 }
