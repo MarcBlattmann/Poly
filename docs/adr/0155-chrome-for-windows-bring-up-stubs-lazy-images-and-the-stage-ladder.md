@@ -1128,6 +1128,12 @@ network, the omnibox, links, keyboard scrolling, back and tabs worked at once. W
    border (`HTLEFT`, `HTRIGHT`, `HTTOP` above the caption, `HTBOTTOM`, the corners), `HTBORDER`
    only for a window without a sizing border (Learn, "WM_NCHITTEST").
 
+**The kernel stack on the first NT use.** The new boot check first failed with a kernel stack
+overflow in the debug kernel: the compositor's first write to the desktop link is the first NT
+use, and `make_state` built the whole NT state (6 KiB in a debug build) in the frame that then ran
+the folder and VFS set-up (about 8 KiB deeper), at the edge of the 16 KiB stack. The state is now
+built by a function of its own whose frame is gone before the set-up runs.
+
 **Consequences.** Every step of the flow works in one run (hand-off `chrome-win-browse.md`).
 `boot-tests chrome-win` stage 3 now also types a `data:` URL into the address field after the
 green page and checks its blue background. `win-app` has the steps `wheel:X|Y|N`, `move:X|Y`,
