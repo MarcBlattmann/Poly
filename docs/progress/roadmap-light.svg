@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 108 of 167 milestones done">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 111 of 171 milestones done">
 <rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#ffffff" rx="8" stroke="#d0d7de"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#1f2328" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">108 / 167 milestones · 65%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="end">111 / 171 milestones · 65%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#1f2328" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2da44e" rx="3"/>
@@ -195,66 +195,69 @@
 <text x="16.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#0969da" text-anchor="start"> 5  NT personality and Windows console apps</text>
 <text x="328.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="600" fill="#0969da" text-anchor="end">NOW</text>
 <g><title>✔ Decided (ADR 0055): run apps' own copies of MSVC / DirectX redistributables; reimplement the most-needed ones later if needed</title>
-<rect x="340.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="340.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Windows test oracle VM, Windows API tracer, Wine conformance tests imported as spec seeds (oracle: a dedicated machine over SSH, ADR 0097; tracer: ADR 0090; Wine seeds: ADR 0097)</title>
-<rect x="363.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="362.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT object manager: handles, object namespace (\??, \Device, \BaseNamedObjects), reference counts</title>
-<rect x="387.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="385.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT memory services: sections, NtAllocateVirtualMemory, NtMapViewOfSection, protections</title>
-<rect x="411.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="408.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT processes and threads, TEB/PEB, thread contexts, APCs (ADR 0065)</title>
-<rect x="435.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="430.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT synchronisation: events, mutants, semaphores, timers, NtWaitForMultipleObjects (ADR 0065)</title>
-<rect x="459.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="453.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ NT file I/O: case-insensitive lookup, drive letters, share modes, byte-range locks, IRP-style async I/O (ADR 0067)</title>
-<rect x="482.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="476.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Structured exception handling: kernel-to-user exception dispatch, unwinding (ADR 0068)</title>
-<rect x="506.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="498.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Registry: hive storage, NtOpenKey family, default system hives</title>
-<rect x="530.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="521.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Our ntdll: PE loader (imports, relocations, TLS, delay-load), heap, Rtl*, loader lock (ADR 0071)</title>
-<rect x="554.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="544.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Our kernelbase / kernel32: files, processes, threads, memory, synchronisation, errors (ADR 0079: two slices, processes, TLS/FLS, code pages, file mappings, condition variables; ADR 0089: handle inheritance, STARTUPINFO and its standard handles, CREATE_SUSPENDED in CreateProcessW)</title>
-<rect x="578.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="566.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ C runtime: ucrtbase + api-ms-win-crt-* and msvcrt (versioned runtimes come with the apps, ADR 0055) (first slice ADR 0084; math, setjmp/longjmp and positional printf ADR 0092; files, processes, pipes, wildcard argv and console I/O ADR 0093; locales and multibyte code pages ADR 0094; C++ exceptions in msvcrt ADR 0099)</title>
-<rect x="601.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="589.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ advapi32 basics: registry API, security descriptors, tokens (single user) (ADR 0083)</title>
-<rect x="625.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="612.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Console: our console host, AllocConsole, ReadConsole / WriteConsole, standard handles (ADR 0080)</title>
-<rect x="649.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="634.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Windows file system layout: C:\Windows, System32, Program Files, user profile (ADR 0073)</title>
-<rect x="673.2" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="657.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Milestone (proof of concept b): 7-Zip command line (7z.exe) passes its full recorded trace (ADR 0087: the x64 7za.exe binds every import and runs usage, i, a, t and x on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the wintrace boot group; ADR 0114: all 15 steps without a divergence, TRACE_REQUIRED, a required check)</title>
-<rect x="697.0" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="680.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Winsock (ws2_32) on our sockets; winhttp / wininet basics (ADR 0095)</title>
-<rect x="720.8" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="702.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Cryptography: bcrypt, crypt32 certificate stores (needed by almost every networked app) (ADR 0096)</title>
-<rect x="744.6" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="725.3" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ Git for Windows: its sh and git (--version, init, config, add, commit, log --stat) run on the MSYS2 runtime (ADR 0194, boot group git-win)</title>
+<rect x="748.0" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>✔ Our own vcruntime140 and vcruntime140_1 (ADR 0199, taking up ADR 0055's fallback; FH4, RTTI and type_info::name from spec-vcrt-1)</title>
-<rect x="768.4" y="203.0" width="21.8" height="16.0" fill="#2da44e" rx="3"/>
+<rect x="770.7" y="203.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
 </g>
 <g><title>Our own msvcp140 and siblings, in the order of the names apps import (ADR 0199; first names: threads, time, the throw helpers, _Lockit; the stream classes and locale next)</title>
-<rect x="792.2" y="203.0" width="21.8" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
+<rect x="793.3" y="203.0" width="20.7" height="16.0" fill="#0969da" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">19/20</text>
+<text x="884.0" y="215.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">20/21</text>
 <text x="16.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 6  Graphics, input, audio and the desktop</text>
 <g><title>✔ ⚖️ Decided (owner): per-window menus for every app; Mac apps' menu bars are drawn under Poly's neutral title bar, the top ridge stays a status strip (ADR 0107)</title>
 <rect x="340.0" y="233.0" width="20.7" height="16.0" fill="#2da44e" rx="3"/>
@@ -322,48 +325,57 @@
 <text x="884.0" y="245.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">20/21</text>
 <text x="16.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 7  Windows GUI apps</text>
 <g><title>win32k services: windows, message queues, input routing, hooks, timers</title>
-<rect x="340.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="340.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>user32: window classes, messages, dialogs, menus, clipboard, DPI awareness</title>
-<rect x="374.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="368.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>gdi32: device contexts, bitmaps, regions, text output; surfaces handed to the compositor</title>
-<rect x="408.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="396.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Native look: uxtheme visual styles, comctl32 common controls matching real Windows</title>
-<rect x="442.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="424.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Text: DirectWrite, GDI font mapping, Uniscribe / complex scripts</title>
-<rect x="476.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="452.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>COM runtime: combase / ole32, apartments, marshalling, RPC, oleaut32 automation</title>
-<rect x="510.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="480.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Shell: shell32 / shlwapi, known folders, file open/save dialogs</title>
-<rect x="544.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="508.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Graphics: DXGI, Direct3D 11 on Vulkan, Direct2D; then Direct3D 12</title>
-<rect x="578.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="536.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Audio: MMDevice / WASAPI and winmm on our audio server</title>
-<rect x="612.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="564.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Security model: tokens, ACLs, integrity levels, job objects, restricted tokens (Chrome sandbox)</title>
-<rect x="646.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="592.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Services: service control manager, scheduled tasks, Windows event log</title>
-<rect x="680.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="620.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Milestone: Notepad++ and the 7-Zip GUI run with native-looking controls</title>
-<rect x="714.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="648.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Milestone: Paint.NET (.NET desktop) and VS Code (Electron) run</title>
-<rect x="748.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="676.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+</g>
+<g><title>✔ Chrome for Windows runs headless with its sandbox and GPU off: the unmodified browser loads a page and prints it (stage 1 of the ladder; boot group chrome-win, a required check) (ADR 0155, 0169, 0189)</title>
+<rect x="704.0" y="263.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>✔ Chrome for Windows in its own window with its sandbox and GPU off: it paints its page, survives its component updater and loads an address typed into its address bar (stage 3; the window check of boot group chrome-win); run by hand it browses http and https sites over the network (stage 4) (ADR 0190, 0195, 0207, 0209)</title>
+<rect x="732.0" y="263.0" width="26.0" height="16.0" fill="#2da44e" rx="3"/>
+</g>
+<g><title>Chrome for Windows with its GPU on: a software Direct3D 11 device, so the GPU process settles on its first start (stage 5; specs from PR #270)</title>
+<rect x="760.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
 <g><title>Milestone: Chrome runs with its sandbox enabled</title>
-<rect x="782.0" y="263.0" width="32.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
+<rect x="788.0" y="263.0" width="26.0" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
 </g>
-<text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">0/14</text>
+<text x="884.0" y="275.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">2/17</text>
 <text x="16.0" y="305.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#59636e" text-anchor="start"> 8  Integration bridges</text>
 <g><title>Shared clipboard across Linux, Windows and macOS formats</title>
 <rect x="340.0" y="293.0" width="24.4" height="16.0" fill="#eff2f5" rx="3" stroke="#d0d7de"/>
