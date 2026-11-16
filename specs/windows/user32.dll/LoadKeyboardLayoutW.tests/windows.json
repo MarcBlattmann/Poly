@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "spec-win-input-final",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T04:56:24Z",
+  "tests": [
+    {
+      "name": "lkl_basic",
+      "exe_sha256": "8ae0b5f73a7f33c77c571665eeecbb07a692b79b185f9a304460693b9c30d76f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZm9yZWdyb3VuZAppbml0aWFsIGxpc3Q6IGNvdW50IDM6IDB4MDgwNzA4MDkgMHgwNDA3MjAwMCAweDA0MDcwODA5CmluaXRpYWw6IEdldEtleWJvYXJkTGF5b3V0KDApPTB4MDQwNzIwMDAgbmFtZShyZXQgMSk9MDAwMDA0MDcKTG9hZEtleWJvYXJkTGF5b3V0VygwMDAwMDQwOSwgTk9URUxMU0hFTEwpID0gMHgwNDA5MDQwOQphZnRlciBsb2FkOiBjb3VudCA0OiAweDA4MDcwODA5IDB4MDQwNzIwMDAgMHgwNDA3MDgwOSAweDA0MDkwNDA5CmFmdGVyIGxvYWQgKG5vdCBhY3RpdmF0ZWQpOiBHZXRLZXlib2FyZExheW91dCgwKT0weDA0MDcyMDAwIG5hbWUocmV0IDEpPTAwMDAwNDA3CmxvYWRlZCBhZ2FpbiA9IDB4MDQwOTA0MDkgKHNhbWU6IHRydWUpCmFmdGVyIHNlY29uZCBsb2FkOiBjb3VudCA0OiAweDA4MDcwODA5IDB4MDQwNzIwMDAgMHgwNDA3MDgwOSAweDA0MDkwNDA5CkxvYWRLZXlib2FyZExheW91dFcoMDAwMDA4MDcpID0gMHgwODA3MDgwNwphZnRlciBsb2FkaW5nIDAwMDAwODA3OiBjb3VudCA1OiAweDA4MDcwODA5IDB4MDQwNzIwMDAgMHgwNDA3MDgwOSAweDA0MDkwNDA5IDB4MDgwNzA4MDcKTG9hZEtleWJvYXJkTGF5b3V0VygwMDAwMGZmZikgPSAweDA0MDkwNDA5IGxhc3RlcnJvciAwCkxvYWRLZXlib2FyZExheW91dFcoNDA5KSA9IDB4MDQwOTA0MDkgbGFzdGVycm9yIDAKTG9hZEtleWJvYXJkTGF5b3V0Vyh6enp6enp6eikgPSAweDA0MDkwNDA5IGxhc3RlcnJvciAwCkxvYWRLZXlib2FyZExheW91dFcoRkZGRkZGRkYpID0gMHgwNDA5MDQwOSBsYXN0ZXJyb3IgMApMb2FkS2V5Ym9hcmRMYXlvdXRXKDAwMDAwNDBjKSA9IDB4MDQwYzA0MGMgbGFzdGVycm9yIDAKYWZ0ZXIgdGhlIG9kZCBuYW1lczogY291bnQgNjogMHgwODA3MDgwOSAweDA0MDcyMDAwIDB4MDQwNzA4MDkgMHgwNDA5MDQwOSAweDA4MDcwODA3IDB4MDQwYzA0MGMKTG9hZEtleWJvYXJkTGF5b3V0VygwMDAwMDQwQywgS0xGX0FDVElWQVRFKSA9IDB4MDQwYzA0MGMKICBbQV0gV01fSU5QVVRMQU5HQ0hBTkdFIGNoYXJzZXQ9MCBoa2w9MHgwNDBjMDQwYwogIFtBXSBXTV9LRVlVUCB2az0weDExCmFmdGVyIEtMRl9BQ1RJVkFURTogR2V0S2V5Ym9hcmRMYXlvdXQoMCk9MHgwNDBjMDQwYyBuYW1lKHJldCAxKT0wMDAwMDQwQwpmaW5hbCBsaXN0OiBjb3VudCAzOiAweDA4MDcwODA5IDB4MDQwNzIwMDAgMHgwNDA3MDgwOQpmaW5hbDogR2V0S2V5Ym9hcmRMYXlvdXQoMCk9MHgwNDA3MjAwMCBuYW1lKHJldCAxKT0wMDAwMDQwNwpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok foreground\ninitial list: count 3: 0x08070809 0x04072000 0x04070809\ninitial: GetKeyboardLayout(0)=0x04072000 name(ret 1)=00000407\nLoadKeyboardLayoutW(00000409, NOTELLSHELL) = 0x04090409\nafter load: count 4: 0x08070809 0x04072000 0x04070809 0x04090409\nafter load (not activated): GetKeyboardLayout(0)=0x04072000 name(ret 1)=00000407\nloaded again = 0x04090409 (same: true)\nafter second load: count 4: 0x08070809 0x04072000 0x04070809 0x04090409\nLoadKeyboardLayoutW(00000807) = 0x08070807\nafter loading 00000807: count 5: 0x08070809 0x04072000 0x04070809 0x04090409 0x08070807\nLoadKeyboardLayoutW(00000fff) = 0x04090409 lasterror 0\nLoadKeyboardLayoutW(409) = 0x04090409 lasterror 0\nLoadKeyboardLayoutW(zzzzzzzz) = 0x04090409 lasterror 0\nLoadKeyboardLayoutW(FFFFFFFF) = 0x04090409 lasterror 0\nLoadKeyboardLayoutW(0000040c) = 0x040c040c lasterror 0\nafter the odd names: count 6: 0x08070809 0x04072000 0x04070809 0x04090409 0x08070807 0x040c040c\nLoadKeyboardLayoutW(0000040C, KLF_ACTIVATE) = 0x040c040c\n  [A] WM_INPUTLANGCHANGE charset=0 hkl=0x040c040c\n  [A] WM_KEYUP vk=0x11\nafter KLF_ACTIVATE: GetKeyboardLayout(0)=0x040c040c name(ret 1)=0000040C\nfinal list: count 3: 0x08070809 0x04072000 0x04070809\nfinal: GetKeyboardLayout(0)=0x04072000 name(ret 1)=00000407\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 575
+    }
+  ]
+}
