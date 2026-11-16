@@ -45,8 +45,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
   own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1
