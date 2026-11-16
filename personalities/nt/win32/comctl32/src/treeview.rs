@@ -463,8 +463,14 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
         return false;
     }
     let action = if want_expand { TVE_EXPAND } else { TVE_COLLAPSE };
+    // An item whose children were asked for says so in the notification's mask (TVIF_CHILDREN).
+    let mask = 0x3E | if with(hwnd, |t| t.nodes[&id].children_flag != 0).unwrap_or(false) { TVIF_CHILDREN } else { 0 };
     // The parent hears of an expansion, not of a collapse (`TVM_EXPAND` in the sheet's test).
-    if want_expand && !quiet && node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, 0x3E))) != 0 {
+    if want_expand && !quiet && node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, mask))) != 0 {
+        return false;
+    }
+    // Nothing came of it when the parent gave the item no children.
+    if want_expand && with(hwnd, |t| t.nodes[&id].kids.is_empty()).unwrap_or(true) {
         return false;
     }
     with(hwnd, |t| {
@@ -479,7 +485,7 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
     });
     if want_expand {
         if !quiet {
-            node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
+            node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, mask)));
         }
         with(hwnd, |t| {
             if let Some(n) = t.nodes.get_mut(&id) {
@@ -498,6 +504,13 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
             for k in kids {
                 delete(hwnd, k as usize);
             }
+            // The item has not been expanded since: it asks for its children again.
+            with(hwnd, |t| {
+                if let Some(n) = t.nodes.get_mut(&id) {
+                    n.state &= !(TVIS_EXPANDED | TVIS_EXPANDEDONCE);
+                    n.children_flag = 1;
+                }
+            });
         }
     }
     invalidate(hwnd);
