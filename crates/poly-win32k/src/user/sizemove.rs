@@ -163,6 +163,9 @@ pub fn run<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: u64, edge: u64, l: u64) {
         );
     }
     send(env, hwnd, WM_EXITSIZEMOVE, 0, 0);
+    if moving {
+        input::AFTER_MOVE_LOOP.store(true, core::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// One mouse move of the loop: the rectangle, `WM_SIZING` / `WM_MOVING`, `SetWindowPos`.

@@ -30,6 +30,11 @@ fn is_wheel(m: u32) -> bool {
     m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL
 }
 
+/// Set when a move loop ended (`sizemove`): the mouse move its capture release makes is followed by
+/// a second one (`WM_ENTERSIZEMOVE.yaml` `szm_caption`: two `WM_NCMOUSEMOVE` after
+/// `WM_EXITSIZEMOVE`).
+pub static AFTER_MOVE_LOOP: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 /// The window and screen place of the last mouse move whose hit was the caption (0: none).
 static CAPTION_SPOT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
@@ -91,6 +96,9 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     } else {
         send(env, h, WM_NCHITTEST, 0, screen_l)
     };
+    if synthetic && AFTER_MOVE_LOOP.swap(false, core::sync::atomic::Ordering::Relaxed) {
+        env.call(Request::Cursor { set: true, x: sx, y: sy });
+    }
     // Moving from the tracked non-client area into the client area (or
     // another window) ends the tracking: WM_NCMOUSELEAVE follows the move.
     if m.message == WM_MOUSEMOVE {
