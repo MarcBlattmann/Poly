@@ -1689,6 +1689,37 @@ pub unsafe extern "system" fn GetMonitorInfoW(monitor: H, mi: *mut u8) -> i32 {
     1
 }
 
+/// `GetMonitorInfoA`: MONITORINFO (40 bytes) or MONITORINFOEXA (72 bytes, the device name as ANSI text).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetMonitorInfoA(monitor: H, mi: *mut u8) -> i32 {
+    if mi.is_null() {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    // SAFETY: the caller's structure starts with cbSize.
+    let size = unsafe { core::ptr::read_unaligned(mi as *const u32) };
+    if size != 40 && size != 72 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let mut wide = [0u8; 104];
+    wide[..4].copy_from_slice(&(if size == 40 { 40u32 } else { 104u32 }).to_le_bytes());
+    // SAFETY: a MONITORINFOEXW of 104 bytes.
+    if unsafe { GetMonitorInfoW(monitor, wide.as_mut_ptr()) } == 0 {
+        return 0;
+    }
+    // SAFETY: `size` bytes of the caller's structure.
+    unsafe {
+        core::ptr::copy_nonoverlapping(wide.as_ptr().add(4), mi.add(4), 36);
+        if size == 72 {
+            let name = b"\\\\.\\DISPLAY1\0";
+            core::ptr::write_bytes(mi.add(40), 0, 32);
+            core::ptr::copy_nonoverlapping(name.as_ptr(), mi.add(40), name.len());
+        }
+    }
+    1
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn AdjustWindowRectEx(rect: *mut i32, style: u32, menu: i32, ex: u32) -> i32 {
     first_call();
