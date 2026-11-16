@@ -648,7 +648,9 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 invalidate(hwnd);
                 old as isize
             }
-            TB_GETIMAGELIST => with(hwnd, |s| if s.images[0] != 0 { s.images[0] } else { s.own_list }).unwrap_or(0) as isize,
+            TB_GETIMAGELIST => {
+                with(hwnd, |s| if s.images[0] != 0 { s.images[0] } else { s.own_list }).unwrap_or(0) as isize
+            }
             TB_GETHOTIMAGELIST => with(hwnd, |s| s.images[1]).unwrap_or(0) as isize,
             TB_GETDISABLEDIMAGELIST => with(hwnd, |s| s.images[2]).unwrap_or(0) as isize,
             TB_SETSTYLE => {

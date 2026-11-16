@@ -1016,7 +1016,10 @@ fn get_item(hwnd: usize, l: usize, wide: bool) -> bool {
         it.children = full.children;
         if full.children == -1 {
             // I_CHILDRENCALLBACK: the parent says whether the item has children.
-            let mut nm = NmTvDispInfo { hdr: NmHdr::default(), item: TvItem { mask: TVIF_CHILDREN, item: it.item, ..TvItem::default() } };
+            let mut nm = NmTvDispInfo {
+                hdr: NmHdr::default(),
+                item: TvItem { mask: TVIF_CHILDREN, item: it.item, ..TvItem::default() },
+            };
             notify(hwnd, TVN_GETDISPINFOW, &mut nm);
             it.children = nm.item.children;
         }
