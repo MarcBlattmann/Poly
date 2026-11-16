@@ -11,5 +11,14 @@
 {"symbol":"$sSo21OSLogMessageComponentC0A0E8ArgumentON","src":["macos-sdk"]},
 {"symbol":"$sSo21OSLogMessageComponentC0A0E8argumentAbCE8ArgumentOvg","src":["macos-sdk"]},
 {"symbol":"$sSo21OSLogMessageComponentC0A0E8argumentAbCE8ArgumentOvpMV","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftOSLog","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftOSLog","src":["macos-sdk"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.data","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.double","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.signed","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.string","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.undefined","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.Argument.unsigned","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogMessageComponent.argument","src":["macos-swift-interface"]},
+{"symbol":"swift:OSLog.OSLogStore.getEntries(with:at:matching:)","src":["macos-swift-interface"]}
 ]

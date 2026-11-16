@@ -7024,5 +7024,12 @@
 {"symbol":"objc:FigSubtitleCALayer","src":["macos-sdk"]},
 {"symbol":"objc:FigVideoContainerLayer","src":["macos-sdk"]},
 {"symbol":"objc:FigVideoContainerLayerForVideoReceiver","src":["macos-sdk"]},
-{"symbol":"objc:FigVideoDestination","src":["macos-sdk"]}
+{"symbol":"objc:FigVideoDestination","src":["macos-sdk"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@clientInfo","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@finalize","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@init","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@prepare","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@process","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@unprepare","src":["macos-objc-api"]},
+{"symbol":"objc:MTAudioProcessingTapCallbacks.@version","src":["macos-objc-api"]}
 ]

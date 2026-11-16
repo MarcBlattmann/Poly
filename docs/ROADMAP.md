@@ -113,6 +113,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] **Milestone (proof of concept b):** 7-Zip command line (`7z.exe`) passes its full recorded trace (ADR 0087: the x64 `7za.exe` binds every import and runs usage, `i`, `a`, `t` and `x` on Poly; ADR 0088/0101: all 16 steps of the scenario recorded on Windows match, exit codes, output and files, a required check; ADR 0110: the scenario's API trace recorded on Windows and committed, compared per step by the `wintrace` boot group; ADR 0114: all 15 steps without a divergence, `TRACE_REQUIRED`, a required check)
 - [x] Winsock (`ws2_32`) on our sockets; `winhttp` / `wininet` basics (ADR 0095)
 - [x] Cryptography: `bcrypt`, `crypt32` certificate stores (needed by almost every networked app) (ADR 0096)
+- [x] Git for Windows: its `sh` and `git` (`--version`, `init`, `config`, `add`, `commit`, `log --stat`) run on the MSYS2 runtime (ADR 0194, boot group `git-win`)
 - [x] Our own `vcruntime140` and `vcruntime140_1` (ADR 0199, taking up ADR 0055's fallback; FH4, RTTI and `type_info::name` from spec-vcrt-1)
 - [ ] Our own `msvcp140` and siblings, in the order of the names apps import (ADR 0199; first names: threads, time, the throw helpers, `_Lockit`; the stream classes and locale next)
 
@@ -155,6 +156,9 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Services: service control manager, scheduled tasks, Windows event log
 - [ ] **Milestone:** Notepad++ and the 7-Zip GUI run with native-looking controls
 - [ ] **Milestone:** Paint.NET (.NET desktop) and VS Code (Electron) run
+- [x] Chrome for Windows runs headless with its sandbox and GPU off: the unmodified browser loads a page and prints it (stage 1 of the ladder; boot group `chrome-win`, a required check) (ADR 0155, 0169, 0189)
+- [x] Chrome for Windows in its own window with its sandbox and GPU off: it paints its page, survives its component updater and loads an address typed into its address bar (stage 3; the window check of boot group `chrome-win`); run by hand it browses http and https sites over the network (stage 4) (ADR 0190, 0195, 0207, 0209)
+- [ ] Chrome for Windows with its GPU on: a software Direct3D 11 device, so the GPU process settles on its first start (stage 5; specs from PR #270)
 - [ ] **Milestone:** Chrome runs with its sandbox enabled
 
 ## Phase 8: Integration bridges
@@ -185,7 +189,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Mach-O reader: fat and thin files, load commands, symbols, dylib dependencies, chained fixups, classic rebase and bind, robust against corrupt files (ADR 0153)
 - [x] aarch64 port groundwork: a boot stub on QEMU `virt` (PL011 serial, self-test) built and booted in CI (ADR 0154)
 - [ ] aarch64 port groundwork: the kernel's x86-64 code behind `crate::arch`, so a second architecture plugs in (ADR 0151)
-- [ ] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API
+- [x] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API (ADR 0182, ADR 0187)
 - [ ] Mach-O loading and our own `dyld` (shared cache optional, chained fixups)
 - [ ] Mach core: tasks, threads, ports, port rights, messages, Mach VM
 - [ ] BSD layer: XNU syscalls, `kqueue`, `posix_spawn`, signals with Darwin semantics

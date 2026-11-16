@@ -13,8 +13,14 @@
 {"symbol":"FPUInternalActionTypeLabelIdentifier","src":["macos-sdk"]},
 {"symbol":"objc:FPUIAction","src":["macos-sdk"]},
 {"symbol":"objc:FPUIActionController","src":["macos-sdk"]},
-{"symbol":"objc:FPUIActionExtensionContext","src":["macos-sdk"]},
-{"symbol":"objc:FPUIActionExtensionViewController","src":["macos-sdk"]},
+{"symbol":"objc:FPUIActionExtensionContext","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionContext.@domainIdentifier","src":["macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionContext.cancelRequestWithError:","src":["macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionContext.completeRequest","src":["macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionViewController","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionViewController.@extensionContext","src":["macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionViewController.prepareForActionWithIdentifier:itemIdentifiers:","src":["macos-objc-api"]},
+{"symbol":"objc:FPUIActionExtensionViewController.prepareForError:","src":["macos-objc-api"]},
 {"symbol":"objc:FPUIActionViewController","src":["macos-sdk"]},
 {"symbol":"objc:FPUIManager","src":["macos-sdk"]}
 ]
