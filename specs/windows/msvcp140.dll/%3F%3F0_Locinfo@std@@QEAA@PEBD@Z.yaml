@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/??0_Locinfo@std@@QEAA@PEBD@Z"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::_Locinfo: the object the standard facets read the C runtime's locale information through (104 bytes). Covers
+  ??0_Locinfo@std@@QEAA@PEBD@Z (from a name), ??0_Locinfo@std@@QEAA@HPEBD@Z (from a category and a name), the destructor
+  ??1_Locinfo, the static helpers _Locinfo_ctor (two), _Locinfo_dtor, _Locinfo_Addcats, and the accessors _Addcats,
+  _Getname, _Getlconv, _Getfalse, _Gettrue, _Getdays, _Getmonths, _Getctype, _Getcvt, _Getcoll, _Getdateorder,
+  _Gettnames and the wide variants. The C locale is the only one specified.
+interface:
+  layout: |
+    104 bytes: the object holds a locale lock (a std::_Lockit on _LOCK_LOCALE) and the strings _Days, _Months, _W_Days,
+    _W_Months, _Oldlocname, _Newlocname as _Yarn objects; only the size is part of the interface (a program's facet
+    constructors allocate it on the stack and call the members). The data types returned by value: _Ctypevec { unsigned
+    page; const short* table; int delfl; char* localeName } (32 bytes), _Cvtvec (44 bytes), _Collvec (16 bytes), and
+    `const lconv*`.
+rules:
+  c_locale: |
+    _Locinfo() and _Locinfo("C") and _Locinfo(category, "C") describe the C locale: _Getname() is "C"; _Getfalse()
+    "false"; _Gettrue() "true"; _Getdays()
+    ":Sun:Sunday:Mon:Monday:Tue:Tuesday:Wed:Wednesday:Thu:Thursday:Fri:Friday:Sat:Saturday"; _Getmonths()
+    ":Jan:January:Feb:February:Mar:March:Apr:April:May:May:Jun:June:Jul:July:Aug:August:Sep:September:Oct:October:Nov:November:Dec:December";
+    _Getdateorder() 2; _Getlconv() is the C library's lconv for the C locale: decimal_point ".", all other strings "",
+    int_frac_digits, frac_digits, p_cs_precedes, p_sep_by_space, n_cs_precedes, n_sep_by_space, p_sign_posn, n_sign_posn
+    all 127 (CHAR_MAX). _Getctype(): page 0, table = the 256-entry classification table of the C locale (' ' 0x48, 'a'
+    0x82, 'A' 0x81, '0' 0x84; see ctype<char>), delfl 1 (the table is a heap copy that the user frees with free()), locale
+    name null. _Getcvt(): size 44, page 0, mbcurmax 1, isclocale 1. _Getcoll(): size 16, page 0, locale name null.
+  bad_names: |
+    A name the C runtime does not know does not throw from the constructor: the object's _Getname() is "*" (also with a
+    category). A NULL name throws std::runtime_error('bad locale name') from both constructors and from _Addcats.
+    _Addcats(category, "C") on a C object keeps the name "C".
+  effect_on_the_c_runtime: |
+    The constructor takes the locale lock and may switch the C runtime's locale for the duration; after the destructor the
+    C runtime's locale is as before (the program's C locale: _Locinfo()._Getname() is "C").
+errors:
+  bad_locale_name: "std::runtime_error('bad locale name') for a null name."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 0  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

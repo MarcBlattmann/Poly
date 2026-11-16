@@ -450,7 +450,7 @@ way older compilers write them (see `tools/pipeline/src/wincxx.rs`).
 **Tests built by Microsoft's compiler** (ADR 0199, spec-vcrt-1): what Visual C++ writes
 (`__CxxFrameHandler4`'s compressed tables, RTTI records, the layouts of `msvcp140`'s classes) cannot
 come from clang, and the container has no Microsoft compiler. A `.cpp` test with the line
-`// poly-cxx: compiler=msvc [cl=/EHa,/O2]` is built on the oracle machine (Visual Studio Build
+`// poly-cxx: compiler=msvc [cl=/EHa,/O2]` (`cl=` takes `/EHsc /EHa /EHs /O1 /O2 /Od /GR /GR- /MD`; `/MD` with `/Od` makes the program call the members of the DLL's classes through their imports, as an application built with the DLL runtime does, which the stream and locale tests need) is built on the oracle machine (Visual Studio Build
 Tools in `C:\BuildTools`, the Visual C++ Redistributable installed in System32) by
 `tools/pipeline/windows/msvc-build.ps1` (`cl /EHsc /GS- /Zl /O1`, `link /NODEFAULTLIB
 /ENTRY:mainCRTStartup /Brepro`, import libraries made from `tests/windows/cxx/*.def` and, for
@@ -459,7 +459,7 @@ Tools in `C:\BuildTools`, the Visual C++ Redistributable installed in System32) 
 beside `<name>.cpp` (a test artefact of about 10 KB; the pipeline's "no binary file" review rule
 has this one exception, by owner decision 2026-11-15). `win build` takes that executable as it is
 (it must import only from `ntdll`, `kernel32`, `msvcrt`, `vcruntime140`, `vcruntime140_1`,
-`ucrtbase`, `msvcp140`); `tests split` keeps a `.exe` with its `.cpp`, visible or held out
+`ucrtbase`, `msvcp140`, `msvcp140_1`); `tests split` keeps a `.exe` with its `.cpp`, visible or held out
 together; `win remote`, `win diff`, `win poly` and `polycheck` need nothing else, so the same file
 runs on Windows and on Poly. A symbol that is a Visual C++ decorated name (`?_Xbad_alloc@std@@YAXXZ`)
 has file names with its `?` written `%3F` (any of `<>:"|?*%` is written `%XX`;

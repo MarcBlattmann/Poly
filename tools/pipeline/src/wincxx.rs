@@ -64,6 +64,8 @@ pub const ALLOWED_DLLS: &[&str] = &[
     // exception tables and the C++ library.
     "vcruntime140_1.dll",
     "msvcp140.dll",
+    // The `std::pmr` default resources (spec-vcrt-2).
+    "msvcp140_1.dll",
 ];
 
 /// Which compiler built a test program (the `compiler=` word of its `poly-cxx:` line).
@@ -127,7 +129,7 @@ impl Runtime {
 /// Compiler options a `poly-cxx:` line may add.
 pub const ALLOWED_CFLAGS: &[&str] = &["-fasync-exceptions", "-O0", "-O1", "-O2"];
 /// What `cl=` may add for `compiler=msvc` (read by `msvc-build.ps1`, which checks the same list).
-pub const ALLOWED_CL_FLAGS: &[&str] = &["/EHsc", "/EHa", "/EHs", "/O1", "/O2", "/Od", "/GR", "/GR-"];
+pub const ALLOWED_CL_FLAGS: &[&str] = &["/EHsc", "/EHa", "/EHs", "/O1", "/O2", "/Od", "/GR", "/GR-", "/MD"];
 /// What clang emits as the FuncInfo magic number (0x19930522).
 const CLANG_MAGIC: u32 = 0x1993_0522;
 
