@@ -43,5 +43,12 @@
 {"symbol":"$sSo7PHAssetC18_Photos_AppIntentsE28defaultResolverSpecification0cD005EmptyfG0VyA2bE12_IntentValueACyHCg_GvgZ","src":["macos-sdk"]},
 {"symbol":"$sSo7PHAssetC18_Photos_AppIntentsE28defaultResolverSpecification0cD005EmptyfG0VyA2bE12_IntentValueACyHCg_GvpZMV","src":["macos-sdk"]},
 {"symbol":"$sSo7PHAssetC21AppIntentsTypeSupport21IntentValueExpressing08_Photos_bC0Mc","src":["macos-sdk"]},
-{"symbol":"$sSo7PHAssetC21AppIntentsTypeSupport22IntentValueConvertible08_Photos_bC0Mc","src":["macos-sdk"]}
+{"symbol":"$sSo7PHAssetC21AppIntentsTypeSupport22IntentValueConvertible08_Photos_bC0Mc","src":["macos-sdk"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.Specification","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.UnwrappedType","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.ValueType","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.defaultResolverSpecification","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.displayRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.persistentIdentifier","src":["macos-swift-interface"]},
+{"symbol":"swift:_Photos_AppIntents.PHAsset.typeDisplayRepresentation","src":["macos-swift-interface"]}
 ]

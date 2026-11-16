@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "num_put_numpunct",
+      "exe_sha256": "de1cc786e371c647b84be62e08d60f02b5d3127076e29118e4c24b32134030e4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKG51bXB1bmN0PGNoYXI+KSA0OApvayBkZWNpbWFsX3BvaW50KCkgaXMgJy4nCm9rIHRob3VzYW5kc19zZXAoKSBpcyAnLCcKb2sgZ3JvdXBpbmcoKSBpcyBlbXB0eQpvayB0cnVlbmFtZSgpCm9rIGZhbHNlbmFtZSgpCm9rIGEgdnRhYmxlIHBvaW50ZXIKb2sgdGhlIG9iamVjdDogX0RwIGF0ICsyNCBpcyAnLicKb2sgdGhlIG9iamVjdDogX0tzZXBhcmF0b3IgYXQgKzI1IGlzICcsJwpvayB0aGUgb2JqZWN0OiBfR3JvdXBpbmcgYXQgKzE2IGlzIGFuIGVtcHR5IEMgc3RyaW5nCm9rIHRoZSBvYmplY3Q6IF9GYWxzZW5hbWUgYXQgKzMyCm9rIHRoZSBvYmplY3Q6IF9UcnVlbmFtZSBhdCArNDAKdmFsdWUgbnVtcHVuY3Q8Y2hhcj46OmlkIDQKb2sgZ3JvdXBpbmcgb2YgMzogMTIzNDU2NwpvayBncm91cGluZyB3aXRoIGEgbmVnYXRpdmUgbnVtYmVyCm9rIG5vIGdyb3VwaW5nIGZvciBhIHNob3J0IG51bWJlcgpvayA5OTkgYW5kIDEwMDAKb2sgaGV4IG51bWJlcnMgYXJlIGdyb3VwZWQgdG9vCm9rIHVuc2lnbmVkIGxvbmcgbG9uZwpvayBkb3VibGUgd2l0aCBncm91cGluZyBpbiB0aGUgaW50ZWdlciBwYXJ0Cm9rIGRvdWJsZSBpbiBkZWZhdWx0IGZvcm1hdApvayBib29sYWxwaGEgdHJ1ZSB1c2VzIHRydWVuYW1lKCkKb2sgYm9vbGFscGhhIGZhbHNlIHVzZXMgZmFsc2VuYW1lKCkKb2sgd2lkdGggY291bnRzIHRoZSBncm91cGluZyBjaGFyYWN0ZXJzCm9rIHBvaW50ZXJzIGFyZSBncm91cGVkIHRvbyAodGhlIDE2IGhleCBkaWdpdHMpCm9rIGEgZGVjaW1hbCBjb21tYQpvayBncm91cGluZyAyIHRoZW4gMyAodGhlIGZpcnN0IGdyb3VwIGlzIHRoZSByaWdodG1vc3Q7IHRoZSBsYXN0IHNpemUgcmVwZWF0cykKb2sgZml4ZWQgd2l0aCBhIGRlY2ltYWwgY29tbWEgYW5kIHRoZSBncm91cGluZyAyLDMKb2sgc2NpZW50aWZpYyB3aXRoIGEgZGVjaW1hbCBjb21tYQpvayBib29sYWxwaGEgdXNlcyB0aGUgbmV3IG5hbWVzCm9rIGEgZ3JvdXAgc2l6ZSBvZiBDSEFSX01BWCBtZWFucyBubyBncm91cGluZwpvayBhIGdyb3VwIHNpemUgb2YgMQpvayBhbiBlbXB0eSBncm91cGluZyBzdHJpbmcgbWVhbnMgbm8gZ3JvdXBpbmcKdmFsdWUgc2l6ZW9mKG51bV9wdXQ8Y2hhcj4pIDE2Cm9rIHB1dCByZXR1cm5zIGFuIGl0ZXJhdG9yIHRoYXQgaGFzIG5vdCBmYWlsZWQKb2sgcHV0KGxvbmcpCm9rIHB1dCB3aXRoIHdpZHRoIGFuZCBmaWxsCm9rIHB1dCByZXNldHMgdGhlIHN0cmVhbSdzIHdpZHRoCm9rIHB1dCh1bnNpZ25lZCBsb25nKQpvayBwdXQobG9uZyBsb25nKQpvayBwdXQodW5zaWduZWQgbG9uZyBsb25nKQpvayBwdXQoZG91YmxlKQpvayBwdXQobG9uZyBkb3VibGUpCm9rIHB1dChib29sKQpvayBwdXQoYm9vbCkgd2l0aCBib29sYWxwaGEKb2sgcHV0KGNvbnN0IHZvaWQqKQpvayB0aGUgZm9ybWF0IGNvbWVzIGZyb20gdGhlIHN0cmVhbSdzIGZsYWdzCm9rIHB1dCBpbnRvIGEgYnVmZmVyIHRoYXQgcmVmdXNlcyBjaGFyYWN0ZXJzOiBmYWlsZWQoKQpzdW1tYXJ5IDQ1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(numpunct<char>) 48\nok decimal_point() is '.'\nok thousands_sep() is ','\nok grouping() is empty\nok truename()\nok falsename()\nok a vtable pointer\nok the object: _Dp at +24 is '.'\nok the object: _Kseparator at +25 is ','\nok the object: _Grouping at +16 is an empty C string\nok the object: _Falsename at +32\nok the object: _Truename at +40\nvalue numpunct<char>::id 4\nok grouping of 3: 1234567\nok grouping with a negative number\nok no grouping for a short number\nok 999 and 1000\nok hex numbers are grouped too\nok unsigned long long\nok double with grouping in the integer part\nok double in default format\nok boolalpha true uses truename()\nok boolalpha false uses falsename()\nok width counts the grouping characters\nok pointers are grouped too (the 16 hex digits)\nok a decimal comma\nok grouping 2 then 3 (the first group is the rightmost; the last size repeats)\nok fixed with a decimal comma and the grouping 2,3\nok scientific with a decimal comma\nok boolalpha uses the new names\nok a group size of CHAR_MAX means no grouping\nok a group size of 1\nok an empty grouping string means no grouping\nvalue sizeof(num_put<char>) 16\nok put returns an iterator that has not failed\nok put(long)\nok put with width and fill\nok put resets the stream's width\nok put(unsigned long)\nok put(long long)\nok put(unsigned long long)\nok put(double)\nok put(long double)\nok put(bool)\nok put(bool) with boolalpha\nok put(const void*)\nok the format comes from the stream's flags\nok put into a buffer that refuses characters: failed()\nsummary 45 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

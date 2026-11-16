@@ -14,5 +14,13 @@
 {"symbol":"$sSo11_GLKVector4V5GLKitEySfSicipMV","src":["macos-sdk"]},
 {"symbol":"$sSo14_GLKQuaternionV5GLKitEySfSicig","src":["macos-sdk"]},
 {"symbol":"$sSo14_GLKQuaternionV5GLKitEySfSicipMV","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftGLKit","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftGLKit","src":["macos-sdk"]},
+{"symbol":"swift:GLKit._GLKMatrix2.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKMatrix3.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKMatrix4.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKQuaternion.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKVector2.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKVector3.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._GLKVector4.subscript(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:GLKit._indexHomogeneousValue(_:_:)","src":["macos-swift-interface"]}
 ]

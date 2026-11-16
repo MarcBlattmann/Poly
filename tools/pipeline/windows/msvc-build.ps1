@@ -26,7 +26,7 @@ param(
     [string]$BuildTools = 'C:\BuildTools'
 )
 $ErrorActionPreference = 'Stop'
-$Allowed = @('/EHsc', '/EHa', '/EHs', '/O1', '/O2', '/Od', '/GR', '/GR-')   # = wincxx::ALLOWED_CL_FLAGS
+$Allowed = @('/EHsc', '/EHa', '/EHs', '/O1', '/O2', '/Od', '/GR', '/GR-', '/MD')   # = wincxx::ALLOWED_CL_FLAGS
 
 # The x64 tools' environment (INCLUDE, LIB, PATH).
 $vcvars = Join-Path $BuildTools 'VC\Auxiliary\Build\vcvars64.bat'
@@ -44,7 +44,7 @@ foreach ($def in Get-ChildItem (Join-Path $Support '*.def')) {
 }
 # msvcp140.dll has about 3,800 exports: its import library is made from the DLL's own export table
 # (dumpbin /exports: the names, which are ABI facts) unless a msvcp140.def sits beside poly_wtest.h.
-foreach ($dll in 'msvcp140') {
+foreach ($dll in 'msvcp140', 'msvcp140_1') {
     if (Test-Path (Join-Path $Support "$dll.def")) { continue }
     $sys = Join-Path $env:SystemRoot "System32\$dll.dll"
     if (-not (Test-Path $sys)) { continue }
@@ -57,7 +57,7 @@ foreach ($dll in 'msvcp140') {
     if ($LASTEXITCODE -ne 0) { throw "lib failed for $dll" }
 }
 # The libraries a program may name, in link order.
-$link = @('vcruntime140', 'vcruntime140_1', 'msvcp140', 'ucrtbase', 'kernel32') | ForEach-Object { Join-Path $Out "lib\$_.lib" } |
+$link = @('vcruntime140', 'vcruntime140_1', 'msvcp140', 'msvcp140_1', 'ucrtbase', 'kernel32') | ForEach-Object { Join-Path $Out "lib\$_.lib" } |
     Where-Object { Test-Path $_ }
 
 $log = @()

@@ -1,0 +1,83 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/?_Winerror_map@std@@YAHH@Z"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::_Winerror_map(int windows_error): maps a Windows error code to the generic (errno) value it corresponds to, or 0
+  when there is none. system_category().default_error_condition(n) uses it: a non-zero result gives
+  error_condition(result, generic_category()), 0 gives error_condition(n, system_category()). `extern "C++"`, __cdecl.
+interface:
+  category: |
+    std::error_category (16 bytes, alignment 8): 0 pointer to the virtual table, 8 a 64-bit identity word `_Addr`. The
+    table (read from the compiler's own listing of a class that derives from it; overloaded virtuals come in REVERSE
+    declaration order): slot 0 scalar deleting destructor, 1 name() const -> const char*, 2 message(int) const ->
+    std::string (hidden result pointer), 3 default_error_condition(int) const -> error_condition (16 bytes, hidden result
+    pointer), 4 equivalent(const error_code&, int) const -> bool, 5 equivalent(int, const error_condition&) const -> bool.
+    EQUALITY of two categories compares the identity words only (operator== is `_Addr == other._Addr`, operator< orders
+    them as unsigned integers), not the object addresses. A category made by a program of its own has its own address as
+    the identity word. The three standard categories carry fixed small identity words: generic_category 3,
+    iostream_category 5, system_category 7 (the future category 1). That is what makes the category object that the
+    library creates inside msvcp140.dll (in _Throw_Cpp_error, in ios_base::failure, in _XGetLastError, in _Throw_C_error)
+    compare equal to the program's own std::generic_category() / iostream_category() / system_category(): there are
+    several objects (one per module that uses them), all with these words. An error_code is 16 bytes: 0 int value, 8
+    pointer to the category; error_condition is the same layout.
+  signature: "int __cdecl std::_Winerror_map(int)"
+rules:
+  table: |
+    Exactly 84 values in -5..69999 have a mapping; the pairs (Windows code -> errno value) are: 1->40, 2->2, 3->2, 4->24,
+    5->13, 6->22, 8->12, 12->13, 14->12, 15->19, 16->13, 17->18, 19->13, 20->19, 21->11, 25->5, 29->5, 30->5, 32->13,
+    33->39, 39->28, 50->129, 53->2, 55->19, 67->2, 80->17, 82->13, 87->22, 109->32, 110->5, 111->38, 112->28, 121->138,
+    123->2, 131->22, 142->16, 145->41, 170->16, 183->17, 206->38, 212->39, 258->138, 267->22, 995->105, 998->13, 1011->5,
+    1012->5, 1013->5, 1237->11, 1460->138, 2401->16, 2404->16, 4393->22, 10004->4, 10009->9, 10013->13, 10014->14,
+    10022->22, 10024->24, 10035->140, 10036->112, 10037->103, 10038->128, 10039->109, 10040->115, 10041->136, 10042->123,
+    10043->135, 10045->130, 10047->102, 10048->100, 10049->101, 10050->116, 10051->118, 10052->117, 10053->106,
+    10054->108, 10055->119, 10056->113, 10057->126, 10060->138, 10061->107, 10063->38, 10065->110. Every other value (0,
+    negative values, 1314 'privilege not held', 99999, 0x7FFFFFFF) maps to 0.
+  system_category: |
+    system_category().name() is 'system', identity word 7; default_error_condition(0) is generic 0;
+    default_error_condition(5) is generic 13 (permission_denied); of an unmapped value (99999, 1314) it is the same value
+    in system_category(); error_code(5, system) == errc::permission_denied, error_code(2, system) ==
+    errc::no_such_file_or_directory, error_code(10061, system) == errc::connection_refused, error_code(10048, system) ==
+    errc::address_in_use; error_code(5, system) != error_code(5, generic) (different categories) but ==
+    error_condition(13, generic) (by equivalence). system_category().message(n) (text of the Windows error, 'unknown
+    error' when there is none) is produced by a function of the static library, not by this DLL.
+errors:
+  none: "no exception."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

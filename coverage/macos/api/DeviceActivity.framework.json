@@ -1224,5 +1224,15 @@
 {"symbol":"$sSo18NSNotificationNamea14DeviceActivityE21eventUnreachThresholdABvpZMV","src":["macos-sdk"]},
 {"symbol":"objc:_TtC14DeviceActivity21DeviceActivityMonitor","src":["macos-sdk"]},
 {"symbol":"objc:_TtC14DeviceActivity27DeviceActivityAuthorization","src":["macos-sdk"]},
-{"symbol":"objc:_TtC14DeviceActivity7Feature","src":["macos-sdk"]}
+{"symbol":"objc:_TtC14DeviceActivity7Feature","src":["macos-sdk"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.authorizedClientIdentifiers","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.init()","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.isAuthorized","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.isAuthorized(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.isOverridden","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorization.sharingEnabled","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorizing","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorizing.isAuthorized","src":["macos-swift-interface"]},
+{"symbol":"swift:DeviceActivity.DeviceActivityAuthorizing.isAuthorized(_:)","src":["macos-swift-interface"]}
 ]
