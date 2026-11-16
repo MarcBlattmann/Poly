@@ -178,7 +178,39 @@ impl Wm {
         events.len() as u32
     }
 
+    /// A key event. On a layout that has an AltGr level (every one but US English) the right Alt
+    /// key is Ctrl+Alt: it makes the left Ctrl key's event before its own (and after it for the
+    /// release), as Windows does, so the layout's AltGr characters (`@` on the Swiss German 2)
+    /// come out of `ToUnicode`.
     fn key_event(&mut self, ctx: Ctx, e: &InputEvent, fx: &mut Effects) {
+        let up = e.flags & KEYEVENTF_KEYUP != 0;
+        let right_alt = e.kind == 1
+            && if e.flags & KEYEVENTF_SCANCODE != 0 {
+                e.flags & KEYEVENTF_EXTENDEDKEY != 0 && e.b as u32 & 0xFF == 0x38
+            } else {
+                e.a as u32 & 0xFF == kbd::VK_RMENU
+            };
+        if right_alt && self.layout() != kbd::Layout::Us {
+            let ctrl = InputEvent {
+                kind: 1,
+                a: 0,
+                b: 0x1D,
+                data: 0,
+                flags: KEYEVENTF_SCANCODE | if up { KEYEVENTF_KEYUP } else { 0 },
+            };
+            if !up {
+                self.key_event_one(ctx, &ctrl, fx);
+            }
+            self.key_event_one(ctx, e, fx);
+            if up {
+                self.key_event_one(ctx, &ctrl, fx);
+            }
+            return;
+        }
+        self.key_event_one(ctx, e, fx);
+    }
+
+    fn key_event_one(&mut self, ctx: Ctx, e: &InputEvent, fx: &mut Effects) {
         let up = e.flags & KEYEVENTF_KEYUP != 0;
         let ext = e.flags & KEYEVENTF_EXTENDEDKEY != 0;
         let (vk, scan, unit) = if e.flags & KEYEVENTF_UNICODE != 0 {
