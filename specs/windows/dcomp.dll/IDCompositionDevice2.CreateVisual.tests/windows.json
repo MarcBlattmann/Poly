@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dcdev2_factory_b",
+      "exe_sha256": "f34c290e2e3a728e8341654765c669dd1144cb36cb8a96799dcca7abe9fd009b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlUmVjdGFuZ2xlQ2xpcDogZGVza3RvcCBkZXZpY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRldmljZTMgMHgwMDAwMDAwMCBwdHI9c2V0CkNyZWF0ZVJvdGF0ZVRyYW5zZm9ybTogZGVza3RvcCBkZXZpY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRldmljZTMgMHgwMDAwMDAwMCBwdHI9c2V0CkNyZWF0ZVRyYW5zbGF0ZVRyYW5zZm9ybTNEOiBkZXNrdG9wIGRldmljZSAweDAwMDAwMDAwIHB0cj1zZXQgZGV2aWNlMyAweDAwMDAwMDAwIHB0cj1zZXQKQ3JlYXRlTWF0cml4VHJhbnNmb3JtM0Q6IGRlc2t0b3AgZGV2aWNlIDB4MDAwMDAwMDAgcHRyPXNldCBkZXZpY2UzIDB4MDAwMDAwMDAgcHRyPXNldApDcmVhdGVWaXN1YWwgYW5zd2VyczogVmlzdWFsCkNyZWF0ZVNjYWxlVHJhbnNmb3JtIGFuc3dlcnM6IFRyYW5zZm9ybSBUcmFuc2Zvcm0zRCBFZmZlY3QKQ3JlYXRlTWF0cml4VHJhbnNmb3JtIGFuc3dlcnM6IFRyYW5zZm9ybSBUcmFuc2Zvcm0zRCBFZmZlY3QgTWF0cml4VHJhbnNmb3JtCkNyZWF0ZVJvdGF0ZVRyYW5zZm9ybTNEIGFuc3dlcnM6IFRyYW5zZm9ybTNEIEVmZmVjdApDcmVhdGVBbmltYXRpb24gYW5zd2VyczoKdjEgZGV2aWNlIENyZWF0ZU1hdHJpeFRyYW5zZm9ybTogMHgwMDAwMDAwMCBwdHI9c2V0ClJlY3RhbmdsZUNsaXAgc2V0dGVycyAodmFsdWUgb3ZlcmxvYWQgaXMgdGhlIHNlY29uZCBzbG90IG9mIGVhY2ggcGFpcik6IExlZnQ6IGZsb2F0IDB4MDAwMDAwMDAgbmFuIDB4ODAwNzAwNTcgaW5mIDB4ODAwNzAwNTcgLTEgMHgwMDAwMDAwMDsgVG9wOiBmbG9hdCAweDAwMDAwMDAwIG5hbiAweDgwMDcwMDU3IGluZiAweDgwMDcwMDU3IC0xIDB4MDAwMDAwMDA7IFJpZ2h0OiBmbG9hdCAweDAwMDAwMDAwIG5hbiAweDgwMDcwMDU3IGluZiAweDgwMDcwMDU3IC0xIDB4MDAwMDAwMDA7IEJvdHRvbTogZmxvYXQgMHgwMDAwMDAwMCBuYW4gMHg4MDA3MDA1NyBpbmYgMHg4MDA3MDA1NyAtMSAweDAwMDAwMDAwOyBUb3BMZWZ0UmFkaXVzWDogZmxvYXQgMHgwMDAwMDAwMCBuYW4gMHg4MDA3MDA1NyBpbmYgMHg4MDA3MDA1NyAtMSAweDAwMDAwMDAwOyBCb3R0b21SaWdodFJhZGl1c1k6IGZsb2F0IDB4MDAwMDAwMDAgbmFuIDB4ODAwNzAwNTcgaW5mIDB4ODAwNzAwNTcgLTEgMHgwMDAwMDAwMDsKTWF0cml4VHJhbnNmb3JtIFNldE1hdHJpeCAweDAwMDAwMDAwCkNyZWF0ZVRyYW5zZm9ybUdyb3VwKDIgdHJhbnNmb3Jtcyk6IDB4MDAwMDAwMDAgcHRyPXNldCBhbnN3ZXJzIFRyYW5zZm9ybSB0cnVlCkNyZWF0ZVRyYW5zZm9ybUdyb3VwKDEgZWxlbWVudCk6IDB4MDAwMDAwMDAgcHRyPXNldApDcmVhdGVUcmFuc2Zvcm1Hcm91cChOVUxMIGFycmF5IHdpdGggMiBlbGVtZW50cyk6IDB4ODAwNzAwNTcgcHRyPW51bGwKQ3JlYXRlU3VyZmFjZUZyb21Id25kKE5VTEwpOiAweDgwMDcwMDU3IHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateRectangleClip: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateRotateTransform: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateTranslateTransform3D: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateMatrixTransform3D: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateVisual answers: Visual\nCreateScaleTransform answers: Transform Transform3D Effect\nCreateMatrixTransform answers: Transform Transform3D Effect MatrixTransform\nCreateRotateTransform3D answers: Transform3D Effect\nCreateAnimation answers:\nv1 device CreateMatrixTransform: 0x00000000 ptr=set\nRectangleClip setters (value overload is the second slot of each pair): Left: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000; Top: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000; Right: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000; Bottom: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000; TopLeftRadiusX: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000; BottomRightRadiusY: float 0x00000000 nan 0x80070057 inf 0x80070057 -1 0x00000000;\nMatrixTransform SetMatrix 0x00000000\nCreateTransformGroup(2 transforms): 0x00000000 ptr=set answers Transform true\nCreateTransformGroup(1 element): 0x00000000 ptr=set\nCreateTransformGroup(NULL array with 2 elements): 0x80070057 ptr=null\nCreateSurfaceFromHwnd(NULL): 0x80070057 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    },
+    {
+      "name": "dcdev2_factory_c",
+      "exe_sha256": "df420e8cbae742d4389042c57705a22c6960950721daedaeaccfdf03495a7c16",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlVHJhbnNsYXRlVHJhbnNmb3JtOiBkZXNrdG9wIGRldmljZSAweDAwMDAwMDAwIHB0cj1zZXQgZGV2aWNlMyAweDAwMDAwMDAwIHB0cj1zZXQKQ3JlYXRlU2tld1RyYW5zZm9ybTogZGVza3RvcCBkZXZpY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRldmljZTMgMHgwMDAwMDAwMCBwdHI9c2V0CkNyZWF0ZVNjYWxlVHJhbnNmb3JtM0Q6IGRlc2t0b3AgZGV2aWNlIDB4MDAwMDAwMDAgcHRyPXNldCBkZXZpY2UzIDB4MDAwMDAwMDAgcHRyPXNldApDcmVhdGVFZmZlY3RHcm91cDogZGVza3RvcCBkZXZpY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRldmljZTMgMHgwMDAwMDAwMCBwdHI9c2V0CkNyZWF0ZVJlY3RhbmdsZUNsaXAgYW5zd2VyczogQ2xpcCBSZWN0YW5nbGVDbGlwCkNyZWF0ZVJvdGF0ZVRyYW5zZm9ybSBhbnN3ZXJzOiBUcmFuc2Zvcm0gVHJhbnNmb3JtM0QgRWZmZWN0CkNyZWF0ZVRyYW5zbGF0ZVRyYW5zZm9ybTNEIGFuc3dlcnM6IFRyYW5zZm9ybTNEIEVmZmVjdApDcmVhdGVNYXRyaXhUcmFuc2Zvcm0zRCBhbnN3ZXJzOiBUcmFuc2Zvcm0zRCBFZmZlY3QKdjEgZGV2aWNlIENyZWF0ZVJlY3RhbmdsZUNsaXA6IDB4MDAwMDAwMDAgcHRyPXNldAp2MSBkZXZpY2UgQ3JlYXRlRWZmZWN0R3JvdXA6IDB4MDAwMDAwMDAgcHRyPXNldApSZWN0YW5nbGVDbGlwIHNldHRlciBvbiB0aGUgZmlyc3Qgc2xvdCB3aXRoIGFuIGFuaW1hdGlvbiBOVUxMOiAweDgwMDcwMDU3Ck1hdHJpeFRyYW5zZm9ybSBTZXRNYXRyaXhFbGVtZW50KHJvdywgY29sLCAzLjApICh0aGUgdmFsdWUgb3ZlcmxvYWQgaXMgdGhlIHNlY29uZCBzbG90IG9mIGl0cyBwYWlyKTogKDAsMCk9MHgwMDAwMDAwMCAoMCwxKT0weDAwMDAwMDAwICgxLDApPTB4MDAwMDAwMDAgKDEsMSk9MHgwMDAwMDAwMCAoMiwwKT0weDAwMDAwMDAwICgyLDEpPTB4MDAwMDAwMDAgKDAsMik9MHg4MDA3MDA1NyAoMywwKT0weDgwMDcwMDU3ICgtMSwwKT0weDgwMDcwMDU3ICgwLC0xKT0weDgwMDcwMDU3CkNyZWF0ZVRyYW5zZm9ybUdyb3VwKDAgZWxlbWVudHMsIE5VTEwgYXJyYXkpOiAweDgwMDcwMDU3IHB0cj1udWxsCkNyZWF0ZVRyYW5zZm9ybUdyb3VwKGEgdmlzdWFsIGluIHRoZSBhcnJheSk6IDB4ODAwNzAwNTcgcHRyPW51bGwKdmVyc2lvbiAzIGVmZmVjdHM6IEdhdXNzaWFuQmx1cj0weDAwMDAwMDAwKyBCcmlnaHRuZXNzPTB4MDAwMDAwMDArIENvbG9yTWF0cml4PTB4MDAwMDAwMDArIFNoYWRvdz0weDAwMDAwMDAwKyBIdWVSb3RhdGlvbj0weDAwMDAwMDAwKyBTYXR1cmF0aW9uPTB4MDAwMDAwMDArIFR1cmJ1bGVuY2U9MHgwMDAwMDAwMCsgTGluZWFyVHJhbnNmZXI9MHgwMDAwMDAwMCsgVGFibGVUcmFuc2Zlcj0weDAwMDAwMDAwKyBDb21wb3NpdGU9MHgwMDAwMDAwMCsgQmxlbmQ9MHgwMDAwMDAwMCsgQXJpdGhtZXRpY0NvbXBvc2l0ZT0weDAwMDAwMDAwKyBBZmZpbmVUcmFuc2Zvcm0yRD0weDAwMDAwMDAwKwpDcmVhdGVTdXJmYWNlRnJvbUh3bmQoMHgxMjM0KTogMHg4MDA3MDA1NyBwdHI9bnVsbApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateTranslateTransform: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateSkewTransform: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateScaleTransform3D: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateEffectGroup: desktop device 0x00000000 ptr=set device3 0x00000000 ptr=set\nCreateRectangleClip answers: Clip RectangleClip\nCreateRotateTransform answers: Transform Transform3D Effect\nCreateTranslateTransform3D answers: Transform3D Effect\nCreateMatrixTransform3D answers: Transform3D Effect\nv1 device CreateRectangleClip: 0x00000000 ptr=set\nv1 device CreateEffectGroup: 0x00000000 ptr=set\nRectangleClip setter on the first slot with an animation NULL: 0x80070057\nMatrixTransform SetMatrixElement(row, col, 3.0) (the value overload is the second slot of its pair): (0,0)=0x00000000 (0,1)=0x00000000 (1,0)=0x00000000 (1,1)=0x00000000 (2,0)=0x00000000 (2,1)=0x00000000 (0,2)=0x80070057 (3,0)=0x80070057 (-1,0)=0x80070057 (0,-1)=0x80070057\nCreateTransformGroup(0 elements, NULL array): 0x80070057 ptr=null\nCreateTransformGroup(a visual in the array): 0x80070057 ptr=null\nversion 3 effects: GaussianBlur=0x00000000+ Brightness=0x00000000+ ColorMatrix=0x00000000+ Shadow=0x00000000+ HueRotation=0x00000000+ Saturation=0x00000000+ Turbulence=0x00000000+ LinearTransfer=0x00000000+ TableTransfer=0x00000000+ Composite=0x00000000+ Blend=0x00000000+ ArithmeticComposite=0x00000000+ AffineTransform2D=0x00000000+\nCreateSurfaceFromHwnd(0x1234): 0x80070057 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dcomp.dll/IDCompositionVisual.SetContent.yaml
+id: windows/api/dcomp.dll/IDCompositionVisual.SetContent
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "DCompositionCreateDevice function (dcomp.h)", "DCompositionCreateDevice2 function (dcomp.h)", "DCompositionCreateDevice3 function (dcomp.h)", "IDCompositionDevice interface", "IDCompositionDevice2 interface", "IDCompositionDesktopDevice interface", "IDCompositionVisual interface", "IDCompositionTarget interface", "IDXGIFactory2::CreateSwapChainForComposition", "IDCompositionVisual::SetContent", "IDXGIFactory2::CreateSwapChainForComposition", "IDXGISwapChain::Present"; dcomp.h, dcomptypes.h, dxgi1_2.h, dxgi1_3.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Associates content (a swap chain, a composition surface) with a visual. This is how Chrome puts its rendered frames on screen: the swap chain of CreateSwapChainForComposition is the visual's content and Present after Commit works as usual. Observed: which objects are accepted, which swap chain descriptions can exist, S_OK and no reference-count change for swap chains, one swap chain in several visuals, replacing and clearing content, Commit and Present afterwards.
+interface:
+  signature: "HRESULT IDCompositionVisual::SetContent(IUnknown* content) (vtable slot 15)"
+  constants: "DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL 3, FLIP_DISCARD 4; DXGI_ALPHA_MODE PREMULTIPLIED 1; DXGI_ERROR_INVALID_CALL 0x887A0001; E_INVALIDARG 0x80070057"
+chrome:
+  calls: "Chrome's GPU process (DirectComposition path, assumed from its documented design; the tracer only sees the exports) makes a D3D11 device, takes its IDXGIDevice, calls DCompositionCreateDevice3 (or 2) and asks for IDCompositionDesktopDevice, creates a target for the browser window's HWND with topmost TRUE, a root visual and one visual per overlay layer, sets a flip swap chain made by CreateSwapChainForComposition as the content of a visual, calls Commit after each change and uses WaitForCommitCompletion / GetFrameStatistics for frame pacing."
+rules:
+  swap_chain_content: "SetContent(IDXGISwapChain1 made by IDXGIFactory2::CreateSwapChainForComposition) gives S_OK for flip sequential (2 buffers), flip discard (2 and 3 buffers), flip discard with R16G16B16A16_FLOAT, R10G10B10A2 and R8G8B8A8 (alpha IGNORE) swap chains; the swap chain's reference count does not change (1 before, 1 after: the visual takes no COM reference). The IUnknown and IDXGISwapChain pointers of the swap chain are accepted too"
+  after_set: "after SetContent: Commit S_OK, WaitForCommitCompletion S_OK, IDXGISwapChain::Present(0, 0), Present(1, 0) and Present(DXGI_PRESENT_TEST) all S_OK (the window is never shown and no DWM is needed)"
+  same_content_twice: "the same swap chain as the content of two visuals: S_OK for both; the same swap chain again on the same visual S_OK; a second swap chain replaces the first S_OK (the first one still presents S_OK); SetContent(NULL) S_OK, repeated S_OK; the same swap chain as content of a parent and of its child S_OK; Commit S_OK after each"
+  release_order: "releasing the visuals first or the swap chain first both work: after the visuals were released the swap chains present S_OK; after the swap chain's last test reference was released while a visual still had it as content, Commit S_OK and SetContent(NULL) S_OK (whether the visual keeps the content alive is not observable through the API)"
+  other_device: "a swap chain made on one D3D11 device as the content of a visual of a DirectComposition device made from ANOTHER D3D11 device: S_OK, Commit S_OK, Present S_OK"
+  not_content: "objects that are not content give E_INVALIDARG (0x80070057): a 2D texture (default or staging), the back buffer texture of a swap chain, the D3D11 device, the IDXGIDevice, the immediate context, the DirectComposition device, the visual itself, another visual, a target, the DXGI factory, the DXGI adapter; NULL content is allowed (S_OK) on a fresh visual"
+  surface_content: "an IDCompositionSurface made by CreateSurface (v1 or desktop device) is accepted (S_OK, refs 1, Commit S_OK); a v1 device's visual accepts swap chains and surfaces too; SetContent on a visual that is the root of a target is S_OK"
+  composition_swap_chain: "IDXGIFactory2::CreateSwapChainForComposition(device, desc, NULL, &sc) (the creation the test needs): BGRA8 flip sequential or flip discard with 2 or 3 buffers, alpha PREMULTIPLIED, UNSPECIFIED (read back as 0) or IGNORE: S_OK; 1 buffer, DXGI_SWAP_EFFECT_DISCARD and SEQUENTIAL (the bit-block-transfer swap effects): DXGI_ERROR_INVALID_CALL (0x887A0001); alpha STRAIGHT: 0x887A0001; scaling NONE and ASPECT_RATIO_STRETCH: 0x887A0001; FP16, R10G10B10A2 and R8G8B8A8 flip discard S_OK; a NULL device 0x887A0001; the IDXGIDevice pointer as the device S_OK; GetDesc1 reads back the description (size, format, buffers, effect, alpha, scaling 0, flags 0)"
+errors:
+  not_content: "E_INVALIDARG (0x80070057)"
+  swap_chain_description: "DXGI_ERROR_INVALID_CALL (0x887A0001) from CreateSwapChainForComposition"
+side_effects: "the visual's content changes at the next Commit"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the pixels that reach the screen (no desktop session), composition surfaces drawn into and used as content together with a swap chain, a swap chain resized after SetContent, content set on visuals of a tree that is committed with a visible target.

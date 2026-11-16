@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIOutput.GetDesc.yaml
+id: windows/api/dxgi.dll/IDXGIOutput.GetDesc
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIOutput::GetDesc method (dxgi.h)", "DXGI_OUTPUT_DESC", "IDXGIOutput::GetDisplayModeList", "IDXGIOutput::FindClosestMatchingMode", "IDXGIOutput::GetFrameStatistics", "IDXGIOutput::WaitForVBlank", "IDXGIOutput6::GetDesc1", "DXGI_ENUM_MODES"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Describes the first monitor (output) of the default hardware adapter. Machine and session dependent, so the tests print only relations and print nothing when the adapter has no output. Observed on a machine with a desktop: GetDesc S_OK, DeviceName starts with '\\.\DISPLAY', DesktopCoordinates is a positive rectangle whose size equals the primary screen size of GetSystemMetrics (SM_CXSCREEN, SM_CYSCREEN) and whose origin is 0,0 for the first output, inside the virtual screen; AttachedToDesktop 1; Rotation 1 (IDENTITY); Monitor non-NULL. The mode list for B8G8R8A8_UNORM is non-empty (modes of format 87, progressive scanline order 1, unspecified scaling 0, refresh denominator non-zero) and sorted by width then height. Chrome uses the output only through ANGLE/DirectComposition to query the monitor's colour space and refresh rate (assumed). This entry's test also covers GetDisplayModeList, FindClosestMatchingMode, GetFrameStatistics, WaitForVBlank and IDXGIOutput6::GetDesc1.
+interface:
+  signature: "HRESULT IDXGIOutput::GetDesc(DXGI_OUTPUT_DESC* pDesc)"
+  constants: "DXGI_OUTPUT_DESC (96 bytes): DeviceName WCHAR[32] at 0, DesktopCoordinates RECT 64, AttachedToDesktop BOOL 80, Rotation 84, Monitor HMONITOR 88. DXGI_OUTPUT_DESC1 adds BitsPerColor 96, ColorSpace 100, RedPrimary[2] 104, GreenPrimary 112, BluePrimary 120, WhitePoint 128, MinLuminance 136, MaxLuminance 140, MaxFullFrameLuminance 144 (dxgi1_6.h). DXGI_MODE_DESC (28 bytes): Width, Height, RefreshRate{Numerator, Denominator}, Format, ScanlineOrdering, Scaling"
+rules:
+  desc: "GetDesc: S_OK; name begins with \\\\.\\DISPLAY; right > left, bottom > top; the rectangle's size equals (SM_CXSCREEN, SM_CYSCREEN) and it starts at (0,0) for the primary output; it lies inside the virtual screen (SM_XVIRTUALSCREEN ..); AttachedToDesktop 1; Rotation 1; Monitor non-NULL; the unused part of DeviceName is zero; two calls give identical bytes (DPI virtualisation of the process can make the screen size smaller than the largest mode: the relations above held on the owner's PC)"
+  interfaces: "the output answers IUnknown, IDXGIOutput, IDXGIOutput1 .. IDXGIOutput6 with the same pointer, IDXGIAdapter gives E_NOINTERFACE; reference count 1; GetParent(IDXGIAdapter1) is S_OK and has the adapter's LUID"
+  mode_list_formats: "GetDisplayModeList(format, 0, &count, NULL): B8G8R8A8_UNORM, R8G8B8A8_UNORM, R10G10B10A2_UNORM, R16G16B16A16_FLOAT give S_OK and a count above 0; B8G8R8X8_UNORM, UNKNOWN, NV12, D32_FLOAT and 999 give S_OK and count 0"
+  mode_list_flags: "flags INTERLACED (1), SCALING (2), DISABLED_STEREO (8), 3: S_OK with the count written; STEREO (4) and 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL (0x887A0001) and the count is not written"
+  mode_list_array: "an array of the exact count: S_OK, count written back equal; an array of 256 entries when the list has fewer: S_OK and the count is rewritten to the real count; an array of 1 entry for a longer list: DXGI_ERROR_MORE_DATA (0x887A0003) and the count variable is left at 1; modes are sorted by (width, height) ascending, Format equals the requested one, ScanlineOrdering 1, Scaling 0; one mode has the desktop size, or the desktop is not larger than the largest mode"
+  find_closest: "FindClosestMatchingMode(mode, &out, NULL): for the largest listed size and B8G8R8A8_UNORM, S_OK, the same size, Format 87, a non-zero refresh numerator; for 0x0: S_OK with a non-zero size; for 1x1: S_OK and a size that is in the list; Format UNKNOWN without a device: DXGI_ERROR_INVALID_CALL; Format UNKNOWN with a D3D11 device pointer (WARP) as the third argument: S_OK; B8G8R8A8_UNORM with an IDXGIDevice pointer: S_OK"
+  frame_statistics: "IDXGIOutput::GetFrameStatistics: DXGI_ERROR_INVALID_CALL (0x887A0001) on a non-fullscreen output; the structure is not written"
+  wait_for_vblank: "WaitForVBlank: S_OK (returns after the next vertical blank)"
+  gamma: "GetGammaControlCapabilities: DXGI_ERROR_INVALID_CALL"
+  desc1: "IDXGIOutput6::GetDesc1: S_OK; the first 96 bytes equal GetDesc's; BitsPerColor and ColorSpace (0 = RGB full range G22 P709) are machine dependent; the primaries, white point and luminances are all zero or the white point is inside (0,1) and MaxLuminance > MinLuminance; CheckHardwareCompositionSupport: S_OK"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  an output on the WARP adapter (none exists), multiple outputs, rotated or interlaced modes, TakeOwnership/SetGammaControl/DuplicateOutput (they would change the display), GetDisplayModeList1.

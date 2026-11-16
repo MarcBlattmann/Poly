@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIFactory2.CreateSwapChainForComposition.yaml
+id: windows/api/dxgi.dll/IDXGIFactory2.CreateSwapChainForComposition
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIFactory2::CreateSwapChainForComposition method (dxgi1_2.h)", "DXGI_SWAP_CHAIN_DESC1", "Composition swap chains", "IDXGISwapChain1::GetHwnd", "IDXGIFactory2::CreateSwapChainForCoreWindow"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Creates a swap chain that is not bound to a window and is meant to be attached to a DirectComposition visual (IDCompositionVisual:: SetContent). This is what Chrome's DirectComposition path (stage S5) uses for the main surface and for overlay layers (assumed from Chrome's documented DCLayerTree design: B8G8R8A8_UNORM, premultiplied alpha, flip model, 2 or 3 buffers). Observed on a WARP D3D11 device: only the flip effects work (FLIP_SEQUENTIAL 3 and FLIP_DISCARD 4; DISCARD, SEQUENTIAL and the obsolete 2 give DXGI_ERROR_INVALID_CALL for every size and format); Width and Height are mandatory (0 in either gives INVALID_CALL: nothing to take them from); formats B8G8R8A8_UNORM, R8G8B8A8_UNORM, R10G10B10A2_UNORM, R16G16B16A16_FLOAT; alpha UNSPECIFIED, PREMULTIPLIED and IGNORE work (STRAIGHT does not). GetHwnd, GetCoreWindow and GetFullscreenDesc fail with INVALID_CALL on such a swap chain, GetContainingOutput gives DXGI_ERROR_UNSUPPORTED.
+interface:
+  signature: "HRESULT IDXGIFactory2::CreateSwapChainForComposition(IUnknown* pDevice, const DXGI_SWAP_CHAIN_DESC1* pDesc, IDXGIOutput* pRestrictToOutput, IDXGISwapChain1** ppSwapChain)"
+  constants: "the constants of DXGI_SWAP_CHAIN_DESC1 are listed in the sheet of IDXGIFactory2.CreateSwapChainForHwnd"
+chrome:
+  calls: "Chrome's DirectComposition output (DCLayerTree / DirectCompositionSurfaceWin) creates its root and overlay swap chains with CreateSwapChainForComposition and attaches them to IDCompositionVisual::SetContent (assumed from Chromium's public design documents, not from source)"
+rules:
+  effects_buffers: "SwapEffect FLIP_SEQUENTIAL (3) and FLIP_DISCARD (4) with 2, 3 or 16 buffers: S_OK; 0 (DISCARD), 1 (SEQUENTIAL), 2, 5 with any buffer count, and the flip effects with 0, 1 or 17 buffers: DXGI_ERROR_INVALID_CALL; the effect and count read back as passed"
+  size: "FLIP_DISCARD: 1x1, 160x120, 4096x4096, 16384x1, 16385x1 give S_OK with the size as passed; 0x0, 0x100 and 100x0 give DXGI_ERROR_INVALID_CALL; 0xFFFFFFFF x 1: E_INVALIDARG; DISCARD gives INVALID_CALL for all sizes"
+  formats: "FLIP_DISCARD and FLIP_SEQUENTIAL: B8G8R8A8_UNORM (87), R8G8B8A8_UNORM (28), R10G10B10A2_UNORM (24), R16G16B16A16_FLOAT (10): S_OK; UNKNOWN, R32G32B32A32_FLOAT, R8G8B8A8_UNORM_SRGB, R8_UNORM, B5G6R5_UNORM, B8G8R8X8_UNORM, R10G10B10_XR_BIAS_A2_UNORM, B8G8R8A8_UNORM_SRGB, NV12, P010: DXGI_ERROR_INVALID_CALL; DISCARD and SEQUENTIAL: INVALID_CALL for every format"
+  scaling: "FLIP_DISCARD: STRETCH (0) S_OK; NONE (1), ASPECT_RATIO_STRETCH (2), 3: DXGI_ERROR_INVALID_CALL"
+  alpha: "FLIP_DISCARD with B8G8R8A8, R16G16B16A16_FLOAT and R10G10B10A2: UNSPECIFIED (0), PREMULTIPLIED (1) and IGNORE (3): S_OK and read back as passed; STRAIGHT (2) and 4: DXGI_ERROR_INVALID_CALL"
+  samples_stereo_usage: "FLIP_DISCARD: SampleDesc 0/0, 2/0 and 4/0: DXGI_ERROR_INVALID_CALL; Stereo TRUE: S_OK; BufferUsage 0 and SHADER_INPUT|RENDER_TARGET_OUTPUT (0x30): S_OK, UNORDERED_ACCESS|RENDER_TARGET_OUTPUT (0x220): DXGI_ERROR_INVALID_CALL"
+  flags: "FLIP_DISCARD: ALLOW_MODE_SWITCH, GDI_COMPATIBLE, RESTRICTED_CONTENT, FRAME_LATENCY_WAITABLE_OBJECT and ALLOW_TEARING: S_OK (read back as passed); FOREGROUND_LAYER and YUV_VIDEO: DXGI_ERROR_INVALID_CALL; DISCARD: INVALID_CALL for every flag tried"
+  device_argument: "ID3D11Device and IDXGIDevice: S_OK (reference count 1); ID3D11DeviceContext, IDXGIAdapter, IDXGIFactory: DXGI_ERROR_INVALID_CALL; NULL device and NULL pDesc: DXGI_ERROR_INVALID_CALL; a factory from CreateDXGIFactory1 with the WARP device: S_OK"
+  interfaces: "the swap chain answers IDXGISwapChain1 .. IDXGISwapChain4 and IDXGIDeviceSubObject with the same pointer and IDXGISwapChainMedia with a different one"
+  no_window: "GetHwnd: DXGI_ERROR_INVALID_CALL (the handle output is NULL); GetCoreWindow: INVALID_CALL; GetFullscreenDesc: INVALID_CALL; the legacy GetDesc: S_OK with OutputWindow NULL and Windowed TRUE; GetContainingOutput: DXGI_ERROR_UNSUPPORTED (0x887A0004)"
+  several: "two composition swap chains from the same device are two distinct objects, both S_OK"
+  core_window: "IDXGIFactory2::CreateSwapChainForCoreWindow with the device (or the factory) as the window object: DXGI_ERROR_INVALID_CALL, NULL output"
+  matrix: "composition swap chains support SetMatrixTransform / GetMatrixTransform (see IDXGISwapChain2.GetFrameLatencyWaitableObject)"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  a real CoreWindow (UWP), pRestrictToOutput, NULL ppSwapChain, hardware devices, DXGI_SCALING_NONE with a visual transform (needs dcomp).

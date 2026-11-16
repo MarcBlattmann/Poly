@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CheckFeatureSupport.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CheckFeatureSupport
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CheckFeatureSupport", "D3D11_FEATURE enumeration" and the "D3D11_FEATURE_DATA_*" structure pages; d3d11.h, d3d11_1.h, d3dcommon.h, dxgiformat.h, dxgi.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Fills a feature's data structure of an exact size. Chrome's GPU info collection and ANGLE ask for the threading and D3D11 option features. On WARP (feature level 11_0) the observed data of feature codes 0 to 20 is below; a size that is not the structure's size is E_INVALIDARG, and so are the codes that do not exist (21 to 24 and 1000) or that need an input the call does not have (code 3 with a 64-byte buffer).
+interface:
+  signature: "HRESULT ID3D11Device::CheckFeatureSupport(D3D11_FEATURE feature, void* data, UINT size)"
+  features: "THREADING 0, DOUBLES 1, FORMAT_SUPPORT 2, FORMAT_SUPPORT2 3, D3D10_X_HARDWARE_OPTIONS 4, D3D11_OPTIONS 5, ARCHITECTURE_INFO 6, D3D9_OPTIONS 7, SHADER_MIN_PRECISION_SUPPORT 8, D3D9_SHADOW_SUPPORT 9, D3D11_OPTIONS1 10, D3D9_SIMPLE_INSTANCING_SUPPORT 11, MARKER_SUPPORT 12, D3D9_OPTIONS1 13, D3D11_OPTIONS2 14, D3D11_OPTIONS3 15, GPU_VIRTUAL_ADDRESS_SUPPORT 16, D3D11_OPTIONS4 17, SHADER_CACHE 18, D3D11_OPTIONS5 19 (d3d11.h, d3d11_3.h, d3d11_4.h)"
+chrome:
+  calls: "ANGLE reads D3D11_FEATURE_D3D11_OPTIONS (code 5), FORMAT_SUPPORT/FORMAT_SUPPORT2 per format, THREADING, D3D11_OPTIONS1 and D3D9_OPTIONS to set its capabilities (assumed)"
+rules:
+  sizes: "each feature accepts exactly its structure's size: THREADING (0) 8 bytes, DOUBLES (1) 4, FORMAT_SUPPORT (2) 8, D3D10_X_HARDWARE_OPTIONS (4) 4, D3D11_OPTIONS (5) 56, ARCHITECTURE_INFO (6) 4, D3D9_OPTIONS (7) 4, SHADER_MIN_PRECISION_SUPPORT (8) 8, D3D9_SHADOW_SUPPORT (9) 4, D3D11_OPTIONS1 (10) 16, D3D9_SIMPLE_INSTANCING (11) 4, MARKER_SUPPORT (12) 4, D3D9_OPTIONS1 (13) 16, D3D11_OPTIONS2 (14) 32 or 36 (both accepted), D3D11_OPTIONS3 (15) 4, GPU_VIRTUAL_ADDRESS_SUPPORT (16) 8, D3D11_OPTIONS4 (17) 4, SHADER_CACHE (18) 4, D3D11_OPTIONS5 (19) 4, feature 20 8; any other size: E_INVALIDARG; FORMAT_SUPPORT2 (3) with the same size as FORMAT_SUPPORT: E_INVALIDARG when probed with a zero format at sizes 1 to 64"
+  data_11_0: "THREADING: DriverConcurrentCreates 1, DriverCommandLists 0; DOUBLES 1; D3D10_X_HARDWARE_OPTIONS 1; D3D11_OPTIONS: the first six BOOLs are 1; ARCHITECTURE_INFO TileBasedDeferredRenderer 0; D3D9_OPTIONS 1; SHADER_MIN_PRECISION: both masks 3; D3D9_SHADOW_SUPPORT 1; D3D11_OPTIONS1: four words of 1; D3D9_SIMPLE_INSTANCING 1; MARKER_SUPPORT 1; D3D11_OPTIONS3 1; GPU_VIRTUAL_ADDRESS_SUPPORT MaxGPUVirtualAddressBitsPerResource 0x20 and PerProcess 0x2F; D3D11_OPTIONS4 1; SHADER_CACHE 0; D3D11_OPTIONS5 3 (the data of each as hex words is in the visible tests)"
+  format_support: "FORMAT_SUPPORT (2) with a format in the first word fills the second word with the same mask CheckFormatSupport gives: B8G8R8A8_UNORM (87) gives 0x03FEF3F3, R8G8B8A8_UNORM (28) 0x03FEF3F3; FORMAT_SUPPORT2 (3) fills the second word: 87 gives 0x000106C0, 28 the same, R32_FLOAT (41) 0x000006C8, NV12 (103) 0x00010480 (D3D11_FORMAT_SUPPORT2 bits)"
+  levels: "the 11_1 device differs from 11_0 in features 10 and 14 only; the 10_0 device differs in 1 (DOUBLES), 5, 10 and 14"
+  bad_code: "feature 1000 (and 21 to 24): E_INVALIDARG (0x80070057)"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  feature codes above 24, feature support of a hardware adapter (differs), NULL data (crashes).
