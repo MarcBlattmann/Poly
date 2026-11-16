@@ -1,0 +1,99 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "cdev_args",
+      "exe_sha256": "19c65c20af31dc2200c589ec23205b827d56850813599b9cca857454e4579d70",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2FycCBhZGFwdGVyIGZyb20gdGhlIGZhY3Rvcnk6IHNldApVTktOT1dOLCBOVUxMIGFkYXB0ZXI6IDB4ODAwNzAwNTcgZGV2aWNlPW51bGwgY29udGV4dD1udWxsIGxldmVsIDB4MApSRUZFUkVOQ0UsIE5VTEwgYWRhcHRlcjogMHg4ODdhMDAwNCBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwCmRyaXZlciB0eXBlIDY6IDB4ODAwNzAwNTcgZGV2aWNlPW51bGwgY29udGV4dD1udWxsIGxldmVsIDB4MApmbGFncyBTSU5HTEVUSFJFQURFRDogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApmbGFncyBWSURFT19TVVBQT1JUOiAweDg4N2EwMDA0IGRldmljZT1udWxsIGNvbnRleHQ9bnVsbCBsZXZlbCAweDAKZmxhZ3MgMHgxMCAodW5kZWZpbmVkKTogMHg4ODdhMDAyZCBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwClNESyB2ZXJzaW9uIDB4MDogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwClNESyB2ZXJzaW9uIDB4NzogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApTREsgdmVyc2lvbiAweGZmZmZmZmZmOiAweDgwMDcwMDU3IGRldmljZT1udWxsIGNvbnRleHQ9bnVsbCBsZXZlbCAweDAKb25seSB0aGUgZGV2aWNlIGFza2VkIGZvcjogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IHJlZnMgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "warp adapter from the factory: set\nUNKNOWN, NULL adapter: 0x80070057 device=null context=null level 0x0\nREFERENCE, NULL adapter: 0x887a0004 device=null context=null level 0x0\ndriver type 6: 0x80070057 device=null context=null level 0x0\nflags SINGLETHREADED: 0x00000000 device=set context=set level 0xb000\nflags VIDEO_SUPPORT: 0x887a0004 device=null context=null level 0x0\nflags 0x10 (undefined): 0x887a002d device=null context=null level 0x0\nSDK version 0x0: 0x80070057 device=null context=null level 0x0\nSDK version 0x7: 0x00000000 device=set context=set level 0xb000\nSDK version 0xffffffff: 0x80070057 device=null context=null level 0x0\nonly the device asked for: 0x00000000 device=set refs 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 128
+    },
+    {
+      "name": "cdev_args_b",
+      "exe_sha256": "e51a80d5bcc0685d33d6ceda9cce5d675029130dd63eb6f7f9843e0aaba9b511",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V0FSUCwgTlVMTCBhZGFwdGVyOiAweDAwMDAwMDAwIGRldmljZT1zZXQgY29udGV4dD1zZXQgbGV2ZWwgMHhiMDAwClVOS05PV04sIHRoZSBXQVJQIGFkYXB0ZXI6IDB4MDAwMDAwMDAgZGV2aWNlPXNldCBjb250ZXh0PXNldCBsZXZlbCAweGIwMDAKTlVMTCBkcml2ZXIsIE5VTEwgYWRhcHRlcjogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApkcml2ZXIgdHlwZSA5OTogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwCmZsYWdzIEJHUkFfU1VQUE9SVDogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApmbGFncyBCR1JBfFNJTkdMRVRIUkVBREVEfFZJREVPOiAweDg4N2EwMDA0IGRldmljZT1udWxsIGNvbnRleHQ9bnVsbCBsZXZlbCAweDAKZmxhZ3MgMHg4MDAwMDAwMCAodW5kZWZpbmVkKTogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApTREsgdmVyc2lvbiAweDE6IDB4ODAwNzAwNTcgZGV2aWNlPW51bGwgY29udGV4dD1udWxsIGxldmVsIDB4MApTREsgdmVyc2lvbiAweDg6IDB4ODAwNzAwNTcgZGV2aWNlPW51bGwgY29udGV4dD1udWxsIGxldmVsIDB4MAphbGwgb3V0cHV0cyBOVUxMOiAweDAwMDAwMDAxCm9ubHkgdGhlIGNvbnRleHQgYXNrZWQgZm9yOiAweDAwMDAwMDAwIGNvbnRleHQ9c2V0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WARP, NULL adapter: 0x00000000 device=set context=set level 0xb000\nUNKNOWN, the WARP adapter: 0x00000000 device=set context=set level 0xb000\nNULL driver, NULL adapter: 0x00000000 device=set context=set level 0xb000\ndriver type 99: 0x80070057 device=null context=null level 0x0\nflags BGRA_SUPPORT: 0x00000000 device=set context=set level 0xb000\nflags BGRA|SINGLETHREADED|VIDEO: 0x887a0004 device=null context=null level 0x0\nflags 0x80000000 (undefined): 0x00000000 device=set context=set level 0xb000\nSDK version 0x1: 0x80070057 device=null context=null level 0x0\nSDK version 0x8: 0x80070057 device=null context=null level 0x0\nall outputs NULL: 0x00000001\nonly the context asked for: 0x00000000 context=set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 135
+    },
+    {
+      "name": "cdev_args_c",
+      "exe_sha256": "0b8a3fe4fb4e18152e3361eb8abc773488a1458dd3218e80b715ea6ab132496f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V0FSUCwgYW4gYWRhcHRlciBnaXZlbjogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwCkhBUkRXQVJFLCB0aGUgV0FSUCBhZGFwdGVyOiAweDgwMDcwMDU3IGRldmljZT1udWxsIGNvbnRleHQ9bnVsbCBsZXZlbCAweDAKU09GVFdBUkUsIG5vIG1vZHVsZTogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwCmZsYWdzIDA6IDB4MDAwMDAwMDAgZGV2aWNlPXNldCBjb250ZXh0PXNldCBsZXZlbCAweGIwMDAKZmxhZ3MgUFJFVkVOVF9JTlRFUk5BTF9USFJFQURJTkdfT1BUSU1JWkFUSU9OUzogMHgwMDAwMDAwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0IGxldmVsIDB4YjAwMApmbGFncyAweDQgKFNXSVRDSF9UT19SRUYpOiAweDg4N2EwMDJkIGRldmljZT1udWxsIGNvbnRleHQ9bnVsbCBsZXZlbCAweDAKZmxhZ3MgMHhGRkZGRkZGRjogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwClNESyB2ZXJzaW9uIDB4NjogMHg4MDA3MDA1NyBkZXZpY2U9bnVsbCBjb250ZXh0PW51bGwgbGV2ZWwgMHgwClNESyB2ZXJzaW9uIDB4MTAwMDAwMDA6IDB4ODAwNzAwNTcgZGV2aWNlPW51bGwgY29udGV4dD1udWxsIGxldmVsIDB4MApvbmx5IHRoZSBsZXZlbCBhc2tlZCBmb3I6IDB4MDAwMDAwMDEgbGV2ZWwgMHhiMDAwCmZhaWxlZCBjYWxsLCBvdXRwdXRzOiAweDgwMDcwMDU3IGRldmljZSBudWxsIGNvbnRleHQgbnVsbCBsZXZlbCAweDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WARP, an adapter given: 0x80070057 device=null context=null level 0x0\nHARDWARE, the WARP adapter: 0x80070057 device=null context=null level 0x0\nSOFTWARE, no module: 0x80070057 device=null context=null level 0x0\nflags 0: 0x00000000 device=set context=set level 0xb000\nflags PREVENT_INTERNAL_THREADING_OPTIMIZATIONS: 0x00000000 device=set context=set level 0xb000\nflags 0x4 (SWITCH_TO_REF): 0x887a002d device=null context=null level 0x0\nflags 0xFFFFFFFF: 0x80070057 device=null context=null level 0x0\nSDK version 0x6: 0x80070057 device=null context=null level 0x0\nSDK version 0x10000000: 0x80070057 device=null context=null level 0x0\nonly the level asked for: 0x00000001 level 0xb000\nfailed call, outputs: 0x80070057 device null context null level 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 130
+    },
+    {
+      "name": "cdev_ifaces_b",
+      "exe_sha256": "abf8802b244ebc922b3a2f6f0610decba5da0d1d8012531621f4661372c79ea2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVmczogZGV2aWNlIDIgY29udGV4dCAxCmRldmljZSBhcyBJRDNEMTFEZXZpY2UxOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1wb2ludGVyLWFzLWFza2VkPXRydWUgc2FtZS1hcy1iYXNlPXRydWUKZGV2aWNlIGFzIElEM0QxMURldmljZTQ6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9dHJ1ZSBzYW1lLWFzLWJhc2U9dHJ1ZQpkZXZpY2UgYXMgSURYR0lEZXZpY2U6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmRldmljZSBhcyBJRFhHSURldmljZTM6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmRldmljZSBhcyBJRDNEMTFEZWJ1ZzogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmRldmljZSBhcyBJRDNEMTFEZXZpY2VDb250ZXh0OiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtcG9pbnRlci1hcy1hc2tlZD1mYWxzZSBzYW1lLWFzLWJhc2U9ZmFsc2UKZGV2aWNlIGFzIElEWEdJRmFjdG9yeTogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmRldmljZSBhcyB0aGUgbWFkZS11cCBpbnRlcmZhY2U6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1wb2ludGVyLWFzLWFza2VkPWZhbHNlIHNhbWUtYXMtYmFzZT1mYWxzZQpjb250ZXh0IGFzIElEM0QxMURldmljZUNvbnRleHQyOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1wb2ludGVyLWFzLWFza2VkPXRydWUgc2FtZS1hcy1iYXNlPXRydWUKY29udGV4dCBhcyBJRDNEMTFEZXZpY2VDaGlsZDogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlci1hcy1hc2tlZD10cnVlIHNhbWUtYXMtYmFzZT10cnVlCmNvbnRleHQgYXMgSUQzRDExRGV2aWNlOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtcG9pbnRlci1hcy1hc2tlZD1mYWxzZSBzYW1lLWFzLWJhc2U9ZmFsc2UKY29udGV4dCBHZXREZXZpY2U6IHNhbWUgZGV2aWNlPXRydWUKSURYR0lEZXZpY2UgaGVsZDogZGV2aWNlIGNvdW50IDMgYWZ0ZXIgcmVsZWFzaW5nIGl0IDIKSURYR0lEZXZpY2U6OkdldFBhcmVudChJRFhHSUFkYXB0ZXIpOiBzYW1lIGFkYXB0ZXI9dHJ1ZQphZGFwdGVyIEdldFBhcmVudChJRDNEMTFEZXZpY2UpOiAweDgwMDA0MDAyIHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "refs: device 2 context 1\ndevice as ID3D11Device1: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ndevice as ID3D11Device4: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ndevice as IDXGIDevice: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ndevice as IDXGIDevice3: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ndevice as ID3D11Debug: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ndevice as ID3D11DeviceContext: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ndevice as IDXGIFactory: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ndevice as the made-up interface: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ncontext as ID3D11DeviceContext2: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ncontext as ID3D11DeviceChild: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ncontext as ID3D11Device: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ncontext GetDevice: same device=true\nIDXGIDevice held: device count 3 after releasing it 2\nIDXGIDevice::GetParent(IDXGIAdapter): same adapter=true\nadapter GetParent(ID3D11Device): 0x80004002 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 76
+    },
+    {
+      "name": "cdev_ifaces_c",
+      "exe_sha256": "ba7324504a664f2e449c2851649b98d7180d34ff4f7f63ac13ca0e7fc2917a4f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SVVua25vd24gb2YgdGhlIGRldmljZTogc2FtZSBvbiByZXBlYXQ9dHJ1ZSBzYW1lLWFzLWRldmljZT1mYWxzZQpkZXZpY2UgYXMgSUQzRDExRGV2aWNlMjogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlci1hcy1hc2tlZD10cnVlIHNhbWUtYXMtYmFzZT10cnVlCmRldmljZSBhcyBJRDNEMTFEZXZpY2U1OiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1wb2ludGVyLWFzLWFza2VkPXRydWUgc2FtZS1hcy1iYXNlPXRydWUKZGV2aWNlIGFzIElEWEdJRGV2aWNlMTogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlci1hcy1hc2tlZD1mYWxzZSBzYW1lLWFzLWJhc2U9ZmFsc2UKZGV2aWNlIGFzIElEWEdJRGV2aWNlNDogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlci1hcy1hc2tlZD1mYWxzZSBzYW1lLWFzLWJhc2U9ZmFsc2UKZGV2aWNlIGFzIElEM0QxMUluZm9RdWV1ZTogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmRldmljZSBhcyBJRDNEVXNlckRlZmluZWRBbm5vdGF0aW9uOiAweDgwMDA0MDAyIHB0cj1udWxsIHNhbWUtcG9pbnRlci1hcy1hc2tlZD1mYWxzZSBzYW1lLWFzLWJhc2U9ZmFsc2UKZGV2aWNlIGFzIElEWEdJU3VyZmFjZTogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmNvbnRleHQgYXMgSUQzRDExRGV2aWNlQ29udGV4dDogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlci1hcy1hc2tlZD10cnVlIHNhbWUtYXMtYmFzZT10cnVlCmNvbnRleHQgYXMgSUQzRDExRGV2aWNlQ29udGV4dDM6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9dHJ1ZSBzYW1lLWFzLWJhc2U9dHJ1ZQpjb250ZXh0IGFzIElEM0RVc2VyRGVmaW5lZEFubm90YXRpb246IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmNvbnRleHQgYXMgSUQzRDExTXVsdGl0aHJlYWQ6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXItYXMtYXNrZWQ9ZmFsc2Ugc2FtZS1hcy1iYXNlPWZhbHNlCmNvbnRleHQgR2V0VHlwZSAwIEdldENvbnRleHRGbGFncyAwCmNvbnRleHQgYWZ0ZXIgcmVsZWFzaW5nIHRoZSBjcmVhdGlvbiByZWZlcmVuY2U6IHNldAphZGFwdGVyIEdldFBhcmVudChJRFhHSUZhY3RvcnkxKTogMHgwMDAwMDAwMCBwdHI9c2V0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "IUnknown of the device: same on repeat=true same-as-device=false\ndevice as ID3D11Device2: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ndevice as ID3D11Device5: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ndevice as IDXGIDevice1: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ndevice as IDXGIDevice4: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ndevice as ID3D11InfoQueue: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ndevice as ID3DUserDefinedAnnotation: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ndevice as IDXGISurface: 0x80004002 ptr=null same-pointer-as-asked=false same-as-base=false\ncontext as ID3D11DeviceContext: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ncontext as ID3D11DeviceContext3: 0x00000000 ptr=set same-pointer-as-asked=true same-as-base=true\ncontext as ID3DUserDefinedAnnotation: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ncontext as ID3D11Multithread: 0x00000000 ptr=set same-pointer-as-asked=false same-as-base=false\ncontext GetType 0 GetContextFlags 0\ncontext after releasing the creation reference: set\nadapter GetParent(IDXGIFactory1): 0x00000000 ptr=set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    },
+    {
+      "name": "cdev_levels",
+      "exe_sha256": "ab3db16d67083d7714e17b183ac7ad0128f64cd1ac055d64c7341c4bccfeedc7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGV2ZWxzIG5vbmUgKE5VTEwgbGlzdCk6IDB4MDAwMDAwMDAgbGV2ZWwgMHhiMDAwIGRldmljZT1zZXQgY29udGV4dD1zZXQKbGV2ZWxzIDExXzE6IEdldEZlYXR1cmVMZXZlbCAweGIxMDAKbGV2ZWxzIDEwXzE6IDB4MDAwMDAwMDAgbGV2ZWwgMHhhMTAwIGRldmljZT1zZXQgY29udGV4dD1zZXQKbGV2ZWxzIDEwXzA6IEdldEZlYXR1cmVMZXZlbCAweGEwMDAKbGV2ZWxzIDlfMjogMHgwMDAwMDAwMCBsZXZlbCAweDkyMDAgZGV2aWNlPXNldCBjb250ZXh0PXNldApsZXZlbHMgOV8xOiBHZXRGZWF0dXJlTGV2ZWwgMHg5MTAwCmxldmVscyAxMl8xOiAweDAwMDAwMDAwIGxldmVsIDB4YzEwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0CmxldmVscyAxMl8xIHRoZW4gMTFfMDogR2V0RmVhdHVyZUxldmVsIDB4YzEwMApsZXZlbHMgMTFfMSB0aGVuIDExXzAgdGhlbiAxMF8xOiAweDAwMDAwMDAwIGxldmVsIDB4YjEwMCBkZXZpY2U9c2V0IGNvbnRleHQ9c2V0CmxldmVscyAxMF8wIHRoZW4gMTFfMCAobGlzdCBvcmRlciB3aW5zKTogR2V0RmVhdHVyZUxldmVsIDB4YTAwMApsZXZlbHMgMTFfMCB0aGVuIDExXzE6IDB4MDAwMDAwMDAgbGV2ZWwgMHhiMDAwIGRldmljZT1zZXQgY29udGV4dD1zZXQKbGV2ZWxzIHRoZSBmdWxsIGxpc3Qgb2YgdGhlIGRvY3M6IEdldEZlYXR1cmVMZXZlbCAweGIxMDAKbGV2ZWxzIHplcm86IDB4ODAwNzAwNTcgbGV2ZWwgMHgwIGRldmljZT1udWxsIGNvbnRleHQ9bnVsbApsZXZlbHMgMTFfMCB0d2ljZTogMHgwMDAwMDAwMCBsZXZlbCAweGIwMDAgZGV2aWNlPXNldCBjb250ZXh0PXNldApsaXN0IHdpdGggY291bnQgMDogMHg4ODdhMDAwNCBkZXZpY2U9bnVsbCBsZXZlbCAweDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "levels none (NULL list): 0x00000000 level 0xb000 device=set context=set\nlevels 11_1: GetFeatureLevel 0xb100\nlevels 10_1: 0x00000000 level 0xa100 device=set context=set\nlevels 10_0: GetFeatureLevel 0xa000\nlevels 9_2: 0x00000000 level 0x9200 device=set context=set\nlevels 9_1: GetFeatureLevel 0x9100\nlevels 12_1: 0x00000000 level 0xc100 device=set context=set\nlevels 12_1 then 11_0: GetFeatureLevel 0xc100\nlevels 11_1 then 11_0 then 10_1: 0x00000000 level 0xb100 device=set context=set\nlevels 10_0 then 11_0 (list order wins): GetFeatureLevel 0xa000\nlevels 11_0 then 11_1: 0x00000000 level 0xb000 device=set context=set\nlevels the full list of the docs: GetFeatureLevel 0xb100\nlevels zero: 0x80070057 level 0x0 device=null context=null\nlevels 11_0 twice: 0x00000000 level 0xb000 device=set context=set\nlist with count 0: 0x887a0004 device=null level 0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 131
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateBlendState.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateBlendState
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateBlendState", "ID3D11Device1::CreateBlendState1", "D3D11_BLEND_DESC", "D3D11_RENDER_TARGET_BLEND_DESC", "D3D11_BLEND", "D3D11_BLEND_OP", "ID3D11BlendState::GetDesc", "D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes (or returns the cached) immutable blend state object. Chrome (ANGLE) makes a blend state per GL blend configuration. Equal descriptions give the SAME object pointer (the reference count rises) after normalisation: GetDesc returns the normalised description: BOOLs become 0 or 1, the blend factors and ops of a render target with BlendEnable FALSE are replaced by the defaults and with IndependentBlendEnable FALSE targets 1 to 7 repeat target 0. At most 4095 distinct blend states can be alive: the next distinct description fails with D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001).
+interface:
+  signature: "HRESULT ID3D11Device::CreateBlendState(const D3D11_BLEND_DESC*, ID3D11BlendState**); HRESULT ID3D11Device1::CreateBlendState1(const D3D11_BLEND_DESC1*, ID3D11BlendState1**); void ID3D11BlendState::GetDesc(D3D11_BLEND_DESC*)"
+  layout: "D3D11_BLEND_DESC (264 bytes, 66 words): AlphaToCoverageEnable, IndependentBlendEnable, then 8 x {BlendEnable, SrcBlend, DestBlend, BlendOp, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha, RenderTargetWriteMask (UINT8 in the low byte, the other bytes of the word are padding)}. D3D11_BLEND_DESC1 (328 bytes, 82 words): AlphaToCoverageEnable, IndependentBlendEnable, then 8 x 10 words {BlendEnable, LogicOpEnable, SrcBlend, DestBlend, BlendOp, SrcBlendAlpha, DestBlendAlpha, BlendOpAlpha, LogicOp, RenderTargetWriteMask} (d3d11_1.h); D3D11_LOGIC_OP: CLEAR 0, SET 1, COPY 2, COPY_INVERTED 3, NOOP 4, INVERT 5, AND 6 ... OR_INVERTED 15"
+  constants: "D3D11_BLEND: ZERO 1, ONE 2, SRC_COLOR 3, INV_SRC_COLOR 4, SRC_ALPHA 5, INV_SRC_ALPHA 6, DEST_ALPHA 7, INV_DEST_ALPHA 8, DEST_COLOR 9, INV_DEST_COLOR 10, SRC_ALPHA_SAT 11, BLEND_FACTOR 14, INV_BLEND_FACTOR 15, SRC1_COLOR 16, INV_SRC1_COLOR 17, SRC1_ALPHA 18, INV_SRC1_ALPHA 19; D3D11_BLEND_OP: ADD 1, SUBTRACT 2, REV_SUBTRACT 3, MIN 4, MAX 5"
+chrome:
+  calls: "ANGLE keeps a cache of blend states keyed by the GL state (assumed); states are created through the device pointer"
+rules:
+  default: "the documented default (blend off, ONE/ZERO/ADD for colour and alpha, mask 0xF on all 8 targets, alpha-to-coverage off, independent off): S_OK; GetDesc matches the input"
+  bool_normalised: "AlphaToCoverageEnable = 2 reads back 1; BlendEnable = 7 reads back 1; IndependentBlendEnable 1 is kept"
+  disabled_normalised: "a target with BlendEnable FALSE reads back SrcBlend 2, DestBlend 1, BlendOp 1, alpha ONE/ZERO/ADD whatever was given: an invalid SrcBlend 99 with BlendEnable FALSE is accepted and normalised; with IndependentBlendEnable FALSE every target reads back as target 0 (a blend enabled only on target 3 reads as disabled; a blend enabled on target 0 reads the same on target 3), with IndependentBlendEnable TRUE target 3 keeps its own values"
+  factors: "with BlendEnable TRUE: SrcBlend and DestBlend accept 1, 2, 11 (SRC_ALPHA_SAT), 14, 15, 16, 19 (3 to 10, 17 and 18 were not tried) and refuse 0, 12, 13, 20, 0xFF with E_INVALIDARG; SrcBlendAlpha and DestBlendAlpha accept 1, 2, 11, 14, 15, 19 and refuse 0, 12, 13, 20, 0xFF and the colour factors: 16 and SRC_COLOR (3) in the alpha slot are E_INVALIDARG"
+  ops: "BlendOp and BlendOpAlpha accept 1 to 5 and refuse 0, 6, 0xFF"
+  write_mask: "only the low byte of the mask word is meaningful: 0, 1, 0xF succeed; 0x10, 0x1F, 0xFF are E_INVALIDARG; 0x100 and 0xFFFFFF0F are accepted (the low byte is 0 and 0x0F)"
+  identity: "the same description twice gives the same object pointer (reference count 2); a different alpha-to-coverage gives a different object; a blend on target 5 with IndependentBlendEnable FALSE gives the SAME object as the default; IndependentBlendEnable TRUE with default targets gives a different object"
+  interfaces: "a blend state answers ID3D11BlendState, ID3D11BlendState1 and ID3D11DeviceChild with the same pointer; GetDevice returns the device"
+  blend_state1: "CreateBlendState1 (ID3D11Device1 slot 45) with the default description (BlendEnable 0, LogicOpEnable 0, ONE/ZERO/ADD, LogicOp NOOP 4, mask 0xF) succeeds; the object answers ID3D11BlendState1 (same pointer) and is the SAME object as the one CreateBlendState gives for the default; GetDesc1 (slot 8) returns the words as given; LogicOpEnable 1 on target 0 with independent blend off succeeds for LogicOp 1 (SET), 3 and 15 (GetDesc1 returns LogicOpEnable 1 and the op; the other targets read the same); LogicOp 16 is E_INVALIDARG; LogicOpEnable together with BlendEnable on a target is E_INVALIDARG; LogicOpEnable on target 0 only with IndependentBlendEnable TRUE is E_INVALIDARG"
+  null_output: "a NULL output pointer only validates: S_FALSE for a valid description, E_INVALIDARG for an invalid one"
+  limit: "keeping 6000 distinct descriptions (independent blend, 4 write masks varying) alive: creation number 4096 (4095 objects exist) fails with D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001); at that point a description that already exists still succeeds (S_OK) and a new one fails with a NULL result; after releasing all objects creation works again"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+  too_many: "D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS (0x887C0001)"
+side_effects: "creates or shares a state object"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  logic ops beyond SET, COPY_INVERTED, NOOP and 15 and the refusals listed, blend state objects in an actual draw (no shader), the limit on other drivers, blend factors 3 to 10, 17 and 18.

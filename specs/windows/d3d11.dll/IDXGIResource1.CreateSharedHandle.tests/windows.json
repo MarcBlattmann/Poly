@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "share_handle_b",
+      "exe_sha256": "b01395138355e8b1b965aee3c51fb6acba4a9fe4f6a36f75f65377931015b629",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWlzYyBTSEFSRUQ6IDB4MDAwMDAwMDAgZGVzYyBtaXNjIDB4MjsgSURYR0lSZXNvdXJjZT15ZXMgSURYR0lSZXNvdXJjZTE9eWVzIElEWEdJS2V5ZWRNdXRleD1ubyBHZXRTaGFyZWRIYW5kbGUgMHgwMDAwMDAwMCBoYW5kbGUgc2V0Cm1pc2MgU0hBUkVEIHwgU0hBUkVEX05USEFORExFOiAweDAwMDAwMDAwIGRlc2MgbWlzYyAweDgwMjsgSURYR0lSZXNvdXJjZT15ZXMgSURYR0lSZXNvdXJjZTE9eWVzIElEWEdJS2V5ZWRNdXRleD1ubyBHZXRTaGFyZWRIYW5kbGUgMHg4MDA3MDA1NyBoYW5kbGUgbnVsbAptaXNjIFNIQVJFRCB8IFNIQVJFRF9LRVlFRE1VVEVYIHwgU0hBUkVEX05USEFORExFOiAweDgwMDcwMDU3IHB0cj1udWxsCm1pc2MgU0hBUkVEX05USEFORExFIHwgR0VORVJBVEVfTUlQUzogMHg4MDA3MDA1NyBwdHI9bnVsbApDcmVhdGVTaGFyZWRIYW5kbGUgb24gYSBub25lIHRleHR1cmUgKGFjY2VzcyAweDgwMDAwMDAxLCBubyBuYW1lKTogMHg4MDA3MDA1NyBoYW5kbGUgbnVsbCBDbG9zZUhhbmRsZSAwCkNyZWF0ZVNoYXJlZEhhbmRsZSBvbiBhIFNIQVJFRF9LRVlFRE1VVEVYIHwgU0hBUkVEX05USEFORExFIHRleHR1cmUgKGFjY2VzcyAweDgwMDAwMDAxLCBubyBuYW1lKTogMHgwMDAwMDAwMCBoYW5kbGUgc2V0IENsb3NlSGFuZGxlIDEKYWNjZXNzIFJFQUQ6IDB4MDAwMDAwMDAgaGFuZGxlIHNldCBDbG9zZUhhbmRsZSAxCmFjY2VzcyBHRU5FUklDX0FMTDogMHgwMDAwMDAwMCBoYW5kbGUgc2V0IENsb3NlSGFuZGxlIDEKYWNjZXNzIDB4MTogMHgwMDAwMDAwMCBoYW5kbGUgc2V0IENsb3NlSGFuZGxlIDEKYWNjZXNzIFJFQUR8V1JJVEV8MHgyOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQgQ2xvc2VIYW5kbGUgMQp0aGUgc2FtZSBuYW1lIGFnYWluIGZvciB0aGUgc2FtZSB0ZXh0dXJlOiAweDg4N2EwMDJjIGhhbmRsZSBudWxsCm5hbWUgTG9jYWxcUG9seVNwZWNTaGFyZTI6IDB4MDAwMDAwMDAgaGFuZGxlIHNldApPcGVuU2hhcmVkUmVzb3VyY2VCeU5hbWUgZm9yIHRoZSBsaXZlIG5hbWU6IDB4MDAwMDAwMDAgb2JqZWN0IHNldCBzYW1lIGFzIHRoZSBvcmlnaW5hbDogZmFsc2UKT3BlblNoYXJlZFJlc291cmNlQnlOYW1lIHdpdGggYWNjZXNzIFJFQUQ6IDB4MDAwMDAwMDAgb2JqZWN0IHNldApvcGVuZWQsIGhhbmRsZSBjbG9zZWQ6IDB4MDAwMDAwMDAgb2JqZWN0IHNldCByZWZzIDEgZGVzYyBlcXVhbCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "misc SHARED: 0x00000000 desc misc 0x2; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=no GetSharedHandle 0x00000000 handle set\nmisc SHARED | SHARED_NTHANDLE: 0x00000000 desc misc 0x802; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=no GetSharedHandle 0x80070057 handle null\nmisc SHARED | SHARED_KEYEDMUTEX | SHARED_NTHANDLE: 0x80070057 ptr=null\nmisc SHARED_NTHANDLE | GENERATE_MIPS: 0x80070057 ptr=null\nCreateSharedHandle on a none texture (access 0x80000001, no name): 0x80070057 handle null CloseHandle 0\nCreateSharedHandle on a SHARED_KEYEDMUTEX | SHARED_NTHANDLE texture (access 0x80000001, no name): 0x00000000 handle set CloseHandle 1\naccess READ: 0x00000000 handle set CloseHandle 1\naccess GENERIC_ALL: 0x00000000 handle set CloseHandle 1\naccess 0x1: 0x00000000 handle set CloseHandle 1\naccess READ|WRITE|0x2: 0x00000000 handle set CloseHandle 1\nthe same name again for the same texture: 0x887a002c handle null\nname Local\\PolySpecShare2: 0x00000000 handle set\nOpenSharedResourceByName for the live name: 0x00000000 object set same as the original: false\nOpenSharedResourceByName with access READ: 0x00000000 object set\nopened, handle closed: 0x00000000 object set refs 1 desc equal true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    },
+    {
+      "name": "share_handle_c",
+      "exe_sha256": "06d6d39f9c7232c73468265d585dd9401ec433460c044e5314cdd6006d9b87ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWlzYyBTSEFSRURfS0VZRURNVVRFWDogMHgwMDAwMDAwMCBkZXNjIG1pc2MgMHgxMDA7IElEWEdJUmVzb3VyY2U9eWVzIElEWEdJUmVzb3VyY2UxPXllcyBJRFhHSUtleWVkTXV0ZXg9eWVzIEdldFNoYXJlZEhhbmRsZSAweDAwMDAwMDAwIGhhbmRsZSBzZXQKbWlzYyBTSEFSRURfS0VZRURNVVRFWCB8IFNIQVJFRF9OVEhBTkRMRTogMHgwMDAwMDAwMCBkZXNjIG1pc2MgMHg5MDA7IElEWEdJUmVzb3VyY2U9eWVzIElEWEdJUmVzb3VyY2UxPXllcyBJRFhHSUtleWVkTXV0ZXg9eWVzIEdldFNoYXJlZEhhbmRsZSAweDgwMDcwMDU3IGhhbmRsZSBudWxsCm1pc2MgU0hBUkVEIHwgR0RJX0NPTVBBVElCTEU6IDB4MDAwMDAwMDAgZGVzYyBtaXNjIDB4MjAyOyBJRFhHSVJlc291cmNlPXllcyBJRFhHSVJlc291cmNlMT15ZXMgSURYR0lLZXllZE11dGV4PW5vIEdldFNoYXJlZEhhbmRsZSAweDAwMDAwMDAwIGhhbmRsZSBzZXQKbWlzYyBTSEFSRUQgfCBSRVNUUklDVF9TSEFSRURfUkVTT1VSQ0U6IDB4MDAwMDAwMDAgZGVzYyBtaXNjIDB4MjAwMjsgSURYR0lSZXNvdXJjZT15ZXMgSURYR0lSZXNvdXJjZTE9eWVzIElEWEdJS2V5ZWRNdXRleD1ubyBHZXRTaGFyZWRIYW5kbGUgMHgwMDAwMDAwMCBoYW5kbGUgc2V0CkNyZWF0ZVNoYXJlZEhhbmRsZSBvbiBhIFNIQVJFRCB0ZXh0dXJlIChhY2Nlc3MgMHg4MDAwMDAwMSwgbm8gbmFtZSk6IDB4ODAwNzAwNTcgaGFuZGxlIG51bGwgQ2xvc2VIYW5kbGUgMApDcmVhdGVTaGFyZWRIYW5kbGUgb24gYSBTSEFSRUQgfCBTSEFSRURfTlRIQU5ETEUgdGV4dHVyZSAoYWNjZXNzIDB4ODAwMDAwMDEsIG5vIG5hbWUpOiAweDAwMDAwMDAwIGhhbmRsZSBzZXQgQ2xvc2VIYW5kbGUgMQphY2Nlc3MgV1JJVEU6IDB4MDAwMDAwMDAgaGFuZGxlIHNldCBDbG9zZUhhbmRsZSAxCmFjY2VzcyBHRU5FUklDX1JFQUQ6IDB4MDAwMDAwMDAgaGFuZGxlIHNldCBDbG9zZUhhbmRsZSAxCmFjY2VzcyBTWU5DSFJPTklaRTogMHgwMDAwMDAwMCBoYW5kbGUgc2V0IENsb3NlSGFuZGxlIDEKdHdvIHVubmFtZWQgaGFuZGxlcyBvZiBvbmUgdGV4dHVyZTogMHgwMDAwMDAwMCAweDAwMDAwMDAwIGRpc3RpbmN0IGhhbmRsZSB2YWx1ZXM6IHRydWUKdGhlIHNhbWUgbmFtZSBmb3IgYW5vdGhlciB0ZXh0dXJlOiAweDg4N2EwMDJjIGhhbmRsZSBudWxsCm5hbWUgZW1wdHk6IDB4MDAwMDAwMDAgaGFuZGxlIHNldApPcGVuU2hhcmVkUmVzb3VyY2VCeU5hbWUgZm9yIGEgbmFtZSBub2JvZHkgbWFkZTogMHg4MDA3MDA1NyBvYmplY3QgbnVsbApPcGVuU2hhcmVkUmVzb3VyY2VCeU5hbWUgYWZ0ZXIgdGhlIGhhbmRsZSBpcyBjbG9zZWQ6IDB4ODAwNzAwNTcgb2JqZWN0IG51bGwKb3BlbmVkIGFmdGVyIHRoZSBvcmlnaW5hbCB0ZXh0dXJlIHdhcyByZWxlYXNlZCAoaGFuZGxlIHN0aWxsIG9wZW4pOiAweDAwMDAwMDAwIG9iamVjdCBzZXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "misc SHARED_KEYEDMUTEX: 0x00000000 desc misc 0x100; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=yes GetSharedHandle 0x00000000 handle set\nmisc SHARED_KEYEDMUTEX | SHARED_NTHANDLE: 0x00000000 desc misc 0x900; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=yes GetSharedHandle 0x80070057 handle null\nmisc SHARED | GDI_COMPATIBLE: 0x00000000 desc misc 0x202; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=no GetSharedHandle 0x00000000 handle set\nmisc SHARED | RESTRICT_SHARED_RESOURCE: 0x00000000 desc misc 0x2002; IDXGIResource=yes IDXGIResource1=yes IDXGIKeyedMutex=no GetSharedHandle 0x00000000 handle set\nCreateSharedHandle on a SHARED texture (access 0x80000001, no name): 0x80070057 handle null CloseHandle 0\nCreateSharedHandle on a SHARED | SHARED_NTHANDLE texture (access 0x80000001, no name): 0x00000000 handle set CloseHandle 1\naccess WRITE: 0x00000000 handle set CloseHandle 1\naccess GENERIC_READ: 0x00000000 handle set CloseHandle 1\naccess SYNCHRONIZE: 0x00000000 handle set CloseHandle 1\ntwo unnamed handles of one texture: 0x00000000 0x00000000 distinct handle values: true\nthe same name for another texture: 0x887a002c handle null\nname empty: 0x00000000 handle set\nOpenSharedResourceByName for a name nobody made: 0x80070057 object null\nOpenSharedResourceByName after the handle is closed: 0x80070057 object null\nopened after the original texture was released (handle still open): 0x00000000 object set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    }
+  ]
+}

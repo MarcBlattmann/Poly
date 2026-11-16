@@ -184,7 +184,7 @@ impl Wm {
         } else if e.flags & KEYEVENTF_SCANCODE != 0 {
             let scan = e.b as u32 & 0xFF;
             let code = if ext { 0xE000 | scan } else { scan };
-            (generic_of(kbd::map_virtual_key(code, kbd::MAPVK_VSC_TO_VK_EX)), scan, 0)
+            (generic_of(kbd::map_virtual_key_in(self.layout(), code, kbd::MAPVK_VSC_TO_VK_EX)), scan, 0)
         } else {
             let vk = e.a as u32 & 0xFF;
             let scan = e.b as u32 & 0xFF;
@@ -406,6 +406,18 @@ impl Wm {
         };
         let ctx = Ctx { pid: 0, tid: 0, now: self.now };
         self.mouse_event(ctx, &InputEvent { kind: 0, a: 0, b: 0, data: 0, flags }, fx);
+    }
+
+    /// The desktop link's wheel (`FromCompositor::Axis`): `vertical` in `WHEEL_DELTA` units,
+    /// positive away from the user, as `MOUSEEVENTF_WHEEL`'s data is (Learn, "MOUSEINPUT"); the
+    /// focus window gets `WM_MOUSEWHEEL` (Learn, "WM_MOUSEWHEEL"). The horizontal wheel is not
+    /// passed on yet.
+    pub fn link_wheel(&mut self, vertical: i32, fx: &mut Effects) {
+        if vertical == 0 {
+            return;
+        }
+        let ctx = Ctx { pid: 0, tid: 0, now: self.now };
+        self.mouse_event(ctx, &InputEvent { kind: 0, a: 0, b: 0, data: vertical as u32, flags: MOUSEEVENTF_WHEEL }, fx);
     }
 
     /// The desktop link's key (an evdev code, which for the main block is

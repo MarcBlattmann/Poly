@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "24852d2ee536",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:40:47Z",
+  "tests": [
+    {
+      "name": "dxcore_factory",
+      "exe_sha256": "dca7ca4e56ac6579352f37903ba748e5f6f25e70fadcd938306b54acd0374917",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RFhDb3JlQ3JlYXRlQWRhcHRlckZhY3RvcnkoSURYQ29yZUFkYXB0ZXJGYWN0b3J5KTogMHgwMDAwMDAwMCBwdHI9c2V0CkRYQ29yZUNyZWF0ZUFkYXB0ZXJGYWN0b3J5KElEWENvcmVBZGFwdGVyTGlzdCk6IDB4ODAwMDQwMDIgcHRyPW51bGwKYSBzZWNvbmQgZmFjdG9yeTogdGhlIHNhbWUgb2JqZWN0IHRydWUgcmVmcyBvZiB0aGUgZmlyc3QgMgpmYWN0b3J5IFFJIElVbmtub3duOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZT1mYWxzZQpDcmVhdGVBZGFwdGVyTGlzdChEM0QxMSBncmFwaGljcyk6IDB4MDAwMDAwMDAgcHRyPXNldCBjb3VudD49MSB0cnVlIHN0YWxlIDAKQ3JlYXRlQWRhcHRlckxpc3QoRDNEMTEgYW5kIEQzRDEyIGdyYXBoaWNzKTogMHgwMDAwMDAwMCBwdHI9c2V0IGNvdW50Pj0xIHRydWUgc3RhbGUgMApDcmVhdGVBZGFwdGVyTGlzdCBhc2tlZCBmb3IgSVVua25vd246IDB4MDAwMDAwMDAgcHRyPXNldApsaXN0IEdldEZhY3Rvcnk6IDB4MDAwMDAwMDAgc2FtZSBhcyB0aGUgY3JlYXRpbmcgZmFjdG9yeSB0cnVlCnByb3BlcnR5IHN1cHBvcnQvc2l6ZSBvZiB0aGUgZmlyc3QgYWRhcHRlciAoc2l6ZXMgb2YgRHJpdmVyRGVzY3JpcHRpb24gYW5kIEFkYXB0ZXJFbmdpbmVOYW1lIHNob3duIGFzIDApOiAwOlM4IDE6UzggMjpTMCAzOlMxNiA0OlM0IDU6UzQgNjpTNCA3OlM4IDg6UzggOTpTOCAxMDpTMSAxMTpTMSAxMjpTMSAxMzpTMSAxNDpTMjAgMTU6UzQgMTY6UzQgMTc6UzAKICBIYXJkd2FyZUlEOiBzaXplIHF1ZXJ5IDB4MDAwMDAwMDAgc2l6ZSAxNiBHZXRQcm9wZXJ0eSAweDAwMDAwMDAwCmV2ZXJ5IGFkYXB0ZXI6IHZhbGlkLCBzdXBwb3J0cyBEM0QxMSBncmFwaGljcywgSW5zdGFuY2VMdWlkIGFuZCBJc0hhcmR3YXJlIHJlYWRhYmxlIHRydWU7IGVhY2ggZm91bmQgaW4gRFhHSSB0cnVlOyBzYW1lIHN1cHBvcnQvc2l6ZSB0YWJsZSBmb3IgYWxsIHRydWU7IEhhcmR3YXJlSUQgdmVuZG9yOiBoYXJkd2FyZSBhZGFwdGVycyBub256ZXJvIGFuZCBub3QgMHgxNDE0LCBzb2Z0d2FyZSBhZGFwdGVycyAweDE0MTQ6IHRydWUKR2V0QWRhcHRlckJ5THVpZCh6ZXJvIExVSUQpOiAweDgwMDcwMDU3IHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DXCoreCreateAdapterFactory(IDXCoreAdapterFactory): 0x00000000 ptr=set\nDXCoreCreateAdapterFactory(IDXCoreAdapterList): 0x80004002 ptr=null\na second factory: the same object true refs of the first 2\nfactory QI IUnknown: 0x00000000 ptr=set same=false\nCreateAdapterList(D3D11 graphics): 0x00000000 ptr=set count>=1 true stale 0\nCreateAdapterList(D3D11 and D3D12 graphics): 0x00000000 ptr=set count>=1 true stale 0\nCreateAdapterList asked for IUnknown: 0x00000000 ptr=set\nlist GetFactory: 0x00000000 same as the creating factory true\nproperty support/size of the first adapter (sizes of DriverDescription and AdapterEngineName shown as 0): 0:S8 1:S8 2:S0 3:S16 4:S4 5:S4 6:S4 7:S8 8:S8 9:S8 10:S1 11:S1 12:S1 13:S1 14:S20 15:S4 16:S4 17:S0\n  HardwareID: size query 0x00000000 size 16 GetProperty 0x00000000\nevery adapter: valid, supports D3D11 graphics, InstanceLuid and IsHardware readable true; each found in DXGI true; same support/size table for all true; HardwareID vendor: hardware adapters nonzero and not 0x1414, software adapters 0x1414: true\nGetAdapterByLuid(zero LUID): 0x80070057 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 90
+    },
+    {
+      "name": "dxcore_factory_c",
+      "exe_sha256": "55bf4d5be58c36c23ff9de48c3b0a97402f709cbb2e0bcd968bb04a5d8611a85",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RFhDb3JlQ3JlYXRlQWRhcHRlckZhY3RvcnkoSVVua25vd24pOiAweDAwMDAwMDAwIHB0cj1zZXQKRFhDb3JlQ3JlYXRlQWRhcHRlckZhY3Rvcnkobm90aGluZyk6IDB4ODAwMDQwMDIgcHRyPW51bGwKZmFjdG9yeSBRSSBJRFhDb3JlQWRhcHRlckZhY3RvcnkxOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZT1mYWxzZQpJc05vdGlmaWNhdGlvblR5cGVTdXBwb3J0ZWQ6IDA9dHJ1ZSAxPXRydWUgMj10cnVlIDM9dHJ1ZSA0PWZhbHNlCkNyZWF0ZUFkYXB0ZXJMaXN0KEQzRDEyIGNvcmUgY29tcHV0ZSk6IDB4MDAwMDAwMDAgcHRyPXNldCBjb3VudD49MSB0cnVlIHN0YWxlIDAKQ3JlYXRlQWRhcHRlckxpc3QoYSBtYWRlLXVwIGF0dHJpYnV0ZSk6IDB4MDAwMDAwMDAgcHRyPXNldCBjb3VudD49MSBmYWxzZSBzdGFsZSAwCmxpc3Q6IEdldEFkYXB0ZXIoaW5kZXggPT0gY291bnQpIG91dCBvZiByYW5nZTogMHg4MDA3MDA1NyBwdHI9bnVsbApEWEdJIGxpc3RzIGF0IGxlYXN0IG9uZSBhZGFwdGVyIHRydWUKICBHZXRQcm9wZXJ0eShEcml2ZXJEZXNjcmlwdGlvbiwgNCBieXRlcyk6IDB4ODAwNzAwNTcgKEluc3RhbmNlTHVpZCBpbiA0IGJ5dGVzOiAweDgwMDcwMDU3LCBpbiAxNiBieXRlcyAweDAwMDAwMDAwLCBpbiAwIGJ5dGVzIDB4ODAwNzAwNTcpCiAgUUkgSURYQ29yZUFkYXB0ZXIxOiBzZXQgc2FtZSBwb2ludGVyIHRydWUKR2V0QWRhcHRlckJ5THVpZCh0aGUgZmlyc3QgYWRhcHRlcidzIExVSUQpOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZSBhZGFwdGVyIG9iamVjdCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DXCoreCreateAdapterFactory(IUnknown): 0x00000000 ptr=set\nDXCoreCreateAdapterFactory(nothing): 0x80004002 ptr=null\nfactory QI IDXCoreAdapterFactory1: 0x00000000 ptr=set same=false\nIsNotificationTypeSupported: 0=true 1=true 2=true 3=true 4=false\nCreateAdapterList(D3D12 core compute): 0x00000000 ptr=set count>=1 true stale 0\nCreateAdapterList(a made-up attribute): 0x00000000 ptr=set count>=1 false stale 0\nlist: GetAdapter(index == count) out of range: 0x80070057 ptr=null\nDXGI lists at least one adapter true\n  GetProperty(DriverDescription, 4 bytes): 0x80070057 (InstanceLuid in 4 bytes: 0x80070057, in 16 bytes 0x00000000, in 0 bytes 0x80070057)\n  QI IDXCoreAdapter1: set same pointer true\nGetAdapterByLuid(the first adapter's LUID): 0x00000000 ptr=set same adapter object true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    }
+  ]
+}

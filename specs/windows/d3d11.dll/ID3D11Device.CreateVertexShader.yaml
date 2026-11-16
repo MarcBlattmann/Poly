@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11Device.CreateVertexShader.yaml
+id: windows/api/d3d11.dll/ID3D11Device.CreateVertexShader
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11Device::CreateVertexShader", "ID3D11Device::CreatePixelShader", "ID3D11Device::CreateGeometryShader", "ID3D11Device::CreateHullShader", "ID3D11Device::CreateDomainShader", "ID3D11Device::CreateComputeShader", "ID3D11Device::CreateInputLayout"; d3d11.h, d3d11_1.h, d3d11_3.h, d3dcommon.h, dxgi.h, dxgi1_2.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Makes a shader object from compiled bytecode (a DXBC container). Chrome (ANGLE) compiles HLSL with the D3D compiler at run time and creates its vertex, pixel, geometry and compute shaders and input layouts; Poly's d3d11 must validate the container, translate or interpret the bytecode (not part of this sheet). No test here can create a valid shader (no compiler allowed): only what is refused is observed: EVERY creation call with NULL, empty, garbage, truncated, zero-filled bytecode, or a bare / hash-less DXBC container is E_INVALIDARG, also with a NULL output pointer (no S_FALSE for an invalid input), and the device stays alive.
+interface:
+  signature: "HRESULT CreateVertexShader(const void* bytecode, SIZE_T length, ID3D11ClassLinkage* linkage, ID3D11VertexShader** shader) (same for Pixel, Geometry, Hull, Domain, Compute); HRESULT CreateInputLayout(const D3D11_INPUT_ELEMENT_DESC* elements, UINT count, const void* bytecode, SIZE_T length, ID3D11InputLayout** layout)"
+chrome:
+  calls: "ANGLE creates shaders through the device pointer after D3DCompile; the tracer does not see them"
+rules:
+  refused_input: "for each of CreateVertexShader, CreateGeometryShader, CreatePixelShader, CreateHullShader, CreateDomainShader, CreateComputeShader: (NULL, 0), 4 garbage bytes, 64 garbage bytes, 256 zero bytes, an empty slice, a 32-byte container header 'DXBC' + zero hash + version 1 + size 32 + 0 chunks, a 68-byte container with a SHDR chunk holding vs_4_0 'ret' and a zero hash, the same cut to 20 bytes and with length 0: all E_INVALIDARG with a NULL output pointer value"
+  null_output: "with a NULL output pointer the same inputs give E_INVALIDARG as well (never S_FALSE)"
+  input_layout: "CreateInputLayout with one POSITION element (R32G32B32_FLOAT) and NULL bytecode, 64 garbage bytes, 256 zero bytes, the header-only container or the chunk container: E_INVALIDARG; zero elements with NULL or garbage bytecode: E_INVALIDARG; an element with a non-existent format (0xFFFF), slot 99 and class 7 with garbage bytecode: E_INVALIDARG"
+  no_removal: "none of the calls removes the device"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  shaders with valid bytecode (needs compiled DXBC: ANGLE's HLSL output; D3DCompile is not allowed in our test build), the container hash check (a hand-built container without the correct hash was refused, but whether the refusal is due to the hash or to the chunk contents is not separated), shader reflection, class linkage, geometry shaders with stream output (CreateGeometryShaderWithStreamOutput), input layouts against a real input signature.

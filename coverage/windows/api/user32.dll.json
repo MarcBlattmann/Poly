@@ -983,7 +983,7 @@
 {"symbol":"WaitMessage","src":["wine-spec"]},
 {"symbol":"WinHelpA","src":["wine-spec"]},
 {"symbol":"WinHelpW","status":"stub","src":["wine-spec"]},
-{"symbol":"WindowFromDC","src":["wine-spec"],"seeds":["wine:user32/tests/dce.c:test_dc_attributes","wine:user32/tests/dce.c:test_destroyed_window"]},
+{"symbol":"WindowFromDC","status":"claimed","claimed_by":"spec-chrome-win-s5","src":["wine-spec"],"seeds":["wine:user32/tests/dce.c:test_dc_attributes","wine:user32/tests/dce.c:test_destroyed_window"]},
 {"symbol":"WindowFromPhysicalPoint","src":["wine-spec"]},
 {"symbol":"WindowFromPoint","status":"green","tests_visible":3,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:user32/tests/win.c:test_window_from_point","wine:user32/tests/win.c:window_from_point_proc"]},
 {"symbol":"keybd_event","status":"stub","src":["wine-spec"],"seeds":["wine:user32/tests/win.c:test_keyboard_input","wine:user32/tests/msg.c:test_keyflags","wine:user32/tests/input.c:test_GetKeyState","wine:user32/tests/input.c:test_GetRawInputBuffer","wine:user32/tests/msg.c:test_menu_messages","wine:user32/tests/msg.c:test_accelerators","wine:user32/tests/msg.c:test_hotkey","wine:user32/tests/msg.c:test_PeekMessage"]},

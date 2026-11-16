@@ -15,7 +15,8 @@
 //!   - `--mode desktop`: Poly's desktop boots with a desktop file for the program; the
 //!     steps (`--steps a,b,c`) start it from the launcher and drive it through QMP (Unix hosts).
 //!     Steps: `launch`, `sleep:S`, `wait:TEXT` (a line of the kernel log, 60 s), `shot:NAME`,
-//!     `type:TEXT`, `key:QCODE`, `chord:ctrl+s`, `click:X,Y`, `dclick:X,Y`, `rclick:X,Y`.
+//!     `type:TEXT`, `key:QCODE`, `chord:ctrl+s`, `click:X|Y`, `dclick:X|Y`, `rclick:X|Y`,
+//!     `drag:X1|Y1|X2|Y2`, `move:X|Y`, `wheel:X|Y|N` (N notches, down when N > 0).
 //!     Without steps: `launch`, `sleep:20`, `shot:window`, `sleep:20`, `shot:later`.
 //!   - Options: `--name N` (default: the program's file stem), `--args "..."` (the program's
 //!     command line after its name), `--then "..."` (repeatable: run the program again with
@@ -189,7 +190,7 @@ fn parse(args: &[String]) -> Result<Opts> {
         flag(args, n).map_or(Ok(d), |v| v.parse().map_err(|e| format!("{n}: {e}")))
     };
     let steps = match flag(args, "--steps") {
-        Some(s) => s.split(',').filter(|p| !p.is_empty()).map(Step::parse).collect::<Result<Vec<_>>>()?,
+        Some(s) => split_steps(&s).iter().map(|p| Step::parse(p)).collect::<Result<Vec<_>>>()?,
         None => ["launch", "sleep:20", "shot:window", "sleep:20", "shot:later"]
             .iter()
             .map(|s| Step::parse(s))
@@ -609,7 +610,7 @@ pub fn desktop_check(
     steps: &str,
     log: &Path,
 ) -> Result<(String, Option<String>)> {
-    let steps = steps.split(',').filter(|p| !p.is_empty()).map(Step::parse).collect::<Result<Vec<_>>>()?;
+    let steps = split_steps(steps).iter().map(|p| Step::parse(p)).collect::<Result<Vec<_>>>()?;
     let out = log.parent().map_or_else(|| root().join("target"), Path::to_path_buf);
     std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let o = Opts {
@@ -637,6 +638,36 @@ pub fn desktop_check(
     Ok((clean(&text), stopped))
 }
 
+/// The steps of `--steps`, comma separated. A piece that does not start a step continues the text
+/// of the `type` or `wtype` step before it, comma and all, so a typed URL may have commas
+/// (`type:data:text/html,<b>x</b>`).
+fn split_steps(s: &str) -> Vec<String> {
+    const KINDS: &[&str] = &[
+        "launch", "sleep", "wait", "shot", "pixel", "type", "wtype", "key", "chord", "click", "dclick", "rclick",
+        "drag", "wheel", "move",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for piece in s.split(',') {
+        let kind = piece.split_once(':').map_or(piece, |p| p.0);
+        let typing = out.last().is_some_and(|l| l.starts_with("type:") || l.starts_with("wtype:"));
+        if typing && !KINDS.contains(&kind) {
+            if let Some(last) = out.last_mut() {
+                last.push(',');
+                last.push_str(piece);
+            }
+        } else if !piece.is_empty() {
+            out.push(piece.to_string());
+        }
+    }
+    out
+}
+
+/// Whether `steps` (as `--steps` takes them) are all steps, for the boot tests' own checks.
+#[cfg(test)]
+pub fn steps_parse(steps: &str) -> bool {
+    split_steps(steps).iter().all(|p| Step::parse(p).is_ok())
+}
+
 /// One step of a desktop run.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(not(unix), allow(dead_code))]
@@ -648,6 +679,9 @@ enum Step {
     /// The screen's pixel at X|Y must be this colour (RRGGBB): the step fails otherwise.
     Pixel(i32, i32, [u8; 3]),
     Type(String),
+    /// Type for a Windows program: the keys of win32k's keyboard layout
+    /// (German, `poly_win32k::kbd`), where `type` uses the US positions.
+    WType(String),
     Key(String),
     Chord(Vec<String>),
     Click(i32, i32),
@@ -655,6 +689,10 @@ enum Step {
     RClick(i32, i32),
     /// Press the left button at the first point, move to the second in steps, release.
     Drag(i32, i32, i32, i32),
+    /// Turn the wheel at X|Y by N notches: down (towards the user) when N > 0, up when N < 0.
+    Wheel(i32, i32, i32),
+    /// Move the pointer to X|Y without a button.
+    Move(i32, i32),
 }
 
 impl Step {
@@ -682,6 +720,7 @@ impl Step {
                 Step::Pixel(x, y, [(c >> 16) as u8, (c >> 8) as u8, c as u8])
             }
             "type" => Step::Type(arg.into()),
+            "wtype" => Step::WType(arg.into()),
             "key" => Step::Key(arg.into()),
             "chord" => Step::Chord(arg.split('+').map(str::to_string).collect()),
             "click" => {
@@ -695,6 +734,19 @@ impl Step {
             "rclick" => {
                 let (x, y) = xy()?;
                 Step::RClick(x, y)
+            }
+            "wheel" => {
+                let v: Vec<i32> = arg
+                    .split('|')
+                    .map(|p| p.trim().parse())
+                    .collect::<core::result::Result<_, _>>()
+                    .map_err(|_| format!("step {s:?}: X|Y|N"))?;
+                let [x, y, n] = v[..] else { return Err(format!("step {s:?}: X|Y|N")) };
+                Step::Wheel(x, y, n)
+            }
+            "move" => {
+                let (x, y) = xy()?;
+                Step::Move(x, y)
             }
             "drag" => {
                 let v: Vec<i32> = arg
@@ -734,6 +786,51 @@ fn qcode(c: char) -> Option<(String, bool)> {
         ')' => shifted("0"),
         '>' => shifted("dot"),
         '<' => shifted("comma"),
+        '?' => shifted("slash"),
+        '&' => shifted("7"),
+        '#' => shifted("3"),
+        '%' => shifted("5"),
+        '@' => shifted("2"),
+        '+' => shifted("equal"),
+        '*' => shifted("8"),
+        '"' => shifted("apostrophe"),
+        _ => None,
+    }
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+/// The keys (QEMU's names, held together) that type a character with win32k's German layout
+/// (`poly_win32k::kbd`: `Y` and `Z` swapped, `/` on Shift+7, `:` on Shift+.).
+fn qcodes_de(c: char) -> Option<Vec<String>> {
+    let key = |k: &str| Some(vec![k.to_string()]);
+    let shift = |k: &str| Some(vec!["shift".to_string(), k.to_string()]);
+    match c {
+        'z' => key("y"),
+        'y' => key("z"),
+        'Z' => shift("y"),
+        'Y' => shift("z"),
+        'a'..='z' | '0'..='9' => key(&c.to_string()),
+        'A'..='Z' => shift(&c.to_ascii_lowercase().to_string()),
+        ' ' => key("spc"),
+        '.' => key("dot"),
+        ',' => key("comma"),
+        '-' => key("slash"),
+        '#' => key("backslash"),
+        '+' => key("bracket_right"),
+        ':' => shift("dot"),
+        ';' => shift("comma"),
+        '_' => shift("slash"),
+        '/' => shift("7"),
+        '?' => shift("minus"),
+        '=' => shift("0"),
+        '&' => shift("6"),
+        '%' => shift("5"),
+        '!' => shift("1"),
+        '"' => shift("2"),
+        '(' => shift("8"),
+        ')' => shift("9"),
+        '\'' => shift("backslash"),
+        '@' => Some(vec!["ctrl".into(), "alt".into(), "q".into()]),
         _ => None,
     }
 }
@@ -852,6 +949,12 @@ impl Driver {
                     }
                 }
             }
+            Step::WType(t) => {
+                for c in t.chars() {
+                    let keys = qcodes_de(c).ok_or(format!("cannot type {c:?} with the German layout"))?;
+                    self.chord(&keys)?;
+                }
+            }
             Step::Key(k) => self.chord(std::slice::from_ref(k))?,
             Step::Chord(k) => self.chord(k)?,
             Step::Click(x, y) => self.click(*x, *y, "left", 1)?,
@@ -867,6 +970,15 @@ impl Driver {
                 self.events(&[Self::btn(false, "left")])?;
                 std::thread::sleep(Duration::from_millis(200));
             }
+            Step::Wheel(x, y, n) => {
+                self.at(*x, *y)?;
+                let b = if *n > 0 { "wheel-down" } else { "wheel-up" };
+                for _ in 0..n.unsigned_abs() {
+                    self.events(&[Self::btn(true, b)])?;
+                    self.events(&[Self::btn(false, b)])?;
+                }
+            }
+            Step::Move(x, y) => self.at(*x, *y)?,
         }
         Ok(())
     }
@@ -910,6 +1022,18 @@ mod tests {
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
         assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
         assert!(Step::parse("drag:1|2|3").is_err());
+        assert_eq!(Step::parse("wheel:300|400|3"), Ok(Step::Wheel(300, 400, 3)));
+        assert_eq!(Step::parse("wheel:300|400|-2"), Ok(Step::Wheel(300, 400, -2)));
+        assert!(Step::parse("wheel:300|400").is_err());
+        assert_eq!(Step::parse("move:5|6"), Ok(Step::Move(5, 6)));
+        assert_eq!(Step::parse("wtype:a/b"), Ok(Step::WType("a/b".into())));
+        assert_eq!(
+            split_steps("launch,type:data:text/html,<p>a,b</p>,key:ret,,sleep:2"),
+            ["launch", "type:data:text/html,<p>a,b</p>", "key:ret", "sleep:2"]
+        );
+        assert_eq!(qcodes_de('z'), Some(vec!["y".to_string()]));
+        assert_eq!(qcodes_de(':'), Some(vec!["shift".to_string(), "dot".to_string()]));
+        assert_eq!(qcodes_de('/'), Some(vec!["shift".to_string(), "7".to_string()]));
         assert_eq!(Step::parse("pixel:200|400|008000"), Ok(Step::Pixel(200, 400, [0, 128, 0])));
         assert!(Step::parse("pixel:200|400|8000").is_err());
         assert!(Step::parse("pixel:200|400").is_err());

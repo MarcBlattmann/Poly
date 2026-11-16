@@ -69,6 +69,16 @@ struct Surface {
     /// The process of the app (0: not told), to end its startup feedback
     /// when its first window is shown (ADR 0167).
     pid: u32,
+    /// An application window (not a popup).
+    top_level: bool,
+    /// What win32k last said: shown, minimized (`Visible`, `State`).
+    shown: bool,
+    minimized: bool,
+    /// A restore or minimize was asked of win32k for this state.
+    asked: bool,
+    /// The window's own borders around the surface that take the pointer
+    /// (`Margins`): left, top, right, bottom.
+    margins: [i32; 4],
 }
 
 /// Windows surfaces in the scene.
@@ -98,6 +108,12 @@ impl WindowsSurfaces {
         self.surfaces.values().find(|s| s.window == window).map(|s| s.pid).filter(|&p| p != 0)
     }
 
+    /// The borders around a Windows surface's scene window that take the
+    /// pointer (left, top, right, bottom).
+    pub fn margins_of(&self, window: WindowId) -> [i32; 4] {
+        self.surfaces.values().find(|s| s.window == window).map_or([0; 4], |s| s.margins)
+    }
+
     /// The surface a scene window shows, if it is a Windows one.
     pub fn surface_of(&self, window: WindowId) -> Option<SurfaceId> {
         self.surfaces.iter().find(|(_, s)| s.window == window).map(|(&id, _)| id)
@@ -125,6 +141,32 @@ impl WindowsSurfaces {
             .into_iter()
             .map(|(surface, (x, y, width, height))| FromCompositor::Configure { surface, x, y, width, height })
             .collect()
+    }
+
+    /// The shell showed or hid an application window itself (a minimized
+    /// window picked in the window switcher, the shell's own minimize):
+    /// the window's restore or minimize, for win32k to have the app run
+    /// (so it draws again, and knows it is minimized). Once per state
+    /// win32k reports.
+    pub fn shell_requests(&mut self, scene: &Scene) -> Vec<FromCompositor> {
+        use poly_win32k::link::Request;
+        let mut out = Vec::new();
+        for (&surface, s) in &mut self.surfaces {
+            if s.asked || !s.top_level {
+                continue;
+            }
+            let Some(win) = scene.window(s.window) else { continue };
+            let request = if s.minimized && !win.is_hidden() {
+                Request::Restore
+            } else if s.shown && !s.minimized && win.is_hidden() {
+                Request::Minimize
+            } else {
+                continue;
+            };
+            s.asked = true;
+            out.push(FromCompositor::Request { surface, request });
+        }
+        out
     }
 
     /// win32k's connection ended: its windows leave the scene.
@@ -158,7 +200,20 @@ impl WindowsSurfaces {
                 if let Some(owner) = self.window(owner) {
                     scene.set_parent(window, Some(owner));
                 }
-                self.surfaces.insert(surface, Surface { window, buffer: None, geometry: (0, 0, 0, 0), pid: 0 });
+                self.surfaces.insert(
+                    surface,
+                    Surface {
+                        window,
+                        buffer: None,
+                        geometry: (0, 0, 0, 0),
+                        pid: 0,
+                        top_level: kind == SurfaceKind::TopLevel,
+                        shown: false,
+                        minimized: false,
+                        asked: false,
+                        margins: [0; 4],
+                    },
+                );
             }
             ToCompositor::Geometry { surface, x, y, width, height } => {
                 if let Some(w) = self.window(surface) {
@@ -181,6 +236,9 @@ impl WindowsSurfaces {
             ToCompositor::Visible { surface, shown } => {
                 if let Some(w) = self.window(surface) {
                     scene.set_hidden(w, !shown);
+                }
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    (s.shown, s.asked) = (shown, false);
                 }
             }
             ToCompositor::Buffer { surface, buffer, width, height, stride, format } => {
@@ -224,6 +282,17 @@ impl WindowsSurfaces {
             ToCompositor::State { surface, state } => {
                 if let Some(w) = self.window(surface) {
                     scene.set_maximized(w, state == WindowState::Maximized);
+                }
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    (s.minimized, s.asked) = (state == WindowState::Minimized, false);
+                }
+            }
+            ToCompositor::Margins { surface, left, top, right, bottom } => {
+                if let Some(s) = self.surfaces.get_mut(&surface) {
+                    s.margins = [left, top, right, bottom].map(i32::from);
+                    if let Some(win) = scene.window(s.window) {
+                        println!("poly-compositor: window {:?} own borders {left},{top},{right},{bottom}", win.title());
+                    }
                 }
             }
             ToCompositor::Destroy { surface } => {
@@ -293,6 +362,22 @@ pub struct Link {
     /// Interactive moves win32k asked for (`DefWindowProc`'s `SC_MOVE`),
     /// started once the server is at hand.
     moves: Vec<WindowId>,
+    /// Interactive resizes (`SC_SIZE` by a border), likewise.
+    resizes: Vec<(WindowId, Edges)>,
+    /// The keyboard layout win32k was told (`poly-input`'s name).
+    layout: alloc::string::String,
+}
+
+/// The `xdg_toplevel.resize_edge` bits of the server's interactive resize
+/// (top 1, bottom 2, left 4, right 8) for the desktop link's edges.
+pub fn resize_edges(e: Edges) -> u32 {
+    let mut bits = 0;
+    for (edge, bit) in [(Edges::TOP, 1), (Edges::BOTTOM, 2), (Edges::LEFT, 4), (Edges::RIGHT, 8)] {
+        if e.contains(edge) {
+            bits |= bit;
+        }
+    }
+    bits
 }
 
 impl Link {
@@ -330,6 +415,8 @@ impl Link {
             copies: Copies::default(),
             incoming: Stream::new(),
             moves: Vec::new(),
+            resizes: Vec::new(),
+            layout: alloc::string::String::new(),
         })
     }
 
@@ -353,7 +440,8 @@ impl Link {
             | E::Button { window, .. }
             | E::Axis { window, .. }
             | E::Key { window, .. }
-            | E::Resize { window, .. } => window,
+            | E::Resize { window, .. }
+            | E::Configure { window, .. } => window,
             E::Leave(window) | E::Close(window) => window,
         };
         let Some(surface) = self.surfaces.surface_of(window) else { return false };
@@ -378,6 +466,16 @@ impl Link {
             E::Leave(_) => vec![FromCompositor::Leave { surface }],
             E::Close(_) => vec![FromCompositor::Request { surface, request: poly_win32k::link::Request::Close }],
             E::Resize { .. } => Vec::new(),
+            // A resize by the window's border: win32k has the app's thread
+            // resize the window (its `SetWindowPos`), and the surface
+            // follows with the new size.
+            E::Configure { x, y, width, height, .. } => vec![FromCompositor::Configure {
+                surface,
+                x,
+                y,
+                width: width.max(1) as u32,
+                height: height.max(1) as u32,
+            }],
         };
         let mut out = Vec::new();
         for r in &records {
@@ -402,6 +500,11 @@ impl Link {
         for w in core::mem::take(&mut self.moves) {
             server.internal_start_move(w);
         }
+        // A press on its own border: the server resizes it with the pointer.
+        for (w, edges) in core::mem::take(&mut self.resizes) {
+            println!("poly-compositor: resize of a Windows window by its border (edges {:#x})", edges.0);
+            server.internal_start_resize(w, resize_edges(edges));
+        }
         let after: Vec<(WindowId, bool)> = self
             .surfaces
             .surfaces
@@ -422,6 +525,10 @@ impl Link {
                 server.release_internal_window(w);
             }
         }
+        for &(w, _) in &after {
+            // Its own sizing borders take the pointer too.
+            server.set_internal_margins(w, self.surfaces.margins_of(w));
+        }
     }
 
     /// Tell win32k where the compositor moved or resized a Windows
@@ -432,6 +539,18 @@ impl Link {
     pub fn sync_geometry(&mut self, scene: &Scene) {
         for record in self.surfaces.sync_geometry(scene) {
             self.send(record);
+        }
+        for record in self.surfaces.shell_requests(scene) {
+            self.send(record);
+        }
+    }
+
+    /// The desktop's keyboard layout (`poly-input`'s name): win32k reads
+    /// Windows apps' keys with it (ADR 0209). Sent when it changes.
+    pub fn set_layout(&mut self, name: &str) {
+        if self.layout != name {
+            self.layout = name.into();
+            self.send(FromCompositor::Layout { name: name.into() });
         }
     }
 
@@ -474,9 +593,10 @@ impl Link {
                     Action::Send(rec) => rec.encode(&mut out),
                     Action::Activate(w) => scene.raise(w),
                     Action::BeginMove(w) => self.moves.push(w),
+                    Action::BeginResize(w, edges) => self.resizes.push((w, edges)),
                     // The copy was made with the buffer record; cursors
-                    // and interactive resizes come with a later slice.
-                    Action::TakeBuffer(_) | Action::Cursor(..) | Action::BeginResize(..) => {}
+                    // come with a later slice.
+                    Action::TakeBuffer(_) | Action::Cursor(..) => {}
                 }
             }
         }
@@ -686,5 +806,53 @@ mod tests {
         let mut st = Stream::<ToCompositor>::new();
         st.push(&out);
         assert!(ws.apply(&mut scene, &st.next().unwrap().unwrap(), &mem).is_empty());
+    }
+
+    #[test]
+    fn a_resize_by_a_windows_border_uses_the_servers_edges() {
+        assert_eq!(resize_edges(Edges::LEFT), 4);
+        assert_eq!(resize_edges(Edges::RIGHT.union(Edges::BOTTOM)), 8 | 2);
+        assert_eq!(resize_edges(Edges::TOP.union(Edges::LEFT)), 1 | 4);
+        assert_eq!(resize_edges(Edges(0)), 0);
+    }
+
+    #[test]
+    fn the_shell_restores_and_minimizes_a_windows_window_through_win32k() {
+        use poly_win32k::link::{Request, WindowState};
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let s = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s, 10, 10, 4, 2);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+        assert!(ws.shell_requests(&scene).is_empty(), "as win32k said");
+        // The app minimized it: hidden, nothing to ask.
+        d.set_state(s, WindowState::Minimized);
+        d.set_visible(s, false);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(scene.window(w).unwrap().is_hidden());
+        assert!(ws.shell_requests(&scene).is_empty());
+        // The window switcher shows it: the app restores it, once.
+        scene.set_hidden(w, false);
+        assert_eq!(ws.shell_requests(&scene), vec![FromCompositor::Request { surface: s, request: Request::Restore }]);
+        assert!(ws.shell_requests(&scene).is_empty());
+        d.set_state(s, WindowState::Normal);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(ws.shell_requests(&scene).is_empty());
+        // The shell hides a shown window: the app minimizes it.
+        scene.set_hidden(w, true);
+        assert_eq!(ws.shell_requests(&scene), vec![FromCompositor::Request { surface: s, request: Request::Minimize }]);
+        // A window the app hid itself (not minimized) is left alone.
+        d.set_visible(s, false);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(ws.shell_requests(&scene).is_empty());
     }
 }
