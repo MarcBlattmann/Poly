@@ -783,7 +783,7 @@ fn vk_key_scan_per_the_sheet() {
     assert_eq!(ex(de, '/'), 0x0137);
     assert_eq!(ex(de, '\u{3}'), 0x0003);
     assert_eq!(ex(ch, '@'), 0x0632);
-    assert_eq!(ex(ch, '{c4}'), 0x00DC);
+    assert_eq!(ex(ch, '\u{c4}'), 0x00DC);
     assert_eq!(ex(ch, '\u{e9}'), 0x01DE);
     assert_eq!(vk_key_scan_in(us, 0x20AC), -1);
     assert_eq!(vk_key_scan_in(us, 0xFC), -1);

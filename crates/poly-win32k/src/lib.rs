@@ -66,6 +66,7 @@ pub mod kbdtab;
 pub mod link;
 pub mod menu;
 pub mod metrics;
+pub mod nchit;
 pub mod notify;
 pub mod props;
 pub mod proto;
