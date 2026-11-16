@@ -5,9 +5,11 @@
 
 fn main() {
     // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
-    // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
-    if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
-        for (name, target) in APPS_FORWARDS {
+    // The 32-bit modules (ADR 0186) carry the functions that are implemented in `kernelbase` for both widths (the
+    // `fail_exports!` stubs of `apps.rs` are x64 only: a fail-only stub takes no arguments and `stdcall` would leave them).
+    let x64 = std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64");
+    for (name, target) in APPS_FORWARDS {
+        if x64 || !X64_ONLY.contains(name) {
             println!("cargo:rustc-link-arg=/EXPORT:{name}={target}");
         }
     }
@@ -32,6 +34,9 @@ fn main() {
     std::fs::write(&res, poly_kernelbase::verinfo::res_file(&version)).expect("write version.res");
     println!("cargo:rustc-link-arg={}", res.display());
 }
+
+/// Forwarded for the 64-bit module only.
+const X64_ONLY: &[&str] = &["__C_specific_handler"];
 
 // BEGIN generated consts
 #[rustfmt::skip]

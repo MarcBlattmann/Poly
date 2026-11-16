@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "comm_state_b",
+      "exe_sha256": "ac38924da8c92b057b2fdfff999b1ec532f869864f4f64fc3a0601bcd9dfe78f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Q29tbVN0YXRlKElOVkFMSURfSEFORExFX1ZBTFVFKSA9IDAgZXJyIDYgZGNiIGxlbmd0aCBmaWVsZCAyOCBmaXJzdCBieXRlIGFmdGVyIDB4MCBhbGwgMjQgYnl0ZXMgc3RpbGwgMHg1QSBmYWxzZQpHZXRDb21tU3RhdGUoYW4gYW5vbnltb3VzIHBpcGUgcmVhZCBlbmQpID0gMCBlcnIgMSBkY2IgbGVuZ3RoIGZpZWxkIDI4IGZpcnN0IGJ5dGUgYWZ0ZXIgMHgwIGFsbCAyNCBieXRlcyBzdGlsbCAweDVBIGZhbHNlCkdldENvbW1TdGF0ZSh0aGUgY3VycmVudCBwcm9jZXNzIHBzZXVkbyBoYW5kbGUpID0gMCBlcnIgNiBkY2IgbGVuZ3RoIGZpZWxkIDI4IGZpcnN0IGJ5dGUgYWZ0ZXIgMHgwIGFsbCAyNCBieXRlcyBzdGlsbCAweDVBIGZhbHNlCkdldENvbW1TdGF0ZShzdGRlcnIpIGlzIEZBTFNFOiB0cnVlIGVyciBpcyAxIG9yIDY6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetCommState(INVALID_HANDLE_VALUE) = 0 err 6 dcb length field 28 first byte after 0x0 all 24 bytes still 0x5A false\nGetCommState(an anonymous pipe read end) = 0 err 1 dcb length field 28 first byte after 0x0 all 24 bytes still 0x5A false\nGetCommState(the current process pseudo handle) = 0 err 6 dcb length field 28 first byte after 0x0 all 24 bytes still 0x5A false\nGetCommState(stderr) is FALSE: true err is 1 or 6: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "comm_state_c",
+      "exe_sha256": "908cabc649ce9636d3e5d0a0be422cec5eb986e2ab443938f096b1406c0937bc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0Q29tbVN0YXRlKGEgY2xvc2VkIGhhbmRsZSB2YWx1ZSkgPSAwIGVyciA2IGRjYiBsZW5ndGggZmllbGQgMjggZmlyc3QgYnl0ZSBhZnRlciAweDAgYWxsIDI0IGJ5dGVzIHN0aWxsIDB4NUEgZmFsc2UKR2V0Q29tbVN0YXRlKGFuIGFub255bW91cyBwaXBlIHdyaXRlIGVuZCkgPSAwIGVyciAxIGRjYiBsZW5ndGggZmllbGQgMjggZmlyc3QgYnl0ZSBhZnRlciAweDAgYWxsIDI0IGJ5dGVzIHN0aWxsIDB4NUEgZmFsc2UKR2V0Q29tbVN0YXRlKHN0ZGluKSBpcyBGQUxTRTogdHJ1ZSBlcnIgaXMgMSBvciA2OiB0cnVlCkdldENvbW1UaW1lb3V0cyh0aGUgTlVMIGRldmljZSkgPSAwIGVyciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetCommState(a closed handle value) = 0 err 6 dcb length field 28 first byte after 0x0 all 24 bytes still 0x5A false\nGetCommState(an anonymous pipe write end) = 0 err 1 dcb length field 28 first byte after 0x0 all 24 bytes still 0x5A false\nGetCommState(stdin) is FALSE: true err is 1 or 6: true\nGetCommTimeouts(the NUL device) = 0 err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

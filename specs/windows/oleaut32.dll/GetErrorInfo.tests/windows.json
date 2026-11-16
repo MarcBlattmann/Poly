@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "f48c13a67ab9",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:35:55Z",
+  "tests": [
+    {
+      "name": "error_info_b",
+      "exe_sha256": "ebe46996aff5f237e4c92080287084a8c724800583a4c11597d8e4191ddb8616",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0RXJyb3JJbmZvKHJlc2VydmVkIDEpID0gMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCiAgUUkgSUVycm9ySW5mbyA9IDB4MDAwMDAwMDAKU2V0RXJyb3JJbmZvKDAsIGluZm8pID0gMHgwMDAwMDAwMApTZXRFcnJvckluZm8oMCwgTlVMTCkgPSAweDAwMDAwMDAwCiAgbm90aGluZyBsZWZ0IGFmdGVyd2FyZHM6IHRydWUKICBRSSBJUmVzdHJpY3RlZEVycm9ySW5mbyA9IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetErrorInfo(reserved 1) = 0x80070057 out_null true\n  QI IErrorInfo = 0x00000000\nSetErrorInfo(0, info) = 0x00000000\nSetErrorInfo(0, NULL) = 0x00000000\n  nothing left afterwards: true\n  QI IRestrictedErrorInfo = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "error_info_c",
+      "exe_sha256": "b6b972b9e7d91f9d464644a3fa747480aa1e7a1dbec02098e99d1b7edba2edf4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRXJyb3JJbmZvID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCiAgR2V0RGVzY3JpcHRpb24gPSAweDAwMDAwMDAwIFtwb2x5IGRlc2NyaXB0aW9uXQpHZXRFcnJvckluZm8gPSAweDAwMDAwMDAwIHNhbWVfb2JqZWN0IHRydWUKICB0aGVuIEdldEVycm9ySW5mbyA9IDB4MDAwMDAwMDEgb3V0X251bGwgdHJ1ZQphZnRlciBSb09yaWdpbmF0ZUVycm9yOiBHZXRFcnJvckluZm8gPSAweDAwMDAwMDAwIG51bGwgZmFsc2UKICBHZXRSZXN0cmljdGVkRXJyb3JJbmZvIGFmdGVyd2FyZHM6IG51bGwgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateErrorInfo = 0x00000000 null false\n  GetDescription = 0x00000000 [poly description]\nGetErrorInfo = 0x00000000 same_object true\n  then GetErrorInfo = 0x00000001 out_null true\nafter RoOriginateError: GetErrorInfo = 0x00000000 null false\n  GetRestrictedErrorInfo afterwards: null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

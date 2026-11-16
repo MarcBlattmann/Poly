@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/RtlDuplicateUnicodeString.yaml
+id: windows/api/ntdll.dll/RtlDuplicateUnicodeString
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  Copies a UNICODE_STRING into a freshly allocated buffer (freed with RtlFreeUnicodeString). Flag 1 adds a NUL and room for it; flag 2 allocates even for an empty string and is valid only together with flag 1.
+interface:
+  signature: "NTSTATUS RtlDuplicateUnicodeString(ULONG Flags, PCUNICODE_STRING StringIn, PUNICODE_STRING StringOut)"
+rules:
+  copy: "\"abc\" (Length 6, Maximum 8): flags 0: STATUS_SUCCESS, Length 6, Maximum 6, the characters copied, no terminator; flags 1: Length 6, Maximum 8 and a NUL after the text; flags 3: as flags 1. The source is unchanged."
+  invalid_flags: "flags 2 alone, 4 and 0xFFFFFFFF: STATUS_INVALID_PARAMETER (0xC000000D) and the output is not touched. Flags 0 with an odd Length (5): also STATUS_INVALID_PARAMETER."
+  empty: "an empty source (Length 0): flags 0 and 1: STATUS_SUCCESS with Length 0, Maximum 0 and a NULL buffer (also with a non-NULL source buffer); flags 3: STATUS_SUCCESS, Length 0, Maximum 2, a buffer holding a NUL."
+  maximum: "a source whose Maximum equals its Length is copied with flags 0 (Maximum 6) and flags 1 (Maximum 8)."
+errors:
+  invalid_parameter: "STATUS_INVALID_PARAMETER 0xC000000D"
+side_effects: "allocates from the process heap"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Out of memory, NULL arguments (raise).

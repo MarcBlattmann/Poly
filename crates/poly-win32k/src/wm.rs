@@ -788,6 +788,31 @@ impl Wm {
         Reply::Value { value: v }
     }
 
+    /// `SetClassLongPtrW`: the class's value is replaced and the old one answered. The icon, cursor, brush, menu name,
+    /// window procedure, instance and style are the class's own fields; an offset into the class's extra bytes sets
+    /// eight of them. The atom and the sizes cannot be set (`ERROR_INVALID_INDEX`).
+    fn set_class_long(&mut self, hwnd: u64, index: i32, value: u64) -> Reply {
+        let Some(class) = self.get(hwnd).map(|w| w.class) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let Some(c) = self.classes[class].as_mut() else { return err(ERROR_INVALID_WINDOW_HANDLE) };
+        let old = match index {
+            -26 => core::mem::replace(&mut c.style, value as u32) as u64,
+            -24 => core::mem::replace(&mut c.wndproc, value),
+            -16 => core::mem::replace(&mut c.instance, value),
+            -14 => core::mem::replace(&mut c.icon, value),
+            -12 => core::mem::replace(&mut c.cursor, value),
+            -10 => core::mem::replace(&mut c.brush, value),
+            -8 => core::mem::replace(&mut c.menu_name, value),
+            -34 => core::mem::replace(&mut c.icon_sm, value),
+            i if i >= 0 && (i as usize) + 8 <= c.extra.len() => {
+                let old = read_le(&c.extra, i as usize, 8);
+                c.extra[i as usize..i as usize + 8].copy_from_slice(&value.to_le_bytes());
+                old
+            }
+            _ => return err(ERROR_INVALID_INDEX),
+        };
+        Reply::Value { value: old }
+    }
+
     // ----- windows
 
     fn create(&mut self, ctx: Ctx, s: CreateSpec) -> Reply {
@@ -1327,7 +1352,15 @@ impl Wm {
             }
         }
         for c in candidates {
+            // The desktop, the parent of the message-only windows and the other processes' stand-ins
+            // (the desktop's class) are no windows a search finds (FindWindowExW.yaml `parent`).
+            if c == self.desktop || c == self.message {
+                continue;
+            }
             let Some(w) = self.get(u64::from(c)) else { continue };
+            if self.get(u64::from(self.desktop)).is_some_and(|d| d.class == w.class) {
+                continue;
+            }
             if w.state != State::Normal {
                 continue;
             }
@@ -2024,6 +2057,7 @@ impl Wm {
                 None => err(ERROR_CLASS_DOES_NOT_EXIST),
             },
             Request::ClassLong { hwnd, index } => self.class_long(hwnd, index),
+            Request::SetClassLong { hwnd, index, value } => self.set_class_long(hwnd, index, value),
             Request::ClassName { hwnd } => match self.get(hwnd) {
                 Some(w) => {
                     Reply::Text { text: self.classes[w.class].as_ref().map(|c| c.name.clone()).unwrap_or_default() }
@@ -2446,6 +2480,57 @@ mod tests {
             r => panic!("{r:?}"),
         }
     }
+
+    /// The thread's IME windows after its top-level window is destroyed (GetWindow.yaml `ime_windows`):
+    /// the walk is ime, ctf, holder; the default IME window has no owner.
+    #[test]
+    fn ime_windows_after_the_active_window_is_destroyed() {
+        let mut wm = Wm::new();
+        wm.set_display(crate::metrics::Display::INTERACTIVE);
+        for n in ["HidC", "MainC", "IME", "MSCTFIME UI"] {
+            reg(&mut wm, n);
+        }
+        let popup = WS_POPUP | WS_DISABLED;
+        let hid = create(&mut wm, A, "HidC", popup, 0, 0);
+        let ime = create_owned(&mut wm, "IME", popup, hid);
+        let main = create(&mut wm, A, "MainC", WS_OVERLAPPEDWINDOW_TEST, 0, 0);
+        wm.handle(A, Request::SetInput { active: main, focus: main, capture: 0, which: 3 }, &mut Effects::default());
+        let ctf = create_owned(&mut wm, "MSCTFIME UI", popup, ime);
+        let walk = |wm: &Wm| -> Vec<u32> {
+            wm.get(u64::from(wm.desktop))
+                .unwrap()
+                .children
+                .iter()
+                .copied()
+                .filter(|&h| [hid, ime, main, ctf].contains(&h))
+                .collect()
+        };
+        assert_eq!(walk(&wm), vec![ctf, ime, main, hid], "active: ctf ime main hid");
+        wm.handle(A, Request::SetInput { active: 0, focus: 0, capture: 0, which: 3 }, &mut Effects::default());
+        wm.handle(A, Request::Free { hwnd: main }, &mut Effects::default());
+        assert_eq!(wm.get(u64::from(ime)).unwrap().owner, 0, "the IME window has no owner");
+        assert_eq!(walk(&wm), vec![ime, ctf, hid], "destroyed: ime ctf hid");
+    }
+
+    fn create_owned(wm: &mut Wm, n: &str, style: u32, owner: u32) -> u32 {
+        let spec = CreateSpec {
+            class: ClassRef::Name { name: name(n) },
+            style,
+            cx: 0,
+            cy: 0,
+            parent: u64::from(owner),
+            ..CreateSpec::default()
+        };
+        match wm.handle(A, Request::CreateWindow { spec }, &mut Effects::default()) {
+            Reply::Created { created } => {
+                wm.handle(A, Request::FinishCreate { hwnd: created.hwnd }, &mut Effects::default());
+                created.hwnd
+            }
+            r => panic!("{r:?}"),
+        }
+    }
+
+    const WS_OVERLAPPEDWINDOW_TEST: u32 = 0x00CF_0000 | WS_VISIBLE;
 
     #[test]
     fn window_messages_share_one_number_per_name() {

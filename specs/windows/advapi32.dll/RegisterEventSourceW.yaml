@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegisterEventSourceW.yaml
+id: windows/api/advapi32.dll/RegisterEventSourceW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  A handle for writing to the event log under a source name (an unknown name logs to the Application log). DeregisterEventSource closes it. No event is written by the test.
+interface:
+  signature: "HANDLE RegisterEventSourceW(LPCWSTR lpUNCServerName, LPCWSTR lpSourceName)"
+rules:
+  register: "RegisterEventSourceW(NULL, \"PolySpecTestSource\") returns a handle (and the same name again another one, different from the first); DeregisterEventSource on each: TRUE, last error unchanged."
+  bad_arguments: "a NULL or empty source name: NULL, ERROR_INVALID_PARAMETER (87); a server that does not exist (\"\\\\poly-no-such-computer-xyz\"): NULL, RPC_S_SERVER_UNAVAILABLE (1722)."
+  deregister: "DeregisterEventSource(NULL) and (-1): FALSE, ERROR_INVALID_HANDLE (6). ReportEventW on a closed handle or on NULL: FALSE, ERROR_INVALID_HANDLE (6)."
+errors:
+  invalid_name: "87"
+  server_unavailable: "1722"
+  invalid_handle: "6"
+side_effects: "opens a log handle"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  ReportEventW writing (it leaves entries on the oracle); sources registered in the registry; message files.
