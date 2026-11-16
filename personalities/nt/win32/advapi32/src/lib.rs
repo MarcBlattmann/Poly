@@ -44,6 +44,90 @@ unsafe extern "system" {
     fn CloseHandle(handle: Handle) -> i32;
 }
 
+// ----- the CryptoAPI provider handle (random numbers only) ------------------------------------
+
+#[cfg_attr(target_arch = "x86", link(name = "bcryptprimitives", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "bcryptprimitives", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn ProcessPrng(buf: *mut u8, len: usize) -> i32;
+}
+
+/// What a provider handle (`HCRYPTPROV`) points to: a live marker, so a released or invented handle is refused.
+const PROVIDER_MAGIC: u32 = 0x4350_5256; // "CPRV"
+
+/// `CryptAcquireContextW(phProv, szContainer, szProvider, dwProvType, dwFlags)`: Poly has one provider, the
+/// system's random number source, for every container, provider name and type; the handle serves
+/// `CryptGenRandom` and `CryptReleaseContext`. (Learn: `CRYPT_VERIFYCONTEXT`, the flag programs that need
+/// only random numbers pass, takes no container; the others are accepted alike.)
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptAcquireContextW(
+    prov: *mut usize,
+    _container: *const u16,
+    _provider: *const u16,
+    _prov_type: u32,
+    _flags: u32,
+) -> i32 {
+    if prov.is_null() {
+        // SAFETY: no preconditions.
+        unsafe { SetLastError(87) };
+        return 0;
+    }
+    // SAFETY: a block of the local heap; the caller's out parameter.
+    unsafe {
+        let p = LocalAlloc(0, 16);
+        if p.is_null() {
+            SetLastError(14);
+            return 0;
+        }
+        p.cast::<u32>().write(PROVIDER_MAGIC);
+        *prov = p as usize;
+    }
+    1
+}
+
+/// `CryptAcquireContextA`: the same.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptAcquireContextA(
+    prov: *mut usize,
+    container: *const u8,
+    provider: *const u8,
+    prov_type: u32,
+    flags: u32,
+) -> i32 {
+    // SAFETY: as for the wide form; the names are not read.
+    unsafe { CryptAcquireContextW(prov, container.cast(), provider.cast(), prov_type, flags) }
+}
+
+/// `CryptReleaseContext(hProv, dwFlags)`: TRUE for a provider handle; `ERROR_INVALID_PARAMETER` (87) otherwise.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptReleaseContext(prov: usize, _flags: u32) -> i32 {
+    let p = prov as *mut u8;
+    // SAFETY: a provider handle points to a block we made; anything else is checked by the marker's address
+    // being readable only for such handles, so callers pass nothing else (Learn: undefined for them).
+    unsafe {
+        if prov == 0 || p.cast::<u32>().read_volatile() != PROVIDER_MAGIC {
+            SetLastError(87);
+            return 0;
+        }
+        p.cast::<u32>().write_volatile(0);
+        LocalFree(p);
+    }
+    1
+}
+
+/// `CryptGenRandom(hProv, dwLen, pbBuffer)`: `dwLen` random bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CryptGenRandom(prov: usize, len: u32, buf: *mut u8) -> i32 {
+    // SAFETY: a provider handle from `CryptAcquireContext*`; the caller's buffer of `len` bytes.
+    unsafe {
+        if prov == 0 || buf.is_null() || (prov as *const u32).read_volatile() != PROVIDER_MAGIC {
+            SetLastError(87);
+            return 0;
+        }
+        i32::from(ProcessPrng(buf, len as usize) != 0)
+    }
+}
+
 /// `poly-security` uses `alloc`, so the DLL needs an allocator: the
 /// process heap through `kernelbase`'s local memory (16-byte aligned).
 struct LocalHeap;

@@ -29,6 +29,7 @@ mod tests;
 
 mod sched;
 
+pub mod apitrace;
 mod exception;
 mod test_seh;
 pub use exception::{fault, last_unhandled};
@@ -63,6 +64,7 @@ pub static USER32_32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-us
 pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.exe"));
 pub static SYS32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-sys32.exe"));
 pub static SAFESEH32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-safeseh32.exe"));
+pub static ANSI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ansi32.exe"));
 
 include!(concat!(env!("OUT_DIR"), "/wow64_dlls.rs"));
 mod test_wow64;
@@ -642,6 +644,7 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         EXCEPTIONS.store(words as u32, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: logging every exception delivered to user mode, {words} stack quadwords");
     }
+    apitrace::configure(boot);
     let memory = boot.arg(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG);
     if memory.is_some() || boot.has_flag(poly_personality_nt::diag::EXCEPTION_MEMORY_FLAG) {
         let bytes = poly_personality_nt::diag::exception_memory_bytes(memory);
@@ -1105,13 +1108,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
     let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
     note_command_line(process.pid);
-    let traced = (trace != 0 || trail != 0).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
-        if crate::arch::user::compat() {
-            poly_personality_nt::trace::begin32(&mut k, regs)
-        } else {
-            poly_personality_nt::trace::begin(&mut k, regs)
-        }
-    });
+    let traced =
+        (trace != 0 || trail != 0 || apitrace::wanted()).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
+            if crate::arch::user::compat() {
+                poly_personality_nt::trace::begin32(&mut k, regs)
+            } else {
+                poly_personality_nt::trace::begin(&mut k, regs)
+            }
+        });
     // A 32-bit thread's call comes in the 32-bit convention and is converted (ADR 0186).
     let outcome = if crate::arch::user::compat() {
         poly_personality_nt::wow64::dispatch32(&mut k, regs, |k, regs| poly_personality_nt::dispatch_with(k, regs))
@@ -1120,6 +1124,12 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     };
     if let Some(call) = traced {
         let status = regs.rax as u32;
+        if crate::arch::user::compat() && apitrace::wanted() {
+            let teb =
+                with(|s| s.processes.get(&ProcessId(process.pid))?.thread(ThreadRef(u64::from(tid))).map(|t| t.teb))
+                    .unwrap_or(0);
+            apitrace::arm_if_match(process.pid, tid, call.object.as_deref(), teb, regs);
+        }
         if trace != 0 && poly_personality_nt::trace::wanted(&call, status, trace == 2) {
             crate::kprintln!("{}", poly_personality_nt::trace::render(process.pid, tid, &call, status));
         }

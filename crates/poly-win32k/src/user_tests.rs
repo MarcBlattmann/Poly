@@ -1442,6 +1442,29 @@ fn a_layered_child_needs_a_windows_8_manifest() {
     });
 }
 
+#[test]
+fn set_class_long_replaces_a_class_value_and_answers_the_old_one() {
+    with_env(|e| {
+        register(e, "Cls");
+        let h = create(e, 'C', 0, "Cls", WS_CAPTION | WS_SYSMENU, 0, 0, 100, 100, 0, 0);
+        let value = |r: Reply| match r {
+            Reply::Value { value } => value,
+            other => panic!("{other:?}"),
+        };
+        // GCL_HCURSOR (-12) and GCL_HICON (-14): the previous value comes back and the new one is read.
+        assert_eq!(value(e.call(Request::SetClassLong { hwnd: h, index: -12, value: 0x1234 })), 0);
+        assert_eq!(value(e.call(Request::ClassLong { hwnd: h, index: -12 })), 0x1234);
+        assert_eq!(value(e.call(Request::SetClassLong { hwnd: h, index: -12, value: 0x77 })), 0x1234);
+        assert_eq!(value(e.call(Request::SetClassLong { hwnd: h, index: -14, value: 5 })), 0);
+        // The atom cannot be set, and a bad window is a bad window.
+        assert!(matches!(e.call(Request::SetClassLong { hwnd: h, index: -32, value: 1 }), Reply::Error { code: 1413 }));
+        assert!(matches!(
+            e.call(Request::SetClassLong { hwnd: 0xdead, index: -12, value: 1 }),
+            Reply::Error { code: 1400 }
+        ));
+    });
+}
+
 /// Learn's `WM_NCHITTEST` codes on the sizing border of a resizable window: Chrome's 900x500
 /// window at 40,40 whose client area starts at its top (8 px borders left, right, below), and a
 /// captioned window with its band above the caption.

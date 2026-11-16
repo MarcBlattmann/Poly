@@ -268,3 +268,115 @@ pub unsafe extern "system" fn SetDIBitsToDevice(
 /// Views of file mappings that DIB sections live in (`CreateDIBSection`
 /// with a section): (the bits' address, the view's base).
 pub(crate) static SECTION_VIEWS: super::SpinLock<Vec<(u64, u64)>> = super::SpinLock::new(Vec::new());
+
+/// `GetDIBits(hdc, hbm, start, lines, lpvBits, lpbmi, usage)`: the bitmap's scan lines `start..start + lines` as a
+/// DIB of the format `lpbmi` asks for (24 or 32 bits per pixel, `BI_RGB`; a negative `biHeight` is top-down, else
+/// scan line 0 is the bottom row). With `lpvBits` NULL, or `biBitCount` 0, the header is filled in (width, height,
+/// the bitmap's depth, `biSizeImage`) and 1 returned. Otherwise the number of scan lines copied, 0 on failure.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetDIBits(
+    hdc: H,
+    hbm: H,
+    start: u32,
+    lines: u32,
+    bits: *mut u8,
+    info: *mut u8,
+    _usage: u32,
+) -> i32 {
+    if info.is_null() || !gdi(|g| g.is_dc(hdc as u64)) {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let Some((w, h, bgra)) = gdi(|g| g.bitmap_bgra(hbm as u64)) else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    // SAFETY: the caller's BITMAPINFOHEADER (40 bytes).
+    let (size, want_bpp, height_in) = unsafe {
+        (
+            info.cast::<u32>().read_unaligned(),
+            info.add(14).cast::<u16>().read_unaligned(),
+            info.add(8).cast::<i32>().read_unaligned(),
+        )
+    };
+    if size < 40 {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let top_down = height_in < 0;
+    let bpp = if bits.is_null() || want_bpp == 0 { 32 } else { want_bpp };
+    let write_header = |bpp: u16| {
+        let stride = Bitmap::dib_stride(w, bpp);
+        // SAFETY: the caller's BITMAPINFOHEADER.
+        unsafe {
+            info.add(4).cast::<i32>().write_unaligned(w);
+            info.add(8).cast::<i32>().write_unaligned(if top_down { -h } else { h });
+            info.add(12).cast::<u16>().write_unaligned(1);
+            info.add(14).cast::<u16>().write_unaligned(bpp);
+            info.add(16).cast::<u32>().write_unaligned(BI_RGB);
+            info.add(20).cast::<u32>().write_unaligned((stride * h as usize) as u32);
+        }
+    };
+    if bits.is_null() || want_bpp == 0 {
+        write_header(bpp);
+        return 1;
+    }
+    if !matches!(bpp, 24 | 32) || start as i32 >= h {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    let count = (lines as i32).min(h - start as i32);
+    let stride = Bitmap::dib_stride(w, bpp);
+    for r in 0..count {
+        let scan = start as i32 + r;
+        let src_row = if top_down { scan } else { h - 1 - scan };
+        for x in 0..w {
+            let at = (src_row * w + x) as usize * 4;
+            let px = &bgra[at..at + 4];
+            // SAFETY: the caller's buffer holds `lines` scan lines of `stride` bytes.
+            unsafe {
+                let out = bits.add(r as usize * stride + x as usize * usize::from(bpp / 8));
+                *out = px[0];
+                *out.add(1) = px[1];
+                *out.add(2) = px[2];
+                if bpp == 32 {
+                    *out.add(3) = 0;
+                }
+            }
+        }
+    }
+    write_header(bpp);
+    count
+}
+
+/// `SetDIBits(hdc, hbm, start, lines, lpBits, lpbmi, usage)`: `lines` scan lines of the DIB into the bitmap (not one
+/// selected into a DC); the number copied, 0 on failure. Bottom-up scan line 0 is the bitmap's last row.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetDIBits(
+    _hdc: H,
+    hbm: H,
+    start: u32,
+    lines: u32,
+    bits: *const u8,
+    info: *const u8,
+    usage: u32,
+) -> i32 {
+    // SAFETY: the caller's BITMAPINFO and `lines` scan lines of bits.
+    let Some((src, _full)) = (unsafe { caller_dib(info, bits, usage, Some(lines)) }) else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    let Some((_, bh, _)) = gdi(|g| g.bitmap_bgra(hbm as u64)) else {
+        set_last_error(ERROR_INVALID_PARAMETER);
+        return 0;
+    };
+    // Where the group's first (top) row goes: a bottom-up DIB's scan line `s` is bitmap row `bh - 1 - s`.
+    let first_row = if src.top_down { start as i32 } else { bh - (start as i32 + src.height) };
+    match gdi(|g| g.set_bitmap_rows(hbm as u64, &src, first_row)) {
+        Some(n) if n > 0 => n,
+        _ => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
+    }
+}

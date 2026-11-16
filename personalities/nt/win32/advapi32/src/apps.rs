@@ -70,7 +70,6 @@ poly_win32_rt::fail_exports!(
         CredReadW,
         CredWriteA,
         CredWriteW,
-        CryptAcquireContextA,
         CryptDecrypt,
         CryptDeriveKey,
         CryptDestroyKey,

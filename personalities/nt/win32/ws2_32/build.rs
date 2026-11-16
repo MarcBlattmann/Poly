@@ -24,7 +24,6 @@ fn main() {
 #[rustfmt::skip]
 const APPS_ORDINALS: &[u32] = &[
     51,
-    101,
     103,
     108,
 ];

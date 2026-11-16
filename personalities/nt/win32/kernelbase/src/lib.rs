@@ -34,6 +34,7 @@ mod iocp;
 mod job;
 mod legacy;
 mod locale;
+mod localea;
 mod mapping;
 mod memory;
 mod misc;
@@ -58,6 +59,7 @@ mod sysex;
 mod system;
 mod threadpool;
 mod tls;
+mod toolhelp;
 mod waits;
 
 #[global_allocator]
@@ -97,5 +99,4 @@ mod delayed;
 #[cfg(target_arch = "x86_64")]
 mod apps;
 
-#[cfg(target_arch = "x86_64")]
 mod apps_impl;
