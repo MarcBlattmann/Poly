@@ -5,7 +5,9 @@
 
 use super::*;
 use crate::kbd;
-use crate::wm::raw::{WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN};
+use crate::wm::raw::{
+    SYNTHETIC_MOVE, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+};
 
 pub const WM_SETCURSOR: u32 = 0x0020;
 /// `HTCLIENT`, `HTERROR` (winuser.h; HTERROR is -2, 16 bits in a hit code).
@@ -26,6 +28,13 @@ const WM_NCMOUSELEAVE: u32 = 0x02A2;
 /// no `WM_SETCURSOR`.
 fn is_wheel(m: u32) -> bool {
     m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL
+}
+
+/// The window and screen place of the last mouse move whose hit was the caption (0: none).
+static CAPTION_SPOT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+fn caption_spot(hwnd: u32, x: i32, y: i32) -> u64 {
+    (u64::from(hwnd) << 32) | (u64::from(x as u16) << 16) | u64::from(y as u16) | (1 << 63)
 }
 
 fn is_button_down(m: u32) -> bool {
@@ -60,9 +69,25 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     // A mouse move over the non-client area uses the geometric hit test
     // directly (SetCursorPos.yaml: no WM_NCHITTEST there). Client moves and
     // button events send WM_NCHITTEST to the window procedure.
-    let hit = if m.message == WM_MOUSEMOVE {
+    // The move a capture release makes (`Msg::private`) asks the window like a button message
+    // does (`WM_ENTERSIZEMOVE.yaml`: WM_NCHITTEST over the border after a sizing loop).
+    let synthetic = m.private == SYNTHETIC_MOVE;
+    let hit = if m.message == WM_MOUSEMOVE && !synthetic {
         let geometric = def_window_proc(env, h, WM_NCHITTEST, 0, screen_l);
+        // A move over the caption is remembered: the press that follows at the same place
+        // reuses its hit (`WM_ENTERSIZEMOVE.yaml` `szm_caption`: no WM_NCHITTEST at the press).
+        CAPTION_SPOT.store(
+            if geometric == frame::HTCAPTION as u64 { caption_spot(i.hwnd, sx, sy) } else { 0 },
+            core::sync::atomic::Ordering::Relaxed,
+        );
         if geometric == HTCLIENT { send(env, h, WM_NCHITTEST, 0, screen_l) } else { geometric }
+    } else if is_button_down(m.message)
+        && CAPTION_SPOT.swap(0, core::sync::atomic::Ordering::Relaxed) == caption_spot(i.hwnd, sx, sy)
+    {
+        frame::HTCAPTION as u64
+    } else if synthetic && def_window_proc(env, h, WM_NCHITTEST, 0, screen_l) == frame::HTCAPTION as u64 {
+        // Over the caption it is not asked either (`szm_caption`, `szm_clamp`).
+        frame::HTCAPTION as u64
     } else {
         send(env, h, WM_NCHITTEST, 0, screen_l)
     };

@@ -68,7 +68,7 @@ const MK_SHIFT: u64 = 0x0004;
 const MK_CONTROL: u64 = 0x0008;
 const MK_MBUTTON: u64 = 0x0010;
 /// `Msg::private` of a mouse move a capture release synthesized.
-const SYNTHETIC_MOVE: u32 = 0x4D4F_5645;
+pub const SYNTHETIC_MOVE: u32 = 0x4D4F_5645;
 
 /// The key-state bytes of a session, a thread.
 pub(super) fn blank_keys() -> Vec<u8> {

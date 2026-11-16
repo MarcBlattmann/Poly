@@ -102,6 +102,7 @@ pub const SC_MAXIMIZE: u64 = 0xF030;
 pub const SC_RESTORE: u64 = 0xF120;
 pub const SC_SIZE: u64 = 0xF000;
 pub const SC_MOVE: u64 = 0xF010;
+pub const WM_ENTERSIZEMOVE: u32 = 0x0231;
 pub const WM_NCLBUTTONDOWN: u32 = 0x00A1;
 pub const WM_NCLBUTTONUP: u32 = 0x00A2;
 pub const WM_NCLBUTTONDBLCLK: u32 = 0x00A3;
@@ -1612,7 +1613,9 @@ fn swp<E: Env + ?Sized>(
     }
     // A visible top-level window that moves or changes size may come under (or leave) the
     // cursor: the window under it then gets a mouse move (`SC_MAXIMIZE.yaml` `max_winkey`).
-    let under_before = (top && vis_before && vis_after && (moved || sized)).then(|| window_under_cursor(env));
+    // (Not while the thread has the mouse captured: the captured window gets the moves anyway.)
+    let under_before = (top && vis_before && vis_after && (moved || sized) && focus::input(env).capture == 0)
+        .then(|| window_under_cursor(env));
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
         env.call(Request::ZOrder { hwnd, after: apply_after, apply: true });
@@ -1881,7 +1884,14 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                     if cmd == SC_SIZE && edges == 0 {
                         return 0;
                     }
-                    env.call(Request::MoveSize { hwnd: hwnd as u32, edges });
+                    // The desktop's compositor drags the surface when the window has one (the
+                    // reply is Ok); without it (no compositor, no surface) the loop runs here.
+                    if let Reply::Error { .. } = env.call(Request::MoveSize { hwnd: hwnd as u32, edges }) {
+                        sizemove::run(env, hwnd, cmd, w & 0xF, l);
+                    } else {
+                        // The compositor's drag is the loop; win32k sends the end with the button.
+                        send(env, hwnd, WM_ENTERSIZEMOVE, 0, 0);
+                    }
                 }
                 _ => {}
             }
@@ -2272,4 +2282,5 @@ pub mod focus;
 pub mod input;
 pub mod paint;
 pub mod place;
+pub mod sizemove;
 pub use paint::{PaintStruct, begin_paint, end_paint};

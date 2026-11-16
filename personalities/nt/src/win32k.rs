@@ -57,6 +57,9 @@ pub struct Win32k {
     /// Each thread's queue event (registered by `user32`) and the handle
     /// value it registered.
     events: BTreeMap<Key, (ObjectId, u64)>,
+    /// The window whose move or size the compositor drags (`Request::MoveSize`): it gets
+    /// `WM_EXITSIZEMOVE` when the left button comes up (ADR 0212).
+    dragging: Option<u32>,
 }
 
 impl Win32k {
@@ -106,7 +109,17 @@ impl Win32k {
                         self.wm.link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
                     }
                 }
-                FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
+                FromCompositor::Button { button, pressed, .. } => {
+                    self.wm.link_button(button, pressed, &mut fx);
+                    // The compositor's drag ends with the button: the window leaves its sizing and
+                    // moving loop (`WM_EXITSIZEMOVE`).
+                    if !pressed
+                        && button == 0x110
+                        && let Some(hwnd) = self.dragging.take()
+                    {
+                        self.wm.post_system_message(hwnd, 0x0232, 0, &mut fx);
+                    }
+                }
                 FromCompositor::Axis { vertical, horizontal, .. } => {
                     self.wm.link_wheel(vertical, &mut fx);
                     self.wm.link_hwheel(horizontal, &mut fx);
@@ -303,12 +316,18 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
             // DefWindowProc's SC_MOVE / SC_SIZE: the compositor drags the surface (ADR 0128).
             Request::MoveSize { hwnd, edges } => {
                 let w = &mut sys.win32k;
+                // Without a compositor there is no one to drag the surface: the caller runs the
+                // sizing and moving loop itself (`user::sizemove`, ADR 0212).
+                if !w.desktop.is_connected() {
+                    return Reply::Error { code: 50 };
+                }
                 let Some(id) = w.surfaces.surface(hwnd) else { return Reply::Error { code: 1400 } };
                 if edges == 0 {
                     w.desktop.begin_move(id);
                 } else {
                     w.desktop.begin_resize(id, poly_win32k::link::Edges(edges));
                 }
+                w.dragging = Some(hwnd);
                 return Reply::Ok {};
             }
             // A system cursor over a top-level window's surface (ADR 0172).
