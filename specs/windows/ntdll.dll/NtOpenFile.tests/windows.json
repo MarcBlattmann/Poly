@@ -6,10 +6,38 @@
     "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "bd7ed23b5b40",
+  "bundle": "2bb5097cfbbd",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-16T00:31:51Z",
+  "started": "2026-11-16T01:04:44Z",
   "tests": [
+    {
+      "name": "pipe_inherit",
+      "exe_sha256": "4c48142160087bcf76b422a704630acd40b26571da82f8a7c9fc43622c158a74",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIHBhaXJzIG1hZGU6IDQKcGFyZW50IHdyaXRlcyA4IGJ5dGVzIGludG8gcGlwZSBCOiAweDAwMDAwMDAwIDgKY2hpbGQgZXhpdCBjb2RlIDcKY2hpbGQ6IGNoaWxkIHJlYWRzIGZyb20gcGlwZSBCOiAweDAwMDAwMDAwIDggdG8gY2hpbGQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two pairs made: 4\nparent writes 8 bytes into pipe B: 0x00000000 8\nchild exit code 7\nchild: child reads from pipe B: 0x00000000 8 to child\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    },
+    {
+      "name": "pipe_inherit_c",
+      "exe_sha256": "7aab08690397eca728a750abc704947e3dd418cd8ddcda97b00e4346e89a4e87",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0SGFuZGxlSW5mb3JtYXRpb24oSEFORExFX0ZMQUdfSU5IRVJJVCkgb24gdGhlIGNoaWxkJ3MgdHdvIGVuZHMgPSAyIC0+IGZsYWdzIDEgMQpwYXJlbnQgcmVhZHMgd2hhdCB0aGUgY2hpbGQgd3JvdGU6IDB4MDAwMDAwMDAgMTAgZnJvbSBjaGlsZApjaGlsZDogY2hpbGQgd3JpdGVzIDEwIGJ5dGVzIGludG8gcGlwZSBBIHdpdGggdGhlIGluaGVyaXRlZCBoYW5kbGU6IDB4MDAwMDAwMDAgMTAKY2hpbGQ6IGluaGVyaXRlZCBoYW5kbGUgZmxhZ3M6IDEgaW5oZXJpdCBmbGFnIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetHandleInformation(HANDLE_FLAG_INHERIT) on the child's two ends = 2 -> flags 1 1\nparent reads what the child wrote: 0x00000000 10 from child\nchild: child writes 10 bytes into pipe A with the inherited handle: 0x00000000 10\nchild: inherited handle flags: 1 inherit flag 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
     {
       "name": "pipe_root_ops",
       "exe_sha256": "2b6e22d87ef9a08304eb074b13d64fb0e15e36f56801195871d6b31360814e17",
@@ -22,7 +50,7 @@
       "output": "create read end: 0x00000000\nwrite 5 bytes: 0x00000000 5\nNtQueryObject(ObjectNameInformation) = 0x00000000 name is \\Device\\NamedPipe\\<the name> true\nDuplicateHandle(read end, access 0x100158, inheritable) = 0 err 5\nread 5 bytes: 0x00000000 5 12345\nNtSetInformationFile(FilePipeInformation, length 4) = 0xc0000004\nafter closing the last write handle: read 0xc000014b 0\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 44
+      "ms": 43
     },
     {
       "name": "pipe_root_ops_b",
@@ -36,7 +64,7 @@
       "output": "server end before data: FilePipeLocalInformation = 0x00000000 information 40 type 0 config 2 max 1 current 1 read available 0 state 3 end 1\nserver end with 5 bytes waiting: FilePipeLocalInformation = 0x00000000 information 40 type 0 config 2 max 1 current 1 read available 5 state 3 end 1\nNtQueryInformationFile(FileNameInformation) of the write end = 0x00000000 name is \\<the name> true\nDuplicateHandle(read end, DUPLICATE_SAME_ACCESS) = 1 handle 1\nNtSetInformationFile(FilePipeInformation byte mode, no wait) on the read end = 0x00000000\nNtSetInformationFile(FilePipeInformation) on the client end = 0x00000000\nserver end with no client: FilePipeLocalInformation = 0x00000000 information 40 type 0 config 2 max 1 current 1 read available 0 state 4 end 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 42
+      "ms": 46
     },
     {
       "name": "pipe_root_pair_b",
@@ -50,7 +78,7 @@
       "output": "open pipe device without the trailing backslash: 0x00000000 handle 1\ncreate the same name again with FILE_CREATE: 0xc00000ab handle 0\nopen write end by the relative name: 0x00000000 information 1 handle 1\nread from the write end: 0xc0000022\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 45
+      "ms": 42
     },
     {
       "name": "pipe_root_pair_c",

@@ -19,6 +19,7 @@ rules:
   data: "10 bytes written to the write end are read from the read end (STATUS_SUCCESS, count 10); a read of the write end and a write to the read end: STATUS_ACCESS_DENIED (0xC0000022)."
   close: "after the last write handle is closed the read gives STATUS_PIPE_BROKEN (0xC000014B), count 0 (end of file); a write after the read end closed gives STATUS_PIPE_CLOSING (0xC00000B1); a duplicate of the write handle keeps the pipe open (an empty no-wait read then gives STATUS_PIPE_EMPTY 0xC00000D9)."
   pipe_information: "NtQueryInformationFile(FilePipeLocalInformation = 24, 40 bytes) of the read end: Information 40, type 0 (byte), configuration 2, maximum instances 1, current instances 1, ReadDataAvailable 0 (5 after 5 bytes were written), state 3 (connected; 4 closing after the last client closed), end 1 (server); the write end reports end 0. NtSetInformationFile(FilePipeInformation = 23, {ReadMode 0, CompletionMode 1}, 8 bytes) on either end: STATUS_SUCCESS; with length 4: STATUS_INFO_LENGTH_MISMATCH (0xC0000004)."
+  inheritance: "a handle made through the pipe device is not inheritable at first (HANDLE_FLAG_INHERIT 0); SetHandleInformation(h, 1, 1) makes it so (TRUE, flag 1). A child started with CreateProcessW(bInheritHandles = TRUE) uses the handle values it is given on its command line: it writes 10 bytes into the inherited write end and the parent reads them (STATUS_SUCCESS, count 10, the text); it reads the 8 bytes the parent wrote into the other pipe and then, the parent having closed its write end, STATUS_PIPE_BROKEN (0xC000014B); its handles still carry the inherit flag. After the child ended and the parent closed its own copy of the write end, the parent's read gives STATUS_PIPE_BROKEN."
   names: "NtQueryObject(read end, ObjectNameInformation) = \"\\Device\\NamedPipe\\<name>\"; NtQueryInformationFile(write end, FileNameInformation) = \"\\<name>\"; PeekNamedPipe on the read end reports the bytes waiting."
   duplicate: "DuplicateHandle(self, self, self, &h, 0x100158, TRUE, 0) of the process pseudo handle: TRUE; of the pipe's read end with 0x100158: FALSE, ERROR_ACCESS_DENIED (5) (more rights than the handle has); with DUPLICATE_SAME_ACCESS: TRUE."
 errors:
@@ -34,8 +35,8 @@ timing:
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4
-  held_out: 2
+  visible: 6
+  held_out: 3
 building_tests: >
   Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
 not_covered: >
