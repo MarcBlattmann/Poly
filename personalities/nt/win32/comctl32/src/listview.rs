@@ -281,6 +281,7 @@ pub fn on_destroy(hwnd: usize) {
     .unwrap_or((0, false));
     let _ = owner;
     // Every item still there is deleted (its notification first), the last one first.
+    notify_plain(hwnd, LVN_DELETEALLITEMS);
     for i in (0..items).rev() {
         notify_item(hwnd, LVN_DELETEITEM, i, 0, 0, 0, 0);
     }
@@ -392,8 +393,9 @@ fn row_rect(hwnd: usize, i: i32) -> Rc {
     let rh = row_height(hwnd);
     let top = with(hwnd, |lv| lv.top).unwrap_or(0);
     let y = header_height(hwnd) + (i - top) * rh;
-    let w = total_width(hwnd).max(rc_w(&client_rect(hwnd)));
-    [0, y, w.max(total_width(hwnd)), y + rh]
+    let total = total_width(hwnd);
+    let w = if total > 0 { total } else { rc_w(&client_rect(hwnd)) };
+    [0, y, w, y + rh]
 }
 
 /// The width of the icon the item has room for (the small image list's).
@@ -661,7 +663,9 @@ fn delete_item(hwnd: usize, i: i32) -> bool {
         return false;
     }
     let state = item_state(hwnd, i);
-    notify_item(hwnd, LVN_ITEMCHANGING, i, 0, 0, state, LVIF_STATE);
+    if !with(hwnd, |lv| lv.owner).unwrap_or(false) {
+        notify_item(hwnd, LVN_ITEMCHANGING, i, 0, 0, state, LVIF_STATE);
+    }
     notify_item(hwnd, LVN_DELETEITEM, i, 0, 0, 0, 0);
     with(hwnd, |lv| {
         if lv.owner {
@@ -1025,9 +1029,12 @@ fn draw(hwnd: usize, hdc: usize) {
         }
         let _ = tbk;
         let full = ex & LVS_EX_FULLROWSELECT != 0;
-        let label_w = text_extent_of(hwnd, i);
-        let sel_rect =
-            if full || !report { row } else { [row[0] + 2, row[1], row[0] + icon + 2 + label_w + 2, row[3]] };
+        let needs_rect = sel || (focused && state & LVIS_FOCUSED != 0);
+        let sel_rect = if full || !report || !needs_rect {
+            row
+        } else {
+            [row[0] + 2, row[1], row[0] + icon + 2 + text_extent_of(hwnd, i) + 2, row[3]]
+        };
         if let Some(b) = row_bk {
             fill(hdc, &row, b);
         }

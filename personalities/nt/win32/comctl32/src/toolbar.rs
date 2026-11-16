@@ -54,6 +54,8 @@ struct State {
     t: Toolbar,
     strings: Vec<Vec<u16>>,
     images: [usize; 3],
+    /// The list the toolbar made for the bitmaps it was given (what `TB_GETIMAGELIST` says before the program sets one).
+    own_list: usize,
     font: usize,
     hot: i32,
     down: i32,
@@ -71,6 +73,7 @@ pub fn on_create(hwnd: usize) {
         t: Toolbar::default(),
         strings: Vec::new(),
         images: [0; 3],
+        own_list: 0,
         font: 0,
         hot: -1,
         down: -1,
@@ -475,7 +478,13 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 // TBADDBITMAP { HINSTANCE hInst; UINT_PTR nID }: a bitmap handle when hInst is NULL.
                 let (inst, id): (usize, usize) = (rd(l as usize, 0), rd(l as usize, core::mem::size_of::<usize>()));
                 if inst == 0 && id != 0 {
-                    return with(hwnd, |s| s.t.add_bitmap(id, w as i32)).unwrap_or(-1) as isize;
+                    let first = with(hwnd, |s| s.t.add_bitmap(id, w as i32)).unwrap_or(-1) as isize;
+                    let (bw, bh) = with(hwnd, |s| s.t.bitmap_size).unwrap_or((16, 16));
+                    if with(hwnd, |s| s.own_list == 0).unwrap_or(false) {
+                        let il = crate::imagelist::ImageList_Create(bw, bh, 0x21, 4, 4);
+                        with(hwnd, |s| s.own_list = il);
+                    }
+                    return first;
                 }
                 // The standard images the system has (`IDB_STD_SMALL_COLOR`): not here.
                 with(hwnd, |s| s.t.add_bitmap(0, w as i32)).unwrap_or(-1) as isize
@@ -624,7 +633,11 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                     TB_SETHOTIMAGELIST => 1,
                     _ => 2,
                 };
-                let old = with(hwnd, |s| core::mem::replace(&mut s.images[slot], l as usize)).unwrap_or(0);
+                let old = with(hwnd, |s| {
+                    let old = core::mem::replace(&mut s.images[slot], l as usize);
+                    if old == 0 && slot == 0 { s.own_list } else { old }
+                })
+                .unwrap_or(0);
                 if l != 0 && slot == 0 {
                     let (mut cx, mut cy) = (0, 0);
                     crate::imagelist::ImageList_GetIconSize(l as usize, &mut cx, &mut cy);
@@ -635,7 +648,7 @@ pub fn proc(hwnd: usize, msg: u32, w: usize, l: isize) -> isize {
                 invalidate(hwnd);
                 old as isize
             }
-            TB_GETIMAGELIST => with(hwnd, |s| s.images[0]).unwrap_or(0) as isize,
+            TB_GETIMAGELIST => with(hwnd, |s| if s.images[0] != 0 { s.images[0] } else { s.own_list }).unwrap_or(0) as isize,
             TB_GETHOTIMAGELIST => with(hwnd, |s| s.images[1]).unwrap_or(0) as isize,
             TB_GETDISABLEDIMAGELIST => with(hwnd, |s| s.images[2]).unwrap_or(0) as isize,
             TB_SETSTYLE => {

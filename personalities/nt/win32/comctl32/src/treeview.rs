@@ -429,7 +429,8 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
     .flatten() else {
         return false;
     };
-    let code = flags & 3;
+    // Only 1, 2 and 3 (with the two flags above them) are actions.
+    let code = flags & !0xC000;
     let want_expand = match code {
         TVE_EXPAND => true,
         TVE_COLLAPSE => false,
@@ -439,6 +440,7 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
     let _ = action_hint;
     if want_expand == expanded {
         if !want_expand && flags & TVE_COLLAPSERESET != 0 {
+            // (The item is collapsed already; the children go all the same.)
             // COLLAPSERESET removes the children.
             let kids = with(hwnd, |t| t.nodes[&id].kids.clone()).unwrap_or_default();
             for k in kids {
@@ -449,15 +451,18 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
                     n.state &= !(TVIS_EXPANDEDONCE);
                 }
             });
+            return true;
         }
-        return true;
+        // Expanding what is expanded works, collapsing what is collapsed does not.
+        return want_expand;
     }
     if !has_kids && want_expand {
         // Nothing to show; the parent is still asked (TVN_ITEMEXPANDING) when it says the item has children.
         return false;
     }
     let action = if want_expand { TVE_EXPAND } else { TVE_COLLAPSE };
-    if node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, 0x3E))) != 0 {
+    // The parent hears of an expansion, not of a collapse (`TVM_EXPAND` in the sheet's test).
+    if want_expand && node_notify(hwnd, TVN_ITEMEXPANDINGW, action, None, Some((id, 0x3E))) != 0 {
         return false;
     }
     with(hwnd, |t| {
@@ -470,8 +475,8 @@ fn expand(hwnd: usize, id: u32, flags: u32, action_hint: u32) -> bool {
         }
         // A selected item below a collapsed one moves the selection up to it.
     });
-    node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
     if want_expand {
+        node_notify(hwnd, TVN_ITEMEXPANDEDW, action, None, Some((id, 0x3E)));
         with(hwnd, |t| {
             if let Some(n) = t.nodes.get_mut(&id) {
                 n.state |= TVIS_EXPANDEDONCE;
