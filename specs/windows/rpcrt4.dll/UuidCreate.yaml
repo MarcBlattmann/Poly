@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/rpcrt4.dll/UuidCreate.yaml
+id: windows/api/rpcrt4.dll/UuidCreate
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  A random (version 4, RFC 4122 variant) UUID; RPC_S_OK. UuidCreateSequential, UuidCreateNil and UuidIsNil are covered by the same test.
+interface:
+  signature: "RPC_STATUS UuidCreate(UUID *Uuid)"
+rules:
+  random: "64 calls: status RPC_S_OK (0) every time, every UUID has version 4 (the high nibble of byte 7 is 4) and the variant bits 10 (byte 8 >> 6 = 2), all 64 are different and none is nil."
+  sequential: "UuidCreateSequential returns RPC_S_OK or RPC_S_UUID_LOCAL_ONLY (1824); two calls differ and share the node field (the last 6 bytes)."
+  nil: "UuidCreateNil = RPC_S_OK and zeros; UuidIsNil(nil) = TRUE with status 0; UuidIsNil(a created UUID) = FALSE."
+errors:
+  none: "never fails"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Uniqueness across machines; UuidToString and friends.

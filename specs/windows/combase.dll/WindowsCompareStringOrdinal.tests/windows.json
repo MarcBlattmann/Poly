@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "hstring_compare",
+      "exe_sha256": "a0bb03267e6bdb683460c7e0d4a6b2ce7bd63f134ff579240dd8be6e7be6b419",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29tcGFyZShhYixhYykgPSAweDAwMDAwMDAwIC0xCmNvbXBhcmUoYWIsYWIgKHR3byBoYW5kbGVzKSkgPSAweDAwMDAwMDAwIDAKY29tcGFyZShhYixhYmMpID0gMHgwMDAwMDAwMCAtMQpjb21wYXJlKGFiLE5VTEwpID0gMHgwMDAwMDAwMCAxCmNvbXBhcmUoYWIsYWMsTlVMTCBvdXQpID0gMHg4MDA3MDA1NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "compare(ab,ac) = 0x00000000 -1\ncompare(ab,ab (two handles)) = 0x00000000 0\ncompare(ab,abc) = 0x00000000 -1\ncompare(ab,NULL) = 0x00000000 1\ncompare(ab,ac,NULL out) = 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "hstring_compare_c",
+      "exe_sha256": "d74d9fdb84d7f27d8558ac28c8e78e65d2eb5034d9242dc26454cacdddc76fda",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29tcGFyZShhYixhYiAoc2FtZSBoYW5kbGUpKSA9IDB4MDAwMDAwMDAgMApjb21wYXJlKEFCLGFiKSA9IDB4MDAwMDAwMDAgLTEKY29tcGFyZShOVUxMLGFiKSA9IDB4MDAwMDAwMDAgLTEKY29tcGFyZShERUwsYWIpID0gMHgwMDAwMDAwMCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "compare(ab,ab (same handle)) = 0x00000000 0\ncompare(AB,ab) = 0x00000000 -1\ncompare(NULL,ab) = 0x00000000 -1\ncompare(DEL,ab) = 0x00000000 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

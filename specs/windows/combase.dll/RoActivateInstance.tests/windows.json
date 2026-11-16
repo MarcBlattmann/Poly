@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "1206ded88010",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:18:09Z",
+  "tests": [
+    {
+      "name": "ro_activate_classes_c",
+      "exe_sha256": "0dc29e69546450af079a849df9ece9c42180859628222c1625848fcfe590ba37",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Um9BY3RpdmF0ZUluc3RhbmNlKCJXaW5kb3dzLkZvdW5kYXRpb24uQ29sbGVjdGlvbnMuUHJvcGVydHlTZXQiKSA9IDB4MDAwMDAwMDAgb3V0X251bGwgZmFsc2UKUm9BY3RpdmF0ZUluc3RhbmNlKCJXaW5kb3dzLlN0b3JhZ2UuU3RvcmFnZUZpbGUiKSA9IDB4ODAwMDQwMDEgb3V0X251bGwgdHJ1ZQpSb0FjdGl2YXRlSW5zdGFuY2UoIldpbmRvd3MuRm9vLkJhciIpID0gMHg4MDA0MDE1NCBvdXRfbnVsbCB0cnVlClJvQWN0aXZhdGVJbnN0YW5jZShOVUxMIEhTVFJJTkcpID0gMHg4MDA3MDA1NyBvdXRfbnVsbCB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RoActivateInstance(\"Windows.Foundation.Collections.PropertySet\") = 0x00000000 out_null false\nRoActivateInstance(\"Windows.Storage.StorageFile\") = 0x80004001 out_null true\nRoActivateInstance(\"Windows.Foo.Bar\") = 0x80040154 out_null true\nRoActivateInstance(NULL HSTRING) = 0x80070057 out_null true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "ro_uisettings",
+      "exe_sha256": "3f97991e9449830b9ab8b898e22501b67c30fd1a4cc51bdae3bb19588fcb54e0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Um9BY3RpdmF0ZUluc3RhbmNlKFVJU2V0dGluZ3MpID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCiAgR2V0SWlkcyBsaXN0cyBJVUlTZXR0aW5nczI6IHRydWUKICBHZXRJaWRzIGxpc3RzIElVSVNldHRpbmdzNTogdHJ1ZQpHZXRUcnVzdExldmVsID0gMHgwMDAwMDAwMCAwClF1ZXJ5SW50ZXJmYWNlKElVSVNldHRpbmdzKSA9IDB4MDAwMDAwMDAgbnVsbCBmYWxzZQpRdWVyeUludGVyZmFjZShJVUlTZXR0aW5nczQpID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlClF1ZXJ5SW50ZXJmYWNlKElBY3RpdmF0aW9uRmFjdG9yeSkgPSAweDgwMDA0MDAyIG51bGwgdHJ1ZQpHZXRDb2xvclZhbHVlKDEpID0gMHgwMDAwMDAwMCBhbHBoYSAyNTUKR2V0Q29sb3JWYWx1ZSg0KSA9IDB4MDAwMDAwMDAgYWxwaGEgMjU1CkdldENvbG9yVmFsdWUoNykgPSAweDAwMDAwMDAwIGFscGhhIDI1NQpHZXRDb2xvclZhbHVlKDEwKSA9IDB4ODAwNzAwNTcgYWxwaGEgMAphZGRfQ29sb3JWYWx1ZXNDaGFuZ2VkKE5VTEwgaGFuZGxlcikgPSAweDgwMDcwMDU3IHRva2VuIDAKSVVJU2V0dGluZ3MuU2Nyb2xsQmFyU2l6ZSA9IDB4MDAwMDAwMDAgKGJvb2xlYW4gb3IgcG9zaXRpdmU6IDEpCklVSVNldHRpbmdzLk1lc3NhZ2VEdXJhdGlvbiA9IDB4MDAwMDAwMDAgKGJvb2xlYW4gb3IgcG9zaXRpdmU6IDEpCklVSVNldHRpbmdzLkNhcmV0QmxpbmtSYXRlID0gMHgwMDAwMDAwMCAoYm9vbGVhbiBvciBwb3NpdGl2ZTogMSkKSVVJU2V0dGluZ3MuTW91c2VIb3ZlclRpbWUgPSAweDAwMDAwMDAwIChib29sZWFuIG9yIHBvc2l0aXZlOiAxKQpJVUlTZXR0aW5ncy5VSUVsZW1lbnRDb2xvcigxKSA9IDB4MDAwMDAwMDAgYWxwaGEgMjU1CklVSVNldHRpbmdzLlVJRWxlbWVudENvbG9yKDEwMCkgPSAweDAwMDAwMDAwIGFscGhhIDAKQWRkUmVmIHRoZW4gUmVsZWFzZTogdHJ1ZSB0aGVuIHRydWUKUm9BY3RpdmF0ZUluc3RhbmNlKEFjY2Vzc2liaWxpdHlTZXR0aW5ncykgPSAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RoActivateInstance(UISettings) = 0x00000000 null false\n  GetIids lists IUISettings2: true\n  GetIids lists IUISettings5: true\nGetTrustLevel = 0x00000000 0\nQueryInterface(IUISettings) = 0x00000000 null false\nQueryInterface(IUISettings4) = 0x00000000 null false\nQueryInterface(IActivationFactory) = 0x80004002 null true\nGetColorValue(1) = 0x00000000 alpha 255\nGetColorValue(4) = 0x00000000 alpha 255\nGetColorValue(7) = 0x00000000 alpha 255\nGetColorValue(10) = 0x80070057 alpha 0\nadd_ColorValuesChanged(NULL handler) = 0x80070057 token 0\nIUISettings.ScrollBarSize = 0x00000000 (boolean or positive: 1)\nIUISettings.MessageDuration = 0x00000000 (boolean or positive: 1)\nIUISettings.CaretBlinkRate = 0x00000000 (boolean or positive: 1)\nIUISettings.MouseHoverTime = 0x00000000 (boolean or positive: 1)\nIUISettings.UIElementColor(1) = 0x00000000 alpha 255\nIUISettings.UIElementColor(100) = 0x00000000 alpha 0\nAddRef then Release: true then true\nRoActivateInstance(AccessibilitySettings) = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "ro_uisettings_b",
+      "exe_sha256": "20187964acabfcd3a38ed853ae97429af2a46e01707c3656108b3dbbecd63941",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0SWlkcyA9IDB4MDAwMDAwMDAgYXQgbGVhc3QgNiB0cnVlCiAgR2V0SWlkcyBsaXN0cyBJVUlTZXR0aW5nczM6IHRydWUKICBHZXRJaWRzIGxpc3RzIElBZ2lsZU9iamVjdDogdHJ1ZQpRdWVyeUludGVyZmFjZShJVW5rbm93bikgPSAweDAwMDAwMDAwIG51bGwgZmFsc2UKUXVlcnlJbnRlcmZhY2UoSVVJU2V0dGluZ3MyKSA9IDB4MDAwMDAwMDAgbnVsbCBmYWxzZQpRdWVyeUludGVyZmFjZShJVUlTZXR0aW5nczUpID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlClF1ZXJ5SW50ZXJmYWNlKElSZXN0cmljdGVkRXJyb3JJbmZvKSA9IDB4ODAwMDQwMDIgbnVsbCB0cnVlCkdldENvbG9yVmFsdWUoMikgPSAweDAwMDAwMDAwIGFscGhhIDI1NQpHZXRDb2xvclZhbHVlKDUpID0gMHgwMDAwMDAwMCBhbHBoYSAyNTUKR2V0Q29sb3JWYWx1ZSg4KSA9IDB4MDAwMDAwMDAgYWxwaGEgMjU1CkdldENvbG9yVmFsdWUoMjQpID0gMHg4MDA3MDA1NyBhbHBoYSAwCnJlbW92ZV9Db2xvclZhbHVlc0NoYW5nZWQoMCkgPSAweDAwMDAwMDAwCklVSVNldHRpbmdzLlNjcm9sbEJhckFycm93U2l6ZSA9IDB4MDAwMDAwMDAgKGJvb2xlYW4gb3IgcG9zaXRpdmU6IDEpCklVSVNldHRpbmdzLkFuaW1hdGlvbnNFbmFibGVkID0gMHgwMDAwMDAwMCAoYm9vbGVhbiBvciBwb3NpdGl2ZTogMSkKSVVJU2V0dGluZ3MuQ2FyZXRXaWR0aCA9IDB4MDAwMDAwMDAgKGJvb2xlYW4gb3IgcG9zaXRpdmU6IDEpCklVSVNldHRpbmdzLkN1cnNvclNpemUgPSAweDAwMDAwMDAwIHBvc2l0aXZlIHRydWUKSVVJU2V0dGluZ3MuVUlFbGVtZW50Q29sb3IoNSkgPSAweDAwMDAwMDAwIGFscGhhIDI1NQpJVUlTZXR0aW5nczIuVGV4dFNjYWxlRmFjdG9yID0gMHgwMDAwMDAwMCBpbiAxLjAuLj0yLjI1IHRydWUKYSBzZWNvbmQgYWN0aXZhdGlvbiBpcyBhIGRpZmZlcmVudCBvYmplY3Q6IHRydWUKICBJQWNjZXNzaWJpbGl0eVNldHRpbmdzLkhpZ2hDb250cmFzdCA9IDB4MDAwMDAwMDAgYm9vbGVhbiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetIids = 0x00000000 at least 6 true\n  GetIids lists IUISettings3: true\n  GetIids lists IAgileObject: true\nQueryInterface(IUnknown) = 0x00000000 null false\nQueryInterface(IUISettings2) = 0x00000000 null false\nQueryInterface(IUISettings5) = 0x00000000 null false\nQueryInterface(IRestrictedErrorInfo) = 0x80004002 null true\nGetColorValue(2) = 0x00000000 alpha 255\nGetColorValue(5) = 0x00000000 alpha 255\nGetColorValue(8) = 0x00000000 alpha 255\nGetColorValue(24) = 0x80070057 alpha 0\nremove_ColorValuesChanged(0) = 0x00000000\nIUISettings.ScrollBarArrowSize = 0x00000000 (boolean or positive: 1)\nIUISettings.AnimationsEnabled = 0x00000000 (boolean or positive: 1)\nIUISettings.CaretWidth = 0x00000000 (boolean or positive: 1)\nIUISettings.CursorSize = 0x00000000 positive true\nIUISettings.UIElementColor(5) = 0x00000000 alpha 255\nIUISettings2.TextScaleFactor = 0x00000000 in 1.0..=2.25 true\na second activation is a different object: true\n  IAccessibilitySettings.HighContrast = 0x00000000 boolean true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "ro_uisettings_c",
+      "exe_sha256": "7bbcc9905e44786791571e8ed57e1160db36bcd80d104f1b647f42b1b31672d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ICBHZXRJaWRzIGxpc3RzIElVSVNldHRpbmdzOiB0cnVlCiAgR2V0SWlkcyBsaXN0cyBJVUlTZXR0aW5nczQ6IHRydWUKR2V0UnVudGltZUNsYXNzTmFtZSA9IDB4MDAwMDAwMDAgV2luZG93cy5VSS5WaWV3TWFuYWdlbWVudC5VSVNldHRpbmdzClF1ZXJ5SW50ZXJmYWNlKElJbnNwZWN0YWJsZSkgPSAweDAwMDAwMDAwIG51bGwgZmFsc2UKUXVlcnlJbnRlcmZhY2UoSVVJU2V0dGluZ3MzKSA9IDB4MDAwMDAwMDAgbnVsbCBmYWxzZQpRdWVyeUludGVyZmFjZShJQWdpbGVPYmplY3QpID0gMHgwMDAwMDAwMCBudWxsIGZhbHNlCkdldENvbG9yVmFsdWUoMCkgPSAweDAwMDAwMDAwIGFscGhhIDI1NQpHZXRDb2xvclZhbHVlKDMpID0gMHgwMDAwMDAwMCBhbHBoYSAyNTUKR2V0Q29sb3JWYWx1ZSg2KSA9IDB4MDAwMDAwMDAgYWxwaGEgMjU1CkdldENvbG9yVmFsdWUoOSkgPSAweDgwMDcwMDU3IGFscGhhIDAKR2V0Q29sb3JWYWx1ZSgxMDApID0gMHg4MDA3MDA1NyBhbHBoYSAwCklVSVNldHRpbmdzLkhhbmRQcmVmZXJlbmNlID0gMHgwMDAwMDAwMCAoYm9vbGVhbiBvciBwb3NpdGl2ZTogMCkKSVVJU2V0dGluZ3MuU2Nyb2xsQmFyVGh1bWJCb3hTaXplID0gMHgwMDAwMDAwMCAoYm9vbGVhbiBvciBwb3NpdGl2ZTogMSkKSVVJU2V0dGluZ3MuQ2FyZXRCcm93c2luZ0VuYWJsZWQgPSAweDAwMDAwMDAwIChib29sZWFuIG9yIHBvc2l0aXZlOiAwKQpJVUlTZXR0aW5ncy5Eb3VibGVDbGlja1RpbWUgPSAweDAwMDAwMDAwIChib29sZWFuIG9yIHBvc2l0aXZlOiAxKQpJVUlTZXR0aW5ncy5VSUVsZW1lbnRDb2xvcigwKSA9IDB4MDAwMDAwMDAgYWxwaGEgMjU1CklVSVNldHRpbmdzLlVJRWxlbWVudENvbG9yKDIwKSA9IDB4MDAwMDAwMDAgYWxwaGEgMApJVUlTZXR0aW5nczUuQXV0b0hpZGVTY3JvbGxCYXJzID0gMHgwMDAwMDAwMApsYXN0IFJlbGVhc2UgPSAwCiAgR2V0SWlkcyA9IDB4MDAwMDAwMDAgY291bnQgMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "  GetIids lists IUISettings: true\n  GetIids lists IUISettings4: true\nGetRuntimeClassName = 0x00000000 Windows.UI.ViewManagement.UISettings\nQueryInterface(IInspectable) = 0x00000000 null false\nQueryInterface(IUISettings3) = 0x00000000 null false\nQueryInterface(IAgileObject) = 0x00000000 null false\nGetColorValue(0) = 0x00000000 alpha 255\nGetColorValue(3) = 0x00000000 alpha 255\nGetColorValue(6) = 0x00000000 alpha 255\nGetColorValue(9) = 0x80070057 alpha 0\nGetColorValue(100) = 0x80070057 alpha 0\nIUISettings.HandPreference = 0x00000000 (boolean or positive: 0)\nIUISettings.ScrollBarThumbBoxSize = 0x00000000 (boolean or positive: 1)\nIUISettings.CaretBrowsingEnabled = 0x00000000 (boolean or positive: 0)\nIUISettings.DoubleClickTime = 0x00000000 (boolean or positive: 1)\nIUISettings.UIElementColor(0) = 0x00000000 alpha 255\nIUISettings.UIElementColor(20) = 0x00000000 alpha 0\nIUISettings5.AutoHideScrollBars = 0x00000000\nlast Release = 0\n  GetIids = 0x00000000 count 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

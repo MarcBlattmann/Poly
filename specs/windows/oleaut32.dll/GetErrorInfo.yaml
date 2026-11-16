@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/GetErrorInfo.yaml
+id: windows/api/oleaut32.dll/GetErrorInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). The functions are looked up in combase.dll at run time with LoadLibrary and GetProcAddress. Microsoft Learn pages for each function; public SDK headers winstring.h, roapi.h, inspectable.h, activation.h, restrictederrorinfo.h, oleauto.h and windows.ui.viewmanagement.h (interface identifiers and the order of methods only). The apps that stop on these calls (Qt 6 platform plugins, Firefox) were only run on Poly to learn which calls they make; nothing of them, of Windows or of Wine was read or disassembled.
+summary: >
+  The thread's IErrorInfo (oleaut32 ordinal 200; SetErrorInfo is ordinal 201, CreateErrorInfo 202). C++/WinRT's error path and Qt 6 call it through the ordinal. GetErrorInfo takes the object (a second call finds nothing); SetErrorInfo(0, NULL) clears it; a restricted error info made by RoOriginateError is the same slot.
+interface:
+  signature: "HRESULT GetErrorInfo(ULONG dwReserved, IErrorInfo **pperrinfo)"
+rules:
+  empty: "nothing set: S_FALSE (1) and *pperrinfo = NULL."
+  reserved: "a non-zero reserved argument: see the test output (observed result)."
+  create: "CreateErrorInfo gives S_OK and an ICreateErrorInfo; its SetSource and SetDescription succeed; QueryInterface for IErrorInfo gives S_OK and GetDescription / GetSource return the text."
+  set_get: "SetErrorInfo(0, info) = S_OK; GetErrorInfo(0, &p) = S_OK with p the same object; the second call gives S_FALSE and NULL; SetErrorInfo(0, NULL) = S_OK and clears it; two SetErrorInfo calls: the second wins and the first is dropped."
+  winrt: "after RoOriginateError(E_FAIL, \"from RoOriginateError\") GetErrorInfo gives S_OK and an object answering IErrorInfo; its GetDescription returns the system text for the HRESULT with its CR LF (\"Unspecified error\" + CR LF, the same as GetErrorDetails gives), QueryInterface for IRestrictedErrorInfo is S_OK; GetRestrictedErrorInfo afterwards finds nothing (the one object was taken). CreateErrorInfo objects: SetSource/SetDescription then GetSource/GetDescription return the text."
+errors:
+  empty: "S_FALSE (1)"
+side_effects: "takes the thread's error info"
+threading: "per thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test kept in three files that make the same calls and write every third observation line. combase.dll is reached through LoadLibraryW and GetProcAddress (it is not on the pipeline's import list); each file declares what it calls from Learn's prototypes. Observations are HRESULTs, booleans, lengths and text, never handles or addresses; the interface tables are used through their documented slot order.
+not_covered: >
+  The GUID of the error (SetGUID), help file and help context.

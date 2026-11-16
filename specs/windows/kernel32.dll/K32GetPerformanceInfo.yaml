@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/K32GetPerformanceInfo.yaml
+id: windows/api/kernel32.dll/K32GetPerformanceInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  The system's PERFORMANCE_INFORMATION record (psapi's GetPerformanceInfo): memory commit and physical counts in pages, kernel pools, handle, process and thread counts.
+interface:
+  signature: "BOOL K32GetPerformanceInfo(PPERFORMANCE_INFORMATION pPerformanceInformation, DWORD cb)"
+rules:
+  size: "cb of 104 or more (105, 200 and 256 too): TRUE and the record's own cb field is 104; cb below 104 (0, 8, 50, 103): FALSE, ERROR_BAD_LENGTH (24) and nothing written."
+  fields: "PageSize is 4096; CommitTotal <= CommitLimit; CommitPeak >= CommitTotal; PhysicalTotal > PhysicalAvailable and times PageSize at least 1 GiB; HandleCount, ProcessCount and ThreadCount are positive and ThreadCount >= ProcessCount. The record's field offsets are those of PERFORMANCE_INFORMATION in psapi.h (cb at 0, page counts at 8.., PageSize at 80, HandleCount at 88)."
+errors:
+  too_small: "ERROR_BAD_LENGTH 24"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  The exact values (they change); a NULL buffer raises.

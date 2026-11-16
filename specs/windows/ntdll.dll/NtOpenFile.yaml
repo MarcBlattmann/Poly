@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtOpenFile.yaml
+id: windows/api/ntdll.dll/NtOpenFile
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-apps-6
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for each function and the public SDK headers it names (winbase.h, synchapi.h, processthreadsapi.h, fileapi.h, appmodel.h, psapi.h, winternl.h, rpcdce.h, winevt/winbase.h); constants and error codes from winerror.h and ntstatus.h. The call lists of the apps that stop on these calls (Firefox 160, PortableGit's sh.exe) come from running them on Poly and from the call tracer on Windows; nothing of those programs, of Windows or of Wine was read or disassembled.
+summary: >
+  Opens a file object by NT path. The case that matters here is the pipe device: NtOpenFile of "\Device\NamedPipe\" gives a directory handle that NtCreateNamedPipeFile and NtOpenFile then use as the RootDirectory of a relative name - how the MSYS2/Cygwin runtime makes the pair of handles of every pipe() (a shell pipeline). Poly fails the relative NtCreateNamedPipeFile with STATUS_INVALID_DEVICE_REQUEST, so every pipeline hangs (see specs/windows/apps/msys2/pipeline.md).
+interface:
+  signature: "NTSTATUS NtOpenFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, ULONG ShareAccess, ULONG OpenOptions)"
+rules:
+  device: "NtOpenFile(\"\\Device\\NamedPipe\\\", SYNCHRONIZE|FILE_READ_ATTRIBUTES, share 3, options 0 or FILE_SYNCHRONOUS_IO_NONALERT): STATUS_SUCCESS, Information FILE_OPENED (1); the name without the trailing backslash works too."
+  relative_create: "NtCreateNamedPipeFile(&h, GENERIC_READ|SYNCHRONIZE|FILE_WRITE_ATTRIBUTES (0x80100100), {RootDirectory = the device handle, Name = \"poly-root-pair-<pid>\"}, ..., share 3, FILE_CREATE, options 0 or FILE_SYNCHRONOUS_IO_NONALERT, type byte, read mode byte, completion queue, max 1, quotas, timeout): STATUS_SUCCESS, Information FILE_CREATED (2). With an absolute name \"\\Device\\NamedPipe\\...\" and no root handle: the same. The same relative name again with FILE_CREATE: STATUS_INSTANCE_NOT_AVAILABLE (0xC00000AB) and no handle."
+  relative_open: "NtOpenFile(&w, GENERIC_WRITE|SYNCHRONIZE|FILE_READ_ATTRIBUTES (0x40100080), {RootDirectory = the device handle, Name = the same name}, share 3, 0): STATUS_SUCCESS, Information FILE_OPENED: the write end."
+  data: "10 bytes written to the write end are read from the read end (STATUS_SUCCESS, count 10); a read of the write end and a write to the read end: STATUS_ACCESS_DENIED (0xC0000022)."
+  close: "after the last write handle is closed the read gives STATUS_PIPE_BROKEN (0xC000014B), count 0 (end of file); a write after the read end closed gives STATUS_PIPE_CLOSING (0xC00000B1); a duplicate of the write handle keeps the pipe open (an empty no-wait read then gives STATUS_PIPE_EMPTY 0xC00000D9)."
+  pipe_information: "NtQueryInformationFile(FilePipeLocalInformation = 24, 40 bytes) of the read end: Information 40, type 0 (byte), configuration 2, maximum instances 1, current instances 1, ReadDataAvailable 0 (5 after 5 bytes were written), state 3 (connected; 4 closing after the last client closed), end 1 (server); the write end reports end 0. NtSetInformationFile(FilePipeInformation = 23, {ReadMode 0, CompletionMode 1}, 8 bytes) on either end: STATUS_SUCCESS; with length 4: STATUS_INFO_LENGTH_MISMATCH (0xC0000004)."
+  names: "NtQueryObject(read end, ObjectNameInformation) = \"\\Device\\NamedPipe\\<name>\"; NtQueryInformationFile(write end, FileNameInformation) = \"\\<name>\"; PeekNamedPipe on the read end reports the bytes waiting."
+  duplicate: "DuplicateHandle(self, self, self, &h, 0x100158, TRUE, 0) of the process pseudo handle: TRUE; of the pipe's read end with 0x100158: FALSE, ERROR_ACCESS_DENIED (5) (more rights than the handle has); with DUPLICATE_SAME_ACCESS: TRUE."
+errors:
+  instance_not_available: "STATUS_INSTANCE_NOT_AVAILABLE 0xC00000AB"
+  pipe_broken: "STATUS_PIPE_BROKEN 0xC000014B"
+  pipe_closing: "STATUS_PIPE_CLOSING 0xC00000B1"
+  pipe_empty: "STATUS_PIPE_EMPTY 0xC00000D9"
+  access_denied: "STATUS_ACCESS_DENIED 0xC0000022"
+side_effects: "creates pipe objects named under \\Device\\NamedPipe\\"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, kept in three files that make the same calls and write every third observation line. Each file declares what it calls from Learn's prototypes (rpcrt4.dll is looked up at run time). Observations are return values, error codes, booleans and relations, never addresses, handles, process ids, times or machine-dependent text.
+not_covered: >
+  Overlapped I/O on these handles, quotas, the security descriptor, other devices, files opened by this call (the entry's other uses).

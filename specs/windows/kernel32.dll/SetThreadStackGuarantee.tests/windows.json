@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bd7ed23b5b40",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T00:31:51Z",
+  "tests": [
+    {
+      "name": "stack_guarantee",
+      "exe_sha256": "530b2d1745cb688135483e083a765221ad2367f84df9c64be2e9b0ec7906e963",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiB0aHJlYWQ6IHF1ZXJ5ID0gMSBndWFyYW50ZWUgMAptYWluIHRocmVhZDogc2V0IDQwOTY6IDEgcmV0dXJuZWQgb2xkIDIwNDgwIGVyciAwIHRoZW4gcXVlcnkgMSAyMDQ4MAptYWluIHRocmVhZDogc2V0IDA6IDEgcmV0dXJuZWQgb2xkIDEwMjQwMCBlcnIgMCB0aGVuIHF1ZXJ5IDEgMTAyNDAwCm1haW4gdGhyZWFkOiBzZXQgMTA3Mzc0MTgyNDogMCByZXR1cm5lZCBvbGQgMTAyNDAwIGVyciA4NyB0aGVuIHF1ZXJ5IDEgMTAyNDAwCnNlY29uZCB0aHJlYWQ6IHNldCAyMDAwMDogMSByZXR1cm5lZCBvbGQgMjA0ODAgZXJyIDAgdGhlbiBxdWVyeSAxIDIwNDgwCnNlY29uZCB0aHJlYWQ6IHNldCA4MTkyOiAxIHJldHVybmVkIG9sZCAxMDI0MDAgZXJyIDAgdGhlbiBxdWVyeSAxIDEwMjQwMApzZWNvbmQgdGhyZWFkOiBzZXQgNDI5NDk2NzI5NTogMCByZXR1cm5lZCBvbGQgMTAyNDAwIGVyciA4NyB0aGVuIHF1ZXJ5IDEgMTAyNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main thread: query = 1 guarantee 0\nmain thread: set 4096: 1 returned old 20480 err 0 then query 1 20480\nmain thread: set 0: 1 returned old 102400 err 0 then query 1 102400\nmain thread: set 1073741824: 0 returned old 102400 err 87 then query 1 102400\nsecond thread: set 20000: 1 returned old 20480 err 0 then query 1 20480\nsecond thread: set 8192: 1 returned old 102400 err 0 then query 1 102400\nsecond thread: set 4294967295: 0 returned old 102400 err 87 then query 1 102400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "stack_guarantee_b",
+      "exe_sha256": "25cde240c83595389eab2f8df7f923f0b372e9a4bb39ad2a2d846e033679b0d8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFpbiB0aHJlYWQ6IHNldCAyMDAwMDogMSByZXR1cm5lZCBvbGQgMCBlcnIgMCB0aGVuIHF1ZXJ5IDEgMjA0ODAKbWFpbiB0aHJlYWQ6IHNldCAxMDAwMDA6IDEgcmV0dXJuZWQgb2xkIDIwNDgwIGVyciAwIHRoZW4gcXVlcnkgMSAxMDI0MDAKbWFpbiB0aHJlYWQ6IHNldCAxOiAxIHJldHVybmVkIG9sZCAxMDI0MDAgZXJyIDAgdGhlbiBxdWVyeSAxIDEwMjQwMApzZWNvbmQgdGhyZWFkOiBxdWVyeSA9IDEgZ3VhcmFudGVlIDAKc2Vjb25kIHRocmVhZDogc2V0IDQwOTY6IDEgcmV0dXJuZWQgb2xkIDIwNDgwIGVyciAwIHRoZW4gcXVlcnkgMSAyMDQ4MApzZWNvbmQgdGhyZWFkOiBzZXQgMDogMSByZXR1cm5lZCBvbGQgMTAyNDAwIGVyciAwIHRoZW4gcXVlcnkgMSAxMDI0MDAKc2Vjb25kIHRocmVhZDogc2V0IDEwNzM3NDE4MjQ6IDAgcmV0dXJuZWQgb2xkIDEwMjQwMCBlcnIgODcgdGhlbiBxdWVyeSAxIDEwMjQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "main thread: set 20000: 1 returned old 0 err 0 then query 1 20480\nmain thread: set 100000: 1 returned old 20480 err 0 then query 1 102400\nmain thread: set 1: 1 returned old 102400 err 0 then query 1 102400\nsecond thread: query = 1 guarantee 0\nsecond thread: set 4096: 1 returned old 20480 err 0 then query 1 20480\nsecond thread: set 0: 1 returned old 102400 err 0 then query 1 102400\nsecond thread: set 1073741824: 0 returned old 102400 err 87 then query 1 102400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}
