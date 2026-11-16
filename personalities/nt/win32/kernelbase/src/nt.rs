@@ -350,6 +350,8 @@ unsafe extern "system" {
     pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
     pub fn NtGetCurrentProcessorNumber() -> u32;
+    /// Poly's own: the physical memory and what is available, two 64-bit sizes (ADR 0206).
+    pub fn PolyPhysicalMemory(out: *mut u64) -> NtStatus;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;

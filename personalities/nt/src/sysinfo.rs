@@ -60,6 +60,18 @@ pub fn random_bytes<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
     Ok(STATUS_SUCCESS)
 }
 
+/// `PolyPhysicalMemory(Out*)` (ADR 0206): the physical memory and what is available, as two 64-bit
+/// values in bytes; `STATUS_NOT_IMPLEMENTED` from a kernel that does not count it.
+pub fn physical_memory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let out = abi::arg(k, regs, 0)?;
+    let (total, available) = k.physical_memory().ok_or(NOT_IMPLEMENTED)?;
+    let mut b = [0u8; 16];
+    b[..8].copy_from_slice(&total.to_le_bytes());
+    b[8..].copy_from_slice(&available.to_le_bytes());
+    abi::write(k, out, &b)?;
+    Ok(STATUS_SUCCESS)
+}
+
 /// `STATUS_NOT_IMPLEMENTED` (`ntstatus.h`).
 const NOT_IMPLEMENTED: NtStatus = NtStatus(0xC000_0002);
 
@@ -134,6 +146,15 @@ mod tests {
         // Length 0 touches nothing; an address the caller cannot write is refused.
         assert_eq!(f.call(Service::PolyRandomBytes, &[0x10, 0]), STATUS_SUCCESS);
         assert_eq!(f.call(Service::PolyRandomBytes, &[0x10, 8]), STATUS_ACCESS_VIOLATION);
+    }
+
+    #[test]
+    fn physical_memory_is_two_sizes_and_needs_a_writable_buffer() {
+        let mut f = Fake::new();
+        let out = f.alloc(16);
+        assert_eq!(f.call(Service::PolyPhysicalMemory, &[out]), STATUS_SUCCESS);
+        assert_eq!((f.u64_at(out), f.u64_at(out + 8)), (8 << 30, 6 << 30));
+        assert_eq!(f.call(Service::PolyPhysicalMemory, &[0x10]), STATUS_ACCESS_VIOLATION);
     }
 
     #[test]

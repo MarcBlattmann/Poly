@@ -1,4 +1,4 @@
-# 0206: Random numbers come from a Poly system call, not from a device file
+# 0206: Random numbers come from a Poly system call, not from a device file (and so do the memory sizes)
 
 **Status:** Accepted. Works toward stage S2 of the Chrome-for-Windows ladder
 ([0155](0155-chrome-for-windows-bring-up-stubs-lazy-images-and-the-stage-ladder.md)). Follows the
@@ -33,6 +33,12 @@ has to be allowed to open.
   `advapi32!SystemFunction036` and the C run time's `rand_s` call it; `bcryptprimitives!ProcessPrng` and
   `bcrypt` reach it through `SystemFunction036` as before. No file is opened any more, so a process
   with any token (restricted, lowbox, impersonating) draws random numbers.
+* **Physical memory the same way** (found by the next stop of the same run: a renderer's failed check
+  after `GlobalMemoryStatusEx` could not open the `/proc` file that gave it the sizes):
+  `PolyPhysicalMemory(Out*)` (Poly table, number 4, `NtKernel::physical_memory`: the frame
+  allocator's total and the free memory plus the clean cache, as `MemAvailable`) writes two 64-bit
+  sizes; `GlobalMemoryStatusEx` calls it. Any other system information that kernelbase read from a
+  `Z:` file gets the same treatment when a sandboxed process needs it.
 * `Z:\dev\urandom` stays a file for programs that open it by name (it is Poly's Linux side).
 
 ## Consequences

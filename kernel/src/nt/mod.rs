@@ -1013,6 +1013,16 @@ impl NtKernel for Kernel {
         crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
     }
 
+    fn physical_memory(&self) -> Option<(u64, u64)> {
+        const PAGE: u64 = 4096;
+        let (total, free) =
+            crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
+        // As `/proc/meminfo`'s MemAvailable: free memory and the clean pages of the cache.
+        let c = crate::fs::cache::cache().stats();
+        let clean = (c.pages as u64).saturating_sub(c.dirty as u64) * PAGE;
+        (total != 0).then_some((total, (free + clean).min(total)))
+    }
+
     fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
         crate::random::fill(buf);
         true

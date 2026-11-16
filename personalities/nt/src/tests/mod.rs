@@ -493,6 +493,10 @@ impl NtKernel for Fake {
         self.traces.push(values);
     }
 
+    fn physical_memory(&self) -> Option<(u64, u64)> {
+        Some((8 << 30, 6 << 30))
+    }
+
     fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
         // A counter: the tests see that every byte was written.
         for (i, b) in buf.iter_mut().enumerate() {

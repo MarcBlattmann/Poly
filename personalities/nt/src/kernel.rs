@@ -322,6 +322,12 @@ pub trait NtKernel {
     /// Log text for the calling process (`PolyDebugPrint`, ADR 0155).
     fn debug_print(&mut self, _text: &[u8]) {}
 
+    /// The physical memory (total, available) in bytes (`PolyPhysicalMemory`, ADR 0206); `None` from
+    /// a kernel that does not count it.
+    fn physical_memory(&self) -> Option<(u64, u64)> {
+        None
+    }
+
     /// Fill `buf` from the kernel's random generator (`PolyRandomBytes`, ADR 0206); false from a
     /// kernel that has none.
     fn random_bytes(&mut self, _buf: &mut [u8]) -> bool {

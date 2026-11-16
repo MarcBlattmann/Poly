@@ -313,6 +313,11 @@ pub enum Service {
     /// Windows (where a driver, not a file, gives them). `STATUS_SUCCESS`, or `STATUS_NOT_IMPLEMENTED`
     /// from a kernel without a generator.
     PolyRandomBytes,
+    /// `PolyPhysicalMemory(Out*)`: writes the physical memory the system has and what is available
+    /// as two 64-bit values (bytes), for `GlobalMemoryStatusEx` (ADR 0206: system information comes
+    /// from a system call, not from a `/proc` file a sandboxed token cannot open).
+    /// `STATUS_NOT_IMPLEMENTED` from a kernel that does not count memory.
+    PolyPhysicalMemory,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -476,7 +481,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 78] = [
+pub const SERVICES: [(Service, u32, &str); 79] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -555,6 +560,7 @@ pub const SERVICES: [(Service, u32, &str); 78] = [
     (Service::PolyResumeApc, (TABLE_POLY << 12) | 1, "PolyResumeApc"),
     (Service::PolyDebugPrint, (TABLE_POLY << 12) | 2, "PolyDebugPrint"),
     (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
+    (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the

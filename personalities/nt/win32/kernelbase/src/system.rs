@@ -363,8 +363,7 @@ fn read_file(nt_path: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// `GlobalMemoryStatusEx`: physical memory from Poly's `/proc/meminfo`
-/// (`Z:` is the whole VFS, ADR 0067), the rest as
+/// `GlobalMemoryStatusEx`: physical memory from `PolyPhysicalMemory` (ADR 0206), the rest as
 /// `poly_kernelbase::system::memory_status` says. `dwLength` must be set
 /// (Learn); a wrong one is `ERROR_INVALID_PARAMETER` (Poly's reading).
 #[unsafe(no_mangle)]
@@ -373,9 +372,16 @@ pub unsafe extern "system" fn GlobalMemoryStatusEx(status: *mut u8) -> i32 {
     if status.is_null() || unsafe { status.cast::<u32>().read_unaligned() } as usize != system::MEMORYSTATUSEX_SIZE {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    let phys = read_file("\\??\\Z:\\proc\\meminfo")
-        .and_then(|b| system::parse_meminfo(core::str::from_utf8(&b).ok()?))
-        .ok_or(ERROR_NOT_SUPPORTED);
+    // The sizes come from a system call, not from `/proc/meminfo` (ADR 0206): a sandboxed process
+    // whose token cannot open files below `Z:` still gets them, as on Windows.
+    let mut sizes = [0u64; 2];
+    // SAFETY: two 64-bit values.
+    let st = unsafe { nt::PolyPhysicalMemory(sizes.as_mut_ptr()) };
+    let phys = if st.is_success() {
+        Ok(system::PhysMemory { total: sizes[0], available: sizes[1].min(sizes[0]) })
+    } else {
+        Err(ERROR_NOT_SUPPORTED)
+    };
     match phys {
         Ok(p) => {
             let b = system::memory_status(p);
