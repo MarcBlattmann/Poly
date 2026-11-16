@@ -1441,3 +1441,29 @@ fn a_layered_child_needs_a_windows_8_manifest() {
         assert_ne!(info.ex_style & 0x0008_0000, 0);
     });
 }
+
+/// Learn's `WM_NCHITTEST` codes on the sizing border of a resizable window: Chrome's 900x500
+/// window at 40,40 whose client area starts at its top (8 px borders left, right, below), and a
+/// captioned window with its band above the caption.
+#[test]
+fn the_sizing_border_of_a_resizable_window_has_its_hit_codes() {
+    let sizable = 0x16CF_0000; // WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN
+    let (w, c) = (Rect::new(40, 40, 940, 540), Rect::new(48, 40, 932, 532));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(44, 300), Some(frame::HTLEFT));
+    assert_eq!(hit(936, 300), Some(frame::HTRIGHT));
+    assert_eq!(hit(500, 536), Some(frame::HTBOTTOM));
+    assert_eq!(hit(44, 536), Some(frame::HTBOTTOMLEFT));
+    assert_eq!(hit(936, 536), Some(frame::HTBOTTOMRIGHT));
+    assert_eq!(hit(500, 300), None, "the client area is the window's");
+    // No sizing border: HTBORDER stays DefWindowProc's answer.
+    assert_eq!(sizing_hit(sizable & !0x0004_0000, w, c, 44, 300), None);
+    assert_eq!(sizing_hit(sizable | 0x0100_0000, w, c, 44, 300), None, "maximized");
+    // A captioned window: the band above the caption is the top border, the caption is not.
+    let (w, c) = (Rect::new(100, 50, 400, 250), Rect::new(108, 81, 392, 242));
+    let hit = |x, y| sizing_hit(sizable, w, c, x, y);
+    assert_eq!(hit(200, 52), Some(frame::HTTOP));
+    assert_eq!(hit(102, 52), Some(frame::HTTOPLEFT));
+    assert_eq!(hit(398, 52), Some(frame::HTTOPRIGHT));
+    assert_eq!(hit(200, 70), None, "the caption");
+}

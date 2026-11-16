@@ -546,3 +546,85 @@ fn shift_grave_and_uppercase_combinations() {
     assert_eq!(to_unicode(0xDC, 0x29, &ks, &mut buf, 0, &mut dead), 1);
     assert_eq!(buf[0], 0xB0);
 }
+
+/// The US layout (ADR 0209): its keys' places are Learn's (the `VK_OEM_*` names for the US
+/// keyboard, the scan code table), its characters the US legends.
+#[test]
+fn the_us_layout_reads_keys_by_their_us_places() {
+    let us = Layout::Us;
+    let vk = |scan| map_virtual_key_in(us, scan, MAPVK_VSC_TO_VK);
+    // QWERTY: Y and Z in their places; the punctuation keys are the US ones.
+    assert_eq!((vk(0x15), vk(0x2C)), (0x59, 0x5A));
+    assert_eq!((vk(0x0C), vk(0x0D), vk(0x1A), vk(0x1B)), (VK_OEM_MINUS, VK_OEM_PLUS, VK_OEM_4, VK_OEM_6));
+    assert_eq!((vk(0x27), vk(0x28), vk(0x29), vk(0x2B), vk(0x35)), (VK_OEM_1, VK_OEM_7, VK_OEM_3, VK_OEM_5, VK_OEM_2));
+    // The other keys as on the German layout.
+    assert_eq!((vk(0x1E), vk(0x02), vk(0x34), vk(0x56)), (0x41, 0x31, VK_OEM_PERIOD, VK_OEM_102));
+    assert_eq!(map_virtual_key_in(us, VK_OEM_2, MAPVK_VK_TO_VSC), 0x35);
+    assert_eq!(map_virtual_key_in(us, 0x5A, MAPVK_VK_TO_VSC), 0x2C);
+    assert_eq!(map_virtual_key_in(us, VK_OEM_1, MAPVK_VK_TO_CHAR), ';' as u32);
+    // The German layout is unchanged.
+    assert_eq!(map_virtual_key_in(Layout::German, 0x15, MAPVK_VSC_TO_VK), 0x5A);
+    assert_eq!(map_virtual_key_in(Layout::German, 0x35, MAPVK_VSC_TO_VK), VK_OEM_MINUS);
+
+    // A URL types as it reads: `http://a-b.c/?x=1`.
+    let mut shift = [0u8; 256];
+    shift[VK_SHIFT as usize] = 0x80;
+    let plain = [0u8; 256];
+    let mut dead = DeadState::default();
+    let mut c = |vk: u32, ks: &[u8; 256]| {
+        let mut buf = [0u16; 2];
+        assert_eq!(to_unicode_in(us, vk, map_virtual_key_in(us, vk, MAPVK_VK_TO_VSC), ks, &mut buf, 0, &mut dead), 1);
+        char::from_u32(u32::from(buf[0])).unwrap()
+    };
+    let typed: String = [
+        (0x48, &plain),
+        (0x54, &plain),
+        (0x54, &plain),
+        (0x50, &plain),
+        (VK_OEM_1, &shift),
+        (VK_OEM_2, &plain),
+        (VK_OEM_2, &plain),
+        (0x41, &plain),
+        (VK_OEM_MINUS, &plain),
+        (0x42, &plain),
+        (VK_OEM_PERIOD, &plain),
+        (0x43, &plain),
+        (VK_OEM_2, &plain),
+        (VK_OEM_2, &shift),
+        (0x58, &plain),
+        (VK_OEM_PLUS, &plain),
+        (0x31, &plain),
+    ]
+    .iter()
+    .map(|&(vk, ks)| c(vk, ks))
+    .collect();
+    assert_eq!(typed, "http://a-b.c/?x=1");
+    // No AltGr, no dead keys; Caps Lock only on letters.
+    let mut altgr = [0u8; 256];
+    altgr[VK_CONTROL as usize] = 0x80;
+    altgr[VK_MENU as usize] = 0x80;
+    let mut buf = [0u16; 2];
+    assert_eq!(to_unicode_in(us, 0x51, 0x10, &altgr, &mut buf, 0, &mut dead), 0);
+    let mut caps = [0u8; 256];
+    caps[VK_CAPITAL as usize] = 1;
+    assert_eq!(to_unicode_in(us, 0x31, 0x02, &caps, &mut buf, 0, &mut dead), 1);
+    assert_eq!(buf[0], '1' as u16);
+    assert_eq!(to_unicode_in(us, 0x41, 0x1E, &caps, &mut buf, 0, &mut dead), 1);
+    assert_eq!(buf[0], 'A' as u16);
+    // TranslateMessage's characters follow it too.
+    let msgs = translate_key_in(us, WM_KEYDOWN, u64::from(VK_OEM_2), 0x0035_0001, &plain, &mut dead);
+    assert_eq!(msgs.iter().next().map(|m| m.wparam), Some('/' as u64));
+}
+
+#[test]
+fn the_desktops_layout_names_pick_a_layout() {
+    assert_eq!(Layout::for_desktop("us"), Layout::Us);
+    assert_eq!(Layout::for_desktop("US"), Layout::Us);
+    assert_eq!(Layout::for_desktop("de"), Layout::German);
+    assert_eq!(Layout::for_desktop("de-ch"), Layout::German);
+    for l in [Layout::German, Layout::Us] {
+        assert_eq!(Layout::from_id(u64::from(l.id())), l);
+    }
+    assert_eq!((Layout::German.hkl(), Layout::Us.hkl()), (HKL, 0x0409_0409));
+    assert_eq!((Layout::German.klid(), Layout::Us.klid()), ("00000407", "00000409"));
+}

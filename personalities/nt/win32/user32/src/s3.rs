@@ -32,7 +32,10 @@ pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) ->
         return LAYOUTS.len() as i32;
     }
     let k = (n as usize).min(LAYOUTS.len());
-    for (i, l) in LAYOUTS.iter().take(k).enumerate() {
+    // The first is the layout keys are read with: the desktop's (ADR 0209).
+    let mut layouts = LAYOUTS;
+    layouts[0] = crate::refresh_layout().hkl();
+    for (i, l) in layouts.iter().take(k).enumerate() {
         // SAFETY: `n` HKLs of the caller.
         unsafe { *list.add(i) = *l as usize };
     }
@@ -42,7 +45,8 @@ pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) ->
 /// Whether an `HKL` is one of the installed layouts (for `imm32`).
 #[unsafe(no_mangle)]
 pub extern "system" fn PrivateLayoutInstalled(hkl: usize) -> i32 {
-    i32::from(LAYOUTS.iter().any(|&l| l as usize == hkl))
+    // The desktop's layout is installed too (ADR 0209).
+    i32::from(LAYOUTS.iter().any(|&l| l as usize == hkl) || kbd::active().hkl() as usize == hkl)
 }
 
 // ----- small queries
