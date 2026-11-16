@@ -1284,7 +1284,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">1.1%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">675 / 62,731 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">695 / 62,731 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 45 / 20,419 done (0.2%)</title>
 <rect x="16.0" y="469.0" width="183.5" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.4" height="218.0" fill="#2ea043"/>
@@ -1317,11 +1317,11 @@
 <text x="206.5" y="650.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntoskrn…</text>
 <text x="206.5" y="664.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
 </g>
-<g><title>kernel32: 65 / 1,559 done (4.2%)</title>
+<g><title>kernel32: 70 / 1,559 done (4.5%)</title>
 <rect x="266.3" y="469.0" width="54.0" height="53.7" fill="#21262d"/>
-<rect x="266.3" y="469.0" width="2.3" height="53.7" fill="#2ea043"/>
-<rect x="268.5" y="469.0" width="12.3" height="53.7" fill="#bb8009"/>
-<rect x="280.8" y="469.0" width="10.7" height="53.7" fill="#388bfd"/>
+<rect x="266.3" y="469.0" width="2.4" height="53.7" fill="#2ea043"/>
+<rect x="268.7" y="469.0" width="12.3" height="53.7" fill="#bb8009"/>
+<rect x="280.9" y="469.0" width="10.6" height="53.7" fill="#388bfd"/>
 <rect x="265.3" y="468.0" width="56.0" height="55.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="271.3" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">kernel…</text>
 <text x="271.3" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">4%</text>
@@ -1338,14 +1338,14 @@
 <text x="271.3" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">win32k…</text>
 <text x="271.3" y="607.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
 </g>
-<g><title>ntdll: 77 / 1,523 done (5.1%)</title>
+<g><title>ntdll: 86 / 1,523 done (5.6%)</title>
 <rect x="266.3" y="634.6" width="54.0" height="52.4" fill="#21262d"/>
-<rect x="266.3" y="634.6" width="2.7" height="52.4" fill="#2ea043"/>
-<rect x="269.0" y="634.6" width="2.2" height="52.4" fill="#bb8009"/>
-<rect x="271.2" y="634.6" width="5.7" height="52.4" fill="#388bfd"/>
+<rect x="266.3" y="634.6" width="3.0" height="52.4" fill="#2ea043"/>
+<rect x="269.3" y="634.6" width="2.2" height="52.4" fill="#bb8009"/>
+<rect x="271.5" y="634.6" width="5.4" height="52.4" fill="#388bfd"/>
 <rect x="265.3" y="633.6" width="56.0" height="54.4" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="271.3" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntdll</text>
-<text x="271.3" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">5%</text>
+<text x="271.3" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">6%</text>
 </g>
 <g><title>kernelbase: 26 / 1,447 done (1.8%)</title>
 <rect x="322.3" y="469.0" width="43.3" height="61.9" fill="#21262d"/>
@@ -1656,11 +1656,11 @@
 <rect x="525.1" y="547.8" width="2.6" height="15.7" fill="#bb8009"/>
 <rect x="524.1" y="546.8" width="15.5" height="17.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>ws2_32: 22 / 136 done (16.2%)</title>
+<g><title>ws2_32: 26 / 136 done (19.1%)</title>
 <rect x="540.6" y="547.8" width="13.3" height="15.7" fill="#21262d"/>
-<rect x="540.6" y="547.8" width="2.2" height="15.7" fill="#2ea043"/>
-<rect x="542.8" y="547.8" width="1.2" height="15.7" fill="#bb8009"/>
-<rect x="543.9" y="547.8" width="5.2" height="15.7" fill="#388bfd"/>
+<rect x="540.6" y="547.8" width="2.5" height="15.7" fill="#2ea043"/>
+<rect x="543.1" y="547.8" width="1.2" height="15.7" fill="#bb8009"/>
+<rect x="544.3" y="547.8" width="4.8" height="15.7" fill="#388bfd"/>
 <rect x="539.6" y="546.8" width="15.3" height="17.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>imm32: 14 / 135 done (10.4%)</title>
@@ -1808,10 +1808,11 @@
 <rect x="573.4" y="579.3" width="10.6" height="11.0" fill="#21262d"/>
 <rect x="572.4" y="578.3" width="12.6" height="13.0" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>secur32: 0 / 82 done (0.0%)</title>
+<g><title>secur32: 1 / 82 done (1.2%)</title>
 <rect x="490.2" y="592.3" width="10.5" height="11.1" fill="#21262d"/>
-<rect x="490.2" y="592.3" width="1.8" height="11.1" fill="#bb8009"/>
-<rect x="492.0" y="592.3" width="1.5" height="11.1" fill="#388bfd"/>
+<rect x="490.2" y="592.3" width="0.1" height="11.1" fill="#2ea043"/>
+<rect x="490.4" y="592.3" width="1.8" height="11.1" fill="#bb8009"/>
+<rect x="492.2" y="592.3" width="1.4" height="11.1" fill="#388bfd"/>
 <rect x="489.2" y="591.3" width="12.5" height="13.1" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>advpack: 0 / 81 done (0.0%)</title>
@@ -2154,9 +2155,10 @@
 <rect x="571.5" y="651.8" width="5.2" height="6.8" fill="#21262d"/>
 <rect x="570.5" y="650.8" width="7.2" height="8.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>mswsock: 0 / 32 done (0.0%)</title>
+<g><title>mswsock: 1 / 32 done (3.1%)</title>
 <rect x="578.8" y="651.8" width="5.2" height="6.8" fill="#21262d"/>
-<rect x="578.8" y="651.8" width="0.3" height="6.8" fill="#388bfd"/>
+<rect x="578.8" y="651.8" width="0.2" height="6.8" fill="#2ea043"/>
+<rect x="578.9" y="651.8" width="0.2" height="6.8" fill="#388bfd"/>
 <rect x="577.8" y="650.8" width="7.2" height="8.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>coremessaging: 0 / 31 done (0.0%)</title>

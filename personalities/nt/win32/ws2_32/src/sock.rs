@@ -246,6 +246,12 @@ pub extern "system" fn closesocket(s: Socket) -> i32 {
         let mut out = [0u8; proto::Info::SIZE];
         let (status, _) = afd::ioctl(handle(s), proto::INFO, &[], &mut out);
         if is_error(status) {
+            // A socket whose handle was closed with `CloseHandle` is still in Winsock's table:
+            // closing it again succeeds once.
+            if afd::forget_orphan(handle(s)) {
+                crate::events::forget(s);
+                return 0;
+            }
             return fail(WSAENOTSOCK);
         }
     }
@@ -316,7 +322,11 @@ pub unsafe extern "system" fn getsockopt(s: Socket, level: i32, name: i32, value
         return fail(WSAEFAULT);
     }
     let mut out = [0u8; 640];
-    match call(s, proto::GET_OPTION, &proto::option_header(level, name), &mut out) {
+    // Reading SO_ERROR takes the endpoint's error: one reader at a time (see `afd::so_error_guard`).
+    let one_at_a_time = (level == SOL_SOCKET && name == SO_ERROR).then(afd::so_error_guard);
+    let r = call(s, proto::GET_OPTION, &proto::option_header(level, name), &mut out);
+    drop(one_at_a_time);
+    match r {
         Ok(n) => {
             // SAFETY: the caller's buffer and length.
             unsafe {
@@ -636,10 +646,10 @@ pub unsafe extern "system" fn sendto(
 /// `recv`.
 #[unsafe(no_mangle)]
 pub extern "system" fn recv(s: Socket, buf: *mut u8, len: i32, flags: i32) -> i32 {
-    if len < 0 {
-        return fail(WSAEFAULT);
-    }
-    ret(recv_flags(flags).and_then(|f| do_recv(s, buf, len as usize, f)).map(|(n, _)| count(n)))
+    // A negative length is a bad buffer, but the state of the connection comes first (the sheet's
+    // `not_connected`): the call goes through the same probe as a NULL buffer.
+    let (buf, len) = if len < 0 { (core::ptr::null_mut(), 1) } else { (buf, len as usize) };
+    ret(recv_flags(flags).and_then(|f| do_recv(s, buf, len, f)).map(|(n, _)| count(n)))
 }
 
 /// `recvfrom`: the sender's address for a datagram socket.
@@ -1148,6 +1158,7 @@ pub unsafe extern "system" fn WSAPoll(fds: *mut u8, n: u32, timeout: i32) -> i32
     }
     let mut entries = Vec::new();
     let mut map = Vec::new();
+    let mut nval_first: Vec<usize> = Vec::new();
     for i in 0..n as usize {
         // SAFETY: the caller's array of `n` entries.
         let (fd, events) = unsafe {
@@ -1155,7 +1166,10 @@ pub unsafe extern "system" fn WSAPoll(fds: *mut u8, n: u32, timeout: i32) -> i32
             core::ptr::write_unaligned(p.add(10).cast::<i16>(), 0);
             (core::ptr::read_unaligned(p.cast::<usize>()), core::ptr::read_unaligned(p.add(8).cast::<i16>()))
         };
+        // INVALID_SOCKET is not a socket: `POLLNVAL`, and the call fails with `WSAENOTSOCK`
+        // (the sheet's `invalid`), at once.
         if (fd as isize) < 0 {
+            nval_first.push(i);
             continue;
         }
         match poll::wsapoll_interest(events) {
@@ -1166,15 +1180,24 @@ pub unsafe extern "system" fn WSAPoll(fds: *mut u8, n: u32, timeout: i32) -> i32
             Err(e) => return fail(e),
         }
     }
-    if entries.is_empty() {
+    if entries.is_empty() && nval_first.is_empty() {
         return fail(WSAEINVAL);
     }
-    let revents = match poll_handles(&entries, i64::from(timeout)) {
-        Ok(v) => v,
-        Err(e) => return fail(e),
+    let mut invalid = !nval_first.is_empty();
+    for &i in &nval_first {
+        // SAFETY: the caller's entry.
+        unsafe { core::ptr::write_unaligned(fds.add(i * WSAPOLLFD_SIZE + 10).cast::<i16>(), POLLNVAL) };
+    }
+    // An entry that is no socket ends the call at once.
+    let revents = if entries.is_empty() {
+        Vec::new()
+    } else {
+        match poll_handles(&entries, if invalid { 0 } else { i64::from(timeout) }) {
+            Ok(v) => v,
+            Err(e) => return fail(e),
+        }
     };
     let mut count = 0;
-    let mut invalid = false;
     for ((i, events), dev) in map.into_iter().zip(revents) {
         let r = poll::wsapoll_revents(events, dev);
         if r != 0 {

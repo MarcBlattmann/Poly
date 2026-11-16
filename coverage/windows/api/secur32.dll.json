@@ -22,7 +22,7 @@
 {"symbol":"GetComputerObjectNameW","src":["wine-spec"],"seeds":["wine:secur32/tests/secur32.c:testGetComputerObjectNameW"]},
 {"symbol":"GetSecurityUserInfo","src":["wine-spec"]},
 {"symbol":"GetUserNameExA","src":["wine-spec"],"seeds":["wine:secur32/tests/secur32.c:testGetUserNameExA","wine:secur32/tests/ntlm.c:test_null_auth_data"]},
-{"symbol":"GetUserNameExW","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"],"seeds":["wine:secur32/tests/secur32.c:testGetUserNameExW"]},
+{"symbol":"GetUserNameExW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:secur32/tests/secur32.c:testGetUserNameExW"]},
 {"symbol":"ImpersonateSecurityContext","src":["wine-spec"]},
 {"symbol":"ImportSecurityContextA","src":["wine-spec"]},
 {"symbol":"ImportSecurityContextW","src":["wine-spec"]},

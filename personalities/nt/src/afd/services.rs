@@ -468,6 +468,11 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
     if !datagram && (a.ip().is_unspecified() || a.port() == 0) {
         return Err(ADDRESS_COMPONENT);
     }
+    // A stream socket that has a connection (also one that was shut down, reset or closed by its
+    // peer) is `WSAEISCONN` for another connect (the sheet's `connected`, `after_shutdown`).
+    if !datagram && (s.connected || sock.established()) {
+        return Err(NtStatus(werr::STATUS_CONNECTION_ACTIVE));
+    }
     if datagram && a.ip().is_unspecified() && a.port() == 0 {
         // The unspecified address and port 0: no destination (Winsock keeps the socket unconnected).
         let _ = sock.disconnect();
@@ -493,9 +498,17 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
     let wait = if s.nonblocking { SockWait::Now } else { SockWait::Forever };
     // A second connect soon after a non-blocking one that is not through (Windows' loopback refusal
     // takes a moment): the first is still under way.
+    // Once the program has read the failure (SO_ERROR), the socket may connect again.
     let now = k.system_time();
     const UNDER_WAY: u64 = 1_000_000; // 100 ms
-    if s.nonblocking && s.connect_at != 0 && now.saturating_sub(s.connect_at) < UNDER_WAY && !sock.established() {
+    let failure_known =
+        k.with_state(|sys, _, _| endpoint(sys, cookie).map(|e| e.conn_error.is_some() && e.conn_error_read))?;
+    if s.nonblocking
+        && s.connect_at != 0
+        && now.saturating_sub(s.connect_at) < UNDER_WAY
+        && !sock.established()
+        && !failure_known
+    {
         return Err(NtStatus(werr::STATUS_INVALID_DEVICE_STATE));
     }
     let r = sock.connect(target, wait);
@@ -505,6 +518,7 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
                 endpoint(sys, cookie).map(|e| {
                     e.connected = true;
                     e.conn_error = None;
+                    e.conn_error_read = false;
                     e.broken = None;
                 })
             })?;
@@ -513,6 +527,7 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
             k.with_state(|sys, _, _| {
                 endpoint(sys, cookie).map(|e| {
                     e.conn_error = None;
+                    e.conn_error_read = false;
                     e.broken = None;
                     e.connect_at = now;
                 })
@@ -795,10 +810,19 @@ fn pend<K: NtKernel>(
     irp_op: IrpOp,
 ) -> Result<NtStatus> {
     let caller = k.caller();
+    // An `AcceptEx` ends when the socket it is to fill is closed.
+    let accept_target = match &op {
+        PendOp::Accept { target, .. } => Some(*target),
+        _ => None,
+    };
     let irp = k.with_state(|sys, _, _| -> Result<u64> {
         n.check_event(sys, &caller)?;
         let irp = n.irp(sys, &caller, file, false, irp_op)?;
-        Ok(sys.io.park(irp))
+        let id = sys.io.park(irp);
+        if let Some(t) = accept_target {
+            sys.io.accept_targets.insert(id, t);
+        }
+        Ok(id)
     })?;
     match k.socket_pend(PendIo::new(irp, file.1, sock, op)) {
         Ok(()) => Ok(STATUS_PENDING),
@@ -1383,6 +1407,9 @@ fn set_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
 
 fn get_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<Done>> {
     let level = u32_in(input, 0)? as i32;
+    // The event helper's own looks do not count as the program reading `SO_ERROR`.
+    let internal = level & afd::INTERNAL_LOOK != 0;
+    let level = level & !afd::INTERNAL_LOOK;
     let name = u32_in(input, 4)? as i32;
     let s = snap(k, cookie)?;
     let sock = s.sock()?.clone();
@@ -1413,6 +1440,9 @@ fn get_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
             // A failed connect keeps reading its error; a reset connection reads 0 (the error is
             // reported by the calls that fail with it).
             if let Some(e) = conn_error {
+                if !internal {
+                    k.with_state(|sys, _, _| endpoint(sys, cookie).map(|ep| ep.conn_error_read = true))?;
+                }
                 return int(e);
             }
             match sock.take_error() {
@@ -1424,7 +1454,12 @@ fn get_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
                 }
                 Some(e) => {
                     let w = werr::wsa_of_status(status_of(e).0);
-                    k.with_state(|sys, _, _| endpoint(sys, cookie).map(|ep| ep.conn_error = Some(w)))?;
+                    k.with_state(|sys, _, _| {
+                        endpoint(sys, cookie).map(|ep| {
+                            ep.conn_error = Some(w);
+                            ep.conn_error_read = !internal;
+                        })
+                    })?;
                     int(w)
                 }
                 None => int(0),
