@@ -502,7 +502,7 @@ fn collect_tbd(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<(), Stri
 /// Collapse duplicate ids (the same export listed per architecture, or the
 /// same syscall under different `#if` branches). An entry restricted to
 /// some architectures widens to the union; unrestricted wins.
-fn dedup(mut v: Vec<Entry>) -> Vec<Entry> {
+pub(crate) fn dedup(mut v: Vec<Entry>) -> Vec<Entry> {
     v.sort_by(|a, b| a.id.cmp(&b.id));
     let mut out: Vec<Entry> = Vec::with_capacity(v.len());
     for e in v {

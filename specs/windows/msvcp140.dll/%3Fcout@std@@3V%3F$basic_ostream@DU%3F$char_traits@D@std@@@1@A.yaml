@@ -1,0 +1,86 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: |
+  windows/api/msvcp140.dll/?cout@std@@3V?$basic_ostream@DU?$char_traits@D@std@@@1@A
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  The standard stream objects std::cin, std::cout, std::cerr, std::clog (data exports
+  ?cin@std@@3V?$basic_istream@...@1@A and the three ostream ones; each is a whole basic_istream<char> /
+  basic_ostream<char> object of 120 / 112 bytes) and the pointers _Ptr_cin, _Ptr_cout, _Ptr_cerr, _Ptr_clog (data
+  exports ?_Ptr_cout@std@@3PEAV?$basic_ostream@...@1@EA, pointers to those objects), together with ios_base::Init
+  (??0Init@ios_base@std@@QEAA@XZ, ??1Init, ??4Init, the static _Init_ctor, _Init_dtor, _Init_cnt (data), _Init_cnt_func)
+  and std::_Init_locks (the locks for the standard streams: ??0, ??1, ??4, _Init_locks_ctor, _Init_locks_dtor). A
+  program that includes <iostream> has a static ios_base::Init object; the objects are used only after one exists.
+interface:
+  objects: |
+    cin: basic_istream<char>, 120 bytes; cout, cerr, clog: basic_ostream<char>, 112 bytes (layouts as in the sheets of
+    those classes, whole objects in the DLL's data); _Ptr_*: 8-byte pointers to them; Init: 1 byte, no data; _Init_cnt:
+    int.
+rules:
+  init_cnt: |
+    ?_Init_cnt@Init@ios_base@std@@0HA is an int, -1 in a fresh process (the streams are not set up). Construction of an
+    Init object (Init() calls the static _Init_ctor(this)): the first one sets it to 1 and sets up the streams; each
+    further one adds 1 (2, 3, ...). Destruction (~Init calls _Init_dtor): each subtracts 1; at 0 (the last one) cout,
+    cerr, clog are flushed. The objects and their buffers stay usable and non-null afterwards. Init is an empty 1-byte
+    class.
+  objects_before_init: |
+    The stream objects exist (their virtual-table pointers are set) from the load of the DLL, before any Init object, but
+    have no usable buffer.
+  after_init: |
+    After the first Init: all four are good; cin.rdbuf(), cout.rdbuf(), cerr.rdbuf(), clog.rdbuf() are non-null and cerr's
+    and clog's are different objects, none is shared with cin/cout; cin.tie() == &cout and cerr.tie() == &cout; cout.tie()
+    and clog.tie() are null; flags: cout, cin, clog 0x201 (skipws|dec), cerr 0x203 (+unitbuf); precision 6, width 0, fill
+    ' ', the locale is the global (classic) locale; _Stdstr of the four is 0 in this library version (the standard streams
+    are not registered with _Addstd). _Ptr_cin/_Ptr_cout/_Ptr_cerr/_Ptr_clog point at the objects. sync_with_stdio() is
+    true: the objects' buffers are the C standard streams' buffers.
+  stdio_sync: |
+    With sync_with_stdio(true) each character written goes straight through the C library's stdout (and stderr, stdin):
+    output of std::cout and of C stdio calls (putchar) on the same process appears in program order ('A' from putchar, 'B'
+    from cout, 'C' from putchar gives 'ABC'). cout is flushed by flush() and endl, by the tie before reading from cin, and
+    when the last Init goes; the data is written to the process's standard output (the stdout FILE of ucrtbase). cerr
+    writes to standard error (unit-buffered), clog to standard error. Verified on the oracle with output redirected to
+    files: stdout 'hello 42 1.5\nABCD\nunflushed ff     7\nafter cerr\nprompt: end\n', stderr 'to stderr -3\nto clog 1\n'.
+  cin: |
+    With standard input at end of file: cin >> x fails (eofbit|failbit, x unchanged); peek() and get() return EOF (eofbit,
+    get adds failbit); getline fails (eofbit|failbit). A tied cout is flushed first, so 'prompt: ' written without a
+    newline appears before the read.
+errors:
+  none: "no function throws."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

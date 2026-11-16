@@ -79,5 +79,11 @@
 {"symbol":"$sSb16SuggestedActionsE7watchOSSbvgZ","src":["macos-sdk"]},
 {"symbol":"$sSb16SuggestedActionsE7watchOSSbvpZMV","src":["macos-sdk"]},
 {"symbol":"$sSb16SuggestedActionsE8visionOSSbvgZ","src":["macos-sdk"]},
-{"symbol":"$sSb16SuggestedActionsE8visionOSSbvpZMV","src":["macos-sdk"]}
+{"symbol":"$sSb16SuggestedActionsE8visionOSSbvpZMV","src":["macos-sdk"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsMessage","src":["macos-swift-interface"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsMessage.Participant","src":["macos-swift-interface"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsMessage.Participant.init(name:handle:isUser:)","src":["macos-swift-interface"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsMessage.init(id:date:subject:body:sender:recipients:)","src":["macos-swift-interface"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsMessage.previousMessagesLimit","src":["macos-swift-interface"]},
+{"symbol":"swift:SuggestedActions.SuggestedActionsView.generate(message:previousMessages:)","src":["macos-swift-interface"]}
 ]

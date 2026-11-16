@@ -2,7 +2,10 @@
 {"symbol":"BCParameterNameBody","src":["macos-sdk"]},
 {"symbol":"BCParameterNameGroup","src":["macos-sdk"]},
 {"symbol":"BCParameterNameIntent","src":["macos-sdk"]},
-{"symbol":"objc:BCChatAction","src":["macos-sdk"]},
-{"symbol":"objc:BCChatButton","src":["macos-sdk"]},
+{"symbol":"objc:BCChatAction","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:BCChatAction+openTranscript:intentParameters:","src":["macos-objc-api"]},
+{"symbol":"objc:BCChatButton","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:BCChatButton.initWithCoder:","src":["macos-objc-api"]},
+{"symbol":"objc:BCChatButton.initWithStyle:","src":["macos-objc-api"]},
 {"symbol":"objc:BCImageManager","src":["macos-sdk"]}
 ]

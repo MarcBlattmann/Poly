@@ -10590,6 +10590,8 @@
 {"symbol":"objc:CTEncryptionStatusInfo","src":["macos-sdk"]},
 {"symbol":"objc:CTEnhancedDataLinkQualityMetric","src":["macos-sdk"]},
 {"symbol":"objc:CTEnhancedLinkQualityMetric","src":["macos-sdk"]},
+{"symbol":"objc:CTError.@domain","src":["macos-objc-api"]},
+{"symbol":"objc:CTError.@error","src":["macos-objc-api"]},
 {"symbol":"objc:CTFetchRoadsideProvidersContext","src":["macos-sdk"]},
 {"symbol":"objc:CTGeofenceCoordinate","src":["macos-sdk"]},
 {"symbol":"objc:CTGeofenceInfo","src":["macos-sdk"]},

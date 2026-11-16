@@ -11,5 +11,9 @@
 {"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt64VRszlE4loadAEyF","src":["macos-sdk"]},
 {"symbol":"$s9_Volatile0A14MappedRegisterVAAs6UInt64VRszlE5storeyyAEF","src":["macos-sdk"]},
 {"symbol":"$s9_Volatile0A14MappedRegisterVMa","src":["macos-sdk"]},
-{"symbol":"$s9_Volatile0A14MappedRegisterVMn","src":["macos-sdk"]}
+{"symbol":"$s9_Volatile0A14MappedRegisterVMn","src":["macos-sdk"]},
+{"symbol":"swift:_Volatile.VolatileMappedRegister","src":["macos-swift-interface"]},
+{"symbol":"swift:_Volatile.VolatileMappedRegister.init(unsafeBitPattern:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_Volatile.VolatileMappedRegister.load()","src":["macos-swift-interface"]},
+{"symbol":"swift:_Volatile.VolatileMappedRegister.store(_:)","src":["macos-swift-interface"]}
 ]

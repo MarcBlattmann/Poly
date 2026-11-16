@@ -13,5 +13,13 @@
 {"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvpMV","src":["macos-sdk"]},
 {"symbol":"$sSo16CAFrameRateRangeV10QuartzCoreE9preferredSfSgvs","src":["macos-sdk"]},
 {"symbol":"$sSo16CAFrameRateRangeVSQ10QuartzCoreMc","src":["macos-sdk"]},
-{"symbol":"_swift_FORCE_LOAD_$_swiftQuartzCore","src":["macos-sdk"]}
+{"symbol":"_swift_FORCE_LOAD_$_swiftQuartzCore","src":["macos-sdk"]},
+{"symbol":"swift:QuartzCore.CAFrameRateRange.==(lhs:rhs:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CAFrameRateRange.init(minimum:maximum:preferred:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CAFrameRateRange.preferred","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CATransform3D._ObjectiveCType","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CATransform3D._bridgeToObjectiveC()","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CATransform3D._conditionallyBridgeFromObjectiveC(_:result:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CATransform3D._forceBridgeFromObjectiveC(_:result:)","src":["macos-swift-interface"]},
+{"symbol":"swift:QuartzCore.CATransform3D._unconditionallyBridgeFromObjectiveC(_:)","src":["macos-swift-interface"]}
 ]

@@ -51,5 +51,10 @@
 {"symbol":"$sSo21LSLinkSecurityManagerC04LinkB0EABycfC","src":["macos-sdk"]},
 {"symbol":"$sSo21LSLinkSecurityManagerC04LinkB0EABycfc","src":["macos-sdk"]},
 {"symbol":"$sSo21LSLinkSecurityManagerCMa","src":["macos-sdk"]},
-{"symbol":"objc:LSLinkSecurityManager","src":["macos-sdk"]}
+{"symbol":"objc:LSLinkSecurityManager","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:LSLinkSecurityManager+@sharedManager","src":["macos-objc-api"]},
+{"symbol":"objc:LSLinkSecurityManager.@hasFlaggedURLs","src":["macos-objc-api"]},
+{"symbol":"objc:LSLinkSecurityManager.addFlaggedURL:","src":["macos-objc-api"]},
+{"symbol":"objc:LSLinkSecurityManager.addFlaggedURLs:","src":["macos-objc-api"]},
+{"symbol":"objc:LSLinkSecurityManager.checkIsFlaggedURL:completion:","src":["macos-objc-api"]}
 ]

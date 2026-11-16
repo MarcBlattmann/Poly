@@ -83,5 +83,11 @@
 {"symbol":"$s28_LinkPresentation_AppIntents0A14MetadataEntityVMn","src":["macos-sdk"]},
 {"symbol":"$s28_LinkPresentation_AppIntents0A14MetadataEntityVN","src":["macos-sdk"]},
 {"symbol":"$s28_LinkPresentation_AppIntents0A14MetadataEntityVs12IdentifiableAAMc","src":["macos-sdk"]},
-{"symbol":"$s28_LinkPresentation_AppIntents0A14MetadataEntityVyAC0aB00aE0VcfC","src":["macos-sdk"]}
+{"symbol":"$s28_LinkPresentation_AppIntents0A14MetadataEntityVyAC0aB00aE0VcfC","src":["macos-sdk"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.Specification","src":["macos-swift-interface"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.UnwrappedType","src":["macos-swift-interface"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.ValueType","src":["macos-swift-interface"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.defaultResolverSpecification","src":["macos-swift-interface"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.displayRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_LinkPresentation_AppIntents.LinkMetadata.typeDisplayRepresentation","src":["macos-swift-interface"]}
 ]
