@@ -1,0 +1,126 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: |
+  windows/api/msvcp140.dll/??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QEAA@PEAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N@Z
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::basic_ostream<char>: the output stream. Covers the constructors (from a buffer; from _Uninitialized; the
+  protected move constructor), the destructor and the 'vbase destructor', _Osfx, opfx, osfx, flush, put, write, tellp,
+  seekp (two forms), swap, and operator<< for bool, short, unsigned short, int, unsigned int, long, unsigned long, long
+  long, unsigned long long, float, double, long double, const void*, streambuf*, and the three manipulator-pointer
+  forms. The inserters for char, signed char, unsigned char, const char* and std::string, and nullptr_t, endl, ends,
+  flush are inline templates in the program (they use sentry, put/write/rdbuf/setstate and _Osfx) and are tested through
+  the DLL members.
+interface:
+  layout_and_abi: |
+    Virtual inheritance: basic_ostream and basic_istream have basic_ios<char> as a VIRTUAL base, so a stream object is
+    laid out as follows (x64). basic_ostream (112 bytes): 0 pointer to the virtual-base table (vbtable: two 32-bit
+    integers {0, 16}: the first is the distance of the table pointer from the start of the subobject (0), the second the
+    offset of the basic_ios part from it (16)); 8 padding (zero); the basic_ios<char> object (96 bytes, see
+    ??0?$basic_ios...) at +16; its 4 bytes before it (+12) hold the 'vtordisp' (0 for a plain ostream). basic_istream (120
+    bytes): 0 vbtable pointer ({0, 24}); 8 long long _Chcount (the gcount); 16 padding; the basic_ios part at +24.
+    basic_iostream (128 bytes): 0 vbtable pointer of the istream part ({0, 32}); 8 _Chcount; 16 vbtable pointer of the
+    ostream part ({0, 16}); 24 padding; the basic_ios part at +32. A program's class derived from them lays out the same
+    way (its own members come after the base subobjects, the basic_ios part after its own members: for `struct S : ostream
+    { int x; }` x is at +8, the ios part at +24, size 120; with istream x is at +16, ios at +32; with iostream x is at
+    +24, ios at +40, size 136) and its constructor builds the virtual base itself.
+  constructor_abi: |
+    Hidden constructor argument (x64): the constructors of classes with a virtual base take one extra int argument after
+    the visible ones, 'construct the virtual base': basic_ostream(streambuf* sb, bool isstd) is called as (this, sb,
+    isstd, initvbase); the compiler passes initvbase = 1 when the stream is the most derived object (the constructor then
+    first runs the protected basic_ios default constructor on the basic_ios part, at this + vbtable[1], sets up the
+    vbtable pointers) and 0 when a derived class built the virtual base already. The name carries only the visible
+    arguments: ??0?$basic_ostream@...QEAA@PEAV?$basic_streambuf@...@1@_N@Z. The destructor has two entry points: the
+    ordinary one (??1, destroys the class's own part) and the 'vbase destructor' (??_D?$basic_ostream@...QEAAXXZ, takes
+    this = the start of the stream object, destroys the stream part and then the basic_ios virtual base: it is the one the
+    compiler calls for a most-derived local object). The class's virtual destructor (slot 0 of the basic_ios/ios_base
+    vtable) adjusts `this` through the vbtable and deletes the whole object, so `delete (std::ios_base*)p` on any stream,
+    and on a program's class derived from a stream, runs the derived destructor first.
+  sentry: |
+    The sentry (inline in the program): locks the buffer (rdbuf()->_Lock()), checks good(); if the stream is tied to
+    another stream (and not to itself) flushes it (tie()->flush()) and re-checks good() only for the stream itself (a bad
+    tied stream does not stop the output); its destructor unlocks (rdbuf()->_Unlock()) and, if no exception is in flight
+    (uncaught_exceptions() == 0), calls _Osfx(). The members in this DLL that write (all operator<<, put, write, flush)
+    use one.
+rules:
+  osfx: |
+    _Osfx(): if good() and unitbuf is set, rdbuf()->pubsync(); a result of -1 sets badbit; exceptions inside are
+    swallowed. opfx() is true on a good stream (after flushing the tie), false otherwise; osfx() is _Osfx().
+  put_write: |
+    put(c) writes one character through the sentry: rdbuf()->sputc(c); EOF sets badbit. write(p, n) writes through
+    rdbuf()->sputn(p, n); fewer than n written sets badbit; write(p, 0) calls xsputn(…, 0). put and write flush the tie
+    like any output. Neither touches the width.
+  flush: |
+    flush(): if rdbuf() is non-null and the stream is good (no sentry flush of the tie), rdbuf()->pubsync() once; a result
+    of -1 sets badbit; a failed stream does not call sync. A stream without a buffer is not an error. endl is put('\n')
+    then flush(); ends puts a NUL; the flush manipulator is flush().
+  seek: |
+    tellp(): -1 if fail(), else rdbuf()->pubseekoff(0, cur, out) (-1 sets nothing in tellp except it returns -1).
+    seekp(pos): if not fail(), rdbuf()->pubseekpos(pos, out); result -1 sets failbit. seekp(off, dir): pubseekoff(off,
+    dir, out), -1 sets failbit.
+  inserters: |
+    Every arithmetic inserter uses the sentry; on a good stream it asks the num_put<char> facet of the stream's locale:
+    use_facet<num_put<char>>(getloc()).put(ostreambuf_iterator(rdbuf()), *this, fill(), value); a failed iterator sets
+    badbit; the facet resets the width to 0. short and int use the long overload (an unsigned conversion first when the
+    base is oct or hex: short -1 in hex prints ffff, int -1 prints ffffffff), unsigned short/unsigned int use the unsigned
+    long overload, float uses the double overload; the others use their own. On a stream that is not good nothing is
+    written and the state is unchanged for these members (the inline char and string inserters add badbit in that case).
+    The facet found in the stream's locale is called: a program's own num_put derived class in the locale gets the calls
+    (see the num_put sheet). Output examples (all verified): 42 -> '42'; hex 255 -> 'ff'; showbase hex 255 -> '0xff';
+    showbase+uppercase -> '0XFF'; showbase oct 8 -> '010'; showpos 5 -> '+5'; setw(6) -> '    42' (right), left '42    ',
+    internal -2 -> '-   42' (-42 setw 6); boolalpha true -> 'true'; (const void*)0x1234 -> '0000000000001234' (16 hex
+    digits, uppercase digits for uppercase); nullptr -> 'nullptr'. Floating point: default %g-like with precision 6
+    ('1.5', '1e+06', '1.23457e+06', '1e-05'), fixed ('1.500000'), scientific ('1.500000e+00', uppercase 'E'), hexfloat
+    ('0x1.0000000000000p+0'), showpoint ('1.00000'), setprecision(17) of 0.1 -> '0.10000000000000001'; infinities print
+    'inf'/'-inf' ('INF' with uppercase), NaN 'nan', the default NaN of 0.0/0.0 '-nan(ind)', a signalling NaN 'nan(snan)'.
+    See the tests for the full list.
+  errors_and_exceptions: |
+    A buffer that refuses a character (overflow returns EOF, xsputn returns less) sets badbit. A C++ exception thrown by
+    the buffer is caught inside the member: badbit is set and the exception is rethrown only if badbit is in the exception
+    mask (then it is the ORIGINAL exception, not an ios_base::failure); with an empty mask, or a mask that has only other
+    bits, it is swallowed. A badbit/failbit set while the mask includes it throws ios_base::failure from the member (see
+    ??0ios_base). A stream built with a null buffer has badbit (4) from the start and writes nothing.
+  streambuf_inserter: |
+    operator<<(streambuf* sb) copies characters from sb (sgetc/sbumpc until EOF) to this stream's buffer; no characters
+    copied sets failbit; a null sb sets badbit; the character count is not recorded.
+errors:
+  failure: |
+    ios_base::failure (see ??0ios_base) when the exception mask asks; a buffer's own exceptions as above.
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 8  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 4  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

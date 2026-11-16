@@ -1024,5 +1024,11 @@
 {"symbol":"objc:_TtC23_GroupActivities_AppKit22PeoplePickerController","src":["macos-sdk"]},
 {"symbol":"objc:_TtC23_GroupActivities_AppKit30GroupActivitySharingController","src":["macos-sdk"]},
 {"symbol":"objc:_TtC23_GroupActivities_AppKit31ReactionPickerPopoverController","src":["macos-sdk"]},
-{"symbol":"objc:_TtCV23_GroupActivities_AppKit20CustomReactionPicker11Coordinator","src":["macos-sdk"]}
+{"symbol":"objc:_TtCV23_GroupActivities_AppKit20CustomReactionPicker11Coordinator","src":["macos-sdk"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult","src":["macos-swift-interface"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult.==(a:b:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult.cancelled","src":["macos-swift-interface"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult.hash(into:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult.hashValue","src":["macos-swift-interface"]},
+{"symbol":"swift:_GroupActivities_AppKit.GroupActivitySharingResult.success","src":["macos-swift-interface"]}
 ]

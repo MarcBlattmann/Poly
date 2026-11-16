@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "std_cout_output",
+      "exe_sha256": "f05939f387770f8b752261df1e865719558f52296ba8b4d65864fae1b3be77c4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY291dCBpcyBnb29kIGFmdGVyIG91dHB1dApvayBjaW4gPj4geCBhdCB0aGUgZW5kIG9mIGlucHV0IGxlYXZlcyB4Cm9rIGNpbjogZW9mYml0IGFuZCBmYWlsYml0Cm9rIGNpbi5wZWVrKCkgYXQgdGhlIGVuZCBvZiBpbnB1dCBpcyBFT0YKb2sgZW9mYml0Cm9rIGNpbi5nZXQoKSBhdCB0aGUgZW5kIGlzIEVPRgpvayBnZXRsaW5lIGF0IHRoZSBlbmQgZmFpbHMKb2sgc3RkOjpnZXRsaW5lIGF0IHRoZSBlbmQgZmFpbHMKc3VtbWFyeSA4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "aGVsbG8gNDIgMS41DQpBQkNEDQp1bmZsdXNoZWQgZmYgICAgIDcNCmFmdGVyIGNlcnINCnByb21wdDogZW5kDQo=",
+      "stderr_b64": "dG8gc3RkZXJyIC0zDQp0byBjbG9nIDENCg==",
+      "output": "ok cout is good after output\nok cin >> x at the end of input leaves x\nok cin: eofbit and failbit\nok cin.peek() at the end of input is EOF\nok eofbit\nok cin.get() at the end is EOF\nok getline at the end fails\nok std::getline at the end fails\nsummary 8 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

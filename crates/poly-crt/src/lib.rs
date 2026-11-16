@@ -68,6 +68,7 @@ pub mod math;
 pub mod mbcs;
 pub mod printf;
 pub mod scanf;
+pub mod slots;
 pub mod sort;
 pub mod spawn;
 pub mod string;

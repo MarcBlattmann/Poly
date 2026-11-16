@@ -133,6 +133,18 @@ impl Memory {
         }
     }
 
+    /// Whether the page holding `addr` is a private copy that was written through its mapping (a
+    /// copy-on-write page of a private file mapping after its first write): a frame the space
+    /// owns with the dirty bit set. Shared and page-cache frames are not.
+    pub fn page_written(&self, addr: u64) -> bool {
+        let page = poly_vm::page_down(addr);
+        let inner = self.inner.lock();
+        if inner.parked.contains_key(&page) || inner.shared.contains_key(&page) || inner.cached.contains_key(&page) {
+            return false;
+        }
+        self.space.translate(page).is_some_and(|m| m.owned && m.dirty)
+    }
+
     /// mincore(2): 1 or 0 into `out[i]` for whether page `i` from `addr`
     /// (page aligned) is resident (see the module docs).
     pub fn residency(&self, addr: u64, out: &mut [u8]) -> Result<(), RangeError> {

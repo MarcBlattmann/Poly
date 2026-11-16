@@ -195,3 +195,34 @@ fn an_address_space_wide_request_conflicts_where_a_small_one_has_no_memory() {
     // A big reservation that fits is fine.
     assert!(vm.allocate(&mut b, 0, 100 << 40, 0, MEM_RESERVE, RW).is_ok());
 }
+
+#[test]
+fn a_copied_write_copy_page_reports_read_write() {
+    let info = MemoryBasicInformation {
+        base_address: 0x10000,
+        allocation_base: 0x10000,
+        allocation_protect: PAGE_WRITECOPY,
+        region_size: 4 * PAGE_SIZE,
+        state: MEM_COMMIT,
+        protect: PAGE_WRITECOPY,
+        type_: MEM_MAPPED,
+    };
+    // Nothing written: the run is as it was.
+    let same = info.with_copied_pages(|_| false);
+    assert_eq!((same.protect, same.region_size), (PAGE_WRITECOPY, 4 * PAGE_SIZE));
+    // The first page was written: it is its own run, read-write; the rest stays write-copy.
+    let first = info.with_copied_pages(|p| p == 0x10000);
+    assert_eq!((first.protect, first.region_size), (PAGE_READWRITE, PAGE_SIZE));
+    let second = MemoryBasicInformation { base_address: 0x11000, region_size: 3 * PAGE_SIZE, ..info }
+        .with_copied_pages(|p| p == 0x10000);
+    assert_eq!((second.protect, second.region_size), (PAGE_WRITECOPY, 3 * PAGE_SIZE));
+    // An execute write-copy page becomes execute read-write.
+    let x = MemoryBasicInformation { protect: PAGE_EXECUTE_WRITECOPY, type_: MEM_IMAGE, ..info }
+        .with_copied_pages(|_| true);
+    assert_eq!((x.protect, x.region_size), (PAGE_EXECUTE_READWRITE, 4 * PAGE_SIZE));
+    // Private memory, free memory and other protections are not looked at.
+    let private = MemoryBasicInformation { type_: MEM_PRIVATE, ..info }.with_copied_pages(|_| panic!("asked"));
+    assert_eq!(private.protect, PAGE_WRITECOPY);
+    let rw = MemoryBasicInformation { protect: PAGE_READWRITE, ..info }.with_copied_pages(|_| panic!("asked"));
+    assert_eq!(rw.protect, PAGE_READWRITE);
+}

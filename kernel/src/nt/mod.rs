@@ -1164,6 +1164,10 @@ pub struct Start {
     pub entry: crate::arch::user::Entry,
     /// The GS base the thread runs with (its TEB).
     pub teb: u64,
+    /// The thread id the first thread runs under (its TEB, thread object and `ClientId` were made
+    /// for it). Not the process id for a process made by `NtCreateUserProcess`: Windows gives
+    /// the first thread an id of its own.
+    pub tid: u32,
 }
 
 /// How an NT process was started: its executable's DOS path and its
@@ -1384,6 +1388,7 @@ fn start_params(
                         args: [ps.start_routine, ps.argument, ps.image_base],
                     },
                     teb: ps.teb,
+                    tid,
                 },
                 opened,
             )),
@@ -1423,7 +1428,9 @@ fn create_process(
         Some(p) => console::std_sources(p),
         None => [console::StdSource::None, console::StdSource::None, console::StdSource::None],
     };
-    let pid = crate::process::alloc_pid();
+    let pid = crate::process::alloc_nt_id();
+    // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
+    let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
     let process = Arc::new(Process::new_nt(pid, format, traced));
     let want = HandlesFor {
@@ -1441,9 +1448,9 @@ fn create_process(
         process_security: req.process_security,
         thread_security: req.thread_security,
     };
-    let (start, handles) = start_params(&process, &memory, req.image, pid, &req.params, &sources, Some(&want))?;
+    let (start, handles) = start_params(&process, &memory, req.image, tid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
-    let first = ThreadRef(u64::from(pid));
+    let first = ThreadRef(u64::from(tid));
     let created = poly_personality_nt::ProcessCreated {
         process: ph,
         thread: th,
@@ -1504,7 +1511,7 @@ pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, s
     // The job notifications count the first thread as run from here on (ADR 0169).
     let pid = ProcessId(process.pid);
     with(|s| s.sys.jobs.started(pid));
-    match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, None) {
+    match spawn_thread(process, memory, start.entry, start.teb, user::DEFAULT_HOOK, Some(start.tid)) {
         Ok(kthread) => {
             // The creator waits on the process object, not the thread.
             let _ = thread::detach(kthread);
@@ -1651,10 +1658,12 @@ pub fn spawn_pe_with(
         let args: Vec<&str> = launch.args.iter().map(String::as_str).collect();
         poly_personality_nt::params::for_program(&launch.image_path, &args, layout::environment(&s.sys))
     });
-    let start = start_params(process, &memory, image, pid, &params, &sources, None)
+    // Its main thread has an id of its own, not the process id.
+    let tid = crate::process::alloc_nt_id();
+    let start = start_params(process, &memory, image, tid, &params, &sources, None)
         .map(|(start, _)| start)
         .map_err(SpawnError::Image)?;
-    match spawn_thread(process, &memory, start.entry, start.teb, hook, None) {
+    match spawn_thread(process, &memory, start.entry, start.teb, hook, Some(start.tid)) {
         Ok(tid) => {
             let _ = thread::detach(tid);
             Ok(())

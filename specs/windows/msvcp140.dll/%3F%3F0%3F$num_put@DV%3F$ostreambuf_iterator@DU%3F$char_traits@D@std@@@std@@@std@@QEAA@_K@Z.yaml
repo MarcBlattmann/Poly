@@ -1,0 +1,86 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: |
+  windows/api/msvcp140.dll/??0?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@QEAA@_K@Z
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::num_put<char, std::ostreambuf_iterator<char>>: the number formatting facet the output streams use (16 bytes:
+  vtable, _Myrefs). Covers the constructors (from refs; from a _Locinfo), the destructor, the vtable, the public put
+  (eight overloads), the virtual do_put (eight), the private helpers (_Fput, _Iput, _Ffmt, _Ifmt, _Put, _Rep), _Getcat,
+  _Init and the id data. Also the behaviour the facet gets from the numpunct<char> facet of the stream's locale:
+  numpunct<char> itself is an inline class of the program (48 bytes: vptr, _Myrefs, 16 const char* _Grouping, 24 char
+  _Dp, 25 char _Kseparator, 32 const char* _Falsename, 40 const char* _Truename; virtual order after the three facet
+  slots: do_decimal_point, do_thousands_sep, do_grouping (returns std::string by hidden pointer), do_falsename,
+  do_truename).
+interface:
+  layout: |
+    num_put<char, ostreambuf_iterator<char>>: 16 bytes: 0 virtual table pointer, 8 long _Myrefs (it has no data of its
+    own); the id data is ?id@?$num_put@DV?$ostreambuf_iterator@...@2V0locale@2@A (a locale::id, 8 bytes). std::string
+    (basic_string<char>) as returned by value: 32 bytes: 0 a 16-byte union (inline buffer of 16 characters, or a pointer
+    to the heap block), 16 size_t size, 24 size_t capacity (15 while the text is in the inline buffer).
+rules:
+  virtual_order: |
+    After _Facet_base's three slots (0 destructor, 1 _Incref, 2 _Decref) the eight do_put overloads are in REVERSE order
+    of their declaration in the header (Microsoft's compiler lays out overloaded virtual functions of one name in reverse;
+    read from the compiler's listing of a derived class): slot 3 do_put(const void*), 4 do_put(long double), 5
+    do_put(double), 6 do_put(unsigned long long), 7 do_put(long long), 8 do_put(unsigned long), 9 do_put(long), 10
+    do_put(bool). The public put(iterator, ios_base&, fill, value) overloads call the matching do_put; a program's own
+    subclass is called through them. ostream::operator<< reaches the facet found in the stream's locale: bool -> bool;
+    short, int, long -> long; unsigned short, unsigned int, unsigned long -> unsigned long; long long, unsigned long long
+    -> their own; float and double -> double; long double; const void*.
+  numpunct: |
+    The facet reads decimal point, thousands separator, grouping and the bool names from use_facet<numpunct<char>>(stream
+    locale). The classic ones are '.', ',', empty grouping, 'true', 'false'. A user numpunct in the locale changes the
+    output: grouping "\3" with ',' gives '1,234,567' (also for negative numbers, for unsigned long long
+    '18,446,744,073,709,551,615', for floating point in the integer part '1,234,567.500000' and '1,234.5', for hex numbers
+    '123,456' and for pointers '0,000,000,012,345,678'; the width counts the separators); the grouping string is read from
+    the right: the first character is the size of the rightmost group, the last character repeats ('\2\3' on 123456789
+    gives '1.234.567.89'); a size of 127 (CHAR_MAX) or an empty string means no grouping; sizes of 1 work ('1_2_3_4_5');
+    the decimal point character replaces '.' (including scientific '1,500000e+00'); boolalpha prints
+    truename()/falsename().
+  direct_put: |
+    put(it, ios, fill, v) formats v by the stream's flags, precision, width and fill and writes to the iterator; it resets
+    ios.width(0) and returns the iterator, whose failed() is true if the buffer refused a character. Examples: 42L ->
+    '42'; -7L with width 6 and fill '*' -> '****-7'; 255UL -> '255'; 9223372036854775807LL; 18446744073709551615ULL; 2.5
+    -> '2.5'; (long double)0.125 -> '0.125'; true -> '1', false with boolalpha -> 'false'; (const void*)0xBEEF ->
+    '000000000000BEEF'; 255L with hex, showbase, uppercase -> '0XFF'.
+errors:
+  none: "no exception; a refusing buffer is reported by the returned iterator."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 2  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).
