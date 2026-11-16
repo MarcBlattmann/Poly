@@ -37,6 +37,13 @@ pub fn deadline(due: i64, now: i64, system_now: i64) -> i64 {
     if due < 0 { now.saturating_add(due.saturating_neg()) } else { now.saturating_add((due - system_now).max(0)) }
 }
 
+/// `SetThreadpoolTimerEx`'s result: whether the timer still had a due time to come. A one-shot
+/// timer that has fired is still "set" for `IsThreadpoolTimerSet` but is no longer pending, so
+/// setting or cancelling it again answers `FALSE`; a periodic timer is always pending.
+pub fn timer_was_pending(set: bool, armed: bool) -> bool {
+    set && armed
+}
+
 /// A `NtWaitFor*` timeout (100 ns, negative relative) for sleeping until `deadline`.
 pub fn wait_timeout(deadline: i64, now: i64) -> i64 {
     -(deadline.saturating_sub(now).max(0))
@@ -162,6 +169,16 @@ mod tests {
         assert_eq!((l.pool, l.cleanup_group, l.cancel_callback, l.finalization, l.flags), (8, 16, 24, 48, 56));
         let l = EnvLayout::new(4);
         assert_eq!((l.pool, l.cleanup_group, l.cancel_callback, l.finalization, l.flags), (4, 8, 12, 24, 28));
+    }
+
+    #[test]
+    fn timer_ex_result_is_whether_a_due_time_was_still_to_come() {
+        // A new timer, a cancelled one: not set, nothing pending.
+        assert!(!timer_was_pending(false, false));
+        // Set and waiting (or periodic): pending.
+        assert!(timer_was_pending(true, true));
+        // A one-shot that fired: IsThreadpoolTimerSet says set, nothing is pending.
+        assert!(!timer_was_pending(true, false));
     }
 
     #[test]

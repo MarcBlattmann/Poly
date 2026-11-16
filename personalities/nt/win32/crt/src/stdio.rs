@@ -337,7 +337,19 @@ fn publish(f: *mut File, s: &mut Stream) {
         // SAFETY: inside the FILE record.
         let b = unsafe { f.cast::<u8>().add(0x20) } as usize;
         let read = s.last == Last::Read;
-        (base, ptr, cnt) = (b, b + usize::from(read), i32::from(read));
+        let mut n = 0;
+        if read {
+            // The UCRT's read of an unbuffered stream leaves two bytes in the record: the one it
+            // returned and the next one, still to be read through the slots.
+            let last = s.rpos.checked_sub(1).and_then(|i| s.buf.get(i)).copied().unwrap_or(0);
+            let next = (readable(s) > 0).then(|| s.buf[s.rpos]);
+            let (two, count) = poly_crt::slots::unbuffered_window(last, next);
+            n = count;
+            // SAFETY: the two bytes of the FILE record's one-byte buffer (inside its 48 bytes).
+            unsafe { core::ptr::copy_nonoverlapping(two.as_ptr(), b as *mut u8, 2) };
+            s.published = Some(Published { ptr: b + 1, len: s.buf.len(), write: false });
+        }
+        (base, ptr, cnt) = (b, b + usize::from(read), n);
     } else if !s.has_buf || s.per_call {
         (base, ptr, cnt) = (0, 0, 0);
     } else {

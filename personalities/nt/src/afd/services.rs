@@ -511,6 +511,7 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
     {
         return Err(NtStatus(werr::STATUS_INVALID_DEVICE_STATE));
     }
+    let stores_before = k.with_state(|sys, _, _| endpoint(sys, cookie).map(|e| e.conn_error_stores))?;
     let r = sock.connect(target, wait);
     match r {
         Ok(()) => {
@@ -524,14 +525,7 @@ fn connect<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<D
             })?;
         }
         Err(Errno::EINPROGRESS) => {
-            k.with_state(|sys, _, _| {
-                endpoint(sys, cookie).map(|e| {
-                    e.conn_error = None;
-                    e.conn_error_read = false;
-                    e.broken = None;
-                    e.connect_at = now;
-                })
-            })?;
+            k.with_state(|sys, _, _| endpoint(sys, cookie).map(|e| e.connect_under_way(stores_before, now)))?;
         }
         Err(_) => {}
     }
@@ -846,6 +840,9 @@ fn run_blocking(io: &PendIo) -> super::PendResult {
                     data.truncate(info.len);
                     (STATUS_SUCCESS, info.len as u64, Some((*buf, data)))
                 }
+                Err(e) if io.sock.kind() == SockType::Datagram => {
+                    (NtStatus(poly_winsock::error::datagram_receive_status(e.0)), 0, None)
+                }
                 Err(e) => (status_of(e), 0, None),
             }
         }
@@ -1016,7 +1013,8 @@ fn recv<K: NtKernel>(
             }
             return Err(status_of(e));
         }
-        r => r.map_err(status_of)?,
+        // A datagram socket sees the ICMP "port unreachable" of an earlier send as a reset.
+        r => r.map_err(|e| NtStatus(poly_winsock::error::datagram_receive_status(e.0)))?,
     };
     let mut total = info.len;
     if stream && s.shut_rd && total == 0 {
@@ -1454,15 +1452,24 @@ fn get_option<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Optio
                 }
                 Some(e) => {
                     let w = werr::wsa_of_status(status_of(e).0);
-                    k.with_state(|sys, _, _| {
-                        endpoint(sys, cookie).map(|ep| {
-                            ep.conn_error = Some(w);
-                            ep.conn_error_read = !internal;
-                        })
-                    })?;
+                    k.with_state(|sys, _, _| endpoint(sys, cookie).map(|ep| ep.store_conn_error(w, !internal)))?;
                     int(w)
                 }
-                None => int(0),
+                None => {
+                    // The stack had nothing: but another reader (the event helper, or the program
+                    // on another thread) may have taken the error and stored it since the first
+                    // look above.
+                    let late = k.with_state(|sys, _, _| {
+                        endpoint(sys, cookie).map(|ep| {
+                            let late = ep.conn_error;
+                            if late.is_some() && !internal {
+                                ep.conn_error_read = true;
+                            }
+                            late
+                        })
+                    })?;
+                    int(late.unwrap_or(0))
+                }
             }
         }
         (SOL_SOCKET, SO_RCVTIMEO) => int(timeouts.0),

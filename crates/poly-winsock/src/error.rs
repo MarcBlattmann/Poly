@@ -109,6 +109,14 @@ pub fn status_of_errno(errno: u16) -> u32 {
     }
 }
 
+/// The `NTSTATUS` of a receive on a datagram socket that the stack refused with `errno`: the
+/// ICMP "port unreachable" a send to a closed port brings back is `ECONNREFUSED` to the stack, and
+/// `WSAECONNRESET` (`STATUS_CONNECTION_RESET`) to Winsock (the sheet of `connect`, rule `udp`: "the
+/// next recv returns -1/WSAECONNRESET once").
+pub fn datagram_receive_status(errno: u16) -> u32 {
+    if errno == ECONNREFUSED { STATUS_CONNECTION_RESET } else { status_of_errno(errno) }
+}
+
 /// The WSA error `ws2_32` reports for a request `\Device\Afd` (or another
 /// service) failed with `status`.
 pub fn wsa_of_status(status: u32) -> u32 {
@@ -146,6 +154,15 @@ pub fn wsa_of_status(status: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_datagram_socket_is_reset_where_a_stream_is_refused() {
+        assert_eq!(wsa_of_status(datagram_receive_status(ECONNREFUSED)), WSAECONNRESET);
+        assert_eq!(wsa_of_status(status_of_errno(ECONNREFUSED)), WSAECONNREFUSED);
+        for e in [EAGAIN, ECONNRESET, EHOSTUNREACH, EMSGSIZE] {
+            assert_eq!(datagram_receive_status(e), status_of_errno(e));
+        }
+    }
 
     #[test]
     fn round_trip() {

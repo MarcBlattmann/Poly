@@ -787,3 +787,44 @@ fn a_failed_connect_may_connect_again_once_the_program_read_the_error() {
     let s = t.ioctl(c, afd::CONNECT, &sa("127.0.0.1:9"), 0).0;
     assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
 }
+
+#[test]
+fn a_refusal_stored_while_connect_was_on_its_way_is_kept() {
+    let mut e = Endpoint::default();
+    // The failure of an earlier attempt, read by the program.
+    e.store_conn_error(WSAECONNREFUSED, true);
+    // The stack is asked to connect; the event helper takes the refusal of this attempt and
+    // stores it before the call is back.
+    let before = e.conn_error_stores;
+    e.store_conn_error(WSAECONNREFUSED, false);
+    e.connect_under_way(before, 77);
+    assert_eq!(e.conn_error, Some(WSAECONNREFUSED), "the refusal is not wiped by the call that started the connect");
+    assert!(!e.conn_error_read, "the program has not read it");
+    assert_eq!(e.connect_at, 77);
+    // Nothing stored while the call was on its way: the earlier failure is history.
+    let before = e.conn_error_stores;
+    e.connect_under_way(before, 99);
+    assert_eq!(e.conn_error, None);
+    assert!(!e.conn_error_read);
+    assert_eq!(e.connect_at, 99);
+}
+
+#[test]
+fn a_datagram_recv_after_a_send_to_a_closed_port_is_a_reset_once() {
+    let mut t = setup();
+    // A port nobody listens on: bound, then closed.
+    let dead = t.socket(AF_INET, SOCK_DGRAM);
+    assert_eq!(t.ioctl(dead, afd::BIND, &sa("127.0.0.1:0"), 0).0, STATUS_SUCCESS);
+    let port = t.name(dead, false).unwrap();
+    t.close(dead);
+    let u = t.socket(AF_INET, SOCK_DGRAM);
+    assert_eq!(t.ioctl(u, afd::SET_NONBLOCKING, &1u32.to_le_bytes(), 0).0, STATUS_SUCCESS);
+    assert_eq!(t.ioctl(u, afd::BIND, &sa("127.0.0.1:0"), 0).0, STATUS_SUCCESS);
+    assert_eq!(t.ioctl(u, afd::CONNECT, &sa(&port.to_string()), 0).0, STATUS_SUCCESS);
+    assert_eq!(t.send(u, b"x", None, 0).0, STATUS_SUCCESS);
+    // The ICMP "port unreachable" comes back: Winsock says "connection reset", once, then nothing.
+    let (s, _, _) = t.recv(u, 16, 0);
+    assert_eq!(werr::wsa_of_status(s.0), WSAECONNRESET);
+    let (s, _, _) = t.recv(u, 16, 0);
+    assert_eq!(werr::wsa_of_status(s.0), WSAEWOULDBLOCK);
+}

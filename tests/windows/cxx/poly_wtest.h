@@ -147,6 +147,8 @@ extern "C" __declspec(noreturn) void __std_terminate() {
 // terminate()).
 extern "C" const void* const poly_type_info_vftable[2] = {0, 0};
 #pragma comment(linker, "/alternatename:??_7type_info@@6B@=poly_type_info_vftable")
+// The compiler refers to `_fltused` when a program uses floating point; the C runtime normally defines it.
+extern "C" int _fltused = 0;
 // clang's `__exception_code()` is Microsoft's `_exception_code()` (excpt.h's GetExceptionCode).
 extern "C" unsigned long __cdecl _exception_code(void);
 #define __exception_code _exception_code

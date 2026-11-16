@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "pmr_default_initial",
+      "exe_sha256": "99cdd9408f525ec27e25590e12a43e2bb43c2f1726553108d312ffb94b1bb5f9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYWxpZ25lZCBkZWZhdWx0IGlzIG5vdCBudWxsCm9rIGl0IGlzIHRoZSBhbGlnbmVkIG5ldy9kZWxldGUgcmVzb3VyY2UKb2sgaXQgaXMgbm90IHRoZSBudWxsIHJlc291cmNlCm9rIGEgc2Vjb25kIGNhbGwgcmV0dXJucyB0aGUgc2FtZSBvYmplY3QKb2sgdW5hbGlnbmVkIGRlZmF1bHQgaXMgbm90IG51bGwKb2sgdW5hbGlnbmVkIGRlZmF1bHQgaXMgdGhlIHVuYWxpZ25lZCBuZXcvZGVsZXRlIHJlc291cmNlCm9rIHRoZSB0d28gbmV3L2RlbGV0ZSByZXNvdXJjZXMgYXJlIGRpZmZlcmVudCBvYmplY3RzCm9rIHRoZSB0d28gZ2V0IGNhbGxzIGRvIG5vdCBzaGFyZSB0aGUgb2JqZWN0Cm9rIGFuIG9iamVjdCdzIGZpcnN0IHdvcmQgaXMgYSB2dGFibGUgcG9pbnRlcgpvayBib3RoIGtpbmRzIGhhdmUgc2VwYXJhdGUgdnRhYmxlcwpvayB0aGUgb2JqZWN0cyBhcmUgOC1ieXRlIGFsaWduZWQKc3VtbWFyeSAxMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok aligned default is not null\nok it is the aligned new/delete resource\nok it is not the null resource\nok a second call returns the same object\nok unaligned default is not null\nok unaligned default is the unaligned new/delete resource\nok the two new/delete resources are different objects\nok the two get calls do not share the object\nok an object's first word is a vtable pointer\nok both kinds have separate vtables\nok the objects are 8-byte aligned\nsummary 11 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "pmr_default_unaligned_set",
+      "exe_sha256": "b6baf75d048aa48273ebc9b82c59a51660b5a32971a339ccfe6387961bf756be",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdW5hbGlnbmVkIHNldCB3aXRoIG5vdGhpbmcgc2V0IHJldHVybnMgdGhlIHVuYWxpZ25lZCBuZXdfZGVsZXRlCm9rIHVuYWxpZ25lZCBnZXQgcmV0dXJucyBmMQpvayB0aGUgYWxpZ25lZCBnZXQgcmV0dXJucyBmMSB0b28gKG9uZSBzaGFyZWQgcG9pbnRlcikKb2sgYWxpZ25lZCBzZXQgcmV0dXJucyBmMQpvayB1bmFsaWduZWQgZ2V0IHJldHVybnMgZjIKb2sgdW5hbGlnbmVkIHNldChudWxsKSByZXR1cm5zIGYyCm9rIHVuc2V0IGFnYWluOiB1bmFsaWduZWQgZ2V0IHJldHVybnMgdGhlIHVuYWxpZ25lZCBuZXdfZGVsZXRlCm9rIHVuc2V0IGFnYWluOiBhbGlnbmVkIGdldCByZXR1cm5zIHRoZSBhbGlnbmVkIG5ld19kZWxldGUKb2sgYWxpZ25lZCBzZXQgd2hlbiB1bnNldCByZXR1cm5zIHRoZSBhbGlnbmVkIG5ld19kZWxldGUKb2sgYWxpZ25lZCBzZXQobnVsbCkgcmV0dXJucyBmMgpvayB1bmFsaWduZWQgc2V0KG51bGwpIHdoZW4gdW5zZXQgcmV0dXJucyB0aGUgdW5hbGlnbmVkIG5ld19kZWxldGUKb2sgYWxpZ25lZCBzZXQobnVsbCkgd2hlbiB1bnNldCByZXR1cm5zIHRoZSBhbGlnbmVkIG5ld19kZWxldGUKc3VtbWFyeSAxMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok unaligned set with nothing set returns the unaligned new_delete\nok unaligned get returns f1\nok the aligned get returns f1 too (one shared pointer)\nok aligned set returns f1\nok unaligned get returns f2\nok unaligned set(null) returns f2\nok unset again: unaligned get returns the unaligned new_delete\nok unset again: aligned get returns the aligned new_delete\nok aligned set when unset returns the aligned new_delete\nok aligned set(null) returns f2\nok unaligned set(null) when unset returns the unaligned new_delete\nok aligned set(null) when unset returns the aligned new_delete\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "num_get_direct",
+      "exe_sha256": "9f108f4f3441efc162f31388cf1451a06a1212154f2613c5588670322a62c102",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKG51bV9nZXQ8Y2hhcj4pIDE2Cm9rIGdldChsb25nKQpvayBubyBzdGF0ZSBiaXRzCm9rIHRoZSByZXR1cm5lZCBpdGVyYXRvciBwb2ludHMgYXQgdGhlIGJsYW5rCm9rIGdldCh1bnNpZ25lZCBsb25nIGxvbmcpCm9rIGhpdHRpbmcgdGhlIGVuZCBzZXRzIGVvZmJpdApvayB0aGUgcmV0dXJuZWQgaXRlcmF0b3IgaXMgdGhlIGVuZApvayBhIG5vbi1udW1iZXIgc2V0cyBmYWlsYml0Cm9rIGFuZCBzdG9yZXMgMApvayBnZXQoZG91YmxlKQpvayBzdGF0ZQpvayBnZXQoYm9vbCkKb2sgZ2V0KGJvb2wpIHdpdGggYm9vbGFscGhhIHJlYWRzIHRoZSBuYW1lCm9rIHN0YXRlCm9rIGdldCh1bnNpZ25lZCkgaW4gaGV4Cm9rIGdldCh2b2lkKikKb2sgdGhlIHZhbHVlIHN0b3BzIGF0IHRoZSBjb21tYSBpbiB0aGUgY2xhc3NpYyBsb2NhbGUKb2sgdGhlIGl0ZXJhdG9yIHBvaW50cyBhdCB0aGUgY29tbWEKb2sgZ2V0KCkgY2FsbHMgdGhlIGRvX2dldCgpIG92ZXJsb2FkIG9mIGl0cyB0eXBlLCBpbiB0aGUgaGVhZGVyJ3Mgb3JkZXIKb2sgX015cmVmcyBpcyAwCnN1bW1hcnkgMTkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(num_get<char>) 16\nok get(long)\nok no state bits\nok the returned iterator points at the blank\nok get(unsigned long long)\nok hitting the end sets eofbit\nok the returned iterator is the end\nok a non-number sets failbit\nok and stores 0\nok get(double)\nok state\nok get(bool)\nok get(bool) with boolalpha reads the name\nok state\nok get(unsigned) in hex\nok get(void*)\nok the value stops at the comma in the classic locale\nok the iterator points at the comma\nok get() calls the do_get() overload of its type, in the header's order\nok _Myrefs is 0\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
