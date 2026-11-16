@@ -107,7 +107,10 @@ impl Win32k {
                     }
                 }
                 FromCompositor::Button { button, pressed, .. } => self.wm.link_button(button, pressed, &mut fx),
-                FromCompositor::Axis { vertical, .. } => self.wm.link_wheel(vertical, &mut fx),
+                FromCompositor::Axis { vertical, horizontal, .. } => {
+                    self.wm.link_wheel(vertical, &mut fx);
+                    self.wm.link_hwheel(horizontal, &mut fx);
+                }
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.

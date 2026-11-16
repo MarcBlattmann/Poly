@@ -453,8 +453,8 @@ impl Link {
                 FromCompositor::Button { surface, button: button as u16, pressed, time },
             ],
             E::Axis { horizontal, value, .. } => {
-                // 15 logical pixels a step, WHEEL_DELTA (120) a notch, up positive.
-                let notches = -value * 120 / 15;
+                // 15 logical pixels a step, WHEEL_DELTA (120) a notch, up and right positive.
+                let notches = if horizontal { value * 120 / 15 } else { -value * 120 / 15 };
                 vec![FromCompositor::Axis {
                     surface,
                     vertical: if horizontal { 0 } else { notches },

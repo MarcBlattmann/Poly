@@ -27,6 +27,7 @@ pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MBUTTONDOWN: u32 = 0x0207;
 pub const WM_MBUTTONUP: u32 = 0x0208;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
+pub const WM_MOUSEHWHEEL: u32 = 0x020E;
 /// The double-click messages (winuser.h): a button-down plus 2.
 pub const WM_LBUTTONDBLCLK: u32 = 0x0203;
 pub const WM_RBUTTONDBLCLK: u32 = 0x0206;
@@ -54,6 +55,7 @@ const MOUSEEVENTF_RIGHTUP: u32 = 0x0010;
 const MOUSEEVENTF_MIDDLEDOWN: u32 = 0x0020;
 const MOUSEEVENTF_MIDDLEUP: u32 = 0x0040;
 const MOUSEEVENTF_WHEEL: u32 = 0x0800;
+const MOUSEEVENTF_HWHEEL: u32 = 0x1000;
 const MOUSEEVENTF_ABSOLUTE: u32 = 0x8000;
 const VK_LBUTTON: usize = 0x01;
 const VK_RBUTTON: usize = 0x02;
@@ -219,6 +221,42 @@ impl Wm {
             return;
         }
         let st = self.input_of(thread);
+        // The shell's Win+Up and Win+Down act on the active window as its caption buttons do: the
+        // key-down is eaten and the window gets `WM_SYSCOMMAND` (SC_MAXIMIZE with the position
+        // (-1,-1), SC_RESTORE or SC_MINIMIZE with (0,0)); `max_winkey` of `SC_MAXIMIZE.yaml`.
+        if !up
+            && matches!(vk, 0x26 | 0x28)
+            && (self.async_keys[kbd::VK_LWIN as usize] | self.async_keys[kbd::VK_RWIN as usize]) & 0x80 != 0
+            && let Some(w) = self.get(u64::from(st.active))
+            && w.style & crate::metrics::WS_CHILD == 0
+            && w.style & crate::metrics::WS_MAXIMIZEBOX != 0
+        {
+            let command = match (vk, w.maximized) {
+                (0x26, false) => Some((0xF030u64, 0xFFFF_FFFFu64)),
+                (0x28, true) => Some((0xF120, 0)),
+                (0x28, false) if w.style & crate::metrics::WS_MINIMIZEBOX != 0 && !w.minimized => Some((0xF020, 0)),
+                _ => None,
+            };
+            if let Some((cmd, l)) = command {
+                let key = self.input_key(thread);
+                let cursor = self.cursor;
+                let active = st.active;
+                let q = self.queue(key);
+                q.raw.push_back(Msg {
+                    hwnd: active,
+                    msg: 0x0112,
+                    w: cmd,
+                    l,
+                    time: ctx.now as u32,
+                    x: cursor.0,
+                    y: cursor.1,
+                    private: 0,
+                });
+                q.changed |= QS_KEY;
+                fx.wake.push(key);
+                return;
+            }
+        }
         let alt = self.async_keys[kbd::VK_MENU as usize] & 0x80 != 0;
         let (target, sys) = if st.focus != 0 { (st.focus, alt) } else { (st.active.max(fg), true) };
         let msg = match (up, sys) {
@@ -303,6 +341,9 @@ impl Wm {
         }
         if e.flags & MOUSEEVENTF_WHEEL != 0 {
             msgs.push((WM_MOUSEWHEEL, u64::from(e.data as u16) << 16));
+        }
+        if e.flags & MOUSEEVENTF_HWHEEL != 0 {
+            msgs.push((WM_MOUSEHWHEEL, u64::from(e.data as u16) << 16));
         }
         for (msg, extra) in msgs {
             self.queue_mouse(ctx, msg, extra, fx);
@@ -410,14 +451,28 @@ impl Wm {
 
     /// The desktop link's wheel (`FromCompositor::Axis`): `vertical` in `WHEEL_DELTA` units,
     /// positive away from the user, as `MOUSEEVENTF_WHEEL`'s data is (Learn, "MOUSEINPUT"); the
-    /// focus window gets `WM_MOUSEWHEEL` (Learn, "WM_MOUSEWHEEL"). The horizontal wheel is not
-    /// passed on yet.
+    /// window under the pointer gets `WM_MOUSEWHEEL` (Learn, "WM_MOUSEWHEEL").
     pub fn link_wheel(&mut self, vertical: i32, fx: &mut Effects) {
         if vertical == 0 {
             return;
         }
         let ctx = Ctx { pid: 0, tid: 0, now: self.now };
         self.mouse_event(ctx, &InputEvent { kind: 0, a: 0, b: 0, data: vertical as u32, flags: MOUSEEVENTF_WHEEL }, fx);
+    }
+
+    /// The desktop link's horizontal wheel (`FromCompositor::Axis`): `horizontal` in `WHEEL_DELTA`
+    /// units, positive to the right, as `MOUSEEVENTF_HWHEEL`'s data is; the window under the
+    /// pointer gets `WM_MOUSEHWHEEL` (Learn, "WM_MOUSEHWHEEL").
+    pub fn link_hwheel(&mut self, horizontal: i32, fx: &mut Effects) {
+        if horizontal == 0 {
+            return;
+        }
+        let ctx = Ctx { pid: 0, tid: 0, now: self.now };
+        self.mouse_event(
+            ctx,
+            &InputEvent { kind: 0, a: 0, b: 0, data: horizontal as u32, flags: MOUSEEVENTF_HWHEEL },
+            fx,
+        );
     }
 
     /// The desktop link's key (an evdev code, which for the main block is
@@ -501,7 +556,7 @@ impl Wm {
                 last.y = y;
                 return;
             }
-            if msg == WM_MOUSEWHEEL {
+            if msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL {
                 let sum = (last.w >> 16) as u16 as i16 as i32 + (extra >> 16) as u16 as i16 as i32;
                 last.w = (u64::from(sum as u16) << 16) | keys;
                 return;

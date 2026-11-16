@@ -51,6 +51,7 @@ pub const WM_SYSCHAR: u32 = 0x0106;
 pub const WM_SYSCOMMAND: u32 = 0x0112;
 pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
+pub const WM_MOUSEHWHEEL: u32 = 0x020E;
 pub const WM_PARENTNOTIFY: u32 = 0x0210;
 pub const WM_DWMNCRENDERINGCHANGED: u32 = 0x031F;
 /// Set by `SetWindowRgn(NULL)`: the next frame change redraws everything.
@@ -1989,7 +1990,7 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             send(env, hwnd, WM_CONTEXTMENU, hwnd, makelparam(px + i.client.left, py + i.client.top));
             0
         }
-        WM_CONTEXTMENU | WM_MOUSEWHEEL => {
+        WM_CONTEXTMENU | WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
             if let Some(i) = info(env, hwnd)
                 && i.style & WS_CHILD != 0
             {

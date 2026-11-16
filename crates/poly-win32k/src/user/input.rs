@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::kbd;
-use crate::wm::raw::{WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN};
+use crate::wm::raw::{WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN};
 
 pub const WM_SETCURSOR: u32 = 0x0020;
 /// `HTCLIENT`, `HTERROR` (winuser.h; HTERROR is -2, 16 bits in a hit code).
@@ -21,6 +21,12 @@ const MA_NOACTIVATEANDEAT: u64 = 4;
 pub static NC_TRACK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 /// `WM_NCMOUSELEAVE` (winuser.h).
 const WM_NCMOUSELEAVE: u32 = 0x02A2;
+
+/// The vertical and horizontal wheel messages: they keep the screen position in `lParam` and get
+/// no `WM_SETCURSOR`.
+fn is_wheel(m: u32) -> bool {
+    m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL
+}
 
 fn is_button_down(m: u32) -> bool {
     matches!(m, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN)
@@ -39,14 +45,14 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     // A disabled top-level window: the hit is HTERROR, WM_SETCURSOR is all
     // it gets; no WM_NCHITTEST, no activation, the mouse message is dropped
     // (EnableWindow.yaml `mouse_disabled_popup`).
-    if i.style & WS_DISABLED != 0 && i.style & WS_CHILD == 0 && st0.capture != i.hwnd && m.message != WM_MOUSEWHEEL {
+    if i.style & WS_DISABLED != 0 && i.style & WS_CHILD == 0 && st0.capture != i.hwnd && !is_wheel(m.message) {
         send(env, h, WM_SETCURSOR, h, HTERROR | (u64::from(m.message) << 16));
         return false;
     }
     if st0.capture == i.hwnd {
         // Captured: client coordinates of the capture window, no hit test
         // and no WM_SETCURSOR (SetCapture.yaml).
-        if m.message != WM_MOUSEWHEEL {
+        if !is_wheel(m.message) {
             m.l = (makelparam(sx - i.client.left, sy - i.client.top)) as usize;
         }
         return true;
@@ -105,13 +111,13 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
             eat = r == MA_NOACTIVATEANDEAT;
         }
     }
-    if m.message != WM_MOUSEWHEEL {
+    if !is_wheel(m.message) {
         send(env, h, WM_SETCURSOR, h, (hit & 0xFFFF) | (u64::from(m.message) << 16));
     }
     if eat {
         return false;
     }
-    if m.message == WM_MOUSEWHEEL {
+    if is_wheel(m.message) {
         return true;
     }
     if hit == HTCLIENT {
