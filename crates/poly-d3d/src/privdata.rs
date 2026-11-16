@@ -62,10 +62,9 @@ impl Store {
     /// `SetPrivateDataInterface(guid, p)`: stores `p` (the caller added a reference) or removes the
     /// entry for NULL; returns a replaced interface the caller releases.
     pub fn set_interface(&mut self, g: [u8; 16], p: usize) -> Option<usize> {
+        // NULL is stored too: the entry then holds no interface (IDXGIDevice.GetAdapter.yaml
+        // `private_data_interface`: a following GetPrivateData is S_OK).
         let old = self.find(&g);
-        if p == 0 {
-            return iface(old.map(|i| self.entries.remove(i).1));
-        }
         match old {
             Some(i) => iface(Some(core::mem::replace(&mut self.entries[i].1, Value::Interface(p)))),
             None => {
@@ -103,13 +102,16 @@ impl Store {
 
     /// Every interface pointer held (to release when the object goes).
     pub fn interfaces(&self) -> impl Iterator<Item = usize> + '_ {
-        self.entries.iter().filter_map(|(_, v)| if let Value::Interface(p) = v { Some(*p) } else { None })
+        self.entries.iter().filter_map(|(_, v)| match v {
+            Value::Interface(p) if *p != 0 => Some(*p),
+            _ => None,
+        })
     }
 }
 
 fn iface(v: Option<Value>) -> Option<usize> {
     match v {
-        Some(Value::Interface(p)) => Some(p),
+        Some(Value::Interface(p)) if p != 0 => Some(p),
         _ => None,
     }
 }
@@ -140,5 +142,6 @@ mod tests {
         assert_eq!(s.get(&g, 8, true), Got::Interface(0x1000));
         assert_eq!(s.get(&g, 4, true), Got::Data { hr: DXGI_ERROR_MORE_DATA, size: 8, bytes: None });
         assert_eq!(s.set_interface(g, 0), Some(0x1000));
+        assert_eq!(s.get(&g, 8, true), Got::Interface(0));
     }
 }

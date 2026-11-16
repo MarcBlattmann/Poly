@@ -468,7 +468,7 @@ pub fn shares_find(handle: usize) -> Option<Arc<Store>> {
 
 // ----- IDXGIResource1, IDXGISurface2, IDXGIKeyedMutex
 
-stubs!(res_stubs, "IDXGIResource1", [CreateSubresourceSurface, CreateSharedHandle]);
+stubs!(res_stubs, "IDXGIResource1", [CreateSubresourceSurface]);
 stubs!(surf_stubs, "IDXGISurface2", [GetDC, ReleaseDC]);
 
 static RESOURCE_VTBL: Vt<14> = Vt([
@@ -485,7 +485,7 @@ static RESOURCE_VTBL: Vt<14> = Vt([
     dxgi_set_eviction as *const c_void,
     dxgi_get_eviction as *const c_void,
     res_stubs::CreateSubresourceSurface as *const c_void,
-    res_stubs::CreateSharedHandle as *const c_void,
+    create_shared_handle as *const c_void,
 ]);
 
 static SURFACE_VTBL: Vt<14> = Vt([
@@ -884,4 +884,106 @@ pub fn copy_region(dst: &Tex, ds: u32, dx: usize, dy: usize, src: &Tex, ss: u32,
 /// Whether two formats share a bit layout (the copy rule: same family).
 pub fn same_family(a: u32, b: u32) -> bool {
     a == b || format::family(a).is_some_and(|f| f.contains(&b))
+}
+
+// ----- NT shared handles (IDXGIResource1.CreateSharedHandle.yaml, ID3D11Device1.OpenSharedResource1.yaml)
+
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn CreateEventW(attrs: *const c_void, manual: i32, initial: i32, name: *const u16) -> usize;
+    fn GetLastError() -> u32;
+    fn CloseHandle(h: usize) -> i32;
+    fn GetHandleInformation(h: usize, flags: *mut u32) -> i32;
+}
+
+/// `DXGI_ERROR_NAME_ALREADY_EXISTS` (winerror.h).
+const DXGI_ERROR_NAME_ALREADY_EXISTS: HRESULT = 0x887A_002Cu32 as i32;
+/// `ERROR_ALREADY_EXISTS` (winerror.h).
+const ERROR_ALREADY_EXISTS: u32 = 183;
+
+/// The NT handles made by `CreateSharedHandle` in this process: the handle value, its name, the
+/// storage. The kernel object behind a handle is an event (a closable handle with an optional name
+/// in the object namespace); it names the resource only through this table.
+static NT_SHARES: Lock<Vec<(usize, Vec<u16>, Arc<Store>)>> = Lock::new(Vec::new());
+
+fn handle_open(h: usize) -> bool {
+    let mut f = 0;
+    // SAFETY: our output; any handle value is safe to ask about.
+    unsafe { GetHandleInformation(h, &mut f) != 0 }
+}
+
+/// The storage an NT handle (still open) names.
+pub fn nt_share(h: usize) -> Option<Arc<Store>> {
+    if h == 0 || !handle_open(h) {
+        return None;
+    }
+    NT_SHARES.with(|v| v.iter().find(|(x, _, _)| *x == h).map(|(_, _, s)| s.clone()))
+}
+
+/// The storage a name names, when one of its handles is still open.
+pub fn nt_share_by_name(name: &[u16]) -> Option<Arc<Store>> {
+    NT_SHARES.with(|v| v.iter().find(|(h, n, _)| n.as_slice() == name && handle_open(*h)).map(|(_, _, s)| s.clone()))
+}
+
+unsafe fn wide(p: *const u16) -> Vec<u16> {
+    let mut v = Vec::new();
+    if p.is_null() {
+        return v;
+    }
+    let mut i = 0;
+    // SAFETY: the caller's NUL-terminated string.
+    while unsafe { *p.add(i) } != 0 {
+        // SAFETY: as above.
+        v.push(unsafe { *p.add(i) });
+        i += 1;
+    }
+    v
+}
+
+/// `CreateSharedHandle(pAttributes, dwAccess, lpName, pHandle)`: only a resource made with
+/// SHARED_NTHANDLE has one; a name already in use is DXGI_ERROR_NAME_ALREADY_EXISTS.
+pub unsafe extern "system" fn create_shared_handle(this: *mut c_void, attrs: *const c_void, access: u32, name: *const u16, out: *mut usize) -> HRESULT {
+    // SAFETY: a live resource.
+    let t = unsafe { part_tex(this) };
+    let m = match &t.kind {
+        Kind::Tex2d(d) => d.misc,
+        Kind::Buffer(b) => b.misc,
+    };
+    // SAFETY: the caller's output.
+    unsafe { put(out, 0) };
+    if out.is_null() || m & misc::SHARED_NTHANDLE == 0 {
+        return E_INVALIDARG;
+    }
+    if access == u32::MAX {
+        return E_FAIL;
+    }
+    // SAFETY: the caller's optional name; a new event.
+    let n = unsafe { wide(name) };
+    let mut z = n.clone();
+    z.push(0);
+    let h = unsafe { CreateEventW(attrs, 1, 0, if name.is_null() || n.is_empty() { core::ptr::null() } else { z.as_ptr() }) };
+    if h == 0 {
+        return E_FAIL;
+    }
+    // SAFETY: a system call right after the creation.
+    if !n.is_empty() && unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        // SAFETY: the handle just made.
+        unsafe { CloseHandle(h) };
+        return DXGI_ERROR_NAME_ALREADY_EXISTS;
+    }
+    let store = t.store.clone();
+    NT_SHARES.with(|v| {
+        v.retain(|(x, _, _)| handle_open(*x));
+        v.push((h, n, store));
+    });
+    // SAFETY: the caller's output.
+    unsafe { *out = h };
+    S_OK
+}
+
+/// The name of a shared-handle open (`OpenSharedResourceByName`).
+pub unsafe fn name_of(p: *const u16) -> Vec<u16> {
+    // SAFETY: the caller's string.
+    unsafe { wide(p) }
 }

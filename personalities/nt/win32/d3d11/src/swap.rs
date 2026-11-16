@@ -16,6 +16,7 @@ unsafe extern "system" {
     fn ReleaseDC(hwnd: usize, dc: usize) -> i32;
     fn GetClientRect(hwnd: usize, rect: *mut [i32; 4]) -> i32;
     fn IsWindow(hwnd: usize) -> i32;
+    fn GetDesktopWindow() -> usize;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -57,27 +58,36 @@ static SWAP_IIDS: [Guid; 4] = [IID_IDXGISWAPCHAIN1, IID_IDXGISWAPCHAIN, IID_IDXG
 /// A swap chain of `device` for `hwnd` described by `desc1` (`DXGI_SWAP_CHAIN_DESC1`).
 pub unsafe fn create(device: *mut c_void, hwnd: usize, desc1: *const u8, out: *mut *mut c_void) -> HRESULT {
     if out.is_null() {
-        return E_POINTER;
+        return DXGI_ERROR_INVALID_CALL;
     }
     // SAFETY: the caller's output.
     unsafe { *out = core::ptr::null_mut() };
-    // SAFETY: the caller's device.
-    if desc1.is_null() || !unsafe { crate::device::is_device(device) } {
-        return E_INVALIDARG;
-    }
-    // A composition swap chain (`hwnd` 0) has no window until a DirectComposition commit
-    // binds it to one (`bind`).
-    // SAFETY: a window handle of the caller.
-    if hwnd != 0 && unsafe { IsWindow(hwnd) } == 0 {
-        return E_INVALIDARG;
+    // The device argument may be the device or its IDXGIDevice (CreateSwapChainForHwnd.yaml
+    // `device_argument`); anything else is an invalid call.
+    // SAFETY: the caller's object.
+    let Some(device) = (unsafe { crate::device::as_device(device) }) else { return DXGI_ERROR_INVALID_CALL };
+    if desc1.is_null() {
+        return DXGI_ERROR_INVALID_CALL;
     }
     // SAFETY: the caller's DXGI_SWAP_CHAIN_DESC1 (48 bytes).
     let mut desc: Desc1 = unsafe { *(desc1 as *const Desc1) };
-    let (w, h) = if hwnd == 0 { (1, 1) } else { client_size(hwnd) };
-    if desc[0] == 0 {
-        desc[0] = w.max(1);
+    // A composition swap chain (`hwnd` 0) has no window until a DirectComposition commit
+    // binds it to one (`bind`).
+    if let Err(hr) = poly_d3d::swap::check(&desc, hwnd == 0) {
+        return hr;
     }
-    if desc[1] == 0 {
+    // SAFETY: a window handle of the caller.
+    if hwnd != 0 && unsafe { IsWindow(hwnd) } == 0 {
+        return DXGI_ERROR_INVALID_CALL;
+    }
+    // SAFETY: a system call.
+    if hwnd != 0 && hwnd == unsafe { GetDesktopWindow() } {
+        return E_ACCESSDENIED;
+    }
+    // Either size 0: both come from the window's client area.
+    if hwnd != 0 && (desc[0] == 0 || desc[1] == 0) {
+        let (w, h) = client_size(hwnd);
+        desc[0] = w.max(1);
         desc[1] = h.max(1);
     }
     // SAFETY: a live device of this DLL.
@@ -105,7 +115,7 @@ pub unsafe fn from_legacy_desc(device: *mut c_void, desc: *const u8, out: *mut *
     // SAFETY: the caller's DXGI_SWAP_CHAIN_DESC.
     let (d, hwnd) = unsafe {
         let w = |o: usize| *(desc.add(o) as *const u32);
-        ([w(0), w(4), w(16), 0, w(28), w(32), w(36), w(40), 0, w(60), 0, w(64)], *(desc.add(48) as *const usize))
+        ([w(0), w(4), w(16), 0, w(28), w(32), w(36), w(40), 0, w(60), 3, w(64)], *(desc.add(48) as *const usize))
     };
     // SAFETY: as `create`.
     unsafe { create(device, hwnd, d.as_ptr() as *const u8, out) }

@@ -599,8 +599,9 @@ const MAP_DO_NOT_WAIT: u32 = 0x10_0000;
 pub unsafe extern "system" fn map(this: P, res: P, sub: u32, kind: u32, flags: u32, out: *mut u8) -> HRESULT {
     let fail = |hr: HRESULT| {
         if !out.is_null() {
-            // SAFETY: the caller's D3D11_MAPPED_SUBRESOURCE (16 bytes).
-            unsafe { core::ptr::write_bytes(out, 0, 16) };
+            // SAFETY: the caller's D3D11_MAPPED_SUBRESOURCE: only pData is cleared (Map.yaml:
+            // E_INVALIDARG with a NULL data pointer; the pitches are left as they were).
+            unsafe { (out as *mut *mut u8).write(core::ptr::null_mut()) };
         }
         hr
     };

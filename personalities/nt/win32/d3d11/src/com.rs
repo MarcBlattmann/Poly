@@ -16,6 +16,7 @@ pub const E_POINTER: HRESULT = 0x8000_4003u32 as i32;
 pub const E_INVALIDARG: HRESULT = 0x8007_0057u32 as i32;
 pub const E_OUTOFMEMORY: HRESULT = 0x8007_000Eu32 as i32;
 pub const E_FAIL: HRESULT = 0x8000_4005u32 as i32;
+pub const E_ACCESSDENIED: HRESULT = 0x8007_0005u32 as i32;
 pub const DXGI_ERROR_INVALID_CALL: HRESULT = 0x887A_0001u32 as i32;
 pub const DXGI_ERROR_MORE_DATA: HRESULT = 0x887A_0003u32 as i32;
 pub const DXGI_ERROR_DEVICE_REMOVED: HRESULT = 0x887A_0005u32 as i32;
@@ -336,7 +337,9 @@ pub unsafe extern "system" fn get_private_data(
         Got::Interface(p) => {
             // SAFETY: a live interface the object holds; the caller's 8 bytes.
             unsafe {
-                com_add_ref(p as *mut c_void);
+                if p != 0 {
+                    com_add_ref(p as *mut c_void);
+                }
                 *(data as *mut usize) = p;
                 *size = 8;
             }

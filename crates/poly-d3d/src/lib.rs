@@ -24,5 +24,6 @@ pub mod hr;
 pub mod privdata;
 pub mod resource;
 pub mod state;
+pub mod swap;
 pub mod query;
 pub mod view;

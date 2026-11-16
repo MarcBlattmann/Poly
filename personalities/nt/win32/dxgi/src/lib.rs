@@ -288,7 +288,9 @@ unsafe extern "system" fn get_private_data(this: *mut c_void, guid: *const Guid,
         Got::Interface(p) => {
             // SAFETY: a live interface the object holds; the caller's 8 bytes and size.
             unsafe {
-                com_add_ref(p as *mut c_void);
+                if p != 0 {
+                    com_add_ref(p as *mut c_void);
+                }
                 *(data as *mut usize) = p;
                 *size = 8;
             }
@@ -520,7 +522,7 @@ unsafe extern "system" fn create_swap_chain_for_hwnd(
             // SAFETY: the caller's output pointer.
             unsafe { *out = core::ptr::null_mut() };
         }
-        return DXGI_ERROR_UNSUPPORTED;
+        return if f == 0 { DXGI_ERROR_UNSUPPORTED } else { DXGI_ERROR_INVALID_CALL };
     }
     type Make = unsafe extern "system" fn(*mut c_void, usize, *const c_void, *mut *mut c_void) -> HRESULT;
     // SAFETY: d3d11.dll's export of that signature.

@@ -180,6 +180,11 @@ fn format_caps(f: u32) -> u32 {
     if !format::known(f) || matches!(f, 0 | 106 | 188) {
         return 0;
     }
+    // B8G8R8X8_TYPELESS may be an unordered-access texture though its typed members may not
+    // (CreateTexture2D.yaml `formats_srv_rtv_uav`, `formats_no_uav`).
+    if f == 92 {
+        return SRV | RTV | UAV | STAGING | DYNAMIC;
+    }
     if let Some(fam) = format::family(f)
         && fam[0] == f
     {

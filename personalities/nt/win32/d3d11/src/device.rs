@@ -31,6 +31,9 @@ pub struct Device {
     pub states: Lock<Vec<(objects::StateKind, Vec<u32>, usize)>>,
     /// The immediate context's bindings.
     pub pipe: Lock<context::State>,
+    /// The immediate context's own reference count; while it is above 0 the context holds one
+    /// reference on the device (D3D11CreateDevice.yaml `references`: device 2, context 1).
+    ctx_refs: AtomicU32,
     /// The adapter (a reference the device holds), made on first use when none was given.
     adapter: core::sync::atomic::AtomicPtr<c_void>,
 }
@@ -62,6 +65,7 @@ pub fn new(flags: u32, level: u32, adapter: *mut c_void) -> *mut c_void {
         frame_latency: AtomicU32::new(3),
         states: Lock::new(Vec::new()),
         pipe: Lock::new(context::State::new()),
+        ctx_refs: AtomicU32::new(0),
         adapter: core::sync::atomic::AtomicPtr::new(adapter),
     });
     // SAFETY: the new device.
@@ -98,9 +102,39 @@ pub unsafe fn device_of<'a>(p: *mut c_void) -> &'a Device {
 pub unsafe fn immediate_context(dev: *mut c_void) -> *mut c_void {
     // SAFETY: a live device.
     unsafe {
-        add_ref(dev);
+        ctx_add_ref(dev);
         &mut (*(dev as *mut Device)).context as *mut Part as *mut c_void
     }
+}
+
+/// One more reference on the immediate context of device `dev`.
+unsafe fn ctx_add_ref(dev: *mut c_void) -> u32 {
+    // SAFETY: a live device.
+    let d = unsafe { &*(dev as *const Device) };
+    let n = d.ctx_refs.fetch_add(1, Ordering::AcqRel) + 1;
+    if n == 1 {
+        // SAFETY: as above.
+        unsafe { add_ref(dev) };
+    }
+    n
+}
+
+unsafe extern "system" fn ctx_part_add_ref(this: *mut c_void) -> u32 {
+    // SAFETY: a part of the context of a live device.
+    unsafe { ctx_add_ref(part_owner(this)) }
+}
+
+unsafe extern "system" fn ctx_part_release(this: *mut c_void) -> u32 {
+    // SAFETY: a part of the context of a live device.
+    let dev = unsafe { part_owner(this) };
+    // SAFETY: as above.
+    let d = unsafe { &*(dev as *const Device) };
+    let n = d.ctx_refs.fetch_sub(1, Ordering::AcqRel) - 1;
+    if n == 0 {
+        // SAFETY: the reference the context held.
+        unsafe { release(dev) };
+    }
+    n
 }
 
 unsafe fn device_more(p: *mut c_void, iid: &Guid) -> *mut c_void {
@@ -121,6 +155,23 @@ unsafe fn device_more(p: *mut c_void, iid: &Guid) -> *mut c_void {
     part as *mut c_void
 }
 
+/// The device of `p` when it is one of our devices or its IDXGIDevice.
+pub unsafe fn as_device(p: *mut c_void) -> Option<*mut c_void> {
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: a COM object's first word is its vtable.
+    let vt = unsafe { *(p as *const *const c_void) };
+    if vt == DEVICE_VTBL.ptr() {
+        Some(p)
+    } else if vt == DXGI_DEVICE_VTBL.ptr() {
+        // SAFETY: a part of a live device.
+        Some(unsafe { part_owner(p) })
+    } else {
+        None
+    }
+}
+
 /// Whether `p` is one of our devices.
 pub unsafe fn is_device(p: *mut c_void) -> bool {
     // SAFETY: a COM object's first word is its vtable.
@@ -139,8 +190,6 @@ stubs!(
         CreateDeferredContext,
         CreateDeferredContext1,
         CreateDeviceContextState,
-        OpenSharedResource1,
-        OpenSharedResourceByName,
         CreateDeferredContext2,
         GetResourceTiling,
         CreateTexture3D1,
@@ -202,8 +251,8 @@ static DEVICE_VTBL: Vt<69> = Vt([
     objects::create_blend_state1 as *const c_void,
     objects::create_rasterizer_state1 as *const c_void,
     dev_stubs::CreateDeviceContextState as *const c_void,
-    dev_stubs::OpenSharedResource1 as *const c_void,
-    dev_stubs::OpenSharedResourceByName as *const c_void,
+    objects::open_shared_resource1 as *const c_void,
+    objects::open_shared_resource_by_name as *const c_void,
     get_immediate_context as *const c_void,
     dev_stubs::CreateDeferredContext2 as *const c_void,
     dev_stubs::GetResourceTiling as *const c_void,
@@ -321,8 +370,8 @@ stubs!(
 /// `ID3D11DeviceContext4` (the SDK header's method order; generated from d3d11*.h).
 static CONTEXT_VTBL: Vt<149> = Vt([
     ctx_query_interface as *const c_void,
-    part_add_ref as *const c_void,
-    part_release as *const c_void,
+    ctx_part_add_ref as *const c_void,
+    ctx_part_release as *const c_void,
     ctx_get_device as *const c_void,
     part_get_private_data as *const c_void,
     part_set_private_data as *const c_void,
@@ -501,14 +550,19 @@ unsafe extern "system" fn ctx_query_interface(this: *mut c_void, riid: *const Gu
     } else if iid == IID_ID3DUSERDEFINEDANNOTATION {
         &mut d.annotation as *mut Part as *mut c_void
     } else if iid == IID_ID3D11MULTITHREAD {
-        &mut d.multithread as *mut Part as *mut c_void
+        // SAFETY: the device is live; the caller's output.
+        unsafe {
+            add_ref(dev);
+            *out = &mut d.multithread as *mut Part as *mut c_void;
+        }
+        return S_OK;
     } else {
         log_iid("ID3D11DeviceContext", &iid);
         return E_NOINTERFACE;
     };
     // SAFETY: the device is live; the caller's output.
     unsafe {
-        add_ref(dev);
+        ctx_add_ref(dev);
         *out = p;
     }
     S_OK
@@ -546,8 +600,8 @@ unsafe extern "system" {
 
 static ANNOTATION_VTBL: Vt<7> = Vt([
     annotation_query_interface as *const c_void,
-    part_add_ref as *const c_void,
-    part_release as *const c_void,
+    ctx_part_add_ref as *const c_void,
+    ctx_part_release as *const c_void,
     begin_event as *const c_void,
     end_event as *const c_void,
     set_marker as *const c_void,

@@ -108,6 +108,8 @@ fn buffer_elements(b: &BufferDesc, format: u32, first: u32, num: u32) -> Result<
             return bad();
         }
         b.stride
+    } else if format::is_typeless(format) {
+        0
     } else {
         format::texel_bytes(format)
     };

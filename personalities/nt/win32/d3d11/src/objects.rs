@@ -699,26 +699,34 @@ pub unsafe extern "system" fn check_feature_support(this: *mut c_void, feature: 
         }
         4 => words(buf, &[1]),
         5 => {
-            let on = u32::from(!low);
             let mut w = [0u32; 14];
             for v in w.iter_mut().take(6) {
-                *v = on;
+                *v = 1;
             }
+            w[1] = u32::from(!low);
             words(buf, &w);
         }
         6 => words(buf, &[0]),
         7 | 9 | 11 | 12 | 15 | 17 => words(buf, &[1]),
         8 => words(buf, &[3, 3]),
-        10 => words(buf, &if l111 { [1; 4] } else { [1, 1, 1, 1] }),
+        // D3D11_OPTIONS1: tiled resources tier, min/max filtering, clear view, map on default.
+        10 => words(buf, &if l111 { [2, 1, 1, 1] } else if low { [0, 1, 1, 0] } else { [1, 1, 1, 1] }),
         13 => words(buf, &[1, 1, 1, 1]),
+        // D3D11_OPTIONS2 (ID3D11Device.CheckFeatureSupport.yaml `levels`).
         14 => {
-            let v: u32 = u32::from(l111);
-            let w = [v, 0, 0, 0, 0, 0, 0, 0, 0];
+            let w = if l111 {
+                [1, 1, 1, 3, 3, 1, 0, 0, 0]
+            } else if low {
+                [0, 0, 0, 0, 0, 1, 0, 0, 0]
+            } else {
+                [0, 1, 0, 0, 0, 1, 0, 0, 0]
+            };
             words(buf, &w[..size as usize / 4]);
         }
         16 => words(buf, &[0x20, 0x2F]),
         18 => words(buf, &[0]),
         19 => words(buf, &[3]),
+        20 => words(buf, &[0, 3]),
         _ => buf.fill(0),
     }
     S_OK
@@ -748,4 +756,50 @@ pub unsafe extern "system" fn open_shared_resource(
 /// The device's state that these methods read.
 pub fn removed(d: &Device) -> bool {
     d.removed.load(Ordering::Acquire)
+}
+
+/// A new resource of this device over `store`, as interface `riid`.
+unsafe fn open_store(this: *mut c_void, store: alloc::sync::Arc<texture::Store>, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+    let Some(kind) = texture::kind_of_store(&store) else { return E_INVALIDARG };
+    // SAFETY: a live device; a new object over the shared storage.
+    let p = unsafe { texture::make(this, kind, Some(store)) };
+    // SAFETY: the new object; the caller's output.
+    let hr = unsafe { query_interface(p, riid, out) };
+    // SAFETY: the reference `make` gave.
+    unsafe { release(p) };
+    hr
+}
+
+/// `OpenSharedResource1(hResource, returnedInterface, ppResource)`: an NT handle of
+/// `CreateSharedHandle`; a legacy handle, a closed or foreign handle: E_INVALIDARG.
+pub unsafe extern "system" fn open_shared_resource1(this: *mut c_void, handle: usize, riid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+    // SAFETY: the caller's output.
+    unsafe { null_out(out) };
+    match texture::nt_share(handle) {
+        // SAFETY: as `open_store`.
+        Some(s) => unsafe { open_store(this, s, riid, out) },
+        None => E_INVALIDARG,
+    }
+}
+
+/// `OpenSharedResourceByName(lpName, dwDesiredAccess, returnedInterface, ppResource)`.
+pub unsafe extern "system" fn open_shared_resource_by_name(
+    this: *mut c_void,
+    name: *const u16,
+    access: u32,
+    riid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
+    // SAFETY: the caller's output.
+    unsafe { null_out(out) };
+    if access == 0 {
+        // The value the oracle gives for no access (OpenSharedResourceByName, CreateSharedHandle.yaml `by_name`).
+        return 0x8876_086Au32 as i32;
+    }
+    // SAFETY: the caller's name.
+    match texture::nt_share_by_name(&unsafe { texture::name_of(name) }) {
+        // SAFETY: as `open_store`.
+        Some(s) => unsafe { open_store(this, s, riid, out) },
+        None => E_INVALIDARG,
+    }
 }
