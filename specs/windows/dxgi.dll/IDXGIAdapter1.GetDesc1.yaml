@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGIAdapter1.GetDesc1.yaml
+id: windows/api/dxgi.dll/IDXGIAdapter1.GetDesc1
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGIAdapter1::GetDesc1 method (dxgi.h)", "DXGI_ADAPTER_DESC1", "IDXGIAdapter::GetDesc", "IDXGIAdapter2::GetDesc2", "IDXGIAdapter::CheckInterfaceSupport", "IDXGIAdapter::EnumOutputs", "IDXGIAdapter3::QueryVideoMemoryInfo", "IDXGIAdapter3::SetVideoMemoryReservation"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Describes an adapter. The WARP adapter (IDXGIFactory4::EnumWarpAdapter) is deterministic on every Windows machine: description 'Microsoft Basic Render Driver' (29 UTF-16 units, all following units zero), VendorId 0x1414, DeviceId 0x8C, SubSysId 0, Revision 0, DedicatedVideoMemory 0, DedicatedSystemMemory 0, SharedSystemMemory non-zero (above 1 MiB; the value depends on the machine's memory), AdapterLuid non-zero with a zero high part, Flags 2 (SOFTWARE). Chrome reads VendorId and DeviceId (and the driver version through CheckInterfaceSupport) to identify the GPU and to apply its GPU blocklist; a Poly build must report the WARP values for its software adapter. The default hardware adapter (EnumAdapters1(0)) is machine dependent and tested only as relations. This entry's tests also cover GetDesc, GetDesc2, CheckInterfaceSupport, EnumOutputs, QueryVideoMemoryInfo and SetVideoMemoryReservation.
+interface:
+  signature: "HRESULT IDXGIAdapter1::GetDesc1(DXGI_ADAPTER_DESC1* pDesc)"
+  constants: "DXGI_ADAPTER_DESC1 (312 bytes): Description WCHAR[128] at 0, VendorId 256, DeviceId 260, SubSysId 264, Revision 268, DedicatedVideoMemory SIZE_T 272, DedicatedSystemMemory 280, SharedSystemMemory 288, AdapterLuid 296 (LowPart u32, HighPart i32), Flags 304. DXGI_ADAPTER_DESC (no Flags) is 304 bytes; DXGI_ADAPTER_DESC2 adds Flags 304, GraphicsPreemptionGranularity 308, ComputePreemptionGranularity 312 (320 bytes). dxgi.h, dxgi1_2.h"
+chrome:
+  calls: "gpu_info_collector_win reads GetDesc1 (vendor/device id, description) and CheckInterfaceSupport(__uuidof(IDXGIDevice)) for the driver version (assumed from public knowledge of the file); DevTools' SystemInfo.getInfo shows the result"
+rules:
+  warp_description: "WARP adapter GetDesc1: S_OK; name 'Microsoft Basic Render Driver'; VendorId 0x1414; DeviceId 0x8C; SubSysId 0; Revision 0; DedicatedVideoMemory 0; DedicatedSystemMemory 0; SharedSystemMemory above 1 MiB; AdapterLuid non-zero, HighPart 0; Flags 0x2; the text is NUL terminated at unit 29 and every later unit of the 128 is zero"
+  stable: "two GetDesc1 calls give identical bytes"
+  get_desc: "IDXGIAdapter::GetDesc: S_OK, the first 304 bytes equal GetDesc1's, byte 304 onwards is not written"
+  get_desc2: "IDXGIAdapter2::GetDesc2: S_OK, the first 304 bytes equal GetDesc1's, Flags 2, GraphicsPreemptionGranularity 4 (DXGI_GRAPHICS_PREEMPTION_INSTRUCTION_BOUNDARY), ComputePreemptionGranularity 4 (DXGI_COMPUTE_PREEMPTION_INSTRUCTION_BOUNDARY) on WARP"
+  check_interface_support: "CheckInterfaceSupport(IID_IDXGIDevice, &version) on WARP: S_OK and a non-zero 64-bit user-mode driver version (not printed: it depends on the Windows build); IID_IDXGIDevice1, ID3D11Device, IDXGIFactory and a made-up id: DXGI_ERROR_UNSUPPORTED (0x887A0004) and the version is not written"
+  enum_outputs_warp: "EnumOutputs(0), (1), (5), (0xFFFFFFFF) on the WARP adapter: DXGI_ERROR_NOT_FOUND (0x887A0002) and a NULL output (WARP has no outputs)"
+  video_memory: "IDXGIAdapter3::QueryVideoMemoryInfo(node 0, segment 0 local): S_OK, Budget non-zero, CurrentUsage <= Budget, AvailableForReservation <= Budget, CurrentReservation 0; (node 0, segment 1 non-local): S_OK with Budget 0 and usage/available not above it; segment group 2, node 1 and node 0xFFFFFFFF: E_INVALIDARG (0x80070057) and the structure is not written"
+  video_memory_reservation: "SetVideoMemoryReservation(0, local, size): E_INVALIDARG (0x80070057) for every size (0, 1 MiB, 0xFFFFFFFFFFFFFFFF) and segment group 7 as long as no D3D11 device was created on this adapter object; after D3D11CreateDevice(that adapter, D3D_DRIVER_TYPE_UNKNOWN) it returns S_OK for 1 MiB and QueryVideoMemoryInfo then reports CurrentReservation 1048576; setting 0 returns it to 0"
+  parent: "the WARP adapter's GetParent(IDXGIFactory4) is S_OK and adds one reference to the factory; GetParent(IDXGIDevice) gives E_NOINTERFACE; GetParent(IUnknown) is S_OK"
+  device_on_adapter: "D3D11CreateDevice(warp adapter, D3D_DRIVER_TYPE_UNKNOWN, ...) is S_OK with level 0xB000; the device's IDXGIDevice::GetAdapter returns the same adapter pointer (the same object as passed in)"
+  default_adapter_relations: "EnumAdapters1(0) (machine dependent): GetDesc1 S_OK, description non-empty, VendorId non-zero, LUID non-zero, Flags only bits 1|2, SOFTWARE set exactly when VendorId == 0x1414, dedicated video memory or shared system memory non-zero; GetDesc equals GetDesc1 in the first 304 bytes; GetDesc2 equals it and has the same Flags; CheckInterfaceSupport(IDXGIDevice) succeeds with a version; QueryVideoMemoryInfo(0, local) S_OK with Budget non-zero and CurrentUsage <= Budget; D3D11CreateDevice on it succeeds with a feature level of at least 9_1, the device's GetAdapter is the same object, CreateSwapChainForHwnd and Present on that device succeed"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  not_found: "DXGI_ERROR_NOT_FOUND (0x887A0002)"
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  invalid_arg: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  the hardware adapter's description (machine dependent), DedicatedVideoMemory of a GPU, outputs of the WARP adapter other than NOT_FOUND, NULL pDesc.

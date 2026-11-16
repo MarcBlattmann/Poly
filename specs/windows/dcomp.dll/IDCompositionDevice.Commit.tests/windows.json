@@ -1,0 +1,99 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dccommit_basic",
+      "exe_sha256": "039c72ea39da2326ab36fab47d337664e51fc35c5355cd8984457bee16998932",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29tbWl0IG9mIGEgZGV2aWNlIHdpdGhvdXQgYW55IG9iamVjdDogMHgwMDAwMDAwMCBhZ2FpbiAweDAwMDAwMDAwCldhaXRGb3JDb21taXRDb21wbGV0aW9uIHR3aWNlOiAweDAwMDAwMDAwIDB4MDAwMDAwMDAKMzAwIENvbW1pdHMgYWZ0ZXIgMzAwIGNoYW5nZXM6IDMwMCBzdWNjZWVkZWQ7IFdhaXQgMHgwMDAwMDAwMApHZXRGcmFtZVN0YXRpc3RpY3MgKGRlc2t0b3AgZGV2aWNlKTogMHgwMDAwMDAwMCBhbGwgdW50b3VjaGVkIGZhbHNlCiAgc2Vjb25kIGNhbGw6IDB4MDAwMDAwMDAgY3VycmVudFRpbWUgZGlkIG5vdCBkZWNyZWFzZSB0cnVlIGZyZXF1ZW5jeSB1bmNoYW5nZWQgdHJ1ZSByYXRlIHVuY2hhbmdlZCB0cnVlCmFmdGVyIGEgdGFyZ2V0IHdhcyBjb21taXR0ZWQ6IDB4MDAwMDAwMDAgZnJlcXVlbmN5IHVuY2hhbmdlZCByYXRlIG51bWVyYXRvciBzZXQgdHJ1ZQpDaGVja0RldmljZVN0YXRlICh0aGUgSURDb21wb3NpdGlvbkRldmljZSBpbnRlcmZhY2Ugb2YgdGhlIGRlc2t0b3AgZGV2aWNlIG9iamVjdCk6IDB4MDAwMDAwMDAgdmFsaWQgMQpDaGVja0RldmljZVN0YXRlIHdpdGggYSBoZWFsdGh5IHJlbmRlcmluZyBkZXZpY2U6IDB4MDAwMDAwMDAgdmFsaWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Commit of a device without any object: 0x00000000 again 0x00000000\nWaitForCommitCompletion twice: 0x00000000 0x00000000\n300 Commits after 300 changes: 300 succeeded; Wait 0x00000000\nGetFrameStatistics (desktop device): 0x00000000 all untouched false\n  second call: 0x00000000 currentTime did not decrease true frequency unchanged true rate unchanged true\nafter a target was committed: 0x00000000 frequency unchanged rate numerator set true\nCheckDeviceState (the IDCompositionDevice interface of the desktop device object): 0x00000000 valid 1\nCheckDeviceState with a healthy rendering device: 0x00000000 valid 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 195
+    },
+    {
+      "name": "dccommit_basic_c",
+      "exe_sha256": "7445d1d83d018845e8f39aa486a10fa24f379345a9199fd887566301adccf6b7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgQ3JlYXRlVmlzdWFsOiBDb21taXQgMHgwMDAwMDAwMCBXYWl0Rm9yQ29tbWl0Q29tcGxldGlvbiAweDAwMDAwMDAwCldhaXRGb3JDb21taXRDb21wbGV0aW9uIG9uIGEgZnJlc2ggZGV2aWNlIHRoYXQgbmV2ZXIgY29tbWl0dGVkOiAweDAwMDAwMDAwCkNvbW1pdCBvZiB0aGUgb3RoZXIgZGV2aWNlOiAweDAwMDAwMDAwIHRoZW4gb2YgdGhlIGRldmljZSBvZiB0aGUgdmlzdWFsIDB4MDAwMDAwMDAKICBjdXJyZW50VGltZSB3aXRoaW4gMTAgcyBvZiBRdWVyeVBlcmZvcm1hbmNlQ291bnRlciB0cnVlCkdldEZyYW1lU3RhdGlzdGljcyAoZGV2aWNlIDMgaW50ZXJmYWNlKTogMHgwMDAwMDAwMCBmcmVxdWVuY3kgZXF1YWwgdHJ1ZQpDaGVja0RldmljZVN0YXRlIGFnYWluOiAweDAwMDAwMDAwIHZhbGlkIDEKaGVhbHRoeSBEM0QxMSBkZXZpY2U6IEdldERldmljZVJlbW92ZWRSZWFzb24gMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after CreateVisual: Commit 0x00000000 WaitForCommitCompletion 0x00000000\nWaitForCommitCompletion on a fresh device that never committed: 0x00000000\nCommit of the other device: 0x00000000 then of the device of the visual 0x00000000\n  currentTime within 10 s of QueryPerformanceCounter true\nGetFrameStatistics (device 3 interface): 0x00000000 frequency equal true\nCheckDeviceState again: 0x00000000 valid 1\nhealthy D3D11 device: GetDeviceRemovedReason 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 178
+    },
+    {
+      "name": "dccommit_huge",
+      "exe_sha256": "75111d0231128db3f304fbdd5ff94aabed91218ff2cb9f644c2172f860341530",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3VyZmFjZSA0MDk2eDQwOTY6IGNyZWF0ZSAweDAwMDAwMDAwIHB0cj1zZXQgRDNEMTEgZGV2aWNlIHN0YXRlIGFmdGVyIDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMCBTZXRDb250ZW50IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMApzdXJmYWNlIDF4MTYzODU6IGNyZWF0ZSAweDAwMDAwMDAwIHB0cj1zZXQgRDNEMTEgZGV2aWNlIHN0YXRlIGFmdGVyIDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMCBTZXRDb250ZW50IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMAp2aXJ0dWFsIDQwOTZ4NDA5NjogY3JlYXRlIDB4MDAwMDAwMDAgcHRyPXNldCBEM0QxMSBkZXZpY2Ugc3RhdGUgYWZ0ZXIgMHgwMDAwMDAwMCBDb21taXQgMHgwMDAwMDAwMCBzdGF0ZSAweDAwMDAwMDAwIFNldENvbnRlbnQgMHgwMDAwMDAwMCBDb21taXQgMHgwMDAwMDAwMCBzdGF0ZSAweDAwMDAwMDAwCnZpcnR1YWwgMzI3Njh4MzI3Njg6IGNyZWF0ZSAweDAwMDAwMDAwIHB0cj1zZXQgRDNEMTEgZGV2aWNlIHN0YXRlIGFmdGVyIDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMCBTZXRDb250ZW50IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMApvbiBvbmUgZGV2aWNlOiB2aXJ0dWFsIDEwMDAwMCAoZGVza3RvcCkgMHgwMDAwMDAwMCB2aXJ0dWFsIDEwMDAwMCAodjEpIDB4MDAwMDAwMDAgc3VyZmFjZSAxMDAwMDAgKGRlc2t0b3ApIDB4ODAwNzAwMGUgc3VyZmFjZSAxMDAwMDAgKHYxKSAweDgwMDcwMDBlCkJlZ2luRHJhdyAweDAwMDAwMDAwIEVuZERyYXcgMHgwMDAwMDAwMCB0aGVuIENvbW1pdCAweDg4N2EwMDA1IHN0YXRlIDB4ODg3YTAwMDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "surface 4096x4096: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nsurface 1x16385: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nvirtual 4096x4096: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nvirtual 32768x32768: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\non one device: virtual 100000 (desktop) 0x00000000 virtual 100000 (v1) 0x00000000 surface 100000 (desktop) 0x8007000e surface 100000 (v1) 0x8007000e\nBeginDraw 0x00000000 EndDraw 0x00000000 then Commit 0x887a0005 state 0x887a0005\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 136
+    },
+    {
+      "name": "dccommit_huge_c",
+      "exe_sha256": "f0862adac6ed94f79d32ba698dfb1901e9cb448ba7f2f5a8b815bd7b7e66e7ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3VyZmFjZSAxNjM4NXgxOiBjcmVhdGUgMHgwMDAwMDAwMCBwdHI9c2V0IEQzRDExIGRldmljZSBzdGF0ZSBhZnRlciAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwIHN0YXRlIDB4MDAwMDAwMDAgU2V0Q29udGVudCAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwIHN0YXRlIDB4MDAwMDAwMDAKc3VyZmFjZSAweDA6IGNyZWF0ZSAweDAwMDAwMDAwIHB0cj1zZXQgRDNEMTEgZGV2aWNlIHN0YXRlIGFmdGVyIDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMCBTZXRDb250ZW50IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMAp2aXJ0dWFsIDE2Mzg1eDE2Mzg1OiBjcmVhdGUgMHgwMDAwMDAwMCBwdHI9c2V0IEQzRDExIGRldmljZSBzdGF0ZSBhZnRlciAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwIHN0YXRlIDB4MDAwMDAwMDAgU2V0Q29udGVudCAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwIHN0YXRlIDB4MDAwMDAwMDAKdmlydHVhbCAweDA6IGNyZWF0ZSAweDAwMDAwMDAwIHB0cj1zZXQgRDNEMTEgZGV2aWNlIHN0YXRlIGFmdGVyIDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMCBTZXRDb250ZW50IDB4MDAwMDAwMDAgQ29tbWl0IDB4MDAwMDAwMDAgc3RhdGUgMHgwMDAwMDAwMAphbiBvcmRpbmFyeSBzdXJmYWNlIGFmdGVyd2FyZHM6IDB4MDAwMDAwMDAgcHRyPXNldCBzdGF0ZSAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "surface 16385x1: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nsurface 0x0: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nvirtual 16385x16385: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nvirtual 0x0: create 0x00000000 ptr=set D3D11 device state after 0x00000000 Commit 0x00000000 state 0x00000000 SetContent 0x00000000 Commit 0x00000000 state 0x00000000\nan ordinary surface afterwards: 0x00000000 ptr=set state 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 116
+    },
+    {
+      "name": "dccommit_surfaces",
+      "exe_sha256": "9ae38eda501e4a15a901c3042c12f3f2af93c1c267cb8ca863d71f01757960ee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "NjR4NjQgQkdSQSBwcmVtdWx0aXBsaWVkOiBkZXNrdG9wIHN1cmZhY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRlc2t0b3AgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQgdjEgc3VyZmFjZSAweDAwMDAwMDAwIHB0cj1zZXQgdjEgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQKNjR4NjQgQkdSQSBzdHJhaWdodDogZGVza3RvcCBzdXJmYWNlIDB4ODAwNzAwNTcgcHRyPW51bGwgZGVza3RvcCB2aXJ0dWFsIDB4ODAwNzAwNTcgcHRyPW51bGwgdjEgc3VyZmFjZSAweDgwMDcwMDU3IHB0cj1udWxsIHYxIHZpcnR1YWwgMHg4MDA3MDA1NyBwdHI9bnVsbAo2NHg2NCBSMTBHMTBCMTBBMjogZGVza3RvcCBzdXJmYWNlIDB4ODAwNzAwNTcgcHRyPW51bGwgZGVza3RvcCB2aXJ0dWFsIDB4ODAwNzAwNTcgcHRyPW51bGwgdjEgc3VyZmFjZSAweDgwMDcwMDU3IHB0cj1udWxsIHYxIHZpcnR1YWwgMHg4MDA3MDA1NyBwdHI9bnVsbAoweDA6IGRlc2t0b3Agc3VyZmFjZSAweDAwMDAwMDAwIHB0cj1zZXQgZGVza3RvcCB2aXJ0dWFsIDB4MDAwMDAwMDAgcHRyPXNldCB2MSBzdXJmYWNlIDB4ODAwNzAwNTcgcHRyPW51bGwgdjEgdmlydHVhbCAweDgwMDcwMDU3IHB0cj1udWxsCnN1cmZhY2UgUUkgSURDb21wb3NpdGlvblN1cmZhY2U6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lPXRydWUKc3VyZmFjZSBRSSBJVW5rbm93bjogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWU9dHJ1ZQp2aXJ0dWFsIHN1cmZhY2UgUUkgSURDb21wb3NpdGlvblN1cmZhY2U6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lPXRydWUKRW5kRHJhdyBhZnRlciB0aGF0OiAweDg4OTgwODAyCiAgRW5kRHJhdyAweDAwMDAwMDAwCkJlZ2luRHJhdyhOVUxMIHJlY3QsIElVbmtub3duKTogMHgwMDAwMDAwMCBwdHI9c2V0IG9mZnNldCBzZXQgdHJ1ZQpFbmREcmF3IHdpdGhvdXQgQmVnaW5EcmF3OiAweDg4OTgwODAyCkJlZ2luRHJhdyhyZWN0IDAsMCwzMywzMyk6IDB4ODAwNzAwNTcgcHRyPW51bGwKQmVnaW5EcmF3KHJlY3QgMTAsMTAsMiwyKTogMHg4MDA3MDA1NyBwdHI9bnVsbAogIGZhY3RvcnkgQ3JlYXRlU3VyZmFjZTogMHgwMDAwMDAwMCBwdHI9c2V0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "64x64 BGRA premultiplied: desktop surface 0x00000000 ptr=set desktop virtual 0x00000000 ptr=set v1 surface 0x00000000 ptr=set v1 virtual 0x00000000 ptr=set\n64x64 BGRA straight: desktop surface 0x80070057 ptr=null desktop virtual 0x80070057 ptr=null v1 surface 0x80070057 ptr=null v1 virtual 0x80070057 ptr=null\n64x64 R10G10B10A2: desktop surface 0x80070057 ptr=null desktop virtual 0x80070057 ptr=null v1 surface 0x80070057 ptr=null v1 virtual 0x80070057 ptr=null\n0x0: desktop surface 0x00000000 ptr=set desktop virtual 0x00000000 ptr=set v1 surface 0x80070057 ptr=null v1 virtual 0x80070057 ptr=null\nsurface QI IDCompositionSurface: 0x00000000 ptr=set same=true\nsurface QI IUnknown: 0x00000000 ptr=set same=true\nvirtual surface QI IDCompositionSurface: 0x00000000 ptr=set same=true\nEndDraw after that: 0x88980802\n  EndDraw 0x00000000\nBeginDraw(NULL rect, IUnknown): 0x00000000 ptr=set offset set true\nEndDraw without BeginDraw: 0x88980802\nBeginDraw(rect 0,0,33,33): 0x80070057 ptr=null\nBeginDraw(rect 10,10,2,2): 0x80070057 ptr=null\n  factory CreateSurface: 0x00000000 ptr=set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 80
+    },
+    {
+      "name": "dccommit_surfaces_b",
+      "exe_sha256": "b09b8eafb982098f5e9aae55c57180c29b856d40c45c2841791b65dec70c7c4f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "NjR4NjQgQkdSQSBpZ25vcmU6IGRlc2t0b3Agc3VyZmFjZSAweDAwMDAwMDAwIHB0cj1zZXQgZGVza3RvcCB2aXJ0dWFsIDB4MDAwMDAwMDAgcHRyPXNldCB2MSBzdXJmYWNlIDB4MDAwMDAwMDAgcHRyPXNldCB2MSB2aXJ0dWFsIDB4MDAwMDAwMDAgcHRyPXNldAo2NHg2NCBSR0JBOCBwcmVtdWx0aXBsaWVkOiBkZXNrdG9wIHN1cmZhY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRlc2t0b3AgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQgdjEgc3VyZmFjZSAweDAwMDAwMDAwIHB0cj1zZXQgdjEgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQKNjR4NjQgUjggdW5vcm06IGRlc2t0b3Agc3VyZmFjZSAweDgwMDcwMDU3IHB0cj1udWxsIGRlc2t0b3AgdmlydHVhbCAweDgwMDcwMDU3IHB0cj1udWxsIHYxIHN1cmZhY2UgMHg4MDA3MDA1NyBwdHI9bnVsbCB2MSB2aXJ0dWFsIDB4ODAwNzAwNTcgcHRyPW51bGwKMXgxOiBkZXNrdG9wIHN1cmZhY2UgMHgwMDAwMDAwMCBwdHI9c2V0IGRlc2t0b3AgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQgdjEgc3VyZmFjZSAweDAwMDAwMDAwIHB0cj1zZXQgdjEgdmlydHVhbCAweDAwMDAwMDAwIHB0cj1zZXQKc3VyZmFjZSBRSSBJRENvbXBvc2l0aW9uVmlydHVhbFN1cmZhY2U6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZT1mYWxzZQpzdXJmYWNlIFFJIElEM0QxMVRleHR1cmUyRDogMHg4MDAwNDAwMiBwdHI9bnVsbCBzYW1lPWZhbHNlCnZpcnR1YWwgc3VyZmFjZSBRSSBJRENvbXBvc2l0aW9uVmlydHVhbFN1cmZhY2U6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lPXRydWUKQmVnaW5EcmF3KE5VTEwgcmVjdCwgSUQzRDExVGV4dHVyZTJEKTogMHgwMDAwMDAwMCBwdHI9c2V0IG9mZnNldCBzZXQgdHJ1ZQpCZWdpbkRyYXcoTlVMTCByZWN0LCBJRFhHSVN1cmZhY2UpOiAweDAwMDAwMDAwIHB0cj1zZXQgb2Zmc2V0IHNldCB0cnVlCiAgRW5kRHJhdyAweDAwMDAwMDAwCkJlZ2luRHJhdyhyZWN0IDQsNCwyMCwyMCk6IDB4MDAwMDAwMDAgcHRyPXNldApCZWdpbkRyYXcocmVjdCAtMSwwLDgsOCk6IDB4ODAwNzAwNTcgcHRyPW51bGwKdmlydHVhbCBzdXJmYWNlIFJlc2l6ZSg2NCw2NCkgMHgwMDAwMDAwMCBSZXNpemUoMCwwKSAweDAwMDAwMDAwIFRyaW0oTlVMTCwwKSAweDAwMDAwMDAwCkNyZWF0ZVN1cmZhY2VGYWN0b3J5KElEWEdJRGV2aWNlKTogMHgwMDAwMDAwMCBwdHI9c2V0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "64x64 BGRA ignore: desktop surface 0x00000000 ptr=set desktop virtual 0x00000000 ptr=set v1 surface 0x00000000 ptr=set v1 virtual 0x00000000 ptr=set\n64x64 RGBA8 premultiplied: desktop surface 0x00000000 ptr=set desktop virtual 0x00000000 ptr=set v1 surface 0x00000000 ptr=set v1 virtual 0x00000000 ptr=set\n64x64 R8 unorm: desktop surface 0x80070057 ptr=null desktop virtual 0x80070057 ptr=null v1 surface 0x80070057 ptr=null v1 virtual 0x80070057 ptr=null\n1x1: desktop surface 0x00000000 ptr=set desktop virtual 0x00000000 ptr=set v1 surface 0x00000000 ptr=set v1 virtual 0x00000000 ptr=set\nsurface QI IDCompositionVirtualSurface: 0x80004002 ptr=null same=false\nsurface QI ID3D11Texture2D: 0x80004002 ptr=null same=false\nvirtual surface QI IDCompositionVirtualSurface: 0x00000000 ptr=set same=true\nBeginDraw(NULL rect, ID3D11Texture2D): 0x00000000 ptr=set offset set true\nBeginDraw(NULL rect, IDXGISurface): 0x00000000 ptr=set offset set true\n  EndDraw 0x00000000\nBeginDraw(rect 4,4,20,20): 0x00000000 ptr=set\nBeginDraw(rect -1,0,8,8): 0x80070057 ptr=null\nvirtual surface Resize(64,64) 0x00000000 Resize(0,0) 0x00000000 Trim(NULL,0) 0x00000000\nCreateSurfaceFactory(IDXGIDevice): 0x00000000 ptr=set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    }
+  ]
+}

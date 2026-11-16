@@ -1,0 +1,99 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dcvis_dead",
+      "exe_sha256": "76945953d3f0bd2b2c398db9f206db258f5ee696e02fc3490d1e10bdfd12a80f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWxsIG1ldGhvZHMgd2l0aCBldmVyeXRoaW5nIGFsaXZlOiBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayAKQ29tbWl0IDB4MDAwMDAwMDAKdmlzdWFsIGNhbGxzIG9uIGFub3RoZXIgdGhyZWFkOiBTZXRPZmZzZXRYIDB4MDAwMDAwMDAgQWRkVmlzdWFsIDB4MDAwMDAwMDAgUmVtb3ZlVmlzdWFsIDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "all methods with everything alive: ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok \nCommit 0x00000000\nvisual calls on another thread: SetOffsetX 0x00000000 AddVisual 0x00000000 RemoveVisual 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    },
+    {
+      "name": "dcvis_dead_c",
+      "exe_sha256": "413304dd107f27c075f9b7e1ffa0a112dc0fc628a4790b02029bb641fdbfe49a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgdGhlIHRhcmdldCdzIHdpbmRvdyB3YXMgZGVzdHJveWVkOiBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayAKYWZ0ZXIgdGhlIGRldmljZSwgRFhHSSBkZXZpY2UgYW5kIEQzRDExIGRldmljZSB3ZXJlIHJlbGVhc2VkOiBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayBvayAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after the target's window was destroyed: ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok \nafter the device, DXGI device and D3D11 device were released: ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok ok \nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 75
+    },
+    {
+      "name": "dcvis_props_b",
+      "exe_sha256": "a69cf6269c11786c7d31144991042216845579ee6f24958a6dfd9b9380ba136a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0T2Zmc2V0WTogMD0weDAwMDAwMDAwIDE9MHgwMDAwMDAwMCAtMT0weDAwMDAwMDAwIDAuNT0weDAwMDAwMDAwIDEwMD0weDAwMDAwMDAwIDFlMTA9MHgwMDAwMDAwMCBNQVg9MHgwMDAwMDAwMCB0aW55PTB4MDAwMDAwMDAgK2luZj0weDgwMDcwMDU3IC1pbmY9MHg4MDA3MDA1NyBuYW49MHg4MDA3MDA1NyAtMD0weDAwMDAwMDAwClNldE9wYWNpdHkgKFZpc3VhbDMpOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIC0xPTB4MDAwMDAwMDAgMC41PTB4MDAwMDAwMDAgMTAwPTB4MDAwMDAwMDAgMWUxMD0weDAwMDAwMDAwIE1BWD0weDAwMDAwMDAwIHRpbnk9MHgwMDAwMDAwMCAraW5mPTB4ODAwNzAwNTcgLWluZj0weDgwMDcwMDU3IG5hbj0weDgwMDcwMDU3IC0wPTB4MDAwMDAwMDAKU2V0VHJhbnNmb3JtKG9iamVjdCBOVUxMKSAweDAwMDAwMDAwIFNldFRyYW5zZm9ybShtYXRyaXgpIGFmdGVyIGl0IDB4MDAwMDAwMDAKICBhcyB0aGUgdHJhbnNmb3JtIG9mIGEgdjEgZGV2aWNlJ3MgdmlzdWFsOiAweDgwMDcwMDU3ClNldFRyYW5zZm9ybVBhcmVudChhbm90aGVyIHZpc3VhbCBvZiB0aGUgZGV2aWNlKSAweDAwMDAwMDAwCkNyZWF0ZVJlY3RhbmdsZUNsaXAgMHgwMDAwMDAwMCBwdHI9c2V0OiBTZXRDbGlwKG9iamVjdCkgMHgwMDAwMDAwMCBvbiBhIHYxIHZpc3VhbCAweDgwMDcwMDU3ClNldEJvcmRlck1vZGU6IDA9MHgwMDAwMDAwMCAxPTB4MDAwMDAwMDAgMj0weDgwMDcwMDU3IDM9MHg4MDA3MDA1NyA0PTB4ODAwNzAwNTcgMTAwPTB4ODAwNzAwNTcgLTE9MHgwMDAwMDAwMCAtMjE0NzQ4MzY0OD0weDgwMDcwMDU3IDIxNDc0ODM2NDc9MHg4MDA3MDA1NwpTZXRCYWNrRmFjZVZpc2liaWxpdHkgKFZpc3VhbDIpOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIDI9MHg4MDA3MDA1NyAzPTB4ODAwNzAwNTcgND0weDgwMDcwMDU3IDEwMD0weDgwMDcwMDU3IC0xPTB4MDAwMDAwMDAgLTIxNDc0ODM2NDg9MHg4MDA3MDA1NyAyMTQ3NDgzNjQ3PTB4ODAwNzAwNTcKdjEgdmlzdWFsIFNldEJpdG1hcEludGVycG9sYXRpb25Nb2RlOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIC0xPTB4MDAwMDAwMDAgNT0weDgwMDcwMDU3ClNldEVmZmVjdChOVUxMKSAweDAwMDAwMDAwIFNldEVmZmVjdCh0aGUgdmlzdWFsKSAweDgwMDcwMDU3CkNvbW1pdCBvZiB0aGUgdjEgZGV2aWNlIDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetOffsetY: 0=0x00000000 1=0x00000000 -1=0x00000000 0.5=0x00000000 100=0x00000000 1e10=0x00000000 MAX=0x00000000 tiny=0x00000000 +inf=0x80070057 -inf=0x80070057 nan=0x80070057 -0=0x00000000\nSetOpacity (Visual3): 0=0x00000000 1=0x00000000 -1=0x00000000 0.5=0x00000000 100=0x00000000 1e10=0x00000000 MAX=0x00000000 tiny=0x00000000 +inf=0x80070057 -inf=0x80070057 nan=0x80070057 -0=0x00000000\nSetTransform(object NULL) 0x00000000 SetTransform(matrix) after it 0x00000000\n  as the transform of a v1 device's visual: 0x80070057\nSetTransformParent(another visual of the device) 0x00000000\nCreateRectangleClip 0x00000000 ptr=set: SetClip(object) 0x00000000 on a v1 visual 0x80070057\nSetBorderMode: 0=0x00000000 1=0x00000000 2=0x80070057 3=0x80070057 4=0x80070057 100=0x80070057 -1=0x00000000 -2147483648=0x80070057 2147483647=0x80070057\nSetBackFaceVisibility (Visual2): 0=0x00000000 1=0x00000000 2=0x80070057 3=0x80070057 4=0x80070057 100=0x80070057 -1=0x00000000 -2147483648=0x80070057 2147483647=0x80070057\nv1 visual SetBitmapInterpolationMode: 0=0x00000000 1=0x00000000 -1=0x00000000 5=0x80070057\nSetEffect(NULL) 0x00000000 SetEffect(the visual) 0x80070057\nCommit of the v1 device 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    },
+    {
+      "name": "dcvis_props_c",
+      "exe_sha256": "200c871159e16283efafd0f6b4fb2cc2740e847f656b8b0481ef07b9038f2f49",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0T2Zmc2V0WCBvbiB0aGUgdjEgdmlzdWFsOiAwPTB4MDAwMDAwMDAgMT0weDAwMDAwMDAwIC0xPTB4MDAwMDAwMDAgMC41PTB4MDAwMDAwMDAgMTAwPTB4MDAwMDAwMDAgMWUxMD0weDAwMDAwMDAwIE1BWD0weDAwMDAwMDAwIHRpbnk9MHgwMDAwMDAwMCAraW5mPTB4ODAwNzAwNTcgLWluZj0weDgwMDcwMDU3IG5hbj0weDgwMDcwMDU3IC0wPTB4MDAwMDAwMDAKU2V0T2Zmc2V0WChhbmltYXRpb24gTlVMTCkgMHg4MDA3MDA1NyBTZXRPZmZzZXRZKGFuaW1hdGlvbiBOVUxMKSAweDgwMDcwMDU3IFNldE9mZnNldFogMHg4MDA3MDA1NyBTZXRPcGFjaXR5IDB4ODAwNzAwNTcKU2V0VHJhbnNmb3JtKDR4NCBtYXRyaXgsIFZpc3VhbDMpOiBpZGVudGl0eT0weDAwMDAwMDAwIHplcm9zPTB4MDAwMDAwMDAgbmFuPTB4MDAwMDAwMDAgb2JqZWN0IE5VTEwgMHgwMDAwMDAwMApTZXRUcmFuc2Zvcm0ob2JqZWN0OiB0aGUgdmlzdWFsIGl0c2VsZikgMHg4MDA3MDA1NwpTZXRDbGlwKHJlY3QpOiAwLDAsMTAsMTA9MHgwMDAwMDAwMCBuZWdhdGl2ZSBvcmlnaW49MHgwMDAwMDAwMCBlbXB0eT0weDAwMDAwMDAwIGludmVydGVkPTB4MDAwMDAwMDAgbmFuPTB4MDAwMDAwMDAgaW5mPTB4MDAwMDAwMDAgLWluZi4uaW5mPTB4MDAwMDAwMDAgaHVnZT0weDAwMDAwMDAwIGZyYWN0aW9ucz0weDAwMDAwMDAwCiAgU2V0Q2xpcChyZWN0KSBhZnRlciB0aGUgY2xpcCBvYmplY3Q6IDB4MDAwMDAwMDAKU2V0Q29tcG9zaXRlTW9kZTogMD0weDAwMDAwMDAwIDE9MHgwMDAwMDAwMCAyPTB4MDAwMDAwMDAgMz0weDgwMDcwMDU3IDQ9MHg4MDA3MDA1NyAxMDA9MHg4MDA3MDA1NyAtMT0weDAwMDAwMDAwIC0yMTQ3NDgzNjQ4PTB4ODAwNzAwNTcgMjE0NzQ4MzY0Nz0weDgwMDcwMDU3ClNldERlcHRoTW9kZSAoVmlzdWFsMyk6IDA9MHgwMDAwMDAwMCAxPTB4MDAwMDAwMDAgMj0weDgwMDcwMDU3IDM9MHg4MDA3MDA1NyA0PTB4ODAwNzAwNTcgLTE9MHgwMDAwMDAwMAp2MSB2aXN1YWwgU2V0Qm9yZGVyTW9kZTogMD0weDAwMDAwMDAwIDE9MHgwMDAwMDAwMCAtMT0weDAwMDAwMDAwIDU9MHg4MDA3MDA1NwpDcmVhdGVFZmZlY3RHcm91cCAweDAwMDAwMDAwIHB0cj1zZXQ6IFNldEVmZmVjdChncm91cCkgMHgwMDAwMDAwMAp0aGUgcm9vdCB2aXN1YWw6IFNldE9mZnNldFgoMykgMHgwMDAwMDAwMCBTZXRPcGFjaXR5KDAuNSkgMHgwMDAwMDAwMCBDb21taXQgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetOffsetX on the v1 visual: 0=0x00000000 1=0x00000000 -1=0x00000000 0.5=0x00000000 100=0x00000000 1e10=0x00000000 MAX=0x00000000 tiny=0x00000000 +inf=0x80070057 -inf=0x80070057 nan=0x80070057 -0=0x00000000\nSetOffsetX(animation NULL) 0x80070057 SetOffsetY(animation NULL) 0x80070057 SetOffsetZ 0x80070057 SetOpacity 0x80070057\nSetTransform(4x4 matrix, Visual3): identity=0x00000000 zeros=0x00000000 nan=0x00000000 object NULL 0x00000000\nSetTransform(object: the visual itself) 0x80070057\nSetClip(rect): 0,0,10,10=0x00000000 negative origin=0x00000000 empty=0x00000000 inverted=0x00000000 nan=0x00000000 inf=0x00000000 -inf..inf=0x00000000 huge=0x00000000 fractions=0x00000000\n  SetClip(rect) after the clip object: 0x00000000\nSetCompositeMode: 0=0x00000000 1=0x00000000 2=0x00000000 3=0x80070057 4=0x80070057 100=0x80070057 -1=0x00000000 -2147483648=0x80070057 2147483647=0x80070057\nSetDepthMode (Visual3): 0=0x00000000 1=0x00000000 2=0x80070057 3=0x80070057 4=0x80070057 -1=0x00000000\nv1 visual SetBorderMode: 0=0x00000000 1=0x00000000 -1=0x00000000 5=0x80070057\nCreateEffectGroup 0x00000000 ptr=set: SetEffect(group) 0x00000000\nthe root visual: SetOffsetX(3) 0x00000000 SetOpacity(0.5) 0x00000000 Commit 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    },
+    {
+      "name": "dcvis_tree",
+      "exe_sha256": "e3bfe98aef451a8a80d1be66f859ee08c22b9c184827bbbda2b82b2ddd55e744",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkVmlzdWFsKGEsIGFib3ZlLCBubyByZWZlcmVuY2UpOiAweDAwMDAwMDAwIHJlZnMgb2YgdGhlIGNoaWxkIDEgLT4gMQpDb21taXQgMHgwMDAwMDAwMApBZGRWaXN1YWwoYSB0byBhIHNlY29uZCBwYXJlbnQpOiAweDgwMDcwMDU3ClJlbW92ZVZpc3VhbChhIGZyb20gdGhlIHNlY29uZCBwYXJlbnQpOiAweDAwMDAwMDAwCkFkZFZpc3VhbChuZXcgY2hpbGQsIGJlbG93LCByZWZlcmVuY2UgYiB3aGljaCBpcyBhIGNoaWxkKTogMHgwMDAwMDAwMApBZGRWaXN1YWwoZSwgYWJvdmUsIHJlZmVyZW5jZSB0aGUgcGFyZW50IHAgaXRzZWxmKTogMHg4MDA3MDA1NwpBZGRWaXN1YWwoYSB2aXN1YWwgb2YgYW5vdGhlciBkZXZpY2UpOiAweDAwMDAwMDAwCkFkZFZpc3VhbChhIGRlc2t0b3AgZGV2aWNlIHZpc3VhbCB0byBhIHYxIGRldmljZSB2aXN1YWwpOiAweDAwMDAwMDAwCkFkZFZpc3VhbCh4IHRvIHksIHRoZW4geSB0byB6KTogMHgwMDAwMDAwMCAweDAwMDAwMDAwCldhaXRGb3JDb21taXRDb21wbGV0aW9uOiAweDAwMDAwMDAwCkFkZFZpc3VhbCh6IHRvIHAyIGFmdGVyIHRoZSBjeWNsZSB3YXMgb3BlbmVkKTogMHgwMDAwMDAwMApBZGRWaXN1YWwodGhhdCB2aXN1YWwgdG8gYW5vdGhlciBwYXJlbnQpOiAweDgwMDcwMDU3CkFkZFZpc3VhbCh0aGF0IHZpc3VhbCB0byBwMiBhZnRlciB0aGF0KTogMHgwMDAwMDAwMApSZW1vdmVWaXN1YWwoYSBjaGlsZCk6IDB4MDAwMDAwMDAKUmVtb3ZlVmlzdWFsKHAgZnJvbSBpdHNlbGYpOiAweDgwMDcwMDU3ClJlbW92ZUFsbFZpc3VhbHMgb24gYW4gZW1wdHkgdmlzdWFsOiAweDAwMDAwMDAwClJlbW92ZUFsbFZpc3VhbHMgcCwgdGhlbiB0aGUgY2hpbGQgYSBpcyBmcmVlIGFnYWluOiAweDAwMDAwMDAwIGFkZCB0byBwMiAweDAwMDAwMDAwClJlbW92ZVZpc3VhbChOVUxMKTogMHg4MDA3MDA1NwpBZGRWaXN1YWwgMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "AddVisual(a, above, no reference): 0x00000000 refs of the child 1 -> 1\nCommit 0x00000000\nAddVisual(a to a second parent): 0x80070057\nRemoveVisual(a from the second parent): 0x00000000\nAddVisual(new child, below, reference b which is a child): 0x00000000\nAddVisual(e, above, reference the parent p itself): 0x80070057\nAddVisual(a visual of another device): 0x00000000\nAddVisual(a desktop device visual to a v1 device visual): 0x00000000\nAddVisual(x to y, then y to z): 0x00000000 0x00000000\nWaitForCommitCompletion: 0x00000000\nAddVisual(z to p2 after the cycle was opened): 0x00000000\nAddVisual(that visual to another parent): 0x80070057\nAddVisual(that visual to p2 after that): 0x00000000\nRemoveVisual(a child): 0x00000000\nRemoveVisual(p from itself): 0x80070057\nRemoveAllVisuals on an empty visual: 0x00000000\nRemoveAllVisuals p, then the child a is free again: 0x00000000 add to p2 0x00000000\nRemoveVisual(NULL): 0x80070057\nAddVisual 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 112
+    },
+    {
+      "name": "dcvis_tree_b",
+      "exe_sha256": "f99d8c50442096e6c1e98b263557f8d4b128815e8cc63667190e8147f164c7f4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkVmlzdWFsKGIsIGJlbG93LCBubyByZWZlcmVuY2UpOiAweDAwMDAwMDAwCkFkZFZpc3VhbChhIGFnYWluLCBzYW1lIHBhcmVudCwgYWJvdmUsIG5vIHJlZmVyZW5jZSk6IDB4ODAwNzAwNTcKQWRkVmlzdWFsKGEgdG8gdGhlIHNlY29uZCBwYXJlbnQgYWZ0ZXIgUmVtb3ZlVmlzdWFsIGZyb20gdGhlIGZpcnN0KTogcmVtb3ZlIDB4MDAwMDAwMDAgYWRkIDB4MDAwMDAwMDAKQWRkVmlzdWFsKGEgYmFjayB0byB0aGUgZmlyc3QgcGFyZW50KTogMHgwMDAwMDAwMApBZGRWaXN1YWwoZSwgYWJvdmUsIHJlZmVyZW5jZSBlIGl0c2VsZik6IDB4ODAwNzAwNTcKQWRkVmlzdWFsKGUsIGJlbG93LCByZWZlcmVuY2UgYSBjaGlsZCBvZiBhbm90aGVyIHBhcmVudCk6IDB4ODAwNzAwNTcKQWRkVmlzdWFsKHRvIGEgcGFyZW50IG9mIGFub3RoZXIgZGV2aWNlKTogMHgwMDAwMDAwMApBZGRWaXN1YWwodjEgY2hpbGQgdG8gdjEgcGFyZW50KTogMHgwMDAwMDAwMApBZGRWaXN1YWwoeiB0byB4LCBjbG9zaW5nIHRoZSBjeWNsZSB4LXkteiwgeiBoYXMgbm8gcGFyZW50KTogMHgwMDAwMDAwMApBZGRWaXN1YWwoeCB0byBhbm90aGVyIHBhcmVudCwgeCBhbHJlYWR5IGhhcyBhIHBhcmVudCk6IDB4ODAwNzAwNTcKUmVtb3ZlVmlzdWFsKHogZnJvbSBwMik6IDB4MDAwMDAwMDAKQ29tbWl0IHdpdGggdGhlIHNlbGYtY3ljbGU6IDB4MDAwMDAwMDAKUmVtb3ZlVmlzdWFsKGUgZnJvbSBwMik6IDB4MDAwMDAwMDAKUmVtb3ZlVmlzdWFsKGEgdmlzdWFsIHRoYXQgaXMgbm90IGEgY2hpbGQpOiAweDgwMDcwMDU3ClJlbW92ZVZpc3VhbChhIHZpc3VhbCByZW1vdmVkIGJlZm9yZSk6IDB4ODAwNzAwNTcKUmVtb3ZlQWxsVmlzdWFscyBvbiBhIGZyZXNoIHZpc3VhbDogMHgwMDAwMDAwMApDb21taXQgMHgwMDAwMDAwMAphIGNoYWluIG9mIDY0IHZpc3VhbHM6IDYzIG9mIDYzIGxpbmtzIGFkZGVkLCBDb21taXQgMHgwMDAwMDAwMAphZnRlciB0aGUgcGFyZW50J3MgbGFzdCB0ZXN0IHJlZmVyZW5jZSB3YXMgcmVsZWFzZWQ6IEFkZFZpc3VhbChyIHRvIHAyKSAweDAwMDAwMDAwIENvbW1pdCAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "AddVisual(b, below, no reference): 0x00000000\nAddVisual(a again, same parent, above, no reference): 0x80070057\nAddVisual(a to the second parent after RemoveVisual from the first): remove 0x00000000 add 0x00000000\nAddVisual(a back to the first parent): 0x00000000\nAddVisual(e, above, reference e itself): 0x80070057\nAddVisual(e, below, reference a child of another parent): 0x80070057\nAddVisual(to a parent of another device): 0x00000000\nAddVisual(v1 child to v1 parent): 0x00000000\nAddVisual(z to x, closing the cycle x-y-z, z has no parent): 0x00000000\nAddVisual(x to another parent, x already has a parent): 0x80070057\nRemoveVisual(z from p2): 0x00000000\nCommit with the self-cycle: 0x00000000\nRemoveVisual(e from p2): 0x00000000\nRemoveVisual(a visual that is not a child): 0x80070057\nRemoveVisual(a visual removed before): 0x80070057\nRemoveAllVisuals on a fresh visual: 0x00000000\nCommit 0x00000000\na chain of 64 visuals: 63 of 63 links added, Commit 0x00000000\nafter the parent's last test reference was released: AddVisual(r to p2) 0x00000000 Commit 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 90
+    }
+  ]
+}

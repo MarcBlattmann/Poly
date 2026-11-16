@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dxgi.dll/IDXGISwapChain.Present.yaml
+id: windows/api/dxgi.dll/IDXGISwapChain.Present
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "IDXGISwapChain::Present method (dxgi.h)", "IDXGISwapChain1::Present1 method (dxgi1_2.h)", "DXGI_PRESENT", "DXGI_PRESENT_PARAMETERS", "IDXGISwapChain::GetLastPresentCount", "IDXGISwapChain::GetFrameStatistics", "DXGI_FRAME_STATISTICS", "DXGI model of presentation (flip model)", "IDXGISwapChain::GetBuffer"; dxgi.h, dxgi1_2.h, dxgi1_3.h, dxgi1_4.h, dxgi1_5.h, dxgi1_6.h, dxgitype.h, dxgiformat.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Presents the back buffer of a swap chain. Chrome calls Present1 (ANGLE: Present with sync interval 0 or 1, often with dirty rectangles for partial presents) every frame. Tested on a WARP device with a never shown window. Observed: sync intervals 0 .. 4 give S_OK and increase GetLastPresentCount by one; 5 and above give DXGI_ERROR_INVALID_CALL without counting; the TEST flag gives S_OK without counting; ALLOW_TEARING without the swap chain flag, and the stereo flags 0x10 and 0x20, give INVALID_CALL. Present never reports DXGI_STATUS_OCCLUDED for a window that was never shown, nor after the window was destroyed (S_OK). The back buffers rotate: after a SEQUENTIAL, FLIP_SEQUENTIAL or FLIP_DISCARD Present, buffer 0 is no longer the picture that was drawn into it (it reads as zero) and the presented picture sits at the last accessible index; with DISCARD, buffer 0 keeps its contents. GetBuffer(0) returns the same COM object after a Present; only its contents changed. (The documentation calls the contents after a DISCARD or FLIP_DISCARD Present undefined; the values here are WARP's.) This entry's tests also cover Present1, GetLastPresentCount and GetFrameStatistics.
+interface:
+  signature: "HRESULT IDXGISwapChain::Present(UINT SyncInterval, UINT Flags)"
+  constants: "DXGI_PRESENT_TEST 0x1, DO_NOT_SEQUENCE 0x2, RESTART 0x4, DO_NOT_WAIT 0x8, STEREO_PREFER_RIGHT 0x10, STEREO_TEMPORARY_MONO 0x20, USE_DURATION 0x100, ALLOW_TEARING 0x200 (dxgi.h, dxgi1_2.h, dxgi1_5.h). DXGI_SWAP_EFFECT DISCARD 0, SEQUENTIAL 1, FLIP_SEQUENTIAL 3, FLIP_DISCARD 4. DXGI_STATUS_OCCLUDED 0x087A0001. DXGI_ERROR_FRAME_STATISTICS_DISJOINT 0x887A000B"
+chrome:
+  calls: "ANGLE's swap chain code calls IDXGISwapChain1::Present1 (or Present) after each frame with SyncInterval 0 or 1 and, for partial swaps, dirty rectangles (assumed from ANGLE's documented behaviour); the API tracer does not see COM calls"
+rules:
+  interval: "Present(0 .. 4, 0): S_OK, GetLastPresentCount +1 each; Present(5), (16), (0xFFFFFFFF): DXGI_ERROR_INVALID_CALL (0x887A0001), the count is unchanged; the same for every swap effect (DISCARD, SEQUENTIAL, FLIP_SEQUENTIAL, FLIP_DISCARD) at sync interval 0 and 1"
+  flags: "TEST (1): S_OK, count unchanged; DO_NOT_SEQUENCE (2), RESTART (4), DO_NOT_WAIT (8), USE_DURATION (0x100), RESTART|DO_NOT_SEQUENCE: S_OK, count +1; ALLOW_TEARING (0x200) on a swap chain created without the ALLOW_TEARING flag, 0x10, 0x20 and 0xFFFFFFFF: DXGI_ERROR_INVALID_CALL, count unchanged"
+  flags_by_effect: "the undefined bits 0x400 and 0x80000000, and TEST|DO_NOT_WAIT (9): S_OK for DISCARD and SEQUENTIAL (0x400 and 0x80000000 count +1, 9 does not count); DXGI_ERROR_INVALID_CALL for FLIP_SEQUENTIAL and FLIP_DISCARD"
+  repeat: "20 presents in a row at interval 0 all succeed and count +20"
+  present_count: "GetLastPresentCount is S_OK and 0 before the first Present; it counts every successful non-TEST Present (also those with sync interval 0); it stays non-zero after the window was destroyed"
+  frame_statistics: "GetFrameStatistics (windowed): DISCARD and SEQUENTIAL: DXGI_ERROR_UNSUPPORTED (0x887A0004); FLIP_SEQUENTIAL and FLIP_DISCARD: DXGI_ERROR_FRAME_STATISTICS_DISJOINT (0x887A000B); the 32-byte DXGI_FRAME_STATISTICS is overwritten with zeros in both cases"
+  fullscreen_state: "GetFullscreenState on a windowed swap chain: S_OK, fullscreen FALSE, output NULL"
+  window_state: "Present on a swap chain whose window was never shown: S_OK (and Present(TEST) S_OK); after the window was destroyed: S_OK and TEST S_OK; with a reference to a back buffer still held by the caller: S_OK"
+  contents_discard: "DISCARD (1 or 2 buffers, only buffer 0 is accessible): fresh buffer 0 reads zero; draw red with ClearRenderTargetView, Present(0,0): buffer 0 still reads red, GetBuffer(0) is the same object; each following picture likewise stays readable; Present(TEST) leaves buffer 0 as drawn"
+  contents_rotation: "SEQUENTIAL and FLIP_SEQUENTIAL with 2 buffers: fresh buffers read zero; draw red in buffer 0, Present: buffer 0 reads zero and buffer 1 reads red; draw green in buffer 0, Present(1,0): buffer 0 reads red, buffer 1 reads green (the presented buffer moves to the last index, every other buffer moves down one index). With 3 buffers (FLIP_SEQUENTIAL): after the first Present buffers 0,1 read zero (red is in buffer 2); after the second Present (green drawn): buffer 0 zero, buffer 1 red, buffer 2 green. FLIP_DISCARD behaves the same on WARP for buffer 0 (zero after the first Present, red after the second with 2 buffers, zero after the second with 3), but only buffer 0 can be fetched with GetBuffer. Present(TEST) does not rotate: buffer 0 still reads what was drawn"
+  buffer_identity: "GetBuffer(0) after a Present returns the same COM pointer as before and the reference count of the texture is then 2 when both pointers are held"
+errors:
+  invalid_call: "DXGI_ERROR_INVALID_CALL (0x887A0001)"
+  unsupported: "DXGI_ERROR_UNSUPPORTED (0x887A0004)"
+  disjoint: "DXGI_ERROR_FRAME_STATISTICS_DISJOINT (0x887A000B)"
+side_effects: "the presented picture moves to the window or visual (not observable: windows are never shown)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 6
+  held_out: 3
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  DXGI_STATUS_OCCLUDED (needs a shown and covered window), DXGI_ERROR_WAS_STILL_DRAWING with DO_NOT_WAIT, DXGI_ERROR_DEVICE_REMOVED, the visual result on screen, timing of sync intervals, ALLOW_TEARING with the swap chain flag (accepted flag combination only tested at creation), present with the swap chain's buffer bound as render target.

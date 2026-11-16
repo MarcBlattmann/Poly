@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "dev_misc",
+      "exe_sha256": "bf9feafaf03156b1ff8088d7fca0066353c878019a0d5203592cf8f64f0a4e4d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlZCB3aXRoIGZsYWdzIDB4MDogMHgwMDAwMDAwMCBHZXRDcmVhdGlvbkZsYWdzIDB4MApjcmVhdGVkIHdpdGggZmxhZ3MgMHgyMTogMHgwMDAwMDAwMCBHZXRDcmVhdGlvbkZsYWdzIDB4MjEKY3JlYXRlZCB3aXRoIGZsYWdzIDB4NDogMHg4ODdhMDAyZCBHZXRDcmVhdGlvbkZsYWdzIDB4MApTZXRFeGNlcHRpb25Nb2RlIDB4MDogMHgwMDAwMDAwMCB0aGVuIEdldCAweDAKU2V0RXhjZXB0aW9uTW9kZSAweDQ6IDB4ODAwNzAwNTcgdGhlbiBHZXQgMHgxClNldEV4Y2VwdGlvbk1vZGUgMHgxMDogMHg4MDA3MDA1NyB0aGVuIEdldCAweDEKU2V0UHJpdmF0ZURhdGEgNSBieXRlczogMHgwMDAwMDAwMApHZXRQcml2YXRlRGF0YSB3aXRoIGFuIDggYnl0ZSBidWZmZXI6IDB4MDAwMDAwMDAgc2l6ZSA1IGRhdGEgNjg2NTZjNmM2ZgpTZXRQcml2YXRlRGF0YShXS1BESURfRDNERGVidWdPYmplY3ROYW1lKTogMHgwMDAwMDAwMApTZXRQcml2YXRlRGF0YUludGVyZmFjZSh0ZXh0dXJlKTogMHgwMDAwMDAwMCB0ZXh0dXJlIHJlZnMgd2hpbGUgaGVsZCAyIChjb250ZXh0IHJlZnMgMSkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "created with flags 0x0: 0x00000000 GetCreationFlags 0x0\ncreated with flags 0x21: 0x00000000 GetCreationFlags 0x21\ncreated with flags 0x4: 0x887a002d GetCreationFlags 0x0\nSetExceptionMode 0x0: 0x00000000 then Get 0x0\nSetExceptionMode 0x4: 0x80070057 then Get 0x1\nSetExceptionMode 0x10: 0x80070057 then Get 0x1\nSetPrivateData 5 bytes: 0x00000000\nGetPrivateData with an 8 byte buffer: 0x00000000 size 5 data 68656c6c6f\nSetPrivateData(WKPDID_D3DDebugObjectName): 0x00000000\nSetPrivateDataInterface(texture): 0x00000000 texture refs while held 2 (context refs 1)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 94
+    },
+    {
+      "name": "dev_misc_b",
+      "exe_sha256": "89946235a5945635096dc9959d35a18d11422343a03b95dd27dddaeced514aff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlZCB3aXRoIGZsYWdzIDB4MTogMHgwMDAwMDAwMCBHZXRDcmVhdGlvbkZsYWdzIDB4MQpjcmVhdGVkIHdpdGggZmxhZ3MgMHg4OiAweDAwMDAwMDAwIEdldENyZWF0aW9uRmxhZ3MgMHg4CkdldERldmljZVJlbW92ZWRSZWFzb24gMHgwMDAwMDAwMApTZXRFeGNlcHRpb25Nb2RlIDB4MTogMHgwMDAwMDAwMCB0aGVuIEdldCAweDEKU2V0RXhjZXB0aW9uTW9kZSAweDg6IDB4ODAwNzAwNTcgdGhlbiBHZXQgMHgxClNldEV4Y2VwdGlvbk1vZGUgMHhmZmZmZmZmZjogMHg4MDA3MDA1NyB0aGVuIEdldCAweDEKR2V0UHJpdmF0ZURhdGEgc2l6ZSBxdWVyeTogMHgwMDAwMDAwMCBzaXplIDUKU2V0UHJpdmF0ZURhdGEgYWdhaW4gd2l0aCAyIGJ5dGVzOiAweDAwMDAwMDAwIG5vdyBzaXplIDIKZGVidWcgbmFtZSBzaXplOiAweDAwMDAwMDAwIDExCkdldFByaXZhdGVEYXRhIG9mIGFuIGludGVyZmFjZSBlbnRyeTogMHgwMDAwMDAwMCBzaXplIDgKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "created with flags 0x1: 0x00000000 GetCreationFlags 0x1\ncreated with flags 0x8: 0x00000000 GetCreationFlags 0x8\nGetDeviceRemovedReason 0x00000000\nSetExceptionMode 0x1: 0x00000000 then Get 0x1\nSetExceptionMode 0x8: 0x80070057 then Get 0x1\nSetExceptionMode 0xffffffff: 0x80070057 then Get 0x1\nGetPrivateData size query: 0x00000000 size 5\nSetPrivateData again with 2 bytes: 0x00000000 now size 2\ndebug name size: 0x00000000 11\nGetPrivateData of an interface entry: 0x00000000 size 8\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 96
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "0a5edfa7d613",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:38:01Z",
+  "tests": [
+    {
+      "name": "dctarget_hwnd",
+      "exe_sha256": "22fb0db4898ad7993013ee5251e256ffa82c80b4f82e91f7e16e2a41813245e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVza3RvcCBkZXZpY2UgQ3JlYXRlVGFyZ2V0Rm9ySHduZCB0b3Btb3N0IDE6IDB4MDAwMDAwMDAgcHRyPXNldAp2MSBkZXZpY2UgQ3JlYXRlVGFyZ2V0Rm9ySHduZCB0b3Btb3N0IDAgKHRoZSBmaXJzdCB0YXJnZXQgcmVsZWFzZWQpOiAweDAwMDAwMDAwIHB0cj1zZXQKZGVza3RvcCBkZXZpY2UgQ3JlYXRlVGFyZ2V0Rm9ySHduZCB0b3Btb3N0IC0xOiAweDAwMDAwMDAwIHB0cj1zZXQKdGFyZ2V0IGZvciBwb3B1cDogMHgwMDAwMDAwMCBwdHI9c2V0CnRhcmdldCBmb3IgV1NfRVhfTk9SRURJUkVDVElPTkJJVE1BUCB3aW5kb3c6IDB4MDAwMDAwMDAgcHRyPXNldAp0YXJnZXQgZm9yIGRlc2t0b3Agd2luZG93OiAweDgwMDcwMDU3IHB0cj1udWxsCnRhcmdldCBmb3IgaHduZCAweDEyMzQ6IDB4ODAwNzAwNTcgcHRyPW51bGwKICB2MSBkZXZpY2U6IDB4ODAwNzAwNTcgcHRyPW51bGwKdGFyZ2V0IGZvciBhIGRlc3Ryb3llZCB3aW5kb3c6IDB4ODAwNzAwNTcgcHRyPW51bGwKdGFyZ2V0IGZvciB0aGUgdGVzdCB3aW5kb3c6IDB4MDAwMDAwMDAgcHRyPXNldCByZWZzIDEKdGFyZ2V0IFFJIElEQ29tcG9zaXRpb25WaXN1YWw6IDB4ODAwMDQwMDIgcHRyPW51bGwKYSBzZWNvbmQgdGFyZ2V0IGZvciB0aGUgc2FtZSB3aW5kb3cgKHNhbWUgZGV2aWNlLCB0b3Btb3N0IFRSVUUpOiAweDg4OTgwODAwIHB0cj1udWxsCmEgc2Vjb25kIHRhcmdldCBmb3IgdGhlIHNhbWUgd2luZG93ICh2MSBkZXZpY2UsIHRvcG1vc3QgRkFMU0UpOiAweDAwMDAwMDAwIHB0cj1zZXQKYW5vdGhlciBub24tdG9wbW9zdCB0YXJnZXQgd2hpbGUgb25lIGV4aXN0czogMHg4ODk4MDgwMCBwdHI9bnVsbAp0YXJnZXQgU2V0Um9vdChOVUxMKSBhZnRlciB0aGUgZGV2aWNlIHdhcyByZWxlYXNlZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "desktop device CreateTargetForHwnd topmost 1: 0x00000000 ptr=set\nv1 device CreateTargetForHwnd topmost 0 (the first target released): 0x00000000 ptr=set\ndesktop device CreateTargetForHwnd topmost -1: 0x00000000 ptr=set\ntarget for popup: 0x00000000 ptr=set\ntarget for WS_EX_NOREDIRECTIONBITMAP window: 0x00000000 ptr=set\ntarget for desktop window: 0x80070057 ptr=null\ntarget for hwnd 0x1234: 0x80070057 ptr=null\n  v1 device: 0x80070057 ptr=null\ntarget for a destroyed window: 0x80070057 ptr=null\ntarget for the test window: 0x00000000 ptr=set refs 1\ntarget QI IDCompositionVisual: 0x80004002 ptr=null\na second target for the same window (same device, topmost TRUE): 0x88980800 ptr=null\na second target for the same window (v1 device, topmost FALSE): 0x00000000 ptr=set\nanother non-topmost target while one exists: 0x88980800 ptr=null\ntarget SetRoot(NULL) after the device was released: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 96
+    },
+    {
+      "name": "dctarget_hwnd_b",
+      "exe_sha256": "108b697136a75db36b97ce1382dc40cf485724943b108429daccb5fb42e95d59",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "djEgZGV2aWNlIENyZWF0ZVRhcmdldEZvckh3bmQgdG9wbW9zdCAxICh0aGUgZmlyc3QgdGFyZ2V0IHJlbGVhc2VkKTogMHgwMDAwMDAwMCBwdHI9c2V0CmRlc2t0b3AgZGV2aWNlIENyZWF0ZVRhcmdldEZvckh3bmQgdG9wbW9zdCAyOiAweDAwMDAwMDAwIHB0cj1zZXQKdjEgZGV2aWNlIENyZWF0ZVRhcmdldEZvckh3bmQgdG9wbW9zdCAtMSAodGhlIGZpcnN0IHRhcmdldCByZWxlYXNlZCk6IDB4MDAwMDAwMDAgcHRyPXNldAp0YXJnZXQgZm9yIGNoaWxkIHdpbmRvdzogMHgwMDAwMDAwMCBwdHI9c2V0CnRhcmdldCBmb3IgbWVzc2FnZS1vbmx5IHdpbmRvdzogMHgwMDAwMDAwMCBwdHI9c2V0CnRhcmdldCBmb3IgaHduZCBOVUxMOiAweDgwMDcwMDU3IHB0cj1udWxsCiAgdjEgZGV2aWNlOiAweDgwMDcwMDU3IHB0cj1udWxsCnRhcmdldCBmb3IgaHduZCBhIGhhbmRsZSB0aGF0IGlzIG5vdCBhIHdpbmRvdyAoYW4gZXZlbnQpOiAweDgwMDcwMDU3IHB0cj1udWxsCnRhcmdldCBmb3IgYSB3aW5kb3cgb2YgYW5vdGhlciB0aHJlYWQ6IDB4MDAwMDAwMDAgcHRyPXNldAp0YXJnZXQgUUkgSURDb21wb3NpdGlvblRhcmdldDogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWU9dHJ1ZQp0YXJnZXQgUUkgSURDb21wb3NpdGlvbkRldmljZTogMHg4MDAwNDAwMiBwdHI9bnVsbAphIHNlY29uZCB0YXJnZXQgZm9yIHRoZSBzYW1lIHdpbmRvdyAoc2FtZSBkZXZpY2UsIHRvcG1vc3QgRkFMU0UpOiAweDAwMDAwMDAwIHB0cj1zZXQKYSBzZWNvbmQgdGFyZ2V0IGZvciB0aGUgc2FtZSB3aW5kb3cgZnJvbSBhbm90aGVyIGRldmljZSwgdG9wbW9zdCBUUlVFOiAweDg4OTgwODAwIHB0cj1udWxsCnRhcmdldCBhZ2FpbiBhZnRlciByZWxlYXNpbmcgdGhlIGZpcnN0OiAweDAwMDAwMDAwIHB0cj1zZXQKdGFyZ2V0IFNldFJvb3QoTlVMTCkgYWZ0ZXIgaXRzIHdpbmRvdyB3YXMgZGVzdHJveWVkOiAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "v1 device CreateTargetForHwnd topmost 1 (the first target released): 0x00000000 ptr=set\ndesktop device CreateTargetForHwnd topmost 2: 0x00000000 ptr=set\nv1 device CreateTargetForHwnd topmost -1 (the first target released): 0x00000000 ptr=set\ntarget for child window: 0x00000000 ptr=set\ntarget for message-only window: 0x00000000 ptr=set\ntarget for hwnd NULL: 0x80070057 ptr=null\n  v1 device: 0x80070057 ptr=null\ntarget for hwnd a handle that is not a window (an event): 0x80070057 ptr=null\ntarget for a window of another thread: 0x00000000 ptr=set\ntarget QI IDCompositionTarget: 0x00000000 ptr=set same=true\ntarget QI IDCompositionDevice: 0x80004002 ptr=null\na second target for the same window (same device, topmost FALSE): 0x00000000 ptr=set\na second target for the same window from another device, topmost TRUE: 0x88980800 ptr=null\ntarget again after releasing the first: 0x00000000 ptr=set\ntarget SetRoot(NULL) after its window was destroyed: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 94
+    },
+    {
+      "name": "dctarget_root",
+      "exe_sha256": "074e6866012e72bd1931c99f1811260480a6cf923467d908cb623b02729f5e5d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0Um9vdCh2aXN1YWwpOiAweDAwMDAwMDAwIHZpc3VhbCByZWZzIGJlZm9yZSAxIGFmdGVyIDEKU2V0Um9vdChhbm90aGVyIHZpc3VhbCk6IDB4MDAwMDAwMDAgcmVmcyBvZiB0aGUgZmlyc3QgMSBvZiB0aGUgc2Vjb25kIDEKU2V0Um9vdCh0aGUgZmlyc3QgdmlzdWFsKTogMHgwMDAwMDAwMApTZXRSb290KHYxIHZpc3VhbCkgb24gYSB2MSBkZXZpY2UncyB0YXJnZXQ6IDB4MDAwMDAwMDAKU2V0Um9vdCBvZiBhIHNlY29uZCB0YXJnZXQgdG8gdGhlIHZpc3VhbCB0aGUgZmlyc3QgdGFyZ2V0IGhhcyBhcyByb290OiAweDgwMDcwMDU3CnRoZSBmaXJzdCB0YXJnZXQgdGFrZXMgdGhlIGZyZWUgdmlzdWFsOiAweDAwMDAwMDAwClNldFJvb3QoaXRzIHBhcmVudCk6IDB4MDAwMDAwMDAKQWRkVmlzdWFsKGEgdmlzdWFsIHRoYXQgaXMgbm8gcm9vdCB0byBhIHBhcmVudCk6IDB4MDAwMDAwMDAKdGhlIHJvb3QgdmlzdWFsIHJlbGVhc2VkIGJ5IHRoZSB0ZXN0LCB0aGUgdGFyZ2V0IGhvbGRzIGl0OiBDb21taXQgMHgwMDAwMDAwMApDb21taXQgYWZ0ZXIgdGhlIHZpc3VhbCdzIGxhc3QgdGVzdCByZWZlcmVuY2Ugd2FzIHJlbGVhc2VkIHdoaWxlIGEgdGFyZ2V0IHVzZXMgaXQ6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetRoot(visual): 0x00000000 visual refs before 1 after 1\nSetRoot(another visual): 0x00000000 refs of the first 1 of the second 1\nSetRoot(the first visual): 0x00000000\nSetRoot(v1 visual) on a v1 device's target: 0x00000000\nSetRoot of a second target to the visual the first target has as root: 0x80070057\nthe first target takes the free visual: 0x00000000\nSetRoot(its parent): 0x00000000\nAddVisual(a visual that is no root to a parent): 0x00000000\nthe root visual released by the test, the target holds it: Commit 0x00000000\nCommit after the visual's last test reference was released while a target uses it: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    },
+    {
+      "name": "dctarget_root_b",
+      "exe_sha256": "55425655df36d7103a3864ac8891d57838ca8f65c8b9f8c51e6f08380a1831fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0Um9vdCh0aGUgc2FtZSB2aXN1YWwgYWdhaW4pOiAweDAwMDAwMDAwIHJlZnMgMQpTZXRSb290KE5VTEwpOiAweDAwMDAwMDAwIHJlZnMgb2YgdGhlIHNlY29uZCAxClNldFJvb3QodmlzdWFsIG9mIGFub3RoZXIgZGV2aWNlKTogMHg4MDA3MDA1NwpTZXRSb290KGRlc2t0b3AgZGV2aWNlIHZpc3VhbCkgb24gYSB2MSBkZXZpY2UncyB0YXJnZXQ6IDB4ODAwNzAwNTcKU2V0Um9vdCBvZiB0aGUgc2Vjb25kIHRhcmdldCB0byBhIGZyZWUgdmlzdWFsOiAweDAwMDAwMDAwCkFkZFZpc3VhbChjaGlsZCB0byBwYXJlbnQpIDB4MDAwMDAwMDAKQWRkVmlzdWFsKHRoZSByb290IG9mIGEgdGFyZ2V0IGFzIHRoZSBjaGlsZCBvZiBhbm90aGVyIHZpc3VhbCk6IDB4ODAwNzAwNTcKQ29tbWl0IDB4MDAwMDAwMDAKU2V0Um9vdChOVUxMKSBvbiB0aGUgZmlyc3QgdGFyZ2V0OiAweDAwMDAwMDAwIHRoZW4gU2V0Um9vdChOVUxMKSBvbiB0aGUgc2Vjb25kOiAweDAwMDAwMDAwClNldFJvb3QoTlVMTCkgYWZ0ZXIgdGhlIGRldmljZSdzIGNyZWF0aW9uIHJlZmVyZW5jZSB3YXMgcmVsZWFzZWQ6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetRoot(the same visual again): 0x00000000 refs 1\nSetRoot(NULL): 0x00000000 refs of the second 1\nSetRoot(visual of another device): 0x80070057\nSetRoot(desktop device visual) on a v1 device's target: 0x80070057\nSetRoot of the second target to a free visual: 0x00000000\nAddVisual(child to parent) 0x00000000\nAddVisual(the root of a target as the child of another visual): 0x80070057\nCommit 0x00000000\nSetRoot(NULL) on the first target: 0x00000000 then SetRoot(NULL) on the second: 0x00000000\nSetRoot(NULL) after the device's creation reference was released: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    }
+  ]
+}

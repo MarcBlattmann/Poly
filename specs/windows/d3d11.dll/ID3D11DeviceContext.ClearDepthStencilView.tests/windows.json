@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "ctx_depth",
+      "exe_sha256": "db34ff7f7b8347e270e08e93dce3604a37dcf1e067cf9bb7b0564b70020a0848",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RDI0X1VOT1JNX1M4X1VJTlQ6IHRleHR1cmUgMHgwMDAwMDAwMCBiaW5kIDB4NDA7IE5VTEwtZGVzYyB2aWV3IDB4MDAwMDAwMDAgZGVzYyBmbXQgNDUgZGltIDMgZmxhZ3MgMCBtaXAgMApEMjRfVU5PUk1fUzhfVUlOVCBzdGVuY2lsIHZhbHVlczogWzB4MF0gMHg4MDAwMDAgWzB4MV0gMHgxODAwMDAwIFsweDdmXSAweDdmODAwMDAwIFsweDgwXSAweDgwODAwMDAwIFsweGZmXSAweGZmODAwMDAwCkQzMl9GTE9BVCBjbGVhcnM6IFtjbGVhciBib3RoIDEuMC8wXSAweDNmODAwMDAwIFtjbGVhciBib3RoIDAuMC8weGZmXSAweDAgW2RlcHRoIG9ubHkgMC41IChzdGVuY2lsIGFyZyA3KV0gMHgzZjAwMDAwMCBbc3RlbmNpbCBvbmx5IDB4NTUgKGRlcHRoIGFyZyAwLjI1KV0gMHgzZjAwMDAwMCBbZmxhZ3MgMF0gMHgzZjAwMDAwMCBbZmxhZ3MgNF0gMHgzZjAwMDAwMCBbZmxhZ3MgMHhmZmZmZmZmZl0gMHgzZjgwMDAwMApEMzJfRkxPQVQ6IGZpcnN0IGFuZCBsYXN0IHBpeGVsIGVxdWFsIGFmdGVyIGEgY2xlYXI6IHRydWUKRDE2X1VOT1JNIGRlcHRoIHZhbHVlczogWzAuMjVdIDB4NDAwMCBbMC4zXSAweDRjY2MgWzAuOTk5XSAweGZmYmQgWzFlLTddIDB4MCBbMi4wXSAweGZmZmYgWy0xLjBdIDB4ZmZmZiBbTmFOXSAweGZmZmYgW2luZl0gMHhmZmZmCkQzMl9GTE9BVF9TOFgyNF9VSU5UOiB0ZXh0dXJlIDB4MDAwMDAwMDAgYmluZCAweDQwOyBOVUxMLWRlc2MgdmlldyAweDAwMDAwMDAwIGRlc2MgZm10IDIwIGRpbSAzIGZsYWdzIDAgbWlwIDAKRDMyX0ZMT0FUX1M4WDI0X1VJTlQgc3RlbmNpbCB2YWx1ZXM6IFsweDBdIDB4M2YwMDAwMDAvMHgwIFsweDFdIDB4M2YwMDAwMDAvMHgxIFsweDdmXSAweDNmMDAwMDAwLzB4N2YgWzB4ODBdIDB4M2YwMDAwMDAvMHg4MCBbMHhmZl0gMHgzZjAwMDAwMC8weGZmCkRTViB0eXBlbGVzcyBSMjRHOCBhcyBEMjRfVU5PUk1fUzhfVUlOVDogMHgwMDAwMDAwMCBkZXNjIGZtdCA0NSBkaW0gMyBmbGFncyAwIFswIDAgMF0KRFNWIHR5cGVsZXNzIFIzMiwgTlVMTCBkZXNjOiAweDgwMDcwMDU3IHB0cj1udWxsCkRTViBEMjRTOCBhcyBVTktOT1dOIGZvcm1hdDogMHgwMDAwMDAwMCBkZXNjIGZtdCA0NSBkaW0gMyBmbGFncyAwIFswIDAgMF0KRFNWIEQyNFM4IHJlYWQtb25seSBzdGVuY2lsOiAweDAwMDAwMDAwIGRlc2MgZm10IDQ1IGRpbSAzIGZsYWdzIDIgWzAgMCAwXQpEU1YgRDI0UzggbWlwIDE6IDB4ODAwNzAwNTcgcHRyPW51bGwKRFNWIG5vIGRlcHRoLXN0ZW5jaWwgYmluZDogMHg4MDA3MDA1NyBwdHI9bnVsbApEU1YgYXJyYXkgb2YgMyBhcyAyREFSUkFZIHNpemUgLTE6IDB4MDAwMDAwMDAgZGVzYyBmbXQgNDAgZGltIDQgZmxhZ3MgMCBbMCAwIDNdCkRTViBtdWx0aXNhbXBsZWQgYXMgMkQ6IDB4ODAwNzAwNTcgcHRyPW51bGwKZGV2aWNlIHJlbW92ZWQgcmVhc29uIGF0IHRoZSBlbmQ6IDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "D24_UNORM_S8_UINT: texture 0x00000000 bind 0x40; NULL-desc view 0x00000000 desc fmt 45 dim 3 flags 0 mip 0\nD24_UNORM_S8_UINT stencil values: [0x0] 0x800000 [0x1] 0x1800000 [0x7f] 0x7f800000 [0x80] 0x80800000 [0xff] 0xff800000\nD32_FLOAT clears: [clear both 1.0/0] 0x3f800000 [clear both 0.0/0xff] 0x0 [depth only 0.5 (stencil arg 7)] 0x3f000000 [stencil only 0x55 (depth arg 0.25)] 0x3f000000 [flags 0] 0x3f000000 [flags 4] 0x3f000000 [flags 0xffffffff] 0x3f800000\nD32_FLOAT: first and last pixel equal after a clear: true\nD16_UNORM depth values: [0.25] 0x4000 [0.3] 0x4ccc [0.999] 0xffbd [1e-7] 0x0 [2.0] 0xffff [-1.0] 0xffff [NaN] 0xffff [inf] 0xffff\nD32_FLOAT_S8X24_UINT: texture 0x00000000 bind 0x40; NULL-desc view 0x00000000 desc fmt 20 dim 3 flags 0 mip 0\nD32_FLOAT_S8X24_UINT stencil values: [0x0] 0x3f000000/0x0 [0x1] 0x3f000000/0x1 [0x7f] 0x3f000000/0x7f [0x80] 0x3f000000/0x80 [0xff] 0x3f000000/0xff\nDSV typeless R24G8 as D24_UNORM_S8_UINT: 0x00000000 desc fmt 45 dim 3 flags 0 [0 0 0]\nDSV typeless R32, NULL desc: 0x80070057 ptr=null\nDSV D24S8 as UNKNOWN format: 0x00000000 desc fmt 45 dim 3 flags 0 [0 0 0]\nDSV D24S8 read-only stencil: 0x00000000 desc fmt 45 dim 3 flags 2 [0 0 0]\nDSV D24S8 mip 1: 0x80070057 ptr=null\nDSV no depth-stencil bind: 0x80070057 ptr=null\nDSV array of 3 as 2DARRAY size -1: 0x00000000 desc fmt 40 dim 4 flags 0 [0 0 3]\nDSV multisampled as 2D: 0x80070057 ptr=null\ndevice removed reason at the end: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 81
+    },
+    {
+      "name": "ctx_depth_b",
+      "exe_sha256": "e711d7f36cd605a296ea366256a1b86dbb365c3a4e0a709ac4604aea81050115",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RDI0X1VOT1JNX1M4X1VJTlQgY2xlYXJzOiBbY2xlYXIgYm90aCAxLjAvMF0gMHhmZmZmZmYgW2NsZWFyIGJvdGggMC4wLzB4ZmZdIDB4ZmYwMDAwMDAgW2RlcHRoIG9ubHkgMC41IChzdGVuY2lsIGFyZyA3KV0gMHhmZjgwMDAwMCBbc3RlbmNpbCBvbmx5IDB4NTUgKGRlcHRoIGFyZyAwLjI1KV0gMHg1NTgwMDAwMCBbZmxhZ3MgMF0gMHg1NTgwMDAwMCBbZmxhZ3MgNF0gMHg1NTgwMDAwMCBbZmxhZ3MgMHhmZmZmZmZmZl0gMHgyMmZmZmZmZgpEMjRfVU5PUk1fUzhfVUlOVDogZmlyc3QgYW5kIGxhc3QgcGl4ZWwgZXF1YWwgYWZ0ZXIgYSBjbGVhcjogdHJ1ZQpEMzJfRkxPQVQgZGVwdGggdmFsdWVzOiBbMC4yNV0gMHgzZTgwMDAwMCBbMC4zXSAweDNlOTk5OTlhIFswLjk5OV0gMHgzZjdmYmU3NyBbMWUtN10gMHgzM2Q2YmY5NSBbMi4wXSAweDNmODAwMDAwIFstMS4wXSAweDNmODAwMDAwIFtOYU5dIDB4M2Y4MDAwMDAgW2luZl0gMHgzZjgwMDAwMApEMTZfVU5PUk06IHRleHR1cmUgMHgwMDAwMDAwMCBiaW5kIDB4NDA7IE5VTEwtZGVzYyB2aWV3IDB4MDAwMDAwMDAgZGVzYyBmbXQgNTUgZGltIDMgZmxhZ3MgMCBtaXAgMApEMTZfVU5PUk0gc3RlbmNpbCB2YWx1ZXM6IFsweDBdIDB4ODAwMCBbMHgxXSAweDgwMDAgWzB4N2ZdIDB4ODAwMCBbMHg4MF0gMHg4MDAwIFsweGZmXSAweDgwMDAKRDMyX0ZMT0FUX1M4WDI0X1VJTlQgY2xlYXJzOiBbY2xlYXIgYm90aCAxLjAvMF0gMHgzZjgwMDAwMC8weDAgW2NsZWFyIGJvdGggMC4wLzB4ZmZdIDB4MC8weGZmIFtkZXB0aCBvbmx5IDAuNSAoc3RlbmNpbCBhcmcgNyldIDB4M2YwMDAwMDAvMHhmZiBbc3RlbmNpbCBvbmx5IDB4NTUgKGRlcHRoIGFyZyAwLjI1KV0gMHgzZjAwMDAwMC8weDU1IFtmbGFncyAwXSAweDNmMDAwMDAwLzB4NTUgW2ZsYWdzIDRdIDB4M2YwMDAwMDAvMHg1NSBbZmxhZ3MgMHhmZmZmZmZmZl0gMHgzZjgwMDAwMC8weDIyCkQzMl9GTE9BVF9TOFgyNF9VSU5UOiBmaXJzdCBhbmQgbGFzdCBwaXhlbCBlcXVhbCBhZnRlciBhIGNsZWFyOiB0cnVlCkRTViB0eXBlbGVzcyBSMjRHOCBhcyBEMzJfRkxPQVQ6IDB4ODAwNzAwNTcgcHRyPW51bGwKRFNWIHR5cGVsZXNzIFIxNiBhcyBEMTZfVU5PUk06IDB4MDAwMDAwMDAgZGVzYyBmbXQgNTUgZGltIDMgZmxhZ3MgMCBbMCAwIDBdCkRTViBEMjRTOCBhcyBEMzJfRkxPQVQ6IDB4ODAwNzAwNTcgcHRyPW51bGwKRFNWIEQyNFM4IHJlYWQtb25seSBib3RoOiAweDAwMDAwMDAwIGRlc2MgZm10IDQ1IGRpbSAzIGZsYWdzIDMgWzAgMCAwXQpEU1YgRDI0UzggYXMgZGltZW5zaW9uIDJETVM6IDB4MDAwMDAwMDAgZGVzYyBmbXQgNDUgZGltIDUgZmxhZ3MgMCBbMCAwIDBdCkRTViBhcnJheSBvZiAzLCBOVUxMIGRlc2M6IDB4MDAwMDAwMDAgZGVzYyBmbXQgNDAgZGltIDQgZmxhZ3MgMCBbMCAwIDNdCkRTViBhcnJheSBvZiAzIGFzIDJEOiAweDAwMDAwMDAwIGRlc2MgZm10IDQwIGRpbSAzIGZsYWdzIDAgWzAgMCAwXQpEU1YgbXVsdGlzYW1wbGVkIGFzIDJETVM6IDB4MDAwMDAwMDAgZGVzYyBmbXQgNDUgZGltIDUgZmxhZ3MgMCBbMCAwIDBdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "D24_UNORM_S8_UINT clears: [clear both 1.0/0] 0xffffff [clear both 0.0/0xff] 0xff000000 [depth only 0.5 (stencil arg 7)] 0xff800000 [stencil only 0x55 (depth arg 0.25)] 0x55800000 [flags 0] 0x55800000 [flags 4] 0x55800000 [flags 0xffffffff] 0x22ffffff\nD24_UNORM_S8_UINT: first and last pixel equal after a clear: true\nD32_FLOAT depth values: [0.25] 0x3e800000 [0.3] 0x3e99999a [0.999] 0x3f7fbe77 [1e-7] 0x33d6bf95 [2.0] 0x3f800000 [-1.0] 0x3f800000 [NaN] 0x3f800000 [inf] 0x3f800000\nD16_UNORM: texture 0x00000000 bind 0x40; NULL-desc view 0x00000000 desc fmt 55 dim 3 flags 0 mip 0\nD16_UNORM stencil values: [0x0] 0x8000 [0x1] 0x8000 [0x7f] 0x8000 [0x80] 0x8000 [0xff] 0x8000\nD32_FLOAT_S8X24_UINT clears: [clear both 1.0/0] 0x3f800000/0x0 [clear both 0.0/0xff] 0x0/0xff [depth only 0.5 (stencil arg 7)] 0x3f000000/0xff [stencil only 0x55 (depth arg 0.25)] 0x3f000000/0x55 [flags 0] 0x3f000000/0x55 [flags 4] 0x3f000000/0x55 [flags 0xffffffff] 0x3f800000/0x22\nD32_FLOAT_S8X24_UINT: first and last pixel equal after a clear: true\nDSV typeless R24G8 as D32_FLOAT: 0x80070057 ptr=null\nDSV typeless R16 as D16_UNORM: 0x00000000 desc fmt 55 dim 3 flags 0 [0 0 0]\nDSV D24S8 as D32_FLOAT: 0x80070057 ptr=null\nDSV D24S8 read-only both: 0x00000000 desc fmt 45 dim 3 flags 3 [0 0 0]\nDSV D24S8 as dimension 2DMS: 0x00000000 desc fmt 45 dim 5 flags 0 [0 0 0]\nDSV array of 3, NULL desc: 0x00000000 desc fmt 40 dim 4 flags 0 [0 0 3]\nDSV array of 3 as 2D: 0x00000000 desc fmt 40 dim 3 flags 0 [0 0 0]\nDSV multisampled as 2DMS: 0x00000000 desc fmt 45 dim 5 flags 0 [0 0 0]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    }
+  ]
+}

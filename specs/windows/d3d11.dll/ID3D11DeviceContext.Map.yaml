@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/d3d11.dll/ID3D11DeviceContext.Map.yaml
+id: windows/api/d3d11.dll/ID3D11DeviceContext.Map
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware with an Intel UHD Graphics 630, driver 31.0.101.2135, as its hardware display adapter; a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-win-s5
+  date: 2026-11-16
+sources: >
+  Observations of our own test programs on the machine above. Chrome's calls: observed on the owner's PC and homeserver2 with Chrome for Testing 157.0.8103.38 (stage S5, default GPU flags) through the API tracer's counts (specs/windows/apps/chrome/traces/s5*.trace.json: D3D11CreateDevice, CreateDXGIFactory1, DCompositionCreateDevice are called through exports; the interfaces' methods are not seen by the tracer) and through DevTools' SystemInfo.getInfo (which adapters Chrome sees, which features are enabled). Microsoft Learn: "ID3D11DeviceContext::Map", "ID3D11DeviceContext::Unmap", "D3D11_MAP enumeration", "D3D11_MAPPED_SUBRESOURCE"; d3d11.h, d3d11_1.h, d3dcommon.h, dxgiformat.h, dxgi.h and winerror.h for constants, layouts and the order of the methods in the vtables. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Gives the CPU a pointer to a subresource. Chrome reads back and uploads through staging textures and writes dynamic buffers with WRITE_DISCARD / WRITE_NO_OVERWRITE. Observed on WARP: staging textures and buffers accept READ, WRITE and READ_WRITE; dynamic ones only the WRITE_* types; default textures and buffers nothing; the row pitch of a texture is its width times the bytes per pixel with no padding for the formats tried, the depth pitch is row pitch times height, and the data written is read back by the next Map.
+interface:
+  signature: "HRESULT ID3D11DeviceContext::Map(ID3D11Resource*, UINT subresource, D3D11_MAP type, UINT flags, D3D11_MAPPED_SUBRESOURCE* mapped); void Unmap(ID3D11Resource*, UINT)"
+  constants: "D3D11_MAP READ 1, WRITE 2, READ_WRITE 3, WRITE_DISCARD 4, WRITE_NO_OVERWRITE 5; flag DO_NOT_WAIT 0x100000 (d3d11.h)"
+chrome:
+  calls: "the GPU process maps staging textures to read pixels back and dynamic buffers to upload vertex data (assumed from ANGLE's documented design)"
+rules:
+  pitches: "staging texture, Map(READ_WRITE): row pitch = width x bytes per pixel, depth pitch = row pitch x height: 1x1 B8G8R8A8 gives 4 and 4; 2x2: 8 and 16; 3x3: 12 and 36; 15x4: 60 and 240; 17x4: 68 and 272; 31x2: 124 and 248; 63x2 R8G8B8A8: 252 and 504; 100x3 R8_UNORM: 100 and 300; 100x3 R16G16B16A16_FLOAT: 800 and 2400; 7x5 R32G32B32A32_FLOAT: 112 and 560; 64x64: 256 and 16384; 1000x2: 4000 and 8000"
+  data_kept: "pixels written through a Map(WRITE) are read by a later Map(READ): (3,5) of a 8x8 texture filled with 0x10000000|(y<<8)|x reads 0x10000503"
+  staging_types: "staging texture: READ, WRITE and READ_WRITE succeed; WRITE_DISCARD, WRITE_NO_OVERWRITE, 0, 6 and 0xFFFFFFFF are E_INVALIDARG with a NULL data pointer"
+  twice: "Map twice without an Unmap in between succeeds both times on WARP"
+  flags: "flags 0 and DO_NOT_WAIT (0x100000) succeed; 0x1, 0x200000 and 0xFFFFFFFF are E_INVALIDARG"
+  subresource: "a subresource index at or above the subresource count (1 for a one-mip texture: 1, 2, 100, 0xFFFFFFFF) is E_INVALIDARG; a texture with 3 mips and 2 slices has subresources 0 to 5 (row pitches 64, 32, 16, 64, 32, 16 for 16x16 B8G8R8A8) and 6 is E_INVALIDARG"
+  unmap: "Unmap of a subresource that is not mapped returns without effect (no error is reportable)"
+  default_dynamic_textures: "DEFAULT texture (also a render target): every map type is E_INVALIDARG; DYNAMIC texture: WRITE_DISCARD succeeds (row pitch 64 for 16 wide), READ, WRITE, READ_WRITE and WRITE_NO_OVERWRITE are E_INVALIDARG"
+  buffers: "STAGING buffer: READ, WRITE, READ_WRITE succeed (row pitch and depth pitch both the byte width 256), WRITE_DISCARD and WRITE_NO_OVERWRITE E_INVALIDARG; DYNAMIC vertex and constant buffers: WRITE_DISCARD and WRITE_NO_OVERWRITE succeed (pitch 256), READ, WRITE, READ_WRITE E_INVALIDARG; DEFAULT buffer: all E_INVALIDARG; a staging buffer keeps written bytes (byte i = 3i reads back)"
+errors:
+  argument: "E_INVALIDARG (0x80070057)"
+side_effects: "none beyond the mapping"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the kit's shared declarations (Learn prototypes, SDK header constants and vtable orders; the COM objects are called through their vtables). Every test makes the same calls in three files that each write every third observation (SAY_PART), so the visible and held-out tests of an entry are different views of one run. Observations are HRESULTs, flags, counts, sizes, pixel values of the test's own rendering read back through staging textures and Map, and booleans; never pointers, handles, LUIDs, times, or the machine's own adapter names and driver versions (machine-dependent values are described as rules and printed only as relations). Devices are made with D3D_DRIVER_TYPE_WARP (Microsoft Basic Render Driver, a software device that every Windows 10 and 11 machine has), so the results do not depend on the oracle's GPU, except in the tests of the default hardware adapter, which print relations only. Tests run in the interactive desktop session of the oracle (DirectComposition and window swap chains need one: in the SSH session 0 DCompositionCreateDevice fails with E_ACCESSDENIED); windows are created but never shown or pumped. No Microsoft font is used and no pixel is compared that the test did not draw itself.
+not_covered: >
+  DO_NOT_WAIT returning DXGI_ERROR_WAS_STILL_DRAWING (the WARP device finishes at once), mapping while the GPU is using the resource, NULL resource, textures with depth slices, deferred contexts.

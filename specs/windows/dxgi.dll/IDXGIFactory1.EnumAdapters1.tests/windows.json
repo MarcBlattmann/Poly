@@ -1,0 +1,43 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "6c78caa1fc17",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-16T02:43:39Z",
+  "tests": [
+    {
+      "name": "enum_adapters_b",
+      "exe_sha256": "3c52b2dc1bf83190f4e6d609e407cf46c6ba0d9b41cd21b14689067419d610fb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YXQgbGVhc3Qgb25lIGFkYXB0ZXI6IHRydWU7IGV2ZXJ5IGFkYXB0ZXI6IEdldERlc2MxIHN1Y2NlZWRzLCBuYW1lIG5vbi1lbXB0eSwgdmVuZG9yIGFuZCBsdWlkIG5vbnplcm8sIG9ubHkga25vd24gZmxhZyBiaXRzLCByZWZlcmVuY2UgY291bnQgMTogdHJ1ZQpFbnVtQWRhcHRlcnMxKGNvdW50KTogMHg4ODdhMDAwMiBwdHI9bnVsbApFbnVtQWRhcHRlcnMxKGJpZyk6IDB4ODg3YTAwMDIgcHRyPW51bGwKcmVmcyBvZiBhZGFwdGVyIDAgd2l0aCB0d28gcmVmZXJlbmNlczogMQphZGFwdGVyIDAgYXMgSURYR0lBZGFwdGVyOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1wb2ludGVyPXRydWUKYWRhcHRlciAwIGFzIElEWEdJQWRhcHRlcjM6IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXI9dHJ1ZQphZGFwdGVyIDAgYXMgSURYR0lEZXZpY2U6IDB4ODAwMDQwMDIgcHRyPW51bGwgc2FtZS1wb2ludGVyPWZhbHNlCkVudW1XYXJwQWRhcHRlcihJRFhHSUFkYXB0ZXIxKTogMHgwMDAwMDAwMCBwdHI9c2V0IHJlZnM9MQpFbnVtV2FycEFkYXB0ZXIoSVVua25vd24pOiAweDAwMDAwMDAwIHB0cj1zZXQKRW51bVdhcnBBZGFwdGVyKElEWEdJQWRhcHRlcjMpOiAweDAwMDAwMDAwIHB0cj1zZXQKRW51bVdhcnBBZGFwdGVyKG1hZGUtdXApOiAweDgwMDA0MDAyIHB0cj1udWxsCndhcnAgR2V0UGFyZW50KElEWEdJRmFjdG9yeTEpOiAweDAwMDAwMDAwIHNhbWUgZmFjdG9yeT10cnVlCkVudW1BZGFwdGVyQnlMdWlkKHplcm8pOiAweDg4N2EwMDAyIHB0cj1udWxsCkVudW1BZGFwdGVyQnlMdWlkKGFkYXB0ZXIgMCwgbWFkZS11cCBpZCk6IDB4ODAwMDQwMDIgcHRyPW51bGwKR3B1UHJlZmVyZW5jZSAwOiBmaXJzdCBlcXVhbHMgRW51bUFkYXB0ZXJzMSgwKTogdHJ1ZQpHcHVQcmVmZXJlbmNlIDI6IGVuZHMgYXQgaW5kZXgtaXMtY291bnQ9dHJ1ZSB3aXRoIDB4ODg3YTAwMDIgcHRyPW51bGwKR3B1UHJlZmVyZW5jZSAzOiBmaXJzdCBlcXVhbHMgRW51bUFkYXB0ZXJzMSgwKTogdHJ1ZQpHcHVQcmVmZXJlbmNlIHdpdGggYSBtYWRlLXVwIGlkOiAweDgwMDA0MDAyIHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "at least one adapter: true; every adapter: GetDesc1 succeeds, name non-empty, vendor and luid nonzero, only known flag bits, reference count 1: true\nEnumAdapters1(count): 0x887a0002 ptr=null\nEnumAdapters1(big): 0x887a0002 ptr=null\nrefs of adapter 0 with two references: 1\nadapter 0 as IDXGIAdapter: 0x00000000 ptr=set same-pointer=true\nadapter 0 as IDXGIAdapter3: 0x00000000 ptr=set same-pointer=true\nadapter 0 as IDXGIDevice: 0x80004002 ptr=null same-pointer=false\nEnumWarpAdapter(IDXGIAdapter1): 0x00000000 ptr=set refs=1\nEnumWarpAdapter(IUnknown): 0x00000000 ptr=set\nEnumWarpAdapter(IDXGIAdapter3): 0x00000000 ptr=set\nEnumWarpAdapter(made-up): 0x80004002 ptr=null\nwarp GetParent(IDXGIFactory1): 0x00000000 same factory=true\nEnumAdapterByLuid(zero): 0x887a0002 ptr=null\nEnumAdapterByLuid(adapter 0, made-up id): 0x80004002 ptr=null\nGpuPreference 0: first equals EnumAdapters1(0): true\nGpuPreference 2: ends at index-is-count=true with 0x887a0002 ptr=null\nGpuPreference 3: first equals EnumAdapters1(0): true\nGpuPreference with a made-up id: 0x80004002 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "enum_adapters_c",
+      "exe_sha256": "b8fec77ec63662f24f21990048e169727930aeeee57ef787b9bacbc18e976e34",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zm9yIGV2ZXJ5IGFkYXB0ZXIgdGhlIFNPRlRXQVJFIGZsYWcgZXF1YWxzICh2ZW5kb3IgPT0gMHgxNDE0KTogdHJ1ZQpFbnVtQWRhcHRlcnMxKGNvdW50KzEpOiAweDg4N2EwMDAyIHB0cj1udWxsCkVudW1BZGFwdGVyczEoYmlnKTogMHg4ODdhMDAwMiBwdHI9bnVsbAphZGFwdGVyIDAgYXMgSVVua25vd246IDB4MDAwMDAwMDAgcHRyPXNldCBzYW1lLXBvaW50ZXI9dHJ1ZQphZGFwdGVyIDAgYXMgSURYR0lBZGFwdGVyMTogMHgwMDAwMDAwMCBwdHI9c2V0IHNhbWUtcG9pbnRlcj10cnVlCmFkYXB0ZXIgMCBhcyBJRFhHSUFkYXB0ZXI0OiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZS1wb2ludGVyPXRydWUKRW51bUFkYXB0ZXJzKGNvdW50KSBlbmRzIHdpdGggMHg4ODdhMDAwMiBhZGFwdGVyLXB0cj1udWxsCndhcnA6IHZlbmRvciAweDE0MTQgc29mdHdhcmUtZmxhZyB0cnVlCkVudW1XYXJwQWRhcHRlcihJRFhHSUFkYXB0ZXIpOiAweDAwMDAwMDAwIHB0cj1zZXQKRW51bVdhcnBBZGFwdGVyKElEWEdJQWRhcHRlcjQpOiAweDAwMDAwMDAwIHB0cj1zZXQKc29mdHdhcmUgYWRhcHRlcnMgZW51bWVyYXRlZDogMTsgaXQgaXMgdGhlIGxhc3Qgb25lOiB0cnVlOyBpdHMgbHVpZCBlcXVhbHMgdGhlIFdBUlAgYWRhcHRlcjogdHJ1ZQpFbnVtQWRhcHRlckJ5THVpZChhZGFwdGVyIDApOiAweDAwMDAwMDAwIHB0cj1zZXQgc2FtZSBsdWlkIGJhY2s9dHJ1ZQpFbnVtQWRhcHRlckJ5THVpZChhbGwgb25lcyk6IDB4ODg3YTAwMDIgcHRyPW51bGwKRW51bUFkYXB0ZXJCeUx1aWQoYWRhcHRlciAwLCBJRFhHSUFkYXB0ZXIpOiAweDAwMDAwMDAwIHB0cj1zZXQKR3B1UHJlZmVyZW5jZSAxOiBlbmRzIGF0IGluZGV4LWlzLWNvdW50PXRydWUgd2l0aCAweDg4N2EwMDAyIHB0cj1udWxsCkdwdVByZWZlcmVuY2UgMjogZmlyc3QgZXF1YWxzIEVudW1BZGFwdGVyczEoMCk6IHRydWUKR3B1UHJlZmVyZW5jZSA0Mjk0OTY3Mjk1OiBlbmRzIGF0IGluZGV4LWlzLWNvdW50PXRydWUgd2l0aCAweDg4N2EwMDAyIHB0cj1udWxsCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "for every adapter the SOFTWARE flag equals (vendor == 0x1414): true\nEnumAdapters1(count+1): 0x887a0002 ptr=null\nEnumAdapters1(big): 0x887a0002 ptr=null\nadapter 0 as IUnknown: 0x00000000 ptr=set same-pointer=true\nadapter 0 as IDXGIAdapter1: 0x00000000 ptr=set same-pointer=true\nadapter 0 as IDXGIAdapter4: 0x00000000 ptr=set same-pointer=true\nEnumAdapters(count) ends with 0x887a0002 adapter-ptr=null\nwarp: vendor 0x1414 software-flag true\nEnumWarpAdapter(IDXGIAdapter): 0x00000000 ptr=set\nEnumWarpAdapter(IDXGIAdapter4): 0x00000000 ptr=set\nsoftware adapters enumerated: 1; it is the last one: true; its luid equals the WARP adapter: true\nEnumAdapterByLuid(adapter 0): 0x00000000 ptr=set same luid back=true\nEnumAdapterByLuid(all ones): 0x887a0002 ptr=null\nEnumAdapterByLuid(adapter 0, IDXGIAdapter): 0x00000000 ptr=set\nGpuPreference 1: ends at index-is-count=true with 0x887a0002 ptr=null\nGpuPreference 2: first equals EnumAdapters1(0): true\nGpuPreference 4294967295: ends at index-is-count=true with 0x887a0002 ptr=null\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 71
+    }
+  ]
+}
