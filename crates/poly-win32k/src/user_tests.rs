@@ -613,6 +613,48 @@ fn topmost_windows_stay_above_later_created_ones() {
 }
 
 #[test]
+fn a_release_queues_its_move_only_after_the_notification() {
+    // ReleaseCapture.yaml `rc_nocapture` (attached): another thread of the same
+    // input releases; the capture window must have heard WM_CAPTURECHANGED
+    // before the move to the window under the cursor can be retrieved. The
+    // release itself (SET_CAPTURE_QUIET) queues no move; SET_CAPTURE_MOVE does,
+    // exactly once, and `release_capture` ends with it.
+    use crate::wm::input::{SET_CAPTURE, SET_CAPTURE_MOVE, SET_CAPTURE_QUIET};
+    with_env(|e| {
+        register(e, "Cap");
+        let a = create(e, 'A', 0, "Cap", WS_POPUP | WS_VISIBLE, 0, 0, 200, 200, 0, 0);
+        e.call(Request::Cursor { set: true, x: 50, y: 50 });
+        let drain = || {
+            let mut n = 0;
+            while let Reply::Message { .. } =
+                e.call(Request::Peek { filter: 0, min: 0x200, max: 0x20E, flags: PM_REMOVE })
+            {
+                n += 1;
+            }
+            n
+        };
+        assert_eq!(drain(), 1);
+        let call = |capture: u32, which: u8| {
+            e.call(Request::SetInput { active: 0, focus: 0, capture, which });
+        };
+        call(a as u32, SET_CAPTURE);
+        call(0, SET_CAPTURE_QUIET);
+        assert_eq!(drain(), 0);
+        call(0, SET_CAPTURE_MOVE);
+        assert_eq!(drain(), 1);
+        assert_eq!(crate::user::focus::set_capture(e, a), 0);
+        take_log();
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), ["A WM_CAPTURECHANGED lparam=0"]);
+        assert_eq!(drain(), 1);
+        // No capture: nothing is sent and no move is queued.
+        assert_eq!(crate::user::focus::release_capture(e), 1);
+        assert_eq!(take_log(), Vec::<String>::new());
+        assert_eq!(drain(), 0);
+    });
+}
+
+#[test]
 fn a_new_capture_drops_the_synthesized_move_of_a_release() {
     with_env(|e| {
         register(e, "Cap");

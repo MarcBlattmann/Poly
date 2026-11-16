@@ -909,6 +909,12 @@ impl NtKernel for Kernel {
     }
 
     fn wait(&mut self, id: WaitId, timeout: NtTimeout, alertable: bool) -> NtStatus {
+        // What this call completed for other threads is delivered before it
+        // blocks, not after it ends: `TransactNamedPipe` writes the request
+        // that wakes the server's pending read and then waits for the reply,
+        // and the reply only comes once the server has seen the request
+        // (a zero-length request met a pending read: both sides waited for ever).
+        io::after_call();
         sched::wait(self.pid, self.tid, id, timeout, alertable)
     }
 
