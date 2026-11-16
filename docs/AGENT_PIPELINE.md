@@ -675,6 +675,21 @@ build:
 Repository paths the tool records (spec sheets, visible tests, hand-off
 log, manifests) always use `/`, whatever the host.
 
+## CI runs Chrome for Windows
+
+Since [ADR 0214](adr/0214-ci-runs-chrome-for-windows-stage-1-and-the-window-check-on-every-pull-request.md)
+the `chrome` job of CI boots Chrome for Windows on Poly on every pull request:
+`chrome (s1-headless)` (stage 1, `--dump-dom`, required) and
+`chrome (s3-window)` (Chrome's window on the desktop, QMP clicks, a typed URL).
+Chrome for Testing is downloaded in the job by `cargo xtask chrome-win fetch`
+(pinned version, SHA-256 checked) and kept only in the repository's Actions
+cache: it is never committed, never an artifact; only the serial logs are
+(`chrome-logs-<stage>`, on a failure). The stages use `data:` pages, no
+network. There is no need to boot Chrome on the owner's PC to check a change:
+push, and read the stage that failed. Locally `cargo xtask chrome-win fetch`
+and `cargo xtask boot-tests chrome-win` still work; `POLY_CHROME_REQUIRED=1`
+turns a missing package from a skip into a failure, as in CI.
+
 ## Safety rules
 
 Reviewers check these on every agent PR; a violation stops the entry

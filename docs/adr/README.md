@@ -189,6 +189,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0209](0209-windows-programs-type-with-the-desktop-s-keyboard-layout.md) | Windows programs type with the desktop's keyboard layout | Accepted |
 | [0210](0210-nt-ids-are-multiples-of-4-a-main-thread-has-its-own-id-and-an-exception-out-of-a-guarded-call-unwinds-first.md) | NT ids are multiples of 4, a main thread has its own id, and an exception out of a guarded call unwinds first | Accepted |
 | [0213](0213-landing-work-on-main-hand-off-records-one-file-each-progress-files-written-on-main-ci-on-any-branch-fast-handoff-verify.md) | Landing work on main: hand-off records one file each, progress files written on main, CI on any branch, a fast `handoff verify` | Accepted |
+| [0214](0214-ci-runs-chrome-for-windows-stage-1-and-the-window-check-on-every-pull-request.md) | CI runs Chrome for Windows, stage 1 and the window check, on every pull request | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
