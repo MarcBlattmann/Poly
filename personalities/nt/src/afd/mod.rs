@@ -241,7 +241,12 @@ impl PendIo {
                         if broken.is_some() {
                             self.placement = Some(Placement { target: self.file, sock: None, broken });
                         }
-                        Some((broken.unwrap_or_else(|| status_of(e)), 0, None))
+                        let failed = if sock.kind() == SockType::Datagram {
+                            NtStatus(poly_winsock::error::datagram_receive_status(e.0))
+                        } else {
+                            status_of(e)
+                        };
+                        Some((broken.unwrap_or(failed), 0, None))
                     }
                     Ok(info) => {
                         data.truncate(info.len);
@@ -370,6 +375,10 @@ pub struct Endpoint {
     /// The program itself read `conn_error` (not only the event helper): the failure is known to it,
     /// and a new connect is not "already under way".
     pub conn_error_read: bool,
+    /// How many times a failed connect's error was taken from the stack and stored in
+    /// `conn_error` (by the program or by the event helper). A `connect` still on its way when the
+    /// helper stores the refusal must not wipe it afterwards ([`Endpoint::connect_under_way`]).
+    pub conn_error_stores: u32,
     /// A connection exists (or existed): `connect` finished or `accept` made it.
     pub connected: bool,
     /// The peer's address once known (`getpeername` still answers after the connection ended).
@@ -387,6 +396,28 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
+    /// Store the error of a failed connect that was taken from the stack; `read` when the program
+    /// itself looked (not only the event helper).
+    pub fn store_conn_error(&mut self, error: u32, read: bool) {
+        self.conn_error = Some(error);
+        self.conn_error_read = read;
+        self.conn_error_stores = self.conn_error_stores.wrapping_add(1);
+    }
+
+    /// A non-blocking `connect` the stack accepted is under way (`stores_before` is
+    /// `conn_error_stores` as it was before the stack was asked, `now` the system time): the
+    /// failure of an earlier attempt is history, but one taken and stored while this call was on
+    /// its way (the stack may refuse a loopback connect at once and the event helper look at it
+    /// before this call returns) belongs to this attempt and stays.
+    pub fn connect_under_way(&mut self, stores_before: u32, now: u64) {
+        if self.conn_error_stores == stores_before {
+            self.conn_error = None;
+            self.conn_error_read = false;
+        }
+        self.broken = None;
+        self.connect_at = now;
+    }
+
     /// How long a receive (or accept) may wait.
     pub fn recv_wait(&self) -> SockWait {
         wait_for(self.nonblocking, self.rcv_timeout)

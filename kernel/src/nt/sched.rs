@@ -341,7 +341,7 @@ pub fn create_thread(
     req: ThreadCreate,
 ) -> Result<ThreadCreated, NtStatus> {
     let process = find(pid).ok_or(STATUS_UNSUCCESSFUL)?;
-    let tid_u32 = crate::process::alloc_pid();
+    let tid_u32 = crate::process::alloc_nt_id();
     let tref = ThreadRef(u64::from(tid_u32));
     let (start, handle) = with(|s| {
         let proc = s.processes.get_mut(&pid).ok_or(STATUS_INVALID_HANDLE)?;
@@ -535,7 +535,12 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
     if prev > 0 && now == 0 {
         // A new process's first thread, created suspended (ADR 0089).
         if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
-            return super::start_first_thread(process, child_memory, &super::Start { entry, teb }).map(|()| prev);
+            return super::start_first_thread(
+                process,
+                child_memory,
+                &super::Start { entry, teb, tid: thread.0 as u32 },
+            )
+            .map(|()| prev);
         }
         let process = find(owner_of(pid, thread));
         if let Some((entry, teb)) = deferred {
