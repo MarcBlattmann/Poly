@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/SetScrollPos.yaml
+id: windows/api/user32.dll/SetScrollPos
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above (the programs are Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers; the test fonts are TrueType files the test writes itself, so no Microsoft font is involved). Microsoft Learn reference pages of the functions, messages and notifications named here (Winsock, "Scroll Bars", "Dialog Boxes", "Common Controls", "Shell Functions"); winsock2.h, winuser.h, wingdi.h, commctrl.h, shlobj.h, shellapi.h and winerror.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets the position of a window's scroll bar or scroll bar control and returns the previous position; the position is kept inside the range.
+interface:
+  signature: "int SetScrollPos(HWND hWnd, int nBar, int nPos, BOOL bRedraw)"
+rules:
+  result: "the previous position (0 when the bar had none: 0 is also the result for a position that was 0, so it is not an error value)"
+  clamping: "the position is kept in [min, max - max(page - 1, 0)]: range 10..110: 9 stays 10, 111 and 1000 become 110, -1000 and -2147483648 become 10, 2147483647 becomes 110; with a page of 20 the largest position is 91 (92, 110 and 95 give 91); on a fresh bar (range 0..0 shown as 0..100) the position 5 is kept"
+  hidden_bar: "a bar that is hidden (range 5..5) still stores the position and the call does not show it"
+  controls: "on a scroll bar control the position is set the same way (clamped to the control's range: on a fresh control with range 0..0 the position stays 0, on 0..50 a request of 70 gives 50) and SBM_SETPOS (returns the old position) / SBM_GETPOS see the same value"
+  bars: "SB_HORZ and SB_VERT keep separate positions; SB_BOTH returns the old position of the vertical bar (4) and GetScrollPos(SB_BOTH) fails with 87; SB_CTL on an ordinary window returns 0 with the last error unchanged"
+  redraw: "the redraw flag does not change what is stored"
+  window_without_bar: "a window without the scroll bar styles: returns 0 with ERROR_NO_SCROLLBARS (1447) and creates nothing (the style bit and the client area do not change)"
+  last_error: "the last error is not changed by a call that works (the tests print -1 for 'unchanged'); some calls on controls leave ERROR_ACCESS_DENIED (5) behind, which is not specified and is printed as unchanged"
+errors:
+  no_bar: "a window without scroll bars: 0 with 1447"
+  bad_bar: "bar 4 and -1: 0 with ERROR_INVALID_PARAMETER (87); SB_CTL on an ordinary window: 0 without an error"
+  bad_window: "a NULL or made-up window: 0 with ERROR_INVALID_WINDOW_HANDLE (1400)"
+side_effects: "none beyond the rules above"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Dragging the thumb and clicking the arrows (WM_HSCROLL / WM_VSCROLL generation, SIF_TRACKPOS during a drag) and the drawn bar: they need real mouse input; GetScrollBarInfo; scroll bars of a window made right to left; DPI scaling of the bar sizes.

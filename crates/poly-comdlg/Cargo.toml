@@ -1,0 +1,11 @@
+[package]
+name = "poly-comdlg"
+description = "The rules of comdlg32's common dialogs: structure and flag checks with their CDERR codes, file filters and wildcards, file name buffers (single and multiple selection), colour and font arithmetic, and the in-memory dialog templates the dialogs are built from; no_std with alloc, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

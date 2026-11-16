@@ -18,7 +18,8 @@ extern crate alloc;
 
 use poly_win32_cryptrt as _;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn LocalAlloc(flags: u32, bytes: usize) -> *mut u8;
     fn SetLastError(error: u32);

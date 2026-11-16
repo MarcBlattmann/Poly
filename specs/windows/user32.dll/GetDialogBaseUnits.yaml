@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/GetDialogBaseUnits.yaml
+id: windows/api/user32.dll/GetDialogBaseUnits
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. Two TrueType test fonts are written by the test itself and added with AddFontMemResourceEx ('PolyDlg Mixed': lower case letters 448 units wide, upper case 704, digits 512 on a 1024 unit em; 'PolyDlg Even': every glyph 640 units), so no Microsoft font enters the results. Microsoft Learn: "MapDialogRect function", "GetDialogBaseUnits function", "DLGTEMPLATE structure", "DLGTEMPLATEEX structure", "Dialog Box Units"; winuser.h. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the base units of the system font: the width in the low word and the height in the high word. The oracle's system font gives 8 x 16 at 96 dpi. A dialog made without a font of its own uses these units, and programs that lay out controls by hand (PuTTY's older code paths, many ports) multiply by them.
+interface:
+  signature: "LONG GetDialogBaseUnits(void)"
+rules:
+  value: "(8, 16) on the oracle: the low word is the width, the high word the height; the same on every call, in every thread, and after a dialog with another font was made (the units of that dialog are its own)"
+  meaning: "the height is the system font's tmHeight (16); the width is (W / 26 + 1) / 2 for the width W of the 52 letters 'abc...zABC...Z' in the system font (429 pixels: 8), not tmAveCharWidth (7)"
+  dialog_without_font: "a dialog made from a template without DS_SETFONT has base units equal to GetDialogBaseUnits: (8, 16)"
+  font_dialogs: "a template with DS_SETFONT gets its own units from its font (see MapDialogRect): 'PolyDlg Mixed' at 8 points (7, 11), 10 points (8, 13), 12 points (9, 16), 'PolyDlg Even' at 9 points (8, 12); text in that font measures as the glyph widths say: with 'PolyDlg Mixed' at 8 points 'a' is 5 pixels wide, 'A' 8, 'aA' 13, 'abc' 15, 'ABC' 24, 'SSH' 24, 'Serial' 33, '0123456789' 60, each 11 high"
+  font_height: "DS_SETFONT point sizes 8, 9, 10 and 12 give font heights of -11, -12, -13 and -16 pixels at 96 dpi"
+errors:
+  none: "the function cannot fail"
+side_effects: "none beyond the rules above"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Other system fonts and other resolutions (the base units of the system font change with the display's DPI setting for DPI-aware programs, which the tests are not), the font the dialog manager picks for DS_SHELLFONT with the face 'MS Shell Dlg' (it maps to a font of the installed system), and GetDialogBaseUnits in a process that is per-monitor DPI aware.

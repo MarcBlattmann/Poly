@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/RoInitialize.yaml
+id: windows/api/combase.dll/RoInitialize
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-com-ole-tls
+  date: 2026-11-15
+sources: >
+  The same observations as the sheet it points to; its tests call this function.
+summary: >
+  Initialises the Windows Runtime for the calling thread (and COM with it). No tests of its own: the tests of TEB.ReservedForOle call it (it is looked up in combase.dll at run time).
+same_as: "windows/api/ole32.dll/TEB.ReservedForOle"
+interface:
+  signature: "HRESULT RoInitialize(RO_INIT_TYPE initType)"
+rules:
+  see_sheet: "the states_ro rule of TEB.ReservedForOle: RO_INIT_SINGLETHREADED (0) is S_OK on a new thread with an apartment threaded apartment (CoGetApartmentType type 3) and the thread's TEB value 0x2000C1; RO_INIT_MULTITHREADED (1) gives type 1 and 0x200141; the same kind again S_FALSE, the other kind RPC_E_CHANGED_MODE 0x80010106; after CoInitializeEx(2) RoInitialize(0) is S_FALSE and RoInitialize(1) is 0x80010106"
+errors:
+  see_sheet: "the errors of the sheet it points to"
+side_effects: "see the sheet it points to"
+threading: "see the sheet it points to"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  see the sheet it points to
+not_covered: >
+  Everything that sheet lists as not covered.

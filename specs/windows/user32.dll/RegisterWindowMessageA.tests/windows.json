@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2cd7f13fe041",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T20:04:12Z",
+  "tests": [
+    {
+      "name": "rwm_errors",
+      "exe_sha256": "b8023e6937df5daed83851f599fab343376131499906a129abf724263e7892a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1wdHkgc3RyaW5nOiAwIGVyciAtMQpvbmUgY2hhcmFjdGVyOiBpbiByYW5nZSBlcnIgLTIKMjU0IGNoYXJhY3RlcnM6IGluIHJhbmdlIGVyciAtMgoyNTUgY2hhcmFjdGVyczogaW4gcmFuZ2UgZXJyIC0yCjI1NiBjaGFyYWN0ZXJzOiAwIGVyciAyMzQKMjU3IGNoYXJhY3RlcnM6IDAgZXJyIDIzNAoyNzAgY2hhcmFjdGVyczogMCBlcnIgMjM0CnRoZSAyNTUtY2hhcmFjdGVyIGlkIGlzIHN0YWJsZTogdHJ1ZQpXTV9OVUxMIGFzIGEgbmFtZTogaW4gcmFuZ2UgZXJyIC0yCldNX1BBSU5UIGFzIGEgbmFtZTogaW4gcmFuZ2UgZXJyIC0yCmEgbmFtZSB3aXRoIGEgcXVvdGUgYW5kIGEgYmFja3NsYXNoOiBpbiByYW5nZSBlcnIgLTIKVyBlbXB0eSBzdHJpbmc6IDAgZXJyIDU3MDA1ClcgMjU1IGNoYXJhY3RlcnM6IGluIHJhbmdlIHRydWUgZXJyIC0yClcgMjU2IGNoYXJhY3RlcnM6IDAgZXJyIDIzNApXIHN1cnJvZ2F0ZSBwYWlyOiBpbiByYW5nZSB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "empty string: 0 err -1\none character: in range err -2\n254 characters: in range err -2\n255 characters: in range err -2\n256 characters: 0 err 234\n257 characters: 0 err 234\n270 characters: 0 err 234\nthe 255-character id is stable: true\nWM_NULL as a name: in range err -2\nWM_PAINT as a name: in range err -2\na name with a quote and a backslash: in range err -2\nW empty string: 0 err 57005\nW 255 characters: in range true err -2\nW 256 characters: 0 err 234\nW surrogate pair: in range true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

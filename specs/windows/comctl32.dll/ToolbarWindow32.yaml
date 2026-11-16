@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/ToolbarWindow32.yaml
+id: windows/api/comctl32.dll/ToolbarWindow32
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station: windows and messages work, controls draw into memory bitmaps with WM_PRINT, nothing is shown on a screen, no input) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output, each run in a fresh scratch directory; the test programs have no manifest, so they get the common controls of version 5.82 and no visual styles"
+  observed_by: spec-win-apps-5
+  date: 2026-11-15
+sources: >
+  Observations of our own test programs on the machine above. The programs have no manifest, so they get the common controls of version 5.82 from the system directory (classic look, no visual styles); controls are drawn into memory bitmaps with WM_PRINT (PRF_CLIENT | PRF_ERASEBKGND | PRF_CHILDREN) and only system colours are compared, never text or glyph pixels. Microsoft Learn: "Common Controls", the control reference pages and their message and notification lists; commctrl.h for constants and layouts. The conformance tests of Wine were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The toolbar control: buttons with images (bitmaps or an image list), separators, states and check groups. 7-Zip's file manager has two (the standard buttons and an archive toolbar) and its window shows an empty strip on Poly.
+interface:
+  signature: "window class ToolbarWindow32 (comctl32 version 5.82): CreateWindowExW(\"ToolbarWindow32\", ...); messages TB_*, notifications TBN_* and NM_*"
+rules:
+  creation: "a toolbar made with no style gets CCS_TOP (0x1) added; WS_CHILD and WS_VISIBLE are the caller's; TB_BUTTONSTRUCTSIZE(sizeof TBBUTTON = 32 on x64) returns 0; TB_BUTTONCOUNT is 0; an empty toolbar at the width of its parent is 28 pixels high (client 26) and its button size is 22 x 23 (TB_GETBUTTONSIZE 0x160017: low word 23 = width, high word 22 = height... the value read is 0x160017); TB_GETROWS is 1; TB_GETBITMAPFLAGS 0"
+  add_bitmap: "TB_ADDBITMAP with a bitmap handle (TBADDBITMAP {NULL, handle}, nButtons 3) returns the index of the first new image (0), the next call 3 (after 3 images); an image list is made behind the scenes (TB_GETIMAGELIST is then not NULL); TB_SETIMAGELIST returns the old list and TB_GETIMAGELIST the new one; hot and disabled lists are NULL until set"
+  add_buttons: "TB_ADDBUTTONSW(count, TBBUTTON array) returns TRUE; TB_BUTTONCOUNT follows; TB_GETBUTTON(i) returns TRUE with bitmap, command, state and style (a separator has bitmap 8 and command 0: the separator's width is kept in the bitmap field), FALSE for an index that does not exist; TB_COMMANDTOINDEX(id) gives the index or -1 (0 gives the index of the first separator); TB_INSERTBUTTONW(index, button) returns TRUE for index 1, -1 (appends?) and 100 (beyond the end): all TRUE; TB_DELETEBUTTON returns TRUE (FALSE for a bad index) and sends TBN_DELETINGBUTTON"
+  rectangles: "TB_GETITEMRECT(i) returns TRUE and the button's rectangle: buttons of 16 x 15 images are 23 wide and 22 high in the oracle (rectangles (0, 2, 23, 24), (31, 2, 54, 24) ...: top 2, bottom 24), a separator is 8 wide, a hidden button returns FALSE with an empty rectangle; TB_SETBUTTONSIZE(30, 28) returns TRUE and the buttons become 30 x 28 with the separator staying 8; TB_SETBITMAPSIZE(20, 18) returns TRUE and TB_GETBUTTONSIZE then reports 0x18001b; TB_GETMAXSIZE gives the total of the buttons (100 x 22 for the first five visible ones); TB_AUTOSIZE returns 0 and keeps a toolbar of one row at 400 x 28; TB_GETPADDING 0x60007"
+  styles: "TB_SETSTYLE returns 0 and TB_GETSTYLE reads back the TBSTYLE_ bits (0x900 for TBSTYLE_FLAT | TBSTYLE_TOOLTIPS with CCS_TOP... as seen in the test); TB_SETEXTENDEDSTYLE returns the old extended style (0) and TB_GETEXTENDEDSTYLE reads it (1 for TBSTYLE_EX_DRAWDDARROWS)"
+  states: "TB_GETSTATE returns the state bits (TBSTATE_ENABLED 4 for a plain button, -1 for an id that does not exist); TB_ISBUTTONENABLED returns the bit's value (4 or 0), the other TB_ISBUTTON... messages return 0 or the bit and -1... for an unknown id the value -1 (all five); TB_CHECKBUTTON(id, TRUE) and TB_PRESSBUTTON(id, TRUE) return TRUE and set TBSTATE_CHECKED (1) and TBSTATE_PRESSED (2); TB_ENABLEBUTTON(id, FALSE) clears TBSTATE_ENABLED; TB_HIDEBUTTON sets TBSTATE_HIDDEN (8) and TB_INDETERMINATE TBSTATE_INDETERMINATE (0x10); an unknown id returns FALSE; TB_SETSTATE replaces the whole state (any byte, 0xFF is stored as 0xFF)"
+  clicks: "a click (WM_LBUTTONDOWN and WM_LBUTTONUP at the middle of a button, sent straight to the control) sends the parent TBN_BEGINDRAG, NM_LDOWN (-20), NM_RELEASEDCAPTURE, TBN_ENDDRAG, then WM_COMMAND with the button's id (notification code 0) and NM_CLICK; a plain click on a disabled button sends the first four notifications but no WM_COMMAND; a click that hits no button sends NM_LDOWN and NM_CLICK only; a TBSTYLE_CHECK button toggles its checked state on a click; in a TBSTYLE_CHECKGROUP a click checks the button and unchecks the other group buttons (a checked group button stays checked when clicked again)"
+  hit_test: "TB_HITTEST with the middle of button 1 returns 1; a point outside every button returns a negative value (-6 for a point right of the last button and for a negative x)"
+  text: "TB_ADDSTRINGW(0, 'Open\\0Save\\0\\0') returns the index of the first new string (0), a second call 2; a button inserted with iString 1 gets the second string ('Save': TB_GETBUTTONTEXTW(id) returns 4 and the text); a button without a string: TB_GETBUTTONTEXTW returns 4 too in the test (the text of the last string asked: not meaningful)"
+errors:
+  unknown_button: "an id or index that does not exist: FALSE (TB_ENABLEBUTTON, TB_GETBUTTON, TB_DELETEBUTTON, TB_GETITEMRECT of a hidden button) or -1 (TB_GETSTATE, TB_COMMANDTOINDEX, TB_ISBUTTON...)"
+side_effects: "posts WM_COMMAND and WM_NOTIFY to the parent"
+threading: "the window's own thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md). Observations print results, error codes, counts, booleans and sizes that come from the test's own fonts and from system metrics at 96 dpi; no line holds a handle, a pointer or a machine, user or time. "err=-1" in a line means the call left the last error as the test had set it before (a marker), "err=N" the value after a failing result; the last error after a succeeding call is not printed (it is not specified).
+not_covered: >
+  Version 6 controls (what PuTTY and 7-Zip get through their manifests: themed painting, extra messages, LVS_EX styles beyond the basic ones), mouse input (a mouse button message sent to these controls starts a loop that waits for the real mouse and never ends in session 0, so the tests send keys and use hit tests), drag and drop, label editing, tool tips, owner draw and custom draw (NM_CUSTOMDRAW), icon and tile views, groups, sorting, and anything that needs a real font (text pixels, text extents of the system font). Customisation, TBSTYLE_LIST text layout and the standard image sets (IDB_STD_SMALL_COLOR), the exact heights with text.
