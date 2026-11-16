@@ -1372,6 +1372,18 @@ fn report_after<E: Env + ?Sized>(env: &E, hwnd: u32, after: u64) -> u64 {
     }
 }
 
+/// The window under the cursor and the cursor's place.
+fn window_under_cursor<E: Env + ?Sized>(env: &E) -> (u32, (i32, i32)) {
+    let at = match env.call(Request::Cursor { set: false, x: 0, y: 0 }) {
+        Reply::Value { value } => (value as u32 as i32, (value >> 32) as u32 as i32),
+        _ => (0, 0),
+    };
+    match env.call(Request::WindowFromPoint { x: at.0, y: at.1, below: 0 }) {
+        Reply::Handle { hwnd } => (hwnd, at),
+        _ => (0, at),
+    }
+}
+
 /// The work of `SetWindowPos` and of every `ShowWindow` command.
 ///
 /// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
@@ -1598,6 +1610,9 @@ fn swp<E: Env + ?Sized>(
             }
         }
     }
+    // A visible top-level window that moves or changes size may come under (or leave) the
+    // cursor: the window under it then gets a mouse move (`SC_MAXIMIZE.yaml` `max_winkey`).
+    let under_before = (top && vis_before && vis_after && (moved || sized)).then(|| window_under_cursor(env));
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
         env.call(Request::ZOrder { hwnd, after: apply_after, apply: true });
@@ -1664,6 +1679,12 @@ fn swp<E: Env + ?Sized>(
     let mut done =
         WindowPos { hwnd: h as usize, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+    if let Some((before, _)) = under_before {
+        let (after, at) = window_under_cursor(env);
+        if after != before && after != 0 {
+            env.call(Request::Cursor { set: true, x: at.0, y: at.1 });
+        }
+    }
     if (moved || sized) && vis_after {
         env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, hwnd, 0, 0);
     }
