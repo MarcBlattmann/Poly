@@ -924,6 +924,35 @@ impl Gdi {
         Some((w, ht, out))
     }
 
+    /// `SetDIBits`: the rows `src` holds (its row `k`, top-down in its own order) become rows
+    /// `first_row + k` of the bitmap `h`, converted to its format (a 32-bit bitmap keeps the source's
+    /// alpha when the source has it). The rows set, or `None` for a bitmap that is not one or is
+    /// selected into a DC (Learn: it must not be).
+    pub fn set_bitmap_rows(&mut self, h: u64, src: &Bitmap, first_row: i32) -> Option<i32> {
+        let Some(Obj::Bitmap { bmp, selected_in, .. }) = self.obj_mut(h) else { return None };
+        if *selected_in != 0 {
+            return None;
+        }
+        let mut done = 0;
+        for k in 0..src.height {
+            let y = first_row + k;
+            if y < 0 || y >= bmp.height {
+                continue;
+            }
+            for x in 0..src.width.min(bmp.width) {
+                let raw = src.raw(x, k);
+                let rgb = src.to_rgb(raw);
+                let mut v = bmp.from_rgb(rgb);
+                if bmp.bpp == 32 && src.bpp == 32 {
+                    v = (v & 0x00FF_FFFF) | (raw & 0xFF00_0000);
+                }
+                bmp.set_raw(x, y, v);
+            }
+            done += 1;
+        }
+        Some(done)
+    }
+
     /// A display DC's origin on the screen (`None`: not a display DC).
     pub fn display_origin(&self, h: u64) -> Option<(i32, i32)> {
         let d = self.dc(h)?;
