@@ -521,6 +521,47 @@ impl Lot {
         woken
     }
 
+    /// `RtlSleepConditionVariableSRW`: `sleep` over an SRW lock the caller holds. `shared` is the
+    /// caller's flag (`RTL_CONDITION_VARIABLE_LOCKMODE_SHARED`). A mode that does not match the
+    /// hold is not refused: a lock that readers hold is given up and taken again as a reader
+    /// whatever the flag says (an exclusive release would leave it held and the re-take would
+    /// never return); a lock held exclusively with the shared flag is given up as a reader.
+    /// `Err(STATUS_RESOURCE_NOT_OWNED)` when the shared flag is set and the lock is free.
+    pub fn sleep_srw(
+        &self,
+        sys: &dyn Sys,
+        cv: &AtomicUsize,
+        lock: &AtomicUsize,
+        timeout: Option<i64>,
+        shared: bool,
+    ) -> Result<bool, u32> {
+        let state = lock.load(Ordering::Relaxed);
+        if shared && state == 0 {
+            // Nothing to give up: refused before the thread is queued.
+            return Err(STATUS_RESOURCE_NOT_OWNED);
+        }
+        let as_reader = shared || state >= READER;
+        Ok(self.sleep(
+            sys,
+            cv,
+            timeout,
+            &mut || {
+                if as_reader {
+                    let _ = self.release_shared(sys, lock);
+                } else {
+                    self.release_exclusive(sys, lock);
+                }
+            },
+            &mut || {
+                if as_reader {
+                    self.acquire_shared(sys, lock);
+                } else {
+                    self.acquire_exclusive(sys, lock);
+                }
+            },
+        ))
+    }
+
     /// `RtlWakeConditionVariable`: the sleeper that has waited longest.
     pub fn wake_one(&self, sys: &dyn Sys, cv: &AtomicUsize) {
         self.wake_sleepers(sys, cv, false);
@@ -975,6 +1016,31 @@ mod tests {
         assert!(!lot.try_acquire_exclusive(&w));
         lot.release_exclusive(&*host, &w);
         assert!(lot.try_acquire_exclusive(&w));
+    }
+
+    #[test]
+    fn sleep_srw_with_a_mode_that_does_not_match_the_hold_times_out() {
+        let (lot, host) = (Lot::new(), Host::default());
+        let (cv, lock) = (AtomicUsize::new(0), AtomicUsize::new(0));
+        // Held shared, exclusive flag: not refused; a timeout, the hold is still a reader's.
+        assert!(lot.try_acquire_shared(&lock));
+        assert_eq!(lot.sleep_srw(&host, &cv, &lock, rel_ms(50), false), Ok(false));
+        assert_eq!(lock.load(Ordering::Relaxed), (1 << 4) | 1);
+        lot.release_shared(&host, &lock).unwrap();
+        assert_eq!(lock.load(Ordering::Relaxed), 0);
+        // Held exclusive, shared flag: a timeout as well.
+        lot.acquire_exclusive(&host, &lock);
+        assert_eq!(lot.sleep_srw(&host, &cv, &lock, rel_ms(50), true), Ok(false));
+        lot.release_shared(&host, &lock).unwrap();
+        assert_eq!(lock.load(Ordering::Relaxed), 0);
+        // The matching modes keep their words.
+        lot.acquire_exclusive(&host, &lock);
+        assert_eq!(lot.sleep_srw(&host, &cv, &lock, rel_ms(20), false), Ok(false));
+        assert_eq!(lock.load(Ordering::Relaxed), 1);
+        lot.release_exclusive(&host, &lock);
+        // Shared flag on a free lock is refused before sleeping.
+        assert_eq!(lot.sleep_srw(&host, &cv, &lock, rel_ms(20), true), Err(STATUS_RESOURCE_NOT_OWNED));
+        assert_eq!(cv.load(Ordering::Relaxed), 0);
     }
 
     #[test]

@@ -195,7 +195,9 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if (length as usize) < MEMORY_BASIC_INFORMATION_SIZE {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
-    let info = on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, _| proc.vm.query(addr))?;
+    let info = on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, b| {
+        proc.vm.query(addr).map(|i| i.with_copied_pages(|page| b.page_written(page)))
+    })?;
     abi::write(k, buf, &info.to_bytes())?;
     if ret != 0 {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;

@@ -902,14 +902,14 @@ pub unsafe extern "system" fn CreateThreadpoolTimer(callback: usize, context: *m
     unsafe { create(Kind::Timer, callback, context as usize, env) }.cast()
 }
 
-/// `SetThreadpoolTimerEx(timer, dueTime, period, windowLength)`: whether the timer was set before.
+/// `SetThreadpoolTimerEx(timer, dueTime, period, windowLength)`: whether the timer still had a due time to come.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SetThreadpoolTimerEx(timer: *mut u8, due: *const u32, period: u32, _window: u32) -> i32 {
     let o = timer as *mut Object;
     lock();
     // SAFETY: the lock is held; the caller's timer and FILETIME.
     let was = unsafe {
-        let was = (*o).set;
+        let was = rules::timer_was_pending((*o).set, (*o).armed);
         if due.is_null() {
             unarm(o);
             (*o).set = false;
