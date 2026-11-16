@@ -1,9 +1,9 @@
 [
-{"symbol":"_Aligned_get_default_resource","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
-{"symbol":"_Aligned_new_delete_resource","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test__Aligned_new_delete_resource","wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
-{"symbol":"_Aligned_set_default_resource","src":["wine-spec"]},
-{"symbol":"_Unaligned_get_default_resource","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
-{"symbol":"_Unaligned_new_delete_resource","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test__Unaligned_new_delete_resource","wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
-{"symbol":"_Unaligned_set_default_resource","src":["wine-spec"]},
-{"symbol":"null_memory_resource","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_null_memory_resource"]}
+{"symbol":"_Aligned_get_default_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
+{"symbol":"_Aligned_new_delete_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test__Aligned_new_delete_resource","wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
+{"symbol":"_Aligned_set_default_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"]},
+{"symbol":"_Unaligned_get_default_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
+{"symbol":"_Unaligned_new_delete_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test__Unaligned_new_delete_resource","wine:msvcp140_1/tests/msvcp140_1.c:test_get_set_default_resource"]},
+{"symbol":"_Unaligned_set_default_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"]},
+{"symbol":"null_memory_resource","status":"claimed","claimed_by":"spec-vcrt-2","src":["wine-spec"],"seeds":["wine:msvcp140_1/tests/msvcp140_1.c:test_null_memory_resource"]}
 ]

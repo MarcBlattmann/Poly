@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "ctype_char_functions",
+      "exe_sha256": "bf4e8ad37286b097e1ee64c6ce1f9d93395f22dc79a62d370eeb6b35b4693c4e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaXMoc3BhY2UsICcgJykKb2sgaXMoc3BhY2UsICdhJykgaXMgZmFsc2UKb2sgaXMoYWxwaGEsICdxJykKb2sgaXMoZGlnaXQsICc3JykKb2sgaXMoeGRpZ2l0LCAnZicpIGFuZCBub3QgJ2cnCm9rIGlzKHVwcGVyfGxvd2VyLCAnUScpCm9rIGlzKHB1bmN0LCAnIScpCm9rIGlzKGNudHJsLCAnXHQnKQpvayBpcyhibGFuaywgc3BhY2UpIGlzIHRydWUgKGJsYW5rIGlzIDB4NDg6IHRoZSBibGFuayBiaXQgYW5kIHRoZSBzcGFjZSBiaXQpCm9rIGEgaGlnaCBieXRlIGhhcyBubyBjbGFzcyBpbiB0aGUgQyBsb2NhbGUKb2sgaXMocmFuZ2UpIHJldHVybnMgdGhlIGVuZApvayBtYXNrIG9mICdhJwpvayBtYXNrIG9mICcxJwpvayBtYXNrIG9mICcgJwpvayBzY2FuX2lzKGRpZ2l0KSBmaW5kcyB0aGUgZmlyc3QgZGlnaXQKb2sgc2Nhbl9pcyB3aXRoIG5vIG1hdGNoIHJldHVybnMgdGhlIGVuZApvayBzY2FuX25vdChhbHBoYSkgZmluZHMgdGhlIGZpcnN0IG5vbi1sZXR0ZXIKb2sgc2Nhbl9ub3QgYXQgdGhlIHN0YXJ0Cm9rIHRvbG93ZXIoJ1EnKQpvayB0b3VwcGVyKCdxJykKb2sgdG9sb3dlciBvZiBhIG5vbi1sZXR0ZXIKb2sgdG91cHBlciBvZiBhIGhpZ2ggYnl0ZSBpcyB1bmNoYW5nZWQgaW4gdGhlIEMgbG9jYWxlCm9rIHRvbG93ZXIgb2YgYSBoaWdoIGJ5dGUgaXMgdW5jaGFuZ2VkCm9rIHRvdXBwZXIocmFuZ2UpCm9rIHJldHVybnMgdGhlIGVuZApvayB0b2xvd2VyKHJhbmdlKQpvayB3aWRlbigneCcpCm9rIHdpZGVuIG9mIGEgaGlnaCBieXRlCm9rIHdpZGVuKHJhbmdlKSBjb3BpZXMKb2sgYW5kIHJldHVybnMgdGhlIGVuZCBvZiB0aGUgaW5wdXQKb2sgbmFycm93KCd4JywgJz8nKQpvayBuYXJyb3cgb2YgYSBoaWdoIGJ5dGUga2VlcHMgaXQKb2sgbmFycm93KHJhbmdlKSBjb3BpZXMKc3VtbWFyeSAzMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok is(space, ' ')\nok is(space, 'a') is false\nok is(alpha, 'q')\nok is(digit, '7')\nok is(xdigit, 'f') and not 'g'\nok is(upper|lower, 'Q')\nok is(punct, '!')\nok is(cntrl, '\\t')\nok is(blank, space) is true (blank is 0x48: the blank bit and the space bit)\nok a high byte has no class in the C locale\nok is(range) returns the end\nok mask of 'a'\nok mask of '1'\nok mask of ' '\nok scan_is(digit) finds the first digit\nok scan_is with no match returns the end\nok scan_not(alpha) finds the first non-letter\nok scan_not at the start\nok tolower('Q')\nok toupper('q')\nok tolower of a non-letter\nok toupper of a high byte is unchanged in the C locale\nok tolower of a high byte is unchanged\nok toupper(range)\nok returns the end\nok tolower(range)\nok widen('x')\nok widen of a high byte\nok widen(range) copies\nok and returns the end of the input\nok narrow('x', '?')\nok narrow of a high byte keeps it\nok narrow(range) copies\nsummary 33 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "ctype_char_virtuals",
+      "exe_sha256": "09768b035a2db2d127675b8fde38da7151f65e6b4a015d946477cc140a37c1ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgZWFjaCBwdWJsaWMgZnVuY3Rpb24gY2FsbHMgaXRzIG93biB2aXJ0dWFsIGZ1bmN0aW9uLCBpbiB0aGUgb3JkZXIgb2YgdGhlIGhlYWRlcgpvayBhIGRlcml2ZWQgZmFjZXQgY3JlYXRlZCB3aXRoIHRoZSBkZWZhdWx0IGNvbnN0cnVjdG9yIHVzZXMgdGhlIGNsYXNzaWMgdGFibGUKb2sgaXMoKSBpcyBub3QgdmlydHVhbDogaXQgcmVhZHMgdGhlIHRhYmxlCm9rIGEgZmFjZXQgbWFkZSBieSBuZXcgaXMgZGVzdHJveWVkIHRocm91Z2ggaXRzIHZpcnR1YWwgZGVzdHJ1Y3RvcgpvayB0YWJsZSgpIHJldHVybnMgdGhlIHRhYmxlIGdpdmVuCm9rIGlzKCkgdXNlcyBpdApvayBfRGVsZmwgaXMgMCBmb3IgZGVsZXRlPWZhbHNlCm9rIHRvbG93ZXIgc3RpbGwgd29ya3Mgd2l0aCBhIHVzZXIgdGFibGUKb2sgYSBudWxsIHRhYmxlIG1lYW5zIHRoZSBjbGFzc2ljIHRhYmxlCm9rIGEgdGFibGUgdG8gZGVsZXRlIGlzIGtlcHQKb2sgX0RlbGZsIGlzIC0xIGZvciBkZWxldGU9dHJ1ZSAodGhlIHRhYmxlIGlzIHJlbGVhc2VkIHdpdGggZGVsZXRlW10pCnZhbHVlIHNpemVvZiB0aGUgY3R5cGUgbWFkZSBieSBuZXcgNDgKb2sgdGhlIGRlc3RydWN0b3IgcmVsZWFzZWQgdGhlIHRhYmxlIChubyBjcmFzaCkKb2sgX015cmVmcyBpcyB0aGUgcmVmcyBhcmd1bWVudCAoMSkKb2sgX015cmVmcyBpcyAwIGZvciByZWZzID0gMApvayBfSW5jcmVmIGFkZHMgb25lCm9rIF9EZWNyZWYgcmV0dXJucyBudWxsIHdoaWxlIHJlZmVyZW5jZXMgcmVtYWluCm9rIF9EZWNyZWYgcmV0dXJucyB0aGUgZmFjZXQgaXRzZWxmIHdoZW4gdGhlIGNvdW50IHJlYWNoZXMgMApvayBhbmQgdGhlIGNvdW50IGlzIDAKc3VtbWFyeSAxOCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok each public function calls its own virtual function, in the order of the header\nok a derived facet created with the default constructor uses the classic table\nok is() is not virtual: it reads the table\nok a facet made by new is destroyed through its virtual destructor\nok table() returns the table given\nok is() uses it\nok _Delfl is 0 for delete=false\nok tolower still works with a user table\nok a null table means the classic table\nok a table to delete is kept\nok _Delfl is -1 for delete=true (the table is released with delete[])\nvalue sizeof the ctype made by new 48\nok the destructor released the table (no crash)\nok _Myrefs is the refs argument (1)\nok _Myrefs is 0 for refs = 0\nok _Incref adds one\nok _Decref returns null while references remain\nok _Decref returns the facet itself when the count reaches 0\nok and the count is 0\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

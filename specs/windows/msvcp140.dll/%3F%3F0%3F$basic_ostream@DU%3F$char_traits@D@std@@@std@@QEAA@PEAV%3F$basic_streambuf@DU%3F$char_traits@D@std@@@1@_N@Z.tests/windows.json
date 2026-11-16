@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "ostream_ctor_layout",
+      "exe_sha256": "4691e999fd6067ddb208f4221e381d82fb4b73fc0c246f9919df5e49e033ad8a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKGJhc2ljX29zdHJlYW08Y2hhcj4pIDExMgp2YWx1ZSBzaXplb2YoTXlPUykgMTIwCm9rIGEgdmlydHVhbC1iYXNlIHRhYmxlIHBvaW50ZXIgYXQgb2Zmc2V0IDAKb2sgdmJ0YWJsZVswXSBpcyAwIChkaXN0YW5jZSBvZiB0aGUgdGFibGUgcG9pbnRlciBmcm9tIHRoZSBvYmplY3QpCm9rIHZidGFibGVbMV0gaXMgMTYgKG9mZnNldCBvZiB0aGUgYmFzaWNfaW9zIGJhc2UpCm9rIHRoZSBiYXNpY19pb3Mgc3ViLW9iamVjdCBpcyBhdCArMTYKb2sgdGhlIGJhc2ljX2lvcyBiYXNlIHN0YXJ0cyB3aXRoIGl0cyBvd24gdnRhYmxlIHBvaW50ZXIKdmFsdWUgdGhlIDQgYnl0ZXMgYXQgKzEyICh2dG9yZGlzcCBvZiB0aGUgdmlydHVhbCBiYXNlKSAwCnZhbHVlIHRoZSA0IGJ5dGVzIGF0ICs4IDAKb2sgcmRidWYoKSBpcyB0aGUgYnVmZmVyCm9rIGdvb2QoKQpvayBmaWxsIGlzIGEgYmxhbmsKb2sgZmxhZ3Mgc2tpcHdzfGRlYwpvayBubyB0aWUKb2sgdGhlIGJ1ZmZlcidzIGZpZWxkczogbm90aGluZyB3cml0dGVuIHlldApvayBhIGNoYXJhY3RlciBpcyB3cml0dGVuIHRocm91Z2ggdGhlIGJ1ZmZlcgpvayBhIHN0cmVhbSBjb25zdHJ1Y3RlZCB3aXRoIGEgbnVsbCBidWZmZXIgaGFzIGJhZGJpdApvayByZGJ1ZigpIGlzIG51bGwKb2sgaXNzdGQgPSB0cnVlOiBzdGlsbCB3b3JrcwpvayBpc3N0ZCA9IHRydWU6IF9TdGRzdHIgKG9mZnNldCAyNCkgaXMgbm9uLXplcm8Kb2sgdGhlIGRlcml2ZWQgb2JqZWN0J3Mgb3duIG1lbWJlciBpcyBpbnRhY3QKb2sgaXQgaXMgdXNhYmxlIGFzIGFuIG9zdHJlYW0Kb2sgd3JpdGVzIHdvcmsKb2sgdGhlIGRlcml2ZWQgY2xhc3MncyBvd24gdmJ0YWJsZSBnaXZlcyB0aGUgc2FtZSBvZmZzZXQgYXMgdGhlIHBvaW50ZXIgY29udmVyc2lvbgp2YWx1ZSBvZmZzZXQgb2YgdGhlIGlvcyBiYXNlIGluIE15T1MgMjQKb2sgd3JpdGVzIHRocm91Z2ggdGhlIGJhc2UgcmVmZXJlbmNlCnZhbHVlIG9mZnNldCBvZiBleHRyYSBpbiBNeU9TIDgKb2sgdGhlIGRlcml2ZWQgZGVzdHJ1Y3RvciByYW4gb25jZQpvayBwb2ludGVyIGNvbnZlcnNpb24gdG8gdGhlIHZpcnR1YWwgYmFzZSBhZGRzIHRoZSB2YnRhYmxlIG9mZnNldApvayBkZWxldGUgdGhyb3VnaCBhbiBpb3NfYmFzZSogcmFuIHRoZSBkZXJpdmVkIGRlc3RydWN0b3IKb2sgZGVsZXRlIHRocm91Z2ggYW4gb3N0cmVhbSogcmFuIHRoZSBkZXJpdmVkIGRlc3RydWN0b3IKb2sgdGhlIGJ1ZmZlciBjb250ZW50IGlzIHVuY2hhbmdlZCBieSBkZXN0cnVjdGlvbgpzdW1tYXJ5IDI2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(basic_ostream<char>) 112\nvalue sizeof(MyOS) 120\nok a virtual-base table pointer at offset 0\nok vbtable[0] is 0 (distance of the table pointer from the object)\nok vbtable[1] is 16 (offset of the basic_ios base)\nok the basic_ios sub-object is at +16\nok the basic_ios base starts with its own vtable pointer\nvalue the 4 bytes at +12 (vtordisp of the virtual base) 0\nvalue the 4 bytes at +8 0\nok rdbuf() is the buffer\nok good()\nok fill is a blank\nok flags skipws|dec\nok no tie\nok the buffer's fields: nothing written yet\nok a character is written through the buffer\nok a stream constructed with a null buffer has badbit\nok rdbuf() is null\nok isstd = true: still works\nok isstd = true: _Stdstr (offset 24) is non-zero\nok the derived object's own member is intact\nok it is usable as an ostream\nok writes work\nok the derived class's own vbtable gives the same offset as the pointer conversion\nvalue offset of the ios base in MyOS 24\nok writes through the base reference\nvalue offset of extra in MyOS 8\nok the derived destructor ran once\nok pointer conversion to the virtual base adds the vbtable offset\nok delete through an ios_base* ran the derived destructor\nok delete through an ostream* ran the derived destructor\nok the buffer content is unchanged by destruction\nsummary 26 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "ostream_error_paths",
+      "exe_sha256": "154d35e262bf3087decd855073f105c91fea31ab4cdba118810d79fc353a6d24",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdGhlIHRpZWQgc3RyZWFtIHdhcyBmbHVzaGVkIChzeW5jIGNhbGxlZCkgYmVmb3JlIHRoZSBvdXRwdXQKb2sgYW5kIGFnYWluIGZvciB0aGUgbmV4dCBpbnNlcnRpb24Kb2sgdGhlIG91dHB1dCB3ZW50IHRvIHRoZSBvdGhlciBidWZmZXIKb2sgcHV0KCkgaGFzIGEgc2VudHJ5IHRvbzogaXQgZmx1c2hlcyB0aGUgdGllCm9rIHdyaXRlKCkgYXMgd2VsbApvayBhIHN0cmVhbSB0aWVkIHRvIGl0c2VsZiBkb2VzIG5vdCBmbHVzaCBpdHNlbGYKb2sgYSBiYWQgdGllZCBzdHJlYW0gZG9lcyBub3Qgc3RvcCB0aGUgb3V0cHV0IChvbmx5IHRoaXMgc3RyZWFtJ3Mgb3duIHN0YXRlIGNvdW50cyBhZnRlciB0aGUgZmx1c2gpCm9rIHVuaXRidWY6IG9uZSBzeW5jIGFmdGVyIGFuIGluc2VydGlvbgpvayB1bml0YnVmOiBvbmUgc3luYyBwZXIgaW5zZXJ0aW9uICgiYWIiIGFuZCAnYycgYXJlIHR3bykKb2sgcHV0KCkgYW5kIHdyaXRlKCkgaGF2ZSB0aGVpciBvd24gc2VudHJ5OiBzeW5jIGVhY2gKb2sgYSBmYWlsaW5nIHN5bmMgc2V0cyBiYWRiaXQKb2sgd2l0aG91dCB1bml0YnVmOiBubyBzeW5jCm9rIG9zZngoKSBzeW5jcyB3aGVuIHVuaXRidWYgaXMgc2V0Cm9rIF9Pc2Z4KCkgc3luY3Mgd2hlbiB1bml0YnVmIGlzIHNldApvayBfT3NmeCgpIGRvZXMgbm90aGluZyB3aXRob3V0IHVuaXRidWYKb2sgb3BmeCgpIGlzIHRydWUgb24gYSBnb29kIHN0cmVhbQpvayBvcGZ4KCkgaXMgZmFsc2Ugb24gYSBmYWlsZWQgc3RyZWFtCm9rIHRoZSBidWZmZXIgdG9vayB0aHJlZSBjaGFyYWN0ZXJzCm9rIGEgZmFpbGVkIHB1dCBzZXRzIGJhZGJpdApvayBmdXJ0aGVyIG91dHB1dCBpcyBza2lwcGVkIGluIHRoZSBiYWQgc3RhdGUKb2sgYSBudW1iZXIgd2hvc2UgZmlyc3QgY2hhcmFjdGVyIGlzIHJlZnVzZWQgc2V0cyBiYWRiaXQKb2sgcHV0KCkgb24gYSByZWZ1c2luZyBidWZmZXIgc2V0cyBiYWRiaXQKb2sgd3JpdGUoKSB0aGF0IHN0b3JlcyBmZXdlciB0aGFuIGFza2VkIHNldHMgYmFkYml0Cm9rIGJhZGJpdCBpbiB0aGUgbWFzazogYW4gaW9zX2Jhc2U6OmZhaWx1cmUgaXMgdGhyb3duCm9rIGl0cyB0ZXh0Cm9rIHRoZSBzdGF0ZSBoYXMgYmFkYml0Cm9rIHdpdGhvdXQgYmFkYml0IGluIHRoZSBtYXNrIHRoZSBidWZmZXIncyBleGNlcHRpb24gaXMgc3dhbGxvd2VkCm9rIGFuZCBiYWRiaXQgaXMgc2V0Cm9rIHRoZSBmaXJzdCBjaGFyYWN0ZXJzIHdlcmUgd3JpdHRlbgpvayB3aXRoIGJhZGJpdCBpbiB0aGUgbWFzayB0aGUgb3JpZ2luYWwgZXhjZXB0aW9uIGlzIHJldGhyb3duIHVuY2hhbmdlZApvayBhbmQgYmFkYml0IGlzIHNldApvayBwdXQoKSBzd2FsbG93cyB0aGUgYnVmZmVyJ3MgZXhjZXB0aW9uIHRvbyB3aGVuIHRoZSBtYXNrIGlzIGVtcHR5Cm9rIGFuZCBzZXRzIGJhZGJpdApvayBhbiBleGNlcHRpb24gbm90IG1hdGNoaW5nIHRoZSBtYXNrIGlzIHN3YWxsb3dlZApvayB3cml0aW5nIHRvIGEgc3RyZWFtIHdpdGhvdXQgYSBidWZmZXIgbGVhdmVzIGJhZGJpdApvayBmbHVzaCBvbiBpdCBpcyBoYXJtbGVzcwpzdW1tYXJ5IDM2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok the tied stream was flushed (sync called) before the output\nok and again for the next insertion\nok the output went to the other buffer\nok put() has a sentry too: it flushes the tie\nok write() as well\nok a stream tied to itself does not flush itself\nok a bad tied stream does not stop the output (only this stream's own state counts after the flush)\nok unitbuf: one sync after an insertion\nok unitbuf: one sync per insertion (\"ab\" and 'c' are two)\nok put() and write() have their own sentry: sync each\nok a failing sync sets badbit\nok without unitbuf: no sync\nok osfx() syncs when unitbuf is set\nok _Osfx() syncs when unitbuf is set\nok _Osfx() does nothing without unitbuf\nok opfx() is true on a good stream\nok opfx() is false on a failed stream\nok the buffer took three characters\nok a failed put sets badbit\nok further output is skipped in the bad state\nok a number whose first character is refused sets badbit\nok put() on a refusing buffer sets badbit\nok write() that stores fewer than asked sets badbit\nok badbit in the mask: an ios_base::failure is thrown\nok its text\nok the state has badbit\nok without badbit in the mask the buffer's exception is swallowed\nok and badbit is set\nok the first characters were written\nok with badbit in the mask the original exception is rethrown unchanged\nok and badbit is set\nok put() swallows the buffer's exception too when the mask is empty\nok and sets badbit\nok an exception not matching the mask is swallowed\nok writing to a stream without a buffer leaves badbit\nok flush on it is harmless\nsummary 36 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "ostream_insert_integers",
+      "exe_sha256": "7fabb8ea48779edacdaae8f0771408fd44c1219bf77dc493d961d3f28ba13bf1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaW50IDAKb2sgaW50IC0xMjMKb2sgaW50IG1heApvayBpbnQgbWluCm9rIHVuc2lnbmVkIG1heApvayBzaG9ydCAtNQpvayB1bnNpZ25lZCBzaG9ydCBtYXgKb2sgbG9uZyAtNwpvayB1bnNpZ25lZCBsb25nIDcKb2sgbG9uZyBsb25nIG1pbgpvayB1bnNpZ25lZCBsb25nIGxvbmcgbWF4Cm9rIGhleCAyNTUKb2sgaGV4IHVwcGVyY2FzZQpvayBoZXggc2hvd2Jhc2UKb2sgaGV4IHNob3diYXNlIHVwcGVyY2FzZQpvayBoZXggc2hvd2Jhc2Ugb2YgemVybyBoYXMgbm8gcHJlZml4Cm9rIG9jdCA4Cm9rIG9jdCBzaG93YmFzZQpvayBvY3Qgc2hvd2Jhc2Ugb2YgemVybwpvayBoZXggb2YgLTEgKGludCkKb2sgaGV4IG9mIC0xIChsb25nIGxvbmcpCm9rIGhleCBvZiAtMSAoc2hvcnQpCm9rIG9jdCBvZiAtMSAoaW50KQpvayBkZWMgb2YgLTEgYWZ0ZXIgaGV4Cm9rIHNob3dwb3MgNQpvayBzaG93cG9zIDAKb2sgc2hvd3BvcyAtNQpvayBzaG93cG9zIHdpdGggaGV4IGhhcyBubyBzaWduCm9rIHNldHcoNikKb2sgc2V0dyg2KSBsZWZ0Cm9rIHNldHcoNikgcmlnaHQKb2sgc2V0dyg2KSBpbnRlcm5hbCBuZWdhdGl2ZQpvayBzZXR3KDYpIGludGVybmFsIGhleCBzaG93YmFzZQpvayBmaWxsICoKb2sgd2lkdGggc21hbGxlciB0aGFuIHRoZSB0ZXh0Cm9rIGJvb2wgdHJ1ZQpvayBib29sIGZhbHNlCm9rIGJvb2xhbHBoYSB0cnVlCm9rIGJvb2xhbHBoYSBmYWxzZQpvayBib29sYWxwaGEgd2l0aCB3aWR0aApvayBwb2ludGVyCm9rIG51bGwgcG9pbnRlcgpvayBwb2ludGVyIHdpdGggd2lkdGggaWdub3JlcyBmaWxsIHR5cGUKb2sgbnVsbHB0cl90Cm9rIGNoYXIKb2sgc2lnbmVkIGNoYXIKb2sgdW5zaWduZWQgY2hhcgpvayBjaGFyIHdpdGggd2lkdGgKb2sgc3RyaW5nCm9rIHN0cmluZyB3aXRoIHdpZHRoCm9rIHN0cmluZyB3aXRoIHdpZHRoLCBsZWZ0Cm9rIHR3byB2YWx1ZXMgaW4gYSByb3cKb2sgZW5kbApvayBlbmRzCm9rIHdpZHRoKCkgaXMgMCBhZnRlciBhIG51bWJlcgpvayB3aWR0aCgpIGlzIDAgYWZ0ZXIgYSBzdHJpbmcKb2sgd2lkdGgoKSBpcyAwIGFmdGVyIGEgY2hhcgpvayBwdXQoKSBkb2VzIG5vdCByZXNldCB0aGUgd2lkdGgKb2sgbm90aGluZyBpcyB3cml0dGVuIGluIHRoZSBmYWlsZWQgc3RhdGUKb2sgdGhlIG51bWJlciBpbnNlcnRlciBsZWF2ZXMgdGhlIHN0YXRlLCB0aGUgY2hhciBhbmQgc3RyaW5nIGluc2VydGVycyBhZGQgYmFkYml0IHdoZW4gdGhlIHNlbnRyeSBmYWlscwpzdW1tYXJ5IDYwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok int 0\nok int -123\nok int max\nok int min\nok unsigned max\nok short -5\nok unsigned short max\nok long -7\nok unsigned long 7\nok long long min\nok unsigned long long max\nok hex 255\nok hex uppercase\nok hex showbase\nok hex showbase uppercase\nok hex showbase of zero has no prefix\nok oct 8\nok oct showbase\nok oct showbase of zero\nok hex of -1 (int)\nok hex of -1 (long long)\nok hex of -1 (short)\nok oct of -1 (int)\nok dec of -1 after hex\nok showpos 5\nok showpos 0\nok showpos -5\nok showpos with hex has no sign\nok setw(6)\nok setw(6) left\nok setw(6) right\nok setw(6) internal negative\nok setw(6) internal hex showbase\nok fill *\nok width smaller than the text\nok bool true\nok bool false\nok boolalpha true\nok boolalpha false\nok boolalpha with width\nok pointer\nok null pointer\nok pointer with width ignores fill type\nok nullptr_t\nok char\nok signed char\nok unsigned char\nok char with width\nok string\nok string with width\nok string with width, left\nok two values in a row\nok endl\nok ends\nok width() is 0 after a number\nok width() is 0 after a string\nok width() is 0 after a char\nok put() does not reset the width\nok nothing is written in the failed state\nok the number inserter leaves the state, the char and string inserters add badbit when the sentry fails\nsummary 60 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "ostream_unformatted",
+      "exe_sha256": "b08ada5d97bbd4d112de5449bac41972d01ad9f48e900e1778b62c76da3d7c87",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcHV0IHdyaXRlcyBvbmUgY2hhcmFjdGVyCm9rIHB1dCByZXR1cm5zIHRoZSBzdHJlYW0Kb2sgcHV0IGFnYWluCm9rIHdyaXRlIHB1dHMgdGhlIGJ5dGVzCm9rIHdyaXRlIGNhbGxzIHhzcHV0big0KQpvayB3cml0ZSBjYW4gd3JpdGUgTlVMIGJ5dGVzCm9rIG9uZSB4c3B1dG4oMykKdmFsdWUgdGhlIHhzcHV0biBsb2cgb2Ygd3JpdGUoIiIsIDApICIiCm9rIGZsdXNoIGNhbGxzIHJkYnVmKCktPnB1YnN5bmMoKSBvbmNlCm9rIGZsdXNoIHJldHVybnMgdGhlIHN0cmVhbQpvayBhIHN5bmMgdGhhdCByZXR1cm5zIC0xIHNldHMgYmFkYml0Cm9rIGZsdXNoIG9uIGEgZmFpbGVkIHN0cmVhbSBkb2VzIG5vdCBjYWxsIHN5bmMKb2sgZW5kbCB3cml0ZXMgYSBuZXdsaW5lCm9rIGFuZCBmbHVzaGVzCm9rIHRoZSBmbHVzaCBtYW5pcHVsYXRvciBmbHVzaGVzCm9rIHRlbGxwIHJldHVybnMgdGhlIGJ1ZmZlcidzIHBvc2l0aW9uCm9rIHRlbGxwIC0+IHNlZWtvZmYoMCwgY3VyLCBvdXQpCm9rIHNlZWtwKHBvcykgLT4gc2Vla3Bvcyhwb3MsIG91dCkKb2sgc2Vla3Aob2ZmLCBkaXIpIC0+IHNlZWtvZmYob2ZmLCBkaXIsIG91dCkKb2sgZ29vZCBhZnRlciBzdWNjZXNzZnVsIHNlZWtzCm9rIHNlZWtwIGZhaWxpbmcgc2V0cyBmYWlsYml0Cm9rIHNlZWtwKG9mZiwgZGlyKSBmYWlsaW5nIHNldHMgZmFpbGJpdApvayB0ZWxscCBvbiBhIGZhaWxlZCBzdHJlYW0gaXMgLTEKb2sgdGVsbHAgd2hlbiB0aGUgYnVmZmVyIGZhaWxzIHJldHVybnMgLTEKb2sgb3BlcmF0b3I8PChzdHJlYW1idWYqKSBjb3BpZXMgZXZlcnl0aGluZwpvayBubyBlcnJvciBiaXRzCm9rIGFuIGVtcHR5IHNvdXJjZSBzZXRzIGZhaWxiaXQKb2sgYSBudWxsIHN0cmVhbWJ1Ziogc2V0cyBiYWRiaXQKb2sgcHV0KCkgb24gYSBnb29kIHN0cmVhbQpzdW1tYXJ5IDI4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok put writes one character\nok put returns the stream\nok put again\nok write puts the bytes\nok write calls xsputn(4)\nok write can write NUL bytes\nok one xsputn(3)\nvalue the xsputn log of write(\"\", 0) \"\"\nok flush calls rdbuf()->pubsync() once\nok flush returns the stream\nok a sync that returns -1 sets badbit\nok flush on a failed stream does not call sync\nok endl writes a newline\nok and flushes\nok the flush manipulator flushes\nok tellp returns the buffer's position\nok tellp -> seekoff(0, cur, out)\nok seekp(pos) -> seekpos(pos, out)\nok seekp(off, dir) -> seekoff(off, dir, out)\nok good after successful seeks\nok seekp failing sets failbit\nok seekp(off, dir) failing sets failbit\nok tellp on a failed stream is -1\nok tellp when the buffer fails returns -1\nok operator<<(streambuf*) copies everything\nok no error bits\nok an empty source sets failbit\nok a null streambuf* sets badbit\nok put() on a good stream\nsummary 28 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

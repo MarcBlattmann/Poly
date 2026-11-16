@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d8c7a1fa5793",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-15T23:06:58Z",
+  "tests": [
+    {
+      "name": "streambuf_areas",
+      "exe_sha256": "b19f3511d5e1cfafc26de43c2e00c4fc4eef67a418b903a3a361bac060d691cf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2V0ZyhmaXJzdCwgbmV4dCwgbGFzdCk6IGViYWNrLCBncHRyLCBlZ3B0cgpvayBfR25hdmFpbCBpcyBsYXN0IC0gbmV4dApvayBnYnVtcCBtb3ZlcyBncHRyIGFuZCBzaHJpbmtzIHRoZSBjb3VudApvayBhIG5lZ2F0aXZlIGdidW1wIG1vdmVzIGJhY2sKb2sgX0duaW5jIHJldHVybnMgdGhlIG9sZCBwb3NpdGlvbiBhbmQgYWR2YW5jZXMKb2sgX0ducHJlaW5jIGFkdmFuY2VzIGFuZCByZXR1cm5zIHRoZSBuZXcgcG9zaXRpb24Kb2sgX0duZGVjIHN0ZXBzIGJhY2sgYW5kIHJldHVybnMgdGhlIG5ldyBwb3NpdGlvbgpvayBfR25hdmFpbCBpcyAwIHdoZW4gZ3B0ciBpcyBudWxsCm9rIHNnZXRuKDcpIHRocm91Z2ggdGhlIGRlZmF1bHQgeHNnZXRuCm9rIHRoZSBjaGFyYWN0ZXJzIGluIG9yZGVyCm9rIHRocmVlIHJlZmlsbHMgb2YgdXAgdG8gMyBjaGFyYWN0ZXJzCm9rIHRoZSBuZXh0IGNoYXJhY3RlciBpcyA3Cm9rIHNnZXRuKDEwKSBzdG9wcyBhdCB0aGUgZW5kIG9mIHRoZSBkYXRhCm9rIGVuZDogc2dldGMgaXMgRU9GCm9rIGVuZDogc2J1bXBjIGlzIEVPRgpvayBlbmQ6IHNuZXh0YyBpcyBFT0YKb2sgc2J1bXBjIHRocm91Z2ggdGhlIGRlZmF1bHQgdWZsb3cKb2sgaW5fYXZhaWwgaXMgd2hhdCBpcyBsZWZ0IGluIHRoZSBhcmVhCm9rIHNuZXh0YwpvayBzYnVtcGMKb2sgc2J1bXBjIHJlZmlsbHMKb2sgaW5fYXZhaWwgYWZ0ZXIgYSByZWZpbGwKb2sgc2V0cChmaXJzdCwgbGFzdCk6IHBiYXNlID0gcHB0ciA9IGZpcnN0LCBlcHB0ciA9IGxhc3QKb2sgX1BuYXZhaWwgaXMgdGhlIHJvb20gbGVmdApvayBzcHV0YyBpbnRvIHRoZSBhcmVhCm9rIHBwdHIgYWR2YW5jZWQKb2sgcGJ1bXAoMikgbW92ZXMgcHB0ciBhbmQgc2hyaW5rcyB0aGUgY291bnQKb2sgYSBuZWdhdGl2ZSBwYnVtcCBtb3ZlcyBiYWNrCm9rIF9QbmluYyByZXR1cm5zIHRoZSBvbGQgcG9zaXRpb24gYW5kIGFkdmFuY2VzCm9rIHNldHAoZmlyc3QsIG5leHQsIGxhc3QpOiBwcHRyID0gbmV4dApvayBfUG5hdmFpbCBpcyAwIHdoZW4gcHB0ciBpcyBudWxsCm9rIHNwdXRuKDEwKSB0aHJvdWdoIHRoZSBkZWZhdWx0IHhzcHV0bgpvayBldmVyeSBjaGFyYWN0ZXIgYXJyaXZlZCwgaW4gb3JkZXIKb2sgb3ZlcmZsb3coKSB3YXMgY2FsbGVkIGZvciB0aGUgY2hhcmFjdGVycyB0aGF0IGRpZCBub3QgZml0Cm9rIHNwdXRuKDApCm9rIG5vIG92ZXJmbG93Cm9rIHNwdXRuKDMpIGZpdHMKb2sgc3RpbGwgbm8gb3ZlcmZsb3cKb2sgc3B1dG4oMSkgZXhhY3RseSBmaWxscyB0aGUgYXJlYQpvayBhbmQgc3RpbGwgbm8gb3ZlcmZsb3cKb2sgb25lIG1vcmUgY2hhcmFjdGVyIGdvZXMgdGhyb3VnaCBvdmVyZmxvdwpvayBvdmVyZmxvdyBjb3VudCAxCm9rIF9Jbml0KHNpeCBwb2ludGVycykgbWFrZXMgdGhlIGJ1ZmZlciB1c2UgdGhlIGNhbGxlcidzIHN0b3JhZ2UKb2sgYW5kIHJlYWRzIHRocm91Z2ggaXQKb2sgdGhlIGNhbGxlcidzIHBvaW50ZXIgbW92ZWQKb2sgYW5kIHdyaXRlcyB0aHJvdWdoIGl0Cm9rIHRoZSBjYWxsZXIncyBwdXQgcG9pbnRlciBtb3ZlZApzdW1tYXJ5IDQ3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok setg(first, next, last): eback, gptr, egptr\nok _Gnavail is last - next\nok gbump moves gptr and shrinks the count\nok a negative gbump moves back\nok _Gninc returns the old position and advances\nok _Gnpreinc advances and returns the new position\nok _Gndec steps back and returns the new position\nok _Gnavail is 0 when gptr is null\nok sgetn(7) through the default xsgetn\nok the characters in order\nok three refills of up to 3 characters\nok the next character is 7\nok sgetn(10) stops at the end of the data\nok end: sgetc is EOF\nok end: sbumpc is EOF\nok end: snextc is EOF\nok sbumpc through the default uflow\nok in_avail is what is left in the area\nok snextc\nok sbumpc\nok sbumpc refills\nok in_avail after a refill\nok setp(first, last): pbase = pptr = first, epptr = last\nok _Pnavail is the room left\nok sputc into the area\nok pptr advanced\nok pbump(2) moves pptr and shrinks the count\nok a negative pbump moves back\nok _Pninc returns the old position and advances\nok setp(first, next, last): pptr = next\nok _Pnavail is 0 when pptr is null\nok sputn(10) through the default xsputn\nok every character arrived, in order\nok overflow() was called for the characters that did not fit\nok sputn(0)\nok no overflow\nok sputn(3) fits\nok still no overflow\nok sputn(1) exactly fills the area\nok and still no overflow\nok one more character goes through overflow\nok overflow count 1\nok _Init(six pointers) makes the buffer use the caller's storage\nok and reads through it\nok the caller's pointer moved\nok and writes through it\nok the caller's put pointer moved\nsummary 47 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    },
+    {
+      "name": "streambuf_defaults",
+      "exe_sha256": "1141ad072e87727cadb522ae17acb8e554256017b9d0083c6e14c11a7e90a8fc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dmFsdWUgc2l6ZW9mKGJhc2ljX3N0cmVhbWJ1ZjxjaGFyPikgMTA0Cm9rIGEgdnRhYmxlIHBvaW50ZXIgYXQgMApvayBfSUdmaXJzdCBwb2ludHMgYXQgX0dmaXJzdCAodGhpcys4KQpvayBfSVBmaXJzdCBwb2ludHMgYXQgX1BmaXJzdCAodGhpcysxNikKb2sgX0lHbmV4dCBwb2ludHMgYXQgX0duZXh0ICh0aGlzKzQwKQpvayBfSVBuZXh0IHBvaW50cyBhdCBfUG5leHQgKHRoaXMrNDgpCm9rIF9JR2NvdW50IHBvaW50cyBhdCBfR2NvdW50ICh0aGlzKzcyKQpvayBfSVBjb3VudCBwb2ludHMgYXQgX1Bjb3VudCAodGhpcys3NikKb2sgYm90aCBhcmVhcyBhcmUgZW1wdHkgKG51bGwgcG9pbnRlcnMsIHplcm8gY291bnRzKQpvayBlYmFjayBncHRyIGVncHRyIHBiYXNlIHBwdHIgZXBwdHIgYXJlIGFsbCBudWxsCm9rIF9QbG9jYWxlIGlzIGEgaGVhcCBsb2NhbGUgb2JqZWN0Cm9rIGdldGxvYygpIGlzIHRoZSBnbG9iYWwgbG9jYWxlCm9rIGdldGxvYygpIGlzIGNsYXNzaWMKb2sgb3ZlcmZsb3coYykgZmFpbHM6IEVPRgpvayBvdmVyZmxvdygpIHdpdGggbm8gYXJndW1lbnQgaXMgRU9GCm9rIHBiYWNrZmFpbChjKSBmYWlscwpvayBzaG93bWFueWMoKSBpcyAwCm9rIHVuZGVyZmxvdygpIGlzIEVPRgpvayB1ZmxvdygpIGlzIEVPRiAodW5kZXJmbG93KCkgc2F5cyBFT0YpCm9rIHhzZ2V0big4KSByZWFkcyBub3RoaW5nCm9rIHhzcHV0biBvZiA1IGNoYXJzOiB0aGUgZmlyc3Qgb3ZlcmZsb3cgZmFpbHMsIG5vdGhpbmcgd3JpdHRlbgpvayB4c3B1dG4gb2YgMCBjaGFycwpvayBzZWVrb2ZmKCkgcmV0dXJucyBwb3MgLTEKb2sgc2Vla3BvcygpIHJldHVybnMgcG9zIC0xCm9rIHNldGJ1ZigpIHJldHVybnMgdGhpcwpvayBzeW5jKCkgaXMgMApvayBpbWJ1ZSgpLCBfTG9jaygpIGFuZCBfVW5sb2NrKCkgZG8gbm90aGluZwpvayBzZ2V0YygpIG9uIGFuIGVtcHR5IGJ1ZmZlciBjYWxscyB1bmRlcmZsb3coKTogRU9GCm9rIHNidW1wYygpIGNhbGxzIHVmbG93KCk6IEVPRgpvayBzbmV4dGMoKTogRU9GCm9rIHNwdXRjKCkgb24gbm8gcHV0IGFyZWEgY2FsbHMgb3ZlcmZsb3coKTogRU9GCm9rIGluX2F2YWlsKCkgd2l0aCBubyBidWZmZXI6IHNob3dtYW55YygpID0gMApvayBzdW5nZXRjKCkgd2l0aCBubyBidWZmZXI6IHBiYWNrZmFpbCgpID0gRU9GCm9rIHNwdXRiYWNrYygpIHdpdGggbm8gYnVmZmVyOiBFT0YKb2sgc2dldG4oKSByZWFkcyBub3RoaW5nCm9rIHNwdXRuKCkgd3JpdGVzIG5vdGhpbmcKb2sgcHVic3luYygpIGlzIDAKb2sgcHVic2V0YnVmKCkgcmV0dXJucyB0aGlzCm9rIHB1YnNlZWtvZmYoKSBpcyAtMQpvayBwdWJzZWVrcG9zKCkgaXMgLTEKb2sgcHViaW1idWUgcmV0dXJucyB0aGUgb2xkIGxvY2FsZQpvayB0aGUgZGVzdHJ1Y3RvciByYW4Kc3VtbWFyeSA0MSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "value sizeof(basic_streambuf<char>) 104\nok a vtable pointer at 0\nok _IGfirst points at _Gfirst (this+8)\nok _IPfirst points at _Pfirst (this+16)\nok _IGnext points at _Gnext (this+40)\nok _IPnext points at _Pnext (this+48)\nok _IGcount points at _Gcount (this+72)\nok _IPcount points at _Pcount (this+76)\nok both areas are empty (null pointers, zero counts)\nok eback gptr egptr pbase pptr epptr are all null\nok _Plocale is a heap locale object\nok getloc() is the global locale\nok getloc() is classic\nok overflow(c) fails: EOF\nok overflow() with no argument is EOF\nok pbackfail(c) fails\nok showmanyc() is 0\nok underflow() is EOF\nok uflow() is EOF (underflow() says EOF)\nok xsgetn(8) reads nothing\nok xsputn of 5 chars: the first overflow fails, nothing written\nok xsputn of 0 chars\nok seekoff() returns pos -1\nok seekpos() returns pos -1\nok setbuf() returns this\nok sync() is 0\nok imbue(), _Lock() and _Unlock() do nothing\nok sgetc() on an empty buffer calls underflow(): EOF\nok sbumpc() calls uflow(): EOF\nok snextc(): EOF\nok sputc() on no put area calls overflow(): EOF\nok in_avail() with no buffer: showmanyc() = 0\nok sungetc() with no buffer: pbackfail() = EOF\nok sputbackc() with no buffer: EOF\nok sgetn() reads nothing\nok sputn() writes nothing\nok pubsync() is 0\nok pubsetbuf() returns this\nok pubseekoff() is -1\nok pubseekpos() is -1\nok pubimbue returns the old locale\nok the destructor ran\nsummary 41 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

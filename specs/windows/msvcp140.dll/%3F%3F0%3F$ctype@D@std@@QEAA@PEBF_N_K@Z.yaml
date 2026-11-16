@@ -1,0 +1,91 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/??0?$ctype@D@std@@QEAA@PEBF_N_K@Z"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::ctype<char> and std::ctype_base: the character classification facet. Covers the constructors
+  (??0?$ctype@D@std@@QEAA@PEBF_N_K@Z: table, delete flag, refs; and from a _Locinfo), the destructor, the vtable
+  (??_7?$ctype@D@std@@6B@), the exported members is (two), narrow (two), do_tolower, do_toupper, do_widen, do_narrow
+  (each in two forms), _Init, _Tidy, _Getcat, the static classic_table, the id data, and the non-virtual inline members
+  the program reads (table(), is(), scan_is, scan_not).
+interface:
+  layout: |
+    x64: 48 bytes: 0 virtual table; 8 long _Myrefs; 16 _Ctypevec: 16 unsigned _Page (0 for the C locale), 24 const short*
+    _Table (256 entries, indexed by the unsigned char value), 32 int _Delfl (0: the table is the caller's / static; > 0:
+    owned and released with free(); < 0: released with delete[]), 40 char* _LocaleName (null for the C locale; freed with
+    free()).
+  masks: |
+    ctype_base::mask is short: upper 0x1, lower 0x2, alpha 0x103 (upper|lower|0x100), digit 0x4, xdigit 0x80, space 0x48,
+    punct 0x10, cntrl 0x20, blank 0x48, print 0x1D7, graph 0x117, alnum 0x107. table_size 256. NOTE blank and space are
+    the same value 0x48 (the space bit 0x8 plus the blank bit 0x40) in the masks, while the table marks only the blank
+    character ' ' with the blank bit (0x40): tab, newline, ... carry 0x8 (so is(blank, '\n') is true).
+  classic_table: |
+    The table of the C locale (256 entries; hash of its 512 bytes, FNV-1a 64, folded to 63 bits: 3105041841194383675):
+    0..8 and 14..31 and 127 are 0x20 (cntrl), 9..13 are 0x28 (cntrl|space), ' ' is 0x48, punctuation 0x10, '0'..'9' 0x84
+    (digit|xdigit), 'A'..'F' 0x81 (upper|xdigit), 'G'..'Z' 0x1, 'a'..'f' 0x82, 'g'..'z' 0x2; 128..255 are 0. The static
+    classic_table() returns a pointer to such a table (the same pointer every time); a facet built from the library's
+    _Locinfo has its own heap copy with identical content and _Delfl 1.
+rules:
+  constructors: |
+    ctype(table, deletefl, refs): _Table = table (the classic table if null), _Delfl 0 or, when deletefl is true, -1 (the
+    table is then released with delete[] in the destructor); the facet starts with refs references (0 or 1 tested).
+    ctype(const _Locinfo&, refs): the table comes from the _Locinfo (a heap copy, _Delfl 1). Delete through the facet
+    base: `delete (std::_Facet_base*)p` runs the virtual destructor, which frees the table as _Delfl says and the locale
+    name with free().
+  classification: |
+    is(m, c) is (table[(unsigned char)c] & m) != 0, inline in the program; is(first, last, dest) writes the mask of every
+    character; scan_is / scan_not return the first character that is / is not in the class, or last. In the C locale a
+    byte >= 0x80 has no class.
+  case: |
+    tolower/toupper convert only the ASCII letters in the C locale and leave every other byte (also >= 0x80) unchanged;
+    the range forms convert in place and return the end.
+  widen_narrow: |
+    widen(c) and narrow(c, dflt) are the identity on a byte in the C locale; the range forms copy the bytes and return the
+    end of the input.
+  virtual_order: |
+    Important: Microsoft's compiler lays out OVERLOADED virtual functions of one name in REVERSE order of declaration
+    (read from the compiler's own listing of a class that derives from ctype<char>). The table is: slot 0 scalar deleting
+    destructor, 1 _Incref, 2 _Decref, then 3 do_tolower(char*, const char*), 4 do_tolower(char), 5 do_toupper(char*, const
+    char*), 6 do_toupper(char), 7 do_widen(const char*, const char*, char*), 8 do_widen(char), 9 do_narrow(const char*,
+    const char*, char, char*), 10 do_narrow(char, char). The public tolower/toupper/widen/narrow in the program call these
+    slots; a program's own ctype<char> subclass puts its overrides in the same slots.
+errors:
+  none: "none."
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 4  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).

@@ -1,0 +1,113 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: "windows/api/msvcp140.dll/?classic@locale@std@@SAAEBV12@XZ"
+oracle:
+  os: |
+    Windows 11 Home 25H2 (build 26200.9974), x64, with the Visual C++ Redistributable 14.44.35211 in System32
+    (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll all 14.44.35211.0)
+  machine: |
+    homeserver2 (the owner's home PC, real hardware), session 0 over SSH; the tests are x64 programs built by Microsoft's
+    compiler (cl 19.44.35230, Visual Studio Build Tools 14.44.35207, Windows SDK 10.0.22621.0, C:\\BuildTools) with /EHsc
+    /GS- /Zl /O1 (the stream and locale tests /Od /MD, so that the members of the library's classes are called through the
+    DLL), no C or C++ runtime of their own, linked with /NODEFAULTLIB against import libraries made from
+    tests/windows/cxx/*.def and from the DLLs' own export tables, run by tools/pipeline/windows/poly-oracle.ps1, two runs
+    each, identical
+  observed_by: "spec-vcrt-2"
+  date: "2026-11-16"
+sources: |
+  Observations of our own test programs on the machine above (the tests of this entry); class layouts, sizes, offsets,
+  vtable orders and constants read from Microsoft's STL headers that ship with the Build Tools (Apache-2.0 with LLVM
+  exception; owner decision 2026-11-15, CLEAN_ROOM.md: spec agents may read them for layouts, sizes, offsets, vtable
+  order and member meaning; nothing of them is copied here, the facts below are in our own words and were checked by
+  probe programs: sizeof and offset values printed by the tests); the compiler's own output for our own probe programs
+  (cl /FAs listings: the arguments of the calls the compiler writes, the hidden constructor argument). No Microsoft
+  binary was disassembled or debugged, no vcruntime, CRT or STL source (stl/src) was read.
+summary: |
+  std::locale and its implementation classes in msvcp140.dll: ?classic@locale@std@@SAAEBV12@XZ (the classic 'C' locale),
+  ?global@locale@std@@SA?AV12@AEBV12@@Z, ?empty@locale@std@@SA?AV12@XZ, the private statics
+  ?_Init@locale@std@@CAPEAV_Locimp@12@_N@Z, ?_Getgloballocale@, ?_Setgloballocale@, the locale implementation class
+  locale::_Locimp (constructors, destructor, ?_New_Locimp@, ?_Locimp_ctor@, ?_Locimp_dtor@, ?_Locimp_Addfac@, ?_Addfac@,
+  ?_Makeloc@ and relatives, the static ?_Clocptr@), locale::facet (??0facet@locale@std@@IEAA@_K@Z, ?_Incref@, ?_Decref@,
+  ?_Getcat@, destructor, vtable), std::_Facet_base, locale::id (??0id@locale@std@@QEAA@_K@Z, ??Bid, the data
+  ?_Id_cnt@id@locale@std@@0HA) and the facet-id data exports (?id@?$ctype@D@std@@2V0locale@2@A and the others). The
+  locale class itself is a thin handle; most of its members are inline in the program and read the implementation object
+  directly, so the layouts below are part of the interface.
+interface:
+  layout: |
+    x64. std::locale: 16 bytes, 8 unused (zero or whatever), at +8 a pointer to the implementation (_Ptr). locale::id: 8
+    bytes, a size_t index (0 until assigned). locale::facet: 16 bytes: 0 virtual table, 8 long _Myrefs (the reference
+    count; a 32-bit counter with 4 bytes of padding). locale::_Locimp (derives from facet): 56 bytes: 0 vptr, 8 _Myrefs,
+    16 pointer _Facetvec (array of facet pointers indexed by facet id), 24 size_t _Facetcount (length of the array), 32
+    int _Catmask (categories the locale was built from: 0x3F for classic), 36 bool _Xparent (transparent locale), 40
+    _Yarn<char> _Name (16 bytes: 40 char* _Myptr, 48 char _Nul), the locale name, "C" for classic, "*" for a locale built
+    by adding a facet, "*" for the empty (transparent) locale. A name is read as _Myptr if non-null, else the empty
+    string.
+  facet_base_vtable: |
+    std::_Facet_base has the virtual table: slot 0 the scalar deleting destructor, slot 1 _Incref(), slot 2 _Decref()
+    (returns the facet pointer when the count dropped to 0, else null; the caller deletes the returned pointer).
+    locale::facet implements _Incref (count + 1) and _Decref (count - 1; returns this when it reaches 0). facet(refs)
+    stores refs in _Myrefs; a facet made with 0 is owned by nobody and starts at 0, a locale that takes it counts 1.
+    facet::_Getcat() (static) returns (size_t)-1.
+rules:
+  classic: |
+    classic() returns a reference to the one classic locale object, the same address every time; its name is "C", _Catmask
+    0x3F, _Xparent false, and in this library version its _Facetvec is null and _Facetcount 0: the standard facets are
+    created lazily by use_facet (use_facet<F>(loc) looks the facet id up in the locale's vector, and when it is not there
+    asks F::_Getcat to build one and caches it in a per-module static). The static
+    ?_Clocptr@_Locimp@locale@std@@0PEAV123@EA points at the classic implementation. A default-constructed std::locale()
+    copies the global locale (_Init(true): increments the reference count of the global implementation and returns it);
+    initially the global locale IS the classic implementation (same pointer, count + 1 per copy).
+  copies: |
+    copy construction and assignment of a locale share the implementation and change its count (+1 for the new reference,
+    -1 for the released one; assigning the same implementation changes nothing); the destructor does -1 and deletes the
+    implementation when the count reaches 0. Equality: same implementation, or both names are not "*" and are equal.
+    locale("C") makes a NEW implementation (different pointer from classic) named "C" that compares equal to classic().
+  adding_a_facet: |
+    locale(loc, facet*) (inline template): copies the implementation (_New_Locimp(*_Ptr): same name, facets, a fresh count
+    1), adds the facet at its id index (_Addfac, which grows _Facetvec/_Facetcount to id+1, calls the facet's virtual
+    _Incref() once and releases any facet it replaces with _Decref()), sets _Catmask 0 and the name "*". Such a locale
+    compares unequal to every other locale except itself and its copies. Destroying the locales calls the facet's
+    _Decref(); when it returns the facet it is deleted (virtual destructor). locale(loc, other, category none) is a copy
+    of the implementation (one more _Incref on its facets).
+  use_facet: |
+    use_facet<F>(loc) (inline) reads loc._Ptr->_Facetvec[F::id index] if the index is below _Facetcount, else (transparent
+    locale: the global locale's vector), else builds the facet lazily when F has a category, else throws std::bad_cast.
+    has_facet is true for the standard facets (which have a category) and for added ones, false for a user facet that was
+    not added. A locale made by empty() has _Xparent true, name "*", _Facetcount 0: it finds facets through the global
+    locale.
+  global: |
+    global(l) installs l as the global locale (the pointer is taken; the previous global implementation is returned as a
+    locale value) and returns the previous locale; locale() then yields l; for the classic locale it does not change the C
+    library's locale. Setting back the old one restores it.
+  bad_name: |
+    locale(const char* name) with a name the C runtime does not know ("no-such-locale-name") and with a null pointer
+    throws std::runtime_error whose what() is "bad locale name" (null name: also).
+  ids: |
+    A locale::id holds 0 until first used (_Get_index() allocates the next number: it takes ++_Id_cnt under the locale
+    lock). ?_Id_cnt@id@locale@std@@0HA (int) counts the allocated ids; the library allocates the ids of the facets it
+    exports (in this order, by the time the program starts): ctype<char> 1, ctype<unsigned short> 2, ctype<wchar_t> 3,
+    codecvt<char,char,mbstate_t> 4; all others (numpunct, collate, num_get, num_put, time_get, time_put, moneypunct,
+    money_get, money_put, messages) hold 0 until the first use in the program, and then take the next free number. A
+    program's own facet ids start after them. (The ids of facets whose id data the library exports are observed as 0 for
+    the ones built into the program and are written by the program.)
+errors:
+  bad_cast_and_runtime_error: |
+    std::bad_cast from use_facet of an unknown facet; std::runtime_error('bad locale name') as above.
+side_effects: "none beyond the results above"
+threading: "the tests are single-threaded"
+ordering: []
+timing:
+  typical: "each test runs in well under a second on the oracle"
+  guarantees: "none"
+tests:
+  visible: 4  # files in <symbol>.tests/ (a .cpp and its .exe are two)
+  held_out: 2  # files kept by the diff runner
+building_tests: |
+  The tests are C++ with the line `// poly-cxx: compiler=msvc` (the stream, locale and error tests also `cl=/Od,/MD`, so
+  that every call of a member of an imported class goes through msvcp140.dll): their executables were built on the
+  oracle machine by Microsoft's compiler (tools/pipeline/windows/msvc-build.ps1) and are checked in beside the sources
+  as `<name>.exe` (test artefacts); `cargo xtask pipeline win build` takes them as they are. They import from
+  vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, msvcp140_1.dll, ucrtbase.dll and kernel32.dll only. A program has
+  no C runtime start-up code: it calls what it needs by hand, and defines the few pieces that Microsoft's static
+  libraries normally provide (operator new on malloc, std::_Facet_Register as an empty function,
+  __std_system_error_allocate_message as an empty function where it is needed).
