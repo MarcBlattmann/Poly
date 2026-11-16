@@ -19,7 +19,8 @@ unsafe extern "system" {
     fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
 }
 
-#[link(name = "advapi32", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn RegOpenKeyExW(key: isize, sub: *const u16, options: u32, sam: u32, out: *mut isize) -> u32;
     fn RegCloseKey(key: isize) -> u32;

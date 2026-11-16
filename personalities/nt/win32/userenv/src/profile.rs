@@ -9,7 +9,8 @@ use alloc::vec::Vec;
 use poly_security::appcontainer as ac;
 use poly_security::sid::Sid;
 
-#[link(name = "kernelbase", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetProcessHeap() -> isize;
     fn HeapAlloc(heap: isize, flags: u32, bytes: usize) -> *mut u8;
