@@ -25,7 +25,8 @@ including the interface the kernel implements for test runs, are in
    repository; `pipeline tests split` keeps ~30% held out, outside the
    repository, and commits ~70% as visible tests.
 4. **Hand-off.** `pipeline handoff record` logs who handed what (file
-   hashes, git revision) to whom in `specs/HANDOFF_LOG.md`;
+   hashes, git revision) to whom, in a file of its own under `specs/handoffs/`
+   (ADR 0213; the legacy `specs/HANDOFF_LOG.md` is still read);
    `pipeline handoff bundle` writes exactly those files for the implementer.
 5. **Implementer** (never sees the real OS or held-out tests):
    implements against the spec and visible tests, runs `cargo xtask ci`.
@@ -311,11 +312,21 @@ pipeline spec new linux/syscall/x86_64/brk --agent spec-1
 pipeline tests split linux/syscall/x86_64/brk ~/poly/generated/brk --spec-agent spec-1
 git commit ...                                   # spec sheet + visible tests
 pipeline handoff record linux/syscall/x86_64/brk --spec-agent spec-1 --implementer impl-1
-git commit specs/HANDOFF_LOG.md ...
+git add specs/handoffs && git commit ...         # one new file per record: PRs never conflict on it
 pipeline handoff bundle linux/syscall/x86_64/brk --out ~/poly/implementer/inbox/brk
 pipeline handoff verify linux/syscall/x86_64/brk --received ~/poly/implementer/inbox/brk
-pipeline handoff verify                          # every record; run before merging
+pipeline handoff verify                          # every record; run before merging (seconds)
 ```
+
+`handoff record` writes `specs/handoffs/<UTC timestamp>-<spec agent>-<implementer>-<entry hash>.md`
+with the fields of a log row (date, entry, spec revision, both agents, every
+file with its SHA-256). Do not add rows to `specs/HANDOFF_LOG.md` any more:
+two pull requests appending to it conflict, two new files never do. `verify`
+and `bundle` read the legacy rows and the files alike, and `verify` reads
+every handed-over file from git in one `git cat-file --batch` process (a
+`git show` per file took 80 s on a Mac and over 30 minutes through a
+container's file system). Agent ids in a record are letters, digits, `.`,
+`_` and `-`.
 
 The held-out store holds `<os>/<layer>/<component>/<symbol>/` with the
 held-out files and a `MANIFEST.json` (hashes of visible and held-out
@@ -683,8 +694,18 @@ Reviewers check these on every agent PR; a violation stops the entry
 - One agent id never plays both roles for an entry (`handoff record` and
   `verify` enforce it).
 - Agents do not edit `docs/ROADMAP.md`, the README progress section,
-  `docs/progress/`, `coverage/` (except through `claim`/`release`) or
-  `CLEAN_ROOM.md`.
+  `docs/progress/`, the ADR index table, `coverage/` (except through
+  `claim`/`release`) or `CLEAN_ROOM.md`.
+- The generated files (the README's `coverage:` and `roadmap:` sections,
+  `docs/progress/*.svg` and the ADR index between its `adr-index:` markers)
+  are written **on `main` only**, by `.github/workflows/progress.yml`, which
+  runs `cargo xtask coverage readme` after every push to `main` (ADR 0213).
+  A pull request must not change them: `cargo xtask ci coverage` fails if
+  it does, and does not fail when they are out of date. Run
+  `cargo xtask coverage readme` to preview them, then restore them
+  (`git checkout README.md docs/progress docs/adr/README.md`) before you
+  commit. If a merge of `main` conflicts in them, take main's version.
+- CI also runs on any branch on demand: `gh workflow run ci.yml --ref <branch>`.
 - Anything that looks like copied code, or a file of unknown origin,
   stops the entry (CLEAN_ROOM.md, red flags).
 
