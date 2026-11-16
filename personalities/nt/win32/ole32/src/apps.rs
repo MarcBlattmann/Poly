@@ -17,7 +17,6 @@ poly_win32_rt::fail_exports!(
         CoGetMalloc,
         CoGetMarshalSizeMax,
         CoGetObject,
-        CoGetObjectContext,
         CoImpersonateClient,
         CoIncrementMTAUsage,
         CoLockObjectExternal,
