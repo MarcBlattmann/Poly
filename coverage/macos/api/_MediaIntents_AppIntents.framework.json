@@ -1865,5 +1865,11 @@
 {"symbol":"$s12MediaIntents29HomeDeviceGroupRepresentationV03AppB028InstanceDisplayRepresentable01_ab1_gB0Mc","src":["macos-sdk"]},
 {"symbol":"$s12MediaIntents29HomeDeviceGroupRepresentationV03AppB11TypeSupport21IntentValueExpressing01_ab1_gB0Mc","src":["macos-sdk"]},
 {"symbol":"$s12MediaIntents29HomeDeviceGroupRepresentationV03AppB11TypeSupport22IntentValueConvertible01_ab1_gB0Mc","src":["macos-sdk"]},
-{"symbol":"$s12MediaIntents29HomeDeviceGroupRepresentationV10Foundation40CustomLocalizedStringResourceConvertible01_ab4_AppB0Mc","src":["macos-sdk"]}
+{"symbol":"$s12MediaIntents29HomeDeviceGroupRepresentationV10Foundation40CustomLocalizedStringResourceConvertible01_ab4_AppB0Mc","src":["macos-sdk"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.Specification","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.UnwrappedType","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.ValueType","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.defaultResolverSpecification","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.displayRepresentation","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaIntents_AppIntents.AudioSearch.typeDisplayRepresentation","src":["macos-swift-interface"]}
 ]

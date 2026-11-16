@@ -2,5 +2,6 @@
 {"symbol":"$s10NowPlaying25MediaContentRepresentableP01_aB11_AppIntentsE20appEntityIdentifiersSay0fG00I10IdentifierVGvM","src":["macos-sdk"]},
 {"symbol":"$s10NowPlaying25MediaContentRepresentableP01_aB11_AppIntentsE20appEntityIdentifiersSay0fG00I10IdentifierVGvg","src":["macos-sdk"]},
 {"symbol":"$s10NowPlaying25MediaContentRepresentableP01_aB11_AppIntentsE20appEntityIdentifiersSay0fG00I10IdentifierVGvpMV","src":["macos-sdk"]},
-{"symbol":"$s10NowPlaying25MediaContentRepresentableP01_aB11_AppIntentsE20appEntityIdentifiersSay0fG00I10IdentifierVGvs","src":["macos-sdk"]}
+{"symbol":"$s10NowPlaying25MediaContentRepresentableP01_aB11_AppIntentsE20appEntityIdentifiersSay0fG00I10IdentifierVGvs","src":["macos-sdk"]},
+{"symbol":"swift:_NowPlaying_AppIntents.MediaContentRepresentable.appEntityIdentifiers","src":["macos-swift-interface"]}
 ]

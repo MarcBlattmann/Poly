@@ -3,5 +3,12 @@
 {"symbol":"NSStackTraceKey","src":["macos-sdk"]},
 {"symbol":"NSUncaughtRuntimeErrorException","src":["macos-sdk"]},
 {"symbol":"NSUncaughtSystemExceptionException","src":["macos-sdk"]},
-{"symbol":"objc:NSExceptionHandler","src":["macos-sdk"]}
+{"symbol":"objc:NSExceptionHandler","src":["macos-sdk","macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler+defaultExceptionHandler","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.delegate","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.exceptionHandlingMask","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.exceptionHangingMask","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.setDelegate:","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.setExceptionHandlingMask:","src":["macos-objc-api"]},
+{"symbol":"objc:NSExceptionHandler.setExceptionHangingMask:","src":["macos-objc-api"]}
 ]

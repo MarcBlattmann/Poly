@@ -9,8 +9,16 @@
       "description": "Linux arch/x86/entry/syscalls/syscall_64.tbl",
       "revision": "f47d223627f80cb7a1eb14c585fe6cb35de5e984"
     },
+    "macos-objc-api": {
+      "description": "Objective-C classes, protocols, methods and properties of the macOS SDK frameworks, by name, from clang -extract-api symbol graphs of the public headers (ADR 0187)",
+      "revision": "macOS SDK 27.0 (26A425)"
+    },
     "macos-sdk": {
       "description": "macOS SDK .tbd stubs (exported symbols and Objective-C classes)",
+      "revision": "macOS SDK 27.0 (26A425)"
+    },
+    "macos-swift-interface": {
+      "description": "Public Swift API of the macOS SDK modules, by name, from the .swiftinterface files (ADR 0187)",
       "revision": "macOS SDK 27.0 (26A425)"
     },
     "ms-learn-dwrite": {

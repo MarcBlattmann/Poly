@@ -20,5 +20,14 @@
 {"symbol":"$s23_MediaPlayer_AppIntents21MPAppEntityIdentifierCMu","src":["macos-sdk"]},
 {"symbol":"$s23_MediaPlayer_AppIntents21MPAppEntityIdentifierCN","src":["macos-sdk"]},
 {"symbol":"$s23_MediaPlayer_AppIntents21MPAppEntityIdentifierCfD","src":["macos-sdk"]},
-{"symbol":"objc:MPAppEntityIdentifier","src":["macos-sdk"]}
+{"symbol":"objc:MPAppEntityIdentifier","src":["macos-sdk"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.copy(with:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.description","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.encode(with:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.hash","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.init(coder:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.init(entityIdentifier:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.isEqual(_:)","src":["macos-swift-interface"]},
+{"symbol":"swift:_MediaPlayer_AppIntents.MPAppEntityIdentifier.supportsSecureCoding","src":["macos-swift-interface"]}
 ]

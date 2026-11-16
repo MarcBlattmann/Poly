@@ -184,7 +184,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Mach-O reader: fat and thin files, load commands, symbols, dylib dependencies, chained fixups, classic rebase and bind, robust against corrupt files (ADR 0153)
 - [x] aarch64 port groundwork: a boot stub on QEMU `virt` (PL011 serial, self-test) built and booted in CI (ADR 0154)
 - [ ] aarch64 port groundwork: the kernel's x86-64 code behind `crate::arch`, so a second architecture plugs in (ADR 0151)
-- [ ] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API
+- [x] macOS test oracle (licensed Mac); extend the framework map with Objective-C methods and Swift API (ADR 0182, ADR 0187)
 - [ ] Mach-O loading and our own `dyld` (shared cache optional, chained fixups)
 - [ ] Mach core: tasks, threads, ports, port rights, messages, Mach VM
 - [ ] BSD layer: XNU syscalls, `kqueue`, `posix_spawn`, signals with Darwin semantics
