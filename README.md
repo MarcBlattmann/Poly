@@ -124,7 +124,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,400 | 726 | 3,631 | 3,653 | 53,094 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,400 | 753 | 3,631 | 3,626 | 53,094 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 

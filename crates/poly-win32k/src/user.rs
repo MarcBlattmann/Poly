@@ -245,9 +245,10 @@ pub trait Env {
     /// Wait until the thread's queue event is set or `ms` pass (`None`:
     /// no limit).
     fn wait_queue(&self, ms: Option<u64>);
-    /// `WaitForMultipleObjects` over `handles` plus, when `queue`, the
-    /// queue's event last: the index woken or `None` on a timeout.
-    fn wait_handles(&self, handles: &[u64], wait_all: bool, ms: Option<u64>, queue: bool) -> Option<u32>;
+    /// `WaitForMultipleObjectsEx` over `handles` plus, when `queue`, the queue's event last
+    /// (`alertable`: an APC ends it): the call's result as it is (an index, `WAIT_ABANDONED_0`
+    /// plus an index, `WAIT_IO_COMPLETION`, `WAIT_TIMEOUT`, `WAIT_FAILED` with the last error set).
+    fn wait_handles(&self, handles: &[u64], wait_all: bool, ms: Option<u64>, queue: bool, alertable: bool) -> u32;
     /// Fill `rect` of DC `hdc` with brush `brush` (`FillRect`).
     fn fill_rect(&self, hdc: u64, rect: CRect, brush: u64);
     /// Delete a window's own DC when the window goes.
@@ -713,8 +714,21 @@ fn destroy_tree<E: Env + ?Sized>(env: &E, hwnd: u32, alone: bool) {
         if i.style & WS_CHILD != 0 {
             send(env, h, WM_SHOWWINDOW, 0, 0);
         }
-        let flags = SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
-        swp(env, hwnd, 0, 0, 0, 0, 0, flags, Opts { destroying: true, ..Opts::default() });
+        if i.style & WS_CHILD != 0 && !i.visible {
+            // A child whose parent is hidden is not on the screen: nothing moves, so it gets the
+            // WM_SHOWWINDOW and no WM_WINDOWPOS* pair (DestroyWindow.yaml `chrome_close`).
+            env.call(Request::SetState {
+                hwnd,
+                visible: Some(false),
+                minimized: None,
+                maximized: None,
+                normal: None,
+                size_move_pending: None,
+            });
+        } else {
+            let flags = SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE;
+            swp(env, hwnd, 0, 0, 0, 0, 0, flags, Opts { destroying: true, ..Opts::default() });
+        }
     } else if i.style & WS_CHILD == 0 && focus::input(env).active == hwnd {
         // A hidden window can be the active one (session 0): destroying it
         // moves the activation as for a visible one.
@@ -2219,8 +2233,16 @@ pub fn translate_message<E: Env + ?Sized>(env: &E, m: &CMsg) -> bool {
 /// falls due.
 pub fn msg_wait<E: Env + ?Sized>(env: &E, handles: &[u64], wait_all: bool, ms: u32, mask: u32, flags: u32) -> u32 {
     const WAIT_TIMEOUT: u32 = 0x102;
+    const WAIT_FAILED: u32 = u32::MAX;
+    const MWMO_ALERTABLE: u32 = 0x2;
+    const ERROR_INVALID_PARAMETER: u32 = 87;
     const MWMO_INPUTAVAILABLE: u32 = 0x4;
     let n = handles.len() as u32;
+    // At most 63 handles (the queue's own takes the 64th place) and no flag but the three.
+    if n > 63 || flags & !(1 | MWMO_ALERTABLE | MWMO_INPUTAVAILABLE) != 0 {
+        env.set_last_error(ERROR_INVALID_PARAMETER);
+        return WAIT_FAILED;
+    }
     let deadline = if ms == u32::MAX { None } else { Some(u64::from(env.tick()) + u64::from(ms)) };
     loop {
         let (now, changed, next_timer) = match env.call(Request::QueueStatus { flags: 0xFFFF, clear: false }) {
@@ -2229,22 +2251,31 @@ pub fn msg_wait<E: Env + ?Sized>(env: &E, handles: &[u64], wait_all: bool, ms: u
         };
         let input = changed & mask != 0 || (flags & MWMO_INPUTAVAILABLE != 0 && now & mask != 0);
         if input && !wait_all {
+            // A message that is new ends the wait first (MsgWaitForMultipleObjects.yaml, mwait_basic); a
+            // queued one that was seen already (`MWMO_INPUTAVAILABLE`) loses to a signaled object.
+            if n > 0 && changed & mask == 0 {
+                let r = env.wait_handles(handles, false, Some(0), false, false);
+                if r != WAIT_TIMEOUT {
+                    return r;
+                }
+            }
             return n;
         }
         let left = deadline.map(|d| d.saturating_sub(u64::from(env.tick())));
-        if left == Some(0) {
-            return WAIT_TIMEOUT;
-        }
         let timer = if mask & crate::wm::QS_TIMER != 0 { next_timer.map(|t| t.max(1)) } else { None };
         let wait = match (left, timer) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, None) => a,
             (None, b) => b,
         };
-        if let Some(i) = env.wait_handles(handles, wait_all, wait, !wait_all)
-            && i < n
-        {
-            return i;
+        // The queue's event takes part when input counts at all (with `wait_all`: the wait ends when
+        // every object is signaled and input is there).
+        let r = env.wait_handles(handles, wait_all, wait, mask != 0, flags & MWMO_ALERTABLE != 0);
+        if r != WAIT_TIMEOUT && !(mask != 0 && !wait_all && r == n) {
+            return r;
+        }
+        if left == Some(0) || deadline.is_some_and(|d| u64::from(env.tick()) >= d) {
+            return WAIT_TIMEOUT;
         }
     }
 }

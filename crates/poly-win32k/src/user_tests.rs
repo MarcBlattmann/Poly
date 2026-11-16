@@ -72,8 +72,8 @@ impl Env for TestEnv {
         0
     }
     fn wait_queue(&self, _: Option<u64>) {}
-    fn wait_handles(&self, _: &[u64], _: bool, _: Option<u64>, _: bool) -> Option<u32> {
-        None
+    fn wait_handles(&self, _: &[u64], _: bool, _: Option<u64>, _: bool, _: bool) -> u32 {
+        0x102
     }
     fn fill_rect(&self, _: u64, _: CRect, _: u64) {}
     fn delete_dc(&self, _: u64) {}

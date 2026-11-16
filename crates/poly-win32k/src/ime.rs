@@ -161,6 +161,26 @@ impl Ime {
     }
 }
 
+/// Whether a window class belongs to the text services' windows (`IME`, `MSCTFIME UI`; compared
+/// without case): the two classes whose windows `EnumWindows` and `EnumThreadWindows` list after
+/// all the others (the `ime_windows` rule of `GetWindow.yaml`, `EnumWindows.yaml`).
+pub fn is_ime_class(name: &[u16]) -> bool {
+    fn same(name: &[u16], want: &str) -> bool {
+        name.len() == want.len()
+            && name.iter().zip(want.bytes()).all(|(&c, w)| c < 128 && (c as u8).eq_ignore_ascii_case(&w))
+    }
+    same(name, "IME") || same(name, "MSCTFIME UI")
+}
+
+/// The order `EnumWindows` and `EnumThreadWindows` list windows in: the z order, except that
+/// every window for which `ime` is set (class `IME` or `MSCTFIME UI`, of any process) comes after
+/// all the others, the two groups each keeping their order.
+pub fn enumeration_order<T: Copy>(z_order: &[(T, bool)]) -> Vec<T> {
+    let mut out: Vec<T> = z_order.iter().filter(|w| !w.1).map(|w| w.0).collect();
+    out.extend(z_order.iter().filter(|w| w.1).map(|w| w.0));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,5 +232,16 @@ mod tests {
         }
         assert_eq!(ime.run(t, ImeOp::Destroy { himc: a }), ImeRes::Ok {});
         assert_eq!(get(&mut ime, a, 0), ImeRes::Err { code: 6 });
+    }
+
+    /// EnumWindows.yaml `ime_windows`: the text services' windows are listed last, in their own order.
+    #[test]
+    fn enumeration_lists_the_text_services_windows_last() {
+        let z = [(1, false), (2, true), (3, true), (4, false), (5, false), (6, true)];
+        assert_eq!(enumeration_order(&z), alloc::vec![1, 4, 5, 2, 3, 6]);
+        assert_eq!(enumeration_order::<u32>(&[]), Vec::<u32>::new());
+        let classes = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        assert!(is_ime_class(&classes("IME")) && is_ime_class(&classes("msctfime ui")));
+        assert!(!is_ime_class(&classes("IMEX")) && !is_ime_class(&classes("MSCTFIME")) && !is_ime_class(&[]));
     }
 }
