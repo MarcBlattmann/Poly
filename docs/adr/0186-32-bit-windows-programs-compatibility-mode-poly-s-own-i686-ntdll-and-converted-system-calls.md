@@ -552,12 +552,15 @@ with a non-zero code (`HRESULT_DLLS`); `msi!#205` (`MsiEnumRelatedProductsW`) ha
 ### Where WinSCP stands
 
 WinSCP runs its Borland start-up and its VCL unit initialisation, creates its application windows, loads
-`TGlyphsModule`, opens the cryptographic random source and Winsock, and reaches the code that builds its image
-lists. It then faults in its own code at `WinSCP.exe+0xc004b0` (a write at address 1) after `gdi32!GetDIBits`,
-which is not implemented yet (the 32-bit `polystub.dll` fails it): the bitmaps of its glyph image lists come back
-empty. No window yet. Next stoppers, in order: `GetDIBits`/`SetDIBits`/`CreateDIBitmap`; the `oleaut32` `Var*`
-functions the Delphi `Variants` unit probes; `ws2_32`'s `addrinfo`, `hostent` and `WSABUF` structures, which are still
-the 64-bit layouts in the 32-bit module (not run: WinSCP does not connect before its dialog); the comctl32 controls
+`TGlyphsModule`, opens the cryptographic random source and Winsock, and builds its image lists (`GetDIBits` and
+`SetDIBits` are implemented). Its first window is its own exception dialog, "Error - WinSCP" (a VCL form with
+OK, Help and Report buttons: `nt-wow64-4-winscp-d1.png`), the first 32-bit window that is not ours. The
+exception is a call through a NULL pointer (`WinSCP.exe+0x525737`) right after the Delphi MSXML vendor unit has
+tried `CoCreateInstance` for `Msxml2.DOMDocument` 6.0, 4.0, 3.0, 2.6 and the older class and none is registered
+(`{88D96A05-...}`, `{88D969C0-...}`, `{F5078F32-...}`, `{F5078F1B-...}`, `{F6D90F11-...}`); pressing OK ends the program.
+So the next stopper is an XML DOM: either MSXML's `DOMDocument` (an `IDispatch` object) or a way for the
+Delphi unit to see "no DOM" without crashing. After it: the `oleaut32` `Var*` functions, `ws2_32`'s `addrinfo`,
+`hostent` and `WSABUF` structures (still the 64-bit layouts in the 32-bit module), and the comctl32 controls
 (`SysListView32`, `SysTreeView32`) its forms create.
 
 ### The C runtime
