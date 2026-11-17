@@ -149,10 +149,29 @@ local-server registration dead and closes the process for local-server requests;
 initialised or the count was raised. Spies (`poly_com::spy`) are per thread, newest first for every method, and end
 with their thread (`DLL_THREAD_DETACH`).
 
+### 8. What the recorded runs settled where the sheets' prose was open
+
+- **Bad arguments write the cookie.** `CoRegisterClassObject` with an undefined flag or a NULL object returns
+  `E_INVALIDARG` *and writes 0* to the cookie (the recorded output: "cookie stays 0"); only a thread without COM
+  leaves it untouched.
+- **Waiting behind a launch is per launch plan.** A request for a class whose server was started and never
+  registered waits behind that start when it would start the same thing; with another command (the class's
+  `LocalServer32` now names a missing file) it is tried at once and fails with `REGDB_E_CLASSNOTREG`. So pending
+  launches are keyed by (class id, plan).
+- **Withdrawing does not wait.** `CoReleaseServerProcess` reaching 0, `CoRevokeClassObject` and the end of an
+  apartment return at once, as on Windows (a test server logs its count before its own polling loop notices the
+  last object); the factory's export is disconnected synchronously and the activation process is told by an
+  ordered sender thread. A client that was served a factory in that moment finds it disconnected when it first
+  calls it and asks the activation process again (three times at most, 20 ms apart).
+- **Spies and `OleInitialize`.** The spies see the result of `OleInitialize`'s COM part (`S_FALSE` on a thread that
+  already has its STA), while `OleInitialize` keeps returning its own result.
+
 ## Consequences
 
 - `CoCreateInstance(CLSCTX_LOCAL_SERVER)` of a registered class starts a real server process and returns working
-  `IUnknown`/`IClassFactory` proxies; 22 of the 24 visible tests are the target, the other two need B1's services.
+  `IUnknown`/`IClassFactory` proxies; 22 of the 24 visible tests pass on Poly (three rounds, identical); the other
+  two (`createex_localservice*`) cannot load until B1 exports the service functions they import
+  (`RegisterServiceCtrlHandlerExW` and the rest).
 - Every process that publishes a class or hands out an object runs one listener thread and creates pipe
   instances; processes that only use in-process COM (Chrome) are unchanged: no thread, no pipe, no window.
 - A new system file, `comlaunch.exe`, in `System32`, built with the Win32 modules and embedded in the kernel.
