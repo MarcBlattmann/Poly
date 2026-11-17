@@ -148,6 +148,7 @@ fn a_dib_reaches_a_dc_bottom_row_last() {
         dib: true,
         colors: alloc::vec::Vec::new(),
         storage: Storage::Owned(bits),
+        drawn: None,
     };
     assert!(g.dib_to_device(dst, (0, 0, 4, 2), &bmp(2, bits.clone()), Rect::new(0, 0, 4, 2), (false, false), SRCCOPY));
     assert_eq!(hex(&d, 4), [[5, 6, 7, 8], [1, 2, 3, 4]]);

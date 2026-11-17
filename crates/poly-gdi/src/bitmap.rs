@@ -100,6 +100,11 @@ pub struct Bitmap {
     /// The colour table (`0x00RRGGBB`).
     pub colors: Vec<u32>,
     pub storage: Storage,
+    /// The pixels written since [`Bitmap::take_drawn`] last ran: left, top,
+    /// right, bottom (exclusive), logical rows. A window's surface commits
+    /// only these (ADR 0219), so a process that drew nothing there does not
+    /// replace what another one drew.
+    pub drawn: Option<[i32; 4]>,
 }
 
 impl Bitmap {
@@ -116,6 +121,7 @@ impl Bitmap {
             dib: false,
             colors: Vec::new(),
             storage: Storage::Owned(alloc::vec![0; stride * height.max(0) as usize]),
+            drawn: None,
         }
     }
 
@@ -176,8 +182,61 @@ impl Bitmap {
         }
     }
 
+    /// Add the rectangle `left, top, right, bottom` (exclusive, logical,
+    /// inside the bitmap) to what was drawn.
+    pub fn mark_drawn(&mut self, r: [i32; 4]) {
+        if r[0] >= r[2] || r[1] >= r[3] {
+            return;
+        }
+        self.drawn = Some(match self.drawn {
+            None => r,
+            Some(d) => [d[0].min(r[0]), d[1].min(r[1]), d[2].max(r[2]), d[3].max(r[3])],
+        });
+    }
+
+    /// What was drawn since the last call (`None`: nothing), forgotten.
+    pub fn take_drawn(&mut self) -> Option<[i32; 4]> {
+        self.drawn.take()
+    }
+
+    /// Where logical row `y` (inside the bitmap) is in memory.
+    pub fn row_address(&self, y: i32) -> usize {
+        self.row_ptr(y) as usize
+    }
+
+    /// The bytes of logical row `y` (inside the bitmap), `stride` of them.
+    fn row_ptr(&self, y: i32) -> *mut u8 {
+        // SAFETY: the row is inside the bitmap's `stride * height` bytes.
+        unsafe { self.base().add(self.row_offset(y)) }
+    }
+
+    /// Copy `n` pixels of 32 bits from column `sx` of row `sy` of `src` to
+    /// column `x` of row `y` (both inside their bitmaps, both 32 bits a
+    /// pixel), as `set_raw` of each `src.raw` would; `src` may be this
+    /// bitmap's own memory (the bytes move as `memmove` moves them).
+    pub fn copy_row32(&mut self, x: i32, y: i32, src: &Bitmap, sx: i32, sy: i32, n: i32) {
+        if n <= 0 {
+            return;
+        }
+        // SAFETY: both spans are inside their bitmaps (the caller's
+        // promise); `copy` allows overlap.
+        unsafe {
+            core::ptr::copy(src.row_ptr(sy).add(sx as usize * 4), self.row_ptr(y).add(x as usize * 4), n as usize * 4);
+        }
+        self.mark_drawn([x, y, x + n, y + 1]);
+    }
+
     /// Store a raw value (inside the bitmap).
     pub fn set_raw(&mut self, x: i32, y: i32, v: u32) {
+        match &mut self.drawn {
+            Some(d) => {
+                d[0] = d[0].min(x);
+                d[1] = d[1].min(y);
+                d[2] = d[2].max(x + 1);
+                d[3] = d[3].max(y + 1);
+            }
+            None => self.drawn = Some([x, y, x + 1, y + 1]),
+        }
         let off = self.row_offset(y);
         let p = self.base();
         let x = x as usize;
@@ -283,6 +342,7 @@ mod tests {
             dib: true,
             colors: colors.to_vec(),
             storage: Storage::External(mem.as_ptr() as u64, mem.len()),
+            drawn: None,
         };
         (b, mem)
     }

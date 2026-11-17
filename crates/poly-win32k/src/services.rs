@@ -24,7 +24,8 @@
 //! | Index | Service |
 //! |---|---|
 //! | `0x000` | `PolyUserCall(request, request_length, reply, reply_capacity, reply_length*)` |
-//! | `0x001` | `PolyUserCommitSurface(hwnd, rects, count)` (the desktop link) |
+//! | `0x001` | `PolyUserCommitSurface(hwnd, pixels, width, height, stride)` (the desktop link) |
+//! | `0x002` | `PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)` (ADR 0219) |
 
 /// The table number of win32k services (bits 12–13 of a service number).
 pub const TABLE_WIN32K: u32 = 1;
@@ -37,16 +38,23 @@ pub enum Win32kService {
     /// [`crate::proto::Reply`] out (`STATUS_BUFFER_TOO_SMALL` with the
     /// length needed when the reply does not fit).
     Call,
-    /// `PolyUserCommitSurface(hwnd, rects, count)`: the rectangles drawn
-    /// into a window's surface since the last commit (ADR 0128, Decision 5).
+    /// `PolyUserCommitSurface(hwnd, pixels, width, height, stride)`: the
+    /// whole picture of a window's surface (ADR 0128, Decision 5).
     CommitSurface,
+    /// `PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride,
+    /// area)`: only the rectangle `area` (a `RECT` in surface pixels) of
+    /// the picture, the part the calling process drew (ADR 0219).
+    CommitSurfaceArea,
 }
 
 /// Every win32k service with its number and its name as `win32u.dll`
 /// exports its stub. The numbers are written out (`0x1000 | index`) so
 /// `win32u`'s `build.rs` can read them as they are. Sorted by number.
-pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 2] =
-    [(Win32kService::Call, 0x1000, "PolyUserCall"), (Win32kService::CommitSurface, 0x1001, "PolyUserCommitSurface")];
+pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 3] = [
+    (Win32kService::Call, 0x1000, "PolyUserCall"),
+    (Win32kService::CommitSurface, 0x1001, "PolyUserCommitSurface"),
+    (Win32kService::CommitSurfaceArea, 0x1002, "PolyUserCommitSurfaceArea"),
+];
 
 impl Win32kService {
     /// The service number `win32u`'s stub puts in `eax`.

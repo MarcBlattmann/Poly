@@ -176,6 +176,30 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
         poly_ntobj::status::STATUS_INVALID_PARAMETER.0
     );
 
+    // PolyUserCommitSurfaceArea (ADR 0219): another process's copy, all grey, of which it drew
+    // only columns 2..5 of rows 3..5. Only those reach the buffer and are damaged; the corners
+    // committed above stay.
+    let grey = alloc::vec![0x77u8; (stride * hgt) as usize];
+    let g = f.put(&grey);
+    let area = f.put(&[2i32, 3, 5, 5].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    let commit_area = Win32kService::CommitSurfaceArea.number();
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, area]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 2, y: 3, width: 3, height: 2 }]);
+    let rows = f.with_state(|sys, _, _| sys.win32k.link_rows(buffer, 0, 10).unwrap());
+    let px_at = |x: usize, y: usize| rows[(y * 20 + x) * 4..(y * 20 + x) * 4 + 4].to_vec();
+    assert_eq!(px_at(0, 0), [0x60, 0x50, 0x40, 0], "outside the area: as committed before");
+    assert_eq!(px_at(0, 9), [1, 2, 3, 0]);
+    assert_eq!((px_at(2, 3), px_at(4, 4)), (alloc::vec![0x77; 4], alloc::vec![0x77; 4]));
+    assert_ne!(px_at(5, 4), alloc::vec![0x77; 4], "the right edge is exclusive");
+    assert_ne!(px_at(2, 5), alloc::vec![0x77; 4], "the bottom edge is exclusive");
+    // An empty area commits nothing; an area beyond the surface is cut to it.
+    let empty = f.put(&[4i32, 4, 4, 9].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, empty]), (Outcome::Handled, 0));
+    assert!(records(&mut f).is_empty());
+    let wide = f.put(&[-5i32, 8, 99, 99].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, wide]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 0, y: 8, width: 20, height: 2 }]);
+
     // A compositor move updates Win32's screen geometry; its title-bar
     // close is queued as WM_CLOSE on the owning GUI thread.
     let surface = f.with_state(|sys, _, _| sys.win32k.surfaces.surface(h)).expect("a Windows surface");
