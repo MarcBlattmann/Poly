@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "5e673ff49f44",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:17Z",
+  "tests": [
+    {
+      "name": "pwr_requests",
+      "exe_sha256": "d7fa67f64ae3f8d84e71612585ba35c8db8a57ca26faa74934b6148d1ded843f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2ltcGxlIHJlYXNvbiBzdHJpbmc6IGhhbmRsZSB2YWxpZCBlcnJvciB1bmNoYW5nZWQKR2V0SGFuZGxlSW5mb3JtYXRpb246IDEgZmxhZ3MgMApEdXBsaWNhdGVIYW5kbGUgKHNhbWUgYWNjZXNzKTogMCAwClNldCByZXF1ZXN0IHR5cGUgMDogMSBlcnJvciB1bmNoYW5nZWQKQ2xlYXIgcmVxdWVzdCB0eXBlIDA6IDEgZXJyb3IgdW5jaGFuZ2VkClNldCByZXF1ZXN0IHR5cGUgMTogMSBlcnJvciB1bmNoYW5nZWQKQ2xlYXIgcmVxdWVzdCB0eXBlIDE6IDEgZXJyb3IgdW5jaGFuZ2VkClNldCByZXF1ZXN0IHR5cGUgMjogMSBlcnJvciB1bmNoYW5nZWQKQ2xlYXIgcmVxdWVzdCB0eXBlIDI6IDEgZXJyb3IgdW5jaGFuZ2VkClNldCByZXF1ZXN0IHR5cGUgMzogMSBlcnJvciB1bmNoYW5nZWQKQ2xlYXIgcmVxdWVzdCB0eXBlIDM6IDEgZXJyb3IgdW5jaGFuZ2VkClNldCByZXF1ZXN0IHR5cGUgNDogMCBlcnJvciA1MApTZXQgcmVxdWVzdCB0eXBlIC0xOiAwIGVycm9yIDUwCkNsZWFyIHJlcXVlc3QgdHlwZSA0OiAwIGVycm9yIDUwClNldCByZXF1ZXN0IHR5cGUgMzogMSBlcnJvciB1bmNoYW5nZWQKU2V0IHJlcXVlc3QgdHlwZSAzOiAxIGVycm9yIHVuY2hhbmdlZApDbGVhciByZXF1ZXN0IHR5cGUgMzogMSBlcnJvciB1bmNoYW5nZWQKQ2xlYXIgcmVxdWVzdCB0eXBlIDM6IDEgZXJyb3IgdW5jaGFuZ2VkCkNsZWFyIHJlcXVlc3QgdHlwZSAzOiAwIGVycm9yIDUwCkNsZWFyIHJlcXVlc3Qgd2l0aCBub3RoaW5nIHNldCB0eXBlIDE6IDAgZXJyb3IgNTAKU2V0IHJlcXVlc3QgdHlwZSAxOiAxIGVycm9yIHVuY2hhbmdlZApDbGVhciByZXF1ZXN0IChhbm90aGVyIHR5cGUgdGhhbiB0aGUgb25lIHNldCkgdHlwZSAzOiAwIGVycm9yIDUwCkNsZWFyIHJlcXVlc3QgdHlwZSAxOiAxIGVycm9yIHVuY2hhbmdlZApTZXQgYW4gZXZlbnQgdHlwZSAzOiAwIGVycm9yIDYKQ2xlYXIgYW4gZXZlbnQgdHlwZSAzOiAwIGVycm9yIDYKU2V0IGEgY2xvc2VkIGhhbmRsZSB0eXBlIDM6IDAgZXJyb3IgNgpTZXQgTlVMTCB0eXBlIDM6IDAgZXJyb3IgNgpTZXQgSU5WQUxJRF9IQU5ETEVfVkFMVUUgdHlwZSAzOiAwIGVycm9yIDYKQ2xlYXIgTlVMTCB0eXBlIDM6IDAgZXJyb3IgNgpTZXQgdGhlIHByb2Nlc3MgcHNldWRvIGhhbmRsZSB0eXBlIDM6IDAgZXJyb3IgNgpTZXQgdGhlIHJlcXVlc3QgYWZ0ZXIgQ2xvc2VIYW5kbGUgdHlwZSAzOiAwIGVycm9yIDYKVmVyc2lvbiAxOiBoYW5kbGUgSU5WQUxJRF9IQU5ETEVfVkFMVUUgZXJyb3IgODcKVmVyc2lvbiAweEZGRkZGRkZGOiBoYW5kbGUgSU5WQUxJRF9IQU5ETEVfVkFMVUUgZXJyb3IgODcKRmxhZ3MgMDogaGFuZGxlIElOVkFMSURfSEFORExFX1ZBTFVFIGVycm9yIDg3CkZsYWdzIDIgKGRldGFpbGVkKSwgbm8gbW9kdWxlLCBubyBzdHJpbmdzOiBoYW5kbGUgSU5WQUxJRF9IQU5ETEVfVkFMVUUgZXJyb3IgODcKRmxhZ3MgMzogaGFuZGxlIElOVkFMSURfSEFORExFX1ZBTFVFIGVycm9yIDg3CkZsYWdzIDB4ODAwMDAwMDA6IGhhbmRsZSB2YWxpZCBlcnJvciB1bmNoYW5nZWQKYW4gZW1wdHkgcmVhc29uIHN0cmluZzogaGFuZGxlIElOVkFMSURfSEFORExFX1ZBTFVFIGVycm9yIDg3CmEgTlVMTCByZWFzb24gc3RyaW5nOiBoYW5kbGUgSU5WQUxJRF9IQU5ETEVfVkFMVUUgZXJyb3IgODcKZmlyc3Qgb2YgdHdvOiBoYW5kbGUgdmFsaWQgZXJyb3IgdW5jaGFuZ2VkCnNlY29uZCBvZiB0d286IGhhbmRsZSB2YWxpZCBlcnJvciB1bmNoYW5nZWQKZGlmZmVyZW50IGhhbmRsZXM6IHRydWUKU2V0IHRoZSBmaXJzdCB0eXBlIDM6IDEgZXJyb3IgdW5jaGFuZ2VkCkNsZWFyIHRoZSBzZWNvbmQgKG5ldmVyIHNldCkgdHlwZSAzOiAwIGVycm9yIDUwCkNsZWFyIHRoZSBmaXJzdCB0eXBlIDM6IDEgZXJyb3IgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "simple reason string: handle valid error unchanged\nGetHandleInformation: 1 flags 0\nDuplicateHandle (same access): 0 0\nSet request type 0: 1 error unchanged\nClear request type 0: 1 error unchanged\nSet request type 1: 1 error unchanged\nClear request type 1: 1 error unchanged\nSet request type 2: 1 error unchanged\nClear request type 2: 1 error unchanged\nSet request type 3: 1 error unchanged\nClear request type 3: 1 error unchanged\nSet request type 4: 0 error 50\nSet request type -1: 0 error 50\nClear request type 4: 0 error 50\nSet request type 3: 1 error unchanged\nSet request type 3: 1 error unchanged\nClear request type 3: 1 error unchanged\nClear request type 3: 1 error unchanged\nClear request type 3: 0 error 50\nClear request with nothing set type 1: 0 error 50\nSet request type 1: 1 error unchanged\nClear request (another type than the one set) type 3: 0 error 50\nClear request type 1: 1 error unchanged\nSet an event type 3: 0 error 6\nClear an event type 3: 0 error 6\nSet a closed handle type 3: 0 error 6\nSet NULL type 3: 0 error 6\nSet INVALID_HANDLE_VALUE type 3: 0 error 6\nClear NULL type 3: 0 error 6\nSet the process pseudo handle type 3: 0 error 6\nSet the request after CloseHandle type 3: 0 error 6\nVersion 1: handle INVALID_HANDLE_VALUE error 87\nVersion 0xFFFFFFFF: handle INVALID_HANDLE_VALUE error 87\nFlags 0: handle INVALID_HANDLE_VALUE error 87\nFlags 2 (detailed), no module, no strings: handle INVALID_HANDLE_VALUE error 87\nFlags 3: handle INVALID_HANDLE_VALUE error 87\nFlags 0x80000000: handle valid error unchanged\nan empty reason string: handle INVALID_HANDLE_VALUE error 87\na NULL reason string: handle INVALID_HANDLE_VALUE error 87\nfirst of two: handle valid error unchanged\nsecond of two: handle valid error unchanged\ndifferent handles: true\nSet the first type 3: 1 error unchanged\nClear the second (never set) type 3: 0 error 50\nClear the first type 3: 1 error unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    }
+  ]
+}

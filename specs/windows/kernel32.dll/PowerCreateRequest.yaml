@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/PowerCreateRequest.yaml
+id: windows/api/kernel32.dll/PowerCreateRequest
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Creates a power request object. Chrome keeps the machine awake while a download runs: a request with a simple reason string is created when a download starts, PowerRequestExecutionRequired (3) is set, and it is cleared (and the handle closed) when the download ends: three times in a run with three downloads. A stub that fails makes Chrome carry on, but the calls are in the path and answer in a fixed way.
+interface:
+  signature: "HANDLE PowerCreateRequest(PREASON_CONTEXT Context)"
+  context: "REASON_CONTEXT (winnt.h): ULONG Version (0), DWORD Flags (POWER_REQUEST_CONTEXT_SIMPLE_STRING 1, POWER_REQUEST_CONTEXT_DETAILED_STRING 2), then a union: the simple reason string pointer, or a module, a string id, a string count and an array of strings; 32 bytes on x64"
+  returns: "a handle (closed with CloseHandle), or INVALID_HANDLE_VALUE and a last error"
+chrome:
+  call: "browser process: PowerCreateRequest(&ctx) with the simple reason string form, PowerSetRequest(handle, 3), later PowerClearRequest(handle, 3) and CloseHandle; once per download"
+rules:
+  create: "Version 0 with Flags 1 and a non-empty string: a valid handle, the last error unchanged; two calls give two handles. GetHandleInformation of it succeeds with flags 0; DuplicateHandle of it with DUPLICATE_SAME_ACCESS fails on the oracle (result FALSE)"
+  bad_context: "Version 1 or 0xFFFFFFFF, Flags 0, Flags 2 (detailed) with no module and no strings, Flags 3, an empty reason string or a NULL reason string: INVALID_HANDLE_VALUE, ERROR_INVALID_PARAMETER (87). Flags 0x80000000 with a good string: a valid handle (the flag bits above the two are ignored)"
+  set_and_clear: "PowerSetRequest(handle, type) for type 0 (display), 1 (system), 2 (away mode) and 3 (execution): TRUE each (in the desktop session; in the SSH session 0 type 0 fails with ERROR_NOT_SUPPORTED (50): there is no display), last error unchanged; PowerClearRequest(handle, type) after a Set: TRUE. A type of 4, 0xFFFFFFFF (-1): FALSE, ERROR_NOT_SUPPORTED (50)"
+  counting: "a type set twice needs two clears: the first two Clears are TRUE, the third is FALSE, 50. Clear of a type that was never set: FALSE, 50. Types are independent: clearing type 3 when only type 1 is set: FALSE, 50. A Clear never needs the type to have been set by the same call count after the object is new"
+  counts_by_object: "two requests count on their own (Clear on one while only the other holds a Set: FALSE, 50); a type still set when the handle is closed leaves nothing behind (a new request starts with nothing set: Clear gives FALSE, 50; Clear on the closed handle: FALSE, 6); three Sets of one type are undone by three Clears and the next Clear fails"
+  bad_handles: "PowerSetRequest and PowerClearRequest on an event handle, a closed handle, NULL, INVALID_HANDLE_VALUE, the current-process pseudo handle and the request after CloseHandle: FALSE, ERROR_INVALID_HANDLE (6)"
+errors:
+  invalid_parameter: "87"
+  not_supported: "50"
+  invalid_handle: "6"
+side_effects: "while a request is set the machine does not go to sleep (the tests clear every request)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. Recorded in the desktop session (session 1) of the oracle account.
+not_covered: >
+  the detailed string form with a module and a string id, what powercfg shows for a request, requests of other processes.

@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateProcessElevation.yaml
+id: windows/api/kernel32.dll/CreateProcessElevation
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (defaults), the local administrator \"server\" in session 1 through tools/pipeline/windows/poly-oracle.ps1 -Token standard (filtered token) and -Token elevated (full token). Tests named *_std are recorded with the standard token, *_adm with the elevated one (per-test token in windows.json). Every test ran twice with identical output."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: CreateProcessW, "Application Manifests"
+  (requestedExecutionLevel: asInvoker, highestAvailable, requireAdministrator), "How User Account Control works",
+  "System Error Codes" (ERROR_ELEVATION_REQUIRED 740). No Microsoft binary was read or disassembled; Wine's tests were not read.
+summary: >
+  What CreateProcessW does with the token and the manifest's requested execution level of the program it starts. A process
+  gets its creator's token (a child of an elevated process is elevated, a child of a standard one is standard); CreateProcessW
+  NEVER asks the user: an executable whose manifest says `requireAdministrator` (or `highestAvailable` for an administrator)
+  started by a process that is not elevated fails with ERROR_ELEVATION_REQUIRED (740) and creates nothing. Only ShellExecuteEx
+  (verbs open, runas) turns that failure into a consent prompt (ShellExecuteExW.yaml). The installers of Google rely on this
+  pair: they start their elevated helper with ShellExecuteEx and runas, never with CreateProcess.
+returns:
+  inherit: "CreateProcessW of this test's own image: the child reports (through its exit code) elevation 0, type 3, medium integrity, Administrators deny-only, a linked token present when the caller has the standard token; elevation 1, type 2, high integrity, Administrators enabled, a linked token present when the caller is elevated. A child that starts a child gives the same report. `cmd.exe /c exit 3` (a system program, no manifest request) starts and ends with code 3 in both cases."
+  embedded_manifest: "the same with an EMBEDDED manifest (resource RT_MANIFEST 24, id 1, language 0x409, in the image; the usual way for installers): the test image carries `requestedExecutionLevel level='asInvoker'`; three copies of its file, one unchanged and two with that attribute patched in place (same file size) to `requireAdministrator` and to `highestAvailable`. From the standard caller: the unchanged copy starts with the caller's token (elevation 0, type 3, medium), BOTH patched copies fail with ERROR_ELEVATION_REQUIRED (740). From the elevated caller all three start, elevated. So the loader reads the manifest from the image's resources when there is one, and CreateProcessW decides before creating the process."
+  manifest_levels: "four copies of the image, each with an EXTERNAL manifest file `<name>.exe.manifest` beside it (the file is honoured because the image has no embedded manifest): no manifest, level asInvoker: both start with the caller's token; level requireAdministrator and level highestAvailable: from the standard token CreateProcessW returns FALSE with ERROR_ELEVATION_REQUIRED (740) and no process is created; from the elevated token both start, elevated."
+errors:
+  elevation_required: "ERROR_ELEVATION_REQUIRED (740): the executable needs a higher token than the caller's (requireAdministrator, or highestAvailable when the user is an administrator)"
+side_effects: "none when it fails"
+threading: "no state"
+ordering: []
+timing:
+  typical: "a few milliseconds per start"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075). `cpe_manifest_*`: the test copies its own image to a scratch file, writes the manifest file beside it
+  (`<requestedExecutionLevel level="..." uiAccess="false"/>` in the asm.v3 trustInfo namespace), starts the copy with
+  ` --child token` and removes both. `cpe_embedded_*`: the test image carries an embedded asInvoker manifest (a resource
+  directory written with global_asm, as the LoadMenuW tests do); a copy of the file is patched in memory to the other level
+  and written beside it. `cpe_child_*`: CreateProcessW of the own image (a child, and a child that starts a child) and of
+  `cmd.exe /c exit 3`. In Poly's test runs the creator's token comes from `poly.win.token=standard|elevated`.
+not_covered: >
+  An embedded manifest in a signed or compressed image, a manifest with other `requestedExecutionLevel` spellings, 32-bit images (and the legacy rule that names such as setup.exe, install.exe or update.exe without a
+  manifest need elevation: 32-bit only), a compatibility shim, `CreateProcessAsUserW` and `CreateProcessWithTokenW`, the
+  `runas` command line tool, AppLocker and Smart App Control, uiAccess.

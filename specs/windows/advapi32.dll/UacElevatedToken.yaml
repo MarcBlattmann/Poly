@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/UacElevatedToken.yaml
+id: windows/api/advapi32.dll/UacElevatedToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (EnableLUA 1, ConsentPromptBehaviorAdmin 5, the defaults; nothing was changed). The local account \"server\" is a member of Administrators and logged on at the console (session 1). Tests ran through tools/pipeline/windows/poly-oracle.ps1 -Token elevated: a one-time scheduled task of that user with the interactive logon type and run level Highest, which the Task Scheduler starts with the user's FULL token, the token a program has after the user said yes to a consent prompt (no prompt is involved; nothing was clicked). Every test ran twice with identical output."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "Access Tokens", "Mandatory Integrity
+  Control", "How User Account Control works", GetTokenInformation, TOKEN_ELEVATION_TYPE, TOKEN_LINKED_TOKEN,
+  CheckTokenMembership, IsUserAnAdmin; winnt.h for constants. No Microsoft binary was read, decompiled or disassembled;
+  Wine's tests were not read.
+summary: >
+  What a process has after an administrator elevated it (consent given): the FULL token of the split token. Companion of
+  UacStandardToken.yaml (read it first). The full token is the administrator with everything: high integrity, the Administrators
+  group enabled, 24 privileges (most of them present but disabled), TokenElevation 1, TokenElevationType 2 (Full), no
+  restrictions, and a LINKED token that is the filtered token.
+returns:
+  own_token: "TokenType 1 (primary), TokenElevation 1, TokenElevationType 2 (TokenElevationTypeFull), TokenHasRestrictions 0, TokenIntegrityLevel 0x3000 (high) attributes 0x60, TokenMandatoryPolicy 3, UIAccess 0, SandBoxInert 0, AppContainer 0, TokenVirtualizationAllowed 0, TokenVirtualizationEnabled 0."
+  groups: "BUILTIN\\Administrators attributes 0xF (mandatory, enabled by default, enabled, owner); BUILTIN\\Users 7; more than 8 groups; integrity label group S-1-16-12288 attributes 0x60."
+  privileges: "24, as in the linked token of UacStandardToken.yaml: SeChangeNotifyPrivilege, SeCreateGlobalPrivilege and SeImpersonatePrivilege have attributes 3 (enabled), SeDebugPrivilege attributes 2 (enabled by default but NOT enabled: the pair a program has to switch on with AdjustTokenPrivileges), all others 0 (present, disabled): SeBackup, SeCreatePagefile, SeCreateSymbolicLink, SeDelegateSessionUserImpersonate, SeIncreaseBasePriority, SeIncreaseQuota, SeIncreaseWorkingSet, SeLoadDriver, SeManageVolume, SeProfileSingleProcess, SeRemoteShutdown, SeRestore, SeSecurity, SeShutdown, SeSystemEnvironment, SeSystemProfile, SeSystemtime, SeTakeOwnership, SeTimeZone, SeUndock. (Unlike the SSH logon's token, in which all 24 are enabled.)"
+  copies: "A primary and an impersonation copy (DuplicateTokenEx, all access) keep elevation 1, type 2, restricted 0, high integrity, Administrators 0xF."
+  length_rules: "as in UacStandardToken.yaml: TokenElevation with 8 bytes: 24 and *return_length 4; TokenElevationType with 2 bytes: 122 and *return_length 4."
+  linked_token: "TokenLinkedToken with 8 bytes succeeds; with 0, 4 or 16 bytes ERROR_BAD_LENGTH (24), *return_length 8. The linked token is the FILTERED token: an impersonation token (type 2) at SecurityIdentification (1), TokenElevation 0, TokenElevationType 3, TokenHasRestrictions 1, integrity 0x2000, Administrators attributes 0x10, mandatory policy 3, UIAccess 0, exactly 5 privileges (SeChangeNotify enabled, SeIncreaseWorkingSet, SeShutdown, SeTimeZone, SeUndock disabled). Its own linked token is the full token again (type 2, elevation 1, high, Administrators 0xF). It can be queried; DuplicateTokenEx as an impersonation token fails with ERROR_BAD_IMPERSONATION_LEVEL (1346)."
+  membership: "IsUserAnAdmin: 1. CheckTokenMembership(NULL, Administrators): member TRUE; (NULL, Users): TRUE; (NULL, SYSTEM): call TRUE, member FALSE; a primary token handle: FALSE, ERROR_NO_IMPERSONATION_TOKEN (1309); an impersonation copy of the process token: Administrators TRUE, Users TRUE; the LINKED (filtered) token handle: Administrators FALSE (deny-only), Users TRUE. While the thread impersonates the linked token IsUserAnAdmin is 0 (identification level); after RevertToSelf it is 1 again."
+  child_process: "A child made with CreateProcessW or ShellExecuteExW ('open' or 'runas') inherits the token kind: elevation 1, type 2, high integrity, Administrators enabled, a linked token present. A child of a child too."
+errors:
+  bad_length: "ERROR_BAD_LENGTH (24) for TokenElevation and TokenLinkedToken with a wrong length"
+  not_impersonation: "ERROR_NO_IMPERSONATION_TOKEN (1309) from CheckTokenMembership with a primary token handle"
+  bad_level: "ERROR_BAD_IMPERSONATION_LEVEL (1346) from DuplicateTokenEx of the linked token"
+side_effects: "none"
+threading: "the process token is the same for all threads; a thread token overrides it for that thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  As UacStandardToken.yaml, run with the pipeline's -Token elevated (windows.json system.token "elevated"; `win poly`
+  boots Poly with poly.win.token=elevated).
+not_covered: >
+  As UacStandardToken.yaml. The SSH logon's third kind of token (type 1 'default', no linked token, all privileges
+  enabled) is the recording of every older entry and stays Poly's behaviour for tests without a token kind.

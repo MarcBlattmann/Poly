@@ -15,6 +15,7 @@ unsafe extern "system" {
     fn GetThreadDpiAwarenessContext() -> isize;
     fn GetAwarenessFromDpiAwarenessContext(ctx: isize) -> i32;
     fn SetProcessDpiAwarenessContext(ctx: isize) -> i32;
+    fn GetDpiForSystem() -> u32;
 }
 
 const S_OK: i32 = 0;
@@ -49,7 +50,8 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: i32, dpi_x:
     if dpi_x.is_null() || dpi_y.is_null() {
         return fail(0x1E7, HR_INVALID_ADDRESS);
     }
-    let v = if kind == MDT_RAW_DPI { 0 } else { 96 };
+    // SAFETY: a user32 call without preconditions.
+    let v = if kind == MDT_RAW_DPI { 0 } else { unsafe { GetDpiForSystem() } };
     // SAFETY: the caller's outputs.
     unsafe {
         *dpi_x = v;
@@ -99,8 +101,8 @@ pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: usize, scale: *m
     if scale.is_null() || unsafe { GetMonitorInfoW(monitor, mi.as_mut_ptr()) } == 0 {
         return E_INVALIDARG;
     }
-    // SAFETY: the caller's output.
-    unsafe { *scale = 100 };
+    // SAFETY: the caller's output; a user32 call without preconditions.
+    unsafe { *scale = (GetDpiForSystem() * 100 / 96) as i32 };
     S_OK
 }
 

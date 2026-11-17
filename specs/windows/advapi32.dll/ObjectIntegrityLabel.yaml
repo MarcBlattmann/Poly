@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/ObjectIntegrityLabel.yaml
+id: windows/api/advapi32.dll/ObjectIntegrityLabel
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (defaults), the local administrator \"server\" in session 1 through tools/pipeline/windows/poly-oracle.ps1 -Token standard (medium integrity, filtered token) and -Token elevated (high integrity, full token). Tests named *_std are recorded with the standard token, *_adm with the elevated one (per-test token in windows.json). Every test ran twice with identical output."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "Mandatory Integrity Control",
+  "Windows Integrity Mechanism Design", GetKernelObjectSecurity, GetFileSecurityW, RegGetKeySecurity,
+  ConvertSecurityDescriptorToStringSecurityDescriptorW, "Security Descriptor String Format" (SDDL: ML, ME, HI, NW, NR).
+  No Microsoft binary was read or disassembled; Wine's tests were not read.
+summary: >
+  Which mandatory integrity label (SYSTEM_MANDATORY_LABEL_ACE, read with LABEL_SECURITY_INFORMATION) an object has after it
+  is created by a process of a given integrity level. The integrity level of the caller (medium 0x2000 for the standard token,
+  high 0x3000 for the elevated one) decides the label of the objects the system makes FOR the process, while objects the
+  program creates by name or with default security get NO label (the implicit medium label). Poly's access checks must
+  keep that difference, because a medium process may not write to objects labelled high.
+returns:
+  process_thread_token_job: "the process object (opened with PROCESS_QUERY_LIMITED_INFORMATION | READ_CONTROL), the calling thread, the process token and a job object the process created carry a label with the process's own level: medium -> `S:AI(ML;;NWNR;;;ME)` for process and thread, `S:AI(ML;;NW;;;ME)` for token and job; high -> `S:AI(ML;;NWNR;;;HI)` and `S:AI(ML;;NW;;;HI)`. (SDDL as ConvertSecurityDescriptorToStringSecurityDescriptorW prints it for LABEL_SECURITY_INFORMATION: no owner, no DACL; AI = the SACL is auto-inherited; NW = no-write-up, NR = no-read-up.) A token or job gets only NW, a process or thread NW and NR."
+  unlabeled_objects: "events (named and unnamed), a named mutex, a named semaphore, an unnamed section (CreateFileMappingW on the paging file), a named pipe server end, a file created by CopyFileW in a scratch directory and a registry key created under HKEY_CURRENT_USER have NO label at all: GetKernelObjectSecurity / GetFileSecurityW / RegGetKeySecurity succeed with LABEL_SECURITY_INFORMATION and the SDDL text of the label part is empty. This holds for both integrity levels (the high-integrity process does not label what it creates by default)."
+errors: {}
+side_effects: "none (the tests create objects and remove the file and the key)"
+threading: "no state"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); the SDDL text is built with ConvertSecurityDescriptorToStringSecurityDescriptorW on the descriptor each call returned.
+not_covered: >
+  Objects created with an explicit security descriptor that has a label, SetSecurityInfo / label changes, system integrity,
+  low integrity and AppContainer processes, the integrity label of a process created by CreateProcessW (the child's own
+  level is shown through its token in CreateProcessElevation.yaml), session and desktop objects.

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "5e673ff49f44",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:17Z",
+  "tests": [
+    {
+      "name": "tb_values",
+      "exe_sha256": "06e396b6969cfe7c2764af503f39924debb91ca0abf51b0a6b24e9d4026633ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKY3JlYXRlOiAweDAwMDAwMDAwIHNldApIckluaXQ6IDB4MDAwMDAwMDAKYSBzaG93biB0b3AtbGV2ZWwgd2luZG93OiB3aW5kb3cgMTsgU2V0UHJvZ3Jlc3NTdGF0ZShOT1JNQUwpIDB4MDAwMDAwMDA7IFNldFByb2dyZXNzVmFsdWUoNSBvZiAxMCkgMHgwMDAwMDAwMDsgU2V0UHJvZ3Jlc3NTdGF0ZShOT1BST0dSRVNTKSAweDAwMDAwMDAwCmEgaGlkZGVuIHRvcC1sZXZlbCB3aW5kb3c6IHdpbmRvdyAxOyBTZXRQcm9ncmVzc1N0YXRlKE5PUk1BTCkgMHgwMDAwMDAwMDsgU2V0UHJvZ3Jlc3NWYWx1ZSg1IG9mIDEwKSAweDAwMDAwMDAwOyBTZXRQcm9ncmVzc1N0YXRlKE5PUFJPR1JFU1MpIDB4MDAwMDAwMDAKYSBjaGlsZCB3aW5kb3c6IHdpbmRvdyAxOyBTZXRQcm9ncmVzc1N0YXRlKE5PUk1BTCkgMHgwMDAwMDAwMDsgU2V0UHJvZ3Jlc3NWYWx1ZSg1IG9mIDEwKSAweDAwMDAwMDAwOyBTZXRQcm9ncmVzc1N0YXRlKE5PUFJPR1JFU1MpIDB4MDAwMDAwMDAKYSBtZXNzYWdlLW9ubHkgd2luZG93OiB3aW5kb3cgMTsgU2V0UHJvZ3Jlc3NTdGF0ZShOT1JNQUwpIDB4MDAwMDAwMDA7IFNldFByb2dyZXNzVmFsdWUoNSBvZiAxMCkgMHgwMDAwMDAwMDsgU2V0UHJvZ3Jlc3NTdGF0ZShOT1BST0dSRVNTKSAweDAwMDAwMDAwCnRoZSBkZXNrdG9wIHdpbmRvdzogd2luZG93IDE7IFNldFByb2dyZXNzU3RhdGUoTk9STUFMKSAweDAwMDAwMDAwOyBTZXRQcm9ncmVzc1ZhbHVlKDUgb2YgMTApIDB4MDAwMDAwMDA7IFNldFByb2dyZXNzU3RhdGUoTk9QUk9HUkVTUykgMHgwMDAwMDAwMAphIHNlY29uZCBvYmplY3QgaXMgYW5vdGhlciBvYmplY3Q6IHRydWUKc2Vjb25kIEhySW5pdDogMHgwMDAwMDAwMApzZWNvbmQgb2JqZWN0IFNldFByb2dyZXNzVmFsdWU6IDB4MDAwMDAwMDAKZmlyc3Qgb2JqZWN0IFNldFByb2dyZXNzU3RhdGUoSU5ERVRFUk1JTkFURSk6IDB4MDAwMDAwMDAKZmlyc3Qgb2JqZWN0IFNldFByb2dyZXNzU3RhdGUoTk9QUk9HUkVTUyk6IDB4MDAwMDAwMDAKbGFzdCBSZWxlYXNlOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\ncreate: 0x00000000 set\nHrInit: 0x00000000\na shown top-level window: window 1; SetProgressState(NORMAL) 0x00000000; SetProgressValue(5 of 10) 0x00000000; SetProgressState(NOPROGRESS) 0x00000000\na hidden top-level window: window 1; SetProgressState(NORMAL) 0x00000000; SetProgressValue(5 of 10) 0x00000000; SetProgressState(NOPROGRESS) 0x00000000\na child window: window 1; SetProgressState(NORMAL) 0x00000000; SetProgressValue(5 of 10) 0x00000000; SetProgressState(NOPROGRESS) 0x00000000\na message-only window: window 1; SetProgressState(NORMAL) 0x00000000; SetProgressValue(5 of 10) 0x00000000; SetProgressState(NOPROGRESS) 0x00000000\nthe desktop window: window 1; SetProgressState(NORMAL) 0x00000000; SetProgressValue(5 of 10) 0x00000000; SetProgressState(NOPROGRESS) 0x00000000\na second object is another object: true\nsecond HrInit: 0x00000000\nsecond object SetProgressValue: 0x00000000\nfirst object SetProgressState(INDETERMINATE): 0x00000000\nfirst object SetProgressState(NOPROGRESS): 0x00000000\nlast Release: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 114
+    }
+  ]
+}

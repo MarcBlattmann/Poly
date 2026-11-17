@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetProcessWorkingSetSizeEx.yaml
+id: windows/api/kernel32.dll/SetProcessWorkingSetSizeEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Run in all three token kinds: the SSH logon session (session 0, elevated administrator token), and with -Token standard and -Token elevated (the interactive session 1 with the administrator's filtered and full token); the observations were identical in all three, so the tests are recorded once with the SSH logon's token. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for SetProcessWorkingSetSizeEx and GetProcessWorkingSetSizeEx and the public SDK headers memoryapi.h and winnt.h (QUOTA_LIMITS_HARDWS_MIN_ENABLE 0x1, QUOTA_LIMITS_HARDWS_MIN_DISABLE 0x2, QUOTA_LIMITS_HARDWS_MAX_ENABLE 0x4, QUOTA_LIMITS_HARDWS_MAX_DISABLE 0x8; PROCESS_SET_QUOTA 0x100); error codes from winerror.h. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  SetProcessWorkingSetSize with a flags word that makes the minimum and the maximum hard limits. With flags 0 it is exactly SetProcessWorkingSetSize (same trim, same read back, same errors, see that sheet). The flags are read back through GetProcessWorkingSetSizeEx, whose flags start as 0xA (both hard limits disabled).
+interface:
+  signature: "BOOL SetProcessWorkingSetSizeEx(HANDLE hProcess, SIZE_T dwMinimumWorkingSetSize, SIZE_T dwMaximumWorkingSetSize, DWORD Flags)"
+rules:
+  flags_zero: "flags 0: the results of SetProcessWorkingSetSize: (-1, -1) is the trim and succeeds with the limits unchanged; (1 MiB, 4 MiB) and (2 MiB, 2 MiB) read back exactly; minimum larger than maximum, (0, 0), (0, 4 MiB) and (-1, 4 MiB): ERROR_INVALID_PARAMETER (87); both sizes 0xFFFFFFFFFFFFFFFE or 0x7FFFFFFFFFFF: ERROR_NO_SYSTEM_RESOURCES (1450); NULL, a garbage value, a thread handle: ERROR_INVALID_HANDLE (6); a process handle without PROCESS_SET_QUOTA: ERROR_ACCESS_DENIED (5)."
+  flags_values: "MIN_ENABLE (1): TRUE, flags read back 0x9 (min enabled, max disabled); MIN_DISABLE (2): 0xA; MAX_ENABLE (4): 0x6 (min disabled, max enabled); MAX_DISABLE (8): 0xA. A flag value of 0x10 (not defined) is accepted and ignored (TRUE, flags 0xA). The sizes read back as set (1 MiB, 4 MiB)."
+  flags_invalid: "MIN_ENABLE|MIN_DISABLE (3) and MAX_ENABLE|MAX_DISABLE (0xC): FALSE, ERROR_INVALID_PARAMETER (87), nothing changes (flags and sizes read back as before). 0xFFFFFFFF: 87."
+  order: "the flags are judged before the handle: NULL handle with flags 0xFFFFFFFF gives 87 (NULL handle with valid flags gives 6); minimum larger than maximum with bad flags gives 87."
+  trim: "with flags 0 the pair (-1, -1) is the trim of SetProcessWorkingSetSize; the tests of this sheet also make the trim call on a child process and it succeeds there."
+  token: "identical for the standard (filtered) and the elevated administrator token."
+errors:
+  invalid_parameter: "87 (sizes, flag combinations)"
+  invalid_handle: "6"
+  access_denied: "5"
+  no_system_resources: "1450"
+side_effects: "as SetProcessWorkingSetSize; the flags make the limits hard until a call with the DISABLE flags"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, three files (flags and read back; error cases and rights; a child process); the error and child tests make the same calls as those of SetProcessWorkingSetSize through the Ex function with flags 0. Each file declares what it calls from Learn's prototypes. Observations are return values and relations, never addresses, handles or process ids.
+not_covered: >
+  Whether a hard limit is enforced (pages beyond a hard maximum are not kept), because that needs memory pressure; SeIncreaseWorkingSetPrivilege being needed; a 32-bit caller.

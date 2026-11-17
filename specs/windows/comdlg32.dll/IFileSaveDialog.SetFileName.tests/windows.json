@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "fsd_props",
+      "exe_sha256": "79c3e536a36f2641b727790f9bfdff1b049c3edd48a997d9398c5a45389f43dc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKQ29DcmVhdGVJbnN0YW5jZShDTFNJRF9GaWxlU2F2ZURpYWxvZywgSUlEX0lGaWxlU2F2ZURpYWxvZyk6IDB4MDAwMDAwMDAgc2V0ClF1ZXJ5SW50ZXJmYWNlIElGaWxlRGlhbG9nOiAweDAwMDAwMDAwIHNldApRdWVyeUludGVyZmFjZSBtYWRlLXVwIGlkOiAweDgwMDA0MDAyIG51bGwKR2V0T3B0aW9ucyAoZGVmYXVsdCk6IDB4MDAwMDAwMDAgMHgwMDAwODgwYQpHZXRGaWxlTmFtZSBiZWZvcmUgYW55dGhpbmcgaXMgc2V0OiAweDgwMDA0MDA1ICIiClNldEZpbGVOYW1lKCJwb2x5LWRvd25sb2FkLnR4dCIpOiAweDAwMDAwMDAwCkdldEZpbGVOYW1lOiAweDAwMDAwMDAwICJwb2x5LWRvd25sb2FkLnR4dCIKU2V0RmlsZU5hbWUoIiIpOiAweDAwMDAwMDAwCkdldEZpbGVOYW1lOiAweDAwMDAwMDAwICIiClNldEZpbGVOYW1lKCJhXGIudHh0Iik6IDB4MDAwMDAwMDAKR2V0RmlsZU5hbWU6IDB4MDAwMDAwMDAgImFcYi50eHQiClNldEZpbGVOYW1lKCJwb2x5Iik6IDB4MDAwMDAwMDAKU2V0RGVmYXVsdEV4dGVuc2lvbigidHh0Iik6IDB4MDAwMDAwMDAKU2V0RGVmYXVsdEV4dGVuc2lvbigiLnR4dCIpOiAweDAwMDAwMDAwClNldERlZmF1bHRFeHRlbnNpb24oIiIpOiAweDAwMDAwMDAwCkdldEZpbGVUeXBlSW5kZXggYmVmb3JlIFNldEZpbGVUeXBlczogMHgwMDAwMDAwMCAwClNldEZpbGVUeXBlcygyKTogMHgwMDAwMDAwMApHZXRGaWxlVHlwZUluZGV4OiAweDAwMDAwMDAwIDAKU2V0RmlsZVR5cGVJbmRleCgyKTogMHgwMDAwMDAwMApHZXRGaWxlVHlwZUluZGV4OiAweDAwMDAwMDAwIDIKU2V0RmlsZVR5cGVJbmRleCgzKTogMHgwMDAwMDAwMApHZXRGaWxlVHlwZUluZGV4OiAweDAwMDAwMDAwIDIKU2V0RmlsZVR5cGVJbmRleCgwKTogMHgwMDAwMDAwMApTZXRGaWxlVHlwZXMoMCwgTlVMTCk6IDB4ODAwNzAwNTcKU2V0T3B0aW9ucyhPVkVSV1JJVEVQUk9NUFQgfCBTVFJJQ1RGSUxFVFlQRVMgfCBQQVRITVVTVEVYSVNUIHwgTk9SRUFET05MWVJFVFVSTiB8IE5PQ0hBTkdFRElSKTogMHgwMDAwMDAwMApHZXRPcHRpb25zOiAweDAwMDAwMDAwIDB4MDAwMDg4MGUKU2V0T3B0aW9ucygwKTogMHgwMDAwMDAwMApHZXRPcHRpb25zOiAweDAwMDAwMDAwIDB4MDAwMDAwMDAKR2V0Rm9sZGVyIGJlZm9yZSBTZXRGb2xkZXI6IDB4MDAwMDAwMDAgc2V0ClNldEZvbGRlcjogMHgwMDAwMDAwMApHZXRGb2xkZXIgYWZ0ZXIgU2V0Rm9sZGVyIChiZWZvcmUgU2hvdyk6IDB4MDAwMDAwMDAgc2V0ClNldERlZmF1bHRGb2xkZXI6IDB4MDAwMDAwMDAKU2V0VGl0bGU6IDB4MDAwMDAwMDAKU2V0T2tCdXR0b25MYWJlbDogMHgwMDAwMDAwMApTZXRGaWxlTmFtZUxhYmVsOiAweDAwMDAwMDAwClNldENsaWVudEd1aWQ6IDB4MDAwMDAwMDAKQ2xlYXJDbGllbnREYXRhOiAweDgwMDA0MDA1ClNldEZpbHRlcihOVUxMKTogMHgwMDAwMDAwMApHZXRSZXN1bHQgYmVmb3JlIFNob3c6IDB4ODAwMGZmZmYgbnVsbApHZXRDdXJyZW50U2VsZWN0aW9uIGJlZm9yZSBTaG93OiAweDgwMDA0MDA1IG51bGwKQ2xvc2UgYmVmb3JlIFNob3c6IDB4MDAwMDAwMDAKQWR2aXNlKE5VTEwpOiAweDgwMDcwMDU3ClVuYWR2aXNlKDApOiAweDgwMDcwMDU3Cmxhc3QgUmVsZWFzZTogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\nCoCreateInstance(CLSID_FileSaveDialog, IID_IFileSaveDialog): 0x00000000 set\nQueryInterface IFileDialog: 0x00000000 set\nQueryInterface made-up id: 0x80004002 null\nGetOptions (default): 0x00000000 0x0000880a\nGetFileName before anything is set: 0x80004005 \"\"\nSetFileName(\"poly-download.txt\"): 0x00000000\nGetFileName: 0x00000000 \"poly-download.txt\"\nSetFileName(\"\"): 0x00000000\nGetFileName: 0x00000000 \"\"\nSetFileName(\"a\\b.txt\"): 0x00000000\nGetFileName: 0x00000000 \"a\\b.txt\"\nSetFileName(\"poly\"): 0x00000000\nSetDefaultExtension(\"txt\"): 0x00000000\nSetDefaultExtension(\".txt\"): 0x00000000\nSetDefaultExtension(\"\"): 0x00000000\nGetFileTypeIndex before SetFileTypes: 0x00000000 0\nSetFileTypes(2): 0x00000000\nGetFileTypeIndex: 0x00000000 0\nSetFileTypeIndex(2): 0x00000000\nGetFileTypeIndex: 0x00000000 2\nSetFileTypeIndex(3): 0x00000000\nGetFileTypeIndex: 0x00000000 2\nSetFileTypeIndex(0): 0x00000000\nSetFileTypes(0, NULL): 0x80070057\nSetOptions(OVERWRITEPROMPT | STRICTFILETYPES | PATHMUSTEXIST | NOREADONLYRETURN | NOCHANGEDIR): 0x00000000\nGetOptions: 0x00000000 0x0000880e\nSetOptions(0): 0x00000000\nGetOptions: 0x00000000 0x00000000\nGetFolder before SetFolder: 0x00000000 set\nSetFolder: 0x00000000\nGetFolder after SetFolder (before Show): 0x00000000 set\nSetDefaultFolder: 0x00000000\nSetTitle: 0x00000000\nSetOkButtonLabel: 0x00000000\nSetFileNameLabel: 0x00000000\nSetClientGuid: 0x00000000\nClearClientData: 0x80004005\nSetFilter(NULL): 0x00000000\nGetResult before Show: 0x8000ffff null\nGetCurrentSelection before Show: 0x80004005 null\nClose before Show: 0x00000000\nAdvise(NULL): 0x80070057\nUnadvise(0): 0x80070057\nlast Release: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 139
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRevokeInitializeSpy.yaml
+id: windows/api/ole32.dll/CoRevokeInitializeSpy
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterInitializeSpy function (objbase.h)", "CoRevokeInitializeSpy", "IInitializeSpy interface (objidl.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Removes the spy registered with the cookie CoRegisterInitializeSpy gave (a 64-bit value passed by value) and releases the reference the registration held.
+interface:
+  signature: "HRESULT CoRevokeInitializeSpy(ULARGE_INTEGER cookie)"
+installer: "Imported with CoRegisterInitializeSpy by the updater and the elevation service."
+rules:
+  result: "S_OK for the cookie of a live registration of the calling thread, also while COM is initialised (no further events); the spy's reference count drops back by the one the registration took"
+  bad_cookie: "the same cookie again, 0, a made-up number (0x1234567812345678) and a number above a live cookie each give E_INVALIDARG 0x80070057 and change nothing"
+  other_spies: "revoking one spy leaves the others registered; revoking the middle, the newest or the oldest of three registrations leaves the remaining ones called in the same newest-first order; registering again puts the spy first"
+  other_thread: "revoking a cookie from another thread than the one that registered it gives E_INVALIDARG and the registration stays (the registering thread's spy was still called afterwards); the registering thread's own revoke gives S_OK"
+  thread_end: "a thread that registers a spy and ends without revoking: the spy's reference count is back to what it was (the registration is released when the thread ends) and the spy is not called for other threads"
+errors:
+  invalid_argument: "E_INVALIDARG 0x80070057"
+side_effects: "releases the spy"
+threading: "per thread (see CoRegisterInitializeSpy)"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, see CoRegisterClassObject: the image is client and COM server (`--child srv <tag> clsid={...} <flags>`, a class factory and a plain object of its own, a log file and request files in the test's directory); the spy is an object written in the test (see CoRegisterInitializeSpy).
+not_covered: >
+  revoking from inside a spy method.

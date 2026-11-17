@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/MoveFileExW.yaml
+id: windows/api/kernel32.dll/MoveFileExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Renames or moves a file or a folder. A download is renamed twice in its folder (`<guid>.tmp` to `Unconfirmed N.crdownload` while it runs, then to its final name); Chrome asks the shell's IFileOperation to do it, so Poly's shell has to do what this entry specifies when it moves the file. The streams of the file (the Zone.Identifier mark Chrome writes) go with it.
+interface:
+  signature: "BOOL MoveFileExW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags)"
+  flags: "MOVEFILE_REPLACE_EXISTING 1, MOVEFILE_COPY_ALLOWED 2, MOVEFILE_DELAY_UNTIL_REBOOT 4 (not tested), MOVEFILE_WRITE_THROUGH 8"
+chrome:
+  download: "the rename of a download in its folder (same volume): `<guid>.tmp` to `Unconfirmed N.crdownload` when the first bytes are written, to the final name when the download ends; the tmp file holds the bytes while a Save As dialog is open"
+  seen_as: "SHCreateItemFromParsingName (file item, folder item) + CoCreateInstance(CLSID_FileOperation) + the operation; kernel32 sees the shell's own MoveFileEx/SetFileInformationByHandle, which no trace of Chrome shows"
+rules:
+  plain_rename: "TRUE, last error unchanged; the source name is gone, the new name has the bytes; a rename in the same folder keeps the size, the content, the attributes (an archive-only file stays archive-only; a read-only file stays read-only: 0x21) and every alternate data stream"
+  target_exists: "without MOVEFILE_REPLACE_EXISTING: FALSE, ERROR_ALREADY_EXISTS (183) and nothing changed; with it: TRUE and the target now holds the source's bytes (the source is gone). A read-only target: FALSE, ERROR_ACCESS_DENIED (5) even with the flag"
+  missing: "a source that is not there: FALSE, ERROR_FILE_NOT_FOUND (2); a target whose folder is not there: FALSE, ERROR_PATH_NOT_FOUND (3); an empty target name: FALSE, 3; a target name with a wildcard or with a colon: FALSE, ERROR_INVALID_NAME (123)"
+  same_name: "a file onto itself: TRUE, with and without the flag, nothing changes; only the case of the name changed: TRUE"
+  folders: "a file into another folder and a folder to another name: TRUE (the content of the folder moves with it); a folder onto a name that is a file: FALSE 183 without the flag, TRUE with MOVEFILE_REPLACE_EXISTING (the name is then a folder); a file onto a name that is a folder: FALSE, 5, the folder is kept"
+  flags_on_same_volume: "MOVEFILE_COPY_ALLOWED | MOVEFILE_WRITE_THROUGH on a rename in one folder: TRUE, the same result as no flags"
+  trailing_dot: "a target name with a trailing dot is stored without it: TRUE and `name.` and `name` are then the same file"
+  open_files: "a source open without FILE_SHARE_DELETE (the other opener's share mode lacks 4): FALSE, ERROR_SHARING_VIOLATION (32); open with FILE_SHARE_DELETE, for reading or for writing: TRUE, and the handle that was open keeps reading the data after the rename"
+  streams: "a file with a `Zone.Identifier` stream (26 bytes) renamed: the target has the same stream with the same bytes and the source's is gone; MOVEFILE_REPLACE_EXISTING onto a target with its own stream: the target's streams become the source's; a source without a stream onto a target with one: the target has no stream afterwards; CopyFileW copies the streams too; deleting the file removes its streams"
+errors:
+  already_exists: "183"
+  not_found: "2"
+  path_not_found: "3"
+  access_denied: "5"
+  sharing_violation: "32"
+  invalid_name: "123"
+side_effects: "creates, renames and removes files in the test's scratch folder"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder.
+not_covered: >
+  MOVEFILE_DELAY_UNTIL_REBOOT, moves between volumes (COPY_ALLOWED across drives), network paths, hard links, junctions, compressed or encrypted files, long paths over 260 units, directories with open handles inside.

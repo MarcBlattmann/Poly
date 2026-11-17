@@ -73,3 +73,59 @@ ADR 0211). The browser process paints the same top-level window itself, for inst
 - Not done here, and needing spec sheets first (listed in the track's hand-back): DPI
   awareness above 96 DPI (Chrome renders at 100 % and is scaled up, hence blurry at 200 %),
   `IDCompositionDevice`'s other interfaces, and cursor shapes over Windows windows.
+
+## Addendum (2026-11-17): Windows apps in output pixels, so Chrome draws at 200 % itself
+
+The owner: at 2560x1600 and 200 % Chrome for Windows looked pixelated. Sharpness is a must.
+
+**What was there.** Every Windows app lived in logical pixels at 96 DPI: `GetDpiForSystem`,
+`GetDpiForWindow`, `GetDpiForMonitor`, `GetDeviceCaps(LOGPIXELSX/Y)` and
+`GetScaleFactorForMonitor` answered 96 (100 %). Chrome drew 1034x748 pixels and the compositor
+enlarged them 2x by nearest neighbour. ADR 0179 already said Windows apps "are told the next whole
+scale and draw at it", but win32k only stored `Hello.scale`. Observed on Poly with a temporary trace:
+all of Chrome's processes call `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` (its
+`chrome.exe` manifest declares no awareness). The browser takes its scale from
+`GetDpiForMonitor(MDT_EFFECTIVE_DPI)` and `GetDeviceCaps(LOGPIXELSX/Y)`, its UI font from
+`SystemParametersInfo(SPI_GETNONCLIENTMETRICS)`, and calls `GetSystemMetricsForDpi` and
+`EnableNonClientDpiScaling`. It never calls `GetDpiForWindow`.
+
+**Decisions.**
+
+7. **Units on the desktop link.** A new record `FromCompositor::Units { units }` follows `Hello`.
+   It means that Windows apps live in `units` output pixels per logical pixel. The output's size and
+   Poly's frame in `Hello` are then given in those pixels already, and so is every position and size
+   on the link. Without the record a unit is one logical pixel, as before.
+8. **The compositor converts, win32k does not.** With `--windows-hidpi` the compositor uses the
+   output's whole scale as the units. It multiplies pointer positions and its own moves and resizes
+   (`Configure`) by them, divides `Geometry` and `Margins` by them, and shows a Windows buffer at
+   buffer scale `units`. At 200 % that is pixel for pixel on the output, with nothing enlarged.
+   win32k keeps one coordinate space, so hit testing, the cursor, capture and z-order stay as they
+   were.
+9. **The system DPI is 96 times the units.** win32k answers it in `Reply::Desktop.dpi`. `user32`'s
+   `GetDpiForSystem`, `GetDpiForWindow`, `GetSystemDpiForProcess` and `GetDpiForMonitor`
+   (effective, angular), `shcore`'s `GetDpiForMonitor` and `GetScaleFactorForMonitor` (`dpi * 100 /
+   96`), and `gdi32`'s `GetDeviceCaps(LOGPIXELSX/Y)` give it. `GetSystemMetrics` gives the scaling
+   metrics at that DPI (`GetSystemMetricsForDpi.yaml`'s table). `SystemParametersInfo`'s
+   non-client metrics, icon metrics and icon-title font come from the values of
+   `SystemParametersInfoForDpi.yaml` at that DPI. At one unit every answer is the 96-DPI one the
+   sheets observed.
+10. **Surfaces up to 8192 pixels a side** (`MAX_SIDE`, was 2048). Chrome's default window at 200 %
+    is 2068 pixels wide, and without a surface it fell back to its minimum size.
+11. **`cargo xtask desktop --chrome-win` turns it on** (`poly.init.arg=--windows-hidpi`). Other
+    desktops and the boot tests keep one unit.
+12. **Windows that are still enlarged are smoothed.** A Windows surface whose buffer scale is below
+    the output's (every one without `--windows-hidpi` at 200 %) is enlarged bilinearly, with a
+    fixed-weight path for exactly 2x, instead of in 2x2 blocks. This was the owner's interim.
+
+**Consequences.**
+
+- Chrome for Windows at 200 % draws its UI and pages at 192 DPI: its window is 2068x1496 pixels,
+  shown pixel for pixel (`chrome-paint-01-sharpness-before-after.png` in the track's hand-back).
+- In this mode **every** Windows app is treated as DPI aware. A DPI-unaware app sees a 2560x1600
+  screen at 192 DPI. Unless it scales its own drawing by the DPI, it comes out at half size, but
+  sharp. Windows instead virtualises unaware apps: it gives them logical coordinates and 96 DPI and
+  enlarges their windows. Doing that per process needs the behaviour observed at a 200 % oracle
+  first (the sheets cover 96 DPI only), so it is left for a spec agent and a later track.
+- Chrome renders and presents four times the pixels. While a whole window changes, the compositor
+  is at about 32 frames a second (compose about 5 ms without scaling, the KMS present about 7 ms).
+- `WM_DPICHANGED` is not sent: the scale is fixed for the session.

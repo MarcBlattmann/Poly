@@ -1,0 +1,54 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRegisterClassObject.yaml
+id: windows/api/ole32.dll/CoRegisterClassObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Registers a class factory (or any object) as the class object of a class id for the calling apartment and returns a cookie to revoke it with. The three ways the tests make use of it: (1) in one process, with no registry entry at all, so that CoGetClassObject and CoCreateInstance find the factory in the registering apartment; (2) as a COM server: a process that COM started from a LocalServer32 command (or a service, AppID LocalService) registers its classes with the local-server context, and clients in other processes reach the factory and the objects through proxies; (3) with REGCLS_SINGLEUSE, which serves one request. Google's updater registers its classes this way inside the service process started for an AppID LocalService class.
+interface:
+  signature: "HRESULT CoRegisterClassObject(REFCLSID rclsid, LPUNKNOWN pUnk, DWORD dwClsContext, DWORD flags, LPDWORD lpdwRegister)"
+installer: "Both updater COM servers (the service started for LocalService classes, and the process of its own `--com-service`) register their class objects while they start; the installer's CoCreateInstance(CLSCTX_LOCAL_SERVER) returns only after that. Chrome's elevation service does the same. All failures of COM activation in the survey's Poly runs start here: no class can be registered by a server yet."
+rules:
+  not_initialised: "a thread that has not initialised COM gets CO_E_NOTINITIALIZED 0x800401F0 and the cookie is not written"
+  invalid_arguments: "flags 0x100 (an undefined bit), a NULL factory pointer and a context of 0x80000000 each give E_INVALIDARG 0x80070057 and the cookie is not written; a context of 0 is accepted (S_OK, a non-zero cookie)"
+  cookie: "a successful call returns S_OK and a non-zero cookie; two registrations of the same class (both MULTIPLEUSE) both succeed with different cookies; revoking one leaves the class available through the other and revoking the last makes the class unknown again"
+  factory_reference: "the registration adds exactly one reference to the object passed in (the object's own count goes up by one) and CoRevokeClassObject takes it away; each pointer handed out by CoGetClassObject adds one more until it is released"
+  lookup_same_apartment: "in the apartment that registered, with no registry entry: CoGetClassObject(IClassFactory or IUnknown) returns the very pointer that was registered (no proxy), CoGetClassObject for an interface the object lacks (IMarshal) gives E_NOINTERFACE 0x80004002 and a NULL output, CoCreateInstance calls the registered factory's CreateInstance once; after the revoke the class is unknown (REGDB_E_CLASSNOTREG 0x80040154, output NULL)"
+  context_of_registration: "a registration for CLSCTX_INPROC_SERVER is found by lookups for in-process and for 'all' contexts in the registering apartment and not by a lookup for CLSCTX_LOCAL_SERVER only (0x80040154); a registration for CLSCTX_LOCAL_SERVER (or in-process and local together) is found by lookups for in-process, local and 'all' in the registering apartment, each time with the registered pointer"
+  singleuse: "a REGCLS_SINGLEUSE registration serves one lookup: the first CoGetClassObject returns the factory, the second and third give 0x80040154; REGCLS_MULTIPLEUSE serves any number"
+  apartments_inproc_context: "a registration for CLSCTX_INPROC_SERVER belongs to its apartment alone: asked for from another apartment of the same process (an MTA thread asking for a class an STA thread registered, an STA thread asking for a class an MTA thread registered) COM says 0x80040154, in both directions; another thread of the same MTA gets the registered pointer"
+  apartments_local_context: "a registration for CLSCTX_LOCAL_SERVER (also with in-process) is visible from the other apartments: the class object comes back as a proxy, the factory's CreateInstance runs on the registering STA thread when that thread pumps messages (from an MTA thread the call is marshalled to it), and the object it made is a proxy too; for a class registered in the MTA and asked for from an STA thread the factory runs on a thread that is neither the registering one nor the caller, and the object is a proxy; another thread of the same MTA gets the registered pointer itself"
+  revoke_from_other_apartment: "CoRevokeClassObject from a thread of another apartment than the one that registered succeeds (S_OK) and removes the class; the registering thread's own revoke afterwards also gives S_OK"
+  server_launch_by_registry: "for a class with a LocalServer32 command in HKLM\\SOFTWARE\\Classes\\CLSID\\{clsid}, CoCreateInstance and CoGetClassObject with CLSCTX_LOCAL_SERVER start the command line (a quoted path with arguments is fine) as a new process and wait until it has registered the class with a local-server context, then return proxies; the object and the factory are proxies (they answer IMarshal) and two creations give two different pointers"
+  multipleuse_server: "a server that registered MULTIPLEUSE serves every later request in its own process: two creations and a CoGetClassObject made one server process and four factory calls (the fifth request, with an outer unknown, never reached the server)"
+  singleuse_server: "a server that registered REGCLS_SINGLEUSE serves one request: three CoCreateInstance calls started three server processes and each saw exactly one CreateInstance"
+  late_registration: "a server that needs 1.5 s before it registers is waited for: the caller gets S_OK and a proxy, one process was started"
+  server_that_never_registers: "a server that starts and ends without registering its class does not make the caller's CoCreateInstance(CLSCTX_LOCAL_SERVER) fail: after 6 s the call is still waiting (it was started on a thread of its own); one server process had been started and had ended. A second activation request for the same class id meanwhile waits behind the first one (a test that reused the class id saw no new server start for 6 s), so tests use a fresh class id per run"
+  missing_server_file: "a LocalServer32 whose file does not exist gives REGDB_E_CLASSNOTREG 0x80040154 at once for CLSCTX_LOCAL_SERVER, and 0x80040154 for CLSCTX_INPROC_SERVER (nothing in-process is registered)"
+  unknown_interface_remote: "CoCreateInstance(CLSCTX_LOCAL_SERVER) of an interface the server's object lacks gives E_NOINTERFACE 0x80004002 and a NULL output; the server's CreateInstance was called with that interface and answered it"
+  aggregation_remote: "IClassFactory::CreateInstance through the factory proxy with a non-NULL outer unknown gives CLASS_E_NOAGGREGATION 0x80040110 and a NULL output without the server's factory being called"
+  locking_remote: "IClassFactory::LockServer(TRUE) and (FALSE) through the factory proxy both return S_OK and reach the server's factory"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  invalid_argument: "E_INVALIDARG 0x80070057"
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  no_aggregation: "CLASS_E_NOAGGREGATION 0x80040110"
+side_effects: "creates a registration owned by the calling apartment (it ends with CoUninitialize of that apartment); for a server COM started, activation requests are answered by the registering process until it revokes or ends"
+threading: "per apartment: see apartments_inproc_context and apartments_local_context; an STA thread has to pump messages to serve calls from other apartments"
+ordering: []
+timing:
+  typical: "well under a millisecond for the call itself; starting a server through COM took tens of milliseconds on the oracle"
+  guarantees: "none; a server that never registers keeps its caller waiting for longer than 6 s"
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, each its own COM server and client: the image started again with `--child srv <tag> clsid={...} <flags>` is the server (a class factory and a plain object written in the test, a log file and a quit file in the test's own directory); the client registers the class with a unique class id (HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} with a default value starting `polyws-com-oop`) and removes it again; a class id with a pending activation of an earlier run is avoided by putting the process id into the class id. Observations are results, booleans and counts, never process ids, thread ids, cookies or times. Calls that can wait for a long time (a server that never registers) are made on a thread of their own with a bounded wait.
+not_covered: >
+  REGCLS_SURROGATE and REGCLS_AGILE, DLL surrogates, remote servers (DCOM over the network), registration with a different COM security setup (CoInitializeSecurity belongs to B2c), servers that run as another user or in another session, class objects that are not class factories, and the interface probes COM makes on the objects it marshals.
