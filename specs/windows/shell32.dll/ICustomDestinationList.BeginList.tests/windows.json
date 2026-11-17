@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "5e673ff49f44",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:17Z",
+  "tests": [
+    {
+      "name": "dl_list",
+      "exe_sha256": "b1ae1e9dc0e3c06a61e6e561de21b9463a02a5c507a2a0c382e8d3d565d7c46b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKQ29DcmVhdGVJbnN0YW5jZShDTFNJRF9EZXN0aW5hdGlvbkxpc3QsIElJRF9JQ3VzdG9tRGVzdGluYXRpb25MaXN0KTogMHgwMDAwMDAwMCBzZXQKQmVnaW5MaXN0IGJlZm9yZSBTZXRBcHBJRDogMHgwMDAwMDAwMApBYm9ydExpc3Q6IDB4MDAwMDAwMDAKU2V0QXBwSUQ6IDB4MDAwMDAwMDAKQmVnaW5MaXN0OiAweDAwMDAwMDAwIG1pbiBzbG90cyA+IDA6IHRydWUgYXJyYXkgc2V0CiAgcmVtb3ZlZCBkZXN0aW5hdGlvbnM6IDB4MDAwMDAwMDAgY291bnQgMApCZWdpbkxpc3QgYWdhaW4gd2l0aG91dCBBYm9ydExpc3Q6IDB4ODAwMGZmZmYKQWJvcnRMaXN0OiAweDAwMDAwMDAwCkFib3J0TGlzdCBhZ2FpbjogMHg4MDAwZmZmZgpDb21taXRMaXN0IHdpdGhvdXQgYSBsaXN0OiAweDgwMDBmZmZmCkRlbGV0ZUxpc3QodGhpcyBpZCk6IDB4MDAwMDAwMDAKRGVsZXRlTGlzdChOVUxMKTogMHgwMDAwMDAwMApCZWdpbkxpc3Qgd2l0aCBhIG1hZGUtdXAgaW50ZXJmYWNlIGlkOiAweDgwMDA0MDAyIG51bGwKQWJvcnRMaXN0OiAweDgwMDBmZmZmClF1ZXJ5SW50ZXJmYWNlIElVbmtub3duOiAweDAwMDAwMDAwIHNldApRdWVyeUludGVyZmFjZSBtYWRlLXVwIGlkOiAweDgwMDA0MDAyIG51bGwKbGFzdCBSZWxlYXNlOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\nCoCreateInstance(CLSID_DestinationList, IID_ICustomDestinationList): 0x00000000 set\nBeginList before SetAppID: 0x00000000\nAbortList: 0x00000000\nSetAppID: 0x00000000\nBeginList: 0x00000000 min slots > 0: true array set\n  removed destinations: 0x00000000 count 0\nBeginList again without AbortList: 0x8000ffff\nAbortList: 0x00000000\nAbortList again: 0x8000ffff\nCommitList without a list: 0x8000ffff\nDeleteList(this id): 0x00000000\nDeleteList(NULL): 0x00000000\nBeginList with a made-up interface id: 0x80004002 null\nAbortList: 0x8000ffff\nQueryInterface IUnknown: 0x00000000 set\nQueryInterface made-up id: 0x80004002 null\nlast Release: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 89
+    }
+  ]
+}

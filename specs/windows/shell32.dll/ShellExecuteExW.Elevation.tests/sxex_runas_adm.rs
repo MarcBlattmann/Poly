@@ -572,45 +572,8 @@ fn exec_ex(t: &mut Test, label: &str, verb: Option<&str>, file: &[u16; 300], mas
 
 main_with_child!(token_child, test);
 
-fn new_info(file: &[u16; 300], verb: *const u16, params: *const u16, mask: u32, cb: u32) -> ShellExecuteInfoW {
-    ShellExecuteInfoW {
-        cb_size: cb,
-        mask,
-        hwnd: core::ptr::null_mut(),
-        verb,
-        file: file.as_ptr(),
-        params,
-        dir: core::ptr::null(),
-        show: 0,
-        inst_app: 0xAAAA,
-        id_list: core::ptr::null_mut(),
-        class: core::ptr::null(),
-        hkey_class: core::ptr::null_mut(),
-        hot_key: 0,
-        monitor: core::ptr::null_mut(),
-        process: core::ptr::null_mut(),
-    }
-}
-
 fn test(t: &mut Test) {
     let (me, _) = self_path();
     let flags = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-    // plain launches: the child has the caller's token
-    exec_ex(t, "open this image", Some("open"), &me, flags);
-    exec_ex(t, "NULL verb, this image", None, &me, flags);
-    exec_ex(t, "open this image, no NOCLOSEPROCESS", Some("open"), &me, SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI);
-    exec_ex(t, "unknown verb", Some("frobnicate"), &me, flags);
-    let nofile = wide(r"C:\poly-no-such-dir\none.exe");
-    exec_ex(t, "open a missing file", Some("open"), &nofile, flags);
-    // runas on a missing file never asks for consent
-    exec_ex(t, "runas on a missing file", Some("runas"), &nofile, flags);
-    // a wrong cbSize
-    let params = wide("--child token");
-    let mut info = new_info(&me, core::ptr::null(), params.as_ptr(), flags, 8);
-    clear_error();
-    // SAFETY: valid struct.
-    let ok = unsafe { ShellExecuteExW(&mut info) };
-    say!(t, "cbSize 8: ok {ok} err {}", gle_if(ok));
-    // the size of the structure is 112 bytes in the 64-bit layout
-    say!(t, "sizeof SHELLEXECUTEINFOW {}", core::mem::size_of::<ShellExecuteInfoW>());
+    exec_ex(t, "runas on this image", Some("runas"), &me, flags);
 }

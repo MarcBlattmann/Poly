@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3146d79e98a5",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:20Z",
+  "tests": [
+    {
+      "name": "resume_sequences",
+      "exe_sha256": "dded9243faac651b0e92d7519104fb6cad8b67dc1ceb71fdccaeb82fb82d414b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gQ09NOiByZXN1bWUgMHgwMDAwMDAwMCwgYWdhaW4gMHgwMDAwMDAwMApNVEEsIG5vdGhpbmcgcmVnaXN0ZXJlZDogcmVzdW1lIDB4MDAwMDAwMDAsIGFnYWluIDB4MDAwMDAwMDAKPT0gbG9jYWwgc2VydmVyCnJlZ2lzdGVyIG5vcm1hbGx5IDB4MDAwMDAwMDAKICBsb29rdXAgYWZ0ZXIgdGhlIG5vcm1hbCByZWdpc3RyYXRpb246IDB4MDAwMDAwMDAsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMQogIHJlc3VtZSAweDgwMDcwNmM2CiAgbG9va3VwIGFmdGVyIHJlc3VtZTogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgc3VzcGVuZCAweDAwMDAwMDAwCiAgbG9va3VwIGFmdGVyIHN1c3BlbmQ6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMAogIHJlc3VtZSAweDgwMDcwNmM2CiAgbG9va3VwIGFmdGVyIHJlc3VtZTogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCnJlZ2lzdGVyIHN1c3BlbmRlZCB0d2ljZSAweDAwMDAwMDAwIDB4MDAwMDAwMDAKICBsb29rdXAgd2hpbGUgc3VzcGVuZGVkOiAweDgwMDQwMTU0LCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDAKICByZXN1bWUgMHgwMDAwMDAwMAogIGxvb2t1cCBhZnRlciByZXN1bWU6IDB4MDAwMDAwMDAsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMQogIHJlc3VtZSBhZ2FpbiAweDgwMDcwNmM2CiAgbG9va3VwIGFmdGVyIHJldm9raW5nIG9uZTogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgbG9va3VwIGFmdGVyIHJldm9raW5nIGJvdGg6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMAogIHJlc3VtZSAweDgwMDcwNmM2Cj09IGluLXByb2Nlc3MKcmVnaXN0ZXIgbm9ybWFsbHkgMHgwMDAwMDAwMAogIGxvb2t1cCBhZnRlciB0aGUgbm9ybWFsIHJlZ2lzdHJhdGlvbjogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgcmVzdW1lIDB4ODAwNzA2YzYKICBsb29rdXAgYWZ0ZXIgcmVzdW1lOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDEKICBzdXNwZW5kIDB4MDAwMDAwMDAKICBsb29rdXAgYWZ0ZXIgc3VzcGVuZDogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgcmVzdW1lIDB4ODAwNzA2YzYKICBsb29rdXAgYWZ0ZXIgcmVzdW1lOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDEKcmVnaXN0ZXIgc3VzcGVuZGVkIHR3aWNlIDB4MDAwMDAwMDAgMHgwMDAwMDAwMAogIGxvb2t1cCB3aGlsZSBzdXNwZW5kZWQ6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMAogIHJlc3VtZSAweDgwMDcwNmM2CiAgbG9va3VwIGFmdGVyIHJlc3VtZTogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCiAgcmVzdW1lIGFnYWluIDB4ODAwNzA2YzYKICBsb29rdXAgYWZ0ZXIgcmV2b2tpbmcgb25lOiAweDgwMDQwMTU0LCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDAKICBsb29rdXAgYWZ0ZXIgcmV2b2tpbmcgYm90aDogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCiAgcmVzdW1lIDB4ODAwNzA2YzYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no COM: resume 0x00000000, again 0x00000000\nMTA, nothing registered: resume 0x00000000, again 0x00000000\n== local server\nregister normally 0x00000000\n  lookup after the normal registration: 0x00000000, the registered pointer 1\n  resume 0x800706c6\n  lookup after resume: 0x00000000, the registered pointer 1\n  suspend 0x00000000\n  lookup after suspend: 0x80040154, the registered pointer 0\n  resume 0x800706c6\n  lookup after resume: 0x80040154, the registered pointer 0\nregister suspended twice 0x00000000 0x00000000\n  lookup while suspended: 0x80040154, the registered pointer 0\n  resume 0x00000000\n  lookup after resume: 0x00000000, the registered pointer 1\n  resume again 0x800706c6\n  lookup after revoking one: 0x00000000, the registered pointer 1\n  lookup after revoking both: 0x80040154, the registered pointer 0\n  resume 0x800706c6\n== in-process\nregister normally 0x00000000\n  lookup after the normal registration: 0x00000000, the registered pointer 1\n  resume 0x800706c6\n  lookup after resume: 0x00000000, the registered pointer 1\n  suspend 0x00000000\n  lookup after suspend: 0x00000000, the registered pointer 1\n  resume 0x800706c6\n  lookup after resume: 0x00000000, the registered pointer 1\nregister suspended twice 0x00000000 0x00000000\n  lookup while suspended: 0x80040154, the registered pointer 0\n  resume 0x800706c6\n  lookup after resume: 0x80040154, the registered pointer 0\n  resume again 0x800706c6\n  lookup after revoking one: 0x80040154, the registered pointer 0\n  lookup after revoking both: 0x80040154, the registered pointer 0\n  resume 0x800706c6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    },
+    {
+      "name": "resume_server_delayed",
+      "exe_sha256": "315e3d6db33b2aa8f9a4d94180b11d2b4dad82f0164ff475e773fbbbe402e953",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVzdW1lIGFmdGVyIDEuMiBzOiByZXR1cm5lZCB3aXRoaW4gNDAwIG1zIDAsIHJldHVybmVkIGF0IGFsbCAxLCBociAweDAwMDAwMDAwCnNydjogc3RhcnQKc3J2OiBpbml0IG10YSAweDAwMDAwMDAwCnNydjogcmVnaXN0ZXIgZmxhZ3M9NSAtPiAweDAwMDAwMDAwIGNvb2tpZV9ub256ZXJvPTEKc3J2OiByZXN1bWUgLT4gMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogb2JqIHJlbGVhc2VkIGxpdmU9MApzcnY6IHJldm9rZSAtPiAweDAwMDAwMDAwCnNydjogZXhpdAogIHRoZSBvYmplY3Qgd2FzIGNyZWF0ZWQgYWZ0ZXIgdGhlIHNlcnZlciByZXN1bWVkOiAxCnJlc3VtZSBhdCBvbmNlOiByZXR1cm5lZCB3aXRoaW4gNTAwMCBtcyAxLCByZXR1cm5lZCBhdCBhbGwgMSwgaHIgMHgwMDAwMDAwMApzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IHJlZ2lzdGVyIGZsYWdzPTUgLT4gMHgwMDAwMDAwMCBjb29raWVfbm9uemVybz0xCnNydjogcmVzdW1lIC0+IDB4MDAwMDAwMDAKc3J2OiBjcmVhdGUgb3V0ZXI9bnVsbCBpaWQ9SVVua25vd24Kc3J2OiBjcmVhdGUgLT4gMHgwMDAwMDAwMApzcnY6IG9iaiByZWxlYXNlZCBsaXZlPTAKc3J2OiByZXZva2UgLT4gMHgwMDAwMDAwMApzcnY6IGV4aXQKICB0aGUgb2JqZWN0IHdhcyBjcmVhdGVkIGFmdGVyIHRoZSBzZXJ2ZXIgcmVzdW1lZDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "resume after 1.2 s: returned within 400 ms 0, returned at all 1, hr 0x00000000\nsrv: start\nsrv: init mta 0x00000000\nsrv: register flags=5 -> 0x00000000 cookie_nonzero=1\nsrv: resume -> 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: obj released live=0\nsrv: revoke -> 0x00000000\nsrv: exit\n  the object was created after the server resumed: 1\nresume at once: returned within 5000 ms 1, returned at all 1, hr 0x00000000\nsrv: start\nsrv: init mta 0x00000000\nsrv: register flags=5 -> 0x00000000 cookie_nonzero=1\nsrv: resume -> 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: obj released live=0\nsrv: revoke -> 0x00000000\nsrv: exit\n  the object was created after the server resumed: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2183
+    },
+    {
+      "name": "resume_threads",
+      "exe_sha256": "f71b1b154acb8302d17956ab6edffbfd943f93175cd48f7661807f1fc5f3ebc0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bG9jYWwgc2VydmVyLCByZWdpc3RlcmluZyB0aHJlYWQgaXMgTVRBCiAgcmVnaXN0ZXIgc3VzcGVuZGVkIDB4MDAwMDAwMDAKICBsb29rdXAgaW4gdGhlIHJlZ2lzdGVyaW5nIHRocmVhZCBiZWZvcmUgcmVzdW1lOiAweDgwMDQwMTU0CiAgcmVzdW1lIGZyb20gdGhlIG1haW4gTVRBIHRocmVhZCAweDAwMDAwMDAwCiAgbG9va3VwIGluIHRoZSByZWdpc3RlcmluZyB0aHJlYWQ6IDB4MDAwMDAwMDAKICBsb29rdXAgZnJvbSB0aGUgbWFpbiBNVEEgdGhyZWFkIDB4MDAwMDAwMDAKICByZXN1bWUgZnJvbSB0aGUgcmVnaXN0ZXJpbmcgdGhyZWFkOiAweDgwMDcwNmM2CiAgbG9va3VwIGluIHRoZSByZWdpc3RlcmluZyB0aHJlYWQ6IDB4MDAwMDAwMDAKbG9jYWwgc2VydmVyLCByZWdpc3RlcmluZyB0aHJlYWQgaXMgU1RBCiAgcmVnaXN0ZXIgc3VzcGVuZGVkIDB4MDAwMDAwMDAKICBsb29rdXAgaW4gdGhlIHJlZ2lzdGVyaW5nIHRocmVhZCBiZWZvcmUgcmVzdW1lOiAweDgwMDQwMTU0CiAgcmVzdW1lIGZyb20gdGhlIG1haW4gTVRBIHRocmVhZCAweDAwMDAwMDAwCiAgbG9va3VwIGluIHRoZSByZWdpc3RlcmluZyB0aHJlYWQ6IDB4MDAwMDAwMDAKICBsb29rdXAgZnJvbSB0aGUgbWFpbiBNVEEgdGhyZWFkIDB4MDAwMDAwMDAKICByZXN1bWUgZnJvbSB0aGUgcmVnaXN0ZXJpbmcgdGhyZWFkOiAweDgwMDcwNmM2CiAgbG9va3VwIGluIHRoZSByZWdpc3RlcmluZyB0aHJlYWQ6IDB4MDAwMDAwMDAKaW4tcHJvY2VzcywgcmVnaXN0ZXJpbmcgdGhyZWFkIGlzIE1UQQogIHJlZ2lzdGVyIHN1c3BlbmRlZCAweDAwMDAwMDAwCiAgbG9va3VwIGluIHRoZSByZWdpc3RlcmluZyB0aHJlYWQgYmVmb3JlIHJlc3VtZTogMHg4MDA0MDE1NAogIHJlc3VtZSBmcm9tIHRoZSBtYWluIE1UQSB0aHJlYWQgMHg4MDA3MDZjNgogIGxvb2t1cCBpbiB0aGUgcmVnaXN0ZXJpbmcgdGhyZWFkOiAweDgwMDQwMTU0CiAgbG9va3VwIGZyb20gdGhlIG1haW4gTVRBIHRocmVhZCAweDgwMDQwMTU0CiAgcmVzdW1lIGZyb20gdGhlIHJlZ2lzdGVyaW5nIHRocmVhZDogMHg4MDA3MDZjNgogIGxvb2t1cCBpbiB0aGUgcmVnaXN0ZXJpbmcgdGhyZWFkOiAweDgwMDQwMTU0CmluLXByb2Nlc3MsIHJlZ2lzdGVyaW5nIHRocmVhZCBpcyBTVEEKICByZWdpc3RlciBzdXNwZW5kZWQgMHgwMDAwMDAwMAogIGxvb2t1cCBpbiB0aGUgcmVnaXN0ZXJpbmcgdGhyZWFkIGJlZm9yZSByZXN1bWU6IDB4ODAwNDAxNTQKICByZXN1bWUgZnJvbSB0aGUgbWFpbiBNVEEgdGhyZWFkIDB4ODAwNzA2YzYKICBsb29rdXAgaW4gdGhlIHJlZ2lzdGVyaW5nIHRocmVhZDogMHg4MDA0MDE1NAogIGxvb2t1cCBmcm9tIHRoZSBtYWluIE1UQSB0aHJlYWQgMHg4MDA0MDE1NAogIHJlc3VtZSBmcm9tIHRoZSByZWdpc3RlcmluZyB0aHJlYWQ6IDB4ODAwNzA2YzYKICBsb29rdXAgaW4gdGhlIHJlZ2lzdGVyaW5nIHRocmVhZDogMHg4MDA0MDE1NApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "local server, registering thread is MTA\n  register suspended 0x00000000\n  lookup in the registering thread before resume: 0x80040154\n  resume from the main MTA thread 0x00000000\n  lookup in the registering thread: 0x00000000\n  lookup from the main MTA thread 0x00000000\n  resume from the registering thread: 0x800706c6\n  lookup in the registering thread: 0x00000000\nlocal server, registering thread is STA\n  register suspended 0x00000000\n  lookup in the registering thread before resume: 0x80040154\n  resume from the main MTA thread 0x00000000\n  lookup in the registering thread: 0x00000000\n  lookup from the main MTA thread 0x00000000\n  resume from the registering thread: 0x800706c6\n  lookup in the registering thread: 0x00000000\nin-process, registering thread is MTA\n  register suspended 0x00000000\n  lookup in the registering thread before resume: 0x80040154\n  resume from the main MTA thread 0x800706c6\n  lookup in the registering thread: 0x80040154\n  lookup from the main MTA thread 0x80040154\n  resume from the registering thread: 0x800706c6\n  lookup in the registering thread: 0x80040154\nin-process, registering thread is STA\n  register suspended 0x00000000\n  lookup in the registering thread before resume: 0x80040154\n  resume from the main MTA thread 0x800706c6\n  lookup in the registering thread: 0x80040154\n  lookup from the main MTA thread 0x80040154\n  resume from the registering thread: 0x800706c6\n  lookup in the registering thread: 0x80040154\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 699
+    }
+  ]
+}

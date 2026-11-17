@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ITaskbarList3.SetProgressValue.yaml
+id: windows/api/shell32.dll/ITaskbarList3.SetProgressValue
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  The taskbar button's progress bar, which Chrome drives while a download runs (and creates for every top-level window it has: CoCreateInstance(CLSID_TaskbarList, IID_ITaskbarList3) appears 20 to 30 times in a short run). CLSID_TaskbarList is a class a program creates in its own process; the calls only need to succeed (and may do nothing where there is no taskbar).
+interface:
+  create: "CoCreateInstance(CLSID_TaskbarList {56FDF344-FD6D-11D0-958A-006097C9A090}, NULL, CLSCTX_INPROC_SERVER, IID_ITaskbarList3 {EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF})"
+  methods: "ITaskbarList after IUnknown: HrInit 3, AddTab 4, DeleteTab 5, ActivateTab 6, SetActiveAlt 7; ITaskbarList2: MarkFullscreenWindow 8; ITaskbarList3: SetProgressValue 9, SetProgressState 10, RegisterTab 11, UnregisterTab 12, SetTabOrder 13, SetTabActive 14, ThumbBarAddButtons 15, ThumbBarUpdateButtons 16, ThumbBarSetImageList 17, SetOverlayIcon 18, SetThumbnailTooltip 19, SetThumbnailClip 20"
+  states: "TBPF_NOPROGRESS 0, TBPF_INDETERMINATE 1, TBPF_NORMAL 2, TBPF_ERROR 4, TBPF_PAUSED 8"
+chrome:
+  calls: "CoCreateInstance(CLSID_TaskbarList, IID_ITaskbarList3) = S_OK, once for each window it creates and repeatedly during a download (about 20 per window in a run with three downloads); the methods are called through the table (HrInit, SetProgressState, SetProgressValue)"
+rules:
+  create: "S_OK; QueryInterface IUnknown S_OK, a made-up id E_NOINTERFACE; the last Release returns 0"
+  every_call_ok: "in the desktop session every call returned S_OK: HrInit (also twice), SetProgressState with 0, 1, 2, 4, 8 and also 3, 16 and 0xFFFFFFFF, SetProgressValue with 0 of 100, 50 of 100, 100 of 100, 101 of 100, 0 of 0, 5 of 0, max of max and 1 of max, AddTab, DeleteTab, SetOverlayIcon(window, NULL, NULL), SetThumbnailTooltip"
+  before_init: "SetProgressState and SetProgressValue before HrInit: S_OK too"
+  window_kinds: "a shown and a hidden top-level window, a child window, a message-only window and the desktop window: every call S_OK; two taskbar list objects on one window: every call S_OK"
+  bad_windows: "SetProgressState and SetProgressValue on a NULL window, on a handle that is no window and on a destroyed window: S_OK (nothing is checked)"
+errors:
+  no_interface: "0x80004002"
+side_effects: "a progress bar on the test window's taskbar button while the window is shown (the test removes it)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. Recorded in the desktop session: the test shows a small window of the STATIC class at (20, 20) without activating it, destroys it at the end.
+not_covered: >
+  what the taskbar shows, thumbnail buttons, tabs, overlay icons with a real icon, the session without a taskbar (the SSH session 0 was not recorded), different COM apartments.

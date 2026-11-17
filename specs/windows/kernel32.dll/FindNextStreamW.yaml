@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/FindNextStreamW.yaml
+id: windows/api/kernel32.dll/FindNextStreamW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Next stream of the enumeration FindFirstStreamW began. Pointer sheet: the observations are those of FindFirstStreamW's tests (ads_files).
+same_as: "kernel32.dll/FindFirstStreamW"
+interface:
+  signature: "BOOL FindNextStreamW(HANDLE hFindStream, LPVOID lpFindStreamData)"
+rules:
+  end: "after the last stream: FALSE, last error ERROR_HANDLE_EOF (38)"
+  order: "see FindFirstStreamW: the main stream first, the others after it"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  none of its own; see kernel32.dll/FindFirstStreamW.
+not_covered: >
+  see kernel32.dll/FindFirstStreamW.

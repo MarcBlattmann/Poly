@@ -1287,192 +1287,192 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">1.3%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">791 / 62,919 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">791 / 62,940 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 44 / 20,419 done (0.2%)</title>
-<rect x="16.0" y="469.0" width="183.0" height="218.0" fill="#e6eaef"/>
+<rect x="16.0" y="469.0" width="182.9" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.4" height="218.0" fill="#2da44e"/>
 <rect x="16.4" y="469.0" width="0.6" height="218.0" fill="#d4a72c"/>
 <rect x="17.0" y="469.0" width="12.0" height="218.0" fill="#218bff"/>
-<rect x="15.0" y="468.0" width="185.0" height="220.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="15.0" y="468.0" width="184.9" height="220.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="21.0" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">MSVC runtimes</text>
 <text x="21.0" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>349 smaller libraries: 4 / 2,831 done (0.1%)</title>
-<rect x="201.0" y="469.0" width="62.7" height="85.1" fill="#e6eaef"/>
-<rect x="201.0" y="469.0" width="0.1" height="85.1" fill="#2da44e"/>
-<rect x="201.1" y="469.0" width="4.8" height="85.1" fill="#d4a72c"/>
-<rect x="205.9" y="469.0" width="0.1" height="85.1" fill="#218bff"/>
-<rect x="200.0" y="468.0" width="64.7" height="87.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="206.0" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">349 smal…</text>
-<text x="206.0" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
+<rect x="200.9" y="469.0" width="62.7" height="85.1" fill="#e6eaef"/>
+<rect x="200.9" y="469.0" width="0.1" height="85.1" fill="#2da44e"/>
+<rect x="201.0" y="469.0" width="4.8" height="85.1" fill="#d4a72c"/>
+<rect x="205.8" y="469.0" width="0.1" height="85.1" fill="#218bff"/>
+<rect x="199.9" y="468.0" width="64.7" height="87.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="205.9" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">349 smal…</text>
+<text x="205.9" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>ucrtbase: 1 / 2,602 done (0.0%)</title>
-<rect x="201.0" y="556.1" width="62.7" height="78.1" fill="#e6eaef"/>
-<rect x="201.0" y="556.1" width="0.0" height="78.1" fill="#2da44e"/>
-<rect x="201.0" y="556.1" width="2.2" height="78.1" fill="#d4a72c"/>
+<rect x="200.9" y="556.1" width="62.7" height="78.1" fill="#e6eaef"/>
+<rect x="200.9" y="556.1" width="0.0" height="78.1" fill="#2da44e"/>
+<rect x="200.9" y="556.1" width="2.2" height="78.1" fill="#d4a72c"/>
 <rect x="203.2" y="556.1" width="23.8" height="78.1" fill="#218bff"/>
-<rect x="200.0" y="555.1" width="64.7" height="80.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="206.0" y="570.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ucrtbase</text>
-<text x="206.0" y="584.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
+<rect x="199.9" y="555.1" width="64.7" height="80.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="205.9" y="570.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ucrtbase</text>
+<text x="205.9" y="584.1" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>ntoskrnl.exe: 0 / 1,714 done (0.0%)</title>
-<rect x="201.0" y="636.2" width="62.7" height="50.8" fill="#e6eaef"/>
-<rect x="200.0" y="635.2" width="64.7" height="52.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="206.0" y="650.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntoskrn…</text>
-<text x="206.0" y="664.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
+<rect x="200.9" y="636.2" width="62.7" height="50.8" fill="#e6eaef"/>
+<rect x="199.9" y="635.2" width="64.7" height="52.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="205.9" y="650.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntoskrn…</text>
+<text x="205.9" y="664.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>kernel32: 90 / 1,559 done (5.8%)</title>
-<rect x="265.7" y="469.0" width="53.8" height="53.7" fill="#e6eaef"/>
-<rect x="265.7" y="469.0" width="3.1" height="53.7" fill="#2da44e"/>
-<rect x="268.8" y="469.0" width="11.6" height="53.7" fill="#d4a72c"/>
-<rect x="280.4" y="469.0" width="10.7" height="53.7" fill="#218bff"/>
-<rect x="264.7" y="468.0" width="55.8" height="55.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="270.7" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kernel…</text>
-<text x="270.7" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">6%</text>
+<rect x="265.6" y="469.0" width="53.8" height="53.7" fill="#e6eaef"/>
+<rect x="265.6" y="469.0" width="3.1" height="53.7" fill="#2da44e"/>
+<rect x="268.8" y="469.0" width="11.4" height="53.7" fill="#d4a72c"/>
+<rect x="280.2" y="469.0" width="10.8" height="53.7" fill="#218bff"/>
+<rect x="264.6" y="468.0" width="55.8" height="55.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="270.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kernel…</text>
+<text x="270.6" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">6%</text>
 </g>
 <g><title>win32u: 0 / 1,541 done (0.0%)</title>
-<rect x="265.7" y="524.7" width="53.8" height="53.0" fill="#e6eaef"/>
-<rect x="264.7" y="523.7" width="55.8" height="55.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="270.7" y="538.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">win32u</text>
-<text x="270.7" y="552.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
+<rect x="265.6" y="524.7" width="53.8" height="53.0" fill="#e6eaef"/>
+<rect x="264.6" y="523.7" width="55.8" height="55.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="270.6" y="538.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">win32u</text>
+<text x="270.6" y="552.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>win32k services: 0 / 1,540 done (0.0%)</title>
-<rect x="265.7" y="579.7" width="53.8" height="53.0" fill="#e6eaef"/>
-<rect x="264.7" y="578.7" width="55.8" height="55.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="270.7" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">win32k…</text>
-<text x="270.7" y="607.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
+<rect x="265.6" y="579.7" width="53.8" height="53.0" fill="#e6eaef"/>
+<rect x="264.6" y="578.7" width="55.8" height="55.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="270.6" y="593.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">win32k…</text>
+<text x="270.6" y="607.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
 <g><title>ntdll: 105 / 1,523 done (6.9%)</title>
-<rect x="265.7" y="634.6" width="53.8" height="52.4" fill="#e6eaef"/>
-<rect x="265.7" y="634.6" width="3.7" height="52.4" fill="#2da44e"/>
+<rect x="265.6" y="634.6" width="53.8" height="52.4" fill="#e6eaef"/>
+<rect x="265.6" y="634.6" width="3.7" height="52.4" fill="#2da44e"/>
 <rect x="269.4" y="634.6" width="2.1" height="52.4" fill="#d4a72c"/>
-<rect x="271.5" y="634.6" width="5.0" height="52.4" fill="#218bff"/>
-<rect x="264.7" y="633.6" width="55.8" height="54.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="270.7" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntdll</text>
-<text x="270.7" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">7%</text>
+<rect x="271.4" y="634.6" width="5.0" height="52.4" fill="#218bff"/>
+<rect x="264.6" y="633.6" width="55.8" height="54.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="270.6" y="648.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">ntdll</text>
+<text x="270.6" y="662.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">7%</text>
 </g>
 <g><title>kernelbase: 27 / 1,447 done (1.9%)</title>
-<rect x="321.6" y="469.0" width="43.2" height="61.9" fill="#e6eaef"/>
-<rect x="321.6" y="469.0" width="0.8" height="61.9" fill="#2da44e"/>
-<rect x="322.4" y="469.0" width="2.0" height="61.9" fill="#d4a72c"/>
-<rect x="324.3" y="469.0" width="9.5" height="61.9" fill="#218bff"/>
-<rect x="320.6" y="468.0" width="45.2" height="63.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="326.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kern…</text>
+<rect x="321.5" y="469.0" width="43.1" height="61.9" fill="#e6eaef"/>
+<rect x="321.5" y="469.0" width="0.8" height="61.9" fill="#2da44e"/>
+<rect x="322.3" y="469.0" width="2.0" height="61.9" fill="#d4a72c"/>
+<rect x="324.2" y="469.0" width="9.5" height="61.9" fill="#218bff"/>
+<rect x="320.5" y="468.0" width="45.1" height="63.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="326.5" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kern…</text>
 </g>
 <g><title>icu: 0 / 1,059 done (0.0%)</title>
-<rect x="321.6" y="532.9" width="43.2" height="44.7" fill="#e6eaef"/>
-<rect x="321.6" y="532.9" width="1.7" height="44.7" fill="#d4a72c"/>
-<rect x="320.6" y="531.9" width="45.2" height="46.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="326.6" y="546.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">icu</text>
+<rect x="321.5" y="532.9" width="43.1" height="44.7" fill="#e6eaef"/>
+<rect x="321.5" y="532.9" width="1.7" height="44.7" fill="#d4a72c"/>
+<rect x="320.5" y="531.9" width="45.1" height="46.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="326.5" y="546.9" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">icu</text>
 </g>
 <g><title>user32: 218 / 997 done (21.9%)</title>
-<rect x="321.6" y="579.6" width="43.2" height="42.0" fill="#e6eaef"/>
-<rect x="321.6" y="579.6" width="9.4" height="42.0" fill="#2da44e"/>
-<rect x="331.0" y="579.6" width="8.7" height="42.0" fill="#d4a72c"/>
-<rect x="339.7" y="579.6" width="2.7" height="42.0" fill="#218bff"/>
-<rect x="320.6" y="578.6" width="45.2" height="44.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="326.6" y="593.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
+<rect x="321.5" y="579.6" width="43.1" height="42.0" fill="#e6eaef"/>
+<rect x="321.5" y="579.6" width="9.4" height="42.0" fill="#2da44e"/>
+<rect x="330.9" y="579.6" width="8.7" height="42.0" fill="#d4a72c"/>
+<rect x="339.5" y="579.6" width="2.7" height="42.0" fill="#218bff"/>
+<rect x="320.5" y="578.6" width="45.1" height="44.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="326.5" y="593.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
 <g><title>shlwapi: 18 / 851 done (2.1%)</title>
-<rect x="321.6" y="623.6" width="43.2" height="35.6" fill="#e6eaef"/>
-<rect x="321.6" y="623.6" width="0.9" height="35.6" fill="#2da44e"/>
-<rect x="322.5" y="623.6" width="2.0" height="35.6" fill="#d4a72c"/>
-<rect x="324.5" y="623.6" width="0.3" height="35.6" fill="#218bff"/>
-<rect x="320.6" y="622.6" width="45.2" height="37.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="326.6" y="637.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">shlw…</text>
+<rect x="321.5" y="623.6" width="43.1" height="35.6" fill="#e6eaef"/>
+<rect x="321.5" y="623.6" width="0.9" height="35.6" fill="#2da44e"/>
+<rect x="322.4" y="623.6" width="2.0" height="35.6" fill="#d4a72c"/>
+<rect x="324.3" y="623.6" width="0.3" height="35.6" fill="#218bff"/>
+<rect x="320.5" y="622.6" width="45.1" height="37.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="326.5" y="637.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">shlw…</text>
 </g>
 <g><title>gdiplus: 0 / 630 done (0.0%)</title>
-<rect x="321.6" y="661.2" width="43.2" height="25.8" fill="#e6eaef"/>
-<rect x="321.6" y="661.2" width="12.9" height="25.8" fill="#d4a72c"/>
-<rect x="320.6" y="660.2" width="45.2" height="27.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="326.6" y="675.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">gdip…</text>
+<rect x="321.5" y="661.2" width="43.1" height="25.8" fill="#e6eaef"/>
+<rect x="321.5" y="661.2" width="12.9" height="25.8" fill="#d4a72c"/>
+<rect x="320.5" y="660.2" width="45.1" height="27.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="326.5" y="675.2" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">gdip…</text>
 </g>
 <g><title>setupapi: 0 / 617 done (0.0%)</title>
-<rect x="366.7" y="469.0" width="33.0" height="33.2" fill="#e6eaef"/>
-<rect x="366.7" y="469.0" width="0.7" height="33.2" fill="#d4a72c"/>
-<rect x="365.7" y="468.0" width="35.0" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-<text x="371.7" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">set…</text>
+<rect x="366.6" y="469.0" width="33.0" height="33.1" fill="#e6eaef"/>
+<rect x="366.6" y="469.0" width="0.7" height="33.1" fill="#d4a72c"/>
+<rect x="365.6" y="468.0" width="35.0" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<text x="371.6" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">set…</text>
 </g>
 <g><title>advapi32: 88 / 589 done (14.9%)</title>
-<rect x="401.7" y="469.0" width="31.4" height="33.2" fill="#e6eaef"/>
-<rect x="401.7" y="469.0" width="4.7" height="33.2" fill="#2da44e"/>
-<rect x="406.4" y="469.0" width="6.3" height="33.2" fill="#d4a72c"/>
-<rect x="412.7" y="469.0" width="2.5" height="33.2" fill="#218bff"/>
-<rect x="400.7" y="468.0" width="33.4" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="401.6" y="469.0" width="31.4" height="33.1" fill="#e6eaef"/>
+<rect x="401.6" y="469.0" width="4.7" height="33.1" fill="#2da44e"/>
+<rect x="406.3" y="469.0" width="6.3" height="33.1" fill="#d4a72c"/>
+<rect x="412.6" y="469.0" width="2.5" height="33.1" fill="#218bff"/>
+<rect x="400.6" y="468.0" width="33.4" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>gdi32: 37 / 545 done (6.8%)</title>
-<rect x="435.1" y="469.0" width="28.9" height="33.2" fill="#e6eaef"/>
-<rect x="435.1" y="469.0" width="2.0" height="33.2" fill="#2da44e"/>
-<rect x="437.0" y="469.0" width="5.0" height="33.2" fill="#d4a72c"/>
-<rect x="442.1" y="469.0" width="0.4" height="33.2" fill="#218bff"/>
-<rect x="434.1" y="468.0" width="30.9" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="435.0" y="469.0" width="28.9" height="33.1" fill="#e6eaef"/>
+<rect x="435.0" y="469.0" width="2.0" height="33.1" fill="#2da44e"/>
+<rect x="436.9" y="469.0" width="5.0" height="33.1" fill="#d4a72c"/>
+<rect x="442.0" y="469.0" width="0.4" height="33.1" fill="#218bff"/>
+<rect x="434.0" y="468.0" width="30.9" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuuc: 0 / 542 done (0.0%)</title>
-<rect x="466.0" y="469.0" width="28.7" height="33.2" fill="#e6eaef"/>
-<rect x="465.0" y="468.0" width="30.7" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="465.9" y="469.0" width="28.7" height="33.1" fill="#e6eaef"/>
+<rect x="464.9" y="468.0" width="30.7" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>rpcrt4: 0 / 532 done (0.0%)</title>
-<rect x="496.7" y="469.0" width="28.2" height="33.2" fill="#e6eaef"/>
-<rect x="496.7" y="469.0" width="1.3" height="33.2" fill="#d4a72c"/>
-<rect x="498.0" y="469.0" width="0.1" height="33.2" fill="#218bff"/>
-<rect x="495.7" y="468.0" width="30.2" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="496.6" y="469.0" width="28.2" height="33.1" fill="#e6eaef"/>
+<rect x="496.6" y="469.0" width="1.3" height="33.1" fill="#d4a72c"/>
+<rect x="498.0" y="469.0" width="0.1" height="33.1" fill="#218bff"/>
+<rect x="495.6" y="468.0" width="30.2" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>crtdll: 0 / 526 done (0.0%)</title>
-<rect x="526.8" y="469.0" width="27.8" height="33.2" fill="#e6eaef"/>
-<rect x="525.8" y="468.0" width="29.8" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="526.8" y="469.0" width="27.8" height="33.1" fill="#e6eaef"/>
+<rect x="525.8" y="468.0" width="29.8" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>vccorlib140: 0 / 518 done (0.0%)</title>
-<rect x="556.6" y="469.0" width="27.4" height="33.2" fill="#e6eaef"/>
-<rect x="555.6" y="468.0" width="29.4" height="35.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="469.0" width="27.4" height="33.1" fill="#e6eaef"/>
+<rect x="555.6" y="468.0" width="29.4" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>unicows: 0 / 507 done (0.0%)</title>
-<rect x="366.7" y="504.2" width="25.7" height="34.5" fill="#e6eaef"/>
-<rect x="365.7" y="503.2" width="27.7" height="36.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="366.6" y="504.1" width="25.8" height="34.3" fill="#e6eaef"/>
+<rect x="365.6" y="503.1" width="27.8" height="36.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>shell32: 2 / 475 done (0.4%)</title>
-<rect x="366.7" y="540.7" width="25.7" height="32.2" fill="#e6eaef"/>
-<rect x="366.7" y="540.7" width="0.1" height="32.2" fill="#2da44e"/>
-<rect x="366.8" y="540.7" width="2.3" height="32.2" fill="#d4a72c"/>
-<rect x="369.1" y="540.7" width="0.4" height="32.2" fill="#218bff"/>
-<rect x="365.7" y="539.7" width="27.7" height="34.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<g><title>shell32: 2 / 491 done (0.4%)</title>
+<rect x="366.6" y="540.4" width="25.8" height="33.1" fill="#e6eaef"/>
+<rect x="366.6" y="540.4" width="0.1" height="33.1" fill="#2da44e"/>
+<rect x="366.7" y="540.4" width="2.0" height="33.1" fill="#d4a72c"/>
+<rect x="368.7" y="540.4" width="1.5" height="33.1" fill="#218bff"/>
+<rect x="365.6" y="539.4" width="27.8" height="35.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>oleaut32: 0 / 418 done (0.0%)</title>
-<rect x="366.7" y="574.8" width="25.7" height="28.1" fill="#e6eaef"/>
-<rect x="366.7" y="574.8" width="0.6" height="28.1" fill="#d4a72c"/>
-<rect x="367.3" y="574.8" width="1.5" height="28.1" fill="#218bff"/>
-<rect x="365.7" y="573.8" width="27.7" height="30.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="366.6" y="575.5" width="25.8" height="27.9" fill="#e6eaef"/>
+<rect x="366.6" y="575.5" width="0.6" height="27.9" fill="#d4a72c"/>
+<rect x="367.2" y="575.5" width="1.5" height="27.9" fill="#218bff"/>
+<rect x="365.6" y="574.5" width="27.8" height="29.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuin: 0 / 416 done (0.0%)</title>
-<rect x="366.7" y="604.9" width="25.7" height="27.9" fill="#e6eaef"/>
-<rect x="365.7" y="603.9" width="27.7" height="29.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="366.6" y="605.4" width="25.8" height="27.8" fill="#e6eaef"/>
+<rect x="365.6" y="604.4" width="27.8" height="29.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>netio.sys: 0 / 391 done (0.0%)</title>
-<rect x="366.7" y="634.9" width="25.7" height="26.1" fill="#e6eaef"/>
-<rect x="365.7" y="633.9" width="27.7" height="28.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="366.6" y="635.2" width="25.8" height="26.0" fill="#e6eaef"/>
+<rect x="365.6" y="634.2" width="27.8" height="28.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>opengl32: 0 / 361 done (0.0%)</title>
-<rect x="366.7" y="663.0" width="25.7" height="24.0" fill="#e6eaef"/>
-<rect x="366.7" y="663.0" width="4.3" height="24.0" fill="#d4a72c"/>
-<rect x="365.7" y="662.0" width="27.7" height="26.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="366.6" y="663.2" width="25.8" height="23.8" fill="#e6eaef"/>
+<rect x="366.6" y="663.2" width="4.3" height="23.8" fill="#d4a72c"/>
+<rect x="365.6" y="662.2" width="27.8" height="25.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>combase: 0 / 355 done (0.0%)</title>
-<rect x="394.4" y="504.2" width="22.0" height="27.5" fill="#e6eaef"/>
-<rect x="394.4" y="504.2" width="2.2" height="27.5" fill="#218bff"/>
-<rect x="393.4" y="503.2" width="24.0" height="29.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="394.4" y="504.1" width="22.0" height="27.5" fill="#e6eaef"/>
+<rect x="394.4" y="504.1" width="2.2" height="27.5" fill="#218bff"/>
+<rect x="393.4" y="503.1" width="24.0" height="29.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>esent: 0 / 336 done (0.0%)</title>
-<rect x="394.4" y="533.7" width="22.0" height="25.9" fill="#e6eaef"/>
-<rect x="393.4" y="532.7" width="24.0" height="27.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="394.4" y="533.6" width="22.0" height="25.9" fill="#e6eaef"/>
+<rect x="393.4" y="532.6" width="24.0" height="27.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>windows.storage: 0 / 323 done (0.0%)</title>
-<rect x="394.4" y="561.6" width="22.0" height="24.8" fill="#e6eaef"/>
-<rect x="393.4" y="560.6" width="24.0" height="26.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="394.4" y="561.5" width="22.0" height="24.8" fill="#e6eaef"/>
+<rect x="393.4" y="560.5" width="24.0" height="26.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ole32: 14 / 309 done (4.5%)</title>
 <rect x="394.4" y="588.4" width="22.0" height="23.7" fill="#e6eaef"/>
 <rect x="394.4" y="588.4" width="1.0" height="23.7" fill="#2da44e"/>
-<rect x="395.4" y="588.4" width="5.8" height="23.7" fill="#d4a72c"/>
-<rect x="401.2" y="588.4" width="1.0" height="23.7" fill="#218bff"/>
+<rect x="395.4" y="588.4" width="5.3" height="23.7" fill="#d4a72c"/>
+<rect x="400.7" y="588.4" width="1.6" height="23.7" fill="#218bff"/>
 <rect x="393.4" y="587.4" width="24.0" height="25.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvcm80: 0 / 306 done (0.0%)</title>
@@ -1491,49 +1491,49 @@
 <rect x="393.4" y="663.4" width="24.0" height="24.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msi: 0 / 295 done (0.0%)</title>
-<rect x="418.4" y="504.2" width="24.1" height="20.5" fill="#e6eaef"/>
-<rect x="417.4" y="503.2" width="26.1" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="418.4" y="504.1" width="24.1" height="20.5" fill="#e6eaef"/>
+<rect x="417.4" y="503.1" width="26.1" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cfgmgr32: 0 / 276 done (0.0%)</title>
-<rect x="444.5" y="504.2" width="22.4" height="20.5" fill="#e6eaef"/>
-<rect x="444.5" y="504.2" width="1.1" height="20.5" fill="#d4a72c"/>
-<rect x="443.5" y="503.2" width="24.4" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="444.5" y="504.1" width="22.4" height="20.5" fill="#e6eaef"/>
+<rect x="444.5" y="504.1" width="1.1" height="20.5" fill="#d4a72c"/>
+<rect x="443.5" y="503.1" width="24.4" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ndis.sys: 0 / 276 done (0.0%)</title>
-<rect x="468.9" y="504.2" width="22.4" height="20.5" fill="#e6eaef"/>
-<rect x="467.9" y="503.2" width="24.4" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="468.9" y="504.1" width="22.4" height="20.5" fill="#e6eaef"/>
+<rect x="467.9" y="503.1" width="24.4" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>NT services: 0 / 271 done (0.0%)</title>
-<rect x="493.3" y="504.2" width="22.0" height="20.5" fill="#e6eaef"/>
-<rect x="493.3" y="504.2" width="0.3" height="20.5" fill="#218bff"/>
-<rect x="492.3" y="503.2" width="24.0" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="493.4" y="504.1" width="22.0" height="20.5" fill="#e6eaef"/>
+<rect x="493.4" y="504.1" width="0.3" height="20.5" fill="#218bff"/>
+<rect x="492.4" y="503.1" width="24.0" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msasn1: 0 / 266 done (0.0%)</title>
-<rect x="517.3" y="504.2" width="21.5" height="20.5" fill="#e6eaef"/>
-<rect x="516.3" y="503.2" width="23.5" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="517.3" y="504.1" width="21.5" height="20.5" fill="#e6eaef"/>
+<rect x="516.3" y="503.1" width="23.5" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>vulkan-1: 0 / 262 done (0.0%)</title>
-<rect x="540.9" y="504.2" width="21.2" height="20.5" fill="#e6eaef"/>
-<rect x="540.9" y="504.2" width="12.1" height="20.5" fill="#d4a72c"/>
-<rect x="539.9" y="503.2" width="23.2" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="540.9" y="504.1" width="21.2" height="20.5" fill="#e6eaef"/>
+<rect x="540.9" y="504.1" width="12.1" height="20.5" fill="#d4a72c"/>
+<rect x="539.9" y="503.1" width="23.2" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wininet: 0 / 248 done (0.0%)</title>
-<rect x="564.1" y="504.2" width="19.9" height="20.5" fill="#e6eaef"/>
-<rect x="564.1" y="504.2" width="1.4" height="20.5" fill="#d4a72c"/>
-<rect x="565.4" y="504.2" width="1.0" height="20.5" fill="#218bff"/>
-<rect x="563.1" y="503.2" width="21.9" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="564.1" y="504.1" width="19.9" height="20.5" fill="#e6eaef"/>
+<rect x="564.1" y="504.1" width="1.4" height="20.5" fill="#d4a72c"/>
+<rect x="565.4" y="504.1" width="1.0" height="20.5" fill="#218bff"/>
+<rect x="563.1" y="503.1" width="21.9" height="22.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>crypt32: 10 / 246 done (4.1%)</title>
 <rect x="418.4" y="526.7" width="19.0" height="21.4" fill="#e6eaef"/>
 <rect x="418.4" y="526.7" width="0.8" height="21.4" fill="#2da44e"/>
 <rect x="419.2" y="526.7" width="3.5" height="21.4" fill="#d4a72c"/>
-<rect x="422.6" y="526.7" width="2.1" height="21.4" fill="#218bff"/>
+<rect x="422.7" y="526.7" width="2.1" height="21.4" fill="#218bff"/>
 <rect x="417.4" y="525.7" width="21.0" height="23.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wldap32: 0 / 245 done (0.0%)</title>
-<rect x="418.4" y="550.1" width="19.0" height="21.3" fill="#e6eaef"/>
-<rect x="418.4" y="550.1" width="1.4" height="21.3" fill="#d4a72c"/>
-<rect x="417.4" y="549.1" width="21.0" height="23.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="418.4" y="550.0" width="19.0" height="21.3" fill="#e6eaef"/>
+<rect x="418.4" y="550.0" width="1.4" height="21.3" fill="#d4a72c"/>
+<rect x="417.4" y="549.0" width="21.0" height="23.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>vssapi: 0 / 216 done (0.0%)</title>
 <rect x="418.4" y="573.3" width="19.0" height="18.5" fill="#e6eaef"/>
@@ -1571,13 +1571,13 @@
 <rect x="457.0" y="525.7" width="18.6" height="20.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>adsldpc: 0 / 189 done (0.0%)</title>
-<rect x="476.7" y="526.7" width="16.5" height="18.4" fill="#e6eaef"/>
-<rect x="475.7" y="525.7" width="18.5" height="20.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="476.7" y="526.7" width="16.4" height="18.4" fill="#e6eaef"/>
+<rect x="475.7" y="525.7" width="18.4" height="20.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winmm: 0 / 189 done (0.0%)</title>
-<rect x="495.1" y="526.7" width="16.5" height="18.4" fill="#e6eaef"/>
+<rect x="495.1" y="526.7" width="16.4" height="18.4" fill="#e6eaef"/>
 <rect x="495.1" y="526.7" width="5.6" height="18.4" fill="#d4a72c"/>
-<rect x="494.1" y="525.7" width="18.5" height="20.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="494.1" y="525.7" width="18.4" height="20.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winspool.drv: 0 / 188 done (0.0%)</title>
 <rect x="513.6" y="526.7" width="16.4" height="18.4" fill="#e6eaef"/>
@@ -1626,21 +1626,21 @@
 <rect x="438.4" y="620.4" width="19.3" height="17.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>fltmgr.sys: 0 / 163 done (0.0%)</title>
-<rect x="439.4" y="638.8" width="17.3" height="14.8" fill="#e6eaef"/>
-<rect x="438.4" y="637.8" width="19.3" height="16.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="439.4" y="638.8" width="17.3" height="14.9" fill="#e6eaef"/>
+<rect x="438.4" y="637.8" width="19.3" height="16.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>pdh: 0 / 163 done (0.0%)</title>
-<rect x="439.4" y="655.6" width="17.3" height="14.8" fill="#e6eaef"/>
-<rect x="439.4" y="655.6" width="0.7" height="14.8" fill="#d4a72c"/>
-<rect x="438.4" y="654.6" width="19.3" height="16.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="439.4" y="655.6" width="17.3" height="14.9" fill="#e6eaef"/>
+<rect x="439.4" y="655.6" width="0.7" height="14.9" fill="#d4a72c"/>
+<rect x="438.4" y="654.6" width="19.3" height="16.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>chakra: 0 / 160 done (0.0%)</title>
 <rect x="439.4" y="672.5" width="17.3" height="14.5" fill="#e6eaef"/>
 <rect x="438.4" y="671.5" width="19.3" height="16.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>spoolss: 0 / 151 done (0.0%)</title>
-<rect x="458.6" y="547.1" width="15.0" height="15.7" fill="#e6eaef"/>
-<rect x="457.6" y="546.1" width="17.0" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="547.1" width="15.0" height="15.7" fill="#e6eaef"/>
+<rect x="457.7" y="546.1" width="17.0" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>fwpuclnt: 0 / 146 done (0.0%)</title>
 <rect x="475.6" y="547.1" width="14.4" height="15.7" fill="#e6eaef"/>
@@ -1660,8 +1660,8 @@
 <rect x="507.4" y="546.1" width="16.0" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dx8vb: 0 / 139 done (0.0%)</title>
-<rect x="524.3" y="547.1" width="13.6" height="15.7" fill="#e6eaef"/>
-<rect x="523.3" y="546.1" width="15.6" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="524.4" y="547.1" width="13.6" height="15.7" fill="#e6eaef"/>
+<rect x="523.4" y="546.1" width="15.6" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ncrypt: 0 / 138 done (0.0%)</title>
 <rect x="540.0" y="547.1" width="13.5" height="15.7" fill="#e6eaef"/>
@@ -1682,41 +1682,41 @@
 <rect x="569.8" y="546.1" width="15.2" height="17.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mprapi: 0 / 132 done (0.0%)</title>
-<rect x="458.6" y="564.8" width="14.1" height="14.4" fill="#e6eaef"/>
-<rect x="457.6" y="563.8" width="16.1" height="16.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="564.8" width="14.1" height="14.4" fill="#e6eaef"/>
+<rect x="457.7" y="563.8" width="16.1" height="16.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>rasapi32: 0 / 128 done (0.0%)</title>
-<rect x="458.6" y="581.2" width="14.1" height="13.9" fill="#e6eaef"/>
-<rect x="457.6" y="580.2" width="16.1" height="15.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="581.2" width="14.1" height="13.9" fill="#e6eaef"/>
+<rect x="457.7" y="580.2" width="16.1" height="15.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>shdocvw: 0 / 128 done (0.0%)</title>
-<rect x="458.6" y="597.1" width="14.1" height="13.9" fill="#e6eaef"/>
-<rect x="457.6" y="596.1" width="16.1" height="15.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="597.0" width="14.1" height="13.9" fill="#e6eaef"/>
+<rect x="457.7" y="596.0" width="16.1" height="15.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>twinapi.appcore: 0 / 127 done (0.0%)</title>
-<rect x="458.6" y="613.0" width="14.1" height="13.8" fill="#e6eaef"/>
-<rect x="457.6" y="612.0" width="16.1" height="15.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="612.9" width="14.1" height="13.8" fill="#e6eaef"/>
+<rect x="457.7" y="611.9" width="16.1" height="15.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wintrust: 0 / 127 done (0.0%)</title>
-<rect x="458.6" y="628.7" width="14.1" height="13.8" fill="#e6eaef"/>
-<rect x="458.6" y="628.7" width="1.3" height="13.8" fill="#d4a72c"/>
-<rect x="457.6" y="627.7" width="16.1" height="15.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="628.7" width="14.1" height="13.8" fill="#e6eaef"/>
+<rect x="458.7" y="628.7" width="1.3" height="13.8" fill="#d4a72c"/>
+<rect x="457.7" y="627.7" width="16.1" height="15.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>uxtheme: 0 / 123 done (0.0%)</title>
-<rect x="458.6" y="644.5" width="14.1" height="13.3" fill="#e6eaef"/>
-<rect x="458.6" y="644.5" width="3.3" height="13.3" fill="#d4a72c"/>
-<rect x="462.0" y="644.5" width="0.9" height="13.3" fill="#218bff"/>
-<rect x="457.6" y="643.5" width="16.1" height="15.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="644.4" width="14.1" height="13.3" fill="#e6eaef"/>
+<rect x="458.7" y="644.4" width="3.3" height="13.3" fill="#d4a72c"/>
+<rect x="462.0" y="644.4" width="0.9" height="13.3" fill="#218bff"/>
+<rect x="457.7" y="643.4" width="16.1" height="15.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mscoree: 0 / 118 done (0.0%)</title>
-<rect x="458.6" y="659.7" width="14.1" height="12.6" fill="#e6eaef"/>
-<rect x="458.6" y="659.7" width="0.1" height="12.6" fill="#d4a72c"/>
-<rect x="457.6" y="658.7" width="16.1" height="14.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="659.7" width="14.1" height="12.6" fill="#e6eaef"/>
+<rect x="458.7" y="659.7" width="0.1" height="12.6" fill="#d4a72c"/>
+<rect x="457.7" y="658.7" width="16.1" height="14.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>windowscodecs: 0 / 118 done (0.0%)</title>
-<rect x="458.6" y="674.4" width="14.1" height="12.6" fill="#e6eaef"/>
-<rect x="458.6" y="674.4" width="0.2" height="12.6" fill="#d4a72c"/>
-<rect x="457.6" y="673.4" width="16.1" height="14.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="458.7" y="674.4" width="14.1" height="12.6" fill="#e6eaef"/>
+<rect x="458.7" y="674.4" width="0.2" height="12.6" fill="#d4a72c"/>
+<rect x="457.7" y="673.4" width="16.1" height="14.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>clusapi: 0 / 115 done (0.0%)</title>
 <rect x="474.7" y="564.8" width="12.6" height="13.7" fill="#e6eaef"/>
@@ -1802,8 +1802,8 @@
 <rect x="517.5" y="579.5" width="14.3" height="12.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msdrm: 0 / 89 done (0.0%)</title>
-<rect x="532.8" y="580.5" width="11.8" height="10.8" fill="#e6eaef"/>
-<rect x="531.8" y="579.5" width="13.8" height="12.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.8" y="580.5" width="11.9" height="10.8" fill="#e6eaef"/>
+<rect x="531.8" y="579.5" width="13.9" height="12.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mf: 0 / 86 done (0.0%)</title>
 <rect x="546.6" y="580.5" width="11.4" height="10.8" fill="#e6eaef"/>
@@ -1887,53 +1887,53 @@
 <rect x="573.5" y="592.3" width="11.5" height="11.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wminet_utils: 0 / 65 done (0.0%)</title>
-<rect x="502.2" y="604.6" width="10.3" height="8.5" fill="#e6eaef"/>
-<rect x="501.2" y="603.6" width="12.3" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="502.2" y="604.5" width="10.3" height="8.5" fill="#e6eaef"/>
+<rect x="501.2" y="603.5" width="12.3" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>bthprops.cpl: 0 / 64 done (0.0%)</title>
-<rect x="514.6" y="604.6" width="10.2" height="8.5" fill="#e6eaef"/>
-<rect x="514.6" y="604.6" width="9.8" height="8.5" fill="#d4a72c"/>
-<rect x="513.6" y="603.6" width="12.2" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="514.6" y="604.5" width="10.2" height="8.5" fill="#e6eaef"/>
+<rect x="514.6" y="604.5" width="9.8" height="8.5" fill="#d4a72c"/>
+<rect x="513.6" y="603.5" width="12.2" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cng.sys: 0 / 63 done (0.0%)</title>
-<rect x="526.7" y="604.6" width="10.0" height="8.5" fill="#e6eaef"/>
-<rect x="525.7" y="603.6" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="526.7" y="604.5" width="10.0" height="8.5" fill="#e6eaef"/>
+<rect x="525.7" y="603.5" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>localspl: 0 / 63 done (0.0%)</title>
-<rect x="538.7" y="604.6" width="10.0" height="8.5" fill="#e6eaef"/>
-<rect x="537.7" y="603.6" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="538.7" y="604.5" width="10.0" height="8.5" fill="#e6eaef"/>
+<rect x="537.7" y="603.5" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winscard: 0 / 63 done (0.0%)</title>
-<rect x="550.7" y="604.6" width="10.0" height="8.5" fill="#e6eaef"/>
-<rect x="550.7" y="604.6" width="10.0" height="8.5" fill="#d4a72c"/>
-<rect x="549.7" y="603.6" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="550.7" y="604.5" width="10.0" height="8.5" fill="#e6eaef"/>
+<rect x="550.7" y="604.5" width="10.0" height="8.5" fill="#d4a72c"/>
+<rect x="549.7" y="603.5" width="12.0" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>bcrypt: 0 / 62 done (0.0%)</title>
-<rect x="562.6" y="604.6" width="9.8" height="8.5" fill="#e6eaef"/>
-<rect x="562.6" y="604.6" width="0.5" height="8.5" fill="#d4a72c"/>
-<rect x="563.1" y="604.6" width="4.4" height="8.5" fill="#218bff"/>
-<rect x="561.6" y="603.6" width="11.8" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="562.6" y="604.5" width="9.8" height="8.5" fill="#e6eaef"/>
+<rect x="562.6" y="604.5" width="0.5" height="8.5" fill="#d4a72c"/>
+<rect x="563.1" y="604.5" width="4.4" height="8.5" fill="#218bff"/>
+<rect x="561.6" y="603.5" width="11.8" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>srvcli: 0 / 61 done (0.0%)</title>
-<rect x="574.4" y="604.6" width="9.6" height="8.5" fill="#e6eaef"/>
-<rect x="573.4" y="603.6" width="11.6" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="574.4" y="604.5" width="9.6" height="8.5" fill="#e6eaef"/>
+<rect x="573.4" y="603.5" width="11.6" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>npptools: 0 / 60 done (0.0%)</title>
-<rect x="502.2" y="615.1" width="8.8" height="9.0" fill="#e6eaef"/>
-<rect x="501.2" y="614.1" width="10.8" height="11.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="502.2" y="615.0" width="8.8" height="9.0" fill="#e6eaef"/>
+<rect x="501.2" y="614.0" width="10.8" height="11.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dxgi: 3 / 59 done (5.1%)</title>
-<rect x="502.2" y="626.1" width="8.8" height="8.8" fill="#e6eaef"/>
-<rect x="502.2" y="626.1" width="0.4" height="8.8" fill="#2da44e"/>
-<rect x="502.7" y="626.1" width="0.4" height="8.8" fill="#d4a72c"/>
-<rect x="503.1" y="626.1" width="7.9" height="8.8" fill="#218bff"/>
-<rect x="501.2" y="625.1" width="10.8" height="10.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="502.2" y="626.1" width="8.8" height="8.9" fill="#e6eaef"/>
+<rect x="502.2" y="626.1" width="0.4" height="8.9" fill="#2da44e"/>
+<rect x="502.7" y="626.1" width="0.4" height="8.9" fill="#d4a72c"/>
+<rect x="503.1" y="626.1" width="7.9" height="8.9" fill="#218bff"/>
+<rect x="501.2" y="625.1" width="10.8" height="10.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dcomp: 0 / 57 done (0.0%)</title>
-<rect x="502.2" y="637.0" width="8.8" height="8.5" fill="#e6eaef"/>
-<rect x="502.2" y="637.0" width="1.9" height="8.5" fill="#d4a72c"/>
-<rect x="504.1" y="637.0" width="5.4" height="8.5" fill="#218bff"/>
-<rect x="501.2" y="636.0" width="10.8" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="502.2" y="636.9" width="8.8" height="8.5" fill="#e6eaef"/>
+<rect x="502.2" y="636.9" width="1.9" height="8.5" fill="#d4a72c"/>
+<rect x="504.1" y="636.9" width="5.4" height="8.5" fill="#218bff"/>
+<rect x="501.2" y="635.9" width="10.8" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>odbccp32: 0 / 57 done (0.0%)</title>
 <rect x="502.2" y="647.4" width="8.8" height="8.5" fill="#e6eaef"/>
@@ -1952,116 +1952,116 @@
 <rect x="501.2" y="677.7" width="10.8" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>rtutils: 0 / 56 done (0.0%)</title>
-<rect x="513.1" y="615.1" width="8.9" height="8.2" fill="#e6eaef"/>
-<rect x="512.1" y="614.1" width="10.9" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="615.0" width="8.9" height="8.2" fill="#e6eaef"/>
+<rect x="512.0" y="614.0" width="10.9" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>tdi.sys: 0 / 56 done (0.0%)</title>
-<rect x="524.0" y="615.1" width="8.9" height="8.2" fill="#e6eaef"/>
-<rect x="523.0" y="614.1" width="10.9" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="524.0" y="615.0" width="8.9" height="8.2" fill="#e6eaef"/>
+<rect x="523.0" y="614.0" width="10.9" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>atl80: 0 / 53 done (0.0%)</title>
-<rect x="534.9" y="615.1" width="8.3" height="8.2" fill="#e6eaef"/>
-<rect x="533.9" y="614.1" width="10.3" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="534.9" y="615.0" width="8.3" height="8.2" fill="#e6eaef"/>
+<rect x="533.9" y="614.0" width="10.3" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>glu32: 0 / 53 done (0.0%)</title>
-<rect x="545.3" y="615.1" width="8.3" height="8.2" fill="#e6eaef"/>
-<rect x="544.3" y="614.1" width="10.3" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="545.2" y="615.0" width="8.3" height="8.2" fill="#e6eaef"/>
+<rect x="544.2" y="614.0" width="10.3" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>atl: 0 / 52 done (0.0%)</title>
-<rect x="555.6" y="615.1" width="8.1" height="8.2" fill="#e6eaef"/>
-<rect x="554.6" y="614.1" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="555.6" y="615.0" width="8.1" height="8.2" fill="#e6eaef"/>
+<rect x="554.6" y="614.0" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>atl100: 0 / 52 done (0.0%)</title>
-<rect x="565.7" y="615.1" width="8.1" height="8.2" fill="#e6eaef"/>
-<rect x="564.7" y="614.1" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="565.7" y="615.0" width="8.1" height="8.2" fill="#e6eaef"/>
+<rect x="564.7" y="614.0" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>atl110: 0 / 52 done (0.0%)</title>
-<rect x="575.9" y="615.1" width="8.1" height="8.2" fill="#e6eaef"/>
-<rect x="574.9" y="614.1" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="575.9" y="615.0" width="8.1" height="8.2" fill="#e6eaef"/>
+<rect x="574.9" y="614.0" width="10.1" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>atl90: 0 / 52 done (0.0%)</title>
-<rect x="513.1" y="625.3" width="7.5" height="8.9" fill="#e6eaef"/>
-<rect x="512.1" y="624.3" width="9.5" height="10.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="625.2" width="7.5" height="8.9" fill="#e6eaef"/>
+<rect x="512.0" y="624.2" width="9.5" height="10.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wtsapi32: 4 / 52 done (7.7%)</title>
-<rect x="513.1" y="636.2" width="7.5" height="8.9" fill="#e6eaef"/>
-<rect x="513.1" y="636.2" width="0.6" height="8.9" fill="#2da44e"/>
-<rect x="513.7" y="636.2" width="0.6" height="8.9" fill="#d4a72c"/>
-<rect x="512.1" y="635.2" width="9.5" height="10.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="636.1" width="7.5" height="8.9" fill="#e6eaef"/>
+<rect x="513.0" y="636.1" width="0.6" height="8.9" fill="#2da44e"/>
+<rect x="513.6" y="636.1" width="0.6" height="8.9" fill="#d4a72c"/>
+<rect x="512.0" y="635.1" width="9.5" height="10.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cldapi: 0 / 51 done (0.0%)</title>
-<rect x="513.1" y="647.0" width="7.5" height="8.6" fill="#e6eaef"/>
-<rect x="512.1" y="646.0" width="9.5" height="10.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="647.0" width="7.5" height="8.7" fill="#e6eaef"/>
+<rect x="512.0" y="646.0" width="9.5" height="10.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>irprops.cpl: 0 / 51 done (0.0%)</title>
-<rect x="513.1" y="657.7" width="7.5" height="8.6" fill="#e6eaef"/>
-<rect x="512.1" y="656.7" width="9.5" height="10.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="657.6" width="7.5" height="8.7" fill="#e6eaef"/>
+<rect x="512.0" y="656.6" width="9.5" height="10.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>feclient: 0 / 50 done (0.0%)</title>
-<rect x="513.1" y="668.3" width="7.5" height="8.4" fill="#e6eaef"/>
-<rect x="512.1" y="667.3" width="9.5" height="10.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="513.0" y="668.3" width="7.5" height="8.5" fill="#e6eaef"/>
+<rect x="512.0" y="667.3" width="9.5" height="10.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winhttp: 2 / 49 done (4.1%)</title>
-<rect x="513.1" y="678.8" width="7.5" height="8.2" fill="#e6eaef"/>
-<rect x="513.1" y="678.8" width="0.3" height="8.2" fill="#2da44e"/>
+<rect x="513.0" y="678.8" width="7.5" height="8.2" fill="#e6eaef"/>
+<rect x="513.0" y="678.8" width="0.3" height="8.2" fill="#2da44e"/>
 <rect x="513.4" y="678.8" width="2.3" height="8.2" fill="#d4a72c"/>
 <rect x="515.7" y="678.8" width="2.6" height="8.2" fill="#218bff"/>
-<rect x="512.1" y="677.8" width="9.5" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="512.0" y="677.8" width="9.5" height="10.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cryptui: 0 / 48 done (0.0%)</title>
-<rect x="522.6" y="625.3" width="7.3" height="8.3" fill="#e6eaef"/>
-<rect x="522.6" y="625.3" width="7.0" height="8.3" fill="#d4a72c"/>
-<rect x="521.6" y="624.3" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="522.6" y="625.2" width="7.3" height="8.3" fill="#e6eaef"/>
+<rect x="522.6" y="625.2" width="7.0" height="8.3" fill="#d4a72c"/>
+<rect x="521.6" y="624.2" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>scsiport.sys: 0 / 48 done (0.0%)</title>
-<rect x="531.9" y="625.3" width="7.3" height="8.3" fill="#e6eaef"/>
-<rect x="530.9" y="624.3" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="531.9" y="625.2" width="7.3" height="8.3" fill="#e6eaef"/>
+<rect x="530.9" y="624.2" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wsnmp32: 0 / 48 done (0.0%)</title>
-<rect x="541.2" y="625.3" width="7.3" height="8.3" fill="#e6eaef"/>
-<rect x="540.2" y="624.3" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="625.2" width="7.3" height="8.3" fill="#e6eaef"/>
+<rect x="540.1" y="624.2" width="9.3" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvfw32: 0 / 47 done (0.0%)</title>
-<rect x="550.5" y="625.3" width="7.1" height="8.3" fill="#e6eaef"/>
-<rect x="549.5" y="624.3" width="9.1" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="550.4" y="625.2" width="7.1" height="8.3" fill="#e6eaef"/>
+<rect x="549.4" y="624.2" width="9.1" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>query: 0 / 46 done (0.0%)</title>
-<rect x="559.5" y="625.3" width="6.9" height="8.3" fill="#e6eaef"/>
-<rect x="558.5" y="624.3" width="8.9" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="559.5" y="625.2" width="6.9" height="8.3" fill="#e6eaef"/>
+<rect x="558.5" y="624.2" width="8.9" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wevtapi: 0 / 46 done (0.0%)</title>
-<rect x="568.4" y="625.3" width="6.9" height="8.3" fill="#e6eaef"/>
-<rect x="568.4" y="625.3" width="6.9" height="8.3" fill="#d4a72c"/>
-<rect x="567.4" y="624.3" width="8.9" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="568.4" y="625.2" width="6.9" height="8.3" fill="#e6eaef"/>
+<rect x="568.4" y="625.2" width="6.9" height="8.3" fill="#d4a72c"/>
+<rect x="567.4" y="624.2" width="8.9" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dhcpcsvc: 1 / 45 done (2.2%)</title>
-<rect x="577.3" y="625.3" width="6.7" height="8.3" fill="#e6eaef"/>
-<rect x="577.3" y="625.3" width="0.1" height="8.3" fill="#2da44e"/>
-<rect x="577.5" y="625.3" width="0.3" height="8.3" fill="#218bff"/>
-<rect x="576.3" y="624.3" width="8.7" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="577.3" y="625.2" width="6.7" height="8.3" fill="#e6eaef"/>
+<rect x="577.3" y="625.2" width="0.1" height="8.3" fill="#2da44e"/>
+<rect x="577.4" y="625.2" width="0.3" height="8.3" fill="#218bff"/>
+<rect x="576.3" y="624.2" width="8.7" height="10.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dwrite: 41 / 45 done (91.1%)</title>
-<rect x="522.6" y="635.6" width="8.0" height="7.0" fill="#e6eaef"/>
-<rect x="522.6" y="635.6" width="7.3" height="7.0" fill="#2da44e"/>
-<rect x="529.9" y="635.6" width="0.7" height="7.0" fill="#218bff"/>
-<rect x="521.6" y="634.6" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="522.6" y="635.5" width="8.0" height="7.0" fill="#e6eaef"/>
+<rect x="522.6" y="635.5" width="7.3" height="7.0" fill="#2da44e"/>
+<rect x="529.9" y="635.5" width="0.7" height="7.0" fill="#218bff"/>
+<rect x="521.6" y="634.5" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>snmpapi: 0 / 45 done (0.0%)</title>
-<rect x="522.6" y="644.6" width="8.0" height="7.0" fill="#e6eaef"/>
-<rect x="521.6" y="643.6" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="522.6" y="644.5" width="8.0" height="7.0" fill="#e6eaef"/>
+<rect x="521.6" y="643.5" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wmi: 0 / 45 done (0.0%)</title>
-<rect x="522.6" y="653.6" width="8.0" height="7.0" fill="#e6eaef"/>
-<rect x="521.6" y="652.6" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="522.6" y="653.5" width="8.0" height="7.0" fill="#e6eaef"/>
+<rect x="521.6" y="652.5" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wsdapi: 0 / 45 done (0.0%)</title>
 <rect x="522.6" y="662.5" width="8.0" height="7.0" fill="#e6eaef"/>
 <rect x="521.6" y="661.5" width="10.0" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>hid: 0 / 44 done (0.0%)</title>
-<rect x="522.6" y="671.5" width="8.0" height="6.8" fill="#e6eaef"/>
-<rect x="522.6" y="671.5" width="8.0" height="6.8" fill="#d4a72c"/>
-<rect x="521.6" y="670.5" width="10.0" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="522.6" y="671.4" width="8.0" height="6.8" fill="#e6eaef"/>
+<rect x="522.6" y="671.4" width="8.0" height="6.8" fill="#d4a72c"/>
+<rect x="521.6" y="670.4" width="10.0" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ktmw32: 0 / 44 done (0.0%)</title>
 <rect x="522.6" y="680.2" width="8.0" height="6.8" fill="#e6eaef"/>
@@ -2069,185 +2069,186 @@
 <rect x="521.6" y="679.2" width="10.0" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msacm32: 0 / 44 done (0.0%)</title>
-<rect x="532.6" y="635.6" width="7.1" height="7.6" fill="#e6eaef"/>
-<rect x="531.6" y="634.6" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="635.5" width="7.1" height="7.6" fill="#e6eaef"/>
+<rect x="531.6" y="634.5" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>usp10: 0 / 44 done (0.0%)</title>
-<rect x="541.8" y="635.6" width="7.1" height="7.6" fill="#e6eaef"/>
-<rect x="541.8" y="635.6" width="7.1" height="7.6" fill="#d4a72c"/>
-<rect x="540.8" y="634.6" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.7" y="635.5" width="7.1" height="7.6" fill="#e6eaef"/>
+<rect x="541.7" y="635.5" width="7.1" height="7.6" fill="#d4a72c"/>
+<rect x="540.7" y="634.5" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wintab32: 0 / 44 done (0.0%)</title>
-<rect x="550.9" y="635.6" width="7.1" height="7.6" fill="#e6eaef"/>
-<rect x="549.9" y="634.6" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="550.9" y="635.5" width="7.1" height="7.6" fill="#e6eaef"/>
+<rect x="549.9" y="634.5" width="9.1" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>authz: 0 / 42 done (0.0%)</title>
-<rect x="560.0" y="635.6" width="6.7" height="7.6" fill="#e6eaef"/>
-<rect x="560.0" y="635.6" width="6.7" height="7.6" fill="#d4a72c"/>
-<rect x="559.0" y="634.6" width="8.7" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="560.0" y="635.5" width="6.7" height="7.6" fill="#e6eaef"/>
+<rect x="560.0" y="635.5" width="6.7" height="7.6" fill="#d4a72c"/>
+<rect x="559.0" y="634.5" width="8.7" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wimgapi: 0 / 42 done (0.0%)</title>
-<rect x="568.8" y="635.6" width="6.7" height="7.6" fill="#e6eaef"/>
-<rect x="567.8" y="634.6" width="8.7" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="568.7" y="635.5" width="6.7" height="7.6" fill="#e6eaef"/>
+<rect x="567.7" y="634.5" width="8.7" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>slc: 0 / 41 done (0.0%)</title>
-<rect x="577.5" y="635.6" width="6.5" height="7.6" fill="#e6eaef"/>
-<rect x="576.5" y="634.6" width="8.5" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="577.5" y="635.5" width="6.5" height="7.6" fill="#e6eaef"/>
+<rect x="576.5" y="634.5" width="8.5" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wlanapi: 0 / 39 done (0.0%)</title>
-<rect x="532.6" y="645.2" width="6.6" height="7.1" fill="#e6eaef"/>
-<rect x="531.6" y="644.2" width="8.6" height="9.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="645.1" width="6.5" height="7.1" fill="#e6eaef"/>
+<rect x="531.6" y="644.1" width="8.5" height="9.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>dxva2: 0 / 38 done (0.0%)</title>
-<rect x="532.6" y="654.3" width="6.6" height="6.8" fill="#e6eaef"/>
-<rect x="532.6" y="654.3" width="6.6" height="6.8" fill="#d4a72c"/>
-<rect x="531.6" y="653.3" width="8.6" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="654.2" width="6.5" height="6.9" fill="#e6eaef"/>
+<rect x="532.6" y="654.2" width="6.5" height="6.9" fill="#d4a72c"/>
+<rect x="531.6" y="653.2" width="8.5" height="8.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>httpapi: 0 / 37 done (0.0%)</title>
-<rect x="532.6" y="663.2" width="6.6" height="6.6" fill="#e6eaef"/>
-<rect x="532.6" y="663.2" width="6.6" height="6.6" fill="#d4a72c"/>
-<rect x="531.6" y="662.2" width="8.6" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="663.1" width="6.5" height="6.6" fill="#e6eaef"/>
+<rect x="532.6" y="663.1" width="6.5" height="6.6" fill="#d4a72c"/>
+<rect x="531.6" y="662.1" width="8.5" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>odbccu32: 0 / 37 done (0.0%)</title>
-<rect x="532.6" y="671.8" width="6.6" height="6.6" fill="#e6eaef"/>
-<rect x="531.6" y="670.8" width="8.6" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="671.7" width="6.5" height="6.6" fill="#e6eaef"/>
+<rect x="531.6" y="670.7" width="8.5" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>rtworkq: 0 / 37 done (0.0%)</title>
-<rect x="532.6" y="680.4" width="6.6" height="6.6" fill="#e6eaef"/>
-<rect x="531.6" y="679.4" width="8.6" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="532.6" y="680.4" width="6.5" height="6.6" fill="#e6eaef"/>
+<rect x="531.6" y="679.4" width="8.5" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>schannel: 0 / 37 done (0.0%)</title>
-<rect x="541.2" y="645.2" width="6.2" height="7.0" fill="#e6eaef"/>
-<rect x="540.2" y="644.2" width="8.2" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="645.1" width="6.2" height="7.0" fill="#e6eaef"/>
+<rect x="540.1" y="644.1" width="8.2" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>rasdlg: 0 / 36 done (0.0%)</title>
-<rect x="541.2" y="654.2" width="6.2" height="6.8" fill="#e6eaef"/>
-<rect x="540.2" y="653.2" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="654.1" width="6.2" height="6.8" fill="#e6eaef"/>
+<rect x="540.1" y="653.1" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>security: 0 / 36 done (0.0%)</title>
-<rect x="541.2" y="663.0" width="6.2" height="6.8" fill="#e6eaef"/>
-<rect x="540.2" y="662.0" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="662.9" width="6.2" height="6.8" fill="#e6eaef"/>
+<rect x="540.1" y="661.9" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>utildll: 0 / 36 done (0.0%)</title>
-<rect x="541.2" y="671.7" width="6.2" height="6.8" fill="#e6eaef"/>
-<rect x="540.2" y="670.7" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="671.7" width="6.2" height="6.8" fill="#e6eaef"/>
+<rect x="540.1" y="670.7" width="8.2" height="8.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mscat32: 0 / 35 done (0.0%)</title>
-<rect x="541.2" y="680.5" width="6.2" height="6.5" fill="#e6eaef"/>
-<rect x="540.2" y="679.5" width="8.2" height="8.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="541.1" y="680.5" width="6.2" height="6.5" fill="#e6eaef"/>
+<rect x="540.1" y="679.5" width="8.2" height="8.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ntprint: 0 / 35 done (0.0%)</title>
-<rect x="549.4" y="645.2" width="7.2" height="5.6" fill="#e6eaef"/>
-<rect x="548.4" y="644.2" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="549.3" y="645.1" width="7.2" height="5.6" fill="#e6eaef"/>
+<rect x="548.3" y="644.1" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>powrprof: 1 / 35 done (2.9%)</title>
-<rect x="558.5" y="645.2" width="7.2" height="5.6" fill="#e6eaef"/>
-<rect x="558.5" y="645.2" width="0.2" height="5.6" fill="#2da44e"/>
-<rect x="558.7" y="645.2" width="1.8" height="5.6" fill="#d4a72c"/>
-<rect x="560.6" y="645.2" width="0.4" height="5.6" fill="#218bff"/>
-<rect x="557.5" y="644.2" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="558.5" y="645.1" width="7.2" height="5.6" fill="#e6eaef"/>
+<rect x="558.5" y="645.1" width="0.2" height="5.6" fill="#2da44e"/>
+<rect x="558.7" y="645.1" width="1.8" height="5.6" fill="#d4a72c"/>
+<rect x="560.5" y="645.1" width="0.4" height="5.6" fill="#218bff"/>
+<rect x="557.5" y="644.1" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>usbd.sys: 0 / 35 done (0.0%)</title>
-<rect x="567.7" y="645.2" width="7.2" height="5.6" fill="#e6eaef"/>
-<rect x="566.7" y="644.2" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="567.6" y="645.1" width="7.2" height="5.6" fill="#e6eaef"/>
+<rect x="566.6" y="644.1" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wmasf: 0 / 35 done (0.0%)</title>
-<rect x="576.8" y="645.2" width="7.2" height="5.6" fill="#e6eaef"/>
-<rect x="575.8" y="644.2" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="576.8" y="645.1" width="7.2" height="5.6" fill="#e6eaef"/>
+<rect x="575.8" y="644.1" width="9.2" height="7.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msctf: 0 / 34 done (0.0%)</title>
-<rect x="549.4" y="652.8" width="5.3" height="7.2" fill="#e6eaef"/>
-<rect x="548.4" y="651.8" width="7.3" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="549.3" y="652.7" width="5.4" height="7.2" fill="#e6eaef"/>
+<rect x="548.3" y="651.7" width="7.4" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>tdh: 0 / 34 done (0.0%)</title>
-<rect x="549.4" y="662.1" width="5.3" height="7.2" fill="#e6eaef"/>
-<rect x="549.4" y="662.1" width="5.3" height="7.2" fill="#d4a72c"/>
-<rect x="548.4" y="661.1" width="7.3" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="549.3" y="661.9" width="5.4" height="7.2" fill="#e6eaef"/>
+<rect x="549.3" y="661.9" width="5.4" height="7.2" fill="#d4a72c"/>
+<rect x="548.3" y="660.9" width="7.4" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+</g>
+<g><title>comdlg32: 5 / 33 done (15.2%)</title>
+<rect x="549.3" y="671.1" width="5.4" height="6.9" fill="#e6eaef"/>
+<rect x="549.3" y="671.1" width="0.8" height="6.9" fill="#2da44e"/>
+<rect x="550.1" y="671.1" width="3.2" height="6.9" fill="#d4a72c"/>
+<rect x="553.3" y="671.1" width="0.8" height="6.9" fill="#218bff"/>
+<rect x="548.3" y="670.1" width="7.4" height="8.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>coml2: 0 / 33 done (0.0%)</title>
-<rect x="549.4" y="671.3" width="5.3" height="7.0" fill="#e6eaef"/>
-<rect x="548.4" y="670.3" width="7.3" height="9.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="549.3" y="680.1" width="5.4" height="6.9" fill="#e6eaef"/>
+<rect x="548.3" y="679.1" width="7.4" height="8.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>hidparse.sys: 0 / 32 done (0.0%)</title>
-<rect x="549.4" y="680.3" width="5.3" height="6.7" fill="#e6eaef"/>
-<rect x="548.4" y="679.3" width="7.3" height="8.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="652.7" width="5.4" height="6.6" fill="#e6eaef"/>
+<rect x="555.6" y="651.7" width="7.4" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>hlink: 0 / 32 done (0.0%)</title>
-<rect x="556.7" y="652.8" width="5.4" height="6.6" fill="#e6eaef"/>
-<rect x="555.7" y="651.8" width="7.4" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="564.0" y="652.7" width="5.4" height="6.6" fill="#e6eaef"/>
+<rect x="563.0" y="651.7" width="7.4" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mswsock: 1 / 32 done (3.1%)</title>
-<rect x="564.2" y="652.8" width="5.4" height="6.6" fill="#e6eaef"/>
-<rect x="564.2" y="652.8" width="0.2" height="6.6" fill="#2da44e"/>
-<rect x="564.3" y="652.8" width="0.2" height="6.6" fill="#218bff"/>
-<rect x="563.2" y="651.8" width="7.4" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="571.4" y="652.7" width="5.4" height="6.6" fill="#e6eaef"/>
+<rect x="571.4" y="652.7" width="0.2" height="6.6" fill="#2da44e"/>
+<rect x="571.6" y="652.7" width="0.2" height="6.6" fill="#218bff"/>
+<rect x="570.4" y="651.7" width="7.4" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>coremessaging: 0 / 31 done (0.0%)</title>
-<rect x="571.6" y="652.8" width="5.2" height="6.6" fill="#e6eaef"/>
-<rect x="571.6" y="652.8" width="4.9" height="6.6" fill="#d4a72c"/>
-<rect x="570.6" y="651.8" width="7.2" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="578.8" y="652.7" width="5.2" height="6.6" fill="#e6eaef"/>
+<rect x="578.8" y="652.7" width="4.8" height="6.6" fill="#d4a72c"/>
+<rect x="577.8" y="651.7" width="7.2" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>drmclien: 0 / 31 done (0.0%)</title>
-<rect x="578.8" y="652.8" width="5.2" height="6.6" fill="#e6eaef"/>
-<rect x="577.8" y="651.8" width="7.2" height="8.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="661.3" width="6.8" height="5.0" fill="#e6eaef"/>
+<rect x="555.6" y="660.3" width="8.8" height="7.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ninput: 0 / 31 done (0.0%)</title>
-<rect x="556.7" y="661.4" width="6.7" height="5.1" fill="#e6eaef"/>
-<rect x="556.7" y="661.4" width="5.7" height="5.1" fill="#d4a72c"/>
-<rect x="555.7" y="660.4" width="8.7" height="7.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="668.4" width="6.8" height="5.0" fill="#e6eaef"/>
+<rect x="556.6" y="668.4" width="5.7" height="5.0" fill="#d4a72c"/>
+<rect x="555.6" y="667.4" width="8.8" height="7.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>cryptext: 0 / 30 done (0.0%)</title>
-<rect x="556.7" y="668.5" width="6.7" height="4.8" fill="#e6eaef"/>
-<rect x="555.7" y="667.5" width="8.7" height="6.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="675.4" width="6.8" height="4.8" fill="#e6eaef"/>
+<rect x="555.6" y="674.4" width="8.8" height="6.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>d3d10_1: 0 / 30 done (0.0%)</title>
-<rect x="556.7" y="675.3" width="6.7" height="4.8" fill="#e6eaef"/>
-<rect x="555.7" y="674.3" width="8.7" height="6.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="556.6" y="682.2" width="6.8" height="4.8" fill="#e6eaef"/>
+<rect x="555.6" y="681.2" width="8.8" height="6.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mssign32: 0 / 30 done (0.0%)</title>
-<rect x="556.7" y="682.2" width="6.7" height="4.8" fill="#e6eaef"/>
-<rect x="555.7" y="681.2" width="8.7" height="6.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="565.4" y="661.3" width="5.0" height="6.5" fill="#e6eaef"/>
+<rect x="564.4" y="660.3" width="7.0" height="8.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>d3d10: 0 / 29 done (0.0%)</title>
-<rect x="565.5" y="661.4" width="4.8" height="6.4" fill="#e6eaef"/>
-<rect x="564.5" y="660.4" width="6.8" height="8.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="572.4" y="661.3" width="4.8" height="6.5" fill="#e6eaef"/>
+<rect x="571.4" y="660.3" width="6.8" height="8.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>d3dcompiler_47: 0 / 29 done (0.0%)</title>
-<rect x="572.3" y="661.4" width="4.8" height="6.4" fill="#e6eaef"/>
-<rect x="572.3" y="661.4" width="4.8" height="6.4" fill="#d4a72c"/>
-<rect x="571.3" y="660.4" width="6.8" height="8.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="579.2" y="661.3" width="4.8" height="6.5" fill="#e6eaef"/>
+<rect x="579.2" y="661.3" width="4.8" height="6.5" fill="#d4a72c"/>
+<rect x="578.2" y="660.3" width="6.8" height="8.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>fltlib: 0 / 29 done (0.0%)</title>
-<rect x="579.2" y="661.4" width="4.8" height="6.4" fill="#e6eaef"/>
-<rect x="578.2" y="660.4" width="6.8" height="8.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="565.4" y="669.8" width="6.9" height="4.5" fill="#e6eaef"/>
+<rect x="564.4" y="668.8" width="8.9" height="6.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>wldp: 0 / 29 done (0.0%)</title>
-<rect x="565.5" y="669.9" width="6.9" height="4.5" fill="#e6eaef"/>
-<rect x="564.5" y="668.9" width="8.9" height="6.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="565.4" y="676.3" width="6.9" height="4.5" fill="#e6eaef"/>
+<rect x="564.4" y="675.3" width="8.9" height="6.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>activeds: 0 / 28 done (0.0%)</title>
-<rect x="565.5" y="676.4" width="6.9" height="4.3" fill="#e6eaef"/>
-<rect x="565.5" y="676.4" width="5.9" height="4.3" fill="#d4a72c"/>
-<rect x="564.5" y="675.4" width="8.9" height="6.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
-</g>
-<g><title>comdlg32: 5 / 28 done (17.9%)</title>
-<rect x="565.5" y="682.7" width="6.9" height="4.3" fill="#e6eaef"/>
-<rect x="565.5" y="682.7" width="1.2" height="4.3" fill="#2da44e"/>
-<rect x="566.7" y="682.7" width="4.9" height="4.3" fill="#d4a72c"/>
-<rect x="564.5" y="681.7" width="8.9" height="6.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="565.4" y="682.8" width="6.9" height="4.2" fill="#e6eaef"/>
+<rect x="565.4" y="682.8" width="6.0" height="4.2" fill="#d4a72c"/>
+<rect x="564.4" y="681.8" width="8.9" height="6.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ddraw: 0 / 28 done (0.0%)</title>
-<rect x="574.3" y="669.9" width="3.8" height="7.6" fill="#e6eaef"/>
-<rect x="573.3" y="668.9" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="574.4" y="669.8" width="3.8" height="7.6" fill="#e6eaef"/>
+<rect x="573.4" y="668.8" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>evr: 0 / 28 done (0.0%)</title>
-<rect x="580.2" y="669.9" width="3.8" height="7.6" fill="#e6eaef"/>
-<rect x="580.2" y="669.9" width="3.3" height="7.6" fill="#d4a72c"/>
-<rect x="579.2" y="668.9" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="580.2" y="669.8" width="3.8" height="7.6" fill="#e6eaef"/>
+<rect x="580.2" y="669.8" width="3.3" height="7.6" fill="#d4a72c"/>
+<rect x="579.2" y="668.8" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mstask: 0 / 28 done (0.0%)</title>
-<rect x="574.3" y="679.4" width="3.8" height="7.6" fill="#e6eaef"/>
-<rect x="573.3" y="678.4" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="574.4" y="679.4" width="3.8" height="7.6" fill="#e6eaef"/>
+<rect x="573.4" y="678.4" width="5.8" height="9.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>nddeapi: 0 / 28 done (0.0%)</title>
 <rect x="580.2" y="679.4" width="3.8" height="7.6" fill="#e6eaef"/>

@@ -226,6 +226,7 @@ pub fn dispatch<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome {
     let status = match Win32kService::from_number(number) {
         Some(Win32kService::Call) => call(k, regs).unwrap_or_else(|e| e),
         Some(Win32kService::CommitSurface) => commit(k, regs).unwrap_or_else(|e| e),
+        Some(Win32kService::CommitSurfaceArea) => commit_area(k, regs).unwrap_or_else(|e| e),
         None => {
             regs.rax = u64::from(STATUS_NOT_IMPLEMENTED);
             return Outcome::Unimplemented { table: Table::Win32k.name(), number: u64::from(index) };
@@ -387,6 +388,56 @@ fn commit<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStat
     let ok = k.with_state(|sys, _, _| {
         let w = &mut sys.win32k;
         w.surfaces.committed(&mut w.desktop, hwnd)
+    });
+    Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
+}
+
+/// `PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)`: as
+/// `PolyUserCommitSurface`, but only the pixels of `area` (a `RECT` in surface pixels: what the
+/// calling process drew) go into the buffer and are damaged (ADR 0219). Another process's drawing
+/// elsewhere in the window stays. A window without a surface of its own (a child) commits its
+/// whole picture into its top-level window's, as `PolyUserCommitSurface` does.
+fn commit_area<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus> {
+    let [hwnd, pixels, width, height, stride, area] = abi::args::<K, 6>(k, regs)?;
+    let (hwnd, width, height) = (hwnd as u32, width as u32, height as u32);
+    let size = k.with_state(|sys, _, _| sys.win32k.surfaces.size(&sys.win32k.desktop, hwnd));
+    if size.is_none() {
+        return commit_child(k, hwnd, pixels, width, height, stride);
+    }
+    if size != Some((width, height)) || width > MAX_SIDE || height > MAX_SIDE || stride < u64::from(width) * 4 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let mut r = [0u8; 16];
+    abi::read(k, area, &mut r)?;
+    let edge = |i: usize| i32::from_le_bytes([r[i * 4], r[i * 4 + 1], r[i * 4 + 2], r[i * 4 + 3]]);
+    let clamp = |v: i32, most: u32| v.clamp(0, most as i32) as u32;
+    let (left, top) = (clamp(edge(0), width), clamp(edge(1), height));
+    let (right, bottom) = (clamp(edge(2), width).max(left), clamp(edge(3), height).max(top));
+    if left == right || top == bottom {
+        return Ok(STATUS_SUCCESS);
+    }
+    let span = (right - left) as usize * 4;
+    let piece = (BAND_BYTES / span.max(1)).max(1) as u32;
+    let mut bytes = vec![0u8; span * piece.min(bottom - top) as usize];
+    let mut y = top;
+    while y < bottom {
+        let n = piece.min(bottom - y) as usize;
+        let part = &mut bytes[..n * span];
+        for (i, chunk) in part.chunks_mut(span).enumerate() {
+            abi::read(k, pixels + (u64::from(y) + i as u64) * stride + u64::from(left) * 4, chunk)?;
+        }
+        let ok = k.with_state(|sys, _, _| {
+            let w = &mut sys.win32k;
+            w.surfaces.write_area(&w.desktop, hwnd, (width, height), (left, y, right - left), part)
+        });
+        if !ok {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        y += n as u32;
+    }
+    let ok = k.with_state(|sys, _, _| {
+        let w = &mut sys.win32k;
+        w.surfaces.committed_area(&mut w.desktop, hwnd, (left, top, right - left, bottom - top))
     });
     Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
 }
