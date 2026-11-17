@@ -617,6 +617,35 @@ enum BlitSrc<'a> {
 /// The source pixels of a blit, one per destination pixel: (colour, raw
 /// value, whether it is the source's background colour); `None` outside
 /// the source. With the source's format.
+
+/// [`Gdi::blit`]'s plain copy: source rectangle `s` onto destination `d` of the same size, both
+/// bitmaps 32 bits a pixel, inside `clip` and `reach`. False (nothing done) for other formats.
+fn copy32(b: &mut Bitmap, clip: &Region, reach: Rect, d: Rect, sb: &Bitmap, s: Rect) -> bool {
+    if b.bpp != 32 || sb.bpp != 32 {
+        return false;
+    }
+    // The source's own bounds, in destination coordinates.
+    let (ox, oy) = (s.left - d.left, s.top - d.top);
+    let from = Rect::new(-ox, -oy, sb.width - ox, sb.height - oy);
+    for r in clip.rects() {
+        let r = r.intersect(&reach).intersect(&from);
+        if r.is_empty() {
+            continue;
+        }
+        // A source in the same memory further up (a scroll down within one
+        // surface) is copied from the bottom, so no row is read after it was
+        // overwritten.
+        let down = b.row_address(r.top) > sb.row_address(r.top + oy);
+        let mut copy = |y: i32| b.copy_row32(r.left, y, sb, r.left + ox, y + oy, r.right - r.left);
+        if down {
+            (r.top..r.bottom).rev().for_each(&mut copy);
+        } else {
+            (r.top..r.bottom).for_each(&mut copy);
+        }
+    }
+    true
+}
+
 struct Cells {
     px: Vec<Option<(Rgb, u32, bool)>>,
     bpp: u16,
@@ -1574,8 +1603,18 @@ impl Gdi {
             dib: true,
             colors,
             storage: Storage::External(bits, bytes),
+            drawn: None,
         };
         self.add(Obj::Bitmap { bmp: b, selected_in: 0, delete_pending: false, stock: false })
+    }
+
+    /// What was drawn on bitmap `h` since the last call: left, top, right,
+    /// bottom (exclusive); `None` for nothing or no bitmap (ADR 0219).
+    pub fn take_drawn(&mut self, h: u64) -> Option<[i32; 4]> {
+        match self.obj_mut(h) {
+            Some(Obj::Bitmap { bmp, .. }) => bmp.take_drawn(),
+            _ => None,
+        }
     }
 
     /// The memory of a DIB section whose object is gone, for the caller to
@@ -2487,6 +2526,23 @@ impl Gdi {
             let v = if dh == sh { j } else { ((2 * i64::from(j) + 1) * i64::from(sh) / (2 * i64::from(dh))) as i32 };
             if flip.1 { sh - 1 - v } else { v }
         };
+        // A plain copy between 32-bit pixels of the same size (a swap chain's
+        // frame into its window, ADR 0219): row by row, no per-pixel work.
+        if code == 0xCC && dw == sw && dh == sh && !flip.0 && !flip.1 {
+            let done = match src {
+                BlitSrc::Bitmap(sb) => self.with_target(dst, |b, _, clip, _| copy32(b, clip, reach, d, sb, s)),
+                BlitSrc::Dc(h) => self
+                    .with_target(dst, |b, _, clip, g| {
+                        // The same bitmap as the destination is taken out: the general path.
+                        let sb = g.dc(h).and_then(|sdc| g.target(sdc))?;
+                        Some(copy32(b, clip, reach, d, sb, s))
+                    })
+                    .flatten(),
+            };
+            if done == Some(true) {
+                return;
+            }
+        }
         let (rw, rh) = (reach.right - reach.left, reach.bottom - reach.top);
         let read = |sb: &Bitmap, bk: Rgb| -> Cells {
             let mut px = Vec::with_capacity((rw as usize) * (rh as usize));

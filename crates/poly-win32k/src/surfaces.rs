@@ -100,6 +100,15 @@ impl Buffer {
         band[at..at + n].copy_from_slice(&src[..n]);
     }
 
+    /// Take `old`'s picture where both buffers have pixels, from the top-left corner.
+    fn keep(&mut self, old: &Buffer) {
+        let n = self.width.min(old.width) as usize * 4;
+        for y in 0..self.height.min(old.height) {
+            let row = old.read(y, y + 1);
+            self.write_span(0, y, &row[..n]);
+        }
+    }
+
     /// The pixel (`B, G, R, x`) at (`x`, `y`), inside the buffer.
     fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
@@ -253,13 +262,19 @@ impl Surfaces {
                 let bar = i.menu_bar.max(0);
                 let (cw, ch) = ((client.right - client.left) as u32, (client.bottom - client.top + bar) as u32);
                 desktop.set_geometry(s, client.left, client.top - bar, cw, ch);
-                let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.width, b.height));
-                if current != Some((cw, ch))
+                let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.id, b.width, b.height));
+                if current.map(|c| (c.1, c.2)) != Some((cw, ch))
                     && cw <= MAX_SIDE
                     && ch <= MAX_SIDE
                     && let Some(b) = desktop.attach_buffer(s, cw, ch, cw * 4, PixelFormat::Xrgb8888)
                 {
-                    self.buffers.insert(b, Buffer::new(cw, ch));
+                    // A resized window keeps what it showed, from its top-left corner: commits
+                    // carry only what was drawn since (ADR 0219).
+                    let mut new = Buffer::new(cw, ch);
+                    if let Some(old) = current.and_then(|c| self.buffers.get(&c.0)) {
+                        new.keep(old);
+                    }
+                    self.buffers.insert(b, new);
                     desktop.damage(s, 0, 0, cw, ch);
                 }
             }
@@ -519,6 +534,46 @@ impl Surfaces {
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
         let Some(b) = self.buffers.get_mut(&info.id) else { return false };
         (b.width, b.height) == (width, height) && b.write(row, pixels)
+    }
+
+    /// Spans of `x, row, width` pixels from row `row` on out of `pixels`
+    /// (`width * 4` bytes a row) into window `hwnd`'s buffer of `size`
+    /// (ADR 0219); false when the window has no such buffer or they do
+    /// not fit.
+    pub fn write_area(
+        &mut self,
+        desktop: &Desktop,
+        hwnd: u32,
+        size: (u32, u32),
+        (x, row, width): (u32, u32, u32),
+        pixels: &[u8],
+    ) -> bool {
+        let Some(s) = self.surface(hwnd) else { return false };
+        let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
+        let Some(b) = self.buffers.get_mut(&info.id) else { return false };
+        let span = width as usize * 4;
+        if (b.width, b.height) != size || span == 0 || !pixels.len().is_multiple_of(span) {
+            return false;
+        }
+        let rows = (pixels.len() / span) as u32;
+        if x.saturating_add(width) > b.width || row.saturating_add(rows) > b.height {
+            return false;
+        }
+        for (i, src) in pixels.chunks(span).enumerate() {
+            b.write_span(x, row + i as u32, src);
+        }
+        true
+    }
+
+    /// The area [`Surfaces::write_area`] wrote is the window's picture
+    /// there now: only it is damaged (`x, y, width, height`).
+    pub fn committed_area(&mut self, desktop: &mut Desktop, hwnd: u32, (x, y, w, h): (u32, u32, u32, u32)) -> bool {
+        let Some(s) = self.surface(hwnd) else { return false };
+        if desktop.surface(s).and_then(|x| x.buffer).is_none() {
+            return false;
+        }
+        desktop.damage(s, x, y, w, h);
+        true
     }
 
     /// The rows [`Surfaces::write_rows`] wrote are the window's picture now:
@@ -946,6 +1001,41 @@ mod tests {
         d.receive(&encode_all(&[FromCompositor::Released { buffer }]));
         s.sync(&wm, &mut d);
         assert!(s.rows(buffer, 0, 1).is_none());
+    }
+
+    /// ADR 0219: a commit of an area changes and damages only that area, and a resized window's
+    /// new buffer keeps its picture from the top-left corner (commits carry only what is drawn).
+    #[test]
+    fn areas_commit_alone_and_a_resized_buffer_keeps_its_picture() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        records(&mut d);
+        let h = popup(&mut wm, &mut d, &mut s, 10, 10, 0, 0x00_11_22_33);
+        let id = s.surface(h).unwrap();
+        records(&mut d);
+        let blue = [0xEE, 0, 0, 0];
+        let span: Vec<u8> = (0..3).flat_map(|_| blue).collect();
+        assert!(s.write_area(&d, h, (40, 30), (5, 6, 3), &[span.clone(), span.clone()].concat()));
+        assert!(!s.write_area(&d, h, (40, 30), (38, 6, 3), &span), "beyond the right edge");
+        assert!(!s.write_area(&d, h, (41, 30), (5, 6, 3), &span), "another size");
+        assert!(s.committed_area(&mut d, h, (5, 6, 3, 2)));
+        assert_eq!(records(&mut d), vec![ToCompositor::Damage { surface: id, x: 5, y: 6, width: 3, height: 2 }]);
+        let buffer = d.surface(id).unwrap().buffer.unwrap().id;
+        let px = |s: &Surfaces, b, x: usize, y: u32| s.rows(b, y, 1).unwrap()[x * 4..x * 4 + 4].to_vec();
+        assert_eq!((px(&s, buffer, 5, 6), px(&s, buffer, 7, 7)), (blue.to_vec(), blue.to_vec()));
+        assert_eq!(px(&s, buffer, 8, 6), [0x11, 0x22, 0x33, 0xFF], "outside: the fill committed before");
+
+        // Wider and lower: the new buffer starts with the old picture where both have pixels.
+        let r = Some(Rect::new(10, 10, 70, 30));
+        call(&mut wm, Request::SetRects { hwnd: h, window_rel: r, client_rel: r });
+        s.sync(&wm, &mut d);
+        let bigger = d.surface(id).unwrap().buffer.unwrap();
+        assert_eq!((bigger.width, bigger.height), (60, 20));
+        assert_eq!(px(&s, bigger.id, 6, 7), blue.to_vec());
+        assert_eq!(px(&s, bigger.id, 39, 19), [0x11, 0x22, 0x33, 0xFF]);
+        assert_eq!(px(&s, bigger.id, 40, 0), [BLANK; 4], "new pixels are blank until drawn");
     }
 
     #[test]

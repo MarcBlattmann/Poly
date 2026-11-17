@@ -1887,6 +1887,32 @@ fn attach_rows(hdc: H, hwnd: H, width: u32, total: u32, skip: u32, rows: u32) ->
     1
 }
 
+/// What this process drew on window `hwnd`'s surface DIB since the last call (ADR 0219): left,
+/// top, right, bottom (exclusive, surface pixels) into `out[0..4]`, through any DC or view of it.
+/// 0 when nothing was drawn or there is no surface.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiTakeSurfaceDrawn(hwnd: H, out: *mut i32) -> i32 {
+    let Some((_, full, ..)) = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied()) else { return 0 };
+    let views: Vec<(u32, u64)> = VIEWS.with(|v| v.iter().filter(|e| e.0 == hwnd).map(|e| (e.1, e.4)).collect());
+    let mut all: Option<[i32; 4]> = gdi(|g| g.take_drawn(full));
+    for (skip, b) in views {
+        if let Some(r) = gdi(|g| g.take_drawn(b)) {
+            let r = [r[0], r[1] + skip as i32, r[2], r[3] + skip as i32];
+            all = Some(match all {
+                None => r,
+                Some(a) => [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[2]), a[3].max(r[3])],
+            });
+        }
+    }
+    let Some(r) = all else { return 0 };
+    if out.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller passes four writable i32s.
+    unsafe { core::ptr::copy_nonoverlapping(r.as_ptr(), out, 4) };
+    1
+}
+
 /// Window `hwnd`'s surface DIB: its pixels, width and height into
 /// `out[0..3]`; 0 when it has none.
 #[unsafe(no_mangle)]
