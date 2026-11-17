@@ -350,6 +350,9 @@ struct FrameStats {
     damaged_pixels: u64,
     copied_bytes: u64,
     copied_max_bytes: u64,
+    /// Time spent taking clients' pixels into the scene: Wayland commits (their buffer copies)
+    /// and the desktop link's records (ADR 0224).
+    take_ns: u64,
 }
 
 impl FrameStats {
@@ -385,10 +388,11 @@ impl FrameStats {
         let damage_avg = self.damaged_pixels / frames;
         let damage_avg_bytes = damage_avg.saturating_mul(core::mem::size_of::<u32>() as u64);
         let copied_avg_bytes = self.copied_bytes / frames;
+        let take_avg_us = self.take_ns / frames / 1_000;
         let damage_pct_milli =
             self.damaged_pixels.saturating_mul(100_000) / frames.saturating_mul(output_pixels.max(1));
         println!(
-            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%)",
+            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%) take_avg_ms={}.{:03} take_window_ms={}",
             elapsed_ns / 1_000_000,
             fps_milli / 1_000,
             fps_milli % 1_000,
@@ -403,6 +407,9 @@ impl FrameStats {
             self.copied_max_bytes,
             damage_pct_milli / 1_000,
             damage_pct_milli % 1_000,
+            take_avg_us / 1_000,
+            take_avg_us % 1_000,
+            self.take_ns / 1_000_000,
         );
         *self = FrameStats { started_ns: now_ns, ..FrameStats::default() };
     }
@@ -836,6 +843,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
         let mut gone = Vec::new();
+        let take_start = if o.stats { os::monotonic_ns() } else { 0 };
         for (pfd, id) in fds[1..input_at].iter().zip(&ids) {
             if pfd.revents == 0 {
                 continue;
@@ -847,6 +855,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => gone.push(*id),
             }
+        }
+        if o.stats {
+            stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(take_start));
         }
 
         // A flip completed: the frame it showed is on the screen since its
@@ -959,7 +970,11 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(l) = &mut winlink
             && fds[win_fds].iter().any(|p| p.revents != 0)
         {
+            let start = if o.stats { os::monotonic_ns() } else { 0 };
             l.pump_server(&mut server);
+            if o.stats {
+                stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
+            }
         }
         // Input to Windows windows goes to win32k (ADR 0136).
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {

@@ -738,6 +738,85 @@ mod tests {
         assert_eq!(s.child_area(&wm, &d, top), None);
     }
 
+    /// ADR 0224: a section presented into a child window is a layer of the top-level window's
+    /// surface, placed at the child and clipped to it and to the surface; presenting it again only
+    /// damages; another section is a second buffer; a resized swap chain's old buffers go; the
+    /// layer goes with its swap chain or its process, and its buffers' pages are found by id.
+    #[test]
+    fn a_presented_section_is_a_layer_of_the_top_level_surface() {
+        use crate::layers::{Layers, Outcome, Presented};
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        let mut l = Layers::new();
+        connect(&mut d);
+        let top = popup(&mut wm, &mut d, &mut s, 100, 100, 0, BLUE);
+        let surface = s.surface(top).unwrap();
+        let spec = CreateSpec {
+            class: ClassRef::Name { name: "Pop".encode_utf16().collect() },
+            style: 0x5000_0000,
+            parent: u64::from(top),
+            ..CreateSpec::default()
+        };
+        let Reply::Created { created } = call(&mut wm, Request::CreateWindow { spec }) else { panic!() };
+        let child = created.hwnd;
+        let r = Some(Rect::new(10, 5, 50, 35));
+        call(&mut wm, Request::SetRects { hwnd: child, window_rel: r, client_rel: r });
+        records(&mut d);
+        let a = Presented { object: 70, backing: 700, width: 40, height: 30, stride: 160 };
+        let got = l.present(&s, &wm, &mut d, child, 9, a, &[(1, 2, 4, 6)]);
+        assert_eq!(got, Some(Outcome { adopted: true, dropped: vec![] }));
+        let r = records(&mut d);
+        let ToCompositor::LayerBuffer { layer, buffer: ba, .. } = r[0] else { panic!("{r:?}") };
+        assert_eq!(
+            r,
+            vec![
+                ToCompositor::LayerBuffer { surface, layer, buffer: ba, width: 40, height: 30, stride: 160 },
+                // At the child's (10, 5); the surface is 40x30, so 30x25 of it shows.
+                ToCompositor::LayerPlace { surface, layer, x: 10, y: 5, clip: (10, 5, 30, 25) },
+                ToCompositor::LayerDamage { surface, layer, buffer: ba, x: 1, y: 2, width: 3, height: 4 },
+            ]
+        );
+        assert_eq!(l.backing(ba), Some(700));
+        // Again: only damage (the whole buffer without rectangles).
+        assert_eq!(l.present(&s, &wm, &mut d, child, 9, a, &[]), Some(Outcome::default()));
+        assert_eq!(
+            records(&mut d),
+            vec![ToCompositor::LayerDamage { surface, layer, buffer: ba, x: 0, y: 0, width: 40, height: 30 }]
+        );
+        // The second buffer of a flip-model swap chain.
+        let b = Presented { object: 71, backing: 701, ..a };
+        assert_eq!(l.present(&s, &wm, &mut d, child, 9, b, &[]).unwrap().adopted, true);
+        let r = records(&mut d);
+        assert!(matches!(r[0], ToCompositor::LayerBuffer { buffer, .. } if buffer != ba), "{r:?}");
+        // Resized: the old buffers go, their objects are let go of.
+        let c = Presented { object: 72, backing: 702, width: 20, height: 10, stride: 80 };
+        let got = l.present(&s, &wm, &mut d, child, 9, c, &[]).unwrap();
+        assert_eq!(got, Outcome { adopted: true, dropped: vec![70, 71] });
+        let r = records(&mut d);
+        assert!(matches!(r[0], ToCompositor::LayerDrop { buffer, .. } if buffer == ba), "{r:?}");
+        assert!(r.contains(&ToCompositor::LayerPlace { surface, layer, x: 10, y: 5, clip: (10, 5, 20, 10) }));
+        // A window that shows nowhere has no layer.
+        assert_eq!(l.present(&s, &wm, &mut d, 0xDEAD, 9, a, &[]), None);
+        // A top-level window's own layer, replayed to a reconnecting compositor; it goes with its
+        // process.
+        let mut d = Desktop::new();
+        connect(&mut d);
+        let top2 = popup(&mut wm, &mut d, &mut s, 300, 300, 0, BLUE);
+        let mut l2 = Layers::new();
+        l2.present(&s, &wm, &mut d, top2, 5, a, &[]).unwrap();
+        let s2 = s.surface(top2).unwrap();
+        records(&mut d);
+        connect(&mut d);
+        let r = records(&mut d);
+        assert!(r.iter().any(|x| matches!(x, ToCompositor::LayerBuffer { surface, .. } if *surface == s2)));
+        assert!(r.contains(&ToCompositor::LayerPlace { surface: s2, layer: 1, x: 0, y: 0, clip: (0, 0, 40, 30) }));
+        assert!(r.iter().any(|x| matches!(x, ToCompositor::LayerDamage { width: 40, height: 30, .. })));
+        assert_eq!(l2.remove_process(&mut d, 5), vec![70]);
+        assert_eq!(records(&mut d), vec![ToCompositor::LayerGone { surface: s2, layer: 1 }]);
+        assert!(l2.is_empty());
+    }
+
     /// SetWindowRgn.yaml `shape_hit_test`, `window_coordinates`, `shapes`,
     /// `removal`: only the part of a window inside its region is on the
     /// screen and hit; the region moves with the window; an empty region

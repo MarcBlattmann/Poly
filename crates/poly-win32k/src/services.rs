@@ -26,6 +26,7 @@
 //! | `0x000` | `PolyUserCall(request, request_length, reply, reply_capacity, reply_length*)` |
 //! | `0x001` | `PolyUserCommitSurface(hwnd, pixels, width, height, stride)` (the desktop link) |
 //! | `0x002` | `PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)` (ADR 0219) |
+//! | `0x003` | `PolyUserPresentBuffer(hwnd, section, width, height, stride, rects, count)` (ADR 0224) |
 
 /// The table number of win32k services (bits 12–13 of a service number).
 pub const TABLE_WIN32K: u32 = 1;
@@ -45,15 +46,22 @@ pub enum Win32kService {
     /// area)`: only the rectangle `area` (a `RECT` in surface pixels) of
     /// the picture, the part the calling process drew (ADR 0219).
     CommitSurfaceArea,
+    /// `PolyUserPresentBuffer(hwnd, section, width, height, stride, rects, count)`: the frame in
+    /// section `section` (`width` x `height` pixels `B, G, R, x`, rows `stride` bytes apart, from
+    /// the section's start) is window `hwnd`'s picture now; `count` `RECT`s at `rects` changed (all
+    /// of it for none). The compositor maps the section's pages: nothing is copied (ADR 0224).
+    /// Section 0: the calling process's picture in the window goes.
+    PresentBuffer,
 }
 
 /// Every win32k service with its number and its name as `win32u.dll`
 /// exports its stub. The numbers are written out (`0x1000 | index`) so
 /// `win32u`'s `build.rs` can read them as they are. Sorted by number.
-pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 3] = [
+pub const WIN32K_SERVICES: [(Win32kService, u32, &str); 4] = [
     (Win32kService::Call, 0x1000, "PolyUserCall"),
     (Win32kService::CommitSurface, 0x1001, "PolyUserCommitSurface"),
     (Win32kService::CommitSurfaceArea, 0x1002, "PolyUserCommitSurfaceArea"),
+    (Win32kService::PresentBuffer, 0x1003, "PolyUserPresentBuffer"),
 ];
 
 impl Win32kService {
