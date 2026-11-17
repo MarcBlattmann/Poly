@@ -19,6 +19,19 @@ unsafe extern "system" {
     fn GetDesktopWindow() -> usize;
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
+}
+
+// TEMP-FEEL
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn QueryPerformanceCounter(out: *mut i64) -> i32;
+}
+
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
@@ -146,12 +159,31 @@ pub unsafe fn bind(p: *mut c_void, hwnd: usize) -> bool {
     if s.hwnd != hwnd {
         log(&alloc::format!("d3d11: swap chain {}x{} bound to window {hwnd:#x}", s.desc[0], s.desc[1]));
     }
+    if s.hwnd != hwnd && hwnd != 0 {
+        tell_alpha(hwnd, s.desc[10] == DXGI_ALPHA_MODE_PREMULTIPLIED);
+    }
     s.hwnd = hwnd;
     // SAFETY: the back buffer is a live texture of this DLL.
     if let Some(t) = unsafe { texture::tex(s.back) } {
         show(hwnd, t);
     }
     true
+}
+
+/// `DXGI_ALPHA_MODE_PREMULTIPLIED` (`dxgi1_2.h`).
+const DXGI_ALPHA_MODE_PREMULTIPLIED: u32 = 1;
+
+/// Tell win32k whether what this swap chain shows in window `hwnd` has premultiplied alpha, so
+/// the window is composed with it (ADR 0225; Learn, "DXGI_ALPHA_MODE": a composition swap chain's
+/// premultiplied pixels are blended over what is below the window). Chrome's menus and bubbles
+/// are transparent outside their rounded corners and in their shadow.
+fn tell_alpha(hwnd: usize, premultiplied: bool) {
+    use poly_win32k::proto::Request;
+    let req = poly_win32k::wire::encode(&Request::SurfaceAlpha { hwnd: hwnd as u32, premultiplied });
+    let mut out = [0u8; 64];
+    let mut len = 0usize;
+    // SAFETY: the buffers are ours and sized as passed.
+    unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
 }
 
 fn client_size(hwnd: usize) -> (u32, u32) {
@@ -381,9 +413,16 @@ unsafe extern "system" fn present(this: *mut c_void, sync: u32, flags: u32) -> H
     s.presents.fetch_add(1, Ordering::Relaxed);
     // SAFETY: the back buffer is a live texture of this DLL.
     let Some(t) = (unsafe { texture::tex(s.back) }) else { return S_OK };
+    let mut t0 = 0i64;
+    // SAFETY: TEMP-FEEL
+    unsafe { QueryPerformanceCounter(&mut t0) };
     if s.hwnd != 0 {
         show(s.hwnd, t);
     }
+    let mut t1 = 0i64;
+    // SAFETY: TEMP-FEEL
+    unsafe { QueryPerformanceCounter(&mut t1) };
+    log(&alloc::format!("feel-t: present hwnd={:#x} {}x{} us={} took={}", s.hwnd, t.width(), t.height(), t0 / 10, (t1 - t0) / 10)); // TEMP-FEEL
     S_OK
 }
 

@@ -284,6 +284,7 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Damage { surface, x, y, width, height } => {
+                println!("feel-t: damage s={surface} {x},{y} {width}x{height} us={}", os::monotonic_ns() / 1000); // TEMP-FEEL
                 if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
                     && let Some(bytes) = buffers.bytes(b)
@@ -498,6 +499,13 @@ impl Link {
         };
         let Some(surface) = self.surfaces.surface_of(window) else { return false };
         let time = (os::monotonic_ns() / 1_000_000) as u32;
+        // TEMP-FEEL
+        if let E::Key { key, pressed: true, .. } = *ev {
+            println!("feel-t: in key={key} us={}", os::monotonic_ns() / 1000);
+        }
+        if let E::Button { pressed: true, .. } = *ev {
+            println!("feel-t: in button us={}", os::monotonic_ns() / 1000);
+        }
         // Logical positions to Windows pixels (ADR 0219).
         let u = self.surfaces.units();
         let records: Vec<FromCompositor> = match *ev {

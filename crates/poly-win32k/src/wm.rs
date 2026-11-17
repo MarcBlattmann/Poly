@@ -2206,6 +2206,7 @@ impl Wm {
             Request::CursorShape { .. }
             | Request::ScreenPixel { .. }
             | Request::LayeredContent { .. }
+            | Request::SurfaceAlpha { .. }
             | Request::MoveSize { .. } => Reply::Ok {},
             Request::KeyboardLayout {} => Reply::Value { value: u64::from(self.layout.id()) },
             Request::LayeredChildren {} => {

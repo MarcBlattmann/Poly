@@ -858,6 +858,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         {
             match k.dispatch() {
                 Ok(Some(flip)) => {
+                    println!("feel-t: flip us={}", flip.monotonic_ns / 1000); // TEMP-FEEL
                     let flags = present_flags::VSYNC | present_flags::HW_CLOCK | present_flags::HW_COMPLETION;
                     let time = FrameTime { monotonic_ns: flip.monotonic_ns };
                     server.frame_completed(time, Some(u64::from(flip.sequence)), flags);
@@ -993,6 +994,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                     None => server.render(fb),
                 }
             };
+            if !drawn.is_empty() {
+                println!("feel-t: frame area={} us={}", damaged_area(&drawn), os::monotonic_ns() / 1000); // TEMP-FEEL
+            }
             let compose_ns =
                 if o.stats { os::monotonic_ns().saturating_sub(frame_start).saturating_sub(present_ns) } else { 0 };
             let shown = os::monotonic_ns();

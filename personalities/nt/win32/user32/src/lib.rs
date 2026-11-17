@@ -1494,6 +1494,7 @@ pub extern "system" fn PostQuitMessage(code: i32) {
 pub unsafe extern "system" fn GetMessageW(msg: *mut CMsg, hwnd: H, min: u32, max: u32) -> i32 {
     let mut m = CMsg::default();
     let r = u::get_message(&SYS, &mut m, hwnd as u64, min, max);
+    feeltrace::msg("get", m.message, m.w as u64); // TEMP-FEEL
     if r != -1 {
         // SAFETY: the caller's MSG.
         unsafe { *msg = m };
@@ -1505,6 +1506,9 @@ pub unsafe extern "system" fn GetMessageW(msg: *mut CMsg, hwnd: H, min: u32, max
 pub unsafe extern "system" fn PeekMessageW(msg: *mut CMsg, hwnd: H, min: u32, max: u32, remove: u32) -> i32 {
     let mut m = CMsg::default();
     let r = u::peek_message(&SYS, &mut m, hwnd as u64, min, max, remove);
+    if r && remove & 1 != 0 {
+        feeltrace::msg("peek", m.message, m.w as u64); // TEMP-FEEL
+    }
     if r {
         // SAFETY: the caller's MSG.
         unsafe { *msg = m };

@@ -26,7 +26,7 @@ use crate::desktop::Desktop;
 use crate::link::{BufferId, PixelFormat, SurfaceId, SurfaceKind};
 use crate::metrics::WS_CAPTION;
 use crate::wm::Wm;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -186,6 +186,9 @@ pub struct Surfaces {
     buffers: BTreeMap<BufferId, Buffer>,
     /// The contents of `UpdateLayeredWindow`-ed windows.
     contents: BTreeMap<u32, Content>,
+    /// Windows whose pixels come with premultiplied alpha from a DirectComposition swap chain
+    /// (ADR 0225).
+    premultiplied: BTreeSet<u32>,
 }
 
 impl Surfaces {
@@ -211,6 +214,7 @@ impl Surfaces {
         }
         // A content lasts while its window is layered by UpdateLayeredWindow.
         self.contents.retain(|h, _| wm.layered(*h).is_some_and(|l| l.update));
+        self.premultiplied.retain(|h| wm.info(*h).is_some());
         // Surfaces exist with a compositor, and in an interactive session
         // even without one (window DCs keep their pixels, BeginPaint.yaml
         // reads them back).
@@ -264,11 +268,12 @@ impl Surfaces {
                 let bar = i.menu_bar.max(0);
                 let (cw, ch) = ((client.right - client.left) as u32, (client.bottom - client.top + bar) as u32);
                 desktop.set_geometry(s, client.left, client.top - bar, cw, ch);
-                let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.id, b.width, b.height));
-                if current.map(|c| (c.1, c.2)) != Some((cw, ch))
+                let format = self.pixel_format(wm, h);
+                let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.id, b.width, b.height, b.format));
+                if current.map(|c| (c.1, c.2, c.3)) != Some((cw, ch, format))
                     && cw <= MAX_SIDE
                     && ch <= MAX_SIDE
-                    && let Some(b) = desktop.attach_buffer(s, cw, ch, cw * 4, PixelFormat::Xrgb8888)
+                    && let Some(b) = desktop.attach_buffer(s, cw, ch, cw * 4, format)
                 {
                     // A resized window keeps what it showed, from its top-left corner: commits
                     // carry only what was drawn since (ADR 0219).
@@ -309,6 +314,46 @@ impl Surfaces {
             desktop.set_margins(s, margins);
             desktop.set_visible(s, shown);
         }
+    }
+
+    /// How the compositor reads window `hwnd`'s pixels (ADR 0225). Two kinds of window come with
+    /// premultiplied alpha (Learn, "BLENDFUNCTION", "DXGI_ALPHA_MODE"), and their transparent
+    /// pixels show what is below them (menus, bubbles and their shadows, rounded corners):
+    /// - one that a DirectComposition swap chain of `DXGI_ALPHA_MODE_PREMULTIPLIED` shows in
+    ///   ([`Surfaces::set_premultiplied`]; Chrome's popups);
+    /// - a layered window given its content by `UpdateLayeredWindow` with `ULW_ALPHA` and
+    ///   `AC_SRC_ALPHA`.
+    ///
+    /// Every other window is opaque: GDI leaves the alpha byte of its pixels undefined.
+    pub fn pixel_format(&self, wm: &Wm, hwnd: u32) -> PixelFormat {
+        let layered_alpha = wm.layered(hwnd).is_some_and(|l| {
+            l.update && !l.attrs && l.ulw_flags & crate::guic::ULW_ALPHA != 0 && l.ulw_src_alpha
+        });
+        if layered_alpha || self.premultiplied.contains(&hwnd) {
+            PixelFormat::Argb8888
+        } else {
+            PixelFormat::Xrgb8888
+        }
+    }
+
+    /// What window `hwnd` shows comes with premultiplied alpha, or no longer does (a swap chain
+    /// of that alpha mode bound to it); false for a window that does not exist. A child window's
+    /// pixels are part of its top-level window's surface, so that surface takes the alpha
+    /// (Chrome's GPU process binds its swap chain to a child of the popup).
+    pub fn set_premultiplied(&mut self, wm: &Wm, hwnd: u32, on: bool) -> bool {
+        let Some(mut i) = wm.info(hwnd) else { return false };
+        let mut top = hwnd;
+        while i.style & crate::metrics::WS_CHILD != 0 {
+            top = i.parent;
+            let Some(p) = wm.info(top) else { return false };
+            i = p;
+        }
+        if on {
+            self.premultiplied.insert(top);
+        } else {
+            self.premultiplied.remove(&top);
+        }
+        true
     }
 
     /// `UpdateLayeredWindow` gave layered window `hwnd` this content:
@@ -854,6 +899,102 @@ mod tests {
         call(&mut wm, Request::SetStyle { hwnd: top, which: -20, value: LAYERED });
         assert_eq!(lay(&mut wm, 3, 0, 255, 2 | 0x100), Reply::Ok {});
         assert_eq!(s.screen_pixel(&wm, &d, 105, 105), RED);
+    }
+
+    /// A popup given its content by UpdateLayeredWindow with per-pixel alpha (Chrome's menus and
+    /// bubbles) reaches the compositor with that alpha: its buffer is premultiplied `Argb8888`, so
+    /// its transparent corners and shadow show what is below instead of black. Other windows stay
+    /// opaque, and so does a layered window that loses the per-pixel alpha.
+    #[test]
+    fn a_layered_window_with_per_pixel_alpha_reaches_the_compositor_with_it() {
+        const LAYERED: u32 = 0x0008_0000;
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let plain = popup(&mut wm, &mut d, &mut s, 10, 10, 0, BLUE);
+        let top = popup(&mut wm, &mut d, &mut s, 100, 100, LAYERED, RED);
+        let format = |s: &Surfaces, d: &Desktop, h: u32| d.surface(s.surface(h).unwrap()).unwrap().buffer.unwrap().format;
+        assert_eq!(format(&s, &d, plain), PixelFormat::Xrgb8888);
+        // Not yet given content: opaque, as before.
+        assert_eq!(format(&s, &d, top), PixelFormat::Xrgb8888);
+        // ULW_ALPHA with AC_SRC_ALPHA: a new buffer of the same size, premultiplied alpha.
+        let lay = |wm: &mut Wm, flags| call(wm, Request::Layered { hwnd: top, op: 3, key: 0, alpha: 255, flags });
+        assert_eq!(lay(&mut wm, 2 | 0x100), Reply::Ok {});
+        s.sync(&wm, &mut d);
+        assert_eq!(format(&s, &d, top), PixelFormat::Argb8888);
+        assert_eq!(d.surface(s.surface(top).unwrap()).unwrap().buffer.unwrap().width, 40);
+        // A transparent corner pixel keeps its alpha 0 in what the compositor reads.
+        let mut px: Vec<u8> = (0..40 * 30).flat_map(|_| [0xFF, 0xFF, 0xFF, 0xFF]).collect();
+        px[..4].copy_from_slice(&[0, 0, 0, 0]);
+        assert!(s.commit(&mut d, top, 40, 30, &px));
+        let id = d.surface(s.surface(top).unwrap()).unwrap().buffer.unwrap().id;
+        assert_eq!(&s.rows(id, 0, 1).unwrap()[..8], &[0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF]);
+        // The same call again changes nothing.
+        s.sync(&wm, &mut d);
+        assert_eq!(d.surface(s.surface(top).unwrap()).unwrap().buffer.unwrap().id, id);
+        // ULW_ALPHA without AC_SRC_ALPHA, or ULW_OPAQUE: opaque again.
+        assert_eq!(lay(&mut wm, 4), Reply::Ok {});
+        s.sync(&wm, &mut d);
+        assert_eq!(format(&s, &d, top), PixelFormat::Xrgb8888);
+        // Without the layered style: opaque.
+        assert_eq!(lay(&mut wm, 2 | 0x100), Reply::Ok {});
+        s.sync(&wm, &mut d);
+        assert_eq!(format(&s, &d, top), PixelFormat::Argb8888);
+        call(&mut wm, Request::SetStyle { hwnd: top, which: -20, value: 0 });
+        s.sync(&wm, &mut d);
+        assert_eq!(format(&s, &d, top), PixelFormat::Xrgb8888);
+    }
+
+    /// A visible child of `parent` covering its 40x30 client area.
+    fn child_of(wm: &mut Wm, parent: u32) -> u32 {
+        let spec = CreateSpec {
+            class: ClassRef::Name { name: "Pop".encode_utf16().collect() },
+            style: 0x5000_0000,
+            parent: u64::from(parent),
+            ..CreateSpec::default()
+        };
+        let Reply::Created { created } = call(wm, Request::CreateWindow { spec }) else { panic!() };
+        let r = Some(Rect::new(0, 0, 40, 30));
+        call(wm, Request::SetRects { hwnd: created.hwnd, window_rel: r, client_rel: r });
+        created.hwnd
+    }
+
+    /// Chrome's menus and bubbles: popups with `WS_EX_NOREDIRECTIONBITMAP` that a
+    /// DirectComposition swap chain of `DXGI_ALPHA_MODE_PREMULTIPLIED` shows in. Their surface
+    /// reaches the compositor with that alpha (a corner pixel of alpha 0 is not black), keeps its
+    /// picture across the new buffer, and is opaque again when the swap chain goes.
+    #[test]
+    fn a_window_a_premultiplied_swap_chain_shows_in_is_composed_with_its_alpha() {
+        const NO_REDIRECTION: u32 = 0x0020_0000;
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let menu = popup(&mut wm, &mut d, &mut s, 100, 100, NO_REDIRECTION, RED);
+        let info = |s: &Surfaces, d: &Desktop| d.surface(s.surface(menu).unwrap()).unwrap().buffer.unwrap();
+        assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
+        assert!(!s.set_premultiplied(&wm, 0xBAD0, true));
+        // The swap chain is bound to a child of the popup: the popup's surface takes the alpha.
+        let child = child_of(&mut wm, menu);
+        assert!(s.set_premultiplied(&wm, child, true));
+        assert!(s.surface(child).is_none());
+        s.sync(&wm, &mut d);
+        let b = info(&s, &d);
+        assert_eq!((b.format, b.width, b.height), (PixelFormat::Argb8888, 40, 30));
+        // The new buffer keeps what the window showed until the next present.
+        assert_eq!(s.screen_pixel(&wm, &d, 105, 105), RED);
+        // The compositor was told: a Buffer record with the premultiplied format.
+        let mut stream = Stream::<ToCompositor>::new();
+        stream.push(&d.take_output());
+        let records: Vec<ToCompositor> = stream.map(Result::unwrap).collect();
+        assert!(records.iter().any(|r| matches!(
+            r,
+            ToCompositor::Buffer { format: PixelFormat::Argb8888, width: 40, height: 30, .. }
+        )));
+        assert!(s.set_premultiplied(&wm, menu, false));
+        s.sync(&wm, &mut d);
+        assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
     }
 
     /// SetLayeredWindowAttributes.yaml `children`: a WS_CHILD window with

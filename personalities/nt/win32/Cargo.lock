@@ -122,6 +122,7 @@ version = "0.0.1"
 dependencies = [
  "poly-d3d",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]

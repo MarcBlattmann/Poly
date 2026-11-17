@@ -390,6 +390,10 @@ crate::wire_enum! {
         /// `SetClassLongPtrW(hwnd, index, value)`: the class value `index` (`GCL_*` or an extra byte offset) of the
         /// window's class set; the old value in a `Value`.
         116 => SetClassLong { hwnd: u64, index: i32, value: u64 },
+        /// What window `hwnd` shows comes with premultiplied alpha (a DirectComposition swap chain
+        /// of `DXGI_ALPHA_MODE_PREMULTIPLIED` bound to it, ADR 0225) or not: its surface is
+        /// composed with that alpha. An `Ok`, an `Error` for a window that does not exist.
+        117 => SurfaceAlpha { hwnd: u32, premultiplied: bool },
     }
 }
 
@@ -480,6 +484,7 @@ mod tests {
             Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
             Request::WindowRgn { hwnd: 1, set: true, rects: vec![1, 2, 3, 4] },
             Request::LayeredContent { hwnd: 1, width: 1, height: 1, pixels: vec![1, 2, 3, 4] },
+            Request::SurfaceAlpha { hwnd: 0x10018, premultiplied: true },
         ] {
             assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         }
