@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/LoadTypeLibEx.yaml
+id: windows/api/oleaut32.dll/LoadTypeLibEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Loads a type library from a file, or from a resource of an executable when the name ends in a backslash and a number (`updater.exe\4`), and registers it or not according to REGKIND. The updater's registered libraries are all of the `file\N` form.
+interface:
+  signature: "HRESULT LoadTypeLibEx(LPCOLESTR szFile, REGKIND regkind, ITypeLib **pptlib)"
+installer: "Windows loads the updater's type libraries by their registered path `...\\updater.exe\\4` (and 5, 6, 1 to 3) whenever it builds a proxy or stub for one of the 37 interfaces."
+rules:
+  regkind: "REGKIND_NONE (2) registers nothing; REGKIND_DEFAULT (0) registers nothing either (neither HKLM nor HKCU, also when nothing was registered before); REGKIND_REGISTER (1) registers the library exactly as RegisterTypeLib does with the file's path (TypeLib\\{id}\\1.0 with FLAGS and HELPDIR = the directory of the file, ...\\0\\win64 = the path, and the Interface keys); when the library is already registered with another file REGKIND_NONE and REGKIND_DEFAULT leave that registration alone and REGKIND_REGISTER replaces the path with the loaded file's"
+  invalid_regkind: "3, -1 and 100: E_INVALIDARG 0x80070057, the output is not written, nothing registered"
+  returned_library: "an ITypeLib that keeps working after the file was deleted (name, version, type info count), loaded twice gives the same object (see LoadTypeLib)"
+  resource_syntax: "a path ending in `\\N` where N is a decimal number names the resource of type TYPELIB with id N in that file (the tests write a DLL image with one such resource): `file.dll\\4` loads it; `\\04` loads it too; `\\3`, `\\1`, `\\0`, `\\x`, `\\-1`, `\\65540`, a trailing second backslash after the number (`\\4\\`) all fail with TYPE_E_CANTLOADLIBRARY 0x80029c4a when that resource does not exist or the number is not a plain number; a path with no number loads resource 1 only (the DLL with the library as resource 4 fails, the one with resource 1 loads); `\\1` or `\\2` after a plain type library file fails"
+  registered_resource_library: "RegisterTypeLib through REGKIND_REGISTER of `file.dll\\4` stores the win64 value `<file>\\4` (the index included); LoadRegTypeLib and QueryPathOfRegTypeLib then work with it (the path returned has the `\\4`) and CoGetPSClsid finds the automation marshaller for the library's interfaces; UnRegisterTypeLib removes it"
+  files: "a missing file or relative name that does not exist: TYPE_E_CANTLOADLIBRARY 0x80029c4a, output NULL"
+errors:
+  cannot_load: "TYPE_E_CANTLOADLIBRARY 0x80029c4a (missing file, not a library, bad resource number)"
+  invalid_arg: "E_INVALIDARG 0x80070057 for NULL path, NULL output, invalid regkind"
+side_effects: "REGKIND_REGISTER writes the registry (HKLM, the process is elevated)"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids. The DLL with a TYPELIB resource is written by the test itself (PE headers, one .rsrc section; layout per Microsoft Learn "PE Format").
+not_covered: >
+  32-bit libraries on a 64-bit process (syskind 1) other than stdole, LCID-specific files, files in other formats (.dll with the library under another resource type, .olb, .exe loaded by name only), network paths.

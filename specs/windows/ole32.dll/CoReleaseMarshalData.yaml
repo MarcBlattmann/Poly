@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoReleaseMarshalData.yaml
+id: windows/api/ole32.dll/CoReleaseMarshalData
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  Releases what CoMarshalInterface took for a marshalled interface (the object's references, the global-table entry) without unmarshalling it.
+interface:
+  signature: "HRESULT CoReleaseMarshalData(IStream *pStm)"
+installer: "Used by COM when a call that carried an interface pointer fails."
+rules:
+  release: "for NORMAL, TABLESTRONG and TABLEWEAK data of a local object: S_OK, the stream position is at the end of the data, the object's references are back to their count before marshalling; unmarshalling the data afterwards fails with CO_E_OBJNOTCONNECTED 0x800401fd; releasing the same data again returns S_OK"
+  followed_by_more_data: "data followed by other bytes: S_OK and the position is just after the data"
+  bad_streams: "an empty stream and a stream at the end of its data: STG_E_READFAULT 0x8003001e; 64 bytes of 7: RPC_E_INVALID_OBJREF 0x8001011d (position 24 after the failed read of the header); NULL stream: E_INVALIDARG 0x80070057; a thread without COM: CO_E_NOTINITIALIZED 0x800401f0"
+  remote: "data made from a proxy (an object in another process): releasing it unused succeeds and the server object lives on while the client's own proxy does; data of a proxy that was released first keeps the server object alive until it is unmarshalled and released; TABLESTRONG data of a proxy releases with S_OK"
+errors:
+  read_fault: "STG_E_READFAULT 0x8003001e"
+  invalid_objref: "RPC_E_INVALID_OBJREF 0x8001011d"
+  invalid_arg: "E_INVALIDARG"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
+side_effects: "releases references and table entries"
+threading: "any thread of an initialised process"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  release of data from another machine or process that has already died.

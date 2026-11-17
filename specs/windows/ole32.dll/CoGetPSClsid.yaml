@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoGetPSClsid.yaml
+id: windows/api/ole32.dll/CoGetPSClsid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  Returns the class of the proxy/stub of an interface from `Interface\{iid}\ProxyStubClsid32`, with a per-process cache and the per-process overrides of CoRegisterPSClsid.
+interface:
+  signature: "HRESULT CoGetPSClsid(REFIID riid, CLSID *pclsid)"
+installer: "Called by COM for each of the 37 interfaces; the answer is {00020424-0000-0000-C000-000000000046} for all of them."
+rules:
+  registered: "an interface of a library registered with RegisterTypeLib: S_OK, {00020424-...}; IDispatch: {00020420-...}; IClassFactory and IStream {00000320-0000-0000-C000-000000000046}; IErrorInfo {B196B286-BAB4-101A-B69C-00AA00341D07}; IUnknown, IMarshal, IPSFactoryBuffer, IRpcStubBuffer and an unknown id: REGDB_E_IIDNOTREG 0x80040155 (the output is set to the zero class id)"
+  hives: "a registration in HKCU only is found; with both, the HKCU value wins (the merged view)"
+  bad_values: "ProxyStubClsid32 = \"not a guid\": CO_E_CLASSSTRING 0x800401f3; an interface key without ProxyStubClsid32: 0x80040155"
+  cache: "a successful answer is remembered for the process: deleting the registration afterwards does not change it (also for the library's interfaces after UnRegisterTypeLib); a failed lookup is not remembered: registering afterwards makes it succeed"
+  arguments: "NULL interface id or NULL output: E_INVALIDARG 0x80070057; a thread without COM: CO_E_NOTINITIALIZED 0x800401f0 (the output is untouched)"
+errors:
+  not_registered: "REGDB_E_IIDNOTREG 0x80040155"
+  bad_class_string: "CO_E_CLASSSTRING 0x800401f3"
+  invalid_arg: "E_INVALIDARG"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
+side_effects: "fills a per-process cache"
+threading: "any thread of an initialised process"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  the WOW6432Node view, interfaces registered through `Interface\{iid}\BaseInterface` (a base interface's proxy/stub is used for an interface that only names a base), ProxyStubClsid (16-bit).

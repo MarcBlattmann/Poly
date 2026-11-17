@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/LoadTypeLib.yaml
+id: windows/api/oleaut32.dll/LoadTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Loads a type library file (or `file\N` resource) and returns it. The updater imports it (ordinal 161). Documentation says the library is registered; on the oracle it is not: nothing is written to HKLM or HKCU, also for a restricted library and when the library is registered with another path.
+interface:
+  signature: "HRESULT LoadTypeLib(LPCOLESTR szFile, ITypeLib **pptlib)"
+installer: "Imported by the updater by ordinal (#161); where the 37 Interface keys come from is not observed (see docs/windows/com-typelib-plan.md)."
+rules:
+  no_registration: "after a successful call the TypeLib\\{id} key and the Interface keys do not exist in HKLM or HKCU; an existing registration (also with another file's path) is not changed"
+  returned_library: "name, version and type info count of the file; calling twice returns the same ITypeLib object (the pointer is equal) while one reference is held; the file is not kept open after the last release (it can be deleted)"
+  paths: "a bare file name that is not in the working directory is looked up in the system directory (stdole2.tlb loads and its name is stdole); a bare name found nowhere, a file that does not exist, a directory, an empty file, a file of text, a name of 600 characters and a directory name with a trailing backslash: TYPE_E_CANTLOADLIBRARY 0x80029c4a, output NULL; an empty name: STG_E_FILENOTFOUND 0x80030002; a library file cut to half its length: STG_E_SEEKERROR 0x80030019"
+  resource_syntax: "`file\\N` as for LoadTypeLibEx"
+errors:
+  cannot_load: "TYPE_E_CANTLOADLIBRARY 0x80029c4a"
+  file_not_found: "STG_E_FILENOTFOUND 0x80030002 for an empty name"
+  short_file: "STG_E_SEEKERROR 0x80030019"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  libraries loaded from other resource types, the search order beyond the system directory, LIBFLAG_FHIDDEN and similar flags.

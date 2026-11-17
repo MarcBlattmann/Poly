@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRegisterPSClsid.yaml
+id: windows/api/ole32.dll/CoRegisterPSClsid
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  Registers, for this process only, the proxy/stub class to use for an interface id; it wins over the registry and is not seen by other processes.
+interface:
+  signature: "HRESULT CoRegisterPSClsid(REFIID riid, REFCLSID rclsid)"
+installer: "Not imported by the updater; specified because CoGetPSClsid's cache is the same table."
+rules:
+  effect: "after the call CoGetPSClsid(iid) returns the class given, also over a registry entry that names another class and when nothing is registered; registering again with another class replaces it; with the same class succeeds; the zero class id is accepted and returned as given with S_OK"
+  scope: "a second process asking for the same ids does not see it (it sees the registry's answer or REGDB_E_IIDNOTREG); the registrations are gone after CoUninitialize of the last apartment and a new CoInitializeEx (CoGetPSClsid then fails with 0x80040155 again)"
+  errors: "a thread without COM: CO_E_NOTINITIALIZED 0x800401f0; NULL interface id or NULL class id: E_INVALIDARG 0x80070057"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
+  invalid_arg: "E_INVALIDARG 0x80070057"
+side_effects: "changes the process's table"
+threading: "any thread of an initialised process"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  use of the registered class by a later CoMarshalInterface (needs a proxy/stub class of our own).

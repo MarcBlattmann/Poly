@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/QueryPathOfRegTypeLib.yaml
+id: windows/api/oleaut32.dll/QueryPathOfRegTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Returns the path stored in the registration (a BSTR) for a library, version and LCID, without loading the file. Version and LCID matching are those of LoadRegTypeLib.
+interface:
+  signature: "HRESULT QueryPathOfRegTypeLib(REFGUID guid, USHORT wMaj, USHORT wMin, LCID lcid, LPBSTR lpbstrPathName)"
+installer: "Setup's `AreComInterfacesPresent` check reads the same registry values."
+rules:
+  path_returned: "the win64 value as stored (`<file>`; a value with a resource index is returned with it: `<file>\\3`; a stored empty value gives S_OK and an empty BSTR); the file is not opened (an unregistered path that does not exist is returned)"
+  version_and_lcid: "1.0 registered: requests 1.0 with LCID 0, 0x409 and 0x400 succeed (the neutral registration serves every LCID); 1.1, 2.0 and 0.0 fail with TYPE_E_LIBNOTREGISTERED 0x8002801d and the output is NULL; with 1.5 added by hand, 1.0 returns the 1.0 path, 1.5 the 1.5 path, 1.6 fails"
+  win32_fallback: "when only a `win32` value exists for the version and LCID, the call returns that value (also in a 64-bit process)"
+  stdole: "stdole 2.0 returns a path whose file name is stdole2.tlb"
+  not_registered: "TYPE_E_LIBNOTREGISTERED 0x8002801d, the output is NULL"
+errors:
+  not_registered: "TYPE_E_LIBNOTREGISTERED 0x8002801d"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  HKCU registrations, other LCIDs registered together, SYSKIND other than the process's.

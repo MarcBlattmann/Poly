@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "regps_basic",
+      "exe_sha256": "3398da972bcb34a0dcdd74a9363075e40603625fc8f55fba3b56d38eec1fef79",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b24gYSB0aHJlYWQgd2l0aG91dCBDT006IDB4ODAwNDAxZjAKQ29Jbml0aWFsaXplRXgoTVRBKSA9IDB4MDAwMDAwMDAKYW4gdW5rbm93biBpZCBiZWZvcmU6IDB4ODAwNDAxNTUgKHplcm8pCkNvUmVnaXN0ZXJQU0Nsc2lkKGEsIFBTRGlzcGF0Y2gpID0gMHgwMDAwMDAwMApDb0dldFBTQ2xzaWQoYSkgPSAweDAwMDAwMDAwIFBTRGlzcGF0Y2gKcmVnaXN0ZXJpbmcgYSBhZ2FpbiB3aXRoIGFub3RoZXIgY2xhc3MgPSAweDAwMDAwMDAwCkNvR2V0UFNDbHNpZChhKSA9IDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZQpyZWdpc3RlcmluZyBhIGFnYWluIHdpdGggdGhlIHNhbWUgY2xhc3MgPSAweDAwMDAwMDAwCkNvUmVnaXN0ZXJQU0Nsc2lkKGIsIFBTRGlzcGF0Y2gpIG92ZXIgYSByZWdpc3RyeSBlbnRyeSB7MDAwMjA0MjR9ID0gMHgwMDAwMDAwMApDb0dldFBTQ2xzaWQoYikgPSAweDAwMDAwMDAwIFBTRGlzcGF0Y2gKQ29SZWdpc3RlclBTQ2xzaWQoYywgemVybyBjbGFzcyBpZCkgPSAweDAwMDAwMDAwCkNvR2V0UFNDbHNpZChjKSA9IDB4MDAwMDAwMDAgKHplcm8pCk5VTEwgaW50ZXJmYWNlIGlkID0gMHg4MDA3MDA1NwpOVUxMIGNsYXNzIGlkID0gMHg4MDA3MDA1Nwp0aGUgc2Vjb25kIHByb2Nlc3MgZW5kZWQgd2l0aCBjb2RlIDAKY2hpbGQ6IENvSW5pdGlhbGl6ZUV4ID0gMHgwMDAwMDAwMApjaGlsZDogdGhlIGlkIHRoZSBwYXJlbnQgcmVnaXN0ZXJlZDogMHg4MDA0MDE1NSBvdGhlcgpjaGlsZDogdGhlIGlkIHRoZSBwYXJlbnQgb3ZlcnJvZGU6IDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZQphZnRlciBDb1VuaW5pdGlhbGl6ZSBhbmQgQ29Jbml0aWFsaXplRXggYWdhaW4gKDB4MDAwMDAwMDApOiBDb0dldFBTQ2xzaWQoYSkgPSAweDgwMDQwMTU1ICh6ZXJvKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "on a thread without COM: 0x800401f0\nCoInitializeEx(MTA) = 0x00000000\nan unknown id before: 0x80040155 (zero)\nCoRegisterPSClsid(a, PSDispatch) = 0x00000000\nCoGetPSClsid(a) = 0x00000000 PSDispatch\nregistering a again with another class = 0x00000000\nCoGetPSClsid(a) = 0x00000000 PSOAInterface\nregistering a again with the same class = 0x00000000\nCoRegisterPSClsid(b, PSDispatch) over a registry entry {00020424} = 0x00000000\nCoGetPSClsid(b) = 0x00000000 PSDispatch\nCoRegisterPSClsid(c, zero class id) = 0x00000000\nCoGetPSClsid(c) = 0x00000000 (zero)\nNULL interface id = 0x80070057\nNULL class id = 0x80070057\nthe second process ended with code 0\nchild: CoInitializeEx = 0x00000000\nchild: the id the parent registered: 0x80040155 other\nchild: the id the parent overrode: 0x00000000 PSOAInterface\nafter CoUninitialize and CoInitializeEx again (0x00000000): CoGetPSClsid(a) = 0x80040155 (zero)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 100
+    }
+  ]
+}

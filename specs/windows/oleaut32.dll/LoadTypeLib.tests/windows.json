@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "loadtl_registers",
+      "exe_sha256": "3abd9c10b6c5e5d90d563379eea9cdea40818088447a0554d264e9f9db4ee01a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiBIS0xNIFR5cGVMaWIga2V5IDAsIEhLTE0gSW50ZXJmYWNlIGtleXMgMDAwLCBIS0NVIFR5cGVMaWIga2V5IDAKTG9hZFR5cGVMaWIgPSAweDAwMDAwMDAwLCBsaWJyYXJ5IHNldCwgbmFtZSBQb2x5V3NUbCwgdmVyc2lvbiAxLjAKYWZ0ZXI6IEhLTE0gVHlwZUxpYiBrZXkgMCwgSEtMTSBJbnRlcmZhY2Uga2V5cyAwMDAsIEhLQ1UgVHlwZUxpYiBrZXkgMAogIHR5cGUgaW5mb3MgMwpsb2FkZWQgdHdpY2U6IHRoZSBzYW1lIGxpYnJhcnkgb2JqZWN0IDEKdGhlIGZpbGUgY2FuIGJlIGRlbGV0ZWQgYWZ0ZXIgdGhlIGxpYnJhcnkgd2FzIHJlbGVhc2VkOiAxCmEgbGlicmFyeSB3aXRoIExJQkZMQUdfRlJFU1RSSUNURUQ6IExvYWRUeXBlTGliID0gMHgwMDAwMDAwMDsgSEtMTSBUeXBlTGliIGtleSAwLCBIS0xNIEludGVyZmFjZSBrZXlzIDAwMCwgSEtDVSBUeXBlTGliIGtleSAwCnRoZSBsaWJyYXJ5IGlzIHJlZ2lzdGVyZWQgd2l0aCBhbm90aGVyIGZpbGU6IExvYWRUeXBlTGliID0gMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyB1bmNoYW5nZWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\nLoadTypeLib = 0x00000000, library set, name PolyWsTl, version 1.0\nafter: HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\n  type infos 3\nloaded twice: the same library object 1\nthe file can be deleted after the library was released: 1\na library with LIBFLAG_FRESTRICTED: LoadTypeLib = 0x00000000; HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\nthe library is registered with another file: LoadTypeLib = 0x00000000, the registered path is unchanged 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 89
+    }
+  ]
+}
