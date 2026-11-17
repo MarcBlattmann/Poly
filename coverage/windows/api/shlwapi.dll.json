@@ -16,7 +16,7 @@
 {"symbol":"AssocQueryStringA","src":["wine-spec"],"seeds":["wine:shlwapi/tests/assoc.c:test_getstring_no_extra"]},
 {"symbol":"AssocQueryStringByKeyA","src":["wine-spec"]},
 {"symbol":"AssocQueryStringByKeyW","src":["wine-spec"]},
-{"symbol":"AssocQueryStringW","status":"stub","src":["wine-spec"],"seeds":["wine:shlwapi/tests/assoc.c:test_getstring_bad","wine:shlwapi/tests/assoc.c:test_getstring_basic"]},
+{"symbol":"AssocQueryStringW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:shlwapi/tests/assoc.c:test_getstring_bad","wine:shlwapi/tests/assoc.c:test_getstring_basic"]},
 {"symbol":"CLSIDFromProgIDWrap","forward":"ole32.CLSIDFromProgID","src":["wine-spec"],"seeds":["wine:shlwapi/tests/clsid.c:test_CLSIDFromProgIDWrap"]},
 {"symbol":"CLSIDFromStringWrap","src":["wine-spec"]},
 {"symbol":"CallMsgFilterWrapW","forward":"user32.CallMsgFilterW","src":["wine-spec"]},

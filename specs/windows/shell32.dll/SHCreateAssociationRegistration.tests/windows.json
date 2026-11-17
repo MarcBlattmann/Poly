@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sar_query",
+      "exe_sha256": "0032f50eedc1ddbe0ba1d9822167009db35b97b07d76224e285cc43701b8469c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0hDcmVhdGVBc3NvY2lhdGlvblJlZ2lzdHJhdGlvbiA9IDB4MCwgb2JqZWN0IHRydWUKUXVlcnlJbnRlcmZhY2UoSVVua25vd24pID0gMHgwLCBzYW1lIG9iamVjdDogdHJ1ZQpRdWVyeUN1cnJlbnREZWZhdWx0KGh0dHAsIHR5cGUgMSwgbGV2ZWwgMSkgPSAweDAsIHRleHQgbGVuZ3RoPjA6IHRydWUKUXVlcnlDdXJyZW50RGVmYXVsdChodHRwcywgdHlwZSAxLCBsZXZlbCAxKSA9IDB4MCwgdGV4dCBsZW5ndGg+MDogdHJ1ZQpRdWVyeUN1cnJlbnREZWZhdWx0KC5odG1sLCB0eXBlIDAsIGxldmVsIDEpID0gMHgwLCB0ZXh0IGxlbmd0aD4wOiB0cnVlClF1ZXJ5Q3VycmVudERlZmF1bHQoLmh0bSwgdHlwZSAwLCBsZXZlbCAxKSA9IDB4MCwgdGV4dCBsZW5ndGg+MDogdHJ1ZQpRdWVyeUN1cnJlbnREZWZhdWx0KC5wb2x5c3BlY2I0LCB0eXBlIDAsIGxldmVsIDApID0gMHg4MDA3MDQ4Mywgb3V0IG51bGw6IHRydWUKUXVlcnlDdXJyZW50RGVmYXVsdCgucG9seXNwZWNiNCwgdHlwZSAwLCBsZXZlbCAxKSA9IDB4ODAwNzA0ODMsIG91dCBudWxsOiB0cnVlClF1ZXJ5Q3VycmVudERlZmF1bHQoLnBvbHlzcGVjYjQsIHR5cGUgMCwgbGV2ZWwgMikgPSAweDgwMDcwNDgzLCBvdXQgbnVsbDogdHJ1ZQpRdWVyeUN1cnJlbnREZWZhdWx0KHBvbHlzcGVjYjRwcm90bywgdHlwZSAxLCBsZXZlbCAwKSA9IDB4ODAwNzA0ODMsIG91dCBudWxsOiB0cnVlClF1ZXJ5Q3VycmVudERlZmF1bHQocG9seXNwZWNiNHByb3RvLCB0eXBlIDEsIGxldmVsIDEpID0gMHg4MDA3MDQ4Mywgb3V0IG51bGw6IHRydWUKUXVlcnlDdXJyZW50RGVmYXVsdChwb2x5c3BlY2I0cHJvdG8sIHR5cGUgMSwgbGV2ZWwgMikgPSAweDgwMDcwNDgzLCBvdXQgbnVsbDogdHJ1ZQpRdWVyeUFwcElzRGVmYXVsdChodHRwLCB0eXBlIDEsIGxldmVsIDEsIFBvbHlTcGVjQjRBcHApID0gMHgwLCBmbGFnIDEKUXVlcnlBcHBJc0RlZmF1bHQoaHR0cCwgdHlwZSAxLCBsZXZlbCAxLCApID0gMHgwLCBmbGFnIDEKUXVlcnlBcHBJc0RlZmF1bHQoLnBvbHlzcGVjYjQsIHR5cGUgMCwgbGV2ZWwgMSwgUG9seVNwZWNCNEFwcCkgPSAweDAsIGZsYWcgMQpRdWVyeUFwcElzRGVmYXVsdChwb2x5c3BlY2I0cHJvdG8sIHR5cGUgMSwgbGV2ZWwgMSwgUG9seVNwZWNCNEFwcCkgPSAweDAsIGZsYWcgMQpRdWVyeUFwcElzRGVmYXVsdEFsbChlZmZlY3RpdmUsIHVucmVnaXN0ZXJlZCBhcHApID0gMHgwLCBmbGFnIDEKUXVlcnlDdXJyZW50RGVmYXVsdChOVUxMIHF1ZXJ5KSA9IDB4ODAwNzAwNTcKUXVlcnlDdXJyZW50RGVmYXVsdChhc3NvY2lhdGlvbiB0eXBlIDkpID0gMHgwClF1ZXJ5Q3VycmVudERlZmF1bHQoYXNzb2NpYXRpb24gbGV2ZWwgOSkgPSAweDgwMDcwMDU3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SHCreateAssociationRegistration = 0x0, object true\nQueryInterface(IUnknown) = 0x0, same object: true\nQueryCurrentDefault(http, type 1, level 1) = 0x0, text length>0: true\nQueryCurrentDefault(https, type 1, level 1) = 0x0, text length>0: true\nQueryCurrentDefault(.html, type 0, level 1) = 0x0, text length>0: true\nQueryCurrentDefault(.htm, type 0, level 1) = 0x0, text length>0: true\nQueryCurrentDefault(.polyspecb4, type 0, level 0) = 0x80070483, out null: true\nQueryCurrentDefault(.polyspecb4, type 0, level 1) = 0x80070483, out null: true\nQueryCurrentDefault(.polyspecb4, type 0, level 2) = 0x80070483, out null: true\nQueryCurrentDefault(polyspecb4proto, type 1, level 0) = 0x80070483, out null: true\nQueryCurrentDefault(polyspecb4proto, type 1, level 1) = 0x80070483, out null: true\nQueryCurrentDefault(polyspecb4proto, type 1, level 2) = 0x80070483, out null: true\nQueryAppIsDefault(http, type 1, level 1, PolySpecB4App) = 0x0, flag 1\nQueryAppIsDefault(http, type 1, level 1, ) = 0x0, flag 1\nQueryAppIsDefault(.polyspecb4, type 0, level 1, PolySpecB4App) = 0x0, flag 1\nQueryAppIsDefault(polyspecb4proto, type 1, level 1, PolySpecB4App) = 0x0, flag 1\nQueryAppIsDefaultAll(effective, unregistered app) = 0x0, flag 1\nQueryCurrentDefault(NULL query) = 0x80070057\nQueryCurrentDefault(association type 9) = 0x0\nQueryCurrentDefault(association level 9) = 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}
