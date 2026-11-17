@@ -92,7 +92,7 @@ start downloads about 230 MB once. To try a Windows program, choose
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 112 of 171 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 1.2%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 1.3%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -118,7 +118,7 @@ start downloads about 230 MB once. To try a Windows program, choose
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 1.2% | n/a | 0 / 0 |
+| Windows | 1.3% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -126,7 +126,7 @@ start downloads about 230 MB once. To try a Windows program, choose
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,404 | 769 | 3,592 | 3,706 | 53,041 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,404 | 791 | 3,592 | 3,684 | 53,041 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
