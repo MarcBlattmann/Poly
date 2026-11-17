@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tfs_gettasks",
+      "exe_sha256": "9c6aabf57eeaf3a73f4e0d51e4277a987f18b938fcc0af6bfdb06bffb4410b45",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpHZXRUYXNrcygwKSBvZiBhbiBlbXB0eSBmb2xkZXI6IGhyPTB4MDAwMDAwMDAgY291bnQ9MApvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpyZWdpc3RlcmluZyBhIGhpZGRlbiB0YXNrOiBocj0weDAwMDAwMDAwCkdldFRhc2tzKDIpOiBocj0weDgwMDcwMDU3IG5vIGNvbGxlY3Rpb24KR2V0VGFza3MoLTEpOiBocj0weDgwMDcwMDU3IG5vIGNvbGxlY3Rpb24KSXRlbSgyKTogaHI9MHgwMDAwMDAwMCBuYW1lPVtUYV0KSXRlbSgtMSk6IGhyPTB4ODAwNzAwNTcgbmFtZT0KSXRlbSgiSGlkIikgYnkgbmFtZTogaHI9MHgwMDAwMDAwMCBuYW1lPVtIaWRdCkl0ZW0oIiIpIGJ5IG5hbWU6IGhyPTB4ODAwNzAwMDMgbmFtZT0KZGlzYWJsZWQgdGhyb3VnaCBhIGNvbGxlY3Rpb24gaXRlbSwgcmVhZCB0aHJvdWdoIEdldFRhc2s6IGVuYWJsZWQ9ZmFsc2UKR2V0VGFza3Mgb24gdGhlIGRlbGV0ZWQgZm9sZGVyJ3Mgb2JqZWN0OiBocj0weDgwMDcwMDAyIGdvdD0wCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nGetTasks(0) of an empty folder: hr=0x00000000 count=0\nok register\nok register\nok register\nok register\nregistering a hidden task: hr=0x00000000\nGetTasks(2): hr=0x80070057 no collection\nGetTasks(-1): hr=0x80070057 no collection\nItem(2): hr=0x00000000 name=[Ta]\nItem(-1): hr=0x80070057 name=\nItem(\"Hid\") by name: hr=0x00000000 name=[Hid]\nItem(\"\") by name: hr=0x80070003 name=\ndisabled through a collection item, read through GetTask: enabled=false\nGetTasks on the deleted folder's object: hr=0x80070002 got=0\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 219
+    },
+    {
+      "name": "tfs_gettasks_c",
+      "exe_sha256": "256970b5fdc2d2acb5ec3d13d7eea5acf2f3e903919f8a9a9de4b9943eecd89a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpwdXRfSGlkZGVuKHRydWUpOiBocj0weDAwMDAwMDAwCkdldFRhc2tzKDEpOiBocj0weDAwMDAwMDAwIGNvdW50PTUgbmFtZXM9W0hpZF18W1RhXXxbVGJdfFt0Y118W1RkXQpHZXRUYXNrcygxNik6IGhyPTB4ODAwNzAwNTcgbm8gY29sbGVjdGlvbgpJdGVtKDEpOiBocj0weDAwMDAwMDAwIG5hbWU9W0hpZF0KSXRlbSg2KTogaHI9MHg4MDA3MDA1NyBuYW1lPQpJdGVtKCJ0YSIpIGJ5IG5hbWU6IGhyPTB4MDAwMDAwMDAgbmFtZT1bdGFdCkl0ZW0oIm5vc3VjaCIpIGJ5IG5hbWU6IGhyPTB4ODAwNzAwMDMgbmFtZT0KY291bnQgb2YgYSBuZXcgY29sbGVjdGlvbjogNAogIEl0ZW0oMSkgb2YgaXQ6IGhyPTB4MDAwMDAwMDAgZ290PTEKc3VtbWFyeSA1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nok register\nok register\nok register\nput_Hidden(true): hr=0x00000000\nGetTasks(1): hr=0x00000000 count=5 names=[Hid]|[Ta]|[Tb]|[tc]|[Td]\nGetTasks(16): hr=0x80070057 no collection\nItem(1): hr=0x00000000 name=[Hid]\nItem(6): hr=0x80070057 name=\nItem(\"ta\") by name: hr=0x00000000 name=[ta]\nItem(\"nosuch\") by name: hr=0x80070003 name=\ncount of a new collection: 4\n  Item(1) of it: hr=0x00000000 got=1\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 207
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tff_folders",
+      "exe_sha256": "1395fab0277cfb212c298338085736c005d6072a6c658e94104f2b604341ad19",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpDcmVhdGVGb2xkZXIoUG9seVNwZWNcdGZmKTogaHI9MHgwMDAwMDAwMCBuYW1lPVt0ZmZdCm9rIGNyZWF0ZSBiYXNlCnRoZSBwYXJlbnQgcCBleGlzdHMgYWZ0ZXJ3YXJkczogaHI9MHgwMDAwMDAwMAphZ2FpbjogaHI9MHg4MDA3MDBCNyBnb3Q9MApmLkdldEZvbGRlcihtaXhlZCBjYXNlKTogaHI9MHgwMDAwMDAwMCBuYW1lPVttaXhlZCBjYXNlXQpDcmVhdGVGb2xkZXIoc2xhc2gpOiBocj0weDgwMDcwMDdCIGdvdD0wCkNyZWF0ZUZvbGRlcihkb3QgZG90KTogaHI9MHg4MDA3MDA3QiBnb3Q9MApDcmVhdGVGb2xkZXIoTlVMTCk6IGhyPTB4ODAwNzAwQjcgZ290PTAKQ3JlYXRlRm9sZGVyIHdpdGggYW4gU0RETCBzdHJpbmc6IGhyPTB4MDAwMDAwMDAKR2V0Rm9sZGVyczogaHI9MHgwMDAwMDAwMCBjb3VudD02Ckl0ZW0oMSk6IGhyPTB4MDAwMDAwMDAgZ290PTEKSXRlbSgtMSk6IGhyPTB4ODAwNzAwNTcgZ290PTAKRGVsZXRlRm9sZGVyKHBccSk6IGhyPTB4MDAwMDAwMDAKR2V0Rm9sZGVyKGEpIGFmdGVyIHRoYXQ6IGhyPTB4ODAwNzAwMDIgZ290PTAKRGVsZXRlVGFzayh3aXRodGFza1x0MSk6IGhyPTB4MDAwMDAwMDAKQ3JlYXRlRm9sZGVyIGluIGEgZGVsZXRlZCBmb2xkZXIncyBvYmplY3Q6IGhyPTB4MDAwMDAwMDAgZ290PTEKRGVsZXRlRm9sZGVyKE5VTEwpIG9uIHRoZSBzYW1lIG9iamVjdDogaHI9MHg4MDA3MDAwMgpzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nCreateFolder(PolySpec\\tff): hr=0x00000000 name=[tff]\nok create base\nthe parent p exists afterwards: hr=0x00000000\nagain: hr=0x800700B7 got=0\nf.GetFolder(mixed case): hr=0x00000000 name=[mixed case]\nCreateFolder(slash): hr=0x8007007B got=0\nCreateFolder(dot dot): hr=0x8007007B got=0\nCreateFolder(NULL): hr=0x800700B7 got=0\nCreateFolder with an SDDL string: hr=0x00000000\nGetFolders: hr=0x00000000 count=6\nItem(1): hr=0x00000000 got=1\nItem(-1): hr=0x80070057 got=0\nDeleteFolder(p\\q): hr=0x00000000\nGetFolder(a) after that: hr=0x80070002 got=0\nDeleteTask(withtask\\t1): hr=0x00000000\nCreateFolder in a deleted folder's object: hr=0x00000000 got=1\nDeleteFolder(NULL) on the same object: hr=0x80070002\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 108
+    },
+    {
+      "name": "tff_folders_c",
+      "exe_sha256": "6dec24b75d5772920f36b6f03a3d0d5778a05f569d242218311231d86eafe573",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayBjcmVhdGUgYmFzZQpDcmVhdGVGb2xkZXIodGZmXHBccSkgd2l0aCBhIG1pc3NpbmcgcGFyZW50OiBocj0weDAwMDAwMDAwIGdvdD0xCmYuQ3JlYXRlRm9sZGVyKGEpOiBocj0weDAwMDAwMDAwIG5hbWU9W2FdCmYuQ3JlYXRlRm9sZGVyKE1peGVkIENhc2UpOiBocj0weDAwMDAwMDAwIG5hbWU9W01peGVkIENhc2VdCkNyZWF0ZUZvbGRlcihjb2xvbik6IGhyPTB4ODAwNzAwN0IgZ290PTAKQ3JlYXRlRm9sZGVyKHRyYWlsaW5nIGJhY2tzbGFzaCk6IGhyPTB4ODAwNzAwN0IgZ290PTAKQ3JlYXRlRm9sZGVyKDMwMCBjaGFyYWN0ZXJzKTogaHI9MHg4MDA3MDA1NyBnb3Q9MAogIHRoZSBmb2xkZXIgbWFkZSBieSB0aGF0IGNhbGw6IERlbGV0ZUZvbGRlciBocj0weDAwMDAwMDAwCkNyZWF0ZUZvbGRlciB3aXRoIGFuIGVtcHR5IFNEREwgc3RyaW5nOiBocj0weDAwMDAwMDAwIGdvdD0xCkl0ZW0oMCk6IGhyPTB4ODAwNzAwNTcgZ290PTAKSXRlbSg3KTogaHI9MHg4MDA3MDA1NyBnb3Q9MApEZWxldGVGb2xkZXIocCkgdGhhdCBoYXMgYSBzdWJmb2xkZXI6IGhyPTB4ODAwNzAwOTEKRGVsZXRlRm9sZGVyKGEpOiBocj0weDAwMDAwMDAwCkRlbGV0ZUZvbGRlcih3aXRodGFzaykgdGhhdCBoYXMgYSB0YXNrOiBocj0weDgwMDcwMDkxCmdldF9OYW1lIG9mIGEgZGVsZXRlZCBmb2xkZXIncyBvYmplY3Q6IGhyPTB4MDAwMDAwMDAKICB0aGUgZm9sZGVyIGFmdGVyd2FyZHM6IGhyPTB4ODAwNzAwMDIKYWZ0ZXIgdGhlIGNsZWFuLXVwIHRoZSBiYXNlIGZvbGRlciBpcyBnb25lOiBocj0weDgwMDcwMDAyCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok create base\nCreateFolder(tff\\p\\q) with a missing parent: hr=0x00000000 got=1\nf.CreateFolder(a): hr=0x00000000 name=[a]\nf.CreateFolder(Mixed Case): hr=0x00000000 name=[Mixed Case]\nCreateFolder(colon): hr=0x8007007B got=0\nCreateFolder(trailing backslash): hr=0x8007007B got=0\nCreateFolder(300 characters): hr=0x80070057 got=0\n  the folder made by that call: DeleteFolder hr=0x00000000\nCreateFolder with an empty SDDL string: hr=0x00000000 got=1\nItem(0): hr=0x80070057 got=0\nItem(7): hr=0x80070057 got=0\nDeleteFolder(p) that has a subfolder: hr=0x80070091\nDeleteFolder(a): hr=0x00000000\nDeleteFolder(withtask) that has a task: hr=0x80070091\nget_Name of a deleted folder's object: hr=0x00000000\n  the folder afterwards: hr=0x80070002\nafter the clean-up the base folder is gone: hr=0x80070002\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 109
+    }
+  ]
+}
