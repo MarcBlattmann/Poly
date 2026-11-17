@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/LoadRegTypeLib.yaml
+id: windows/api/oleaut32.dll/LoadRegTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Loads a library through its registration: HKCR\TypeLib\{id}\<major.minor>\<lcid hex>\win64 (or win32), the value being a file path with an optional `\N`. COM calls this when it builds the proxy and stub of an interface whose `Interface\{iid}\TypeLib` key names a library; Chrome's installer registers its type libraries this way.
+interface:
+  signature: "HRESULT LoadRegTypeLib(REFGUID rguid, WORD wVerMajor, WORD wVerMinor, LCID lcid, ITypeLib **pptlib)"
+installer: "Needed by the marshalling of all 37 updater interfaces (TypeLib = updater.exe\\4 etc.)."
+rules:
+  version_rule: "the major version must be equal; of the registered versions with that major the one with the lowest minor that is at least the requested minor is loaded: with 1.0, 1.2 and 2.0 registered, a request for 1.0 loads 1.0, 1.1 loads 1.2, 1.2 loads 1.2, 1.3 fails, 2.0 loads 2.0, 2.1 and 3.0 and 0.x and 1.65535 fail; with 1.2 unregistered 1.0 still loads 1.0 and 1.2 fails; stdole 2.0 loads, 2.1, 1.0 and 3.0 fail"
+  lcid_rule: "with only LCID 0x409 registered the request for 0x409 loads it and every other LCID (0, 0x809, 0x09, 0x407, 0x400, 0x800) fails; with only the neutral registration (0) the requests 0, 0x409 and 0x400 load it"
+  same_object: "loaded twice (a reference held) gives the same ITypeLib pointer"
+  stdole: "stdole {00020430-0000-0000-C000-000000000046} 2.0, LCID 0: attributes syskind 1 (32-bit library file; it loads in a 64-bit process), flags 0x8; name `stdole`, doc string `OLE Automation`; at least the first six type infos are, in order: GUID (record), DISPPARAMS (record), EXCEPINFO (record), IUnknown (interface, 3 functions QueryInterface/AddRef/Release at vtable offsets 0, 8, 16, id {00000000-0000-0000-C000-000000000046}), IDispatch (interface, 4 functions GetTypeInfoCount, GetTypeInfo, GetIDsOfNames, Invoke at offsets 24, 32, 40, 48, 1 base type, id {00020400-...}), IEnumVARIANT; GetTypeInfoOfGuid finds IUnknown and IDispatch; the registered path's file name is stdole2.tlb. Every library made by CreateTypeLib2 or MIDL for a custom interface refers to it for its base interface, so it must be loadable"
+  errors_by_registration: "not registered, or the version/LCID not matching: TYPE_E_LIBNOTREGISTERED 0x8002801d, output NULL; registered with a file that was renamed, a text file, an empty file, a name without directory that does not exist, or a path with `\\1` added to a plain library file: TYPE_E_CANTLOADLIBRARY 0x80029c4a; with an empty value: STG_E_FILENOTFOUND 0x80030002; a trailing blank in the registered path is ignored (loads)"
+  registry_read_each_time: "a registration changed between two calls (renamed file, restored file, replaced value) is seen by the next call"
+errors:
+  not_registered: "TYPE_E_LIBNOTREGISTERED 0x8002801d"
+  cannot_load: "TYPE_E_CANTLOADLIBRARY 0x80029c4a"
+  empty_value: "STG_E_FILENOTFOUND 0x80030002"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  the HKCU/HKLM precedence for libraries registered per user (RegisterTypeLibForUser, B2b-2), LCIDs other than 0 and 0x409 registered together, the win32 value when win64 is absent (see QueryPathOfRegTypeLib).
