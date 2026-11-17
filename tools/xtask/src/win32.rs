@@ -351,6 +351,10 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/src/services.rs",
             // win32u's stubs come from win32k's table (ADR 0128).
             "crates/poly-win32k/src/services.rs",
+            // The 32-bit fail stubs' argument sizes, compiled into the Win32 runtime by path
+            // (ADR 0222), not through a Cargo dependency.
+            "crates/poly-stubs/src/x86slots.rs",
+            "crates/poly-stubs/src/x86_signatures.txt",
             "rust-toolchain.toml",
         ],
     )?;

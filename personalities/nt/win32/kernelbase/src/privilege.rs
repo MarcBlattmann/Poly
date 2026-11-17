@@ -58,26 +58,38 @@ pub unsafe extern "system" fn AdjustTokenPrivileges(
     TRUE
 }
 
-/// `GetFileSecurityW`: Poly's NT file I/O keeps no security descriptors
-/// yet (no `NtQuerySecurityObject`): `ERROR_NOT_SUPPORTED` once the file
-/// is known to exist.
+/// `GetFileSecurityW`: the file (or directory) opened for `READ_CONTROL`, then its descriptor as
+/// `GetKernelObjectSecurity` gives it (ADR 0171's descriptors of files; ObjectIntegrityLabel.yaml:
+/// a new file has no label).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetFileSecurityW(
     name: *const u16,
-    _requested: u32,
-    _descriptor: *mut u8,
-    _length: u32,
-    _needed: *mut u32,
+    requested: u32,
+    descriptor: *mut u8,
+    length: u32,
+    needed: *mut u32,
 ) -> i32 {
+    // `READ_CONTROL`, and `ACCESS_SYSTEM_SECURITY` for the SACL (`winnt.h`; Learn:
+    // "GetFileSecurityW"); a directory opens too (`FILE_OPEN_FOR_BACKUP_INTENT`).
+    const READ_CONTROL: u32 = 0x0002_0000;
+    const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
+    const SACL_SECURITY_INFORMATION: u32 = 0x8;
+    const FILE_OPEN_FOR_BACKUP_INTENT: u32 = 0x4000;
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
-    match crate::file::attributes_of(name) {
-        Ok(_) => fail(ERROR_NOT_SUPPORTED, FALSE),
-        Err(e) => fail(e, FALSE),
-    }
+    let access = READ_CONTROL | if requested & SACL_SECURITY_INFORMATION != 0 { ACCESS_SYSTEM_SECURITY } else { 0 };
+    let h = match crate::file::open_for(name, access, FILE_OPEN_FOR_BACKUP_INTENT) {
+        Ok(h) => h,
+        Err(e) => return fail(e, FALSE),
+    };
+    // SAFETY: the caller's buffer of `length` bytes and variable; our handle.
+    let r = unsafe { crate::security::GetKernelObjectSecurity(h, requested, descriptor, length, needed) };
+    crate::base::close(h);
+    r
 }
 
-/// `SetFileSecurityW`: as `GetFileSecurityW`.
+/// `SetFileSecurityW`: not kept yet (`ERROR_NOT_SUPPORTED` once the file is known to exist;
+/// `SetNamedSecurityInfoW` sets a file's security).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SetFileSecurityW(name: *const u16, _information: u32, _descriptor: *const u8) -> i32 {
     // SAFETY: the caller's string.

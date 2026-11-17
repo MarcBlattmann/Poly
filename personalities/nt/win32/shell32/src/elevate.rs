@@ -36,7 +36,6 @@ unsafe extern "system" {
         pi: *mut ProcessInformation,
     ) -> i32;
     fn GetFullPathNameW(name: *const u16, size: u32, buf: *mut u16, part: *mut *mut u16) -> u32;
-    fn SearchPathW(path: *const u16, name: *const u16, ext: *const u16, size: u32, buf: *mut u16, part: *mut *mut u16) -> u32;
     fn GetFileAttributesW(name: *const u16) -> u32;
     fn GetCurrentDirectoryW(size: u32, buf: *mut u16) -> u32;
     fn SetCurrentDirectoryW(dir: *const u16) -> i32;
@@ -327,11 +326,13 @@ fn resolve(file: &[u16], dir: Option<&[u16]>) -> Option<Vec<u16>> {
     };
     let bare = !file.iter().any(|&c| c == u16::from(b'\\') || c == u16::from(b'/') || c == u16::from(b':'));
     if (n == 0 || n >= buf.len() || !exists(&buf[..n])) && bare {
-        let ext = nul(&wide(".exe"));
+        // A bare name without its extension: `.exe` added (`ShellExecute` finds programs so).
+        let mut with = file.to_vec();
+        with.extend(wide(".exe"));
+        let with = nul(&with);
         // SAFETY: as above.
-        n = unsafe {
-            SearchPathW(core::ptr::null(), name.as_ptr(), ext.as_ptr(), buf.len() as u32, buf.as_mut_ptr(), core::ptr::null_mut())
-        } as usize;
+        n = unsafe { GetFullPathNameW(with.as_ptr(), buf.len() as u32, buf.as_mut_ptr(), core::ptr::null_mut()) }
+            as usize;
     }
     if restore {
         // SAFETY: the directory saved above.
