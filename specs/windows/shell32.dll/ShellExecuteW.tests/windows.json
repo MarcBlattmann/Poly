@@ -1,0 +1,62 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sxw_calls_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "6e742341accb8627d4bf0d509571fcdd561b5e77a1dfac86a76e65e3bf88eafe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3BlbiB0aGlzIGltYWdlOiBzdWNjZXNzKD4zMikKTlVMTCB2ZXJiLCB0aGlzIGltYWdlOiBzdWNjZXNzKD4zMikKb3BlbiBhIG1pc3NpbmcgZmlsZTogZXJyb3IgMgpOVUxMIHZlcmIgYSBtaXNzaW5nIGZpbGU6IGVycm9yIDIKcnVuYXMgYSBtaXNzaW5nIGZpbGU6IGVycm9yIDIKdW5rbm93biB2ZXJiOiBlcnJvciAzMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "open this image: success(>32)\nNULL verb, this image: success(>32)\nopen a missing file: error 2\nNULL verb a missing file: error 2\nrunas a missing file: error 2\nunknown verb: error 31\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 172
+    },
+    {
+      "name": "sxw_decline_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "16f21502ab82e20184ac2dc4b13cb94e34ef7c05ca214cac968e6bb0564bcd06",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cnVuYXMgdGhpcyBpbWFnZTogZXJyb3IgNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "runas this image: error 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 122376
+    },
+    {
+      "name": "sxw_runas_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "16f21502ab82e20184ac2dc4b13cb94e34ef7c05ca214cac968e6bb0564bcd06",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cnVuYXMgdGhpcyBpbWFnZTogc3VjY2Vzcyg+MzIpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "runas this image: success(>32)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 134
+    }
+  ]
+}

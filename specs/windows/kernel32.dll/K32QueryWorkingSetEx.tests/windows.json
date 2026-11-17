@@ -1,0 +1,60 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2c1341f980d8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:55:57Z",
+  "tests": [
+    {
+      "name": "qws_args",
+      "exe_sha256": "f89899ee0936a43205f79d4e4fe1436ab086f0ba43e4c266baf9bc6e77b5d126",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2IgNDggKDMgZW50cmllcyk6IG9rPTEgZXJyIC0yCiAgYXR0cnMgdmFsaWQgYml0czogMSAxIDE7IGFkZHJlc3NlcyB1bmNoYW5nZWQ6IHRydWUKdGhyZWUgZGlmZmVyZW50IHBhZ2VzOiBvaz0xIGVyciAtMgogIHZhbGlkIGJpdHM6IDEgMCAwCmNiIDA6IG9rPTAgZXJyIDI0CiAgYXR0ciB1bnRvdWNoZWQ6IHRydWUKY2IgOCAoaGFsZiBhbiBlbnRyeSk6IG9rPTAgZXJyIDI0CmNiIDE1OiBvaz0wIGVyciAyNApjYiAxNjogb2s9MSBlcnIgLTIKY2IgMTc6IG9rPTEgZXJyIC0yCmNiIDI0IChvbmUgYW5kIGEgaGFsZiBlbnRyaWVzKTogb2s9MSBlcnIgLTIKY2IgMzI6IG9rPTEgZXJyIC0yCmhhbmRsZSBRVUVSWV9JTkZPUk1BVElPTnxWTV9SRUFEOiBvaz0xIGVyciAtMgpoYW5kbGUgUVVFUllfSU5GT1JNQVRJT04gb25seTogb2s9MSBlcnIgLTIKaGFuZGxlIFZNX1JFQUQgb25seTogb2s9MCBlcnIgNQpOVUxMIGhhbmRsZTogb2s9MCBlcnIgNgpnYXJiYWdlIGhhbmRsZTogb2s9MCBlcnIgNgp0aHJlYWQgcHNldWRvIGhhbmRsZTogb2s9MCBlcnIgNgpjaGlsZCBjcmVhdGVkOiAxCmNoaWxkIGhhbmRsZSAoYWxsIGFjY2VzcyksIGxvdyBhZGRyZXNzOiBvaz0xIGVyciAtMgpjaGlsZCBoYW5kbGUsIGFuIGFkZHJlc3MgdGhhdCBpcyBvdXIgYWxsb2NhdGlvbjogb2s9MSBlcnIgLTIKICB0aGF0IHBhZ2UgaXMgbm90IHZhbGlkIGluIHRoZSBjaGlsZDogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "cb 48 (3 entries): ok=1 err -2\n  attrs valid bits: 1 1 1; addresses unchanged: true\nthree different pages: ok=1 err -2\n  valid bits: 1 0 0\ncb 0: ok=0 err 24\n  attr untouched: true\ncb 8 (half an entry): ok=0 err 24\ncb 15: ok=0 err 24\ncb 16: ok=1 err -2\ncb 17: ok=1 err -2\ncb 24 (one and a half entries): ok=1 err -2\ncb 32: ok=1 err -2\nhandle QUERY_INFORMATION|VM_READ: ok=1 err -2\nhandle QUERY_INFORMATION only: ok=1 err -2\nhandle VM_READ only: ok=0 err 5\nNULL handle: ok=0 err 6\ngarbage handle: ok=0 err 6\nthread pseudo handle: ok=0 err 6\nchild created: 1\nchild handle (all access), low address: ok=1 err -2\nchild handle, an address that is our allocation: ok=1 err -2\n  that page is not valid in the child: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "qws_rights_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "ddba4e0f86a1108430f9adeed6aff5aae3e7d64624cb2a1ca0497b0b7f4dabe0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VsZiwgUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogb2s9MSBlcnIgLTIKc2VsZiwgUVVFUllfSU5GT1JNQVRJT046IG9rPTEgZXJyIC0yCnNlbGYsIFFVRVJZX0xJTUlURURfSU5GT1JNQVRJT058Vk1fUkVBRDogb2s9MSBlcnIgLTIKc2VsZiwgUVVFUllfSU5GT1JNQVRJT058Vk1fUkVBRDogb2s9MSBlcnIgLTIKY2hpbGQsIFFVRVJZX0xJTUlURURfSU5GT1JNQVRJT046IG9rPTEgZXJyIC0yCmNoaWxkLCBRVUVSWV9JTkZPUk1BVElPTjogb2s9MSBlcnIgLTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "self, QUERY_LIMITED_INFORMATION: ok=1 err -2\nself, QUERY_INFORMATION: ok=1 err -2\nself, QUERY_LIMITED_INFORMATION|VM_READ: ok=1 err -2\nself, QUERY_INFORMATION|VM_READ: ok=1 err -2\nchild, QUERY_LIMITED_INFORMATION: ok=1 err -2\nchild, QUERY_INFORMATION: ok=1 err -2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    },
+    {
+      "name": "qws_rights_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "ddba4e0f86a1108430f9adeed6aff5aae3e7d64624cb2a1ca0497b0b7f4dabe0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VsZiwgUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogb2s9MCBlcnIgNQpzZWxmLCBRVUVSWV9JTkZPUk1BVElPTjogb2s9MSBlcnIgLTIKc2VsZiwgUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTnxWTV9SRUFEOiBvaz0wIGVyciA1CnNlbGYsIFFVRVJZX0lORk9STUFUSU9OfFZNX1JFQUQ6IG9rPTEgZXJyIC0yCmNoaWxkLCBRVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBvaz0wIGVyciA1CmNoaWxkLCBRVUVSWV9JTkZPUk1BVElPTjogb2s9MSBlcnIgLTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "self, QUERY_LIMITED_INFORMATION: ok=0 err 5\nself, QUERY_INFORMATION: ok=1 err -2\nself, QUERY_LIMITED_INFORMATION|VM_READ: ok=0 err 5\nself, QUERY_INFORMATION|VM_READ: ok=1 err -2\nchild, QUERY_LIMITED_INFORMATION: ok=0 err 5\nchild, QUERY_INFORMATION: ok=1 err -2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    }
+  ]
+}

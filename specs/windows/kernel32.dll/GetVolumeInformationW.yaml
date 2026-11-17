@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetVolumeInformationW.yaml
+id: windows/api/kernel32.dll/GetVolumeInformationW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Facts about the volume a root path names. Chrome asks for the longest file name component of the volume that holds its download folder (the second output only, `lpMaximumComponentLength`), right after GetVolumePathNameW on the folder, to shorten long file names before it creates them. Poly's file systems must answer 255 for an NTFS-like volume or Chrome picks a wrong limit.
+interface:
+  signature: "BOOL GetVolumeInformationW(LPCWSTR lpRootPathName, LPWSTR lpVolumeNameBuffer, DWORD nVolumeNameSize, LPDWORD lpVolumeSerialNumber, LPDWORD lpMaximumComponentLength, LPDWORD lpFileSystemFlags, LPWSTR lpFileSystemNameBuffer, DWORD nFileSystemNameSize)"
+chrome:
+  call: "browser process, once per download: GetVolumePathNameW(<download folder>, buf, 260) = TRUE (the last error is left at 234, ERROR_MORE_DATA, by the call), then GetVolumeInformationW(<that root, e.g. `C:\\`>, NULL, 0, NULL, &max_component, NULL, NULL, 0) = TRUE with max_component 255"
+rules:
+  root: "the root of a drive with its trailing backslash (`C:\\`, also with a lower case letter and with the `\\\\?\\` prefix) and the NULL name (the current directory's volume) and `\\` alone succeed; `C:` without the backslash: FALSE, ERROR_INVALID_NAME (123); a folder (`C:\\Windows\\`): FALSE, 144 (ERROR_DIR_NOT_ROOT); a relative name: FALSE, 123; a drive that is not there (`Z:\\`) and an empty string: FALSE, ERROR_PATH_NOT_FOUND (3)"
+  unc: "a UNC name of a server that is not there: FALSE, ERROR_BAD_NETPATH (53); the root with the device prefix (backslash backslash dot backslash) works like the one with the question mark prefix; a file name (C:, backslash, x.txt): FALSE, 123"
+  outputs: "every output is optional: a call with all of them NULL succeeds. On the oracle's NTFS volume: maximum component length 255; flags: FILE_CASE_PRESERVED_NAMES (2), FILE_UNICODE_ON_DISK (4), FILE_PERSISTENT_ACLS (8), FILE_NAMED_STREAMS (0x40000), FILE_SUPPORTS_SPARSE_FILES (0x40) and FILE_SUPPORTS_REPARSE_POINTS (0x80) all set; the file system name is `NTFS`; the serial number is nonzero; the volume name is a string of at most 32 units (it may be empty)"
+  buffer_sizes: "a file system name buffer of 2 units for `NTFS`: FALSE, ERROR_BAD_LENGTH (24); a volume name buffer of 2 units: TRUE (the label was short or empty on the oracle: not specified)"
+  failure_leaves_outputs: "after a failure the output the test passed is untouched"
+  volume_path_name: "GetVolumePathNameW(<an existing folder>, buf, 260) and GetVolumePathNameW(<a path in a folder that is not there>, buf, 260) both return TRUE and leave the last error at 234 (ERROR_MORE_DATA); the answer is the drive root with its backslash"
+errors:
+  invalid_name: "123"
+  not_a_root: "144"
+  no_drive: "3"
+  bad_length: "24"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder.
+not_covered: >
+  volume labels of network and removable drives, mount points, `\\?\Volume{...}` names, flags other than the ones above, other file systems (FAT, exFAT, ReFS).

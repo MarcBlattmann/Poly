@@ -1,0 +1,75 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/LocaleNameToLCID.yaml
+id: windows/api/kernelbase.dll/LocaleNameToLCID
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  The LCID for a locale name. Returns 0 and sets the last error when the name is not a locale name; a well-formed name
+  without a classic LCID gets the custom LCID 0x1000.
+interface:
+  signature: "LCID LocaleNameToLCID(LPCWSTR lpName, DWORD dwFlags)"
+rules:
+  names: >-
+    Case-insensitive; a hyphen or an underscore both separate parts ("en_US", "en-us", "EN-US" are 0x409). With flags 0:
+    en-US 0x409, en-GB 0x809, de-DE 0x407, de-CH 0x807, fr-FR 0x40C, fr-CH 0x100C, it-IT 0x410, ja-JP 0x411, zh-CN 0x804,
+    zh-TW 0x404, zh-HK 0xC04, zh-SG 0x1004, es-ES 0xC0A, es-ES_tradnl 0x40A, es-419 0x580A, es-MX 0x80A, pt-BR 0x416,
+    sr-Latn-RS 0x241A, sr-Cyrl-RS 0x281A, af-ZA 0x436, ar-SA 0x401, he-IL 0x40D, ru-RU 0x419, tr-TR 0x41F, en-AU 0xC09,
+    en-CA 0x1009, en-IN 0x4009, fr-CA 0xC0C, nb-NO 0x414, nn-NO 0x814, pl-PL 0x415, ko-KR 0x412; the invariant L"" is 0x7F
+    with no error; sort names de-DE_phoneb 0x10407, ja-JP_radstr 0x40411, x-IV_mathan 0x1007F, qps-ploc 0x501, qps-ploca
+    0x5FE, qps-plocm 0x9FF. Neutral names with flags 0 give the default specific locale: en 0x409, de 0x407, fr 0x40C, es
+    0xC0A, zh 0x804, ja 0x411, zh-Hans 0x804, zh-Hant 0xC04, no 0x414, sr-Latn 0x241A. With LOCALE_ALLOW_NEUTRAL_NAMES
+    0x08000000: en 0x9, de 0x7, fr 0xC, es 0xA, zh 0x7804, ja 0x11, zh-Hans 0x4, zh-Hant 0x7C04, no 0x14, sr-Latn 0x701A;
+    names of specific locales are unchanged.
+  custom: >-
+    Well-formed names without a classic LCID succeed with LOCALE_CUSTOM_UNSPECIFIED 0x1000 and no error: en-US_tradnl,
+    en-001, en-150, iv, zz, zz-ZZ, xx-XX, en-ZZ, aa-bb-cc-dd-ee, i-klingon, de-DE-1996, de-u-co-phonebk. (LCIDToLocaleName
+    does not give such names back: it maps 0x1000 to the user's own locale.)
+  malformed: >-
+    Fail with 0 and ERROR_INVALID_PARAMETER 87: a trailing, leading or doubled hyphen ("en-US-", "-en-US", "en--US",
+    "en-", "-"), spaces anywhere, "!", a single letter ("e", "x", "x-"), hexadecimal digits ("0409", "00000409", "0x409",
+    "409"), "!x-user-default-locale", and names of 84 or 86 units made of one long subtag (malformed anyway).
+  special: >-
+    L"!x-sys-default-locale" (any case) is the system default locale's LCID, and with a trailing space it is malformed
+    (87). NULL is not an error: it gives a non-zero LCID with no error, the user default locale's (with and without the
+    neutral flag). Machine values are recorded only as equalities with the LCID of GetUserDefaultLocaleName /
+    GetSystemDefaultLocaleName.
+  roundtrip: >-
+    LCIDToLocaleName then LocaleNameToLCID with the same flag gives the original LCID for every classic LCID listed in the
+    LCIDToLocaleName sheet, except that neutral LCIDs given with flags 0 come back as their specific default (0x9 -> en-US
+    -> 0x409) and 0x7C04 -> zh-HK -> 0xC04; with the neutral flag all of them come back unchanged (0x9 -> en -> 0x9).
+  flags: >-
+    Only 0 and 0x08000000 are valid; any other flag (0x1, 0x2, 0x4, 0x8, 0x10, 0x100, 0x40000000, 0x80000000, 0x08000001,
+    0xFFFFFFFF) fails with 87, also for a valid name.
+errors:
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

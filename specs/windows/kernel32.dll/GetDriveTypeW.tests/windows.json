@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "gdt_forms",
+      "exe_sha256": "49d851002ca3556e98018979930f856d46190a436834e23105ce9b1b85760ccc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "XFw/XEM6XCA9PiAzClxcP1xDOiBubyBiYWNrc2xhc2ggPT4gMQpcXC5cQzpcID0+IDMKXFwuXEM6IG5vIGJhY2tzbGFzaCA9PiAxClw/P1xDOlwgPT4gMwpcXD9cR0xPQkFMUk9PVFwgPT4gMQpcIChyb290IG9mIHRoZSBjdXJyZW50IGRyaXZlKSA9PiAzClxXaW5kb3dzIChyb290ZWQsIG5vIGRyaXZlKSA9PiAxCldpbmRvd3MgKHJlbGF0aXZlKSA9PiAxCmVtcHR5IHN0cmluZyA9PiAxCmEgc3BhY2UgPT4gMQpcXG5vLXN1Y2gtaG9zdC14eXpcc2hhcmVcID0+IDEKQ09OT1VUJCA9PiAxCk5VTCA9PiAxCk5VTEwgPT4gMwpjd2QgaXMgb24gYSBkcml2ZSBsZXR0ZXI6IHRydWUKYWZ0ZXIgY2hkaXIgQzpcV2luZG93czogb2s9MSBOVUxMID0+IDMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "\\\\?\\C:\\ => 3\n\\\\?\\C: no backslash => 1\n\\\\.\\C:\\ => 3\n\\\\.\\C: no backslash => 1\n\\??\\C:\\ => 3\n\\\\?\\GLOBALROOT\\ => 1\n\\ (root of the current drive) => 3\n\\Windows (rooted, no drive) => 1\nWindows (relative) => 1\nempty string => 1\na space => 1\n\\\\no-such-host-xyz\\share\\ => 1\nCONOUT$ => 1\nNUL => 1\nNULL => 3\ncwd is on a drive letter: true\nafter chdir C:\\Windows: ok=1 NULL => 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1323
+    },
+    {
+      "name": "gdt_more",
+      "exe_sha256": "36713dc984ed8433a2da2678aaa1defcdecb82350b124b55c2b7f3c3fe9239de",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0TG9naWNhbERyaXZlU3RyaW5nc1cgZml0cywgbGVuZ3RoIG11bHRpcGxlIG9mIDQ6IHRydWUgdHJ1ZQpldmVyeSBsaXN0ZWQgZHJpdmUgaGFzIGEgdHlwZSBvZiAyIG9yIG1vcmU6IHRydWU7IEM6IGxpc3RlZDogdHJ1ZQpDOlwgaXMgRFJJVkVfRklYRUQ6IHRydWUKR2V0Vm9sdW1lSW5mb3JtYXRpb25XIG9rPTEgZnM9TlRGUwpHZXREaXNrRnJlZVNwYWNlRXhXIG9rPTEgdG90YWw+ZnJlZTogdHJ1ZQpyZXBlYXRhYmxlOiB0cnVlCjI5OSBsZXR0ZXJzID0+IDEKQzpcIHBsdXMgNDk5NiBsZXR0ZXJzID0+IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetLogicalDriveStringsW fits, length multiple of 4: true true\nevery listed drive has a type of 2 or more: true; C: listed: true\nC:\\ is DRIVE_FIXED: true\nGetVolumeInformationW ok=1 fs=NTFS\nGetDiskFreeSpaceExW ok=1 total>free: true\nrepeatable: true\n299 letters => 1\nC:\\ plus 4996 letters => 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "isadmin_calls_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "0baa54b945404403377befbb7546591fd80ce13a69de0e3fadbd62112d8c46e5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SXNVc2VyQW5BZG1pbjogMSwgbGFzdCBlcnJvciBsZWZ0IHVudG91Y2hlZCB0cnVlCmFnYWluOiAxCmZyb20gYW5vdGhlciB0aHJlYWQ6IDEKaW4gYSBjaGlsZCBwcm9jZXNzOiAxCmltcGVyc29uYXRpbmcgYSBjb3B5IG9mIHRoZSBvd24gdG9rZW46IHNldCAxLCBJc1VzZXJBbkFkbWluIDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "IsUserAnAdmin: 1, last error left untouched true\nagain: 1\nfrom another thread: 1\nin a child process: 1\nimpersonating a copy of the own token: set 1, IsUserAnAdmin 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 99
+    },
+    {
+      "name": "isadmin_calls_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "0baa54b945404403377befbb7546591fd80ce13a69de0e3fadbd62112d8c46e5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SXNVc2VyQW5BZG1pbjogMCwgbGFzdCBlcnJvciBsZWZ0IHVudG91Y2hlZCB0cnVlCmFnYWluOiAwCmZyb20gYW5vdGhlciB0aHJlYWQ6IDAKaW4gYSBjaGlsZCBwcm9jZXNzOiAwCmltcGVyc29uYXRpbmcgYSBjb3B5IG9mIHRoZSBvd24gdG9rZW46IHNldCAxLCBJc1VzZXJBbkFkbWluIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "IsUserAnAdmin: 0, last error left untouched true\nagain: 0\nfrom another thread: 0\nin a child process: 0\nimpersonating a copy of the own token: set 1, IsUserAnAdmin 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    },
+    {
+      "name": "isadmin_imp_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "0853c4bf81060e9b40030ee74170051ee650c769263fd4238d4e925502eacb0f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b24gdGhlIHByb2Nlc3MgdG9rZW46IDAKaW1wZXJzb25hdGluZyBhIGNvcHk6IHNldCAxLCBJc1VzZXJBbkFkbWluIDAKYWZ0ZXIgUmV2ZXJ0VG9TZWxmOiAwCmltcGVyc29uYXRpbmcgdGhlIGxpbmtlZCB0b2tlbjogc2V0IDEsIElzVXNlckFuQWRtaW4gMAphZnRlciBSZXZlcnRUb1NlbGY6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "on the process token: 0\nimpersonating a copy: set 1, IsUserAnAdmin 0\nafter RevertToSelf: 0\nimpersonating the linked token: set 1, IsUserAnAdmin 0\nafter RevertToSelf: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}

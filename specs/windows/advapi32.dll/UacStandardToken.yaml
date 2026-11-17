@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/UacStandardToken.yaml
+id: windows/api/advapi32.dll/UacStandardToken
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (EnableLUA 1, ConsentPromptBehaviorAdmin 5, the defaults; nothing was changed). The local account \"server\" is a member of Administrators and logged on at the console (session 1). Tests ran through tools/pipeline/windows/poly-oracle.ps1 -Token standard: a one-time scheduled task of that user with the interactive logon type and run level Limited, which the Task Scheduler starts with the user's FILTERED token (no consent prompt is involved). Every test ran twice with identical output. The same account's SSH logon, which all older recordings used, has a third kind of token (no split, see GetTokenInformation.yaml 'oracle_token')."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "Access Tokens", "Mandatory Integrity
+  Control", "How User Account Control works", GetTokenInformation, TOKEN_INFORMATION_CLASS, TOKEN_ELEVATION_TYPE,
+  TOKEN_LINKED_TOKEN, CheckTokenMembership, IsUserAnAdmin; winnt.h for constants. No Microsoft binary was read, decompiled
+  or disassembled; Wine's tests were not read.
+summary: >
+  What a PROGRAM RUN BY AN ADMINISTRATOR WITHOUT ELEVATION has: the filtered ("standard", "limited") token of a split token.
+  Windows gives an administrator two tokens of one logon: a full one and a filtered one, and starts every program with the
+  filtered one until it is elevated. The filtered token has the same user and logon, the Administrators group present but
+  USE_FOR_DENY_ONLY, medium integrity, 5 privileges, and a LINKED token that is the full token. Poly's policy (owner decision
+  2026-11-17): ordinary programs run with this token; a program that asks for administrator rights gets a consent dialog
+  (ShellExecute runas, a requireAdministrator manifest, COM elevation) and, if the user says yes, a process with the
+  full token (UacElevatedToken.yaml). Today Poly gives every process the full token (ADR 0171): this sheet is what changes.
+returns:
+  own_token: "GetTokenInformation on the process token (OpenProcessToken, TOKEN_QUERY): TokenType 1 (primary), TokenElevation 0, TokenElevationType 3 (TokenElevationTypeLimited), TokenHasRestrictions 1 (true: a deny-only group counts), TokenIntegrityLevel 0x2000 (medium) with attributes 0x60, TokenMandatoryPolicy 3, TokenUIAccess 0, TokenSandBoxInert 0, TokenIsAppContainer 0, TokenVirtualizationAllowed 1, TokenVirtualizationEnabled 0."
+  groups: "BUILTIN\\Administrators (S-1-5-32-544) is in TokenGroups with attributes 0x10 (SE_GROUP_USE_FOR_DENY_ONLY) only: not enabled, not mandatory, not enabled-by-default. 'Local account and member of Administrators group' (S-1-5-114) is deny-only too. BUILTIN\\Users has attributes 7 (mandatory, enabled by default, enabled). More than 8 groups are present. The integrity label group is S-1-16-8192 with attributes 0x60."
+  privileges: "exactly 5: SeChangeNotifyPrivilege (attributes 3: enabled and enabled by default), and SeIncreaseWorkingSetPrivilege, SeShutdownPrivilege, SeTimeZonePrivilege, SeUndockPrivilege (attributes 0: present, disabled). The names come out of LookupPrivilegeNameW sorted here by name; none of the powerful ones (SeDebug, SeBackup, SeRestore, SeLoadDriver, SeTakeOwnership, SeImpersonate, SeCreateGlobal, SeSecurity, SeSystemtime ...) is present."
+  copies: "DuplicateTokenEx of it (all access) as an impersonation token at SecurityImpersonation and as a primary token: both keep every fact above (TokenType 2 or 1, elevation 0, type 3, restricted 1, medium integrity, Administrators deny-only)."
+  length_rules: "TokenElevation (20) with a buffer of 8 bytes fails with ERROR_BAD_LENGTH (24) and *return_length 4; TokenElevationType (18) with 2 bytes fails with ERROR_INSUFFICIENT_BUFFER (122) and *return_length 4."
+  linked_token: "TokenLinkedToken (19) with an 8-byte buffer succeeds and returns the handle of the LINKED token; with 0, 4 or 16 bytes it fails with ERROR_BAD_LENGTH (24) and *return_length 8. The linked token is the full token of the same logon: TokenType 2 (an impersonation token) at impersonation level 1 (SecurityIdentification), TokenElevation 1, TokenElevationType 2 (Full), TokenHasRestrictions 0, integrity 0x3000 (high), Administrators attributes 0xF (mandatory, enabled by default, enabled, owner), mandatory policy 3, UIAccess 0, 24 privileges: SeChangeNotify, SeCreateGlobal and SeImpersonate enabled (3), the rest present and disabled (0): SeBackup, SeCreatePagefile, SeCreateSymbolicLink, SeDebug, SeDelegateSessionUserImpersonate, SeIncreaseBasePriority, SeIncreaseQuota, SeIncreaseWorkingSet, SeLoadDriver, SeManageVolume, SeProfileSingleProcess, SeRemoteShutdown, SeRestore, SeSecurity, SeShutdown, SeSystemEnvironment, SeSystemProfile, SeSystemtime, SeTakeOwnership, SeTimeZone, SeUndock."
+  linked_handle: "The returned handle can be queried (TOKEN_QUERY works: GetTokenInformation on it succeeds) and its own TokenLinkedToken is the filtered token again (type 3, restricted 1, medium). DuplicateTokenEx of the linked token as an impersonation token FAILS with ERROR_BAD_IMPERSONATION_LEVEL (1346) because it is only at identification level. SetThreadToken(NULL, linked) succeeds and the thread token can be read (elevation 1, type 2, high), but an identification-level token gives no rights: IsUserAnAdmin stays FALSE while impersonating it."
+  membership: "IsUserAnAdmin: 0 (FALSE). CheckTokenMembership(NULL, S-1-5-32-544): TRUE (the call works) with *is_member FALSE: a deny-only group is not a membership; (NULL, BUILTIN\\Users): member TRUE; (NULL, SYSTEM S-1-5-18): TRUE call, member FALSE. A primary token handle: FALSE, ERROR_NO_IMPERSONATION_TOKEN (1309), member FALSE. An impersonation copy of the process token: Administrators FALSE, Users TRUE. The LINKED token handle: Administrators member TRUE, Users TRUE (this is how a program asks whether the user COULD elevate)."
+  child_process: "A process created with CreateProcessW or ShellExecuteExW ('open', no verb) inherits the token kind: the child reports elevation 0, type 3, medium integrity, Administrators deny-only, a linked token present. A child of a child too."
+errors:
+  bad_length: "ERROR_BAD_LENGTH (24) for TokenElevation with a wrong length and for TokenLinkedToken with a length other than 8"
+  not_impersonation: "ERROR_NO_IMPERSONATION_TOKEN (1309) from CheckTokenMembership with a primary token handle"
+  bad_level: "ERROR_BAD_IMPERSONATION_LEVEL (1346) from DuplicateTokenEx of the linked token"
+side_effects: "none"
+threading: "the process token is the same for all threads; a thread token (SetThreadToken) overrides it for that thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, header constants). A test
+  prints facts, never handles, SIDs of the machine, LUID values or times. They run with the pipeline's -Token standard (the
+  recorded windows.json has system.token "standard", and `win poly` boots Poly with poly.win.token=standard). A child
+  process is the test's own image started with ` --child token`; it ends with a code that carries its token facts.
+not_covered: >
+  A domain account, a user who is not an administrator (never observed), Group Policy that changes
+  the split (FilterAdministratorToken, EnableLUA 0, LocalAccountTokenFilterPolicy), the built-in Administrator account,
+  AppContainer tokens, UIAccess. WOW64 callers: not observed.

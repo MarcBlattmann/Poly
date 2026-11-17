@@ -344,6 +344,15 @@ pub fn screen<E: Env + ?Sized>(env: &E) -> Display {
     }
 }
 
+/// The system DPI: 96, or 96 times the desktop link's units when Windows apps live in output
+/// pixels (ADR 0219).
+pub fn system_dpi<E: Env + ?Sized>(env: &E) -> u32 {
+    match env.call(Request::Desktop {}) {
+        Reply::Desktop { dpi, .. } => dpi,
+        _ => 96,
+    }
+}
+
 /// The desktop window.
 pub fn desktop<E: Env + ?Sized>(env: &E) -> u32 {
     match env.call(Request::Desktop {}) {

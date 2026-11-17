@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellExecuteA.yaml
+id: windows/api/shell32.dll/ShellExecuteA
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (defaults), the local administrator \"server\" in session 1 through tools/pipeline/windows/poly-oracle.ps1 -Token standard (filtered token) and -Token elevated (full token); tests named *_std are recorded with the first, *_adm with the second (per-test token in windows.json). Every test ran twice with identical output. The `runas` of an EXISTING file (which shows the consent prompt) is covered for the wide form in ShellExecuteW.yaml; here only the calls that never prompt."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ShellExecuteA (the ANSI form of
+  ShellExecuteW, same return codes). No Microsoft binary was read or disassembled; Wine's tests were not read.
+summary: >
+  The ANSI form of ShellExecuteW (see ShellExecuteW.yaml and ShellExecuteExW.yaml): the same results for the same
+  inputs. Strings are in the ANSI code page (the tests use ASCII only).
+interface:
+  signature: "HINSTANCE ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParameters, LPCSTR lpDirectory, INT nShowCmd)"
+rules:
+  open: "verb `open` or NULL verb on the image with parameters `--child token`: a value above 32 (standard and elevated callers)."
+  missing_file: "file `C:\\poly-no-such-dir\\none.exe`: verb open or runas: 2 (SE_ERR_FNF); no prompt is shown for a missing file."
+  unknown_verb: "verb `frobnicate` on the image: 31 (SE_ERR_NOASSOC)."
+errors:
+  fnf: "2 (SE_ERR_FNF)"
+  noassoc: "31 (SE_ERR_NOASSOC)"
+side_effects: "starts a process"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); the child is the test's own image started with ` --child token`.
+not_covered: >
+  Non-ASCII names, the runas of an existing file (ShellExecuteW.yaml), URLs and documents.

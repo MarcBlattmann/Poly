@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "swsx_errors",
+      "exe_sha256": "0fce0036ab96bd9941126f664ed3e89e6c1184e77b8908d44f40ce3b0f984560",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWluID4gbWF4ICgyTWlCLCAxTWlCKSA9IDAgZXJyIDg3Cm1pbiA9IG1heCA9IDAgPSAwIGVyciA4NwptaW4gMCwgbWF4IDRNaUIgPSAwIGVyciA4NwptaW4gMSwgbWF4IDEgPSAxIGVyciAtMgptaW4gNDA5NiwgbWF4IDgxOTIgPSAxIGVyciAtMgptaW4gMU1pQiwgbWF4IC0xID0gMSBlcnIgLTIKbWluIC0xLCBtYXggNE1pQiA9IDAgZXJyIDg3Cm1pbiBtYXgtMSwgbWF4IC0yIChodWdlKSA9IDAgZXJyIDE0NTAKbWluIDB4N0ZGRkZGRkZGRkZGLCBtYXggdGhlIHNhbWUgPSAwIGVyciAxNDUwCk5VTEwgaGFuZGxlID0gMCBlcnIgNgpJTlZBTElEX0hBTkRMRV9WQUxVRSAoLTEgPSBjdXJyZW50IHByb2Nlc3MpID0gMSBlcnIgLTIKZ2FyYmFnZSBoYW5kbGUgMHgxMjM0NTY3OCA9IDAgZXJyIDYKY3VycmVudCB0aHJlYWQgcHNldWRvIGhhbmRsZSAoLTIpID0gMCBlcnIgNgphIHRocmVhZCBoYW5kbGUgPSAwIGVyciA2ClFVRVJZX0lORk9STUFUSU9OIG9ubHkgPSAwIGVyciA1CiAgR2V0UHJvY2Vzc1dvcmtpbmdTZXRTaXplIHdpdGggdGhhdCBoYW5kbGUgPSAxIGVyciAtMgpRVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OIG9ubHkgPSAwIGVyciA1CiAgR2V0UHJvY2Vzc1dvcmtpbmdTZXRTaXplIHdpdGggdGhhdCBoYW5kbGUgPSAxIGVyciAtMgpTWU5DSFJPTklaRSBvbmx5ID0gMCBlcnIgNQogIEdldFByb2Nlc3NXb3JraW5nU2V0U2l6ZSB3aXRoIHRoYXQgaGFuZGxlID0gMCBlcnIgNQpTRVRfUVVPVEEgb25seSA9IDEgZXJyIC0yCiAgR2V0UHJvY2Vzc1dvcmtpbmdTZXRTaXplIHdpdGggdGhhdCBoYW5kbGUgPSAwIGVyciA1CkV4IE5VTEwgaGFuZGxlICsgYmFkIGZsYWdzID0gMCBlcnIgODcKRXggbWluPm1heCArIGJhZCBmbGFncyA9IDAgZXJyIDg3CkV4IE1JTl9FTkFCTEV8TUlOX0RJU0FCTEUgPSAwIGVyciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "min > max (2MiB, 1MiB) = 0 err 87\nmin = max = 0 = 0 err 87\nmin 0, max 4MiB = 0 err 87\nmin 1, max 1 = 1 err -2\nmin 4096, max 8192 = 1 err -2\nmin 1MiB, max -1 = 1 err -2\nmin -1, max 4MiB = 0 err 87\nmin max-1, max -2 (huge) = 0 err 1450\nmin 0x7FFFFFFFFFFF, max the same = 0 err 1450\nNULL handle = 0 err 6\nINVALID_HANDLE_VALUE (-1 = current process) = 1 err -2\ngarbage handle 0x12345678 = 0 err 6\ncurrent thread pseudo handle (-2) = 0 err 6\na thread handle = 0 err 6\nQUERY_INFORMATION only = 0 err 5\n  GetProcessWorkingSetSize with that handle = 1 err -2\nQUERY_LIMITED_INFORMATION only = 0 err 5\n  GetProcessWorkingSetSize with that handle = 1 err -2\nSYNCHRONIZE only = 0 err 5\n  GetProcessWorkingSetSize with that handle = 0 err 5\nSET_QUOTA only = 1 err -2\n  GetProcessWorkingSetSize with that handle = 0 err 5\nEx NULL handle + bad flags = 0 err 87\nEx min>max + bad flags = 0 err 87\nEx MIN_ENABLE|MIN_DISABLE = 0 err 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "swsx_flags",
+      "exe_sha256": "84936379234c092c62593a77e6dd8ee0031fd4aee356b78ad7a0ba42ae8d501d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IHJlYWQgb2s9MSBtaW49MHgzMjAwMCBtYXg9MHgxNTkwMDAgZmxhZ3M9MHhhClNldFByb2Nlc3NXb3JraW5nU2V0U2l6ZShzZWxmLC0xLC0xKSA9IDEgZXJyIC0yCmFmdGVyIHRyaW06IHJlYWQgb2s9MSBtaW49MHgzMjAwMCBtYXg9MHgxNTkwMDAgZmxhZ3M9MHhhClNldFByb2Nlc3NXb3JraW5nU2V0U2l6ZUV4KHNlbGYsLTEsLTEsMCkgPSAxIGVyciAtMgphZnRlciB0cmltIEV4OiByZWFkIG9rPTEgbWluPTB4MzIwMDAgbWF4PTB4MTU5MDAwIGZsYWdzPTB4YQpzZXQgMU1pQi4uNE1pQiA9IDEgZXJyIC0yCmFmdGVyIDFNLi40TTogcmVhZCBvaz0xIG1pbj0weDEwMDAwMCBtYXg9MHg0MDAwMDAgZmxhZ3M9MHhhCnNldCAyTWlCLi4yTWlCID0gMSBlcnIgLTIKYWZ0ZXIgMk0uLjJNOiByZWFkIG9rPTEgbWluPTB4MjAwMDAwIG1heD0weDIwMDAwMCBmbGFncz0weGEKRXggZmxhZ3MgTUlOX0VOQUJMRSA9IDEgZXJyIC0yCiAgZmxhZ3MgcmVhZCBiYWNrIDB4OSBtaW49MHgxMDAwMDAgbWF4PTB4NDAwMDAwCkV4IGZsYWdzIE1JTl9ESVNBQkxFID0gMSBlcnIgLTIKICBmbGFncyByZWFkIGJhY2sgMHhhIG1pbj0weDEwMDAwMCBtYXg9MHg0MDAwMDAKRXggZmxhZ3MgTUFYX0VOQUJMRSA9IDEgZXJyIC0yCiAgZmxhZ3MgcmVhZCBiYWNrIDB4NiBtaW49MHgxMDAwMDAgbWF4PTB4NDAwMDAwCkV4IGZsYWdzIE1BWF9ESVNBQkxFID0gMSBlcnIgLTIKICBmbGFncyByZWFkIGJhY2sgMHhhIG1pbj0weDEwMDAwMCBtYXg9MHg0MDAwMDAKRXggZmxhZ3MgTUlOX0VOQUJMRXxNSU5fRElTQUJMRSA9IDAgZXJyIDg3CiAgZmxhZ3MgcmVhZCBiYWNrIDB4YSBtaW49MHgxMDAwMDAgbWF4PTB4NDAwMDAwCkV4IGZsYWdzIE1BWF9FTkFCTEV8TUFYX0RJU0FCTEUgPSAwIGVyciA4NwogIGZsYWdzIHJlYWQgYmFjayAweGEgbWluPTB4MTAwMDAwIG1heD0weDQwMDAwMApFeCBmbGFncyAweDEwIHVua25vd24gPSAxIGVyciAtMgogIGZsYWdzIHJlYWQgYmFjayAweGEgbWluPTB4MTAwMDAwIG1heD0weDQwMDAwMApFeCBmbGFncyAweEZGRkZGRkZGID0gMCBlcnIgODcKICBmbGFncyByZWFkIGJhY2sgMHhhIG1pbj0weDEwMDAwMCBtYXg9MHg0MDAwMDAKT3BlblByb2Nlc3MoU0VUX1FVT1RBfFFVRVJZX0lORk9STUFUSU9OLCBzZWxmKSBub24tbnVsbDogdHJ1ZQpzZXQgdGhyb3VnaCB0aGUgaGFuZGxlID0gMSBlcnIgLTIKR2V0UHJvY2Vzc1dvcmtpbmdTZXRTaXplIHRocm91Z2ggdGhlIGhhbmRsZSBvaz0xIG1pbj0weDE4MDAwMCBtYXg9MHgzMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: read ok=1 min=0x32000 max=0x159000 flags=0xa\nSetProcessWorkingSetSize(self,-1,-1) = 1 err -2\nafter trim: read ok=1 min=0x32000 max=0x159000 flags=0xa\nSetProcessWorkingSetSizeEx(self,-1,-1,0) = 1 err -2\nafter trim Ex: read ok=1 min=0x32000 max=0x159000 flags=0xa\nset 1MiB..4MiB = 1 err -2\nafter 1M..4M: read ok=1 min=0x100000 max=0x400000 flags=0xa\nset 2MiB..2MiB = 1 err -2\nafter 2M..2M: read ok=1 min=0x200000 max=0x200000 flags=0xa\nEx flags MIN_ENABLE = 1 err -2\n  flags read back 0x9 min=0x100000 max=0x400000\nEx flags MIN_DISABLE = 1 err -2\n  flags read back 0xa min=0x100000 max=0x400000\nEx flags MAX_ENABLE = 1 err -2\n  flags read back 0x6 min=0x100000 max=0x400000\nEx flags MAX_DISABLE = 1 err -2\n  flags read back 0xa min=0x100000 max=0x400000\nEx flags MIN_ENABLE|MIN_DISABLE = 0 err 87\n  flags read back 0xa min=0x100000 max=0x400000\nEx flags MAX_ENABLE|MAX_DISABLE = 0 err 87\n  flags read back 0xa min=0x100000 max=0x400000\nEx flags 0x10 unknown = 1 err -2\n  flags read back 0xa min=0x100000 max=0x400000\nEx flags 0xFFFFFFFF = 0 err 87\n  flags read back 0xa min=0x100000 max=0x400000\nOpenProcess(SET_QUOTA|QUERY_INFORMATION, self) non-null: true\nset through the handle = 1 err -2\nGetProcessWorkingSetSize through the handle ok=1 min=0x180000 max=0x300000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

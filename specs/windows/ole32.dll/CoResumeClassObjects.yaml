@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoResumeClassObjects.yaml
+id: windows/api/ole32.dll/CoResumeClassObjects
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Makes the class objects registered with REGCLS_SUSPENDED visible to activation requests. A COM server registers its classes suspended while it starts, then resumes them once it is ready; until then a client that asked for the class waits. The tests find that only registrations for the local-server context are held back: an in-process-only REGCLS_SUSPENDED registration stays invisible, and the call then returns an error.
+interface:
+  signature: "HRESULT CoResumeClassObjects(void)"
+installer: "Both Google servers call it after registering their classes; the installer's CoCreateInstance(LOCAL) returns only after it."
+rules:
+  nothing_registered: "S_OK, also called twice, with COM initialised (MTA) and on a thread without COM"
+  result_codes: "S_OK when at least one local-context REGCLS_SUSPENDED registration was waiting and became visible; HRESULT 0x800706C6 (error 1734) when nothing was waiting: after a normal registration, on a second call right after a successful one, after CoSuspendClassObjects (which it does not undo), and for an in-process-only suspended registration"
+  suspended_local: "a class registered for the local-server context with REGCLS_SUSPENDED is not found by CoGetClassObject or CoCreateInstance (REGDB_E_CLASSNOTREG 0x80040154) until the call; after it every thread finds it: two suspended registrations are resumed by one call; revoking one of them leaves the other found, revoking both makes the class unknown"
+  any_thread: "the call resumes the registrations of all threads of the process: a main MTA thread resumes a class an STA or MTA thread registered, and the registering thread resumes its own class too; the second call from another thread then gives 0x800706C6"
+  suspended_inprocess: "a REGCLS_SUSPENDED registration for the in-process context only is never found (0x80040154 before and after the call) and the call returns 0x800706C6"
+  cross_process: "a server that registers MULTIPLEUSE|SUSPENDED (flags 5) and resumes 1.2 s later: the client's CoCreateInstance(LOCAL) does not return within 400 ms, returns S_OK afterwards, and the server's log shows register, resume, then create; a server that resumes at once is served within 5 s"
+  never_resumed: "a server that registers suspended and never resumes (and then ends) leaves the client's CoCreateInstance(LOCAL) waiting: no return within 2.5 s, and still waiting 1.5 s after the server was asked to leave and had left; the server never saw a CreateInstance"
+errors:
+  nothing_to_resume: "0x800706C6 (HRESULT_FROM_WIN32(1734))"
+side_effects: "makes suspended class objects visible to every activation request, in this process and from other processes"
+threading: "any thread may call; the effect is process-wide"
+ordering: ["register (suspended), then resume, then clients' waiting activations are answered"]
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, see CoRegisterClassObject: the image is client and COM server (`--child srv <tag> clsid={...} <flags>`, a class factory and a plain object of its own, a log file and request files in the test's directory); class registrations are the test's own (HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...}, default value starting `polyws-com-oop`) and are removed again; a class id with a pending activation of an earlier run is avoided by putting the process id into the class id; calls that can wait for a long time run on a thread of their own with a bounded wait. Observations are results, booleans and counts, never process ids, thread ids, cookies or times.
+not_covered: >
+  REGCLS_SURROGATE and REGCLS_AGILE combinations, activation of a suspended class by DCOM from another machine, what 0x800706C6 is named by the system.
