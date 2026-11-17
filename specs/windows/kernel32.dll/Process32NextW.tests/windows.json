@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e63c3a40c5bb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:46:31Z",
+  "tests": [
+    {
+      "name": "th_next_edge",
+      "exe_sha256": "441df4ee7878e69eb67e2b30e3777dc494fbc2f96b382cb9be4b4583032d55c7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UHJvY2VzczMyTmV4dFcgd2l0aCBkd1NpemUgMCBvbiBhIGZyZXNoIHNuYXBzaG90OiByZXN1bHQgZmFsc2UsIGxhc3QgZXJyb3IgMjQKUHJvY2VzczMyTmV4dFcgd2l0aCBkd1NpemUgMTAwIGluIHRoZSBtaWRkbGUgb2YgdGhlIGxpc3Q6IHJlc3VsdCBmYWxzZSwgbGFzdCBlcnJvciAyNApOZXh0IGFmdGVyIEZpcnN0IGdpdmVzIGFub3RoZXIgZW50cnk6IHRydWUKUHJvY2VzczMyTmV4dFcgb24gYSBmcmVzaCBzbmFwc2hvdDogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIsIHBpZCAwCmFuZCB0aGUgbmV4dCBvbmU6IHRydWUsIGEgZGlmZmVyZW50IHBpZDogdHJ1ZQpQcm9jZXNzMzJOZXh0VyB3aXRoIGhhbmRsZSBOVUxMOiByZXN1bHQgZmFsc2UsIGxhc3QgZXJyb3IgNgpQcm9jZXNzMzJOZXh0VyB3aXRoIGhhbmRsZSAtMTogcmVzdWx0IGZhbHNlLCBsYXN0IGVycm9yIDYKUHJvY2VzczMyTmV4dFcgb24gYSBjbG9zZWQgaGFuZGxlOiByZXN1bHQgZmFsc2UsIGxhc3QgZXJyb3IgNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Process32NextW with dwSize 0 on a fresh snapshot: result false, last error 24\nProcess32NextW with dwSize 100 in the middle of the list: result false, last error 24\nNext after First gives another entry: true\nProcess32NextW on a fresh snapshot: result true, last error -2, pid 0\nand the next one: true, a different pid: true\nProcess32NextW with handle NULL: result false, last error 6\nProcess32NextW with handle -1: result false, last error 6\nProcess32NextW on a closed handle: result false, last error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}
