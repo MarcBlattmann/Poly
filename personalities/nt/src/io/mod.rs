@@ -401,6 +401,18 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
     v
 }
 
+/// The user's profile below `C:` (`\Users\<name>`).
+fn profile_path() -> String {
+    alloc::format!("\\Users\\{}", poly_registry::defaults::POLY_USER_NAME)
+}
+
+/// The profile's security (ADR 0222): owned by the user, SYSTEM, Administrators and the user in
+/// full control of everything below, nothing inherited from above (Windows' profile folders).
+pub fn profile_sddl() -> String {
+    let u = poly_registry::defaults::POLY_USER_SID;
+    alloc::format!("O:{u}G:{u}D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;{u})")
+}
+
 impl IoState {
     /// The same file in Poly's own file system (the volume's root directory, then the path with
     /// `/` separators), for the desktop's consent prompt to read the publisher from (ADR 0222).
@@ -505,6 +517,12 @@ impl IoState {
                 add_named(om, &kernel, &link, NewObject::SymbolicLink { target: &path })?;
             }
             self.devices.insert(cookie, Device::Volume(self.volumes.len()));
+            if config.letter == Some('C') {
+                // The user's profile is the user's (ADR 0222): a program without administrator
+                // rights owns what it makes there, as on Windows.
+                let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(&profile_path()));
+                om.seed_path_security(&key, &profile_sddl());
+            }
             self.volumes.push(Volume {
                 device,
                 root,

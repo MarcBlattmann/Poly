@@ -468,6 +468,26 @@ impl ObjectManager {
         poly_security::inherit::effective(&default, &chain, container)
     }
 
+    /// Set the security of the file or key at `key` (as [`path_key`] spells it) from SDDL, as if
+    /// it had been set on it (`SetNamedSecurityInfoW`): what lies below inherits its inheritable
+    /// ACEs. The system's own folders that belong to someone (the user's profile and hive, ADR
+    /// 0222) are given so when the volume or the registry is made. False if `sddl` does not parse.
+    pub fn seed_path_security(&mut self, key: &str, sddl: &str) -> bool {
+        let w: Vec<u16> = sddl.encode_utf16().collect();
+        let Ok(rel) = poly_security::sdstr::parse(&w) else { return false };
+        let Some(parts) = Parts::from_relative(&rel) else { return false };
+        let st = Stored {
+            owner: parts.owner.clone(),
+            group: parts.group.clone(),
+            dacl: (parts.control & sd::SE_DACL_PRESENT != 0)
+                .then(|| parts.dacl.as_deref().map(poly_security::inherit::explicit_acl)),
+            protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+            sacl: parts.sacl.clone(),
+        };
+        self.security.paths.insert(key.into(), st);
+        true
+    }
+
     /// Give a file or key object (made by the file system or the registry)
     /// the descriptor of its `path` (components joined by backslashes, the
     /// volume or hive first, case folded by the caller): inherited from what
@@ -584,5 +604,34 @@ mod tests {
         assert!(matches!(got, Some(Ok(_))), "{got:?}");
         // Writing is not given.
         assert!(matches!(om.dacl_grant(&c, id, 0x4000_0000, false), Some(Err(_))));
+    }
+    /// ADR 0222: what is seeded on a folder passes down to what lies below it; elsewhere the
+    /// default stands. An administrator's filtered token may change the DACL (`WRITE_DAC`) of a
+    /// file in its profile and not of one in the system's folders.
+    #[test]
+    fn a_seeded_folder_passes_its_owner_s_rights_down() {
+        let mut filtered = Token::uac_filtered();
+        filtered.clamp_privileges_to_integrity();
+        // Poly's single user (ADR 0171).
+        let user = "S-1-5-21-520193847-884726105-1936024571-1002";
+        let mut om = ObjectManager::new();
+        let (p, _) = om.new_token(filtered, ThreadRef(1)).unwrap();
+        om.set_process_token(ProcessId(5), p).unwrap();
+        let c = Caller::user(ProcessId(5), ThreadRef(6));
+        let sddl = alloc::format!("O:{user}G:{user}D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;{user})");
+        assert!(om.seed_path_security(r"F0\USERS\POLY", &sddl));
+        assert!(!om.seed_path_security(r"F0\X", "not sddl"));
+        let file = |om: &mut ObjectManager, path: &str| {
+            let id = om
+                .new_object(NewObject::Opaque { kind: ObjectType::File, cookie: 1, signaled: None, parse: false }, c.thread)
+                .unwrap();
+            om.assign_path_security(id, DefaultSd::File, path, false);
+            id
+        };
+        const WRITE_DAC: u32 = 0x0004_0000;
+        let mine = file(&mut om, r"F0\USERS\POLY\APPDATA\LOCAL\CHROME\X");
+        assert!(matches!(om.dacl_grant(&c, mine, WRITE_DAC, false), Some(Ok(_))));
+        let system = file(&mut om, r"F0\WINDOWS\X");
+        assert!(matches!(om.dacl_grant(&c, system, WRITE_DAC, false), Some(Err(_))));
     }
 }
