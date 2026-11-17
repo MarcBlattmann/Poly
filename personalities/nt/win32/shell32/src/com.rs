@@ -10,7 +10,9 @@
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 pub use poly_com::guid::Guid;
-use poly_com::inproc::{CLSID_DESTINATION_LIST, CLSID_FILE_OPERATION, CLSID_TASKBAR_LIST, IID_ICLASS_FACTORY, IID_IUNKNOWN};
+use poly_com::inproc::{
+    CLSID_DESTINATION_LIST, CLSID_FILE_OPERATION, CLSID_TASKBAR_LIST, IID_ICLASS_FACTORY, IID_IUNKNOWN,
+};
 
 pub type Hresult = i32;
 pub use poly_com::hresult::{
@@ -246,7 +248,11 @@ unsafe extern "system" fn factory_lock(_this: *mut c_void, _lock: i32) -> Hresul
 /// `DllGetClassObject(rclsid, riid, ppv)` (Learn): the class object of one of this DLL's classes
 /// ([`poly_com::inproc`]), `CLASS_E_CLASSNOTAVAILABLE` for any other class.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DllGetClassObject(clsid: *const Guid, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn DllGetClassObject(
+    clsid: *const Guid,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }

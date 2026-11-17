@@ -69,7 +69,14 @@ unsafe extern "system" fn not_implemented_2(_: *mut c_void, _: usize, _: usize) 
 unsafe extern "system" fn not_implemented_3(_: *mut c_void, _: usize, _: usize, _: usize) -> Hresult {
     E_NOTIMPL
 }
-unsafe extern "system" fn not_implemented_5(_: *mut c_void, _: usize, _: usize, _: usize, _: usize, _: usize) -> Hresult {
+unsafe extern "system" fn not_implemented_5(
+    _: *mut c_void,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+) -> Hresult {
     E_NOTIMPL
 }
 unsafe extern "system" fn not_implemented_4(_: *mut c_void, _: usize, _: usize, _: usize, _: usize) -> Hresult {
@@ -227,7 +234,11 @@ pub unsafe extern "system" fn SHCreateItemFromParsingName(
 /// `SHCreateItemFromIDList(pidl, riid, ppv)`: the item of one of Poly's item lists
 /// ([`crate::pidl_path`]); the empty list is the desktop.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SHCreateItemFromIDList(pidl: *const u8, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn SHCreateItemFromIDList(
+    pidl: *const u8,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }

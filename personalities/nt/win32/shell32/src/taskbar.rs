@@ -177,7 +177,12 @@ unsafe fn begun<'a>(p: *mut c_void) -> &'a AtomicBool {
     unsafe { &(*p.cast::<DestinationList>()).begun }
 }
 
-unsafe extern "system" fn begin_list(p: *mut c_void, slots: *mut u32, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+unsafe extern "system" fn begin_list(
+    p: *mut c_void,
+    slots: *mut u32,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if slots.is_null() || out.is_null() {
         return E_POINTER;
     }

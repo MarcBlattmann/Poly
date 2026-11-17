@@ -27,7 +27,8 @@ unsafe extern "system" {
 }
 
 /// `IID_IFileOperation` (`shobjidl_core.h`).
-pub const IID_IFILE_OPERATION: Guid = guid(0x947A_AB5F, 0x0A5C, 0x4C13, [0xB4, 0xD6, 0x4B, 0xF7, 0x83, 0x6F, 0xC9, 0xF8]);
+pub const IID_IFILE_OPERATION: Guid =
+    guid(0x947A_AB5F, 0x0A5C, 0x4C13, [0xB4, 0xD6, 0x4B, 0xF7, 0x83, 0x6F, 0xC9, 0xF8]);
 /// `FOF_RENAMEONCOLLISION` (`shellapi.h`).
 const FOF_RENAMEONCOLLISION: u32 = 0x8;
 const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
@@ -41,11 +42,24 @@ const FIND_NAME_AT: usize = 44;
 /// One queued operation, with the paths as they were when it was queued.
 enum Op {
     /// Move `from` into `folder` as `name` (`None`: its own name).
-    Move { from: Vec<u16>, folder: Vec<u16>, name: Option<Vec<u16>> },
+    Move {
+        from: Vec<u16>,
+        folder: Vec<u16>,
+        name: Option<Vec<u16>>,
+    },
     /// Give `from` a new name in its folder.
-    Rename { from: Vec<u16>, name: Vec<u16> },
-    Copy { from: Vec<u16>, folder: Vec<u16>, name: Option<Vec<u16>> },
-    Delete { from: Vec<u16> },
+    Rename {
+        from: Vec<u16>,
+        name: Vec<u16>,
+    },
+    Copy {
+        from: Vec<u16>,
+        folder: Vec<u16>,
+        name: Option<Vec<u16>>,
+    },
+    Delete {
+        from: Vec<u16>,
+    },
 }
 
 #[derive(Default)]
@@ -185,7 +199,12 @@ unsafe extern "system" fn copy_item(
     S_OK
 }
 
-unsafe extern "system" fn rename_item(p: *mut c_void, item: *mut c_void, name: *const u16, _sink: *mut c_void) -> Hresult {
+unsafe extern "system" fn rename_item(
+    p: *mut c_void,
+    item: *mut c_void,
+    name: *const u16,
+    _sink: *mut c_void,
+) -> Hresult {
     // SAFETY: our object; the caller's item and name.
     unsafe {
         let Some(from) = path_of(item) else { return E_INVALIDARG };

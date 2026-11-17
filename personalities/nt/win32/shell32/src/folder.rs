@@ -60,7 +60,14 @@ unsafe extern "system" fn not_implemented_3(_: *mut c_void, _: usize, _: usize, 
 unsafe extern "system" fn not_implemented_4(_: *mut c_void, _: usize, _: usize, _: usize, _: usize) -> Hresult {
     E_NOTIMPL
 }
-unsafe extern "system" fn not_implemented_5(_: *mut c_void, _: usize, _: usize, _: usize, _: usize, _: usize) -> Hresult {
+unsafe extern "system" fn not_implemented_5(
+    _: *mut c_void,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+    _: usize,
+) -> Hresult {
     E_NOTIMPL
 }
 unsafe extern "system" fn not_implemented_6(
@@ -138,7 +145,12 @@ unsafe extern "system" fn compare_ids(_this: *mut c_void, _lparam: isize, a: *co
     (si::compare_paths(&a, &b) & 0xFFFF) as u16 as Hresult
 }
 
-unsafe extern "system" fn get_attributes_of(_this: *mut c_void, count: u32, lists: *const *const u8, io: *mut u32) -> Hresult {
+unsafe extern "system" fn get_attributes_of(
+    _this: *mut c_void,
+    count: u32,
+    lists: *const *const u8,
+    io: *mut u32,
+) -> Hresult {
     if io.is_null() {
         return E_POINTER;
     }
@@ -154,7 +166,12 @@ unsafe extern "system" fn get_attributes_of(_this: *mut c_void, count: u32, list
     S_OK
 }
 
-unsafe extern "system" fn get_display_name_of(_this: *mut c_void, pidl: *const u8, flags: u32, out: *mut u8) -> Hresult {
+unsafe extern "system" fn get_display_name_of(
+    _this: *mut c_void,
+    pidl: *const u8,
+    flags: u32,
+    out: *mut u8,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }

@@ -7,14 +7,7 @@
 poly_win32_rt::fail_exports!(
     "shell32",
     win32,
-    [
-        DragQueryFileW,
-        SHAppBarMessage,
-        SHGetFileInfoW,
-        ShellExecuteA,
-        SHChangeNotify,
-        IsUserAnAdmin
-    ]
+    [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW, ShellExecuteA, SHChangeNotify, IsUserAnAdmin]
 );
 
 // These return an `HRESULT`.

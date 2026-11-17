@@ -34,7 +34,8 @@ const IID_IMODAL_WINDOW: Guid = guid(0xB4DB_1657, 0x70D7, 0x485E, [0x8E, 0x3E, 0
 const IID_IFILE_DIALOG: Guid = guid(0x42F8_5136, 0xDB7E, 0x439C, [0x85, 0xF1, 0xE4, 0x07, 0x5D, 0x13, 0x5F, 0xC8]);
 const IID_IFILE_SAVE_DIALOG: Guid = guid(0x84BC_CD23, 0x5FDE, 0x4CDB, [0xAE, 0xA4, 0xAF, 0x64, 0xB8, 0x3D, 0x78, 0xAB]);
 const IID_ISHELL_ITEM: Guid = guid(0x4382_6D1E, 0xE718, 0x42EE, [0xBC, 0x55, 0xA1, 0xE2, 0x61, 0xC3, 0x7B, 0xFE]);
-const CLSID_FILE_SAVE_DIALOG: Guid = guid(0xC0B4_E2F3, 0xBA21, 0x4773, [0x8D, 0xBA, 0x33, 0x5E, 0xC9, 0x46, 0xEB, 0x8B]);
+const CLSID_FILE_SAVE_DIALOG: Guid =
+    guid(0xC0B4_E2F3, 0xBA21, 0x4773, [0x8D, 0xBA, 0x33, 0x5E, 0xC9, 0x46, 0xEB, 0x8B]);
 
 const S_OK: Hresult = 0;
 const E_NOINTERFACE: Hresult = 0x8000_4002_u32 as i32;
@@ -140,7 +141,8 @@ unsafe fn item_path(item: *mut c_void) -> Option<Vec<u16>> {
     // SAFETY: a live IShellItem; the string is task memory.
     unsafe {
         let vtbl = *item.cast::<*const usize>();
-        let f: unsafe extern "system" fn(*mut c_void, u32, *mut *mut u16) -> Hresult = core::mem::transmute(*vtbl.add(5));
+        let f: unsafe extern "system" fn(*mut c_void, u32, *mut *mut u16) -> Hresult =
+            core::mem::transmute(*vtbl.add(5));
         let mut s: *mut u16 = core::ptr::null_mut();
         if f(item, SIGDN_FILESYSPATH, &mut s) != S_OK || s.is_null() {
             return None;
@@ -514,10 +516,10 @@ static VTBL: Vtbl<32> = Vtbl([
     get_result as *const c_void,
     ok_2 as *const c_void, // AddPlace(item, place)
     set_default_extension as *const c_void,
-    ok_1 as *const c_void, // Close(hr)
-    ok_1 as *const c_void, // SetClientGuid(guid)
+    ok_1 as *const c_void,   // Close(hr)
+    ok_1 as *const c_void,   // SetClientGuid(guid)
     fail_0 as *const c_void, // ClearClientData: E_FAIL (the sheet)
-    ok_1 as *const c_void, // SetFilter(filter)
+    ok_1 as *const c_void,   // SetFilter(filter)
     set_save_as_item as *const c_void,
     ok_1 as *const c_void, // SetProperties(store)
     ok_2 as *const c_void, // SetCollectedProperties(list, append)
@@ -601,7 +603,11 @@ unsafe extern "system" fn factory_create(
 
 /// `DllGetClassObject(rclsid, riid, ppv)`: the class object of `CLSID_FileSaveDialog`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DllGetClassObject(clsid: *const Guid, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn DllGetClassObject(
+    clsid: *const Guid,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }

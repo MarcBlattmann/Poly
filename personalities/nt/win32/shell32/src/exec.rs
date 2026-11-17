@@ -15,7 +15,15 @@ use poly_win32k::proto::{Reply, Request};
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *mut c_void, disp: u32, flags: u32, tpl: usize) -> usize;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *mut c_void,
+        disp: u32,
+        flags: u32,
+        tpl: usize,
+    ) -> usize;
     fn CloseHandle(h: usize) -> i32;
     fn CreateProcessW(
         app: *const u16,
@@ -38,7 +46,15 @@ unsafe extern "system" {
 #[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn RegGetValueW(key: isize, sub: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut u8, size: *mut u32) -> u32;
+    fn RegGetValueW(
+        key: isize,
+        sub: *const u16,
+        value: *const u16,
+        flags: u32,
+        kind: *mut u32,
+        data: *mut u8,
+        size: *mut u32,
+    ) -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -143,7 +159,11 @@ fn w(s: &str) -> Vec<u16> {
 /// (`Request::ShellOpen`, ADR 0223). The Win32 error when it cannot (50: no desktop).
 pub fn desktop_request(path: &[u16], show: bool) -> Result<(), u32> {
     poly_win32_rt::unimplemented_export_error(
-        if show { "shell32: asks the desktop to show a file in Files" } else { "shell32: asks the desktop to open a file" },
+        if show {
+            "shell32: asks the desktop to show a file in Files"
+        } else {
+            "shell32: asks the desktop to open a file"
+        },
         0,
         0,
     );
