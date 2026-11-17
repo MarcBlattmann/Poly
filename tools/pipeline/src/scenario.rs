@@ -1063,6 +1063,7 @@ pub fn run_poly(
             build: None,
             arch: Some("x86_64".into()),
             session: None,
+            token: None,
         },
         bundle: None,
         runner: Some("cargo xtask pipeline win scenario poly".into()),

@@ -1,0 +1,68 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/GetDateFormatEx.yaml
+id: windows/api/kernelbase.dll/GetDateFormatEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  GetDateFormatW with the locale given by name, and a calendar parameter that must be NULL. Layouts, pictures, names,
+  flags, sizes and date checks are those of GetDateFormatW.
+interface:
+  signature: "int GetDateFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, const SYSTEMTIME *lpDate, LPCWSTR lpFormat, LPWSTR lpDateStr, int cchDate, LPCWSTR lpCalendar)"
+rules:
+  same_as_lcid_form: >-
+    For en-US, en-GB, de-DE, de-CH, fr-FR, it-IT, ja-JP and L"" every output equals the LCID form of the matching LCID for
+    the same date and flags (short, long, year-month, month and weekday names, pictures). DATE_MONTHDAY 0x80 is refused
+    here too (1004). The layout flag 0x40 with a picture is accepted; SHORT, LONG and YEARMONTH with a picture fail with
+    1004; LTR|RTL together fail.
+  calendar: >-
+    lpCalendar NULL works. Any non-NULL value, including an empty string, "Gregorian" and "1", fails with
+    ERROR_INVALID_PARAMETER 87.
+  names: >-
+    As GetTimeFormatEx: case-insensitive, neutral names ("en" US text, "de" "Mittwoch, 5. November 2025", "fr" "mercredi 5
+    novembre 2025", "zh-Hans" and "zh-CN" "2025年11月5日", "ja-JP" the same pattern), sort suffixes and an underscore
+    separator accepted, "x-IV_mathan" is the invariant layout with 05 padding ("Wednesday, 05 November 2025"), unknown but
+    well-formed names (xx-XX, zz) format as the invariant locale (short "11/05/2025"), malformed names (a long single
+    subtag included) fail with 87.
+  defaults: >-
+    NULL name is the user default, L"!x-sys-default-locale" the system default: each gives the same text as the matching
+    GetUserDefaultLocaleName / GetSystemDefaultLocaleName name, with every layout flag and with LOCALE_NOUSEROVERRIDE. The
+    machine's own text is not recorded.
+  errors: >-
+    Sizes as GetDateFormatW (cch 0 gives the size with the NUL, short buffer 122 with nothing written, NULL buffer with
+    cch>0 and negative cch 87). Invalid dates fail with 87 (month 0/13, day 0/32, Feb 30, Feb 29 in 2023/1900, year
+    1600/30828/0); years 1601 and 30827 work. NULL date is today.
+errors:
+  invalid_flags: "1004"
+  buffer_too_small: "122"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

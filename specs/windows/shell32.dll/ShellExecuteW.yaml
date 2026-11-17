@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellExecuteW.yaml
+id: windows/api/shell32.dll/ShellExecuteW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (defaults), the local administrator \"server\" in session 1 through tools/pipeline/windows/poly-oracle.ps1 -Token standard (filtered token) and -Token elevated (full token); tests named *_std are recorded with the first, *_adm with the second (per-test token in windows.json). Every test ran twice with identical output. Nothing was clicked: sxw_decline_std makes Windows show its consent prompt and nobody answers; Windows ends it after about two minutes and the call returns the 'declined' code."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ShellExecuteW and its return values
+  (a value above 32 on success, SE_ERR_* codes otherwise), "How User Account Control works". No Microsoft binary was read or
+  disassembled; Wine's tests were not read. See ShellExecuteExW.yaml (same machinery, same prompt, same token rules).
+summary: >
+  `HINSTANCE ShellExecuteW(hwnd, verb, file, parameters, directory, show)`: the older form of ShellExecuteExW with no
+  structure. It returns a value above 32 when it started the program (the value itself is not a handle), otherwise a small error code:
+  2 (SE_ERR_FNF) for a missing file, 31 (SE_ERR_NOASSOC) for no handler (an unknown verb), 5 (SE_ERR_ACCESSDENIED) when a consent
+  prompt was declined. It does not set GetLastError in the cases below that matter and returns no process handle. Token rules as for
+  ShellExecuteExW: `open` gives the child the caller's token; `runas` from a standard caller shows the consent prompt; from an
+  elevated caller it just starts the program elevated.
+interface:
+  signature: "HINSTANCE ShellExecuteW(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParameters, LPCWSTR lpDirectory, INT nShowCmd)"
+rules:
+  open: "verb `open` or NULL verb on the test's own image with parameters `--child token`: a value above 32 (both token kinds)."
+  missing_file: "file `C:\\poly-no-such-dir\\none.exe`: verb open, NULL verb or runas: 2 (SE_ERR_FNF), from a standard or an elevated caller, with no prompt."
+  unknown_verb: "verb `frobnicate` on the image: 31 (SE_ERR_NOASSOC)."
+  runas_elevated: "verb runas on the image from an elevated caller: above 32, no prompt (the child is elevated)."
+  runas_declined: "verb runas on the image from a standard caller: the consent prompt is shown; unanswered until Windows ends it (about 140 s on the oracle), or answered No: 5 (SE_ERR_ACCESSDENIED); nothing is started."
+errors:
+  fnf: "2 (SE_ERR_FNF)"
+  noassoc: "31 (SE_ERR_NOASSOC)"
+  declined: "5 (SE_ERR_ACCESSDENIED)"
+side_effects: "starts a process; the consent prompt blocks the calling thread until answered"
+threading: "may be called from any thread; the prompt blocks it"
+ordering: []
+timing:
+  typical: "a few milliseconds; a declined, unanswered prompt about 140 s on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075); the child is the test's own image started with ` --child token`. In Poly's test runs
+  (`poly.win.token=standard`) the consent dialog must answer No at once, as for ShellExecuteExW.yaml.
+not_covered: >
+  The answer Yes, URLs and documents as files, `explore`/`find`/`print` verbs, directories (hwnd, working directory), nShowCmd effects.

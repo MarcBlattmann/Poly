@@ -69,6 +69,18 @@ logon type, runs itself through it with the same parameters, waits for it,
 prints its log and removes the task again. The user must be logged on and
 the session unlocked. The result file's `system.session` says
 `interactive`.
+
+.PARAMETER Token
+`standard` or `elevated`: run the tests in the interactive session (as with
+-Interactive) with the user's filtered token (`standard`: a one-time task with
+run level Limited, medium integrity, the Administrators group deny-only,
+TokenElevationType 3) or with the full administrator token of the same logon
+(`elevated`: run level Highest, high integrity, TokenElevationType 2, as after
+a UAC consent). No consent prompt is shown: the Task Scheduler starts the task
+with the token the run level names. Without -Token the tests run in this
+session's own token (an SSH logon of an administrator: high integrity,
+TokenElevationType 1, no linked token). The result file's `system.token` says
+which. ADR 0171, docs/windows/chrome-installer-plan.md.
 #>
 [CmdletBinding()]
 param(
@@ -84,9 +96,11 @@ param(
     [switch] $KeepScratch,
     [switch] $PrintJson,
     [switch] $Interactive,
+    [ValidateSet('', 'standard', 'elevated')] [string] $Token = '',
     [int] $InteractiveTimeoutSeconds = 3600,
     # Internal: set by -Interactive for the run inside the task.
     [string] $SessionKind,
+    [string] $TokenKind,
     [string] $Log
 )
 
@@ -133,6 +147,7 @@ function Get-SystemInfo {
         display = [string](Get-Prop $cv 'DisplayVersion')
     }
     if ($SessionKind) { $info.session = $SessionKind }
+    if ($TokenKind) { $info.token = $TokenKind }
     return $info
 }
 
@@ -168,12 +183,15 @@ function Invoke-Interactive {
     if ($Tests.Count -gt 0) { $a += @('-Tests', ($Tests -join ',')) }
     $a += @('-Out', $innerOut, '-Work', $base, '-TimeoutSeconds', [string]$TimeoutSeconds, '-Runs', [string]$Runs)
     $a += @('-SessionKind', 'interactive', '-Log', $innerLog)
+    if ($Token) { $a += @('-TokenKind', $Token) }
     if ($KeepScratch) { $a += '-KeepScratch' }
     $argLine = ($a | ForEach-Object { ConvertTo-CmdArg $_ }) -join ' '
     if (Test-Path -LiteralPath $innerOut) { Remove-Item -LiteralPath $innerOut -Force }
     $name = 'poly-oracle-' + [Guid]::NewGuid().ToString('N').Substring(0, 12)
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argLine -WorkingDirectory $parent
-    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+    # Limited: the filtered token of an administrator; Highest: the full token (no prompt, the Task Scheduler is trusted).
+    $level = if ($Token -eq 'elevated') { 'Highest' } else { 'Limited' }
+    $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel $level
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
         -ExecutionTimeLimit (New-TimeSpan -Seconds $InteractiveTimeoutSeconds) -MultipleInstances IgnoreNew
     Register-ScheduledTask -TaskName $name -Action $action -Principal $principal -Settings $settings | Out-Null
@@ -361,6 +379,7 @@ $script:BundleHasData = $false
 if ($Bundle.Count -eq 0 -and -not $TestsDir) {
     throw 'give -Bundle <file or parts> or -TestsDir <directory of .exe files>'
 }
+if ($Token) { $Interactive = $true }
 if ($Interactive) {
     Invoke-Interactive
     exit 0

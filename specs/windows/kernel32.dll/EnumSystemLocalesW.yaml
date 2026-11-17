@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/EnumSystemLocalesW.yaml
+id: windows/api/kernel32.dll/EnumSystemLocalesW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  Calls a callback with the LCID of each installed or supported locale as an 8-digit lower-case hexadecimal string, on
+  the calling thread, until the list ends or the callback returns FALSE.
+interface:
+  signature: "BOOL EnumSystemLocalesW(LOCALE_ENUMPROCW lpLocaleEnumProc, DWORD dwFlags)    /* BOOL CALLBACK LOCALE_ENUMPROCW(LPWSTR lpLocaleString) */"
+rules:
+  flags: >-
+    LCID_INSTALLED 1, LCID_SUPPORTED 2 and flags 0 list the same locales (over 100, under 300: en-US 00000409, en-GB
+    00000809, de-DE 00000407, de-CH 00000807, ja-JP 00000411, zh-CN 00000804, af-ZA 00000436 are present; neutral and
+    special ones such as 00000009, 00000007, 0000007f, 00000800, 00000400, 00001000 and 00000000 are not; fr-FR is
+    0000040c). LCID_ALTERNATE_SORTS 4 lists only the alternate sort orders (10 or more but under 100; 00010407, the German
+    phone book sort, and 0001007f are in it) and none of the others. INSTALLED|SUPPORTED (3) and all three bits (7) are
+    refused: they fail with ERROR_INVALID_FLAGS 1004, as do 8, 0x10, 0x100, 0x80000000 and 0xFFFFFFFF, and the callback is
+    not called. 5 (INSTALLED|ALT) and 6 (SUPPORTED|ALT) work and list the normal locales plus the alternate sorts (their
+    count is the sum of the two lists).
+  strings: >-
+    Each string is exactly eight lower-case hexadecimal digits (a-f lower case: "0000040c"). The callback is called on the
+    thread that called the function, synchronously. Two enumerations list the same locales in the same order. The order is
+    not ascending by value.
+  stopping: >-
+    When the callback returns FALSE after its n-th call the enumeration ends with no further call (n = 1, 2, 3, 10 tested)
+    and the function returns TRUE with no error set. When it returns TRUE every time the function returns TRUE after the
+    list.
+  errors: >-
+    A NULL callback fails with ERROR_INVALID_PARAMETER 87 (with flag 2 and with flag 0). Invalid flags fail with
+    ERROR_INVALID_FLAGS 1004 (nothing is enumerated).
+errors:
+  invalid_flags: "1004"
+  null_callback: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  The exact number and order of the locales (only lower bounds are recorded), locales with custom LCIDs, user overrides.
