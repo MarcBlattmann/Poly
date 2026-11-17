@@ -307,6 +307,26 @@ fn writeback_writes_runs_of_pages_in_one_call() {
     assert_eq!(probe.contents(ino), data);
 }
 
+/// More dirty pages than one batch collects (`WRITEBACK_BATCH`, 40 in
+/// tests): writeback takes them all, batch after batch, across files.
+#[test]
+fn writeback_takes_more_dirty_pages_than_a_batch() {
+    let (cache, probe, fs) = setup(1000);
+    let a = fs.create(fs.root(), b"a", &REG).unwrap();
+    let b = fs.create(fs.root(), b"b", &REG).unwrap();
+    let (da, db) = (pattern(5, 70 * PAGE_SIZE), pattern(6, 33 * PAGE_SIZE + 1));
+    fs.write(a, 0, &da).unwrap();
+    fs.write(b, 0, &db).unwrap();
+    assert!(70 + 34 > 2 * WRITEBACK_BATCH);
+    assert_eq!(cache.writeback_all().unwrap(), 70 + 34);
+    assert_eq!(fs.page_counts().1, 0, "nothing dirty left");
+    assert_eq!((probe.contents(a), probe.contents(b)), (da, db));
+    // One file alone, the same.
+    fs.write(a, 0, &pattern(7, 70 * PAGE_SIZE)).unwrap();
+    assert_eq!(fs.writeback(Some(a)).unwrap(), 70);
+    assert_eq!(probe.contents(a), pattern(7, 70 * PAGE_SIZE));
+}
+
 #[test]
 fn partial_writes_read_the_page_first() {
     let (_cache, probe, fs) = setup(1000);
@@ -456,6 +476,41 @@ fn allocation_failure_evicts_then_reports_out_of_memory() {
     // A write that gets one page of two writes that much.
     assert_eq!(fs.write(written, 0, &[3; 2 * PAGE_SIZE]).unwrap(), PAGE_SIZE);
     BUDGET.with(|x| x.set(None));
+}
+
+/// Files of more pages than one batch (`DROP_BATCH`, 40 in tests) are
+/// dropped whole, a batch at a time: by eviction (only what is clean and
+/// held by nobody), an unlink, shrinking. A 1 GiB file deleted at once
+/// was a kernel panic, the list of its pages larger than any heap block.
+#[test]
+fn big_files_leave_the_cache_a_batch_at_a_time() {
+    let (cache, _probe, fs) = setup(10_000);
+    let before = live();
+    let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(ino, 0, &pattern(1, 130 * PAGE_SIZE)).unwrap();
+    assert_eq!(fs.page_counts(), (130, 130));
+    assert_eq!(fs.evict_clean(), 0, "dirty pages stay");
+    fs.writeback(None).unwrap();
+    // One page held (a mapping) and one dirty again: the rest go.
+    let held = fs.page(ino, 7).unwrap();
+    fs.write(ino, 100 * PAGE_SIZE as u64, b"again").unwrap();
+    assert_eq!(fs.evict_clean(), 128);
+    assert_eq!(fs.page_counts(), (2, 1));
+    drop(held);
+    // Cached whole again, then unlinked.
+    let data = pattern(2, 130 * PAGE_SIZE);
+    fs.write(ino, 0, &data).unwrap();
+    assert_eq!(read_all(&*fs, ino), data);
+    assert_eq!(fs.page_counts().0, 130);
+    fs.unlink(fs.root(), b"f").unwrap();
+    assert_eq!(fs.page_counts(), (0, 0));
+    assert_eq!(live(), before);
+    // Shrinking the cache by more than a batch.
+    let g = fs.create(fs.root(), b"g", &REG).unwrap();
+    fs.write(g, 0, &pattern(3, 150 * PAGE_SIZE)).unwrap();
+    fs.writeback(None).unwrap();
+    assert_eq!(cache.shrink(20), 130);
+    assert_eq!(fs.page_counts().0, 20);
 }
 
 #[test]

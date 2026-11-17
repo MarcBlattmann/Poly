@@ -95,6 +95,18 @@ pub const READAHEAD_PAGES: usize = 16;
 /// (consecutive pages of one file).
 pub const WRITEBACK_RUN_PAGES: usize = 16;
 
+/// Dirty pages one writeback pass collects at once, so the list it keeps
+/// stays small (16384 keys of 24 bytes, 384 KiB) however much is dirty: a
+/// kernel heap allocation is at most 4 MiB, and collecting every dirty key of
+/// a 1 GiB copy into one list (about 6 MiB) was a kernel panic.
+pub const WRITEBACK_BATCH: usize = if cfg!(test) { 40 } else { 16 * 1024 };
+
+/// Pages the loops that drop many (discarding a file, forgetting a file
+/// system, punching a hole, eviction) look at under one hold of the index's
+/// lock, for the same reason: every list they keep stays this short, and
+/// the frames of a batch are freed before the next.
+pub const DROP_BATCH: usize = WRITEBACK_BATCH;
+
 /// Clean pages evicted to make room when a frame cannot be allocated.
 const EVICT_ON_FAILURE: usize = 32;
 
@@ -308,9 +320,26 @@ impl<F> Index<F> {
         page.dirty.swap(false, Relaxed)
     }
 
-    /// The keys of inode `ino` of `fs` from page `from` on.
-    fn keys_of(&self, fs: FsId, ino: Ino, from: u64) -> Vec<Key> {
-        self.pages.range(Key::new(fs, ino, from)..=Key::new(fs, ino, u64::MAX)).map(|(k, _)| *k).collect()
+    /// Remove the pages with keys from `from` to `hi` that `pick` accepts,
+    /// looking at [`DROP_BATCH`] of them at most: the pages removed, and
+    /// where the range goes on (`None`: it is done).
+    fn remove_batch(
+        &mut self,
+        from: core::ops::Bound<Key>,
+        hi: Key,
+        pick: &dyn Fn(&Arc<Page<F>>) -> bool,
+    ) -> (Vec<Arc<Page<F>>>, Option<core::ops::Bound<Key>>) {
+        use core::ops::Bound;
+        let (mut keys, mut looked, mut last) = (Vec::new(), 0, None);
+        for (k, slot) in self.pages.range((from, Bound::Included(hi))).take(DROP_BATCH) {
+            looked += 1;
+            last = Some(*k);
+            if pick(&slot.page) {
+                keys.push(*k);
+            }
+        }
+        let pages = keys.iter().filter_map(|k| self.remove(k)).collect();
+        (pages, last.filter(|_| looked == DROP_BATCH).map(Bound::Excluded))
     }
 
     fn has_inode(&self, fs: FsId, ino: Ino) -> bool {
@@ -440,64 +469,96 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
     /// The caller holds the inode's lock. Pages someone still holds (a
     /// mapping) live on outside the cache until they are let go.
     pub(crate) fn discard(&self, fs: FsId, ino: Ino, from: u64) -> usize {
-        let dropped: Vec<_> = {
-            let mut index = self.index.lock();
-            let keys = index.keys_of(fs, ino, from);
-            keys.iter().filter_map(|k| index.remove(k)).collect()
-        };
-        self.c.discarded.fetch_add(dropped.len() as u64, Relaxed);
-        dropped.len()
+        let n = self.remove_range(Key::new(fs, ino, from), Key::new(fs, ino, u64::MAX), &|_| true);
+        self.c.discarded.fetch_add(n as u64, Relaxed);
+        n
+    }
+
+    /// Remove the pages with keys in `lo..=hi` that `pick` accepts, a
+    /// batch at a time ([`Index::remove_batch`]); each batch's frames are
+    /// freed after the index is unlocked. How many went.
+    pub(crate) fn remove_range(&self, lo: Key, hi: Key, pick: &dyn Fn(&Arc<Page<F>>) -> bool) -> usize {
+        let mut from = core::ops::Bound::Included(lo);
+        let mut removed = 0;
+        loop {
+            let (dropped, next) = self.index.lock().remove_batch(from, hi, pick);
+            removed += dropped.len();
+            drop(dropped);
+            match next {
+                Some(b) => from = b,
+                None => return removed,
+            }
+        }
     }
 
     /// Evict clean pages that nobody but the index holds, least recently
     /// used first, until at most `target` pages are cached. Returns how
     /// many went. Their frames are freed after the index is unlocked.
     pub(crate) fn shrink(&self, target: usize) -> usize {
-        let evicted: Vec<Arc<Page<F>>> = {
-            let mut index = self.index.lock();
-            let excess = index.pages.len().saturating_sub(target);
-            let victims: Vec<Key> = index
-                .lru
-                .values()
-                .filter(|k| {
-                    let slot = &index.pages[*k];
-                    !slot.page.is_dirty() && Arc::strong_count(&slot.page) == 1
-                })
-                .take(excess)
-                .copied()
-                .collect();
-            victims.iter().filter_map(|k| index.remove(k)).collect()
-        };
-        self.c.evicted.fetch_add(evicted.len() as u64, Relaxed);
-        evicted.len()
+        let mut total = 0;
+        loop {
+            let evicted: Vec<Arc<Page<F>>> = {
+                let mut index = self.index.lock();
+                let excess = index.pages.len().saturating_sub(target);
+                let victims: Vec<Key> = index
+                    .lru
+                    .values()
+                    .filter(|k| {
+                        let slot = &index.pages[*k];
+                        !slot.page.is_dirty() && Arc::strong_count(&slot.page) == 1
+                    })
+                    .take(excess.min(DROP_BATCH))
+                    .copied()
+                    .collect();
+                victims.iter().filter_map(|k| index.remove(k)).collect()
+            };
+            total += evicted.len();
+            self.c.evicted.fetch_add(evicted.len() as u64, Relaxed);
+            // A batch short of the batch size: nothing more can go.
+            if evicted.len() < DROP_BATCH {
+                return total;
+            }
+        }
     }
 
     /// Write back the dirty pages of `st` (all of them, or those of one
     /// inode). Returns how many pages were written; errors are recorded for
     /// the file system's next `sync`, and the first is returned.
     pub(crate) fn writeback(&self, st: &FsState<L>, only: Option<Ino>) -> Result<usize> {
-        let keys: Vec<Key> = {
-            let index = self.index.lock();
-            let (lo, hi) = match only {
-                Some(ino) => (Key::new(st.id, ino, 0), Key::new(st.id, ino, u64::MAX)),
-                None => (Key::new(st.id, 0, 0), Key::new(st.id, Ino::MAX, u64::MAX)),
-            };
-            index.dirty.range(lo..=hi).copied().collect()
+        use core::ops::Bound;
+        let (lo, hi) = match only {
+            Some(ino) => (Key::new(st.id, ino, 0), Key::new(st.id, ino, u64::MAX)),
+            None => (Key::new(st.id, 0, 0), Key::new(st.id, Ino::MAX, u64::MAX)),
         };
         let mut written = 0;
         let mut first_error = None;
-        let mut rest = keys.as_slice();
-        while let Some(first) = rest.first() {
-            let n = rest.iter().take_while(|k| k.ino == first.ino).count();
-            match self.writeback_inode(st, first.ino, &rest[..n]) {
-                Ok(w) => written += w,
-                Err(e) => {
-                    first_error.get_or_insert(e);
-                    let mut slot = st.error.lock();
-                    slot.get_or_insert(e);
+        // In batches of at most `WRITEBACK_BATCH` keys, each after the
+        // last key of the one before (pages dirtied behind it meanwhile are
+        // the next pass's).
+        let mut from = Bound::Included(lo);
+        loop {
+            let keys: Vec<Key> = {
+                let index = self.index.lock();
+                index.dirty.range((from, Bound::Included(hi))).take(WRITEBACK_BATCH).copied().collect()
+            };
+            let Some(&last) = keys.last() else { break };
+            let mut rest = keys.as_slice();
+            while let Some(first) = rest.first() {
+                let n = rest.iter().take_while(|k| k.ino == first.ino).count();
+                match self.writeback_inode(st, first.ino, &rest[..n]) {
+                    Ok(w) => written += w,
+                    Err(e) => {
+                        first_error.get_or_insert(e);
+                        let mut slot = st.error.lock();
+                        slot.get_or_insert(e);
+                    }
                 }
+                rest = &rest[n..];
             }
-            rest = &rest[n..];
+            if keys.len() < WRITEBACK_BATCH {
+                break;
+            }
+            from = Bound::Excluded(last);
         }
         match first_error {
             Some(e) => Err(e),
@@ -617,14 +678,8 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
     /// inode locks.
     pub(crate) fn unregister(&self, fs: FsId) {
         self.filesystems.lock().remove(&fs);
-        let dropped: Vec<_> = {
-            let mut index = self.index.lock();
-            let keys: Vec<Key> =
-                index.pages.range(Key::new(fs, 0, 0)..=Key::new(fs, Ino::MAX, u64::MAX)).map(|(k, _)| *k).collect();
-            keys.iter().filter_map(|k| index.remove(k)).collect()
-        };
-        self.c.discarded.fetch_add(dropped.len() as u64, Relaxed);
-        drop(dropped);
+        let n = self.remove_range(Key::new(fs, 0, 0), Key::new(fs, Ino::MAX, u64::MAX), &|_| true);
+        self.c.discarded.fetch_add(n as u64, Relaxed);
         self.inodes.lock().retain(|(f, _), _| *f != fs);
     }
 
