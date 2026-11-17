@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/K32QueryWorkingSetEx.yaml
+id: windows/api/kernel32.dll/K32QueryWorkingSetEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). qws_pages and qws_args gave identical output in all three token kinds (the SSH logon session 0 with its elevated administrator token; -Token standard and -Token elevated: the interactive session 1 with the administrator's filtered and full token) and are recorded once with the SSH logon's token. qws_rights_std is recorded with -Token standard and qws_rights_adm with -Token elevated, because a handle with only PROCESS_QUERY_LIMITED_INFORMATION is refused for the filtered token and accepted for the full one. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for QueryWorkingSetEx (psapi.h; kernel32 exports it as K32QueryWorkingSetEx), PSAPI_WORKING_SET_EX_INFORMATION and PSAPI_WORKING_SET_EX_BLOCK (the bit fields: Valid bit 0, ShareCount bits 1-3, Win32Protection bits 4-14, Shared bit 15, Node bits 16-21, Locked bit 22, LargePage bit 23, Bad bit 31) and the public SDK headers psapi.h and winnt.h; error codes from winerror.h. The updater and Google's installers import K32QueryWorkingSetEx (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  For each address in an array of 16-byte entries (the address, then a 64-bit attribute word that the call fills in) tells whether the page at that address is in the process's working set and how it is mapped: bit 0 valid, bits 4-14 the page protection (PAGE_READONLY 2, PAGE_READWRITE 4, PAGE_EXECUTE_READ 0x20, PAGE_EXECUTE_READWRITE 0x40), bit 15 shared, bit 22 locked. A committed page nobody touched, a reserved page and an unmapped address all have bit 0 clear and every other field 0; the call still succeeds. A size below 16 (one entry) is refused with ERROR_BAD_LENGTH.
+interface:
+  signature: "BOOL K32QueryWorkingSetEx(HANDLE hProcess, PVOID pv, DWORD cb)"
+  entry: "{ PVOID VirtualAddress (in); ULONG_PTR VirtualAttributes (out) }, 16 bytes"
+rules:
+  attributes: "a committed page not yet touched: ok, valid 0 and all other fields 0; after a write: valid 1, protection 4 (PAGE_READWRITE), shared 0, locked 0, share count 0; the neighbouring untouched page stays valid 0; a page that was only read (a zero page): valid 1, protection 4; any address inside the page (+0x123) answers for the page."
+  protection: "VirtualProtect to PAGE_READONLY: protection 2 (valid stays 1); to PAGE_EXECUTE_READWRITE: 0x40."
+  lock: "after VirtualLock of the page: valid 1, protection 4, locked 1 (and VirtualLock succeeds)."
+  not_present: "a reserved-only page, address 0x10, a kernel-half address (0xFFFF800000000000) and a page after VirtualFree: the call succeeds with valid 0 and every other field 0."
+  image: "the page of the executable's header (the module base) and its first section page: valid 1, shared 1, protection 2 (header) and 0x20 (PAGE_EXECUTE_READ, code); a page of kernel32.dll (the function's own address): shared 1. A private page has share count 0."
+  size: "cb 0, 8 and 15: FALSE, ERROR_BAD_LENGTH (24), the output untouched; 16, 17, 24 and 32 (with a buffer of three entries): TRUE; cb 48 fills three entries, which may name the same address."
+  entries: "three entries with different addresses are answered independently and the addresses are left as they were."
+  handles: "NULL and a garbage value (0x12345678): FALSE, ERROR_INVALID_HANDLE (6); the current-thread pseudo handle: 6. A real handle with PROCESS_QUERY_INFORMATION (with or without PROCESS_VM_READ) works, with only PROCESS_VM_READ: ERROR_ACCESS_DENIED (5)."
+  limited_rights: "a handle with only PROCESS_QUERY_LIMITED_INFORMATION (own process or a child): the full administrator token (the elevated task and the SSH logon): TRUE; the filtered (standard) token: FALSE, 5. A handle with PROCESS_QUERY_INFORMATION works for both tokens."
+  other_process: "a suspended child opened with all access: TRUE; asking the child about an address of the parent's allocation gives valid 0 (the address space is the child's own)."
+errors:
+  bad_length: "24 (cb below 16)"
+  invalid_handle: "6"
+  access_denied: "5"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: page attributes of the process's own pages (qws_pages), sizes, handles and a child process (qws_args), and the PROCESS_QUERY_LIMITED_INFORMATION handle recorded for both tokens (qws_rights_std, qws_rights_adm). Each file declares what it calls from Learn's prototypes. Only the fields named above are printed (valid, protection, shared, locked, large page, bad, share count of private pages): the reserved bits 24-30 and the share count of shared pages differ from run to run and from machine to machine.
+not_covered: >
+  Whether a page leaves the working set after SetProcessWorkingSetSize(-1, -1) (it is nondeterministic), large pages, NUMA node numbers, the Bad bit of a failed page, ranges larger than a few entries, processes of other users and protected processes, a 32-bit caller.

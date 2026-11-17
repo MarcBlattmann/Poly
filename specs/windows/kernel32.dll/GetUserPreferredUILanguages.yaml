@@ -1,0 +1,67 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetUserPreferredUILanguages.yaml
+id: windows/api/kernel32.dll/GetUserPreferredUILanguages
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  The user's preferred UI languages as a double-NUL-terminated multi-string, either as locale names or as four-digit
+  language IDs, with the usual two-call size protocol.
+interface:
+  signature: "BOOL GetUserPreferredUILanguages(DWORD dwFlags, PULONG pulNumLanguages, PZZWSTR pwszLanguagesBuffer, PULONG pcchLanguagesBuffer)"
+rules:
+  forms: >-
+    MUI_LANGUAGE_NAME 8 gives locale names ("en-GB"), MUI_LANGUAGE_ID 4 gives language IDs as four hexadecimal digits
+    ("0809"); flags 0 gives names, the same list as flag 8. The name list and the ID list have the same number of
+    languages and the ID at each position is the language of the name at that position (LCIDToLocaleName with the
+    neutral-names flag turns the ID into the name). The first language is the user's UI language
+    (GetUserDefaultUILanguage). Every name is known to LocaleNameToLCID. The list is the machine's and is only recorded
+    through these relations; it is the same on two calls.
+  multistring: >-
+    The result is a series of non-empty strings each ended by a NUL, then one more NUL; *pulNumLanguages is the number of
+    strings and *pcchLanguagesBuffer the total length including both final NULs. The size query (NULL buffer, *pcch 0)
+    returns TRUE, sets *pcch to the size and *pul to the number of languages; the second call with that size fills the
+    buffer exactly and the unit after the buffer is left alone.
+  buffer: >-
+    A buffer smaller than the size needed (by 1 or 2 units), or *pcch 0 with a non-NULL buffer, fails with
+    ERROR_INSUFFICIENT_BUFFER 122, sets *pcch to the size needed and does not write the buffer or *pul; an exact or larger
+    buffer succeeds (*pcch is set to the size needed). A NULL buffer with *pcch above 0 fails with ERROR_INVALID_PARAMETER
+    87. A NULL pulNumLanguages crashes the call with an access violation on the oracle (a NULL pcch is assumed to as well
+    and is not tested), so none of the tests passes one.
+  flags: >-
+    Valid: 0, 4, 8 and 2 (an accepted bit that changes nothing seen here: 8|2 and 4|2 succeed); every other flag
+    combination, including 4|8, 1, 0x10, 0x20, 0x30 (MUI_UI_FALLBACK), 0x40 (MUI_THREAD_LANGUAGES), 0x80, 0x100, 0x200,
+    0x400, 0x800, 0x1000, 0x8000, 0x10000, 0x80000000 and 0xFFFFFFFF, with or without 4 or 8, fails with
+    ERROR_INVALID_PARAMETER 87 and sets neither counter.
+errors:
+  invalid_parameter: "87"
+  buffer_too_small: "122"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  The names of the machine's languages, the thread and console preferences, MUI_RESET_FILTERS, other threads.

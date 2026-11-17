@@ -1,0 +1,62 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "lbl_files_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "139a0d3bf6cca1f5de23bdabd76adfc267aa7ad2e76a730217316768e35cf3c7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIGludGVncml0eSAweDMwMDAKbmV3IGZpbGU6IGxhYmVsIFtdCm5ldyByZWdpc3RyeSBrZXk6IGxhYmVsIFtdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller integrity 0x3000\nnew file: label []\nnew registry key: label []\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "lbl_kernel_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "36f781d7849d6cc1358610f80729e11cdbe8ab0abe4373b617b914acb592e859",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIGludGVncml0eSAweDMwMDAKb3duIHByb2Nlc3M6IGxhYmVsIFtTOkFJKE1MOztOV05SOzs7SEkpXQpvd24gdGhyZWFkOiBsYWJlbCBbUzpBSShNTDs7TldOUjs7O0hJKV0Kb3duIHRva2VuOiBsYWJlbCBbUzpBSShNTDs7Tlc7OztISSldCnVubmFtZWQgZXZlbnQ6IGxhYmVsIFtdCm5hbWVkIGV2ZW50OiBsYWJlbCBbXQpuYW1lZCBtdXRleDogbGFiZWwgW10KbmFtZWQgc2VtYXBob3JlOiBsYWJlbCBbXQp1bm5hbWVkIGpvYjogbGFiZWwgW1M6QUkoTUw7O05XOzs7SEkpXQp1bm5hbWVkIHNlY3Rpb246IGxhYmVsIFtdCm5hbWVkIHBpcGU6IGxhYmVsIFtdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller integrity 0x3000\nown process: label [S:AI(ML;;NWNR;;;HI)]\nown thread: label [S:AI(ML;;NWNR;;;HI)]\nown token: label [S:AI(ML;;NW;;;HI)]\nunnamed event: label []\nnamed event: label []\nnamed mutex: label []\nnamed semaphore: label []\nunnamed job: label [S:AI(ML;;NW;;;HI)]\nunnamed section: label []\nnamed pipe: label []\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "lbl_kernel_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "36f781d7849d6cc1358610f80729e11cdbe8ab0abe4373b617b914acb592e859",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIGludGVncml0eSAweDIwMDAKb3duIHByb2Nlc3M6IGxhYmVsIFtTOkFJKE1MOztOV05SOzs7TUUpXQpvd24gdGhyZWFkOiBsYWJlbCBbUzpBSShNTDs7TldOUjs7O01FKV0Kb3duIHRva2VuOiBsYWJlbCBbUzpBSShNTDs7Tlc7OztNRSldCnVubmFtZWQgZXZlbnQ6IGxhYmVsIFtdCm5hbWVkIGV2ZW50OiBsYWJlbCBbXQpuYW1lZCBtdXRleDogbGFiZWwgW10KbmFtZWQgc2VtYXBob3JlOiBsYWJlbCBbXQp1bm5hbWVkIGpvYjogbGFiZWwgW1M6QUkoTUw7O05XOzs7TUUpXQp1bm5hbWVkIHNlY3Rpb246IGxhYmVsIFtdCm5hbWVkIHBpcGU6IGxhYmVsIFtdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller integrity 0x2000\nown process: label [S:AI(ML;;NWNR;;;ME)]\nown thread: label [S:AI(ML;;NWNR;;;ME)]\nown token: label [S:AI(ML;;NW;;;ME)]\nunnamed event: label []\nnamed event: label []\nnamed mutex: label []\nnamed semaphore: label []\nunnamed job: label [S:AI(ML;;NW;;;ME)]\nunnamed section: label []\nnamed pipe: label []\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

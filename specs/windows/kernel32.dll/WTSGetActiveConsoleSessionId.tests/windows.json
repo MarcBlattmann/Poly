@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "wtsc_child_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "0d77ceed77c6a2977c1a3eeaf42bef2fb958c76314169d5f00b31732df61bab9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YW5vdGhlciB0aHJlYWQgZ2V0cyB0aGUgc2FtZSBpZDogdHJ1ZQpjaGlsZCBjcmVhdGVkOiAxClByb2Nlc3NJZFRvU2Vzc2lvbklkKGNoaWxkKSBvaz0xOyB0aGUgY2hpbGQgaXMgaW4gdGhpcyBwcm9jZXNzJ3Mgc2Vzc2lvbjogdHJ1ZQp0aGUgY29uc29sZSBzZXNzaW9uIGlzIGEgc21hbGwgbnVtYmVyOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "another thread gets the same id: true\nchild created: 1\nProcessIdToSessionId(child) ok=1; the child is in this process's session: true\nthe console session is a small number: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    }
+  ]
+}

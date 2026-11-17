@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/SystemTimeToVariantTime.yaml
+id: windows/api/oleaut32.dll/SystemTimeToVariantTime
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators) in the SSH logon session (session 0, elevated administrator token); the same tests gave identical output with -Token standard and -Token elevated. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for SystemTimeToVariantTime, SYSTEMTIME and the VARIANT type VT_DATE (days since 1899-12-30 as a double, the fraction is the time of day) and the public SDK headers oleauto.h and minwinbase.h. oleaut32 exports it as ordinal 184 (the name found in the DLL's export table, both the 64-bit and the 32-bit DLL); the 32-bit Chrome installers import it by that ordinal (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Converts a SYSTEMTIME into an OLE automation date: a double that counts days from 1899-12-30 00:00:00 (day 0), with the time of day as the fraction. It returns 1 on success and 0 when the fields are not a valid date and time (the output is then untouched). The day-of-week field and the milliseconds are ignored (2000-01-01 00:00:00.001, .499 and .500 all convert to exactly 36526.0). A year from 0 to 99 is read as a two-digit year (0 is 2000, 50 is 1950, 99 is 1999).
+interface:
+  signature: "INT SystemTimeToVariantTime(LPSYSTEMTIME lpSystemTime, DOUBLE *pvtime)"
+rules:
+  epoch: "1899-12-30 00:00:00 -> 0.0; 1899-12-31 -> 1.0; 1900-01-01 -> 2.0; 1900-02-28 -> 60.0; 1900-03-01 -> 61.0 (there is no 1900-02-29: the real calendar is counted); 1970-01-01 -> 25569.0; 2000-01-01 -> 36526.0; 2000-02-29 12:00:00 -> 36585.5; 2026-11-17 06:30:15.250 -> 46343.271007 (milliseconds ignored; 06:30:15 = 0.271007...); the exact bit patterns are in the tests."
+  before_epoch: "1899-12-29 18:00:00 -> -1.75 (before day 0 the value is negative and the time of day is the fraction of its absolute value: 18:00 is 0.75); 0100-01-01 -> -657434.0 (year 100 is the lowest year the tests tried that is accepted)."
+  top: "9999-12-31 23:59:59.999 -> 2958465.99998843 (the last representable day; the milliseconds are ignored)."
+  two_digit_years: "year 99 with month 6, day 1 -> 36312.0 (1999-06-01); year 50, month 1, day 1 -> 18264.0 (1950-01-01); year 0 -> 36526.0 (2000-01-01). Where the century window turns (29/30) was not probed."
+  invalid: "year 10000, month 13, day 32, hour 24, minute 60, second 60: return 0 and the output is untouched. Month 0 gives the previous December (36495.0, 1999-12-01), day 0 the day before (36525.0 = 1999-12-31), February 30 and February 29 of a non-leap year roll over to March 1 / March 1 (36586.0 and 36951.0), millisecond 1000 is accepted and ignored."
+  weekday: "the day-of-week field is ignored: 7 and the right value 6 (a Saturday) and a wrong value 3 give the same result."
+errors:
+  none: "returns 0 for invalid fields; no error code"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a microsecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), three files: ordinary dates and times (vt_dates), the range of years and two-digit years, milliseconds and the weekday field (vt_ranges), and fields out of range (vt_invalid). Each line prints the return value, the value times a million (rounded) and the exact bit pattern of the double. Each file declares what it calls from Learn's prototypes.
+not_covered: >
+  VariantTimeToSystemTime (the inverse is a separate entry), DosDateTimeToVariantTime, VariantTimeToDosDateTime, the local time zone (the function does not convert zones), a 32-bit caller.
