@@ -24,6 +24,7 @@ mod dlg;
 mod icons;
 mod kbdlayout;
 mod layered;
+pub mod feeltrace; // TEMP-FEEL
 mod menu;
 mod menuansi;
 mod menutrack;
@@ -956,6 +957,9 @@ pub unsafe extern "system" fn CreateWindowExW(
         ansi: ansiapi::ansi_next_window(),
     };
     let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
+    if style & 0x4000_0000 == 0 {
+        feeltrace::log(&alloc::format!("feel: create hwnd={h:#x} ex={ex_style:#x} style={style:#x} at {x},{y} w={w} owner={parent:#x}")); // TEMP-FEEL
+    }
     if h != 0 && menu != 0 && style & 0x4000_0000 == 0 {
         menu::after_create(h);
     }

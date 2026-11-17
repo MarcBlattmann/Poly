@@ -406,6 +406,7 @@ unsafe extern "system" fn create_target_for_hwnd(
     _topmost: i32,
     out: *mut *mut c_void,
 ) -> HRESULT {
+    log(&alloc::format!("feel: dcomp CreateTargetForHwnd hwnd={hwnd:#x}")); // TEMP-FEEL
     if out.is_null() {
         return E_POINTER;
     }

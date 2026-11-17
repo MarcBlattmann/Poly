@@ -49,6 +49,7 @@ fn fail(r: Reply) -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn SetLayeredWindowAttributes(hwnd: H, key: u32, alpha: u8, flags: u32) -> i32 {
+    super::feeltrace::log(&alloc::format!("feel: SetLayeredWindowAttributes hwnd={hwnd:#x} key={key:#x} alpha={alpha} flags={flags:#x}")); // TEMP-FEEL
     if hwnd > u32::MAX as usize {
         set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;
@@ -182,6 +183,7 @@ pub unsafe extern "system" fn UpdateLayeredWindow(
         // SAFETY: the caller's BLENDFUNCTION (4 bytes).
         unsafe { (*pblend.add(2), *pblend.add(3) & 1 != 0) }
     };
+    super::feeltrace::log(&alloc::format!("feel: ULW hwnd={hwnd:#x} size={size:?} flags={flags:#x} ca={constant_alpha} srcalpha={src_alpha} key={key:#x} src={src:#x}")); // TEMP-FEEL
     match layered(hwnd, 3, key, constant_alpha, (flags & 7) | if src_alpha { 0x100 } else { 0 }) {
         Reply::Ok {} => {}
         r => return fail(r),
@@ -265,6 +267,7 @@ fn rects_of(rgn: usize) -> Option<Vec<Rect>> {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn SetWindowRgn(hwnd: H, rgn: usize, redraw: i32) -> i32 {
+    super::feeltrace::log(&alloc::format!("feel: SetWindowRgn hwnd={hwnd:#x} rgn={rgn:#x}")); // TEMP-FEEL
     let Some(i) = info(hwnd) else {
         set_last_error(ERROR_INVALID_WINDOW_HANDLE);
         return 0;

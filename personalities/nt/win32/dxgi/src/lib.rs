@@ -534,6 +534,13 @@ unsafe extern "system" fn create_swap_chain_for_hwnd(
     _: *mut c_void,
     out: *mut *mut c_void,
 ) -> HRESULT {
+    if !desc.is_null() {
+        // SAFETY: TEMP-FEEL: DXGI_SWAP_CHAIN_DESC1's twelve u32s.
+        let d = unsafe { core::slice::from_raw_parts(desc as *const u32, 12) };
+        let t = alloc::format!("feel: swapchain hwnd={hwnd:#x} {}x{} fmt={} effect={} alpha={} flags={:#x} count={}", d[0], d[1], d[2], d[9], d[10], d[11], d[7]);
+        // SAFETY: TEMP-FEEL
+        unsafe { PolyDebugPrint(t.as_ptr(), t.len()) };
+    }
     let f = d3d11_export(c"PolyD3D11CreateSwapChain");
     if f == 0 || device.is_null() || desc.is_null() {
         if !out.is_null() {
