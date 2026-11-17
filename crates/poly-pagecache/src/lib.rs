@@ -107,6 +107,15 @@ pub const WRITEBACK_BATCH: usize = if cfg!(test) { 40 } else { 16 * 1024 };
 /// the frames of a batch are freed before the next.
 pub const DROP_BATCH: usize = WRITEBACK_BATCH;
 
+/// Pages one page added over the limit makes eviction look at, at most.
+/// A cache full of dirty pages (a big copy faster than writeback) has
+/// nothing to evict until writeback has run; looking at every page for each
+/// page added (a quarter of RAM, under the index's lock) made a 600 MB copy
+/// next to `dpkg` take many minutes. The cache then stays over its limit a
+/// little while, as it does with mapped pages; a frame that cannot be
+/// allocated, or low memory, still looks at everything.
+const INSERT_SCAN: usize = 64;
+
 /// Clean pages evicted to make room when a frame cannot be allocated.
 const EVICT_ON_FAILURE: usize = 32;
 
@@ -355,8 +364,8 @@ impl<F> Index<F> {
     /// mapped pages at the old end, under the index's lock: Google Chrome's
     /// 450 MB package took ten minutes to unpack.) The pages taken, and how
     /// many were looked at.
-    fn evict_batch(&mut self, excess: usize) -> (Vec<Arc<Page<F>>>, usize) {
-        let oldest: Vec<Key> = self.lru.values().take(DROP_BATCH).copied().collect();
+    fn evict_batch(&mut self, excess: usize, at_most: usize) -> (Vec<Arc<Page<F>>>, usize) {
+        let oldest: Vec<Key> = self.lru.values().take(DROP_BATCH.min(at_most)).copied().collect();
         let (mut victims, mut looked) = (Vec::new(), 0);
         for key in oldest {
             if victims.len() == excess {
@@ -491,7 +500,7 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
             index.pages.len() > self.limit.load(Relaxed)
         };
         if over {
-            self.shrink(self.limit.load(Relaxed));
+            self.shrink_looking(self.limit.load(Relaxed), INSERT_SCAN);
         }
         page
     }
@@ -530,7 +539,12 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
     /// used first, until at most `target` pages are cached. Returns how
     /// many went. Their frames are freed after the index is unlocked.
     pub(crate) fn shrink(&self, target: usize) -> usize {
-        let (mut total, mut spared) = (0, 0);
+        self.shrink_looking(target, usize::MAX)
+    }
+
+    /// [`Core::shrink`], looking at `budget` pages at most.
+    fn shrink_looking(&self, target: usize, budget: usize) -> usize {
+        let (mut total, mut spared, mut looked) = (0, 0, 0);
         loop {
             // Each page is looked at once at most per call: once as many
             // pages got a second chance as are cached, every page left was
@@ -538,10 +552,10 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
             let (evicted, n, done) = {
                 let mut index = self.index.lock();
                 let excess = index.pages.len().saturating_sub(target);
-                if excess == 0 || spared >= index.pages.len() {
+                if excess == 0 || spared >= index.pages.len() || looked >= budget {
                     (Vec::new(), 0, true)
                 } else {
-                    let (evicted, n) = index.evict_batch(excess);
+                    let (evicted, n) = index.evict_batch(excess, budget - looked);
                     (evicted, n, false)
                 }
             };
@@ -549,6 +563,7 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
                 return total;
             }
             spared += n - evicted.len();
+            looked += n;
             total += evicted.len();
             self.c.evicted.fetch_add(evicted.len() as u64, Relaxed);
             self.c.scanned.fetch_add(n as u64, Relaxed);
