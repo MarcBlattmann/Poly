@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/WTSGetActiveConsoleSessionId.yaml
+id: windows/api/kernel32.dll/WTSGetActiveConsoleSessionId
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain; the local account \"server\" is logged on at the console, so the console is session 1 and the services run in session 0). The tests are recorded with -Token standard (poly-oracle.ps1: a one-time task in that interactive session 1 with the administrator's filtered token); the same tests gave identical output with -Token elevated (the full token). Run from the SSH logon session (session 0, no token option) the answers about \"this process\" differ in the ways listed under session_0. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for WTSGetActiveConsoleSessionId (wtsapi32.h; kernel32 exports it), ProcessIdToSessionId and the "Session 0 isolation" overview; error codes from winerror.h. Google's installers and updater import it to find the user's session (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The id of the session attached to the physical console: the desktop session of the logged-on user (0xFFFFFFFF would mean there is none). On the oracle it is not 0 (session 0 is the services session) and it is the session of every program the console user starts; a program started in session 0 (a service, an SSH logon) sees the same id and runs in a different session.
+interface:
+  signature: "DWORD WTSGetActiveConsoleSessionId(void)"
+rules:
+  value: "not 0xFFFFFFFF and not 0 on a machine with a user at the console; a small number; repeatable; the same from every thread and every process of the machine."
+  own_session: "a process started in the console user's interactive session (here: -Token standard and -Token elevated tasks): its own session id (ProcessIdToSessionId(GetCurrentProcessId()), and the TokenSessionId of its token) equals the console session id, and is not 0."
+  child: "a child process of such a process runs in the same session as its parent (ProcessIdToSessionId of the child's id equals the parent's)."
+  session_0: "in the SSH logon (session 0): own session id 0, not equal to the console session id; the console id itself is the same number."
+  bad_pid: "ProcessIdToSessionId with an unused process id (0xFFFFFFF0): FALSE, ERROR_INVALID_PARAMETER (87)."
+errors:
+  none: "the function cannot fail; it returns 0xFFFFFFFF when there is no console session"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), two files recorded with -Token standard (the per-test token and session are in windows.json): relations only (equal, not equal, not 0, not 0xFFFFFFFF), never the session numbers themselves, which differ between machines. Each file declares what it calls from Learn's prototypes.
+not_covered: >
+  A machine with no one logged on at the console, a remote desktop session as the active console, fast user switching (the console moves to another session), a 32-bit caller.

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "sws_basic",
+      "exe_sha256": "387d9049cb996aaad8c5c06314cc3b11b2e28cd7492a37db73d9f1a6f8838994",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhcnQ6IHJlYWQgb2s9MSBtaW49MHgzMjAwMCBtYXg9MHgxNTkwMDAgZmxhZ3M9MHhhClNldFByb2Nlc3NXb3JraW5nU2V0U2l6ZShzZWxmLC0xLC0xKSA9IDEgZXJyIC0yCmFmdGVyIHRyaW06IHJlYWQgb2s9MSBtaW49MHgzMjAwMCBtYXg9MHgxNTkwMDAgZmxhZ3M9MHhhCnNldCAxTWlCLi40TWlCID0gMSBlcnIgLTIKYWZ0ZXIgMU0uLjRNOiByZWFkIG9rPTEgbWluPTB4MTAwMDAwIG1heD0weDQwMDAwMCBmbGFncz0weGEKc2V0IDJNaUIuLjJNaUIgPSAxIGVyciAtMgphZnRlciAyTS4uMk06IHJlYWQgb2s9MSBtaW49MHgyMDAwMDAgbWF4PTB4MjAwMDAwIGZsYWdzPTB4YQpPcGVuUHJvY2VzcyhTRVRfUVVPVEF8UVVFUllfSU5GT1JNQVRJT04sIHNlbGYpIG5vbi1udWxsOiB0cnVlCnNldCB0aHJvdWdoIHRoZSBoYW5kbGUgPSAxIGVyciAtMgpHZXRQcm9jZXNzV29ya2luZ1NldFNpemUgdGhyb3VnaCB0aGUgaGFuZGxlIG9rPTEgbWluPTB4MTgwMDAwIG1heD0weDMwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "start: read ok=1 min=0x32000 max=0x159000 flags=0xa\nSetProcessWorkingSetSize(self,-1,-1) = 1 err -2\nafter trim: read ok=1 min=0x32000 max=0x159000 flags=0xa\nset 1MiB..4MiB = 1 err -2\nafter 1M..4M: read ok=1 min=0x100000 max=0x400000 flags=0xa\nset 2MiB..2MiB = 1 err -2\nafter 2M..2M: read ok=1 min=0x200000 max=0x200000 flags=0xa\nOpenProcess(SET_QUOTA|QUERY_INFORMATION, self) non-null: true\nset through the handle = 1 err -2\nGetProcessWorkingSetSize through the handle ok=1 min=0x180000 max=0x300000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "sws_child",
+      "exe_sha256": "c05f4de349f862ad0868ad3a129445fa8ea3e54c115163fc930e3e47565288f3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2VJbmNyZWFzZVdvcmtpbmdTZXRQcml2aWxlZ2UgaXMgaW4gdGhlIHRva2VuIChlbmFibGVkIG9yIG5vdCk6IHRydWUKQ3JlYXRlUHJvY2Vzc1cgc3VzcGVuZGVkIGNoaWxkIG9rPTEKY2hpbGQgZGVmYXVsdCB3b3JraW5nIHNldCBvaz0xIG1pbj0weDMyMDAwIG1heD0weDE1OTAwMApzZXQgY2hpbGQgMU1pQi4uNE1pQiA9IDEgZXJyIC0yCmNoaWxkIGFmdGVyIG1pbj0weDEwMDAwMCBtYXg9MHg0MDAwMDAKdHJpbSBjaGlsZCAoLTEsLTEpID0gMSBlcnIgLTIKY2hpbGQgYWZ0ZXIgdHJpbSBtaW49MHgxMDAwMDAgbWF4PTB4NDAwMDAwCk9wZW5Qcm9jZXNzKFNFVF9RVU9UQXxRVUVSWV9JTkZPUk1BVElPTikgc2V0ID0gMSBlcnIgLTIKT3BlblByb2Nlc3MoUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTikgc2V0ID0gMCBlcnIgNQpPcGVuUHJvY2VzcyhTRVRfUVVPVEEpIHNldCA9IDEgZXJyIC0yCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SeIncreaseWorkingSetPrivilege is in the token (enabled or not): true\nCreateProcessW suspended child ok=1\nchild default working set ok=1 min=0x32000 max=0x159000\nset child 1MiB..4MiB = 1 err -2\nchild after min=0x100000 max=0x400000\ntrim child (-1,-1) = 1 err -2\nchild after trim min=0x100000 max=0x400000\nOpenProcess(SET_QUOTA|QUERY_INFORMATION) set = 1 err -2\nOpenProcess(QUERY_LIMITED_INFORMATION) set = 0 err 5\nOpenProcess(SET_QUOTA) set = 1 err -2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    }
+  ]
+}

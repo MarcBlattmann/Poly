@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SystemTemp.yaml
+id: windows/api/kernel32.dll/SystemTemp
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). The *_std tests are recorded with -Token standard (a one-time task in the account's interactive session 1 with the administrator's FILTERED token: medium integrity, the Administrators group deny-only, TokenElevationType 3) and the *_adm tests with -Token elevated (the same logon's FULL token: high integrity, TokenElevationType 2); stmp_paths gave identical output in the SSH logon (session 0, elevated token), the filtered and the full token and is recorded with the SSH logon's token. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for GetTempPathW, GetTempPath2W, CreateDirectoryW, CreateFileW, GetFileSecurityW, "File Security and Access Rights", "Security Descriptor String Format" (SDDL: SY the local system, BA the built-in administrators, OICI object and container inherit, FA file all access), "User Account Control" and winerror.h. The directory is where Google's installers (ChromeSetup.exe and ChromeStandaloneSetup64.exe, run elevated) unpack the updater: C:\Windows\SystemTemp\Google<pid>_<n>\bin (survey-chrome-installer, docs/windows/chrome-installer-plan.md); on Poly the directory is missing and the installer falls back to a Program Files directory. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  C:\Windows\SystemTemp is a directory that exists on a clean Windows 11 and that only the system and the elevated administrators may use: its security descriptor owner is the local system (SY) and its DACL gives full control, inherited by files and subdirectories, to SY and to BA (the Administrators group) and to nobody else. A process with the administrator's FULL token can list it, open it with every right, and create and delete subdirectories and files in it. A process with the same user's FILTERED token (where the Administrators group is deny-only) cannot open it with any right (ERROR_ACCESS_DENIED), cannot list it, cannot read its security descriptor, and cannot create anything in it; yet GetFileAttributesW answers (it is a directory) and a name that does not exist inside it is "not found" (2), not "access denied". GetTempPathW and GetTempPath2W do not point into it for these tokens: they follow TMP/TEMP (the user's profile) and are equal.
+interface:
+  directory: "C:\\Windows\\SystemTemp (the Windows directory is C:\\Windows)"
+rules:
+  exists: "GetFileAttributesW(\"C:\\Windows\\SystemTemp\"): a directory (0x10 among the attributes, no hidden/system/reparse bits at 0x1F1), with every token."
+  elevated_open: "the full token: CreateFileW(... FILE_FLAG_BACKUP_SEMANTICS) succeeds for FILE_READ_ATTRIBUTES, READ_CONTROL, FILE_LIST_DIRECTORY, FILE_ADD_FILE, FILE_ADD_SUBDIRECTORY, FILE_TRAVERSE, DELETE, WRITE_DAC and GENERIC_READ; FindFirstFileW(\"...\\*\") succeeds."
+  standard_open: "the filtered token: the same opens fail with ERROR_ACCESS_DENIED (5), also FILE_READ_ATTRIBUTES and FILE_TRAVERSE; FindFirstFileW(\"...\\*\") fails with 5; GetFileSecurityW fails with 5 for the owner, the DACL and both."
+  descriptor: "(the full token and the SSH logon) owner and group SY, DACL protected and auto-inherited with two access-allowed entries, both inheriting to objects and containers, full access: SDDL \"O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)\" (DACL part \"D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)\", owner part \"O:SY\")."
+  elevated_create: "the full token: CreateDirectoryW(\"C:\\Windows\\SystemTemp\\<name>\") succeeds, a file can be created inside it with CREATE_NEW and written (5 bytes), deleted, the new directory is a directory and RemoveDirectoryW succeeds; CreateFileW(CREATE_NEW) directly in SystemTemp succeeds and the file can be deleted (the installers' own Google<pid>_<n> subdirectory is made the same way)."
+  standard_create: "the filtered token: CreateDirectoryW fails with ERROR_ACCESS_DENIED (5) and CreateFileW(CREATE_NEW) in the directory fails with 5."
+  missing_name: "opening a name that does not exist inside SystemTemp for reading: FALSE with ERROR_FILE_NOT_FOUND (2), with both tokens (the filtered token gets 2, not 5, although it cannot open the directory itself)."
+  temp_paths: "GetTempPathW ends with a backslash, equals GetTempPath2W, does not lie below C:\\Windows\\SystemTemp or below C:\\Windows, and starts with the TMP and TEMP variables of the process (the user's profile temp directory); GetSystemWindowsDirectoryW equals GetWindowsDirectoryW and is C:\\Windows. (GetTempPath2W gives a directory below SystemTemp only to a process running as the local system; no such process was tested.)"
+errors:
+  access_denied: "5 (filtered token: open, list, create, descriptor)"
+  file_not_found: "2 (a name that does not exist inside the directory)"
+side_effects: "the create tests make and remove one subdirectory and one file in C:\\Windows\\SystemTemp"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test, compiled twice under different names for the two tokens (stmp_dir_std and stmp_dir_adm: existence, opens, listing and the security descriptor; stmp_create_std and stmp_create_adm: creating and removing; each name is unique per run and not printed) and one file for the temp paths (stmp_paths). The per-test token and session are recorded in windows.json. Each file declares what it calls from Learn's prototypes. Observations are return values, error codes, SDDL text and relations, never user names, handles or the text of paths.
+not_covered: >
+  A process running as the local system (its GetTempPath2W lands in SystemTemp), the files that other software keeps in the directory, a 32-bit caller (the file system redirector does not apply to C:\Windows\SystemTemp; not tested), group policy that changes the descriptor, the "Users" group (it has no access, so no standard user token was needed beyond the filtered administrator token).
