@@ -69,6 +69,7 @@ pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
+pub mod streams;
 pub mod walk;
 
 #[cfg(test)]
@@ -185,6 +186,10 @@ pub struct DiskFile {
     /// The directory and name it was opened by (for rename and delete).
     pub parent: Option<NodeRef>,
     pub name: Vec<u8>,
+    /// The named stream this file object is open on (ADR 0223): then `node`
+    /// is the stream's backing file and `parent`/`name` its place in the
+    /// file's stream directory.
+    pub stream: Option<Vec<u16>>,
 }
 
 /// What a file object is open on.
@@ -722,6 +727,9 @@ impl IoState {
                     let state = self.nodes.remove(&d.key).expect("there");
                     if state.delete_pending {
                         self.delete_node(d.key, &d.node, state.link);
+                        if d.stream.is_none() {
+                            self.drop_streams_if_gone(d.volume, &d.node);
+                        }
                     }
                 }
             }

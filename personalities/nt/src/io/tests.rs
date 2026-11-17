@@ -209,3 +209,4 @@ mod npfs;
 mod null;
 mod process;
 mod process_big;
+mod streams;
