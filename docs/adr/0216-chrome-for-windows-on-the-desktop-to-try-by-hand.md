@@ -54,3 +54,39 @@ Chromium, a Linux program on a Debian disk (ADR 0147).
   profile's cache grows there.
 - `winapps` has a second scripted-run entry (`desktop_entry_check`) for a disk and an entry that
   are not `win-app`'s; its `launch` step types a query the caller gives.
+
+## Addendum (2026-11-17): Chrome starts with its defaults, the sandbox and the GPU on
+
+Track `chrome-defaults`. With the sandbox (S2, ADR 0206/0217) and the software Direct3D 11
+device (S5, ADR 0211) both on `main`, `chrometry::FLAGS` is **empty**. The launcher entry starts
+Chrome with only `--no-first-run --no-default-browser-check --user-data-dir=C:\poly-chrome-profile`:
+nothing that changes security or the GPU, so Chrome shows no "unsupported command-line flag" bar.
+Its own "Chrome for Testing is only for automated testing" bar stays; Windows shows it too.
+
+- **The two together had never run.** With both on, the GPU process runs in its own sandbox
+  and opens `d3d11.dll`/`dxgi.dll` there. It did not stop on anything new: no exception, no
+  access denied, one rendering GPU process. Chrome's GPU-information process still runs
+  beside it, without the GPU sandbox by Chrome's own choice (`--disable-gpu-sandbox`,
+  observed). Poly needed no fix.
+- **Stage 7** (`chrome-win run --stage 7`): stage 2 without `--disable-gpu`, i.e. headless
+  `--dump-dom` with Chrome's defaults. Its output is the spec's `s2` (the same page and DOM).
+- **Boot group `chrome-win-defaults`**, in the `chrome-win-sandbox` CI shard (the
+  `chrome (s2-sandbox)` job), required (`S7_REQUIRED`). It needs the DOM, plus exactly one
+  rendering GPU process whose switches name neither `no-sandbox` nor `disable-gpu-sandbox`
+  (`chromewin::defaults_gpu_note`). A second rendering GPU process would mean the first one
+  ended.
+- **`chrome-try` and stage 3's window check** read `FLAGS`, so they now run with the defaults.
+  `chrome-try` also applies `defaults_gpu_note` to its run. Stage 5 and the S5 window keep
+  `--no-sandbox`: they are S5's own check, separate from S2.
+- Measured (release kernel, 4 GB, 4 CPUs): stage 7 takes about 30 s on KVM. On the owner's PC
+  on WHPX, Chrome's window showed Google's new-tab page less than 45 s after Enter in
+  the launcher (the first screenshot, at 45 s). `http://example.com/` loads. A bookmark and the history survive closing QEMU's
+  window and starting again.
+- **A first-start race, fixed.** On a checkout whose `ntdll.dll` (or Win32/WOW64 modules)
+  had to be built, `desktop --chrome-win` built it twice at once. The kernel's build and the
+  generation of `polystub.dll` (`winimports::load_ours`) each called `ntdll::ensure` into the
+  same `target/ntdll`. The first to finish removed that directory under the other, which then
+  failed with "The system cannot find the path specified" (seen on the PC on a fresh worktree).
+  `ntdll::ensure`, `win32::ensure` and `wow64::ensure` now run one at a time in a process. The
+  second caller waits and takes the first one's cached result. Checked on the PC: with an
+  ntdll input changed, one build, and the desktop came up.

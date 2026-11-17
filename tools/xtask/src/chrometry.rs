@@ -23,11 +23,11 @@
 use crate::Result;
 use std::path::{Path, PathBuf};
 
-/// Chrome's switches in the launcher's entry. **The one place**: on `main` Chrome still needs the
-/// sandbox and the GPU off (the sandbox's child-process support and the Direct3D 11 device are
-/// other tracks, ADR 0155's S2 and S5). When both have landed this list is empty and Chrome starts
-/// as it does on Windows.
-pub const FLAGS: &[&str] = &["--no-sandbox", "--disable-gpu"];
+/// Chrome's switches in the launcher's entry. **The one place**, and empty: Chrome starts with its
+/// defaults, as on Windows, its sandbox on (S2, ADR 0206/0217) and its GPU on Poly's software
+/// Direct3D 11 device (S5, ADR 0211), so it shows no "unsupported command-line flag" bar (ADR 0216
+/// addendum). The window check ([`group_boot_test`]) and stage 3 use the same list.
+pub const FLAGS: &[&str] = &[];
 /// Not about what Poly lacks: a first start of a browser (no welcome page, no question about
 /// being the default browser) and where the profile is ([`PROFILE_DOS`]).
 const START_FLAGS: &[&str] = &["--no-first-run", "--no-default-browser-check"];
@@ -61,6 +61,11 @@ pub fn mounts(settings: bool) -> String {
 /// Chrome's command line after the program: [`FLAGS`], the start switches and the profile.
 pub fn switches() -> Vec<String> {
     FLAGS.iter().chain(START_FLAGS).map(|s| s.to_string()).chain([format!("--user-data-dir={PROFILE_DOS}")]).collect()
+}
+
+/// Whether [`FLAGS`] turn Chrome's GPU off (then there is no GPU process to check).
+fn gpu_off() -> bool {
+    FLAGS.contains(&"--disable-gpu")
 }
 
 /// Where Chrome's program is, as the launcher's `Exec` names it.
@@ -223,6 +228,12 @@ pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sym
         let exceptions: Vec<&str> = text.lines().filter(|l| l.contains("nt-exc:")).take(3).collect();
         match crate::chromewin::s3_verdict(stopped.as_deref(), &exceptions) {
             crate::chromewin::S3Verdict::Pass => {
+                // With Chrome's defaults the page must come from one GPU process in its sandbox.
+                if !gpu_off()
+                    && let Some(why) = crate::chromewin::defaults_gpu_note(&text)
+                {
+                    return Err(format!("the menu's Chrome painted, but {why} (see {})", log.display()));
+                }
                 println!("CHROME TRY PASSED");
                 return Ok(());
             }
@@ -275,6 +286,27 @@ mod tests {
         assert_eq!(app.argv[1..1 + flags.len()], flags[..]);
         // The profile is on the disk's C:, with the backslash as it is.
         assert!(app.argv.contains(&format!("--user-data-dir={PROFILE_DOS}")), "{:?}", app.argv);
+    }
+
+    #[test]
+    fn chrome_starts_with_its_defaults_sandbox_and_gpu_on() {
+        // No switch that turns off a security or GPU feature: Chrome shows its "unsupported
+        // command-line flag" bar for those (ADR 0216 addendum).
+        for f in switches() {
+            assert!(
+                ![
+                    "--no-sandbox",
+                    "--disable-gpu",
+                    "--disable-gpu-sandbox",
+                    "--disable-gpu-compositing",
+                    "--in-process-gpu"
+                ]
+                .iter()
+                .any(|bad| f == *bad),
+                "{f}"
+            );
+        }
+        assert!(!gpu_off());
     }
 
     #[test]

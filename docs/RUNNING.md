@@ -37,10 +37,16 @@ WHPX (Windows) or KVM (Linux) when the host has it. Press the Windows key or Ctr
 **Chrome (Windows)** and wait about a minute for its window. Chrome's profile (bookmarks,
 history, logins) is on the disk, so it survives a reboot; only `--fresh-disk` (or a new Chrome
 version, which makes the disk again) starts it empty. The keyboard layout is the desktop's own
-(Settings, or the menu's; ADR 0209). Chrome's switches are in `chrometry::FLAGS`: today
-`--no-sandbox --disable-gpu`, until the sandbox and the GPU work lands. `cargo xtask boot-tests
-chrome-try` (after `cargo xtask chrome-win fetch`; Linux or `polyd`) also starts it from the
-launcher, checks that the page paints and loads a typed URL.
+(Settings, or the menu's; ADR 0209). Chrome starts with its **default settings**, as on
+Windows: its sandbox on and its GPU process on Poly's software Direct3D 11 device, with no
+"unsupported command-line flag" bar (only Chrome for Testing's own "for automated testing"
+bar). Its switches are in `chrometry::FLAGS`, which is empty (ADR 0216 addendum). How long it
+takes: the first start on a checkout that has never built anything spends about 10 minutes on
+the download and the builds (Win32 modules about 4 minutes, kernel about 2); later starts boot
+in seconds, and Chrome's window shows its new-tab page less than a minute after Enter in the
+launcher. `cargo xtask boot-tests chrome-try` (after `cargo xtask chrome-win fetch`; Linux or
+`polyd`) also starts it from the launcher. It checks that the page paints, that a typed URL
+loads and that the GPU process ran once, in its sandbox.
 
 **Installing a Linux app** (ADR 0173): on the desktop with Chromium, download a `.deb`
 from Debian 13's archive (for example from packages.debian.org) and click it in

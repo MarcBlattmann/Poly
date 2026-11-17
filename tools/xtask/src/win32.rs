@@ -163,9 +163,16 @@ pub fn command(args: &[String]) -> Result {
     Ok(())
 }
 
+/// One [`ensure`] at a time in this process. Two threads can ask at once (`desktop --chrome-win`
+/// builds the kernel while `polystub.dll` reads our exports): without it both built the Win32 modules into
+/// the same target directory and the first to finish removed it under the other's build.
+static ENSURING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// The directory with the up-to-date modules: from the cache, or built,
 /// verified and cached.
 pub fn ensure() -> Result<PathBuf> {
+    // The second caller waits here and then finds the first one's result in the cache.
+    let _one = ENSURING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = root();
     let key = cache_key(&root)?;
     let cache = cache_dir(&root);
