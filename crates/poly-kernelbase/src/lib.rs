@@ -72,6 +72,7 @@ pub mod advapi;
 pub mod apps;
 pub mod atoms;
 pub mod cpu;
+pub mod drivetype;
 pub mod env;
 pub mod errmode;
 pub mod error;
@@ -88,6 +89,7 @@ pub mod mitigation;
 pub mod namedpipe;
 pub mod nls;
 pub mod oleaut;
+pub mod oleauto;
 pub mod path;
 pub mod pipe;
 pub mod priority;
@@ -116,8 +118,10 @@ pub mod version;
 pub mod waitreg;
 pub mod winmm;
 pub mod winpath;
+pub mod workingset;
 pub mod wow64;
 pub mod wsprintf;
+pub mod wtsenum;
 
 pub use poly_ntobj::NtStatus;
 
