@@ -85,6 +85,7 @@ fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:PolyRandomBytes");
     // And the physical memory sizes, for `GlobalMemoryStatusEx` (ADR 0206).
     println!("cargo:rustc-link-arg=/EXPORT:PolyPhysicalMemory");
+    println!("cargo:rustc-link-arg=/EXPORT:PolyRequestElevation");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
     if !x86 {

@@ -315,6 +315,22 @@ impl Desktop {
         true
     }
 
+    /// Ask the compositor for the user's consent (ADR 0222, [`ToCompositor::Consent`]). False
+    /// when no compositor is connected: then nobody can answer.
+    pub fn ask_consent(&mut self, request: u32, pid: u32, program: &str, path: &str, file: &str) -> bool {
+        if !self.connected {
+            return false;
+        }
+        self.send(ToCompositor::Consent {
+            request,
+            pid,
+            program: String::from(program),
+            path: String::from(path),
+            file: String::from(file),
+        });
+        true
+    }
+
     /// The bytes to hand to the compositor's next `read`.
     pub fn take_output(&mut self) -> Vec<u8> {
         core::mem::take(&mut self.out)

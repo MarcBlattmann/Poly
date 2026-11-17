@@ -94,6 +94,13 @@ pub struct NtSystem {
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],
+    /// The logon the Windows programs run in (`poly.win.token`, ADR 0222): which token a process
+    /// that no process made starts with. The kernel sets it at boot ([`Logon::Standard`] unless
+    /// told otherwise); a new system has the administrator without a split token (ADR 0171), as
+    /// the host tests expect.
+    pub logon: poly_security::token::Logon,
+    /// The consent broker: elevation requests waiting for the user (ADR 0222).
+    pub consent: crate::consent::Broker,
 
     sections: BTreeMap<u64, Section>,
     next_key: u64,
@@ -149,9 +156,26 @@ impl NtSystem {
             winsta: crate::winsta::WinSta::default(),
             proc_attrs: BTreeMap::new(),
             ntdll32: &[],
+            logon: poly_security::token::Logon::Admin,
+            consent: crate::consent::Broker::default(),
             sections: BTreeMap::new(),
             next_key: 1,
         }
+    }
+
+    /// The desktop link's device: bytes the compositor wrote. win32k takes the input and the
+    /// window records, the consent broker the user's answers (ADR 0222).
+    pub fn link_receive(&mut self, bytes: &[u8]) {
+        self.win32k.link_receive(&mut self.objects, bytes);
+        for (request, allow) in self.win32k.take_consent_answers() {
+            self.consent.desktop_answered(&mut self.objects, request, allow);
+        }
+    }
+
+    /// The desktop link's device: the compositor closed it. A prompt it showed is answered No.
+    pub fn link_closed(&mut self) {
+        self.win32k.link_closed();
+        self.consent.desktop_gone(&mut self.objects);
     }
 
     /// Process `pid` ended with `status`: its jobs count it out and post

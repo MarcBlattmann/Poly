@@ -4,9 +4,12 @@
 //! A [`Token`] is the contents of one token object: its user, groups and
 //! restricting SIDs with their attributes, its privileges, owner, primary
 //! group, default DACL, integrity level and the flags programs ask about.
-//! Poly's processes start with [`Token::poly_user`], an elevated
-//! administrator's token like the one the spec sheets were observed with
-//! (12 groups, 24 privileges, High integrity); every other token is made
+//! Poly's processes start with a token of the logon kind the system was
+//! booted with ([`Logon`], ADR 0222): an administrator's filtered token with
+//! its full token linked (User Account Control), the full one, or
+//! [`Token::poly_user`], the elevated administrator without a split token
+//! that the older spec sheets were observed with (12 groups, 24 privileges,
+//! High integrity, ADR 0171); every other token is made
 //! from one by [`Token::duplicate`] and [`Token::filter`]
 //! (`DuplicateTokenEx`, `CreateRestrictedToken`), and changed by
 //! [`adjust_privileges`], [`Token::adjust_groups`] and
@@ -250,6 +253,8 @@ pub const PRIVILEGES: &[(u32, &str)] = &[
 /// `SeChangeNotify`, `SeShutdown`, `SeUndock`, `SeIncreaseWorkingSet`,
 /// `SeTimeZone`.
 const LUA_PRIVILEGES: [u32; 5] = [23, 19, 25, 33, 34];
+/// The same, in the order of their LUIDs (the order a filtered token lists them in).
+const LUA_PRIVILEGES_SORTED: [u32; 5] = [19, 23, 25, 33, 34];
 
 /// The LUID of a privilege name (ASCII case ignored).
 pub fn privilege_value(name: &[u16]) -> Option<u32> {
@@ -397,7 +402,50 @@ pub struct Token {
     pub object_dacl: Option<Vec<u8>>,
     /// The AppContainer a lowbox token belongs to (`NtCreateLowBoxToken`, ADR 0196).
     pub app_container: Option<AppContainer>,
+    /// The other token of a split token (ADR 0222): the full token of a filtered one and the
+    /// filtered one of a full one. The copy kept here has no link of its own;
+    /// [`Token::linked_token`] makes one that links back.
+    pub linked: Option<alloc::boxed::Box<Token>>,
+    /// The token was handed out by the consent broker after the user said yes (ADR 0222): a
+    /// process of a lower integrity may start one process with it. Starting a process with it
+    /// clears the mark, and a copy never has it.
+    pub consented: bool,
     flags: u32,
+}
+
+/// The kind of logon Poly's Windows programs run in (`poly.win.token`, ADR 0222).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Logon {
+    /// An administrator with User Account Control: programs get the filtered token
+    /// ([`Token::uac_filtered`]). The default.
+    Standard,
+    /// The same administrator's programs after a consent: the full token ([`Token::uac_full`]).
+    Elevated,
+    /// The elevated administrator without a split token ([`Token::poly_user`], ADR 0171): the
+    /// token of the older spec sheets' recordings, which tests without a token kind compare with.
+    Admin,
+}
+
+impl Logon {
+    /// The kind a `poly.win.token` value names (`standard`, `elevated`, `admin`).
+    pub fn parse(value: &str) -> Option<Logon> {
+        match value {
+            "standard" => Some(Logon::Standard),
+            "elevated" => Some(Logon::Elevated),
+            "admin" => Some(Logon::Admin),
+            _ => None,
+        }
+    }
+
+    /// The primary token a program of this logon starts with when no process made it (the
+    /// first process, a program the desktop starts).
+    pub fn token(self) -> Token {
+        match self {
+            Logon::Standard => Token::uac_filtered(),
+            Logon::Elevated => Token::uac_full(),
+            Logon::Admin => Token::poly_user(),
+        }
+    }
 }
 
 /// What makes a token a lowbox token: the container's package SID, the number the system gave
@@ -476,8 +524,121 @@ impl Token {
             session: 0,
             origin: POLY_LOGON_LUID,
             app_container: None,
+            linked: None,
+            consented: false,
             flags: 0,
         }
+    }
+
+    /// The full token of an administrator's split token (UacElevatedToken.yaml, ADR 0222): High
+    /// integrity, Administrators enabled and owner, 24 privileges of which `SeChangeNotify`,
+    /// `SeImpersonate` and `SeCreateGlobal` are enabled (3) and `SeDebug` has attributes 2,
+    /// elevation 1 of type Full, no restrictions; the filtered token is linked.
+    pub fn uac_full() -> Token {
+        let mut full = Token::uac_full_alone();
+        full.linked = Some(alloc::boxed::Box::new(Token::uac_filtered_alone()));
+        full
+    }
+
+    /// The filtered token of an administrator's split token (UacStandardToken.yaml, ADR 0222):
+    /// Medium integrity, Administrators and `S-1-5-114` deny-only, the five privileges of a
+    /// standard user (`SeChangeNotify` enabled), elevation 0 of type Limited, restrictions and
+    /// virtualization allowed; the full token is linked.
+    pub fn uac_filtered() -> Token {
+        let mut filtered = Token::uac_filtered_alone();
+        filtered.linked = Some(alloc::boxed::Box::new(Token::uac_full_alone()));
+        filtered
+    }
+
+    fn uac_full_alone() -> Token {
+        let mut t = Token::poly_user();
+        const ON: u32 = SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT;
+        for (luid, attrs) in t.privileges.iter_mut() {
+            *attrs = match *luid {
+                23 | 29 | 30 => ON,
+                20 => SE_PRIVILEGE_ENABLED,
+                _ => 0,
+            };
+        }
+        t.elevation_type = TOKEN_ELEVATION_TYPE_FULL;
+        t
+    }
+
+    fn uac_filtered_alone() -> Token {
+        let mut t = Token::poly_user();
+        let admins = sid::builtin(rid::DOMAIN_ALIAS_RID_ADMINS);
+        let local_admin = sid::nt(114);
+        for (g, a) in t.groups.iter_mut() {
+            if *g == admins || *g == local_admin {
+                *a = SE_GROUP_USE_FOR_DENY_ONLY;
+            } else if *a & SE_GROUP_INTEGRITY != 0 {
+                *g = sid::mandatory(rid::SECURITY_MANDATORY_MEDIUM_RID);
+            }
+        }
+        t.privileges = LUA_PRIVILEGES_SORTED
+            .iter()
+            .map(|&l| (l, if l == 23 { SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT } else { 0 }))
+            .collect();
+        // What it creates belongs to the user, not to a group it cannot use.
+        t.owner = t.user.clone();
+        let logon = logon_sid(POLY_LOGON_LUID);
+        let dacl = acl::build(
+            acl::ACL_REVISION,
+            &[(0, 0, GENERIC_ALL, &t.user), (0, 0, GENERIC_ALL, &sid::local_system()), (0, 0, 0xA000_0000, &logon)],
+        );
+        t.default_dacl = Some(dacl.clone());
+        t.object_dacl = Some(dacl);
+        t.elevated = false;
+        t.elevation_type = TOKEN_ELEVATION_TYPE_LIMITED;
+        t.flags = F_HAS_RESTRICTIONS | F_VIRT_ALLOWED;
+        t
+    }
+
+    /// What `TokenLinkedToken` hands out for this token (ADR 0222): the other token of the
+    /// split token as an impersonation token at identification level, under `id`, linked back
+    /// to this one. `None` for a token that is not half of a split token.
+    pub fn linked_token(&self, id: u64) -> Option<Token> {
+        let mut other = (**self.linked.as_ref()?).clone();
+        let mut me = self.clone();
+        me.linked = None;
+        me.consented = false;
+        other.linked = Some(alloc::boxed::Box::new(me));
+        other.id = id;
+        other.modified_id = id;
+        other.kind = TOKEN_IMPERSONATION;
+        other.level = SECURITY_IDENTIFICATION;
+        other.consented = false;
+        Some(other)
+    }
+
+    /// The full token to start an elevated program with after a consent (ADR 0222): this
+    /// token itself if it is the full token, else its linked full token, as a primary token
+    /// under `id` that links back and carries the consent mark. `None` when there is no full
+    /// token to give.
+    pub fn elevated_for_consent(&self, id: u64) -> Option<Token> {
+        let mut t = if self.elevation_type == TOKEN_ELEVATION_TYPE_LIMITED {
+            self.linked_token(id)?
+        } else if self.elevated {
+            let mut t = self.clone();
+            t.id = id;
+            t.modified_id = id;
+            t
+        } else {
+            return None;
+        };
+        t.kind = TOKEN_PRIMARY;
+        t.level = SECURITY_ANONYMOUS;
+        t.consented = true;
+        Some(t)
+    }
+
+    /// Whether the Administrators group is enabled (`IsUserAnAdmin`: a deny-only group is no
+    /// membership).
+    pub fn admin_enabled(&self) -> bool {
+        let admins = sid::builtin(rid::DOMAIN_ALIAS_RID_ADMINS);
+        self.groups
+            .iter()
+            .any(|(g, a)| *g == admins && a & SE_GROUP_ENABLED != 0 && a & SE_GROUP_USE_FOR_DENY_ONLY == 0)
     }
 
     /// The logon SID (`S-1-5-5-X-Y`): the group with `SE_GROUP_LOGON_ID`.
@@ -566,6 +727,7 @@ impl Token {
     /// they are now.
     pub fn duplicate(&self, kind: u32, level: u32, id: u64) -> Token {
         let mut t = self.clone();
+        t.consented = false;
         t.id = id;
         t.modified_id = id;
         t.kind = kind;
@@ -1456,5 +1618,79 @@ mod tests {
         // Classes without pointers are the same in both widths.
         assert_eq!(t.query_width(class::TOKEN_STATISTICS, 0, 4), t.query(class::TOKEN_STATISTICS, 0));
         assert!(set_length_ok_width(class::TOKEN_OWNER, 4, 4) && !set_length_ok(class::TOKEN_OWNER, 4));
+    }
+
+    fn admins_attrs(t: &Token) -> u32 {
+        let admins = sid::builtin(rid::DOMAIN_ALIAS_RID_ADMINS);
+        t.groups.iter().find(|(g, _)| *g == admins).map(|(_, a)| *a).unwrap()
+    }
+
+    #[test]
+    fn the_filtered_token_is_the_one_the_standard_sheet_observed() {
+        let t = Token::uac_filtered();
+        assert_eq!(t.query(class::TOKEN_ELEVATION, 0).unwrap(), 0u32.to_le_bytes());
+        assert_eq!(t.query(class::TOKEN_ELEVATION_TYPE, 0).unwrap(), 3u32.to_le_bytes());
+        assert_eq!(t.query(class::TOKEN_HAS_RESTRICTIONS, 0).unwrap(), [1]);
+        assert_eq!(t.query(class::TOKEN_VIRTUALIZATION_ALLOWED, 0).unwrap(), 1u32.to_le_bytes());
+        assert_eq!(t.integrity_rid(), 0x2000);
+        assert_eq!(admins_attrs(&t), SE_GROUP_USE_FOR_DENY_ONLY);
+        assert!(!t.admin_enabled());
+        let p: Vec<(u32, u32)> = t.privileges.clone();
+        assert_eq!(p, [(19, 0), (23, 3), (25, 0), (33, 0), (34, 0)]);
+        assert!(t.groups.iter().any(|(g, a)| *g == sid::nt(114) && *a == SE_GROUP_USE_FOR_DENY_ONLY));
+    }
+
+    #[test]
+    fn the_full_token_is_the_one_the_elevated_sheet_observed() {
+        let t = Token::uac_full();
+        assert_eq!(t.query(class::TOKEN_ELEVATION, 0).unwrap(), 1u32.to_le_bytes());
+        assert_eq!(t.query(class::TOKEN_ELEVATION_TYPE, 0).unwrap(), 2u32.to_le_bytes());
+        assert_eq!(t.query(class::TOKEN_HAS_RESTRICTIONS, 0).unwrap(), [0]);
+        assert_eq!(t.query(class::TOKEN_VIRTUALIZATION_ALLOWED, 0).unwrap(), 0u32.to_le_bytes());
+        assert_eq!(t.integrity_rid(), 0x3000);
+        assert_eq!(admins_attrs(&t), 0xF);
+        assert!(t.admin_enabled());
+        assert_eq!(t.privileges.len(), 24);
+        let on: Vec<u32> = t.privileges.iter().filter(|p| p.1 == 3).map(|p| p.0).collect();
+        assert_eq!(on, [23, 29, 30]);
+        assert_eq!(t.privileges.iter().find(|p| p.0 == 20).unwrap().1, 2);
+        assert_eq!(t.privileges.iter().filter(|p| p.1 == 0).count(), 20);
+    }
+
+    #[test]
+    fn the_linked_token_is_the_other_half_at_identification_level_and_links_back() {
+        let filtered = Token::uac_filtered();
+        let full = filtered.linked_token(77).unwrap();
+        assert_eq!((full.id, full.kind, full.level), (77, TOKEN_IMPERSONATION, SECURITY_IDENTIFICATION));
+        assert_eq!(full.elevation_type, TOKEN_ELEVATION_TYPE_FULL);
+        assert!(full.admin_enabled());
+        let back = full.linked_token(78).unwrap();
+        assert_eq!(back.elevation_type, TOKEN_ELEVATION_TYPE_LIMITED);
+        assert_eq!(back.integrity_rid(), 0x2000);
+        assert_eq!(Token::uac_full().linked_token(5).unwrap().elevation_type, TOKEN_ELEVATION_TYPE_LIMITED);
+        // The token without a split has none.
+        assert!(Token::poly_user().linked_token(5).is_none());
+        assert_eq!(Token::poly_user().query(class::TOKEN_LINKED_TOKEN, 0), Err(STATUS_NO_SUCH_LOGON_SESSION));
+    }
+
+    #[test]
+    fn a_consent_gives_a_marked_primary_full_token_and_a_copy_loses_the_mark() {
+        let t = Token::uac_filtered().elevated_for_consent(9).unwrap();
+        assert!(t.consented && t.admin_enabled());
+        assert_eq!((t.kind, t.integrity_rid()), (TOKEN_PRIMARY, 0x3000));
+        assert!(!t.duplicate(TOKEN_PRIMARY, SECURITY_IMPERSONATION, 10).consented);
+        assert!(Token::uac_full().elevated_for_consent(9).unwrap().consented);
+        // The administrator without a split is elevated already.
+        assert!(Token::poly_user().elevated_for_consent(9).is_some());
+    }
+
+    #[test]
+    fn logon_kinds() {
+        assert_eq!(Logon::parse("standard"), Some(Logon::Standard));
+        assert_eq!(Logon::parse("elevated"), Some(Logon::Elevated));
+        assert_eq!(Logon::parse("admin"), Some(Logon::Admin));
+        assert_eq!(Logon::parse("x"), None);
+        assert_eq!(Logon::Admin.token(), Token::poly_user());
+        assert!(!Logon::Standard.token().admin_enabled());
     }
 }

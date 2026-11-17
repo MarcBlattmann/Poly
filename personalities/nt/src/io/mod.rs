@@ -402,6 +402,25 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
 }
 
 impl IoState {
+    /// The same file in Poly's own file system (the volume's root directory, then the path with
+    /// `/` separators), for the desktop's consent prompt to read the publisher from (ADR 0222).
+    /// The name is spelled as given: a file found only case-insensitively gives no such path.
+    pub fn vfs_path_of_dos(&self, dos: &[u16]) -> Option<Vec<u8>> {
+        let (device, path) = self.dos_file_name(dos)?;
+        let name = device.strip_prefix(wide(r"\Device\").as_slice())?;
+        let volume = self.volumes.iter().find(|v| v.device == name)?;
+        let mut out = volume.path.clone();
+        while out.last() == Some(&b'/') {
+            out.pop();
+        }
+        let text = String::from_utf16(&path).ok()?;
+        for part in text.split('\\').filter(|p| !p.is_empty()) {
+            out.push(b'/');
+            out.extend_from_slice(part.as_bytes());
+        }
+        Some(out)
+    }
+
     /// The file a DOS path (`X:\dir\file`, or `\??\X:\dir\file`) names, as the object manager spells
     /// it: `(\Device\HarddiskVolume<N>, the path below that volume)`. The drive letter picks the volume.
     pub fn dos_file_name(&self, dos: &[u16]) -> Option<(Vec<u16>, Vec<u16>)> {

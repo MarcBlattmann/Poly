@@ -59,8 +59,7 @@ impl Link {
         let early = core::mem::take(&mut *self.early.lock());
         let more = with_existing(|s| {
             if !early.is_empty() {
-                let sys = &mut s.sys;
-                sys.win32k.link_receive(&mut sys.objects, &early);
+                s.sys.link_receive(&early);
             }
             s.sys.win32k.link_output()
         });
@@ -101,7 +100,7 @@ struct LinkFile(Arc<Link>);
 
 impl Drop for LinkFile {
     fn drop(&mut self) {
-        with_existing(|s| s.sys.win32k.link_closed());
+        with_existing(|s| s.sys.link_closed());
         self.0.out.lock().clear();
         self.0.early.lock().clear();
         self.0.open.store(false, Ordering::SeqCst);
@@ -124,10 +123,7 @@ impl CharDevice for LinkFile {
     fn write(&self, _: u64, buf: &[u8], _: bool) -> poly_vfs::Result<usize> {
         let mut early = self.0.early.lock();
         let handled = early.is_empty()
-            && with_existing(|s| {
-                let sys = &mut s.sys;
-                sys.win32k.link_receive(&mut sys.objects, buf);
-            })
+            && with_existing(|s| s.sys.link_receive(buf))
             .is_some();
         if !handled {
             early.extend_from_slice(buf);

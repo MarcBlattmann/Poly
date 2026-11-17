@@ -330,6 +330,17 @@ static TASKBAR_BOTTOM: core::sync::atomic::AtomicBool = core::sync::atomic::Atom
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
 
+/// `poly.win.token=standard|elevated|admin` (ADR 0222): the logon Windows programs run in. Without
+/// it they run as an administrator with User Account Control: the filtered token, elevation by
+/// consent. `admin` is the elevated administrator without a split token (ADR 0171) that the
+/// older spec sheets were recorded with. Kept as [`Logon`](poly_personality_nt::security::Logon) until the
+/// NT state is made.
+pub const TOKEN_ARG: &str = "poly.win.token";
+static LOGON: Mutex<poly_personality_nt::security::Logon> = Mutex::new(poly_personality_nt::security::Logon::Standard);
+/// `poly.uac.answer=yes|no` (ADR 0222): a test run answers every consent prompt at once (nobody is
+/// at the screen). Never on by default.
+static UAC_ANSWER: Mutex<Option<bool>> = Mutex::new(None);
+
 /// `poly.nt.trace` (`poly.nt.trace=all` for the noisy services too): one
 /// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
 static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
@@ -685,6 +696,19 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         TRACE.store(1, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: tracing system calls (poly.nt.trace)");
     }
+    if let Some(v) = boot.arg(TOKEN_ARG) {
+        match poly_personality_nt::security::Logon::parse(v) {
+            Some(l) => {
+                *LOGON.lock() = l;
+                crate::kprintln!("nt: Windows programs run with the {v} token (poly.win.token)");
+            }
+            None => crate::kprintln!("nt: poly.win.token={v} is not standard, elevated or admin; ignored"),
+        }
+    }
+    if let Some(v) = boot.arg(poly_personality_nt::consent::ANSWER_ARG) {
+        *UAC_ANSWER.lock() = poly_personality_nt::consent::Broker::parse_hook(v);
+        crate::kprintln!("nt: consent prompts are answered {v:?} at once (poly.uac.answer, a test hook)");
+    }
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
@@ -754,6 +778,9 @@ fn make_state(slot: &mut Option<NtState>) {
     let Some(state) = slot.as_mut() else { return };
     // The i686 ntdll every 32-bit process maps (ADR 0186).
     state.sys.ntdll32 = NTDLL32;
+    // The logon the programs run in (ADR 0222).
+    state.sys.logon = *LOGON.lock();
+    state.sys.consent.hook = *UAC_ANSWER.lock();
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
     layout::prepare(&mut state.sys);

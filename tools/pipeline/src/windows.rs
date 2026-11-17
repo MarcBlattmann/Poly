@@ -447,12 +447,16 @@ fn token_of(source: &Path, name: &str) -> Option<String> {
 }
 
 /// The kernel arguments for a test recorded with `token`: Poly's NT personality gives
-/// the program the token of that kind (`standard`: filtered, `elevated`: full after a consent).
+/// the program the token of that kind (`standard`: filtered, `elevated`: full after a consent;
+/// ADR 0222). Nobody can answer a consent prompt in a test run, so a standard test's prompt is
+/// answered No at once (`poly.uac.answer=no`), as the oracle's unanswered prompt ended. A test
+/// with no token kind was recorded with the SSH logon's elevated administrator without a split
+/// token, which Poly gives with `admin` (ADR 0171).
 pub fn token_kernel_args(token: Option<&str>) -> &'static str {
     match token {
-        Some("standard") => " poly.win.token=standard",
+        Some("standard") => " poly.win.token=standard poly.uac.answer=no",
         Some("elevated") => " poly.win.token=elevated",
-        _ => "",
+        _ => " poly.win.token=admin",
     }
 }
 
@@ -1605,9 +1609,9 @@ mod tests {
         assert_eq!(h.system.token.as_deref(), Some("standard"));
         assert!(serde_json::to_string(&h.system).unwrap().contains("\"token\":\"standard\""));
         assert!(!serde_json::to_string(&f.system).unwrap().contains("token"));
-        assert_eq!(token_kernel_args(Some("standard")), " poly.win.token=standard");
+        assert_eq!(token_kernel_args(Some("standard")), " poly.win.token=standard poly.uac.answer=no");
         assert_eq!(token_kernel_args(Some("elevated")), " poly.win.token=elevated");
-        assert_eq!(token_kernel_args(None), "");
+        assert_eq!(token_kernel_args(None), " poly.win.token=admin");
         let t = f.test("t").unwrap();
         assert_eq!(t.exit_code, Some(0xC000_0005));
         assert_eq!(t.exit_code_bits, 32);

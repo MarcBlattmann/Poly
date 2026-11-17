@@ -8,8 +8,10 @@
 //! process has a primary token (a copy of its creator's), a thread may have
 //! an impersonation token, and a request is checked with the thread's token,
 //! else the process's. A token is an object of type `Token`; its contents
-//! are [`poly_security::token::Token`]. The first process has
-//! [`Token::poly_user`], an elevated administrator's.
+//! are [`poly_security::token::Token`]. The first process has the token of
+//! the system's logon kind ([`NtSystem::logon`], ADR 0222): an
+//! administrator's filtered token with the full one linked, unless the boot
+//! asked for another.
 //!
 //! Arguments in the order of the documented `Zw*` routines (Learn, WDK) or,
 //! where Learn has no page, of the Win32 function that calls them.
@@ -30,6 +32,8 @@ use poly_security::sd::{self, Parts};
 use poly_security::sdops;
 use poly_security::sid::Sid;
 use poly_security::token::{self, SetData, Token, class};
+/// The logon kinds (ADR 0222), for the kernel's `poly.win.token`.
+pub use poly_security::token::Logon;
 
 type Result<T> = core::result::Result<T, NtStatus>;
 
@@ -71,7 +75,8 @@ pub fn process_token(sys: &mut NtSystem, pid: ProcessId, thread: ThreadRef) -> R
     if let Some(id) = sys.objects.security.process_token(pid) {
         return Ok(id);
     }
-    install_process_token(sys, pid, Token::poly_user(), thread, None)
+    let first = sys.logon.token();
+    install_process_token(sys, pid, first, thread, None)
 }
 
 /// The token of a process being created: a copy of `creator`'s (or of
@@ -88,10 +93,14 @@ pub fn inherit_token(
         (Some(id), _) => id,
         (None, Some(c)) => process_token(sys, c, thread)?,
         (None, None) => {
-            install_process_token(sys, child, Token::poly_user(), thread, None)?;
+            let first = sys.logon.token();
+            install_process_token(sys, child, first, thread, None)?;
             return Ok(());
         }
     };
+    if let (Some(given), Some(c)) = (given, creator) {
+        check_given_token(sys, given, c, thread)?;
+    }
     let id = sys.objects.security.new_luid();
     let source = sys.objects.security.token(base).ok_or(STATUS_INVALID_PARAMETER)?;
     let mut copy = source.duplicate(token::TOKEN_PRIMARY, token::SECURITY_IMPERSONATION, id);
@@ -102,6 +111,29 @@ pub fn inherit_token(
     }
     let creator_token = creator.and_then(|c| sys.objects.security.process_token(c));
     install_process_token(sys, child, copy, thread, creator_token).map(|_| ())
+}
+
+/// Whether `creator` may start a process with token `given` (ADR 0222). A token of a higher
+/// integrity level than the creator's own would be an elevation without the user: it is allowed
+/// only once for a token the consent broker handed out after a yes (the mark is used up here),
+/// or to a creator that holds `SeAssignPrimaryTokenPrivilege` or `SeTcbPrivilege` enabled (a
+/// service of the system). Otherwise `STATUS_PRIVILEGE_NOT_HELD`.
+fn check_given_token(sys: &mut NtSystem, given: u64, creator: ProcessId, thread: ThreadRef) -> Result<()> {
+    let mine = process_token(sys, creator, thread)?;
+    let (own_rid, may_assign) = {
+        let t = sys.objects.security.token(mine).ok_or(STATUS_INVALID_PARAMETER)?;
+        let held = |luid: u32| t.privileges.iter().any(|&(l, a)| l == luid && a & token::SE_PRIVILEGE_ENABLED != 0);
+        (t.integrity_rid(), held(3) || held(7))
+    };
+    let g = sys.objects.security.token_mut(given).ok_or(STATUS_INVALID_PARAMETER)?;
+    if g.integrity_rid() <= own_rid || may_assign {
+        return Ok(());
+    }
+    if g.consented {
+        g.consented = false;
+        return Ok(());
+    }
+    Err(STATUS_PRIVILEGE_NOT_HELD)
 }
 
 /// Give the objects of a new process their descriptors (the default of its
@@ -332,6 +364,9 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     let t = copy_of(k, id)?;
     // Pointers and `SID_AND_ATTRIBUTES` in the caller's width (ADR 0186).
     let w = k.with_state(|_, p, _| p.layout().ptr as usize);
+    if info_class == class::TOKEN_LINKED_TOKEN && t.linked.is_some() {
+        return query_linked_token(k, &t, buf, ret, w);
+    }
     let bytes = t.query_width(info_class, buf, w)?;
     if ret == 0 {
         return Err(STATUS_ACCESS_VIOLATION);
@@ -345,6 +380,32 @@ pub fn query_information_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     }
     abi::write(k, buf, &bytes)?;
     abi::write_u32(k, ret, bytes.len() as u32)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `TokenLinkedToken` of half of a split token (ADR 0222, UacStandardToken.yaml): a new handle
+/// to a new token object, the other half as an impersonation token at identification level
+/// (it can be queried and set on a thread, not used to act: `DuplicateTokenEx` to a higher
+/// level is refused), written as a `TOKEN_LINKED_TOKEN` (one handle).
+fn query_linked_token<K: NtKernel>(k: &mut K, t: &Token, buf: u64, ret: u64, w: usize) -> Result<NtStatus> {
+    if ret == 0 || buf == 0 {
+        return Err(STATUS_ACCESS_VIOLATION);
+    }
+    let caller = k.caller();
+    let handle = k.with_state(|sys, _, b| {
+        let id = sys.objects.security.new_luid();
+        let linked = t.linked_token(id).ok_or(token::STATUS_NO_SUCH_LOGON_SESSION)?;
+        let creator = sys.objects.security.effective(caller.process, caller.thread);
+        let (_, obj) = sys.objects.new_token(linked, caller.thread)?;
+        sys.objects.assign_security(obj, ObjectType::Token, creator, None);
+        let handle = open_exact(sys, &caller, obj, token::TOKEN_ALL_ACCESS, 0);
+        let _ = sys.objects.dereference(obj);
+        sys.reap(b);
+        handle
+    })?;
+    let bytes = handle.0.to_le_bytes();
+    abi::write(k, buf, &bytes[..w])?;
+    abi::write_u32(k, ret, w as u32)?;
     Ok(STATUS_SUCCESS)
 }
 
