@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3146d79e98a5",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:20Z",
+  "tests": [
+    {
+      "name": "spyrevoke_basic",
+      "exe_sha256": "e368eff9403230a59c2923cc1f2e29b6351159f70b4845e836ed34b255a3274c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIHNwaWVzIHJlZ2lzdGVyZWQ6IHJlZmVyZW5jZXMgaGVsZCBvbiBzcHkxICsxLCBzcHkyICsxCnJldm9rZShzcHkxJ3MgY29va2llKSA9IDB4MDAwMDAwMDAsIHNweTEgcmVmZXJlbmNlcyBiYWNrIHRvICswCmV2ZW50cyBhZnRlciB0aGUgcmV2b2tlOiA0IGV2ZW50cwogIHNweTIgUHJlSW5pdGlhbGl6ZShjb2luaXQ9MCwgdGhyZWFkIGFwYXJ0bWVudCByZWZzPTApCiAgc3B5MiBQb3N0SW5pdGlhbGl6ZShocj0weDAwMDAwMDAwLCBjb2luaXQ9MCwgcmVmcyBhZnRlcj0xKQogIHNweTIgUHJlVW5pbml0aWFsaXplKHJlZnM9MSkKICBzcHkyIFBvc3RVbmluaXRpYWxpemUocmVmcyBhZnRlcj0wKQpyZXZva2Uoc3B5MSdzIGNvb2tpZSkgYWdhaW4gPSAweDgwMDcwMDU3CnJldm9rZSgwKSA9IDB4ODAwNzAwNTcKcmV2b2tlKDB4MTIzNDU2NzgxMjM0NTY3OCkgPSAweDgwMDcwMDU3CnJldm9rZShzcHkyJ3MgY29va2llICsgMTAwMCkgPSAweDgwMDcwMDU3CnNweTIgc3RpbGwgcmVnaXN0ZXJlZDogcmVmZXJlbmNlcyArMQpyZXZva2Uoc3B5MidzIGNvb2tpZSkgPSAweDAwMDAwMDAwLCByZWZlcmVuY2VzIGJhY2sgdG8gKzAKZXZlbnRzIHdpdGggbm8gc3B5IHJlZ2lzdGVyZWQ6IDAgZXZlbnRzCnJldm9rZSBpbnNpZGUgYW4gaW5pdGlhbGlzZWQgYXBhcnRtZW50ID0gMHgwMDAwMDAwMApldmVudHMgb2YgdGhlIENvVW5pbml0aWFsaXplIGFmdGVyIHRoYXQ6IDAgZXZlbnRzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two spies registered: references held on spy1 +1, spy2 +1\nrevoke(spy1's cookie) = 0x00000000, spy1 references back to +0\nevents after the revoke: 4 events\n  spy2 PreInitialize(coinit=0, thread apartment refs=0)\n  spy2 PostInitialize(hr=0x00000000, coinit=0, refs after=1)\n  spy2 PreUninitialize(refs=1)\n  spy2 PostUninitialize(refs after=0)\nrevoke(spy1's cookie) again = 0x80070057\nrevoke(0) = 0x80070057\nrevoke(0x1234567812345678) = 0x80070057\nrevoke(spy2's cookie + 1000) = 0x80070057\nspy2 still registered: references +1\nrevoke(spy2's cookie) = 0x00000000, references back to +0\nevents with no spy registered: 0 events\nrevoke inside an initialised apartment = 0x00000000\nevents of the CoUninitialize after that: 0 events\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "spyrevoke_order",
+      "exe_sha256": "cdbca2323daa15cb565f4ba057310f6baf963c6fe60636b09491934161a794c8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3B5MSwgc3B5Miwgc3B5MSByZWdpc3RlcmVkOiAxMiBldmVudHMsIFByZUluaXRpYWxpemUgb3JkZXI6IHNweTEgc3B5MiBzcHkxCnJldm9rZSB0aGUgbWlkZGxlIG9uZSAoc3B5MikgPSAweDAwMDAwMDAwCmFmdGVyIHRoYXQ6IDggZXZlbnRzLCBQcmVJbml0aWFsaXplIG9yZGVyOiBzcHkxIHNweTEKcmV2b2tlIHRoZSBuZXdlc3QgKHNweTEpID0gMHgwMDAwMDAwMAphZnRlciB0aGF0OiA0IGV2ZW50cywgUHJlSW5pdGlhbGl6ZSBvcmRlcjogc3B5MQpzcHkyIHJlZ2lzdGVyZWQgYWdhaW46IDggZXZlbnRzLCBQcmVJbml0aWFsaXplIG9yZGVyOiBzcHkyIHNweTEKcmV2b2tlIHRoZSBvbGRlc3QgKHNweTEpID0gMHgwMDAwMDAwMAphZnRlciB0aGF0OiA0IGV2ZW50cywgUHJlSW5pdGlhbGl6ZSBvcmRlcjogc3B5MgpyZXZva2Ugc3B5MiA9IDB4MDAwMDAwMDAKYWZ0ZXIgdGhhdDogMCBldmVudHMsIFByZUluaXRpYWxpemUgb3JkZXI6CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "spy1, spy2, spy1 registered: 12 events, PreInitialize order: spy1 spy2 spy1\nrevoke the middle one (spy2) = 0x00000000\nafter that: 8 events, PreInitialize order: spy1 spy1\nrevoke the newest (spy1) = 0x00000000\nafter that: 4 events, PreInitialize order: spy1\nspy2 registered again: 8 events, PreInitialize order: spy2 spy1\nrevoke the oldest (spy1) = 0x00000000\nafter that: 4 events, PreInitialize order: spy2\nrevoke spy2 = 0x00000000\nafter that: 0 events, PreInitialize order:\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

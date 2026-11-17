@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4b19c16f2075",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:40:04Z",
+  "tests": [
+    {
+      "name": "addref_counts_apartments",
+      "exe_sha256": "3d7271e8104b60f23b0e36cbab4087e8be254602f26670f8ffd29d4ce808769b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TVRBIG1haW46IGFkZCAxCk1UQSB0aHJlYWQ6IGFkZCAyLCBhZGQgMywgcmVsZWFzZSAyCiAgbWFpbiBhZGQgMwogIGFmdGVyIHRoYXQgdGhyZWFkIGVuZGVkOiBtYWluIGFkZCA0LCByZWxlYXNlIDMKU1RBIHRocmVhZDogYWRkIDQsIGFkZCA1LCByZWxlYXNlIDQKICBtYWluIGFkZCA1CiAgYWZ0ZXIgdGhhdCB0aHJlYWQgZW5kZWQ6IG1haW4gYWRkIDYsIHJlbGVhc2UgNQptYWluIHJlbGVhc2UgNCwgcmVsZWFzZSAzCiAgYWRkIDQsIGFkZCA1CmFmdGVyIHRoZSBsYXN0IENvVW5pbml0aWFsaXplOiBhZGQgNiwgcmVsZWFzZSA1LCByZWxlYXNlIDQKYWZ0ZXIgQ29Jbml0aWFsaXplRXgoU1RBKSBhZ2FpbjogYWRkIDUsIHJlbGVhc2UgNCwgcmVsZWFzZSAzLCByZWxlYXNlIDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "MTA main: add 1\nMTA thread: add 2, add 3, release 2\n  main add 3\n  after that thread ended: main add 4, release 3\nSTA thread: add 4, add 5, release 4\n  main add 5\n  after that thread ended: main add 6, release 5\nmain release 4, release 3\n  add 4, add 5\nafter the last CoUninitialize: add 6, release 5, release 4\nafter CoInitializeEx(STA) again: add 5, release 4, release 3, release 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 126
+    },
+    {
+      "name": "addref_server",
+      "exe_sha256": "b811974b98f20fab3ebaa7ad700517bfc6ade9bd43f8d76e6fb8e95bd6853942",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIG9iamVjdHMgZnJvbSB0aGUgZmlyc3Qgc2VydmVyOiAweDAwMDAwMDAwIDB4MDAwMDAwMDAKICBzZXJ2ZXIgcHJvY2Vzc2VzIDEKICByZWxlYXNlIG9mIHRoZSBmaXJzdCBvYmplY3Q6IDAKICB0aGUgc2VydmVyIHNhdyBpdCAxCiAgYSB0aGlyZCBvYmplY3Qgd2hpbGUgdGhlIGNvdW50IGlzIGFib3ZlIHplcm86IDB4MDAwMDAwMDAsIHNlcnZlciBwcm9jZXNzZXMgMQogIGFsbCByZWxlYXNlZCwgdGhlIHNlcnZlciBzYXcgdGhlIGxhc3Qgb25lIDEKYW4gYWN0aXZhdGlvbiBhZnRlciB0aGUgY291bnQgcmVhY2hlZCB6ZXJvOiAweDAwMDAwMDAwLCBzZXJ2ZXIgcHJvY2Vzc2VzIDIKc2VydmVyIGxvZzogQ29BZGRSZWZTZXJ2ZXJQcm9jZXNzIGxpbmVzIDQsIENvUmVsZWFzZVNlcnZlclByb2Nlc3MgbGluZXMgNAogIENvQWRkUmVmU2VydmVyUHJvY2VzcyAtPiAyCiAgQ29BZGRSZWZTZXJ2ZXJQcm9jZXNzIC0+IDMKICBDb1JlbGVhc2VTZXJ2ZXJQcm9jZXNzIC0+IDEKICBDb0FkZFJlZlNlcnZlclByb2Nlc3MgLT4gMwogIENvUmVsZWFzZVNlcnZlclByb2Nlc3MgLT4gMQogIENvUmVsZWFzZVNlcnZlclByb2Nlc3MgLT4gMAogIENvQWRkUmVmU2VydmVyUHJvY2VzcyAtPiAyCiAgQ29SZWxlYXNlU2VydmVyUHJvY2VzcyAtPiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two objects from the first server: 0x00000000 0x00000000\n  server processes 1\n  release of the first object: 0\n  the server saw it 1\n  a third object while the count is above zero: 0x00000000, server processes 1\n  all released, the server saw the last one 1\nan activation after the count reached zero: 0x00000000, server processes 2\nserver log: CoAddRefServerProcess lines 4, CoReleaseServerProcess lines 4\n  CoAddRefServerProcess -> 2\n  CoAddRefServerProcess -> 3\n  CoReleaseServerProcess -> 1\n  CoAddRefServerProcess -> 3\n  CoReleaseServerProcess -> 1\n  CoReleaseServerProcess -> 0\n  CoAddRefServerProcess -> 2\n  CoReleaseServerProcess -> 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 496
+    },
+    {
+      "name": "addref_zero_inproc",
+      "exe_sha256": "232397e49471db73a8f2a0316e6d210a521379a8b4e452a6569b83fda8fe17b9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0ZXIgQ1ggZm9yIGluLXByb2Nlc3M6IDB4MDAwMDAwMDAKICBhZGQgMQogIGxvb2t1cCB3aXRoIHRoZSBjb3VudCBhdCAxOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDEKICByZWxlYXNlIDAKICBsb29rdXAgd2l0aCB0aGUgY291bnQgYXQgMDogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgbG9va3VwIHdpdGggdGhlIGNvdW50IGF0IDAsIGFza2luZyBmb3IgdGhlIGxvY2FsIHNlcnZlcjogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCnJlZ2lzdGVyIENYIGZvciBpbi1wcm9jZXNzIGFmdGVyIHRoZSBjb3VudCByZWFjaGVkIHplcm86IDB4MDAwMDAwMDAKICBsb29rdXAgYXNraW5nIGZvciBpbi1wcm9jZXNzOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDEKICBsb29rdXAgYXNraW5nIGZvciB0aGUgbG9jYWwgc2VydmVyOiAweDgwMDQwMTU0LCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDAKICBhZGQgMSwgcmVsZWFzZSAwCiAgbG9va3VwIGFmdGVyIG9uZSBtb3JlIGFkZCBhbmQgcmVsZWFzZSwgYXNraW5nIGZvciBpbi1wcm9jZXNzOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDEKICBsb29rdXAgYWZ0ZXIgb25lIG1vcmUgYWRkIGFuZCByZWxlYXNlLCBhc2tpbmcgZm9yIHRoZSBsb2NhbCBzZXJ2ZXI6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMApyZWdpc3RlciBDWCBmb3IgaW4tcHJvY2VzcyBhbmQgbG9jYWwgYWZ0ZXIgdGhlIGNvdW50IHJlYWNoZWQgemVybzogMHgwMDAwMDAwMAogIGxvb2t1cCBhc2tpbmcgZm9yIGluLXByb2Nlc3M6IDB4MDAwMDAwMDAsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMQogIGxvb2t1cCBhc2tpbmcgZm9yIHRoZSBsb2NhbCBzZXJ2ZXI6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMAogIGFkZCAxLCByZWxlYXNlIDAKICBsb29rdXAgYWZ0ZXIgb25lIG1vcmUgYWRkIGFuZCByZWxlYXNlLCBhc2tpbmcgZm9yIGluLXByb2Nlc3M6IDB4ODAwNDAxNTQsIHRoZSByZWdpc3RlcmVkIHBvaW50ZXIgMAogIGxvb2t1cCBhZnRlciBvbmUgbW9yZSBhZGQgYW5kIHJlbGVhc2UsIGFza2luZyBmb3IgdGhlIGxvY2FsIHNlcnZlcjogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCnJlZ2lzdGVyIENYIGZvciBsb2NhbCBhZnRlciB0aGUgY291bnQgcmVhY2hlZCB6ZXJvOiAweDAwMDAwMDAwCiAgbG9va3VwIGFza2luZyBmb3IgaW4tcHJvY2VzczogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAxCiAgbG9va3VwIGFza2luZyBmb3IgdGhlIGxvY2FsIHNlcnZlcjogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCiAgYWRkIDEsIHJlbGVhc2UgMAogIGxvb2t1cCBhZnRlciBvbmUgbW9yZSBhZGQgYW5kIHJlbGVhc2UsIGFza2luZyBmb3IgaW4tcHJvY2VzczogMHg4MDA0MDE1NCwgdGhlIHJlZ2lzdGVyZWQgcG9pbnRlciAwCiAgbG9va3VwIGFmdGVyIG9uZSBtb3JlIGFkZCBhbmQgcmVsZWFzZSwgYXNraW5nIGZvciB0aGUgbG9jYWwgc2VydmVyOiAweDgwMDQwMTU0LCB0aGUgcmVnaXN0ZXJlZCBwb2ludGVyIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "register CX for in-process: 0x00000000\n  add 1\n  lookup with the count at 1: 0x00000000, the registered pointer 1\n  release 0\n  lookup with the count at 0: 0x00000000, the registered pointer 1\n  lookup with the count at 0, asking for the local server: 0x80040154, the registered pointer 0\nregister CX for in-process after the count reached zero: 0x00000000\n  lookup asking for in-process: 0x00000000, the registered pointer 1\n  lookup asking for the local server: 0x80040154, the registered pointer 0\n  add 1, release 0\n  lookup after one more add and release, asking for in-process: 0x00000000, the registered pointer 1\n  lookup after one more add and release, asking for the local server: 0x80040154, the registered pointer 0\nregister CX for in-process and local after the count reached zero: 0x00000000\n  lookup asking for in-process: 0x00000000, the registered pointer 1\n  lookup asking for the local server: 0x80040154, the registered pointer 0\n  add 1, release 0\n  lookup after one more add and release, asking for in-process: 0x80040154, the registered pointer 0\n  lookup after one more add and release, asking for the local server: 0x80040154, the registered pointer 0\nregister CX for local after the count reached zero: 0x00000000\n  lookup asking for in-process: 0x00000000, the registered pointer 1\n  lookup asking for the local server: 0x80040154, the registered pointer 0\n  add 1, release 0\n  lookup after one more add and release, asking for in-process: 0x80040154, the registered pointer 0\n  lookup after one more add and release, asking for the local server: 0x80040154, the registered pointer 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}
