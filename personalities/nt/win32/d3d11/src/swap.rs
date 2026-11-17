@@ -585,65 +585,13 @@ unsafe fn present_rects(this: *mut c_void, sync: u32, flags: u32, rects: &[[i32;
         return S_OK;
     }
     s.presents.fetch_add(1, Ordering::Relaxed);
-    let start = tmpstat::now();
     deliver(s, rects);
-    // SAFETY: TEMPORARY.
-    if let Some(t) = unsafe { texture::tex(s.back) } {
-        tmpstat::present(start, s.desc, t.width() as u32, t.height() as u32);
-    }
     S_OK
 }
 
-/// TEMPORARY (chrome-paint-2 measurement): presents per second and the cost of `show`.
-mod tmpstat {
-    use core::sync::atomic::{AtomicU64, Ordering};
-    #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
-    #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
-    unsafe extern "system" {
-        fn NtQueryPerformanceCounter(counter: *mut i64, freq: *mut i64) -> i32;
-    }
-    static FIRST: AtomicU64 = AtomicU64::new(0);
-    static N: AtomicU64 = AtomicU64::new(0);
-    static SUM: AtomicU64 = AtomicU64::new(0);
-    static MAX: AtomicU64 = AtomicU64::new(0);
-    pub static DIRTY: AtomicU64 = AtomicU64::new(0);
-    pub static DIRTY_PX: AtomicU64 = AtomicU64::new(0);
-    pub static P1: AtomicU64 = AtomicU64::new(0);
-    /// Microseconds.
-    pub fn now() -> u64 {
-        let (mut c, mut f) = (0i64, 0i64);
-        // SAFETY: our outputs.
-        unsafe { NtQueryPerformanceCounter(&mut c, &mut f) };
-        (c as u128 * 1_000_000 / (f.max(1) as u128)) as u64
-    }
-    pub fn present(start: u64, desc: [u32; 12], w: u32, h: u32) {
-        let end = now();
-        let us = end.saturating_sub(start);
-        let first = FIRST.load(Ordering::Relaxed);
-        if first == 0 {
-            FIRST.store(end, Ordering::Relaxed);
-        }
-        N.fetch_add(1, Ordering::Relaxed);
-        SUM.fetch_add(us, Ordering::Relaxed);
-        MAX.fetch_max(us, Ordering::Relaxed);
-        if first != 0 && end.saturating_sub(first) >= 3_000_000 {
-            let n = N.swap(0, Ordering::Relaxed).max(1);
-            let sum = SUM.swap(0, Ordering::Relaxed);
-            let max = MAX.swap(0, Ordering::Relaxed);
-            let span = end - first;
-            FIRST.store(end, Ordering::Relaxed);
-            crate::com::log(&alloc::format!(
-                "tmpstat d3d11: {}x{} effect {} count {} format {} flags {:#x}: {} presents in {} ms ({} /s), show avg {} us max {} us, present1 {} dirty-rects {} dirty-px {}",
-                w, h, desc[9], desc[7], desc[2], desc[11], n, span / 1000, n * 1_000_000 / span.max(1), sum / n, max,
-                P1.swap(0, Ordering::Relaxed), DIRTY.swap(0, Ordering::Relaxed), DIRTY_PX.swap(0, Ordering::Relaxed)
-            ));
-        }
-    }
-}
-
-/// `Present1(SyncInterval, PresentFlags, pPresentParameters)`: as `Present` (the whole buffer).
 /// `Present1(SyncInterval, PresentFlags, pPresentParameters)`: dirty and scroll rectangles are for
-/// flip-model swap chains only.
+/// flip-model swap chains only. They are what the present hands over (ADR 0224); none, or more
+/// than 64, is the whole buffer.
 unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, params: *const u32) -> HRESULT {
     let mut rects: Vec<[i32; 4]> = Vec::new();
     if !params.is_null() {
@@ -652,28 +600,14 @@ unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, par
         // SAFETY: the same structure (dxgi1_2.h): the count, then the rectangles, the scrolled
         // rectangle and its offset, pointers of this width.
         let p = unsafe { &*(params as *const PresentParameters) };
-        if dirty > 0 && !p.rects.is_null() {
+        if dirty > 0 && dirty <= 64 && !p.rects.is_null() {
             // SAFETY: `DirtyRectsCount` RECTs of the caller.
-            rects.extend_from_slice(unsafe { core::slice::from_raw_parts(p.rects, dirty.min(64) as usize) });
-            if dirty > 64 {
-                rects.clear();
-            }
+            rects.extend_from_slice(unsafe { core::slice::from_raw_parts(p.rects, dirty as usize) });
         }
         // A scrolled area changed too.
         if !rects.is_empty() && !p.scroll.is_null() {
             // SAFETY: the caller's RECT.
             rects.push(unsafe { *p.scroll });
-        }
-        tmpstat::P1.fetch_add(1, Ordering::Relaxed);
-        tmpstat::DIRTY.fetch_add(u64::from(dirty), Ordering::Relaxed);
-        // SAFETY: TEMPORARY: DXGI_PRESENT_PARAMETERS { DirtyRectsCount, pDirtyRects, .. }.
-        let rects = unsafe { *(params.add(2) as *const *const [i32; 4]) };
-        if !rects.is_null() {
-            for i in 0..dirty as usize {
-                // SAFETY: TEMPORARY: the caller's rectangles.
-                let r = unsafe { *rects.add(i) };
-                tmpstat::DIRTY_PX.fetch_add(((r[2] - r[0]).max(0) as u64) * ((r[3] - r[1]).max(0) as u64), Ordering::Relaxed);
-            }
         }
         // SAFETY: a live swap chain.
         if dirty != 0 && !poly_d3d::swap::is_flip(unsafe { chain(this) }.desc[9]) {
@@ -687,10 +621,10 @@ unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, par
 /// `DXGI_PRESENT_PARAMETERS` (dxgi1_2.h).
 #[repr(C)]
 struct PresentParameters {
-    count: u32,
+    _count: u32,
     rects: *const [i32; 4],
     scroll: *const [i32; 4],
-    offset: *const [i32; 2],
+    _offset: *const [i32; 2],
 }
 
 /// Copy a texture into the window's client area, top-down 32-bit pixels.
