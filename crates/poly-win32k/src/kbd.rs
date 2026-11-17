@@ -1,49 +1,62 @@
-//! The keyboard layout: Poly's own description of the German layout (KLID
-//! `00000407`) that the oracle uses, and the functions over it that
-//! `user32.dll` exports (`MapVirtualKeyW`, `MapVirtualKeyExW`, `ToUnicode`,
-//! `ToUnicodeEx`, `GetKeyboardLayout`) and that `TranslateMessage` needs.
+//! The keyboard layouts: Poly's own description of the layouts win32k has
+//! (German, KLID `00000407`, the one the oracle uses; US English, Swiss German
+//! and French) and the functions over them that `user32.dll` exports
+//! (`MapVirtualKeyW`, `MapVirtualKeyExW`, `VkKeyScanExW`, `ToUnicode`,
+//! `ToUnicodeEx`, `GetKeyboardLayout`) and that `TranslateMessage` needs
+//! (ADR 0209, ADR 0212).
 //!
-//! Sources: the spec sheets `MapVirtualKeyW.yaml`, `ToUnicode.yaml` and
-//! `SendInput.yaml` with the visible tests' recorded results, Microsoft
-//! Learn ("Keyboard Input Overview", "Virtual-Key Codes", "Keyboard Input
-//! Notifications", the `ToUnicode`/`MapVirtualKeyW` reference pages), the
-//! printed legends of the German (T1, DIN 2137) keyboard, and Unicode's
-//! precomposed characters for the dead-key combinations. Constants are
-//! `winuser.h`'s.
+//! Sources: the spec sheets `MapVirtualKeyW.yaml`, `MapVirtualKeyExW.yaml`,
+//! `VkKeyScanExW.yaml`, `ToUnicode.yaml`, `ToUnicodeEx.yaml` and
+//! `SendInput.yaml` with the visible tests' recorded results, Microsoft Learn
+//! ("Keyboard Input Overview", "Virtual-Key Codes", "Keyboard Input
+//! Notifications", the `ToUnicode`/`MapVirtualKeyW`/`VkKeyScanExW` reference
+//! pages), and Unicode's precomposed characters for the dead-key
+//! combinations. Constants are `winuser.h`'s.
 //!
 //! The model:
 //!
 //! - **Scan codes** are set 1 make codes; an extended key carries `0xE0` (or,
 //!   for Pause, `0xE1`) in the high byte, the form `MAPVK_VK_TO_VSC_EX` gives
 //!   and `MAPVK_VSC_TO_VK(_EX)` accepts.
-//! - **Characters** come from the virtual key alone (the scan code only says
-//!   whether this is a key-up): each character key has a character for no
-//!   modifier, Shift, Ctrl, Ctrl+Shift and AltGr (Ctrl+Alt), and says whether
-//!   Caps Lock acts as Shift on it. Alt alone gives the unmodified character.
-//! - **Dead keys** (`^` on `VK_OEM_5`, acute and, with Shift, grave on
-//!   `VK_OEM_6`) give their spacing character and stay pending in a
-//!   [`DeadState`] until the next character key, which combines with them
-//!   or, if it does not, comes after the accent.
+//! - **Layouts are data** ([`crate::kbdtab`]): per key its scan code in the
+//!   layout and ten cells, one per shift state (none, Shift, Caps Lock, Shift
+//!   and Caps Lock, Ctrl, Ctrl+Shift, AltGr, AltGr+Shift, Alt, AltGr and Caps
+//!   Lock). The keys that make no character (arrows, function keys) are the
+//!   same on every layout.
+//! - **Dead keys** have their spacing character in a cell and stay pending in
+//!   a [`DeadState`] until the next key, which combines with them or, if it
+//!   does not, comes after the accent.
 
-/// The keyboard layouts win32k has (ADR 0209): the German one the oracle
-/// uses (every program without Poly's desktop, and the spec sheets' tests),
-/// and US English, which Poly's desktop has unless its settings say German
-/// or Swiss German. The desktop's layout decides which one Windows programs
-/// type with, so a key gives them the character it gives Poly's own apps.
+use crate::kbdtab::{self, DEAD, NO, Row};
+
+/// The keyboard layouts win32k has (ADR 0209, ADR 0212): the German one the
+/// oracle uses (every program without Poly's desktop, and the spec sheets'
+/// tests), and the layouts Poly's desktop can have (US English by default;
+/// German, Swiss German in its settings) or a program can load (French).
+/// The desktop's layout decides which one Windows programs type with, so a
+/// key gives them the character it gives Poly's own apps.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Layout {
     #[default]
     German,
     Us,
+    SwissGerman,
+    French,
 }
 
 impl Layout {
     /// The layout for the desktop's keyboard layout setting (`poly-input`'s
-    /// names: `us`, `de`, `de-ch`). Swiss German has no table of its own
-    /// yet: the German one is the nearest (the same letters, digits, `.`,
-    /// `,`, `-`, and `:`, `/` on Shift).
+    /// names: `us`, `de`, `de-ch`).
     pub fn for_desktop(name: &str) -> Layout {
-        if name.eq_ignore_ascii_case("us") { Layout::Us } else { Layout::German }
+        if name.eq_ignore_ascii_case("us") {
+            Layout::Us
+        } else if name.eq_ignore_ascii_case("de-ch") {
+            Layout::SwissGerman
+        } else if name.eq_ignore_ascii_case("fr") {
+            Layout::French
+        } else {
+            Layout::German
+        }
     }
 
     /// Its number on the wire (`Request::KeyboardLayout`) and in [`set_active`].
@@ -51,20 +64,31 @@ impl Layout {
         match self {
             Layout::German => 0,
             Layout::Us => 1,
+            Layout::SwissGerman => 2,
+            Layout::French => 3,
         }
     }
 
     pub fn from_id(id: u64) -> Layout {
-        if id == 1 { Layout::Us } else { Layout::German }
+        match id {
+            1 => Layout::Us,
+            2 => Layout::SwissGerman,
+            3 => Layout::French,
+            _ => Layout::German,
+        }
     }
 
-    /// The `HKL` `GetKeyboardLayout` gives: the oracle's for German, the
-    /// US English language and layout (`0x0409`, KLID `00000409`; Learn,
-    /// "Keyboard identifiers and input method editors") for US.
+    /// The `HKL` `GetKeyboardLayout` gives when this is the thread's
+    /// layout: the oracle's for German (device and language of the user's
+    /// settings), and the layout's own number otherwise (device identifier
+    /// in the high word, language in the low one; Learn, "Keyboard
+    /// identifiers and input method editors").
     pub fn hkl(self) -> u32 {
         match self {
             Layout::German => HKL,
             Layout::Us => 0x0409_0409,
+            Layout::SwissGerman => 0x0807_0807,
+            Layout::French => 0x040C_040C,
         }
     }
 
@@ -73,6 +97,30 @@ impl Layout {
         match self {
             Layout::German => KLID,
             Layout::Us => "00000409",
+            Layout::SwissGerman => "00000807",
+            Layout::French => "0000040C",
+        }
+    }
+
+    /// The layout an `HKL` types with: by its device identifier (the high
+    /// word, the KLID's language); a device this table has no layout for
+    /// types as US English (a loaded layout of an unknown KLID is the US one).
+    pub fn for_hkl(hkl: u32) -> Layout {
+        match hkl >> 16 {
+            0x0407 => Layout::German,
+            0x0807 => Layout::SwissGerman,
+            0x040C => Layout::French,
+            _ => Layout::Us,
+        }
+    }
+
+    /// The layout's key table.
+    fn rows(self) -> &'static [Row] {
+        match self {
+            Layout::German => kbdtab::GERMAN,
+            Layout::Us => kbdtab::US,
+            Layout::SwissGerman => kbdtab::SWISS_GERMAN,
+            Layout::French => kbdtab::FRENCH,
         }
     }
 }
@@ -81,7 +129,7 @@ impl Layout {
 static ACTIVE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
 
 /// The layout the functions without a layout argument use (`user32` sets
-/// it from win32k's answer; German until then).
+/// it from the calling thread's layout; German until then).
 pub fn active() -> Layout {
     Layout::from_id(u64::from(ACTIVE.load(core::sync::atomic::Ordering::Relaxed)))
 }
@@ -201,41 +249,33 @@ const SCAN_TO_VK: [u8; 0x80] = [
     0x00, 0x00, 0x00, 0xEB, 0x09, 0x00, 0xC2, 0x00,
 ];
 
-/// The US layout's virtual keys where they differ from the German one, by
-/// scan code: the keys Learn's "Virtual-Key Codes" names for the US
-/// keyboard (`VK_OEM_1` the `;:` key, `VK_OEM_2` `/?`, `VK_OEM_3` the
-/// grave accent and tilde, `VK_OEM_4` `[{`, `VK_OEM_5` the backslash and
-/// bar, `VK_OEM_6` `]}`, `VK_OEM_7` the quotes, `VK_OEM_PLUS` `=+`,
-/// `VK_OEM_MINUS` `-_`) at their places in Learn's scan code table
-/// ("Keyboard Input Overview", "Scan codes"), and Y and Z in their QWERTY
-/// places.
-const US_SCAN_TO_VK: &[(u8, u8)] = &[
-    (0x0C, 0xBD),
-    (0x0D, 0xBB),
-    (0x15, 0x59),
-    (0x1A, 0xDB),
-    (0x1B, 0xDD),
-    (0x27, 0xBA),
-    (0x28, 0xDE),
-    (0x29, 0xC0),
-    (0x2B, 0xDC),
-    (0x2C, 0x5A),
-    (0x35, 0xBF),
-];
+/// Whether `vk` is a key whose place depends on the layout: digits, letters
+/// and the `VK_OEM_*` keys (the other keys keep their scan codes everywhere).
+fn layout_key(vk: u32) -> bool {
+    matches!(vk, 0x30..=0x39 | 0x41..=0x5A | 0xBA..=0xC0 | 0xDB..=0xDF | 0xE2)
+}
+
+/// The key `vk`'s row in layout `l`.
+fn row(l: Layout, vk: u32) -> Option<&'static Row> {
+    l.rows().iter().find(|r| u32::from(r.0) == vk)
+}
 
 /// The virtual key of scan code `low` (no prefix) in layout `l`.
 fn table_vk(l: Layout, low: u32) -> u32 {
-    if l == Layout::Us
-        && let Some(&(_, vk)) = US_SCAN_TO_VK.iter().find(|e| u32::from(e.0) == low)
+    if low != 0
+        && let Some(r) = l.rows().iter().find(|r| u32::from(r.1) == low && layout_key(u32::from(r.0)))
     {
-        return u32::from(vk);
+        return u32::from(r.0);
     }
     SCAN_TO_VK.get(low as usize).map_or(0, |&v| u32::from(v))
 }
 
 /// The scan code (no prefix) of virtual key `vk` in layout `l`'s tables, 0 for none.
 fn table_scan(l: Layout, vk: u32) -> u32 {
-    (1..0x80u32).find(|&sc| table_vk(l, sc) == vk).unwrap_or(0)
+    if layout_key(vk) {
+        return row(l, vk).map_or(0, |r| u32::from(r.1));
+    }
+    (1..0x80u32).find(|&sc| SCAN_TO_VK[sc as usize] as u32 == vk).unwrap_or(0)
 }
 
 /// The virtual key of a scan code, `0xE0`/`0xE1` prefix in the high byte;
@@ -312,143 +352,17 @@ fn vk_to_scan(l: Layout, vk: u32, ex: bool) -> u32 {
     if ex && scan != 0 { scan | (prefix << 8) } else { scan }
 }
 
-/// "No character" in the tables below (U+FFFF is a noncharacter).
-const NO: u32 = 0xFFFF;
-/// A dead key's spacing character in the tables below.
-const D: u32 = DEAD_KEY_BIT;
-
-/// One character key: its characters for no modifier, Shift, Ctrl,
-/// Ctrl+Shift and AltGr, whether Caps Lock acts as Shift on it, and whether
-/// Alt alone gives nothing (the numpad digits) instead of the unmodified
-/// character.
-#[derive(Clone, Copy, Debug)]
-struct Key {
-    vk: u8,
-    chars: [u32; 5],
-    caps: bool,
-    alt_none: bool,
-}
-
-const fn k(vk: u32, chars: [u32; 5], caps: bool) -> Key {
-    Key { vk: vk as u8, chars, caps, alt_none: false }
-}
-
-/// The German layout's keys other than the letters (`letter_key`).
-/// Columns: none, Shift, Ctrl, Ctrl+Shift, AltGr (`ToUnicode.yaml`).
-#[rustfmt::skip]
-const KEYS: &[Key] = &[
-    // The digit row: Caps Lock acts as Shift; AltGr per the legends.
-    k(0x31, ['1' as u32, '!' as u32, NO, NO, NO], true),
-    k(0x32, ['2' as u32, '"' as u32, NO, 0x0000, 0xB2], true),
-    k(0x33, ['3' as u32, 0xA7, NO, NO, 0xB3], true),
-    k(0x34, ['4' as u32, '$' as u32, NO, NO, NO], true),
-    k(0x35, ['5' as u32, '%' as u32, NO, NO, NO], true),
-    k(0x36, ['6' as u32, '&' as u32, NO, NO, NO], true),
-    k(0x37, ['7' as u32, '/' as u32, NO, NO, '{' as u32], true),
-    k(0x38, ['8' as u32, '(' as u32, NO, NO, '[' as u32], true),
-    k(0x39, ['9' as u32, ')' as u32, NO, NO, ']' as u32], true),
-    k(0x30, ['0' as u32, '=' as u32, NO, NO, '}' as u32], true),
-    k(VK_OEM_4, [0xDF, '?' as u32, NO, NO, '\\' as u32], true),
-    k(VK_OEM_6, [D | 0xB4, D | 0x60, NO, NO, NO], false),
-    // The letter rows' other keys.
-    k(VK_OEM_1, [0xFC, 0xDC, 0x1B, NO, NO], true),
-    k(VK_OEM_PLUS, ['+' as u32, '*' as u32, 0x1D, NO, '~' as u32], true),
-    k(VK_OEM_3, [0xF6, 0xD6, NO, NO, NO], true),
-    k(VK_OEM_7, [0xE4, 0xC4, NO, NO, NO], true),
-    k(VK_OEM_2, ['#' as u32, '\'' as u32, 0x1C, NO, NO], true),
-    k(VK_OEM_5, [D | 0x5E, 0xB0, NO, NO, NO], false),
-    k(VK_OEM_102, ['<' as u32, '>' as u32, NO, NO, '|' as u32], false),
-    k(VK_OEM_COMMA, [',' as u32, ';' as u32, NO, NO, NO], true),
-    k(VK_OEM_PERIOD, ['.' as u32, ':' as u32, NO, NO, NO], true),
-    k(VK_OEM_MINUS, ['-' as u32, '_' as u32, NO, 0x1F, NO], false),
-    // Control keys.
-    k(VK_SPACE, [0x20, 0x20, 0x20, NO, NO], false),
-    k(VK_RETURN, [0x0D, 0x0D, 0x0A, NO, NO], false),
-    k(VK_BACK, [0x08, 0x08, 0x7F, NO, NO], false),
-    k(VK_TAB, [0x09, 0x09, NO, NO, NO], false),
-    k(VK_ESCAPE, [0x1B, 0x1B, 0x1B, NO, NO], false),
-    k(VK_CANCEL, [0x03, 0x03, 0x03, NO, NO], false),
-    // The numpad's operators and decimal key (',' on the German layout).
-    k(VK_MULTIPLY, ['*' as u32, '*' as u32, NO, NO, NO], false),
-    k(VK_ADD, ['+' as u32, '+' as u32, NO, NO, NO], false),
-    k(VK_SUBTRACT, ['-' as u32, '-' as u32, NO, NO, NO], false),
-    k(VK_DECIMAL, [',' as u32, ',' as u32, NO, NO, NO], false),
-    k(VK_DIVIDE, ['/' as u32, '/' as u32, NO, NO, NO], false),
-];
-
-/// The US layout's keys other than the letters, by the legends of the US
-/// keyboard: Caps Lock does not act on them, there is no AltGr (the right
-/// Alt is Alt) and there are no dead keys. Ctrl gives the control
-/// characters of the keys whose places give them in the German table.
-#[rustfmt::skip]
-const US_KEYS: &[Key] = &[
-    k(0x31, ['1' as u32, '!' as u32, NO, NO, NO], false),
-    k(0x32, ['2' as u32, '@' as u32, NO, NO, NO], false),
-    k(0x33, ['3' as u32, '#' as u32, NO, NO, NO], false),
-    k(0x34, ['4' as u32, '$' as u32, NO, NO, NO], false),
-    k(0x35, ['5' as u32, '%' as u32, NO, NO, NO], false),
-    k(0x36, ['6' as u32, '^' as u32, NO, NO, NO], false),
-    k(0x37, ['7' as u32, '&' as u32, NO, NO, NO], false),
-    k(0x38, ['8' as u32, '*' as u32, NO, NO, NO], false),
-    k(0x39, ['9' as u32, '(' as u32, NO, NO, NO], false),
-    k(0x30, ['0' as u32, ')' as u32, NO, NO, NO], false),
-    k(VK_OEM_MINUS, ['-' as u32, '_' as u32, NO, NO, NO], false),
-    k(VK_OEM_PLUS, ['=' as u32, '+' as u32, NO, NO, NO], false),
-    k(VK_OEM_4, ['[' as u32, '{' as u32, 0x1B, NO, NO], false),
-    k(VK_OEM_6, [']' as u32, '}' as u32, 0x1D, NO, NO], false),
-    k(VK_OEM_5, ['\\' as u32, '|' as u32, 0x1C, NO, NO], false),
-    k(VK_OEM_1, [';' as u32, ':' as u32, NO, NO, NO], false),
-    k(VK_OEM_7, ['\'' as u32, '"' as u32, NO, NO, NO], false),
-    k(VK_OEM_3, ['`' as u32, '~' as u32, NO, NO, NO], false),
-    k(VK_OEM_COMMA, [',' as u32, '<' as u32, NO, NO, NO], false),
-    k(VK_OEM_PERIOD, ['.' as u32, '>' as u32, NO, NO, NO], false),
-    k(VK_OEM_2, ['/' as u32, '?' as u32, NO, NO, NO], false),
-    k(VK_OEM_102, ['\\' as u32, '|' as u32, 0x1C, NO, NO], false),
-    // Control keys, as on the German layout.
-    k(VK_SPACE, [0x20, 0x20, 0x20, NO, NO], false),
-    k(VK_RETURN, [0x0D, 0x0D, 0x0A, NO, NO], false),
-    k(VK_BACK, [0x08, 0x08, 0x7F, NO, NO], false),
-    k(VK_TAB, [0x09, 0x09, NO, NO, NO], false),
-    k(VK_ESCAPE, [0x1B, 0x1B, 0x1B, NO, NO], false),
-    k(VK_CANCEL, [0x03, 0x03, 0x03, NO, NO], false),
-    // The numpad's operators and decimal key ('.' on the US layout).
-    k(VK_MULTIPLY, ['*' as u32, '*' as u32, NO, NO, NO], false),
-    k(VK_ADD, ['+' as u32, '+' as u32, NO, NO, NO], false),
-    k(VK_SUBTRACT, ['-' as u32, '-' as u32, NO, NO, NO], false),
-    k(VK_DECIMAL, ['.' as u32, '.' as u32, NO, NO, NO], false),
-    k(VK_DIVIDE, ['/' as u32, '/' as u32, NO, NO, NO], false),
-];
-
-/// AltGr on the letter keys (the legends): `@` on Q, `€` on E, `µ` on M.
-fn letter_altgr(vk: u32) -> u32 {
-    match vk {
-        0x51 => '@' as u32,
-        0x45 => 0x20AC,
-        0x4D => 0xB5,
-        _ => NO,
-    }
-}
-
-/// The key description of `vk` in layout `l`, if it makes characters.
-fn key(l: Layout, vk: u32) -> Option<Key> {
-    match vk {
-        // Letters: lower and upper case, Ctrl gives the control character.
-        0x41..=0x5A => Some(Key {
-            vk: vk as u8,
-            chars: [vk + 0x20, vk, vk - 0x40, vk - 0x40, if l == Layout::Us { NO } else { letter_altgr(vk) }],
-            caps: true,
-            alt_none: false,
-        }),
-        // Numpad digits: only with no modifier (or Caps Lock).
-        0x60..=0x69 => Some(Key {
-            vk: vk as u8,
-            chars: [vk - VK_NUMPAD0 + '0' as u32, NO, NO, NO, NO],
-            caps: false,
-            alt_none: true,
-        }),
-        _ => if l == Layout::Us { US_KEYS } else { KEYS }.iter().find(|k| u32::from(k.vk) == vk).copied(),
-    }
-}
+// Columns of a row's cells (`kbdtab`).
+const C_NONE: usize = 0;
+const C_SHIFT: usize = 1;
+const C_CAPS: usize = 2;
+const C_SHIFT_CAPS: usize = 3;
+const C_CTRL: usize = 4;
+const C_CTRL_SHIFT: usize = 5;
+const C_ALTGR: usize = 6;
+const C_ALTGR_SHIFT: usize = 7;
+const C_ALT: usize = 8;
+const C_ALTGR_CAPS: usize = 9;
 
 /// The modifiers `ToUnicode` reads from a key-state array: the high (down)
 /// bit of `VK_SHIFT`, `VK_CONTROL` and `VK_MENU`, the low (toggle) bit of
@@ -458,46 +372,119 @@ fn modifiers(key_state: &[u8; 256]) -> (bool, bool, bool, bool) {
     (down(VK_SHIFT), down(VK_CONTROL), down(VK_MENU), key_state[VK_CAPITAL as usize] & 1 != 0)
 }
 
-/// The table entry (character, `D|` for a dead key, or `NO`) of `vk` with
-/// these modifiers.
-fn key_entry(l: Layout, vk: u32, key_state: &[u8; 256]) -> u32 {
-    let Some(key) = key(l, vk) else { return NO };
-    let (shift, ctrl, alt, caps) = modifiers(key_state);
+/// The cell of a key for a modifier set: Ctrl+Alt is AltGr; Alt alone gives
+/// the plain character (its own cell, which is empty on the numeric pad), and
+/// with Shift or Caps Lock it is as without Alt.
+fn column(shift: bool, ctrl: bool, alt: bool, caps: bool) -> usize {
     match (ctrl, alt) {
-        // AltGr is Ctrl+Alt; Shift+AltGr gives nothing on this layout.
         (true, true) => {
             if shift {
-                NO
+                C_ALTGR_SHIFT
+            } else if caps {
+                C_ALTGR_CAPS
             } else {
-                key.chars[4]
+                C_ALTGR
             }
         }
-        (true, false) => key.chars[if shift { 3 } else { 2 }],
-        (false, true) if key.alt_none => NO,
-        // Alt alone gives the unmodified character.
-        _ => key.chars[usize::from(shift ^ (caps && key.caps))],
+        (true, false) => {
+            if shift {
+                C_CTRL_SHIFT
+            } else {
+                C_CTRL
+            }
+        }
+        (false, true) if !shift && !caps => C_ALT,
+        _ => match (shift, caps) {
+            (false, false) => C_NONE,
+            (true, false) => C_SHIFT,
+            (false, true) => C_CAPS,
+            (true, true) => C_SHIFT_CAPS,
+        },
     }
+}
+
+/// The table entry (character, `DEAD|` for a dead key, or `NO`) of `vk` with
+/// these modifiers.
+fn key_entry(l: Layout, vk: u32, key_state: &[u8; 256]) -> u32 {
+    let Some(r) = row(l, vk) else { return NO };
+    let (shift, ctrl, alt, caps) = modifiers(key_state);
+    r.2[column(shift, ctrl, alt, caps)]
+}
+
+/// Whether `vk` is a key a pending dead key is consumed by even when the key
+/// gives no character (digits, letters, the `VK_OEM_*` keys and Space).
+fn consumes_dead(vk: u32) -> bool {
+    layout_key(vk) || vk == VK_SPACE
 }
 
 /// A dead key's combinations with the next character (Unicode's
 /// precomposed characters); Space gives the accent alone.
 fn combine(dead: u16, c: u16) -> Option<u16> {
-    // (base letters, their combinations) per accent, same order.
-    const BASES: &[u16] = &[0x61, 0x65, 0x69, 0x6F, 0x75, 0x41, 0x45, 0x49, 0x4F, 0x55, 0x79, 0x59];
-    const CIRCUMFLEX: &[u16] = &[0xE2, 0xEA, 0xEE, 0xF4, 0xFB, 0xC2, 0xCA, 0xCE, 0xD4, 0xDB];
-    const ACUTE: &[u16] = &[0xE1, 0xE9, 0xED, 0xF3, 0xFA, 0xC1, 0xC9, 0xCD, 0xD3, 0xDA, 0xFD, 0xDD];
-    const GRAVE: &[u16] = &[0xE0, 0xE8, 0xEC, 0xF2, 0xF9, 0xC0, 0xC8, 0xCC, 0xD2, 0xD9];
+    // (base, combination) pairs per accent.
+    const CIRCUMFLEX: &[(u16, u16)] = &[
+        (0x61, 0xE2),
+        (0x65, 0xEA),
+        (0x69, 0xEE),
+        (0x6F, 0xF4),
+        (0x75, 0xFB),
+        (0x41, 0xC2),
+        (0x45, 0xCA),
+        (0x49, 0xCE),
+        (0x4F, 0xD4),
+        (0x55, 0xDB),
+    ];
+    const ACUTE: &[(u16, u16)] = &[
+        (0x61, 0xE1),
+        (0x65, 0xE9),
+        (0x69, 0xED),
+        (0x6F, 0xF3),
+        (0x75, 0xFA),
+        (0x79, 0xFD),
+        (0x41, 0xC1),
+        (0x45, 0xC9),
+        (0x49, 0xCD),
+        (0x4F, 0xD3),
+        (0x55, 0xDA),
+        (0x59, 0xDD),
+    ];
+    const GRAVE: &[(u16, u16)] = &[
+        (0x61, 0xE0),
+        (0x65, 0xE8),
+        (0x69, 0xEC),
+        (0x6F, 0xF2),
+        (0x75, 0xF9),
+        (0x41, 0xC0),
+        (0x45, 0xC8),
+        (0x49, 0xCC),
+        (0x4F, 0xD2),
+        (0x55, 0xD9),
+    ];
+    const DIAERESIS: &[(u16, u16)] = &[
+        (0x61, 0xE4),
+        (0x65, 0xEB),
+        (0x69, 0xEF),
+        (0x6F, 0xF6),
+        (0x75, 0xFC),
+        (0x79, 0xFF),
+        (0x41, 0xC4),
+        (0x45, 0xCB),
+        (0x49, 0xCF),
+        (0x4F, 0xD6),
+        (0x55, 0xDC),
+    ];
+    const TILDE: &[(u16, u16)] = &[(0x61, 0xE3), (0x6F, 0xF5), (0x6E, 0xF1), (0x41, 0xC3), (0x4F, 0xD5), (0x4E, 0xD1)];
     let table = match dead {
         0x5E => CIRCUMFLEX,
         0xB4 => ACUTE,
         0x60 => GRAVE,
+        0xA8 => DIAERESIS,
+        0x7E => TILDE,
         _ => return None,
     };
     if c == 0x20 {
         return Some(dead);
     }
-    let i = BASES.iter().position(|&b| b == c)?;
-    table.get(i).copied()
+    table.iter().find(|e| e.0 == c).map(|e| e.1)
 }
 
 /// The dead key a thread has pending (its keyboard state between
@@ -523,9 +510,12 @@ impl DeadState {
 /// What one key-down makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Outcome {
-    /// No character (key-up, modifier, navigation key, a state without a
-    /// character); a pending dead key stays pending.
+    /// No character (key-up, modifier, navigation key); a pending dead key
+    /// stays pending.
     Nothing,
+    /// A character key without a character in this state: a pending dead key
+    /// is gone (`ToUnicodeEx.yaml` `dead_keys`: AltGr+a after a dead key).
+    Cancel,
     /// A dead key with nothing pending: its spacing character.
     Dead(u16),
     /// One or two characters (two: a pending accent that did not combine,
@@ -539,13 +529,17 @@ fn outcome(l: Layout, vk: u32, scan: u32, key_state: &[u8; 256], pending: Option
     }
     let e = key_entry(l, vk, key_state);
     if e == NO {
-        return Outcome::Nothing;
+        return if pending.is_some() && consumes_dead(vk) { Outcome::Cancel } else { Outcome::Nothing };
     }
     let c = (e & 0xFFFF) as u16;
-    let dead = e & D != 0;
+    let dead = e & DEAD != 0;
+    let (_, ctrl, alt, _) = modifiers(key_state);
     match pending {
         None if dead => Outcome::Dead(c),
         None => Outcome::Chars([c, 0], 1),
+        // A control character replaces the accent (Ctrl+a after a dead key is U+0001 alone);
+        // Ctrl+Space is the space.
+        Some(_) if ctrl && !alt && c != 0x20 && !dead => Outcome::Chars([c, 0], 1),
         Some(p) => match if dead { None } else { combine(p, c) } {
             Some(x) => Outcome::Chars([x, 0], 1),
             None => Outcome::Chars([p, c], 2),
@@ -553,7 +547,7 @@ fn outcome(l: Layout, vk: u32, scan: u32, key_state: &[u8; 256], pending: Option
     }
 }
 
-/// `MapVirtualKeyW(code, map_type)` / `MapVirtualKeyExW` with the German
+/// `MapVirtualKeyW(code, map_type)` / `MapVirtualKeyExW` with the active
 /// layout: `Err(ERROR_INVALID_PARAMETER)` for an unknown map type and for a
 /// virtual key above 0xFF (the caller sets the last error and returns 0);
 /// `Ok(0)` when there is no translation (`MapVirtualKeyW.yaml`).
@@ -572,9 +566,15 @@ pub fn try_map_virtual_key_in(l: Layout, code: u32, map_type: u32) -> Result<u32
         MAPVK_VK_TO_CHAR => Ok(match code {
             0 => 0,
             // Observed on the oracle (`MapVirtualKeyW.yaml`: "0xFF gives 0x5E").
-            0xFF => 0x5E,
+            0xFF => {
+                if l == Layout::Us {
+                    0
+                } else {
+                    0x5E
+                }
+            }
             0x41..=0x5A => code,
-            _ => match key(l, code).map(|k| k.chars[0]) {
+            _ => match row(l, code).map(|r| r.2[C_NONE]) {
                 Some(e) if e != NO => e,
                 _ => 0,
             },
@@ -594,9 +594,41 @@ pub fn map_virtual_key_in(l: Layout, code: u32, map_type: u32) -> u32 {
     try_map_virtual_key_in(l, code, map_type).unwrap_or(0)
 }
 
+/// `VkKeyScanExW(ch, layout)` (`VkKeyScanExW.yaml`): the virtual key in the
+/// low byte and the shift state in the high byte (1 Shift, 2 Ctrl, 4 Alt) of
+/// the first way to type `ch`: the lowest shift state first (none, Shift,
+/// Ctrl, Ctrl+Shift, AltGr, AltGr+Shift, then Caps Lock reported as none), in
+/// it the lowest virtual key; the numeric pad is left out. `-1` when no key does.
+pub fn vk_key_scan_in(l: Layout, ch: u16) -> i16 {
+    // The states searched, with the columns that stand for them. A character only Caps Lock
+    // reaches (U+00C4 on the Swiss German Ä key) is reported as the key alone.
+    const STATES: [(u16, &[usize]); 7] = [
+        (0, &[C_NONE]),
+        (1, &[C_SHIFT]),
+        (2, &[C_CTRL]),
+        (3, &[C_CTRL_SHIFT]),
+        (6, &[C_ALTGR]),
+        (7, &[C_ALTGR_SHIFT]),
+        (0, &[C_CAPS]),
+    ];
+    for &(state, cols) in &STATES {
+        let best = l
+            .rows()
+            .iter()
+            .filter(|r| !matches!(r.0, 0x60..=0x6F | 0x25 | 0x2E | 0x7F))
+            .filter(|r| cols.iter().any(|&c| r.2[c] != NO && (r.2[c] & 0xFFFF) as u16 == ch))
+            .map(|r| r.0)
+            .min();
+        if let Some(vk) = best {
+            return ((state << 8) | u16::from(vk)) as i16;
+        }
+    }
+    -1
+}
+
 /// `ToUnicode(vk, scan, key_state, buf, buf.len(), flags)` /
-/// `ToUnicodeEx` with the German layout and the calling thread's `dead`
-/// state (`ToUnicode.yaml`):
+/// `ToUnicodeEx` with the active layout and the calling thread's `dead`
+/// state (`ToUnicode.yaml`, `ToUnicodeEx.yaml`):
 ///
 /// - returns the number of UTF-16 units written (at most `buf.len()`), 0
 ///   for no character, -1 for a dead key (its spacing character in
@@ -606,7 +638,8 @@ pub fn map_virtual_key_in(l: Layout, code: u32, map_type: u32) -> u32 {
 ///   combination) the accent comes first and the key's character second;
 ///   with room for one unit only the accent is written and the key's
 ///   character is lost; key-ups (`scan & 0x8000`) and keys without a
-///   character return 0 and leave it pending;
+///   character return 0 and leave it pending, except a letter, digit or
+///   punctuation key that makes no character in this state, which drops it;
 /// - the units of `buf` after the result are zeroed;
 /// - an empty `buf` returns 0 and changes nothing (the `user32` wrapper
 ///   writes the NUL Windows puts at unit 0 even then, if the pointer is
@@ -632,6 +665,12 @@ pub fn to_unicode_in(
     let keep = flags & TU_NO_STATE_CHANGE != 0;
     match outcome(l, vk, scan, key_state, dead.pending) {
         Outcome::Nothing => 0,
+        Outcome::Cancel => {
+            if !keep {
+                dead.pending = None;
+            }
+            0
+        }
         Outcome::Dead(c) => {
             buf[0] = c;
             if !keep {
@@ -732,6 +771,10 @@ pub fn translate_key_in(
     let msg = |msg, c: u16, lparam| Some(CharMsg { msg, wparam: u64::from(c), lparam });
     match outcome(l, wparam as u32, scan, key_state, dead.pending) {
         Outcome::Nothing => CharMsgs::default(),
+        Outcome::Cancel => {
+            dead.pending = None;
+            CharMsgs::default()
+        }
         Outcome::Dead(c) => {
             dead.pending = Some(c);
             CharMsgs { msgs: [msg(dead_msg, c, lparam), None] }

@@ -181,6 +181,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("propsys.dll", super::PROPSYS),
         ("wevtapi.dll", super::WEVTAPI),
         ("hid.dll", super::HID),
+        ("mdmregistration.dll", super::MDMREGISTRATION),
         ("dxgi.dll", super::DXGI),
         ("d3d11.dll", super::D3D11),
         ("dcomp.dll", super::DCOMP),

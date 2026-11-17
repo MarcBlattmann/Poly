@@ -427,7 +427,8 @@ jobs:
 
   # Chrome for Windows on Poly (ADR 0155, ADR 0214), one job per stage so each
   # shows on its own which stage broke: `s1-headless` (headless --dump-dom,
-  # required) and `s3-window` (Chrome's window on the desktop: the page painted,
+  # required), `s2-sandbox` (the same with Chrome's sandbox on, required,
+  # ADR 0217) and `s3-window` (Chrome's window on the desktop: the page painted,
   # a typed URL; QMP clicks). Chrome for Testing is downloaded here, from
   # Google's public bucket, by `xtask chrome-win fetch` (pinned version, size
   # and SHA-256 checked), and kept only in this repository's Actions cache,
@@ -449,8 +450,12 @@ jobs:
         include:
           - chrome: s1-headless
             shards: chrome-win
+          - chrome: s2-sandbox
+            shards: chrome-win-sandbox
           - chrome: s3-window
             shards: chrome-win-window
+          - chrome: s5-gpu
+            shards: chrome-win-gpu
     env:
       POLY_QEMU_ACCEL: auto
       POLY_PREBUILT: 1

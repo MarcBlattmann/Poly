@@ -53,6 +53,16 @@ fn create_user_process_starts_a_child_with_its_parameters() {
     // Running: the exit status is pending and the handle not signalled.
     let (s, exit, id) = exit_status_of(&mut t, ph);
     assert_eq!((s, exit, id), (STATUS_SUCCESS, STATUS_PENDING.0, u64::from(pid.0)));
+    // `ProcessBasicInformation` of the child: the normal base priority and a PEB
+    // (the sheet's `basic_child`); a buffer of 47 bytes is refused and `ReturnLength` untouched.
+    let buf = t.f.alloc(48);
+    let ret = t.f.put_u64(0xAAAA);
+    assert_eq!(t.f.call(Service::QueryInformationProcess, &[ph, 0, buf, 48, ret]), STATUS_SUCCESS);
+    assert_eq!(t.f.u32_at(buf + 24), 8, "BasePriority");
+    assert_ne!(t.f.u64_at(buf + 8), 0, "PebBaseAddress");
+    let ret = t.f.put_u64(0xAAAA);
+    assert_eq!(t.f.call(Service::QueryInformationProcess, &[ph, 0, buf, 47, ret]), STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(t.f.u64_at(ret), 0xAAAA);
     let zero = t.f.put_u64(0);
     assert_eq!(t.f.call(Service::WaitForSingleObject, &[ph, 0, zero]), STATUS_TIMEOUT);
     // Its last thread ends with 0x2A: the process's status, its handle
@@ -335,4 +345,25 @@ fn a_parent_reads_writes_queries_and_allocates_in_its_child() {
     assert_eq!(s, STATUS_SUCCESS);
     let limited = t.f.u64_at(limited);
     assert_eq!(t.f.call(Service::ReadVirtualMemory, &[limited, peb, back, 8, 0]), STATUS_ACCESS_DENIED);
+}
+
+/// Share access ends with a file object's last handle (Learn, "IoRemoveShareAccess": the cleanup
+/// request), not with its last reference: a section mapping the file does not keep it.
+#[test]
+fn a_section_of_a_file_does_not_keep_its_sharing() {
+    use crate::consts::PAGE_READWRITE;
+    let mut t = setup();
+    let p = "\\??\\C:\\mapped-share.bin";
+    let (s, h, _) = t.create(p, RW, 0, FILE_OPEN_IF, SYNC | FILE_NON_DIRECTORY_FILE, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    t.write(h, &[1; 4096], Some(0));
+    let (s, section) = create_section(&mut t, h, 0, PAGE_READWRITE);
+    assert_eq!(s, STATUS_SUCCESS);
+    // While the handle is open, the open without sharing refuses others.
+    assert_eq!(t.create(p, RW, SHARE_ALL, FILE_OPEN, SYNC, 0).0, STATUS_SHARING_VIOLATION);
+    t.close(h);
+    let (s, h2, _) = t.create(p, RW, 0, FILE_OPEN, SYNC, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    t.close(h2);
+    t.close(section);
 }

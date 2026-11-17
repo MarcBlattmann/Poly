@@ -251,12 +251,17 @@ fn io_errors() {
     assert_eq!(c.get(&mut q, 5), Err(CacheError::Io(IoError::Media)));
     assert!(!c.is_cached(5));
     assert_eq!(c.get(&mut q, 16), Err(CacheError::Io(IoError::OutOfRange)));
-    // A failed write-back keeps the block dirty and cached, and the
-    // operation that wanted its slot fails.
+    // A failed write-back keeps the block dirty and cached; the operation
+    // that wanted its slot takes the clean one instead.
     let b = c.get_zeroed(&mut q, 5).unwrap();
     c.release(b);
     c.get(&mut q, 0).map(|x| c.release(x)).unwrap();
-    assert_eq!(c.get(&mut q, 1), Err(CacheError::Io(IoError::Media)));
+    c.get(&mut q, 1).map(|x| c.release(x)).unwrap();
+    assert!(c.is_cached(5) && c.dirty_count() == 1 && !c.is_cached(0));
+    // With every unpinned slot dirty, the operation fails with the write's error.
+    let x = c.get(&mut q, 1).unwrap();
+    assert_eq!(c.get(&mut q, 2), Err(CacheError::Io(IoError::Media)));
+    c.release(x);
     assert!(c.is_cached(5) && c.dirty_count() == 1);
     assert_eq!(c.sync(&mut q), Err(CacheError::Io(IoError::Media)));
     assert_eq!(requests(&q.device().log, Op::Flush), []);
@@ -271,6 +276,43 @@ fn io_errors() {
     c.release(x);
     assert!(c.discard(2) && !c.is_cached(2));
     assert!(c.discard(9));
+}
+
+/// A block whose write-back keeps failing (the disk under the guest is
+/// full) stays dirty, and reads of every other block still work and return
+/// their data: the cache takes clean slots, and tries the bad block again
+/// only once per trip round the LRU list (ADR 0217).
+#[test]
+fn an_unwritable_block_does_not_stop_reads() {
+    let mut t = Tables::new(4, 2, 4);
+    let mut disk = SimDisk::new(64, BS as u32, false, 5);
+    for b in 0..64u64 {
+        disk.durable[b as usize * BS..(b as usize + 1) * BS].copy_from_slice(&pattern(b));
+    }
+    disk.bad = vec![40];
+    let mut q = RequestQueue::new(disk, t.storage()).unwrap();
+    let mut s = Store::new(4);
+    let mut c = s.cache();
+    let b = c.get_zeroed(&mut q, 40).unwrap();
+    c.data_mut(&b)[0] = 0xAA;
+    c.release(b);
+    for round in 0..3 {
+        for blk in (0..32u64).filter(|b| b % 3 != round) {
+            let x = c.get(&mut q, blk).unwrap_or_else(|e| panic!("reading block {blk}: {e:?}"));
+            assert_eq!(c.data(&x), &pattern(blk)[..]);
+            c.release(x);
+        }
+    }
+    // The bad block kept its data, dirty, and was tried about once per trip
+    // round the LRU list, not on every miss.
+    assert!(c.is_cached(40) && c.dirty_count() == 1);
+    let x = c.get(&mut q, 40).unwrap();
+    assert_eq!(c.data(&x)[0], 0xAA);
+    c.release(x);
+    let tries = requests(&q.device().log, Op::Write).iter().filter(|&&(lba, _)| lba == 40).count();
+    let reads = requests(&q.device().log, Op::Read).len();
+    assert!(tries > 1 && tries <= reads / 3 + 1, "{tries} write-backs of the bad block for {reads} reads");
+    assert_eq!(c.sync(&mut q), Err(CacheError::Io(IoError::Media)));
 }
 
 #[test]

@@ -393,8 +393,10 @@ pub struct Prepared {
     /// The initramfs: the desktop's own, or with `--chromium` the one that
     /// switches to Chromium's disk.
     image: PathBuf,
-    /// Chromium's disk (`--chromium`).
+    /// Chromium's disk (`--chromium`), or Chrome for Windows's (`--chrome-win`).
     chromium_disk: Option<PathBuf>,
+    /// `--chrome-win`: the disk is Chrome for Windows's (`chrometry.rs`), not Chromium's.
+    chrome_win: bool,
     state: PathBuf,
     size: (u32, u32),
     /// The compositor's scale as it takes it (`1`, `1.25`, `1.5`, `2`).
@@ -417,9 +419,13 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     let qmp_port = parse_qmp_port(args)?;
     let test_apps = args.iter().any(|a| a == "--test-apps");
     let chromium = args.iter().any(|a| a == "--chromium");
+    let chrome_win = args.iter().any(|a| a == "--chrome-win");
     let fresh_disk = args.iter().any(|a| a == "--fresh-disk");
-    if fresh_disk && !chromium {
-        return Err("--fresh-disk is for --chromium's disk (the desktop's own image is made afresh every time)".into());
+    if chromium && chrome_win {
+        return Err("--chromium and --chrome-win are two different disks: choose one".into());
+    }
+    if fresh_disk && !chromium && !chrome_win {
+        return Err("--fresh-disk is for --chromium's or --chrome-win's disk (the desktop's own image is made afresh every time)".into());
     }
     let value = |name: &str| args.iter().find_map(|a| a.strip_prefix(name)).map(str::to_string);
     // The scale asked for, in percent (ADR 0179: fractions too).
@@ -463,7 +469,9 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
             }
             Ok(())
         });
-        let image = if chromium {
+        let image = if chrome_win {
+            crate::chrometry::parts(fresh_disk).map(|p| (p.initrd, Some(p.disk)))
+        } else if chromium {
             let files = crate::chromium::PolyFiles { test_apps, compositor_args, test_page: None };
             crate::chromium::apply_disk_size(args)
                 .and_then(|()| crate::chromium::desktop_parts(&files, fresh_disk))
@@ -480,6 +488,7 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         kernel,
         image,
         chromium_disk,
+        chrome_win,
         state,
         size,
         scale,
@@ -493,7 +502,20 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
 
 /// Boot what [`prepare`] made, in QEMU's window.
 pub fn boot(p: Prepared) -> Result {
-    let Prepared { kernel, image, chromium_disk, state, size, scale, asked, host, qmp_port, extra, resources } = p;
+    let Prepared {
+        kernel,
+        image,
+        chromium_disk,
+        chrome_win,
+        state,
+        size,
+        scale,
+        asked,
+        host,
+        qmp_port,
+        extra,
+        resources,
+    } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
     // that is not 1. At scale 1 the settings choose, as before.
@@ -504,6 +526,20 @@ pub fn boot(p: Prepared) -> Result {
     // the arguments `prepare` wrote for it); the settings disk is the second
     // virtio-blk disk, bound into the root disk (ADR 0147).
     let (memory, cpus, append) = match &chromium_disk {
+        // Chrome for Windows: the desktop's own initramfs (with the launcher entry) and the disk the
+        // NT personality keeps `C:` on, mounted beside the settings disk (`chrometry.rs`).
+        Some(_) if chrome_win => (
+            crate::chrometry::MEMORY,
+            crate::chrometry::CPUS,
+            append(
+                format!(
+                    "poly.mount={} poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf console=ttyS0 poly.net=qemu poly.display.scale={scale} {force} {}",
+                    crate::chrometry::mounts(true),
+                    extra.join(" ")
+                )
+                .trim_end(),
+            ),
+        ),
         Some(_) => (
             crate::chromium::MEMORY,
             crate::chromium::CPUS.unwrap_or(crate::QEMU_CPUS),
@@ -537,7 +573,13 @@ pub fn boot(p: Prepared) -> Result {
         cmd.args(super::rootdisk::drive_args(disk));
     }
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
-    if chromium_disk.is_some() {
+    if chrome_win {
+        cmd.args(crate::net::nic_args(None, false));
+        eprintln!(
+            "==> Chrome for Windows: open the launcher (the Windows key or Ctrl+Space), choose \"{}\"; its window takes about a minute to open",
+            crate::chrometry::ENTRY_NAME
+        );
+    } else if chromium_disk.is_some() {
         cmd.args(crate::net::nic_args(None, false));
         eprintln!(
             "==> Chromium's window takes about a minute to open (more without a hypervisor); the launcher lists it as Chromium"

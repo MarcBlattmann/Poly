@@ -610,8 +610,11 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     let search = if has_path { None } else { search_path_for(flags) };
     let search_ptr = search.as_ref().map_or(core::ptr::null(), |v| v.as_ptr());
     let loaded_before: Vec<u64> = modules().into_iter().map(|(b, _)| b).collect();
+    // The data-file flags go to the loader (`LdrLoadDll`'s flags, Poly's reading), which does not
+    // tell the observers of loads about such a module.
+    let mut ldr_flags = flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
     // SAFETY: valid pointers; the search path is NUL-terminated.
-    let st = unsafe { nt::LdrLoadDll(search_ptr, core::ptr::null_mut(), &s, &mut h) };
+    let st = unsafe { nt::LdrLoadDll(search_ptr, &mut ldr_flags, &s, &mut h) };
     if !st.is_success() {
         return fail_status(st, core::ptr::null_mut());
     }
@@ -623,6 +626,10 @@ pub unsafe extern "system" fn LoadLibraryExW(name: *const u16, file: Handle, fla
     }
     h
 }
+
+/// `LOAD_LIBRARY_AS_DATAFILE` and `LOAD_LIBRARY_AS_IMAGE_RESOURCE` (`libloaderapi.h`).
+const LOAD_LIBRARY_AS_DATAFILE: u32 = 0x2;
+const LOAD_LIBRARY_AS_IMAGE_RESOURCE: u32 = 0x20;
 
 /// The `;`-separated, NUL-terminated search path a load with `flags` uses, or `None` for the
 /// standard search order (`poly_kernelbase::system::dll_search_dirs`).

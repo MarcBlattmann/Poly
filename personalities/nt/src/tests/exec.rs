@@ -70,6 +70,22 @@ fn teb_peb_and_stack() {
 }
 
 #[test]
+fn the_pebs_slot_at_0x2d8_points_to_a_private_read_write_region_of_8_kib() {
+    // Windows: a pointer to a committed zeroed region of its own; a broker writes 0 there from outside.
+    let mut f = Fake::bare();
+    let s = start(&mut f, &test_exe(false)).unwrap();
+    let slot = f.u64_at(s.peb + exec::PEB_SLOT_2D8);
+    assert_ne!(slot, 0);
+    let q = f.proc.vm.query(slot).unwrap();
+    assert_eq!((q.state, q.protect, q.region_size), (MEM_COMMIT, PAGE_READWRITE, 0x2000));
+    assert_eq!(q.allocation_base, slot);
+    assert_eq!(f.bytes_at(slot, 16), [0u8; 16]);
+    // The field itself is writable (`WriteProcessMemory(PEB + 0x2d8, 8 zero bytes)`).
+    f.mem.write_bytes(s.peb + exec::PEB_SLOT_2D8, &[0u8; 8]).unwrap();
+    assert_eq!(f.u64_at(s.peb + exec::PEB_SLOT_2D8), 0);
+}
+
+#[test]
 fn a_second_threads_stack_grows_too() {
     let mut f = Fake::bare();
     start(&mut f, &test_exe(false)).unwrap();

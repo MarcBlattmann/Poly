@@ -200,3 +200,21 @@ fn ids_of_deleted_objects_stay_dead() {
     assert_eq!(om.object_type(a), None);
     assert_eq!(om.wait_objects(T1, &[a], WaitType::Any, false, Timeout::Zero), Err(STATUS_INVALID_HANDLE));
 }
+
+#[test]
+fn opaque_objects_report_their_last_handle_before_their_deletion() {
+    let (mut om, c) = setup();
+    let k = Caller::kernel(P1, T1);
+    let file = NewObject::Opaque { kind: ObjectType::File, cookie: 43, signaled: None, parse: false };
+    let f = om.create_object(&k, &ObjectAttributes::unnamed(0), FILE_ALL_ACCESS, file, &mut NoParse).unwrap();
+    // A pointer reference (a section mapping the file) keeps the object alive.
+    om.reference(f.object).unwrap();
+    assert_eq!(om.pop_cleaned(), None);
+    om.nt_close(&c, f.handle).unwrap();
+    assert_eq!(om.pop_cleaned(), Some(Deleted { id: f.object, kind: ObjectType::File, cookie: 43 }));
+    assert_eq!(om.pop_cleaned(), None);
+    assert_eq!(om.pop_deleted(), None);
+    om.dereference(f.object).unwrap();
+    assert_eq!(om.pop_deleted(), Some(Deleted { id: f.object, kind: ObjectType::File, cookie: 43 }));
+    assert_eq!(om.pop_cleaned(), None);
+}

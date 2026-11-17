@@ -312,7 +312,7 @@ pub const DISK_FILE: &str = "poly-chrome-win-disk.img";
 pub const APP_ON_DISK: &str = "poly/nt/c/Program Files/Chrome";
 pub const APP_DOS: &str = "C:\\Program Files\\Chrome";
 /// Changes when what the disk carries of Poly's fonts changes (the disk is made again).
-const FONTS_STAMP: &str = "fonts-0181-dejavu";
+pub(crate) const FONTS_STAMP: &str = "fonts-0181-dejavu";
 /// The test directory on the disk (`C:\poly-test`): the launcher, the
 /// stages, the pages.
 pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
@@ -390,7 +390,7 @@ pub struct Stage {
     pub seconds: u32,
 }
 
-pub const STAGES: [Stage; 5] = [
+pub const STAGES: [Stage; 8] = [
     Stage {
         number: 1,
         name: "headless dump-dom, no sandbox, no GPU",
@@ -462,6 +462,50 @@ pub const STAGES: [Stage; 5] = [
             "file:///C:/poly-test/s4.html",
         ],
         expect: S4_EXPECT,
+        seconds: 300,
+    },
+    // S5 (the spec's `s5`, specs/windows/apps/chrome/s5-gpu.md): stage 1's page with Chrome's
+    // default GPU flags, so the GPU process starts on Poly's software Direct3D device (ADR 0211).
+    Stage {
+        number: 5,
+        name: "headless dump-dom, no sandbox, default GPU flags (the software D3D11 device)",
+        program: None,
+        args: &[
+            "--headless",
+            "--no-sandbox",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--dump-dom",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: DOM_EXPECT,
+        seconds: 300,
+    },
+    // S5 in a window: stage 3 without `--disable-gpu`; the launcher stops Chrome after `seconds`.
+    // The desktop check of `boot-tests chrome-win` counts its GPU processes (one is the goal).
+    Stage {
+        number: 6,
+        name: "a visible window, no sandbox, default GPU flags (ends after the launcher's wait)",
+        program: None,
+        args: &[
+            "--no-sandbox",
+            "--no-first-run",
+            "--user-data-dir=C:\\poly-test\\profile",
+            "--window-position=40,40",
+            "--window-size=900,500",
+            "file:///C:/poly-test/s1.html",
+        ],
+        expect: "LAUNCH-EXIT",
+        seconds: 120,
+    },
+    // S2 and S5 together, Chrome's defaults (ADR 0216 addendum): stage 1's page with the sandbox
+    // on and the default GPU flags, so the GPU process starts inside its own sandbox and opens
+    // Poly's software Direct3D 11 device there. What `cargo xtask desktop --chrome-win` starts.
+    Stage {
+        number: 7,
+        name: "headless dump-dom, sandbox on, default GPU flags (Chrome's defaults)",
+        program: None,
+        args: &["--headless", "--user-data-dir=C:\\poly-test\\profile", "--dump-dom", "file:///C:/poly-test/s1.html"],
+        expect: DOM_EXPECT,
         seconds: 300,
     },
 ];
@@ -559,6 +603,22 @@ pub fn trace_env(debugging: &Debugging) -> String {
 /// The tree of the disk: Chrome, the launcher, the stages, the test
 /// pages, the hives' directory and, when given, `polystub.dll`.
 pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::RootTree> {
+    let mut tree = app_tree(polystub, kit)?;
+    tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
+    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
+    for stage in &STAGES {
+        let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
+        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
+    }
+    tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
+    tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
+    Ok(tree)
+}
+
+/// What a disk with Chrome on it needs, without the test files (`cargo xtask start`'s "Desktop
+/// with Chrome for Windows" uses this alone, `chrometry.rs`): the hives' directory, Chrome under
+/// [`APP_ON_DISK`], `polystub.dll` and Poly's fonts.
+pub fn app_tree(polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::RootTree> {
     let app = fetch()?;
     let mut tree = crate::rootdisk::RootTree::default();
     tree.dir("poly", 0o755);
@@ -584,14 +644,6 @@ pub fn tree(launcher: &[u8], probe: &[u8], polystub: &[u8], kit: Option<&Path>) 
         let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
         tree.host_file(&format!("{APP_ON_DISK}/{rel}"), 0o755, path, crate::hostfs::mtime(&meta));
     }
-    tree.file(&format!("{TEST_ON_DISK}/s1.html"), 0o644, &s1_page()?);
-    tree.file(&format!("{TEST_ON_DISK}/s4.html"), 0o644, &s4_page()?);
-    for stage in &STAGES {
-        let cmd = if kit.is_some() { stage_cmd_traced(stage) } else { stage_cmd(stage) };
-        tree.file(&format!("{TEST_ON_DISK}/stage{}.cmd", stage.number), 0o644, cmd.as_bytes());
-    }
-    tree.file(&format!("{TEST_ON_DISK}/{LAUNCHER}.exe"), 0o755, launcher);
-    tree.file(&format!("{TEST_ON_DISK}/{PROBE}.exe"), 0o755, probe);
     tree.file(&format!("{SYSTEM32_ON_DISK}/{}", poly_stubs::STUB_DLL), 0o755, polystub);
     // Poly's fonts (ADR 0181): Windows programs get DirectWrite's system collection and GDI's faces from
     // `C:\Windows\Fonts`. Without them Chrome's UI font set-up found no face and started over until its
@@ -627,7 +679,7 @@ pub fn polystub() -> Result<Vec<u8>> {
 }
 
 /// A fingerprint of what the disk is made of besides Chrome (FNV-1a).
-fn fingerprint(parts: &[&[u8]]) -> String {
+pub(crate) fn fingerprint(parts: &[&[u8]]) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for p in parts {
         for &b in p.iter().chain(&(p.len() as u64).to_le_bytes()) {
@@ -704,6 +756,11 @@ pub struct Summary {
     pub stdout_sha256: Option<String>,
     /// Lines of the kernel log that name a fault or an unsupported call.
     pub faults: Vec<String>,
+    /// Kernel lines saying a write to the guest's disk failed with `EIO` (`fs: writeback ...
+    /// failed: EIO`, the registry's hive saves): the disk image under QEMU could not be written,
+    /// as when the host's disk is full. Chrome's databases then fail and Chrome ends its network
+    /// service on purpose: a run with these says nothing about Poly (ADR 0217).
+    pub disk_errors: usize,
 }
 
 impl Summary {
@@ -747,6 +804,9 @@ impl Summary {
             if !expect.is_empty() && line.contains(expect) {
                 s.expected = true;
             }
+            if line.contains("failed: EIO") && (line.contains("fs: ") || line.contains("nt: registry: ")) {
+                s.disk_errors += 1;
+            }
         }
         // The launcher's markers again, from its console output alone: the kernel's own log
         // lines can land in the middle of a marker, and the console wraps long lines with cursor
@@ -785,12 +845,23 @@ impl Summary {
 pub fn console_stream(log: &str) -> String {
     const KERNEL: [&str; 6] = ["nt: pid ", "nt-waits: ", "nt-trace: ", "nt-trail: ", "nt-exc: ", "ptrace"];
     let mut kept = String::with_capacity(log.len());
-    let mut rest = log;
-    while let Some(at) = KERNEL.iter().filter_map(|k| rest.find(k)).min() {
-        kept.push_str(&rest[..at]);
-        rest = rest[at..].find('\n').map_or("", |nl| &rest[at + nl + 1..]);
+    // Where each prefix next occurs at or after `pos`: searched again only once `pos` has passed
+    // it, so the whole log is scanned about once per prefix. (Searching the rest of the log for
+    // every prefix after every kernel line took more than ten minutes for a 10 MB log of
+    // `--exceptions` runs.)
+    let mut next: [Option<usize>; KERNEL.len()] = KERNEL.map(|k| log.find(k));
+    let mut pos = 0;
+    loop {
+        for (n, k) in next.iter_mut().zip(KERNEL) {
+            if n.is_some_and(|at| at < pos) {
+                *n = log[pos..].find(k).map(|at| pos + at);
+            }
+        }
+        let Some(at) = next.iter().flatten().min().copied() else { break };
+        kept.push_str(&log[pos..at]);
+        pos = log[at..].find('\n').map_or(log.len(), |nl| at + nl + 1);
     }
-    kept.push_str(rest);
+    kept.push_str(&log[pos..]);
     crate::console::strip_ansi(&kept).chars().filter(|&c| c != '\n').collect()
 }
 
@@ -1060,6 +1131,14 @@ impl Outcome {
         if let Some(t) = &self.trace {
             println!("  poly-side call trace: {}", t.display());
         }
+        if self.summary.disk_errors > 0 {
+            println!(
+                "  DISK ERRORS: {} writes to the guest's disk failed with EIO: the disk image under QEMU \
+                 could not be written (is the host's disk full?). Chrome's databases fail then and Chrome ends \
+                 its network service on purpose, so this run says nothing about Poly (ADR 0217).",
+                self.summary.disk_errors
+            );
+        }
     }
 }
 
@@ -1070,7 +1149,13 @@ fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
         return None;
     }
     // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
-    let key = if st.number == 4 { "s4-headless".to_string() } else { format!("s{}", st.number) };
+    let key = match st.number {
+        4 => "s4-headless".to_string(),
+        6 => return None,
+        // Stage 2's page and output with the GPU on as well: the spec's `s2` (sandbox on).
+        7 => "s2".to_string(),
+        n => format!("s{n}"),
+    };
     let (want_bytes, want_sha) = match spec_stdout(&key) {
         Ok(v) => v,
         Err(e) => return Some(e),
@@ -1191,9 +1276,71 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
     eprintln!(
         "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom (stage 1) on the NT personality (ADR 0155)"
     );
+    headless_boot_test(kernel, &STAGES[0], "headless", S1_REQUIRED).map(|_| ())
+}
+
+/// The boot test group `chrome-win-sandbox` (ADR 0217): stage 2, the same headless `--dump-dom`
+/// with Chrome's sandbox on (its GPU, network and renderer children as AppContainers, ADR 0206),
+/// required like stage 1 ([`S2_REQUIRED`]). Skipped without the cached package, like `chrome-win`.
+pub fn sandbox_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    eprintln!(
+        "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom with the sandbox on (stage 2) (ADR 0206, ADR 0217)"
+    );
+    headless_boot_test(kernel, &STAGES[1], "sandbox", S2_REQUIRED).map(|_| ())
+}
+
+/// The boot test group `chrome-win-defaults` (ADR 0216 addendum): stage 7, the same headless
+/// `--dump-dom` with Chrome's defaults, the sandbox on and the default GPU flags, so the GPU process
+/// opens Poly's software Direct3D 11 device inside its own sandbox (S2 and S5 together, what
+/// `cargo xtask desktop --chrome-win` starts). Required: the DOM of stage 1, and one rendering GPU
+/// process that ran sandboxed ([`defaults_gpu_note`]). Skipped without the cached package.
+pub fn defaults_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    eprintln!(
+        "==> boot test: Chrome for Testing {VERSION}, headless --dump-dom with Chrome's defaults: sandbox on, GPU on (stage 7)"
+    );
+    let st = STAGES.iter().find(|s| s.number == 7).expect("stage 7");
+    let Some(log) = headless_boot_test(kernel, st, "defaults", S7_REQUIRED)? else {
+        return Ok(());
+    };
+    let text = std::fs::read_to_string(&log).map_err(|e| format!("{}: {e}", log.display()))?;
+    match defaults_gpu_note(&text) {
+        None => {
+            println!("STAGE 7 GPU PASSED: one rendering GPU process, in its sandbox");
+            Ok(())
+        }
+        Some(why) if S7_REQUIRED || chrome_required() => {
+            ci_annotation(7, "defaults", &why);
+            Err(format!("stage 7: {why} (see {})", log.display()))
+        }
+        Some(why) => {
+            eprintln!("==> stage 7: {why} (not required: S7_REQUIRED)");
+            Ok(())
+        }
+    }
+}
+
+/// Whether stage 7 (and the menu's window check, `chrometry`) ran Chrome's GPU the default way:
+/// `None` when the log shows exactly one rendering GPU process ([`gpu_processes`]) and its switches
+/// name neither `no-sandbox` nor `disable-gpu-sandbox`; else what was wrong. A second rendering GPU
+/// process means the first one ended (Chrome starts another after a GPU process crash).
+pub fn defaults_gpu_note(log: &str) -> Option<String> {
+    let rendering: Vec<&str> = gpu_lines(log).filter(|l| !l.contains("gpu-vendor-id")).collect();
+    if rendering.len() != 1 {
+        return Some(format!("{} rendering GPU processes, one is the goal", rendering.len()));
+    }
+    let switches = rendering[0].split("switches ").nth(1).unwrap_or("");
+    if switches.split(',').any(|s| matches!(s.trim(), "no-sandbox" | "disable-gpu-sandbox")) {
+        return Some("the rendering GPU process ran without its sandbox".into());
+    }
+    None
+}
+
+/// Boot a headless stage `st` once and report it; with `required` (or `POLY_CHROME_REQUIRED=1`)
+/// a stage that does not pass fails the group. The serial log's path when the stage ran.
+fn headless_boot_test(kernel: &Path, st: &Stage, what: &str, required: bool) -> Result<Option<PathBuf>> {
     if !fetched() {
         if chrome_required() {
-            ci_annotation(1, "headless", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            ci_annotation(st.number, what, "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
             return Err(format!(
                 "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
                 cache_dir().display()
@@ -1203,9 +1350,8 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
             "==> skipped: Chrome {VERSION} is not in the cache ({}); `cargo xtask chrome-win fetch` downloads it",
             cache_dir().display()
         );
-        return Ok(());
+        return Ok(None);
     }
-    let st = &STAGES[0];
     let outcome = boot_stage(
         kernel,
         st,
@@ -1220,24 +1366,24 @@ pub fn boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>)
         },
     )?;
     outcome.report(st);
-    let required = S1_REQUIRED || chrome_required();
+    let required = required || chrome_required();
     if outcome.passed {
         println!("STAGE {} PASSED", st.number);
     } else if required {
         ci_annotation(
             st.number,
-            "headless",
+            what,
             "Chrome's headless --dump-dom did not pass (the serial log is an artifact of the run)",
         );
         return Err(format!("stage {} did not pass (see {})", st.number, outcome.log.display()));
     } else {
         eprintln!(
-            "==> stage {} did not pass yet (not required: see S1_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
+            "==> stage {} did not pass yet (not required: see S1_REQUIRED/S2_REQUIRED in tools/xtask/src/chromewin.rs); log {}",
             st.number,
             outcome.log.display()
         );
     }
-    Ok(())
+    Ok(Some(outcome.log))
 }
 
 /// The boot test group `chrome-win-window`: stage 3, Chrome's window on the desktop
@@ -1257,8 +1403,108 @@ pub fn window_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sy
     stage3_window(kernel)
 }
 
+/// The boot test group `chrome-win-gpu` (ADR 0211): the S5 checks, stage 5 headless and the S5
+/// window, both with Chrome's default GPU flags ([`stage5`]). Skipped without the cached package,
+/// like `chrome-win`.
+pub fn gpu_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    if !fetched() {
+        if chrome_required() {
+            ci_annotation(5, "gpu", "Chrome is not in the cache and POLY_CHROME_REQUIRED=1");
+            return Err(format!(
+                "Chrome {VERSION} is not in the cache ({}) and POLY_CHROME_REQUIRED=1; `cargo xtask chrome-win fetch` downloads it",
+                cache_dir().display()
+            ));
+        }
+        eprintln!("==> skipped: Chrome {VERSION} is not in the cache; `cargo xtask chrome-win fetch` downloads it");
+        return Ok(());
+    }
+    stage5(kernel)
+}
+
+/// Whether the S5 checks (stage 5 headless, the S5 window) fail the `chrome-win` group. On since
+/// they passed three runs in a row (2026-11-16, ADR 0211: one rendering GPU process, the page
+/// green, no exception); like the group, they are skipped where Chrome is not fetched.
+pub const S5_REQUIRED: bool = true;
+
+/// The S5 window's steps: start, the same stop/reload at 50 s as stage 3 (a slow start still
+/// loads), and at about 125 s the green page at (200, 400).
+const S5_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000";
+
+/// How many rendering GPU processes a run's log shows: `d3d11.dll` says once per process which
+/// kind of process loaded it and the names of its switches (ADR 0211). A `gpu-process` started
+/// with the GPU's identity on its command line (`--gpu-vendor-id`, observed on Poly with
+/// `--disable-gpu-sandbox --use-gl`) is Chrome's GPU-information process, which runs once beside
+/// the rendering one; it is counted by [`gpu_info_processes`].
+pub fn gpu_processes(log: &str) -> usize {
+    gpu_lines(log).filter(|l| !l.contains("gpu-vendor-id")).count()
+}
+
+pub fn gpu_info_processes(log: &str) -> usize {
+    gpu_lines(log).filter(|l| l.contains("gpu-vendor-id")).count()
+}
+
+fn gpu_lines(log: &str) -> impl Iterator<Item = &str> {
+    log.lines().filter(|l| l.contains("d3d11: loaded (process type gpu-process)"))
+}
+
+/// The S5 checks: stage 5 (headless, default GPU flags) must print stage 1's DOM; the window run
+/// with default GPU flags must paint its page from the first GPU process (ADR 0211). Reported, and
+/// required only with [`S5_REQUIRED`] or `POLY_CHROME_S5_REQUIRED=1`.
+fn stage5(kernel: &Path) -> Result {
+    let required = S5_REQUIRED || std::env::var("POLY_CHROME_S5_REQUIRED").is_ok_and(|v| v == "1");
+    let st = STAGES.iter().find(|s| s.number == 5).expect("stage 5");
+    eprintln!("==> boot test: Chrome for Testing {VERSION}, headless --dump-dom with the default GPU flags (stage 5)");
+    let outcome = boot_stage(
+        kernel,
+        st,
+        &Options {
+            trace: false,
+            exceptions: None,
+            waits: None,
+            fresh: false,
+            timeout: 600,
+            rest: Vec::new(),
+            kit: None,
+        },
+    )?;
+    outcome.report(st);
+    let headless = outcome.passed;
+    if headless {
+        println!("STAGE 5 PASSED");
+    } else {
+        eprintln!("==> stage 5 did not pass (see {})", outcome.log.display());
+    }
+    let window = if cfg!(unix) {
+        eprintln!("==> boot test: Chrome for Testing {VERSION}, a window with the default GPU flags (S5)");
+        let dir = cache_dir().join(TOP);
+        let args = format!(
+            "--no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+        );
+        let log = crate::root().join("target/win-app/s5-boot/chrome.serial.log");
+        let (text, stopped) =
+            crate::winapps::desktop_check(kernel, &dir, "chrome.exe", "chrome", &args, S5_STEPS, &log)?;
+        let gpus = gpu_processes(&text);
+        let info = gpu_info_processes(&text);
+        let exceptions = text.lines().filter(|l| l.contains("nt-exc:")).count();
+        let ok = stopped.is_none() && gpus == 1 && exceptions == 0;
+        println!(
+            "STAGE 5 WINDOW {}: {gpus} rendering GPU process(es), {info} GPU-information process(es), {exceptions} exception(s){}",
+            if ok { "PASSED" } else { "DID NOT PASS" },
+            stopped.map(|s| format!(", {s}")).unwrap_or_default()
+        );
+        ok
+    } else {
+        eprintln!("==> S5 window skipped: a desktop run needs a Unix host (QMP over a Unix socket)");
+        true
+    };
+    if required && !(headless && window) {
+        return Err("the S5 checks did not pass (POLY_CHROME_S5_REQUIRED)".into());
+    }
+    Ok(())
+}
+
 /// Stage 3's page: green, so a pixel of the page area shows that the window is up and painted.
-const S3_PAGE: &str =
+pub(crate) const S3_PAGE: &str =
     "data:text/html,<title>poly-s3</title><style>body{background:green;color:white}</style><h1>HelloPoly</h1>";
 
 /// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
@@ -1268,13 +1514,13 @@ const S3_PAGE: &str =
 /// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
 /// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
 /// (ADR 0155 addendum "browsing").
-const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
+pub(crate) const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
                         chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
                         pixel:200|400|0000ff";
 
 /// What one stage 3 run showed.
 #[derive(Debug, PartialEq, Eq)]
-enum S3Verdict {
+pub(crate) enum S3Verdict {
     /// The page is painted and the browser threw no exception.
     Pass,
     /// The page area is still blank white: a slow start whose page never finished loading (the
@@ -1285,7 +1531,7 @@ enum S3Verdict {
 
 /// Judge a run: an exception delivered to user mode, a window that never came, or any colour but
 /// the page's or blank white at the pixel is a failure.
-fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
+pub(crate) fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
     match stopped {
         _ if !exceptions.is_empty() => S3Verdict::Fail,
         None => S3Verdict::Pass,
@@ -1295,7 +1541,8 @@ fn s3_verdict(stopped: Option<&str>, exceptions: &[&str]) -> S3Verdict {
     }
 }
 
-/// The stage 3 boot check: the browser's window, with the GPU off, shows its page and is still up
+/// The stage 3 boot check: the browser's window, with the switches of `chrometry::FLAGS` (since the
+/// ADR 0216 addendum none: the sandbox and the GPU on), shows its page and is still up
 /// after the component updater's BITS download was refused (ADR 0207: the apartment of a COM
 /// thread is in `TEB.ReservedForOle`). Skipped where there is no Unix host or no cached Chrome.
 /// An exception or a missing window fails it at once; a page that never finished loading (blank
@@ -1308,8 +1555,10 @@ fn stage3_window(kernel: &Path) -> Result {
         return Ok(());
     }
     let dir = cache_dir().join(TOP);
+    // Chrome's switches are in one place (`chrometry::FLAGS`).
     let args = format!(
-        "--disable-gpu --no-sandbox --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}"
+        "{} --no-first-run --user-data-dir=C:\\poly-prof --window-position=40,40 --window-size=900,500 {S3_PAGE}",
+        crate::chrometry::FLAGS.join(" ")
     );
     let log = crate::root().join("target/win-app/s3-boot/chrome.serial.log");
     for attempt in 1..=3 {
@@ -1346,6 +1595,16 @@ fn stage3_window(kernel: &Path) -> Result {
 /// `chrome.dll+0xc62f809` and the timeouts were a looping `InterlockedPushEntrySList`).
 pub const S1_REQUIRED: bool = true;
 
+/// Whether the `chrome-win-sandbox` boot test group fails when stage 2 (the sandbox on) does not
+/// pass. Its failures under load were a full host disk under the guest's disk image (ADR 0217):
+/// with a disk that can be written it passes every time.
+pub const S2_REQUIRED: bool = true;
+
+/// Whether the `chrome-win-defaults` group fails when stage 7 (Chrome's defaults: the sandbox and
+/// the GPU on) does not pass or its GPU process did not run once, sandboxed. On from the first run
+/// (2026-11-17, ADR 0216 addendum): it passed every time.
+pub const S7_REQUIRED: bool = true;
+
 /// `cargo xtask chrome-win <fetch | imports | disk | run>`.
 pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
@@ -1367,6 +1626,18 @@ fn crate_steps_parse() -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gpu_processes_are_counted_by_the_d3d11_load_line() {
+        let log = "nt: pid 9: d3d11: loaded (process type gpu-process) switches no-sandbox,gpu-preferences\n\
+                   nt: pid 4: d3d11: loaded (process type main) switches no-sandbox\n\
+                   nt: pid 12: d3d11: loaded (process type gpu-process) switches disable-gpu-sandbox,use-gl,gpu-vendor-id\n";
+        assert_eq!(super::gpu_processes(log), 1);
+        assert_eq!(super::gpu_info_processes(log), 1);
+        assert!(crate::winapps::steps_parse(super::S5_STEPS));
+        let s5 = super::STAGES.iter().find(|s| s.number == 5).unwrap();
+        assert!(!s5.args.contains(&"--disable-gpu") && s5.args.contains(&"--headless"));
+    }
+
     #[test]
     fn stage_3_is_judged_by_exceptions_and_the_pixel() {
         use super::{S3Verdict, s3_verdict};
@@ -1526,6 +1797,30 @@ mod tests {
         assert_eq!(late.code, None);
     }
 
+    /// A log of an `--exceptions` run: tens of thousands of kernel lines between the
+    /// launcher's (each pass over the rest of the log per line made this take minutes).
+    #[test]
+    fn a_long_log_of_kernel_lines_is_read_in_one_pass() {
+        let mut log = String::from("LAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 stdout 7b79f8b475");
+        for i in 0..60_000 {
+            log.push_str(&format!("nt-exc: pid 7 tid {i} stack +0x0000: 0000000000000000 0000000000000001\n"));
+        }
+        log.push_str("542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b\x1b[22;1HLAUNCH-EXIT code=0x0\n");
+        let s = Summary::parse(&log, DOM_EXPECT);
+        assert_eq!(s.stdout_bytes, Some(440));
+        assert_eq!(
+            s.stdout_sha256.as_deref(),
+            Some("7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b")
+        );
+        assert_eq!(s.code, Some(0));
+        assert_eq!(console_stream("a\nnt: pid 1: x\nb ptrace q\nc"), "ab c");
+        assert_eq!(s.disk_errors, 0);
+        // A run whose disk could not be written (the host's disk was full) is counted.
+        let full = "fs: writeback to /mnt/root (virtio0) failed: EIO\n\
+                    nt: registry: writing hive SYSTEM to /mnt/root/poly/nt/registry failed: EIO\nLAUNCH-EXIT code=0x0\n";
+        assert_eq!(Summary::parse(full, DOM_EXPECT).disk_errors, 2);
+    }
+
     #[test]
     fn the_spec_records_stage_one_and_its_page() {
         let (bytes, sha) = spec_stdout("s1").unwrap();
@@ -1547,6 +1842,39 @@ mod tests {
             assert!(st.args.iter().any(|a| a.starts_with("--user-data-dir=")));
             assert!(st.expect.contains("script-ran 42"));
         }
+    }
+
+    #[test]
+    fn stage_seven_is_stage_two_with_the_gpu_on() {
+        let s2 = STAGES.iter().find(|s| s.number == 2).unwrap();
+        let s7 = STAGES.iter().find(|s| s.number == 7).unwrap();
+        let without_gpu_off: Vec<&str> = s2.args.iter().copied().filter(|a| *a != "--disable-gpu").collect();
+        assert_eq!(s7.args, &without_gpu_off[..]);
+        assert!(!s7.args.iter().any(|a| a.contains("sandbox") || a.contains("gpu")));
+        assert_eq!(s7.expect, s2.expect);
+        // Its output is stage 2's, recorded by the spec as `s2`.
+        let s = Summary {
+            stdout_bytes: Some(spec_stdout("s2").unwrap().0),
+            stdout_sha256: Some(spec_stdout("s2").unwrap().1),
+            ..Summary::default()
+        };
+        assert_eq!(digest_note(s7, &s), None);
+    }
+
+    #[test]
+    fn the_defaults_want_one_sandboxed_rendering_gpu_process() {
+        let gpu = "nt: pid 1244: d3d11: loaded (process type gpu-process) switches gpu-recent-crash-count,headless,gpu-preferences\n";
+        let info = "nt: pid 3144: d3d11: loaded (process type gpu-process) switches disable-gpu-sandbox,use-gl,gpu-vendor-id\n";
+        assert_eq!(defaults_gpu_note(gpu), None);
+        // Chrome's GPU-information process runs without the GPU sandbox by its own choice.
+        assert_eq!(defaults_gpu_note(&format!("{gpu}{info}")), None);
+        assert!(defaults_gpu_note(info).unwrap().contains("0 rendering"));
+        assert!(defaults_gpu_note(&format!("{gpu}{gpu}")).unwrap().contains("2 rendering"));
+        let unsandboxed = "nt: pid 9: d3d11: loaded (process type gpu-process) switches no-sandbox,gpu-preferences\n";
+        assert!(defaults_gpu_note(unsandboxed).unwrap().contains("without its sandbox"));
+        let gpu_sandbox_off =
+            "nt: pid 9: d3d11: loaded (process type gpu-process) switches disable-gpu-sandbox,headless\n";
+        assert!(defaults_gpu_note(gpu_sandbox_off).is_some());
     }
 
     #[test]

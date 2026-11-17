@@ -264,15 +264,56 @@ pub fn boot_args() -> String {
 /// need more than the default.
 pub const MEMORY: &str = "1G";
 
+/// Environment variable: let the disk's first N writes through and fail every later one with
+/// `EIO`, as a full disk under the guest does (ADR 0217). For reproducing what Poly does then.
+pub const WRITE_ERRORS_AFTER: &str = "POLY_DISK_WRITE_ERRORS_AFTER";
+
 /// QEMU arguments attaching `image` as the only virtio-blk device
-/// (`virtio0`, `/dev/vda`).
+/// (`virtio0`, `/dev/vda`). With [`WRITE_ERRORS_AFTER`] set, the image sits behind QEMU's
+/// `blkdebug` driver, which fails the writes after the first N.
 pub fn drive_args(image: &Path) -> Vec<String> {
-    vec![
-        "-drive".into(),
-        format!("if=none,id=root,format=raw,file={}", image.display()),
-        "-device".into(),
-        "virtio-blk-pci,drive=root,disable-legacy=on".into(),
-    ]
+    let after = std::env::var(WRITE_ERRORS_AFTER).ok().and_then(|n| n.trim().parse::<u32>().ok());
+    let drive = match after.map(|n| write_errors_config(image, n)) {
+        Some(Ok(cfg)) => {
+            eprintln!("==> the disk fails every write after the first {} ({WRITE_ERRORS_AFTER})", after.unwrap_or(0));
+            format!(
+                "if=none,id=root,format=raw,werror=report,rerror=report,file.driver=blkdebug,\
+                 file.config={},file.image.filename={}",
+                cfg.display(),
+                image.display()
+            )
+        }
+        Some(Err(e)) => {
+            eprintln!("==> {WRITE_ERRORS_AFTER}: {e}; the disk works normally");
+            format!("if=none,id=root,format=raw,file={}", image.display())
+        }
+        None => format!("if=none,id=root,format=raw,file={}", image.display()),
+    };
+    vec!["-drive".into(), drive, "-device".into(), "virtio-blk-pci,drive=root,disable-legacy=on".into()]
+}
+
+/// A `blkdebug` configuration (QEMU's `docs/devel/blkdebug.rst`, used as a black box) that lets
+/// `n` writes through and fails every later one with `EIO`: each write moves the state on by one
+/// until state `n + 1`, where writes fail. Written next to `image`.
+fn write_errors_config(image: &Path, n: u32) -> std::io::Result<std::path::PathBuf> {
+    let path = image.with_extension(format!("write-errors-{n}.cfg"));
+    std::fs::write(&path, write_errors_rules(n))?;
+    Ok(path)
+}
+
+fn write_errors_rules(n: u32) -> String {
+    let mut cfg = String::new();
+    for state in 1..=n {
+        cfg.push_str(&format!(
+            "[set-state]\nstate = \"{state}\"\nevent = \"write_aio\"\nnew_state = \"{}\"\n\n",
+            state + 1
+        ));
+    }
+    cfg.push_str(&format!(
+        "[inject-error]\nstate = \"{}\"\nevent = \"write_aio\"\nerrno = \"5\"\nonce = \"off\"\n",
+        n + 1
+    ));
+    cfg
 }
 
 /// The initramfs of a boot from the root disk (BusyBox's init, see
@@ -293,4 +334,15 @@ pub fn command() -> crate::Result {
     let (path, _) = make(FILE_NAME)?;
     println!("{}", path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod write_error_tests {
+    #[test]
+    fn the_rules_let_n_writes_through_then_fail_every_write() {
+        let cfg = super::write_errors_rules(2);
+        assert_eq!(cfg.matches("[set-state]").count(), 2);
+        assert!(cfg.contains("state = \"2\"\nevent = \"write_aio\"\nnew_state = \"3\""));
+        assert!(cfg.ends_with("[inject-error]\nstate = \"3\"\nevent = \"write_aio\"\nerrno = \"5\"\nonce = \"off\"\n"));
+    }
 }

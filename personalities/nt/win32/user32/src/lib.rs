@@ -22,6 +22,7 @@ mod ctl;
 mod display;
 mod dlg;
 mod icons;
+mod kbdlayout;
 mod layered;
 mod menu;
 mod menuansi;
@@ -57,7 +58,14 @@ unsafe extern "system" {
 #[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
-    fn PolyUserCommitSurface(hwnd: usize, pixels: usize, width: usize, height: usize, stride: usize) -> u32;
+    fn PolyUserCommitSurfaceArea(
+        hwnd: usize,
+        pixels: usize,
+        width: usize,
+        height: usize,
+        stride: usize,
+        area: *const i32,
+    ) -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -97,6 +105,7 @@ unsafe extern "system" {
     fn PolyGdiAttachSurfaceRowsTo(hdc: usize, surface_hwnd: usize, width: u32, total: u32, skip: u32, rows: u32)
     -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
+    fn PolyGdiTakeSurfaceDrawn(hwnd: usize, out: *mut i32) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
         x: i32,
@@ -1641,16 +1650,7 @@ fn with_dead_state<R>(f: impl FnOnce(&mut kbd::DeadState) -> R) -> R {
     })
 }
 
-/// The keyboard layout win32k reads keys with (the desktop's, ADR 0209; German without
-/// one), made this process's for the keyboard functions.
-pub(crate) fn refresh_layout() -> kbd::Layout {
-    let l = match call(Request::KeyboardLayout {}) {
-        Reply::Value { value } => kbd::Layout::from_id(value),
-        _ => kbd::Layout::German,
-    };
-    kbd::set_active(l);
-    l
-}
+pub(crate) use kbdlayout::refresh_layout;
 
 /// `MapVirtualKeyW` (`MapVirtualKeyW.yaml`).
 #[unsafe(no_mangle)]
@@ -1662,20 +1662,68 @@ pub extern "system" fn MapVirtualKeyW(code: u32, map_type: u32) -> u32 {
     })
 }
 
-/// `MapVirtualKeyExW`: there is one layout, so the same as
-/// `MapVirtualKeyW` for any `layout` (`MapVirtualKeyW.yaml` `same_as_ex`).
+/// `MapVirtualKeyExW`: through the layout of `layout` (NULL: the thread's); a layout that is not
+/// loaded gives 0 (`MapVirtualKeyExW.yaml`).
 #[unsafe(no_mangle)]
-pub extern "system" fn MapVirtualKeyExW(code: u32, map_type: u32, _layout: usize) -> u32 {
-    MapVirtualKeyW(code, map_type)
+pub extern "system" fn MapVirtualKeyExW(code: u32, map_type: u32, layout: usize) -> u32 {
+    let Some(l) = kbdlayout::layout_of(layout) else { return 0 };
+    kbd::try_map_virtual_key_in(l, code, map_type).unwrap_or_else(|e| {
+        set_last_error(e);
+        0
+    })
 }
 
-/// `ToUnicode` (`ToUnicode.yaml`).
+/// `ToUnicode` (`ToUnicode.yaml`): in the thread's layout.
 ///
 /// # Safety
 /// `key_state` is NULL or 256 readable bytes; `buffer` is NULL or
 /// `buffer_len` writable units (at least one when `buffer_len` is 0).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ToUnicode(
+    vk: u32,
+    scan: u32,
+    key_state: *const u8,
+    buffer: *mut u16,
+    buffer_len: i32,
+    flags: u32,
+) -> i32 {
+    let l = refresh_layout();
+    // SAFETY: the caller's promises, passed on.
+    unsafe { to_unicode_in(l, vk, scan, key_state, buffer, buffer_len, flags) }
+}
+
+/// `ToUnicodeEx`: in the layout of `layout` (NULL: the thread's); a layout that is not loaded
+/// gives no character (`ToUnicodeEx.yaml` `layouts`).
+///
+/// # Safety
+/// As [`ToUnicode`].
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ToUnicodeEx(
+    vk: u32,
+    scan: u32,
+    key_state: *const u8,
+    buffer: *mut u16,
+    buffer_len: i32,
+    flags: u32,
+    layout: usize,
+) -> i32 {
+    let Some(l) = kbdlayout::layout_of(layout) else {
+        if !buffer.is_null() && buffer_len > 0 {
+            // SAFETY: the caller's buffer of `buffer_len` characters.
+            unsafe { *buffer = 0 };
+        }
+        return 0;
+    };
+    // SAFETY: the caller's promises, passed on.
+    unsafe { to_unicode_in(l, vk, scan, key_state, buffer, buffer_len, flags) }
+}
+
+/// The body of `ToUnicode(Ex)` in layout `l`.
+///
+/// # Safety
+/// As [`ToUnicode`].
+unsafe fn to_unicode_in(
+    l: kbd::Layout,
     vk: u32,
     scan: u32,
     key_state: *const u8,
@@ -1699,49 +1747,21 @@ pub unsafe extern "system" fn ToUnicode(
     unsafe { core::ptr::copy_nonoverlapping(key_state, ks.as_mut_ptr(), 256) };
     // SAFETY: the caller's buffer of `buffer_len` units.
     let buf = unsafe { core::slice::from_raw_parts_mut(buffer, buffer_len as usize) };
-    refresh_layout();
-    with_dead_state(|dead| kbd::to_unicode(vk, scan, &ks, buf, flags, dead))
+    with_dead_state(|dead| kbd::to_unicode_in(l, vk, scan, &ks, buf, flags, dead))
 }
 
-/// `ToUnicodeEx`: there is one layout, so `ToUnicode` for any `layout`.
-///
-/// # Safety
-/// As [`ToUnicode`].
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn ToUnicodeEx(
-    vk: u32,
-    scan: u32,
-    key_state: *const u8,
-    buffer: *mut u16,
-    buffer_len: i32,
-    flags: u32,
-    layout: usize,
-) -> i32 {
-    // A layout that is not installed gives no character (ToUnicodeEx.yaml `layouts`).
-    refresh_layout();
-    if layout != 0 && s3::PrivateLayoutInstalled(layout) == 0 {
-        if !buffer.is_null() && buffer_len > 0 {
-            // SAFETY: the caller's buffer of `buffer_len` characters.
-            unsafe { *buffer = 0 };
-        }
-        return 0;
-    }
-    // SAFETY: the caller's promises, passed on.
-    unsafe { ToUnicode(vk, scan, key_state, buffer, buffer_len, flags) }
-}
-
-/// `GetKeyboardLayout`: every thread has the oracle's layout
-/// (`MapVirtualKeyW.yaml`: HKL `0x04072000`).
+/// `GetKeyboardLayout`: the thread's layout (the oracle's `0x04072000` without a desktop,
+/// the desktop's with one, or what the thread activated).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetKeyboardLayout(thread: u32) -> usize {
     // A thread that has no window (or does not exist) has no layout of its own to give: 0
     // (GetKeyboardLayout.yaml `other_threads`).
-    let hkl = refresh_layout().hkl() as usize;
+    let hkl = kbdlayout::thread_hkl() as usize;
     if thread == 0 || thread == SYS.tid() {
         return hkl;
     }
     match call(Request::ThreadHasWindows { tid: thread }) {
-        Reply::Bool { value: true } => hkl,
+        Reply::Bool { value: true } => kbdlayout::hkl_of_thread(thread) as usize,
         _ => 0,
     }
 }
@@ -2122,7 +2142,10 @@ fn attach_surface(hwnd: u32, dc: H) -> H {
     dc
 }
 
-/// What the window's DCs drew goes to its surface (`ReleaseDC`).
+/// What the window's DCs drew goes to its surface (`ReleaseDC`): only the rectangle this
+/// process drew since its last commit (ADR 0219). Each process draws into its own copy of the
+/// window's pixels, so the rest of its copy may be older than what another process (Chrome's GPU
+/// process presenting into the browser's window) committed since.
 fn commit_surface(hwnd: H) {
     let hwnd = if hwnd == 0 { 0 } else { top_level_of(hwnd) };
     let mut s = [0u64; 3];
@@ -2130,8 +2153,22 @@ fn commit_surface(hwnd: H) {
     if hwnd == 0 || unsafe { PolyGdiSurface(hwnd, s.as_mut_ptr()) } == 0 {
         return;
     }
-    // SAFETY: win32u's stub; the kernel reads `height` rows of the DIB.
-    unsafe { PolyUserCommitSurface(hwnd as usize, s[0] as usize, s[1] as usize, s[2] as usize, s[1] as usize * 4) };
+    let mut area = [0i32; 4];
+    // SAFETY: our gdi32 writes four i32s.
+    if unsafe { PolyGdiTakeSurfaceDrawn(hwnd, area.as_mut_ptr()) } == 0 {
+        return;
+    }
+    // SAFETY: win32u's stub; the kernel reads the RECT and the rows of the DIB inside it.
+    unsafe {
+        PolyUserCommitSurfaceArea(
+            hwnd as usize,
+            s[0] as usize,
+            s[1] as usize,
+            s[2] as usize,
+            s[1] as usize * 4,
+            area.as_ptr(),
+        )
+    };
 }
 
 /// `WindowFromDC` (BeginPaint.yaml `erase_sent`): the window a DC from

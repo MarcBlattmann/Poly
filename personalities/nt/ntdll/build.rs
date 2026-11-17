@@ -3,7 +3,7 @@
 //! generate our `ntdll`'s stubs from this table"), so the numbering has one
 //! source. Every service whose exported name begins with `Nt` becomes an
 //! exported naked function `NtX` and an alias `ZwX`, both
-//! `mov r10, rcx; mov eax, <number>; syscall; ret` (the x64 convention of
+//! `mov r10, rcx; mov eax, <number>; syscall; ret` in a 32-byte slot (the x64 convention of
 //! `ntdll`'s stubs: service number in EAX, the kernel reads arguments the
 //! same as a `call`, moving RCX into R10 because `syscall` clobbers RCX).
 //! Poly's own services (`Poly*`, numbered `(TABLE_POLY << 12) | n`) get a
@@ -51,10 +51,19 @@ fn main() {
             }
             writeln!(asm, "    mov eax, {num}\n    lea edx, [esp + 4]\n    int 0xF4\n    ret {}\n", 4 * n).unwrap();
         } else {
+            // Each stub has a 32-byte slot of its own and `mov r10, rcx` is spelled `4C 8B D1`
+            // (the other encoding of the same instruction: Intel SDM `MOV r64, r/m64` instead of
+            // `MOV r/m64, r64`). Chrome's sandbox broker patches the first 16 bytes of the stubs of
+            // some `Nt*` functions in its targets, reads 32 bytes of each first and gives up (last
+            // error `ERROR_ALREADY_EXISTS`, the target is killed) when what it reads is not a stub
+            // of that spelling that still has all of its own bytes: with stubs 11 bytes apart the
+            // patch of one overwrote the start of the next (ADR 0196, found by observing Chrome
+            // on Poly; no sheet says what the broker looks for).
+            writeln!(asm, "    .balign 32").unwrap();
             for label in &names {
                 writeln!(asm, ".globl {label}\n{label}:").unwrap();
             }
-            writeln!(asm, "    mov r10, rcx\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
+            writeln!(asm, "    .byte 0x4c, 0x8b, 0xd1\n    mov eax, {num}\n    syscall\n    ret\n").unwrap();
         }
         if !poly {
             // Export both names from the DLL (apps import Nt*/Zw* from ntdll);
@@ -70,6 +79,12 @@ fn main() {
     assert!(seen.iter().any(|n| n == "PolyResumeApc"), "no PolyResumeApc service found");
     // The diagnostics service is exported for Poly's own stub DLLs (ADR 0155).
     println!("cargo:rustc-link-arg=/EXPORT:PolyDebugPrint");
+    // And the random bytes of the kernel's generator, for the DLLs that give programs random
+    // numbers (ADR 0206): no file is opened, so a sandboxed token that cannot open the random device
+    // still gets them.
+    println!("cargo:rustc-link-arg=/EXPORT:PolyRandomBytes");
+    // And the physical memory sizes, for `GlobalMemoryStatusEx` (ADR 0206).
+    println!("cargo:rustc-link-arg=/EXPORT:PolyPhysicalMemory");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
     if !x86 {

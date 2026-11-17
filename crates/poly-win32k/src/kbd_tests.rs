@@ -621,10 +621,184 @@ fn the_desktops_layout_names_pick_a_layout() {
     assert_eq!(Layout::for_desktop("us"), Layout::Us);
     assert_eq!(Layout::for_desktop("US"), Layout::Us);
     assert_eq!(Layout::for_desktop("de"), Layout::German);
-    assert_eq!(Layout::for_desktop("de-ch"), Layout::German);
-    for l in [Layout::German, Layout::Us] {
+    assert_eq!(Layout::for_desktop("de-ch"), Layout::SwissGerman);
+    assert_eq!(Layout::for_desktop("fr"), Layout::French);
+    for l in [Layout::German, Layout::Us, Layout::SwissGerman, Layout::French] {
         assert_eq!(Layout::from_id(u64::from(l.id())), l);
     }
     assert_eq!((Layout::German.hkl(), Layout::Us.hkl()), (HKL, 0x0409_0409));
+    assert_eq!((Layout::SwissGerman.hkl(), Layout::French.hkl()), (0x0807_0807, 0x040C_040C));
+    assert_eq!(Layout::for_hkl(0x0807_0809), Layout::SwissGerman);
+    assert_eq!(Layout::for_hkl(0x0407_2000), Layout::German);
+    assert_eq!(Layout::for_hkl(0x0809_0809), Layout::Us);
     assert_eq!((Layout::German.klid(), Layout::Us.klid()), ("00000407", "00000409"));
+}
+
+/// A key state from a modifier mask: 1 Shift, 2 Ctrl, 4 Alt, 8 Caps Lock.
+fn state(m: u32) -> [u8; 256] {
+    let mut ks = [0u8; 256];
+    if m & 1 != 0 {
+        ks[0x10] = 0x80;
+    }
+    if m & 2 != 0 {
+        ks[0x11] = 0x80;
+    }
+    if m & 4 != 0 {
+        ks[0x12] = 0x80;
+    }
+    if m & 8 != 0 {
+        ks[0x14] = 1;
+    }
+    ks
+}
+
+/// A cell as the tests print it: `-` none, `~xxxx` dead, `xxxx` one unit.
+fn cell(l: Layout, vk: u32, m: u32) -> String {
+    let mut buf = [0u16; 8];
+    let mut dead = DeadState::default();
+    let r = to_unicode_in(l, vk, 0, &state(m), &mut buf, TU_NO_STATE_CHANGE, &mut dead);
+    match r {
+        0 => "-".into(),
+        r if r < 0 => format!("~{:04x}", buf[0]),
+        _ => format!("{:04x}", buf[0]),
+    }
+}
+
+/// The modifier masks of the ten columns of a table row: N S C SC Ct CtS AG AGS Al AGC.
+const COLUMNS: [u32; 10] = [0, 1, 8, 9, 2, 3, 6, 7, 4, 14];
+
+fn row_text(l: Layout, vk: u32) -> String {
+    COLUMNS.iter().map(|&m| cell(l, vk, m)).collect::<Vec<_>>().join(" ")
+}
+
+#[test]
+fn swiss_german_rows_per_the_sheet() {
+    let l = Layout::SwissGerman;
+    // From `tue_dech_table`'s recorded results.
+    assert_eq!(row_text(l, 0x32), "0032 0022 0032 0022 - - 0040 - 0032 0040");
+    assert_eq!(row_text(l, 0x36), "0036 0026 0036 0026 - 001e 00ac - 0036 00ac");
+    assert_eq!(row_text(l, 0xBA), "00fc 00e8 00dc 00c8 001b - 005b - 00fc 005b");
+    assert_eq!(row_text(l, 0xBB), "- - - - - - - - - -");
+    assert_eq!(row_text(l, 0xC0), "~00a8 0021 ~00a8 0021 001d - 005d - ~00a8 005d");
+    assert_eq!(row_text(l, 0xDB), "0027 003f 0027 003f - - ~00b4 - 0027 ~00b4");
+    assert_eq!(row_text(l, 0xDC), "00e4 00e0 00c4 00c0 - - 007b - 00e4 007b");
+    assert_eq!(row_text(l, 0xDD), "~005e ~0060 ~005e ~0060 - - ~007e - ~005e ~007e");
+    assert_eq!(row_text(l, 0xDE), "00f6 00e9 00d6 00c9 - - - - 00f6 -");
+    assert_eq!(row_text(l, 0xDF), "0024 00a3 0024 00a3 001c - 007d - 0024 007d");
+    assert_eq!(row_text(l, 0xE2), "003c 003e 003c 003e 001c - 005c - 003c 005c");
+    assert_eq!(row_text(l, 0x6E), "002e 002e 002e 002e - - - - 002e -");
+    // Caps Lock does not shift the digits; it does the letters.
+    assert_eq!(row_text(l, 0x31), "0031 002b 0031 002b - - 00a6 - 0031 00a6");
+    assert_eq!(row_text(l, 0x5A), "007a 005a 005a 007a 001a 001a - - 007a -");
+}
+
+#[test]
+fn swiss_german_types_the_address_bar_characters() {
+    // z y ü ä é @ (AltGr+2): the places of the keyboard (scan codes) through the layout.
+    let l = Layout::SwissGerman;
+    let vk = |scan| map_virtual_key_in(l, scan, MAPVK_VSC_TO_VK);
+    assert_eq!(vk(0x15), 0x5A); // the Z key's place is the one German calls Z
+    assert_eq!(vk(0x2C), 0x59);
+    assert_eq!(vk(0x1A), VK_OEM_1);
+    assert_eq!(vk(0x28), VK_OEM_5);
+    assert_eq!(vk(0x27), VK_OEM_7);
+    let mut dead = DeadState::default();
+    let mut buf = [0u16; 4];
+    let mut t = |vk: u32, m: u32| {
+        let r = to_unicode_in(l, vk, 0, &state(m), &mut buf, 0, &mut dead);
+        assert_eq!(r, 1, "vk {vk:#x}");
+        buf[0]
+    };
+    assert_eq!(t(vk(0x15), 0), 'z' as u16);
+    assert_eq!(t(vk(0x2C), 0), 'y' as u16);
+    assert_eq!(t(vk(0x1A), 0), 0xFC);
+    assert_eq!(t(vk(0x28), 0), 0xE4);
+    assert_eq!(t(vk(0x27), 1), 0xE9);
+    assert_eq!(t(0x32, 6), '@' as u16);
+}
+
+#[test]
+fn german_and_swiss_german_differ_as_the_sheet_says() {
+    let (de, ch) = (Layout::German, Layout::SwissGerman);
+    // Digits under Caps Lock.
+    assert_eq!(cell(de, 0x30, 8), "003d");
+    assert_eq!(cell(ch, 0x30, 8), "0030");
+    // The decimal key.
+    assert_eq!(cell(de, VK_DECIMAL, 0), "002c");
+    assert_eq!(cell(ch, VK_DECIMAL, 0), "002e");
+    // VK_OEM_PLUS has no key in Swiss German.
+    assert_eq!(map_virtual_key_in(ch, VK_OEM_PLUS, MAPVK_VK_TO_VSC), 0);
+    assert_eq!(map_virtual_key_in(de, VK_OEM_PLUS, MAPVK_VK_TO_VSC), 0x1B);
+    // AltGr+Q is @ in German, nothing in Swiss German.
+    assert_eq!(cell(de, 0x51, 6), "0040");
+    assert_eq!(cell(ch, 0x51, 6), "-");
+}
+
+#[test]
+fn dead_keys_of_the_new_layouts_combine() {
+    let l = Layout::SwissGerman;
+    let mut dead = DeadState::default();
+    let press = |vk: u32, m: u32, dead: &mut DeadState| {
+        let mut buf = [0u16; 4];
+        let r = to_unicode_in(l, vk, 0, &state(m), &mut buf, 0, dead);
+        (r, buf)
+    };
+    // Dead diaeresis, then u: ü.
+    assert_eq!(press(0xC0, 0, &mut dead).0, -1);
+    assert_eq!(press(0x55, 0, &mut dead), (1, [0xFC, 0, 0, 0]));
+    // Dead diaeresis, then n: the accent and n.
+    press(0xC0, 0, &mut dead);
+    assert_eq!(press(0x4E, 0, &mut dead), (2, [0xA8, 'n' as u16, 0, 0]));
+    // Dead tilde (AltGr+^), then n: ñ.
+    assert_eq!(press(0xDD, 6, &mut dead).0, -1);
+    assert_eq!(press(0x4E, 0, &mut dead), (1, [0xF1, 0, 0, 0]));
+    // A dead key, then Ctrl+a: U+0001 alone; then AltGr+a: nothing, and the accent is gone.
+    press(0xC0, 0, &mut dead);
+    assert_eq!(press(0x41, 2, &mut dead), (1, [1, 0, 0, 0]));
+    press(0xC0, 0, &mut dead);
+    assert_eq!(press(0x41, 6, &mut dead).0, 0);
+    assert_eq!(dead.pending(), None);
+    // The pending dead key stays through a modifier.
+    press(0xC0, 0, &mut dead);
+    assert_eq!(press(VK_SHIFT, 1, &mut dead).0, 0);
+    assert_eq!(dead.pending(), Some(0xA8));
+}
+
+#[test]
+fn vk_key_scan_per_the_sheet() {
+    let ex = |l, c: char| vk_key_scan_in(l, c as u16) as u16;
+    let (us, de, ch) = (Layout::Us, Layout::German, Layout::SwissGerman);
+    assert_eq!(ex(us, 'a'), 0x0041);
+    assert_eq!(ex(us, 'A'), 0x0141);
+    assert_eq!(ex(us, '"'), 0x01DE);
+    assert_eq!(ex(us, '\\'), 0x00DC);
+    assert_eq!(ex(us, '\u{1c}'), 0x02DC);
+    assert_eq!(ex(us, '\0'), 0x0332);
+    assert_eq!(ex(us, '\u{1e}'), 0x0336);
+    assert_eq!(ex(us, '\u{1f}'), 0x03BD);
+    assert_eq!(ex(us, '*'), 0x0138);
+    assert_eq!(ex(de, '@'), 0x0651);
+    assert_eq!(ex(de, '\u{20ac}'), 0x0645);
+    assert_eq!(ex(de, '^'), 0x00DC);
+    assert_eq!(ex(de, '/'), 0x0137);
+    assert_eq!(ex(de, '\u{3}'), 0x0003);
+    assert_eq!(ex(ch, '@'), 0x0632);
+    assert_eq!(ex(ch, '\u{c4}'), 0x00DC);
+    assert_eq!(ex(ch, '\u{e9}'), 0x01DE);
+    assert_eq!(vk_key_scan_in(us, 0x20AC), -1);
+    assert_eq!(vk_key_scan_in(us, 0xFC), -1);
+}
+
+#[test]
+fn us_control_characters_per_the_sheet() {
+    let us = Layout::Us;
+    assert_eq!(cell(us, VK_OEM_4, 2), "001b");
+    assert_eq!(cell(us, VK_OEM_6, 2), "001d");
+    assert_eq!(cell(us, VK_OEM_5, 2), "001c");
+    assert_eq!(cell(us, VK_OEM_102, 2), "001c");
+    assert_eq!(cell(us, 0x32, 3), "0000");
+    assert_eq!(cell(us, 0x36, 3), "001e");
+    assert_eq!(cell(us, VK_OEM_MINUS, 3), "001f");
+    assert_eq!(cell(us, VK_OEM_4, 3), "-");
+    assert_eq!(cell(us, 0x41, 6), "-");
 }

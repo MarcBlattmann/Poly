@@ -657,3 +657,59 @@ fn the_cursor_and_pointer_follow_the_same_conversion() {
     assert_ne!(fb.pixel(14, 14), Some(0x000000));
     assert_eq!(scene.logical_size(), (200, 133));
 }
+
+/// The arrow leaves nothing behind where it was: after it moves over a
+/// window, drawing only the damage gives the same picture as drawing
+/// everything (the owner's "pixels left behind the cursor", at 200%).
+#[test]
+fn the_arrow_leaves_no_pixels_behind_when_it_moves() {
+    for scale in ["1", "1.25", "1.5", "2", "3"] {
+        let s = Scale::parse(scale).unwrap();
+        let (w, h) = (80u32, 60u32);
+        let (pw, ph) = (s.px(w as i32) as u32, s.px(h as i32) as u32);
+        let mut scene = Scene::new(pw, ph, s);
+        window(&mut scene, 4, 4, 70, 50, 1, 0xff33_6699, false);
+        let mut fb = MemoryFramebuffer::new(pw, ph);
+        scene.render(&mut fb);
+        for (i, at) in [(10, 10), (13, 11), (30, 25), (31, 40), (5, 5), (60, 44)].into_iter().enumerate() {
+            scene.set_cursor(Some(at));
+            scene.render(&mut fb);
+            let mut full = MemoryFramebuffer::new(pw, ph);
+            scene.damage_all();
+            scene.render(&mut full);
+            for y in 0..ph {
+                for x in 0..pw {
+                    assert_eq!(fb.pixel(x, y), full.pixel(x, y), "scale {scale}, move {i} to {at:?}: pixel ({x}, {y})");
+                }
+            }
+        }
+    }
+}
+
+/// A scale-1 buffer at 200% (a Windows app's window): every buffer pixel is
+/// a 2x2 block, opaque rows and half-transparent rows alike, as blending
+/// each output pixel on its own gives.
+#[test]
+fn a_scale_one_buffer_doubles_at_two_hundred_percent() {
+    let mut scene = Scene::new(40, 30, 2);
+    let below = window(&mut scene, 0, 0, 20, 15, 1, 0xff00_8000, false);
+    let id = window(&mut scene, 2, 3, 6, 4, 1, 0xff11_2233, false);
+    {
+        let c = scene.content_mut(id).unwrap();
+        for (i, p) in c.pixels.iter_mut().enumerate() {
+            let (x, y) = (i % 6, i / 6);
+            *p = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | (x as u32 * 16) << 8 | y as u32 };
+        }
+    }
+    let _ = below;
+    let mut fb = MemoryFramebuffer::new(40, 30);
+    scene.render(&mut fb);
+    for py in 6..14u32 {
+        for px in 4..16u32 {
+            let (x, y) = ((px - 4) / 2, (py - 6) / 2);
+            let src = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | (x * 16) << 8 | y };
+            let want = over(src, 0xff00_8000) & 0x00ff_ffff;
+            assert_eq!(fb.pixel(px, py), Some(want), "({px}, {py})");
+        }
+    }
+}

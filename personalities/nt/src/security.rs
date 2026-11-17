@@ -54,6 +54,9 @@ pub fn install_process_token(
     thread: ThreadRef,
     creator: Option<u64>,
 ) -> Result<u64> {
+    // The token of a container belongs to the container: its own default descriptor, whoever
+    // made the process (ADR 0196).
+    let creator = if token.app_container.is_some() { None } else { creator };
     let (id, obj) = sys.objects.new_token(token, thread)?;
     sys.objects.assign_security(obj, ObjectType::Token, Some(creator.unwrap_or(id)), None);
     let r = sys.objects.set_process_token(pid, id);
@@ -705,6 +708,77 @@ pub fn filter_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
         let (_, obj) = sys.objects.new_token(new, caller.thread)?;
         sys.objects.assign_security(obj, ObjectType::Token, creator, None);
         let handle = open_exact(sys, &caller, obj, granted, 0);
+        let _ = sys.objects.dereference(obj);
+        sys.reap(b);
+        handle
+    })?;
+    return_handle(k, out, handle)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `NtCreateLowBoxToken(NewTokenHandle*, ExistingTokenHandle, DesiredAccess, ObjectAttributes*,
+/// PackageSid*, CapabilityCount, Capabilities*, HandleCount, Handles*)` (what
+/// `CreateAppContainerToken` calls, ADR 0196): a primary lowbox token from the existing one,
+/// which needs `TOKEN_DUPLICATE | TOKEN_QUERY` and, if it is an impersonation token, level 2 or
+/// more. The package SID is `S-1-15-2` with 8 sub-authorities; the capabilities (`SID_AND_ATTRIBUTES`
+/// array) are capability SIDs, each once. The system gives each package SID a number, the same
+/// every time. The last two arguments (the handles the container may use) are not read.
+pub fn create_lowbox_token<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [out, h, desired, oa, package, count, caps, _handle_count, _handles] = abi::args::<K, 9>(k, regs)?;
+    let caller = k.caller();
+    let src_id = token_of(k, h, token::TOKEN_DUPLICATE | token::TOKEN_QUERY)?;
+    let attrs = abi::read_attributes(k, oa)?;
+    if attrs.name.is_some() || attrs.root.is_some() {
+        return Err(STATUS_OBJECT_NAME_INVALID);
+    }
+    if package == 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let sid = Sid::from_bytes(&read_sid(k, package)?).ok_or(STATUS_INVALID_PARAMETER)?;
+    if !poly_security::appcontainer::is_package_sid(&sid) {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let count = count as u32 as usize;
+    if count > MAX_NEW_STATE || (count == 0) != (caps == 0) {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let mut capabilities: Vec<(Sid, u32)> = Vec::with_capacity(count);
+    for i in 0..count {
+        let mut e = [0u8; 16];
+        abi::read(k, caps + 16 * i as u64, &mut e)?;
+        let ptr = u64::from_le_bytes(e[0..8].try_into().expect("8 bytes"));
+        let attributes = u32::from_le_bytes(e[8..12].try_into().expect("4 bytes"));
+        if ptr == 0 {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let c = Sid::from_bytes(&read_sid(k, ptr)?).ok_or(STATUS_INVALID_PARAMETER)?;
+        if !poly_security::appcontainer::is_capability_sid(&c) || capabilities.iter().any(|(d, _)| *d == c) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        capabilities.push((c, attributes));
+    }
+    let src = copy_of(k, src_id)?;
+    if src.kind == token::TOKEN_IMPERSONATION && src.level < token::SECURITY_IMPERSONATION {
+        return Err(STATUS_BAD_IMPERSONATION_LEVEL);
+    }
+    let source_access =
+        k.with_state(|sys, _, _| sys.objects.granted_access(&caller, Handle(h)).unwrap_or(token::TOKEN_ALL_ACCESS));
+    let mapped = poly_ntobj::ObjectType::Token.generic_mapping().map(desired as u32);
+    let granted = if desired as u32 == 0 {
+        source_access & TOKEN_VALID
+    } else if mapped & MAXIMUM_ALLOWED != 0 {
+        token::TOKEN_ALL_ACCESS
+    } else {
+        mapped & TOKEN_VALID
+    };
+    let handle = k.with_state(|sys, _, b| {
+        let number = sys.lowbox_number(&sid);
+        let id = sys.objects.security.new_luid();
+        let new = src.lowbox(sid, number, capabilities, id).map_err(|e| e.nt())?;
+        // A container's token has the container's default descriptor (its own SID in it).
+        let (own, obj) = sys.objects.new_token(new, caller.thread)?;
+        sys.objects.assign_security(obj, ObjectType::Token, Some(own), attrs.security.as_deref());
+        let handle = open_exact(sys, &caller, obj, granted, attrs.attributes);
         let _ = sys.objects.dereference(obj);
         sys.reap(b);
         handle

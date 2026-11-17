@@ -79,8 +79,13 @@ cargo xtask start
 ```
 
 A menu opens. Press Enter to boot Poly's desktop with Chromium; the first
-start downloads about 230 MB once. More commands are in
-[docs/RUNNING.md](docs/RUNNING.md).
+start downloads about 230 MB once. To try a Windows program, choose
+*Desktop with Chrome for Windows* instead (or run `cargo xtask desktop --release --chrome-win`):
+Chrome for Testing (a download of about 210 MB, once) runs on the same desktop with its
+default settings, sandbox and GPU on. Press the Windows key, type `chrome`, press Enter, and
+its window opens on Google's page in under a minute. Type a URL to browse; bookmarks and
+history survive a restart. The very first start also builds Poly, which takes about 10 minutes.
+More commands are in [docs/RUNNING.md](docs/RUNNING.md).
 
 ## How far along is it?
 
@@ -90,7 +95,7 @@ start downloads about 230 MB once. More commands are in
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 112 of 171 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 1.2%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 1.3%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -116,7 +121,7 @@ start downloads about 230 MB once. More commands are in
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 1.2% | n/a | 0 / 0 |
+| Windows | 1.3% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -124,7 +129,7 @@ start downloads about 230 MB once. More commands are in
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,404 | 752 | 3,596 | 3,711 | 53,049 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,404 | 791 | 3,592 | 3,684 | 53,041 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 

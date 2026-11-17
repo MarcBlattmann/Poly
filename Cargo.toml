@@ -33,6 +33,7 @@ members = [
     "crates/poly-font",
     "crates/poly-gdi",
     "crates/poly-bochs-vbe",
+    "crates/poly-d3d",
     "crates/poly-gfx",
     "crates/poly-hda",
     "crates/poly-heap",
@@ -147,6 +148,7 @@ poly-font = { path = "crates/poly-font" }
 poly-gdi = { path = "crates/poly-gdi" }
 poly-bochs-vbe = { path = "crates/poly-bochs-vbe" }
 poly-gfx = { path = "crates/poly-gfx" }
+poly-d3d = { path = "crates/poly-d3d" }
 poly-hda = { path = "crates/poly-hda" }
 poly-heap = { path = "crates/poly-heap" }
 poly-http = { path = "crates/poly-http" }

@@ -114,6 +114,8 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::PolyTrace, &[V, V, V]),
     (Service::PolyResumeApc, &[]),
     (Service::PolyDebugPrint, &[P, V]),
+    (Service::PolyRandomBytes, &[P, V]),
+    (Service::PolyPhysicalMemory, &[P]),
     (Service::CreateKey, &[OH, V, OA, V, US, V, P]),
     (Service::OpenKey, &[OH, V, OA]),
     (Service::OpenKeyEx, &[OH, V, OA, V]),
@@ -142,6 +144,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::AdjustPrivilegesToken, &[H, V, P, V, P, P]),
     (Service::DuplicateToken, &[H, V, OA, V, V, OH]),
     (Service::FilterToken, &[H, V, P, P, P, OH]),
+    (Service::CreateLowBoxToken, &[OH, H, V, OA, P, V, X, V, X]),
     (Service::AdjustGroupsToken, &[H, V, P, V, P, P]),
     (Service::SetInformationToken, &[H, V, P, V]),
     (Service::CompareTokens, &[H, H, P]),
@@ -186,6 +189,8 @@ pub const WIN32K_SIGNATURES: &[(Win32kService, &[Arg])] = &[
     (Win32kService::Call, &[P, V, P, V, OS]),
     // PolyUserCommitSurface(hwnd, pixels, width, height, stride)
     (Win32kService::CommitSurface, &[V, P, V, V, V]),
+    // PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)
+    (Win32kService::CommitSurfaceArea, &[V, P, V, V, V, P]),
 ];
 
 /// The 32-bit signature of win32k service `service`.

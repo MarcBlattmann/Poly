@@ -1923,6 +1923,7 @@ fn set_bitmap_rows_converts_a_dib_into_a_bitmap_not_in_a_dc() {
         dib: true,
         colors: Vec::new(),
         storage: Storage::External(bytes.as_ptr() as u64, bytes.len()),
+        drawn: None,
     };
     assert_eq!(g.set_bitmap_rows(bm, &src, 0), Some(2));
     let (w, h, bgra) = g.bitmap_bgra(bm).unwrap();
@@ -1934,4 +1935,74 @@ fn set_bitmap_rows_converts_a_dib_into_a_bitmap_not_in_a_dc() {
     let dc = u64::from(g.create_compatible_dc(0));
     g.select_object(dc, bm).unwrap();
     assert_eq!(g.set_bitmap_rows(bm, &src, 0), None);
+}
+
+/// A copy between 32-bit DIBs of the same size takes whole rows (ADR 0219)
+/// and gives exactly what the pixel-by-pixel copy gives: only inside the
+/// clip region, only where the source has pixels.
+#[test]
+fn a_plain_32_bit_copy_matches_pixel_by_pixel_inside_the_clip() {
+    let mut g = Gdi::new();
+    let (w, h) = (12, 9);
+    let (src, mut sp) = dib32(&mut g, w, h);
+    for (i, p) in sp.iter_mut().enumerate() {
+        *p = 0xAB00_0000 | i as u32;
+    }
+    let (dst, mut dp) = dib32(&mut g, w, h);
+    dp.fill(0x1111_1111);
+    // An L-shaped clip: two rectangles.
+    let a = u64::from(g.create_rect_rgn(Rect::new(0, 0, 5, 9)).unwrap());
+    let b = u64::from(g.create_rect_rgn(Rect::new(0, 6, 12, 9)).unwrap());
+    g.combine_rgn(a, a, b, 2);
+    g.select_clip_rgn(dst, a);
+    // Partly outside the source: from (3, 2) of the source to (1, 1).
+    assert!(g.bit_blt(dst, 1, 1, 11, 8, src, 3, 2, 0x00CC_0020).0);
+    for y in 0..h {
+        for x in 0..w {
+            let inside = (x < 5 || y >= 6) && x >= 1 && y >= 1;
+            let (sx, sy) = (x + 2, y + 1);
+            let want = if inside && sx < w && sy < h { sp[(sy * w + sx) as usize] } else { 0x1111_1111 };
+            assert_eq!(dp[(y * w + x) as usize], want, "({x}, {y})");
+        }
+    }
+}
+
+/// Two DIBs over the same memory (a window's surface and its view below the
+/// menu bar): a copy one row down reads every row before it is overwritten.
+#[test]
+fn a_copy_within_the_same_memory_moves_rows_like_memmove() {
+    let mut g = Gdi::new();
+    let (w, h) = (4, 6);
+    let (dc, mut px) = dib32(&mut g, w, h);
+    for (i, p) in px.iter_mut().enumerate() {
+        *p = i as u32 / 4;
+    }
+    let other = u64::from(g.create_compatible_dc(0));
+    let view = g.create_dib(w, -h, 32, Vec::new(), px.as_ptr() as u64, px.len() * 4);
+    g.select_object(other, u64::from(view)).unwrap();
+    assert!(g.bit_blt(dc, 0, 1, w, h - 1, other, 0, 0, 0x00CC_0020).0);
+    let rows: Vec<u32> = px.chunks(4).map(|r| r[0]).collect();
+    assert_eq!(rows, [0, 0, 1, 2, 3, 4]);
+    assert!(g.bit_blt(dc, 0, 0, w, h - 1, other, 0, 1, 0x00CC_0020).0);
+    let rows: Vec<u32> = px.chunks(4).map(|r| r[0]).collect();
+    assert_eq!(rows, [0, 1, 2, 3, 4, 4]);
+}
+
+/// A bitmap knows the rectangle drawn on it since it was last asked: what
+/// a window's surface commits (ADR 0219).
+#[test]
+fn a_bitmap_remembers_the_rectangle_drawn_on_it() {
+    let mut g = Gdi::new();
+    let mem = vec![0u32; 20 * 10];
+    let dc = u64::from(g.create_compatible_dc(0));
+    let bm = u64::from(g.create_dib(20, -10, 32, Vec::new(), mem.as_ptr() as u64, mem.len() * 4));
+    g.select_object(dc, bm).unwrap();
+    assert_eq!(g.take_drawn(bm), None, "nothing drawn yet");
+    g.set_pixel(dc, 3, 4, 0x00FF_0000);
+    g.pat_blt(dc, 10, 1, 2, 2, 0x00F0_0021);
+    assert_eq!(g.take_drawn(bm), Some([3, 1, 12, 5]));
+    assert_eq!(g.take_drawn(bm), None, "taken");
+    let (src, _sp) = dib32(&mut g, 5, 5);
+    assert!(g.bit_blt(dc, 15, 5, 5, 5, src, 0, 0, 0x00CC_0020).0);
+    assert_eq!(g.take_drawn(bm), Some([15, 5, 20, 10]));
 }

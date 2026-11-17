@@ -15,6 +15,8 @@ cargo xtask start   # a menu of everything that boots: the desktop (with Chromiu
                     # (it remembers your choice: next time Enter runs it again; --last skips the menu)
 cargo xtask desktop --chromium # Poly's desktop with Chromium, the default browser (the menu's default; the first
                     # start downloads about 230 MB of Debian packages and makes a 1.3 GB disk image, kept after that)
+cargo xtask desktop --chrome-win # Poly's desktop with Chrome for Windows in the launcher (the menu's
+                    # "Desktop with Chrome for Windows"; see below)
 cargo xtask desktop # the desktop without Chromium, from a small initramfs (no test apps in the image or the launcher)
 cargo xtask desktop --test-apps # add the test apps: Poly Demo, Wayland Test Client, Demo Window, Poly Fill, Send Test Notification
 cargo xtask run     # boot the kernel in QEMU (Ctrl-A X to quit)
@@ -23,6 +25,28 @@ cargo xtask test    # host unit tests + boot tests in QEMU
 cargo xtask boot-tests --list   # the boot test groups; `boot-tests <group>` runs some
 cargo xtask ci      # everything CI checks (`ci lint`, `ci host-tests`, ...: one part)
 ```
+
+**Chrome for Windows** (ADR 0216): in the menu, *Desktop with Chrome for Windows* (or
+`cargo xtask desktop --chrome-win`; add `--release` for the fast kernel, which the menu
+does). It works the same from Git Bash, PowerShell and a Linux shell. The first start
+downloads Chrome for Testing (the pinned version, about 210 MB, shared by all checkouts of
+the repository) and writes a disk with Chrome under `C:\Program Files\Chrome`
+(`target/poly-chrome-try-disk.img`, about 3 minutes); then Poly's desktop opens in QEMU's
+window with network (QEMU's user networking), 4 GB and 4 CPUs (`--memory=`, `--cpus=`), on
+WHPX (Windows) or KVM (Linux) when the host has it. Press the Windows key or Ctrl+Space, pick
+**Chrome (Windows)** and wait about a minute for its window. Chrome's profile (bookmarks,
+history, logins) is on the disk, so it survives a reboot; only `--fresh-disk` (or a new Chrome
+version, which makes the disk again) starts it empty. The keyboard layout is the desktop's own
+(Settings, or the menu's; ADR 0209). Chrome starts with its **default settings**, as on
+Windows: its sandbox on and its GPU process on Poly's software Direct3D 11 device, with no
+"unsupported command-line flag" bar (only Chrome for Testing's own "for automated testing"
+bar). Its switches are in `chrometry::FLAGS`, which is empty (ADR 0216 addendum). How long it
+takes: the first start on a checkout that has never built anything spends about 10 minutes on
+the download and the builds (Win32 modules about 4 minutes, kernel about 2); later starts boot
+in seconds, and Chrome's window shows its new-tab page less than a minute after Enter in the
+launcher. `cargo xtask boot-tests chrome-try` (after `cargo xtask chrome-win fetch`; Linux or
+`polyd`) also starts it from the launcher. It checks that the page paints, that a typed URL
+loads and that the GPU process ran once, in its sandbox.
 
 **Installing a Linux app** (ADR 0173): on the desktop with Chromium, download a `.deb`
 from Debian 13's archive (for example from packages.debian.org) and click it in
