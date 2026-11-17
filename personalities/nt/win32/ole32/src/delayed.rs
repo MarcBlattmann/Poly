@@ -18,9 +18,7 @@ poly_win32_rt::fail_exports!(
         GetHGlobalFromStream,
         ReleaseStgMedium,
         RoGetAgileReference,
-        StgCreateDocfileOnILockBytes,
-        CoRegisterInitializeSpy,
-        CoRevokeInitializeSpy
+        StgCreateDocfileOnILockBytes
     ]
 );
 

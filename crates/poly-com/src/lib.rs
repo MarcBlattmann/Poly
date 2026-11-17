@@ -24,8 +24,12 @@
 
 extern crate alloc;
 
+pub mod activation;
 pub mod apartment;
+pub mod classtable;
 pub mod git;
+pub mod spy;
+pub mod wire;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
@@ -48,6 +52,16 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoGetObjectContext",
     "CoCreateInstance",
     "CoCreateInstanceEx",
+    // ADR 0220.
+    "CoRegisterClassObject",
+    "CoRevokeClassObject",
+    "CoResumeClassObjects",
+    "CoSuspendClassObjects",
+    "CoAddRefServerProcess",
+    "CoReleaseServerProcess",
+    "CoRegisterInitializeSpy",
+    "CoRevokeInitializeSpy",
+    "CoDisconnectObject",
     "RoGetActivationFactory",
     "RoActivateInstance",
     "CoCreateFreeThreadedMarshaler",
