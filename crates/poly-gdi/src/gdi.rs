@@ -614,10 +614,6 @@ enum BlitSrc<'a> {
     Bitmap(&'a Bitmap),
 }
 
-/// The source pixels of a blit, one per destination pixel: (colour, raw
-/// value, whether it is the source's background colour); `None` outside
-/// the source. With the source's format.
-
 /// [`Gdi::blit`]'s plain copy: source rectangle `s` onto destination `d` of the same size, both
 /// bitmaps 32 bits a pixel, inside `clip` and `reach`. False (nothing done) for other formats.
 fn copy32(b: &mut Bitmap, clip: &Region, reach: Rect, d: Rect, sb: &Bitmap, s: Rect) -> bool {
@@ -646,6 +642,9 @@ fn copy32(b: &mut Bitmap, clip: &Region, reach: Rect, d: Rect, sb: &Bitmap, s: R
     true
 }
 
+/// The source pixels of a blit, one per destination pixel: (colour, raw
+/// value, whether it is the source's background colour); `None` outside
+/// the source. With the source's format.
 struct Cells {
     px: Vec<Option<(Rgb, u32, bool)>>,
     bpp: u16,
