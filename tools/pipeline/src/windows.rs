@@ -1590,7 +1590,10 @@ mod tests {
         assert!(!serde_json::to_string(&f.system).unwrap().contains("session"));
         // A recording made with `poly-oracle.ps1 -Token standard` says so, and Poly is booted with that token.
         assert_eq!(f.system.token, None);
-        let standard = text.replace("\"arch\": \"AMD64\"", "\"arch\": \"AMD64\", \"session\": \"interactive\", \"token\": \"standard\"");
+        let standard = text.replace(
+            "\"arch\": \"AMD64\"",
+            "\"arch\": \"AMD64\", \"session\": \"interactive\", \"token\": \"standard\"",
+        );
         let h = RunFile::parse(standard.as_bytes()).unwrap();
         assert_eq!(h.system.token.as_deref(), Some("standard"));
         assert!(serde_json::to_string(&h.system).unwrap().contains("\"token\":\"standard\""));
