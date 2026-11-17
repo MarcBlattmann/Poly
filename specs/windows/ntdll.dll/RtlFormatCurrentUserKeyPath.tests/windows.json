@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "60f950d81b55",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:05:29Z",
+  "tests": [
+    {
+      "name": "ntreg_hkcu",
+      "exe_sha256": "1f280c5eb13e8ba25712c3aa23f6acf9779f3b9e2b28b26f75fcb586d4b4a27e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UnRsRm9ybWF0Q3VycmVudFVzZXJLZXlQYXRoOiBzdGF0dXMgMHgwMDAwMDAwMApsZW5ndGggaW4gYnl0ZXMgaXMgZXZlbiBhbmQgbm9uLXplcm86IHRydWU7IG1heGltdW0gbGVuZ3RoIGlzIGF0IGxlYXN0IGxlbmd0aCArIDI6IHRydWUKTlVMIHRlcm1pbmF0ZWQ6IHRydWUKc3RhcnRzIHdpdGggXFJlZ2lzdHJ5XFVzZXJcUy0xLTUtMjEtOiB0cnVlCmVuZHMgd2l0aCAtPGRpZ2l0cz4gKGEgcmVsYXRpdmUgaWQpOiB0cnVlCm5vIGJhY2tzbGFzaCBhZnRlciBcUmVnaXN0cnlcVXNlclw6IHRydWUKTnRPcGVuS2V5RXggb2YgdGhlIHBhdGg6IHN0YXR1cyAweDAwMDAwMDAwCk50T3BlbktleUV4IG9mIDxwYXRoPlxTb2Z0d2FyZTogc3RhdHVzIDB4MDAwMDAwMDAKTnRPcGVuS2V5RXggb2YgPHBhdGg+X0NsYXNzZXMgKHRoZSB1c2VyJ3MgY2xhc3NlcyBoaXZlKTogc3RhdHVzIDB4MDAwMDAwMDAKY3JlYXRlIEhLQ1VcU29mdHdhcmVcUG9seVNwZWNCNE50SGtjdSB3aXRoIHRoZSBXaW4zMiBBUEk6IDAKb3BlbiBpdCB0aHJvdWdoIHRoZSB1c2VyIHBhdGg6IHN0YXR1cyAweDAwMDAwMDAwCml0cyB2YWx1ZSBWIHRocm91Z2ggTnRRdWVyeVZhbHVlS2V5OiBzdGF0dXMgMHgwMDAwMDAwMCBkYXRhIDc3CmRlbGV0ZSBpdDogMHgwMDAwMDAwMAphZnRlciBSdGxGcmVlVW5pY29kZVN0cmluZyB0aGUgYnVmZmVyIHBvaW50ZXIgaXMgTlVMTCBhbmQgdGhlIGxlbmd0aHMgYXJlIDA6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RtlFormatCurrentUserKeyPath: status 0x00000000\nlength in bytes is even and non-zero: true; maximum length is at least length + 2: true\nNUL terminated: true\nstarts with \\Registry\\User\\S-1-5-21-: true\nends with -<digits> (a relative id): true\nno backslash after \\Registry\\User\\: true\nNtOpenKeyEx of the path: status 0x00000000\nNtOpenKeyEx of <path>\\Software: status 0x00000000\nNtOpenKeyEx of <path>_Classes (the user's classes hive): status 0x00000000\ncreate HKCU\\Software\\PolySpecB4NtHkcu with the Win32 API: 0\nopen it through the user path: status 0x00000000\nits value V through NtQueryValueKey: status 0x00000000 data 77\ndelete it: 0x00000000\nafter RtlFreeUnicodeString the buffer pointer is NULL and the lengths are 0: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

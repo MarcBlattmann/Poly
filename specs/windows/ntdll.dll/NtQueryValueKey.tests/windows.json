@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "60f950d81b55",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:05:29Z",
+  "tests": [
+    {
+      "name": "ntreg_query_buf",
+      "exe_sha256": "3bdccc4ad8195d0aae433051f56f5caff6af3477cf3aec561b2541e1765680b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIHRoZSB0ZXN0IGtleTogc3RhdHVzIDB4MDAwMDAwMDAgZGlzcG9zaXRpb24gMQpzZXQgVGV4dCAoUkVHX1NaICdhYmMnKTogMHgwMDAwMDAwMApzZXQgTnVtIChSRUdfRFdPUkQgNSk6IDB4MDAwMDAwMDAKc2V0IHRoZSBkZWZhdWx0IHZhbHVlIChSRUdfU1ogJ2QnKTogMHgwMDAwMDAwMApzZXQgQmluIChSRUdfQklOQVJZIDMgYnl0ZXMpOiAweDAwMDAwMDAwClRleHQsIFBhcnRpYWwsIGJ1ZmZlciAxMiAoaGVhZGVyIG9ubHkpOiBzdGF0dXMgMHg4MDAwMDAwNSByZXN1bHQgbGVuZ3RoIDIwIHwgdGl0bGUgMCB0eXBlIDEgZGF0YSBsZW5ndGggOCBkYXRhIGNjIGNjIGNjIGNjIGNjIGNjIGNjIGNjClRleHQsIFBhcnRpYWwsIGJ1ZmZlciAxNSAoaGVhZGVyICsgMyBvZiA4IGRhdGEgYnl0ZXMpOiBzdGF0dXMgMHg4MDAwMDAwNSByZXN1bHQgbGVuZ3RoIDIwIHwgdGl0bGUgMCB0eXBlIDEgZGF0YSBsZW5ndGggOCBkYXRhIDYxIDAwIDYyIGNjIGNjIGNjIGNjIGNjClRleHQsIFBhcnRpYWwsIGJ1ZmZlciAyMCAoZXhhY3QpOiBzdGF0dXMgMHgwMDAwMDAwMCByZXN1bHQgbGVuZ3RoIDIwIHwgdGl0bGUgMCB0eXBlIDEgZGF0YSBsZW5ndGggOCBkYXRhIDYxIDAwIDYyIDAwIDYzIDAwIDAwIDAwClRleHQsIFBhcnRpYWwsIGJ1ZmZlciAxMSAoc21hbGxlciB0aGFuIHRoZSBoZWFkZXIpOiBzdGF0dXMgMHhjMDAwMDAyMyByZXN1bHQgbGVuZ3RoIDIwClRleHQsIFBhcnRpYWwsIGJ1ZmZlciAwOiBzdGF0dXMgMHhjMDAwMDAyMyByZXN1bHQgbGVuZ3RoIDIwClRleHQsIEJhc2ljLCBidWZmZXIgMTI6IHN0YXR1cyAweDgwMDAwMDA1IHJlc3VsdCBsZW5ndGggMjAgfCB0aXRsZSAwIHR5cGUgMSBuYW1lIGxlbmd0aCA4IG5hbWUgJ8OMw4zDjMOMJwpUZXh0LCBCYXNpYywgYnVmZmVyIDE0OiBzdGF0dXMgMHg4MDAwMDAwNSByZXN1bHQgbGVuZ3RoIDIwIHwgdGl0bGUgMCB0eXBlIDEgbmFtZSBsZW5ndGggOCBuYW1lICdUw4zDjMOMJwpUZXh0LCBCYXNpYywgYnVmZmVyIDI0ICgxMiArIHRoZSA4IGJ5dGUgbmFtZSAnVGV4dCcpOiBzdGF0dXMgMHgwMDAwMDAwMCByZXN1bHQgbGVuZ3RoIDIwIHwgdGl0bGUgMCB0eXBlIDEgbmFtZSBsZW5ndGggOCBuYW1lICdUZXh0JwpUZXh0LCBGdWxsLCBidWZmZXIgMjA6IHN0YXR1cyAweDgwMDAwMDA1IHJlc3VsdCBsZW5ndGggNDAgfCB0aXRsZSAwIHR5cGUgMSBkYXRhIG9mZnNldCAzMiBkYXRhIGxlbmd0aCA4IG5hbWUgbGVuZ3RoIDgKYSB2YWx1ZSB0aGF0IGRvZXMgbm90IGV4aXN0OiBzdGF0dXMgMHhjMDAwMDAzNCByZXN1bHQgbGVuZ3RoIDQyOTQ5NjcyOTUKb3BlbiB3aXRoIEtFWV9TRVRfVkFMVUUgb25seTogMHgwMDAwMDAwMApxdWVyeSB0aHJvdWdoIGl0OiBzdGF0dXMgMHhjMDAwMDAyMiByZXN1bHQgbGVuZ3RoIDQyOTQ5NjcyOTUKZGVsZXRlIHRoZSB0ZXN0IGtleTogMHgwMDAwMDAwMAp0aGUga2V5IGFmdGVyIHRoZSBkZWxldGU6IDB4YzAwMDAwMzQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create the test key: status 0x00000000 disposition 1\nset Text (REG_SZ 'abc'): 0x00000000\nset Num (REG_DWORD 5): 0x00000000\nset the default value (REG_SZ 'd'): 0x00000000\nset Bin (REG_BINARY 3 bytes): 0x00000000\nText, Partial, buffer 12 (header only): status 0x80000005 result length 20 | title 0 type 1 data length 8 data cc cc cc cc cc cc cc cc\nText, Partial, buffer 15 (header + 3 of 8 data bytes): status 0x80000005 result length 20 | title 0 type 1 data length 8 data 61 00 62 cc cc cc cc cc\nText, Partial, buffer 20 (exact): status 0x00000000 result length 20 | title 0 type 1 data length 8 data 61 00 62 00 63 00 00 00\nText, Partial, buffer 11 (smaller than the header): status 0xc0000023 result length 20\nText, Partial, buffer 0: status 0xc0000023 result length 20\nText, Basic, buffer 12: status 0x80000005 result length 20 | title 0 type 1 name length 8 name 'ÌÌÌÌ'\nText, Basic, buffer 14: status 0x80000005 result length 20 | title 0 type 1 name length 8 name 'TÌÌÌ'\nText, Basic, buffer 24 (12 + the 8 byte name 'Text'): status 0x00000000 result length 20 | title 0 type 1 name length 8 name 'Text'\nText, Full, buffer 20: status 0x80000005 result length 40 | title 0 type 1 data offset 32 data length 8 name length 8\na value that does not exist: status 0xc0000034 result length 4294967295\nopen with KEY_SET_VALUE only: 0x00000000\nquery through it: status 0xc0000022 result length 4294967295\ndelete the test key: 0x00000000\nthe key after the delete: 0xc0000034\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}
