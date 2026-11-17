@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "sss_exit_codes",
+      "exe_sha256": "b55d5c67a968bca296970a16905a8254c2308a49200583f81900f4980c26bde5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFeGl0KTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCmFmdGVyOiB0eXBlPTB4MTAgc3RhdGU9U1RPUFBFRCBhY2NlcHRlZD0weDAgd2luMzI9MTA2NiBzcGVjaWZpYz00MiBjaGVja3BvaW50PTAgaGludD0wIGhhc19waWQ9MCBmbGFncz0wClF1ZXJ5U2VydmljZVN0YXR1czogd2luMzI9MTA2NiBzcGVjaWZpYz00MgpzdmM6IG1haW46IGFyZ2M9MSBhcmd2PVtQb2x5U3BlY1N2Y0V4aXRdCnN2YzogbWFpbjogaGFuZGxlciByZWdpc3RlcmVkPTEKc3ZjOiBtYWluOiByZXBvcnRpbmcgU1RPUFBFRCB3aXRoIGEgc2VydmljZS1zcGVjaWZpYyBlcnJvcgpDcmVhdGVTZXJ2aWNlVyhQb2x5U3BlY1N2Y0V4aXQyKTogb2sKZmFpbHVyZSBhY3Rpb25zICh0aHJlZSByZXN0YXJ0cyBhZnRlciAzMDAgbXMsIHRoZW4gbm9uZSk6IG9rClN0YXJ0U2VydmljZVc6IG9rClJVTk5JTkcgd2l0aGluIDUgczogMQpTVE9QUEVEIHdpdGhpbiA0IHMgKGV4aXQgY29kZSA1IHJlcG9ydGVkKTogMQpzdG9wcGVkOiB0eXBlPTB4MTAgc3RhdGU9U1RPUFBFRCBhY2NlcHRlZD0weDAgd2luMzI9NSBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAgaGFzX3BpZD0wIGZsYWdzPTAKMS4yIHMgbGF0ZXIsIGZsYWcgb2ZmOiB0eXBlPTB4MTAgc3RhdGU9U1RPUFBFRCBhY2NlcHRlZD0weDAgd2luMzI9NSBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAgaGFzX3BpZD0wIGZsYWdzPTAKc3RhcnRzIHNvIGZhciAoZmxhZyBvZmYpOiAxCmZhaWx1cmUgYWN0aW9ucyBmbGFnID0gMTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKc3RhcnRzIHdpdGhpbiAzLjIgcyAoZmxhZyBvbik6IDQKYXQgdGhlIGVuZDogdHlwZT0weDEwIHN0YXRlPVNUT1BQRUQgYWNjZXB0ZWQ9MHgwIHdpbjMyPTUgc3BlY2lmaWM9MCBjaGVja3BvaW50PTAgaGludD0wIGhhc19waWQ9MCBmbGFncz0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcExit): ok\nStartServiceW: ok\nSTOPPED within 5 s: 1\nafter: type=0x10 state=STOPPED accepted=0x0 win32=1066 specific=42 checkpoint=0 hint=0 has_pid=0 flags=0\nQueryServiceStatus: win32=1066 specific=42\nsvc: main: argc=1 argv=[PolySpecSvcExit]\nsvc: main: handler registered=1\nsvc: main: reporting STOPPED with a service-specific error\nCreateServiceW(PolySpecSvcExit2): ok\nfailure actions (three restarts after 300 ms, then none): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nSTOPPED within 4 s (exit code 5 reported): 1\nstopped: type=0x10 state=STOPPED accepted=0x0 win32=5 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\n1.2 s later, flag off: type=0x10 state=STOPPED accepted=0x0 win32=5 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nstarts so far (flag off): 1\nfailure actions flag = 1: ok\nStartServiceW: ok\nstarts within 3.2 s (flag on): 4\nat the end: type=0x10 state=STOPPED accepted=0x0 win32=5 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 6993
+    },
+    {
+      "name": "sss_outside",
+      "exe_sha256": "d77fd769750de27f4b02696020b054b0a59efcf5d923fe066b125be32d65afab",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0U2VydmljZVN0YXR1cyhOVUxMKTogZXJyIDYKUmVnaXN0ZXJTZXJ2aWNlQ3RybEhhbmRsZXJXIHJldHVybmVkIGEgaGFuZGxlOiAwClJlZ2lzdGVyU2VydmljZUN0cmxIYW5kbGVyRXhXIHJldHVybmVkIGEgaGFuZGxlOiAwClJlZ2lzdGVyU2VydmljZUN0cmxIYW5kbGVyVyhOVUxMLCBOVUxMKSByZXR1cm5lZCBhIGhhbmRsZTogMApSZWdpc3RlclNlcnZpY2VDdHJsSGFuZGxlckV4VyhOVUxMLCBOVUxMKSByZXR1cm5lZCBhIGhhbmRsZTogMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetServiceStatus(NULL): err 6\nRegisterServiceCtrlHandlerW returned a handle: 0\nRegisterServiceCtrlHandlerExW returned a handle: 0\nRegisterServiceCtrlHandlerW(NULL, NULL) returned a handle: 0\nRegisterServiceCtrlHandlerExW(NULL, NULL) returned a handle: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}
