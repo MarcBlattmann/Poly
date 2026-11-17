@@ -159,6 +159,8 @@ pub static DXGI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dxgi.dll"));
 pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"));
 /// `dcomp`: DirectComposition targets showing d3d11 swap chains (the S3 hunt, ADR 0155).
 pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
+/// `comlaunch.exe`: COM's activation process, started by `ole32` on demand (ADR 0220).
+pub static COMLAUNCH: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comlaunch.exe"));
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
