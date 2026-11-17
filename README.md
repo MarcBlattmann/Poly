@@ -11,9 +11,11 @@
 > [!NOTE]
 > **Poly is early.** It runs in a virtual machine (QEMU), not yet on real
 > hardware. Linux apps run today, including Chromium as the browser. Windows
-> apps are starting to run: Chrome for Windows opens web pages in its own
-> window (with its sandbox and GPU still switched off), and the command lines
-> of 7-Zip and Git for Windows work. For macOS only the groundwork exists.
+> apps are starting to run: Chrome for Windows browses the web in its own
+> window with its default settings (sandbox and GPU on), types on US, German,
+> Swiss German and French keyboards, and keeps bookmarks and history. The
+> command lines of 7-Zip and Git for Windows work too. For macOS only the
+> groundwork exists.
 
 ## What is Poly?
 
@@ -79,13 +81,35 @@ cargo xtask start
 ```
 
 A menu opens. Press Enter to boot Poly's desktop with Chromium; the first
-start downloads about 230 MB once. To try a Windows program, choose
-*Desktop with Chrome for Windows* instead (or run `cargo xtask desktop --release --chrome-win`):
-Chrome for Testing (a download of about 210 MB, once) runs on the same desktop with its
-default settings, sandbox and GPU on. Press the Windows key, type `chrome`, press Enter, and
-its window opens on Google's page in under a minute. Type a URL to browse; bookmarks and
-history survive a restart. The very first start also builds Poly, which takes about 10 minutes.
-More commands are in [docs/RUNNING.md](docs/RUNNING.md).
+start downloads about 230 MB once. The very first start also builds Poly,
+which takes about 10 minutes.
+
+To try a Windows program, choose *Desktop with Chrome for Windows* instead, or run:
+
+```sh
+cargo xtask desktop --release --chrome-win
+```
+
+Chrome for Testing (a download of about 210 MB, once) runs on the same desktop
+with its default settings. Press the Windows key, type `chrome`, press Enter,
+and its window opens on Google's page in under a minute. Type a URL to browse;
+bookmarks and history survive a restart. More commands are in
+[docs/RUNNING.md](docs/RUNNING.md).
+
+Chrome for Windows still has rough edges, being worked on now:
+
+- on a screen scaled to 200 % it looks pixelated, because it draws at half
+  resolution and the desktop stretches it;
+- it can flicker and leave pixels behind the mouse pointer, and it is slower
+  than Chromium on Poly;
+- downloads start but do not finish yet;
+- Chinese and Japanese text shows as boxes (no font for them yet).
+
+Next on the way: installing Google Chrome for Linux from its `.deb`, and
+installing Chrome for Windows with Google's own installer (double-click
+`ChromeSetup.exe`, approve the admin prompt, and it installs and updates
+itself as on Windows; see
+[docs/windows/chrome-installer-plan.md](docs/windows/chrome-installer-plan.md)).
 
 ## How far along is it?
 
