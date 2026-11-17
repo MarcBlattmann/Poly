@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c6172fba81f",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:48:35Z",
+  "tests": [
+    {
+      "name": "sl_ansi",
+      "exe_sha256": "3cb9f5da20e88b5638408e24528f94f9062ec53bbc38c0ae7af040e5755adfb2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIElTaGVsbExpbmtBOiBociAweDAKUXVlcnlJbnRlcmZhY2UgSVNoZWxsTGlua1cgZnJvbSBJU2hlbGxMaW5rQTogbm9uLW51bGwgdHJ1ZQpBIFNldFBhdGg6IGhyIDB4MApBIFNldEFyZ3VtZW50czogaHIgMHgwCkEgU2V0RGVzY3JpcHRpb246IGhyIDB4MApBIFNldFdvcmtpbmdEaXJlY3Rvcnk6IGhyIDB4MApBIFNldEljb25Mb2NhdGlvbjogaHIgMHgwClcgR2V0UGF0aDogaHIgMHgwIFtDOlxXaW5kb3dzXFN5c3RlbTMyXGtlcm5lbDMyLmRsbF0KVyBHZXRBcmd1bWVudHM6IGhyIDB4MCBsZW4gMzQgdGVybWluYXRlZCB0cnVlIHRleHQgWy0tc291cmNlLXNob3J0Y3V0LWxvY2F0aW9uPWRlc2t0b3BdClcgR2V0RGVzY3JpcHRpb246IGhyIDB4MCBsZW4gMTkgdGVybWluYXRlZCB0cnVlIHRleHQgW0FjY2VzcyB0aGUgSW50ZXJuZXRdClcgR2V0V29ya2luZ0RpcmVjdG9yeTogaHIgMHgwIGxlbiAxOSB0ZXJtaW5hdGVkIHRydWUgdGV4dCBbQzpcV2luZG93c1xTeXN0ZW0zMl0KVyBHZXRJY29uTG9jYXRpb246IGhyIDB4MCBbQzpcV2luZG93c1xTeXN0ZW0zMlxzaGVsbDMyLmRsbF0gaW5kZXggOQpBIEdldEFyZ3VtZW50cyBhZnRlciBhIFcgU2V0QXJndW1lbnRzOiBociAweDAgW2Zyb20gdGhlIHdpZGUgc2lkZV0KQSBHZXREZXNjcmlwdGlvbiBjY2ggMDogaHIgMHgwIFtdCkEgR2V0RGVzY3JpcHRpb24gY2NoIDE6IGhyIDB4MCBbXQpBIEdldERlc2NyaXB0aW9uIGNjaCA1OiBociAweDAgW0FjY2VdCkEgR2V0RGVzY3JpcHRpb24gY2NoIDE4OiBociAweDAgW0FjY2VzcyB0aGUgSW50ZXJuXQpBIEdldERlc2NyaXB0aW9uIGNjaCAxOTogaHIgMHgwIFtBY2Nlc3MgdGhlIEludGVybmVdCkEgR2V0RGVzY3JpcHRpb24gY2NoIDIwOiBociAweDAgW0FjY2VzcyB0aGUgSW50ZXJuZXRdCkEgR2V0RGVzY3JpcHRpb24gY2NoIDEwMDogaHIgMHgwIFtBY2Nlc3MgdGhlIEludGVybmV0XQpBIEdldFBhdGggd2l0aCBmaW5kIGRhdGE6IGhyIDB4MCBhdHRyaWJ1dGVzIDB4MjAgbmFtZSBhdCBvZmZzZXQgNDQgaXMga2VybmVsMzIuZGxsOiB0cnVlClNhdmUgZnJvbSB0aGUgQSB2aWV3OiBociAweDAgZXhpc3RzIHRydWUKdGhlIHNhdmVkIGZpbGUgaXMgVW5pY29kZTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create IShellLinkA: hr 0x0\nQueryInterface IShellLinkW from IShellLinkA: non-null true\nA SetPath: hr 0x0\nA SetArguments: hr 0x0\nA SetDescription: hr 0x0\nA SetWorkingDirectory: hr 0x0\nA SetIconLocation: hr 0x0\nW GetPath: hr 0x0 [C:\\Windows\\System32\\kernel32.dll]\nW GetArguments: hr 0x0 len 34 terminated true text [--source-shortcut-location=desktop]\nW GetDescription: hr 0x0 len 19 terminated true text [Access the Internet]\nW GetWorkingDirectory: hr 0x0 len 19 terminated true text [C:\\Windows\\System32]\nW GetIconLocation: hr 0x0 [C:\\Windows\\System32\\shell32.dll] index 9\nA GetArguments after a W SetArguments: hr 0x0 [from the wide side]\nA GetDescription cch 0: hr 0x0 []\nA GetDescription cch 1: hr 0x0 []\nA GetDescription cch 5: hr 0x0 [Acce]\nA GetDescription cch 18: hr 0x0 [Access the Intern]\nA GetDescription cch 19: hr 0x0 [Access the Interne]\nA GetDescription cch 20: hr 0x0 [Access the Internet]\nA GetDescription cch 100: hr 0x0 [Access the Internet]\nA GetPath with find data: hr 0x0 attributes 0x20 name at offset 44 is kernel32.dll: true\nSave from the A view: hr 0x0 exists true\nthe saved file is Unicode: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 101
+    },
+    {
+      "name": "sl_mta",
+      "exe_sha256": "d3bc2affbd4a8f87dd25fdd9554fb4a85968c62a23c91588c79bbd88fa98d865",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXggTVRBOiBociAweDAKY3JlYXRlIGluIHRoZSBNVEE6IGhyIDB4MCBub24tbnVsbCB0cnVlClNldFBhdGg6IGhyIDB4MApTZXRBcmd1bWVudHM6IGhyIDB4MApHZXRQYXRoOiBociAweDAgW0M6XFdpbmRvd3NcU3lzdGVtMzJca2VybmVsMzIuZGxsXQpHZXRBcmd1bWVudHM6IGhyIDB4MCBsZW4gMyB0ZXJtaW5hdGVkIHRydWUgdGV4dCBbeCB5XQpRdWVyeUludGVyZmFjZSBJUGVyc2lzdEZpbGU6IGhyIDB4MApTYXZlIGZyb20gdGhlIE1UQTogaHIgMHgwIGV4aXN0cyB0cnVlClNUQSB0aHJlYWQ6IENvSW5pdGlhbGl6ZUV4IFNfT0sgMSBjcmVhdGUgb2sgMSBTZXRBcmd1bWVudHMgb2sgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx MTA: hr 0x0\ncreate in the MTA: hr 0x0 non-null true\nSetPath: hr 0x0\nSetArguments: hr 0x0\nGetPath: hr 0x0 [C:\\Windows\\System32\\kernel32.dll]\nGetArguments: hr 0x0 len 3 terminated true text [x y]\nQueryInterface IPersistFile: hr 0x0\nSave from the MTA: hr 0x0 exists true\nSTA thread: CoInitializeEx S_OK 1 create ok 1 SetArguments ok 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 85
+    }
+  ]
+}

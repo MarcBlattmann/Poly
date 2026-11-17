@@ -37,6 +37,10 @@
       "description": "Microsoft Learn and the public SDK headers shobjidl_core.h, shellapi.h, shlobj_core.h, fileapi.h, winbase.h: the COM interfaces and methods Chrome's download path uses in shell32.dll, comdlg32.dll (entries named Interface.Method) and the kernel32.dll functions beside them",
       "revision": "Windows SDK 10.0.26100.0"
     },
+    "ms-learn-shell-link": {
+      "description": "Microsoft Learn and the public SDK headers shobjidl_core.h, shlobj_core.h, propsys.h, propvarutil.h, objidl.h and the Microsoft format specification MS-SHLLINK: shell links (CLSID_ShellLink, IShellLinkW/A, IPersistFile, IPropertyStore on a link, the .lnk file) as Chrome's setup.exe uses them; entries named Interface or Class.Interface (spec-win-chrome-setup, docs/windows/chrome-installer-plan.md)",
+      "revision": "Windows 11 25H2 build 26200.9974"
+    },
     "ms-learn-systemtemp": {
       "description": "Microsoft Learn file system and temporary file reference: the C:\\Windows\\SystemTemp directory that installers extract into, observed by the spec agents (spec-win-elevation); entries named by directory",
       "revision": "Windows 11 25H2 build 26200.9974"
