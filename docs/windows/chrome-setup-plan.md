@@ -106,12 +106,11 @@ recorded on the oracle (every test ran twice with identical output, per-test tok
 |---|---|
 | Shell links (5) | `shell32.dll/ShellLink` 2/1, `IShellLinkW` 3/2, `ShellLink.IPersistFile` 4/2, `ShellLink.PropertyStore` 1/1, `propsys.dll/InitPropVariantFromCLSID` 1/1 |
 | Folders, shell, associations (5) | `shell32.dll/KnownFolders.Common` 2/1, `SHChangeNotify` 1/1, `SHCreateAssociationRegistration` 1/1, `ShellDispatch.ShellExecute` 2/1, `shlwapi.dll/AssocQueryStringW` 2/1 |
-| Event log, hives, version, natives (14) | `advapi32.dll/RegisterEventSourceA` 1/1, `ReportEventA` 1/1, `EventLogSourceRegistration` 1/1, `RegLoadKeyW` 2/1, `RegUnLoadKeyW` 2/1, `RegSaveKeyW` 2/1, `RegEnumValueA` 1/1, `version.dll/GetFileVersionInfoSizeW`, `GetFileVersionInfoW`, `VerQueryValueW` 1/1 each, `ntdll.dll/NtOpenKeyEx`, `NtQueryValueKey`, `NtDeleteKey`, `RtlFormatCurrentUserKeyPath` 1/1 each |
+| Event log, hives, version, natives, firewall (15) | `advapi32.dll/RegisterEventSourceA` 1/1, `ReportEventA` 1/1, `EventLogSourceRegistration` 1/1, `RegLoadKeyW` 2/1, `RegUnLoadKeyW` 2/1, `RegSaveKeyW` 2/1, `RegEnumValueA` 1/1, `version.dll/GetFileVersionInfoSizeW`, `GetFileVersionInfoW`, `VerQueryValueW` 1/1 each, `ntdll.dll/NtOpenKeyEx`, `NtQueryValueKey`, `NtDeleteKey`, `RtlFormatCurrentUserKeyPath` 1/1 each, `hnetcfg.dll/NetFwPolicy2` (policy, rules, rule objects; adding a rule needs the full token, the filtered token gets `E_ACCESSDENIED`, which Chrome's setup tolerates; a table that enforces nothing is enough) 3/1 |
 | Files and processes (11) | `kernel32.dll/CopyFileW` 2/1, `MoveFileExW.DelayUntilReboot` 2/1, `CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW`, `GetShortPathNameW`, `GetLongPathNameW`, `ReadDirectoryChangesW`, `GetProcessHandleCount`, `K32GetProcessMemoryInfo`, `GetThreadLocale` 1/1 each |
 | Tokens and strings (8) | `advapi32.dll/CreateProcessWithTokenW` 3/1, `userenv.dll/CreateEnvironmentBlock` 2/1, `DestroyEnvironmentBlock` 2/1, `shell32.dll/CommandLineToArgvW` 2/1, `shlwapi.dll/UrlCanonicalizeW` 2/1, `IsOS` 1/1, `winhttp.dll/WinHttpSetOption`, `WinHttpSetStatusCallback` 1/1 each |
 
-Total: 43 entries, 63 visible and 45 held-out tests. Not specified (and why): the firewall COM API, see section 6;
-Active Setup (no API); `K32GetModuleInformation`, thread priority boost, `QueryThreadCycleTime`, `HeapLock/Unlock/Walk`,
+Total: 44 entries, 66 visible and 46 held-out tests. Not specified (and why): Active Setup (no API); `K32GetModuleInformation`, thread priority boost, `QueryThreadCycleTime`, `HeapLock/Unlock/Walk`,
 `GetThreadContext` (diagnostic code, not on the install path); `ncrypt`/`tbs`/`CreateURLMonikerEx` (not on the
 `--system-level` path: the log shows no key-attestation or TPM step).
 
