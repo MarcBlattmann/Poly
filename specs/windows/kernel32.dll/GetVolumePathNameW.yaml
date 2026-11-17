@@ -12,6 +12,8 @@ summary: >
   The root of the volume that holds a path. The path need not exist; relative paths resolve against the current directory's volume; prefixes are kept.
 interface:
   signature: "BOOL GetVolumePathNameW(LPCWSTR lpszFileName, LPWSTR lpszVolumePathName, DWORD cchBufferLength)"
+chrome:
+  call: "Chrome for Testing 157.0.8103.38, browser process, once per download (spec-chrome-dl): GetVolumePathNameW(<the download folder, an existing folder>, buf, 260) = TRUE, then GetVolumeInformationW on the root it gave. The call leaves the last error at ERROR_MORE_DATA (234)."
 rules:
   drive_paths: "\"C:\\Windows\\System32\\notepad.exe\", \"C:\\no\\such\\dir\\file.txt\", \"C:\", \"C:\\\", \"C:/Windows/System32\", \"C:\\Windows\\..\\Windows\", \"C:\\a b\\c\" and \"C:file\" all give \"C:\\\" (the drive letter keeps the case given: \"c:\\windows\" gives \"c:\\\")."
   prefixes: "\"\\\\?\\C:\\Windows\" gives \"\\\\?\\C:\\\"; \"\\\\.\\C:\\Windows\" gives \"\\\\.\\C:\\\"; \"NUL\" gives \"\\\\.\\NUL\\\"."
@@ -19,6 +21,7 @@ rules:
   failures: "\"\" and \"\\\\server\\share\\dir\\file\" (no such server), \"\\\\?\\UNC\\server\\share\\dir\" and a \\\\?\\Volume{...} name of no volume: FALSE, ERROR_INVALID_NAME (123); \"Z:\\x\" (no such drive): FALSE, ERROR_FILE_NOT_FOUND (2); a NULL name: FALSE, ERROR_INVALID_PARAMETER (87)."
   buffer: "the buffer must hold the root and its NUL: for \"C:\\Windows\\System32\": 0 units: FALSE, 87; 1 and 2 units: FALSE, ERROR_FILENAME_EXCED_RANGE (206) with the first unit set to 0; 3 units: TRUE with \"C:\" and a NUL (no backslash); 4: \"C:\\\"."
   long_path: "a 319-unit path gives \"C:\\\"."
+  last_error_after_success: "a successful call leaves the last error at ERROR_MORE_DATA (234) in the cases seen (an existing folder and a path in a folder that is not there; observed by the tests of kernel32.dll/GetVolumeInformationW, gvi_calls); callers do not look at it, but a program that clears the last error before the call sees 234 afterwards."
 errors:
   invalid_name: "123"
   no_such_drive: "2"
