@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "acc_actions_b",
+      "exe_sha256": "d601b8c19ec1f797127da0d0c5994621c2af9b21b118fdb303ede7e06b7b9194",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpkZWZhdWx0IENvbnRleHQ6IGhyPTB4MDAwMDAwMDAgPG51bGw+CkNyZWF0ZSgxKTogaHI9MHg4MDA3MDA1NyBubyBhY3Rpb24KQ3JlYXRlKDQpOiBocj0weDgwMDcwMDU3IG5vIGFjdGlvbgpDcmVhdGUoNyk6IGhyPTB4MDAwMDAwMDAgdHlwZSByZXBvcnRlZD03IElFeGVjQWN0aW9uPTAgaWQ9PG51bGw+Ckl0ZW0oMCk6IGhyPTB4ODAwNzAwNTcgdHlwZT0tOTkKSXRlbSg1KTogaHI9MHg4MDAwNDAwNSB0eXBlPS05OQpSZW1vdmUoMCk6IGhyPTB4ODAwNzAwNTcKZGVmYXVsdCBQYXRoOiBocj0weDAwMDAwMDAwIDxudWxsPgpQYXRoID0gIkM6XFxXaW5kb3dzXFxTeXN0ZW0zMlxcY21kLmV4ZSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW0M6XFdpbmRvd3NcU3lzdGVtMzJcY21kLmV4ZV0KUGF0aCA9ICJjbWQuZXhlIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbY21kLmV4ZV0KUGF0aCA9ICIgIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbIF0KQXJndW1lbnRzID0gIi0td2FrZSAtLXN5c3RlbSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgWy0td2FrZSAtLXN5c3RlbV0KQXJndW1lbnRzID0gIiUxICUyIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbJTEgJTJdCldvcmtpbmdEaXJlY3RvcnkgPSAiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbXQpJZCA9ICJpZCBvbmUiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtpZCBvbmVdCkFyZ3VtZW50cyA9ICIvYyBleGl0IDAiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFsvYyBleGl0IDBdCnhtbCB3aXRoIENvbnRleHQgPSBMb2NhbFN5c3RlbTogPEFjdGlvbnMgQ29udGV4dD0iTG9jYWxTeXN0ZW0iPjwwMDBkPiA8RXhlYz48MDAwZD4gPENvbW1hbmQ+QzpcV2luZG93c1xTeXN0ZW0zMlxjbWQuZXhlPC9Db21tYW5kPjwwMDBkPiA8QXJndW1lbnRzPi9jIGV4aXQgMDwvQXJndW1lbnRzPjwwMDBkPiA8V29ya2luZ0RpcmVjdG9yeT5yZWxhdGl2ZTwvV29ya2luZ0RpcmVjdG9yeT48MDAwZD4gPC9FeGVjPjwwMDBkPiA8RXhlYz48MDAwZD4gPENvbW1hbmQ+c2Vjb25kLmV4ZTwvQ29tbWFuZD48MDAwZD4gPC9FeGVjPjwwMDBkPiA8RXhlYz48MDAwZD4gPENvbW1hbmQ+dGhpcmQuZXhlPC9Db21tYW5kPjwwMDBkPiA8L0V4ZWM+PDAwMGQ+IAp0eXBlIDY6IGhyPTB4MDAwMDAwMDAgeG1sOiA8QWN0aW9ucyBDb250ZXh0PSJBdXRob3IiPjwwMDBkPiA8U2VuZEVtYWlsPjwwMDBkPiA8SGVhZGVyRmllbGRzIC8+PDAwMGQ+IDxBdHRhY2htZW50cyAvPjwwMDBkPiA8L1NlbmRFbWFpbD48MDAwZD4gCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\ndefault Context: hr=0x00000000 <null>\nCreate(1): hr=0x80070057 no action\nCreate(4): hr=0x80070057 no action\nCreate(7): hr=0x00000000 type reported=7 IExecAction=0 id=<null>\nItem(0): hr=0x80070057 type=-99\nItem(5): hr=0x80004005 type=-99\nRemove(0): hr=0x80070057\ndefault Path: hr=0x00000000 <null>\nPath = \"C:\\\\Windows\\\\System32\\\\cmd.exe\": put hr=0x00000000 reads back [C:\\Windows\\System32\\cmd.exe]\nPath = \"cmd.exe\": put hr=0x00000000 reads back [cmd.exe]\nPath = \" \": put hr=0x00000000 reads back [ ]\nArguments = \"--wake --system\": put hr=0x00000000 reads back [--wake --system]\nArguments = \"%1 %2\": put hr=0x00000000 reads back [%1 %2]\nWorkingDirectory = \"\": put hr=0x00000000 reads back []\nId = \"id one\": put hr=0x00000000 reads back [id one]\nArguments = \"/c exit 0\": put hr=0x00000000 reads back [/c exit 0]\nxml with Context = LocalSystem: <Actions Context=\"LocalSystem\"><000d> <Exec><000d> <Command>C:\\Windows\\System32\\cmd.exe</Command><000d> <Arguments>/c exit 0</Arguments><000d> <WorkingDirectory>relative</WorkingDirectory><000d> </Exec><000d> <Exec><000d> <Command>second.exe</Command><000d> </Exec><000d> <Exec><000d> <Command>third.exe</Command><000d> </Exec><000d> \ntype 6: hr=0x00000000 xml: <Actions Context=\"Author\"><000d> <SendEmail><000d> <HeaderFields /><000d> <Attachments /><000d> </SendEmail><000d> \nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "acc_actions_c",
+      "exe_sha256": "f0da05394e39c5111cc63559f74cdeb14f30d59a6cac443f386c7d91d93e9894",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpDcmVhdGUoLTEpOiBocj0weDgwMDcwMDU3IG5vIGFjdGlvbgpDcmVhdGUoMik6IGhyPTB4ODAwNzAwNTcgbm8gYWN0aW9uCkNyZWF0ZSg1KTogaHI9MHgwMDAwMDAwMCB0eXBlIHJlcG9ydGVkPTUgSUV4ZWNBY3Rpb249MCBpZD08bnVsbD4KQ3JlYXRlKDgpOiBocj0weDgwMDcwMDU3IG5vIGFjdGlvbgpJdGVtKDEpOiBocj0weDAwMDAwMDAwIHR5cGU9MApJdGVtKC0xKTogaHI9MHg4MDA3MDA1NyB0eXBlPS05OQpSZW1vdmUoOTkpOiBocj0weDgwMDcwMDU3CmRlZmF1bHQgQXJndW1lbnRzOiBocj0weDAwMDAwMDAwIDxudWxsPgpQYXRoID0gIlwiQzpcXFByb2dyYW0gRmlsZXMgKHg4NilcXEdvb2dsZVxcR29vZ2xlVXBkYXRlclxcMTU5LjAuODE0MC4wXFx1cGRhdGVyLmV4ZVwiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbIkM6XFByb2dyYW0gRmlsZXMgKHg4NilcR29vZ2xlXEdvb2dsZVVwZGF0ZXJcMTU5LjAuODE0MC4wXHVwZGF0ZXIuZXhlIl0KUGF0aCA9ICJDOlxcTm9TdWNoXFxNaXNzaW5nLmV4ZSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW0M6XE5vU3VjaFxNaXNzaW5nLmV4ZV0KUGF0aCA9ICJhXCJiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbYSJiXQpBcmd1bWVudHMgPSAiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbXQpXb3JraW5nRGlyZWN0b3J5ID0gIkM6XFxXaW5kb3dzIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbQzpcV2luZG93c10KV29ya2luZ0RpcmVjdG9yeSA9ICJyZWxhdGl2ZSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW3JlbGF0aXZlXQpJZCA9ICIiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtdCnhtbCB3aXRoIG9uZSBhY3Rpb246IDxBY3Rpb25zPjwwMDBkPiA8RXhlYz48MDAwZD4gPENvbW1hbmQ+QzpcV2luZG93c1xTeXN0ZW0zMlxjbWQuZXhlPC9Db21tYW5kPjwwMDBkPiA8QXJndW1lbnRzPi9jIGV4aXQgMDwvQXJndW1lbnRzPjwwMDBkPiA8V29ya2luZ0RpcmVjdG9yeT5yZWxhdGl2ZTwvV29ya2luZ0RpcmVjdG9yeT48MDAwZD4gPC9FeGVjPjwwMDBkPiAKQ29udGV4dCA9IE5vU3VjaFByaW5jaXBhbDogaHI9MHgwMDAwMDAwMAp0eXBlIDc6IGhyPTB4MDAwMDAwMDAgeG1sOiA8QWN0aW9ucyBDb250ZXh0PSJBdXRob3IiPjwwMDBkPiA8U2hvd01lc3NhZ2UgLz48MDAwZD4gCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nCreate(-1): hr=0x80070057 no action\nCreate(2): hr=0x80070057 no action\nCreate(5): hr=0x00000000 type reported=5 IExecAction=0 id=<null>\nCreate(8): hr=0x80070057 no action\nItem(1): hr=0x00000000 type=0\nItem(-1): hr=0x80070057 type=-99\nRemove(99): hr=0x80070057\ndefault Arguments: hr=0x00000000 <null>\nPath = \"\\\"C:\\\\Program Files (x86)\\\\Google\\\\GoogleUpdater\\\\159.0.8140.0\\\\updater.exe\\\"\": put hr=0x00000000 reads back [\"C:\\Program Files (x86)\\Google\\GoogleUpdater\\159.0.8140.0\\updater.exe\"]\nPath = \"C:\\\\NoSuch\\\\Missing.exe\": put hr=0x00000000 reads back [C:\\NoSuch\\Missing.exe]\nPath = \"a\\\"b\": put hr=0x00000000 reads back [a\"b]\nArguments = \"\": put hr=0x00000000 reads back []\nWorkingDirectory = \"C:\\\\Windows\": put hr=0x00000000 reads back [C:\\Windows]\nWorkingDirectory = \"relative\": put hr=0x00000000 reads back [relative]\nId = \"\": put hr=0x00000000 reads back []\nxml with one action: <Actions><000d> <Exec><000d> <Command>C:\\Windows\\System32\\cmd.exe</Command><000d> <Arguments>/c exit 0</Arguments><000d> <WorkingDirectory>relative</WorkingDirectory><000d> </Exec><000d> \nContext = NoSuchPrincipal: hr=0x00000000\ntype 7: hr=0x00000000 xml: <Actions Context=\"Author\"><000d> <ShowMessage /><000d> \nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    }
+  ]
+}
