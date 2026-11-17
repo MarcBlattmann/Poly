@@ -150,7 +150,7 @@ survives without its scheduled task or without `CoInitializeSecurity` specifics;
    (ADR 0171: today every process has `Token::poly_user()`, the elevated administrator's token): an administrator gets a
    **split token**, a filtered standard token plus a linked elevated token. The observable behaviour is specified by
    `specs/windows/advapi32.dll/UacStandardToken.yaml`, `UacElevatedToken.yaml`, `ObjectIntegrityLabel.yaml`,
-   `kernel32.dll/CreateProcessElevation.yaml`, `shell32.dll/{IsUserAnAdmin,ShellExecuteExW,ShellExecuteW,ShellExecuteA}.yaml`
+   `kernel32.dll/CreateProcessElevation.yaml`, `shell32.dll/{IsUserAnAdmin,ShellExecuteExW.Elevation,ShellExecuteW,ShellExecuteA}.yaml`
    (spec track `spec-win-elevation`; recorded on the oracle with the filtered and with the full token, `poly-oracle.ps1 -Token
    standard|elevated`, docs/AGENT_PIPELINE.md). What the consent dialog looks like is Poly's own design.
 2. **Auto-update is on from the start.** Google's updater services and task stay (2 services + 1 task per version).
