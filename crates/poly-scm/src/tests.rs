@@ -251,6 +251,8 @@ fn the_30_second_rule() {
     e.scm.start(&e.c(ME), h, vec![], 11).unwrap();
     let mut pid = 600;
     e.host(&mut pid);
+    // Once its process is made, the host waits no longer than the start deadline.
+    assert_eq!(e.scm.next_wake(e.now), Some(START_TIMEOUT_MS));
     e.now += START_TIMEOUT_MS;
     let fx = e.host(&mut pid);
     assert_eq!(fx, vec![Effect::Terminate(604)]);

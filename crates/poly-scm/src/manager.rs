@@ -991,17 +991,23 @@ impl Scm {
                 service_sid: matches!(s.config.sid_type, Some(1 | 3)),
             });
         }
-        let next = self
-            .services
+        let next = self.next_wake(c.now);
+        fx.retain(|e| *e != Effect::WakeHost);
+        (spawns, next, fx)
+    }
+
+    /// How long the host may wait (milliseconds from `now`) before something is due: a start
+    /// deadline or a restart. `None`: until it is woken. Asked again after the host started the
+    /// processes [`Scm::host_work`] returned (their deadlines begin then).
+    pub fn next_wake(&self, now: u64) -> Option<u64> {
+        self.services
             .values()
             .filter_map(|s| match s.phase {
                 Phase::Connect if !s.timed_out => s.deadline,
                 _ => s.restart_at,
             })
             .min()
-            .map(|t| t.saturating_sub(c.now));
-        fx.retain(|e| *e != Effect::WakeHost);
-        (spawns, next, fx)
+            .map(|t| t.saturating_sub(now))
     }
 
     /// The host started (`Ok(pid)`) or could not start (`Err(win32)`) the process of service

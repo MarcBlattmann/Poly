@@ -1638,9 +1638,6 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if host_needed {
         start_service_host();
     }
-    if DBG_HOST.load(core::sync::atomic::Ordering::SeqCst) == pid {
-        crate::kprintln!("scm-dbg: services.exe p{pid} ended {:?}", take_exit_status(pid));
-    }
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
@@ -1652,8 +1649,6 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     sched::drain_wakes();
     registry::flush();
 }
-
-static DBG_HOST: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 
 /// `services.exe` is being started (ADR 0221): one start at a time.
 static HOST_STARTING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -1675,12 +1670,14 @@ pub fn start_service_host() {
 
 fn services_main(_: usize) -> usize {
     let path = alloc::format!("{}/Windows/System32/services.exe", layout::C_PATH);
-    match crate::program::exec_path(path.as_bytes(), &[path.as_bytes()], &[], false) {
-        Ok(p) => {
-            watch_exit_status(p.pid);
-            DBG_HOST.store(p.pid, core::sync::atomic::Ordering::SeqCst);
-            crate::kprintln!("nt: services.exe started (p{})", p.pid)
-        }
+    let started = crate::program::prepare(path.as_bytes(), &[path.as_bytes()], &[], false).and_then(|p| {
+        // The manager accepts this process, and only it, as its host.
+        let pid = p.process().pid;
+        with(|s| poly_personality_nt::scm::expect_host(&mut s.sys, ProcessId(pid)));
+        p.start()
+    });
+    match started {
+        Ok(p) => crate::kprintln!("nt: services.exe started (p{})", p.pid),
         Err(e) => crate::kprintln!("nt: services.exe could not start: {e}"),
     }
     HOST_STARTING.store(false, core::sync::atomic::Ordering::SeqCst);

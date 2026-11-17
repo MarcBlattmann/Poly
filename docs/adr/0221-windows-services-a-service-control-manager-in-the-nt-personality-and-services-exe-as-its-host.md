@@ -60,8 +60,10 @@ is that process: the kernel starts it from a kernel thread when the manager firs
 at the first NT use when the registry holds auto-start services). It loops on
 `PolyServiceCall(HOST)`, which starts the processes that are due **in its own call** (so their
 creator is `services.exe`), ends the ones past their deadline, and returns its event and how long
-it may wait. On its first call it becomes LocalSystem; only `System32\services.exe` run by an
-administrator or SYSTEM, while no other host lives, may become the host.
+it may wait. On its first call it becomes LocalSystem. Only the process the kernel started as
+`services.exe` (it tells the manager the process id before its first thread runs), and only while
+no other host lives, may become the host. A service process is made suspended and resumed once
+the manager knows its id, so its dispatcher can never connect before the manager expects it.
 
 ### What a service process is
 

@@ -57,6 +57,8 @@ pub struct ScmState {
     loaded: bool,
     /// The kernel was asked to start the host and it has not called in yet.
     host_requested: bool,
+    /// The process the kernel started as `services.exe`.
+    expected_host: Option<u32>,
 }
 
 impl ScmState {
@@ -166,7 +168,9 @@ pub fn service_call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
         return Err(STATUS_INVALID_PARAMETER);
     }
     let mut input = alloc::vec![0u8; in_len as usize];
-    abi::read(k, in_at, &mut input)?;
+    if in_len != 0 {
+        abi::read(k, in_at, &mut input)?;
+    }
     let mut after = After::default();
     let reply = match operation as u32 {
         op::HOST => host(k, &mut after)?,
@@ -481,29 +485,17 @@ fn call(
     out
 }
 
-/// May the calling process be the host? It has to be `System32\services.exe`, run by an
-/// administrator or SYSTEM, and there must be no other host.
-fn may_host(sys: &NtSystem, caller: &Caller, image: &[u16]) -> bool {
-    let name: alloc::string::String =
-        char::decode_utf16(image.iter().copied()).map(|c| c.unwrap_or('?').to_ascii_lowercase()).collect();
-    if !name.ends_with("\\windows\\system32\\services.exe") {
-        return false;
-    }
-    let admin = sys
-        .objects
-        .security
-        .effective(caller.process, caller.thread)
-        .and_then(|id| sys.objects.security.token(id))
-        .is_some_and(|t| {
-            t.user == poly_security::sid::local_system()
-                || t.groups.iter().any(|(s, a)| {
-                    *s == poly_security::sid::builtin(poly_security::sid::rid::DOMAIN_ALIAS_RID_ADMINS)
-                        && a & poly_security::token::SE_GROUP_ENABLED != 0
-                        && a & poly_security::token::SE_GROUP_USE_FOR_DENY_ONLY == 0
-                })
-        });
+/// May the calling process be the host? Only the process the kernel started as
+/// `services.exe` ([`expect_host`]), and only while no other host lives.
+fn may_host(sys: &NtSystem, caller: &Caller) -> bool {
     let other = sys.scm.scm.host_pid().is_some_and(|p| p != caller.process.0);
-    admin && !other
+    sys.scm.expected_host == Some(caller.process.0) && !other
+}
+
+/// The kernel made process `pid` to run `services.exe` (before its first thread runs): it may
+/// become the host.
+pub fn expect_host(sys: &mut NtSystem, pid: ProcessId) {
+    sys.scm.expected_host = Some(pid.0);
 }
 
 /// `services.exe`'s turn ([`OP_HOST`]): it becomes the host (LocalSystem, the first time), starts
@@ -513,16 +505,14 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
     let pid = caller.process.0;
     let now = ms(k);
     let ft = k.system_time();
-    let host = k.with_state(|sys, proc, _| -> Result<Option<(u64, u64)>> {
+    let host = k.with_state(|sys, _, _| -> Result<Option<(u64, u64)>> {
         ScmState::ready(sys, ft);
         if let Some((p, id, h)) = sys.scm.host_handle
             && p == pid
         {
             return Ok(Some((id, h)));
         }
-        let image = proc.image_name.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
-        let _dbg = alloc::string::String::from_utf16_lossy(&image);
-        if !may_host(sys, &caller, &image) {
+        if !may_host(sys, &caller) {
             return Ok(None);
         }
         // The host is LocalSystem in session 0 (SERVICES.md section 4).
@@ -539,9 +529,8 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
         sys.scm.host_requested = false;
         Ok(Some((id, eh.0)))
     })?;
-    k.debug_print(alloc::format!("scm-dbg: host call from p{pid}: {:?}", host).as_bytes());
     let Some((event_id, handle)) = host else { return Ok(err(ERROR_ACCESS_DENIED)) };
-    let (spawns, wait, fx) = k.with_state(|sys, _, _| {
+    let (spawns, _, fx) = k.with_state(|sys, _, _| {
         let c = poly_scm::Caller { pid, token: None, now };
         let r = sys.scm.scm.host_work(&c, Some(event_id));
         sys.scm.scm.sync(&mut sys.registry.reg, ft);
@@ -549,23 +538,29 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
     });
     k.with_state(|sys, _, _| apply(sys, fx, after));
     for s in spawns {
-        let result = spawn(k, &s);
-        k.debug_print(alloc::format!("scm-dbg: spawn {:?}", result).as_bytes());
+        // The process is made suspended: the manager knows its id before it can connect.
+        let made = spawn(k, &s);
         let now = ms(k);
         k.with_state(|sys, _, _| {
-            let fx = sys.scm.scm.spawned(&s.name, result, now);
+            let fx = sys.scm.scm.spawned(&s.name, made.map(|(pid, _)| pid), now);
             apply(sys, fx, after);
             sys.scm.scm.sync(&mut sys.registry.reg, ft);
         });
+        if let Ok((_, thread)) = made {
+            let _ = k.resume_thread(thread);
+        }
     }
+    // The processes just started have their deadlines now.
+    let now = ms(k);
+    let wait = k.with_state(|sys, _, _| sys.scm.scm.next_wake(now));
     let mut w = Writer::new();
     w.u64(handle).u64(wait.unwrap_or(u64::MAX));
     Ok(ok(w))
 }
 
-/// Start the process of a service from the host's call: `Ok(pid)` or a Win32 error (2 for a
-/// program that is not there).
-fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<u32, u32> {
+/// Make the process of a service from the host's call, suspended: its id and first thread, or a
+/// Win32 error (2 for a program that is not there).
+fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<(u32, poly_ntobj::ThreadRef), u32> {
     use crate::io::consts::*;
     let processors = k.processor_count();
     let caller = k.caller();
@@ -613,7 +608,7 @@ fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<u32, u32> {
         process_access: poly_ntobj::access::PROCESS_ALL_ACCESS,
         thread_access: poly_ntobj::access::THREAD_ALL_ACCESS,
         inherit_handles: false,
-        suspended: false,
+        suspended: true,
         token: Some(token_id),
         inherit_only: None,
         jobs: Vec::new(),
@@ -632,7 +627,7 @@ fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<u32, u32> {
             let _ = sys.objects.close(&caller, c.thread);
         }
     });
-    created.map(|c| c.client.process.0).map_err(|e| match e.0 {
+    created.map(|c| (c.client.process.0, c.client.thread)).map_err(|e| match e.0 {
         0xC000_009A => ERROR_INVALID_PARAMETER,
         _ => not_found(e),
     })
@@ -658,4 +653,51 @@ pub fn process_ended(sys: &mut NtSystem, pid: ProcessId, now_ms: u64, now_ft: u6
 /// host when the NT personality comes up.
 pub fn wants_host_at_boot(sys: &mut NtSystem) -> bool {
     poly_scm::manager::autostart_in_registry(&sys.registry.reg) && sys.scm.host_handle.is_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::services::Service;
+    use crate::tests::{Fake, PID};
+    use poly_ntobj::status::{STATUS_BUFFER_TOO_SMALL, STATUS_SUCCESS};
+    use poly_scm::wire::{Writer, op};
+
+    /// Send `req` as `operation`: the status and the reply's error code.
+    fn send(f: &mut Fake, operation: u32, req: &Writer) -> (poly_ntobj::NtStatus, u32, u64) {
+        let (inp, out, ret) = (f.alloc(req.0.len().max(8)), f.alloc(256), f.alloc(8));
+        f.mem.write_bytes(inp, &req.0).unwrap();
+        let in_at = if req.0.is_empty() { 0 } else { inp };
+        let st = f.call(Service::PolyServiceCall, &[u64::from(operation), in_at, req.0.len() as u64, out, 256, ret]);
+        (st, f.u32_at(out), out)
+    }
+
+    #[test]
+    fn programs_reach_the_manager_through_one_call() {
+        let mut f = Fake::new();
+        let mut w = Writer::new();
+        w.u32(poly_scm::consts::SC_MANAGER_ALL_ACCESS);
+        let (st, e, out) = send(&mut f, op::OPEN_MANAGER, &w);
+        assert_eq!((st, e), (STATUS_SUCCESS, 0));
+        assert_ne!(f.u64_at(out + 4), 0);
+        // A reply that does not fit gives its size.
+        let ret = f.alloc(8);
+        let st = f.call(Service::PolyServiceCall, &[u64::from(op::OPEN_MANAGER), out, 4, out, 2, ret]);
+        assert_eq!((st, f.u32_at(ret)), (STATUS_BUFFER_TOO_SMALL, 12));
+    }
+
+    #[test]
+    fn only_the_process_the_kernel_started_becomes_the_host() {
+        let mut f = Fake::new();
+        // An empty request at address 0 is fine (services.exe sends one).
+        let (st, e, _) = send(&mut f, op::HOST, &Writer::new());
+        assert_eq!((st, e), (STATUS_SUCCESS, poly_scm::consts::ERROR_ACCESS_DENIED));
+        super::expect_host(&mut f.sys, PID);
+        let (st, e, out) = send(&mut f, op::HOST, &Writer::new());
+        assert_eq!((st, e), (STATUS_SUCCESS, 0));
+        assert_ne!(f.u64_at(out + 4), 0, "the host's event handle");
+        assert_eq!(f.u64_at(out + 12), u64::MAX, "nothing is due");
+        // It is LocalSystem now.
+        let id = f.sys.objects.security.process_token(PID).unwrap();
+        assert_eq!(f.sys.objects.security.token(id).unwrap().user, poly_security::sid::local_system());
+    }
 }
