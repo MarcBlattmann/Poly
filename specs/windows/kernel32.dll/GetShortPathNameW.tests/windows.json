@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6fd7dced7969",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:53:37Z",
+  "tests": [
+    {
+      "name": "gp_short_api",
+      "exe_sha256": "12a15284fc80c961a51b77edbc8a59f82014f00b525843d6e5705c074ff40922",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFrZSB0aGUgZGlyZWN0b3J5OiB0cnVlCmJ1ZmZlciBsZW5ndGggMDogcmV0dXJucyB0aGUgbmVlZGVkIHNpemUgaW5jbHVkaW5nIHRoZSBOVUwgKHRydWUpLCBidWZmZXIgdW50b3VjaGVkIHRydWUKYnVmZmVyIG9uZSB1bml0IHRvbyBzbWFsbDogcmV0dXJucyB0aGUgbmVlZGVkIHNpemUgaW5jbHVkaW5nIHRoZSBOVUwgKHRydWUpLCBsYXN0IGVycm9yIC0yCmV4YWN0IGJ1ZmZlcjogcmV0dXJucyB0aGUgbGVuZ3RoIHdpdGhvdXQgdGhlIE5VTCAodHJ1ZSksIE5VTCB3cml0dGVuIHRydWUKYSBmaWxlIHRoYXQgZG9lcyBub3QgZXhpc3Q6IHJlc3VsdCAwLCBsYXN0IGVycm9yIDIKYSBkaXJlY3RvcnkgdGhhdCBkb2VzIG5vdCBleGlzdDogcmVzdWx0IDAsIGxhc3QgZXJyb3IgMwphbiBlbXB0eSBwYXRoOiByZXN1bHQgMCwgbGFzdCBlcnJvciAzCk5VTEwgc291cmNlOiByZXN1bHQgMCwgbGFzdCBlcnJvciA4Nwpzb3VyY2UgYW5kIGRlc3RpbmF0aW9uIHRoZSBzYW1lIGJ1ZmZlcjogcmVzdWx0IHRydWUsIHRoZSBidWZmZXIgaG9sZHMgdGhlIHNob3J0IHBhdGg6IDxzY3JhdGNoPkdQX0xPTn4xXEFMT05HRn4xLlRFWApmb3J3YXJkIHNsYXNoZXM6IHRoZSByZXN1bHQgaXMgc2hvcnRlciB0aGFuIHRoZSBpbnB1dCAodGhlIHBhcnRzIHdlcmUgc2hvcnRlbmVkKTogdHJ1ZQpmb3J3YXJkIHNsYXNoZXM6IHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yOyB0aGUgcmVzdWx0IGhhcyBiYWNrc2xhc2hlcyBmYWxzZSBhbmQgZm9yd2FyZCBzbGFzaGVzIHRydWUKd2l0aCB0aGUgXFw/XCBwcmVmaXg6IHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yOyB0aGUgcmVzdWx0IHN0YXJ0cyB3aXRoIHRoZSBwcmVmaXggdHJ1ZTsgaXQgaXMgc2hvcnQgPHNjcmF0Y2g+R1BfTE9OfjFcQUxPTkdGfjEuVEVYCmEgcGF0aCB3aXRoIGEgLi4gY29tcG9uZW50OiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMjsgPHNjcmF0Y2g+R1BfTE9OfjFcLi5cZ3AudHh0CmEgcmVsYXRpdmUgcGF0aDogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIsIHRoZSBhbnN3ZXIgR1BfTE9OfjFcQUxPTkdGfjEuVEVYCmNsZWFuOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "make the directory: true\nbuffer length 0: returns the needed size including the NUL (true), buffer untouched true\nbuffer one unit too small: returns the needed size including the NUL (true), last error -2\nexact buffer: returns the length without the NUL (true), NUL written true\na file that does not exist: result 0, last error 2\na directory that does not exist: result 0, last error 3\nan empty path: result 0, last error 3\nNULL source: result 0, last error 87\nsource and destination the same buffer: result true, the buffer holds the short path: <scratch>GP_LON~1\\ALONGF~1.TEX\nforward slashes: the result is shorter than the input (the parts were shortened): true\nforward slashes: result true, last error -2; the result has backslashes false and forward slashes true\nwith the \\\\?\\ prefix: result true, last error -2; the result starts with the prefix true; it is short <scratch>GP_LON~1\\ALONGF~1.TEX\na path with a .. component: result true, last error -2; <scratch>GP_LON~1\\..\\gp.txt\na relative path: result true, last error -2, the answer GP_LON~1\\ALONGF~1.TEX\nclean: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}
