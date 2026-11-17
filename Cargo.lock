@@ -534,6 +534,14 @@ name = "poly-sched"
 version = "0.0.1"
 
 [[package]]
+name = "poly-scm"
+version = "0.0.1"
+dependencies = [
+ "poly-registry",
+ "poly-security",
+]
+
+[[package]]
 name = "poly-security"
 version = "0.0.1"
 dependencies = [
