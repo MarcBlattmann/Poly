@@ -212,11 +212,34 @@ fn nul(v: &[u16]) -> Vec<u16> {
     o
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetWindowThreadProcessId(hwnd: usize, pid: *mut u32) -> u32;
+}
+
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetCurrentProcessId() -> u32;
+}
+
+/// The owner Poly's dialog gets: the caller's window if it is one of this process's; a window of
+/// another process (Chrome shows the dialog from a utility process, owned by the browser's
+/// window) is left out, so the dialog does not wait on that process.
+fn own_owner(owner: usize) -> usize {
+    let mut pid = 0u32;
+    // SAFETY: a window handle query and a local.
+    let same = unsafe { GetWindowThreadProcessId(owner, &mut pid) != 0 && pid == GetCurrentProcessId() };
+    if same { owner } else { 0 }
+}
+
 /// `IModalWindow::Show(hwndOwner)`: Poly's file dialog with the object's settings; the chosen
 /// path is kept for `GetResult`. Cancel: `HRESULT_FROM_WIN32(ERROR_CANCELLED)`.
 unsafe extern "system" fn show(p: *mut c_void, owner: usize) -> Hresult {
     // SAFETY: our object.
     let s = unsafe { state(p) };
+    poly_win32_rt::unimplemented_export_error("comdlg32: the Save dialog of IFileSaveDialog is shown", 0, 0);
     let fallback = documents();
     let folder = nul(s.start_folder(&fallback));
     let filter = s.filter();
@@ -229,7 +252,7 @@ unsafe extern "system" fn show(p: *mut c_void, owner: usize) -> Hresult {
     }
     let mut ofn = Ofn {
         size: core::mem::size_of::<Ofn>() as u32,
-        owner,
+        owner: own_owner(owner),
         instance: 0,
         filter: filter.as_ref().map_or(core::ptr::null(), |f| f.as_ptr()),
         custom_filter: core::ptr::null_mut(),
@@ -255,10 +278,16 @@ unsafe extern "system" fn show(p: *mut c_void, owner: usize) -> Hresult {
     // A complete OPENFILENAMEW whose buffers live until the dialog returns.
     let ok = crate::file::run((&mut ofn as *mut Ofn).cast(), true);
     if ok == 0 {
+        let line = alloc::format!(
+            "comdlg32: the Save dialog of IFileSaveDialog was cancelled (error {:#x})",
+            crate::CommDlgExtendedError()
+        );
+        poly_win32_rt::unimplemented_export_error(&line, 0, 0);
         s.result = None;
         return st::CANCELLED as i32;
     }
     let n = file.iter().position(|&c| c == 0).unwrap_or(FILE_BUFFER);
+    poly_win32_rt::unimplemented_export_error("comdlg32: the Save dialog of IFileSaveDialog was answered", 0, 0);
     s.result = Some(file[..n].to_vec());
     if s.types.is_some() {
         s.type_index = ofn.filter_index;

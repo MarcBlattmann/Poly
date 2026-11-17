@@ -142,6 +142,11 @@ fn w(s: &str) -> Vec<u16> {
 /// its folder in Files (`show` true): win32k's link carries the request to the compositor
 /// (`Request::ShellOpen`, ADR 0223). The Win32 error when it cannot (50: no desktop).
 pub fn desktop_request(path: &[u16], show: bool) -> Result<(), u32> {
+    poly_win32_rt::unimplemented_export_error(
+        if show { "shell32: asks the desktop to show a file in Files" } else { "shell32: asks the desktop to open a file" },
+        0,
+        0,
+    );
     let name = nul(path);
     // SAFETY: a NUL-terminated name; the handle is only read by win32k and closed here.
     let h = unsafe {
