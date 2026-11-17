@@ -283,6 +283,27 @@ fn check(token: Option<&Token>, sd: &[u8], desired: u32, mapping: &GenericMappin
 /// to).
 pub const SERVICES_PATH: &str = "SYSTEM\\ControlSet001\\Services";
 
+/// Whether the registry holds a service to start at boot (`Start` 2, not a driver, not marked
+/// for deletion, not one the manager provides itself), without changing anything.
+pub fn autostart_in_registry(reg: &Registry) -> bool {
+    let Some(key) = reg.find(reg.machine(), SERVICES_PATH) else { return false };
+    let mut index = 0;
+    while let Ok(sub) = reg.subkey_at(key, index) {
+        index += 1;
+        let Ok(k) = reg.key(sub) else { continue };
+        let values: Vec<_> = k.values().iter().map(|v| (v.name.clone(), v.kind, v.data.clone())).collect();
+        let builtin = BUILTIN.iter().any(|b| eq_fold(&w(b.0), k.name()));
+        if let Some(c) = Config::from_values(k.name(), &values)
+            && c.start == SERVICE_AUTO_START
+            && !c.delete_flag
+            && !builtin
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// The `Services` key, made if needed.
 fn services_key(reg: &mut Registry, now: u64) -> Option<KeyId> {
     let mut cur = reg.machine();

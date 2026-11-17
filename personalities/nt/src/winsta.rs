@@ -89,6 +89,27 @@ impl WinSta {
         Start { spec: spec.unwrap_or_default(), station, desktop }
     }
 
+    /// What a service process starts with (ADR 0221): the window station of its account's
+    /// services (`Service-0x0-3e7$` for LocalSystem) and its `Default` desktop, made when first
+    /// needed and kept, open to SYSTEM and Administrators, not visible (SERVICES.md section 4).
+    pub fn service_start(&mut self, objects: &mut poly_ntobj::ObjectManager, station: &[u16], thread: ThreadRef) -> Start {
+        const SERVICE_STATION_SDDL: &str = "O:SYG:SYD:(A;;GA;;;SY)(A;;GA;;;BA)";
+        let sd = poly_security::sdstr::parse(&wide(SERVICE_STATION_SDDL)).ok();
+        let st = match self.registry.station_by_name(station) {
+            Some(s) => Some(s.object),
+            // The creation reference stays: the station is kept for good.
+            None => self.new_station(objects, None, thread, station, sd.as_deref()),
+        };
+        let desk = st.and_then(|s| match self.registry.desktop_by_name(s, &wide(DEFAULT_DESKTOP)) {
+            Some(d) => Some(d.object),
+            None => self.new_desktop(objects, None, thread, s, &wide(DEFAULT_DESKTOP), sd.as_deref()),
+        });
+        for id in st.iter().chain(desk.iter()) {
+            let _ = objects.reference(*id);
+        }
+        Start { spec: Vec::new(), station: st, desktop: desk }
+    }
+
     /// The kernel made process `pid` with `start`.
     pub fn begin(&mut self, pid: ProcessId, start: Start) {
         self.procs.entry(pid).or_default().start = Some(start);

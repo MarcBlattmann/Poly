@@ -164,6 +164,9 @@ pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcrun
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
 /// Poly's own `msvcp140.dll` (ADR 0199): its first names, the rest fail-only.
 pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.dll"));
+/// Poly's `services.exe`, the host of the service control manager (ADR 0221), installed in
+/// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
+pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -759,6 +762,10 @@ fn make_state(slot: &mut Option<NtState>) {
     layout::prepare(&mut state.sys);
     // File I/O: the VFS's volumes and drive letters (ADR 0067).
     io::attach(&mut state.sys);
+    // The services that start at boot, once the state is there (ADR 0221).
+    if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
+        let _ = thread::detach(tid);
+    }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
         let display = if TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed) {
             poly_win32k::metrics::Display::INTERACTIVE_BOTTOM
@@ -1029,6 +1036,10 @@ impl NtKernel for Kernel {
     fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
         crate::random::fill(buf);
         true
+    }
+
+    fn start_service_host(&mut self) {
+        start_service_host();
     }
 
     fn system_time(&self) -> u64 {
@@ -1598,7 +1609,7 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
     }
-    with(|s| {
+    let host_needed = with(|s| {
         if let Some(created) = s.created.remove(&ProcessId(pid)) {
             let cpu = used;
             const KEEP: usize = 4096;
@@ -1620,7 +1631,13 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
         }
         // Its registry notifications go too (ADR 0066).
         s.sys.registry.process_ended(ProcessId(pid), &mut s.sys.objects);
+        // Its service handles close, and a service it ran stops (ADR 0221).
+        let now_ms = crate::time::now_ns() / 1_000_000;
+        poly_personality_nt::scm::process_ended(&mut s.sys, ProcessId(pid), now_ms, registry::filetime_now())
     });
+    if host_needed {
+        start_service_host();
+    }
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
@@ -1631,6 +1648,43 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
+}
+
+/// `services.exe` is being started (ADR 0221): one start at a time.
+static HOST_STARTING: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Start `C:\Windows\System32\services.exe`, the host of the service control manager (ADR 0221),
+/// from a kernel thread of its own (the caller may hold the NT state).
+pub fn start_service_host() {
+    use core::sync::atomic::Ordering::SeqCst;
+    if HOST_STARTING.swap(true, SeqCst) {
+        return;
+    }
+    match thread::spawn_named("nt-services", services_main, 0) {
+        Ok(tid) => {
+            let _ = thread::detach(tid);
+        }
+        Err(_) => HOST_STARTING.store(false, SeqCst),
+    }
+}
+
+fn services_main(_: usize) -> usize {
+    let path = alloc::format!("{}/Windows/System32/services.exe", layout::C_PATH);
+    match crate::program::exec_path(path.as_bytes(), &[path.as_bytes()], &[], false) {
+        Ok(p) => crate::kprintln!("nt: services.exe started (p{})", p.pid),
+        Err(e) => crate::kprintln!("nt: services.exe could not start: {e}"),
+    }
+    HOST_STARTING.store(false, core::sync::atomic::Ordering::SeqCst);
+    0
+}
+
+/// At the first NT use: start the service host when the registry has services to start at boot
+/// (ADR 0221: the auto-start services start with the Windows world).
+fn boot_services(_: usize) -> usize {
+    if with(|s| poly_personality_nt::scm::wants_host_at_boot(&mut s.sys)) {
+        start_service_host();
+    }
+    0
 }
 
 /// A page fault the memory map could not resolve, in NT process `pid`: a
