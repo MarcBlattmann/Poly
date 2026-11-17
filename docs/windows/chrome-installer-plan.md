@@ -105,7 +105,7 @@ All function lists are from the survey; the coverage map has an entry for each n
 
 | Batch | Content | Entries (approx.) | Size | Unlocks |
 |---|---|---|---|---|
-| **B0 The installer starts** | `shell32!IsUserAnAdmin` (TRUE: the process token is elevated), `ShellExecuteExW/W/A` (verbs `open`, `runas` = a plain launch with the same token; `SEE_MASK_NOCLOSEPROCESS`), `C:\Windows\SystemTemp` in the layout and what `GetTempPath` returns for an elevated process, opening a volume (`\\.\C:`, and `\??\C:` as a volume), `GetDriveTypeW`, `SetProcessWorkingSetSize`, `K32QueryWorkingSetEx`, `WTSGetActiveConsoleSessionId`, `WTSEnumerateSessionsW`, `QueryFullProcessImageNameW`, `GetTimeFormatW`/`GetDateFormatW`/`EnumSystemLocalesW` and their `...Ex`/`LCIDToLocaleName`/`LocaleNameToLCID` kernelbase forms, `GetUserPreferredUILanguages`, `WinHttpSetOption`, `CoGetCallContext`, `CoIncrementMTAUsage`, `oleaut32 #161 #184 #424`. Plus, for the integrator, not an entry: **a 32-bit fail stub must pop its arguments** (today it ends the process, so one missing function ends a 32-bit installer) | ~25 | M | both installers extract and start the updater |
+| **B0 The installer starts** | `shell32!IsUserAnAdmin` (FALSE in an ordinary process, TRUE after a consent: decision 1), `ShellExecuteExW/W/A` (verb `open` = the caller's token; `runas` from a non-elevated caller = the consent dialog; `SEE_MASK_NOCLOSEPROCESS`), `C:\Windows\SystemTemp` in the layout and what `GetTempPath` returns for an elevated process, opening a volume (`\\.\C:`, and `\??\C:` as a volume), `GetDriveTypeW`, `SetProcessWorkingSetSize`, `K32QueryWorkingSetEx`, `WTSGetActiveConsoleSessionId`, `WTSEnumerateSessionsW`, `QueryFullProcessImageNameW`, `GetTimeFormatW`/`GetDateFormatW`/`EnumSystemLocalesW` and their `...Ex`/`LCIDToLocaleName`/`LocaleNameToLCID` kernelbase forms, `GetUserPreferredUILanguages`, `WinHttpSetOption`, `CoGetCallContext`, `CoIncrementMTAUsage`, `oleaut32 #161 #184 #424`. Plus, for the integrator, not an entry: **a 32-bit fail stub must pop its arguments** (today it ends the process, so one missing function ends a 32-bit installer) | ~25 | M | both installers extract and start the updater |
 | **B1 Services (SCM)** | `advapi32`: `OpenSCManagerW`, `CreateServiceW`, `OpenServiceW`, `ChangeServiceConfig(2)W`, `QueryServiceConfig(2)W`, `QueryServiceStatus(Ex)`, `StartServiceW`, `ControlService`, `DeleteService`, `CloseServiceHandle`, `EnumServicesStatusExW`, `StartServiceCtrlDispatcherW`, `RegisterServiceCtrlHandlerExW`, `SetServiceStatus`; the services registry layout above; a **service host** in the NT personality: starts `Start=2` services at boot as LocalSystem, starts a service on demand (`StartServiceW`, COM `LocalService`), ends and restarts them | ~18 + the host | L | `CreateServiceW` of the updater and of Chrome's elevation service; the updater's `Setup succeeded` |
 | **B2 COM across processes** | `CoRegisterClassObject`, `CoResumeClassObjects`, `CoRevokeClassObject`, `CoAddRefServerProcess`, `CoReleaseServerProcess`, `CoInitializeSecurity`, `CoImpersonateClient`, `CoSetProxyBlanket`, `CoGetPSClsid`/`CoRegisterPSClsid`, activation of `LocalServer32` and `AppID\LocalService` classes (with `ServiceParameters`), **marshalling through the type library** (`oleaut32` `LoadTypeLib`/`LoadTypeLibEx` of a resource `exe\4`, `RegisterTypeLib`, the PSOAInterface proxy and stub, `rpcrt4` as far as the updater's interfaces need), the 32/64-bit registry views | ~25-30 | **XL** | the install's talk to the update service; Chrome's `IElevator` (cookie encryption) |
 | **B3 Task Scheduler** | `taskschd`: `CLSID_TaskScheduler`, `ITaskService`, `ITaskFolder` (`GetFolder`, `CreateFolder`, `RegisterTaskDefinition`, `DeleteFolder`), `ITaskDefinition` and the registration/trigger/action/principal/settings objects, `IRegisteredTask` (`Run`, `Enabled`); the task store (registry `Schedule\TaskCache` and the XML), a scheduler that runs `--wake` tasks | ~12 interfaces | M | the updater's `RegisterTaskDefinition`; also needed by other installers |
@@ -139,6 +139,27 @@ survives without its scheduled task or without `CoInitializeSecurity` specifics;
 `WinHttp` against Google's servers on Poly's network stack).
 
 ## 4. Owner decisions
+
+### Decided on 2026-11-17 (they replace the recommendations below where they differ)
+
+1. **UAC is a separate prompt, as on Windows.** Normal programs run **not elevated**. A program that asks for
+   administrator rights gets a consent dialog of Poly's own: `ShellExecute(Ex)` with `runas`, a `requireAdministrator`
+   manifest (or `highestAvailable` for an administrator), COM elevation. Yes: the program runs with the elevated
+   token. No: the documented failure (`ERROR_CANCELLED` 1223 with `hInstApp` 5 from `ShellExecuteExW`, 5 from
+   `ShellExecuteW`; `ERROR_ELEVATION_REQUIRED` 740 from a plain `CreateProcess`). This changes Poly's token model
+   (ADR 0171: today every process has `Token::poly_user()`, the elevated administrator's token): an administrator gets a
+   **split token**, a filtered standard token plus a linked elevated token. The observable behaviour is specified by
+   `specs/windows/advapi32.dll/UacStandardToken.yaml`, `UacElevatedToken.yaml`, `ObjectIntegrityLabel.yaml`,
+   `kernel32.dll/CreateProcessElevation.yaml`, `shell32.dll/{IsUserAnAdmin,ShellExecuteExW,ShellExecuteW,ShellExecuteA}.yaml`
+   (spec track `spec-win-elevation`; recorded on the oracle with the filtered and with the full token, `poly-oracle.ps1 -Token
+   standard|elevated`, docs/AGENT_PIPELINE.md). What the consent dialog looks like is Poly's own design.
+2. **Auto-update is on from the start.** Google's updater services and task stay (2 services + 1 task per version).
+3. **Google's installers run unchanged** (route A).
+4. **The installed Chrome replaces Chrome for Testing** in the launcher (and the `desktop --chrome-win` disk starts without it
+   once B7 passes).
+
+The rest of this section is the survey's original list; items 1 to 3 and 5 are answered by the above.
+
 
 1. **Elevation (UAC).** Recommended: every Poly process already has the elevated administrator's token (ADR
    0171). `IsUserAnAdmin` is TRUE, `ShellExecute` with `runas` is a plain launch, and the **Install click in

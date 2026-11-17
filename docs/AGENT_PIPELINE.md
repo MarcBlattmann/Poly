@@ -442,8 +442,12 @@ integrity, 24 privileges, `TokenElevationType` 2, linked token the filtered one)
 prompt is shown and no security setting changes. The result file's `system.token` says which;
 a test's own `token` in `windows.json` overrides it (a directory can hold both), and `win poly`
 boots Poly with `poly.win.token=standard|elevated` for it (nothing for a test without a token:
-the pipeline's old default, the elevated administrator). Never click through or approve a real
-consent prompt on the oracle, and never change UAC settings there.
+the pipeline's old default, the elevated administrator). A consent prompt that a test provokes (`ShellExecute` runas from a `standard` caller) is
+**never answered** on the oracle: Windows ends it itself after about two minutes and the call returns as
+declined (`ERROR_CANCELLED`), so those tests take about 140 s per run (give them `-TestTimeouts name=400`).
+On Poly a `poly.win.token=standard` test run has nobody to click: the consent dialog must answer No at once.
+Per-test `token` and `session` in `windows.json` rows are kept by `tests split` (`RunResult`).
+Never click through or approve a real consent prompt on the oracle, and never change UAC settings there.
 
 **Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
 accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that
