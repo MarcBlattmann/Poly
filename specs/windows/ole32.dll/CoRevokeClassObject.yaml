@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRevokeClassObject.yaml
+id: windows/api/ole32.dll/CoRevokeClassObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Removes a class registration made by CoRegisterClassObject, by cookie. Clients that already hold the class factory or objects it made keep what they hold; a remote client's factory proxy is disconnected and the next creation starts a new server (when the class has a LocalServer32 entry).
+interface:
+  signature: "HRESULT CoRevokeClassObject(DWORD dwRegister)"
+installer: "The updater's servers revoke their class objects when they shut down (after the server process count reached zero), and COM does it for them when the process ends."
+rules:
+  not_initialised: "on a thread that has not initialised COM: CO_E_NOTINITIALIZED 0x800401F0"
+  cookie_results: "the cookie of a live registration: S_OK and the class (if no other registration of it remains) becomes unknown; the same cookie again: S_OK (no error); 0, 0xffffffff, 0x12345678 and a number above the live cookies: S_OK; nothing is reported for cookies that mean nothing"
+  other_registrations: "revoking one registration leaves the other registrations of the same class and of other classes in place"
+  cookies_not_reused: "a registration made after revokes got a cookie that none of the earlier ones had"
+  apartment_end: "a registration that is never revoked ends with CoUninitialize of its apartment: the registration's reference on the factory is released, CoRevokeClassObject with its old cookie then gives CO_E_NOTINITIALIZED (the thread has no apartment) and the class is unknown in a new apartment (0x80040154)"
+  held_pointers: "after the revoke a pointer obtained by CoGetClassObject still works: CreateInstance through it makes objects; the factory's reference count falls only by the registration's reference (two held pointers stayed counted until released); a new CoCreateInstance for the class gives REGDB_E_CLASSNOTREG 0x80040154"
+  made_objects: "an object made before the revoke is not touched: its AddRef and Release go on working and its last Release frees it"
+  singleuse_used_up: "the registration of a REGCLS_SINGLEUSE class that already served its one request is revoked with S_OK and the factory's reference count returns to its value before the registration"
+  remote_effect: "a server that revokes while a client holds proxies: the factory proxy's CreateInstance then fails with RPC_E_DISCONNECTED 0x80010108 and a NULL output; the object proxy made earlier still answers QueryInterface (S_OK for IUnknown, E_NOINTERFACE for an unknown id), AddRef and Release; LockServer through the old factory proxy still returned S_OK; a new CoCreateInstance(LOCAL) starts a second server process from the registry entry, and both servers end when asked"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  disconnected: "RPC_E_DISCONNECTED 0x80010108 for the old factory proxy of a remote client"
+side_effects: "the class is no longer found by new requests; existing clients keep their objects"
+threading: "any thread of the process may revoke a cookie (also from another apartment than the registering one)"
+ordering: []
+timing:
+  typical: "well under a millisecond; a remote client sees the disconnect within a few hundred ms"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), see CoRegisterClassObject: one image as client and as COM server (the server revokes on a request file and keeps running), a unique class id per run, results and booleans only.
+not_covered: >
+  revoking from a thread of a process other than the registering one cannot be asked (cookies are per process); REGCLS_SURROGATE.

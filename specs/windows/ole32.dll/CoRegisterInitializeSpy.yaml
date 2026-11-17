@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRegisterInitializeSpy.yaml
+id: windows/api/ole32.dll/CoRegisterInitializeSpy
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterInitializeSpy function (objbase.h)", "CoRevokeInitializeSpy", "IInitializeSpy interface (objidl.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Registers an IInitializeSpy for the calling thread: its Pre and Post methods are called around every CoInitializeEx, CoUninitialize (and OleInitialize and OleUninitialize, which go through them) of that thread. Both Google servers register one on their main thread.
+interface:
+  signature: "HRESULT CoRegisterInitializeSpy(IInitializeSpy *spy, ULARGE_INTEGER *cookie)"
+installer: "Both the updater (157 and 159) and the elevation service import CoRegisterInitializeSpy and CoRevokeInitializeSpy."
+rules:
+  registration: "S_OK and a non-zero 64-bit cookie, before COM is initialised on the thread or while it is; the registration adds one reference to the spy (released by the revoke)"
+  bad_arguments: "a NULL spy: E_INVALIDARG 0x80070057; an object whose QueryInterface refuses IInitializeSpy: E_NOINTERFACE 0x80004002; the cookie is not written in either case"
+  calls_initialize: "CoInitializeEx calls PreInitialize(mode, the thread's apartment reference count before) and then PostInitialize(the result, mode, the count after): the first STA initialisation: Pre(2, 0), Post(S_OK, 2, 1); the same again: Pre(2, 1), Post(S_FALSE 1, 2, 2); a request for MTA on an STA thread: Pre(0, 2), Post(RPC_E_CHANGED_MODE 0x80010106, 0, 2) (the count does not change); the mode is 0 for MTA and 2 for STA"
+  calls_uninitialize: "CoUninitialize calls PreUninitialize(the count before) then PostUninitialize(the count after): counts 3 to 2, 2 to 1, 1 to 0; one more on a thread without COM: Pre(0), Post(0)"
+  ole: "OleInitialize is seen as a CoInitializeEx(STA) (mode 2) and OleUninitialize as a CoUninitialize"
+  return_values: "PreInitialize's return value is ignored (E_FAIL: CoInitializeEx still returns S_OK and the apartment is initialised, the spy sees Pre and Post); PostInitialize's return value is what CoInitializeEx returns (E_ABORT gives 0x80004004, S_FALSE gives 1) although the initialisation happened and the count went up; the return values of PreUninitialize and PostUninitialize are ignored (the apartment count still goes down)"
+  registered_while_initialised: "a spy registered when COM is already initialised on the thread sees only the following calls (the CoUninitialize that ends the apartment: Pre(1), Post(0))"
+  several_spies: "all registered spies of the thread are called, the newest registration first, for each of the four methods (Pre and Post alike, not in reverse for Post); the same spy registered twice is called twice with two cookies"
+  per_thread: "a spy sees only its own thread's calls: a second thread that initialises COM produced no events for it"
+errors:
+  invalid_argument: "E_INVALIDARG 0x80070057"
+  no_interface: "E_NOINTERFACE 0x80004002"
+side_effects: "adds a reference to the spy until it is revoked or its thread ends"
+threading: "per thread: the spy is called on the thread that registered it"
+ordering: ["PreInitialize, the initialisation, PostInitialize; PreUninitialize, the uninitialisation, PostUninitialize"]
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each: a spy object written in the test (a vtable of seven methods) records the calls into a log that the test prints as one line per call; the spies' return values are set by the test; separate threads where the per-thread rule is observed.
+not_covered: >
+  spies that call COM from inside their methods, and registration from a thread that ends while its spy is being called.

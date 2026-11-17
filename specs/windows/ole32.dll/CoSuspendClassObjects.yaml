@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoSuspendClassObjects.yaml
+id: windows/api/ole32.dll/CoSuspendClassObjects
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Hides the process's local-server class registrations from activation requests (they stay registered). The updater does not import it; COM itself does the equivalent when the server's process count reaches zero (CoReleaseServerProcess).
+interface:
+  signature: "HRESULT CoSuspendClassObjects(void)"
+installer: "Not imported by the updater or the elevation service; specified because COM's server-lifetime rule uses the same state."
+rules:
+  result: "S_OK always: with COM initialised or not, with nothing registered, called twice"
+  local_registrations: "every registration made for the local-server context before the call, MULTIPLEUSE or MULTI_SEPARATE, is not found afterwards (0x80040154) by lookups for that context, from every thread; a registration for both contexts is hidden for lookups of either"
+  inprocess_registrations: "registrations for the in-process context only are not affected (still found, with the registered pointer, from the registering apartment)"
+  later_registrations: "a class registered after the call is found at once"
+  resume: "CoResumeClassObjects afterwards returns 0x800706C6 and does not bring a hidden local-only registration back; a registration made for both contexts and asked for with both contexts is found again after that call"
+  any_thread: "the call from any thread hides the process's registrations for all threads (an MTA thread, the registering STA or MTA thread)"
+  server_suspends_itself: "a COM-started server that calls it keeps running; the next activation request starts a second server process (a later CoResumeClassObjects in the first server returns 0x800706C6 and changes nothing)"
+errors:
+side_effects: "hides local-context registrations of the whole process from activation requests"
+threading: "any thread; process-wide effect"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, see CoRegisterClassObject: the image is client and COM server (`--child srv <tag> clsid={...} <flags>`, a class factory and a plain object of its own, a log file and request files in the test's directory); class registrations are the test's own (HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...}, default value starting `polyws-com-oop`) and are removed again; a class id with a pending activation of an earlier run is avoided by putting the process id into the class id; calls that can wait for a long time run on a thread of their own with a bounded wait. Observations are results, booleans and counts, never process ids, thread ids, cookies or times.
+not_covered: >
+  REGCLS_SURROGATE, activation through the activation filter, and what other processes' waiting requests see at the moment of the call.
