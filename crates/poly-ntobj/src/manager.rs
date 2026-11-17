@@ -56,6 +56,9 @@ pub struct ObjectManager {
     pub(crate) waits: Slab<WaitBlock>,
     pub(crate) wakes: VecDeque<Wake>,
     pub(crate) deleted: VecDeque<Deleted>,
+    /// Opaque objects whose last handle closed (the `IRP_MJ_CLEANUP` point: Learn, "IRP_MJ_CLEANUP"),
+    /// oldest first; the object may live on through pointer references.
+    pub(crate) cleaned: VecDeque<Deleted>,
     /// Pointer references to drop once the current operation is done, so
     /// nothing is deleted while a loop still looks at it.
     pub(crate) deferred: Vec<ObjectId>,
@@ -114,6 +117,7 @@ impl ObjectManager {
             waits: Slab::new(),
             wakes: VecDeque::new(),
             deleted: VecDeque::new(),
+            cleaned: VecDeque::new(),
             deferred: Vec::new(),
             security: crate::security::ObjectSecurity::new(),
         };
@@ -233,8 +237,12 @@ impl ObjectManager {
         h.handle_count = h.handle_count.checked_sub(1).expect("handle count underflow");
         if h.handle_count == 0 {
             h.exclusive_process = None;
+            let (kind, cookie) = (h.kind, h.cookie);
             if !h.permanent && h.parent.is_some() {
                 self.unlink(id);
+            }
+            if matches!(self.obj(id).body, Body::Opaque { .. }) {
+                self.cleaned.push_back(Deleted { id, kind, cookie });
             }
         }
         self.release_pointer(id);
@@ -353,5 +361,11 @@ impl ObjectManager {
     /// Next deleted opaque object, oldest first.
     pub fn pop_deleted(&mut self) -> Option<Deleted> {
         self.deleted.pop_front()
+    }
+
+    /// Next opaque object whose last handle closed, oldest first (it may already be deleted too:
+    /// then it is also in [`Self::pop_deleted`]'s queue, after this).
+    pub fn pop_cleaned(&mut self) -> Option<Deleted> {
+        self.cleaned.pop_front()
     }
 }

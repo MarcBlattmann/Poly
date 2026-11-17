@@ -454,6 +454,8 @@ jobs:
             shards: chrome-win-sandbox
           - chrome: s3-window
             shards: chrome-win-window
+          - chrome: s5-gpu
+            shards: chrome-win-gpu
     env:
       POLY_QEMU_ACCEL: auto
       POLY_PREBUILT: 1

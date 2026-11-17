@@ -201,6 +201,11 @@ impl NtSystem {
     /// that in turn); a file's goes to the kernel. Call after anything that
     /// can drop a reference.
     pub fn reap(&mut self, b: &mut dyn Backend) {
+        while let Some(c) = self.objects.pop_cleaned() {
+            if c.kind == ObjectType::File {
+                self.io.file_cleanup(c.cookie);
+            }
+        }
         while let Some(d) = self.objects.pop_deleted() {
             self.objects.security_object_deleted(&d);
             match d.kind {

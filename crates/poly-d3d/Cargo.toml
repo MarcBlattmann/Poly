@@ -1,0 +1,11 @@
+[package]
+name = "poly-d3d"
+description = "The rules of Poly's software Direct3D 11 / DXGI device (ADR 0211): creation arguments, formats, resource and view descriptions, state objects, queries, clears and swap chain descriptions; no_std with alloc, host-tested, the DLLs only hold the COM objects"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

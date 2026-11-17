@@ -1666,6 +1666,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Chrome's window on the desktop with its page painted, a URL typed into the address field
     // (stage 3; chromewin.rs, ADR 0155, ADR 0214).
     ("chrome-win-window", chromewin::window_boot_test),
+    // Stage 5 and the S5 window: Chrome's default GPU flags on the software D3D11 device
+    // (chromewin.rs, ADR 0211).
+    ("chrome-win-gpu", chromewin::gpu_boot_test),
     // The same window from what `cargo xtask start` boots as "Desktop with Chrome for Windows": its
     // disk and launcher entry (chrometry.rs, ADR 0216).
     ("chrome-try", chrometry::group_boot_test),
@@ -1782,7 +1785,7 @@ const BOOT_GROUPS: &[BootGroup] = &[
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 14] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
     // About 75 s: Linux programs and the root disk.
@@ -1810,6 +1813,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 14] = [
     ("chrome-win", &["chrome-win"]),
     ("chrome-win-sandbox", &["chrome-win-sandbox"]),
     ("chrome-win-window", &["chrome-win-window", "chrome-try"]),
+    ("chrome-win-gpu", &["chrome-win-gpu"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
     // About 60 s: the compositor and the desktop.

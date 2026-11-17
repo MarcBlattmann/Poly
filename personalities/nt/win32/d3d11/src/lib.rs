@@ -16,20 +16,18 @@
 extern crate alloc;
 
 pub mod com;
+mod context;
 mod device;
+mod objects;
 mod swap;
 mod texture;
 
 use com::*;
 use core::ffi::c_void;
+use poly_d3d::create;
 use poly_win32_rt as _;
 
 poly_win32_rt::process_heap_allocator!();
-
-/// `D3D_FEATURE_LEVEL_11_0` (d3dcommon.h): what the device offers.
-pub const FEATURE_LEVEL: u32 = 0xb000;
-/// `D3D11_SDK_VERSION` (d3d11.h).
-const SDK_VERSION: u32 = 7;
 
 /// `D3D11CreateDevice(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels,
 /// SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext)`: a device of the first level asked
@@ -37,9 +35,9 @@ const SDK_VERSION: u32 = 7;
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
 pub unsafe extern "system" fn D3D11CreateDevice(
-    _adapter: *mut c_void,
-    _driver_type: u32,
-    _software: usize,
+    adapter: *mut c_void,
+    driver_type: u32,
+    software: usize,
     flags: u32,
     levels: *const u32,
     nlevels: u32,
@@ -48,17 +46,31 @@ pub unsafe extern "system" fn D3D11CreateDevice(
     out_level: *mut u32,
     out_context: *mut *mut c_void,
 ) -> HRESULT {
-    if sdk != SDK_VERSION {
-        return E_INVALIDARG;
-    }
-    let level = if levels.is_null() || nlevels == 0 {
-        FEATURE_LEVEL
+    let list = if levels.is_null() {
+        None
     } else {
         // SAFETY: the caller's array of `nlevels` levels.
-        let asked = unsafe { core::slice::from_raw_parts(levels, nlevels as usize) };
-        match asked.iter().copied().find(|&l| l <= FEATURE_LEVEL) {
-            Some(l) => l,
-            None => return DXGI_ERROR_UNSUPPORTED,
+        Some(unsafe { core::slice::from_raw_parts(levels, nlevels as usize) })
+    };
+    let args = create::Args {
+        driver: driver_type,
+        adapter: !adapter.is_null(),
+        software: software != 0,
+        flags,
+        levels: list,
+        count: nlevels,
+        sdk,
+    };
+    let level = match create::level(&args) {
+        Ok(l) => l,
+        Err(hr) => {
+            // SAFETY: the caller's optional outputs: NULL and level 0 on failure.
+            unsafe {
+                put(out_device, core::ptr::null_mut());
+                put(out_context, core::ptr::null_mut());
+                put(out_level, 0);
+            }
+            return hr;
         }
     };
     // SAFETY: the caller's optional outputs.
@@ -67,7 +79,8 @@ pub unsafe extern "system" fn D3D11CreateDevice(
         // Learn: only the feature level was asked for.
         return S_FALSE;
     }
-    let dev = device::new(flags, level);
+    let dev =
+        device::new(flags, level, if driver_type == create::driver::UNKNOWN { adapter } else { core::ptr::null_mut() });
     // SAFETY: a new device; the caller's optional outputs.
     unsafe {
         if !out_context.is_null() {
@@ -211,8 +224,39 @@ poly_win32_rt::fail_exports!(
     ]
 );
 
-/// The entry point (`DllMain`): nothing to set up.
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetCommandLineW() -> *const u16;
+}
+
+/// The entry point (`DllMain`): on process attach, one line in the kernel log saying which kind
+/// of process loaded the DLL (the `--type=` switch of its command line, as programs with several
+/// process kinds pass it), so a run's log shows how many processes use the device.
 #[unsafe(no_mangle)]
-pub extern "system" fn d3d11_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
+pub extern "system" fn d3d11_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
+    if reason == 1 {
+        // SAFETY: the process's command line, NUL terminated.
+        let line = unsafe { GetCommandLineW() };
+        let mut text = alloc::string::String::new();
+        let mut i = 0;
+        // SAFETY: reading up to the terminating NUL.
+        while !line.is_null() && unsafe { *line.add(i) } != 0 && i < 4096 {
+            // SAFETY: as above.
+            text.push(char::from_u32(unsafe { *line.add(i) } as u32).unwrap_or('?'));
+            i += 1;
+        }
+        let kind = text.split(' ').find_map(|w| w.strip_prefix("--type=")).unwrap_or("main");
+        // The names of the switches (no values) tell the kinds of GPU process apart.
+        let switches: alloc::vec::Vec<&str> = text
+            .split(' ')
+            .filter_map(|w| w.strip_prefix("--"))
+            .map(|w| w.split('=').next().unwrap_or(""))
+            .filter(|w| !w.is_empty() && *w != "type")
+            .collect();
+        let mut names = switches.join(",");
+        names.truncate(400);
+        log(&alloc::format!("d3d11: loaded (process type {kind}) switches {names}"));
+    }
     1
 }

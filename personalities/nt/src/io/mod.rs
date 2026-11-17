@@ -228,6 +228,8 @@ pub struct FileRecord {
     /// `CurrentByteOffset`, used by synchronous file objects.
     pub position: u64,
     pub delete_on_close: bool,
+    /// The last handle closed (cleanup): its share access is counted out already.
+    pub cleaned: bool,
     /// The directory scan of `NtQueryDirectoryFile`.
     pub scan: Option<dir::Scan>,
     /// The completion port this file object is associated with (ADR 0169).
@@ -637,6 +639,25 @@ impl IoState {
     /// close. Pending requests are cancelled, its locks and share access
     /// go, `FILE_DELETE_ON_CLOSE` marks the file for deletion, and the file
     /// is deleted if it was the last open of a file marked so.
+    /// The last handle of a file object closed (`IRP_MJ_CLEANUP`): its share access is removed
+    /// now, though the object may live on (a section that maps the file holds a reference); Learn,
+    /// "IoRemoveShareAccess": a file system removes the share access of a file object when it
+    /// processes the cleanup request.
+    pub fn file_cleanup(&mut self, cookie: u64) {
+        let Some(rec) = self.files.get_mut(&cookie) else { return };
+        if rec.cleaned {
+            return;
+        }
+        rec.cleaned = true;
+        let share = rec.share;
+        if let Target::Disk(d) = &rec.target {
+            let key = d.key;
+            if let Some(state) = self.nodes.get_mut(&key) {
+                state.share.remove(&share);
+            }
+        }
+    }
+
     pub fn file_closed(&mut self, cookie: u64) {
         let Some(rec) = self.files.get(&cookie) else { return };
         let _ = rec;
@@ -690,7 +711,9 @@ impl IoState {
                     self.retry_locks(d.key);
                 }
                 let state = self.nodes.entry(d.key).or_default();
-                state.share.remove(&rec.share);
+                if !rec.cleaned {
+                    state.share.remove(&rec.share);
+                }
                 state.opens = state.opens.saturating_sub(1);
                 if rec.delete_on_close {
                     state.delete_pending = true;
