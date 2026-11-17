@@ -60,7 +60,7 @@ out from implementers so that "green" means the behaviour was understood, not
 fitted to visible tests. Do not put held-out tests in a pull request. Mark which
 of your tests you mean to hold out in the PR description, and the maintainer
 moves them to the private held-out store. The hand-off to an implementer is then
-recorded in [specs/HANDOFF_LOG.md](specs/HANDOFF_LOG.md).
+recorded in [specs/handoffs/](specs/handoffs/) (and, for older ones, [specs/HANDOFF_LOG.md](specs/HANDOFF_LOG.md)).
 
 ## 4. Implementers
 
@@ -90,8 +90,10 @@ when the maintainer's runner has passed it against the real OS with the visible
   [Developer Certificate of Origin](https://developercertificate.org/): you
   wrote the change, or have the right to submit it under the project's
   licence.
-- Don't hand-edit the README progress section or `docs/progress/`; run
-  `cargo xtask coverage readme` after changing `coverage/` or the roadmap.
+- Don't edit or commit the README progress section, `docs/progress/` or the
+  ADR index table: they are regenerated on `main` after every merge, and CI
+  fails a pull request that changes them (ADR 0213).
+  `cargo xtask coverage readme` previews them locally; don't commit its output.
 
 By contributing you agree that your contribution is licensed under the
 [Apache License 2.0](LICENSE), like the rest of the project.

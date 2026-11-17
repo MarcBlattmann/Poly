@@ -203,6 +203,7 @@ unsafe extern "system" {
         kind: u32,
         initial: u8,
     ) -> NtStatus;
+    pub fn NtCreateTimer(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes, kind: u32) -> NtStatus;
     pub fn NtSetEvent(handle: Handle, previous: *mut i32) -> NtStatus;
     pub fn NtResetEvent(handle: Handle, previous: *mut i32) -> NtStatus;
     pub fn NtCreateMutant(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes, owner: u8)
@@ -337,6 +338,7 @@ unsafe extern "system" {
     pub fn NtGetContextThread(handle: Handle, context: *mut u8) -> NtStatus;
     pub fn NtSetContextThread(handle: Handle, context: *const u8) -> NtStatus;
     pub fn NtOpenEvent(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
+    pub fn NtOpenMutant(handle: *mut Handle, access: u32, attributes: *const ObjectAttributes) -> NtStatus;
     pub fn RtlRaiseException(record: *const u8);
     pub fn NtQueryInformationThread(
         handle: Handle,
@@ -349,6 +351,8 @@ unsafe extern "system" {
     pub fn NtSetInformationProcess(handle: Handle, class: u32, info: *const u8, length: u32) -> NtStatus;
     /// The CPU number the caller runs on, as the return value (Poly's `NtGetCurrentProcessorNumber`).
     pub fn NtGetCurrentProcessorNumber() -> u32;
+    /// Poly's own: the physical memory and what is available, two 64-bit sizes (ADR 0206).
+    pub fn PolyPhysicalMemory(out: *mut u64) -> NtStatus;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;

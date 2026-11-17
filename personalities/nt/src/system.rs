@@ -39,6 +39,11 @@ pub struct Section {
     /// The kernel's id for the pages ([`Backend::create_section`]).
     pub backing: u64,
     pub kind: SectionKind,
+    /// For an image: the base its first view got in some process. Every view of the section goes
+    /// there, relocated, where that is free, and is `STATUS_IMAGE_NOT_AT_BASE` (not relocated)
+    /// where it is not (the sheet of `NtMapViewOfSection`: why an image is at the same address in
+    /// every process of a boot).
+    pub chosen_base: Option<u64>,
 }
 
 impl Section {
@@ -75,6 +80,11 @@ pub struct NtSystem {
     /// The job objects and which process belongs to which (ADR 0169).
     pub jobs: crate::job::Jobs,
 
+    /// The package SIDs of the AppContainers whose tokens were made, in the order of their
+    /// first use: a container's number is its place here plus one (`TokenAppContainerNumber`,
+    /// ADR 0196).
+    pub lowbox_sids: Vec<poly_security::sid::Sid>,
+
     /// The window stations and desktops and who is on them (ADR 0192).
     pub winsta: crate::winsta::WinSta,
     /// What a process keeps that another can set and a child inherits: error mode, memory
@@ -96,6 +106,19 @@ impl Default for NtSystem {
 }
 
 impl NtSystem {
+    /// The number the system gives a container's SID: the same every time, a later SID a
+    /// larger one (the sheet of `CreateAppContainerToken`).
+    pub fn lowbox_number(&mut self, sid: &poly_security::sid::Sid) -> u32 {
+        let at = match self.lowbox_sids.iter().position(|s| s == sid) {
+            Some(i) => i,
+            None => {
+                self.lowbox_sids.push(sid.clone());
+                self.lowbox_sids.len() - 1
+            }
+        };
+        at as u32 + 1
+    }
+
     pub fn new() -> NtSystem {
         Self::with_registry(Self::default_registry(0, &mut |_| None))
     }
@@ -122,6 +145,7 @@ impl NtSystem {
             process_exits: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
+            lowbox_sids: Vec::new(),
             winsta: crate::winsta::WinSta::default(),
             proc_attrs: BTreeMap::new(),
             ntdll32: &[],

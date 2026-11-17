@@ -42,6 +42,39 @@ pub fn query_system_time<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
     Ok(STATUS_SUCCESS)
 }
 
+/// `PolyRandomBytes(Buffer, Length)` (ADR 0206): random bytes from the kernel's generator into the
+/// caller's buffer, in pieces of 4 KiB; `STATUS_NOT_IMPLEMENTED` from a kernel without one. The
+/// buffer must be writable (`STATUS_ACCESS_VIOLATION`).
+pub fn random_bytes<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let [buffer, length] = abi::args::<K, 2>(k, regs)?;
+    let mut done = 0u64;
+    let mut piece = [0u8; 4096];
+    while done < length {
+        let n = (length - done).min(piece.len() as u64) as usize;
+        if !k.random_bytes(&mut piece[..n]) {
+            return Err(NOT_IMPLEMENTED);
+        }
+        abi::write(k, buffer + done, &piece[..n])?;
+        done += n as u64;
+    }
+    Ok(STATUS_SUCCESS)
+}
+
+/// `PolyPhysicalMemory(Out*)` (ADR 0206): the physical memory and what is available, as two 64-bit
+/// values in bytes; `STATUS_NOT_IMPLEMENTED` from a kernel that does not count it.
+pub fn physical_memory<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let out = abi::arg(k, regs, 0)?;
+    let (total, available) = k.physical_memory().ok_or(NOT_IMPLEMENTED)?;
+    let mut b = [0u8; 16];
+    b[..8].copy_from_slice(&total.to_le_bytes());
+    b[8..].copy_from_slice(&available.to_le_bytes());
+    abi::write(k, out, &b)?;
+    Ok(STATUS_SUCCESS)
+}
+
+/// `STATUS_NOT_IMPLEMENTED` (`ntstatus.h`).
+const NOT_IMPLEMENTED: NtStatus = NtStatus(0xC000_0002);
+
 /// `NtQueryPerformanceCounter`.
 pub fn query_performance_counter<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [counter, frequency] = abi::args::<K, 2>(k, regs)?;
@@ -98,6 +131,30 @@ mod tests {
         assert!(a != 0 && b != 0 && a != b, "{a:#x} {b:#x}");
         // An address the caller cannot write.
         assert_eq!(f.call(Service::AllocateLocallyUniqueId, &[0x10]), STATUS_ACCESS_VIOLATION);
+    }
+
+    #[test]
+    fn random_bytes_fill_the_buffer_in_pieces_and_refuse_an_unwritable_one() {
+        let mut f = Fake::new();
+        let buf = f.alloc(10_000);
+        f.mem.write_bytes(buf, &[0xEE; 10_000]).unwrap();
+        assert_eq!(f.call(Service::PolyRandomBytes, &[buf, 10_000]), STATUS_SUCCESS);
+        // The fake writes 1, 2, 3 ... in each piece of 4096: every byte was written.
+        assert_eq!(f.bytes_at(buf, 3), [1, 2, 3]);
+        assert_eq!(f.bytes_at(buf + 4096, 2), [1, 2]);
+        assert_eq!(f.bytes_at(buf + 9_999, 1)[0], ((10_000 - 8192 - 1) as u8).wrapping_add(1));
+        // Length 0 touches nothing; an address the caller cannot write is refused.
+        assert_eq!(f.call(Service::PolyRandomBytes, &[0x10, 0]), STATUS_SUCCESS);
+        assert_eq!(f.call(Service::PolyRandomBytes, &[0x10, 8]), STATUS_ACCESS_VIOLATION);
+    }
+
+    #[test]
+    fn physical_memory_is_two_sizes_and_needs_a_writable_buffer() {
+        let mut f = Fake::new();
+        let out = f.alloc(16);
+        assert_eq!(f.call(Service::PolyPhysicalMemory, &[out]), STATUS_SUCCESS);
+        assert_eq!((f.u64_at(out), f.u64_at(out + 8)), (8 << 30, 6 << 30));
+        assert_eq!(f.call(Service::PolyPhysicalMemory, &[0x10]), STATUS_ACCESS_VIOLATION);
     }
 
     #[test]

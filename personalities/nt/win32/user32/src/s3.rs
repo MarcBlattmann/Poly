@@ -6,7 +6,6 @@
 
 use super::{H, SYS};
 use poly_win32k::dispcfg;
-use poly_win32k::kbd;
 use poly_win32k::user::Env;
 
 // `GetWindowPlacement` is slice B's now (`lib.rs`, MonitorFromWindow.yaml `state_rects`).
@@ -16,9 +15,8 @@ pub extern "system" fn IsWindowArranged(_hwnd: H) -> i32 {
     0
 }
 
-// ----- keyboard layouts: the oracle's three installed ones
-
-const LAYOUTS: [u32; 3] = [kbd::HKL, 0x040C_040C, 0x1007_0807];
+// ----- keyboard layouts: the process's list (`kbdlayout`: the oracle's three installed ones
+// with the desktop's in the middle, and what the process loaded)
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) -> i32 {
@@ -27,13 +25,11 @@ pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) ->
         super::set_last_error(998);
         return 0;
     }
+    let layouts = crate::kbdlayout::list();
     if n == 0 || list.is_null() {
-        return LAYOUTS.len() as i32;
+        return layouts.len() as i32;
     }
-    let k = (n as usize).min(LAYOUTS.len());
-    // The first is the layout keys are read with: the desktop's (ADR 0209).
-    let mut layouts = LAYOUTS;
-    layouts[0] = crate::refresh_layout().hkl();
+    let k = (n as usize).min(layouts.len());
     for (i, l) in layouts.iter().take(k).enumerate() {
         // SAFETY: `n` HKLs of the caller.
         unsafe { *list.add(i) = *l as usize };
@@ -41,11 +37,10 @@ pub unsafe extern "system" fn GetKeyboardLayoutList(n: i32, list: *mut usize) ->
     k as i32
 }
 
-/// Whether an `HKL` is one of the installed layouts (for `imm32`).
+/// Whether an `HKL` is one of the layouts of the list (for `imm32`).
 #[unsafe(no_mangle)]
 pub extern "system" fn PrivateLayoutInstalled(hkl: usize) -> i32 {
-    // The desktop's layout is installed too (ADR 0209).
-    i32::from(LAYOUTS.iter().any(|&l| l as usize == hkl) || kbd::active().hkl() as usize == hkl)
+    i32::from(crate::kbdlayout::installed(hkl as u32))
 }
 
 // ----- small queries

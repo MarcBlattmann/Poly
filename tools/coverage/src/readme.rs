@@ -250,7 +250,7 @@ pub fn splice_phases(readme: &str, table: &str) -> Result<String, String> {
 }
 
 /// Replace everything from `begin` to `end` (both included) with `section`.
-fn splice_between(readme: &str, begin: &str, end: &str, section: &str) -> Result<String, String> {
+pub fn splice_between(readme: &str, begin: &str, end: &str, section: &str) -> Result<String, String> {
     let start = readme.find(begin).ok_or_else(|| format!("README has no {begin} marker"))?;
     let stop = readme.find(end).ok_or_else(|| format!("README has no {end} marker"))? + end.len();
     if stop < start {

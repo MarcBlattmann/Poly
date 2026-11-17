@@ -240,6 +240,18 @@ pub extern "system" fn ResetEvent(event: Handle) -> i32 {
     if st.is_success() { TRUE } else { fail_status(st, FALSE) }
 }
 
+/// `CreateWaitableTimerW(security, manualReset, name)` (Learn: "CreateWaitableTimerW"): a timer object,
+/// `NotificationTimer` for a manual-reset one, else `SynchronizationTimer`, named in
+/// `\BaseNamedObjects` like the events. (`CreateWaitableTimerExW` stays what it was.)
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateWaitableTimerW(security: *const u8, manual: i32, name: *const u16) -> Handle {
+    // `TIMER_ALL_ACCESS` (`winnt.h`: `STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 3`).
+    const TIMER_ALL_ACCESS: u32 = 0x1F_0003;
+    let kind = if manual != 0 { NOTIFICATION_EVENT } else { SYNCHRONIZATION_EVENT };
+    // SAFETY: valid pointers from `create_named`.
+    unsafe { create_named(name, security, |h, oa| nt::NtCreateTimer(h, TIMER_ALL_ACCESS, oa, kind)) }
+}
+
 /// `CreateMutexW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CreateMutexW(security: *const u8, owner: i32, name: *const u16) -> Handle {

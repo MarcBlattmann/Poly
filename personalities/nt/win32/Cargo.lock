@@ -255,6 +255,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mdmregistration"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "mfplat"
 version = "0.0.1"
 dependencies = [
@@ -475,6 +482,9 @@ dependencies = [
 [[package]]
 name = "poly-security"
 version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]
 
 [[package]]
 name = "poly-seh"
@@ -659,6 +669,7 @@ name = "userenv"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+ "poly-security",
  "poly-win32-cryptrt",
  "poly-win32-rt",
 ]

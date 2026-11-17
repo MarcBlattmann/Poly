@@ -130,8 +130,9 @@ pub struct CacheStats {
 /// (read-ahead) go to the queue together, which sorts and merges them.
 ///
 /// On a write-back error the block stays dirty and cached, and the
-/// operation that needed the slot fails with the error. On a read error
-/// nothing is cached.
+/// operation that needed the slot takes a clean or empty one instead; it
+/// fails with the error only when every unpinned slot is dirty. On a read
+/// error nothing is cached.
 pub struct BufferCache<'a> {
     slots: &'a mut [CacheSlot],
     data: &'a mut [u8],
@@ -583,14 +584,31 @@ impl<'a> BufferCache<'a> {
 
     /// A slot to reuse, off the LRU list and empty. Writes the least
     /// recently used block back first if it is dirty.
+    ///
+    /// If that write-back fails, the block stays dirty and cached, moves to
+    /// the most recently used end (it is tried again by `sync` and when it
+    /// comes round again, not on every miss), and the least recently used
+    /// clean or empty slot is taken instead: a block that cannot be written
+    /// must not make reads of other blocks fail (a full disk under the
+    /// guest left every read failing, so code pages of running programs
+    /// could not come in; ADR 0217). Only when every unpinned slot is dirty
+    /// does the operation fail with the write's error.
     fn victim<Q: IoQueue + ?Sized>(&mut self, q: &mut Q) -> Result<u32, CacheError> {
         let i = self.lru_head;
         if i == NIL {
             return Err(CacheError::AllPinned);
         }
         let s = self.slots[i as usize];
-        if s.valid && s.dirty {
-            self.write_back_run(q, i)?;
+        if s.valid
+            && s.dirty
+            && let Err(e) = self.write_back_run(q, i)
+        {
+            self.lru_unlink(i);
+            self.lru_push_back(i);
+            let Some(clean) = self.clean_victim() else { return Err(e.into()) };
+            self.lru_unlink(clean);
+            self.evict(clean);
+            return Ok(clean);
         }
         self.lru_unlink(i);
         self.evict(i);

@@ -8,6 +8,7 @@ extern crate std;
 mod bigimage;
 mod exceptions;
 mod exec;
+mod lowbox;
 mod memory;
 mod objects;
 mod registry;
@@ -490,6 +491,18 @@ impl NtKernel for Fake {
 
     fn trace(&mut self, values: [u64; 3]) {
         self.traces.push(values);
+    }
+
+    fn physical_memory(&self) -> Option<(u64, u64)> {
+        Some((8 << 30, 6 << 30))
+    }
+
+    fn random_bytes(&mut self, buf: &mut [u8]) -> bool {
+        // A counter: the tests see that every byte was written.
+        for (i, b) in buf.iter_mut().enumerate() {
+            *b = (i as u8).wrapping_add(1);
+        }
+        true
     }
 }
 

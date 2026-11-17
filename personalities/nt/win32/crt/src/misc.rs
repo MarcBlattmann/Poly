@@ -213,37 +213,14 @@ pub unsafe extern "C" fn rand_s(out: *mut u32) -> i32 {
     0
 }
 
-/// Fill `buf` from `Z:\dev\urandom` (the whole VFS is `Z:`, ADR 0067).
+/// Fill `buf` from the kernel's generator through `ntdll!PolyRandomBytes` (ADR 0206): no file is
+/// opened, so a sandboxed process still gets random numbers.
 fn system_random(buf: &mut [u8]) -> bool {
-    use crate::sys;
-    let path: [u16; 15] = {
-        let mut p = [0u16; 15];
-        for (d, c) in p.iter_mut().zip("Z:\\dev\\urandom".encode_utf16()) {
-            *d = c;
-        }
-        p
-    };
-    // GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING (`winnt.h`, `fileapi.h`).
-    // SAFETY: a NUL-terminated name; no security attributes or template.
-    let h = unsafe { sys::CreateFileW(path.as_ptr(), 0x8000_0000, 3, core::ptr::null(), 3, 0, 0) };
-    if h == sys::INVALID_HANDLE_VALUE {
-        return false;
+    if buf.is_empty() {
+        return true;
     }
-    let mut done = 0usize;
-    while done < buf.len() {
-        let mut n = 0u32;
-        // SAFETY: `buf` past `done` is writable for the length given.
-        let ok = unsafe {
-            sys::ReadFile(h, buf[done..].as_mut_ptr(), (buf.len() - done) as u32, &mut n, core::ptr::null_mut())
-        };
-        if ok == 0 || n == 0 {
-            break;
-        }
-        done += n as usize;
-    }
-    // SAFETY: our handle.
-    unsafe { sys::CloseHandle(h) };
-    done == buf.len()
+    // SAFETY: the caller's buffer of `buf.len()` bytes.
+    unsafe { crate::sys::PolyRandomBytes(buf.as_mut_ptr(), buf.len()) >= 0 }
 }
 
 // ----- errno and handlers ----------------------------------------------------------------

@@ -51,6 +51,7 @@ pub const WM_SYSCHAR: u32 = 0x0106;
 pub const WM_SYSCOMMAND: u32 = 0x0112;
 pub const WM_RBUTTONUP: u32 = 0x0205;
 pub const WM_MOUSEWHEEL: u32 = 0x020A;
+pub const WM_MOUSEHWHEEL: u32 = 0x020E;
 pub const WM_PARENTNOTIFY: u32 = 0x0210;
 pub const WM_DWMNCRENDERINGCHANGED: u32 = 0x031F;
 /// Set by `SetWindowRgn(NULL)`: the next frame change redraws everything.
@@ -101,6 +102,7 @@ pub const SC_MAXIMIZE: u64 = 0xF030;
 pub const SC_RESTORE: u64 = 0xF120;
 pub const SC_SIZE: u64 = 0xF000;
 pub const SC_MOVE: u64 = 0xF010;
+pub const WM_ENTERSIZEMOVE: u32 = 0x0231;
 pub const WM_NCLBUTTONDOWN: u32 = 0x00A1;
 pub const WM_NCLBUTTONUP: u32 = 0x00A2;
 pub const WM_NCLBUTTONDBLCLK: u32 = 0x00A3;
@@ -1371,6 +1373,18 @@ fn report_after<E: Env + ?Sized>(env: &E, hwnd: u32, after: u64) -> u64 {
     }
 }
 
+/// The window under the cursor and the cursor's place.
+fn window_under_cursor<E: Env + ?Sized>(env: &E) -> (u32, (i32, i32)) {
+    let at = match env.call(Request::Cursor { set: false, x: 0, y: 0 }) {
+        Reply::Value { value } => (value as u32 as i32, (value >> 32) as u32 as i32),
+        _ => (0, 0),
+    };
+    match env.call(Request::WindowFromPoint { x: at.0, y: at.1, below: 0 }) {
+        Reply::Handle { hwnd } => (hwnd, at),
+        _ => (0, at),
+    }
+}
+
 /// The work of `SetWindowPos` and of every `ShowWindow` command.
 ///
 /// `WM_WINDOWPOSCHANGING` carries the caller's flags. A call without
@@ -1597,6 +1611,11 @@ fn swp<E: Env + ?Sized>(
             }
         }
     }
+    // A visible top-level window that moves or changes size may come under (or leave) the
+    // cursor: the window under it then gets a mouse move (`SC_MAXIMIZE.yaml` `max_winkey`).
+    // (Not while the thread has the mouse captured: the captured window gets the moves anyway.)
+    let under_before = (top && vis_before && vis_after && (moved || sized) && focus::input(env).capture == 0)
+        .then(|| window_under_cursor(env));
     env.call(Request::SetRects { hwnd, window_rel: Some(new_win), client_rel: Some(new_client) });
     if f & SWP_NOZORDER == 0 && !opts.keep_z {
         env.call(Request::ZOrder { hwnd, after: apply_after, apply: true });
@@ -1663,6 +1682,12 @@ fn swp<E: Env + ?Sized>(
     let mut done =
         WindowPos { hwnd: h as usize, insert_after: wp.insert_after, x: nx, y: ny, cx: ncx, cy: ncy, flags: changed };
     send(env, h, WM_WINDOWPOSCHANGED, 0, ptr(&mut done));
+    if let Some((before, _)) = under_before {
+        let (after, at) = window_under_cursor(env);
+        if after != before && after != 0 {
+            env.call(Request::Cursor { set: true, x: at.0, y: at.1 });
+        }
+    }
     if (moved || sized) && vis_after {
         env.win_event(crate::winevent::EVENT_OBJECT_LOCATIONCHANGE, hwnd, 0, 0);
     }
@@ -1859,7 +1884,14 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                     if cmd == SC_SIZE && edges == 0 {
                         return 0;
                     }
-                    env.call(Request::MoveSize { hwnd: hwnd as u32, edges });
+                    // The desktop's compositor drags the surface when the window has one (the
+                    // reply is Ok); without it (no compositor, no surface) the loop runs here.
+                    if let Reply::Error { .. } = env.call(Request::MoveSize { hwnd: hwnd as u32, edges }) {
+                        sizemove::run(env, hwnd, cmd, w & 0xF, l);
+                    } else {
+                        // The compositor's drag is the loop; win32k sends the end with the button.
+                        send(env, hwnd, WM_ENTERSIZEMOVE, 0, 0);
+                    }
                 }
                 _ => {}
             }
@@ -1954,13 +1986,7 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             } else if env.menu_hit(i.hwnd, px, py) {
                 5
             } else if i.window.contains(px, py) {
-                if let Some(code) = sizing_hit(i.style, i.window, i.client, px, py) {
-                    code as u64
-                } else if has_caption(i.style) && py < i.client.top {
-                    2
-                } else {
-                    18
-                }
+                crate::nchit::nc_hit(i.style, i.ex_style, i.window, i.client, px, py) as u64
             } else {
                 0
             }
@@ -1995,7 +2021,7 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
             send(env, hwnd, WM_CONTEXTMENU, hwnd, makelparam(px + i.client.left, py + i.client.top));
             0
         }
-        WM_CONTEXTMENU | WM_MOUSEWHEEL => {
+        WM_CONTEXTMENU | WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
             if let Some(i) = info(env, hwnd)
                 && i.style & WS_CHILD != 0
             {
@@ -2076,38 +2102,6 @@ fn to_cmsg(m: &Msg) -> CMsg {
         pt: CPoint { x: m.x, y: m.y },
         private: m.private,
     }
-}
-
-/// `DefWindowProc`'s `WM_NCHITTEST` on the sizing border of a resizable window (Learn,
-/// "WM_NCHITTEST": `HTLEFT` "in the left border of a resizable window", `HTBOTTOMRIGHT` "in the
-/// lower-right corner of a border of a resizable window", ...; `HTBORDER` is for a window without
-/// a sizing border). The border is what lies outside the client area at the sides and below it,
-/// and above it the band as thick as the side border (the caption is below that band); a point on
-/// two sides is the corner. `None` for a window without `WS_THICKFRAME`, a maximized one, or a
-/// point that is not on the border (the caption, a menu).
-pub fn sizing_hit(style: u32, window: Rect, client: Rect, x: i32, y: i32) -> Option<i32> {
-    if style & crate::metrics::WS_THICKFRAME == 0 || style & (WS_MAXIMIZE | WS_CHILD) != 0 {
-        return None;
-    }
-    let side = (client.left - window.left).max(window.right - client.right);
-    if side <= 0 {
-        return None;
-    }
-    let left = x < client.left;
-    let right = x >= client.right;
-    let bottom = y >= client.bottom;
-    let top = y < client.top && y < window.top + side;
-    Some(match (left, right, top, bottom) {
-        (true, _, true, _) => frame::HTTOPLEFT,
-        (_, true, true, _) => frame::HTTOPRIGHT,
-        (true, _, _, true) => frame::HTBOTTOMLEFT,
-        (_, true, _, true) => frame::HTBOTTOMRIGHT,
-        (true, ..) => frame::HTLEFT,
-        (_, true, ..) => frame::HTRIGHT,
-        (_, _, true, _) => frame::HTTOP,
-        (.., true) => frame::HTBOTTOM,
-        _ => return None,
-    })
 }
 
 /// `PeekMessageW`: messages sent by other threads run first.
@@ -2288,4 +2282,5 @@ pub mod focus;
 pub mod input;
 pub mod paint;
 pub mod place;
+pub mod sizemove;
 pub use paint::{PaintStruct, begin_paint, end_paint};

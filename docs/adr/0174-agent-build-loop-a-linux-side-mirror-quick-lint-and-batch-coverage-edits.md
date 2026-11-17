@@ -1,6 +1,6 @@
 # 0174: The agents' build loop: a Linux-side mirror of the checkout, a quick lint and batch coverage edits
 
-**Status:** Accepted. Tooling only: the wrapper the agents build through
+**Status:** Accepted; amended 2026-11-16 (a shared compile cache, below). Tooling only: the wrapper the agents build through
 (`polyd`, outside this repository), `cargo xtask ci lint`, the coverage tool
 and one build profile. Builds on [ADR 0077](0077-ci-in-parallel-jobs-and-qemu-on-kvm.md),
 [ADR 0150](0150-ci-in-equal-sized-jobs.md) and [ADR 0156](0156-ci-builds-once.md)
@@ -161,13 +161,58 @@ and the Winsock loopback program) failed in two of six boots while the
 Docker VM's load was 12 to 40, and passed in every boot at load 9, on the
 same kernel binary: the host, not the mirror.
 
+## Amendment (2026-11-16): a shared compile cache, incremental builds kept
+
+`polyd` and `polyd-template` now run every container with sccache 0.19 as
+`RUSTC_WRAPPER` and one cache for all worktrees, the Docker volume
+`poly-sccache` (60 GB, least recently used out). Incremental builds stay
+on, so sccache passes the path crates' dev builds through untouched. It
+caches what every worktree used to compile for itself without
+incremental state to help: release builds (the native programs, a release
+kernel's crates), the `-Zbuild-std` builds of `core`/`alloc` and the Win32,
+32-bit and ntdll crates (their target directories are deleted after each
+build), and registry crates. Bin, test, proc-macro and cdylib crates are
+never cached. Mirrors all build at `/repo`, so the paths in the cache keys
+match across worktrees.
+
+Measured on the loaded machine (load 6 to 25), the second worktree against
+the same build without the cache:
+
+| build | without | with the cache (second worktree) |
+|---|---|---|
+| `cargo xtask win32` after a change to one module | 58 s, 220 CPU s | 26 s, 129 CPU s |
+| `cargo xtask wow64` after the same change | 105 s, 226 CPU s | 35 s, 97 CPU s |
+| `cargo xtask build` after a change to `poly-abi` (8 dependent manifests) | 8 s, 41 CPU s | 7 s, 14 CPU s |
+| `cargo xtask build` / `ci lint --quick` after a change to `personalities/nt` | 9 s, 12 CPU s / 6 s, 9 CPU s | the same (incremental) |
+| a new worktree of `origin/main`, template fresh | 0.4 s / 6 s | the same (only xtask, a bin) |
+
+`CARGO_INCREMENTAL=0` (so path crates are cached too) was measured and
+dropped, as the first version of this ADR expected: it changes every
+crate's fingerprint, so a template built incrementally is stale (the
+first worktree: 120 + 520 CPU s), and the kernel is a bin crate, which is
+never cached: after the same `personalities/nt` change the build took 58 s
+and 228 CPU s instead of 9 s and 12. Adding the wrapper changes no
+fingerprint: a built worktree rebuilds nothing when it is turned on or off.
+
+Four containers building the Win32 modules at once on one cache, with a
+20 MB cap that evicted all the time, all built and gave the same DLLs as a
+build without the cache (byte for byte, except the link time stamps and
+the CodeView GUID, which differ between any two links). sccache writes a
+cache entry to a temporary file and renames it into place, and a read that
+finds its entry gone counts as a miss.
+
+A worktree that ran with `POLYD_SPEC=1` (it sees the held-out tests) uses
+a cache of its own, `poly-sccache-spec`, so nothing compiled from held-out
+tests can reach an implementer's container ([CLEAN_ROOM.md](../../CLEAN_ROOM.md)).
+The cache is off for everyone with `echo 0 > rt/snap/cache` in the
+wrapper's directory, and off for one call with `POLYD_CACHE=0`.
+
 ## Considered and dropped
 
-- **sccache** as `RUSTC_WRAPPER` with a shared volume: it caches no
-  incremental compile, and every crate that matters here is a path
-  dependency built incrementally; turning incremental builds off to feed
-  the cache would slow the loop that is fast today. The template gives a
-  new worktree the same warm state with incremental builds kept.
+- **sccache with incremental builds off** (`CARGO_INCREMENTAL=0`), so that
+  path crates are cached too: see the amendment above. Without incremental
+  state, every edit recompiles the edited crate and the kernel (a bin, never
+  cached) from scratch. sccache with incremental builds kept is in use.
 - **Seeding a `target/` volume alone**: a new worktree's files all have
   the time of its checkout, so cargo rebuilds every crate; cargo's
   `-Zchecksum-freshness` (which CI's build jobs use) would fix that but

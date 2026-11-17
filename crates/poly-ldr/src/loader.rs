@@ -1172,8 +1172,16 @@ impl Loader {
         self.note = None;
         self.thread_register(p, teb)?;
         let mut op = LoadOp::default();
-        let (base, size) = (self.m(exe).base, self.m(exe).size);
-        p.protect(base, size, page::READWRITE)?;
+        let base = self.m(exe).base;
+        // The executable's data is writable while its imports are bound and its code is executable
+        // at once (the kernel maps the image writable): binding calls `NtMapViewOfSection` and
+        // friends, and a program whose system-call stubs were patched from outside (Chrome's
+        // sandbox does it to its targets before they run) executes code of its own in there
+        // (ADR 0196).
+        for (rva, len, pr) in self.m(exe).protections.clone() {
+            let now = if pr & 0xF0 != 0 { pr } else { page::READWRITE };
+            p.protect(base + u64::from(rva), u64::from(len), now)?;
+        }
         self.bind(p, exe, &mut op)?;
         self.assign_tls(p, exe)?;
         self.apply_protections(p, exe)?;

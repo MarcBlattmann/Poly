@@ -14,7 +14,7 @@ use crate::procattrs::ProcAttrs;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::{
-    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_SET_INFORMATION, THREAD_GET_CONTEXT,
+    PROCESS_CREATE_THREAD, PROCESS_DUP_HANDLE, PROCESS_QUERY_INFORMATION, PROCESS_SET_INFORMATION, THREAD_GET_CONTEXT,
     THREAD_QUERY_INFORMATION, THREAD_SET_CONTEXT, THREAD_SET_INFORMATION, THREAD_SUSPEND_RESUME, THREAD_TERMINATE,
 };
 use poly_ntobj::status::*;
@@ -490,6 +490,51 @@ fn class_base_priority(class: u8) -> i32 {
     }
 }
 
+/// `STATUS_DATATYPE_MISALIGNMENT` (`ntstatus.h`).
+const STATUS_DATATYPE_MISALIGNMENT: NtStatus = NtStatus(0x8000_0002);
+
+/// `ProcessHandleTable` (class 58, 0x3A): no name in the public headers (`winternl.h` stops at
+/// 29); described by its number in `specs/windows/ntdll.dll/NtQueryInformationProcess.yaml`
+/// (`handle_list_*`). The values of the open handles of the process as a plain array of 4-byte
+/// values in ascending order, one per handle (the number `ProcessHandleCount` gives), pseudo handles
+/// not listed. A length below 4 is `STATUS_INFO_LENGTH_MISMATCH`; from 4 up as many whole entries as
+/// fit are written, the first ones, and the returned length is their size. The buffer must be
+/// 4-byte aligned (`STATUS_DATATYPE_MISALIGNMENT`). The caller's own process (the pseudo handle)
+/// needs no right; a handle needs `PROCESS_QUERY_INFORMATION` and `PROCESS_DUP_HANDLE` together. A
+/// process that has ended is `STATUS_PROCESS_IS_TERMINATING` with 0 as the returned length. Every
+/// failure leaves the returned length as it was (but that one).
+fn query_handle_table<K: NtKernel>(k: &mut K, h: Handle, buf: u64, length: u32, ret: u64) -> Result<NtStatus> {
+    let pid = if h == Handle::CURRENT_PROCESS {
+        k.with_state(|_, proc, _| proc.pid)
+    } else {
+        process_of(k, h, PROCESS_QUERY_INFORMATION | PROCESS_DUP_HANDLE)?
+    };
+    let values =
+        k.with_state(
+            |sys, _, _| {
+                if sys.process_exits.contains_key(&pid) { None } else { sys.objects.process_handle_values(pid) }
+            },
+        );
+    let Some(values) = values else {
+        abi::write_opt_u32(k, ret, 0)?;
+        return Err(STATUS_PROCESS_IS_TERMINATING);
+    };
+    if length < 4 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    if !buf.is_multiple_of(4) {
+        return Err(STATUS_DATATYPE_MISALIGNMENT);
+    }
+    let n = values.len().min(length as usize / 4);
+    let mut bytes = Vec::with_capacity(n * 4);
+    for v in &values[..n] {
+        bytes.extend_from_slice(&(*v as u32).to_le_bytes());
+    }
+    abi::write(k, buf, &bytes)?;
+    abi::write_opt_u32(k, ret, bytes.len() as u32)?;
+    Ok(STATUS_SUCCESS)
+}
+
 /// `NtQueryInformationProcess(Process, Class, Buffer, Length, ReturnLength)`: the classes programs
 /// ask with their exact lengths (`specs/windows/ntdll.dll/NtQueryInformationProcess.yaml`).
 /// `ExitStatus` of the basic information is `STATUS_PENDING` for a running process and its exit
@@ -501,6 +546,9 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
     let (class, length) = (class as u32, length as u32);
     if Handle(h) == Handle::CURRENT_THREAD {
         return Err(STATUS_OBJECT_TYPE_MISMATCH);
+    }
+    if class == 58 {
+        return query_handle_table(k, Handle(h), buf, length, ret);
     }
     let pid = process_of_any(k, Handle(h), &[PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_QUERY_INFORMATION])?;
     let le32 = |v: u32| v.to_le_bytes();

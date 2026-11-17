@@ -5,7 +5,9 @@
 
 use super::*;
 use crate::kbd;
-use crate::wm::raw::{WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN};
+use crate::wm::raw::{
+    SYNTHETIC_MOVE, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+};
 
 pub const WM_SETCURSOR: u32 = 0x0020;
 /// `HTCLIENT`, `HTERROR` (winuser.h; HTERROR is -2, 16 bits in a hit code).
@@ -21,6 +23,24 @@ const MA_NOACTIVATEANDEAT: u64 = 4;
 pub static NC_TRACK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
 /// `WM_NCMOUSELEAVE` (winuser.h).
 const WM_NCMOUSELEAVE: u32 = 0x02A2;
+
+/// The vertical and horizontal wheel messages: they keep the screen position in `lParam` and get
+/// no `WM_SETCURSOR`.
+fn is_wheel(m: u32) -> bool {
+    m == WM_MOUSEWHEEL || m == WM_MOUSEHWHEEL
+}
+
+/// Set when a move loop ended (`sizemove`): the mouse move its capture release makes is followed by
+/// a second one (`WM_ENTERSIZEMOVE.yaml` `szm_caption`: two `WM_NCMOUSEMOVE` after
+/// `WM_EXITSIZEMOVE`).
+pub static AFTER_MOVE_LOOP: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// The window and screen place of the last mouse move whose hit was the caption (0: none).
+static CAPTION_SPOT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+
+fn caption_spot(hwnd: u32, x: i32, y: i32) -> u64 {
+    (u64::from(hwnd) << 32) | (u64::from(x as u16) << 16) | u64::from(y as u16) | (1 << 63)
+}
 
 fn is_button_down(m: u32) -> bool {
     matches!(m, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN)
@@ -39,14 +59,14 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     // A disabled top-level window: the hit is HTERROR, WM_SETCURSOR is all
     // it gets; no WM_NCHITTEST, no activation, the mouse message is dropped
     // (EnableWindow.yaml `mouse_disabled_popup`).
-    if i.style & WS_DISABLED != 0 && i.style & WS_CHILD == 0 && st0.capture != i.hwnd && m.message != WM_MOUSEWHEEL {
+    if i.style & WS_DISABLED != 0 && i.style & WS_CHILD == 0 && st0.capture != i.hwnd && !is_wheel(m.message) {
         send(env, h, WM_SETCURSOR, h, HTERROR | (u64::from(m.message) << 16));
         return false;
     }
     if st0.capture == i.hwnd {
         // Captured: client coordinates of the capture window, no hit test
         // and no WM_SETCURSOR (SetCapture.yaml).
-        if m.message != WM_MOUSEWHEEL {
+        if !is_wheel(m.message) {
             m.l = (makelparam(sx - i.client.left, sy - i.client.top)) as usize;
         }
         return true;
@@ -54,12 +74,31 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     // A mouse move over the non-client area uses the geometric hit test
     // directly (SetCursorPos.yaml: no WM_NCHITTEST there). Client moves and
     // button events send WM_NCHITTEST to the window procedure.
-    let hit = if m.message == WM_MOUSEMOVE {
+    // The move a capture release makes (`Msg::private`) asks the window like a button message
+    // does (`WM_ENTERSIZEMOVE.yaml`: WM_NCHITTEST over the border after a sizing loop).
+    let synthetic = m.private == SYNTHETIC_MOVE;
+    let hit = if m.message == WM_MOUSEMOVE && !synthetic {
         let geometric = def_window_proc(env, h, WM_NCHITTEST, 0, screen_l);
+        // A move over the caption is remembered: the press that follows at the same place
+        // reuses its hit (`WM_ENTERSIZEMOVE.yaml` `szm_caption`: no WM_NCHITTEST at the press).
+        CAPTION_SPOT.store(
+            if geometric == frame::HTCAPTION as u64 { caption_spot(i.hwnd, sx, sy) } else { 0 },
+            core::sync::atomic::Ordering::Relaxed,
+        );
         if geometric == HTCLIENT { send(env, h, WM_NCHITTEST, 0, screen_l) } else { geometric }
+    } else if is_button_down(m.message)
+        && CAPTION_SPOT.swap(0, core::sync::atomic::Ordering::Relaxed) == caption_spot(i.hwnd, sx, sy)
+    {
+        frame::HTCAPTION as u64
+    } else if synthetic && def_window_proc(env, h, WM_NCHITTEST, 0, screen_l) == frame::HTCAPTION as u64 {
+        // Over the caption it is not asked either (`szm_caption`, `szm_clamp`).
+        frame::HTCAPTION as u64
     } else {
         send(env, h, WM_NCHITTEST, 0, screen_l)
     };
+    if synthetic && AFTER_MOVE_LOOP.swap(false, core::sync::atomic::Ordering::Relaxed) {
+        env.call(Request::Cursor { set: true, x: sx, y: sy });
+    }
     // Moving from the tracked non-client area into the client area (or
     // another window) ends the tracking: WM_NCMOUSELEAVE follows the move.
     if m.message == WM_MOUSEMOVE {
@@ -105,13 +144,13 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
             eat = r == MA_NOACTIVATEANDEAT;
         }
     }
-    if m.message != WM_MOUSEWHEEL {
+    if !is_wheel(m.message) {
         send(env, h, WM_SETCURSOR, h, (hit & 0xFFFF) | (u64::from(m.message) << 16));
     }
     if eat {
         return false;
     }
-    if m.message == WM_MOUSEWHEEL {
+    if is_wheel(m.message) {
         return true;
     }
     if hit == HTCLIENT {

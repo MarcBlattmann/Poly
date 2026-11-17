@@ -4,13 +4,10 @@
 //! implementation replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 //! Generated from the programs' import tables (names only) and our export table.
 
-poly_win32_rt::fail_exports!("user32", invalid_handle, [VkKeyScanExW, VkKeyScanW,]);
-
 poly_win32_rt::fail_exports!(
     "user32",
     win32,
     [
-        ActivateKeyboardLayout,
         AnimateWindow,
         BeginDeferWindowPos,
         BroadcastSystemMessageW,
@@ -99,8 +96,6 @@ poly_win32_rt::fail_exports!(
         IsWinEventHookInstalled,
         IsWindowInDestroy,
         LoadCursorFromFileA,
-        LoadKeyboardLayoutA,
-        LoadKeyboardLayoutW,
         LockWindowUpdate,
         LockWorkStation,
         MapVirtualKeyA,
@@ -141,7 +136,6 @@ poly_win32_rt::fail_exports!(
         ToAscii,
         ToAsciiEx,
         TranslateMDISysAccel,
-        UnloadKeyboardLayout,
         UnpackDDElParam,
         UnregisterTouchWindow,
         UpdateLayeredWindowIndirect,

@@ -290,6 +290,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
             k.debug_print(&buf[..n]);
             Ok(poly_ntobj::status::STATUS_SUCCESS)
         }
+        PolyRandomBytes => sysinfo::random_bytes(k, regs),
+        PolyPhysicalMemory => sysinfo::physical_memory(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),
@@ -324,6 +326,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         AdjustPrivilegesToken => security::adjust_privileges_token(k, regs),
         DuplicateToken => security::duplicate_token(k, regs),
         FilterToken => security::filter_token(k, regs),
+        CreateLowBoxToken => security::create_lowbox_token(k, regs),
         AdjustGroupsToken => security::adjust_groups_token(k, regs),
         SetInformationToken => security::set_information_token(k, regs),
         CompareTokens => security::compare_tokens(k, regs),

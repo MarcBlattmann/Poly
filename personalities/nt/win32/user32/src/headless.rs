@@ -168,6 +168,15 @@ pub unsafe extern "system" fn EnumThreadWindows(tid: u32, f: Option<EnumProc>, l
     1
 }
 
+unsafe fn put_wide_units(dst: *mut u8, units: &[u16]) {
+    for (n, &c) in units.iter().enumerate() {
+        // SAFETY: inside the caller's buffer of KL_NAMELENGTH (9) characters.
+        unsafe { core::ptr::write_unaligned(dst.add(n * 2) as *mut u16, c) };
+    }
+    // SAFETY: the terminating NUL is the ninth character.
+    unsafe { core::ptr::write_unaligned(dst.add(units.len() * 2) as *mut u16, 0) };
+}
+
 unsafe fn put_wide(dst: *mut u8, capacity: usize, s: &str) {
     let mut n = 0;
     for c in s.encode_utf16().take(capacity - 1) {
@@ -190,8 +199,13 @@ pub unsafe extern "system" fn GetKeyboardLayoutNameW(buf: *mut u16) -> i32 {
         set_last_error(998);
         return 0;
     }
+    let klid = poly_win32k::kbdlist::hkl_to_klid(crate::kbdlayout::thread_hkl());
+    let mut name = [0u16; 8];
+    for (d, s) in name.iter_mut().zip(klid) {
+        *d = u16::from(s);
+    }
     // SAFETY: the caller's buffer of KL_NAMELENGTH (9) characters.
-    unsafe { put_wide(buf as *mut u8, 9, crate::refresh_layout().klid()) };
+    unsafe { put_wide_units(buf as *mut u8, &name) };
     1
 }
 

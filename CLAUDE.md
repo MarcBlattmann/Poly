@@ -43,8 +43,16 @@ crates that depend on what you changed, so the full lint (and CI) is the gate.
 - **Every `unsafe` block gets a `// SAFETY:` comment** explaining why it is sound.
 - **Claim before you work.** `cargo xtask coverage claim` marks an entry so no
   other agent duplicates it. Release it if you stop.
-- **Never hand-edit the README progress section or `docs/progress/`.** Run
-  `cargo xtask coverage readme` after changing `coverage/` or `docs/ROADMAP.md`.
+- **Never edit, and never commit a regenerated copy of, the README progress
+  section (between `coverage:begin/end` and `roadmap:begin/end`),
+  `docs/progress/` or the ADR index table (between `adr-index:begin/end`).**
+  A workflow regenerates them on `main` after every merge (ADR 0213); CI fails a
+  PR that changes them. The rest of `README.md` and `docs/adr/README.md` stays
+  editable. `cargo xtask coverage readme` still previews them locally: look,
+  then `git checkout README.md docs/progress docs/adr/README.md`.
+- **Hand-off records are one file each** under `specs/handoffs/`
+  (`pipeline handoff record` writes it; commit that file). Never add rows to
+  `specs/HANDOFF_LOG.md`: it is the legacy log, read but no longer written.
 - **Work in roadmap order.** Pick the next unticked milestone in `docs/ROADMAP.md`;
   tick it (`- [x]`) in the same change that delivers it with tests. Do not start a
   milestone marked ⚖️ until the owner has made that decision.

@@ -53,6 +53,16 @@ fn create_user_process_starts_a_child_with_its_parameters() {
     // Running: the exit status is pending and the handle not signalled.
     let (s, exit, id) = exit_status_of(&mut t, ph);
     assert_eq!((s, exit, id), (STATUS_SUCCESS, STATUS_PENDING.0, u64::from(pid.0)));
+    // `ProcessBasicInformation` of the child: the normal base priority and a PEB
+    // (the sheet's `basic_child`); a buffer of 47 bytes is refused and `ReturnLength` untouched.
+    let buf = t.f.alloc(48);
+    let ret = t.f.put_u64(0xAAAA);
+    assert_eq!(t.f.call(Service::QueryInformationProcess, &[ph, 0, buf, 48, ret]), STATUS_SUCCESS);
+    assert_eq!(t.f.u32_at(buf + 24), 8, "BasePriority");
+    assert_ne!(t.f.u64_at(buf + 8), 0, "PebBaseAddress");
+    let ret = t.f.put_u64(0xAAAA);
+    assert_eq!(t.f.call(Service::QueryInformationProcess, &[ph, 0, buf, 47, ret]), STATUS_INFO_LENGTH_MISMATCH);
+    assert_eq!(t.f.u64_at(ret), 0xAAAA);
     let zero = t.f.put_u64(0);
     assert_eq!(t.f.call(Service::WaitForSingleObject, &[ph, 0, zero]), STATUS_TIMEOUT);
     // Its last thread ends with 0x2A: the process's status, its handle

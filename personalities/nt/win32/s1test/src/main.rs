@@ -643,11 +643,14 @@ unsafe fn system() {
 
     // The keyboard layout list: three installed layouts, as the oracle of
     // specs/windows/imm32.dll/ImmIsIME.yaml has (its visible test records the
-    // count); the first one is the thread's current layout.
+    // count); the oracle's list is Swiss German, the thread's layout, German
+    // (ADR 0212, LoadKeyboardLayoutW.yaml `list_effect`).
     check_eq(GetKeyboardLayoutList(0, core::ptr::null_mut()) as usize, 3);
-    let mut hkl = 0usize;
-    check_eq(GetKeyboardLayoutList(1, &mut hkl) as usize, 1);
-    check_eq(hkl, GetKeyboardLayout(0));
+    let mut hkls = [0usize; 3];
+    check_eq(GetKeyboardLayoutList(3, hkls.as_mut_ptr()) as usize, 3);
+    check_eq(hkls[0], 0x0807_0809);
+    check_eq(hkls[1], GetKeyboardLayout(0));
+    check_eq(hkls[2], 0x0407_0809);
     let mut kl = [0u16; 9];
     check_eq(GetKeyboardLayoutNameW(kl.as_mut_ptr()) as usize, 1);
     check_got(wide_eq(&kl, "00000407"), 0);

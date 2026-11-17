@@ -213,21 +213,61 @@ fn file(f: &mut Fake, key: u64, bytes: Vec<u8>) -> u64 {
     h.0
 }
 
+/// Prohibit-dynamic-code lets the views of image sections be executable (what the loader makes
+/// of a module) and nothing else (ADR 0196).
+#[test]
+fn prohibit_dynamic_code_exempts_image_views_only() {
+    let mut f = Fake::new();
+    let fh = file(&mut f, 3, test_exe(false));
+    let (s, h) = create(&mut f, "", 0, PAGE_EXECUTE_WRITECOPY, SEC_IMAGE, fh);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (_, v, n, _) = map(&mut f, h, 0, None, 0, PAGE_READONLY);
+    f.proc.set_mitigation(poly_kernelbase::mitigation::State::new().with_creation_words(1 << 36, 0));
+    assert!(f.proc.dynamic_code_blocked);
+    // The module's sections change protection, as the loader does after it relocated.
+    let b = f.put_u64(v);
+    let sz = f.put_u64(0x1000);
+    let old = f.alloc(4);
+    for prot in [PAGE_READWRITE, PAGE_EXECUTE_READ] {
+        assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(prot), old]), STATUS_SUCCESS);
+    }
+    // Private memory cannot become executable.
+    let (st, p, _) = allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    assert_eq!(st, STATUS_SUCCESS);
+    let pbase = f.put_u64(p);
+    let blocked = NtStatus(0xC000_0604);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, pbase, sz, u64::from(PAGE_EXECUTE_READ), old]), blocked);
+    // A range that leaves the view is not the view's.
+    let past = f.put_u64(v + n - 0x1000);
+    let two = f.put_u64(0x2000);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, past, two, u64::from(PAGE_EXECUTE_READ), old]), blocked);
+}
+
 #[test]
 fn image_sections_from_files() {
     let mut f = Fake::new();
     let fh = file(&mut f, 3, test_exe(false));
     let (s, h) = create(&mut f, "", 0, PAGE_EXECUTE_WRITECOPY, SEC_IMAGE, fh);
     assert_eq!(s, STATUS_SUCCESS);
-    // The executable already sits at the preferred base: the view moves and
-    // the caller is told to relocate.
+    // The executable already sits at the preferred base: the first view of the section goes
+    // elsewhere and is relocated for it (the sheet's `image_first_view`: `STATUS_SUCCESS`, the
+    // header's `ImageBase` is the base), which becomes the section's base.
     let (s, v, n, _) = map(&mut f, h, 0, None, 0, PAGE_READONLY);
-    assert_eq!((s, n), (STATUS_IMAGE_NOT_AT_BASE, 0x5000));
+    assert_eq!((s, n), (STATUS_SUCCESS, 0x5000));
     assert_ne!(v, IMAGE_BASE);
     let q = query(&mut f, v + 0x1000);
     assert_eq!((q.type_, q.protect, q.allocation_base), (MEM_IMAGE, PAGE_EXECUTE_READ, v));
-    // Not relocated: the pointer still names the preferred base.
-    assert_eq!(f.u64_at(v + 0x2008), IMAGE_BASE + 0x1000);
+    assert_eq!(f.u64_at(v + 0x2008), v + 0x1000);
+    assert_eq!(f.u64_at(v + 0x40 + 24 + 24), v);
+    // A second view in the same process: the section's base is taken, so it is somewhere else,
+    // not relocated, and `STATUS_IMAGE_NOT_AT_BASE` (`image_second_view`).
+    let (s2, v2, n2, _) = map(&mut f, h, 0, None, 0, PAGE_READONLY);
+    assert_eq!((s2, n2), (STATUS_IMAGE_NOT_AT_BASE, 0x5000));
+    assert!(v2 != v && v2 != IMAGE_BASE);
+    assert_eq!(f.u64_at(v2 + 0x2008), IMAGE_BASE + 0x1000);
+    assert_eq!(f.call(Service::UnmapViewOfSection, &[SELF, v2]), STATUS_SUCCESS);
+    // A section offset is refused for an image.
+    assert_eq!(map(&mut f, h, 0, Some(0x10000), 0, PAGE_READONLY).0, STATUS_INVALID_VIEW_SIZE);
     // The section holds the file; both go with the view.
     assert_eq!(f.call(Service::Close, &[h]), STATUS_SUCCESS);
     assert_eq!(f.call(Service::Close, &[fh]), STATUS_SUCCESS);
@@ -237,6 +277,51 @@ fn image_sections_from_files() {
     // Not an image.
     let bad = file(&mut f, 4, vec![1, 2, 3]);
     assert_eq!(create(&mut f, "", 0, PAGE_READONLY, SEC_IMAGE, bad).0, STATUS_INVALID_IMAGE_FORMAT);
+}
+
+#[test]
+fn an_image_page_made_writable_is_copy_on_write_until_it_is_written() {
+    // The sheet of `VirtualProtectEx`: `PAGE_READWRITE` on an image page is reported
+    // `PAGE_WRITECOPY`; a write through the kernel (`WriteProcessMemory`) makes the page a private
+    // `PAGE_READWRITE` one that stays `MEM_IMAGE`; and what it was before comes back as `old`.
+    let mut f = Fake::new();
+    let fh = file(&mut f, 3, test_exe(false));
+    let (s, h) = create(&mut f, "", 0, PAGE_EXECUTE_WRITECOPY, SEC_IMAGE, fh);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (_, v, _, _) = map(&mut f, h, 0, None, 0, PAGE_READONLY);
+    let code = v + 0x1000;
+    assert_eq!(query(&mut f, code).protect, PAGE_EXECUTE_READ);
+    let b = f.put_u64(code);
+    let sz = f.put_u64(0x1000);
+    let old = f.alloc(4);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(PAGE_READWRITE), old]), STATUS_SUCCESS);
+    assert_eq!(f.u32_at(old), PAGE_EXECUTE_READ);
+    let q = query(&mut f, code);
+    assert_eq!((q.protect, q.type_), (PAGE_WRITECOPY, MEM_IMAGE));
+    // Not written yet: back to the old protection reports copy-on-write as `old`.
+    let b = f.put_u64(code);
+    let sz = f.put_u64(0x1000);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(PAGE_WRITECOPY), old]), STATUS_SUCCESS);
+    assert_eq!(f.u32_at(old), PAGE_WRITECOPY);
+    // The broker's write.
+    let data = f.alloc(4);
+    f.mem.write_bytes(data, &[1, 2, 3, 4]).unwrap();
+    let done = f.put_u64(0);
+    assert_eq!(f.call(Service::WriteVirtualMemory, &[SELF, code + 8, data, 4, done]), STATUS_SUCCESS);
+    assert_eq!(query(&mut f, code).protect, PAGE_READWRITE);
+    let b = f.put_u64(code);
+    let sz = f.put_u64(0x1000);
+    assert_eq!(
+        f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(PAGE_EXECUTE_READ), old]),
+        STATUS_SUCCESS
+    );
+    assert_eq!(f.u32_at(old), PAGE_READWRITE);
+    assert_eq!(query(&mut f, code).protect, PAGE_EXECUTE_READ);
+    // A page that was not copy-on-write keeps its protection when written.
+    let b = f.put_u64(code + 0x1000);
+    let sz = f.put_u64(0x1000);
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, sz, u64::from(PAGE_READONLY), old]), STATUS_SUCCESS);
+    assert_eq!(query(&mut f, code + 0x1000).protect, PAGE_READONLY);
 }
 
 #[test]

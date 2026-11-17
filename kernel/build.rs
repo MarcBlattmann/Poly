@@ -103,6 +103,7 @@ fn embed_win32() {
         "propsys.dll",
         "wevtapi.dll",
         "hid.dll",
+        "mdmregistration.dll",
         "dxgi.dll",
         "d3d11.dll",
         "dcomp.dll",
