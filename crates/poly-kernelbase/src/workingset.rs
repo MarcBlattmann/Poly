@@ -96,12 +96,12 @@ impl Default for WorkingSet {
 
 impl WorkingSet {
     /// Apply a checked request; `limit` is the most a limit may be (the machine's memory): above
-    /// it the call fails (`ERROR_NO_SYSTEM_RESOURCES`, the kernel's `STATUS_INSUFFICIENT_RESOURCES`)
-    /// and nothing changes.
-    pub fn apply(&mut self, r: Request, flags: u32, limit: u64) -> Result<(), ()> {
+    /// it the call fails (`false`: `ERROR_NO_SYSTEM_RESOURCES`, the kernel's
+    /// `STATUS_INSUFFICIENT_RESOURCES`) and nothing changes.
+    pub fn apply(&mut self, r: Request, flags: u32, limit: u64) -> bool {
         if let Request::Set { minimum, maximum } = r {
             if minimum > limit || maximum.is_some_and(|m| m > limit) {
-                return Err(());
+                return false;
             }
             self.minimum = minimum;
             if let Some(m) = maximum {
@@ -109,7 +109,7 @@ impl WorkingSet {
             }
         }
         self.flags = merge_flags(self.flags, flags);
-        Ok(())
+        true
     }
 
     /// The bytes of Poly's process information class for it (three `u64`s: minimum, maximum,
@@ -214,16 +214,18 @@ mod tests {
     fn apply_and_limits() {
         let mut ws = WorkingSet::default();
         assert_eq!(ws.to_bytes(), WorkingSet { minimum: 0x32000, maximum: 0x159000, flags: 0xA }.to_bytes());
-        ws.apply(Request::Trim, 0, 1 << 33).unwrap();
+        assert!(ws.apply(Request::Trim, 0, 1 << 33));
         assert_eq!(ws, WorkingSet::default());
-        ws.apply(Request::Set { minimum: MIB, maximum: Some(4 * MIB) }, 0, 1 << 33).unwrap();
+        assert!(ws.apply(Request::Set { minimum: MIB, maximum: Some(4 * MIB) }, 0, 1 << 33));
         assert_eq!((ws.minimum, ws.maximum), (MIB, 4 * MIB));
-        assert!(ws.apply(Request::Set { minimum: 0x7FFF_FFFF_FFFF, maximum: Some(0x7FFF_FFFF_FFFF) }, 0, 1 << 33).is_err());
+        assert!(!ws.apply(Request::Set { minimum: 0x7FFF_FFFF_FFFF, maximum: Some(0x7FFF_FFFF_FFFF) }, 0, 1 << 33));
         assert_eq!((ws.minimum, ws.maximum), (MIB, 4 * MIB));
-        ws.apply(Request::Set { minimum: 2 * MIB, maximum: None }, 0, 1 << 33).unwrap();
+        assert!(ws.apply(Request::Set { minimum: 2 * MIB, maximum: None }, 0, 1 << 33));
         assert_eq!((ws.minimum, ws.maximum), (2 * MIB, 4 * MIB));
         assert_eq!(WorkingSet::from_bytes(&ws.to_bytes()), ws);
-        for r in [Request::Trim, Request::Set { minimum: 5, maximum: Some(6) }, Request::Set { minimum: 5, maximum: None }] {
+        for r in
+            [Request::Trim, Request::Set { minimum: 5, maximum: Some(6) }, Request::Set { minimum: 5, maximum: None }]
+        {
             assert_eq!(request_from_bytes(&request_bytes(r, 9)), Some((r, 9)));
         }
     }

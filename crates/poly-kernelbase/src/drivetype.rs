@@ -106,7 +106,9 @@ pub fn drive_query(path: Option<&[u16]>, cwd: &[u16]) -> DriveQuery {
         let p: Vec<u16> = prefix.encode_utf16().collect();
         if let Some(rest) = path.strip_prefix(p.as_slice()) {
             return match rest {
-                [d, c, s] if *c == u16::from(b':') && is_sep(*s) => letter(*d).map_or(DriveQuery::NoRoot, DriveQuery::Root),
+                [d, c, s] if *c == u16::from(b':') && is_sep(*s) => {
+                    letter(*d).map_or(DriveQuery::NoRoot, DriveQuery::Root)
+                }
                 [d, c, s, ..] if *c == u16::from(b':') && is_sep(*s) && trailing && letter(*d).is_some() => {
                     directory(rest, cwd)
                 }
@@ -156,8 +158,20 @@ mod tests {
 
     #[test]
     fn the_system_drive_in_every_spelling() {
-        for s in ["C:\\", "c:\\", "C:", "C:/", "C:\\\\", "C:\\.", "C:\\..", "C:\\ ", "\\", "\\\\?\\C:\\", "\\\\.\\C:\\", "\\??\\C:\\"]
-        {
+        for s in [
+            "C:\\",
+            "c:\\",
+            "C:",
+            "C:/",
+            "C:\\\\",
+            "C:\\.",
+            "C:\\..",
+            "C:\\ ",
+            "\\",
+            "\\\\?\\C:\\",
+            "\\\\.\\C:\\",
+            "\\??\\C:\\",
+        ] {
             assert_eq!(q(s), DriveQuery::Root(b'C'), "{s}");
         }
         assert_eq!(drive_query(None, &w("C:\\Windows")), DriveQuery::Root(b'C'));
@@ -169,7 +183,9 @@ mod tests {
         assert_eq!(q("C:\\Windows\\"), DriveQuery::Directory(w("C:\\Windows\\")));
         assert_eq!(q("C:\\nonexistent-dir-xyz\\"), DriveQuery::Directory(w("C:\\nonexistent-dir-xyz\\")));
         assert_eq!(q("C:\\Windows\\..\\Windows\\"), DriveQuery::Directory(w("C:\\Windows\\")));
-        for s in ["C:\\Windows", "C:\\Windows\\System32\\kernel32.dll", "\\Windows", "Windows", " ", "CONOUT$", "NUL", ""] {
+        for s in
+            ["C:\\Windows", "C:\\Windows\\System32\\kernel32.dll", "\\Windows", "Windows", " ", "CONOUT$", "NUL", ""]
+        {
             assert_eq!(q(s), DriveQuery::NoRoot, "{s:?}");
         }
     }

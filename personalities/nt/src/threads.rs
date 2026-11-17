@@ -477,14 +477,15 @@ fn set_working_set<K: NtKernel>(k: &mut K, h: u64, info: u64, length: u64) -> Re
     }
     let mut b = [0u8; 32];
     abi::read(k, info, &mut b)?;
-    let (request, flags) =
-        poly_kernelbase::workingset::request_from_bytes(&b).ok_or(STATUS_INVALID_PARAMETER)?;
+    let (request, flags) = poly_kernelbase::workingset::request_from_bytes(&b).ok_or(STATUS_INVALID_PARAMETER)?;
     // Without a count of the machine's memory, 64 GiB.
     let limit = k.physical_memory().map_or(64 << 30, |(total, _)| total);
     k.with_state(|sys, _, _| {
         let ws = sys.working_sets.entry(pid).or_default();
         let mut next = *ws;
-        next.apply(request, flags, limit).map_err(|()| STATUS_INSUFFICIENT_RESOURCES)?;
+        if !next.apply(request, flags, limit) {
+            return Err(STATUS_INSUFFICIENT_RESOURCES);
+        }
         *ws = next;
         Ok(STATUS_SUCCESS)
     })

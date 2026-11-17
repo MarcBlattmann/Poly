@@ -126,12 +126,18 @@ impl CreateHook<'_> {
         match start {
             Start::Pipe => self.open_pipe(om, r.remaining),
             // The volume itself (`\??\C:` with nothing after it), not its root directory.
-            Start::Volume(v) if r.remaining.is_empty() => self.open_volume(om, v),
+            Start::Volume(v) if r.remaining.is_empty() => self.open_volume(om, v, false),
+            // `$Volume`, NTFS's file for the volume: the volume's data, for its owners only.
+            Start::Volume(v) if names::fold(r.remaining) == names::fold(&poly_ntobj::name::wide("\\$Volume")) => {
+                self.open_volume(om, v, true)
+            }
             Start::Volume(v) => {
                 let root = self.io.volumes[v].root.clone();
                 self.open_disk(om, r.caller.as_ref(), v, &root, &[], r.remaining)
             }
-            Start::Dir { volume, node, path } => self.open_disk(om, r.caller.as_ref(), volume, &node, &path, r.remaining),
+            Start::Dir { volume, node, path } => {
+                self.open_disk(om, r.caller.as_ref(), volume, &node, &path, r.remaining)
+            }
         }
     }
 
@@ -177,14 +183,17 @@ impl CreateHook<'_> {
     /// is not there). The file object carries [`super::volume::VOLUME_SDDL`], which the object
     /// manager checks the access against; an open that asks for more than attribute, control and
     /// synchronize rights reaches the volume's data and answers `FILE_OPENED`, the others 0.
-    fn open_volume(&mut self, om: &mut ObjectManager, v: usize) -> Result<ObjectId, NtStatus> {
+    /// `$Volume` (`file`) is the volume's data whatever the rights: [`super::volume::VOLUME_FILE_SDDL`]
+    /// and `FILE_OPENED` (the sheet: refused to the filtered token, opened by the full one).
+    fn open_volume(&mut self, om: &mut ObjectManager, v: usize, file: bool) -> Result<ObjectId, NtStatus> {
         if self.io.volumes[v].letter != Some('C') {
             return Err(STATUS_OBJECT_NAME_NOT_FOUND);
         }
-        let data = self.params.access & !super::volume::LIGHT_RIGHTS != 0;
+        let data = file || self.params.access & !super::volume::LIGHT_RIGHTS != 0;
         let cookie = self.io.cookie();
         let object = new_file_object(om, cookie, self.thread)?;
-        om.assign_sddl(object, ObjectType::File, super::volume::VOLUME_SDDL);
+        let sddl = if file { super::volume::VOLUME_FILE_SDDL } else { super::volume::VOLUME_SDDL };
+        om.assign_sddl(object, ObjectType::File, sddl);
         self.io.files.insert(cookie, self.record(object, Target::Volume(v), FileType::BlockDevice));
         self.information = if data { FILE_OPENED } else { 0 };
         self.made = Some(cookie);
@@ -346,6 +355,12 @@ impl CreateHook<'_> {
         let follow = p.options & FILE_OPEN_REPARSE_POINT == 0;
         let vr = self.io.vfs()?;
         let found = walk::resolve(vr, start, start_path, &parts, follow)?;
+        // The root directory of a volume asked for as a file (`CreateFileW` without
+        // `FILE_FLAG_BACKUP_SEMANTICS`): no such path (the sheet of `OpenVolume`: `C:\` and
+        // `\\.\C:\` fail with `ERROR_PATH_NOT_FOUND`, other directories with access denied).
+        if found.parent.is_none() && start_path.is_empty() && p.options & FILE_NON_DIRECTORY_FILE != 0 {
+            return Err(STATUS_OBJECT_PATH_NOT_FOUND);
+        }
         let (info, node, open) = match &found.node {
             Some(node) => self.open_existing(&found, node, trailing)?,
             None => {

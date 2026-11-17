@@ -451,8 +451,9 @@ pub extern "system" fn CoGetCallContext(_iid: *const Guid, _out: *mut *mut c_voi
 static MTA_COOKIES: AtomicUsize = AtomicUsize::new(0x4D54_0000);
 
 /// `CoIncrementMTAUsage(pCookie)`: keeps the process's multithreaded apartment alive without a
-/// thread in it, so threads that never initialised COM are in the implicit MTA (type 1, qualifier
-/// 1) while any cookie is held; a thread with its own apartment keeps it
+/// thread in it, so threads that never initialised COM are in the implicit MTA (`APTTYPE_MTA`
+/// with `APTTYPEQUALIFIER_IMPLICIT_MTA`) while any cookie is held; a thread with its own apartment
+/// keeps it
 /// (`specs/windows/ole32.dll/CoIncrementMTAUsage.yaml`). A NULL cookie pointer is `E_INVALIDARG`
 /// (Windows raises).
 #[unsafe(no_mangle)]

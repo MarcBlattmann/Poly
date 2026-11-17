@@ -658,4 +658,36 @@ mod tests {
         // Writing is not given.
         assert!(matches!(om.dacl_grant(&c, id, 0x4000_0000, false), Some(Err(_))));
     }
+
+    /// The administrator's filtered token: Administrators deny-only, no `SeDebugPrivilege`.
+    fn filtered() -> Token {
+        let mut t = token(0x2000, true);
+        let ba = poly_security::sid::builtin(poly_security::sid::rid::DOMAIN_ALIAS_RID_ADMINS);
+        for g in t.groups.iter_mut().filter(|g| g.0 == ba) {
+            g.1 = poly_security::token::SE_GROUP_USE_FOR_DENY_ONLY;
+        }
+        t.privileges.retain(|&(l, _)| l != 20);
+        t
+    }
+
+    #[test]
+    fn a_directory_for_the_administrators_refuses_the_filtered_token() {
+        // `C:\Windows\SystemTemp`'s descriptor (the sheet `SystemTemp`).
+        let key = "F1\\WINDOWS\\SYSTEMTEMP";
+        let sddl = "O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        for (tok, allowed) in [(Token::poly_user(), true), (filtered(), false)] {
+            let (mut om, c) = setup(tok.clone(), tok);
+            // Nothing set: not checked.
+            assert_eq!(om.path_access(&c, key, true, 2), Ok(()));
+            om.set_path_security(key, sddl);
+            let want = if allowed { Ok(()) } else { Err(STATUS_ACCESS_DENIED) };
+            assert_eq!(om.path_access(&c, key, true, 2), want, "add file");
+            assert_eq!(om.path_access(&c, key, true, 4), want, "add subdirectory");
+            // A directory below inherits the entries.
+            assert_eq!(om.path_access(&c, &alloc::format!("{key}\\SUB"), true, 2), want);
+            // Elsewhere nothing changes.
+            assert_eq!(om.path_access(&c, "F1\\WINDOWS", true, 2), Ok(()));
+            assert_eq!(om.holds_privilege(&c, 20), allowed);
+        }
+    }
 }

@@ -6,10 +6,10 @@
 
 use crate::base::*;
 use crate::nt::{self, Handle, IoStatusBlock};
-use poly_ntobj::NtStatus;
 use alloc::vec::Vec;
 use poly_kernelbase::drivetype::{self, DriveQuery};
 use poly_kernelbase::workingset::{self, WorkingSet};
+use poly_ntobj::NtStatus;
 
 /// Poly's own process information class for the working set limits (`poly_kernelbase::workingset`:
 /// set takes a request of four `u64`s, query answers three), the same for 32- and 64-bit callers.
@@ -282,7 +282,13 @@ pub unsafe extern "system" fn GetVolumeInformationByHandleW(
     let mut iosb = IoStatusBlock::default();
     // SAFETY: local buffers of the sizes passed.
     let st = unsafe {
-        nt::NtQueryVolumeInformationFile(file, &mut iosb, vol.as_mut_ptr(), vol.len() as u32, FILE_FS_VOLUME_INFORMATION)
+        nt::NtQueryVolumeInformationFile(
+            file,
+            &mut iosb,
+            vol.as_mut_ptr(),
+            vol.len() as u32,
+            FILE_FS_VOLUME_INFORMATION,
+        )
     };
     if !st.is_success() {
         return fail_status(st, FALSE);

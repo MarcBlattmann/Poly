@@ -198,7 +198,8 @@ fn is_local_name(name: &[u16]) -> bool {
         s.iter().map(|&c| if (0x61..=0x7A).contains(&c) { c - 0x20 } else { c }).collect()
     };
     let n = fold(name);
-    if n.is_empty() || n == fold(&"localhost".encode_utf16().collect::<alloc::vec::Vec<_>>()) || n == [u16::from(b'.')] {
+    if n.is_empty() || n == fold(&"localhost".encode_utf16().collect::<alloc::vec::Vec<_>>()) || n == [u16::from(b'.')]
+    {
         return true;
     }
     let mut computer = [0u16; 64];

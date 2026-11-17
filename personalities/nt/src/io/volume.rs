@@ -23,6 +23,10 @@ use poly_ntobj::status::{STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_PARAMETER};
 /// Administrators group may do everything.
 pub const VOLUME_SDDL: &str = "O:BAG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x1200A0;;;WD)";
 
+/// `$Volume` below the volume's root (NTFS's file for the volume): the local system and the
+/// Administrators group only.
+pub const VOLUME_FILE_SDDL: &str = "O:BAG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)";
+
 /// The rights an open of the volume device asks without reaching its data: such an open answers
 /// `Information` 0 (the sheet), any other right `FILE_OPENED`.
 pub const LIGHT_RIGHTS: u32 = FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE;

@@ -148,7 +148,8 @@ impl IoState {
             // A volume device has a position and its handle's facts, no file information (the
             // sheet: `GetFileSizeEx` fails with `ERROR_INVALID_FUNCTION`).
             Target::Volume(_) => {
-                let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
+                let handle =
+                    HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
                 let fixed = |bytes: Vec<u8>| {
                     let n = bytes.len();
                     InfoBytes { bytes, fixed: n }

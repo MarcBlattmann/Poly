@@ -83,11 +83,8 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
         if let Some(v) = sys.io.volume_of(file.1) {
             let granted = sys.objects.granted_access(&caller, Handle(h))?;
             let facts = sys.io.volume_facts(v);
-            let reply = match crate::io::volume::control(&facts, code, granted, outlen) {
-                Ok(data) => Reply::Data(STATUS_SUCCESS, data),
-                Err(s) => return Err(s),
-            };
-            return Ok((file, reply));
+            let data = crate::io::volume::control(&facts, code, granted, outlen)?;
+            return Ok((file, Reply::Data(STATUS_SUCCESS, data)));
         }
         // A file on a volume: the file-system controls it answers (ADR 0091).
         if sys.io.is_disk(file.1) {

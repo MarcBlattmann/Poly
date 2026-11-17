@@ -12,7 +12,15 @@ use poly_kernelbase::oleauto::{self, SystemTime};
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetFileAttributesW(name: *const u16) -> u32;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const u8, disp: u32, flags: u32, tpl: isize) -> isize;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const u8,
+        disp: u32,
+        flags: u32,
+        tpl: isize,
+    ) -> isize;
     fn ReadFile(h: isize, buf: *mut u8, n: u32, read: *mut u32, ov: *mut u8) -> i32;
     fn GetFileSizeEx(h: isize, size: *mut i64) -> i32;
     fn CloseHandle(h: isize) -> i32;
@@ -178,7 +186,17 @@ struct DispatchVtbl {
     get_type_info: unsafe extern "system" fn(Pic, u32, u32, *mut *mut c_void) -> u32,
     get_ids_of_names: unsafe extern "system" fn(Pic, *const Guid, *const *const u16, u32, u32, *mut i32) -> u32,
     #[allow(clippy::type_complexity)]
-    invoke: unsafe extern "system" fn(Pic, i32, *const Guid, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> u32,
+    invoke: unsafe extern "system" fn(
+        Pic,
+        i32,
+        *const Guid,
+        u32,
+        u16,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut u32,
+    ) -> u32,
 }
 
 // SAFETY: tables of function pointers.
@@ -442,7 +460,9 @@ fn read_file(path: &[u16]) -> Option<alloc::vec::Vec<u8>> {
     while ok && done < data.len() {
         let mut got = 0u32;
         // SAFETY: the rest of `data`.
-        let r = unsafe { ReadFile(h, data.as_mut_ptr().add(done), (data.len() - done) as u32, &mut got, core::ptr::null_mut()) };
+        let r = unsafe {
+            ReadFile(h, data.as_mut_ptr().add(done), (data.len() - done) as u32, &mut got, core::ptr::null_mut())
+        };
         if r == 0 || got == 0 {
             break;
         }
@@ -496,9 +516,8 @@ pub unsafe extern "system" fn OleLoadPicturePath(
     let Some(data) = read_file(&z) else { return oleauto::INET_E_OBJECT_NOT_FOUND };
     let Some(picture) = oleauto::decode_picture(&data) else { return oleauto::E_FAIL };
     // SAFETY: 32-bit rows of the picture's size.
-    let bitmap = unsafe {
-        CreateBitmap(picture.width as i32, picture.height as i32, 1, 32, picture.pixels.as_ptr().cast())
-    };
+    let bitmap =
+        unsafe { CreateBitmap(picture.width as i32, picture.height as i32, 1, 32, picture.pixels.as_ptr().cast()) };
     if bitmap == 0 {
         return E_OUTOFMEMORY;
     }
