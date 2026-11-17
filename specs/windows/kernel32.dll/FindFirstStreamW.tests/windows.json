@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "ads_files",
+      "exe_sha256": "0bae2f305fdb7a1833305425cef728c7d7df0575bbcb5efe4a4a84329779be0b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RyZWFtcyBvZiBhIHBsYWluIGZpbGU6IDo6JERBVEE6OSAoZW5kIDM4KQpjcmVhdGUgdGhlIHN0cmVhbTogMSBlcnJvciAwCndyaXR0ZW46IDI2CnN0cmVhbXM6IDo6JERBVEE6OSA6Wm9uZS5JZGVudGlmaWVyOiREQVRBOjI2IChlbmQgMzgpCm1haW4gc2l6ZTogOTsgc3RyZWFtIHNpemU6IDI2CnN0cmVhbSBjb250ZW50OiBwcmVzZW50IHNpemU9MjYgdGV4dD0iW1pvbmVUcmFuc2ZlIgp3aXRoIDokREFUQTogcHJlc2VudCBzaXplPTI2IHRleHQ9Iltab25lVHJhbnNmZSIKbWFpbiB3aXRoIDo6JERBVEE6IHByZXNlbnQgc2l6ZT05IHRleHQ9Im1haW4gZGF0YSIKdGhlIHN0cmVhbSBleGlzdHMgZm9yIEdldEZpbGVBdHRyaWJ1dGVzVzogdHJ1ZQphIHN0cmVhbSB0aGF0IGlzIG5vdCB0aGVyZTogYWJzZW50Cm9wZW4gaXQgZm9yIHJlYWRpbmcsIE9QRU5fRVhJU1RJTkc6IDAgZXJyb3IgMgphZnRlciBhbiBlbXB0eSBzZWNvbmQgc3RyZWFtOiA6OiREQVRBOjkgOnNlY29uZDokREFUQTowIDpab25lLklkZW50aWZpZXI6JERBVEE6MjYgKGVuZCAzOCkKc3RyZWFtIGZpcnN0OiBtYWluIGZpbGUgcHJlc2VudCBzaXplPTAgdGV4dD0iIgpzdHJlYW1zOiA6OiREQVRBOjAgOlpvbmUuSWRlbnRpZmllcjokREFUQTowIChlbmQgMzgpCmRpcmVjdG9yeSBsaXN0aW5nIG9mIGFkcy0qOiBhZHMtbWFpbi5iaW46OSBhZHMtbmV3LmJpbjowIApEZWxldGVGaWxlVyBvZiB0aGUgc3RyZWFtOiAxOyBzdHJlYW1zIG5vdyA6OiREQVRBOjkgOnNlY29uZDokREFUQTowIChlbmQgMzgpOyBtYWluIHByZXNlbnQgc2l6ZT05IHRleHQ9Im1haW4gZGF0YSIKYWZ0ZXIgcmV3cml0aW5nIHRoZSBtYWluIGZpbGUgKENSRUFURV9BTFdBWVMpOiBzdHJlYW1zIDo6JERBVEE6MSAoZW5kIDM4KQphZnRlciBkZWxldGluZyB0aGUgbWFpbiBmaWxlOiBzdHJlYW0gYWJzZW50CnN0cmVhbSBvbiBhIGZvbGRlcjogMSBlcnJvciAwCmZvbGRlciBzdHJlYW1zOiA6aW5mbzokREFUQTowIChlbmQgMzgpCnN0cmVhbSBuYW1lIHdpdGggJzwnOiAxIGVycm9yIDAKZW1wdHkgc3RyZWFtIG5hbWU6IDAgZXJyb3IgMTIzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "streams of a plain file: ::$DATA:9 (end 38)\ncreate the stream: 1 error 0\nwritten: 26\nstreams: ::$DATA:9 :Zone.Identifier:$DATA:26 (end 38)\nmain size: 9; stream size: 26\nstream content: present size=26 text=\"[ZoneTransfe\"\nwith :$DATA: present size=26 text=\"[ZoneTransfe\"\nmain with ::$DATA: present size=9 text=\"main data\"\nthe stream exists for GetFileAttributesW: true\na stream that is not there: absent\nopen it for reading, OPEN_EXISTING: 0 error 2\nafter an empty second stream: ::$DATA:9 :second:$DATA:0 :Zone.Identifier:$DATA:26 (end 38)\nstream first: main file present size=0 text=\"\"\nstreams: ::$DATA:0 :Zone.Identifier:$DATA:0 (end 38)\ndirectory listing of ads-*: ads-main.bin:9 ads-new.bin:0 \nDeleteFileW of the stream: 1; streams now ::$DATA:9 :second:$DATA:0 (end 38); main present size=9 text=\"main data\"\nafter rewriting the main file (CREATE_ALWAYS): streams ::$DATA:1 (end 38)\nafter deleting the main file: stream absent\nstream on a folder: 1 error 0\nfolder streams: :info:$DATA:0 (end 38)\nstream name with '<': 1 error 0\nempty stream name: 0 error 123\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

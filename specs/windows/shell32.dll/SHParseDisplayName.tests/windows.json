@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "sp_desktop",
+      "exe_sha256": "67f781ce2593137b745963f978f886d9ae08f696f427b9787e8e3ffa21e0e9e7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKU0hHZXREZXNrdG9wRm9sZGVyOiAweDAwMDAwMDAwIHNldAphIHNlY29uZCBjYWxsIGdpdmVzIHRoZSBzYW1lIG9iamVjdDogdHJ1ZQpQYXJzZURpc3BsYXlOYW1lIG9mIGEgZmlsZTogMHgwMDAwMDAwMCBwaWRsIHNldCBlYXRlbiAwCiAgcGF0aCBiYWNrOiAxOyBlcXVhbCB0cnVlClBhcnNlRGlzcGxheU5hbWUgb2YgYSBmb2xkZXI6IDB4MDAwMDAwMDAgcGlkbCBzZXQgZWF0ZW4gMAogIHBhdGggYmFjazogMTsgZXF1YWwgdHJ1ZQpQYXJzZURpc3BsYXlOYW1lIG9mIGEgZmlsZSB0aGF0IGlzIG5vdCB0aGVyZTogMHg4MDA3MDAwMiBwaWRsIG51bGwgZWF0ZW4gMApQYXJzZURpc3BsYXlOYW1lIG9mIGEgbmFtZSB3aXRoIGEgc3RyZWFtIHBhcnQ6IDB4ODAwNzAwNTcgcGlkbCBudWxsIGVhdGVuIDAKUGFyc2VEaXNwbGF5TmFtZSBvZiBhbiBlbXB0eSBuYW1lOiAweDAwMDAwMDAwIHBpZGwgc2V0IGVhdGVuIDQzNjkwCiAgcGF0aCBiYWNrOiAwOyBlcXVhbCB0cnVlCnR3byBQSURMcyBvZiBvbmUgZmlsZTogZGlmZmVyZW50IGJsb2NrcyB0cnVlClNIT3BlbkZvbGRlckFuZFNlbGVjdEl0ZW1zKE5VTEwsIDAsIE5VTEwsIDApOiAweDgwMDcwMDU3ClNIT3BlbkZvbGRlckFuZFNlbGVjdEl0ZW1zKE5VTEwsIDAsIE5VTEwsIGJhZCBmbGFncyk6IDB4ODAwNzAwNTcKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\nSHGetDesktopFolder: 0x00000000 set\na second call gives the same object: true\nParseDisplayName of a file: 0x00000000 pidl set eaten 0\n  path back: 1; equal true\nParseDisplayName of a folder: 0x00000000 pidl set eaten 0\n  path back: 1; equal true\nParseDisplayName of a file that is not there: 0x80070002 pidl null eaten 0\nParseDisplayName of a name with a stream part: 0x80070057 pidl null eaten 0\nParseDisplayName of an empty name: 0x00000000 pidl set eaten 43690\n  path back: 0; equal true\ntwo PIDLs of one file: different blocks true\nSHOpenFolderAndSelectItems(NULL, 0, NULL, 0): 0x80070057\nSHOpenFolderAndSelectItems(NULL, 0, NULL, bad flags): 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 88
+    }
+  ]
+}

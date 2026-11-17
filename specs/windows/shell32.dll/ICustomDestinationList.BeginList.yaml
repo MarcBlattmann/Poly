@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ICustomDestinationList.BeginList.yaml
+id: windows/api/shell32.dll/ICustomDestinationList.BeginList
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  The jump list object (CLSID_DestinationList, ICustomDestinationList) that Chrome creates at start-up and refreshes now and then (CoCreateInstance(CLSID_DestinationList, IID_ICustomDestinationList) appears once in a short run). The tests use a private application id and leave nothing behind.
+interface:
+  create: "CoCreateInstance(CLSID_DestinationList {77F10CF0-3DB5-4966-B520-B7C54FD35ED6}, NULL, CLSCTX_INPROC_SERVER, IID_ICustomDestinationList {6332DEBF-87B5-4670-90C0-5E57B408A49E})"
+  methods: "after IUnknown: SetAppID 3, BeginList 4, AppendCategory 5, AppendKnownCategory 6, AddUserTasks 7, CommitList 8, GetRemovedDestinations 9, DeleteList 10, AbortList 11"
+chrome:
+  call: "CoCreateInstance(CLSID_DestinationList, IID_ICustomDestinationList) = S_OK, once at start-up; the list is built through the table afterwards"
+rules:
+  create: "S_OK; QueryInterface IUnknown S_OK, a made-up id E_NOINTERFACE; the last Release returns 0"
+  begin: "BeginList(&minSlots, IID_IObjectArray, &removed) after SetAppID: S_OK, minSlots above 0, an IObjectArray whose GetCount is S_OK with 0; BeginList before SetAppID: S_OK; BeginList a second time without AbortList or CommitList: E_UNEXPECTED (0x8000FFFF); with a made-up interface id: E_NOINTERFACE and no object"
+  abort: "AbortList after BeginList: S_OK; AbortList again, or with no list begun: E_UNEXPECTED"
+  commit: "CommitList without BeginList: E_UNEXPECTED"
+  delete: "DeleteList(<application id>) and DeleteList(NULL): S_OK (the id has no list)"
+  order: "SetAppID may be called any number of times (S_OK); BeginList's removed-destinations array is empty: GetCount S_OK with 0, GetAt(0) E_INVALIDARG; AppendKnownCategory(KDC_RECENT 2) after BeginList: S_OK, with 0: E_FAIL (0x80004005); CommitList after that: S_OK, again: E_UNEXPECTED; BeginList after a commit: S_OK; two objects with one application id do not disturb each other"
+errors:
+  unexpected: "0x8000FFFF"
+  no_interface: "0x80004002"
+side_effects: "none (an empty list under a private application id)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. Recorded in the desktop session.
+not_covered: >
+  categories, tasks, CommitList after a real list, what the shell shows, removed destinations, the application id of Chrome itself.
