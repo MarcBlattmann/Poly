@@ -128,7 +128,7 @@ pub extern "system" fn SetProcessDPIAware() -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemDpiForProcess(_process: usize) -> u32 {
-    96
+    u::system_dpi(&SYS)
 }
 
 /// Windows whose non-client scaling was enabled (the per-monitor v1 cascade
@@ -320,7 +320,9 @@ unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
-            ncm(pv, size, 96);
+            // At the system DPI: 96, or more when Windows apps live in output pixels (ADR 0219;
+            // SystemParametersInfoForDpi.yaml has the values at 192).
+            ncm(pv, size, u::system_dpi(&SYS));
             1
         }
         0x002D => {
@@ -329,7 +331,7 @@ unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
-            iconmetrics(pv, 96);
+            iconmetrics(pv, u::system_dpi(&SYS));
             1
         }
         0x001F => {
@@ -337,7 +339,7 @@ unsafe fn spi_get(action: u32, param: u32, pv: *mut u8, _ini: u32) -> i32 {
                 set_last_error(ERROR_INVALID_PARAMETER);
                 return 0;
             }
-            put_logfont(pv, 0, -12);
+            put_logfont(pv, 0, font_height(u::system_dpi(&SYS)));
             1
         }
         0x0048 => {
@@ -688,7 +690,7 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: u32, dpi_x:
         set_last_error(0x1E7);
         return 0x8007_01E7u32 as i32;
     }
-    let v = if kind == 2 { 0 } else { 96 };
+    let v = if kind == 2 { 0 } else { u::system_dpi(&SYS) };
     // SAFETY: the caller's outputs.
     unsafe {
         *dpi_x = v;
@@ -708,7 +710,7 @@ pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: usize, scale: *m
         return E_INVALIDARG;
     }
     // SAFETY: the caller's output.
-    unsafe { *scale = 100 };
+    unsafe { *scale = (u::system_dpi(&SYS) * 100 / 96) as i32 };
     0
 }
 

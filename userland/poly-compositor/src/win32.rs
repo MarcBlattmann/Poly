@@ -82,14 +82,33 @@ struct Surface {
 }
 
 /// Windows surfaces in the scene.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct WindowsSurfaces {
     surfaces: BTreeMap<SurfaceId, Surface>,
+    /// Windows pixels per logical pixel (ADR 0219): 1, or the output's whole scale when Windows
+    /// apps live in output pixels (`--windows-hidpi`). Positions and sizes on the link are in
+    /// these; the scene's are logical.
+    units: i32,
+}
+
+impl Default for WindowsSurfaces {
+    fn default() -> WindowsSurfaces {
+        WindowsSurfaces::new()
+    }
 }
 
 impl WindowsSurfaces {
     pub fn new() -> WindowsSurfaces {
-        WindowsSurfaces::default()
+        WindowsSurfaces { surfaces: BTreeMap::new(), units: 1 }
+    }
+
+    /// Windows apps live in `units` output pixels per logical pixel (ADR 0219).
+    pub fn set_units(&mut self, units: i32) {
+        self.units = units.max(1);
+    }
+
+    pub fn units(&self) -> i32 {
+        self.units
     }
 
     /// The scene window showing `surface`.
@@ -137,9 +156,16 @@ impl WindowsSurfaces {
                 s.geometry = (*x, *y, *width, *height);
             }
         }
+        let u = self.units;
         moved
             .into_iter()
-            .map(|(surface, (x, y, width, height))| FromCompositor::Configure { surface, x, y, width, height })
+            .map(|(surface, (x, y, width, height))| FromCompositor::Configure {
+                surface,
+                x: x * u,
+                y: y * u,
+                width: width * u as u32,
+                height: height * u as u32,
+            })
             .collect()
     }
 
@@ -216,6 +242,9 @@ impl WindowsSurfaces {
                 );
             }
             ToCompositor::Geometry { surface, x, y, width, height } => {
+                // Windows pixels to logical ones (ADR 0219).
+                let u = self.units;
+                let (x, y, width, height) = (x.div_euclid(u), y.div_euclid(u), width / u as u32, height / u as u32);
                 if let Some(w) = self.window(surface) {
                     scene.set_position(w, x, y);
                 }
@@ -247,8 +276,9 @@ impl WindowsSurfaces {
                         actions.push(Action::DropBuffer(old));
                         actions.push(Action::Send(FromCompositor::Released { buffer: old }));
                     }
-                    scene.resize_content(s.window, width, height, 1);
-                    // Windows apps draw at 100 %: enlarged smoothly, not in blocks (ADR 0219).
+                    // A buffer in Windows pixels: `units` of them a logical pixel. One the
+                    // output enlarges is enlarged smoothly, not in blocks (ADR 0219).
+                    scene.resize_content(s.window, width, height, self.units as u32);
                     scene.set_smooth(s.window, true);
                     actions.push(Action::TakeBuffer(buffer));
                 }
@@ -290,8 +320,9 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Margins { surface, left, top, right, bottom } => {
+                let u = self.units;
                 if let Some(s) = self.surfaces.get_mut(&surface) {
-                    s.margins = [left, top, right, bottom].map(i32::from);
+                    s.margins = [left, top, right, bottom].map(|m| i32::from(m) / u);
                     if let Some(win) = scene.window(s.window) {
                         println!("poly-compositor: window {:?} own borders {left},{top},{right},{bottom}", win.title());
                     }
@@ -382,10 +413,33 @@ pub fn resize_edges(e: Edges) -> u32 {
     bits
 }
 
+/// What the compositor says first on the link: `Hello` with the output's logical size (and Poly's
+/// frame) in Windows pixels, `units` of them a logical pixel, then `Units` when that is more than
+/// one (ADR 0219): Windows apps then live in output pixels at 96 times `units` DPI.
+pub fn greeting(width: u32, height: u32, scale: u32, units: u32) -> Vec<FromCompositor> {
+    let u = units.max(1);
+    let f = FrameMetrics::POLY;
+    let k = |v: u16| (u32::from(v) * u).min(u32::from(u16::MAX)) as u16;
+    let mut out = vec![FromCompositor::Hello {
+        version: VERSION,
+        width: width * u,
+        height: height * u,
+        // Windows apps draw at a whole scale; the compositor shrinks
+        // their pictures to a fractional output's (ADR 0179).
+        scale,
+        frame: FrameMetrics { title: k(f.title), border: k(f.border), resize: k(f.resize) },
+    }];
+    if u > 1 {
+        out.push(FromCompositor::Units { units: u });
+    }
+    out
+}
+
 impl Link {
     /// Open [`DEVICE`] and greet win32k with the output and Poly's frame;
-    /// `None` (logged) without the device.
-    pub fn open(scene: &Scene) -> Option<Link> {
+    /// `None` (logged) without the device. With `hidpi` Windows apps live in
+    /// output pixels at the output's whole scale (ADR 0219).
+    pub fn open(scene: &Scene, hidpi: bool) -> Option<Link> {
         let fd = match os::open_device(DEVICE, true, true) {
             Ok(fd) => fd,
             Err(e) => {
@@ -395,25 +449,21 @@ impl Link {
         };
         let (width, height) = scene.logical_size();
         let (_, _, scale) = scene.output();
-        let hello = FromCompositor::Hello {
-            version: VERSION,
-            width: width as u32,
-            height: height as u32,
-            // Windows apps draw at a whole scale; the compositor shrinks
-            // their pictures to a fractional output's (ADR 0179).
-            scale: scale.ceil(),
-            frame: FrameMetrics::POLY,
-        };
+        let units = if hidpi { scale.ceil().max(1) } else { 1 };
         let mut out = Vec::new();
-        hello.encode(&mut out);
+        for r in greeting(width as u32, height as u32, scale.ceil(), units) {
+            r.encode(&mut out);
+        }
         if let Err(e) = os::write(fd, &out) {
             println!("poly-compositor: {DEVICE}: {e}");
             return None;
         }
-        println!("poly-compositor: desktop link to Windows apps on {DEVICE}");
+        println!("poly-compositor: desktop link to Windows apps on {DEVICE} ({units} Windows pixels a logical pixel)");
+        let mut surfaces = WindowsSurfaces::new();
+        surfaces.set_units(units as i32);
         Some(Link {
             fd,
-            surfaces: WindowsSurfaces::new(),
+            surfaces,
             copies: Copies::default(),
             incoming: Stream::new(),
             moves: Vec::new(),
@@ -448,10 +498,12 @@ impl Link {
         };
         let Some(surface) = self.surfaces.surface_of(window) else { return false };
         let time = (os::monotonic_ns() / 1_000_000) as u32;
+        // Logical positions to Windows pixels (ADR 0219).
+        let u = self.surfaces.units();
         let records: Vec<FromCompositor> = match *ev {
-            E::Motion { x, y, .. } => vec![FromCompositor::Pointer { surface, x, y, time }],
+            E::Motion { x, y, .. } => vec![FromCompositor::Pointer { surface, x: x * u, y: y * u, time }],
             E::Button { x, y, button, pressed, .. } => vec![
-                FromCompositor::Pointer { surface, x, y, time },
+                FromCompositor::Pointer { surface, x: x * u, y: y * u, time },
                 FromCompositor::Button { surface, button: button as u16, pressed, time },
             ],
             E::Axis { horizontal, value, .. } => {
@@ -473,10 +525,10 @@ impl Link {
             // follows with the new size.
             E::Configure { x, y, width, height, .. } => vec![FromCompositor::Configure {
                 surface,
-                x,
-                y,
-                width: width.max(1) as u32,
-                height: height.max(1) as u32,
+                x: x * u,
+                y: y * u,
+                width: (width.max(1) * u) as u32,
+                height: (height.max(1) * u) as u32,
             }],
         };
         let mut out = Vec::new();
@@ -675,6 +727,65 @@ mod tests {
         assert_eq!(i32::from(FrameMetrics::POLY.border), BORDER);
         assert_eq!(FrameMetrics::BUTTON, poly_wayland::compose::CLOSE_SIZE);
         assert_eq!(FrameMetrics::GAP, poly_wayland::compose::BUTTON_GAP);
+    }
+
+    /// ADR 0219: with Windows apps in output pixels (`--windows-hidpi` at 200 %), the greeting
+    /// gives win32k the output and Poly's frame in those pixels and the units; a surface's buffer
+    /// is shown at scale 2 (pixel for pixel on the output, not enlarged), its position and borders
+    /// come back to logical pixels, and moves go out in Windows pixels.
+    #[test]
+    fn windows_apps_in_output_pixels_are_shown_pixel_for_pixel() {
+        let g = greeting(1280, 800, 2, 2);
+        let f = FrameMetrics::POLY;
+        assert_eq!(
+            g,
+            vec![
+                FromCompositor::Hello {
+                    version: VERSION,
+                    width: 2560,
+                    height: 1600,
+                    scale: 2,
+                    frame: FrameMetrics { title: f.title * 2, border: f.border * 2, resize: f.resize * 2 },
+                },
+                FromCompositor::Units { units: 2 },
+            ]
+        );
+        assert_eq!(greeting(1280, 800, 2, 1).len(), 1, "no Units record at one unit");
+
+        let mut scene = Scene::new(2560, 1600, 2);
+        let mut ws = WindowsSurfaces::new();
+        ws.set_units(2);
+        let mut d = Desktop::new();
+        let mut mem = Memory(BTreeMap::new());
+        d.receive(&encode_all(&g));
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let s = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s, 36, 68, 8, 6);
+        let b = d.attach_buffer(s, 8, 6, 32, PixelFormat::Xrgb8888).unwrap();
+        mem.0.insert(b, vec![0x40; 8 * 6 * 4]);
+        d.set_margins(s, [8, 0, 8, 8]);
+        d.damage(s, 0, 0, 8, 6);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+        let win = scene.window(w).unwrap();
+        assert_eq!(win.position(), (18, 34), "logical");
+        let c = content_of(&scene, w).unwrap();
+        assert_eq!((c.width, c.height, c.scale), (8, 6, 2));
+        assert_eq!(c.logical_size(), (4, 3));
+        assert_eq!(ws.margins_of(w), [4, 0, 4, 4]);
+        assert!(ws.sync_geometry(&scene).is_empty());
+        scene.set_position(w, 20, 40);
+        assert_eq!(
+            ws.sync_geometry(&scene),
+            vec![FromCompositor::Configure { surface: s, x: 40, y: 80, width: 8, height: 6 }]
+        );
+        // Drawn on a 200 % output without enlarging: one buffer pixel, one output pixel.
+        let mut fb = poly_wayland::compose::MemoryFramebuffer::new(2560, 1600);
+        scene.render(&mut fb);
+        assert_eq!(fb.pixel(40, 80), Some(0x40_4040));
+        assert_eq!(fb.pixel(47, 85), Some(0x40_4040));
+        assert_ne!(fb.pixel(48, 80), Some(0x40_4040), "8 output pixels wide, not 16");
     }
 
     #[test]
