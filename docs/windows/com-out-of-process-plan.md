@@ -103,3 +103,27 @@ B2a is implemented by [ADR 0220](../adr/0220-com-across-processes-an-activation-
 `IUnknown`/`IClassFactory` across apartments and processes, the server count and initialisation spies. 22 of the 24
 visible tests pass on Poly; the two LocalService tests wait for B1's service functions. The ADR's section 6 says
 where B2b's marshalling and B2c's security plug in.
+
+## 6. B2c (security and caller identity): status PAUSED, findings so far
+
+Track `spec-win-com-sec` (spec agent). Observed on the oracle with ~40 test programs (kit outside the repository); no sheets or
+recorded tests are committed yet. The planned entries: `CoInitializeSecurity`, `CoSetProxyBlanket`, `CoQueryProxyBlanket`,
+`CoCopyProxy`, `CoQueryClientBlanket`, `CoImpersonateClient`, `CoRevertToSelf`, `CoGetCallContext` (the in-call part, new entry
+`CoGetCallContext.InCall`), `IServerSecurity`, `IClientSecurity`, `rpcrt4!I_RpcOpenClientProcess` and the AppID permission values
+(`AppID.Security`).
+
+**How the updater finds the client PID.** Its import table has no PID API for COM (no `I_RpcOpenClientProcess`, no
+`CoImpersonateClient`, no `CoQueryClientBlanket`); the only caller-identity import is `CoGetCallContext` (plus `OpenThreadToken`,
+`GetTokenInformation`, `OpenProcess`, `QueryFullProcessImageNameW`). The call context gives an interface only for `IServerSecurity` and
+`IUnknown` (of all 26126 registered interface ids none other), and `IServerSecurity` has no process id. What the oracle shows is the PID of the
+**immediate caller of the call being served** (`rpcrt4!I_RpcOpenClientProcess(NULL, ...)` returns that process): for the factory's
+`CreateInstance` run by `CoCreateInstance` it is the process of the RPC/activation service (`svchost -k RPCSS`, the same PID 1272 the
+updater logs for `UpdaterImpl` and `UpdaterInternalImpl`), for a call the client makes directly (`AppBundleWebImpl`, a method call, the
+logged PID is chrome.exe) it is the client. So Poly's "who called" must report the activator for activation-time calls and the real
+client for direct calls; the updater only logs the value.
+
+**Other findings** (details in the hand-back): `CoInitializeSecurity` needs COM initialised (`CO_E_NOTINITIALIZED` otherwise), works once
+per process (`RPC_E_TOO_LATE` 0x80010119, also after any out-of-process activation attempt), takes only an **absolute** descriptor
+(self-relative: 0x80070551), `EXECUTE` (1) is the bit the access check needs. A standard (filtered) token is refused by a descriptor that only
+grants Administrators (`E_ACCESSDENIED`), and by a SYSTEM service that does not admit it (what the updater's descriptor is for).
+Impersonation: direct calls at impersonation level IDENTIFY give an identification-level thread token, which cannot open files.
