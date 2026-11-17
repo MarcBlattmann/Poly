@@ -8,7 +8,7 @@
 {"symbol":"CallCPLEntry16","src":["wine-spec"]},
 {"symbol":"CheckEscapesA","src":["wine-spec"]},
 {"symbol":"CheckEscapesW","src":["wine-spec"]},
-{"symbol":"CommandLineToArgvW","forward":"shcore.CommandLineToArgvW","src":["wine-spec"],"seeds":["wine:shell32/tests/shlexec.c:test_one_cmdline","wine:shell32/tests/shlexec.c:test_commandline2argv"]},
+{"symbol":"CommandLineToArgvW","status":"claimed","claimed_by":"impl-chrome-installer","forward":"shcore.CommandLineToArgvW","src":["wine-spec"],"seeds":["wine:shell32/tests/shlexec.c:test_one_cmdline","wine:shell32/tests/shlexec.c:test_commandline2argv"]},
 {"symbol":"Control_FillCache_RunDLL","src":["wine-spec"]},
 {"symbol":"Control_FillCache_RunDLLA","src":["wine-spec"]},
 {"symbol":"Control_FillCache_RunDLLW","src":["wine-spec"]},

@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/DestroyEnvironmentBlock.yaml
+id: windows/api/userenv.dll/DestroyEnvironmentBlock
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Default mode: the SSH logon (session 0, no interactive desktop, the administrator's elevated token, 24 privileges). dcb_basic_std ran with -Token standard (the filtered token) and gave the same text. Every test ran twice with identical output."
+  observed_by: "spec-win-chrome-setup"
+  date: "2026-11-17"
+sources: "Observations of our own test programs on the oracle machine. Microsoft Learn: DestroyEnvironmentBlock (userenv.h). Nothing of Windows or Google's programs was read or disassembled."
+summary: "Frees a block that CreateEnvironmentBlock returned. The block is an independent allocation (it survives the token handle being closed, two blocks do not share memory) and destroying them in any order works."
+interface:
+  signature: "BOOL DestroyEnvironmentBlock(LPVOID environment)  (userenv)"
+rules:
+  success: "TRUE for a block from CreateEnvironmentBlock, also when the token handle was closed before, for blocks made for a NULL token, with inherit TRUE or FALSE; 50 create/destroy rounds in a row all succeed"
+  independent_blocks: "two blocks made one after the other are different pointers with the same first entry; writing into one does not change the other; destroying b before a works"
+  null: "NULL: FALSE with ERROR_INVALID_PARAMETER (87)"
+  after_destroy: "a new block can be made at once; the pointer must not be used again (not tested)"
+errors:
+  invalid_parameter: "87 for NULL; other pointers (not from CreateEnvironmentBlock, a block destroyed twice) are not tested: undefined"
+side_effects: "frees the block"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+building_tests: "Rust tests (ADR 0075): dcb_basic, dcb_lifetime; dcb_basic_std is dcb_basic with the filtered token."
+not_covered: "a block that is not from CreateEnvironmentBlock, a double destroy (both crash or corrupt the heap), a block passed to a child process and then destroyed."
+tests:
+  visible: 2
+  held_out: 1

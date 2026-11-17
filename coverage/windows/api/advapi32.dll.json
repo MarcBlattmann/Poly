@@ -72,7 +72,7 @@
 {"symbol":"CreateProcessAsUserA","forward":"kernel32.CreateProcessAsUserA","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_create_process_token","wine:advapi32/tests/security.c:test_duplicate_handle_access"]},
 {"symbol":"CreateProcessAsUserW","status":"claimed","claimed_by":"impl-win-sec","forward":"kernel32.CreateProcessAsUserW","src":["wine-spec"]},
 {"symbol":"CreateProcessWithLogonW","src":["wine-spec"]},
-{"symbol":"CreateProcessWithTokenW","status":"stub","src":["wine-spec"]},
+{"symbol":"CreateProcessWithTokenW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"]},
 {"symbol":"CreateRestrictedToken","status":"green","tests_visible":3,"tests_held_out":2,"src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_CreateRestrictedToken","wine:advapi32/tests/security.c:test_elevation","wine:advapi32/tests/security.c:test_create_process_token","wine:advapi32/tests/security.c:test_duplicate_handle_access"]},
 {"symbol":"CreateServiceA","status":"stub","src":["wine-spec"],"seeds":["wine:advapi32/tests/service.c:test_refcount","wine:advapi32/tests/service.c:test_start_stop","wine:advapi32/tests/service.c:test_wow64","wine:advapi32/tests/service.c:test_create_delete_svc","wine:advapi32/tests/service.c:test_queryconfig2","wine:advapi32/tests/service.c:test_get_displayname","wine:advapi32/tests/service.c:test_sequence"]},
 {"symbol":"CreateServiceW","status":"stub","src":["wine-spec"]},
