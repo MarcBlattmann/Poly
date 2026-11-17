@@ -698,7 +698,7 @@ fn a_scale_one_buffer_doubles_at_two_hundred_percent() {
         let c = scene.content_mut(id).unwrap();
         for (i, p) in c.pixels.iter_mut().enumerate() {
             let (x, y) = (i % 6, i / 6);
-            *p = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | (x as u32 * 16) << 8 | y as u32 };
+            *p = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | ((x as u32 * 16) << 8) | y as u32 };
         }
     }
     let _ = below;
@@ -707,7 +707,7 @@ fn a_scale_one_buffer_doubles_at_two_hundred_percent() {
     for py in 6..14u32 {
         for px in 4..16u32 {
             let (x, y) = ((px - 4) / 2, (py - 6) / 2);
-            let src = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | (x * 16) << 8 | y };
+            let src = if y == 2 { 0x8040_0000 } else { 0xff00_0000 | ((x * 16) << 8) | y };
             let want = over(src, 0xff00_8000) & 0x00ff_ffff;
             assert_eq!(fb.pixel(px, py), Some(want), "({px}, {py})");
         }
@@ -724,7 +724,10 @@ fn a_smooth_buffer_at_two_hundred_percent_is_bilinear() {
     let id = window(&mut scene, 3, 2, bw as u32, bh as u32, 1, 0, false);
     scene.set_smooth(id, true);
     let px = |x: usize, y: usize| -> u32 {
-        0xff00_0000 | ((x as u32 * 37) & 0xff) << 16 | ((y as u32 * 61) & 0xff) << 8 | ((x * y) as u32 * 13 & 0xff)
+        0xff00_0000
+            | (((x as u32 * 37) & 0xff) << 16)
+            | (((y as u32 * 61) & 0xff) << 8)
+            | (((x * y) as u32 * 13) & 0xff)
     };
     for y in 0..bh {
         for x in 0..bw {

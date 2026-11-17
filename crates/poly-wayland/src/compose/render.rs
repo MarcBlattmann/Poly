@@ -346,7 +346,7 @@ fn draw_double(fb: &mut dyn Framebuffer, c: &Content, dest: Rect, area: Rect) {
         out.truncate(n);
     };
     let mut kept: [(i32, Vec<u32>); 3] = [(-1, Vec::new()), (-1, Vec::new()), (-1, Vec::new())];
-    let mut slot = |k: i32, kept: &mut [(i32, Vec<u32>); 3]| -> usize {
+    let slot = |k: i32, kept: &mut [(i32, Vec<u32>); 3]| -> usize {
         if let Some(i) = kept.iter().position(|e| e.0 == k) {
             return i;
         }
