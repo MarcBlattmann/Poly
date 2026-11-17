@@ -284,6 +284,9 @@ exec /usr/local/bin/poly-as-user /usr/bin/chromium \"$@\"
 /// `setpriv(1)` (util-linux) changes the user.
 pub const USER_SCRIPT: &str = "#!/bin/bash
 # A program as user poly on the desktop (tools/xtask/src/chromium.rs).
+# Already user poly (the desktop started Chromium's launch script through
+# this one, ADR 0218): nothing to change.
+[ \"$EUID\" = 1000 ] && exec \"$@\"
 . /etc/poly-desktop.env
 U=/run/user/1000
 mkdir -p \"$U\" /home/poly
@@ -1447,6 +1450,7 @@ cd /root
 ARGS=
 [ -r /etc/poly-desktop.args ] && ARGS=$(cat /etc/poly-desktop.args)
 [ -x /usr/bin/Xwayland ] && ARGS=\"--xwayland-lazy $ARGS\"
+[ -x /usr/local/bin/poly-as-user ] && ARGS=\"--app-user /usr/local/bin/poly-as-user $ARGS\"
 [ -x /usr/local/bin/poly-session-bus ] && /usr/local/bin/poly-session-bus > /dev/null 2>&1 &
 exec /usr/local/bin/poly-compositor --desktop $ARGS
 ";
@@ -2906,6 +2910,10 @@ mod tests {
         assert!(DESKTOP_SCRIPT.contains("[ -x /usr/bin/Xwayland ] && ARGS=\"--xwayland-lazy $ARGS\""));
         assert!(DESKTOP_SCRIPT.contains("/usr/local/bin/poly-session-bus > /dev/null 2>&1 &"));
         assert!(USER_SCRIPT.contains("/usr/local/bin/poly-session-bus"));
+        // The system's apps start as user poly (ADR 0218); Chromium's launch
+        // script, started so, runs poly-as-user again as that user.
+        assert!(DESKTOP_SCRIPT.contains("ARGS=\"--app-user /usr/local/bin/poly-as-user $ARGS\""));
+        assert!(USER_SCRIPT.lines().nth(4) == Some("[ \"$EUID\" = 1000 ] && exec \"$@\""));
         assert!(USER_SCRIPT.contains("${BUS:+DBUS_SESSION_BUS_ADDRESS=\"$BUS\"}"));
         assert!(SESSION_BUS_SCRIPT.contains("--session --address=\"unix:path=$U/bus\" --nofork"));
         // The daemon and the services it starts use poly's directories, not root's.

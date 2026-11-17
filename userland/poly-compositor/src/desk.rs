@@ -75,6 +75,10 @@ pub struct Desktop {
     /// Internal events of windows the desktop does not draw (Windows apps'
     /// surfaces, ADR 0136), for their owner.
     pub foreign: Vec<InternalEvent>,
+    /// The program that runs an app as the desktop's user (`--app-user`,
+    /// ADR 0218), for the apps that run so
+    /// ([`poly_shell::apps::runs_as_user`]).
+    pub app_user: Option<String>,
 }
 
 /// Seconds on the wall clock.
@@ -226,6 +230,7 @@ impl Desktop {
         server.set_cursor_visible(true);
         server.scene_mut().damage_all();
         let mut d = Desktop {
+            app_user: None,
             shell,
             input,
             shortcuts: desktop::Shortcuts::default(),
