@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "secd_set",
+      "exe_sha256": "0e7d5767a39c230f2e6c84941a31176f11af86cfd0a6d16639bb8ba87952e40b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNTZFNldCk6IG9rCmJlZm9yZTogRDooQTs7Q0NMQ1NXUlBXUERUTE9DUlJDOzs7U1kpKEE7O0NDRENMQ1NXUlBXUERUTE9DUlNEUkNXRFdPOzs7QkEpKEE7O0NDTENTV0xPQ1JSQzs7O0lVKShBOztDQ0xDU1dMT0NSUkM7OztTVSkKZ3JhbnQgRXZlcnlvbmUgUVVFUllfU1RBVFVTIGFuZCBrZWVwIEFkbWluaXN0cmF0b3JzIGFuZCBTWVNURU06IG9rCmFmdGVyOiBEOihBOztMQzs7O1dEKShBOztDQ0RDTENTV1JQV1BEVExPQ1JTRFJDV0RXTzs7O0JBKShBOztDQ0xDU1dSUFdQRFRMT0NSUkM7OztTWSkKT3BlblNlcnZpY2VXKFFVRVJZX1NUQVRVUyk6IG9rCm5vbi1hZG1pbiBPcGVuU0NNYW5hZ2VyVyhDT05ORUNUKTogb2sKbm9uLWFkbWluIE9wZW5TZXJ2aWNlVyhRVUVSWV9TVEFUVVMpIGFmdGVyIGdyYW50aW5nIEV2ZXJ5b25lOiBvawpub24tYWRtaW4gT3BlblNlcnZpY2VXKFNUQVJUKTogZXJyIDUKcmVzdHJpY3RlZCB0b2tlbiBtYWRlOiAxCmFuIFNEREwgdGhhdCBpcyBub3Qgb25lOiBTRERMIGNvbnZlcnNpb24gZXJyIDg3Ck9wZW5TZXJ2aWNlVyhhbGwgYnV0IFdSSVRFX0RBQyk6IG9rClNldFNlcnZpY2VPYmplY3RTZWN1cml0eSB3aXRob3V0IFdSSVRFX0RBQzogZXJyIDUKcmVzdG9yZSB0aGUgZGVmYXVsdDogb2sKcmVzdG9yZWQ6IEQ6KEE7O0NDTENTV1JQV1BEVExPQ1JSQzs7O1NZKShBOztDQ0RDTENTV1JQV1BEVExPQ1JTRFJDV0RXTzs7O0JBKShBOztDQ0xDU1dMT0NSUkM7OztJVSkoQTs7Q0NMQ1NXTE9DUlJDOzs7U1UpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcSdSet): ok\nbefore: D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)\ngrant Everyone QUERY_STATUS and keep Administrators and SYSTEM: ok\nafter: D:(A;;LC;;;WD)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPDTLOCRRC;;;SY)\nOpenServiceW(QUERY_STATUS): ok\nnon-admin OpenSCManagerW(CONNECT): ok\nnon-admin OpenServiceW(QUERY_STATUS) after granting Everyone: ok\nnon-admin OpenServiceW(START): err 5\nrestricted token made: 1\nan SDDL that is not one: SDDL conversion err 87\nOpenServiceW(all but WRITE_DAC): ok\nSetServiceObjectSecurity without WRITE_DAC: err 5\nrestore the default: ok\nrestored: D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 120
+    }
+  ]
+}

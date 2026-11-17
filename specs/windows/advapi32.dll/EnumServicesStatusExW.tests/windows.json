@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "enum_basic",
+      "exe_sha256": "55c9d2bf4182732052c553be180d12e81c7606a2d6d5af7f21690f99ed49c0ae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFbnVtQSk6IG9rCkNyZWF0ZVNlcnZpY2VXKFBvbHlTcGVjU3ZjRW51bUIpOiBvawpDcmVhdGVTZXJ2aWNlVyhQb2x5U3BlY1N2Y0VudW1DKTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCnNpemUgcXVlcnk6IGVyciAyMzQgY291bnQ9MCBzaXplIGlzIG1vcmUgdGhhbiAxMDAgYnl0ZXM6IDEKZW50cnkgUG9seVNwZWNTdmNFbnVtQSBkaXNwbGF5PVtQb2x5U3BlY1N2Y0VudW1BXSB0eXBlPTB4MTAgc3RhdGU9UlVOTklORyBhY2NlcHRlZD0weDEgd2luMzI9MCBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAgaGFzX3BpZD0xIGZsYWdzPTAKZW50cnkgUG9seVNwZWNTdmNFbnVtQiBkaXNwbGF5PVtQb2x5IHNwZWMgZW51bSBCIGRpc3BsYXldIHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0xMDc3IHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MAplbnRyeSBQb2x5U3BlY1N2Y0VudW1DIGRpc3BsYXk9W1BvbHlTcGVjU3ZjRW51bUNdIHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0xMDc3IHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MApmb3VuZCBvdXIgc2VydmljZXM6IDMgKHRoZSBsaXN0IGhvbGRzIG1vcmUgdGhhbiBvdXJzOiAxKQpjb25uZWN0LW9ubHkgbWFuYWdlciBoYW5kbGUgKDEpOiBlcnIgNQppbmZvIGxldmVsIDE6IGVyciAxMjQKc2VydmljZSBoYW5kbGUgYXMgbWFuYWdlciBoYW5kbGU6IGVyciA2CkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcEnumA): ok\nCreateServiceW(PolySpecSvcEnumB): ok\nCreateServiceW(PolySpecSvcEnumC): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nsize query: err 234 count=0 size is more than 100 bytes: 1\nentry PolySpecSvcEnumA display=[PolySpecSvcEnumA] type=0x10 state=RUNNING accepted=0x1 win32=0 specific=0 checkpoint=0 hint=0 has_pid=1 flags=0\nentry PolySpecSvcEnumB display=[Poly spec enum B display] type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nentry PolySpecSvcEnumC display=[PolySpecSvcEnumC] type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nfound our services: 3 (the list holds more than ours: 1)\nconnect-only manager handle (1): err 5\ninfo level 1: err 124\nservice handle as manager handle: err 6\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 197
+    },
+    {
+      "name": "enum_filters",
+      "exe_sha256": "782b45df350acd0d3b995521225ce5b34265f3e57ffe971e792b3a55465097c1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFbkYxKTogb2sKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFbkYyKTogb2sKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFbkYzLCBzaGFyZSBwcm9jZXNzKTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCldJTjMyLCBhbGwgc3RhdGVzOiBvdXJzIFtQb2x5U3BlY1N2Y0VuRjEgUG9seVNwZWNTdmNFbkYyIFBvbHlTcGVjU3ZjRW5GMyBdCldJTjMyLCBhY3RpdmU6IG91cnMgW1BvbHlTcGVjU3ZjRW5GMSBdCldJTjMyLCBpbmFjdGl2ZTogb3VycyBbUG9seVNwZWNTdmNFbkYyIFBvbHlTcGVjU3ZjRW5GMyBdCm93biBwcm9jZXNzLCBhbGw6IG91cnMgW1BvbHlTcGVjU3ZjRW5GMSBQb2x5U3BlY1N2Y0VuRjIgXQpzaGFyZSBwcm9jZXNzLCBhbGw6IG91cnMgW1BvbHlTcGVjU3ZjRW5GMyBdCmtlcm5lbCBkcml2ZXIsIGFsbDogb3VycyBbXQp0eXBlIDA6IGVyciA4NwpzdGF0ZSAwOiBlcnIgODcKc3RhdGUgNDogZXJyIDg3Cmdyb3VwIHRoYXQgbm8gc2VydmljZSBpcyBpbjogZXJyIDEwNjAgY291bnQ9MApDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcEnF1): ok\nCreateServiceW(PolySpecSvcEnF2): ok\nCreateServiceW(PolySpecSvcEnF3, share process): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nWIN32, all states: ours [PolySpecSvcEnF1 PolySpecSvcEnF2 PolySpecSvcEnF3 ]\nWIN32, active: ours [PolySpecSvcEnF1 ]\nWIN32, inactive: ours [PolySpecSvcEnF2 PolySpecSvcEnF3 ]\nown process, all: ours [PolySpecSvcEnF1 PolySpecSvcEnF2 ]\nshare process, all: ours [PolySpecSvcEnF3 ]\nkernel driver, all: ours []\ntype 0: err 87\nstate 0: err 87\nstate 4: err 87\ngroup that no service is in: err 1060 count=0\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 217
+    }
+  ]
+}
