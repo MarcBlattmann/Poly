@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "prp_principal_b",
+      "exe_sha256": "7b61c88d936fa3409ab9f3fa018e9aea3cf7bf4d820415ec9c8631da448f8067",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpkZWZhdWx0IERpc3BsYXlOYW1lOiBocj0weDAwMDAwMDAwIDxudWxsPgpkZWZhdWx0IExvZ29uVHlwZSAzLCBSdW5MZXZlbCAwCkxvZ29uVHlwZSA9IDE6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgMQpMb2dvblR5cGUgPSA0OiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIDQKTG9nb25UeXBlID0gNzogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayA3ClJ1bkxldmVsID0gMDogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayAwClJ1bkxldmVsID0gLTE6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgLTEKVXNlcklkID0gIlMtMS01LTE4IjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbU1lTVEVNXQpVc2VySWQgPSAiTm9TdWNoVXNlcjQyIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbTm9TdWNoVXNlcjQyXQpVc2VySWQgPSAieCp5IjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbeCp5XQpHcm91cElkICh3aXRoIGEgVXNlcklkIHNldCkgPSAiQlVJTFRJTlxcVXNlcnMiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtVc2Vyc10KR3JvdXBJZCAod2l0aCBhIFVzZXJJZCBzZXQpID0gIiI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW10KVXNlcklkICh3aXRoIGEgR3JvdXBJZCBzZXQpID0gIlNZU1RFTSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW1NZU1RFTV0KSWQgPSAiT3RoZXIiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtPdGhlcl0KVXNlcklkID0gIlNZU1RFTSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW1NZU1RFTV0KeG1sIHdpdGggYWxsIHNldDogPFByaW5jaXBhbHM+PDAwMGQ+IDxQcmluY2lwYWw+PDAwMGQ+IDxVc2VySWQ+Uy0xLTUtMTg8L1VzZXJJZD48MDAwZD4gPERpc3BsYXlOYW1lPlNob3duIG5hbWU8L0Rpc3BsYXlOYW1lPjwwMDBkPiA8UnVuTGV2ZWw+SGlnaGVzdEF2YWlsYWJsZTwvUnVuTGV2ZWw+PDAwMGQ+IDwvUHJpbmNpcGFsPjwwMDBkPiA8L1ByaW5jaXBhbHM+PDAwMGQ+IApyZWdpc3RlcmVkIHdpdGggdGhlIHByaW5jaXBhbCBhYm92ZTogaHI9MHgwMDAwMDAwMApyZWdpc3RlcmVkIElkOiBocj0weDAwMDAwMDAwIFtBdXRob3JdCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\ndefault DisplayName: hr=0x00000000 <null>\ndefault LogonType 3, RunLevel 0\nLogonType = 1: put hr=0x00000000 reads back 1\nLogonType = 4: put hr=0x00000000 reads back 4\nLogonType = 7: put hr=0x00000000 reads back 7\nRunLevel = 0: put hr=0x00000000 reads back 0\nRunLevel = -1: put hr=0x00000000 reads back -1\nUserId = \"S-1-5-18\": put hr=0x00000000 reads back [SYSTEM]\nUserId = \"NoSuchUser42\": put hr=0x00000000 reads back [NoSuchUser42]\nUserId = \"x*y\": put hr=0x00000000 reads back [x*y]\nGroupId (with a UserId set) = \"BUILTIN\\\\Users\": put hr=0x00000000 reads back [Users]\nGroupId (with a UserId set) = \"\": put hr=0x00000000 reads back []\nUserId (with a GroupId set) = \"SYSTEM\": put hr=0x00000000 reads back [SYSTEM]\nId = \"Other\": put hr=0x00000000 reads back [Other]\nUserId = \"SYSTEM\": put hr=0x00000000 reads back [SYSTEM]\nxml with all set: <Principals><000d> <Principal><000d> <UserId>S-1-5-18</UserId><000d> <DisplayName>Shown name</DisplayName><000d> <RunLevel>HighestAvailable</RunLevel><000d> </Principal><000d> </Principals><000d> \nregistered with the principal above: hr=0x00000000\nregistered Id: hr=0x00000000 [Author]\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 135
+    },
+    {
+      "name": "prp_principal_c",
+      "exe_sha256": "f1b6a559b62a3b62912cc0b7935144d9118373f7b2424e965e462b320bd65520",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpkZWZhdWx0IFVzZXJJZDogaHI9MHgwMDAwMDAwMCA8bnVsbD4KeG1sIG9mIGEgbmV3IGRlZmluaXRpb246IChubyBQcmluY2lwYWxzIGVsZW1lbnQpCkxvZ29uVHlwZSA9IDI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgMgpMb2dvblR5cGUgPSA1OiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIDUKTG9nb25UeXBlID0gODogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayA4ClJ1bkxldmVsID0gMTogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayAxClVzZXJJZCA9ICJTWVNURU0iOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtTWVNURU1dClVzZXJJZCA9ICJBZG1pbmlzdHJhdG9ycyI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW0FkbWluaXN0cmF0b3JzXQpVc2VySWQgPSAiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbXQpVc2VySWQgPSAiU1lTVEVNIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbU1lTVEVNXQpHcm91cElkICh3aXRoIGEgVXNlcklkIHNldCkgPSAiUy0xLTUtMzItNTQ1IjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbVXNlcnNdClVzZXJJZCA9IE5VTEw6IGhyPTB4MDAwMDAwMDAKR3JvdXBJZCA9ICIiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtdCklkID0gIiI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW10KTG9nb25UeXBlID0gNTogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayA1CklQcmluY2lwYWwyOiBocj0weDAwMDAwMDAwCnJlZ2lzdGVyZWQgeG1sIHByaW5jaXBhbHM6IDxQcmluY2lwYWxzPjwwMDBkPiA8UHJpbmNpcGFsIGlkPSJBdXRob3IiPjwwMDBkPiA8VXNlcklkPlMtMS01LTE4PC9Vc2VySWQ+PDAwMGQ+IDxEaXNwbGF5TmFtZT5TaG93biBuYW1lPC9EaXNwbGF5TmFtZT48MDAwZD4gPFJ1bkxldmVsPkhpZ2hlc3RBdmFpbGFibGU8L1J1bkxldmVsPjwwMDBkPiA8L1ByaW5jaXBhbD48MDAwZD4gPC9QcmluY2lwYWxzPjwwMDBkPiAKcmVnaXN0ZXJlZCB3aXRoIG5vIHByaW5jaXBhbCwgbG9nb24gdHlwZSAzOiBocj0weDAwMDAwMDAwCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\ndefault UserId: hr=0x00000000 <null>\nxml of a new definition: (no Principals element)\nLogonType = 2: put hr=0x00000000 reads back 2\nLogonType = 5: put hr=0x00000000 reads back 5\nLogonType = 8: put hr=0x00000000 reads back 8\nRunLevel = 1: put hr=0x00000000 reads back 1\nUserId = \"SYSTEM\": put hr=0x00000000 reads back [SYSTEM]\nUserId = \"Administrators\": put hr=0x00000000 reads back [Administrators]\nUserId = \"\": put hr=0x00000000 reads back []\nUserId = \"SYSTEM\": put hr=0x00000000 reads back [SYSTEM]\nGroupId (with a UserId set) = \"S-1-5-32-545\": put hr=0x00000000 reads back [Users]\nUserId = NULL: hr=0x00000000\nGroupId = \"\": put hr=0x00000000 reads back []\nId = \"\": put hr=0x00000000 reads back []\nLogonType = 5: put hr=0x00000000 reads back 5\nIPrincipal2: hr=0x00000000\nregistered xml principals: <Principals><000d> <Principal id=\"Author\"><000d> <UserId>S-1-5-18</UserId><000d> <DisplayName>Shown name</DisplayName><000d> <RunLevel>HighestAvailable</RunLevel><000d> </Principal><000d> </Principals><000d> \nregistered with no principal, logon type 3: hr=0x00000000\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 128
+    }
+  ]
+}
