@@ -188,6 +188,7 @@ unsafe fn caller_dib(info: *const u8, bits: *const u8, usage: u32, rows: Option<
         dib: true,
         colors,
         storage: Storage::External(bits as u64, len),
+        drawn: None,
     };
     Some((bmp, full))
 }

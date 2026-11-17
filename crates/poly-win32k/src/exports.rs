@@ -448,6 +448,7 @@ pub const GDI32_EXPORTS: &[&str] = &[
     "PolyGdiSetDisplayBase",
     "PolyGdiAttachSurfaceRows",
     "PolyGdiSurface",
+    "PolyGdiTakeSurfaceDrawn",
     "PolyGdiSetDisplayGeometry",
     "PolyGdiSetSystemClip",
     "PolyGdiGetRegionRects",

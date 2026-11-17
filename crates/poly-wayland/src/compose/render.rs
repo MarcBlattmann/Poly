@@ -7,6 +7,7 @@ use super::paint::{self, Radii, ShadowCache};
 use super::scene::{Backdrop, Content, CursorLook, Placed, Scene, Window, WindowId};
 use super::{CURSOR_SIZE, Framebuffer, Layer, Rect, SCALE_UNIT, Scale, over, with_alpha};
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 const OPAQUE: u32 = 0xff00_0000;
 
@@ -91,7 +92,11 @@ const ARROW: [&[u8; CURSOR_SIZE.0 as usize]; CURSOR_SIZE.1 as usize] = [
 /// pixels are as large as the scale makes a logical pixel.
 pub(super) fn draw_cursor(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: Scale) {
     let (ox, oy) = (s.px(x), s.px(y));
-    let area = Rect::new(ox, oy, s.px(CURSOR_SIZE.0) + 1, s.px(CURSOR_SIZE.1) + 1).intersect(&clip);
+    // Exactly the physical pixels of the logical rectangle the scene damages
+    // for the cursor (`Scene::cursor_rect`, rounded by `Scale::rect`, inside
+    // its `rect_out`): a pixel beyond it would stay on the screen when the
+    // cursor moves away.
+    let area = s.rect(Rect::new(x, y, CURSOR_SIZE.0, CURSOR_SIZE.1)).intersect(&clip);
     for py in area.y..area.bottom() {
         let row = fb.row_mut(py as u32);
         let line = ARROW[(s.to_logical(py - oy) as usize).min(ARROW.len() - 1)];
@@ -245,6 +250,39 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
             for (dst, &p) in row[area.x as usize..area.right() as usize].iter_mut().zip(src) {
                 *dst = over(p, *dst) | OPAQUE;
             }
+        }
+    } else if s.is_integer() && bs == 1 {
+        // A buffer of scale 1 at a whole output scale (a Windows app's window at 200%): each
+        // buffer pixel is `si` output pixels wide, and a row the same opaque buffer row gave is
+        // copied rather than drawn again.
+        let si = s.ceil() as i32;
+        let x0 = area.x - dest.x;
+        let mut last: Option<(i32, i32)> = None;
+        let mut line: Vec<u32> = Vec::new();
+        for y in area.y..area.bottom() {
+            let sy = (y - dest.y) / si;
+            if let Some((ly, lsy)) = last
+                && lsy == sy
+            {
+                line.clear();
+                line.extend_from_slice(&fb.row_mut(ly as u32)[area.x as usize..area.right() as usize]);
+                fb.row_mut(y as u32)[area.x as usize..area.right() as usize].copy_from_slice(&line);
+                continue;
+            }
+            let src = &c.pixels[sy as usize * width..(sy as usize + 1) * width];
+            let row = &mut fb.row_mut(y as u32)[area.x as usize..area.right() as usize];
+            let mut opaque = true;
+            let (mut sx, mut k) = ((x0 / si) as usize, x0 % si);
+            for dst in row.iter_mut() {
+                let p = src[sx];
+                opaque &= p >> 24 == 0xff;
+                *dst = over(p, *dst) | OPAQUE;
+                k += 1;
+                if k == si {
+                    (sx, k) = (sx + 1, 0);
+                }
+            }
+            last = opaque.then_some((y, sy));
         }
     } else if s.is_integer() {
         let si = s.ceil() as i32;
