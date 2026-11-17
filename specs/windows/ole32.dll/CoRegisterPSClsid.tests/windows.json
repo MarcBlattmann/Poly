@@ -11,18 +11,18 @@
   "started": "2026-11-17T12:17:35Z",
   "tests": [
     {
-      "name": "regps_basic",
-      "exe_sha256": "3398da972bcb34a0dcdd74a9363075e40603625fc8f55fba3b56d38eec1fef79",
+      "name": "regps_threads",
+      "exe_sha256": "e09ab562860e5b6ca362a995a7d75b468018c7338af52fd98e2f9ebf1814a014",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "b24gYSB0aHJlYWQgd2l0aG91dCBDT006IDB4ODAwNDAxZjAKQ29Jbml0aWFsaXplRXgoTVRBKSA9IDB4MDAwMDAwMDAKYW4gdW5rbm93biBpZCBiZWZvcmU6IDB4ODAwNDAxNTUgKHplcm8pCkNvUmVnaXN0ZXJQU0Nsc2lkKGEsIFBTRGlzcGF0Y2gpID0gMHgwMDAwMDAwMApDb0dldFBTQ2xzaWQoYSkgPSAweDAwMDAwMDAwIFBTRGlzcGF0Y2gKcmVnaXN0ZXJpbmcgYSBhZ2FpbiB3aXRoIGFub3RoZXIgY2xhc3MgPSAweDAwMDAwMDAwCkNvR2V0UFNDbHNpZChhKSA9IDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZQpyZWdpc3RlcmluZyBhIGFnYWluIHdpdGggdGhlIHNhbWUgY2xhc3MgPSAweDAwMDAwMDAwCkNvUmVnaXN0ZXJQU0Nsc2lkKGIsIFBTRGlzcGF0Y2gpIG92ZXIgYSByZWdpc3RyeSBlbnRyeSB7MDAwMjA0MjR9ID0gMHgwMDAwMDAwMApDb0dldFBTQ2xzaWQoYikgPSAweDAwMDAwMDAwIFBTRGlzcGF0Y2gKQ29SZWdpc3RlclBTQ2xzaWQoYywgemVybyBjbGFzcyBpZCkgPSAweDAwMDAwMDAwCkNvR2V0UFNDbHNpZChjKSA9IDB4MDAwMDAwMDAgKHplcm8pCk5VTEwgaW50ZXJmYWNlIGlkID0gMHg4MDA3MDA1NwpOVUxMIGNsYXNzIGlkID0gMHg4MDA3MDA1Nwp0aGUgc2Vjb25kIHByb2Nlc3MgZW5kZWQgd2l0aCBjb2RlIDAKY2hpbGQ6IENvSW5pdGlhbGl6ZUV4ID0gMHgwMDAwMDAwMApjaGlsZDogdGhlIGlkIHRoZSBwYXJlbnQgcmVnaXN0ZXJlZDogMHg4MDA0MDE1NSBvdGhlcgpjaGlsZDogdGhlIGlkIHRoZSBwYXJlbnQgb3ZlcnJvZGU6IDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZQphZnRlciBDb1VuaW5pdGlhbGl6ZSBhbmQgQ29Jbml0aWFsaXplRXggYWdhaW4gKDB4MDAwMDAwMDApOiBDb0dldFBTQ2xzaWQoYSkgPSAweDgwMDQwMTU1ICh6ZXJvKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "output_b64": "Q29Jbml0aWFsaXplRXgoTVRBKSA9IDB4MDAwMDAwMDAKYmVmb3JlOiBDb0dldFBTQ2xzaWQoYSkgKHplcm8pCltTVEEgdGhyZWFkOiBDb0luaXRpYWxpemVFeCAweDAwMDAwMDAwLCBDb1JlZ2lzdGVyUFNDbHNpZCAweDAwMDAwMDAwXSAgZW5kZWQgMQptYWluIE1UQSB0aHJlYWQgYWZ0ZXIgdGhlIFNUQSB0aHJlYWQgcmVnaXN0ZXJlZDogMHgwMDAwMDAwMCBQU0Rpc3BhdGNoCnRoZSBtYWluIHRocmVhZCByZWdpc3RlcnMgYW5vdGhlciBjbGFzcyBmb3IgYTogMHgwMDAwMDAwMApbTVRBIHRocmVhZDogQ29Jbml0aWFsaXplRXggMHgwMDAwMDAwMCwgQ29HZXRQU0Nsc2lkIDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZV0gIGVuZGVkIDEKW3RocmVhZCB3aXRob3V0IENPTTogQ29SZWdpc3RlclBTQ2xzaWQgMHgwMDAwMDAwMCwgQ29HZXRQU0Nsc2lkIDB4MDAwMDAwMDBdICBlbmRlZCAxCmIgKHJlZ2lzdGVyZWQgYnkgdGhlIHRocmVhZCB3aXRob3V0IENPTSk6IDB4MDAwMDAwMDAgUFNEaXNwYXRjaApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "on a thread without COM: 0x800401f0\nCoInitializeEx(MTA) = 0x00000000\nan unknown id before: 0x80040155 (zero)\nCoRegisterPSClsid(a, PSDispatch) = 0x00000000\nCoGetPSClsid(a) = 0x00000000 PSDispatch\nregistering a again with another class = 0x00000000\nCoGetPSClsid(a) = 0x00000000 PSOAInterface\nregistering a again with the same class = 0x00000000\nCoRegisterPSClsid(b, PSDispatch) over a registry entry {00020424} = 0x00000000\nCoGetPSClsid(b) = 0x00000000 PSDispatch\nCoRegisterPSClsid(c, zero class id) = 0x00000000\nCoGetPSClsid(c) = 0x00000000 (zero)\nNULL interface id = 0x80070057\nNULL class id = 0x80070057\nthe second process ended with code 0\nchild: CoInitializeEx = 0x00000000\nchild: the id the parent registered: 0x80040155 other\nchild: the id the parent overrode: 0x00000000 PSOAInterface\nafter CoUninitialize and CoInitializeEx again (0x00000000): CoGetPSClsid(a) = 0x80040155 (zero)\nsummary 0 passed, 0 failed\n",
+      "output": "CoInitializeEx(MTA) = 0x00000000\nbefore: CoGetPSClsid(a) (zero)\n[STA thread: CoInitializeEx 0x00000000, CoRegisterPSClsid 0x00000000]  ended 1\nmain MTA thread after the STA thread registered: 0x00000000 PSDispatch\nthe main thread registers another class for a: 0x00000000\n[MTA thread: CoInitializeEx 0x00000000, CoGetPSClsid 0x00000000 PSOAInterface]  ended 1\n[thread without COM: CoRegisterPSClsid 0x00000000, CoGetPSClsid 0x00000000]  ended 1\nb (registered by the thread without COM): 0x00000000 PSDispatch\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 100
+      "ms": 54
     }
   ]
 }

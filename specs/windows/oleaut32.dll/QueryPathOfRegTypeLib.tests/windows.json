@@ -22,7 +22,7 @@
       "output": "not registered: 0x8002801d, path (NULL)\nregistered, 1.0, LCID 0: 0x00000000, path <file>\n1.0 with LCID 0x409: 0x00000000, path <file>\n1.0 with LCID 0x400: 0x00000000, path <file>\n1.1 (higher minor than registered): 0x8002801d, path (NULL)\n2.0: 0x8002801d, path (NULL)\n0.0: 0x8002801d, path (NULL)\n1.5 registered by hand, request 1.0: 0x00000000, path <file>\n  request 1.5: 0x00000000, path C:\\polyws\\fifteen.tlb\n  request 1.6: 0x8002801d, path (NULL)\nvalue with a resource index \\3: 0x00000000, path <file>\\3\nempty value: 0x00000000, path \nonly a win32 value registered (1.5): 0x00000000, path C:\\polyws\\win32only.tlb\nstdole 2.0: 0x00000000, file name stdole2.tlb\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 67
+      "ms": 88
     }
   ]
 }

@@ -18,7 +18,8 @@ rules:
   hives: "a registration in HKCU only is found; with both, the HKCU value wins (the merged view)"
   bad_values: "ProxyStubClsid32 = \"not a guid\": CO_E_CLASSSTRING 0x800401f3; an interface key without ProxyStubClsid32: 0x80040155"
   cache: "a successful answer is remembered for the process: deleting the registration afterwards does not change it (also for the library's interfaces after UnRegisterTypeLib); a failed lookup is not remembered: registering afterwards makes it succeed"
-  arguments: "NULL interface id or NULL output: E_INVALIDARG 0x80070057; a thread without COM: CO_E_NOTINITIALIZED 0x800401f0 (the output is untouched)"
+  arguments: "NULL interface id or NULL output: E_INVALIDARG 0x80070057; in a process in which no thread has initialised COM: CO_E_NOTINITIALIZED 0x800401f0 (the output is untouched); a thread without COM in a process that has an MTA works like any thread"
+  threads_and_processes: "the answer is the same on a thread of another apartment (an STA thread gets {00020424-...} for the library's interfaces); a process started later reads the registry itself: it finds the library's interfaces while they are registered and gets 0x80040155 (output zero class id) after UnRegisterTypeLib, while the first process still answers from its cache"
 errors:
   not_registered: "REGDB_E_IIDNOTREG 0x80040155"
   bad_class_string: "CO_E_CLASSSTRING 0x800401f3"
@@ -32,7 +33,7 @@ timing:
   guarantees: none
 tests:
   visible: 1
-  held_out: 0
+  held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
 not_covered: >

@@ -1,7 +1,5 @@
-//! CoGetPSClsid: the class of the proxy/stub of an interface, read from `Interface\{iid}\ProxyStubClsid32`: for the
-//! interfaces of a registered type library ({00020424-...}, the automation marshaller), for the standard automation
-//! and OLE interfaces, for unregistered ids, with the registration in HKCU, and after UnRegisterTypeLib; NULL
-//! arguments and a thread without COM.
+//! VARIANTs through the type-library marshaller: each variant type sent to the server and sent back unchanged
+//! (`EchoVariant`), what the server received, and the types the marshaller refuses.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_camel_case_types, non_upper_case_globals, non_snake_case, clippy::all)]
@@ -3588,133 +3586,208 @@ fn local_echo() -> *mut c_void {
     new_eobj() as *mut c_void
 }
 
-poly_wtest::main!(test);
+main_with_child!(child, test);
 
-fn ps(iid: &GUID) -> (i32, Buf<48>) {
-    let mut c = guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]);
-    // SAFETY: live out pointer.
-    let hr = unsafe { CoGetPSClsid(iid, &mut c) };
-    let name = if c == CLSID_PSOAInterface {
-        "PSOAInterface {00020424-...}".into_buf()
-    } else if c == CLSID_PSDispatch {
-        "PSDispatch {00020420-...}".into_buf()
-    } else if c == guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]) {
-        "(unchanged)".into_buf()
-    } else {
-        guid_text(&c)
-    };
-    (hr, name)
+fn child(a: &str) -> u32 {
+    tl_child_main(a, no_extra)
 }
 
-trait IntoBuf {
-    fn into_buf(self) -> Buf<48>;
-}
-
-impl IntoBuf for &str {
-    fn into_buf(self) -> Buf<48> {
-        let mut b = Buf::<48>::new();
-        let _ = write!(b, "{self}");
-        b
+fn one(t: &mut Test, echo: *mut c_void, name: &str, v: &VARIANT) {
+    let (hr, mut r) = echo_variant(echo, v);
+    say!(t, "{name}: {} result vt={:#x} value={:#x}", hrs(hr).as_str(), r.vt, r.val[0]);
+    if hr == S_OK {
+        // SAFETY: a variant the call filled.
+        unsafe { VariantClear(&mut r) };
     }
 }
 
 fn test(t: &mut Test) {
-    let seed = run_seed();
-    let (hr, c) = ps(&gid(K_ECHO, seed));
-    say!(t, "an interface that is not registered, no COM on the thread: {} {}", hrs(hr).as_str(), c.as_str());
-    let run = match tl_setup(seed, "pl", SHAPE_INTERFACE) {
-        Ok(r) => r,
-        Err((s, hr)) => {
-            say!(t, "setup failed at step {s}: {}", hrs(hr).as_str());
-            tl_cleanup(seed);
-            return;
-        }
-    };
-    let hr = co_init(true);
-    say!(t, "CoInitializeEx(MTA) = {}", hrs(hr).as_str());
-    for (name, iid) in [
-        ("ITlEcho (type library registered)", gid(K_ECHO, seed)),
-        ("ITlCallback", gid(K_CB, seed)),
-        ("ITlDual", gid(K_DUAL, seed)),
-        ("an unregistered id", IID_Unknown1),
-        ("IUnknown", IID_IUnknown),
-        ("IDispatch", IID_IDispatch),
-        ("IClassFactory", IID_IClassFactory),
-        ("IMarshal", IID_IMarshal),
-        ("IStream", IID_IStream),
-        ("IErrorInfo", IID_IErrorInfo),
-        ("IPSFactoryBuffer", IID_IPSFactoryBuffer),
-        ("IRpcStubBuffer", IID_IRpcStubBuffer),
-    ] {
-        let (hr, c) = ps(&iid);
-        say!(t, "{name}: {} {}", hrs(hr).as_str(), c.as_str());
-    }
-    // NULL arguments
-    let mut c = guid(0, 0, 0, [0; 8]);
-    // SAFETY: NULL iid is the call's error case.
-    let hr = unsafe { CoGetPSClsid(core::ptr::null(), &mut c) };
-    say!(t, "NULL interface id: {}", hrs(hr).as_str());
-    // SAFETY: NULL output is the call's error case.
-    let hr = unsafe { CoGetPSClsid(&gid(K_ECHO, seed), core::ptr::null_mut()) };
-    say!(t, "NULL output: {}", hrs(hr).as_str());
-    // registry scenarios, each with an interface id that was not looked up before (the answers are cached per process)
-    let val_oa = "{00020424-0000-0000-C000-000000000046}";
-    let val_disp = "{00020420-0000-0000-C000-000000000046}";
-    let mut keys = [
-        Buf::<120>::new(),
-        Buf::<120>::new(),
-        Buf::<120>::new(),
-        Buf::<120>::new(),
-        Buf::<120>::new(),
-        Buf::<120>::new(),
-    ];
-    for (i, k) in keys.iter_mut().enumerate() {
-        let _ = write!(k, "Interface\\{}", guid_braced(&gid(0xA100 + i as u32, seed)).as_str());
-    }
-    let sub = |i: usize| -> Buf<160> {
-        let mut b = Buf::<160>::new();
-        let _ = write!(b, "{}\\ProxyStubClsid32", keys[i].as_str());
-        b
-    };
-    // 0: HKLM only
-    reg_put(HKLM, sub(0).as_str(), None, val_oa);
-    let (hr, c) = ps(&gid(0xA100, seed));
-    say!(t, "registered in HKLM only: {} {}", hrs(hr).as_str(), c.as_str());
-    // 1: HKCU only
-    reg_put(HKCU, sub(1).as_str(), None, val_disp);
-    let (hr, c) = ps(&gid(0xA101, seed));
-    say!(t, "registered in HKCU only: {} {}", hrs(hr).as_str(), c.as_str());
-    // 2: both
-    reg_put(HKLM, sub(2).as_str(), None, val_oa);
-    reg_put(HKCU, sub(2).as_str(), None, val_disp);
-    let (hr, c) = ps(&gid(0xA102, seed));
-    say!(t, "registered in both (HKLM 00020424, HKCU 00020420): {} {}", hrs(hr).as_str(), c.as_str());
-    // 3: text that is not a class id
-    reg_put(HKLM, sub(3).as_str(), None, "not a guid");
-    let (hr, c) = ps(&gid(0xA103, seed));
-    say!(t, "ProxyStubClsid32 = \"not a guid\": {} {}", hrs(hr).as_str(), c.as_str());
-    // 4: the interface key without ProxyStubClsid32
-    reg_put(HKLM, keys[4].as_str(), None, "an interface");
-    let (hr, c) = ps(&gid(0xA104, seed));
-    say!(t, "interface key without ProxyStubClsid32: {} {}", hrs(hr).as_str(), c.as_str());
-    // 5: not registered at first, registered afterwards, deleted afterwards
-    let (hr, c) = ps(&gid(0xA105, seed));
-    say!(t, "not registered: {} {}", hrs(hr).as_str(), c.as_str());
-    reg_put(HKLM, sub(5).as_str(), None, val_oa);
-    let (hr, c) = ps(&gid(0xA105, seed));
-    say!(t, "registered after the failed lookup: {} {}", hrs(hr).as_str(), c.as_str());
-    reg_delete_tree(HKLM, keys[5].as_str());
-    let (hr, c) = ps(&gid(0xA105, seed));
-    say!(t, "deleted again after a successful lookup: {} {}", hrs(hr).as_str(), c.as_str());
-    for k in keys.iter() {
-        reg_delete_tree(HKLM, k.as_str());
-        reg_delete_tree(HKCU, k.as_str());
-    }
-    // the library's own interfaces after UnRegisterTypeLib (answers already given are cached)
+    let Some((run, echo)) = boot(t, "cv", false, SHAPE_INTERFACE) else { return };
+    let mut v = variant_empty();
+    one(t, echo, "VT_EMPTY", &v);
+    v.vt = VT_NULL;
+    one(t, echo, "VT_NULL", &v);
+    v.vt = VT_I2;
+    v.val[0] = 0xFFFE;
+    one(t, echo, "VT_I2 -2", &v);
+    v.vt = VT_I4;
+    v.val[0] = 0x8000_0001;
+    one(t, echo, "VT_I4 0x80000001", &v);
+    v.vt = VT_R8;
+    v.val[0] = 1.5f64.to_bits();
+    one(t, echo, "VT_R8 1.5", &v);
+    v.vt = VT_BOOL;
+    v.val[0] = 0xFFFF;
+    one(t, echo, "VT_BOOL true", &v);
+    v.vt = VT_ERROR;
+    v.val[0] = 0x8002_0004;
+    one(t, echo, "VT_ERROR DISP_E_PARAMNOTFOUND", &v);
+    v.vt = VT_UI1;
+    v.val[0] = 200;
+    one(t, echo, "VT_UI1 200", &v);
+    v.vt = 21; // VT_UI8
+    v.val[0] = 0x1_0000_0002;
+    one(t, echo, "VT_UI8 0x100000002", &v);
+    v.vt = 7; // VT_DATE
+    v.val[0] = 36000.5f64.to_bits();
+    one(t, echo, "VT_DATE 36000.5", &v);
+    v.vt = 6; // VT_CY
+    v.val[0] = 1_234_500;
+    one(t, echo, "VT_CY 123.45", &v);
+    // a BSTR
+    let b = bstr_new("variant text");
+    v.vt = VT_BSTR;
+    v.val[0] = b as usize as u64;
+    let (hr, mut r) = echo_variant(echo, &v);
+    say!(t, "VT_BSTR: {} result vt={} text={}", hrs(hr).as_str(), r.vt, bstr_text(r.val[0] as usize as BSTR).as_str());
+    // SAFETY: a variant the call filled.
+    unsafe { VariantClear(&mut r) };
+    bstr_free(b);
+    v.vt = VT_BSTR;
+    v.val[0] = 0;
+    let (hr, r) = echo_variant(echo, &v);
+    say!(
+        t,
+        "VT_BSTR with a NULL string: {} result vt={} NULL string {}",
+        hrs(hr).as_str(),
+        r.vt,
+        u32::from(r.val[0] == 0)
+    );
+    // an array of integers inside a variant
     // SAFETY: plain call.
-    let hr = unsafe { UnRegisterTypeLib(&gid(K_LIB, seed), 1, 0, 0, SYS_WIN64) };
-    say!(t, "UnRegisterTypeLib = {}", hrs(hr).as_str());
-    let (hr, c) = ps(&gid(K_ECHO, seed));
-    say!(t, "ITlEcho after UnRegisterTypeLib (looked up before): {} {}", hrs(hr).as_str(), c.as_str());
-    local_end(run);
+    let sa = unsafe { SafeArrayCreateVector(VT_I4, 0, 3) };
+    let mut data: *mut c_void = core::ptr::null_mut();
+    // SAFETY: an array made above.
+    unsafe {
+        SafeArrayAccessData(sa, &mut data);
+        for i in 0..3 {
+            *(data as *mut i32).add(i) = (i as i32 + 1) * 100;
+        }
+        SafeArrayUnaccessData(sa);
+    }
+    v.vt = VT_ARRAY | VT_I4;
+    v.val[0] = sa as usize as u64;
+    let (hr, mut r) = echo_variant(echo, &v);
+    say!(t, "VT_ARRAY|VT_I4: {} result vt={:#x}", hrs(hr).as_str(), r.vt);
+    if hr == S_OK && r.vt == (VT_ARRAY | VT_I4) {
+        let arr = r.val[0] as usize as *mut c_void;
+        let (mut lo, mut hi) = (0, 0);
+        let mut d: *mut c_void = core::ptr::null_mut();
+        // SAFETY: the array the call returned.
+        unsafe {
+            SafeArrayGetLBound(arr, 1, &mut lo);
+            SafeArrayGetUBound(arr, 1, &mut hi);
+            SafeArrayAccessData(arr, &mut d);
+            say!(
+                t,
+                "  bounds {lo}..{hi} elements {} {} {}",
+                *(d as *const i32),
+                *(d as *const i32).add(1),
+                *(d as *const i32).add(2)
+            );
+            SafeArrayUnaccessData(arr);
+        }
+    }
+    // SAFETY: a variant the call filled; the array made above.
+    unsafe {
+        VariantClear(&mut r);
+        SafeArrayDestroy(sa);
+    }
+    // an array of IDispatch pointers inside a variant (the updater passes its application states this way)
+    let (hr, disp) = unk_qi(echo, &IID_IDispatch);
+    say!(t, "QI(IDispatch) = {}", hrs(hr).as_str());
+    if hr == S_OK {
+        // SAFETY: plain call; the array holds two interface pointers each with a reference of its own.
+        let arr = unsafe { SafeArrayCreateVector(VT_DISPATCH, 0, 2) };
+        let mut d: *mut c_void = core::ptr::null_mut();
+        // SAFETY: an array made above.
+        unsafe {
+            SafeArrayAccessData(arr, &mut d);
+            for i in 0..2 {
+                unk_addref(disp);
+                *(d as *mut *mut c_void).add(i) = disp;
+            }
+            SafeArrayUnaccessData(arr);
+        }
+        let mut av = variant_empty();
+        av.vt = VT_ARRAY | VT_DISPATCH;
+        av.val[0] = arr as usize as u64;
+        let (hr, mut r) = echo_variant(echo, &av);
+        say!(t, "VT_ARRAY|VT_DISPATCH of 2 proxies: {} result vt={:#x}", hrs(hr).as_str(), r.vt);
+        if hr == S_OK && r.vt == (VT_ARRAY | VT_DISPATCH) {
+            let ra = r.val[0] as usize as *mut c_void;
+            let (mut lo, mut hi) = (0, 0);
+            let mut rd: *mut c_void = core::ptr::null_mut();
+            // SAFETY: the array the call returned.
+            unsafe {
+                SafeArrayGetLBound(ra, 1, &mut lo);
+                SafeArrayGetUBound(ra, 1, &mut hi);
+                SafeArrayAccessData(ra, &mut rd);
+            }
+            say!(t, "  bounds {lo}..{hi}");
+            for i in 0..2 {
+                // SAFETY: elements of the array the call returned.
+                let p = unsafe { *(rd as *const *mut c_void).add(i) };
+                let mut r4 = 0;
+                let (hq, dual) = unk_qi(p, &gid(K_DUAL, run.seed));
+                let hr = if hq == S_OK { vcall!(dual, 7, (i32, i32, *mut i32) -> i32, 20, 22, &mut r4) } else { hq };
+                say!(
+                    t,
+                    "  element {i}: a proxy {}, QI(ITlDual) = {}, AddLong through it = {} {r4}",
+                    u32::from(!p.is_null() && is_proxy(p)),
+                    hrs(hq).as_str(),
+                    hrs(hr).as_str()
+                );
+                if hq == S_OK {
+                    unk_release(dual);
+                }
+            }
+            // SAFETY: as above.
+            unsafe { SafeArrayUnaccessData(ra) };
+        }
+        // SAFETY: a variant the call filled; the array made above.
+        unsafe {
+            VariantClear(&mut r);
+            SafeArrayDestroy(arr);
+        }
+        unk_release(disp);
+    }
+    // a by-reference variant
+    let mut n: i32 = 99;
+    v.vt = VT_BYREF | VT_I4;
+    v.val[0] = &mut n as *mut i32 as usize as u64;
+    let (hr, r) = echo_variant(echo, &v);
+    say!(t, "VT_BYREF|VT_I4: {} result vt={:#x} value={}", hrs(hr).as_str(), r.vt, r.val[0] as i32);
+    // an unknown pointer (the callback object) and NULL
+    v.vt = VT_UNKNOWN;
+    v.val[0] = cb_ptr() as usize as u64;
+    let (hr, mut r) = echo_variant(echo, &v);
+    let p = r.val[0] as usize as *mut c_void;
+    say!(
+        t,
+        "VT_UNKNOWN(callback object): {} result vt={} a proxy {}",
+        hrs(hr).as_str(),
+        r.vt,
+        u32::from(hr == S_OK && r.vt == VT_UNKNOWN && !p.is_null() && is_proxy(p))
+    );
+    if hr == S_OK {
+        // SAFETY: a variant the call filled.
+        unsafe { VariantClear(&mut r) };
+    }
+    v.vt = VT_UNKNOWN;
+    v.val[0] = 0;
+    let (hr, r) = echo_variant(echo, &v);
+    say!(t, "VT_UNKNOWN(NULL): {} result vt={} NULL {}", hrs(hr).as_str(), r.vt, u32::from(r.val[0] == 0));
+    v.vt = VT_DISPATCH;
+    v.val[0] = 0;
+    let (hr, r) = echo_variant(echo, &v);
+    say!(t, "VT_DISPATCH(NULL): {} result vt={}", hrs(hr).as_str(), r.vt);
+    // invalid types
+    for vt in [0x1234u16, 15, 0x7f] {
+        v.vt = vt;
+        v.val[0] = 0;
+        let (hr, r) = echo_variant(echo, &v);
+        say!(t, "vt {vt:#x}: {} result vt={:#x}", hrs(hr).as_str(), r.vt);
+    }
+    finish_run(t, run, &[echo], true);
 }

@@ -77,12 +77,15 @@ registers with `RegisterTypeLib` and removes again. No Microsoft or Google type 
 
 - `RegisterTypeLibForUser`, `UnRegisterTypeLibForUser` (per-user registration under `HKCU`), `CoMarshalInterThreadInterfaceInStream`,
   `CoGetInterfaceAndReleaseStream`, `CoMarshalHresult`, `CoUnmarshalHresult`.
-- **The `MSFT` type-library file format** (what `updater.exe\N` contains). Poly can implement everything above with its own
-  in-memory model and its own on-disk form for libraries made by `CreateTypeLib2`, but reading Google's libraries needs the
-  format of the real files. No public document describes it; the sheets give what `ITypeLib` / `ITypeInfo` return for them
-  (the listing above) and the implementer cannot derive the file layout from that. Options: a format sheet from observing
-  `CreateTypeLib2` output byte by byte (a spec task of its own, about a day), or a converter that turns the updater's libraries
-  into Poly's form at build time on a machine that has them. **Decision for the owner / coordinator.**
+- **The `MSFT` type-library file format (B2b-2, first item; owner's decision 2026-11-17).** Poly must read `updater.exe`'s libraries at run
+  time (the owner downloads Google's installer; a build-time converter is out). No public document describes the format, so the
+  spec agent derives a **format sheet from black-box observation**: write libraries with `CreateTypeLib2` on the oracle, vary one
+  thing at a time (a name, a guid, a function, a parameter type, a flag, an inherited interface, a reference to another type,
+  an alias), compare the bytes, and check every hypothesis by reading the resulting file back through `ITypeLib` / `ITypeInfo`
+  and by loading Google's own libraries (`updater.exe` to ``, `docs/windows/com-typelib-updater-types.md` is the target
+  content). The sheet covers what `LoadTypeLib` must read; writing the format is not needed (Poly's own `CreateTypeLib2`
+  may store libraries in any form it reads back). Nothing of Wine, ReactOS or any decompiler is used. Sub-batch B2b-2 starts after
+  the PR of this batch.
 - `SAFEARRAY` records (`IRecordInfo`), `VT_RECORD`, `VT_CY`/`VT_DECIMAL` edge cases, `ICreateTypeInfo2` custom data, `ITypeComp`,
   `ITypeInfo::Invoke` details for server-side `IDispatch`, `CreateStdDispatch`, `DispInvoke`.
 - `[out]` parameters when the server fails after writing them, `RPC_E_*` for a server that dies in the middle of a call, apartment

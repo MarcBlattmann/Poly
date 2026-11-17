@@ -16,7 +16,8 @@ installer: "Not imported by the updater; specified because CoGetPSClsid's cache 
 rules:
   effect: "after the call CoGetPSClsid(iid) returns the class given, also over a registry entry that names another class and when nothing is registered; registering again with another class replaces it; with the same class succeeds; the zero class id is accepted and returned as given with S_OK"
   scope: "a second process asking for the same ids does not see it (it sees the registry's answer or REGDB_E_IIDNOTREG); the registrations are gone after CoUninitialize of the last apartment and a new CoInitializeEx (CoGetPSClsid then fails with 0x80040155 again)"
-  errors: "a thread without COM: CO_E_NOTINITIALIZED 0x800401f0; NULL interface id or NULL class id: E_INVALIDARG 0x80070057"
+  errors: "in a process in which no thread has initialised COM: CO_E_NOTINITIALIZED 0x800401f0; NULL interface id or NULL class id: E_INVALIDARG 0x80070057"
+  threads: "process-wide: a registration made on an STA thread is answered by CoGetPSClsid on the main MTA thread; a later registration for the same id from another thread replaces it and is seen by every thread; a thread without COM can register and read once the process has an MTA"
 errors:
   not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
   invalid_arg: "E_INVALIDARG 0x80070057"
@@ -28,7 +29,7 @@ timing:
   guarantees: none
 tests:
   visible: 1
-  held_out: 0
+  held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
 not_covered: >

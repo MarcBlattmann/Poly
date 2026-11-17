@@ -1,6 +1,7 @@
-//! CoRegisterPSClsid: a proxy/stub class registered for an interface id in this process only: what CoGetPSClsid
-//! answers afterwards (also over a registry entry and for an interface the registry does not know), registering the
-//! same id again, a zero class id, NULL arguments, a thread without COM, and that another process does not see it.
+//! CoGetStandardMarshal: the standard marshaller's IMarshal for an object of this process: its interfaces,
+//! GetUnmarshalClass (the standard marshaller's class id {00000017-...}), GetMarshalSizeMax, MarshalInterface and
+//! UnmarshalInterface through it (the same OBJREF as CoMarshalInterface writes), ReleaseMarshalData, and the
+//! arguments it refuses.
 #![no_std]
 #![no_main]
 #![allow(dead_code, non_camel_case_types, non_upper_case_globals, non_snake_case, clippy::all)]
@@ -3587,132 +3588,120 @@ fn local_echo() -> *mut c_void {
     new_eobj() as *mut c_void
 }
 
-main_with_child!(child, test);
+poly_wtest::main!(test);
 
-fn child(a: &str) -> u32 {
-    tl_child_main(a, ps_child)
-}
-
-/// `psq <report handle> <seed>`: ask CoGetPSClsid for the ids the parent registered.
-fn ps_child(a: &str) -> u32 {
-    let h = arg_handle(a, 1);
-    let seed: u32 = a.split(' ').nth(2).and_then(|x| x.parse().ok()).unwrap_or(0);
-    let mut out = ChildOut { h };
-    let hr = co_init(true);
-    say!(out, "CoInitializeEx = {}", hrs(hr).as_str());
-    for (name, iid) in
-        [("the id the parent registered", gid(0xA200, seed)), ("the id the parent overrode", gid(0xA201, seed))]
-    {
-        let mut c = guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]);
-        // SAFETY: live out pointer.
-        let hr = unsafe { CoGetPSClsid(&iid, &mut c) };
-        say!(
-            out,
-            "{name}: {} {}",
-            hrs(hr).as_str(),
-            if c == CLSID_PSDispatch {
-                "PSDispatch"
-            } else if c == CLSID_PSOAInterface {
-                "PSOAInterface"
-            } else {
-                "other"
-            }
-        );
-    }
-    // SAFETY: plain call.
-    unsafe { CoUninitialize() };
-    0
-}
-
-fn get(iid: &GUID) -> (i32, &'static str) {
-    let mut c = guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]);
-    // SAFETY: live out pointer.
-    let hr = unsafe { CoGetPSClsid(iid, &mut c) };
-    let n = if c == CLSID_PSDispatch {
-        "PSDispatch"
-    } else if c == CLSID_PSOAInterface {
-        "PSOAInterface"
-    } else if c == CLSID_StdMarshal {
-        "StdMarshal"
-    } else if c == guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]) {
-        "(unchanged)"
-    } else if c == guid(0, 0, 0, [0; 8]) {
-        "(zero)"
-    } else {
-        "other"
-    };
-    (hr, n)
-}
-
-fn reg(iid: &GUID, c: &GUID) -> i32 {
-    // SAFETY: plain call.
-    unsafe { CoRegisterPSClsid(iid, c) }
+fn std_marshal(iid: &GUID, obj: *mut c_void, ctx: u32, flags: u32) -> (i32, *mut c_void) {
+    let mut m: *mut c_void = 0x1111 as *mut c_void;
+    // SAFETY: live out pointer; an object the test holds.
+    let hr = unsafe { CoGetStandardMarshal(iid, obj, ctx, core::ptr::null_mut(), flags, &mut m) };
+    (hr, m)
 }
 
 fn test(t: &mut Test) {
-    let seed = run_seed();
-    let a = gid(0xA200, seed);
-    let b = gid(0xA201, seed);
-    let hr = reg(&a, &CLSID_PSDispatch);
-    say!(t, "on a thread without COM: {}", hrs(hr).as_str());
-    let hr = co_init(true);
-    say!(t, "CoInitializeEx(MTA) = {}", hrs(hr).as_str());
-    let (hr, n) = get(&a);
-    say!(t, "an unknown id before: {} {n}", hrs(hr).as_str());
-    let hr = reg(&a, &CLSID_PSDispatch);
-    say!(t, "CoRegisterPSClsid(a, PSDispatch) = {}", hrs(hr).as_str());
-    let (hr, n) = get(&a);
-    say!(t, "CoGetPSClsid(a) = {} {n}", hrs(hr).as_str());
-    let hr = reg(&a, &CLSID_PSOAInterface);
-    say!(t, "registering a again with another class = {}", hrs(hr).as_str());
-    let (hr, n) = get(&a);
-    say!(t, "CoGetPSClsid(a) = {} {n}", hrs(hr).as_str());
-    let hr = reg(&a, &CLSID_PSOAInterface);
-    say!(t, "registering a again with the same class = {}", hrs(hr).as_str());
-    // over a registry entry that was not looked up before
-    let mut ik = Buf::<120>::new();
-    let _ = write!(ik, "Interface\\{}\\ProxyStubClsid32", guid_braced(&b).as_str());
-    reg_put(HKLM, ik.as_str(), None, "{00020424-0000-0000-C000-000000000046}");
-    let hr = reg(&b, &CLSID_PSDispatch);
-    say!(t, "CoRegisterPSClsid(b, PSDispatch) over a registry entry {{00020424}} = {}", hrs(hr).as_str());
-    let (hr, n) = get(&b);
-    say!(t, "CoGetPSClsid(b) = {} {n}", hrs(hr).as_str());
-    // the zero class id and the other special values
-    let c = gid(0xA202, seed);
-    let hr = reg(&c, &guid(0, 0, 0, [0; 8]));
-    say!(t, "CoRegisterPSClsid(c, zero class id) = {}", hrs(hr).as_str());
-    let (hr, n) = get(&c);
-    say!(t, "CoGetPSClsid(c) = {} {n}", hrs(hr).as_str());
-    // SAFETY: NULL arguments are the call's error cases.
-    let hr = unsafe { CoRegisterPSClsid(core::ptr::null(), &CLSID_PSDispatch) };
-    say!(t, "NULL interface id = {}", hrs(hr).as_str());
-    // SAFETY: as above.
-    let hr = unsafe { CoRegisterPSClsid(&gid(0xA203, seed), core::ptr::null()) };
-    say!(t, "NULL class id = {}", hrs(hr).as_str());
-    // another process
-    let rep = Report::new();
-    let mut args = Buf::<100>::new();
-    let _ = write!(args, "psq {:x} {seed}", rep.write as usize);
-    match start_child(args.as_str(), 0) {
-        Some(ch) => {
-            let code = ch.finish();
-            say!(t, "the second process ended with code {code}");
+    let (hr, m) = std_marshal(&IID_IUnknown, core::ptr::null_mut(), MSHCTX_LOCAL, MSHLFLAGS_NORMAL);
+    say!(t, "on a thread without COM: {}, pointer written {}", hrs(hr).as_str(), u32::from(m as usize != 0x1111));
+    let Some(run) = local_boot(t, "sm", true) else { return };
+    let seed = run.seed;
+    let iid = gid(K_ECHO, seed);
+    let obj = local_echo();
+    let (hr, m) = std_marshal(&iid, obj, MSHCTX_LOCAL, MSHLFLAGS_NORMAL);
+    say!(t, "CoGetStandardMarshal(ITlEcho, object, LOCAL, NORMAL) = {}", hrs(hr).as_str());
+    if hr == S_OK {
+        for (name, i) in [
+            ("IUnknown", IID_IUnknown),
+            ("IMarshal", IID_IMarshal),
+            ("ITlEcho", iid),
+            ("IStdMarshalInfo", IID_IStdMarshalInfo),
+        ] {
+            let (hr, o) = unk_qi(m, &i);
+            say!(t, "  QI({name}) = {}", hrs(hr).as_str());
+            unk_release(o);
         }
-        None => say!(t, "the second process could not be started"),
+        let mut c = guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]);
+        let hr = vcall!(m, 3, (*const GUID, *mut c_void, u32, *mut c_void, u32, *mut GUID) -> i32, &iid, obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL, &mut c);
+        say!(
+            t,
+            "  GetUnmarshalClass = {}, the standard marshaller's class {{00000017-...}} {}",
+            hrs(hr).as_str(),
+            u32::from(c == CLSID_StdMarshal)
+        );
+        let mut n = 0xCAFE_u32;
+        let hr = vcall!(m, 4, (*const GUID, *mut c_void, u32, *mut c_void, u32, *mut u32) -> i32, &iid, obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL, &mut n);
+        say!(t, "  GetMarshalSizeMax = {}, non-zero {}", hrs(hr).as_str(), u32::from(n != 0 && n != 0xCAFE));
+        let stm = stream_new();
+        let hr = vcall!(m, 5, (*mut c_void, *const GUID, *mut c_void, u32, *mut c_void, u32) -> i32, stm, &iid, obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL);
+        let (b, nb) = stream_bytes(stm);
+        say!(
+            t,
+            "  MarshalInterface = {}, stream signature {:#010x}, flags {}, bound covers the stream {}",
+            hrs(hr).as_str(),
+            if nb >= 8 { le32(&b, 0) } else { 0 },
+            if nb >= 8 { le32(&b, 4) } else { 0 },
+            u32::from(u64::from(n) >= stream_len(stm))
+        );
+        if hr == S_OK {
+            stream_rewind(stm);
+            let mut out: *mut c_void = 0x1111 as *mut c_void;
+            let hr = vcall!(m, 6, (*mut c_void, *const GUID, *mut *mut c_void) -> i32, stm, &iid, &mut out);
+            say!(t, "  UnmarshalInterface = {}, the original pointer {}", hrs(hr).as_str(), u32::from(out == obj));
+            if hr == S_OK {
+                unk_release(out);
+            }
+            stream_rewind(stm);
+            // the data is used: release it
+            let hr = vcall!(m, 7, (*mut c_void) -> i32, stm);
+            say!(t, "  ReleaseMarshalData on used data = {}", hrs(hr).as_str());
+        }
+        unk_release(stm);
+        let stm = stream_new();
+        vcall!(m, 5, (*mut c_void, *const GUID, *mut c_void, u32, *mut c_void, u32) -> i32, stm, &iid, obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_TABLESTRONG);
+        stream_rewind(stm);
+        let hr = vcall!(m, 7, (*mut c_void) -> i32, stm);
+        say!(t, "  ReleaseMarshalData on unused TABLESTRONG data = {}", hrs(hr).as_str());
+        unk_release(stm);
+        let hr = vcall!(m, 8, (u32) -> i32, 0);
+        say!(t, "  DisconnectObject = {}", hrs(hr).as_str());
+        unk_release(m);
     }
-    rep.print(t);
-    // after CoUninitialize the registration is gone with the process's state? (it is per process)
-    // SAFETY: plain call.
-    unsafe { CoUninitialize() };
-    let hr = co_init(true);
-    let (hr2, n) = get(&a);
-    say!(
-        t,
-        "after CoUninitialize and CoInitializeEx again ({}): CoGetPSClsid(a) = {} {n}",
-        hrs(hr).as_str(),
-        hrs(hr2).as_str()
-    );
-    let mut k = Buf::<120>::new();
-    let _ = write!(k, "Interface\\{}", guid_braced(&b).as_str());
-    reg_delete_tree(HKLM, k.as_str());
+    // other interfaces and contexts
+    for (name, i, ctx) in [
+        ("IUnknown", IID_IUnknown, MSHCTX_LOCAL),
+        ("ITlEcho, INPROC", iid, MSHCTX_INPROC),
+        ("ITlCallback (not implemented by the object)", gid(K_CB, seed), MSHCTX_LOCAL),
+        ("an unregistered id", IID_Unknown1, MSHCTX_LOCAL),
+    ] {
+        let (hr, m) = std_marshal(&i, obj, ctx, MSHLFLAGS_NORMAL);
+        say!(t, "CoGetStandardMarshal({name}) = {}", hrs(hr).as_str());
+        if hr == S_OK {
+            unk_release(m);
+        }
+    }
+    // NULL object: the form used on the unmarshalling side
+    let (hr, m) = std_marshal(&iid, core::ptr::null_mut(), MSHCTX_LOCAL, MSHLFLAGS_NORMAL);
+    say!(t, "CoGetStandardMarshal(ITlEcho, NULL object) = {}", hrs(hr).as_str());
+    if hr == S_OK {
+        let mut c = guid(0xAAAA, 0xBBBB, 0xCCCC, [1; 8]);
+        let hr = vcall!(m, 3, (*const GUID, *mut c_void, u32, *mut c_void, u32, *mut GUID) -> i32, &iid, core::ptr::null_mut::<c_void>(), MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL, &mut c);
+        say!(
+            t,
+            "  GetUnmarshalClass = {}, the standard marshaller's class {}",
+            hrs(hr).as_str(),
+            u32::from(c == CLSID_StdMarshal)
+        );
+        unk_release(m);
+    }
+    // NULL arguments
+    // SAFETY: NULL arguments are the call's error cases.
+    let hr = unsafe {
+        CoGetStandardMarshal(&iid, obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL, core::ptr::null_mut())
+    };
+    say!(t, "NULL output pointer: {}", hrs(hr).as_str());
+    let mut out: *mut c_void = 0x1111 as *mut c_void;
+    // SAFETY: as above.
+    let hr = unsafe {
+        CoGetStandardMarshal(core::ptr::null(), obj, MSHCTX_LOCAL, core::ptr::null_mut(), MSHLFLAGS_NORMAL, &mut out)
+    };
+    say!(t, "NULL interface id: {}", hrs(hr).as_str());
+    unk_release(obj);
+    local_end(run);
 }

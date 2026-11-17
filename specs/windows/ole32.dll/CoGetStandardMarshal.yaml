@@ -17,6 +17,7 @@ rules:
   object: "S_OK with an IMarshal that answers IUnknown and IMarshal and not the object's own interface (ITlEcho) nor IStdMarshalInfo; GetUnmarshalClass returns CLSID_StdMarshal {00000017-0000-0000-C000-000000000046}; GetMarshalSizeMax returns a non-zero bound that covers the stream; MarshalInterface writes an OBJREF (signature `MEOW`, flags 1); UnmarshalInterface from it (same apartment) returns the original pointer; ReleaseMarshalData of used data and of unused TABLESTRONG data: S_OK; DisconnectObject(0): S_OK"
   no_validation: "IUnknown, ITlEcho with the INPROC context, an interface the object does not implement and an unregistered id: S_OK (nothing is checked until the IMarshal is used)"
   null_object: "NULL object (with an interface id): S_OK; GetUnmarshalClass through it returns {00000017-...} too"
+  proxy: "QueryInterface(IMarshal) on a proxy of an object in another process succeeds; its GetUnmarshalClass is {00000017-...}, GetMarshalSizeMax non-zero, MarshalInterface writes `MEOW` flags 1, and the data unmarshalled in this process is a proxy that reaches the same server object (AddLong works); CoGetStandardMarshal given the proxy returns an IMarshal with the same class"
   arguments: "NULL output pointer: E_INVALIDARG 0x80070057; NULL interface id: S_OK; a thread without COM: CO_E_NOTINITIALIZED 0x800401f0 (the output is written NULL)"
 errors:
   invalid_arg: "E_INVALIDARG 0x80070057"
@@ -28,8 +29,8 @@ timing:
   typical: "well under a millisecond"
   guarantees: none
 tests:
-  visible: 0
-  held_out: 0
+  visible: 1
+  held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
 not_covered: >

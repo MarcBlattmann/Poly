@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "relmarshal_basic",
+      "exe_sha256": "ec3aca0a0efd7c31f09271a138df3e77c673c204676c9932fd2fe26592927d90",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b24gYSB0aHJlYWQgd2l0aG91dCBDT00sIGVtcHR5IHN0cmVhbTogMHg4MDA0MDFmMApOT1JNQUw6IG1hcnNoYWxsaW5nIGhlbGQgcmVmZXJlbmNlcyAxLCBDb1JlbGVhc2VNYXJzaGFsRGF0YSA9IDB4MDAwMDAwMDAsIHBvc2l0aW9uIGF0IHRoZSBlbmQgb2YgdGhlIGRhdGEgMSwgcmVmZXJlbmNlcyBiYWNrIHRvIHRoZSBzdGFydCAxCiAgdW5tYXJzaGFsbGluZyBhZnRlciB0aGUgcmVsZWFzZSA9IDB4ODAwNDAxZmQsIHBvaW50ZXIgTlVMTCAxCiAgcmVsZWFzaW5nIHRoZSBzYW1lIGRhdGEgYSBzZWNvbmQgdGltZSA9IDB4MDAwMDAwMDAKVEFCTEVTVFJPTkc6IG1hcnNoYWxsaW5nIGhlbGQgcmVmZXJlbmNlcyAxLCBDb1JlbGVhc2VNYXJzaGFsRGF0YSA9IDB4MDAwMDAwMDAsIHBvc2l0aW9uIGF0IHRoZSBlbmQgb2YgdGhlIGRhdGEgMSwgcmVmZXJlbmNlcyBiYWNrIHRvIHRoZSBzdGFydCAxCiAgdW5tYXJzaGFsbGluZyBhZnRlciB0aGUgcmVsZWFzZSA9IDB4ODAwNDAxZmQsIHBvaW50ZXIgTlVMTCAxCiAgcmVsZWFzaW5nIHRoZSBzYW1lIGRhdGEgYSBzZWNvbmQgdGltZSA9IDB4MDAwMDAwMDAKVEFCTEVXRUFLOiBtYXJzaGFsbGluZyBoZWxkIHJlZmVyZW5jZXMgMSwgQ29SZWxlYXNlTWFyc2hhbERhdGEgPSAweDAwMDAwMDAwLCBwb3NpdGlvbiBhdCB0aGUgZW5kIG9mIHRoZSBkYXRhIDEsIHJlZmVyZW5jZXMgYmFjayB0byB0aGUgc3RhcnQgMQogIHVubWFyc2hhbGxpbmcgYWZ0ZXIgdGhlIHJlbGVhc2UgPSAweDgwMDQwMWZkLCBwb2ludGVyIE5VTEwgMQogIHJlbGVhc2luZyB0aGUgc2FtZSBkYXRhIGEgc2Vjb25kIHRpbWUgPSAweDAwMDAwMDAwCmRhdGEgZm9sbG93ZWQgYnkgNCBtb3JlIGJ5dGVzOiAweDAwMDAwMDAwLCBwb3NpdGlvbiBhZnRlciB0aGUgZGF0YSAxCmFuIGVtcHR5IHN0cmVhbTogMHg4MDAzMDAxZQo2NCBieXRlcyBvZiA3OiAweDgwMDEwMTFkLCBwb3NpdGlvbiAyNApOVUxMIHN0cmVhbTogMHg4MDA3MDA1Nwp0aGUgc3RyZWFtIGF0IHRoZSBlbmQgb2YgdGhlIGRhdGE6IDB4ODAwMzAwMWUKYWxsIHJlbGVhc2VkOiB0aGUgb2JqZWN0J3MgcmVmZXJlbmNlcyBhcmUgYmFjayB0byB0aGUgc3RhcnQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "on a thread without COM, empty stream: 0x800401f0\nNORMAL: marshalling held references 1, CoReleaseMarshalData = 0x00000000, position at the end of the data 1, references back to the start 1\n  unmarshalling after the release = 0x800401fd, pointer NULL 1\n  releasing the same data a second time = 0x00000000\nTABLESTRONG: marshalling held references 1, CoReleaseMarshalData = 0x00000000, position at the end of the data 1, references back to the start 1\n  unmarshalling after the release = 0x800401fd, pointer NULL 1\n  releasing the same data a second time = 0x00000000\nTABLEWEAK: marshalling held references 1, CoReleaseMarshalData = 0x00000000, position at the end of the data 1, references back to the start 1\n  unmarshalling after the release = 0x800401fd, pointer NULL 1\n  releasing the same data a second time = 0x00000000\ndata followed by 4 more bytes: 0x00000000, position after the data 1\nan empty stream: 0x8003001e\n64 bytes of 7: 0x8001011d, position 24\nNULL stream: 0x80070057\nthe stream at the end of the data: 0x8003001e\nall released: the object's references are back to the start 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 72
+    }
+  ]
+}

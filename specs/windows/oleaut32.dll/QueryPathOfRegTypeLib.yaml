@@ -16,6 +16,7 @@ installer: "Setup's `AreComInterfacesPresent` check reads the same registry valu
 rules:
   path_returned: "the win64 value as stored (`<file>`; a value with a resource index is returned with it: `<file>\\3`; a stored empty value gives S_OK and an empty BSTR); the file is not opened (an unregistered path that does not exist is returned)"
   version_and_lcid: "1.0 registered: requests 1.0 with LCID 0, 0x409 and 0x400 succeed (the neutral registration serves every LCID); 1.1, 2.0 and 0.0 fail with TYPE_E_LIBNOTREGISTERED 0x8002801d and the output is NULL; with 1.5 added by hand, 1.0 returns the 1.0 path, 1.5 the 1.5 path, 1.6 fails"
+  lcid_rule: "the request's LCID is looked up exactly first, then the neutral registration (0) answers: with only 0x409 registered, 0x409 gets its path and 0, 0x809, 0x407 and 0x400 fail with 0x8002801d; with 0x409 and neutral registered, 0 and every other LCID (0x809, 0x407, 0x400, 0x41) get the neutral file's path and 0x409 its own; with 0x407 also registered 0x407 gets its own; the LCID subkeys of the version key are named in hex (`0`, `407`, `409`) beside FLAGS and HELPDIR"
   win32_fallback: "when only a `win32` value exists for the version and LCID, the call returns that value (also in a 64-bit process)"
   stdole: "stdole 2.0 returns a path whose file name is stdole2.tlb"
   not_registered: "TYPE_E_LIBNOTREGISTERED 0x8002801d, the output is NULL"
@@ -29,7 +30,7 @@ timing:
   guarantees: none
 tests:
   visible: 1
-  held_out: 0
+  held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
 not_covered: >
