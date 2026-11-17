@@ -88,7 +88,10 @@ pub enum Found {
     /// In the caller's apartment: the registered pointer itself.
     Here(usize),
     /// A local-server registration of another apartment of this process: a proxy to it.
-    Elsewhere { owner: Owner, object: usize },
+    Elsewhere {
+        owner: Owner,
+        object: usize,
+    },
     Nothing,
 }
 
@@ -372,8 +375,10 @@ mod tests {
     use super::*;
     use crate::hresult::E_INVALIDARG;
 
-    const C1: Guid = Guid { data1: 0xB2A0_C001, data2: 0, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
-    const C2: Guid = Guid { data1: 0xB2A0_C002, data2: 0, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
+    const C1: Guid =
+        Guid { data1: 0xB2A0_C001, data2: 0, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
+    const C2: Guid =
+        Guid { data1: 0xB2A0_C002, data2: 0, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
     const F: usize = 0x1000;
     const MTA: Owner = Owner::Mta;
     const STA: Owner = Owner::Sta(7);

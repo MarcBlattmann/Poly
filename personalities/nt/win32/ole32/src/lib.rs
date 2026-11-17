@@ -875,11 +875,7 @@ pub unsafe extern "system" fn CoCreateInstanceEx(
         for q in entries.iter_mut() {
             let (hr, p) = oop::query(o, &*q.iid);
             q.itf = p;
-            q.hr = if p.is_null() {
-                if hr < 0 { hr } else { E_NOINTERFACE }
-            } else {
-                S_OK
-            };
+            q.hr = if p.is_null() { if hr < 0 { hr } else { E_NOINTERFACE } } else { S_OK };
             if !p.is_null() {
                 found += 1;
             }

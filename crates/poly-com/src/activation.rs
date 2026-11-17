@@ -322,13 +322,15 @@ mod tests {
     fn hives_and_plans() {
         let mut m = Map(BTreeMap::new());
         assert_eq!(find_class(&m, C), None);
-        m.put(Hive::LocalMachine, &alloc::format!(r"SOFTWARE\Classes\WOW6432Node\CLSID\{C}\LocalServer32"), "", "w.exe");
+        m.put(
+            Hive::LocalMachine,
+            &alloc::format!(r"SOFTWARE\Classes\WOW6432Node\CLSID\{C}\LocalServer32"),
+            "",
+            "w.exe",
+        );
         assert_eq!(local_plan(&find_class(&m, C).unwrap()), Some(Plan::Command("w.exe -Embedding".to_string())));
         m.put(Hive::LocalMachine, &alloc::format!(r"SOFTWARE\Classes\CLSID\{C}\LocalServer32"), "", "\"m.exe\" a");
-        assert_eq!(
-            local_plan(&find_class(&m, C).unwrap()),
-            Some(Plan::Command("\"m.exe\" a -Embedding".to_string()))
-        );
+        assert_eq!(local_plan(&find_class(&m, C).unwrap()), Some(Plan::Command("\"m.exe\" a -Embedding".to_string())));
         m.put(Hive::CurrentUser, &alloc::format!(r"Software\Classes\CLSID\{C}\LocalServer32"), "", "u.exe");
         assert_eq!(local_plan(&find_class(&m, C).unwrap()), Some(Plan::Command("u.exe -Embedding".to_string())));
     }

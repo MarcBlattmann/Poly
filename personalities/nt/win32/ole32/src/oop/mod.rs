@@ -66,8 +66,7 @@ unsafe extern "system" {
         template: Handle,
     ) -> Handle;
     pub(crate) fn ReadFile(file: Handle, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut c_void) -> i32;
-    pub(crate) fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void)
-    -> i32;
+    pub(crate) fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
     pub(crate) fn CreateMutexW(security: *const c_void, owner: i32, name: *const u16) -> Handle;
     pub(crate) fn ReleaseMutex(mutex: Handle) -> i32;
     pub(crate) fn CreateProcessW(
@@ -153,7 +152,8 @@ pub(crate) static COUNT: Locked<ServerCount> = Locked::new(ServerCount::new());
 pub(crate) static SPIES: Locked<Spies> = Locked::new(Spies::new());
 
 /// `IID_IClassFactory` (`unknwn.h`): {00000001-0000-0000-C000-000000000046}.
-pub(crate) const IID_ICLASS_FACTORY: Guid = Guid { data1: 1, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+pub(crate) const IID_ICLASS_FACTORY: Guid =
+    Guid { data1: 1, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 /// `IID_IInitializeSpy` (`objidl.h`): {00000034-0000-0000-C000-000000000046}.
 pub(crate) const IID_IINITIALIZE_SPY: Guid =
     Guid { data1: 0x34, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
@@ -168,7 +168,8 @@ pub(crate) unsafe fn query(p: *mut c_void, iid: &Guid) -> (Hresult, *mut c_void)
     let mut out: *mut c_void = core::ptr::null_mut();
     // SAFETY: the caller's COM object; slot 0 of every vtable.
     let hr = unsafe {
-        let vtbl = *(p as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
+        let vtbl =
+            *(p as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
         (*vtbl)(p, iid, &mut out)
     };
     if hr < 0 {

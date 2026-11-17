@@ -52,7 +52,8 @@ pub(crate) fn read_exact(h: Handle, buf: &mut [u8]) -> bool {
     while at < buf.len() {
         let mut n = 0u32;
         // SAFETY: a pipe handle; writes into the free part of `buf`.
-        let ok = unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
+        let ok =
+            unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
         if ok == 0 || n == 0 {
             return false;
         }

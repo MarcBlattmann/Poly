@@ -175,7 +175,8 @@ fn read_exact(h: Handle, buf: &mut [u8]) -> bool {
     while at < buf.len() {
         let mut n = 0u32;
         // SAFETY: a pipe handle; writes into the free part of `buf`.
-        let ok = unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
+        let ok =
+            unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
         if ok == 0 || n == 0 {
             return false;
         }
@@ -432,11 +433,11 @@ fn handle(req: Request) -> Reply {
                     }
                     Decision::Launch => {
                         started = Some(t);
-                        if let Some(p) = &plan {
-                            if let Err(hr) = launch(p) {
-                                STATE.with(|a| a.launch_failed(&clsid, p));
-                                return Reply::hr(hr);
-                            }
+                        if let Some(p) = &plan
+                            && let Err(hr) = launch(p)
+                        {
+                            STATE.with(|a| a.launch_failed(&clsid, p));
+                            return Reply::hr(hr);
                         }
                     }
                 }
@@ -449,20 +450,19 @@ fn handle(req: Request) -> Reply {
 unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     let h = arg as Handle;
     let mut head = [0u8; 4];
-    if read_exact(h, &mut head) {
-        if let Some(n) = frame_len(head) {
-            let mut payload = alloc::vec![0u8; n];
-            if read_exact(h, &mut payload) {
-                let reply = match Request::decode(&payload) {
-                    Ok(r) => handle(r),
-                    Err(_) => Reply::hr(E_UNEXPECTED),
-                };
-                if write_all(h, &frame(&reply.encode())) {
-                    // Wait for the client to read the reply and close its end.
-                    let mut b = [0u8; 1];
-                    read_exact(h, &mut b);
-                }
-            }
+    let payload = if read_exact(h, &mut head) { frame_len(head) } else { None }.and_then(|n| {
+        let mut payload = alloc::vec![0u8; n];
+        read_exact(h, &mut payload).then_some(payload)
+    });
+    if let Some(payload) = payload {
+        let reply = match Request::decode(&payload) {
+            Ok(r) => handle(r),
+            Err(_) => Reply::hr(E_UNEXPECTED),
+        };
+        if write_all(h, &frame(&reply.encode())) {
+            // Wait for the client to read the reply and close its end.
+            let mut b = [0u8; 1];
+            read_exact(h, &mut b);
         }
     }
     // SAFETY: the connection's handle, closed once.

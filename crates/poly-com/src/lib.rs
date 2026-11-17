@@ -28,12 +28,12 @@ pub mod activation;
 pub mod apartment;
 pub mod classtable;
 pub mod git;
-pub mod spy;
-pub mod wire;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
 pub mod propvariant;
+pub mod spy;
+pub mod wire;
 
 /// What `ole32.dll` must export, as code (`cargo xtask win32` checks it).
 pub const OLE32_EXPORTS: &[&str] = &[

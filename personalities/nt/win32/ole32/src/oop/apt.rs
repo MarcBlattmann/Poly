@@ -101,7 +101,11 @@ unsafe extern "system" fn com_window_proc(hwnd: usize, msg: u32, wp: usize, lp: 
         return 0;
     }
     // SAFETY: user32's DefWindowProcW.
-    unsafe { core::mem::transmute::<usize, unsafe extern "system" fn(usize, u32, usize, isize) -> isize>(p)(hwnd, msg, wp, lp) }
+    unsafe {
+        core::mem::transmute::<usize, unsafe extern "system" fn(usize, u32, usize, isize) -> isize>(p)(
+            hwnd, msg, wp, lp,
+        )
+    }
 }
 
 /// The current thread's COM window, if it has one.
@@ -206,7 +210,8 @@ fn pump_mine(hwnd: usize) {
     let mut m = Msg { hwnd: 0, message: 0, wparam: 0, lparam: 0, time: 0, pt: [0; 2], private: 0 };
     // SAFETY: user32's PeekMessageW/DispatchMessageW with a live MSG; only this window's messages.
     unsafe {
-        let peek = core::mem::transmute::<usize, unsafe extern "system" fn(*mut Msg, usize, u32, u32, u32) -> i32>(peek);
+        let peek =
+            core::mem::transmute::<usize, unsafe extern "system" fn(*mut Msg, usize, u32, u32, u32) -> i32>(peek);
         let dispatch = core::mem::transmute::<usize, unsafe extern "system" fn(*const Msg) -> isize>(dispatch);
         while peek(&mut m, hwnd, 0, 0, PM_REMOVE) != 0 {
             dispatch(&m);
@@ -267,7 +272,8 @@ fn run_dyn(owner: Owner, call: &mut dyn FnMut()) {
         return;
     }
     // SAFETY: the job lives on this stack frame until `done` is set: the waits below return only then.
-    let mut job = Job { call: unsafe { core::mem::transmute::<&mut dyn FnMut(), &'static mut dyn FnMut()>(call) }, done };
+    let mut job =
+        Job { call: unsafe { core::mem::transmute::<&mut dyn FnMut(), &'static mut dyn FnMut()>(call) }, done };
     let jp = (&raw mut job) as isize;
     let started = match owner {
         Owner::Sta(tid) => {

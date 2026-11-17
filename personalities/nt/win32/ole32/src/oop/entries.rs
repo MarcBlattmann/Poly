@@ -36,7 +36,12 @@ fn withdraw_later(req: Request) {
     if ev == 0 {
         // SAFETY: an unnamed auto-reset event, kept for the life of the process.
         let made = unsafe { CreateEventW(core::ptr::null(), 0, 0, core::ptr::null()) };
-        match SENDER_EVENT.compare_exchange(0, made, core::sync::atomic::Ordering::AcqRel, core::sync::atomic::Ordering::Acquire) {
+        match SENDER_EVENT.compare_exchange(
+            0,
+            made,
+            core::sync::atomic::Ordering::AcqRel,
+            core::sync::atomic::Ordering::Acquire,
+        ) {
             Ok(_) => {
                 ev = made;
                 let mut tid = 0u32;
@@ -258,7 +263,8 @@ pub(crate) fn spied_initialize(coinit: u32, ole: bool, init: impl FnOnce() -> Hr
     for &s in &spies {
         // SAFETY: IInitializeSpy::PostInitialize(HRESULT hrCoInit, DWORD dwCoInit, DWORD dwNewThreadAptRefs).
         unsafe {
-            let f: unsafe extern "system" fn(usize, Hresult, u32, u32) -> Hresult = core::mem::transmute(spy_slot(s, 4));
+            let f: unsafe extern "system" fn(usize, Hresult, u32, u32) -> Hresult =
+                core::mem::transmute(spy_slot(s, 4));
             hr = f(s, hr, coinit, after);
         }
     }
