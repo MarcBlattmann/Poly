@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: hnetcfg.dll/NetFwPolicy2.yaml
+id: windows/api/hnetcfg.dll/NetFwPolicy2
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s "Windows Firewall with Advanced Security API" pages and the public SDK header netfw.h (CLSIDs, IIDs, the order of the methods of INetFwPolicy2, INetFwRules and INetFwRule, NET_FW_RULE_DIRECTION, NET_FW_ACTION, NET_FW_PROFILE_TYPE2); error codes from winerror.h. Chrome''s own setup.exe adds one inbound rule, ''Google Chrome (mDNS-In)'', through these interfaces, found by CoCreateInstance without any import of its own (survey-chrome-installer: the rule is in the firewall diff). The oracle''s own rules are only counted, never printed. Nothing of Windows or Google''s programs was read or disassembled.'
+summary: 'The Windows Firewall policy object (CLSID {E2B3C97F-6AE1-41AC-817A-F6F92166D7DD}, in-process, interface INetFwPolicy2) with its rule collection (INetFwRules) and the rule objects (CLSID_NetFwRule {2C5BC43E-3369-4C33-AB0C-BE9469677AF4}, INetFwRule) as Chrome''s installer uses them: create a rule object, set its properties, Rules.Add it, and later Rules.Remove it by name. Adding or removing needs the full administrator token (the filtered token gets E_ACCESSDENIED); reading does not. A minimal implementation may keep rules in a table and enforce nothing.'
+interface:
+  clsid: 'NetFwPolicy2 {E2B3C97F-6AE1-41AC-817A-F6F92166D7DD}, interface INetFwPolicy2 {98325047-C671-4174-8D81-DEFCD3F03186}'
+  rule_clsid: 'NetFwRule {2C5BC43E-3369-4C33-AB0C-BE9469677AF4}, interface INetFwRule {AF230D27-BABA-4E42-ACED-F524F22CFCE2}'
+rules:
+  create: 'CoCreateInstance(NetFwPolicy2, CLSCTX_INPROC_SERVER or CLSCTX_ALL, INetFwPolicy2) returns S_OK in an STA and in the MTA. QueryInterface for IDispatch and IUnknown works; for INetFwPolicy (the older interface) and for an unknown IID: E_NOINTERFACE (0x80004002) and a NULL out pointer. A second CoCreateInstance gives a different object; with a non-NULL outer unknown: CLASS_E_NOAGGREGATION (0x80040110).'
+  policy: 'get_CurrentProfileTypes: S_OK and a value made of the bits 1 (domain), 2 (private), 4 (public). get_FirewallEnabled(1), (2) and (4): S_OK and a VARIANT_BOOL (0 or -1; the value depends on the machine). get_FirewallEnabled with 0, 8, 0x7FFFFFFF or -1: E_INVALIDARG (0x80070057), with 3: 0x80070032 (ERROR_NOT_SUPPORTED); nothing is written. get_CurrentProfileTypes(NULL) and get_Rules(NULL): E_POINTER (0x80004003).'
+  rules_object: 'get_Rules: S_OK and an INetFwRules object that answers QueryInterface(IDispatch). get_Count is positive on the oracle (it has rules) and a NULL pointer gives E_POINTER. Item(name) of a rule that does not exist: 0x80070002 (HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)) and the out pointer set to NULL; Item(NULL): E_INVALIDARG. get__NewEnum: S_OK and an object.'
+  new_rule: 'A new rule object has: Name, Description, ApplicationName, Grouping, LocalPorts NULL (a NULL BSTR); Protocol 256 (NET_FW_IP_PROTOCOL_ANY); Direction 1 (NET_FW_RULE_DIR_IN); Action 1 (NET_FW_ACTION_ALLOW); Enabled 0 (VARIANT_FALSE); Profiles 0x7FFFFFFF; EdgeTraversal 0.'
+  chrome_rule: 'Setting Name ''PolySpecB4 Chrome (mDNS-In)'', Description, ApplicationName ''C:\PolySpecB4\chrome.exe'', Protocol 17, LocalPorts ''5353'', Direction 1, Action 1, Enabled true (-1), Grouping and Profiles 0x7FFFFFFF each returns S_OK; Rules.Add(rule) returns S_OK, Rules.Count grows by one and Rules.Item(name) returns a rule whose properties read back exactly the values set (Protocol 17, LocalPorts ''5353'', Direction 1, Action 1, Enabled -1, Profiles 0x7FFFFFFF, EdgeTraversal 0). Changes made on the added object are stored at once (a Description put after Add is seen by Item).'
+  duplicates: 'A second rule with the same name is accepted by Add (S_OK; the count grows by one again). Rules.Remove(name) removes one rule with that name per call (S_OK each time; the count drops by one); Remove of a name that is not there: S_OK (nothing changes); Remove(NULL): E_INVALIDARG.'
+  validation: 'Protocol: 6, 17, 1, 58, 255, 0 and 256 are accepted and read back; 300 and -1: E_INVALIDARG and the old value stays. Direction: 1 and 2 accepted; 0, 3, -1: E_INVALIDARG. Action: 0 (block) and 1 accepted; 2, 3: E_INVALIDARG. Profiles: 1, 2, 4, 7 and 0x7FFFFFFF accepted and read back; 8 and 0 are accepted and read back as 0; -1 is accepted and reads back as 7. LocalPorts needs a protocol with ports: with protocol ANY the put fails (E_INVALIDARG) and the value stays NULL; with UDP ''5353'', ''80,443'', ''5000-5100'', ''*'' and ''0'' are accepted and read back as given, ''RPC'' is accepted and reads back ''RPC,'', ''5353,'' reads back ''5353'', '''' reads back ''*''; ''abc'', ''70000'' and ''1-'' fail with 0x8007000D (ERROR_INVALID_DATA) and keep the old value; with ICMP (1) ''5353'' is accepted. Name, Grouping (including ''@missing.dll,-1'') and ApplicationName (''%ProgramFiles%\...'', a relative name) are stored as given; an empty Name is accepted by the put.'
+  add_validation: 'Add of a rule without a name: E_INVALIDARG (0x80070057), nothing added. Add(NULL): E_POINTER. Add of a rule with only a name (everything else default, disabled) works (S_OK). Add of an ICMP rule that has LocalPorts ''80'' works too (S_OK on this build).'
+  minimal_implementation: 'A table-only implementation (rules stored, nothing enforced) is observably identical through these calls: no test sends traffic. What it cannot reproduce is the effect on real traffic, which Poly has no host firewall to change; get_FirewallEnabled may report any of the three profiles as disabled (0) and get_CurrentProfileTypes may report 2 or 4. The firewall may also fail harmlessly for Chrome''s installer: setup.exe only logs when the rule cannot be added.'
+  standard_token: 'With the filtered token CoCreateInstance, get_CurrentProfileTypes, get_FirewallEnabled(1), get_Rules and get_Count work (S_OK) but Rules.Add returns E_ACCESSDENIED (0x80070005), Item of the name then gives 0x80070002; Remove of a name that is not there still returns S_OK.'
+errors:
+  invalid_arg: '0x80070057'
+  pointer: '0x80004003'
+  access_denied: '0x80070005'
+  not_found: '0x80070002'
+  no_interface: '0x80004002'
+  no_aggregation: '0x80040110'
+  invalid_data: '0x8007000D'
+  not_supported: '0x80070032'
+side_effects: 'Add and Remove change the machine''s firewall rules; the tests remove the rules they add'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075): the interfaces are called through their vtables after CoCreateInstance (no import); a BSTR is made with oleaut32''s SysAllocString. Each test removes its own rules (names start with PolySpecB4) at the end and at the start; after a run no rule with that prefix is left (checked with netsh advfirewall firewall show rule name=all). Slots counted after IDispatch''s seven: INetFwPolicy2 get_CurrentProfileTypes 7, get_FirewallEnabled 8, get_Rules 18; INetFwRules get_Count 7, Add 8, Remove 9, Item 10, get__NewEnum 11; INetFwRule Name 7/8 (get/put), Description 9/10, ApplicationName 11/12, Protocol 15/16, LocalPorts 17/18, Direction 27/28, Enabled 33/34, Grouping 35/36, Profiles 37/38, EdgeTraversal 39/40, Action 41/42. Observations are HRESULTs, counts and read-back values.'
+not_covered: 'Enumerating through get__NewEnum (only that the object exists), put_FirewallEnabled and the other policy properties (they change the machine), INetFwRule2/INetFwRule3 (service names, local user authorization, security descriptors, remote addresses, ICMP types, interface types), Group policy rules, Rules.Item for rules of other profiles, whether the rule is enforced (an unenforced rule is observably the same through these calls), 32-bit callers, and the notification dialogs of the firewall.'
