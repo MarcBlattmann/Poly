@@ -570,7 +570,7 @@ pub fn closure(seeds: &[&str], packages: &BTreeMap<String, Stanza>) -> Result<BT
 }
 
 /// Download `url` to `to` with curl (HTTPS only, like `fonts.rs`).
-fn download(url: &str, to: &Path) -> Result {
+pub(crate) fn download(url: &str, to: &Path) -> Result {
     if !url.starts_with("https://") {
         return Err(format!("{url}: not HTTPS"));
     }
@@ -1808,6 +1808,8 @@ pub fn command(args: &[String]) -> Result {
     match args.first().map(String::as_str) {
         Some("lock") => return write_lock(),
         Some("fetch") => return fetch(args.iter().any(|a| a == "--reference")),
+        // Google Chrome's current .deb for the `linux-chrome` boot group.
+        Some("fetch-chrome") => return crate::linuxchrome::fetch(),
         Some("root") => {
             let dir = unpack_reference()?;
             println!("{}", dir.display());
