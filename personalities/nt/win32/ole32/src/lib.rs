@@ -691,21 +691,82 @@ unsafe fn not_registered(
     poly_com::apartment::activation_failure(true, outer)
 }
 
-/// `CoGetClassObject`: no class is registered (the global interface table has no class factory).
+/// `DllGetClassObject` (Learn): the class object of `clsid` with interface `iid`.
+type DllGetClassObjectFn = unsafe extern "system" fn(*const Guid, *const Guid, *mut *mut c_void) -> Hresult;
+
+/// The class object of one of the classes Poly's own DLLs serve ([`poly_com::inproc`], ADR 0223):
+/// the DLL is loaded and its `DllGetClassObject` asked, as for an `InprocServer32` class. `None`
+/// when Poly has no such class (or `context` rules out an in-process server).
+unsafe fn inproc_class_object(clsid: *const Guid, context: u32, iid: *const Guid, ppv: *mut *mut c_void) -> Option<Hresult> {
+    if clsid.is_null() || !poly_com::inproc::context_allows_inproc(context) {
+        return None;
+    }
+    // SAFETY: the caller's GUID.
+    let dll = poly_com::inproc::server_of(unsafe { &*clsid })?;
+    let name: alloc::vec::Vec<u16> = dll.encode_utf16().collect();
+    // SAFETY: a NUL-terminated name; the export has `DllGetClassObject`'s signature.
+    unsafe {
+        let module = LoadLibraryW(name.as_ptr());
+        let entry = if module == 0 { 0 } else { GetProcAddress(module, c"DllGetClassObject".as_ptr().cast()) };
+        if entry == 0 {
+            log(&alloc::format!("stub: ole32: {} has no DllGetClassObject for {}", dll.trim_end_matches('\0'), guid_text(clsid)));
+            return None;
+        }
+        let get: DllGetClassObjectFn = core::mem::transmute(entry);
+        Some(get(clsid, iid, ppv))
+    }
+}
+
+/// The object of one of Poly's own in-process classes: its class object's
+/// `IClassFactory::CreateInstance(outer, iid)` (slot 3), then the class object is released.
+unsafe fn inproc_create(
+    clsid: *const Guid,
+    outer: *mut c_void,
+    context: u32,
+    iid: *const Guid,
+    ppv: *mut *mut c_void,
+) -> Option<Hresult> {
+    let mut factory: *mut c_void = core::ptr::null_mut();
+    // SAFETY: the caller's pointers; a local out parameter.
+    let hr = unsafe { inproc_class_object(clsid, context, &poly_com::inproc::IID_ICLASS_FACTORY, &mut factory)? };
+    if hr != S_OK || factory.is_null() {
+        return Some(if hr == S_OK { E_NOINTERFACE } else { hr });
+    }
+    type CreateFn = unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult;
+    // SAFETY: `factory` is an IClassFactory: its table's slot 3 is CreateInstance.
+    unsafe {
+        let vtbl = *factory.cast::<*const usize>();
+        let create: CreateFn = core::mem::transmute(*vtbl.add(3));
+        let hr = create(factory, outer, iid, ppv);
+        release_unknown(factory);
+        Some(hr)
+    }
+}
+
+/// `CoGetClassObject`: the class objects of Poly's own in-process classes; no other class is
+/// registered (the global interface table has no class factory).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoGetClassObject(
     clsid: *const Guid,
-    _context: u32,
+    context: u32,
     _server_info: *mut c_void,
     iid: *const Guid,
     ppv: *mut *mut c_void,
 ) -> Hresult {
     // SAFETY: the caller's pointers.
-    unsafe { not_registered("CoGetClassObject", clsid, iid, false, ppv) }
+    unsafe {
+        if !ppv.is_null() && com_usable() {
+            *ppv = core::ptr::null_mut();
+            if let Some(hr) = inproc_class_object(clsid, context, iid, ppv) {
+                return hr;
+            }
+        }
+        not_registered("CoGetClassObject", clsid, iid, false, ppv)
+    }
 }
 
-/// `CoCreateInstance`: the global interface table is the one class there is; no other is
-/// registered.
+/// `CoCreateInstance`: the global interface table and the in-process classes of Poly's own DLLs
+/// ([`poly_com::inproc`]); no other class is registered.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstance(
     clsid: *const Guid,
@@ -718,6 +779,12 @@ pub unsafe extern "system" fn CoCreateInstance(
     unsafe {
         if is_guid(clsid, &CLSID_STD_GLOBAL_INTERFACE_TABLE) {
             return create_global_interface_table(outer, context, iid, ppv);
+        }
+        if !ppv.is_null() && com_usable() {
+            *ppv = core::ptr::null_mut();
+            if let Some(hr) = inproc_create(clsid, outer, context, iid, ppv) {
+                return hr;
+            }
         }
         not_registered("CoCreateInstance", clsid, iid, !outer.is_null(), ppv)
     }
@@ -765,6 +832,46 @@ pub unsafe extern "system" fn CoCreateInstanceEx(
                     last = hr;
                 }
             }
+            return if found == count {
+                S_OK
+            } else if found > 0 {
+                CO_S_NOTALLINTERFACES
+            } else {
+                last
+            };
+        }
+        let first = if com_usable() && poly_com::inproc::context_allows_inproc(context) && !clsid.is_null() && poly_com::inproc::server_of(&*clsid).is_some() {
+            let mut object: *mut c_void = core::ptr::null_mut();
+            inproc_create(clsid, outer, context, &poly_com::inproc::IID_IUNKNOWN, &mut object).map(|hr| (hr, object))
+        } else {
+            None
+        };
+        if let Some((hr, object)) = first {
+            if hr != S_OK || object.is_null() {
+                for i in 0..count as usize {
+                    let q = results.add(i);
+                    (*q).itf = core::ptr::null_mut();
+                    (*q).hr = hr;
+                }
+                return hr;
+            }
+            type QiFn = unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult;
+            let qi: QiFn = core::mem::transmute(*(*object.cast::<*const usize>()));
+            let mut found = 0;
+            let mut last = E_NOINTERFACE;
+            for i in 0..count as usize {
+                let q = results.add(i);
+                let mut out: *mut c_void = core::ptr::null_mut();
+                let hr = qi(object, (*q).iid, &mut out);
+                (*q).itf = out;
+                (*q).hr = hr;
+                if hr == S_OK {
+                    found += 1;
+                } else {
+                    last = hr;
+                }
+            }
+            release_unknown(object);
             return if found == count {
                 S_OK
             } else if found > 0 {

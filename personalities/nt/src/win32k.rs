@@ -268,6 +268,7 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
     k.with_state(|sys, _, _| {
         match req {
             Request::RegisterEvent { handle } => return register_event(sys, caller, ctx, handle),
+            Request::ShellOpen { handle, show } => return shell_open(sys, caller, handle, show),
             Request::Surface { hwnd } => {
                 let w = &sys.win32k;
                 // A child draws into its top-level window's surface, through a bitmap of its
@@ -493,6 +494,16 @@ fn commit_child<K: NtKernel>(
 /// `RegisterEvent`: handle 0 asks which handle the thread registered (0:
 /// none yet); another handle, an event the thread created, becomes its
 /// queue event.
+/// `Request::ShellOpen` (ADR 0223): the file of the caller's `handle` (any access) is opened or
+/// shown by the desktop: its path in Poly's file system goes to the compositor.
+fn shell_open(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, handle: u64, show: bool) -> Reply {
+    let Ok((_, cookie)) = crate::io::services::file_handle(sys, caller, Handle(handle), 0) else {
+        return Reply::Error { code: 6 };
+    };
+    let Some(path) = sys.io.native_path(cookie) else { return Reply::Error { code: 6 } };
+    if sys.win32k.desktop.shell(show, &path) { Reply::Ok {} } else { Reply::Error { code: 50 } }
+}
+
 fn register_event(sys: &mut crate::NtSystem, caller: &poly_ntobj::Caller, ctx: Ctx, handle: u64) -> Reply {
     let key = (ctx.pid, ctx.tid);
     if handle == 0 {

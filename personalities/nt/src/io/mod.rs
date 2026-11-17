@@ -558,6 +558,23 @@ impl IoState {
         self.files.get(&cookie)
     }
 
+    /// The path in Poly's file system of a file object of a disk volume: the volume's VFS
+    /// path and the file's path below it, with `/` between the names (ADR 0223: what a
+    /// Windows program's "open" or "show in folder" hands to the desktop).
+    pub fn native_path(&self, cookie: u64) -> Option<alloc::string::String> {
+        let disk = self.file(cookie)?.disk()?;
+        let volume = self.volumes.get(disk.volume)?;
+        let mut out = alloc::string::String::from_utf8_lossy(&volume.path).into_owned();
+        for part in disk.path.split(|&c| c == u16::from(b'\\')).filter(|p| !p.is_empty()) {
+            out.push('/');
+            out.push_str(&alloc::string::String::from_utf16_lossy(part));
+        }
+        if out.is_empty() {
+            out.push('/');
+        }
+        Some(out)
+    }
+
     pub fn file_mut(&mut self, cookie: u64) -> Option<&mut FileRecord> {
         self.files.get_mut(&cookie)
     }

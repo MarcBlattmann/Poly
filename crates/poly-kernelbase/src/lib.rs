@@ -99,6 +99,7 @@ pub mod resource;
 pub mod safearray;
 pub mod session;
 pub mod shell;
+pub mod shellitem;
 pub mod shlwapi;
 pub mod slist;
 pub mod sync;

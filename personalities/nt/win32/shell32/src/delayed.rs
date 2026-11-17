@@ -13,8 +13,6 @@ poly_win32_rt::fail_exports!(
         SHGetFileInfoW,
         ShellExecuteA,
         SHChangeNotify,
-        ShellExecuteExW,
-        ShellExecuteW,
         IsUserAnAdmin
     ]
 );
@@ -24,11 +22,7 @@ poly_win32_rt::fail_exports!(
     "shell32",
     hresult,
     [
-        SHCreateItemFromParsingName,
-        SHGetDesktopFolder,
         SHGetStockIconInfo,
-        SHOpenFolderAndSelectItems,
-        SHParseDisplayName,
         SHQueryUserNotificationState,
         SetCurrentProcessExplicitAppUserModelID,
         SHCreateAssociationRegistration
