@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetProcessHandleCount.yaml
+id: windows/api/kernel32.dll/GetProcessHandleCount
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's page for GetProcessHandleCount and winerror.h. Chrome's setup.exe reads its own handle count for diagnostics (docs/windows/chrome-setup-plan.md); it is not on the install path. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Returns the number of handles the process has open. For the current process (the pseudo handle -1) every new handle (CreateEventW, OpenProcess) adds exactly 1 and closing it takes it away again, so the count is exact. A real handle to the process needs PROCESS_QUERY_INFORMATION or PROCESS_QUERY_LIMITED_INFORMATION and gives the same count; SYNCHRONIZE or PROCESS_VM_READ only gives ERROR_ACCESS_DENIED (5). NULL, a thread pseudo handle, a closed handle and a handle of another object type give ERROR_INVALID_HANDLE (6). A failed call leaves the output alone.
+interface:
+  signature: "BOOL GetProcessHandleCount(HANDLE hProcess, PDWORD pdwHandleCount)"
+rules:
+  own_process: "the pseudo handle (-1) of the current process: TRUE and a count of at least 1 (well below 1000 for a small test program)."
+  exact_counting: "CreateEventW: count + 1; a second event: + 1 again; after closing both: the first count again; OpenProcess: + 1 (the new handle itself is counted)."
+  real_handle: "OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION (0x1000) or PROCESS_QUERY_INFORMATION (0x400): TRUE; the count equals the pseudo handle's count taken at the same moment."
+  rights: "a process handle with only SYNCHRONIZE (0x100000) or only PROCESS_VM_READ (0x10): FALSE, ERROR_ACCESS_DENIED (5)."
+  bad_handles: "NULL, -2 (current thread pseudo handle), a closed handle, an event handle: FALSE, ERROR_INVALID_HANDLE (6); *pdwHandleCount is not written."
+errors:
+  access_denied: "5"
+  invalid_handle: "6"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: hc_basic (own process and the exact counting) and hc_err (rights and invalid handles). Observations are relations, never counts.
+not_covered: >
+  The count of another process, of a protected process, of a process that has ended, a NULL output pointer (not tested), handles inherited by a child, pseudo handles of the thread, a 32-bit process seen from a 64-bit caller.

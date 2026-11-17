@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/Process32NextW.yaml
+id: windows/api/kernel32.dll/Process32NextW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for Process32NextW and PROCESSENTRY32W, the public header tlhelp32.h and winerror.h. Chrome's setup.exe walks the process list with it (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Fills a PROCESSENTRY32W (see Process32FirstW) with the next process of a snapshot. The walk ends with FALSE and ERROR_NO_MORE_FILES (18), repeatedly, and leaves the entry untouched. dwSize must be 568 (the struct's size) or the call fails with ERROR_BAD_LENGTH (24). On a snapshot on which Process32FirstW was never called, Process32NextW returns the first entry (pid 0) and the next call the second: it behaves as First. Handles that are NULL, -1 or closed fail with ERROR_INVALID_HANDLE (6).
+interface:
+  signature: "BOOL Process32NextW(HANDLE hSnapshot, LPPROCESSENTRY32W lppe)"
+rules:
+  walk: "First then Next calls give every entry once, in the order of Process32FirstW's walk; the second entry differs from the first; the first pid does not come again."
+  end: "after the last entry: FALSE with ERROR_NO_MORE_FILES (18); the same again on the next call; the entry buffer is not written (pid and name stay as the caller left them)."
+  size: "dwSize 0 or 100 (not 568): FALSE with ERROR_BAD_LENGTH (24), also in the middle of the list; a following Next with 568 gives another entry than the First before it."
+  fresh_snapshot: "Process32NextW without a prior Process32FirstW: TRUE, the first entry (pid 0); the next call gives the second entry (a different pid)."
+  bad_handles: "NULL, -1, or a closed snapshot: FALSE, ERROR_INVALID_HANDLE (6)."
+errors:
+  bad_length: "24"
+  no_more_files: "18"
+  invalid_handle: "6"
+side_effects: "advances the snapshot's walk position"
+threading: "a walk position belongs to the snapshot handle"
+ordering: []
+timing:
+  typical: "microseconds per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: th_next_end (a whole walk and the end) and th_next_edge (wrong sizes, a Next on a fresh snapshot, NULL / -1 / closed handles). Observations are relations and the documented constants, never process ids or counts.
+not_covered: >
+  Process32Next (ANSI), a dwSize larger than 568, the order of the list beyond "pid 0 first", whether a failed Next with a wrong size leaves the position unchanged beyond the one call tested, 32-bit callers, processes of other sessions for a standard user.

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e63c3a40c5bb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:46:31Z",
+  "tests": [
+    {
+      "name": "th_first_layout",
+      "exe_sha256": "6d08bf3379ee47cce3ae0473937095ce257b4830033930b5161fe44df0f9c179",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZW9mKFBST0NFU1NFTlRSWTMyVykgb24geDY0OiA1NjgKUHJvY2VzczMyRmlyc3RXIHdpdGggZHdTaXplIDA6IHJlc3VsdCBmYWxzZSwgbGFzdCBlcnJvciAyNApQcm9jZXNzMzJGaXJzdFcgd2l0aCBkd1NpemUgNDogcmVzdWx0IGZhbHNlLCBsYXN0IGVycm9yIDI0ClByb2Nlc3MzMkZpcnN0VyB3aXRoIGR3U2l6ZSAzMDA6IHJlc3VsdCBmYWxzZSwgbGFzdCBlcnJvciAyNApQcm9jZXNzMzJGaXJzdFcgd2l0aCBkd1NpemUgNTY3OiByZXN1bHQgZmFsc2UsIGxhc3QgZXJyb3IgMjQKUHJvY2VzczMyRmlyc3RXIHdpdGggZHdTaXplIDU2ODogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIKdGhlIGxpc3QgaGFzIGF0IGxlYXN0IDIwIGVudHJpZXM6IHRydWUKdGhlIGZpcnN0IGVudHJ5OiBwaWQgMCwgbmFtZSAnW1N5c3RlbSBQcm9jZXNzXScsIHBhcmVudCAwCmFuIGVudHJ5IHdpdGggcGlkIDQgZXhpc3RzIGFuZCBpcyBuYW1lZCBTeXN0ZW06IHRydWUKZXZlcnkgcGlkIG9jY3VycyBvbmNlOiB0cnVlCmFuIGVudHJ5IHdpdGggb3VyIHBpZCBleGlzdHM6IHRydWUKaXRzIGV4ZSBuYW1lIGlzIHRoaXMgaW1hZ2UncyBmaWxlIG5hbWU6IHRydWUKaXRzIHRocmVhZCBjb3VudCBpcyBhdCBsZWFzdCAxOiB0cnVlCml0cyBwYXJlbnQgaXMgbm90IDAgYW5kIG5vdCBpdHNlbGY6IHRydWUKb3duIGVudHJ5OiBjbnRVc2FnZSAwLCB0aDMyRGVmYXVsdEhlYXBJRCAwLCB0aDMyTW9kdWxlSUQgMCwgcGNQcmlDbGFzc0Jhc2UgOCwgZHdGbGFncyAwCm93biBlbnRyeTogdGhlIG5hbWUgZW5kcyB3aXRoIGEgTlVMIGluc2lkZSB0aGUgMjYwIHVuaXRzOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "sizeof(PROCESSENTRY32W) on x64: 568\nProcess32FirstW with dwSize 0: result false, last error 24\nProcess32FirstW with dwSize 4: result false, last error 24\nProcess32FirstW with dwSize 300: result false, last error 24\nProcess32FirstW with dwSize 567: result false, last error 24\nProcess32FirstW with dwSize 568: result true, last error -2\nthe list has at least 20 entries: true\nthe first entry: pid 0, name '[System Process]', parent 0\nan entry with pid 4 exists and is named System: true\nevery pid occurs once: true\nan entry with our pid exists: true\nits exe name is this image's file name: true\nits thread count is at least 1: true\nits parent is not 0 and not itself: true\nown entry: cntUsage 0, th32DefaultHeapID 0, th32ModuleID 0, pcPriClassBase 8, dwFlags 0\nown entry: the name ends with a NUL inside the 260 units: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

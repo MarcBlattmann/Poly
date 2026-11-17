@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "e63c3a40c5bb",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:46:31Z",
+  "tests": [
+    {
+      "name": "th_child",
+      "exe_sha256": "eee4acd202710cbb016fa60d1c0251308305afd2a99a2678a7a9f6d81e2895a1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBzbmFwc2hvdCB0YWtlbiBhZnRlciB0aGUgc3RhcnQgbGlzdHMgdGhlIGNoaWxkOiB0cnVlCml0cyBwYXJlbnQgaXMgdXM6IHRydWUKaXRzIGV4ZSBuYW1lIGlzIHRoaXMgaW1hZ2UncyBmaWxlIG5hbWU6IHRydWUKaXRzIHRocmVhZCBjb3VudCBpcyBhdCBsZWFzdCAxOiB0cnVlCnRoZSBzbmFwc2hvdCB0YWtlbiBiZWZvcmUgdGhlIHN0YXJ0IGRvZXMgbm90IGxpc3QgaXQ6IHRydWUKYWZ0ZXIgaXQgZW5kZWQsIHdpdGggb3VyIHByb2Nlc3MgaGFuZGxlIHN0aWxsIG9wZW4sIGl0IGlzIGxpc3RlZDogZmFsc2UKYWZ0ZXIgdGhlIGxhc3QgaGFuZGxlIHdhcyBjbG9zZWQgaXQgaXMgbm8gbG9uZ2VyIGxpc3RlZCAod2l0aGluIDUgcyk6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a snapshot taken after the start lists the child: true\nits parent is us: true\nits exe name is this image's file name: true\nits thread count is at least 1: true\nthe snapshot taken before the start does not list it: true\nafter it ended, with our process handle still open, it is listed: false\nafter the last handle was closed it is no longer listed (within 5 s): true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 77
+    }
+  ]
+}
