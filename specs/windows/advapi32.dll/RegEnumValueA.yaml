@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/RegEnumValueA.yaml
+id: windows/api/advapi32.dll/RegEnumValueA
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for the registry functions, "RegEnumValueA", "Registry Key Security and Access Rights"; constants and error codes from winreg.h, winnt.h and winerror.h. Chrome''s own setup.exe (survey-chrome-installer, docs/windows/chrome-installer-plan.md) imports RegLoadKeyW and RegUnLoadKeyW together with AdjustTokenPrivileges to reach other users'' hives, and RegEnumValueA. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Enumerates the values of an open key by index, in the order they were created, returning the name, the type and the data in the system''s ANSI code page. Names and the data of REG_SZ, REG_EXPAND_SZ and REG_MULTI_SZ values are converted to ANSI; other types are returned unchanged. A value too long for a buffer gives ERROR_MORE_DATA and the needed size.'
+interface:
+  signature: 'LSTATUS RegEnumValueA(HKEY hKey, DWORD dwIndex, LPSTR lpValueName, LPDWORD lpcchValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData)'
+rules:
+  order: 'Values come back in the order they were created (a test creating Alpha (REG_SZ ''abc''), Num (REG_DWORD 5), Bin (REG_BINARY 01 02 03), a name ''W'' + U+00E9 (REG_SZ ''x'' U+00E9 ''y''), the unnamed default value (REG_SZ ''dflt'') and Multi (REG_MULTI_SZ ''a'',''b'') sees the indexes 0 to 5 in that order); index 6 and any larger index: ERROR_NO_MORE_ITEMS (259); a key without values: 259 at index 0.'
+  name: 'The name length returned is in characters without the NUL; the unnamed default value has the empty name (length 0). A non-ASCII name is converted with the ANSI code page (on the oracle Windows-1252: U+00E9 is the single byte E9).'
+  data_conversion: 'REG_SZ ''abc'' (stored as 8 bytes) is returned as 4 bytes 61 62 63 00; ''x'' U+00E9 ''y'' as 78 E9 79 00; the default value ''dflt'' as 5 bytes; REG_MULTI_SZ ''a'',''b'' (stored as 10 bytes) as 5 bytes 61 00 62 00 00; REG_DWORD (4 bytes) and REG_BINARY (3 bytes) unchanged. RegEnumValueW for the same index returns the wide sizes (8 bytes for ''abc'').'
+  small_name_buffer: 'A name buffer smaller than needed, including the case of exactly the name length (no room for the NUL): ERROR_MORE_DATA (234); the name length variable is left at the buffer size given; the type and data length are still returned (index 0: type 1, data length 4).'
+  small_data_buffer: 'A data buffer smaller than the data: 234 with the needed size in *lpcbData (4 for the first value) and no data written. A buffer of exactly the size: 0.'
+  size_query: 'lpData NULL with *lpcbData 0, or with *lpcbData 64: 0 with the data size in *lpcbData (4). lpType, lpData and lpcbData may all be NULL (name only): 0.'
+  bad_args: 'A NULL name pointer or a NULL name length pointer: ERROR_INVALID_PARAMETER (87). A non-NULL lpReserved: 87. A NULL key handle: ERROR_INVALID_HANDLE (6). A handle opened with KEY_SET_VALUE only (no KEY_QUERY_VALUE): ERROR_ACCESS_DENIED (5).'
+errors:
+  more_data: '234'
+  no_more_items: '259'
+  invalid_parameter: '87'
+  invalid_handle: '6'
+  access_denied: '5'
+side_effects: 'none'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075): one creates a unique HKCU key with the values above and enumerates it (order, conversion, W comparison); one checks the buffer rules and the bad arguments. The key is removed at the end. Observations are return values, sizes and hex bytes.'
+not_covered: 'REG_EXPAND_SZ data conversion beyond what REG_SZ shows, values with embedded NULs in the data, values changed during the enumeration, performance data keys (HKEY_PERFORMANCE_DATA), a code page other than 1252.'

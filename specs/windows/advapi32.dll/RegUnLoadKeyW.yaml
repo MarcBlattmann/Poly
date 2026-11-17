@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/RegUnLoadKeyW.yaml
+id: windows/api/advapi32.dll/RegUnLoadKeyW
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for the registry functions, "Registry Hives", "Privilege Constants" and "Registry Key Security and Access Rights"; constants and error codes from winreg.h, winnt.h and winerror.h. Chrome''s own setup.exe (survey-chrome-installer, docs/windows/chrome-installer-plan.md) imports RegLoadKeyW and RegUnLoadKeyW together with AdjustTokenPrivileges to reach other users'' hives, and RegEnumValueA. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Unloads a hive that RegLoadKeyW mounted below HKEY_LOCAL_MACHINE or HKEY_USERS. It works only through the same root the hive was loaded under, by the exact key name (case-insensitive), and only when no handle into the hive is open; the changes made while it was loaded are in the file afterwards. SeRestorePrivilege must be enabled.'
+interface:
+  signature: 'LSTATUS RegUnLoadKeyW(HKEY hKey, LPCWSTR lpSubKey)'
+rules:
+  privilege: 'Without SeRestorePrivilege (the filtered token): ERROR_PRIVILEGE_NOT_HELD (1314) for HKLM, HKU, HKEY_CURRENT_USER and a name that is not loaded, also with a NULL name; a NULL key handle is still 6.'
+  unload: 'After RegLoadKeyW(HKLM, Name, file): RegUnLoadKeyW(HKLM, Name) returns 0 and opening HKLM\Name then fails with 2. The name matches without regard to case, and with a trailing backslash (the call returns 0 and unloads).'
+  open_handles: 'While any handle into the hive is open, the root of the loaded key or a handle on one of its subkeys, the call fails with ERROR_ACCESS_DENIED (5) and the hive stays loaded and usable; after every handle is closed the call returns 0.'
+  persist: 'Values, subkeys and changed values written while the hive was loaded are in the file: after the unload a reload (also below the other root, HKEY_USERS) shows them. The file stays a registry file (signature regf, a size that is a multiple of 4096 and not smaller than before) and its .LOG1 and .LOG2 files exist beside it.'
+  roots: 'The root must be the one used for the load: a hive loaded below HKLM unloaded through HKEY_USERS, through HKEY_CURRENT_USER, with a subkey path (Name\Sub), through an empty or NULL name, or never loaded: ERROR_INVALID_PARAMETER (87). A hive loaded below HKU is unloaded through HKU (0) and not through HKLM (87). Unloading twice: 87. A NULL key handle: 6.'
+  not_hive_root: 'A name that is an ordinary key (HKLM\SOFTWARE\Microsoft) gives 87. Never unload the system hives (SOFTWARE, SYSTEM) in a test.'
+errors:
+  privilege: '1314'
+  access: '5 (a handle is open)'
+  invalid_parameter: '87'
+  invalid_handle: '6'
+side_effects: 'the hive file is written and closed; the key disappears'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075), one file per test; each declares what it calls from Learn''s prototypes. They save a hive with RegSaveKeyW from a unique HKCU key (PolySpecB4*), load it under a unique name, and remove every key, loaded hive and file at the start and the end. Observations are return values, error codes and booleans, never paths or handles.'
+not_covered: 'Per-user hive loading of real profiles (ntuser.dat of another account), RegLoadKeyA and RegLoadAppKey, RegLoadMUIString, security descriptors and ownership of loaded keys, a hive whose file is on a network share, hive format versions, a 32-bit caller, and the effect on the registry watchers (RegNotifyChangeKeyValue).'

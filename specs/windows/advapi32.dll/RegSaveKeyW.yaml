@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/RegSaveKeyW.yaml
+id: windows/api/advapi32.dll/RegSaveKeyW
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for the registry functions, "Registry Hives", "Privilege Constants" and "Registry Key Security and Access Rights"; constants and error codes from winreg.h, winnt.h and winerror.h. Chrome''s own setup.exe (survey-chrome-installer, docs/windows/chrome-installer-plan.md) imports RegLoadKeyW and RegUnLoadKeyW together with AdjustTokenPrivileges to reach other users'' hives, and RegEnumValueA. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Writes a key and everything below it to a new file in the registry hive format (a file that RegLoadKeyW can mount). The caller needs SeBackupPrivilege enabled. With it, any key handle works, whatever access it was opened with. The file must not exist.'
+interface:
+  signature: 'LSTATUS RegSaveKeyW(HKEY hKey, LPCWSTR lpFile, const SECURITY_ATTRIBUTES *lpSecurityAttributes)'
+rules:
+  privilege: 'Without SeBackupPrivilege (the filtered token): ERROR_PRIVILEGE_NOT_HELD (1314); the file is created (it exists afterwards) before the check fails. With the privilege enabled the call works for a key in HKCU, for a subkey, and for HKEY_CURRENT_USER itself.'
+  file: 'The file starts with the signature ''regf'' (4 bytes), is at least 8 KiB for a small key, and its size is a multiple of 4096. Saving a key with two values and a subkey returns 0; the subkey saves too.'
+  exists: 'The target file exists already: ERROR_ALREADY_EXISTS (183), also for a second save to the same name; the file is not changed.'
+  bad_path: 'A drive that does not exist, or a directory that does not exist: ERROR_PATH_NOT_FOUND (3).'
+  bad_args: 'A NULL key handle: ERROR_INVALID_HANDLE (6). A NULL or empty file name: ERROR_INVALID_PARAMETER (87). A handle to a key that was deleted: ERROR_KEY_DELETED (1018).'
+  access: 'With the privilege a handle opened with KEY_SET_VALUE only (no read right) still saves (0).'
+  roundtrip: 'The saved file loads with RegLoadKeyW: the saved key''s values and subkeys are the content of the loaded key (see RegLoadKeyW).'
+errors:
+  privilege: '1314'
+  exists: '183'
+  path: '3'
+  invalid_handle: '6'
+  invalid_parameter: '87'
+  key_deleted: '1018'
+side_effects: 'creates the file'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075), one file per test; each declares what it calls from Learn''s prototypes. They save a hive with RegSaveKeyW from a unique HKCU key (PolySpecB4*), load it under a unique name, and remove every key, loaded hive and file at the start and the end. Observations are return values, error codes and booleans, never paths or handles.'
+not_covered: 'The security attributes pointer, RegSaveKeyExW formats, saving HKLM keys, volatile keys, very large keys, saving through a remote registry handle.'
