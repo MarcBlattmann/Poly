@@ -98,9 +98,79 @@ and B5's note below. (What the stub does, `chrmstp.exe --configure-user-settings
 
 ## 4. Sheets of this batch
 
-(The list, counts, branches and the recordings: see the hand-back and `specs/handoffs/`. It is filled in at the end of this
-document by the lead.)
+All entries are claimed for `impl-chrome-installer` (except `shlwapi!IsOS`, claimed earlier by `impl-chrome-s9`),
+recorded on the oracle (every test ran twice with identical output, per-test token in `windows.json`), and handed off
+(one record each under `specs/handoffs/`). Counts are visible / held out; ids are below `windows/api/`.
+
+| Group | Entries |
+|---|---|
+| Shell links (5) | `shell32.dll/ShellLink` 2/1, `IShellLinkW` 3/2, `ShellLink.IPersistFile` 4/2, `ShellLink.PropertyStore` 1/1, `propsys.dll/InitPropVariantFromCLSID` 1/1 |
+| Folders, shell, associations (5) | `shell32.dll/KnownFolders.Common` 2/1, `SHChangeNotify` 1/1, `SHCreateAssociationRegistration` 1/1, `ShellDispatch.ShellExecute` 2/1, `shlwapi.dll/AssocQueryStringW` 2/1 |
+| Event log, hives, version, natives (14) | `advapi32.dll/RegisterEventSourceA` 1/1, `ReportEventA` 1/1, `EventLogSourceRegistration` 1/1, `RegLoadKeyW` 2/1, `RegUnLoadKeyW` 2/1, `RegSaveKeyW` 2/1, `RegEnumValueA` 1/1, `version.dll/GetFileVersionInfoSizeW`, `GetFileVersionInfoW`, `VerQueryValueW` 1/1 each, `ntdll.dll/NtOpenKeyEx`, `NtQueryValueKey`, `NtDeleteKey`, `RtlFormatCurrentUserKeyPath` 1/1 each |
+| Files and processes (11) | `kernel32.dll/CopyFileW` 2/1, `MoveFileExW.DelayUntilReboot` 2/1, `CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW`, `GetShortPathNameW`, `GetLongPathNameW`, `ReadDirectoryChangesW`, `GetProcessHandleCount`, `K32GetProcessMemoryInfo`, `GetThreadLocale` 1/1 each |
+| Tokens and strings (8) | `advapi32.dll/CreateProcessWithTokenW` 3/1, `userenv.dll/CreateEnvironmentBlock` 2/1, `DestroyEnvironmentBlock` 2/1, `shell32.dll/CommandLineToArgvW` 2/1, `shlwapi.dll/UrlCanonicalizeW` 2/1, `IsOS` 1/1, `winhttp.dll/WinHttpSetOption`, `WinHttpSetStatusCallback` 1/1 each |
+
+Total: 43 entries, 63 visible and 45 held-out tests. Not specified (and why): the firewall COM API, see section 6;
+Active Setup (no API); `K32GetModuleInformation`, thread priority boost, `QueryThreadCycleTime`, `HeapLock/Unlock/Walk`,
+`GetThreadContext` (diagnostic code, not on the install path); `ncrypt`/`tbs`/`CreateURLMonikerEx` (not on the
+`--system-level` path: the log shows no key-attestation or TPM step).
 
 ## 5. Notes for B5 (Poly's front door, implementer only)
 
-(Next sections written after the groups reported: link import, launcher entries, uninstall mapping, shell start.)
+**Importing the `.lnk` files into the launcher** (reading what `IPersistFile::Save` wrote; the exact rules are the
+`reading_a_link` rule of `ShellLink.IPersistFile.yaml`):
+
+- **Scan, don't copy.** After the installer ends, and on every `rescan`, walk `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\**`,
+  `C:\Users\Public\Desktop`, the user's Start Menu and Desktop, and build the launcher entries from the links that exist
+  *now*. Then an uninstalled app vanishes with its links; nothing to delete by hand. Skip Quick Launch (it only repeats
+  the Start menu link) and links whose file name starts with `Uninstall`/`Remove`; one entry per (target, arguments).
+  Desktop file name `poly-win-<hash of target+args>.desktop`, `X-Poly-WindowsLnk=<the .lnk's path>`.
+- **Name** = the file name without `.lnk`. **Comment** = the link's description (StringData NAME_STRING).
+- **Target**, in this order: LinkInfo `LocalBasePath` (+ `CommonPathSuffix`) when the link has LinkInfo (only if the target
+  existed on a local disk when saved); else the ID list (drive letter from the 0x2F item, then each file item's name);
+  else the EnvironmentVariableDataBlock (0xA0000001), expanding `%ProgramFiles%` etc.; the relative path alone is not
+  enough (a Chrome-like link saved *before* `chrome.exe` exists has no LinkInfo: ID list only). Re-check that the target
+  exists before showing the entry (a link whose target is gone is dead, e.g. mid-update).
+- **Arguments** (`--source-shortcut-location=desktop` etc., kept verbatim), **working directory**, **show command** (only 1, 3
+  and 7 are stored) and **icon**: IconLocation string plus the index in the header; if absent use the target's first icon
+  group (ADR 0216 does it for Chrome for Testing: the largest PNG of the icon group). Strings are UTF-16 and may contain
+  unexpanded `%variables%`.
+- **AppUserModelID** and **ToastActivatorCLSID** come from the PropertyStoreDataBlock (0xA0000009), format id
+  `{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}` pid 5 (string) and pid 26 (CLSID). Keep the AUMID with the entry: it groups
+  windows and notifications of the app (`ChromeHTML` also names it: `Application\AppUserModelId`=`Chrome`).
+- **Launching** an imported entry: start the target with the arguments from the user's session and the user's
+  (unelevated) token, not as the installer's elevated process (see the shell-start note).
+
+**Replacing Chrome for Testing in the launcher.** The installed Chrome's link set above gives the entry `Google Chrome`
+with target `C:\Program Files\Google\Chrome\Application\chrome.exe`. Once it exists the launcher hides the Chrome for
+Testing entry (`desktop --chrome-win` disk without it); the profile moves from `C:\poly-chrome-profile` to Chrome's own
+`%LOCALAPPDATA%\Google\Chrome\User Data`.
+
+**Starting the installed Chrome "through the shell".** Windows' updater asks Explorer (Shell.Application,
+`ShellExecute`), so the child has the user's *filtered* token, medium integrity, the interactive session and Explorer as
+parent, whatever the caller's token (`ShellDispatch.ShellExecute` sheet). `ShellExecuteExW` or an in-process
+Shell.Application keep the caller's token. Poly's session manager should therefore start installed apps (and run
+`CreateProcessWithTokenW(shell token)`) with the desktop user's own token. `CreateProcessWithTokenW` needs
+SeImpersonatePrivilege (1314 without) and does **not** inherit environment, current directory or handles
+(`CreateProcessWithTokenW`, `CreateEnvironmentBlock` sheets).
+
+**Uninstall entry → Settings and Files' uninstall (ADR 0180).**
+
+- Enumerate `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*` in **both** registry views and `HKCU` (Chrome's key is
+  only in the 32-bit view). Show an entry when it has `DisplayName` and an `UninstallString` and no `SystemComponent`=1
+  and no `ParentKeyName`/`ReleaseType` (updates). Fields: name, `DisplayVersion`, `Publisher`, `DisplayIcon` (path,index),
+  `InstallLocation`, `EstimatedSize` (KB), `InstallDate` (YYYYMMDD).
+- ADR 0180's window is the confirmation. Then run `QuietUninstallString` if present, else `UninstallString`; for Google Chrome Windows' Apps
+  settings appends `--force-uninstall` (the survey's uninstall: exit 19, 6 s; without it Chrome shows its own dialog).
+  Run it elevated like the install, wait for the process and its children, then `rescan`; the `.lnk` scan makes the
+  launcher entry disappear. Chrome's updater removes its two services and task about 20 s after the last app goes (B1/B3).
+- `NoRemove`=1 hides the button; `WindowsInstaller`=1 means an MSI (`msiexec /x`, B6, not Google's path).
+- On uninstall `setup.exe` needs: `RegLoadKeyW`/`RegUnLoadKeyW` of other users' `ntuser.dat` (sheets in this batch),
+  `MoveFileExW` to move its own running image and a delayed delete, `ReadDirectoryChangesW`, `CopyFileW`, Toolhelp.
+- **Active Setup**: after a user logs in (and once after the install for the installing user) Poly's session start runs,
+  for every `Active Setup\Installed Components\<GUID>` with `IsInstalled`=1 whose HKLM `Version` is newer than the user's
+  HKCU copy, the `StubPath` command line in the user's session, then copies `Version` to HKCU. Chrome's stubs
+  (`chrmstp.exe --configure-user-settings`, `platform_experience_helper.exe --first-run`) are Chrome's own programs.
+- **Default browser**: `SHCreateAssociationRegistration` sheets show Windows' API reads `Capabilities`/`RegisteredApplications`
+  only for queries; `SetAppAsDefault` fails (`E_FAIL`) and `QueryAppIsDefault` answers TRUE, so Poly's Settings must keep
+  its own default-browser state and read the `ChromeHTML`/`URLAssociations` registrations to offer "Google Chrome".
