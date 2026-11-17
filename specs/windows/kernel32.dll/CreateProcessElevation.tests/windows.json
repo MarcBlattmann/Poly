@@ -1,0 +1,78 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "cpe_child_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "77ad59f3466b763236b8d4122014ee0796545bc540cd0c0cf6d279b22bca7ef7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhpcyBpbWFnZSBhcyBhIGNoaWxkOiBlbGV2YXRpb24gMSB0eXBlIDIgaW50ZWdyaXR5IDMgYWRtaW5zLWRlbnktb25seSAwIGFkbWlucy1lbmFibGVkIDEgbGlua2VkLXByZXNlbnQgMQphIGNoaWxkIHRoYXQgc3RhcnRzIGEgY2hpbGQ6IGVsZXZhdGlvbiAxIHR5cGUgMiBpbnRlZ3JpdHkgMyBhZG1pbnMtZGVueS1vbmx5IDAgYWRtaW5zLWVuYWJsZWQgMSBsaW5rZWQtcHJlc2VudCAxCmNtZC5leGUgL2MgZXhpdCAzOiBzdGFydGVkLCBleGl0IGNvZGUgMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "this image as a child: elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\na child that starts a child: elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\ncmd.exe /c exit 3: started, exit code 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 138
+    },
+    {
+      "name": "cpe_child_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "77ad59f3466b763236b8d4122014ee0796545bc540cd0c0cf6d279b22bca7ef7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhpcyBpbWFnZSBhcyBhIGNoaWxkOiBlbGV2YXRpb24gMCB0eXBlIDMgaW50ZWdyaXR5IDIgYWRtaW5zLWRlbnktb25seSAxIGFkbWlucy1lbmFibGVkIDAgbGlua2VkLXByZXNlbnQgMQphIGNoaWxkIHRoYXQgc3RhcnRzIGEgY2hpbGQ6IGVsZXZhdGlvbiAwIHR5cGUgMyBpbnRlZ3JpdHkgMiBhZG1pbnMtZGVueS1vbmx5IDEgYWRtaW5zLWVuYWJsZWQgMCBsaW5rZWQtcHJlc2VudCAxCmNtZC5leGUgL2MgZXhpdCAzOiBzdGFydGVkLCBleGl0IGNvZGUgMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "this image as a child: elevation 0 type 3 integrity 2 admins-deny-only 1 admins-enabled 0 linked-present 1\na child that starts a child: elevation 0 type 3 integrity 2 admins-deny-only 1 admins-enabled 0 linked-present 1\ncmd.exe /c exit 3: started, exit code 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 155
+    },
+    {
+      "name": "cpe_embedded_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "0c9db17fb2b7c903e7a8b318bb5fca4cec77bc224de1a936a4b0cc1544378226",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1iX2FzaW52b2tlcjogc3RhcnRlZCwgY2hpbGQgZWxldmF0aW9uIDEgdHlwZSAyIGludGVncml0eSAzIGFkbWlucy1kZW55LW9ubHkgMCBhZG1pbnMtZW5hYmxlZCAxIGxpbmtlZC1wcmVzZW50IDEKZW1iX3JlcXVpcmVhZG1pbjogc3RhcnRlZCwgY2hpbGQgZWxldmF0aW9uIDEgdHlwZSAyIGludGVncml0eSAzIGFkbWlucy1kZW55LW9ubHkgMCBhZG1pbnMtZW5hYmxlZCAxIGxpbmtlZC1wcmVzZW50IDEKZW1iX2hpZ2hlc3Q6IHN0YXJ0ZWQsIGNoaWxkIGVsZXZhdGlvbiAxIHR5cGUgMiBpbnRlZ3JpdHkgMyBhZG1pbnMtZGVueS1vbmx5IDAgYWRtaW5zLWVuYWJsZWQgMSBsaW5rZWQtcHJlc2VudCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "emb_asinvoker: started, child elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\nemb_requireadmin: started, child elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\nemb_highest: started, child elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 608
+    },
+    {
+      "name": "cpe_embedded_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "0c9db17fb2b7c903e7a8b318bb5fca4cec77bc224de1a936a4b0cc1544378226",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1iX2FzaW52b2tlcjogc3RhcnRlZCwgY2hpbGQgZWxldmF0aW9uIDAgdHlwZSAzIGludGVncml0eSAyIGFkbWlucy1kZW55LW9ubHkgMSBhZG1pbnMtZW5hYmxlZCAwIGxpbmtlZC1wcmVzZW50IDEKZW1iX3JlcXVpcmVhZG1pbjogQ3JlYXRlUHJvY2Vzc1cgZmFpbGVkLCBlcnJvciA3NDAKZW1iX2hpZ2hlc3Q6IENyZWF0ZVByb2Nlc3NXIGZhaWxlZCwgZXJyb3IgNzQwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "emb_asinvoker: started, child elevation 0 type 3 integrity 2 admins-deny-only 1 admins-enabled 0 linked-present 1\nemb_requireadmin: CreateProcessW failed, error 740\nemb_highest: CreateProcessW failed, error 740\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 620
+    }
+  ]
+}

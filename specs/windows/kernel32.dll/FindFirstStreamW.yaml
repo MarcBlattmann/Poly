@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/FindFirstStreamW.yaml
+id: windows/api/kernel32.dll/FindFirstStreamW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Lists the data streams of a file. Chrome marks every download with an alternate data stream (`file:Zone.Identifier`, the text `[ZoneTransfer]`, `ZoneId=3`, `HostUrl=<url>`) opened with CreateFileW and a colon in the name, and the file has to keep it when it is renamed. This entry specifies how streams behave through CreateFileW, DeleteFileW, FindFirstFileW and FindFirstStreamW; the rename and copy rules are in MoveFileExW.
+interface:
+  signature: "HANDLE FindFirstStreamW(LPCWSTR lpFileName, STREAM_INFO_LEVELS InfoLevel, LPVOID lpFindStreamData, DWORD dwFlags)"
+  data: "WIN32_FIND_STREAM_DATA: LARGE_INTEGER StreamSize, WCHAR cStreamName[296]; InfoLevel FindStreamInfoStandard 0, dwFlags 0"
+chrome:
+  mark: "after the download is renamed to its final name Chrome's file has a `:Zone.Identifier` stream with `[ZoneTransfer]`, `ZoneId=3` and `HostUrl=<the page's url>` (and a ReferrerUrl line when there was a referrer), 65 to 66 bytes for a local url; the file's own attributes are 0x20 (archive) and its name has no stream part"
+rules:
+  plain_file: "one stream, `::$DATA`, with the file's size; the enumeration ends with FindNextStreamW returning FALSE and ERROR_HANDLE_EOF (38)"
+  create: "CreateFileW(`file:Zone.Identifier`, GENERIC_WRITE, CREATE_ALWAYS): a valid handle, last error 0; writing 26 bytes gives a stream of 26 bytes; the main file's size does not change; the listing is `::$DATA:<size>` then the streams; the order seen was `::$DATA`, `:second:$DATA`, `:Zone.Identifier:$DATA` for streams created in the order Zone.Identifier, second"
+  names: "the stream opens as `file:name`, `file:name:$DATA` and the main data as `file::$DATA`; GetFileAttributesW of a stream name succeeds when it exists; opening a stream that is not there with OPEN_EXISTING: no handle, ERROR_FILE_NOT_FOUND (2); `file:` with an empty stream name: no handle, ERROR_INVALID_NAME (123); a stream name with `<` was accepted (a handle, last error 0)"
+  file_not_there: "creating `file:stream` (CREATE_NEW) for a file that does not exist creates the file with size 0 and the stream"
+  listing: "FindFirstFileW/FindNextFileW over the folder show the file once, with the size of its main stream, and never a stream; the sizes of two files in a listing are those of their main streams"
+  delete: "DeleteFileW(`file:stream`) removes that stream only (the file and its other streams stay); deleting the file removes all of its streams (afterwards the stream name does not open)"
+  rewrite: "opening the main file with CREATE_ALWAYS (the file is replaced by a new empty one) leaves it with only `::$DATA`: its alternate streams are gone, also while a handle to a stream is open (the write to the main file succeeds); OPEN_ALWAYS on the main file keeps the streams"
+  existing_stream: "CreateFileW of a stream that exists with CREATE_NEW: no handle, ERROR_FILE_EXISTS (80); with OPEN_ALWAYS: a handle and last error ERROR_ALREADY_EXISTS (183); DeleteFileW of a stream that is already gone: FALSE, 2; a stream name with a backslash: no handle, 123"
+  folders: "a folder can have a stream (`folder:info` with CREATE_NEW: a handle, last error 0); the folder's listing has `:info:$DATA` and no `::$DATA`"
+errors:
+  end_of_listing: "38"
+  stream_not_found: "2"
+  empty_stream_name: "123"
+side_effects: "creates and removes files and streams in the test's scratch folder"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder.
+not_covered: >
+  FindStreamInfoMaxInfoLevel and other levels, stream names with other special characters, very long names, stream size limits, reading a stream while another handle writes it, streams on network shares, FAT or exFAT volumes (the oracle's volume is NTFS: Poly answers per its own file system, but the default Chrome expects works on NTFS only).

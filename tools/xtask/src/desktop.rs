@@ -527,13 +527,15 @@ pub fn boot(p: Prepared) -> Result {
     // virtio-blk disk, bound into the root disk (ADR 0147).
     let (memory, cpus, append) = match &chromium_disk {
         // Chrome for Windows: the desktop's own initramfs (with the launcher entry) and the disk the
-        // NT personality keeps `C:` on, mounted beside the settings disk (`chrometry.rs`).
+        // NT personality keeps `C:` on, mounted beside the settings disk (`chrometry.rs`). Windows
+        // apps live in output pixels at the scale's DPI, so Chrome (per-monitor DPI aware) draws
+        // at 200 % itself instead of being enlarged (ADR 0219).
         Some(_) if chrome_win => (
             crate::chrometry::MEMORY,
             crate::chrometry::CPUS,
             append(
                 format!(
-                    "poly.mount={} poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf console=ttyS0 poly.net=qemu poly.display.scale={scale} {force} {}",
+                    "poly.mount={} poly.init.arg=--settings poly.init.arg=/mnt/poly/shell.conf console=ttyS0 poly.net=qemu poly.display.scale={scale} {force} poly.init.arg=--windows-hidpi {}",
                     crate::chrometry::mounts(true),
                     extra.join(" ")
                 )

@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/OpenVolume.yaml
+id: windows/api/kernel32.dll/OpenVolume
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators), drive C: a local NTFS volume. The *_std tests are recorded with -Token standard (a one-time task in the account's interactive session 1 with the administrator's FILTERED token: medium integrity, the Administrators group deny-only, TokenElevationType 3), the *_adm tests with -Token elevated (the same logon's FULL token: high integrity, TokenElevationType 2). The SSH logon's token (session 0) gave the same answers as the full token. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for CreateFileW ("Naming Files, Paths, and Namespaces"; "Physical Disk and Volume Access"), NtCreateFile (winternl.h), NtQueryVolumeInformationFile, DeviceIoControl, IOCTL_STORAGE_GET_DEVICE_NUMBER, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, FSCTL_GET_NTFS_VOLUME_DATA and the public SDK headers winioctl.h, ntstatus.h (STATUS_INVALID_PARAMETER 0xC000000D, STATUS_ACCESS_DENIED 0xC0000022, STATUS_OBJECT_NAME_NOT_FOUND 0xC0000034, STATUS_OBJECT_NAME_INVALID 0xC0000033) and winerror.h. Google's installers open the system volume as \??\C: before they unpack and, on Poly, stop with 0xC00000BA because Poly's \??\C: is the root directory, not the volume (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Opening the volume of drive C: as a device (\\.\C: with CreateFileW, \??\C: with NtCreateFile) is allowed to every token when the access mask holds only attribute, control and synchronize rights (0, FILE_READ_ATTRIBUTES, READ_CONTROL, SYNCHRONIZE) and then the handle answers the disk queries (file type disk, storage device number, disk extents, the device type 7 / FILE_DEVICE_DISK of FileFsDeviceInformation). Any right to read or write the data of the volume (FILE_READ_DATA, FILE_WRITE_DATA, GENERIC_READ, GENERIC_WRITE) is granted only to the FULL administrator token: the filtered token gets ERROR_ACCESS_DENIED (5) / STATUS_ACCESS_DENIED (0xC0000022). With the full token a read handle returns the boot sector (512 bytes at offset 0, "NTFS    " at offset 3) and the NTFS volume data.
+interface:
+  names: "\\\\.\\C: and \\\\?\\C: (CreateFileW); \\??\\C: (NtCreateFile, OBJ_CASE_INSENSITIVE, FILE_OPEN)"
+rules:
+  win32_light_access: "CreateFileW(\"\\\\.\\C:\") with access 0, FILE_READ_ATTRIBUTES, SYNCHRONIZE or READ_CONTROL, share mode 7: succeeds with both tokens; access 0 succeeds with share mode 0, 1, 2 and 3 as well; \"\\\\.\\c:\" (lower case) and \"\\\\?\\C:\" open the same way."
+  win32_data_access: "FILE_READ_DATA, GENERIC_READ, GENERIC_WRITE and GENERIC_READ|GENERIC_WRITE (share 7): the full token succeeds; the filtered token fails with ERROR_ACCESS_DENIED (5). (MAXIMUM_ALLOWED is not specified: it depends on what else holds the volume open.)"
+  win32_names: "\"\\\\.\\C:\\\" (a trailing backslash): FALSE, ERROR_PATH_NOT_FOUND (3); \"\\\\.\\Z:\" (no such drive): ERROR_FILE_NOT_FOUND (2); \"C:\" (not the device form): ERROR_ACCESS_DENIED (5); \"C:\\\" without FILE_FLAG_BACKUP_SEMANTICS: 3."
+  query_handle: "a handle opened with access 0: GetFileType 1 (FILE_TYPE_DISK); IOCTL_STORAGE_GET_DEVICE_NUMBER succeeds (12 bytes, device type 7 = FILE_DEVICE_DISK); IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS succeeds with 1 extent; GetVolumeInformationByHandleW, GetFileSizeEx and FSCTL_GET_NTFS_VOLUME_DATA fail (ERROR_INVALID_FUNCTION 1 for the last two)."
+  read_handle: "(full token) a GENERIC_READ handle (share 3): ReadFile of 512 bytes at offset 0 succeeds with 512 bytes and the file-system name \"NTFS    \" at offset 3; ReadFile of 100 bytes (not a multiple of the sector size): FALSE, ERROR_INVALID_PARAMETER (87); SetFilePointerEx succeeds; FSCTL_GET_NTFS_VOLUME_DATA succeeds (bytes per cluster 4096 on the oracle)."
+  nt_access: "NtCreateFile(\"\\??\\C:\", FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT, share 7): access 0, FILE_READ_ATTRIBUTES and MAXIMUM_ALLOWED without SYNCHRONIZE: STATUS_INVALID_PARAMETER (0xC000000D, no handle); SYNCHRONIZE, FILE_READ_ATTRIBUTES|SYNCHRONIZE (0x100080) and READ_CONTROL|SYNCHRONIZE: STATUS_SUCCESS with IoStatus.Information 0 for both tokens; FILE_READ_DATA|SYNCHRONIZE, FILE_WRITE_DATA|SYNCHRONIZE, GENERIC_READ|SYNCHRONIZE, FILE_LIST_DIRECTORY|SYNCHRONIZE (the same bit as read data) and FILE_READ_EA|SYNCHRONIZE: STATUS_ACCESS_DENIED for the filtered token, STATUS_SUCCESS with Information 1 (FILE_OPENED) for the full token; FILE_TRAVERSE|SYNCHRONIZE: STATUS_SUCCESS with Information 1 for both tokens."
+  nt_names: "\"\\??\\C:\" and \"\\??\\c:\": success, Information 0; \"\\??\\C:\\\" (the root directory) and \"\\??\\C:\\Windows\": success, Information 1 (with FILE_READ_ATTRIBUTES|SYNCHRONIZE); \"\\??\\C:\\$Volume\" (an NTFS metadata file): STATUS_ACCESS_DENIED for the filtered token, success (Information 1) for the full token; \"\\??\\GLOBALROOT\": STATUS_OBJECT_NAME_INVALID (0xC0000033); \"\\??\\Z:\": STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034)."
+  nt_options: "\"\\??\\C:\" with FILE_READ_ATTRIBUTES|SYNCHRONIZE and FILE_DIRECTORY_FILE, or FILE_NON_DIRECTORY_FILE: both succeed (Information 0); share modes 0, 1, 3 and 7 all succeed."
+  device_information: "NtQueryVolumeInformationFile(FileFsDeviceInformation, class 4) on that handle: STATUS_SUCCESS, device type 7 (FILE_DEVICE_DISK), characteristics 0x220020."
+errors:
+  access_denied: "5 / 0xC0000022 (filtered token and data rights)"
+  invalid_parameter: "0xC000000D (access mask without SYNCHRONIZE together with FILE_SYNCHRONOUS_IO_NONALERT); 87 (unaligned read of the volume)"
+  not_found: "2 / 0xC0000034; path not found 3"
+side_effects: "none (the handles only read)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test and token (ov_nt_std, ov_nt_adm: NtCreateFile; ov_win32_std, ov_win32_adm: CreateFileW, the queries and the read), with the per-test token and session in windows.json. Each file declares what it calls from Learn's prototypes. Observations are statuses, error codes and relations, never sizes, serial numbers, device numbers or the text of paths.
+not_covered: >
+  Writing to the volume (never tried), locking and dismounting it (FSCTL_LOCK_VOLUME), other drives, other file systems, the volume GUID names (\\?\Volume{...}), volumes that another program holds exclusively, a 32-bit caller, the Poly-side detail of what a "volume" is in a filesystem that has no block device.

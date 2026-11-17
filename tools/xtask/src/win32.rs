@@ -195,16 +195,68 @@ pub fn ensure() -> Result<PathBuf> {
         std::fs::copy(built.join(f), tmp.join(f)).map_err(|e| format!("{f}: {e}"))?;
     }
     write_stub_dlls(&tmp)?;
-    if std::fs::rename(&tmp, &cached).is_err() {
-        // Another worktree cached the same version first.
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
+    install_set(&tmp, &cached, RENAME_RETRIES, RENAME_PAUSE)?;
     if std::env::var_os("POLY_WIN32_KEEP_BUILD").is_none() {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);
     crate::progress::note(&format!("Win32 modules built in {:.0?}, cached as {}", started.elapsed(), cached.display()));
     Ok(cached)
+}
+
+/// How often and how long [`install_set`] waits for a directory rename that fails.
+const RENAME_RETRIES: u32 = 10;
+const RENAME_PAUSE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Whether `dir` holds a whole cached set: every module and the stub list.
+fn set_complete(dir: &Path) -> bool {
+    OUTPUTS.iter().all(|f| dir.join(f).is_file()) && dir.join(STUB_LIST).is_file()
+}
+
+/// Put the filled private directory `tmp` in place as `cached`, and remove `tmp`, **without ever
+/// losing the set**. The rename can fail for two reasons: another worktree cached the same version
+/// first (then `cached` is complete and `tmp` is not needed), or the host refused it. Windows refuses
+/// to rename a directory while another program, a virus scanner or the indexer, has a file of it
+/// open, and an earlier version deleted the set whatever the reason, so the kernel build that
+/// followed could not find `kernelbase.dll`. So: retry the rename `retries` times `pause` apart
+/// (stopping as soon as `cached` is complete), then copy the files, the stub list last so that
+/// [`set_complete`] only holds when all of it is there, and fail with the rename's error if even that
+/// does not give a complete set. `tmp` is removed only once `cached` is complete.
+fn install_set(tmp: &Path, cached: &Path, retries: u32, pause: std::time::Duration) -> Result {
+    let mut last = String::new();
+    for attempt in 0..=retries {
+        match std::fs::rename(tmp, cached) {
+            Ok(()) => return Ok(()),
+            Err(e) => last = e.to_string(),
+        }
+        if set_complete(cached) {
+            // Another worktree cached the same version first.
+            let _ = std::fs::remove_dir_all(tmp);
+            return Ok(());
+        }
+        if attempt < retries {
+            std::thread::sleep(pause);
+        }
+    }
+    std::fs::create_dir_all(cached).map_err(|e| format!("{}: {e}", cached.display()))?;
+    let mut names: Vec<std::ffi::OsString> = std::fs::read_dir(tmp)
+        .map_err(|e| format!("{}: {e}", tmp.display()))?
+        .flatten()
+        .map(|e| e.file_name())
+        .collect();
+    names.sort_by_key(|n| n.to_str() == Some(STUB_LIST));
+    for n in &names {
+        std::fs::copy(tmp.join(n), cached.join(n)).map_err(|e| format!("{}: {e}", n.to_string_lossy()))?;
+    }
+    if !set_complete(cached) {
+        return Err(format!(
+            "could not cache the Win32 modules: renaming {} to {} failed ({last}) and copying them did not give a complete set",
+            tmp.display(),
+            cached.display()
+        ));
+    }
+    let _ = std::fs::remove_dir_all(tmp);
+    Ok(())
 }
 
 /// The hash of everything the modules are built from: the name they are
@@ -723,4 +775,82 @@ fn verify_crt(dir: &Path) -> Result {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NO_WAIT: std::time::Duration = std::time::Duration::ZERO;
+
+    /// A fresh scratch directory.
+    fn scratch(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("poly-win32-cache-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// A directory holding a whole set.
+    fn whole_set(dir: &Path, content: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        for f in OUTPUTS {
+            std::fs::write(dir.join(f), content).unwrap();
+        }
+        std::fs::write(dir.join(STUB_LIST), content).unwrap();
+    }
+
+    #[test]
+    fn a_set_is_moved_into_place() {
+        let root = scratch("move");
+        let (tmp, cached) = (root.join("tmp"), root.join("cached"));
+        whole_set(&tmp, "new");
+        install_set(&tmp, &cached, 0, NO_WAIT).unwrap();
+        assert!(set_complete(&cached));
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn another_worktrees_set_is_kept_and_ours_removed() {
+        let root = scratch("won");
+        let (tmp, cached) = (root.join("tmp"), root.join("cached"));
+        whole_set(&cached, "theirs");
+        whole_set(&tmp, "ours");
+        install_set(&tmp, &cached, 1, NO_WAIT).unwrap();
+        assert!(set_complete(&cached));
+        assert_eq!(std::fs::read_to_string(cached.join(STUB_LIST)).unwrap(), "theirs");
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The case that lost the set on a Windows PC: the rename fails (here: the target is a
+    /// directory that is not empty and holds no whole set) and the set was deleted. It is copied.
+    #[test]
+    fn a_failed_rename_copies_the_set_and_never_loses_it() {
+        let root = scratch("copy");
+        let (tmp, cached) = (root.join("tmp"), root.join("cached"));
+        std::fs::create_dir_all(&cached).unwrap();
+        std::fs::write(cached.join("kernelbase.dll"), "half written").unwrap();
+        whole_set(&tmp, "ours");
+        install_set(&tmp, &cached, 2, NO_WAIT).unwrap();
+        assert!(set_complete(&cached));
+        assert_eq!(std::fs::read_to_string(cached.join("kernelbase.dll")).unwrap(), "ours");
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_incomplete_set_is_an_error_and_keeps_the_private_directory() {
+        let root = scratch("err");
+        let (tmp, cached) = (root.join("tmp"), root.join("cached"));
+        std::fs::create_dir_all(&cached).unwrap();
+        std::fs::write(cached.join("other"), "x").unwrap();
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("kernelbase.dll"), "only one file").unwrap();
+        let e = install_set(&tmp, &cached, 1, NO_WAIT).unwrap_err();
+        assert!(e.contains("could not cache the Win32 modules"), "{e}");
+        assert!(tmp.join("kernelbase.dll").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

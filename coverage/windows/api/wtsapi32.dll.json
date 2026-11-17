@@ -13,7 +13,7 @@
 {"symbol":"WTSEnumerateSessionsA","src":["wine-spec"],"seeds":["wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateSessions"]},
 {"symbol":"WTSEnumerateSessionsExA","src":["wine-spec"]},
 {"symbol":"WTSEnumerateSessionsExW","src":["wine-spec"]},
-{"symbol":"WTSEnumerateSessionsW","status":"stub","src":["wine-spec"],"seeds":["wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateSessions"]},
+{"symbol":"WTSEnumerateSessionsW","status":"claimed","claimed_by":"spec-win-elevation","src":["wine-spec"],"seeds":["wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateSessions"]},
 {"symbol":"WTSFreeMemory","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateProcessesW","wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateSessions","wine:wtsapi32/tests/wtsapi.c:test_WTSQuerySessionInformation"]},
 {"symbol":"WTSFreeMemoryExA","src":["wine-spec"]},
 {"symbol":"WTSFreeMemoryExW","src":["wine-spec"],"seeds":["wine:wtsapi32/tests/wtsapi.c:test_WTSEnumerateProcessesW"]},

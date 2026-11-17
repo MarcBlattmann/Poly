@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/OleLoadPicturePath.yaml
+id: windows/api/oleaut32.dll/OleLoadPicturePath
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators) in the SSH logon session (session 0, elevated administrator token); the same tests gave identical output with -Token standard and -Token elevated. Every test ran at least twice with identical output, each run in a fresh scratch directory (the tests write their picture files there and delete them)"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for OleLoadPicturePath, IPicture (get_Handle, get_Type, get_Width, get_Height), PICTYPE_* and the public SDK headers olectl.h, ocidl.h and winerror.h. oleaut32 exports it as ordinal 424 (the name found in the DLL's export table, both the 64-bit and the 32-bit DLL); the 64-bit updater imports it by that ordinal (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Creates an IPicture from a picture file (BMP, GIF, JPEG, ICO, WMF) given by a full path or a URL; the format is decided by the file's content, not its name. A 1x1 pixel 24-bit bitmap and a 1x1 GIF both give a picture of type PICTYPE_BITMAP (1), 26 by 26 HIMETRIC units at 96 DPI, with a non-zero bitmap handle. A relative path is not a path for this function: it is read as a URL and fails with INET_E_UNKNOWN_PROTOCOL (0x800C000D). A file that is not a picture (text, or empty) fails with E_FAIL (0x80004005); a missing file with INET_E_OBJECT_NOT_FOUND (0x800C0005); a directory with 0x800C0015. A NULL path is E_INVALIDARG and leaves the output alone.
+interface:
+  signature: "HRESULT OleLoadPicturePath(LPOLESTR szURLorPath, LPUNKNOWN punkCaller, DWORD dwReserved, OLE_COLOR clrReserved, REFIID riid, LPVOID *ppvRet)"
+rules:
+  bmp: "a full path to a 58-byte 1x1 24-bit bitmap file, riid IID_IPicture {7BF80980-BF32-101A-8BBB-00AA00300CAB}: S_OK; get_Type 1 (PICTYPE_BITMAP); width 26 and height 26 (HIMETRIC, 96 DPI); get_Handle non-zero; each IPicture method returned S_OK. riid IID_IUnknown and IID_IDispatch: S_OK (the picture object also implements IDispatch)."
+  gif: "a 35-byte 1x1 GIF89a file: S_OK, type 1, width 26, height 26. A bitmap whose file name ends in .gif loads as the bitmap it is."
+  relative_path: "\"poly-pic.bmp\" (existing file in the current directory but not a full path): 0x800C000D (INET_E_UNKNOWN_PROTOCOL); the empty string: 0x800C000D; *ppvRet is NULL."
+  missing: "a full path of a file that does not exist: 0x800C0005 (INET_E_OBJECT_NOT_FOUND)."
+  bad_content: "a file with text in it and an empty file: 0x80004005 (E_FAIL); *ppvRet NULL."
+  directory: "a full path of a directory (C:\\Windows): 0x800C0015."
+  null_path: "NULL path: 0x80070057 (E_INVALIDARG) and *ppvRet is not written."
+  output_on_failure: "*ppvRet is set to NULL on every failure other than the NULL path."
+errors:
+  invalid_arg: "0x80070057 (NULL path)"
+  inet_e_unknown_protocol: "0x800C000D (relative path, empty path)"
+  inet_e_object_not_found: "0x800C0005"
+  e_fail: "0x80004005 (not a picture)"
+side_effects: "reads the file; no file is changed"
+threading: "the call needs COM initialised on the thread (the tests use an STA)"
+ordering: []
+timing:
+  typical: "a few milliseconds on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), three files: the bitmap and its IPicture (pic_load), the failures (pic_errors), the GIF (pic_gif). The tests write the picture files into the run's scratch directory, build their full path from GetCurrentDirectoryW (never printed) and delete the files. IPicture is used through its vtable slots (3 get_Handle, 5 get_Type, 6 get_Width, 7 get_Height). Each file declares what it calls from Learn's prototypes.
+not_covered: >
+  JPEG, icon and metafile content, http: and file: URLs, the background colour and punkCaller arguments, IPicture::Render and the picture's other properties, a 32-bit caller, a screen DPI other than 96 (the HIMETRIC size follows it).

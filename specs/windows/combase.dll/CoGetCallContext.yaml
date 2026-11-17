@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/combase.dll/CoGetCallContext.yaml
+id: windows/api/combase.dll/CoGetCallContext
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; see the sheet of ole32.dll!CoGetCallContext, whose tests exercise the forwarded export"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  The sheet of ole32.dll!CoGetCallContext (observations of our own test programs on the oracle machine, Microsoft Learn and the public SDK headers objidl.h and winerror.h). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The combase.dll name of the ole32 function (ole32.dll forwards to it).
+same_as: "the tests of CoGetCallContext (ole32.dll) cover this call"
+interface:
+  signature: "HRESULT CoGetCallContext(REFIID riid, void **ppInterface)"
+rules:
+  tests: "No test of its own: the visible and held-out tests of CoGetCallContext (ole32.dll) exercise it: with no call in progress it fails with RPC_E_CALL_COMPLETE (0x80010117) and leaves the output alone."
+errors:
+  none: "see the sheet named above"
+side_effects: "none"
+threading: "per thread, see the sheet named above"
+ordering: []
+timing:
+  typical: "see the sheet named above"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  See the sheet that holds the tests.
+not_covered: >
+  Anything the named tests do not do.

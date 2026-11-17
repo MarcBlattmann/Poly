@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sxa_calls_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "c0276e6aaaede3b702ecbb0d899c35caa2b55be73872d21ef6ca5281f69d45bf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3BlbiB0aGlzIGltYWdlOiBzdWNjZXNzKD4zMikKTlVMTCB2ZXJiLCB0aGlzIGltYWdlOiBzdWNjZXNzKD4zMikKb3BlbiBhIG1pc3NpbmcgZmlsZTogZXJyb3IgMgpydW5hcyBhIG1pc3NpbmcgZmlsZTogZXJyb3IgMgp1bmtub3duIHZlcmI6IGVycm9yIDMxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "open this image: success(>32)\nNULL verb, this image: success(>32)\nopen a missing file: error 2\nrunas a missing file: error 2\nunknown verb: error 31\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 188
+    }
+  ]
+}

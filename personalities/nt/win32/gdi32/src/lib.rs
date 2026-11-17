@@ -1028,13 +1028,19 @@ dc_get_set! {
 /// screen's values for every DC, of the display win32k has now.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
-    let size = display_size();
+    let shown = display();
     let caps = gdi(|g| {
-        if let Some((width, height)) = size {
+        if let Some((width, height, _)) = shown {
             g.screen = poly_gdi::gdi::Screen { width, height };
         }
         g.device_caps(hdc as u64, index)
     });
+    // LOGPIXELSX (88), LOGPIXELSY (90): the system DPI (Learn, "GetDeviceCaps"), 96 unless Windows
+    // apps live in output pixels on a larger scale (ADR 0219).
+    let caps = match (caps, shown) {
+        (Some(v), Some((_, _, dpi))) if (index == 88 || index == 90) && v == 96 => Some(dpi as i32),
+        (c, _) => c,
+    };
     caps.unwrap_or_else(|| {
         // A deleted DC still answers GetObjectType with OBJ_DC: ERROR_INVALID_PARAMETER for it
         // (GetDeviceCaps.yaml `invalid_dc`), ERROR_INVALID_HANDLE for what is no DC.
@@ -1046,6 +1052,11 @@ pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
 
 /// The screen's size in pixels, from win32k (`None`: it did not answer).
 fn display_size() -> Option<(i32, i32)> {
+    display().map(|(w, h, _)| (w, h))
+}
+
+/// The screen's size in pixels and the system DPI, from win32k (`None`: it did not answer).
+fn display() -> Option<(i32, i32, u32)> {
     use poly_win32k::proto::{Reply, Request};
     let req = poly_win32k::wire::encode(&Request::Desktop {});
     let mut out = [0u8; 256];
@@ -1056,7 +1067,7 @@ fn display_size() -> Option<(i32, i32)> {
         return None;
     }
     match poly_win32k::wire::decode(out.get(..len as usize)?)? {
-        Reply::Desktop { width, height, .. } => Some((width, height)),
+        Reply::Desktop { width, height, dpi, .. } => Some((width, height, dpi)),
         _ => None,
     }
 }
@@ -1884,6 +1895,32 @@ fn attach_rows(hdc: H, hwnd: H, width: u32, total: u32, skip: u32, rows: u32) ->
         }
     };
     gdi(|g| g.set_surface(hdc as u64, Some(bitmap as u32)));
+    1
+}
+
+/// What this process drew on window `hwnd`'s surface DIB since the last call (ADR 0219): left,
+/// top, right, bottom (exclusive, surface pixels) into `out[0..4]`, through any DC or view of it.
+/// 0 when nothing was drawn or there is no surface.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyGdiTakeSurfaceDrawn(hwnd: H, out: *mut i32) -> i32 {
+    let Some((_, full, ..)) = SURFACES.with(|s| s.iter().find(|e| e.0 == hwnd).copied()) else { return 0 };
+    let views: Vec<(u32, u64)> = VIEWS.with(|v| v.iter().filter(|e| e.0 == hwnd).map(|e| (e.1, e.4)).collect());
+    let mut all: Option<[i32; 4]> = gdi(|g| g.take_drawn(full));
+    for (skip, b) in views {
+        if let Some(r) = gdi(|g| g.take_drawn(b)) {
+            let r = [r[0], r[1] + skip as i32, r[2], r[3] + skip as i32];
+            all = Some(match all {
+                None => r,
+                Some(a) => [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[2]), a[3].max(r[3])],
+            });
+        }
+    }
+    let Some(r) = all else { return 0 };
+    if out.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller passes four writable i32s.
+    unsafe { core::ptr::copy_nonoverlapping(r.as_ptr(), out, 4) };
     1
 }
 

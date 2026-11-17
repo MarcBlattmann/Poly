@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "fo_cases",
+      "exe_sha256": "09fac4f5494437b3ef7704ed39e9497540975b63a3025b62ccbe683db63657cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKU2V0T3BlcmF0aW9uRmxhZ3MoRk9GX05PX1VJKTogMHgwMDAwMDAwMApNb3ZlSXRlbSBvbnRvIGFuIGV4aXN0aW5nIG5hbWUsIG5vIFVJOiAweDAwMDAwMDAwClBlcmZvcm1PcGVyYXRpb25zOiAweDAwMDAwMDAwCiAgYWJvcnRlZCAwOyBhLmJpbiBhYnNlbnQ7IGIuYmluIHByZXNlbnQgc2l6ZT04IHRleHQ9ImZjLWEuYmluIjsgbGlzdGluZyBmYy1iLmJpbjo4IGZjLXN1Yi8gCk1vdmVJdGVtIG9udG8gYW4gZXhpc3RpbmcgbmFtZSwgUkVOQU1FT05DT0xMSVNJT046IDB4MDAwMDAwMDAKUGVyZm9ybU9wZXJhdGlvbnM6IDB4MDAwMDAwMDAKICBsaXN0aW5nIGZjLWIgLSBDb3B5LmJpbjo4IGZjLWIuYmluOjggClJlbmFtZUl0ZW06IDB4MDAwMDAwMDAKUGVyZm9ybU9wZXJhdGlvbnM6IDB4MDAwMDAwMDA7IGxpc3RpbmcgZmMtbi5iaW46OCAKTW92ZUl0ZW0gaW50byBhIGZvbGRlciwgbm8gbmV3IG5hbWU6IDB4MDAwMDAwMDAKTW92ZUl0ZW0gaW50byBhIGZvbGRlciwgbmV3IG5hbWUgdGhlIHNhbWU6IDB4MDAwMDAwMDAKUGVyZm9ybU9wZXJhdGlvbnMgb2YgdHdvIG1vdmVzOiAweDAwMDAwMDAwCiAgdG9wOiBmYy1zdWIvIDsgc3ViOiBwcmVzZW50IHNpemU9OCB0ZXh0PSJmYy1hLmJpbiIgcHJlc2VudCBzaXplPTggdGV4dD0iZmMtYy5iaW4iCkNvcHlJdGVtOiAweDAwMDAwMDAwClBlcmZvcm1PcGVyYXRpb25zOiAweDAwMDAwMDAwOyBsaXN0aW5nIGZjLWEuYmluOjggZmMtY29weS5iaW46OCAKRGVsZXRlSXRlbSAobm8gdW5kbyk6IDB4MDAwMDAwMDAKUGVyZm9ybU9wZXJhdGlvbnM6IDB4MDAwMDAwMDA7IGxpc3RpbmcgZmMtY29weS5iaW46OCAKU2V0UHJvZ3Jlc3NNZXNzYWdlOiAweDgwMDA0MDAxClNldE93bmVyV2luZG93KE5VTEwpOiAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\nSetOperationFlags(FOF_NO_UI): 0x00000000\nMoveItem onto an existing name, no UI: 0x00000000\nPerformOperations: 0x00000000\n  aborted 0; a.bin absent; b.bin present size=8 text=\"fc-a.bin\"; listing fc-b.bin:8 fc-sub/ \nMoveItem onto an existing name, RENAMEONCOLLISION: 0x00000000\nPerformOperations: 0x00000000\n  listing fc-b - Copy.bin:8 fc-b.bin:8 \nRenameItem: 0x00000000\nPerformOperations: 0x00000000; listing fc-n.bin:8 \nMoveItem into a folder, no new name: 0x00000000\nMoveItem into a folder, new name the same: 0x00000000\nPerformOperations of two moves: 0x00000000\n  top: fc-sub/ ; sub: present size=8 text=\"fc-a.bin\" present size=8 text=\"fc-c.bin\"\nCopyItem: 0x00000000\nPerformOperations: 0x00000000; listing fc-a.bin:8 fc-copy.bin:8 \nDeleteItem (no undo): 0x00000000\nPerformOperations: 0x00000000; listing fc-copy.bin:8 \nSetProgressMessage: 0x80004001\nSetOwnerWindow(NULL): 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 226
+    }
+  ]
+}

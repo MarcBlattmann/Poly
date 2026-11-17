@@ -58,7 +58,14 @@ unsafe extern "system" {
 #[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
-    fn PolyUserCommitSurface(hwnd: usize, pixels: usize, width: usize, height: usize, stride: usize) -> u32;
+    fn PolyUserCommitSurfaceArea(
+        hwnd: usize,
+        pixels: usize,
+        width: usize,
+        height: usize,
+        stride: usize,
+        area: *const i32,
+    ) -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -98,6 +105,7 @@ unsafe extern "system" {
     fn PolyGdiAttachSurfaceRowsTo(hdc: usize, surface_hwnd: usize, width: u32, total: u32, skip: u32, rows: u32)
     -> i32;
     fn PolyGdiSurface(hwnd: usize, out: *mut u64) -> i32;
+    fn PolyGdiTakeSurfaceDrawn(hwnd: usize, out: *mut i32) -> i32;
     fn PolyGdiSetDisplayGeometry(
         hdc: usize,
         x: i32,
@@ -1780,7 +1788,16 @@ pub(crate) fn first_call() {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
     first_call();
-    match metrics::system_metric(index, &u::screen(&SYS)) {
+    // At a system DPI other than 96 (Windows apps in output pixels, ADR 0219) the sizes that
+    // scale are those of that DPI (GetSystemMetricsForDpi.yaml `scaling_table`).
+    let screen = u::screen(&SYS);
+    let dpi = u::system_dpi(&SYS);
+    let v = if dpi == 96 {
+        metrics::system_metric(index, &screen)
+    } else {
+        metrics::system_metric_for_dpi(index, dpi, &screen)
+    };
+    match v {
         Some(v) => v,
         None => {
             set_last_error(ERROR_INVALID_PARAMETER);
@@ -1823,8 +1840,6 @@ pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
 
 // ----- DPI and monitors (one monitor, DPI-unaware processes: 96)
 
-/// The system DPI (GetDpiForSystem.yaml).
-const SYSTEM_DPI: u32 = 96;
 /// The one monitor's handle: the same value for every point and thread.
 const PRIMARY_MONITOR: usize = 0x0001_0001;
 /// `MONITOR_DEFAULTTONULL` / `TOPRIMARY` / `TONEAREST` (winuser.h).
@@ -1837,7 +1852,7 @@ const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForSystem() -> u32 {
-    SYSTEM_DPI
+    u::system_dpi(&SYS)
 }
 
 /// 96 for any window of a DPI-unaware process, the desktop and message
@@ -1845,7 +1860,7 @@ pub extern "system" fn GetDpiForSystem() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForWindow(hwnd: H) -> u32 {
     if hwnd != 0 && info(hwnd).is_some() {
-        SYSTEM_DPI
+        u::system_dpi(&SYS)
     } else {
         set_last_error(ERROR_INVALID_PARAMETER);
         0
@@ -2134,7 +2149,10 @@ fn attach_surface(hwnd: u32, dc: H) -> H {
     dc
 }
 
-/// What the window's DCs drew goes to its surface (`ReleaseDC`).
+/// What the window's DCs drew goes to its surface (`ReleaseDC`): only the rectangle this
+/// process drew since its last commit (ADR 0219). Each process draws into its own copy of the
+/// window's pixels, so the rest of its copy may be older than what another process (Chrome's GPU
+/// process presenting into the browser's window) committed since.
 fn commit_surface(hwnd: H) {
     let hwnd = if hwnd == 0 { 0 } else { top_level_of(hwnd) };
     let mut s = [0u64; 3];
@@ -2142,8 +2160,22 @@ fn commit_surface(hwnd: H) {
     if hwnd == 0 || unsafe { PolyGdiSurface(hwnd, s.as_mut_ptr()) } == 0 {
         return;
     }
-    // SAFETY: win32u's stub; the kernel reads `height` rows of the DIB.
-    unsafe { PolyUserCommitSurface(hwnd as usize, s[0] as usize, s[1] as usize, s[2] as usize, s[1] as usize * 4) };
+    let mut area = [0i32; 4];
+    // SAFETY: our gdi32 writes four i32s.
+    if unsafe { PolyGdiTakeSurfaceDrawn(hwnd, area.as_mut_ptr()) } == 0 {
+        return;
+    }
+    // SAFETY: win32u's stub; the kernel reads the RECT and the rows of the DIB inside it.
+    unsafe {
+        PolyUserCommitSurfaceArea(
+            hwnd as usize,
+            s[0] as usize,
+            s[1] as usize,
+            s[2] as usize,
+            s[1] as usize * 4,
+            area.as_ptr(),
+        )
+    };
 }
 
 /// `WindowFromDC` (BeginPaint.yaml `erase_sent`): the window a DC from

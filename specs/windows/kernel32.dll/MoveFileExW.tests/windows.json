@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "mv_streams",
+      "exe_sha256": "2ce86f68557568483a9d741f500be2ddbdef5f7c0d5b5b1019a5ee200b462d16",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiBzdHJlYW1zIDo6JERBVEE6NCA6Wm9uZS5JZGVudGlmaWVyOiREQVRBOjI2IChlbmQgMzgpCm1vdmU6IDEgdW5jaGFuZ2VkCmFmdGVyOiBzb3VyY2UgYWJzZW50OyB0YXJnZXQgcHJlc2VudCBzaXplPTQgdGV4dD0iZGF0YSIKdGFyZ2V0IHN0cmVhbXM6IDo6JERBVEE6NCA6Wm9uZS5JZGVudGlmaWVyOiREQVRBOjI2IChlbmQgMzgpCnRhcmdldCBzdHJlYW0gY29udGVudDogcHJlc2VudCBzaXplPTI2IHRleHQ9Iltab25lVHJhbnNmZSIKc291cmNlIHN0cmVhbTogYWJzZW50CnJlcGxhY2U6IDE7IHRhcmdldCBzdHJlYW1zIDo6JERBVEE6NiA6Wm9uZS5JZGVudGlmaWVyOiREQVRBOjI2IChlbmQgMzgpOyBzdHJlYW0gY29udGVudCBwcmVzZW50IHNpemU9MjYgdGV4dD0iW1pvbmVUcmFuc2ZlIgpyZXBsYWNlIGJ5IGEgZmlsZSB3aXRob3V0IGEgc3RyZWFtOiAxOyB0YXJnZXQgc3RyZWFtcyA6OiREQVRBOjUgKGVuZCAzOCkKQ29weUZpbGVXIG9mIGEgZmlsZSB3aXRoIGEgc3RyZWFtOiAxOyBjb3B5IHN0cmVhbXMgOjokREFUQTo1IDpab25lLklkZW50aWZpZXI6JERBVEE6MjYgKGVuZCAzOCkKYWZ0ZXIgZGVsZXRpbmcgdGhlIGZpbGU6IHRoZSBzdHJlYW0gaXMgYWJzZW50CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: streams ::$DATA:4 :Zone.Identifier:$DATA:26 (end 38)\nmove: 1 unchanged\nafter: source absent; target present size=4 text=\"data\"\ntarget streams: ::$DATA:4 :Zone.Identifier:$DATA:26 (end 38)\ntarget stream content: present size=26 text=\"[ZoneTransfe\"\nsource stream: absent\nreplace: 1; target streams ::$DATA:6 :Zone.Identifier:$DATA:26 (end 38); stream content present size=26 text=\"[ZoneTransfe\"\nreplace by a file without a stream: 1; target streams ::$DATA:5 (end 38)\nCopyFileW of a file with a stream: 1; copy streams ::$DATA:5 :Zone.Identifier:$DATA:26 (end 38)\nafter deleting the file: the stream is absent\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

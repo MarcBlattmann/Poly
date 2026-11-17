@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "a5492fd16ebc",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:35:26Z",
+  "tests": [
+    {
+      "name": "se_image",
+      "exe_sha256": "52ca881f3387903a012fd427be6aa4ee4553bad9c55954877fa77f94e0175e1f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXg6IDB4MDAwMDAwMDAKdGhlIGltYWdlIGJ5IG5hbWUsIG5vIHZlcmIsIHdpdGggcGFyYW1ldGVyczogcmVzdWx0IDEgZXJyb3IgMCBoSW5zdEFwcCA+IDMyCiAgcHJvY2VzcyB3YWl0IDAgZXhpdCBjb2RlIDQyOyBpdCB3cm90ZTogYWxwaGEgYmV0YQp2ZXJiIG9wZW46IHJlc3VsdCAxIGVycm9yIDAgaEluc3RBcHAgPiAzMgogIHByb2Nlc3Mgd2FpdCAwIGV4aXQgY29kZSA0MjsgaXQgd3JvdGU6IGFscGhhIGJldGEKYSB2ZXJiIHRoZSBmaWxlIGhhcyBub3QsIE5PX1VJOiByZXN1bHQgMCBlcnJvciAxMTU1IGhJbnN0QXBwIDMxClNIUGFyc2VEaXNwbGF5TmFtZSBvZiB0aGUgaW1hZ2U6IDB4MDAwMDAwMDAgc2V0CnRoZSBpbWFnZSBieSBQSURMIChJRExJU1R8Tk9DTE9TRVBST0NFU1N8RERFV0FJVCksIHRoZSBmb2xkZXIgYXMgdGhlIGRpcmVjdG9yeSwgbm8gcGFyYW1ldGVyczogcmVzdWx0IDEgZXJyb3IgMCBoSW5zdEFwcCA+IDMyCiAgcHJvY2VzcyB3YWl0IDAgZXhpdCBjb2RlIDI7IGl0IHdyb3RlOiAobm8gZmlsZSkKdGhlIGltYWdlIGJ5IFBJREwgd2l0aCBwYXJhbWV0ZXJzOiByZXN1bHQgMSBlcnJvciAwIGhJbnN0QXBwID4gMzIKICBwcm9jZXNzIHdhaXQgMCBleGl0IGNvZGUgNDI7IGl0IHdyb3RlOiBhbHBoYSBiZXRhCmEgZmlsZSB0aGF0IGlzIG5vdCB0aGVyZSwgTk9fVUk6IHJlc3VsdCAwIGVycm9yIDIgaEluc3RBcHAgMgphIGZvbGRlciB0aGF0IGlzIG5vdCB0aGVyZSwgTk9fVUk6IHJlc3VsdCAwIGVycm9yIDIgaEluc3RBcHAgMgphIGZpbGUgd2l0aCBhbiBleHRlbnNpb24gbm90aGluZyBpcyBhc3NvY2lhdGVkIHdpdGgsIE5PX1VJOiByZXN1bHQgMCBlcnJvciAyMTQ3NTAwMDY1IGhJbnN0QXBwIDUKY2JTaXplIDg6IHJlc3VsdCAwIGVycm9yIDUgaEluc3RBcHAgNQpjYlNpemUgMDogcmVzdWx0IDAgZXJyb3IgNSBoSW5zdEFwcCA1CmEgd29ya2luZyBkaXJlY3RvcnkgdGhhdCBpcyBub3QgdGhlcmU6IHJlc3VsdCAxIGVycm9yIDAgaEluc3RBcHAgPiAzMgogIHByb2Nlc3Mgd2FpdCAwIGV4aXQgY29kZSA0MjsgaXQgd3JvdGU6IGFscGhhIGJldGEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx: 0x00000000\nthe image by name, no verb, with parameters: result 1 error 0 hInstApp > 32\n  process wait 0 exit code 42; it wrote: alpha beta\nverb open: result 1 error 0 hInstApp > 32\n  process wait 0 exit code 42; it wrote: alpha beta\na verb the file has not, NO_UI: result 0 error 1155 hInstApp 31\nSHParseDisplayName of the image: 0x00000000 set\nthe image by PIDL (IDLIST|NOCLOSEPROCESS|DDEWAIT), the folder as the directory, no parameters: result 1 error 0 hInstApp > 32\n  process wait 0 exit code 2; it wrote: (no file)\nthe image by PIDL with parameters: result 1 error 0 hInstApp > 32\n  process wait 0 exit code 42; it wrote: alpha beta\na file that is not there, NO_UI: result 0 error 2 hInstApp 2\na folder that is not there, NO_UI: result 0 error 2 hInstApp 2\na file with an extension nothing is associated with, NO_UI: result 0 error 2147500065 hInstApp 5\ncbSize 8: result 0 error 5 hInstApp 5\ncbSize 0: result 0 error 5 hInstApp 5\na working directory that is not there: result 1 error 0 hInstApp > 32\n  process wait 0 exit code 42; it wrote: alpha beta\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 306
+    }
+  ]
+}

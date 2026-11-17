@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "cgcc_mta",
+      "exe_sha256": "1c912b385f637f6f87d9ef61515ea53dd28ba0ff5ddf46a25ecd6cbcef32ad80",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXgoTVRBKSA9IDB4MApNVEE6IElTZXJ2ZXJTZWN1cml0eTogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCk1UQTogSVVua25vd246IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApNVEE6IElDb250ZXh0Q2FsbGJhY2s6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApNVEE6IElPYmpDb250ZXh0OiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKTVRBOiBJQ2FsbEZhY3Rvcnk6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApNVEE6IElTZWN1cml0eUNhbGxDb250ZXh0OiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKTVRBOiBJTWFyc2hhbDogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCk1UQTogSURpc3BhdGNoOiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKTVRBOiBHVUlEX05VTEw6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApDb0luY3JlbWVudE1UQVVzYWdlID0gMHgwCmltcGxpY2l0IE1UQTogSVNlcnZlclNlY3VyaXR5OiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKaW1wbGljaXQgTVRBOiBJVW5rbm93bjogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCmltcGxpY2l0IE1UQTogSUNvbnRleHRDYWxsYmFjazogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCmltcGxpY2l0IE1UQTogSU9iakNvbnRleHQ6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZAppbXBsaWNpdCBNVEE6IElDYWxsRmFjdG9yeTogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCmltcGxpY2l0IE1UQTogSVNlY3VyaXR5Q2FsbENvbnRleHQ6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZAppbXBsaWNpdCBNVEE6IElNYXJzaGFsOiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKaW1wbGljaXQgTVRBOiBJRGlzcGF0Y2g6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZAppbXBsaWNpdCBNVEE6IEdVSURfTlVMTDogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx(MTA) = 0x0\nMTA: IServerSecurity: hr=0x80010117 out untouched\nMTA: IUnknown: hr=0x80010117 out untouched\nMTA: IContextCallback: hr=0x80010117 out untouched\nMTA: IObjContext: hr=0x80010117 out untouched\nMTA: ICallFactory: hr=0x80010117 out untouched\nMTA: ISecurityCallContext: hr=0x80010117 out untouched\nMTA: IMarshal: hr=0x80010117 out untouched\nMTA: IDispatch: hr=0x80010117 out untouched\nMTA: GUID_NULL: hr=0x80010117 out untouched\nCoIncrementMTAUsage = 0x0\nimplicit MTA: IServerSecurity: hr=0x80010117 out untouched\nimplicit MTA: IUnknown: hr=0x80010117 out untouched\nimplicit MTA: IContextCallback: hr=0x80010117 out untouched\nimplicit MTA: IObjContext: hr=0x80010117 out untouched\nimplicit MTA: ICallFactory: hr=0x80010117 out untouched\nimplicit MTA: ISecurityCallContext: hr=0x80010117 out untouched\nimplicit MTA: IMarshal: hr=0x80010117 out untouched\nimplicit MTA: IDispatch: hr=0x80010117 out untouched\nimplicit MTA: GUID_NULL: hr=0x80010117 out untouched\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "cgcc_noinit",
+      "exe_sha256": "b7bdfd2f77ea05e826d3c167cae22ab6ae93a828d8ae7e4a22ff59bc9fdbcdf8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gQ09NOiBJU2VydmVyU2VjdXJpdHk6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApubyBDT006IElVbmtub3duOiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKbm8gQ09NOiBJQ29udGV4dENhbGxiYWNrOiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKbm8gQ09NOiBJT2JqQ29udGV4dDogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCm5vIENPTTogSUNhbGxGYWN0b3J5OiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKbm8gQ09NOiBJU2VjdXJpdHlDYWxsQ29udGV4dDogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCm5vIENPTTogSU1hcnNoYWw6IGhyPTB4ODAwMTAxMTcgb3V0IHVudG91Y2hlZApubyBDT006IElEaXNwYXRjaDogaHI9MHg4MDAxMDExNyBvdXQgdW50b3VjaGVkCm5vIENPTTogR1VJRF9OVUxMOiBocj0weDgwMDEwMTE3IG91dCB1bnRvdWNoZWQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no COM: IServerSecurity: hr=0x80010117 out untouched\nno COM: IUnknown: hr=0x80010117 out untouched\nno COM: IContextCallback: hr=0x80010117 out untouched\nno COM: IObjContext: hr=0x80010117 out untouched\nno COM: ICallFactory: hr=0x80010117 out untouched\nno COM: ISecurityCallContext: hr=0x80010117 out untouched\nno COM: IMarshal: hr=0x80010117 out untouched\nno COM: IDispatch: hr=0x80010117 out untouched\nno COM: GUID_NULL: hr=0x80010117 out untouched\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
