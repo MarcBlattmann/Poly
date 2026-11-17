@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/wtsapi32.dll/WTSEnumerateSessionsW.yaml
+id: windows/api/wtsapi32.dll/WTSEnumerateSessionsW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain; the local account \"server\" is logged on at the console, so the console is session 1 and the services run in session 0). wtse_enum_std is recorded with -Token standard (poly-oracle.ps1: a one-time task in that interactive session 1 with the administrator's filtered token; identical with -Token elevated), wtse_args and wtse_shape with the SSH logon's token (session 0; identical in all three kinds). Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for WTSEnumerateSessionsW, WTS_SESSION_INFOW, WTS_CONNECTSTATE_CLASS (WTSActive 0, WTSConnected 1, WTSConnectQuery 2, WTSShadow 3, WTSDisconnected 4, WTSIdle 5, WTSListen 6, WTSReset 7, WTSDown 8, WTSInit 9), WTSFreeMemory and WTSOpenServerW and the public SDK header wtsapi32.h; error codes from winerror.h. Google's installers import it (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Lists the sessions of a machine (here the current one: server handle NULL): an array of WTS_SESSION_INFOW {DWORD SessionId; LPWSTR pWinStationName; WTS_CONNECTSTATE_CLASS State} (24 bytes each on x64) and the number of entries, in one memory block the caller frees with WTSFreeMemory. Session 0 is always the first entry, named "Services", disconnected (4); the console session of a logged-on user is named "Console" and is active (0). Reserved must be 0 and Version 1.
+interface:
+  signature: "BOOL WTSEnumerateSessionsW(HANDLE hServer, DWORD Reserved, DWORD Version, PWTS_SESSION_INFOW *ppSessionInfo, DWORD *pCount)"
+  free: "void WTSFreeMemory(PVOID pMemory); NULL is accepted"
+rules:
+  success: "hServer NULL (WTS_CURRENT_SERVER_HANDLE), Reserved 0, Version 1: TRUE; the count is at least 1; repeated calls give the same count; every call gives memory that WTSFreeMemory frees."
+  entries: "the ids are unique and ascending; session 0 is listed first, its name is \"Services\" and its state 4 (WTSDisconnected); the console session (WTSGetActiveConsoleSessionId) is listed, named \"Console\", state 0 (WTSActive); the caller's own session is listed too (in the interactive session its state is 0; for a program in the SSH logon, session 0, it is 4); every name is non-empty, every state is in 0..9, and the name strings are stored in the same allocation, right after the array."
+  server_handle: "WTSOpenServerW(\"localhost\") gives a handle that works like NULL (TRUE, the array filled); it is closed with WTSCloseServer."
+  bad_arguments: "Reserved 1, Version 0 and Version 2: FALSE, ERROR_INVALID_PARAMETER (87), and the outputs are set to NULL and 0 (not left alone). A NULL ppSessionInfo or a NULL pCount: FALSE, ERROR_INVALID_USER_BUFFER (1784); with both NULL nothing is written."
+  token: "the standard (filtered) and the elevated administrator token see the same sessions and names."
+errors:
+  invalid_parameter: "87"
+  invalid_user_buffer: "1784"
+side_effects: "allocates the result block (WTSFreeMemory frees it)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "a millisecond or less per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), three files: the array of the interactive session (wtse_enum_std), arguments (wtse_args) and the shape of the array over three rounds (wtse_shape). Each file declares what it calls from Learn's prototypes. The tests print the names "Services" and "Console", states and relations, never the session numbers or the names of other sessions (a remote desktop session has a machine-specific name such as RDP-Tcp#0).
+not_covered: >
+  Other servers (a name that is not this machine), remote desktop and disconnected user sessions, more than the two sessions of a logged-on console machine, the order of entries beyond "ascending ids", a 32-bit caller.

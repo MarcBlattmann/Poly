@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "pic_errors",
+      "exe_sha256": "fc8b32aea91054f6998a7bff58b3eacd816926afead15d57118f7e3a047e4e7f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d3JvdGUgdGhlIGJpdG1hcDogdHJ1ZQpyZWxhdGl2ZSBuYW1lOiBocj0weDgwMGMwMDBkIG91dCBOVUxMCm1pc3NpbmcgZmlsZTogaHI9MHg4MDBjMDAwNSBvdXQgTlVMTAplbXB0eSBwYXRoOiBocj0weDgwMGMwMDBkIG91dCBOVUxMCndyb3RlIGdhcmJhZ2UgLmJtcDogdHJ1ZQpnYXJiYWdlIGNvbnRlbnQ6IGhyPTB4ODAwMDQwMDUgb3V0IE5VTEwKd3JvdGUgZW1wdHkgZmlsZTogdHJ1ZQplbXB0eSBmaWxlOiBocj0weDgwMDA0MDA1IG91dCBOVUxMCmEgZGlyZWN0b3J5OiBocj0weDgwMGMwMDE1IG91dCBOVUxMCk5VTEwgcGF0aDogaHI9MHg4MDA3MDA1NyBvdXQgdW50b3VjaGVkOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "wrote the bitmap: true\nrelative name: hr=0x800c000d out NULL\nmissing file: hr=0x800c0005 out NULL\nempty path: hr=0x800c000d out NULL\nwrote garbage .bmp: true\ngarbage content: hr=0x80004005 out NULL\nwrote empty file: true\nempty file: hr=0x80004005 out NULL\na directory: hr=0x800c0015 out NULL\nNULL path: hr=0x80070057 out untouched: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 68
+    },
+    {
+      "name": "pic_gif",
+      "exe_sha256": "824b378556ebb675ba18a27753fa7df4273a00bc78ab65ab07211719b159d2f1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d3JvdGUgdGhlIGdpZjogdHJ1ZQpwb2x5LXBpYy5naWY6IGhyPTB4MDAwMDAwMDAgb3V0IHNldApJUGljdHVyZTogdHlwZSAxIHdpZHRoIDI2IGhlaWdodCAyNiBociAwIDAgMAp3cm90ZSB0aGUgYml0bWFwIGFzIC5naWY6IHRydWUKYml0bWFwIGNvbnRlbnQgaW4gYSAuZ2lmIG5hbWU6IGhyPTB4MDAwMDAwMDAgb3V0IHNldApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "wrote the gif: true\npoly-pic.gif: hr=0x00000000 out set\nIPicture: type 1 width 26 height 26 hr 0 0 0\nwrote the bitmap as .gif: true\nbitmap content in a .gif name: hr=0x00000000 out set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

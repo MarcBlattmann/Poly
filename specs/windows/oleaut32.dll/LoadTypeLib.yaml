@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/LoadTypeLib.yaml
+id: windows/api/oleaut32.dll/LoadTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators) in the SSH logon session (session 0, elevated administrator token); the same tests gave identical output with -Token standard and -Token elevated (interactive session 1, the administrator's filtered and full token). Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for LoadTypeLib, ITypeLib (GetTypeInfoCount, GetLibAttr, GetDocumentation, ReleaseTLibAttr), TLIBATTR, "Type Libraries and the Object Description Language" and the public SDK headers oaidl.h, oleauto.h and winerror.h (TYPE_E_CANTLOADLIBRARY 0x80029C4A, STG_E_FILENOTFOUND 0x80030002). oleaut32 exports it as ordinal 161 (the name found in the DLL's export table, both the 64-bit and the 32-bit DLL); the 32-bit Chrome installers import it by that ordinal, the updater's 37 interfaces are marshalled through a type library kept as a resource of updater.exe, resource 4 (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Loads a type library from a file and returns its ITypeLib. The file may be a standalone type library (stdole2.tlb) or a module (an exe or DLL) that holds the library as a TYPELIB resource: the module name alone loads resource 1, and "module\N" (a backslash and a decimal resource index) loads resource N. Any file that cannot be read as a type library, a missing resource, a directory and a non-existent file all fail with TYPE_E_CANTLOADLIBRARY (0x80029C4A); the empty string fails with STG_E_FILENOTFOUND (0x80030002). On failure *pptlib is set to NULL. The file name alone ("stdole2.tlb") is searched for on the normal path (System32) and found.
+interface:
+  signature: "HRESULT LoadTypeLib(LPCOLESTR szFile, ITypeLib **pptlib)"
+rules:
+  stdole2: "LoadTypeLib(\"C:\\Windows\\System32\\stdole2.tlb\") (and the bare name \"stdole2.tlb\"): S_OK, an ITypeLib with more than 0 type infos; GetLibAttr: guid {00020430-0000-0000-C000-000000000046}, version 2.0, lcid 0, flags 0x8 (LIBFLAG_FHASDISKIMAGE); GetDocumentation(-1) name \"stdole\"."
+  module_resource: "LoadTypeLib(\"C:\\Windows\\System32\\scrrun.dll\") and \"...\\scrrun.dll\\1\": S_OK, the same library: guid {420B2830-E718-11CF-893D-00A0C9054228}, version 1.0, lcid 0, flags 0x8, name \"Scripting\", more than 0 type infos."
+  failures: "\"...\\scrrun.dll\\2\", \"...\\scrrun.dll\\0\" and \"...\\scrrun.dll\\x\" (no such resource, a zero index, not a number), \"C:\\Windows\\System32\\kernel32.dll\" (a module without a TYPELIB resource), \"C:\\Windows\\no-such-file.tlb\", \"C:\\Windows\" (a directory) and \"Z:\\no.tlb\" (no such drive): 0x80029C4A and *pptlib is NULL. The empty string: 0x80030002 and *pptlib NULL."
+  output_on_failure: "the pointer is written (NULL) even on failure, unlike CoGetCallContext."
+errors:
+  cant_load_library: "0x80029C4A (TYPE_E_CANTLOADLIBRARY)"
+  file_not_found: "0x80030002 (STG_E_FILENOTFOUND), for the empty name"
+side_effects: "none observable (nothing is registered; RegisterTypeLib does that); the library object is released with Release"
+threading: "free-threaded: the library object may be used from any apartment"
+ordering: []
+timing:
+  typical: "a millisecond or two for the first load of a library on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), two files: libraries that load (tlb_files: stdole2.tlb and scrrun.dll, which both exist in System32 of every Windows 11) and failures (tlb_errors). The ITypeLib methods used are called through the vtable (slot 3 GetTypeInfoCount, 7 GetLibAttr, 9 GetDocumentation, 12 ReleaseTLibAttr). Each file declares what it calls from Learn's prototypes. On Poly the test needs those two files in C:\Windows\System32 (the implementer may supply a type library of its own with the same guid).
+not_covered: >
+  The type infos themselves (ITypeInfo, GetTypeInfoOfGuid, GetNames), registration (RegisterTypeLib, LoadRegTypeLib), a 32-bit caller (the same file loads for the 32-bit DLL; its SYSKIND differs), a type library inside a loaded 64-bit updater.exe (resource 4; not observed here because Google's updater is not run on the oracle by this track), a library that depends on another, localized "LCID" directories, the search of the bare name beyond System32.

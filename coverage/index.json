@@ -33,6 +33,14 @@
       "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
       "revision": "Windows SDK 10.0.26100.0"
     },
+    "ms-learn-systemtemp": {
+      "description": "Microsoft Learn file system and temporary file reference: the C:\\Windows\\SystemTemp directory that installers extract into, observed by the spec agents (spec-win-elevation); entries named by directory",
+      "revision": "Windows 11 25H2 build 26200.9974"
+    },
+    "ms-learn-volume": {
+      "description": "Microsoft Learn volume management and CreateFile reference (opening a volume as \\\\.\\C: or \\??\\C:), observed by the spec agents (spec-win-elevation); entries named by operation",
+      "revision": "Windows 11 25H2 build 26200.9974"
+    },
     "ms-learn-winuser": {
       "description": "Microsoft Learn window messages and system commands of user32 (winuser.h): behaviour that is not an export, entries named by message or command (WM_NCHITTEST, WM_ENTERSIZEMOVE, WM_MOUSEHWHEEL, SC_MAXIMIZE; spec-win-input)",
       "revision": "Windows SDK 10.0.26100.0"
