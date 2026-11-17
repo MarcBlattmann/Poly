@@ -121,6 +121,27 @@ pub fn places(home: &str, user_dirs: Option<&str>, mounts: &str, exists: &dyn Fn
     out
 }
 
+/// The variable of the desktop's environment that names the home of the
+/// user the desktop runs apps as (ADR 0218), where it is not the user Files
+/// runs as: Files is Poly's own program (no Linux user of its own, the
+/// desktop's), the browsers save into that user's Downloads.
+pub const APPS_USER_HOME: &str = "POLY_APPS_USER_HOME";
+
+/// `places` with the Downloads folder of the user the desktop runs apps as
+/// (`apps_home`, [`APPS_USER_HOME`]) after Home, labelled Downloads, when
+/// it exists and the list has no Downloads place of its own: what a browser
+/// downloaded is one click away.
+pub fn with_apps_user_downloads(mut places: Vec<Place>, apps_home: Option<&str>, exists: &dyn Fn(&str) -> bool) -> Vec<Place> {
+    let Some(apps_home) = apps_home.filter(|h| h.starts_with('/')) else { return places };
+    let path = crate::path::join(&normalize(apps_home), "Downloads");
+    if places.iter().any(|p| p.kind == PlaceKind::Downloads || p.path == path) || !exists(&path) {
+        return places;
+    }
+    let at = places.iter().position(|p| p.kind == PlaceKind::Home).map_or(0, |i| i + 1);
+    places.insert(at, Place { label: "Downloads".into(), path, icon: PlaceIcon::Downloads, kind: PlaceKind::Downloads });
+    places
+}
+
 /// `places` with the Applications folder (ADR 0175) before Computer: for
 /// Files, not for a file picker (an app is not a file to pick).
 pub fn with_applications(mut places: Vec<Place>) -> Vec<Place> {
@@ -271,6 +292,23 @@ pub fn unescape_octal(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_apps_users_downloads_join_the_places_of_roots_files() {
+        let exists = |p: &str| p == "/home/poly/Downloads";
+        let base = places("/root", None, "", &exists);
+        let with = with_apps_user_downloads(base.clone(), Some("/home/poly"), &exists);
+        let labels: Vec<(&str, &str)> = with.iter().map(|p| (p.label.as_str(), p.path.as_str())).collect();
+        assert_eq!(labels[..2], [("Home", "/root"), ("Downloads", "/home/poly/Downloads")]);
+        assert_eq!(with[1].kind, PlaceKind::Downloads);
+        // Not set, not there, or Home has its own Downloads: unchanged.
+        assert_eq!(with_apps_user_downloads(base.clone(), None, &exists), base);
+        assert_eq!(with_apps_user_downloads(base.clone(), Some("/home/other"), &exists), base);
+        let own = |p: &str| p == "/home/poly/Downloads";
+        let poly = places("/home/poly", None, "", &own);
+        assert_eq!(with_apps_user_downloads(poly.clone(), Some("/home/poly"), &own), poly);
+    }
+
     use super::*;
 
     const MOUNTS: &str = "\

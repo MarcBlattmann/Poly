@@ -1459,7 +1459,9 @@ exec /usr/local/bin/poly-compositor --desktop $ARGS
 /// display the compositor offers (`:0`, the first free number; where the disk
 /// has Xwayland), and no question asked by `apt` and what it runs (debconf(7):
 /// `tzdata` asked for a time zone on the console and waited for ever).
-const SESSION_ENV: &str = "# X11 apps: the display the compositor owns, where there is an X server.
+const SESSION_ENV: &str = "# The home of the user the desktop runs apps as (ADR 0218): Files lists its Downloads.
+export POLY_APPS_USER_HOME=/home/poly
+# X11 apps: the display the compositor owns, where there is an X server.
 [ -x /usr/bin/Xwayland ] && export DISPLAY=:0
 # apt and dpkg ask nothing (debconf(7)).
 export DEBIAN_FRONTEND=noninteractive
