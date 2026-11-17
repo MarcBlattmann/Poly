@@ -41,6 +41,7 @@ mod memory;
 mod misc;
 mod mitigation;
 mod nls;
+mod nlsfmt;
 mod npipe;
 mod nt;
 mod pathcch;

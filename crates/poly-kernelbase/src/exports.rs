@@ -492,6 +492,16 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // timezoneapi.h, sysinfoapi.h, winbase.h, wow64apiset.h).
     ("GetLocaleInfoEx", "api-ms-win-core-localization-l1-2-0"),
     ("IsValidLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    // Group L of the Chrome installer's batch B0: locale names, enumerations, date and time formats.
+    ("EnumSystemLocalesEx", "api-ms-win-core-localization-l1-2-0"),
+    ("EnumSystemLocalesW", "api-ms-win-core-localization-l1-2-0"),
+    ("GetDateFormatEx", "api-ms-win-core-localization-l1-2-0"),
+    ("GetDateFormatW", "api-ms-win-core-localization-l1-2-0"),
+    ("GetTimeFormatEx", "api-ms-win-core-localization-l1-2-0"),
+    ("GetTimeFormatW", "api-ms-win-core-localization-l1-2-0"),
+    ("LCIDToLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    ("LocaleNameToLCID", "api-ms-win-core-localization-l1-2-0"),
+    ("GetUserPreferredUILanguages", "api-ms-win-core-localization-l1-2-0"),
     ("GetUserGeoID", "api-ms-win-core-localization-l1-2-0"),
     ("GetGeoInfoW", "api-ms-win-core-localization-l1-2-0"),
     ("GetTimeZoneInformation", "api-ms-win-core-timezone-l1-1-0"),

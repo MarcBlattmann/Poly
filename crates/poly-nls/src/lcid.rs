@@ -668,7 +668,9 @@ mod tests {
 
     #[test]
     fn the_grammar_of_a_name() {
-        for good in ["zz", "xx-XX", "aa-bb-cc-dd-ee", "i-klingon", "de-DE-1996", "de-u-co-phonebk", "en-US_tradnl", "iv"] {
+        for good in
+            ["zz", "xx-XX", "aa-bb-cc-dd-ee", "i-klingon", "de-DE-1996", "de-u-co-phonebk", "en-US_tradnl", "iv"]
+        {
             assert!(is_well_formed(&w(good)), "{good}");
         }
         let long = "a".repeat(84);

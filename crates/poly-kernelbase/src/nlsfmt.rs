@@ -320,7 +320,8 @@ pub fn enum_lcids(flags: u32) -> Result<Vec<Vec<u16>>, u32> {
 /// of them; `LOCALE_SUPPLEMENTAL` adds nothing (there are no supplemental locales). Any other
 /// flag is `ERROR_INVALID_FLAGS`.
 pub fn enum_names(flags: u32) -> Result<Vec<(Vec<u16>, u32)>, u32> {
-    let known = LOCALE_WINDOWS | LOCALE_SUPPLEMENTAL | LOCALE_ALTERNATE_SORTS | LOCALE_NEUTRALDATA | LOCALE_SPECIFICDATA;
+    let known =
+        LOCALE_WINDOWS | LOCALE_SUPPLEMENTAL | LOCALE_ALTERNATE_SORTS | LOCALE_NEUTRALDATA | LOCALE_SPECIFICDATA;
     if flags & !known != 0 {
         return Err(ERROR_INVALID_FLAGS);
     }
@@ -425,7 +426,10 @@ mod tests {
         assert_eq!(date_ex("en-US", 0x80, &d), Err(ERROR_INVALID_FLAGS));
         assert_eq!(date_ex("en-US", DATE_SHORTDATE | DATE_LONGDATE, &d), Err(ERROR_INVALID_FLAGS));
         assert_eq!(date_ex("en-US", 0x30, &d), Err(ERROR_INVALID_FLAGS));
-        assert_eq!(date_ex("en-US", DATE_AUTOLAYOUT, &st(2024, 3, 5, 0, 0, 0, 0)).unwrap(), "\u{200E}3/\u{200E}5/\u{200E}2024");
+        assert_eq!(
+            date_ex("en-US", DATE_AUTOLAYOUT, &st(2024, 3, 5, 0, 0, 0, 0)).unwrap(),
+            "\u{200E}3/\u{200E}5/\u{200E}2024"
+        );
         assert_eq!(date_ex("en-US", 0, &st(2023, 2, 29, 0, 0, 0, 0)), Err(ERROR_INVALID_PARAMETER));
         let p = formats_of_name(None).unwrap();
         assert_eq!(date_text(p, DATE_LONGDATE, &d, Some(&w("d"))), Err(ERROR_INVALID_FLAGS));

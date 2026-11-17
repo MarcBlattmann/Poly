@@ -287,10 +287,7 @@ pub fn profile(name: &str) -> &'static Profile {
     }
     let language = name.split(['-', '_']).next().unwrap_or("");
     let language = if language == "en" { "en-GB" } else { language };
-    PROFILES
-        .iter()
-        .find(|p| p.name == language || p.name.split('-').next() == Some(language))
-        .unwrap_or(&INVARIANT)
+    PROFILES.iter().find(|p| p.name == language || p.name.split('-').next() == Some(language)).unwrap_or(&INVARIANT)
 }
 
 /// The days of a month (Gregorian).
@@ -298,7 +295,7 @@ pub fn days_in_month(year: u32, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => 29,
         2 => 28,
         _ => 0,
     }
@@ -455,7 +452,7 @@ pub fn format_time(picture: &[u16], hour: u32, minute: u32, second: u32, flags: 
                 let width = if n >= 2 { 2 } else { 0 };
                 match l {
                     b'h' if flags & TIME_FORCE24HOURFORMAT == 0 => {
-                        push_number(&mut out, if hour % 12 == 0 { 12 } else { hour % 12 }, width)
+                        push_number(&mut out, if hour.is_multiple_of(12) { 12 } else { hour % 12 }, width)
                     }
                     b'h' | b'H' => push_number(&mut out, hour, width),
                     b'm' => push_number(&mut out, minute, width),
