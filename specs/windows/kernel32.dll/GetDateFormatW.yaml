@@ -1,0 +1,88 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetDateFormatW.yaml
+id: windows/api/kernel32.dll/GetDateFormatW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  Formats the date part of a SYSTEMTIME as text for a locale given by LCID: a short date (the default), a long date, a
+  year and month, or a caller's picture.
+interface:
+  signature: "int GetDateFormatW(LCID Locale, DWORD dwFlags, const SYSTEMTIME *lpDate, LPCWSTR lpFormat, LPWSTR lpDateStr, int cchDate)"
+rules:
+  short: >-
+    No flag and DATE_SHORTDATE 1 give the locale's short date; for 2024-03-05 and 2025-11-05: en-US "3/5/2024"
+    "11/5/2025", en-GB, fr-FR and it-IT "05/03/2024" "05/11/2025", de-DE and de-CH "05.03.2024" "05.11.2025", invariant
+    "03/05/2024" "11/05/2025", ja-JP "2024/03/05" "2025/11/05". The earliest date, 1601-01-01, gives "01/01/1601" in
+    en-GB.
+  long: >-
+    DATE_LONGDATE 2: en-US "Tuesday, March 5, 2024", en-GB "05 March 2024", de-DE and de-CH "Dienstag, 5. März 2024"
+    (U+00E4), fr-FR "mardi 5 mars 2024" (lower case), it-IT "martedì 5 marzo 2024" (U+00EC), invariant "Tuesday, 05 March
+    2024", ja-JP "2024年3月5日" (U+5E74 U+6708 U+65E5, no padding).
+  yearmonth: >-
+    DATE_YEARMONTH 8: en-US, en-GB "March 2024", de "März 2024", fr-FR "mars 2024", it-IT "marzo 2024", invariant "2024
+    March" (year first), ja-JP "2024年3月".
+  flags: >-
+    DATE_USE_ALT_CALENDAR 4 is accepted (Gregorian text). DATE_LTRREADING 0x10 and DATE_RTLREADING 0x20 put U+200E,
+    respectively U+200F, before each component of the short date ("‎3/‎5/‎2024"); both together fail. DATE_AUTOLAYOUT 0x40
+    acts as 0x10 for en-US and works with a picture and with LONGDATE. LOCALE_NOUSEROVERRIDE 0x80000000 and
+    LOCALE_USE_CP_ACP 0x40000000 are accepted and change nothing for explicit locales. SHORT|LONG, SHORT|YEARMONTH,
+    LONG|YEARMONTH, 0x80 (DATE_MONTHDAY) alone or with LONG, 0x100, 0x1000 and 0xFFFFFFFF fail with ERROR_INVALID_FLAGS
+    1004. SHORT, LONG and YEARMONTH combined with a picture fail with 1004; only the layout flags (0x40) are allowed with
+    a picture.
+  picture: >-
+    d (day without padding), dd (day padded to two), ddd (abbreviated weekday: Tue, Di, mar.), dddd (weekday name; ddddd
+    and longer behave as dddd); M, MM (month number), MMM (abbreviated name: Mar, Mär, mars), MMMM (full name; five Ms as
+    four); y and yy (two-digit year "24"), yyy and yyyy and more (four digits); g, gg, ggg the era ("A.D." in en-US).
+    Quoted text is literal ("Day 5 of March"), the empty picture gives the empty string (result 1), unknown letters are
+    copied (x, h, H, t are not date letters: "h:mm tt" is copied as it is), spaces are kept. The weekday comes from the
+    date: the wDayOfWeek member of the SYSTEMTIME is ignored (values 0, 3, 6, 7, 99 all give Sunday for 2024-07-14).
+  names: >-
+    Month and day names of en-US, de-CH, fr-FR and the invariant locale for all twelve months and seven weekdays are in
+    the tests (en-US Sunday..Saturday and Sun..Sat; de-CH Sonntag..Samstag, So Mo Di Mi Do Fr Sa; fr-FR dimanche..samedi
+    with abbreviations dim. lun. mar. mer. jeu. ven. sam.).
+  size: >-
+    As GetTimeFormatW: cchDate 0 returns the size needed including the NUL (9 for "3/5/2024"), a short buffer fails with
+    122 and is not written, NULL buffer with cchDate > 0 and negative cchDate fail with 87.
+  date: >-
+    The date is validated: month 0 or 13, day 0 or 32, February 30, February 29 in 2023 and 1900 (but not 2000 or 2024),
+    April 31, year 1600 and year 30828 and above, year 0 and 65535 fail with ERROR_INVALID_PARAMETER 87; year 1601 and
+    30827 work. Hour, minute, second and milliseconds are not looked at (hour 99 formats fine). A NULL SYSTEMTIME means
+    today.
+  locale: >-
+    As GetTimeFormatW: 0x400, 0, 0x1000 and 0x2000 are the user default (equal to the user's own LCID), 0x800 the system
+    default, 0x1007F the invariant text, 0x9 neutral English the US text; unknown LCIDs and 0x10409 fail with 87.
+errors:
+  invalid_flags: "1004"
+  buffer_too_small: "122"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

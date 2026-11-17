@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/EnumSystemLocalesEx.yaml
+id: windows/api/kernelbase.dll/EnumSystemLocalesEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  Calls a callback with the name of each locale of a kind (Windows locales, neutral or specific, alternate sorts),
+  together with a flag saying which kind it is and the caller's lParam, on the calling thread, until the list ends or
+  the callback returns FALSE.
+interface:
+  signature: "BOOL EnumSystemLocalesEx(LOCALE_ENUMPROCEX lpLocaleEnumProcEx, DWORD dwFlags, LPARAM lParam, LPVOID lpReserved)    /* BOOL CALLBACK LOCALE_ENUMPROCEX(LPWSTR lpLocaleString, DWORD dwFlags, LPARAM lParam) */"
+rules:
+  flags: >-
+    LOCALE_WINDOWS 1, LOCALE_ALTERNATE_SORTS 4, LOCALE_NEUTRALDATA 0x10, LOCALE_SPECIFICDATA 0x20 are the kinds; flags 0
+    lists Windows locales, neutral and specific, and alternate sorts (everything in the tests is present: en-US, en,
+    de-CH, de, fr-FR, "" the invariant locale, de-DE, fr, en-GB, ja-JP, zh-CN, zh-Hans, de-DE_phoneb, ja-JP_radstr),
+    WINDOWS (1) all Windows locales without the alternate sorts, NEUTRALDATA (0x10) the neutral ones only (en, de, fr,
+    zh-Hans and the invariant ""), SPECIFICDATA (0x20) the specific ones only (en-US, de-CH, fr-FR, en-GB, zh-CN, ja-JP
+    ...), 0x30 both, ALTERNATE_SORTS (4) only de-DE_phoneb, ja-JP_radstr, es-ES_tradnl, x-IV_mathan and the like (under
+    100), 5 and 0x14 and 0x24 add the alternate sorts to the others. Adding LOCALE_WINDOWS to the neutral or specific kind
+    (0x11, 0x21, 0x31) changes none of the names looked for. Counts: every list but the alternate sorts has over 300
+    names, the specific list has more names than the neutral one, count(0x30) = count(0x10) + count(0x20), the neutral and
+    the specific lists do not share a name. LOCALE_SUPPLEMENTAL 2 alone lists nothing and succeeds; 3 lists the same as 1.
+    Fails with ERROR_INVALID_FLAGS 1004 with no callback call: 8 (LOCALE_REPLACEMENT), 0x40, 0x100, 0xFFFFFFFF. qps-ploc,
+    !x-sys-default-locale, en-US_tradnl and zh-Hans-CN are not listed.
+  callback_flags: >-
+    The second callback argument says what the locale is: 0x11 (neutral data, LOCALE_WINDOWS|LOCALE_NEUTRALDATA), 0x21
+    (specific), 0x4 (alternate sort); only these three values occur. lParam is passed through unchanged, with every bit of
+    a 64-bit value.
+  order: >-
+    Names are ASCII, sorted ascending (case-insensitively), the same on every call, delivered on the calling thread.
+  stopping: >-
+    A callback returning FALSE after its n-th call (1, 2, 3, 10) ends the enumeration there and the function returns TRUE
+    with no error set.
+  errors: >-
+    lpReserved must be NULL: a non-NULL pointer fails with ERROR_INVALID_PARAMETER 87 with no callback call. A NULL
+    callback fails with 87 (flags 1 and 0). Invalid flags fail with 1004.
+errors:
+  invalid_flags: "1004"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  The exact number of locales (only lower bounds), the exact set outside the names listed.

@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetDriveTypeW.yaml
+id: windows/api/kernel32.dll/GetDriveTypeW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Run in all three token kinds: the SSH logon session (session 0, elevated administrator token), and with -Token standard and -Token elevated (the interactive session 1 with the administrator's filtered and full token). The answers were identical in all three; the tests are recorded once, with the SSH logon's token. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's page for GetDriveTypeW and the public SDK header fileapi.h / winbase.h (DRIVE_UNKNOWN 0, DRIVE_NO_ROOT_DIR 1, DRIVE_REMOVABLE 2, DRIVE_FIXED 3, DRIVE_REMOTE 4, DRIVE_CDROM 5, DRIVE_RAMDISK 6). The call stops Google's Chrome installers (ChromeSetup.exe, ChromeStandaloneSetup64.exe) on Poly (survey-chrome-installer, docs/windows/chrome-installer-plan.md): both call it on the system drive and then end the process if it fails. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The kind of the drive whose root a path names. The installers ask it for "C:\" and treat 3 (DRIVE_FIXED) as an ordinary local disk. The system drive of the oracle answers 3; a drive letter nobody uses answers 1 (DRIVE_NO_ROOT_DIR), never 0 (DRIVE_UNKNOWN). The call never fails in a way a program can see: it returns a number and sets no error that the tests rely on.
+interface:
+  signature: "UINT GetDriveTypeW(LPCWSTR lpRootPathName)"
+  constants: "DRIVE_UNKNOWN 0, DRIVE_NO_ROOT_DIR 1, DRIVE_REMOVABLE 2, DRIVE_FIXED 3, DRIVE_REMOTE 4, DRIVE_CDROM 5, DRIVE_RAMDISK 6 (winbase.h)"
+returns:
+  system_drive: "\"C:\\\", \"c:\\\" (case does not matter), \"C:\" (no backslash), \"C:/\" (forward slash), \"C:\\\\\" (two backslashes), \"C:\\.\", \"C:\\..\", \"C:\\ \" (a trailing blank): all 3."
+  root_by_trailing_backslash: "a path below the root answers for its drive only when it ends in a backslash: \"C:\\Windows\\\" gives 3 while \"C:\\Windows\" (a directory without the backslash), \"C:\\Windows\\System32\\kernel32.dll\" (a file) and \"C:\\nonexistent-dir-xyz\\\" all give 1. Names without a trailing backslash that are not one of the spellings under system_drive (a directory, a file, a name that does not exist) give 1."
+  prefixes: "\"\\\\?\\C:\\\", \"\\\\.\\C:\\\" and \"\\??\\C:\\\" give 3; \"\\\\?\\C:\" and \"\\\\.\\C:\" (no trailing backslash) give 1; \"\\\\?\\GLOBALROOT\\\" gives 1."
+  no_drive: "\"\\\" (the root of the current drive) gives 3; \"\\Windows\", \"Windows\" (relative), \" \" (a blank), \"CONOUT$\" and \"NUL\" give 1; the empty string gives 1."
+  unused_letter: "the last unused letter, as \"X:\\\" and as \"X:\": 1. \"1:\\\" and \"[:\\\" (not letters): 1."
+  null: "NULL means the root of the drive of the current directory: 3 with the current directory on C:, and it follows SetCurrentDirectoryW (still 3 after a change to C:\\Windows)."
+  remote: "a UNC root of a computer that does not exist (\"\\\\no-such-host-xyz\\share\\\") gives 1."
+  length: "a 299-letter name gives 1; \"C:\\\" followed by 4996 letters gives 1 (no length error)."
+  agreement: "every string GetLogicalDriveStringsW returns gives 2 or more (a drive that exists is never 0 or 1); C:\\ is listed; GetVolumeInformationW(\"C:\\\") reports the file system NTFS and GetDiskFreeSpaceExW succeeds; repeated calls give the same answer."
+errors:
+  none: "the function reports unusable names through its return value (1 for a root that does not exist, 0 for a drive whose type cannot be determined) and the tests do not rely on the last error."
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle for local drives"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, three files with different groups of names. Each file declares what it calls from Learn's prototypes. Observations are return values and relations, never addresses, handles, process ids, times or machine-dependent text. The tests assume drive C: is a local NTFS disk, and use GetLogicalDrives only to pick an unused drive letter.
+not_covered: >
+  Removable, CD-ROM, RAM and network drives (the oracle has none; the survey's installers only ask about C:), UNC names of computers that exist (the Server service of the machine decides: "\\localhost\C$\" gave 4, "\\localhost\ipc$\" gave 0), a 32-bit caller (the answers do not depend on the caller's bitness as far as known).

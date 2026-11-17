@@ -34,7 +34,7 @@
 {"symbol":"CoGetActivationState","src":["wine-spec"]},
 {"symbol":"CoGetApartmentID","src":["wine-spec"]},
 {"symbol":"CoGetApartmentType","src":["wine-spec"],"seeds":["wine:combase/tests/roapi.c:test_apartment_context_","wine:combase/tests/roapi.c:test_implicit_mta","wine:combase/tests/roapi.c:unk_ctx_impl_create"]},
-{"symbol":"CoGetCallContext","src":["wine-spec"]},
+{"symbol":"CoGetCallContext","status":"claimed","claimed_by":"spec-win-elevation","src":["wine-spec"]},
 {"symbol":"CoGetCallState","src":["wine-spec"]},
 {"symbol":"CoGetCallerTID","src":["wine-spec"]},
 {"symbol":"CoGetCancelObject","src":["wine-spec"]},

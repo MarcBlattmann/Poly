@@ -552,6 +552,7 @@ mod tests {
             size: 0,
             imports: Default::default(),
             session: None,
+            token: None,
         }
     }
 

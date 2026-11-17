@@ -1,0 +1,85 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetTimeFormatW.yaml
+id: windows/api/kernel32.dll/GetTimeFormatW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  Formats the time part of a SYSTEMTIME as text for a locale given by LCID: the locale's own time pattern, or a caller's
+  picture. Returns the number of characters written including the NUL, or, with a zero-size buffer, the number needed.
+interface:
+  signature: "int GetTimeFormatW(LCID Locale, DWORD dwFlags, const SYSTEMTIME *lpTime, LPCWSTR lpFormat, LPWSTR lpTimeStr, int cchTime)"
+rules:
+  patterns: >-
+    For the explicit locales (output is fixed text on this build): en-US "h:mm:ss tt" (7:08:09 AM, 12:00:00 AM at
+    midnight, 12:00:00 PM at noon, 11:59:58 PM), en-GB, de-DE, de-CH, fr-FR, it-IT and the invariant locale (0x7F)
+    "HH:mm:ss" (07:08:09, 00:00:00, 23:59:58), ja-JP "H:mm:ss" (7:08:09, 0:00:00, 15:30:45). The AM/PM markers are the
+    plain ASCII "AM" and "PM". LCID 0x409 and 0x9 (neutral English) agree. The explicit locales ignore the user's Region
+    overrides; only LCIDs that mean the user default (0x400, 0, 0x1000, 0x2000, the user's own LCID) follow them.
+  flags: >-
+    TIME_NOMINUTESORSECONDS 1 drops minutes and seconds ("7 AM", "07"), TIME_NOSECONDS 2 drops the seconds ("7:08 AM",
+    "07:08"), TIME_NOTIMEMARKER 4 drops the marker and the space before it ("7:08:09"), TIME_FORCE24HOURFORMAT 8 gives a
+    24-hour clock: in en-US the pattern keeps its shape and its marker and only the hour digits change ("0:00:00 AM" at
+    midnight, "15:30:45 PM" at 15:30:45, hour not padded), in the 24-hour locales (and the invariant locale) it changes
+    nothing. Combinations compose: 2|4 "7:08" and 1|4 "7" (en-US), 8|2 "15:30 PM", 8|4 "15:30:45", 8|1 "7 AM" at 07:00.
+    LOCALE_NOUSEROVERRIDE 0x80000000 and LOCALE_USE_CP_ACP 0x40000000 are accepted and change nothing for the explicit
+    locales. Every other flag bit (0x10, 0x20, 0x80, 0x100, 0x1000, 0xFFFFFFFF) fails with ERROR_INVALID_FLAGS 1004 and
+    writes nothing.
+  picture: >-
+    A picture replaces the locale's pattern: h hh (12-hour, padded by hh), H HH (24-hour), m mm, s ss (hhh, mmm, sss
+    behave as two letters), t (one letter of the marker: "P") and tt ("PM"; ttt gives "p"), text between single quotes is
+    literal and a doubled quote inside it is one quote ("hh 'o''clock' tt" gives "03 o'clock PM"), an unterminated quote
+    runs to the end, any other character (including f, z, d, M, y and spaces) is copied unchanged ("03:30:45.fff",
+    "dd.MM.yyyy 15:30"). An empty picture gives the empty string with a result of 1. The picture is the same in every
+    locale (the marker is "AM"/"PM" even in de-CH). The flags still apply to a picture: picture "HH:mm" with flag 1 gives
+    "07", with 2, 4 or 8 "07:08" (no flag is refused for a picture).
+  size: >-
+    cchTime 0: the result is the number of units needed including the NUL (11 for "7:08:09 AM") and the buffer (which may
+    be NULL) is not touched. A buffer one unit or more too short fails with ERROR_INSUFFICIENT_BUFFER 122, result 0, and
+    the buffer is not written at all (not even a partial string). An exact size or larger succeeds and the result is the
+    length plus one; the units after the NUL are left as they were. A NULL buffer with cchTime above 0 and a negative
+    cchTime fail with ERROR_INVALID_PARAMETER 87.
+  time: >-
+    Only hour, minute, second and milliseconds are looked at, and checked: hour 24 or more, minute 60 or more and
+    milliseconds 1000 or more fail with 87; second 60 is accepted ("1:01:60 AM"). Year, month, day and weekday are not
+    looked at and not validated (month 0, year 0 and 65535 format fine). A NULL SYSTEMTIME means the current local time
+    (checked by shape only: "hh:mm:ss" for invariant with FORCE24, an AM/PM ending for en-US).
+  locale: >-
+    LCID 0 (neutral) and 0x400 (user default) give what the user's own LCID (GetUserDefaultLCID) gives, 0x800 (system
+    default) what GetSystemDefaultLCID gives; 0x1000 and 0x2000 (custom locales) give the user default's text and 0x7F
+    with a sort id (0x1007F) the invariant text. Unknown LCIDs (0x1234, 0xFFFF) and a sort id the locale does not have
+    (0x10409) fail with 87.
+errors:
+  invalid_flags: "1004"
+  buffer_too_small: "122"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

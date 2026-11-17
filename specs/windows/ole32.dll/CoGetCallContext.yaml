@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoGetCallContext.yaml
+id: windows/api/ole32.dll/CoGetCallContext
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators) in the SSH logon session (session 0, elevated administrator token). The same tests gave identical output with -Token standard and -Token elevated (interactive session 1, the administrator's filtered and full token). Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for CoGetCallContext, IServerSecurity, ISecurityCallContext, IContextCallback, CoInitializeEx, CoIncrementMTAUsage and the public SDK headers objidl.h, combaseapi.h, unknwn.h and winerror.h (RPC_E_CALL_COMPLETE 0x80010117). The updater (and through it both Google installers) imports ole32!CoGetCallContext (survey-chrome-installer); the function is exported by ole32.dll and forwarded to combase.dll. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Returns an interface on the context of the call being served on this thread (IServerSecurity for the caller's identity, among others). When the thread is not serving a call from another apartment or process, as in every test here, it fails with RPC_E_CALL_COMPLETE (0x80010117) for every interface id, whatever the apartment of the thread, and leaves the output pointer alone. The installers only need the import to bind and this answer.
+interface:
+  signature: "HRESULT CoGetCallContext(REFIID riid, void **ppInterface)"
+  forward: "ole32.dll!CoGetCallContext forwards to combase.dll!CoGetCallContext (the coverage entry of combase.dll is a pointer to this sheet)"
+rules:
+  no_call: "on a thread that never initialised COM, on a thread in an STA (also after CoUninitialize), in an MTA (CoInitializeEx with COINIT_MULTITHREADED) and in the implicit MTA made by CoIncrementMTAUsage: the result is 0x80010117 (RPC_E_CALL_COMPLETE) and *ppInterface is left as it was, for IID_IServerSecurity {0000013E-0000-0000-C000-000000000046}, IID_IUnknown, IID_IContextCallback {000001DA-...}, IID_IObjContext {000001C6-...}, IID_ICallFactory {000001C9-...}, IID_ISecurityCallContext {CAFC823E-B441-11D1-B82B-0000F8757E2A}, IID_IMarshal, IID_IDispatch and GUID_NULL."
+  calling_thread: "the call does not need COM to be initialised on the thread: the answer is the same without CoInitializeEx."
+errors:
+  rpc_e_call_complete: "0x80010117, no call is in progress"
+side_effects: "none"
+threading: "per thread: the context of the call served on the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per case (no COM on the thread: cgcc_noinit; STA and after CoUninitialize: cgcc_sta; MTA and the implicit MTA: cgcc_mta). Each file declares what it calls from Learn's prototypes. Observations are HRESULTs and whether the output pointer changed.
+not_covered: >
+  The answer inside a call served for a client in another apartment or process (IServerSecurity then comes back; this needs a registered marshaller for the interface under test and belongs to the "COM across processes" batch), a NULL output pointer or NULL riid (they raise), a 32-bit caller.
