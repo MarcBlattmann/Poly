@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shcore.dll/GetScaleFactorForMonitor.yaml
+id: windows/api/shcore.dll/GetScaleFactorForMonitor
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
+  observed_by: spec-win-dpi
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Setting the default DPI awareness for a process", "Mixed-Mode DPI Scaling and DPI-aware APIs", "Multiple Display Monitors",
+  "Application manifests" (dpiAware, dpiAwareness), and the Learn reference page of the function named here; winuser.h, windef.h, shellscalingapi.h
+  and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the DEVICE_SCALE_FACTOR of a monitor.
+interface:
+  signature: "HRESULT GetScaleFactorForMonitor(HMONITOR monitor, DEVICE_SCALE_FACTOR *scale)"
+rules:
+  values: "on the 2560x1600 monitor at 200 percent: S_OK and 180 for every caller (also unaware ones); for a NULL monitor S_OK and 100; see GetDpiForMonitor scale_factor (tests dpi_mon_*)"
+errors:
+  none: "no error case was observed"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; the DPI awareness context is per thread, set by SetThreadDpiAwarenessContext, and a thread without one of its own has the process awareness"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the same declarations (Learn prototypes, header constants) and a few
+  helpers; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) on a display set to 2560x1600 at 200 percent. A test that needs
+  a particular awareness sets it with SetProcessDpiAwarenessContext as its first call (or carries a manifest as a resource). Test windows
+  are placed within the top-left 1000x500 pixels of their own coordinates and closed within seconds; the cursor is parked at the start
+  and put back at the end. A test never prints handles, times or process ids.
+tests_are_in: "dpi_mon_* of GetDpiForMonitor"
+not_covered: >
+  Other scales than 200 percent (the scale change tests step to 175 percent and back), several monitors, monitors with an EDID
+  (this one has none), a different physical screen size.

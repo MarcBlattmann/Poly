@@ -12,6 +12,20 @@
   "started": "2026-11-09T14:40:32Z",
   "tests": [
     {
+      "name": "dpi_spifd_u",
+      "exe_sha256": "c1efdc7ff48146a87a8a72904acd6d460fb5204d2f4851258ec1d371fa881650",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsClNQSV9HRVROT05DTElFTlRNRVRSSUNTIC0+IHRydWUgYm9yZGVyIDEgc2Nyb2xsIDE3eDE3IGNhcHRpb24gMzZ4MjIgc21jYXB0aW9uIDIyeDIyIG1lbnUgMTl4MTkgcGFkZGVkIDQKICBmb250IGhlaWdodHMgY2FwdGlvbiAtMTIgc21jYXB0aW9uIC0xMiBtZW51IC0xMiBzdGF0dXMgLTEyIG1lc3NhZ2UgLTEyClN5c3RlbVBhcmFtZXRlcnNJbmZvRm9yRHBpKDk2KSAtPiB0cnVlIGJvcmRlciAxIHNjcm9sbCAxN3gxNyBjYXB0aW9uIDM2eDIyIHNtY2FwdGlvbiAyMngyMiBtZW51IDE5eDE5IHBhZGRlZCA0IGNhcHRpb24gZm9udCAtMTIgbWVudSBmb250IC0xMgpTeXN0ZW1QYXJhbWV0ZXJzSW5mb0ZvckRwaSgxNDQpIC0+IHRydWUgYm9yZGVyIDIgc2Nyb2xsIDI2eDI2IGNhcHRpb24gNTR4MzMgc21jYXB0aW9uIDMzeDMzIG1lbnUgMjl4MjkgcGFkZGVkIDYgY2FwdGlvbiBmb250IC0xOCBtZW51IGZvbnQgLTE4ClN5c3RlbVBhcmFtZXRlcnNJbmZvRm9yRHBpKDE5MikgLT4gdHJ1ZSBib3JkZXIgMiBzY3JvbGwgMzR4MzQgY2FwdGlvbiA3Mng0NCBzbWNhcHRpb24gNDR4NDQgbWVudSAzOHgzOCBwYWRkZWQgOCBjYXB0aW9uIGZvbnQgLTI0IG1lbnUgZm9udCAtMjQKU3lzdGVtUGFyYW1ldGVyc0luZm9Gb3JEcGkoMjg4KSAtPiB0cnVlIGJvcmRlciAzIHNjcm9sbCA1MXg1MSBjYXB0aW9uIDEwOXg2NiBzbWNhcHRpb24gNjZ4NjYgbWVudSA1N3g1NyBwYWRkZWQgMTIgY2FwdGlvbiBmb250IC0zNiBtZW51IGZvbnQgLTM2ClNQSV9HRVRJQ09OTUVUUklDUyAtPiB0cnVlIGhvcnogNzUgdmVydCA3NSB3cmFwIDEgZm9udCBoZWlnaHQgLTEyClNQSV9HRVRJQ09OVElUTEVMT0dGT05UIC0+IHRydWUgaGVpZ2h0IC0xMgpTeXN0ZW1QYXJhbWV0ZXJzSW5mb0ZvckRwaShTUElfR0VUSUNPTk1FVFJJQ1MsIDE5MikgLT4gdHJ1ZSBob3J6IDE1MCB2ZXJ0IDE1MCBmb250IGhlaWdodCAtMjQKU3lzdGVtUGFyYW1ldGVyc0luZm9Gb3JEcGkoU1BJX0dFVElDT05USVRMRUxPR0ZPTlQsIDE5MikgLT4gdHJ1ZSBoZWlnaHQgLTI0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode no call: no SetProcessDpiAwarenessContext call\nSPI_GETNONCLIENTMETRICS -> true border 1 scroll 17x17 caption 36x22 smcaption 22x22 menu 19x19 padded 4\n  font heights caption -12 smcaption -12 menu -12 status -12 message -12\nSystemParametersInfoForDpi(96) -> true border 1 scroll 17x17 caption 36x22 smcaption 22x22 menu 19x19 padded 4 caption font -12 menu font -12\nSystemParametersInfoForDpi(144) -> true border 2 scroll 26x26 caption 54x33 smcaption 33x33 menu 29x29 padded 6 caption font -18 menu font -18\nSystemParametersInfoForDpi(192) -> true border 2 scroll 34x34 caption 72x44 smcaption 44x44 menu 38x38 padded 8 caption font -24 menu font -24\nSystemParametersInfoForDpi(288) -> true border 3 scroll 51x51 caption 109x66 smcaption 66x66 menu 57x57 padded 12 caption font -36 menu font -36\nSPI_GETICONMETRICS -> true horz 75 vert 75 wrap 1 font height -12\nSPI_GETICONTITLELOGFONT -> true height -12\nSystemParametersInfoForDpi(SPI_GETICONMETRICS, 192) -> true horz 150 vert 150 font height -24\nSystemParametersInfoForDpi(SPI_GETICONTITLELOGFONT, 192) -> true height -24\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
       "name": "spifd_errors",
       "exe_sha256": "85a08d62dc5ce6aee96054b21eb4dbc15412b72233c1a910af98bb2318211a72",
       "status": "ran",

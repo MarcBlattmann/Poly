@@ -12,6 +12,48 @@
   "started": "2026-11-09T14:40:32Z",
   "tests": [
     {
+      "name": "dpi_encs_s",
+      "exe_sha256": "93c439ff0705b380f3a0df713f99d7fb547c1b2c33702ddd72d19c63b3783e8d",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMAp3aXRob3V0IEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmc6IHdpbmRvdyAxMDAsMTAwLDUwMCw0MDAgY2xpZW50IDAsMCwzNzQsMjI5IGRwaSAxOTIKICB0b3AgV01fTkNDUkVBVEUKICB0b3AgV01fQ1JFQVRFCiAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCAzNzR4MjI5CiAgdG9wIFdNX01PVkUgMTEzLDE1OAogIGZyYW1lIGJ5IEFkanVzdFdpbmRvd1JlY3RFeEZvckRwaSBhdCB0aGUgd2luZG93J3MgZHBpOiAyNng3MSBleHRyYQogICB0b3AgV01fTU9WRSAxNjMsMTc4CiAgIHRvcCBXTV9TSVpFIHR5cGUgMCBjbGllbnQgNDc0eDI3OQogIEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmcoTlVMTCkgLT4gZmFsc2UgZXJyb3IgMTQwMAp3aXRoIEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmcgaW4gV01fTkNDUkVBVEU6IHdpbmRvdyAxMDAsMTAwLDUwMCw0MDAgY2xpZW50IDAsMCwzNzQsMjI5IGRwaSAxOTIKICB0b3AgV01fTkNDUkVBVEU6IEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmcgLT4gZmFsc2UgZXJyb3IgMAogIHRvcCBXTV9DUkVBVEUKICB0b3AgV01fU0laRSB0eXBlIDAgY2xpZW50IDM3NHgyMjkKICB0b3AgV01fTU9WRSAxMTMsMTU4CiAgZnJhbWUgYnkgQWRqdXN0V2luZG93UmVjdEV4Rm9yRHBpIGF0IHRoZSB3aW5kb3cncyBkcGk6IDI2eDcxIGV4dHJhCiAgIHRvcCBXTV9NT1ZFIDE2MywxNzgKICAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCA0NzR4Mjc5CiAgRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZyhOVUxMKSAtPiBmYWxzZSBlcnJvciAxNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\nwithout EnableNonClientDpiScaling: window 100,100,500,400 client 0,0,374,229 dpi 192\n  top WM_NCCREATE\n  top WM_CREATE\n  top WM_SIZE type 0 client 374x229\n  top WM_MOVE 113,158\n  frame by AdjustWindowRectExForDpi at the window's dpi: 26x71 extra\n   top WM_MOVE 163,178\n   top WM_SIZE type 0 client 474x279\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nwith EnableNonClientDpiScaling in WM_NCCREATE: window 100,100,500,400 client 0,0,374,229 dpi 192\n  top WM_NCCREATE: EnableNonClientDpiScaling -> false error 0\n  top WM_CREATE\n  top WM_SIZE type 0 client 374x229\n  top WM_MOVE 113,158\n  frame by AdjustWindowRectExForDpi at the window's dpi: 26x71 extra\n   top WM_MOVE 163,178\n   top WM_SIZE type 0 client 474x279\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 612,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
+      "name": "dpi_encs_u",
+      "exe_sha256": "ef8b889e1d2846607406c389af6873233fd14fded4d647a1d7bedb689609df90",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCndpdGhvdXQgRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZzogd2luZG93IDEwMCwxMDAsNTAwLDQwMCBjbGllbnQgMCwwLDM4NCwyNjEgZHBpIDk2CiAgdG9wIFdNX05DQ1JFQVRFCiAgdG9wIFdNX0NSRUFURQogIHRvcCBXTV9TSVpFIHR5cGUgMCBjbGllbnQgMzg0eDI2MQogIHRvcCBXTV9NT1ZFIDEwOCwxMzEKICBmcmFtZSBieSBBZGp1c3RXaW5kb3dSZWN0RXhGb3JEcGkgYXQgdGhlIHdpbmRvdydzIGRwaTogMTZ4MzkgZXh0cmEKICAgdG9wIFdNX01PVkUgMTU4LDE1MQogICB0b3AgV01fU0laRSB0eXBlIDAgY2xpZW50IDQ4NHgzMTEKICBFbmFibGVOb25DbGllbnREcGlTY2FsaW5nKE5VTEwpIC0+IGZhbHNlIGVycm9yIDE0MDAKd2l0aCBFbmFibGVOb25DbGllbnREcGlTY2FsaW5nIGluIFdNX05DQ1JFQVRFOiB3aW5kb3cgMTAwLDEwMCw1MDAsNDAwIGNsaWVudCAwLDAsMzg0LDI2MSBkcGkgOTYKICB0b3AgV01fTkNDUkVBVEU6IEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmcgLT4gZmFsc2UgZXJyb3IgMAogIHRvcCBXTV9DUkVBVEUKICB0b3AgV01fU0laRSB0eXBlIDAgY2xpZW50IDM4NHgyNjEKICB0b3AgV01fTU9WRSAxMDgsMTMxCiAgZnJhbWUgYnkgQWRqdXN0V2luZG93UmVjdEV4Rm9yRHBpIGF0IHRoZSB3aW5kb3cncyBkcGk6IDE2eDM5IGV4dHJhCiAgIHRvcCBXTV9NT1ZFIDE1OCwxNTEKICAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCA0ODR4MzExCiAgRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZyhOVUxMKSAtPiBmYWxzZSBlcnJvciAxNDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode no call: no SetProcessDpiAwarenessContext call\nwithout EnableNonClientDpiScaling: window 100,100,500,400 client 0,0,384,261 dpi 96\n  top WM_NCCREATE\n  top WM_CREATE\n  top WM_SIZE type 0 client 384x261\n  top WM_MOVE 108,131\n  frame by AdjustWindowRectExForDpi at the window's dpi: 16x39 extra\n   top WM_MOVE 158,151\n   top WM_SIZE type 0 client 484x311\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nwith EnableNonClientDpiScaling in WM_NCCREATE: window 100,100,500,400 client 0,0,384,261 dpi 96\n  top WM_NCCREATE: EnableNonClientDpiScaling -> false error 0\n  top WM_CREATE\n  top WM_SIZE type 0 client 384x261\n  top WM_MOVE 108,131\n  frame by AdjustWindowRectExForDpi at the window's dpi: 16x39 extra\n   top WM_MOVE 158,151\n   top WM_SIZE type 0 client 484x311\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 649,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
+      "name": "dpi_encs_v",
+      "exe_sha256": "bfcf6400ebc46514eb3b0ac42af5af2ccb92da9c5a3b7b86d75fde0338d4f28e",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCndpdGhvdXQgRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZzogd2luZG93IDEwMCwxMDAsNTAwLDQwMCBjbGllbnQgMCwwLDM3NCwyMjkgZHBpIDE5MgogIHRvcCBXTV9OQ0NSRUFURQogIHRvcCBXTV9DUkVBVEUKICB0b3AgV01fU0laRSB0eXBlIDAgY2xpZW50IDM3NHgyMjkKICB0b3AgV01fTU9WRSAxMTMsMTU4CiAgZnJhbWUgYnkgQWRqdXN0V2luZG93UmVjdEV4Rm9yRHBpIGF0IHRoZSB3aW5kb3cncyBkcGk6IDI2eDcxIGV4dHJhCiAgIHRvcCBXTV9NT1ZFIDE2MywxNzgKICAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCA0NzR4Mjc5CiAgRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZyhOVUxMKSAtPiBmYWxzZSBlcnJvciAxNDAwCndpdGggRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZyBpbiBXTV9OQ0NSRUFURTogd2luZG93IDEwMCwxMDAsNTAwLDQwMCBjbGllbnQgMCwwLDM3NCwyMjkgZHBpIDE5MgogIHRvcCBXTV9OQ0NSRUFURTogRW5hYmxlTm9uQ2xpZW50RHBpU2NhbGluZyAtPiB0cnVlIGVycm9yIDAKICB0b3AgV01fQ1JFQVRFCiAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCAzNzR4MjI5CiAgdG9wIFdNX01PVkUgMTEzLDE1OAogIGZyYW1lIGJ5IEFkanVzdFdpbmRvd1JlY3RFeEZvckRwaSBhdCB0aGUgd2luZG93J3MgZHBpOiAyNng3MSBleHRyYQogICB0b3AgV01fTU9WRSAxNjMsMTc4CiAgIHRvcCBXTV9TSVpFIHR5cGUgMCBjbGllbnQgNDc0eDI3OQogIEVuYWJsZU5vbkNsaWVudERwaVNjYWxpbmcoTlVMTCkgLT4gZmFsc2UgZXJyb3IgMTQwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\nwithout EnableNonClientDpiScaling: window 100,100,500,400 client 0,0,374,229 dpi 192\n  top WM_NCCREATE\n  top WM_CREATE\n  top WM_SIZE type 0 client 374x229\n  top WM_MOVE 113,158\n  frame by AdjustWindowRectExForDpi at the window's dpi: 26x71 extra\n   top WM_MOVE 163,178\n   top WM_SIZE type 0 client 474x279\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nwith EnableNonClientDpiScaling in WM_NCCREATE: window 100,100,500,400 client 0,0,374,229 dpi 192\n  top WM_NCCREATE: EnableNonClientDpiScaling -> true error 0\n  top WM_CREATE\n  top WM_SIZE type 0 client 374x229\n  top WM_MOVE 113,158\n  frame by AdjustWindowRectExForDpi at the window's dpi: 26x71 extra\n   top WM_MOVE 163,178\n   top WM_SIZE type 0 client 474x279\n  EnableNonClientDpiScaling(NULL) -> false error 1400\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 669,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
       "name": "encds_permonitor",
       "exe_sha256": "47a06cbb794e10a5993ca637fd0388ffe5ffd15f4653d8b0d8d8e701eb027f64",
       "status": "ran",
