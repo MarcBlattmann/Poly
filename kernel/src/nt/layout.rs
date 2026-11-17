@@ -185,6 +185,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dxgi.dll", super::DXGI),
         ("d3d11.dll", super::D3D11),
         ("dcomp.dll", super::DCOMP),
+        // ADR 0220.
+        ("comlaunch.exe", super::COMLAUNCH),
     ] {
         if bytes.is_empty() {
             continue;
