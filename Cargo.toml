@@ -25,6 +25,7 @@ members = [
     "crates/poly-fbdev",
     "crates/poly-files",
     "crates/poly-com",
+    "crates/poly-taskschd",
     "crates/poly-fuse",
     "crates/poly-cpio",
     "crates/poly-dbus",
