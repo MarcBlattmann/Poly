@@ -244,6 +244,12 @@ pub struct Built {
     /// `win poly` boots Poly's win32k in the same kind of session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// The token kind its reference was recorded with (`standard`: the
+    /// administrator's filtered token, `elevated`: its full token after a
+    /// consent; absent: the SSH logon's own token, the elevated administrator
+    /// of ADR 0171). `win poly` boots Poly with `poly.win.token=<kind>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// `manifest.json` beside the executables.
@@ -397,6 +403,7 @@ pub fn build_runtime(
             size: bytes.len() as u64,
             imports,
             session: session_of(&src.path, &src.name),
+            token: token_of(&src.path, &src.name),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -424,6 +431,28 @@ fn session_of(source: &Path, name: &str) -> Option<String> {
     match session.as_deref() {
         Some("interactive") if bottom => Some("interactive-bottom".to_string()),
         _ => session,
+    }
+}
+
+/// The token kind a test's reference was recorded with: the test's own `token` in the
+/// `windows.json` in the source's directory, else that file's `system.token`, if there is one.
+fn token_of(source: &Path, name: &str) -> Option<String> {
+    let reference = source.parent()?.join("windows.json");
+    let bytes = std::fs::read(reference).ok()?;
+    let own = serde_json::from_slice::<serde_json::Value>(&bytes).ok().and_then(|v| {
+        let t = v.get("tests")?.as_array()?.iter().find(|t| t.get("name").and_then(|n| n.as_str()) == Some(name))?;
+        Some(t.get("token")?.as_str()?.to_string())
+    });
+    own.or_else(|| RunFile::parse(&bytes).ok()?.system.token)
+}
+
+/// The kernel arguments for a test recorded with `token`: Poly's NT personality gives
+/// the program the token of that kind (`standard`: filtered, `elevated`: full after a consent).
+pub fn token_kernel_args(token: Option<&str>) -> &'static str {
+    match token {
+        Some("standard") => " poly.win.token=standard",
+        Some("elevated") => " poly.win.token=elevated",
+        _ => "",
     }
 }
 
@@ -693,6 +722,10 @@ pub struct System {
     /// the SSH session (session 0, no visible desktop).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// Windows: `standard` or `elevated` when the runner ran the tests with
+    /// `poly-oracle.ps1 -Token`, absent for the SSH logon's own token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 fn bits32() -> u8 {
@@ -953,7 +986,12 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
-        let args = format!("{}{}", poly_kernel_args(), session_kernel_args(t.session.as_deref()));
+        let args = format!(
+            "{}{}{}",
+            poly_kernel_args(),
+            session_kernel_args(t.session.as_deref()),
+            token_kernel_args(t.token.as_deref())
+        );
         let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
@@ -979,6 +1017,7 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
             build: None,
             arch: Some("x86_64".into()),
             session: None,
+            token: None,
         },
         bundle: None,
         runner: Some("cargo xtask pipeline win poly".into()),
@@ -1493,6 +1532,7 @@ mod tests {
                 size: bytes.len() as u64,
                 imports: BTreeMap::new(),
                 session: None,
+                token: None,
             });
         }
         let m =
@@ -1548,6 +1588,16 @@ mod tests {
         assert_eq!(g.system.session.as_deref(), Some("interactive"));
         assert!(serde_json::to_string(&g.system).unwrap().contains("\"session\":\"interactive\""));
         assert!(!serde_json::to_string(&f.system).unwrap().contains("session"));
+        // A recording made with `poly-oracle.ps1 -Token standard` says so, and Poly is booted with that token.
+        assert_eq!(f.system.token, None);
+        let standard = text.replace("\"arch\": \"AMD64\"", "\"arch\": \"AMD64\", \"session\": \"interactive\", \"token\": \"standard\"");
+        let h = RunFile::parse(standard.as_bytes()).unwrap();
+        assert_eq!(h.system.token.as_deref(), Some("standard"));
+        assert!(serde_json::to_string(&h.system).unwrap().contains("\"token\":\"standard\""));
+        assert!(!serde_json::to_string(&f.system).unwrap().contains("token"));
+        assert_eq!(token_kernel_args(Some("standard")), " poly.win.token=standard");
+        assert_eq!(token_kernel_args(Some("elevated")), " poly.win.token=elevated");
+        assert_eq!(token_kernel_args(None), "");
         let t = f.test("t").unwrap();
         assert_eq!(t.exit_code, Some(0xC000_0005));
         assert_eq!(t.exit_code_bits, 32);
