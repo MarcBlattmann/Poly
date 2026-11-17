@@ -39,7 +39,11 @@ pub fn check_context(c: &Context) -> Result<(), u32> {
     if c.version != POWER_REQUEST_CONTEXT_VERSION {
         return Err(ERROR_INVALID_PARAMETER);
     }
-    match c.flags & 3 {
+    // `Flags` 0x80000000 alone with a good string is a valid simple context on the oracle
+    // (the sheet's `bad_context`): the high bit stands for the simple form.
+    let form =
+        if c.flags & 3 == 0 && c.flags & 0x8000_0000 != 0 { POWER_REQUEST_CONTEXT_SIMPLE_STRING } else { c.flags & 3 };
+    match form {
         POWER_REQUEST_CONTEXT_SIMPLE_STRING if c.simple_len.is_some_and(|n| n > 0) => Ok(()),
         POWER_REQUEST_CONTEXT_DETAILED_STRING if c.detailed_module => Ok(()),
         _ => Err(ERROR_INVALID_PARAMETER),
@@ -112,6 +116,7 @@ mod tests {
     fn contexts() {
         assert_eq!(check_context(&simple(11)), Ok(()));
         assert_eq!(check_context(&Context { flags: 0x8000_0001, ..simple(11) }), Ok(()));
+        assert_eq!(check_context(&Context { flags: 0x8000_0000, ..simple(11) }), Ok(()));
         for bad in [
             Context { version: 1, ..simple(11) },
             Context { version: 0xFFFF_FFFF, ..simple(11) },

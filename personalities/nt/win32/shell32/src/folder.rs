@@ -113,13 +113,14 @@ unsafe extern "system" fn parse_display_name(
         }
         let name = wstr(name);
         let asked = if attributes.is_null() { 0 } else { *attributes };
+        // The whole name is used: `pchEaten` 0, also when it names nothing (an empty name
+        // leaves it as it was).
+        if !eaten.is_null() && !name.is_empty() {
+            *eaten = 0;
+        }
         match parse(name, asked) {
             Ok((pidl, attrs)) => {
                 *out = pidl;
-                // The whole name is used: `pchEaten` 0 (an empty name leaves it as it was).
-                if !eaten.is_null() && !name.is_empty() {
-                    *eaten = 0;
-                }
                 if !attributes.is_null() {
                     *attributes = attrs;
                 }
