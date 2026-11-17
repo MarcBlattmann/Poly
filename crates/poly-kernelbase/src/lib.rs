@@ -87,6 +87,7 @@ pub mod message;
 pub mod mitigation;
 pub mod namedpipe;
 pub mod nls;
+pub mod nlsfmt;
 pub mod oleaut;
 pub mod path;
 pub mod pipe;
