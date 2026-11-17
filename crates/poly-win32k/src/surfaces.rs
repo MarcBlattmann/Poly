@@ -786,7 +786,7 @@ mod tests {
         );
         // The second buffer of a flip-model swap chain.
         let b = Presented { object: 71, backing: 701, ..a };
-        assert_eq!(l.present(&s, &wm, &mut d, child, 9, b, &[]).unwrap().adopted, true);
+        assert!(l.present(&s, &wm, &mut d, child, 9, b, &[]).unwrap().adopted);
         let r = records(&mut d);
         assert!(matches!(r[0], ToCompositor::LayerBuffer { buffer, .. } if buffer != ba), "{r:?}");
         // Resized: the old buffers go, their objects are let go of.

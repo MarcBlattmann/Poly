@@ -239,7 +239,13 @@ impl WindowsSurfaces {
             && !r.is_empty()
         {
             let r = r.intersect(&Rect::new(0, 0, bw as i32, bh as i32));
-            copy(scene, window, src, (bw, bh, stride, format), (r.x as u32, r.y as u32, r.width as u32, r.height as u32));
+            copy(
+                scene,
+                window,
+                src,
+                (bw, bh, stride, format),
+                (r.x as u32, r.y as u32, r.width as u32, r.height as u32),
+            );
         }
         self.overlay(scene, surface, r, buffers, None);
     }

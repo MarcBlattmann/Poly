@@ -507,19 +507,14 @@ fn present_buffer<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         list.extend(raw.chunks_exact(16).map(|r| (edge(r, 0), edge(r, 1), edge(r, 2), edge(r, 3))));
     }
     k.with_state(|sys, _, b| {
-        let object = sys.objects.object_by_handle(
-            &caller,
-            Handle(section),
-            SECTION_MAP_READ,
-            Some(ObjectType::Section),
-        )?;
+        let object =
+            sys.objects.object_by_handle(&caller, Handle(section), SECTION_MAP_READ, Some(ObjectType::Section))?;
         let key = sys.objects.cookie(object).ok_or(STATUS_INVALID_PARAMETER)?;
         let s = sys.section(key).ok_or(STATUS_INVALID_PARAMETER)?;
         if s.image().is_some() || s.size < stride * u64::from(height) {
             return Err(STATUS_INVALID_PARAMETER);
         }
-        let presented =
-            Presented { object: object.raw(), backing: s.backing, width, height, stride: stride as u32 };
+        let presented = Presented { object: object.raw(), backing: s.backing, width, height, stride: stride as u32 };
         let w = &mut sys.win32k;
         let Some(outcome) = w.layers.present(&w.surfaces, &w.wm, &mut w.desktop, hwnd, pid, presented, &list) else {
             return Ok(STATUS_SUCCESS);

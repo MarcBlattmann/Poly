@@ -57,6 +57,10 @@ pub struct Surface {
     pub layers: BTreeMap<LayerId, Layer>,
 }
 
+/// Where a layer is: (x, y) of its buffers' first pixel in the surface, and the surface rectangle
+/// it is shown in (x, y, width, height).
+pub type LayerPlace = (i32, i32, (u32, u32, u32, u32));
+
 /// A layer of a surface as the compositor is told about it (ADR 0224).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Layer {
@@ -64,7 +68,7 @@ pub struct Layer {
     pub buffers: Vec<(BufferId, u32, u32, u32)>,
     /// Where it is: (x, y) of its buffers' first pixel in the surface, and the surface rectangle
     /// it is shown in (x, y, width, height). `None` until placed.
-    pub place: Option<(i32, i32, (u32, u32, u32, u32))>,
+    pub place: Option<LayerPlace>,
     /// The buffer it shows (after its first damage).
     pub current: Option<BufferId>,
 }

@@ -43,7 +43,14 @@ unsafe extern "system" {
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn CreateFileMappingW(file: usize, attrs: *const c_void, protect: u32, high: u32, low: u32, name: *const u16) -> usize;
+    fn CreateFileMappingW(
+        file: usize,
+        attrs: *const c_void,
+        protect: u32,
+        high: u32,
+        low: u32,
+        name: *const u16,
+    ) -> usize;
     fn MapViewOfFile(map: usize, access: u32, high: u32, low: u32, len: usize) -> *mut u8;
     fn UnmapViewOfFile(base: *const u8) -> i32;
     fn CloseHandle(h: usize) -> i32;
@@ -124,7 +131,14 @@ impl Shared {
         let make = || -> Option<Section> {
             // SAFETY: a pagefile-backed section of `len` bytes, mapped whole in this process.
             unsafe {
-                let handle = CreateFileMappingW(usize::MAX, core::ptr::null(), PAGE_READWRITE | SEC_COMMIT, 0, len as u32, core::ptr::null());
+                let handle = CreateFileMappingW(
+                    usize::MAX,
+                    core::ptr::null(),
+                    PAGE_READWRITE | SEC_COMMIT,
+                    0,
+                    len as u32,
+                    core::ptr::null(),
+                );
                 if handle == 0 {
                     return None;
                 }
@@ -227,9 +241,10 @@ fn deliver(s: &mut SwapChain, rects: &[[i32; 4]]) {
     }
     let handover = poly_d3d::swap::is_flip(s.desc[9]) && t.format() == FORMAT_BGRA;
     if handover {
-        let fits = s.shared.as_ref().is_some_and(|sh| {
-            sh.hwnd == s.hwnd && (sh.width, sh.height) == (t.width() as u32, t.height() as u32)
-        });
+        let fits = s
+            .shared
+            .as_ref()
+            .is_some_and(|sh| sh.hwnd == s.hwnd && (sh.width, sh.height) == (t.width() as u32, t.height() as u32));
         if !fits {
             if let Some(old) = s.shared.take() {
                 old.end(Some(t));

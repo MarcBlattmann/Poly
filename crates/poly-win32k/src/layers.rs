@@ -64,15 +64,25 @@ pub struct Layers {
     next: LayerId,
 }
 
-/// Where window `hwnd`'s client area is in a surface: the surface, the client area's top-left
-/// corner in it, and the client area's size. A top-level window with a surface is its own
-/// surface; a child window is in its top-level window's.
-fn place(surfaces: &Surfaces, wm: &Wm, desktop: &Desktop, hwnd: u32) -> Option<(SurfaceId, (u32, u32), i32, i32, u32, u32)> {
-    if let (Some(s), Some((w, h))) = (surfaces.surface(hwnd), surfaces.size(desktop, hwnd)) {
-        return Some((s, (w, h), 0, 0, w, h));
+/// Where a window's client area is in a surface: the surface and its size, and the client
+/// area's top-left corner in it and size.
+struct Where {
+    surface: SurfaceId,
+    size: (u32, u32),
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+/// Where window `hwnd`'s client area is. A top-level window with a surface is its own surface; a
+/// child window is in its top-level window's.
+fn place(surfaces: &Surfaces, wm: &Wm, desktop: &Desktop, hwnd: u32) -> Option<Where> {
+    if let (Some(surface), Some((w, h))) = (surfaces.surface(hwnd), surfaces.size(desktop, hwnd)) {
+        return Some(Where { surface, size: (w, h), x: 0, y: 0, width: w, height: h });
     }
     let a = surfaces.child_area(wm, desktop, hwnd)?;
-    Some((surfaces.surface(a.top)?, a.surface, a.x, a.y, a.width, a.height))
+    Some(Where { surface: surfaces.surface(a.top)?, size: a.surface, x: a.x, y: a.y, width: a.width, height: a.height })
 }
 
 /// `a`'s part inside `0 .. limit`, from `at` on for `len`: (start, length).
@@ -101,7 +111,7 @@ impl Layers {
         section: Presented,
         rects: &[(i32, i32, i32, i32)],
     ) -> Option<Outcome> {
-        let (surface, (sw, sh), x, y, cw, ch) = place(surfaces, wm, desktop, hwnd)?;
+        let Where { surface, size: (sw, sh), x, y, width: cw, height: ch } = place(surfaces, wm, desktop, hwnd)?;
         let mut out = Outcome::default();
         let next = &mut self.next;
         let e = self.entries.entry((hwnd, pid)).or_insert_with(|| {
