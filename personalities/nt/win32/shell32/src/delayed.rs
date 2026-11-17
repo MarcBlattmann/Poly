@@ -11,11 +11,7 @@ poly_win32_rt::fail_exports!(
         DragQueryFileW,
         SHAppBarMessage,
         SHGetFileInfoW,
-        ShellExecuteA,
-        SHChangeNotify,
-        ShellExecuteExW,
-        ShellExecuteW,
-        IsUserAnAdmin
+        SHChangeNotify
     ]
 );
 

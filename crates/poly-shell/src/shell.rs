@@ -165,6 +165,8 @@ pub struct Shell {
     icons: core::cell::RefCell<AppIcons>,
     /// The settings window's state (its contents are the shell's).
     pub settings_window: SettingsWindow,
+    /// User Account Control's consent prompts (ADR 0222), over everything.
+    consent: crate::consent::Consent,
 }
 
 impl Shell {
@@ -204,6 +206,7 @@ impl Shell {
             pictures: crate::picture::Pictures::new(),
             icons: core::cell::RefCell::new(AppIcons::default()),
             settings_window: SettingsWindow::default(),
+            consent: crate::consent::Consent::default(),
         };
         let rows = s.room_for_rows();
         s.launcher.set_limit(rows);
@@ -720,6 +723,43 @@ impl Shell {
     }
 
     // -----------------------------------------------------------------
+    // The consent prompt (ADR 0222).
+
+    /// Show a consent prompt (or queue it behind the one showing).
+    pub fn ask_consent(&mut self, p: crate::consent::Prompt) {
+        self.consent.ask(p);
+        self.damage.push(Rect::new(0, 0, self.width, self.height));
+    }
+
+    /// Whether a consent prompt shows: then every key and click is its.
+    pub fn consent_open(&self) -> bool {
+        self.consent.is_open()
+    }
+
+    /// The prompts.
+    pub fn consent(&self) -> &crate::consent::Consent {
+        &self.consent
+    }
+
+    /// A key for the prompt.
+    pub fn consent_key(&mut self, k: crate::consent::PromptKey) {
+        if self.consent.key(k) {
+            self.damage.push(Rect::new(0, 0, self.width, self.height));
+        }
+    }
+
+    /// A left press while the prompt shows (it is the prompt's wherever it is).
+    pub fn consent_press(&mut self, x: i32, y: i32) {
+        if self.consent.press(x, y, self.width, self.height, &self.text) {
+            self.damage.push(Rect::new(0, 0, self.width, self.height));
+        }
+    }
+
+    /// Answers given: `(request, yes)`.
+    pub fn take_consent_answers(&mut self) -> Vec<(u32, bool)> {
+        self.consent.take_answers()
+    }
+
     // The switcher and the snap preview.
 
     pub fn switcher_open(&self) -> bool {
@@ -1393,6 +1433,9 @@ impl Layer for Above<'_> {
         self.0.draw_snap(fb, clip, scale);
         self.0.draw_surface(fb, clip, scale);
         self.0.draw_edge(fb, clip, scale);
+        // The consent prompt over everything (ADR 0222).
+        let sh = self.0;
+        sh.consent.draw(fb, clip, scale, sh.width, sh.height, &sh.text);
     }
 }
 

@@ -140,6 +140,7 @@ dependencies = [
  "poly-wayland",
  "poly-win32k",
  "poly-x11",
+ "poly-x509",
 ]
 
 [[package]]

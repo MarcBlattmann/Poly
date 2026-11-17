@@ -25,6 +25,7 @@ mod attrlist;
 mod base;
 mod console;
 mod copy;
+mod elevate;
 mod errmode;
 mod everyday;
 mod except;

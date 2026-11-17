@@ -40,6 +40,7 @@ pub mod applications;
 pub mod apps;
 pub mod chrome;
 pub mod clock;
+pub mod consent;
 pub mod draw;
 pub mod icons;
 pub mod launcher;

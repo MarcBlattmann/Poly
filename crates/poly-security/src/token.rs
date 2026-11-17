@@ -546,7 +546,15 @@ impl Token {
     /// virtualization allowed; the full token is linked.
     pub fn uac_filtered() -> Token {
         let mut filtered = Token::uac_filtered_alone();
-        filtered.linked = Some(alloc::boxed::Box::new(Token::uac_full_alone()));
+        // The full token as the filtered one's link shows it: no privilege enabled but the three
+        // a logon enables (`SeDebugPrivilege` 0, UacStandardToken.yaml's linked token).
+        let mut full = Token::uac_full_alone();
+        for (luid, attrs) in full.privileges.iter_mut() {
+            if *luid == 20 {
+                *attrs = 0;
+            }
+        }
+        filtered.linked = Some(alloc::boxed::Box::new(full));
         filtered
     }
 
@@ -617,7 +625,15 @@ impl Token {
     /// token to give.
     pub fn elevated_for_consent(&self, id: u64) -> Option<Token> {
         let mut t = if self.elevation_type == TOKEN_ELEVATION_TYPE_LIMITED {
-            self.linked_token(id)?
+            let mut t = self.linked_token(id)?;
+            // A process started with the full token has `SeDebugPrivilege` as the full token of
+            // a logon has it (UacElevatedToken.yaml: attributes 2).
+            for (luid, attrs) in t.privileges.iter_mut() {
+                if *luid == 20 {
+                    *attrs = SE_PRIVILEGE_ENABLED;
+                }
+            }
+            t
         } else if self.elevated {
             let mut t = self.clone();
             t.id = id;

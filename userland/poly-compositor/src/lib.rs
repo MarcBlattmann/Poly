@@ -940,6 +940,13 @@ fn run(args: &[String]) -> Result<u8, String> {
                 println!("poly-compositor: asked to uninstall {id}");
                 start_app(d, &mut server, &env, &poly_shell::apps::uninstaller_entry(&id));
             }
+            // The answers to consent prompts go back to win32k (ADR 0222).
+            for (request, allow) in d.shell.take_consent_answers() {
+                println!("poly-compositor: consent {request}: {}", if allow { "yes" } else { "no" });
+                if let Some(link) = &mut winlink {
+                    link.answer_consent(request, allow);
+                }
+            }
             d.sync(&mut server);
         }
 
@@ -967,6 +974,22 @@ fn run(args: &[String]) -> Result<u8, String> {
             l.set_layout(d.layout.name);
             for ev in core::mem::take(&mut d.foreign) {
                 l.input(&ev);
+            }
+        }
+        // Consent prompts Windows programs asked for (ADR 0222): the desktop shows them; without
+        // a desktop nobody can answer, which is No.
+        if let Some(l) = &mut winlink {
+            for a in l.take_consents() {
+                let win32::Action::Consent { request, pid, program, path, file } = a else { continue };
+                let publisher = if file.is_empty() { None } else { publisher_of(&file) };
+                println!(
+                    "poly-compositor: consent prompt {request} for process {pid}: {program} ({path}), publisher {}",
+                    publisher.as_deref().unwrap_or("unknown")
+                );
+                match &mut desk {
+                    Some(d) => d.shell.ask_consent(poly_shell::consent::Prompt { request, program, publisher, path }),
+                    None => l.answer_consent(request, false),
+                }
             }
         }
 
@@ -1093,6 +1116,23 @@ fn run(args: &[String]) -> Result<u8, String> {
 
 /// Adds `more` to the poll set and says where it sits there, so that its
 /// reader gets these descriptors and not the ones added behind them.
+/// The publisher a signed Windows program names (ADR 0222): the signer of its certificate table
+/// (`poly_x509::authenticode`), read from Poly's file system. `None` when it is not signed or
+/// cannot be read.
+fn publisher_of(file: &str) -> Option<String> {
+    use poly_rt::io::Read;
+    const MOST: u32 = 1 << 20;
+    let mut f = poly_rt::fs::File::open(file).ok()?;
+    let mut head = vec![0u8; 4096];
+    let n = f.read(&mut head).ok()?;
+    head.truncate(n);
+    let (offset, size) = poly_x509::authenticode::certificate_table(&head)?;
+    f.seek(offset as i64, poly_rt::abi::Whence::Start).ok()?;
+    let mut table = vec![0u8; size.min(MOST) as usize];
+    f.read_exact(&mut table).ok()?;
+    poly_x509::authenticode::publisher(&table)
+}
+
 fn add_fds(fds: &mut Vec<os::PollFd>, more: impl IntoIterator<Item = os::PollFd>) -> core::ops::Range<usize> {
     let at = fds.len();
     fds.extend(more);

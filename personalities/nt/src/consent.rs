@@ -215,3 +215,79 @@ pub fn request_elevation<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
     return_handle(k, out, handle)?;
     Ok(STATUS_SUCCESS)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::Service;
+    use crate::tests::Fake;
+    use poly_security::token::Logon;
+
+    /// A process of `logon` whose prompts are answered `hook` asks for `C:\setup.exe`.
+    fn ask_as(logon: Logon, hook: Option<bool>) -> (Fake, NtStatus, u64) {
+        let mut f = Fake::new();
+        f.sys.logon = logon;
+        f.sys.consent.hook = hook;
+        let path: Vec<u8> = r"C:\setup.exe".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let p = f.put(&path);
+        let out = f.alloc(8);
+        let st = f.call(Service::PolyRequestElevation, &[p, (path.len() / 2) as u64, out]);
+        let h = f.u64_at(out);
+        (f, st, h)
+    }
+
+    /// The integrity level and elevation of the token behind handle `h`, and its consent mark.
+    fn facts(f: &mut Fake, h: u64) -> (u32, bool, bool) {
+        let caller = f.caller();
+        let obj = f.sys.objects.object_by_handle(&caller, poly_ntobj::Handle(h), 0, Some(ObjectType::Token)).unwrap();
+        let id = f.sys.objects.cookie(obj).unwrap();
+        let t = f.sys.objects.security.token(id).unwrap();
+        (t.integrity_rid(), t.elevated, t.consented)
+    }
+
+    #[test]
+    fn a_yes_gives_a_consented_full_token() {
+        let (mut f, st, h) = ask_as(Logon::Standard, Some(true));
+        assert_eq!(st, STATUS_SUCCESS);
+        assert_eq!(facts(&mut f, h), (0x3000, true, true));
+        assert_eq!(f.sys.consent.log.last().map(|e| (e.1.as_str(), e.2)), Some(("setup.exe", Some(true))));
+        assert!(f.sys.consent.pending.is_empty());
+    }
+
+    #[test]
+    fn a_no_or_nobody_to_ask_is_cancelled() {
+        assert_eq!(ask_as(Logon::Standard, Some(false)).1, STATUS_CANCELLED);
+        // No hook and no desktop connected: nobody can answer.
+        let (f, st, _) = ask_as(Logon::Standard, None);
+        assert_eq!(st, STATUS_CANCELLED);
+        assert_eq!(f.sys.consent.log.last().map(|e| e.2), Some(Some(false)));
+        assert!(f.sys.consent.pending.is_empty());
+    }
+
+    #[test]
+    fn an_elevated_caller_is_not_asked() {
+        for logon in [Logon::Elevated, Logon::Admin] {
+            let (mut f, st, h) = ask_as(logon, Some(false));
+            assert_eq!(st, STATUS_SUCCESS, "{logon:?}");
+            assert_eq!(facts(&mut f, h).0, 0x3000);
+            assert!(f.sys.consent.log.is_empty());
+        }
+    }
+
+    #[test]
+    fn the_desktop_answers_and_a_closed_desktop_says_no() {
+        let mut b = Broker::default();
+        let mut f = Fake::new();
+        let t = f.caller().thread;
+        let ev = f.sys.objects.new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, t).unwrap();
+        b.pending.insert(1, Pending { event: ev, pid: ProcessId(1), answer: None });
+        b.pending.insert(2, Pending { event: ev, pid: ProcessId(1), answer: None });
+        b.desktop_answered(&mut f.sys.objects, 1, true);
+        b.desktop_gone(&mut f.sys.objects);
+        assert_eq!(b.pending[&1].answer, Some(true));
+        assert_eq!(b.pending[&2].answer, Some(false));
+        assert_eq!(Broker::parse_hook("yes"), Some(true));
+        assert_eq!(Broker::parse_hook("no"), Some(false));
+        assert_eq!(Broker::parse_hook("maybe"), None);
+    }
+}

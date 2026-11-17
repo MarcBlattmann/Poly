@@ -280,6 +280,11 @@ impl Desktop {
     /// keys, the shell's presses, the rest to the server. Returns an app
     /// to start.
     pub fn route(&mut self, ev: InputEvent, server: &mut Server) -> Option<poly_shell::App> {
+        // A consent prompt (ADR 0222) takes every key and click: no app sees them while it
+        // shows, so only the person at the real keyboard and pointer answers it.
+        if self.shell.consent_open() && self.consent_input(&ev, server) {
+            return None;
+        }
         match ev {
             InputEvent::Key { key, pressed, .. } => {
                 // A shortcut being recorded takes every key first (and the
@@ -431,6 +436,37 @@ impl Desktop {
                 server.handle_input(ev);
                 None
             }
+        }
+    }
+
+    /// Input while a consent prompt shows: keys and buttons are the prompt's (true: taken), the
+    /// pointer moves as ever.
+    fn consent_input(&mut self, ev: &InputEvent, server: &mut Server) -> bool {
+        use poly_shell::consent::PromptKey;
+        match *ev {
+            InputEvent::Key { key, pressed, .. } => {
+                if pressed {
+                    let k = match key {
+                        28 | 96 => Some(PromptKey::Enter),
+                        1 => Some(PromptKey::Escape),
+                        15 | 103 | 105 | 106 | 108 => Some(PromptKey::Toggle),
+                        _ => None,
+                    };
+                    if let Some(k) = k {
+                        self.shell.consent_key(k);
+                    }
+                }
+                true
+            }
+            InputEvent::PointerButton { button, pressed, .. } => {
+                if pressed && button == BTN_LEFT {
+                    let (x, y) = server.pointer();
+                    self.shell.consent_press(x.floor(), y.floor());
+                }
+                true
+            }
+            InputEvent::PointerAxis { .. } => true,
+            _ => false,
         }
     }
 

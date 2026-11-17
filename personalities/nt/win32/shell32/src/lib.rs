@@ -15,6 +15,8 @@
 
 extern crate alloc;
 
+mod elevate;
+
 use alloc::vec::Vec;
 use poly_kernelbase::shell;
 use poly_win32_rt as _;
