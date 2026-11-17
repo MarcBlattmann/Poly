@@ -345,6 +345,38 @@ impl<F> Index<F> {
     fn has_inode(&self, fs: FsId, ino: Ino) -> bool {
         self.pages.range(Key::new(fs, ino, 0)..=Key::new(fs, ino, u64::MAX)).next().is_some()
     }
+
+    /// Up to `excess` clean pages that nobody but the index holds, taken
+    /// out, least recently used first, looking at [`DROP_BATCH`] pages at
+    /// most. A page looked at that cannot go (dirty, or held: mapped, being
+    /// copied) gets a second chance: it moves to the newest end of the
+    /// order, so the next eviction does not look at it again. (Without it
+    /// every page added to a full cache walked past the same dirty and
+    /// mapped pages at the old end, under the index's lock: Google Chrome's
+    /// 450 MB package took ten minutes to unpack.) The pages taken, and how
+    /// many were looked at.
+    fn evict_batch(&mut self, excess: usize) -> (Vec<Arc<Page<F>>>, usize) {
+        let oldest: Vec<Key> = self.lru.values().take(DROP_BATCH).copied().collect();
+        let (mut victims, mut looked) = (Vec::new(), 0);
+        for key in oldest {
+            if victims.len() == excess {
+                break;
+            }
+            looked += 1;
+            let page = &self.pages[&key].page;
+            if !page.dirty.load(Relaxed) && Arc::strong_count(page) == 1 {
+                victims.push(key);
+            } else {
+                let stamp = self.stamp();
+                if let Some(slot) = self.pages.get_mut(&key) {
+                    self.lru.remove(&slot.stamp);
+                    slot.stamp = stamp;
+                    self.lru.insert(stamp, key);
+                }
+            }
+        }
+        (victims.iter().filter_map(|k| self.remove(k)).collect(), looked)
+    }
 }
 
 /// Counters of a [`PageCache`].
@@ -367,6 +399,8 @@ pub struct Stats {
     pub written: u64,
     /// Clean pages dropped to make room.
     pub evicted: u64,
+    /// Pages eviction looked at (evicted or given a second chance).
+    pub scanned: u64,
     /// Pages dropped because their file shrank or went away.
     pub discarded: u64,
     /// Writebacks that failed (the data is lost; the next `sync` of the
@@ -381,6 +415,7 @@ struct Counters {
     filled: AtomicU64,
     written: AtomicU64,
     evicted: AtomicU64,
+    scanned: AtomicU64,
     discarded: AtomicU64,
     write_errors: AtomicU64,
 }
@@ -495,29 +530,28 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
     /// used first, until at most `target` pages are cached. Returns how
     /// many went. Their frames are freed after the index is unlocked.
     pub(crate) fn shrink(&self, target: usize) -> usize {
-        let mut total = 0;
+        let (mut total, mut spared) = (0, 0);
         loop {
-            let evicted: Vec<Arc<Page<F>>> = {
+            // Each page is looked at once at most per call: once as many
+            // pages got a second chance as are cached, every page left was
+            // looked at and none of them can go.
+            let (evicted, n, done) = {
                 let mut index = self.index.lock();
                 let excess = index.pages.len().saturating_sub(target);
-                let victims: Vec<Key> = index
-                    .lru
-                    .values()
-                    .filter(|k| {
-                        let slot = &index.pages[*k];
-                        !slot.page.is_dirty() && Arc::strong_count(&slot.page) == 1
-                    })
-                    .take(excess.min(DROP_BATCH))
-                    .copied()
-                    .collect();
-                victims.iter().filter_map(|k| index.remove(k)).collect()
+                if excess == 0 || spared >= index.pages.len() {
+                    (Vec::new(), 0, true)
+                } else {
+                    let (evicted, n) = index.evict_batch(excess);
+                    (evicted, n, false)
+                }
             };
-            total += evicted.len();
-            self.c.evicted.fetch_add(evicted.len() as u64, Relaxed);
-            // A batch short of the batch size: nothing more can go.
-            if evicted.len() < DROP_BATCH {
+            if done || n == 0 {
                 return total;
             }
+            spared += n - evicted.len();
+            total += evicted.len();
+            self.c.evicted.fetch_add(evicted.len() as u64, Relaxed);
+            self.c.scanned.fetch_add(n as u64, Relaxed);
         }
     }
 
@@ -665,6 +699,7 @@ impl<F: PageFrame, L: RawLock + Default> Core<F, L> {
             filled: c.filled.load(Relaxed),
             written: c.written.load(Relaxed),
             evicted: c.evicted.load(Relaxed),
+            scanned: c.scanned.load(Relaxed),
             discarded: c.discarded.load(Relaxed),
             write_errors: c.write_errors.load(Relaxed),
         }

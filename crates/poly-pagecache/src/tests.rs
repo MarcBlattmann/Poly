@@ -513,6 +513,35 @@ fn big_files_leave_the_cache_a_batch_at_a_time() {
     assert_eq!(fs.page_counts().0, 20);
 }
 
+/// A full cache whose oldest pages are dirty or mapped: each page added
+/// evicts a clean one without walking past those again and again (they get
+/// a second chance at the new end of the order). Unpacking Google Chrome's
+/// package into a full cache took ten minutes in the kernel before.
+#[test]
+fn eviction_does_not_walk_past_the_same_busy_pages_again() {
+    let (cache, _probe, fs) = setup(100);
+    // 60 dirty pages first (the oldest), then clean ones up to the limit.
+    let busy = fs.create(fs.root(), b"busy", &REG).unwrap();
+    fs.write(busy, 0, &pattern(1, 60 * PAGE_SIZE)).unwrap();
+    let clean = fs.create(fs.root(), b"clean", &REG).unwrap();
+    fs.write(clean, 0, &pattern(2, 40 * PAGE_SIZE)).unwrap();
+    fs.writeback(Some(clean)).unwrap();
+    assert_eq!(fs.page_counts(), (100, 60));
+    // 30 more pages, one at a time, each over the limit.
+    let more = fs.create(fs.root(), b"more", &REG).unwrap();
+    let before = cache.stats().scanned;
+    for i in 0..30u64 {
+        fs.write(more, i * PAGE_SIZE as u64, &pattern(3, PAGE_SIZE)).unwrap();
+        fs.writeback(Some(more)).unwrap();
+    }
+    let scanned = cache.stats().scanned - before;
+    assert_eq!(cache.stats().evicted, 30);
+    assert!(scanned < 60 + 2 * 30, "the dirty pages were looked at once, not 30 times: {scanned}");
+    assert_eq!(fs.page_counts(), (100, 60), "the dirty pages stay");
+    // The clean file's oldest pages went first.
+    assert_eq!(read_all(&*fs, clean), pattern(2, 40 * PAGE_SIZE));
+}
+
 #[test]
 fn unlinked_files_lose_their_pages() {
     let (_cache, _probe, fs) = setup(1000);
