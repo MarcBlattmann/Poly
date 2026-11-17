@@ -1,0 +1,60 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellExecuteExW.yaml
+id: windows/api/shell32.dll/ShellExecuteExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (EnableLUA 1, ConsentPromptBehaviorAdmin 5, the defaults; nothing was changed). The local account \"server\" is a member of Administrators and logged on at the console (session 1). Tests ran through tools/pipeline/windows/poly-oracle.ps1 -Token standard (the user's filtered token) and -Token elevated (the full token), see UacStandardToken.yaml and UacElevatedToken.yaml; tests named *_std are recorded with the first, *_adm with the second (per-test token in windows.json). Every test ran twice with identical output. NOTHING was clicked: the *_decline_std and *_admin_std tests make Windows show its consent prompt on the secure desktop and nobody answers it; Windows ends the prompt itself after about two minutes and the call returns as 'declined' (ERROR_CANCELLED). Those tests take about 140 s per run on the oracle."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ShellExecuteExW, SHELLEXECUTEINFOW,
+  ShellExecuteW (return codes SE_ERR_*), "How User Account Control works", "Application Manifests", shellapi.h
+  (SEE_MASK_*, SE_ERR_*), winerror.h (ERROR_CANCELLED 1223, ERROR_NO_ASSOCIATION 1155). The survey of Google's installers
+  (docs/windows/chrome-installer-plan.md): their stubs start their elevated helper with this call and the verb runas, and
+  react to the answer. No Microsoft binary was read or disassembled; Wine's tests were not read.
+summary: >
+  Starts a program with a verb (open, runas, ...). Two things matter for Poly's elevation model (owner decision 2026-11-17: ordinary
+  programs are NOT elevated; a request for administrator rights shows a consent dialog of Poly's own): (1) the child of
+  `open` gets the CALLER's token (standard stays standard, elevated stays elevated); (2) the verb `runas`, and `open` on an
+  executable whose manifest requires administrator, from a caller that is NOT elevated, shows the consent dialog, and
+  if the user answers No the call fails with ERROR_CANCELLED and hInstApp 5 (SE_ERR_ACCESSDENIED), no process, hProcess NULL;
+  if the user answers Yes the child is started with the FULL token (UacElevatedToken.yaml). From an ELEVATED caller `runas` and
+  `open` simply start the child elevated, with no prompt. A missing file or an unknown verb fail before any prompt.
+interface:
+  signature: "BOOL ShellExecuteExW(SHELLEXECUTEINFOW *info)"
+  struct_x64: "cbSize u32 @0, fMask u32 @4, hwnd @8, lpVerb @16, lpFile @24, lpParameters @32, lpDirectory @40, nShow i32 @48, hInstApp @56, lpIDList @64, lpClass @72, hkeyClass @80, dwHotKey u32 @88, hMonitor/hIcon @96, hProcess @104; sizeof 112."
+  masks_used: "SEE_MASK_NOCLOSEPROCESS 0x40 (the call fills hProcess), SEE_MASK_NOASYNC 0x100, SEE_MASK_FLAG_NO_UI 0x400."
+rules:
+  open_child_token: "verb `open` or NULL verb, the test's own image as file, parameters `--child token`, mask NOCLOSEPROCESS|NOASYNC|NO_UI: returns TRUE, hInstApp above 32, hProcess set; the child reports (exit code) the caller's token: standard caller -> elevation 0, type 3, medium integrity, Administrators deny-only; elevated caller -> elevation 1, type 2, high integrity, Administrators enabled. The last error is left alone on success."
+  no_hprocess: "without SEE_MASK_NOCLOSEPROCESS: TRUE, hInstApp above 32, hProcess stays NULL."
+  runas_elevated_caller: "verb `runas` on the image from an elevated caller: TRUE, hInstApp above 32, hProcess set, no prompt; the child is elevated (elevation 1, type 2, high integrity)."
+  runas_standard_caller_declined: "verb `runas` on the image from a standard caller: FALSE, GetLastError ERROR_CANCELLED (1223), hInstApp 5 (SE_ERR_ACCESSDENIED), hProcess NULL, no process was created. The consent prompt was left unanswered until Windows gave up (about 140 s on the oracle); a prompt answered No gives the same result."
+  admin_manifest_standard_caller_declined: "verb `open` on a copy of the image whose manifest (external `.manifest` file beside it) says requireAdministrator, from a standard caller: the same consent prompt, the same declined result: FALSE, 1223, hInstApp 5, hProcess NULL. From an elevated caller the same call starts it: TRUE, hInstApp above 32, hProcess set, child elevated."
+  missing_file: "file `C:\\poly-no-such-dir\\none.exe`: verb open or runas, standard or elevated caller: FALSE, ERROR_FILE_NOT_FOUND (2), hInstApp 2 (SE_ERR_FNF). No prompt is shown for `runas` of a missing file."
+  unknown_verb: "verb `frobnicate` on an existing exe: FALSE, ERROR_NO_ASSOCIATION (1155), hInstApp 31 (SE_ERR_NOASSOC)."
+  bad_size: "cbSize 8: FALSE, ERROR_ACCESS_DENIED (5)."
+  decline_is_no_failure_of_the_api: "a declined `runas` is an ordinary failure return: the program may call again; nothing is cached."
+errors:
+  cancelled: "ERROR_CANCELLED (1223) with hInstApp 5: the user (or the timeout of the prompt) said no to a consent prompt"
+  file_not_found: "ERROR_FILE_NOT_FOUND (2) with hInstApp 2"
+  no_association: "ERROR_NO_ASSOCIATION (1155) with hInstApp 31"
+  access_denied: "ERROR_ACCESS_DENIED (5) for a wrong cbSize"
+side_effects: "starts a process; the consent prompt (secure desktop on Windows) blocks the calling thread until it is answered; the caller's token is not changed"
+threading: "synchronous with SEE_MASK_NOASYNC; the prompt blocks only the calling thread"
+ordering: "the prompt is shown before the child exists; a declined call creates nothing"
+timing:
+  typical: "a few milliseconds for open; a declined unanswered prompt about 140 s on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075). The child is the test's own image started with ` --child token`; it ends with a code that carries
+  its token facts. `sxex_admin_*` copies the image to a scratch file and writes `<name>.exe.manifest` with
+  requestedExecutionLevel requireAdministrator beside it. In Poly's test runs (`poly.win.token=standard`) nobody can
+  answer: the consent dialog must answer No at once, so the *_decline_std and *_admin_std tests finish quickly.
+not_covered: >
+  The answer Yes (it needs a person on the oracle), credentials prompts for a non-administrator user, a manifest of
+  `highestAvailable` through ShellExecuteEx, ShellExecuteEx with SEE_MASK_INVOKEIDLIST, class names, folders and URLs
+  as files, verbs other than open and runas, hwnd owner windows, the -Verb RunAs of a console in a non-interactive
+  session (session 0 has no desktop for a prompt; not observed), 32-bit (WOW64) callers.

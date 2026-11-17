@@ -33,6 +33,10 @@
       "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
       "revision": "Windows SDK 10.0.26100.0"
     },
+    "ms-learn-uac": {
+      "description": "User Account Control: Microsoft Learn (Access Tokens, Mandatory Integrity Control, ShellExecuteEx, Application Manifests) and the oracle's behaviour for the split token of an administrator: the standard (filtered) token and the elevated (full) token (entries named by the behaviour; docs/windows/chrome-installer-plan.md)",
+      "revision": "Windows 11 build 26200.9974"
+    },
     "ms-learn-winuser": {
       "description": "Microsoft Learn window messages and system commands of user32 (winuser.h): behaviour that is not an export, entries named by message or command (WM_NCHITTEST, WM_ENTERSIZEMOVE, WM_MOUSEHWHEEL, SC_MAXIMIZE; spec-win-input)",
       "revision": "Windows SDK 10.0.26100.0"

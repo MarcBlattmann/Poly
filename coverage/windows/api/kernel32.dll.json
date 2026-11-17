@@ -171,6 +171,7 @@
 {"symbol":"CreateProcessA","status":"claimed","claimed_by":"impl-createprocess","src":["wine-spec"],"seeds":["wine:kernel32/tests/console.c:test_GetConsoleOriginalTitle","wine:kernel32/tests/process.c:test_Startup","wine:kernel32/tests/console.c:test_AllocConsole","wine:kernel32/tests/process.c:test_IsWow64Process","wine:kernel32/tests/fiber.c:test_fls_exit_deadlock","wine:kernel32/tests/console.c:test_AttachConsole","wine:kernel32/tests/process.c:test_ExitCode","wine:kernel32/tests/process.c:test_DebuggingFlag"]},
 {"symbol":"CreateProcessAsUserA","src":["wine-spec"],"seeds":["wine:advapi32/tests/security.c:test_create_process_token","wine:advapi32/tests/security.c:test_duplicate_handle_access"]},
 {"symbol":"CreateProcessAsUserW","src":["wine-spec"]},
+{"symbol":"CreateProcessElevation","status":"claimed","claimed_by":"spec-win-elevation","src":["ms-learn-uac"]},
 {"symbol":"CreateProcessInternalA","src":["wine-spec"]},
 {"symbol":"CreateProcessInternalW","src":["wine-spec"]},
 {"symbol":"CreateProcessW","status":"claimed","claimed_by":"kernel32-2","src":["wine-spec"],"seeds":["wine:kernel32/tests/debugger.c:test_debug_loop_wow64","wine:dbghelp/tests/dbghelp.c:test_live_modules_proc","wine:psapi/tests/psapi_main.c:test_GetModuleFileNameEx","wine:mscoree/tests/mscoree.c:test_loadpaths_execute","wine:qmgr/tests/qmgr.c:run_child","wine:mscoree/tests/mscoree.c:compile_cs"]},

@@ -736,6 +736,13 @@ fn bits32() -> u8 {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunResult {
     pub name: String,
+    /// In a recording of an entry that holds tests of both token kinds: the session and the
+    /// token kind this test was recorded with (`interactive`, `standard`|`elevated`); they win
+    /// over the file's `system` (see `session_of`, `token_of`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
     #[serde(default)]
     pub exe_sha256: Option<String>,
     /// `ran`, `timeout`, `error` (could not start it, or the runner
