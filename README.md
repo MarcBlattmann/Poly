@@ -80,9 +80,12 @@ cargo xtask start
 
 A menu opens. Press Enter to boot Poly's desktop with Chromium; the first
 start downloads about 230 MB once. To try a Windows program, choose
-*Desktop with Chrome for Windows* instead: Chrome for Testing (a download of about
-210 MB, once) runs on the same desktop and is in its launcher. More commands are in
-[docs/RUNNING.md](docs/RUNNING.md).
+*Desktop with Chrome for Windows* instead (or run `cargo xtask desktop --release --chrome-win`):
+Chrome for Testing (a download of about 210 MB, once) runs on the same desktop with its
+default settings, sandbox and GPU on. Press the Windows key, type `chrome`, press Enter, and
+its window opens on Google's page in under a minute. Type a URL to browse; bookmarks and
+history survive a restart. The very first start also builds Poly, which takes about 10 minutes.
+More commands are in [docs/RUNNING.md](docs/RUNNING.md).
 
 ## How far along is it?
 

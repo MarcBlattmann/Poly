@@ -1663,6 +1663,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     ("chrome-win", chromewin::boot_test),
     // Stage 2: the same with Chrome's sandbox on (chromewin.rs, ADR 0206, ADR 0217).
     ("chrome-win-sandbox", chromewin::sandbox_boot_test),
+    // Stage 7: Chrome's defaults, the sandbox and the GPU on, its GPU process sandboxed on the
+    // software D3D11 device (chromewin.rs, ADR 0216 addendum).
+    ("chrome-win-defaults", chromewin::defaults_boot_test),
     // Chrome's window on the desktop with its page painted, a URL typed into the address field
     // (stage 3; chromewin.rs, ADR 0155, ADR 0214).
     ("chrome-win-window", chromewin::window_boot_test),
@@ -1811,7 +1814,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     // Chrome for Windows, each stage its own job so a flaky window check can never hide stage 1
     // (the `chrome` job of the workflow fetches the package; ADR 0214).
     ("chrome-win", &["chrome-win"]),
-    ("chrome-win-sandbox", &["chrome-win-sandbox"]),
+    ("chrome-win-sandbox", &["chrome-win-sandbox", "chrome-win-defaults"]),
     ("chrome-win-window", &["chrome-win-window", "chrome-try"]),
     ("chrome-win-gpu", &["chrome-win-gpu"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).

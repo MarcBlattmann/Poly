@@ -107,9 +107,16 @@ pub fn command(args: &[String]) -> Result {
     Ok(())
 }
 
+/// One [`ensure`] at a time in this process. Two threads can ask at once (`desktop --chrome-win`
+/// builds the kernel while `polystub.dll` reads our exports): without it both built ntdll.dll into
+/// the same target directory and the first to finish removed it under the other's build.
+static ENSURING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// The up-to-date `ntdll.dll`: from the cache, or built, verified and
 /// cached.
 pub fn ensure() -> Result<PathBuf> {
+    // The second caller waits here and then finds the first one's result in the cache.
+    let _one = ENSURING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let root = root();
     let key = hash_inputs(&root)?;
     let dir = cache_dir(&root);
