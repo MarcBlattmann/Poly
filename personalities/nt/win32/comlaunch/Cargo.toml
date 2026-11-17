@@ -1,0 +1,20 @@
+[package]
+name = "comlaunch"
+description = "comlaunch.exe (ADR 0220): Poly's COM activation process, the machine-wide table of published class objects and the launcher of local servers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "comlaunch"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-com = { path = "../../../../crates/poly-com" }
+
+[lints]
+workspace = true

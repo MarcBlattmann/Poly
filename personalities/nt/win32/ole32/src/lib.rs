@@ -234,6 +234,12 @@ fn touch() {
     let _ = update(|st| st.touch());
 }
 
+/// The calling thread's id.
+fn thread_id() -> u32 {
+    // SAFETY: no arguments.
+    unsafe { GetCurrentThreadId() }
+}
+
 /// The apartment a registration or a fetch belongs to: this thread's STA, else the MTA.
 fn current_owner() -> Owner {
     match state().model() {
@@ -289,6 +295,9 @@ fn thread_alive(tid: u32) -> bool {
 /// `CoInitializeEx` / `RoInitialize` / `OleInitialize` on this thread.
 fn initialize(kind: InitKind) -> Hresult {
     let Some(hr) = update(|st| st.initialize(kind)) else { return E_OUTOFMEMORY };
+    if hr >= 0 {
+        oop::entries::com_initialised();
+    }
     if hr == S_OK {
         match kind.model() {
             // SAFETY: no arguments.
@@ -327,6 +336,8 @@ fn uninitialize(ole: bool) {
     match before {
         Some(Model::Sta) => {
             MAIN_STA.release(tid);
+            // Its class registrations, exported objects and COM window go (ADR 0220).
+            oop::entries::apartment_ended(Owner::Sta(tid));
             // What the apartment registered in the global interface table ends with it.
             let gone = with_git(|t| t.remove_owner(Owner::Sta(tid)));
             for r in gone {
@@ -334,7 +345,12 @@ fn uninitialize(ole: bool) {
                 unsafe { release_unknown(r.object as *mut c_void) };
             }
         }
-        Some(Model::Mta) => MTA_THREADS.leave(),
+        Some(Model::Mta) => {
+            MTA_THREADS.leave();
+            if !MTA_THREADS.any() {
+                oop::entries::apartment_ended(Owner::Mta);
+            }
+        }
         None => {}
     }
     // The apartment's message filter goes with it.
@@ -375,7 +391,7 @@ pub extern "system" fn CoInitializeEx(reserved: *mut c_void, co_init: u32) -> Hr
     if !reserved.is_null() || !coinit_is_valid(co_init) {
         return E_INVALIDARG;
     }
-    initialize(InitKind::Com(co_init))
+    oop::entries::spied_initialize(co_init, false, || initialize(InitKind::Com(co_init)))
 }
 
 #[unsafe(no_mangle)]
@@ -383,12 +399,14 @@ pub extern "system" fn CoInitialize(reserved: *mut c_void) -> Hresult {
     if !reserved.is_null() {
         return E_INVALIDARG;
     }
-    initialize(InitKind::Com(COINIT_APARTMENTTHREADED))
+    oop::entries::spied_initialize(COINIT_APARTMENTTHREADED, false, || {
+        initialize(InitKind::Com(COINIT_APARTMENTTHREADED))
+    })
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn CoUninitialize() {
-    uninitialize(false);
+    oop::entries::spied_uninitialize(|| uninitialize(false));
 }
 
 /// `OleInitialize`: a single-threaded apartment with an OLE count; `pvReserved` must be NULL.
@@ -397,12 +415,13 @@ pub extern "system" fn OleInitialize(reserved: *mut c_void) -> Hresult {
     if !reserved.is_null() {
         return E_INVALIDARG;
     }
-    initialize(InitKind::Ole)
+    // Spies see it as a CoInitializeEx(COINIT_APARTMENTTHREADED) (sheet `CoRegisterInitializeSpy`).
+    oop::entries::spied_initialize(COINIT_APARTMENTTHREADED, true, || initialize(InitKind::Ole))
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn OleUninitialize() {
-    uninitialize(true);
+    oop::entries::spied_uninitialize(|| uninitialize(true));
 }
 
 /// `CoGetApartmentType`: `CO_E_NOTINITIALIZED` when the thread has none and the process has no
@@ -659,18 +678,22 @@ unsafe fn is_guid(p: *const Guid, want: &Guid) -> bool {
     !p.is_null() && unsafe { *p } == *want
 }
 
-/// Activation of a class Poly does not have: the out parameter is cleared and the answer is
-/// `REGDB_E_CLASSNOTREG` (`CO_E_NOTINITIALIZED` on a thread with no apartment, `CLASS_E_NOAGGREGATION`
-/// with an outer unknown). The failing call still gives the thread its COM block (sheet
-/// `TEB.ReservedForOle`). The log names the class, so a program that stops after asking for one
-/// shows which; BITS is one such class: where the service is missing Windows answers the same.
-unsafe fn not_registered(
-    function: &str,
-    clsid: *const Guid,
-    iid: *const Guid,
-    outer: bool,
-    ppv: *mut *mut c_void,
-) -> Hresult {
+/// Log a class nobody registered (the program that stops after asking for one shows which; BITS
+/// is one: where its service is missing Windows answers the same).
+fn log_unregistered(function: &str, clsid: *const Guid, iid: *const Guid) {
+    // SAFETY: the caller's GUID.
+    let name =
+        if unsafe { is_guid(clsid, &CLSID_BACKGROUND_COPY_MANAGER) } { " (BITS: not installed here)" } else { "" };
+    log(&alloc::format!(
+        "stub: ole32: {function}: class {}{name} is not registered (interface {})",
+        guid_text(clsid),
+        guid_text(iid)
+    ));
+}
+
+/// The common start of an activation: the out parameter cleared, the thread's block made (sheet
+/// `TEB.ReservedForOle`), COM usable.
+unsafe fn activation_start(ppv: *mut *mut c_void) -> Hresult {
     if ppv.is_null() {
         return E_POINTER;
     }
@@ -680,32 +703,63 @@ unsafe fn not_registered(
     if !com_usable() {
         return CO_E_NOTINITIALIZED;
     }
-    // SAFETY: the caller's GUID.
-    let name =
-        if unsafe { is_guid(clsid, &CLSID_BACKGROUND_COPY_MANAGER) } { " (BITS: not installed here)" } else { "" };
-    log(&alloc::format!(
-        "stub: ole32: {function}: class {}{name} is not registered (interface {})",
-        guid_text(clsid),
-        guid_text(iid)
-    ));
-    poly_com::apartment::activation_failure(true, outer)
+    S_OK
 }
 
-/// `CoGetClassObject`: no class is registered (the global interface table has no class factory).
+/// `CoGetClassObject` (ADR 0220): the class table, the registry, the activation process.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoGetClassObject(
     clsid: *const Guid,
-    _context: u32,
+    context: u32,
     _server_info: *mut c_void,
     iid: *const Guid,
     ppv: *mut *mut c_void,
 ) -> Hresult {
     // SAFETY: the caller's pointers.
-    unsafe { not_registered("CoGetClassObject", clsid, iid, false, ppv) }
+    unsafe {
+        let hr = activation_start(ppv);
+        if hr != S_OK {
+            return hr;
+        }
+        if clsid.is_null() || iid.is_null() {
+            return E_INVALIDARG;
+        }
+        match oop::activate::class_object(&*clsid, context, &*iid) {
+            Ok(p) => {
+                *ppv = p;
+                S_OK
+            }
+            Err(hr) => {
+                if hr == REGDB_E_CLASSNOTREG {
+                    log_unregistered("CoGetClassObject", clsid, iid);
+                }
+                hr
+            }
+        }
+    }
 }
 
-/// `CoCreateInstance`: the global interface table is the one class there is; no other is
-/// registered.
+/// The class factory of `clsid` for an activation, or the failure the caller returns (an outer
+/// unknown turns "not registered" into `CLASS_E_NOAGGREGATION`, sheet `CoCreateInstance`).
+unsafe fn factory_for(
+    function: &str,
+    clsid: *const Guid,
+    context: u32,
+    iid: *const Guid,
+    outer: bool,
+) -> Result<*mut c_void, Hresult> {
+    // SAFETY: the caller's GUID.
+    oop::activate::class_object(unsafe { &*clsid }, context, &oop::IID_ICLASS_FACTORY).map_err(|hr| {
+        if hr == REGDB_E_CLASSNOTREG {
+            log_unregistered(function, clsid, iid);
+            poly_com::apartment::activation_failure(true, outer)
+        } else {
+            hr
+        }
+    })
+}
+
+/// `CoCreateInstance`: the global interface table, or an object of a registered class (ADR 0220).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstance(
     clsid: *const Guid,
@@ -719,7 +773,24 @@ pub unsafe extern "system" fn CoCreateInstance(
         if is_guid(clsid, &CLSID_STD_GLOBAL_INTERFACE_TABLE) {
             return create_global_interface_table(outer, context, iid, ppv);
         }
-        not_registered("CoCreateInstance", clsid, iid, !outer.is_null(), ppv)
+        let hr = activation_start(ppv);
+        if hr != S_OK {
+            return hr;
+        }
+        if clsid.is_null() || iid.is_null() {
+            return E_INVALIDARG;
+        }
+        let f = match factory_for("CoCreateInstance", clsid, context, iid, !outer.is_null()) {
+            Ok(f) => f,
+            Err(hr) => return hr,
+        };
+        match oop::activate::create_with(f, outer, &*iid) {
+            Ok(o) => {
+                *ppv = o;
+                S_OK
+            }
+            Err(hr) => hr,
+        }
     }
 }
 
@@ -734,8 +805,9 @@ pub struct MultiQi {
 /// `CO_S_NOTALLINTERFACES` (`winerror.h`): some of the interfaces asked for are missing.
 const CO_S_NOTALLINTERFACES: Hresult = 0x0008_0012;
 
-/// `CoCreateInstanceEx`: every requested interface is asked from the object, or fails the same
-/// way when the class is not there.
+/// `CoCreateInstanceEx` (sheet `CoCreateInstanceEx`): one object, every requested interface asked of
+/// it; the factory gets the first one in-process, `IUnknown` from another process when there are
+/// several.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoCreateInstanceEx(
     clsid: *const Guid,
@@ -750,15 +822,18 @@ pub unsafe extern "system" fn CoCreateInstanceEx(
     }
     // SAFETY: the caller's pointers; `count` entries of the caller.
     unsafe {
+        let entries = core::slice::from_raw_parts_mut(results, count as usize);
+        if entries.iter().any(|q| q.iid.is_null() || !q.itf.is_null()) {
+            return E_INVALIDARG;
+        }
         if is_guid(clsid, &CLSID_STD_GLOBAL_INTERFACE_TABLE) {
             let mut found = 0;
             let mut last = E_NOINTERFACE;
-            for i in 0..count as usize {
-                let q = results.add(i);
+            for q in entries.iter_mut() {
                 let mut out: *mut c_void = core::ptr::null_mut();
-                let hr = create_global_interface_table(outer, context, (*q).iid, &mut out);
-                (*q).itf = out;
-                (*q).hr = hr;
+                let hr = create_global_interface_table(outer, context, q.iid, &mut out);
+                q.itf = out;
+                q.hr = hr;
                 if hr == S_OK {
                     found += 1;
                 } else {
@@ -773,14 +848,46 @@ pub unsafe extern "system" fn CoCreateInstanceEx(
                 last
             };
         }
-        let mut unused: *mut c_void = core::ptr::null_mut();
-        let hr = not_registered("CoCreateInstanceEx", clsid, core::ptr::null(), !outer.is_null(), &mut unused);
-        for i in 0..count as usize {
-            let q = results.add(i);
-            (*q).itf = core::ptr::null_mut();
-            (*q).hr = hr;
+        touch();
+        if !com_usable() {
+            return CO_E_NOTINITIALIZED;
         }
-        hr
+        if clsid.is_null() {
+            return E_INVALIDARG;
+        }
+        let fail_all = |entries: &mut [MultiQi], hr: Hresult| {
+            for q in entries.iter_mut() {
+                q.itf = core::ptr::null_mut();
+                q.hr = hr;
+            }
+            hr
+        };
+        let f = match factory_for("CoCreateInstanceEx", clsid, context, entries[0].iid, !outer.is_null()) {
+            Ok(f) => f,
+            Err(hr) => return fail_all(entries, hr),
+        };
+        let first = if oop::proxy::is_remote(f) && count > 1 { IID_IUNKNOWN } else { *entries[0].iid };
+        let o = match oop::activate::create_with(f, outer, &first) {
+            Ok(o) => o,
+            Err(hr) => return fail_all(entries, hr),
+        };
+        let mut found = 0;
+        for q in entries.iter_mut() {
+            let (hr, p) = oop::query(o, &*q.iid);
+            q.itf = p;
+            q.hr = if p.is_null() { if hr < 0 { hr } else { E_NOINTERFACE } } else { S_OK };
+            if !p.is_null() {
+                found += 1;
+            }
+        }
+        release_unknown(o);
+        if found == count {
+            S_OK
+        } else if found > 0 {
+            CO_S_NOTALLINTERFACES
+        } else {
+            E_NOINTERFACE
+        }
     }
 }
 
@@ -2047,11 +2154,17 @@ pub unsafe extern "system" fn WindowsDeleteStringBuffer(buffer: HString) -> Hres
 
 /// The entry point (`DllMain`): nothing to set up.
 #[unsafe(no_mangle)]
-pub extern "system" fn ole32_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
+pub extern "system" fn ole32_main(_module: *mut u8, reason: u32, _reserved: *mut u8) -> i32 {
+    // DLL_THREAD_DETACH: the thread's initialisation spies are released (sheet
+    // `CoRevokeInitializeSpy`, `thread_end`).
+    if reason == 3 {
+        oop::entries::thread_ended();
+    }
     1
 }
 
 mod delayed;
+mod oop;
 
 #[cfg(target_arch = "x86_64")]
 mod apps;
