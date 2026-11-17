@@ -1,0 +1,29 @@
+# Hand-off of windows/api/user32.dll/SetProcessDpiAwarenessContext
+
+Date (UTC): 2026-11-17 14:28:27
+Entry id: windows/api/user32.dll/SetProcessDpiAwarenessContext
+Spec revision (git): d472ab0435e5253f7a20aeb77ec1ff40a2f300c7
+Spec agent: spec-win-dpi
+Implementer agent: impl-win-dpi
+
+Files handed over:
+
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.yaml` sha256:a6c67ce1d154380cef9e666d85c2286beda10fe3985b726ec67e401a726a5ac4
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_both.rs` sha256:f958ed5384ec2203519452760eaf4285b339ffc53ee82de1ab074fbe529415ec
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_false.rs` sha256:7e34561529ee6b4d5627b53f4e4d10d269a203c3e046e276f26eed1703d14eb5
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_list.rs` sha256:5f71471f76811e14a778210d7ab8b7b728a8c0e8437f4787ffa2113aa2d4756c
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_pm.rs` sha256:e1781e185391cfdea9b2b32e37ca0ebdf4e67bea6fe1dab249175fda1fa4d35f
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_pmv2.rs` sha256:1245bcdb58c1fd30fb069c35050dac7122fef28326e58aac93423dbe30e8a09b
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_true.rs` sha256:d6ea37c2dc55a03c4ca7e43608095e487202f6a683b3f76b7dd175422f3569c8
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_truepm.rs` sha256:1cfab5401b3be06ae5676abfb1a9305e378a4e47ff7e066556aa6b28069a2dd8
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_man_unknown.rs` sha256:42020bd3b6a449e14a55da4e411c754f5937521e82efc4ed0273c95a5fa82e29
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_who_s.rs` sha256:66a1b03715da17a262bef678abc2486e5d90025afb4668aa6664a3803bb0999b
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_who_u.rs` sha256:40a4270a1f58bd7dbb7e6d4683b1d23fd0a2291f0b89ce8ffde89442ac18b507
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/dpi_who_x.rs` sha256:db83f411fdba166efc6db2737bb6a3cb109110706f89c8febd912991479ad6b3
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_default_invalid.rs` sha256:51c3f072c0530c0c39e7d697ce6245602d1cf45d78013a2b5a0f39d3b823c3c1
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_late.rs` sha256:e181933c1ff7d5aef1badd075f139495bff5bb485e77e1879e2d7e0b14204a63
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_permonitor.rs` sha256:0c5577b148c132f50f6e1d5019635c555eb715997588106668fed69c445a4397
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_permonitor_v2.rs` sha256:41cccd993bea1dd813222488862a406c4d2171d69d3a02656967a73127fa8e79
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_system.rs` sha256:d71b163a4d4517b229d1130f063aa9aff32c598646ff2e7c15089660a532f488
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/spdac_threads.rs` sha256:dd5aa352a2e7edaa77d76fb3c1bd10c8843993cad4c4f46660b7546cff0d88c1
+- `specs/windows/user32.dll/SetProcessDpiAwarenessContext.tests/windows.json` sha256:fe527da5c4c9eabf20b3cb04a7d458d26748f521e5baf043db58bd2343a30cbd
