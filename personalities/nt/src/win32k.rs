@@ -125,6 +125,8 @@ impl Win32k {
                     self.wm.link_hwheel(horizontal, &mut fx);
                 }
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
+                // Windows apps live in output pixels: the system DPI follows (ADR 0219).
+                FromCompositor::Units { units } => self.wm.set_system_dpi(96 * units.clamp(1, 8)),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.
                 FromCompositor::Request { surface, request: DesktopRequest::Close } => {
@@ -166,7 +168,9 @@ impl Win32k {
         if let Some(o) = self.desktop.output()
             && !self.wm.display().interactive
         {
-            self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, 24));
+            // The ridge in Windows pixels (ADR 0219: `units` of them a logical pixel).
+            let ridge = 24 * (self.wm.system_dpi() / 96).max(1) as i32;
+            self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, ridge));
         }
         self.sync();
     }

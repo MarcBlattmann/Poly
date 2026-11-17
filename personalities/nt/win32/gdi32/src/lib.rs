@@ -1028,13 +1028,19 @@ dc_get_set! {
 /// screen's values for every DC, of the display win32k has now.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
-    let size = display_size();
+    let shown = display();
     let caps = gdi(|g| {
-        if let Some((width, height)) = size {
+        if let Some((width, height, _)) = shown {
             g.screen = poly_gdi::gdi::Screen { width, height };
         }
         g.device_caps(hdc as u64, index)
     });
+    // LOGPIXELSX (88), LOGPIXELSY (90): the system DPI (Learn, "GetDeviceCaps"), 96 unless Windows
+    // apps live in output pixels on a larger scale (ADR 0219).
+    let caps = match (caps, shown) {
+        (Some(v), Some((_, _, dpi))) if (index == 88 || index == 90) && v == 96 => Some(dpi as i32),
+        (c, _) => c,
+    };
     caps.unwrap_or_else(|| {
         // A deleted DC still answers GetObjectType with OBJ_DC: ERROR_INVALID_PARAMETER for it
         // (GetDeviceCaps.yaml `invalid_dc`), ERROR_INVALID_HANDLE for what is no DC.
@@ -1046,6 +1052,11 @@ pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
 
 /// The screen's size in pixels, from win32k (`None`: it did not answer).
 fn display_size() -> Option<(i32, i32)> {
+    display().map(|(w, h, _)| (w, h))
+}
+
+/// The screen's size in pixels and the system DPI, from win32k (`None`: it did not answer).
+fn display() -> Option<(i32, i32, u32)> {
     use poly_win32k::proto::{Reply, Request};
     let req = poly_win32k::wire::encode(&Request::Desktop {});
     let mut out = [0u8; 256];
@@ -1056,7 +1067,7 @@ fn display_size() -> Option<(i32, i32)> {
         return None;
     }
     match poly_win32k::wire::decode(out.get(..len as usize)?)? {
-        Reply::Desktop { width, height, .. } => Some((width, height)),
+        Reply::Desktop { width, height, dpi, .. } => Some((width, height, dpi)),
         _ => None,
     }
 }

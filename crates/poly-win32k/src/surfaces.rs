@@ -31,8 +31,10 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-/// The largest surface side with a buffer (16 MiB of kernel memory).
-pub const MAX_SIDE: u32 = 2048;
+/// The largest surface side with a buffer: a window as large as an 8K screen. Its buffer is kept
+/// in bands ([`BAND_BYTES`]); a window in output pixels on a 2560x1600 screen at 200 % is wider
+/// than 2048 (ADR 0219).
+pub const MAX_SIDE: u32 = 8192;
 
 /// The widest own border a window's surface passes the pointer to (a window
 /// with a border wider than this gets this much of it).

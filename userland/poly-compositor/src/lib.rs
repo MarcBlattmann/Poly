@@ -142,11 +142,13 @@ struct Options {
     no_kms: bool,
     /// Print compose/present/damage summaries every few seconds.
     stats: bool,
+    /// Windows apps live in output pixels at the scale's DPI (ADR 0219).
+    windows_hidpi: bool,
     xwayland: Option<xwayland::Start>,
     exec: Vec<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `auto`, a factor (`2`, `1.5`) or a percentage (`150`,
 /// `150%`; [`Scale::parse`]).
@@ -178,6 +180,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         drm: "/dev/dri/card0".into(),
         no_kms: false,
         stats: false,
+        windows_hidpi: false,
         xwayland: None,
         exec: Vec::new(),
     };
@@ -195,6 +198,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--drm" => o.drm = value()?,
             "--no-kms" => o.no_kms = true,
             "--stats" => o.stats = true,
+            "--windows-hidpi" => o.windows_hidpi = true,
             "--dump" => o.dump = Some(value()?),
             "--probe" => {
                 let v = value()?;
@@ -700,7 +704,7 @@ fn run(args: &[String]) -> Result<u8, String> {
         None => None,
     };
     // Windows apps' top-level windows through win32k's desktop link (ADR 0131).
-    let mut winlink = if o.desktop { win32::Link::open(server.scene()) } else { None };
+    let mut winlink = if o.desktop { win32::Link::open(server.scene(), o.windows_hidpi) } else { None };
     let mut env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
     // Poly's own apps follow the desktop's theme and keyboard layout from
     // the settings file (ADR 0134).

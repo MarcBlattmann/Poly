@@ -1788,7 +1788,16 @@ pub(crate) fn first_call() {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemMetrics(index: i32) -> i32 {
     first_call();
-    match metrics::system_metric(index, &u::screen(&SYS)) {
+    // At a system DPI other than 96 (Windows apps in output pixels, ADR 0219) the sizes that
+    // scale are those of that DPI (GetSystemMetricsForDpi.yaml `scaling_table`).
+    let screen = u::screen(&SYS);
+    let dpi = u::system_dpi(&SYS);
+    let v = if dpi == 96 {
+        metrics::system_metric(index, &screen)
+    } else {
+        metrics::system_metric_for_dpi(index, dpi, &screen)
+    };
+    match v {
         Some(v) => v,
         None => {
             set_last_error(ERROR_INVALID_PARAMETER);
@@ -1831,8 +1840,6 @@ pub extern "system" fn GetSystemMetricsForDpi(index: i32, dpi: u32) -> i32 {
 
 // ----- DPI and monitors (one monitor, DPI-unaware processes: 96)
 
-/// The system DPI (GetDpiForSystem.yaml).
-const SYSTEM_DPI: u32 = 96;
 /// The one monitor's handle: the same value for every point and thread.
 const PRIMARY_MONITOR: usize = 0x0001_0001;
 /// `MONITOR_DEFAULTTONULL` / `TOPRIMARY` / `TONEAREST` (winuser.h).
@@ -1845,7 +1852,7 @@ const ERROR_INVALID_MONITOR_HANDLE: u32 = 1461;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForSystem() -> u32 {
-    SYSTEM_DPI
+    u::system_dpi(&SYS)
 }
 
 /// 96 for any window of a DPI-unaware process, the desktop and message
@@ -1853,7 +1860,7 @@ pub extern "system" fn GetDpiForSystem() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForWindow(hwnd: H) -> u32 {
     if hwnd != 0 && info(hwnd).is_some() {
-        SYSTEM_DPI
+        u::system_dpi(&SYS)
     } else {
         set_last_error(ERROR_INVALID_PARAMETER);
         0

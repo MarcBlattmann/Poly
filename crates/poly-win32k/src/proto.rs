@@ -405,7 +405,7 @@ crate::wire_enum! {
         /// A Win32 error for the caller's last error.
         2 => Error { code: u32 },
         3 => Value { value: u64 },
-        4 => Desktop { desktop: u32, message: u32, width: i32, height: i32, work: Rect, interactive: bool },
+        4 => Desktop { desktop: u32, message: u32, width: i32, height: i32, work: Rect, interactive: bool, dpi: u32 },
         5 => Atom { atom: u16 },
         6 => Class { info: ClassInfo },
         7 => Created { created: Created },
