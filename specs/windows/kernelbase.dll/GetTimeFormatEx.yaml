@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/GetTimeFormatEx.yaml
+id: windows/api/kernelbase.dll/GetTimeFormatEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  GetTimeFormatW with the locale given by name (L"en-US", L"" for the invariant locale, NULL for the user default,
+  L"!x-sys-default-locale" for the system default). Formats, flags, pictures, sizes and time checks are those of
+  GetTimeFormatW.
+interface:
+  signature: "int GetTimeFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, const SYSTEMTIME *lpTime, LPCWSTR lpFormat, LPWSTR lpTimeStr, int cchTime)"
+rules:
+  same_as_lcid_form: >-
+    For the names en-US, en-GB, de-DE, de-CH, fr-FR, it-IT, ja-JP and L"" (invariant) every output equals the one the LCID
+    form gives for the matching LCID (see GetTimeFormatW: en-US "h:mm:ss tt", ja-JP "H:mm:ss", the rest "HH:mm:ss"); flags
+    and pictures behave the same, including flag bits other than the six time flags and LOCALE_NOUSEROVERRIDE failing with
+    1004 and the flags still applying to a picture. LOCALE_USE_CP_ACP is accepted.
+  names: >-
+    Names are case-insensitive ("EN-us"). Neutral names work and give the primary locale ("en" the US text, "de", "fr",
+    "zh-Hans", "zh-CN" 24-hour). A sort suffix after an underscore is accepted ("de-DE_phoneb", "en-US_tradnl",
+    "x-IV_mathan"); an underscore for the hyphen is accepted ("en_US" is en-US). Names that are well-formed but unknown
+    (xx-XX, zz) succeed and format as the invariant locale. Malformed names fail with ERROR_INVALID_PARAMETER 87: a space
+    anywhere ("en US", " en-US", "en-US "), digits as an LCID ("0409", "00000409"), a single letter "e", a trailing or
+    leading hyphen ("en-", "-US", "en-US-"),. A name of 86 units (one long subtag) fails as well; it is malformed for that
+    reason too (the limit Learn gives is 85 units with the NUL).
+  defaults: >-
+    NULL is the user default locale and L"!x-sys-default-locale" the system default locale: the text equals what the
+    locale name of GetUserDefaultLocaleName, respectively GetSystemDefaultLocaleName, formats (NULL with
+    LOCALE_NOUSEROVERRIDE equals that name with LOCALE_NOUSEROVERRIDE). The result for these two is the machine's and is
+    not recorded.
+  errors: >-
+    cch 0 gives the size needed with the NUL and does not touch the buffer; too small a buffer: ERROR_INSUFFICIENT_BUFFER
+    122 and nothing written; NULL buffer with cch > 0 and cch -1: 87. Hour 24, minute 60, ms 1000 fail with 87; second 60
+    works; the date part is not looked at. A NULL time means now.
+errors:
+  invalid_flags: "1004"
+  buffer_too_small: "122"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

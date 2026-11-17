@@ -1,0 +1,69 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernelbase.dll/LCIDToLocaleName.yaml
+id: windows/api/kernelbase.dll/LCIDToLocaleName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: >-
+    homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by
+    tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of
+    Administrators) with its elevated administrator token; every test ran at least twice with identical output, and once
+    more with `-Token standard` (the same account's filtered token, medium integrity, interactive session) with
+    byte-identical output: none of these calls depends on the token. The machine's own user locale is not en-US and is
+    never recorded: only explicit locales and relations to the user's own are.
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >-
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output).
+  Microsoft Learn's page for each function named here, "Locale Identifiers", "Locale Names", "National Language Support
+  Constants" and the public SDK headers winnls.h, winnt.h, winbase.h, minwinbase.h, winerror.h for constants and
+  layouts. Nothing of Windows, Wine or any other implementation was read or disassembled.
+summary: >-
+  The locale name for an LCID. Returns the number of characters including the NUL; with cchName 0 only the size.
+interface:
+  signature: "int LCIDToLocaleName(LCID Locale, LPWSTR lpName, int cchName, DWORD dwFlags)"
+rules:
+  names: >-
+    Flags 0: 0x409 en-US, 0x809 en-GB, 0x407 de-DE, 0x807 de-CH, 0x40C fr-FR, 0x80C fr-BE, 0x410 it-IT, 0x411 ja-JP, 0x804
+    zh-CN, 0x404 zh-TW, 0xC04 zh-HK, 0x1004 zh-SG, 0x436 af-ZA, 0xC0A es-ES, 0x40A es-ES_tradnl, 0x241A sr-Latn-RS, 0x4009
+    en-IN, 0x1009 en-CA, 0x2C09 en-TT, 0x501 qps-ploc, 0x5FE qps-ploca; sorts: 0x10407 de-DE_phoneb, 0x1007F x-IV_mathan;
+    0x7F the invariant locale: the empty string, result 1. Neutral LCIDs with flags 0 give a specific name: 0x9 en-US, 0x7
+    de-DE, 0xC fr-FR, 0x10 it-IT, 0x16 pt-BR, 0x4 zh-CN, 0x7C04 zh-HK, 0x7C moh-CA. With LOCALE_ALLOW_NEUTRAL_NAMES
+    0x08000000 the same LCIDs give neutral names: 0x9 en, 0x7 de, 0xC fr, 0x10 it, 0x16 pt, 0x4 zh-Hans, 0x7C04 zh-Hant,
+    0x7C moh; specific LCIDs are unchanged. Unknown LCIDs fail with ERROR_INVALID_PARAMETER 87 and write nothing: 0x1234,
+    0xFFFF, 0x8000, 0xFFFFFFFF, 0x10409 and 0x20409 (a sort id the locale does not have).
+  defaults: >-
+    0x400, 0, 0xC00 (LOCALE_CUSTOM_DEFAULT) and 0x1000 give the name GetUserDefaultLocaleName gives, 0x800 the name
+    GetSystemDefaultLocaleName gives, 0x1400 (LOCALE_CUSTOM_UI_DEFAULT) the name of the user's UI language
+    (GetUserDefaultUILanguage); the same with and without the neutral flag. The user's own LCID gives the user's own name
+    and the system's own LCID the system's own name. The values are the machine's and are only recorded as these
+    equalities.
+  size: >-
+    cchName 0 returns the size needed including the NUL (6 for en-US, 1 for invariant, 13 for de-DE_phoneb) and the buffer
+    (may be NULL) is not touched. A buffer that is too short fails with ERROR_INSUFFICIENT_BUFFER 122, result 0, but a
+    truncated prefix of the name is written (cch 5 gives "en-U", cch 1 gives an empty string); an invariant name needs
+    only one unit and always fits (cch 1). A buffer of exactly the needed size or larger succeeds. Negative cchName fails
+    with 87 and writes nothing; a NULL buffer with cchName > 0 fails with 87.
+  flags: >-
+    Only 0 and LOCALE_ALLOW_NEUTRAL_NAMES are valid; every other flag, alone or combined with it (0x1, 0x2, 0x4, 0x8,
+    0x10, 0x100, 0x400, 0x1000, 0x40000000, 0x80000000, 0x08000001, 0x0C000000, 0xFFFFFFFF), fails with
+    ERROR_INVALID_PARAMETER 87 (not 1004) and writes nothing.
+errors:
+  invalid_parameter: "87"
+  buffer_too_small: "122"
+side_effects: "none"
+threading: "may be called from any thread; no state is shared between calls"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >-
+  Rust tests (ADR 0075), one file per test, each declaring what it calls from Learn's prototypes. Observations are
+  return values, error codes, booleans and the formatted text of explicit locales, never addresses, handles, process
+  ids, times, or the text of the machine's own default locale (only equalities with it). Fixed SYSTEMTIME values are
+  used throughout; calls with a NULL time check only the shape of the current time.
+not_covered: >-
+  Calendars other than Gregorian, locales other than the ones named, user overrides from the Region settings (the
+  machine has some; they are never recorded).

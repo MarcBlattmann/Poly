@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "97dbb8225ac3",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:32:01Z",
+  "tests": [
+    {
+      "name": "enum_ex_callback",
+      "exe_sha256": "417b2fc9f07b6ecdd09922e2a4c437560649c6b5e6df153622c9444c5583e0e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RvcCBhZnRlciAxIChXSU5ET1dTKTogcmV0PTEgZXJyPS0yIGNhbGxzPTEgbHBhcmFtX3dyb25nPTAKc3RvcCBhZnRlciAyIChXSU5ET1dTKTogcmV0PTEgZXJyPS0yIGNhbGxzPTIgbHBhcmFtX3dyb25nPTAKc3RvcCBhZnRlciAzIChXSU5ET1dTKTogcmV0PTEgZXJyPS0yIGNhbGxzPTMgbHBhcmFtX3dyb25nPTAKc3RvcCBhZnRlciAxMCAoV0lORE9XUyk6IHJldD0xIGVycj0tMiBjYWxscz0xMCBscGFyYW1fd3Jvbmc9MApscGFyYW0gMHgwOiByZXQ9MSBscGFyYW1fd3Jvbmc9MCBjYWxscz0zCmxwYXJhbSAweDE6IHJldD0xIGxwYXJhbV93cm9uZz0wIGNhbGxzPTMKbHBhcmFtIDB4MTIzNDU2Nzg6IHJldD0xIGxwYXJhbV93cm9uZz0wIGNhbGxzPTMKbHBhcmFtIDB4ZmZmZmZmZmY6IHJldD0xIGxwYXJhbV93cm9uZz0wIGNhbGxzPTMKNjQtYml0IGxwYXJhbSBpbnRhY3Q6IHRydWUgKHJldD0xKQpyZXNlcnZlZCBub24tTlVMTDogcmV0PTAgZXJyPTg3IGNhbGxzPjA9ZmFsc2UKZmxhZ3MgMHgwOiByZXQ9MSBlcnI9LTIgY2FsbHM+MD10cnVlCmZsYWdzIDB4NDA6IHJldD0wIGVycj0xMDA0IGNhbGxzPjA9ZmFsc2UKZmxhZ3MgMHhmZmZmZmZmZjogcmV0PTAgZXJyPTEwMDQgY2FsbHM+MD1mYWxzZQpOVUxMIGNhbGxiYWNrIGZsYWdzIDE6IHJldD0wIGVycj04NwpOVUxMIGNhbGxiYWNrIGZsYWdzIDA6IHJldD0wIGVycj04Nwp0d28gZW51bWVyYXRpb25zIGFncmVlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "stop after 1 (WINDOWS): ret=1 err=-2 calls=1 lparam_wrong=0\nstop after 2 (WINDOWS): ret=1 err=-2 calls=2 lparam_wrong=0\nstop after 3 (WINDOWS): ret=1 err=-2 calls=3 lparam_wrong=0\nstop after 10 (WINDOWS): ret=1 err=-2 calls=10 lparam_wrong=0\nlparam 0x0: ret=1 lparam_wrong=0 calls=3\nlparam 0x1: ret=1 lparam_wrong=0 calls=3\nlparam 0x12345678: ret=1 lparam_wrong=0 calls=3\nlparam 0xffffffff: ret=1 lparam_wrong=0 calls=3\n64-bit lparam intact: true (ret=1)\nreserved non-NULL: ret=0 err=87 calls>0=false\nflags 0x0: ret=1 err=-2 calls>0=true\nflags 0x40: ret=0 err=1004 calls>0=false\nflags 0xffffffff: ret=0 err=1004 calls>0=false\nNULL callback flags 1: ret=0 err=87\nNULL callback flags 0: ret=0 err=87\ntwo enumerations agree: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "enum_ex_content",
+      "exe_sha256": "0b2a04abb04f6a58c0845316a6602b544c02b3598af8b3ac6f792acf09c3b9f0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W2VuLVVTXSBuZXV0cmFsPTAgc3BlY2lmaWM9MSBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW2VuXSBuZXV0cmFsPTEgc3BlY2lmaWM9MCBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW2RlLUNIXSBuZXV0cmFsPTAgc3BlY2lmaWM9MSBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW2RlXSBuZXV0cmFsPTEgc3BlY2lmaWM9MCBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW2ZyLUZSXSBuZXV0cmFsPTAgc3BlY2lmaWM9MSBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW10gbmV1dHJhbD0xIHNwZWNpZmljPTAgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xCltkZS1ERV0gbmV1dHJhbD0wIHNwZWNpZmljPTEgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xCltmcl0gbmV1dHJhbD0xIHNwZWNpZmljPTAgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xCltlbi1HQl0gbmV1dHJhbD0wIHNwZWNpZmljPTEgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xCltqYS1KUF0gbmV1dHJhbD0wIHNwZWNpZmljPTEgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xClt6aC1DTl0gbmV1dHJhbD0wIHNwZWNpZmljPTEgYm90aD0xIHdpbmRvd3M9MSBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MSB3aW5kb3dzfHNwZWNpZmljPTEgemVybz0xClt6aC1IYW5zXSBuZXV0cmFsPTEgc3BlY2lmaWM9MCBib3RoPTEgd2luZG93cz0xIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0xIHdpbmRvd3N8c3BlY2lmaWM9MSB6ZXJvPTEKW2RlLURFX3Bob25lYl0gbmV1dHJhbD0wIHNwZWNpZmljPTAgYm90aD0wIHdpbmRvd3M9MCBhbHQ9MSB3aW5kb3dzfG5ldXRyYWw9MCB3aW5kb3dzfHNwZWNpZmljPTAgemVybz0xCltqYS1KUF9yYWRzdHJdIG5ldXRyYWw9MCBzcGVjaWZpYz0wIGJvdGg9MCB3aW5kb3dzPTAgYWx0PTEgd2luZG93c3xuZXV0cmFsPTAgd2luZG93c3xzcGVjaWZpYz0wIHplcm89MQpbcXBzLXBsb2NdIG5ldXRyYWw9MCBzcGVjaWZpYz0wIGJvdGg9MCB3aW5kb3dzPTAgYWx0PTAgd2luZG93c3xuZXV0cmFsPTAgd2luZG93c3xzcGVjaWZpYz0wIHplcm89MApbIXgtc3lzLWRlZmF1bHQtbG9jYWxlXSBuZXV0cmFsPTAgc3BlY2lmaWM9MCBib3RoPTAgd2luZG93cz0wIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0wIHdpbmRvd3N8c3BlY2lmaWM9MCB6ZXJvPTAKW2VuLVVTX3RyYWRubF0gbmV1dHJhbD0wIHNwZWNpZmljPTAgYm90aD0wIHdpbmRvd3M9MCBhbHQ9MCB3aW5kb3dzfG5ldXRyYWw9MCB3aW5kb3dzfHNwZWNpZmljPTAgemVybz0wClt6aC1IYW5zLUNOXSBuZXV0cmFsPTAgc3BlY2lmaWM9MCBib3RoPTAgd2luZG93cz0wIGFsdD0wIHdpbmRvd3N8bmV1dHJhbD0wIHdpbmRvd3N8c3BlY2lmaWM9MCB6ZXJvPTAKbmV1dHJhbCBhbmQgc3BlY2lmaWMgYXJlIGRpc2pvaW50IGluIHRoZSB3YW50ZWQgc2V0OiB0cnVlCmNvdW50KDB4MzApID09IGNvdW50KDB4MTApICsgY291bnQoMHgyMCk6IHRydWUKY291bnQoMHgxMSkgPD0gY291bnQoMSkgYW5kIGNvdW50KDB4MjEpIDw9IGNvdW50KDEpOiB0cnVlIHRydWUKY291bnQoMHgxMSkgKyBjb3VudCgweDIxKSA9PSBjb3VudCgxKTogZmFsc2UKY291bnQoMCkgPT0gY291bnQoMSkrY291bnQoMiBzdXBwbGVtZW50YWwpPyB3aW5kb3dzLW9ubHk6IGZhbHNlICh6ZXJvIHRydWUgd2luZG93cyB0cnVlKQphbHRlcm5hdGUgc29ydHMgbm9uZW1wdHk6IHRydWUKc3BlY2lmaWMgaXMgbW9yZSB0aGFuIG5ldXRyYWw6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[en-US] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[en] neutral=1 specific=0 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[de-CH] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[de] neutral=1 specific=0 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[fr-FR] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[] neutral=1 specific=0 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[de-DE] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[fr] neutral=1 specific=0 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[en-GB] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[ja-JP] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[zh-CN] neutral=0 specific=1 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[zh-Hans] neutral=1 specific=0 both=1 windows=1 alt=0 windows|neutral=1 windows|specific=1 zero=1\n[de-DE_phoneb] neutral=0 specific=0 both=0 windows=0 alt=1 windows|neutral=0 windows|specific=0 zero=1\n[ja-JP_radstr] neutral=0 specific=0 both=0 windows=0 alt=1 windows|neutral=0 windows|specific=0 zero=1\n[qps-ploc] neutral=0 specific=0 both=0 windows=0 alt=0 windows|neutral=0 windows|specific=0 zero=0\n[!x-sys-default-locale] neutral=0 specific=0 both=0 windows=0 alt=0 windows|neutral=0 windows|specific=0 zero=0\n[en-US_tradnl] neutral=0 specific=0 both=0 windows=0 alt=0 windows|neutral=0 windows|specific=0 zero=0\n[zh-Hans-CN] neutral=0 specific=0 both=0 windows=0 alt=0 windows|neutral=0 windows|specific=0 zero=0\nneutral and specific are disjoint in the wanted set: true\ncount(0x30) == count(0x10) + count(0x20): true\ncount(0x11) <= count(1) and count(0x21) <= count(1): true true\ncount(0x11) + count(0x21) == count(1): false\ncount(0) == count(1)+count(2 supplemental)? windows-only: false (zero true windows true)\nalternate sorts nonempty: true\nspecific is more than neutral: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}
