@@ -1,0 +1,62 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2c1341f980d8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:55:57Z",
+  "tests": [
+    {
+      "name": "ov_nt_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "63d0902d9785933946bdc46a39675556740b49ab4859c614e16a138914cbe2c2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "XD8/XEM6IGFjY2VzcyAwOiBzdGF0dXMgMHhjMDAwMDAwZCBpbmZvcm1hdGlvbiAtMQpcPz9cQzogYWNjZXNzIEZJTEVfUkVBRF9BVFRSSUJVVEVTOiBzdGF0dXMgMHhjMDAwMDAwZCBpbmZvcm1hdGlvbiAtMQpcPz9cQzogYWNjZXNzIFNZTkNIUk9OSVpFOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiBhY2Nlc3MgRklMRV9SRUFEX0FUVFJJQlVURVN8U1lOQ0hST05JWkU6IHN0YXR1cyAweDAwMDAwMDAwIGluZm9ybWF0aW9uIDAKXD8/XEM6IGFjY2VzcyBSRUFEX0NPTlRST0x8U1lOQ0hST05JWkU6IHN0YXR1cyAweDAwMDAwMDAwIGluZm9ybWF0aW9uIDAKXD8/XEM6IGFjY2VzcyBGSUxFX1JFQURfREFUQXxTWU5DSFJPTklaRTogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMQpcPz9cQzogYWNjZXNzIEZJTEVfV1JJVEVfREFUQXxTWU5DSFJPTklaRTogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMQpcPz9cQzogYWNjZXNzIEdFTkVSSUNfUkVBRHxTWU5DSFJPTklaRTogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMQpcPz9cQzogYWNjZXNzIEZJTEVfTElTVF9ESVJFQ1RPUll8U1lOQ0hST05JWkU6IHN0YXR1cyAweDAwMDAwMDAwIGluZm9ybWF0aW9uIDEKXD8/XEM6IGFjY2VzcyBGSUxFX1RSQVZFUlNFfFNZTkNIUk9OSVpFOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAxClw/P1xDOiBhY2Nlc3MgRklMRV9SRUFEX0VBfFNZTkNIUk9OSVpFOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAxClw/P1xDOiBhY2Nlc3MgTUFYSU1VTV9BTExPV0VEOiBzdGF0dXMgMHhjMDAwMDAwZCBpbmZvcm1hdGlvbiAtMQpuYW1lIFw/P1xDOjogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMApuYW1lIFw/P1xDOlw6IHN0YXR1cyAweDAwMDAwMDAwIGluZm9ybWF0aW9uIDEKbmFtZSBcPz9cYzo6IHN0YXR1cyAweDAwMDAwMDAwIGluZm9ybWF0aW9uIDAKbmFtZSBcPz9cR0xPQkFMUk9PVDogc3RhdHVzIDB4YzAwMDAwMzMgaW5mb3JtYXRpb24gLTEKbmFtZSBcPz9cQzpcV2luZG93czogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMQpuYW1lIFw/P1xDOlwkVm9sdW1lOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAxCm5hbWUgXD8/XFo6OiBzdGF0dXMgMHhjMDAwMDAzNCBpbmZvcm1hdGlvbiAtMQpcPz9cQzogd2l0aCBGSUxFX0RJUkVDVE9SWV9GSUxFOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiB3aXRoIEZJTEVfTk9OX0RJUkVDVE9SWV9GSUxFOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiBGSUxFX1JFQURfQVRUUklCVVRFUyBzaGFyZSAwOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiBGSUxFX1JFQURfQVRUUklCVVRFUyBzaGFyZSAxOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiBGSUxFX1JFQURfQVRUUklCVVRFUyBzaGFyZSAzOiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwClw/P1xDOiBGSUxFX1JFQURfQVRUUklCVVRFUyBzaGFyZSA3OiBzdGF0dXMgMHgwMDAwMDAwMCBpbmZvcm1hdGlvbiAwCm9wZW4gZm9yIGRldmljZSBpbmZvcm1hdGlvbjogc3RhdHVzIDB4MDAwMDAwMDAgaW5mb3JtYXRpb24gMApGaWxlRnNEZXZpY2VJbmZvcm1hdGlvbjogc3RhdHVzIDB4MCBkZXZpY2UgdHlwZSAweDcgY2hhcmFjdGVyaXN0aWNzIDB4MjIwMDIwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "\\??\\C: access 0: status 0xc000000d information -1\n\\??\\C: access FILE_READ_ATTRIBUTES: status 0xc000000d information -1\n\\??\\C: access SYNCHRONIZE: status 0x00000000 information 0\n\\??\\C: access FILE_READ_ATTRIBUTES|SYNCHRONIZE: status 0x00000000 information 0\n\\??\\C: access READ_CONTROL|SYNCHRONIZE: status 0x00000000 information 0\n\\??\\C: access FILE_READ_DATA|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access FILE_WRITE_DATA|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access GENERIC_READ|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access FILE_LIST_DIRECTORY|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access FILE_TRAVERSE|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access FILE_READ_EA|SYNCHRONIZE: status 0x00000000 information 1\n\\??\\C: access MAXIMUM_ALLOWED: status 0xc000000d information -1\nname \\??\\C:: status 0x00000000 information 0\nname \\??\\C:\\: status 0x00000000 information 1\nname \\??\\c:: status 0x00000000 information 0\nname \\??\\GLOBALROOT: status 0xc0000033 information -1\nname \\??\\C:\\Windows: status 0x00000000 information 1\nname \\??\\C:\\$Volume: status 0x00000000 information 1\nname \\??\\Z:: status 0xc0000034 information -1\n\\??\\C: with FILE_DIRECTORY_FILE: status 0x00000000 information 0\n\\??\\C: with FILE_NON_DIRECTORY_FILE: status 0x00000000 information 0\n\\??\\C: FILE_READ_ATTRIBUTES share 0: status 0x00000000 information 0\n\\??\\C: FILE_READ_ATTRIBUTES share 1: status 0x00000000 information 0\n\\??\\C: FILE_READ_ATTRIBUTES share 3: status 0x00000000 information 0\n\\??\\C: FILE_READ_ATTRIBUTES share 7: status 0x00000000 information 0\nopen for device information: status 0x00000000 information 0\nFileFsDeviceInformation: status 0x0 device type 0x7 characteristics 0x220020\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "ov_win32_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "2ff8928715a128dac93b36d233b03211ce3583ea1623054ddab457cccaced640",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "XFwuXEM6IGFjY2VzcyAwIChubyBhY2Nlc3MpLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIEZJTEVfUkVBRF9BVFRSSUJVVEVTLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIFNZTkNIUk9OSVpFLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIFJFQURfQ09OVFJPTCwgc2hhcmUgNzogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyBGSUxFX1JFQURfREFUQSwgc2hhcmUgNzogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyBHRU5FUklDX1JFQUQsIHNoYXJlIDc6IHRydWUgZXJyIC0yClxcLlxDOiBhY2Nlc3MgR0VORVJJQ19XUklURSwgc2hhcmUgNzogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyBHRU5FUklDX1JFQUR8R0VORVJJQ19XUklURSwgc2hhcmUgNzogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyAwLCBzaGFyZSAwOiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIDAsIHNoYXJlIDE6IHRydWUgZXJyIC0yClxcLlxDOiBhY2Nlc3MgMCwgc2hhcmUgMjogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyAwLCBzaGFyZSAzOiB0cnVlIGVyciAtMgpuYW1lIFxcLlxDOiBhY2Nlc3MgMDogdHJ1ZSBlcnIgLTIKbmFtZSBcXC5cYzogYWNjZXNzIDA6IHRydWUgZXJyIC0yCm5hbWUgXFw/XEM6IGFjY2VzcyAwOiB0cnVlIGVyciAtMgpuYW1lIFxcLlxDOlwgYWNjZXNzIDA6IGZhbHNlIGVyciAzCm5hbWUgXFwuXFo6IGFjY2VzcyAwOiBmYWxzZSBlcnIgMgpuYW1lIEM6IGFjY2VzcyAwOiBmYWxzZSBlcnIgNQpuYW1lIEM6XCBhY2Nlc3MgMDogZmFsc2UgZXJyIDMKcXVlcnkgaGFuZGxlOiB0cnVlIGVyciAtMgpHZXRGaWxlVHlwZSA9IDEgKDEgZGlzaywgMiBjaGFyLCAzIHBpcGUpCkdldFZvbHVtZUluZm9ybWF0aW9uQnlIYW5kbGVXIG9rPTAgZnM9CklPQ1RMX1NUT1JBR0VfR0VUX0RFVklDRV9OVU1CRVIgb2s9MSBlcnIgLTIgYnl0ZXMgMTIgZGV2aWNlIHR5cGUgNwpJT0NUTF9WT0xVTUVfR0VUX1ZPTFVNRV9ESVNLX0VYVEVOVFMgb2s9MSBlcnIgLTIgZXh0ZW50cyAxCkZTQ1RMX0dFVF9OVEZTX1ZPTFVNRV9EQVRBIG9rPTAgZXJyIDEgYnl0ZXMgcGVyIGNsdXN0ZXIgLTEKR2V0RmlsZVNpemVFeCBvaz0wIGVyciAxCnJlYWQgaGFuZGxlOiB0cnVlIGVyciAtMgpSZWFkRmlsZSA1MTIgYnl0ZXMgYXQgb2Zmc2V0IDA6IG9rPTEgZ290PTUxMiBlcnIgLTIgTlRGUyBzaWduYXR1cmU6IHRydWUKUmVhZEZpbGUgMTAwIGJ5dGVzIChub3QgYSBzZWN0b3IgbXVsdGlwbGUpOiBvaz0wIGVyciA4NwpGU0NUTF9HRVRfTlRGU19WT0xVTUVfREFUQSBvbiB0aGUgcmVhZCBoYW5kbGUgb2s9MSBlcnIgLTIgYnl0ZXMgcGVyIGNsdXN0ZXIgNDA5NgpTZXRGaWxlUG9pbnRlckV4IG9rPTEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "\\\\.\\C: access 0 (no access), share 7: true err -2\n\\\\.\\C: access FILE_READ_ATTRIBUTES, share 7: true err -2\n\\\\.\\C: access SYNCHRONIZE, share 7: true err -2\n\\\\.\\C: access READ_CONTROL, share 7: true err -2\n\\\\.\\C: access FILE_READ_DATA, share 7: true err -2\n\\\\.\\C: access GENERIC_READ, share 7: true err -2\n\\\\.\\C: access GENERIC_WRITE, share 7: true err -2\n\\\\.\\C: access GENERIC_READ|GENERIC_WRITE, share 7: true err -2\n\\\\.\\C: access 0, share 0: true err -2\n\\\\.\\C: access 0, share 1: true err -2\n\\\\.\\C: access 0, share 2: true err -2\n\\\\.\\C: access 0, share 3: true err -2\nname \\\\.\\C: access 0: true err -2\nname \\\\.\\c: access 0: true err -2\nname \\\\?\\C: access 0: true err -2\nname \\\\.\\C:\\ access 0: false err 3\nname \\\\.\\Z: access 0: false err 2\nname C: access 0: false err 5\nname C:\\ access 0: false err 3\nquery handle: true err -2\nGetFileType = 1 (1 disk, 2 char, 3 pipe)\nGetVolumeInformationByHandleW ok=0 fs=\nIOCTL_STORAGE_GET_DEVICE_NUMBER ok=1 err -2 bytes 12 device type 7\nIOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS ok=1 err -2 extents 1\nFSCTL_GET_NTFS_VOLUME_DATA ok=0 err 1 bytes per cluster -1\nGetFileSizeEx ok=0 err 1\nread handle: true err -2\nReadFile 512 bytes at offset 0: ok=1 got=512 err -2 NTFS signature: true\nReadFile 100 bytes (not a sector multiple): ok=0 err 87\nFSCTL_GET_NTFS_VOLUME_DATA on the read handle ok=1 err -2 bytes per cluster 4096\nSetFilePointerEx ok=1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    },
+    {
+      "name": "ov_win32_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "2ff8928715a128dac93b36d233b03211ce3583ea1623054ddab457cccaced640",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "XFwuXEM6IGFjY2VzcyAwIChubyBhY2Nlc3MpLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIEZJTEVfUkVBRF9BVFRSSUJVVEVTLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIFNZTkNIUk9OSVpFLCBzaGFyZSA3OiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIFJFQURfQ09OVFJPTCwgc2hhcmUgNzogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyBGSUxFX1JFQURfREFUQSwgc2hhcmUgNzogZmFsc2UgZXJyIDUKXFwuXEM6IGFjY2VzcyBHRU5FUklDX1JFQUQsIHNoYXJlIDc6IGZhbHNlIGVyciA1ClxcLlxDOiBhY2Nlc3MgR0VORVJJQ19XUklURSwgc2hhcmUgNzogZmFsc2UgZXJyIDUKXFwuXEM6IGFjY2VzcyBHRU5FUklDX1JFQUR8R0VORVJJQ19XUklURSwgc2hhcmUgNzogZmFsc2UgZXJyIDUKXFwuXEM6IGFjY2VzcyAwLCBzaGFyZSAwOiB0cnVlIGVyciAtMgpcXC5cQzogYWNjZXNzIDAsIHNoYXJlIDE6IHRydWUgZXJyIC0yClxcLlxDOiBhY2Nlc3MgMCwgc2hhcmUgMjogdHJ1ZSBlcnIgLTIKXFwuXEM6IGFjY2VzcyAwLCBzaGFyZSAzOiB0cnVlIGVyciAtMgpuYW1lIFxcLlxDOiBhY2Nlc3MgMDogdHJ1ZSBlcnIgLTIKbmFtZSBcXC5cYzogYWNjZXNzIDA6IHRydWUgZXJyIC0yCm5hbWUgXFw/XEM6IGFjY2VzcyAwOiB0cnVlIGVyciAtMgpuYW1lIFxcLlxDOlwgYWNjZXNzIDA6IGZhbHNlIGVyciAzCm5hbWUgXFwuXFo6IGFjY2VzcyAwOiBmYWxzZSBlcnIgMgpuYW1lIEM6IGFjY2VzcyAwOiBmYWxzZSBlcnIgNQpuYW1lIEM6XCBhY2Nlc3MgMDogZmFsc2UgZXJyIDMKcXVlcnkgaGFuZGxlOiB0cnVlIGVyciAtMgpHZXRGaWxlVHlwZSA9IDEgKDEgZGlzaywgMiBjaGFyLCAzIHBpcGUpCkdldFZvbHVtZUluZm9ybWF0aW9uQnlIYW5kbGVXIG9rPTAgZnM9CklPQ1RMX1NUT1JBR0VfR0VUX0RFVklDRV9OVU1CRVIgb2s9MSBlcnIgLTIgYnl0ZXMgMTIgZGV2aWNlIHR5cGUgNwpJT0NUTF9WT0xVTUVfR0VUX1ZPTFVNRV9ESVNLX0VYVEVOVFMgb2s9MSBlcnIgLTIgZXh0ZW50cyAxCkZTQ1RMX0dFVF9OVEZTX1ZPTFVNRV9EQVRBIG9rPTAgZXJyIDEgYnl0ZXMgcGVyIGNsdXN0ZXIgLTEKR2V0RmlsZVNpemVFeCBvaz0wIGVyciAxCnJlYWQgaGFuZGxlOiBmYWxzZSBlcnIgNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "\\\\.\\C: access 0 (no access), share 7: true err -2\n\\\\.\\C: access FILE_READ_ATTRIBUTES, share 7: true err -2\n\\\\.\\C: access SYNCHRONIZE, share 7: true err -2\n\\\\.\\C: access READ_CONTROL, share 7: true err -2\n\\\\.\\C: access FILE_READ_DATA, share 7: false err 5\n\\\\.\\C: access GENERIC_READ, share 7: false err 5\n\\\\.\\C: access GENERIC_WRITE, share 7: false err 5\n\\\\.\\C: access GENERIC_READ|GENERIC_WRITE, share 7: false err 5\n\\\\.\\C: access 0, share 0: true err -2\n\\\\.\\C: access 0, share 1: true err -2\n\\\\.\\C: access 0, share 2: true err -2\n\\\\.\\C: access 0, share 3: true err -2\nname \\\\.\\C: access 0: true err -2\nname \\\\.\\c: access 0: true err -2\nname \\\\?\\C: access 0: true err -2\nname \\\\.\\C:\\ access 0: false err 3\nname \\\\.\\Z: access 0: false err 2\nname C: access 0: false err 5\nname C:\\ access 0: false err 3\nquery handle: true err -2\nGetFileType = 1 (1 disk, 2 char, 3 pipe)\nGetVolumeInformationByHandleW ok=0 fs=\nIOCTL_STORAGE_GET_DEVICE_NUMBER ok=1 err -2 bytes 12 device type 7\nIOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS ok=1 err -2 extents 1\nFSCTL_GET_NTFS_VOLUME_DATA ok=0 err 1 bytes per cluster -1\nGetFileSizeEx ok=0 err 1\nread handle: false err 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

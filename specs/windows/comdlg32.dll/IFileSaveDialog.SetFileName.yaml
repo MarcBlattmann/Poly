@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comdlg32.dll/IFileSaveDialog.SetFileName.yaml
+id: windows/api/comdlg32.dll/IFileSaveDialog.SetFileName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  The Save As dialog Chrome shows when a download asks where to save (CLSID_FileSaveDialog, IFileSaveDialog): Chrome runs it in a utility process (`--utility-sub-type=chrome.mojom.UtilWin`), sets the file name and the file types, shows it and reads the answer. This entry specifies the object before it is shown (the properties and what refuses) and what the shown dialog looks like; showing it needs a user.
+interface:
+  create: "CoCreateInstance(CLSID_FileSaveDialog {C0B4E2F3-BA21-4773-8DBA-335EC946EB8B}, NULL, CLSCTX_INPROC_SERVER, IID_IFileSaveDialog {84BCCD23-5FDE-4CDB-AEA4-AF64B83D78AB})"
+  methods: "IFileDialog after IModalWindow::Show 3: SetFileTypes 4, SetFileTypeIndex 5, GetFileTypeIndex 6, Advise 7, Unadvise 8, SetOptions 9, GetOptions 10, SetDefaultFolder 11, SetFolder 12, GetFolder 13, GetCurrentSelection 14, SetFileName 15, GetFileName 16, SetTitle 17, SetOkButtonLabel 18, SetFileNameLabel 19, GetResult 20, AddPlace 21, SetDefaultExtension 22, Close 23, SetClientGuid 24, ClearClientData 25, SetFilter 26; IFileSaveDialog: SetSaveAsItem 27 and the property methods"
+chrome:
+  shown: "with the option 'ask where to save' (download.prompt_for_download) the download's tmp file is created (`<guid>.tmp`, the payload so far) and a top-level window `Save As` (class #32770, an Explorer-style dialog) appears in the utility process, owned by the browser's window: the file name field (id 1001) holds the name without its extension (`poly-dl-hello` for `poly-dl-hello.txt`), the type list holds `Text Document`, the address band shows `Downloads` (the default download folder), the buttons are `Save` (id 1) and `Cancel` (id 2), plus the usual toolbar (Organise, New folder, view menu), navigation pane, column headers (Name, Date modified, Type, Size) and search box"
+  answer: "Save with the name typed: the file appears under that name in the chosen folder (rename of the tmp file, as in the plain download); Cancel: the download is cancelled and the tmp file is removed"
+rules:
+  create: "S_OK in an apartment; QueryInterface IFileDialog S_OK, a made-up id E_NOINTERFACE"
+  options: "GetOptions of a new dialog: 0x0000880A (FOS_OVERWRITEPROMPT 2, FOS_NOCHANGEDIR 8, FOS_PATHMUSTEXIST 0x800, FOS_NOREADONLYRETURN 0x8000); SetOptions(x) stores x exactly (0x880E reads back 0x880E, 0 reads back 0; 2, 4, 8, 0x40, 0x100, 0x1000, 0x2000000 and 0x10000000 alone read back as set): the dialog does not add or remove bits. FOS_PICKFOLDERS (0x20) on a save dialog, 0xFFFFFFFF and 0x12345678: E_INVALIDARG (0x80070057) and the options stay as they were"
+  file_name: "GetFileName before any SetFileName: E_FAIL (0x80004005) and an empty string; after SetFileName(s) it returns s exactly (also an empty string and a name with a backslash); SetFileName always S_OK"
+  extension: "SetDefaultExtension with `txt`, `.txt` and an empty string: S_OK"
+  settings_are_per_object: "two dialogs share nothing: a name set on one is not there on the other (E_FAIL)"
+  file_types_again: "SetFileTypes a second time on one dialog (also with an empty spec or a NULL name): E_UNEXPECTED (0x8000FFFF); with one entry the index starts at 0 after the call, SetFileTypeIndex(1) reads back 1, 2 and 0 are S_OK and the index stays 1; SetFileName with the name it already has: S_FALSE (1), the name unchanged"
+  file_types: "GetFileTypeIndex before SetFileTypes: S_OK and 0; SetFileTypes(2, {`Text Document` `*.txt`, `All files` `*.*`}): S_OK and the index stays 0 until set; SetFileTypeIndex(2): S_OK and reads back 2; SetFileTypeIndex(3) (past the end) and 0: S_OK and the index stays 2; SetFileTypes(0, NULL): E_INVALIDARG (0x80070057)"
+  folders: "GetFolder before SetFolder: S_OK and an item (a default folder); SetFolder and SetDefaultFolder with a shell item: S_OK; GetFolder after SetFolder, before the dialog is shown: S_OK and an item"
+  labels: "SetTitle, SetOkButtonLabel, SetFileNameLabel, SetClientGuid, SetFilter(NULL): S_OK; ClearClientData: E_FAIL (0x80004005)"
+  before_show: "GetResult before Show: E_UNEXPECTED (0x8000FFFF) and no item; GetCurrentSelection: E_FAIL and no item; Close(hr) before Show: S_OK; Advise(NULL) and Unadvise(0): E_INVALIDARG (0x80070057)"
+  release: "the last Release returns 0"
+errors:
+  fail: "0x80004005"
+  unexpected: "0x8000FFFF"
+  invalid_arg: "0x80070057"
+  no_interface: "0x80004002"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. Nothing shows the dialog. The description of the shown dialog comes from Chrome's run in the desktop session (UI Automation of the window).
+not_covered: >
+  Show (the answer of a user, the filter list shown, the overwrite prompt, the extension added to a typed name, the options' effects), GetResult after Show, SetSaveAsItem, the property methods, AddPlace, events (Advise with a sink), keyboard handling.

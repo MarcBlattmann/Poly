@@ -586,6 +586,7 @@ impl Server {
                         scale: scale as u32,
                         pixels: alloc::vec![0; width as usize * height as usize],
                         view,
+                        smooth: false,
                     };
                 }
                 for r in rects(resized) {

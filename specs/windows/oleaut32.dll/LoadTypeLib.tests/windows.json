@@ -6,23 +6,23 @@
     "build": "26200.9974",
     "arch": "AMD64"
   },
-  "bundle": "bfa7b81da781",
+  "bundle": "cdbe24a5206d",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-17T12:17:35Z",
+  "started": "2026-11-17T10:53:39Z",
   "tests": [
     {
-      "name": "loadtl_registers",
-      "exe_sha256": "3abd9c10b6c5e5d90d563379eea9cdea40818088447a0554d264e9f9db4ee01a",
+      "name": "tlb_errors",
+      "exe_sha256": "5bf087a99a139f7e965da37c616f4332d4dd0b563fcc4762bd43cea33d66b1ab",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "YmVmb3JlOiBIS0xNIFR5cGVMaWIga2V5IDAsIEhLTE0gSW50ZXJmYWNlIGtleXMgMDAwLCBIS0NVIFR5cGVMaWIga2V5IDAKTG9hZFR5cGVMaWIgPSAweDAwMDAwMDAwLCBsaWJyYXJ5IHNldCwgbmFtZSBQb2x5V3NUbCwgdmVyc2lvbiAxLjAKYWZ0ZXI6IEhLTE0gVHlwZUxpYiBrZXkgMCwgSEtMTSBJbnRlcmZhY2Uga2V5cyAwMDAsIEhLQ1UgVHlwZUxpYiBrZXkgMAogIHR5cGUgaW5mb3MgMwpsb2FkZWQgdHdpY2U6IHRoZSBzYW1lIGxpYnJhcnkgb2JqZWN0IDEKdGhlIGZpbGUgY2FuIGJlIGRlbGV0ZWQgYWZ0ZXIgdGhlIGxpYnJhcnkgd2FzIHJlbGVhc2VkOiAxCmEgbGlicmFyeSB3aXRoIExJQkZMQUdfRlJFU1RSSUNURUQ6IExvYWRUeXBlTGliID0gMHgwMDAwMDAwMDsgSEtMTSBUeXBlTGliIGtleSAwLCBIS0xNIEludGVyZmFjZSBrZXlzIDAwMCwgSEtDVSBUeXBlTGliIGtleSAwCnRoZSBsaWJyYXJ5IGlzIHJlZ2lzdGVyZWQgd2l0aCBhbm90aGVyIGZpbGU6IExvYWRUeXBlTGliID0gMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyB1bmNoYW5nZWQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "output_b64": "c2NycnVuLmRsbFwyIChubyBzdWNoIHJlc291cmNlKTogaHI9MHg4MDAyOWM0YSBvdXQgTlVMTApzY3JydW4uZGxsXDA6IGhyPTB4ODAwMjljNGEgb3V0IE5VTEwKc2NycnVuLmRsbFx4IChub3QgYSBudW1iZXIpOiBocj0weDgwMDI5YzRhIG91dCBOVUxMCmtlcm5lbDMyLmRsbCAobm8gdHlwZSBsaWJyYXJ5KTogaHI9MHg4MDAyOWM0YSBvdXQgTlVMTAphIG5hbWUgdGhhdCBkb2VzIG5vdCBleGlzdDogaHI9MHg4MDAyOWM0YSBvdXQgTlVMTAphIGRpcmVjdG9yeTogaHI9MHg4MDAyOWM0YSBvdXQgTlVMTAplbXB0eSBzdHJpbmc6IGhyPTB4ODAwMzAwMDIgb3V0IE5VTEwKYSBkcml2ZSB0aGF0IGRvZXMgbm90IGV4aXN0OiBocj0weDgwMDI5YzRhIG91dCBOVUxMCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "before: HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\nLoadTypeLib = 0x00000000, library set, name PolyWsTl, version 1.0\nafter: HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\n  type infos 3\nloaded twice: the same library object 1\nthe file can be deleted after the library was released: 1\na library with LIBFLAG_FRESTRICTED: LoadTypeLib = 0x00000000; HKLM TypeLib key 0, HKLM Interface keys 000, HKCU TypeLib key 0\nthe library is registered with another file: LoadTypeLib = 0x00000000, the registered path is unchanged 1\nsummary 0 passed, 0 failed\n",
+      "output": "scrrun.dll\\2 (no such resource): hr=0x80029c4a out NULL\nscrrun.dll\\0: hr=0x80029c4a out NULL\nscrrun.dll\\x (not a number): hr=0x80029c4a out NULL\nkernel32.dll (no type library): hr=0x80029c4a out NULL\na name that does not exist: hr=0x80029c4a out NULL\na directory: hr=0x80029c4a out NULL\nempty string: hr=0x80030002 out NULL\na drive that does not exist: hr=0x80029c4a out NULL\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 89
+      "ms": 60
     }
   ]
 }

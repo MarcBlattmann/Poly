@@ -62,7 +62,7 @@ registers with `RegisterTypeLib` and removes again. No Microsoft or Google type 
 |---|---|---|
 | oleaut32 `CreateTypeLib2` | `createlib_roundtrip`, `createlib_errors` | the library as `ITypeLib` / `ITypeInfo` read it back: attributes, names, kinds, flags, function and parameter descriptions, how a dual interface is stored; errors of the builder interfaces |
 | oleaut32 `LoadTypeLibEx` | `loadex_regkind`, `loadex_resource` | `REGKIND_*`, `file\N` resource syntax (a DLL image the test writes), errors |
-| oleaut32 `LoadTypeLib` | `loadtl_registers`, `loadtl_errors` | no registration, caching, file and path errors |
+| oleaut32 `LoadTypeLib` | (sheet and tests by `spec-win-elevation`, B0) | this batch's tests `loadtl_registers`/`loadtl_errors` showed that it does not register, returns the same library object twice and does not keep the file open; those facts are in the `LoadTypeLibEx` sheet |
 | oleaut32 `LoadRegTypeLib` | `loadreg_versions`, `loadreg_stdole`, `loadreg_errors` | version and LCID matching, `stdole`, unloadable registrations |
 | oleaut32 `RegisterTypeLib` | `register_keys`, `register_variants` | every key and value written, flags, LCID, versions, interface registration rules |
 | oleaut32 `UnRegisterTypeLib` | `unreg_keys`, `unreg_errors` | what is removed, mismatching arguments |

@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/PowerSetRequest.yaml
+id: windows/api/kernel32.dll/PowerSetRequest
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive in the desktop session of the local account \"server\" (session 1, 1920x1080 at 96 DPI, unlocked; member of Administrators, elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled.
+summary: >
+  Sets one kind of power request on a request handle. Pointer sheet: the observations are those of PowerCreateRequest's tests (pwr_requests).
+same_as: "kernel32.dll/PowerCreateRequest"
+interface:
+  signature: "BOOL PowerSetRequest(HANDLE PowerRequest, POWER_REQUEST_TYPE RequestType)"
+rules:
+  types: "types 0 to 3 TRUE on a request handle; anything else FALSE, 50; a handle that is no request FALSE, 6; see PowerCreateRequest"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  none of its own; see kernel32.dll/PowerCreateRequest.
+not_covered: >
+  see kernel32.dll/PowerCreateRequest.

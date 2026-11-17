@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHParseDisplayName.yaml
+id: windows/api/shell32.dll/SHParseDisplayName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  Turns a path into a PIDL (an item identifier list). Chrome's "Open" on a finished download asks for the file's PIDL and passes it to ShellExecuteExW (SEE_MASK_IDLIST); "Show in folder" gets its PIDL from the desktop folder's ParseDisplayName and passes it to SHOpenFolderAndSelectItems. The PIDL is CoTaskMem memory the caller frees.
+interface:
+  signature: "HRESULT SHParseDisplayName(PCWSTR pszName, IBindCtx *pbc, PIDLIST_ABSOLUTE *ppidl, SFGAOF sfgaoIn, SFGAOF *psfgaoOut)"
+chrome:
+  open: "ShellExecuteExW's caller (the download's Open): SHParseDisplayName(<path of the download>, NULL, &pidl, 0x40000000 (SFGAO_FILESYSTEM), NULL-or-out) = S_OK, then ShellExecuteExW with lpIDList = pidl (see ShellExecuteExW)"
+  show_in_folder: "SHGetDesktopFolder(&desktop), IShellFolder::ParseDisplayName(NULL, NULL, <path>, &eaten, &pidl, &attrs) through its table, then SHOpenFolderAndSelectItems(pidl, 1, ...) = S_OK; an Explorer window on the folder opens (a Shell.Application window with the folder's `file:///` url)"
+rules:
+  file_and_folder: "an existing file or folder: S_OK and a PIDL; SHGetPathFromIDListW of it gives the path as given (TRUE)"
+  attributes: "sfgaoIn 0 gives 0 in *psfgaoOut; SFGAO_FILESYSTEM (0x40000000) asked: 0x40000000 for a file and for a folder 0x60000000 when SFGAO_FOLDER (0x20000000) is also asked; SFGAO_STREAM (0x00400000) asked for a file: 0x40400000 (FILESYSTEM and STREAM)"
+  not_there: "a file or a folder that is not there: 0x80070002, *ppidl NULL and *psfgaoOut 0"
+  refused: "a name with a stream part and a name with forward slashes: E_INVALIDARG (0x80070057), *ppidl NULL"
+  empty_name: "an empty string: S_OK and a PIDL (the desktop's) for which SHGetPathFromIDListW returns FALSE"
+  desktop_same_object: "two SHGetDesktopFolder calls give the same object; two ParseDisplayName calls for one file give two PIDL blocks (the same path); an empty name leaves *pchEaten untouched"
+  desktop_folder: "SHGetDesktopFolder: S_OK and an IShellFolder (QueryInterface IUnknown, AddRef and Release work); its ParseDisplayName (slot 3: hwnd, pbc, name, pchEaten, ppidl, pdwAttributes) on a file and on a folder: S_OK, a PIDL with the same SHGetPathFromIDListW result as SHParseDisplayName, *pchEaten 0; on a file that is not there: 0x80070002"
+  get_path: "SHGetPathFromIDListW(NULL): FALSE"
+  open_folder_and_select: "SHOpenFolderAndSelectItems(NULL, 0, NULL, 0): E_INVALIDARG (0x80070057) and no window; with a PIDL it opens an Explorer window for the folder and returns S_OK (observed through Chrome, not repeated in tests because it opens a window)"
+errors:
+  not_found: "0x80070002"
+  invalid: "0x80070057"
+side_effects: "none (the PIDL is allocated memory)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder.
+not_covered: >
+  bind contexts, `shell:` names, drives that are not ready, network paths, the window SHOpenFolderAndSelectItems opens and which item it selects (the oracle's session cannot show a window to the test), SFGAO bits beyond the three tried.
