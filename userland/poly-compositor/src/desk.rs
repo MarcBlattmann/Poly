@@ -79,6 +79,9 @@ pub struct Desktop {
     /// ADR 0218), for the apps that run so
     /// ([`poly_shell::apps::runs_as_user`]).
     pub app_user: Option<String>,
+    /// Since when an empty desktop waits for a running app's next window
+    /// before it shows the launcher ([`desktop::launcher_reopen`]).
+    launcher_wait: Option<u64>,
 }
 
 /// Seconds on the wall clock.
@@ -231,6 +234,7 @@ impl Desktop {
         server.scene_mut().damage_all();
         let mut d = Desktop {
             app_user: None,
+            launcher_wait: None,
             shell,
             input,
             shortcuts: desktop::Shortcuts::default(),
@@ -885,12 +889,17 @@ impl Desktop {
                 println!("poly-compositor: launch-to-window {name}: {ms} ms");
             }
         }
-        if desktop::launcher_should_reopen(
+        let (show, waiting) = desktop::launcher_reopen(
             self.shell.launcher().is_visible(),
             !now.is_empty(),
-            !self.windows.is_empty(),
+            !self.windows.is_empty() && now.is_empty(),
             app_exited,
-        ) {
+            !self.children.is_empty(),
+            self.launcher_wait,
+            now_ms(),
+        );
+        self.launcher_wait = waiting;
+        if show {
             self.shell.toggle_launcher();
             println!("poly-compositor: launcher shown");
         }

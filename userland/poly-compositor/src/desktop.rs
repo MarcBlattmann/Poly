@@ -44,10 +44,42 @@ impl poly_shell::appicon::IconFiles for DiskIcons {
     }
 }
 
-/// Whether an empty desktop should show the launcher after the last window
-/// disappears or a no-window app exits.
-pub fn launcher_should_reopen(launcher_visible: bool, has_windows: bool, had_windows: bool, app_exited: bool) -> bool {
-    !launcher_visible && !has_windows && (had_windows || app_exited)
+/// How long an empty desktop waits for the next window of an app that is
+/// still running before it shows the launcher: Google Chrome closes its
+/// first-run Terms window and opens Welcome, then the sign-in page, then
+/// its browser window, each some seconds later on Poly, and the launcher
+/// came up over each of them.
+pub const REOPEN_WAIT_MS: u64 = 10_000;
+
+/// Whether an empty desktop shows the launcher now (the last window gone,
+/// or a no-window app exited), with that wait, and since when the desktop has been waiting (`waiting`, kept by
+/// the caller). The last window gone while an app the desktop started
+/// still runs (`apps_running`) starts the wait; a window, the launcher
+/// shown by hand, or the wait running out ends it. An app that exits shows
+/// the launcher at once, as before.
+pub fn launcher_reopen(
+    launcher_visible: bool,
+    has_windows: bool,
+    had_windows: bool,
+    app_exited: bool,
+    apps_running: bool,
+    waiting: Option<u64>,
+    now_ms: u64,
+) -> (bool, Option<u64>) {
+    if launcher_visible || has_windows {
+        return (false, None);
+    }
+    if app_exited && !apps_running {
+        return (true, None);
+    }
+    match waiting {
+        Some(since) if now_ms.saturating_sub(since) >= REOPEN_WAIT_MS => (true, None),
+        Some(since) => (false, Some(since)),
+        None if had_windows || app_exited => {
+            if apps_running { (false, Some(now_ms)) } else { (true, None) }
+        }
+        None => (false, None),
+    }
 }
 
 /// Give the shell the wallpapers' pictures that are on the disk.
@@ -304,10 +336,30 @@ mod tests {
 
     #[test]
     fn an_empty_desktop_returns_to_the_launcher_after_an_app_exits() {
-        assert!(launcher_should_reopen(false, false, false, true), "no-window apps such as notify-send");
-        assert!(launcher_should_reopen(false, false, true, false), "the last window closed");
-        assert!(!launcher_should_reopen(true, false, false, true), "do not toggle a visible launcher off");
-        assert!(!launcher_should_reopen(false, true, true, true), "another window is still open");
-        assert!(!launcher_should_reopen(false, false, false, false), "a live app has not opened a window yet");
+        assert_eq!(launcher_reopen(false, false, false, true, false, None, 0), (true, None), "no-window apps such as notify-send");
+        assert_eq!(launcher_reopen(false, false, true, false, false, None, 0), (true, None), "the last window closed");
+        assert_eq!(launcher_reopen(true, false, false, true, false, None, 0), (false, None), "do not toggle a visible launcher off");
+        assert_eq!(launcher_reopen(false, true, true, true, false, None, 0), (false, None), "another window is still open");
+        assert_eq!(launcher_reopen(false, false, false, false, true, None, 0), (false, None), "a live app has not opened a window yet");
+    }
+
+    #[test]
+    fn the_launcher_waits_for_a_running_apps_next_window() {
+        let w = REOPEN_WAIT_MS;
+        // Chrome closes its Terms window and is still running: wait.
+        assert_eq!(launcher_reopen(false, false, true, false, true, None, 1000), (false, Some(1000)));
+        // Its next window comes: the wait ends, no launcher.
+        assert_eq!(launcher_reopen(false, true, false, false, true, Some(1000), 3000), (false, None));
+        // No window within the wait: the launcher.
+        assert_eq!(launcher_reopen(false, false, false, false, true, Some(1000), 1000 + w), (true, None));
+        assert_eq!(launcher_reopen(false, false, false, false, true, Some(1000), 999 + w), (false, Some(1000)));
+        // The last app exits: at once.
+        assert_eq!(launcher_reopen(false, false, false, true, false, Some(1000), 2000), (true, None));
+        assert_eq!(launcher_reopen(false, false, true, true, false, None, 2000), (true, None));
+        // Nothing of the desktop's runs (a window of a program started
+        // elsewhere closed): at once, as before.
+        assert_eq!(launcher_reopen(false, false, true, false, false, None, 5), (true, None));
+        // Shown by hand meanwhile: the wait is over.
+        assert_eq!(launcher_reopen(true, false, false, false, true, Some(1000), 2000), (false, None));
     }
 }
