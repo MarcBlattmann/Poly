@@ -588,6 +588,20 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
         earlier.map_or(Ok(()), Err)
     }
 
+    /// fsync(2) of one file: its dirty pages only, then the inner file
+    /// system's sync of it. (Writing back every file's pages for each
+    /// fsync made `dpkg`, which syncs its status files hundreds of times,
+    /// write a big download or copy again and again: `dpkg --configure -a`
+    /// next to a 600 MB copy took six minutes.)
+    fn sync_inode(&self, ino: Ino, data_only: bool) -> Result<()> {
+        let written = self.writeback(Some(ino));
+        let synced = self.st.inner.sync_inode(ino, data_only);
+        let earlier = self.st.error.lock().take();
+        written?;
+        synced?;
+        earlier.map_or(Ok(()), Err)
+    }
+
     /// The inner file system's counts (dirty pages not yet written back
     /// have no blocks yet, so free space may be overstated).
     fn statfs(&self) -> Result<poly_vfs::FsStats> {

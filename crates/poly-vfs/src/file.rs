@@ -779,7 +779,7 @@ impl OpenFile {
             Backend::Path => Err(Errno::EBADF),
             Backend::Inode => match self.handle {
                 Some(h) => self.fs().sync_handle(self.node.ino(), h, data_only, self.kind == FileType::Directory),
-                None => self.fs().sync(),
+                None => self.fs().sync_inode(self.node.ino(), data_only),
             },
             Backend::Device(dev) => dev.sync(),
             Backend::Object(_) => Err(Errno::EINVAL),

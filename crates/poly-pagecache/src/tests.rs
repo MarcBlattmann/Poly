@@ -542,6 +542,42 @@ fn eviction_does_not_walk_past_the_same_busy_pages_again() {
     assert_eq!(read_all(&*fs, clean), pattern(2, 40 * PAGE_SIZE));
 }
 
+/// fsync of one file writes that file's pages, not every dirty page of
+/// the file system; sync writes them all.
+#[test]
+fn fsync_writes_back_only_its_file() {
+    let (_cache, probe, fs) = setup(1000);
+    let a = fs.create(fs.root(), b"a", &REG).unwrap();
+    let b = fs.create(fs.root(), b"b", &REG).unwrap();
+    fs.write(a, 0, &pattern(1, 3 * PAGE_SIZE)).unwrap();
+    fs.write(b, 0, &pattern(2, 50 * PAGE_SIZE)).unwrap();
+    fs.sync_inode(a, false).unwrap();
+    assert_eq!(probe.contents(a), pattern(1, 3 * PAGE_SIZE));
+    assert_eq!(fs.page_counts(), (53, 50), "b's pages are still dirty");
+    fs.sync().unwrap();
+    assert_eq!(fs.page_counts(), (53, 0));
+    assert_eq!(probe.contents(b), pattern(2, 50 * PAGE_SIZE));
+}
+
+/// A cache over its limit with only dirty pages (a copy faster than
+/// writeback): a page added looks at a few pages, not all of them, and the
+/// cache stays over its limit until writeback; then it shrinks again.
+#[test]
+fn a_page_added_to_a_cache_of_dirty_pages_looks_at_few() {
+    let (cache, _probe, fs) = setup(100);
+    let f = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(f, 0, &pattern(1, 100 * PAGE_SIZE)).unwrap();
+    let before = cache.stats().scanned;
+    fs.write(f, 100 * PAGE_SIZE as u64, &pattern(2, 50 * PAGE_SIZE)).unwrap();
+    let scanned = cache.stats().scanned - before;
+    assert!(scanned <= 50 * INSERT_SCAN as u64, "{scanned}");
+    assert!(scanned < 50 * 100, "not every page for every page added: {scanned}");
+    assert_eq!(fs.page_counts(), (150, 150), "over the limit, nothing clean");
+    fs.writeback(None).unwrap();
+    assert_eq!(cache.shrink(100), 50);
+    assert_eq!(read_all(&*fs, f).len(), 150 * PAGE_SIZE);
+}
+
 #[test]
 fn unlinked_files_lose_their_pages() {
     let (_cache, _probe, fs) = setup(1000);
