@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/MoveFileExW.DelayUntilReboot.yaml
+id: windows/api/kernel32.dll/MoveFileExW.DelayUntilReboot
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). mvd_delete and mvd_rename ran in the SSH logon (elevated administrator token); mvd_std ran with -Token standard (a one-time task in the account's interactive session with the administrator's FILTERED token, Administrators deny-only). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output) and Microsoft Learn's page for MoveFileExW ("If dwFlags specifies MOVEFILE_DELAY_UNTIL_REBOOT, the file is not moved until the system is restarted; the function stores the request in the PendingFileRenameOperations value of HKLM\SYSTEM\CurrentControlSet\Control\Session Manager; the caller needs write access to the key; MOVEFILE_DELAY_UNTIL_REBOOT cannot be used with MOVEFILE_COPY_ALLOWED"), winbase.h (MOVEFILE_* values) and winreg.h. This is how Chrome's own setup.exe removes its running image at uninstall (survey-chrome-installer, docs/windows/chrome-setup-plan.md). The test programs only read the value and put it back exactly as it was; the machine had real entries of its own in it (printer driver files) that stay first and untouched. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  MoveFileExW with MOVEFILE_DELAY_UNTIL_REBOOT (4) does not touch the files. For the full (elevated) administrator token it returns TRUE at once and appends strings to the REG_MULTI_SZ value PendingFileRenameOperations of HKLM\SYSTEM\CurrentControlSet\Control\Session Manager, in front of the list's final terminator, after whatever the value held. A deletion (new name NULL) appends two strings: "*1\??\<full path of the file>" and an empty string. A rename appends the old name "*1\??\<full path>" and the new name "*1\??\<full path>"; with MOVEFILE_REPLACE_EXISTING the new name is written "*1!\??\<full path>" (an exclamation mark between the "*1" and the "\??\"). Every call appends, also for a file that is already in the list. Nothing is checked at this time: a source that does not exist, a destination in a directory that does not exist and a relative name are accepted with TRUE. The process with the filtered token (standard) gets FALSE with ERROR_ACCESS_DENIED (5), the value is not changed, and an ordinary immediate rename still works.
+interface:
+  call: "BOOL MoveFileExW(LPCWSTR existing, LPCWSTR new_or_null, DWORD flags) with flags containing MOVEFILE_DELAY_UNTIL_REBOOT 4 (and optionally MOVEFILE_REPLACE_EXISTING 1)"
+  value: "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager, value PendingFileRenameOperations, type REG_MULTI_SZ (7)"
+rules:
+  return_elevated: "TRUE (the last error after a success is not specified and not tested). The file stays where it is and keeps its contents."
+  delete_entry: "new name NULL: two strings are appended: the old name written as '*1' + the NT form of the full path ('\\??\\' + 'C:\\...') and then an EMPTY string. In the REG_MULTI_SZ the empty string is the second element of the pair: the value's data ends '...<path>\\0\\0<final terminator>' as the pair '(path, empty)' followed by the list's terminator."
+  rename_entry: "new name given: two strings are appended: '*1\\??\\<full old path>' and '*1\\??\\<full new path>'."
+  replace_existing: "with MOVEFILE_REPLACE_EXISTING the new name has an exclamation mark after the '*1': '*1!\\??\\<full new path>'; the old name is unchanged."
+  append_only: "every call appends after the strings that are already there (the machine's own earlier entries stay first, byte for byte); the entries of a first call stay in front of those of a second call; the same file queued again is appended again (no merging), so the value grows each time."
+  no_validation: "a source that does not exist (given as a relative name), a destination in a directory that does not exist: TRUE, entries appended. The failure of such an entry only shows at the next boot."
+  type: "the value is REG_MULTI_SZ (7); the call keeps the type."
+  standard_token: "the filtered administrator token (Administrators deny-only): FALSE with ERROR_ACCESS_DENIED (5) for the delete form and for the rename form; the value is byte for byte unchanged; the source file is untouched; an immediate rename without the flag (flags 0) succeeds."
+errors:
+  access_denied: "5 (standard token: the caller cannot write the Session Manager key)"
+side_effects: "the call changes the machine-wide value (the tests append and then restore the exact original bytes and type through RegSetValueExW)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each reading the value first and restoring it exactly at the end (bytes, type, presence). mvd_delete: the delete form, twice with different files and once with the same file again. mvd_rename: the rename form, the rename with MOVEFILE_REPLACE_EXISTING, a destination in a missing directory and a relative source that does not exist. mvd_std: recorded with -Token standard, the refusals. Paths are shown with the scratch directory as <scratch>; the machine's own earlier entries are never printed.
+not_covered: >
+  What happens at the reboot (the session manager performs the list: deleting, renaming, in order, the meaning of the "*1" prefix and of the '!' marker beyond what the writer produces), a value that does not exist before (the oracle's machine already had entries), the PendingFileRenameOperations2 value, directories, 32-bit callers and the WOW64 redirection of the path, network and non-NTFS paths, MOVEFILE_COPY_ALLOWED together with the flag (documented as failing), a path longer than MAX_PATH, how a relative name is stored (the tests show only that it is accepted), what a non-administrator account without access to the key gets (only the filtered token was tested).
