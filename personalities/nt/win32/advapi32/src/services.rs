@@ -70,7 +70,8 @@ fn call(operation: u32, req: &Writer) -> Result<Vec<u8>, u32> {
     loop {
         let mut ret = 0u32;
         // SAFETY: the request and the reply buffer live for the call; `ret` is a live out value.
-        let st = unsafe { PolyServiceCall(operation, req.0.as_ptr(), req.0.len(), out.as_mut_ptr(), out.len(), &mut ret) };
+        let st =
+            unsafe { PolyServiceCall(operation, req.0.as_ptr(), req.0.len(), out.as_mut_ptr(), out.len(), &mut ret) };
         if st == STATUS_BUFFER_TOO_SMALL && (ret as usize) > out.len() {
             // Only the replies of queries grow (the others are a few bytes): asking again is safe.
             out = vec![0u8; ret as usize];
@@ -166,7 +167,10 @@ pub unsafe extern "system" fn OpenSCManagerW(machine: *const u16, database: *con
         let bare = if m.starts_with(&[92, 92]) { &m[2..] } else { &m[..] };
         let mine = &me[..n as usize];
         let same = bare.len() == mine.len()
-            && bare.iter().zip(mine).all(|(&a, &b)| a == b || (a < 0x80 && b < 0x80 && (a as u8).eq_ignore_ascii_case(&(b as u8))));
+            && bare
+                .iter()
+                .zip(mine)
+                .all(|(&a, &b)| a == b || (a < 0x80 && b < 0x80 && (a as u8).eq_ignore_ascii_case(&(b as u8))));
         if !same {
             // RPC_S_SERVER_UNAVAILABLE: Poly reaches no other machine.
             return fail_h(1722);
@@ -291,9 +295,19 @@ pub unsafe extern "system" fn ChangeServiceConfig2W(h: ScHandle, level: u32, inf
                 SERVICE_CONFIG_FAILURE_ACTIONS => {
                     let f = &*(info as *const FailureActionsW);
                     let actions = (!f.actions.is_null()).then(|| {
-                        (0..f.count.min(1024) as usize).map(|i| { let a = *f.actions.add(i); (a[0], a[1]) }).collect()
+                        (0..f.count.min(1024) as usize)
+                            .map(|i| {
+                                let a = *f.actions.add(i);
+                                (a[0], a[1])
+                            })
+                            .collect()
                     });
-                    Config2::Failure { reset: f.reset, reboot_msg: wstr(f.reboot_msg), command: wstr(f.command), actions }
+                    Config2::Failure {
+                        reset: f.reset,
+                        reboot_msg: wstr(f.reboot_msg),
+                        command: wstr(f.command),
+                        actions,
+                    }
                 }
                 SERVICE_CONFIG_DELAYED_AUTO_START_INFO
                 | SERVICE_CONFIG_FAILURE_ACTIONS_FLAG
@@ -358,7 +372,9 @@ pub unsafe extern "system" fn QueryServiceConfigW(h: ScHandle, buf: *mut u8, siz
     }
     let mut w = Writer::new();
     w.u64(h as u64);
-    let cfg = match call(op::QUERY_CONFIG, &w).and_then(|b| ConfigReply::read(&mut Reader::new(&b)).ok_or(ERROR_INVALID_PARAMETER)) {
+    let cfg = match call(op::QUERY_CONFIG, &w)
+        .and_then(|b| ConfigReply::read(&mut Reader::new(&b)).ok_or(ERROR_INVALID_PARAMETER))
+    {
         Ok(c) => c,
         Err(e) => return fail(e),
     };
@@ -410,7 +426,13 @@ pub unsafe extern "system" fn QueryServiceConfigW(h: ScHandle, buf: *mut u8, siz
 
 /// `QueryServiceConfig2W`: the structure of the level and what it points to.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn QueryServiceConfig2W(h: ScHandle, level: u32, buf: *mut u8, size: u32, needed: *mut u32) -> Bool {
+pub unsafe extern "system" fn QueryServiceConfig2W(
+    h: ScHandle,
+    level: u32,
+    buf: *mut u8,
+    size: u32,
+    needed: *mut u32,
+) -> Bool {
     if needed.is_null() {
         return fail(ERROR_INVALID_ADDRESS);
     }
@@ -501,7 +523,13 @@ fn status_of(h: ScHandle) -> Result<Status, u32> {
 /// `QueryServiceStatusEx(hService, InfoLevel, lpBuffer, cbBufSize, pcbBytesNeeded)`: level
 /// `SC_STATUS_PROCESS_INFO` (0) only, 36 bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn QueryServiceStatusEx(h: ScHandle, level: u32, buf: *mut u8, size: u32, needed: *mut u32) -> Bool {
+pub unsafe extern "system" fn QueryServiceStatusEx(
+    h: ScHandle,
+    level: u32,
+    buf: *mut u8,
+    size: u32,
+    needed: *mut u32,
+) -> Bool {
     if needed.is_null() || buf.is_null() {
         return fail(ERROR_INVALID_ADDRESS);
     }
@@ -706,7 +734,13 @@ pub unsafe extern "system" fn EnumServicesStatusExW(
 /// `QueryServiceObjectSecurity(hService, dwSecurityInformation, lpSecurityDescriptor, cbBufSize,
 /// pcbBytesNeeded)`: a self-relative descriptor.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn QueryServiceObjectSecurity(h: ScHandle, info: u32, sd: *mut u8, size: u32, needed: *mut u32) -> Bool {
+pub unsafe extern "system" fn QueryServiceObjectSecurity(
+    h: ScHandle,
+    info: u32,
+    sd: *mut u8,
+    size: u32,
+    needed: *mut u32,
+) -> Bool {
     if needed.is_null() {
         return fail(ERROR_INVALID_ADDRESS);
     }
@@ -877,7 +911,11 @@ pub unsafe extern "system" fn RegisterServiceCtrlHandlerW(_name: *const u16, han
 
 /// `RegisterServiceCtrlHandlerExW(lpServiceName, lpHandlerProc, lpContext)`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn RegisterServiceCtrlHandlerExW(_name: *const u16, handler: Option<HandlerEx>, context: *mut c_void) -> ScHandle {
+pub unsafe extern "system" fn RegisterServiceCtrlHandlerExW(
+    _name: *const u16,
+    handler: Option<HandlerEx>,
+    context: *mut c_void,
+) -> ScHandle {
     register(handler.map_or(0, |f| f as usize), true, context as usize)
 }
 

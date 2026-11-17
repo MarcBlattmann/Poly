@@ -12,9 +12,9 @@
 //! Kept apart from the interactive user's token ([`Token::poly_user`]) on purpose: the user's
 //! token follows the elevation model (ADR 0171 and its successors), a service's does not.
 
+use crate::acl;
 use crate::sid::{self, Sid, rid};
 use crate::token::*;
-use crate::acl;
 use alloc::vec;
 use poly_crypto::sha1::Sha1;
 

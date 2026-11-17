@@ -13,7 +13,8 @@
 
 use poly_win32_rt as _;
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn PolyServiceCall(op: u32, input: *const u8, in_len: usize, out: *mut u8, out_len: usize, ret: *mut u32) -> i32;
     fn NtWaitForSingleObject(handle: isize, alertable: u8, timeout: *const i64) -> i32;

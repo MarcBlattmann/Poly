@@ -92,7 +92,12 @@ impl WinSta {
     /// What a service process starts with (ADR 0221): the window station of its account's
     /// services (`Service-0x0-3e7$` for LocalSystem) and its `Default` desktop, made when first
     /// needed and kept, open to SYSTEM and Administrators, not visible (SERVICES.md section 4).
-    pub fn service_start(&mut self, objects: &mut poly_ntobj::ObjectManager, station: &[u16], thread: ThreadRef) -> Start {
+    pub fn service_start(
+        &mut self,
+        objects: &mut poly_ntobj::ObjectManager,
+        station: &[u16],
+        thread: ThreadRef,
+    ) -> Start {
         const SERVICE_STATION_SDDL: &str = "O:SYG:SYD:(A;;GA;;;SY)(A;;GA;;;BA)";
         let sd = poly_security::sdstr::parse(&wide(SERVICE_STATION_SDDL)).ok();
         let st = match self.registry.station_by_name(station) {

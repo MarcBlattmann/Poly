@@ -24,7 +24,12 @@ const HOST: u32 = 4;
 
 impl Env {
     fn new() -> Env {
-        let mut e = Env { scm: Scm::new(), reg: Registry::new(), token: alloc::boxed::Box::leak(alloc::boxed::Box::new(Token::poly_user())), now: 1000 };
+        let mut e = Env {
+            scm: Scm::new(),
+            reg: Registry::new(),
+            token: alloc::boxed::Box::leak(alloc::boxed::Box::new(Token::poly_user())),
+            now: 1000,
+        };
         e.scm.load(&mut e.reg, 1);
         e
     }
@@ -166,7 +171,8 @@ fn a_crash_is_1067_and_restarts_by_the_failure_actions() {
     let mut e = Env::new();
     let m = e.mgr();
     let h = e.create(m, "Crash").unwrap();
-    let acts = Config2::Failure { reset: 86400, reboot_msg: None, command: None, actions: Some(vec![(1, 500), (0, 0)]) };
+    let acts =
+        Config2::Failure { reset: 86400, reboot_msg: None, command: None, actions: Some(vec![(1, 500), (0, 0)]) };
     e.scm.change2(&e.c(ME), h, SERVICE_CONFIG_FAILURE_ACTIONS, acts).unwrap();
     e.scm.start(&e.c(ME), h, vec![], 1).unwrap();
     let mut pid = 300;
@@ -256,7 +262,13 @@ fn dependencies_start_first_and_missing_or_disabled_ones_fail() {
     let m = e.mgr();
     let a = e.create(m, "DepA").unwrap();
     let b = e.create(m, "DepB").unwrap();
-    let ch = Change { ty: SERVICE_NO_CHANGE, start: SERVICE_NO_CHANGE, error: SERVICE_NO_CHANGE, deps: Some(vec![w("DepA")]), ..Change::default() };
+    let ch = Change {
+        ty: SERVICE_NO_CHANGE,
+        start: SERVICE_NO_CHANGE,
+        error: SERVICE_NO_CHANGE,
+        deps: Some(vec![w("DepA")]),
+        ..Change::default()
+    };
     e.scm.change(&e.c(ME), b, ch).unwrap();
     e.scm.start(&e.c(ME), b, vec![], 1).unwrap();
     assert_eq!(e.status(a).state, SERVICE_START_PENDING);
@@ -274,12 +286,24 @@ fn dependencies_start_first_and_missing_or_disabled_ones_fail() {
     e.scm.set_status(&e.c(708), Status { state: SERVICE_RUNNING, accepted: 1, ..Status::default() }).unwrap();
     assert_eq!(e.scm.control(&e.c(ME), a, SERVICE_CONTROL_STOP, 5).err(), Some(ERROR_DEPENDENT_SERVICES_RUNNING));
     let c = e.create(m, "DepC").unwrap();
-    let ch = Change { ty: SERVICE_NO_CHANGE, start: SERVICE_NO_CHANGE, error: SERVICE_NO_CHANGE, deps: Some(vec![w("Nope")]), ..Change::default() };
+    let ch = Change {
+        ty: SERVICE_NO_CHANGE,
+        start: SERVICE_NO_CHANGE,
+        error: SERVICE_NO_CHANGE,
+        deps: Some(vec![w("Nope")]),
+        ..Change::default()
+    };
     e.scm.change(&e.c(ME), c, ch).unwrap();
     assert_eq!(e.scm.start(&e.c(ME), c, vec![], 1).err(), Some(ERROR_SERVICE_DEPENDENCY_DELETED));
     // Google's services depend on RPCSS: it is running.
     let g = e.create(m, "DepG").unwrap();
-    let ch = Change { ty: SERVICE_NO_CHANGE, start: SERVICE_NO_CHANGE, error: SERVICE_NO_CHANGE, deps: Some(vec![w("RPCSS")]), ..Change::default() };
+    let ch = Change {
+        ty: SERVICE_NO_CHANGE,
+        start: SERVICE_NO_CHANGE,
+        error: SERVICE_NO_CHANGE,
+        deps: Some(vec![w("RPCSS")]),
+        ..Change::default()
+    };
     e.scm.change(&e.c(ME), g, ch).unwrap();
     let fx = e.scm.start(&e.c(ME), g, vec![], 1).unwrap();
     assert!(fx.contains(&Effect::WakeHost));
@@ -333,7 +357,10 @@ fn a_restricted_caller_cannot_create_or_start() {
     let cm = u64::from(e.scm.open_manager(&c, SC_MANAGER_CONNECT).unwrap());
     assert_eq!(e.scm.open_service(&c, cm, Some(&w("Sec")), SERVICE_START), Err(ERROR_ACCESS_DENIED));
     // Grant Everyone QUERY_STATUS (the sheet of SetServiceObjectSecurity).
-    let sd = poly_security::sdstr::parse(&w("D:(A;;LC;;;WD)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPDTLOCRRC;;;SY)")).unwrap();
+    let sd = poly_security::sdstr::parse(&w(
+        "D:(A;;LC;;;WD)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPDTLOCRRC;;;SY)",
+    ))
+    .unwrap();
     e.scm.set_security(&e.c(ME), h, poly_security::sd::DACL_SECURITY_INFORMATION, &sd).unwrap();
     assert!(e.scm.open_service(&c, cm, Some(&w("Sec")), SERVICE_QUERY_STATUS).is_ok());
     assert_eq!(e.scm.open_service(&c, cm, Some(&w("Sec")), SERVICE_START), Err(ERROR_ACCESS_DENIED));
@@ -350,7 +377,10 @@ fn enumeration_filters() {
     assert!(active.iter().all(|(n, _, _)| *n == w("RpcSs")));
     assert_eq!(e.scm.enumerate(&e.c(ME), m, 0, 3, None).err(), Some(ERROR_INVALID_PARAMETER));
     assert_eq!(e.scm.enumerate(&e.c(ME), m, SERVICE_WIN32, 4, None).err(), Some(ERROR_INVALID_PARAMETER));
-    assert_eq!(e.scm.enumerate(&e.c(ME), m, SERVICE_WIN32, 3, Some(&w("NoGroup"))).err(), Some(ERROR_SERVICE_DOES_NOT_EXIST));
+    assert_eq!(
+        e.scm.enumerate(&e.c(ME), m, SERVICE_WIN32, 3, Some(&w("NoGroup"))).err(),
+        Some(ERROR_SERVICE_DOES_NOT_EXIST)
+    );
 }
 
 #[test]

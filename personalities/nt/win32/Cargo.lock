@@ -15,6 +15,7 @@ version = "0.0.1"
 dependencies = [
  "poly-etw",
  "poly-kernelbase",
+ "poly-scm",
  "poly-security",
  "poly-win32-rt",
 ]
@@ -480,6 +481,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-scm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-security"
 version = "0.0.1"
 dependencies = [
@@ -596,6 +601,13 @@ version = "0.0.1"
 dependencies = [
  "poly-netapi",
  "poly-win32-netrt",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "services"
+version = "0.0.1"
+dependencies = [
  "poly-win32-rt",
 ]
 

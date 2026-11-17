@@ -147,11 +147,7 @@ fn ms<K: NtKernel>(k: &K) -> u64 {
 
 /// The environment the system's programs get (to expand `%SystemRoot%` and its kind).
 fn system_environment(sys: &NtSystem, processors: u32) -> crate::layout::env::Block {
-    crate::layout::env::build(
-        &sys.registry.reg,
-        &crate::layout::POLY_USER,
-        crate::layout::env::Machine { processors },
-    )
+    crate::layout::env::build(&sys.registry.reg, &crate::layout::POLY_USER, crate::layout::env::Machine { processors })
 }
 
 fn lookup(env: &crate::layout::env::Block) -> impl Fn(&[u16]) -> Option<Vec<u16>> + '_ {
@@ -211,6 +207,7 @@ fn reply(r: core::result::Result<Writer, u32>) -> Vec<u8> {
 }
 
 /// One call of a program (not the host's).
+#[allow(clippy::too_many_arguments)]
 fn call(
     sys: &mut NtSystem,
     caller: &Caller,
@@ -228,7 +225,7 @@ fn call(
         .effective(caller.process, caller.thread)
         .and_then(|id| sys.objects.security.token(id))
         .cloned();
-    let pid = caller.process.0 as u32;
+    let pid = caller.process.0;
     let c = poly_scm::Caller { pid, token: token.as_ref(), now };
     let mut r = Reader::new(input);
     let bad = || err(ERROR_INVALID_PARAMETER);
@@ -492,15 +489,20 @@ fn may_host(sys: &NtSystem, caller: &Caller, image: &[u16]) -> bool {
     if !name.ends_with("\\windows\\system32\\services.exe") {
         return false;
     }
-    let admin = sys.objects.security.effective(caller.process, caller.thread).and_then(|id| sys.objects.security.token(id)).is_some_and(|t| {
-        t.user == poly_security::sid::local_system()
-            || t.groups.iter().any(|(s, a)| {
-                *s == poly_security::sid::builtin(poly_security::sid::rid::DOMAIN_ALIAS_RID_ADMINS)
-                    && a & poly_security::token::SE_GROUP_ENABLED != 0
-                    && a & poly_security::token::SE_GROUP_USE_FOR_DENY_ONLY == 0
-            })
-    });
-    let other = sys.scm.scm.host_pid().is_some_and(|p| p != caller.process.0 as u32);
+    let admin = sys
+        .objects
+        .security
+        .effective(caller.process, caller.thread)
+        .and_then(|id| sys.objects.security.token(id))
+        .is_some_and(|t| {
+            t.user == poly_security::sid::local_system()
+                || t.groups.iter().any(|(s, a)| {
+                    *s == poly_security::sid::builtin(poly_security::sid::rid::DOMAIN_ALIAS_RID_ADMINS)
+                        && a & poly_security::token::SE_GROUP_ENABLED != 0
+                        && a & poly_security::token::SE_GROUP_USE_FOR_DENY_ONLY == 0
+                })
+        });
+    let other = sys.scm.scm.host_pid().is_some_and(|p| p != caller.process.0);
     admin && !other
 }
 
@@ -508,7 +510,7 @@ fn may_host(sys: &NtSystem, caller: &Caller, image: &[u16]) -> bool {
 /// the processes the manager asks for and learns how long it may wait on its event.
 fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
     let caller = k.caller();
-    let pid = caller.process.0 as u32;
+    let pid = caller.process.0;
     let now = ms(k);
     let ft = k.system_time();
     let host = k.with_state(|sys, proc, _| -> Result<Option<(u64, u64)>> {
@@ -519,6 +521,7 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
             return Ok(Some((id, h)));
         }
         let image = proc.image_name.as_ref().map(|(_, p)| p.clone()).unwrap_or_default();
+        let _dbg = alloc::string::String::from_utf16_lossy(&image);
         if !may_host(sys, &caller, &image) {
             return Ok(None);
         }
@@ -536,6 +539,7 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
         sys.scm.host_requested = false;
         Ok(Some((id, eh.0)))
     })?;
+    k.debug_print(alloc::format!("scm-dbg: host call from p{pid}: {:?}", host).as_bytes());
     let Some((event_id, handle)) = host else { return Ok(err(ERROR_ACCESS_DENIED)) };
     let (spawns, wait, fx) = k.with_state(|sys, _, _| {
         let c = poly_scm::Caller { pid, token: None, now };
@@ -546,6 +550,7 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
     k.with_state(|sys, _, _| apply(sys, fx, after));
     for s in spawns {
         let result = spawn(k, &s);
+        k.debug_print(alloc::format!("scm-dbg: spawn {:?}", result).as_bytes());
         let now = ms(k);
         k.with_state(|sys, _, _| {
             let fx = sys.scm.scm.spawned(&s.name, result, now);
@@ -577,7 +582,8 @@ fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<u32, u32> {
         _ => ERROR_FILE_NOT_FOUND,
     };
     let name = crate::threads::image_nt_name(&image).map_err(not_found)?;
-    let attrs = abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
+    let attrs =
+        abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
     let section = crate::io::services::with_named(
         k,
         &attrs,
@@ -626,7 +632,7 @@ fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<u32, u32> {
             let _ = sys.objects.close(&caller, c.thread);
         }
     });
-    created.map(|c| c.client.process.0 as u32).map_err(|e| match e.0 {
+    created.map(|c| c.client.process.0).map_err(|e| match e.0 {
         0xC000_009A => ERROR_INVALID_PARAMETER,
         _ => not_found(e),
     })
@@ -638,8 +644,8 @@ pub fn process_ended(sys: &mut NtSystem, pid: ProcessId, now_ms: u64, now_ft: u6
     if !sys.scm.loaded {
         return false;
     }
-    let fx = sys.scm.scm.process_ended(pid.0 as u32, now_ms);
-    if sys.scm.host_handle.is_some_and(|(p, _, _)| p == pid.0 as u32) {
+    let fx = sys.scm.scm.process_ended(pid.0, now_ms);
+    if sys.scm.host_handle.is_some_and(|(p, _, _)| p == pid.0) {
         sys.scm.host_handle = None;
     }
     let mut after = After::default();

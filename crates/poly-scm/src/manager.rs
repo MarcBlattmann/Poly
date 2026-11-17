@@ -104,6 +104,13 @@ pub enum Next {
     End,
 }
 
+/// What a connecting dispatcher gets: the service's name, its arguments (the name first) and what
+/// to do.
+pub type Connected = (Vec<u16>, Vec<Vec<u16>>, Vec<Effect>);
+
+/// One service of a listing: its name, display name and status.
+pub type Listed = (Vec<u16>, Vec<u16>, Status);
+
 /// How `ControlService` goes on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Controlled {
@@ -269,7 +276,9 @@ fn sd_of(sddl: &str) -> Vec<u8> {
 /// or 5.
 fn check(token: Option<&Token>, sd: &[u8], desired: u32, mapping: &GenericMapping) -> Result<u32, u32> {
     let Some(t) = token else {
-        return Ok(mapping.map(desired & !MAXIMUM_ALLOWED) | if desired & MAXIMUM_ALLOWED != 0 { mapping.all } else { 0 });
+        return Ok(
+            mapping.map(desired & !MAXIMUM_ALLOWED) | if desired & MAXIMUM_ALLOWED != 0 { mapping.all } else { 0 }
+        );
     };
     let Some(parts) = Parts::from_relative(sd) else { return Err(ERROR_ACCESS_DENIED) };
     let out = access::check(&parts, &t.check_view(), mapping.map(desired), mapping);
@@ -450,7 +459,9 @@ impl Scm {
     /// A service handle: the service's key and the rights of the handle.
     fn service_of(&self, c: &Caller<'_>, h: u64) -> Result<(Vec<u16>, u32), u32> {
         match self.handle(c, h)? {
-            ScHandle { kind: Kind::Service(k), granted, .. } if self.services.contains_key(k) => Ok((k.clone(), *granted)),
+            ScHandle { kind: Kind::Service(k), granted, .. } if self.services.contains_key(k) => {
+                Ok((k.clone(), *granted))
+            }
             _ => Err(ERROR_INVALID_HANDLE),
         }
     }
@@ -486,11 +497,7 @@ impl Scm {
         {
             return Err(RPC_X_BAD_STUB_DATA);
         }
-        if path.is_empty()
-            || !config::type_valid(req.ty)
-            || !config::start_valid(req.ty, req.start)
-            || req.error > 3
-        {
+        if path.is_empty() || !config::type_valid(req.ty) || !config::start_valid(req.ty, req.start) || req.error > 3 {
             return Err(ERROR_INVALID_PARAMETER);
         }
         let deps = req.deps.unwrap_or_default();
@@ -501,7 +508,11 @@ impl Scm {
             None => w("LocalSystem"),
             Some(a) => {
                 let acct = poly_security::service::account_of(a).ok_or(ERROR_INVALID_SERVICE_ACCOUNT)?;
-                if acct == poly_security::service::Account::LocalSystem && a.is_empty() { w("LocalSystem") } else { a.clone() }
+                if acct == poly_security::service::Account::LocalSystem && a.is_empty() {
+                    w("LocalSystem")
+                } else {
+                    a.clone()
+                }
             }
         };
         let key = fold(&name);
@@ -684,8 +695,12 @@ impl Scm {
                     s.config.failure = Some(FailureActions { reset, reboot_msg: None, command: None, actions: a });
                 }
             }
-            (SERVICE_CONFIG_DELAYED_AUTO_START_INFO, Config2::Value(_, v)) => s.config.delayed = Some(u32::from(v != 0)),
-            (SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, Config2::Value(_, v)) => s.config.failure_flag = Some(u32::from(v != 0)),
+            (SERVICE_CONFIG_DELAYED_AUTO_START_INFO, Config2::Value(_, v)) => {
+                s.config.delayed = Some(u32::from(v != 0))
+            }
+            (SERVICE_CONFIG_FAILURE_ACTIONS_FLAG, Config2::Value(_, v)) => {
+                s.config.failure_flag = Some(u32::from(v != 0))
+            }
             (SERVICE_CONFIG_SERVICE_SID_INFO, Config2::Value(_, v)) => {
                 if !matches!(v, 0 | 1 | 3) {
                     return Err(ERROR_INVALID_PARAMETER);
@@ -814,12 +829,7 @@ impl Scm {
     fn begin(&mut self, key: &[u16], args: Vec<Vec<u16>>, starter: Option<u64>, fx: &mut Vec<Effect>) {
         let deps_ready = self.deps_running(key);
         let Some(s) = self.services.get_mut(key) else { return };
-        s.status = Status {
-            ty: s.config.ty,
-            state: SERVICE_START_PENDING,
-            hint: START_HINT_MS,
-            ..Status::default()
-        };
+        s.status = Status { ty: s.config.ty, state: SERVICE_START_PENDING, hint: START_HINT_MS, ..Status::default() };
         s.args = args;
         if let Some(old) = core::mem::replace(&mut s.starter, starter) {
             fx.push(Effect::Signal(old));
@@ -838,9 +848,11 @@ impl Scm {
 
     fn deps_running(&self, key: &[u16]) -> bool {
         let Some(s) = self.services.get(key) else { return false };
-        s.config.deps.iter().filter(|d| d.first() != Some(&u16::from(b'+'))).all(|d| {
-            self.services.get(&fold(d)).is_some_and(|ds| ds.builtin || ds.status.state == SERVICE_RUNNING)
-        })
+        s.config
+            .deps
+            .iter()
+            .filter(|d| d.first() != Some(&u16::from(b'+')))
+            .all(|d| self.services.get(&fold(d)).is_some_and(|ds| ds.builtin || ds.status.state == SERVICE_RUNNING))
     }
 
     /// Decide a start: the waiter learns `result` through [`Scm::start_result`].
@@ -1026,9 +1038,12 @@ impl Scm {
     /// `StartServiceCtrlDispatcherW` connects: the service's name and arguments. `event` is the
     /// dispatcher's control event. 1063 for a process the manager did not start, 1056 for a second
     /// attempt.
-    pub fn connect(&mut self, c: &Caller<'_>, event: u64) -> Result<(Vec<u16>, Vec<Vec<u16>>, Vec<Effect>), u32> {
-        let found =
-            self.services.iter().find(|(_, s)| s.process == Some(c.pid) && s.phase == Phase::Connect).map(|(k, _)| k.clone());
+    pub fn connect(&mut self, c: &Caller<'_>, event: u64) -> Result<Connected, u32> {
+        let found = self
+            .services
+            .iter()
+            .find(|(_, s)| s.process == Some(c.pid) && s.phase == Phase::Connect)
+            .map(|(k, _)| k.clone());
         let first = self.tried.insert(c.pid);
         let Some(k) = found.filter(|_| first) else {
             return Err(if first { ERROR_FAILED_SERVICE_CONTROLLER_CONNECT } else { ERROR_SERVICE_ALREADY_RUNNING });
@@ -1046,7 +1061,10 @@ impl Scm {
     }
 
     fn connected(&self, pid: u32) -> Option<Vec<u16>> {
-        self.services.iter().find(|(_, s)| s.process == Some(pid) && s.phase == Phase::Connected).map(|(k, _)| k.clone())
+        self.services
+            .iter()
+            .find(|(_, s)| s.process == Some(pid) && s.phase == Phase::Connected)
+            .map(|(k, _)| k.clone())
     }
 
     /// Whether `pid` runs a connected service (`RegisterServiceCtrlHandler(Ex)W`).
@@ -1093,7 +1111,11 @@ impl Scm {
     fn failure(&mut self, key: &[u16], now: u64, fx: &mut Vec<Effect>) {
         let Some(s) = self.services.get_mut(key) else { return };
         let reset = s.config.failure.as_ref().map_or(0, |f| f.reset);
-        if s.failures > 0 && reset != 0 && reset != u32::MAX && now.saturating_sub(s.last_failure) > u64::from(reset) * 1000 {
+        if s.failures > 0
+            && reset != 0
+            && reset != u32::MAX
+            && now.saturating_sub(s.last_failure) > u64::from(reset) * 1000
+        {
             s.failures = 0;
         }
         s.failures += 1;
@@ -1110,7 +1132,13 @@ impl Scm {
 
     /// `ControlService`: checks the code, the right and the state, then queues the control for the
     /// service's dispatcher; `waiter` is signalled when its handler has returned.
-    pub fn control(&mut self, c: &Caller<'_>, h: u64, code: u32, waiter: u64) -> Result<(Controlled, Vec<Effect>), u32> {
+    pub fn control(
+        &mut self,
+        c: &Caller<'_>,
+        h: u64,
+        code: u32,
+        waiter: u64,
+    ) -> Result<(Controlled, Vec<Effect>), u32> {
         let (k, granted) = self.service_of(c, h)?;
         let right = match code {
             SERVICE_CONTROL_STOP => SERVICE_STOP,
@@ -1135,9 +1163,10 @@ impl Scm {
                     return Err(ERROR_INVALID_SERVICE_CONTROL);
                 }
                 let name = &s.config.name;
-                let running_dependent = self.services.values().any(|o| {
-                    o.status.state != SERVICE_STOPPED && o.config.deps.iter().any(|d| eq_fold(d, name))
-                });
+                let running_dependent = self
+                    .services
+                    .values()
+                    .any(|o| o.status.state != SERVICE_STOPPED && o.config.deps.iter().any(|d| eq_fold(d, name)));
                 if running_dependent {
                     return Err(ERROR_DEPENDENT_SERVICES_RUNNING);
                 }
@@ -1183,10 +1212,10 @@ impl Scm {
         let Some(k) = self.connected(c.pid) else { return Vec::new() };
         let s = self.services.get_mut(&k).expect("found");
         let mut fx: Vec<Effect> = s.in_flight.take().and_then(|x| x.waiter).map(Effect::Signal).into_iter().collect();
-        if !s.controls.is_empty() || s.reported_stopped {
-            if let Some(e) = s.control_event {
-                fx.push(Effect::Set(e));
-            }
+        if (!s.controls.is_empty() || s.reported_stopped)
+            && let Some(e) = s.control_event
+        {
+            fx.push(Effect::Set(e));
         }
         fx
     }
@@ -1277,7 +1306,7 @@ impl Scm {
         ty: u32,
         state: u32,
         group: Option<&[u16]>,
-    ) -> Result<Vec<(Vec<u16>, Vec<u16>, Status)>, u32> {
+    ) -> Result<Vec<Listed>, u32> {
         let granted = self.manager(c, mgr)?;
         if granted & SC_MANAGER_ENUMERATE_SERVICE == 0 {
             return Err(ERROR_ACCESS_DENIED);
@@ -1322,11 +1351,12 @@ impl Scm {
         if info & 0xF == 0 {
             return Err(ERROR_INVALID_PARAMETER);
         }
-        let need = if info & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION) != 0 {
-            READ_CONTROL
-        } else {
-            0
-        } | if info & poly_security::sd::SACL_SECURITY_INFORMATION != 0 { ACCESS_SYSTEM_SECURITY } else { 0 };
+        let need =
+            if info & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION) != 0 {
+                READ_CONTROL
+            } else {
+                0
+            } | if info & poly_security::sd::SACL_SECURITY_INFORMATION != 0 { ACCESS_SYSTEM_SECURITY } else { 0 };
         if granted & need != need {
             return Err(ERROR_ACCESS_DENIED);
         }

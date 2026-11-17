@@ -113,11 +113,12 @@ impl Config {
 
     /// The registry values, in the order they are written: `(name, kind, data)`.
     pub fn values(&self) -> Vec<(Vec<u16>, u32, Vec<u8>)> {
-        let mut v = Vec::new();
-        v.push((w("Type"), REG_DWORD, dword(self.ty)));
-        v.push((w("Start"), REG_DWORD, dword(self.start)));
-        v.push((w("ErrorControl"), REG_DWORD, dword(self.error)));
-        v.push((w("ImagePath"), REG_EXPAND_SZ, sz(&self.path)));
+        let mut v = alloc::vec![
+            (w("Type"), REG_DWORD, dword(self.ty)),
+            (w("Start"), REG_DWORD, dword(self.start)),
+            (w("ErrorControl"), REG_DWORD, dword(self.error)),
+            (w("ImagePath"), REG_EXPAND_SZ, sz(&self.path)),
+        ];
         if let Some(d) = &self.display {
             v.push((w("DisplayName"), REG_SZ, sz(d)));
         }
@@ -198,7 +199,8 @@ impl Config {
 
 /// Case-insensitive equality of two names (the units of the Basic Multilingual Plane upper-cased).
 pub fn eq_fold(a: &[u16], b: &[u16]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| poly_security::service::upcase(x) == poly_security::service::upcase(y))
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(&x, &y)| poly_security::service::upcase(x) == poly_security::service::upcase(y))
 }
 
 /// The key a name is found under.
