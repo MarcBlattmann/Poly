@@ -7,5 +7,5 @@
 poly_win32_rt::fail_exports!(
     "wtsapi32",
     win32,
-    [WTSDisconnectSession, WTSEnumerateSessionsW, WTSLogoffSession, WTSSendMessageW,]
+    [WTSDisconnectSession, WTSLogoffSession, WTSSendMessageW,]
 );

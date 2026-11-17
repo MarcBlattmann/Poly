@@ -125,11 +125,13 @@ impl CreateHook<'_> {
         };
         match start {
             Start::Pipe => self.open_pipe(om, r.remaining),
+            // The volume itself (`\??\C:` with nothing after it), not its root directory.
+            Start::Volume(v) if r.remaining.is_empty() => self.open_volume(om, v),
             Start::Volume(v) => {
                 let root = self.io.volumes[v].root.clone();
-                self.open_disk(om, v, &root, &[], r.remaining)
+                self.open_disk(om, r.caller.as_ref(), v, &root, &[], r.remaining)
             }
-            Start::Dir { volume, node, path } => self.open_disk(om, volume, &node, &path, r.remaining),
+            Start::Dir { volume, node, path } => self.open_disk(om, r.caller.as_ref(), volume, &node, &path, r.remaining),
         }
     }
 
@@ -166,6 +168,25 @@ impl CreateHook<'_> {
         let object = new_file_object(om, cookie, self.thread)?;
         let target = Target::Socket(crate::afd::Endpoint::default());
         self.io.files.insert(cookie, self.record(object, target, FileType::Socket));
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
+    /// A volume opened as a device ([`super::volume`]): the system volume only (Poly's other
+    /// volumes are views of its VFS, no disks: `STATUS_OBJECT_NAME_NOT_FOUND`, as for a drive that
+    /// is not there). The file object carries [`super::volume::VOLUME_SDDL`], which the object
+    /// manager checks the access against; an open that asks for more than attribute, control and
+    /// synchronize rights reaches the volume's data and answers `FILE_OPENED`, the others 0.
+    fn open_volume(&mut self, om: &mut ObjectManager, v: usize) -> Result<ObjectId, NtStatus> {
+        if self.io.volumes[v].letter != Some('C') {
+            return Err(STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+        let data = self.params.access & !super::volume::LIGHT_RIGHTS != 0;
+        let cookie = self.io.cookie();
+        let object = new_file_object(om, cookie, self.thread)?;
+        om.assign_sddl(object, ObjectType::File, super::volume::VOLUME_SDDL);
+        self.io.files.insert(cookie, self.record(object, Target::Volume(v), FileType::BlockDevice));
+        self.information = if data { FILE_OPENED } else { 0 };
         self.made = Some(cookie);
         Ok(object)
     }
@@ -304,6 +325,7 @@ impl CreateHook<'_> {
     fn open_disk(
         &mut self,
         om: &mut ObjectManager,
+        caller: Option<&poly_ntobj::Caller>,
         volume: usize,
         start: &NodeRef,
         start_path: &[u16],
@@ -326,7 +348,24 @@ impl CreateHook<'_> {
         let found = walk::resolve(vr, start, start_path, &parts, follow)?;
         let (info, node, open) = match &found.node {
             Some(node) => self.open_existing(&found, node, trailing)?,
-            None => self.create_new(&found, trailing)?,
+            None => {
+                // Making a name asks the directory for `FILE_ADD_FILE` or `FILE_ADD_SUBDIRECTORY`
+                // (Learn: "File Security and Access Rights"; the sheet of `SystemTemp`: the filtered
+                // token cannot create in `C:\Windows\SystemTemp`). A name that is not there to
+                // open is not found first.
+                if let Some(c) = caller
+                    && !matches!(p.disposition, FILE_OPEN | FILE_OVERWRITE)
+                {
+                    let parent = match found.path.iter().rposition(|&ch| ch == u16::from(b'\\')) {
+                        Some(i) => &found.path[..i],
+                        None => &[][..],
+                    };
+                    let key = poly_ntobj::path_key(&alloc::format!("F{volume}"), parent);
+                    let want = if p.options & FILE_DIRECTORY_FILE != 0 { FILE_ADD_SUBDIRECTORY } else { FILE_ADD_FILE };
+                    om.path_access(c, &key, true, want)?;
+                }
+                self.create_new(&found, trailing)?
+            }
         };
         let kind = node.kind().map_err(status_of)?;
         let key = NodeKey::of(&node)?;
