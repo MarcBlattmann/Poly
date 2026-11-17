@@ -224,3 +224,37 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
     };
     assert_eq!((msg.hwnd, msg.msg), (h, poly_win32k::user::WM_CLOSE));
 }
+
+/// ADR 0219: a compositor whose Windows apps live in output pixels greets with the output in those
+/// pixels and `Units`: the system DPI is 96 times the units, and the work area is below the
+/// desktop's ridge in those pixels too. Without `Units` it stays 96.
+#[test]
+fn the_desktop_links_units_set_the_system_dpi() {
+    use poly_win32k::frame::FrameMetrics;
+    use poly_win32k::link::{FromCompositor, VERSION, encode_all};
+    for (units, dpi, ridge) in [(1u32, 96u32, 24), (2, 192, 48)] {
+        let mut f = Fake::new();
+        let hello = FromCompositor::Hello {
+            version: VERSION,
+            width: 1280 * units,
+            height: 800 * units,
+            scale: 2,
+            frame: FrameMetrics::POLY,
+        };
+        let mut records = alloc::vec![hello];
+        if units > 1 {
+            records.push(FromCompositor::Units { units });
+        }
+        f.with_state(|sys, _, _| {
+            let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+            win32k.link_receive(objects, &encode_all(&records));
+        });
+        let Reply::Desktop { width, height, work, dpi: got, .. } =
+            user_call(&mut f, &Request::Desktop {}, 4096).1.expect("a reply")
+        else {
+            panic!("not the desktop")
+        };
+        assert_eq!((width, height, got), ((1280 * units) as i32, (800 * units) as i32, dpi));
+        assert_eq!(work.top, ridge);
+    }
+}

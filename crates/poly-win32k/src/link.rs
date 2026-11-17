@@ -223,6 +223,10 @@ pub enum FromCompositor {
     Layout { name: String },
     /// The compositor reads that buffer no more.
     Released { buffer: BufferId },
+    /// Windows apps live in `units` output pixels per logical pixel (ADR 0219): the sizes in
+    /// `Hello` and every position and size on the link are already in those pixels, and the
+    /// system DPI is 96 times `units`. Without this record: 1.
+    Units { units: u32 },
 }
 
 /// Why bytes are not a record.
@@ -375,6 +379,7 @@ mod kind {
     pub const REQUEST: u16 = 0x800A;
     pub const LAYOUT: u16 = 0x800B;
     pub const RELEASED: u16 = 0x800C;
+    pub const UNITS: u16 = 0x800D;
 }
 
 fn kind_of(k: SurfaceKind) -> u8 {
@@ -546,6 +551,7 @@ impl Record for FromCompositor {
             Request { surface, request } => Out::new(out, kind::REQUEST).u32(*surface).u8(request_of(*request)).done(),
             Layout { name } => Out::new(out, kind::LAYOUT).string(name).done(),
             Released { buffer } => Out::new(out, kind::RELEASED).u32(*buffer).done(),
+            Units { units } => Out::new(out, kind::UNITS).u32(*units).done(),
         }
     }
 
@@ -581,6 +587,7 @@ impl Record for FromCompositor {
             },
             kind::LAYOUT => Layout { name: b.string()? },
             kind::RELEASED => Released { buffer: b.u32()? },
+            kind::UNITS => Units { units: b.u32()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -701,6 +708,7 @@ mod tests {
             Request { surface: 1, request: self::Request::Close },
             Layout { name: String::from("ch") },
             Released { buffer: 9 },
+            Units { units: 2 },
         ]
     }
 

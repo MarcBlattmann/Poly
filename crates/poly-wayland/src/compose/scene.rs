@@ -120,6 +120,9 @@ pub struct Content {
     pub scale: u32,
     pub pixels: Vec<u32>,
     pub view: View,
+    /// Enlarged to a larger output scale with a bilinear filter rather than
+    /// nearest neighbour (a Windows app's window that draws at 100 %, ADR 0219).
+    pub smooth: bool,
 }
 
 impl Content {
@@ -936,10 +939,24 @@ impl Scene {
             return;
         }
         self.update(id, |w| {
-            let view = w.content.view;
-            w.content =
-                Content { width, height, scale: scale.max(1), pixels: vec![0; width as usize * height as usize], view };
+            let (view, smooth) = (w.content.view, w.content.smooth);
+            w.content = Content {
+                width,
+                height,
+                scale: scale.max(1),
+                pixels: vec![0; width as usize * height as usize],
+                view,
+                smooth,
+            };
         });
+    }
+
+    /// Enlarge window `id`'s content smoothly (bilinear) when the output's
+    /// scale is larger than its buffer's (ADR 0219).
+    pub fn set_smooth(&mut self, id: WindowId, smooth: bool) {
+        if self.window(id).is_some_and(|w| w.content.smooth != smooth) {
+            self.update(id, |w| w.content.smooth = smooth);
+        }
     }
 
     /// Replace a window's content (all of it damaged).
