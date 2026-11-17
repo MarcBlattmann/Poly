@@ -251,6 +251,10 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
                 *dst = over(p, *dst) | OPAQUE;
             }
         }
+    } else if c.smooth && bs == 1 && s.as_120ths() == 2 * SCALE_UNIT {
+        draw_double(fb, c, dest, area);
+    } else if c.smooth && s.as_120ths() > bs as u32 * SCALE_UNIT {
+        draw_smooth(fb, c, dest, area, bs, s);
     } else if s.is_integer() && bs == 1 {
         // A buffer of scale 1 at a whole output scale (a Windows app's window at 200%): each
         // buffer pixel is `si` output pixels wide, and a row the same opaque buffer row gave is
@@ -298,6 +302,79 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
         }
     } else {
         draw_smooth(fb, c, dest, area, bs, s);
+    }
+}
+
+/// `(3 a + b) / 4` in each of the four 8-bit channels, rounded.
+fn mix31(a: u32, b: u32) -> u32 {
+    const LO: u32 = 0x00ff_00ff;
+    let lo = ((a & LO) * 3 + (b & LO) + 0x0002_0002) >> 2 & LO;
+    let hi = (((a >> 8) & LO) * 3 + ((b >> 8) & LO) + 0x0002_0002) >> 2 & LO;
+    lo | hi << 8
+}
+
+/// [`draw_image`] smoothed for a scale-1 buffer at exactly 200 % (ADR 0219): the bilinear filter
+/// of [`draw_smooth`] at that ratio puts every output pixel a quarter of a buffer pixel from its
+/// nearest buffer pixel, so it is three quarters of that pixel and one quarter of the next one
+/// towards it, in each direction (edges repeat their pixel).
+fn draw_double(fb: &mut dyn Framebuffer, c: &Content, dest: Rect, area: Rect) {
+    let (w, h) = (c.width as i32, c.height as i32);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let (x0, n) = (area.x - dest.x, area.width as usize);
+    // Buffer row `k` widened to the area's output columns: column 2i is three quarters of buffer
+    // column i and a quarter of i - 1, column 2i + 1 the same with i + 1. Each buffer row serves
+    // up to four output rows, so the last three widened rows are kept.
+    let widen = |k: i32, out: &mut Vec<u32>| {
+        let src = &c.pixels[(k * w) as usize..((k + 1) * w) as usize];
+        let at = |i: i32| src[i.clamp(0, w - 1) as usize];
+        // Every buffer column the area touches, both output columns it gives, then the area's
+        // part of them.
+        let (first, last) = (x0 >> 1, (x0 + n as i32 - 1) >> 1);
+        out.clear();
+        let mut prev = at(first - 1);
+        let mut here = at(first);
+        for i in first..=last {
+            let next = at(i + 1);
+            out.push(mix31(here, prev));
+            out.push(mix31(here, next));
+            (prev, here) = (here, next);
+        }
+        let skip = (x0 & 1) as usize;
+        out.drain(..skip);
+        out.truncate(n);
+    };
+    let mut kept: [(i32, Vec<u32>); 3] = [(-1, Vec::new()), (-1, Vec::new()), (-1, Vec::new())];
+    let mut slot = |k: i32, kept: &mut [(i32, Vec<u32>); 3]| -> usize {
+        if let Some(i) = kept.iter().position(|e| e.0 == k) {
+            return i;
+        }
+        // Rows are asked for top to bottom: the lowest kept row is done with.
+        let i = (0..3).min_by_key(|&i| kept[i].0).unwrap_or(0);
+        widen(k, &mut kept[i].1);
+        kept[i].0 = k;
+        i
+    };
+    let mut line: Vec<u32> = alloc::vec![0; n];
+    for y in area.y..area.bottom() {
+        let o = y - dest.y;
+        let near = (o / 2).min(h - 1);
+        let other = if o % 2 == 0 { (near - 1).max(0) } else { (near + 1).min(h - 1) };
+        let (a, b) = (slot(near, &mut kept), slot(other, &mut kept));
+        let mut alpha = 0xff00_0000;
+        for ((m, &p), &q) in line.iter_mut().zip(&kept[a].1).zip(&kept[b].1) {
+            *m = mix31(p, q);
+            alpha &= *m;
+        }
+        let row = &mut fb.row_mut(y as u32)[area.x as usize..area.right() as usize];
+        if alpha == 0xff00_0000 {
+            row.copy_from_slice(&line);
+        } else {
+            for (dst, &p) in row.iter_mut().zip(&line) {
+                *dst = over(p, *dst) | OPAQUE;
+            }
+        }
     }
 }
 

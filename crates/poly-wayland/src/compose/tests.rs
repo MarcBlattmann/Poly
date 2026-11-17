@@ -713,3 +713,46 @@ fn a_scale_one_buffer_doubles_at_two_hundred_percent() {
         }
     }
 }
+
+/// A Windows window's buffer enlarged to 200 % smoothly (ADR 0219): each output pixel is the
+/// bilinear mix of the four buffer pixels around its centre (three quarters towards the nearest,
+/// edges repeated), to within rounding; not 2x2 blocks.
+#[test]
+fn a_smooth_buffer_at_two_hundred_percent_is_bilinear() {
+    let (bw, bh) = (7usize, 5usize);
+    let mut scene = Scene::new(40, 30, 2);
+    let id = window(&mut scene, 3, 2, bw as u32, bh as u32, 1, 0, false);
+    scene.set_smooth(id, true);
+    let px = |x: usize, y: usize| -> u32 {
+        0xff00_0000 | ((x as u32 * 37) & 0xff) << 16 | ((y as u32 * 61) & 0xff) << 8 | ((x * y) as u32 * 13 & 0xff)
+    };
+    for y in 0..bh {
+        for x in 0..bw {
+            scene.content_mut(id).unwrap().pixels[y * bw + x] = px(x, y);
+        }
+    }
+    let mut fb = MemoryFramebuffer::new(40, 30);
+    scene.render(&mut fb);
+    let ch = |v: u32, s: u32| f64::from((v >> s) & 0xff);
+    for oy in 0..2 * bh {
+        for ox in 0..2 * bw {
+            // The output pixel's centre in buffer pixels, less half a pixel.
+            let fx = (ox as f64 + 0.5) / 2.0 - 0.5;
+            let fy = (oy as f64 + 0.5) / 2.0 - 0.5;
+            let (x0, y0) = (fx.floor(), fy.floor());
+            let (wx, wy) = (fx - x0, fy - y0);
+            let at =
+                |x: f64, y: f64| px(x.clamp(0.0, bw as f64 - 1.0) as usize, y.clamp(0.0, bh as f64 - 1.0) as usize);
+            let got = fb.pixel(6 + ox as u32, 4 + oy as u32).unwrap();
+            for s in [0, 8, 16] {
+                let want = ch(at(x0, y0), s) * (1.0 - wx) * (1.0 - wy)
+                    + ch(at(x0 + 1.0, y0), s) * wx * (1.0 - wy)
+                    + ch(at(x0, y0 + 1.0), s) * (1.0 - wx) * wy
+                    + ch(at(x0 + 1.0, y0 + 1.0), s) * wx * wy;
+                assert!((ch(got, s) - want).abs() <= 1.5, "({ox}, {oy}) channel {s}: {} vs {want}", ch(got, s));
+            }
+        }
+    }
+    // Not blocks: two output pixels of one buffer pixel differ where the picture changes.
+    assert_ne!(fb.pixel(6 + 4, 4 + 4), fb.pixel(6 + 5, 4 + 4));
+}

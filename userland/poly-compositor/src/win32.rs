@@ -248,6 +248,8 @@ impl WindowsSurfaces {
                         actions.push(Action::Send(FromCompositor::Released { buffer: old }));
                     }
                     scene.resize_content(s.window, width, height, 1);
+                    // Windows apps draw at 100 %: enlarged smoothly, not in blocks (ADR 0219).
+                    scene.set_smooth(s.window, true);
                     actions.push(Action::TakeBuffer(buffer));
                 }
             }
