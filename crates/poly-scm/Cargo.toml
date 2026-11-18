@@ -1,0 +1,20 @@
+[package]
+name = "poly-scm"
+description = "Windows' service control manager (ADR 0221): the service database over the registry, service states, controls, failure actions, handles and rights, and the messages advapi32 sends it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["manager"]
+# The manager itself (the kernel's side). Without it only the messages and constants (advapi32's side).
+manager = ["dep:poly-registry", "dep:poly-security"]
+
+[dependencies]
+poly-registry = { workspace = true, optional = true }
+poly-security = { workspace = true, optional = true }
+
+[lints]
+workspace = true
