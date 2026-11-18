@@ -41,6 +41,10 @@
       "description": "Microsoft Learn file system and temporary file reference: the C:\\Windows\\SystemTemp directory that installers extract into, observed by the spec agents (spec-win-elevation); entries named by directory",
       "revision": "Windows 11 25H2 build 26200.9974"
     },
+    "ms-learn-taskschd": {
+      "description": "Microsoft Learn Task Scheduler 2.0 reference and the public SDK headers taskschd.h, winerror.h: the COM interfaces of taskschd.dll (entries named Interface.Method, and Interface.Property for a get/put pair; spec-win-taskschd)",
+      "revision": "Windows SDK 10.0.26100.0"
+    },
     "ms-learn-uac": {
       "description": "User Account Control: Microsoft Learn (Access Tokens, Mandatory Integrity Control, ShellExecuteEx, Application Manifests) and the oracle's behaviour for the split token of an administrator: the standard (filtered) token and the elevated (full) token (entries named by the behaviour; docs/windows/chrome-installer-plan.md)",
       "revision": "Windows 11 build 26200.9974"

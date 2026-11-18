@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tfx_xml_b",
+      "exe_sha256": "4f861911d53ba9fc9228069434ac7d70015d3fabe3f68e4d6bc7ba66c549b357",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlciB4bWwKICB0aGUgdGFzazogbmFtZT1beDFdIHBhdGg9W1xQb2x5U3BlY1x0ZnhceDFdIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wCnhtbHw8VGFzayB2ZXJzaW9uPSIxLjIiIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dpbmRvd3MvMjAwNC8wMi9taXQvdGFzayI+CnhtbHwgICAgPFVSST5cUG9seVNwZWNcdGZ4XHgxPC9VUkk+CnhtbHwgICAgPFByaW5jaXBhbCBpZD0iQXV0aG9yIj4KeG1sfCAgICA8L1ByaW5jaXBhbD4KeG1sfCAgICA8RGlzYWxsb3dTdGFydElmT25CYXR0ZXJpZXM+dHJ1ZTwvRGlzYWxsb3dTdGFydElmT25CYXR0ZXJpZXM+CnhtbHwgICAgPElkbGVTZXR0aW5ncz4KeG1sfCAgICA8L0lkbGVTZXR0aW5ncz4KeG1sfCAgICA8TG9nb25UcmlnZ2VyIC8+CnhtbHwgICAgPEV4ZWM+CnhtbHwgICAgPC9FeGVjPgpDUkVBVEUgYWdhaW46IGhyPTB4ODAwNzAwQjcgZ290PTAKVkFMSURBVEVfT05MWTogaHI9MHgwMDAwMDAwMCBnb3Q9MAp1c2VyIGFyZ3VtZW50IFNZU1RFTTogaHI9MHgwMDAwMDAwMApzY2hlbWEgdmVyc2lvbiAxLjA6IGhyPTB4ODAwNDEzMTYgZ290PTAKc2NoZW1hIHZlcnNpb24gMS4yOiBocj0weDAwMDAwMDAwIGdvdD0xCiAgdGhlIHN0b3JlZCB2ZXJzaW9uIGlzIHdyaXR0ZW4gYXMgPFRhc2sgCnNjaGVtYSB2ZXJzaW9uIDEuNTogaHI9MHgwMDAwMDAwMCBnb3Q9MQogIHRoZSBzdG9yZWQgdmVyc2lvbiBpcyB3cml0dGVuIGFzIDxUYXNrIApzY2hlbWEgdmVyc2lvbiBub25lOiBocj0weDgwMDQxMzE2IGdvdD0wClhNTCBubyBhY3Rpb25zOiBocj0weDgwMDQxMzE5IGdvdD0wClhNTCBhbiBlbGVtZW50IG91dCBvZiBvcmRlcjogaHI9MHgwMDAwMDAwMCBnb3Q9MQpYTUwgbWluaW1hbCBhbmQgdmFsaWQ6IGhyPTB4MDAwMDAwMDAgZ290PTEKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register xml\n  the task: name=[x1] path=[\\PolySpec\\tfx\\x1] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nxml|<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\nxml|    <URI>\\PolySpec\\tfx\\x1</URI>\nxml|    <Principal id=\"Author\">\nxml|    </Principal>\nxml|    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>\nxml|    <IdleSettings>\nxml|    </IdleSettings>\nxml|    <LogonTrigger />\nxml|    <Exec>\nxml|    </Exec>\nCREATE again: hr=0x800700B7 got=0\nVALIDATE_ONLY: hr=0x00000000 got=0\nuser argument SYSTEM: hr=0x00000000\nschema version 1.0: hr=0x80041316 got=0\nschema version 1.2: hr=0x00000000 got=1\n  the stored version is written as <Task \nschema version 1.5: hr=0x00000000 got=1\n  the stored version is written as <Task \nschema version none: hr=0x80041316 got=0\nXML no actions: hr=0x80041319 got=0\nXML an element out of order: hr=0x00000000 got=1\nXML minimal and valid: hr=0x00000000 got=1\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 360
+    },
+    {
+      "name": "tfx_xml_c",
+      "exe_sha256": "9b32adc0a74d2aee7632c3de18ef29962208a512a3f460012ffb1ebc634a8169",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlciB4bWwKICBnZXRfWG1sOiBocj0weDAwMDAwMDAwCnhtbHwgIDxSZWdpc3RyYXRpb25JbmZvPgp4bWx8ICA8L1JlZ2lzdHJhdGlvbkluZm8+CnhtbHwgICAgICA8VXNlcklkPlMtMS01LTE4PC9Vc2VySWQ+CnhtbHwgIDwvUHJpbmNpcGFscz4KeG1sfCAgICA8U3RvcElmR29pbmdPbkJhdHRlcmllcz50cnVlPC9TdG9wSWZHb2luZ09uQmF0dGVyaWVzPgp4bWx8ICAgICAgPFN0b3BPbklkbGVFbmQ+dHJ1ZTwvU3RvcE9uSWRsZUVuZD4KeG1sfCAgPC9TZXR0aW5ncz4KeG1sfCAgPC9UcmlnZ2Vycz4KeG1sfCAgICAgIDxDb21tYW5kPiI8aW1hZ2U+IjwvQ29tbWFuZD4KeG1sfCAgPC9BY3Rpb25zPgpVUERBVEU6IGhyPTB4MDAwMDAwMDAKQ1JFQVRFIHwgRElTQUJMRTogaHI9MHgwMDAwMDAwMAp1c2VyIGFyZ3VtZW50IExvY2FsU2VydmljZSBhZ2FpbnN0IGEgU1lTVEVNIHByaW5jaXBhbCBpbiB0aGUgWE1MOiBocj0weDAwMDAwMDAwCnNjaGVtYSB2ZXJzaW9uIDEuMTogaHI9MHgwMDAwMDAwMCBnb3Q9MQogIHRoZSBzdG9yZWQgdmVyc2lvbiBpcyB3cml0dGVuIGFzIDxUYXNrIApzY2hlbWEgdmVyc2lvbiAxLjQ6IGhyPTB4MDAwMDAwMDAgZ290PTEKICB0aGUgc3RvcmVkIHZlcnNpb24gaXMgd3JpdHRlbiBhcyA8VGFzayAKc2NoZW1hIHZlcnNpb24gMS43OiBocj0weDgwMDQxMzE4IGdvdD0wClhNTCBlbXB0eTogaHI9MHg4MDA0MTMxQSBnb3Q9MApYTUwgd3JvbmcgbmFtZXNwYWNlOiBocj0weDgwMDQxMzE3IGdvdD0wClhNTCBhIHRyaWdnZXIgd2l0aCBhIGJhZCBkYXRlOiBocj0weDgwMDQxMzE4IGdvdD0wCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register xml\n  get_Xml: hr=0x00000000\nxml|  <RegistrationInfo>\nxml|  </RegistrationInfo>\nxml|      <UserId>S-1-5-18</UserId>\nxml|  </Principals>\nxml|    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>\nxml|      <StopOnIdleEnd>true</StopOnIdleEnd>\nxml|  </Settings>\nxml|  </Triggers>\nxml|      <Command>\"<image>\"</Command>\nxml|  </Actions>\nUPDATE: hr=0x00000000\nCREATE | DISABLE: hr=0x00000000\nuser argument LocalService against a SYSTEM principal in the XML: hr=0x00000000\nschema version 1.1: hr=0x00000000 got=1\n  the stored version is written as <Task \nschema version 1.4: hr=0x00000000 got=1\n  the stored version is written as <Task \nschema version 1.7: hr=0x80041318 got=0\nXML empty: hr=0x8004131A got=0\nXML wrong namespace: hr=0x80041317 got=0\nXML a trigger with a bad date: hr=0x80041318 got=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 330
+    }
+  ]
+}

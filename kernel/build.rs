@@ -113,6 +113,8 @@ fn embed_win32() {
         "vcruntime140.dll",
         "vcruntime140_1.dll",
         "msvcp140.dll",
+        // ADR 0221.
+        "services.exe",
     ] {
         match &dir {
             Some(d) => {

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/taskschd.dll/IRegisteredTask.NumberOfMissedRuns.yaml
+id: windows/api/taskschd.dll/IRegisteredTask.NumberOfMissedRuns
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-taskschd
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above (each test makes its own tasks under the folder \PolySpec\<test> and deletes them again; the scheduler starts the test's own image as SYSTEM for the tests that run a task). Microsoft Learn: "Task Scheduler 2.0 Interfaces" and the page of each interface and method, "Task Scheduler Schema", "TASK_CREATION", "TASK_LOGON_TYPE", "TASK_STATE"; taskschd.h and winerror.h (Windows Kits 10.0.26100.0) for the interface and method orders, the enumerations and the error codes. Google's updater (survey-chrome-installer): its log line, the registry difference of its installer run and the GUIDs that its data holds say which calls matter (TASKSCHD.md section 1). Wine's and ReactOS's sources were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed.
+summary: >
+  Runs missed. (Observed by the test file(s) rtr_run (entry IRegisteredTask.Run).)
+same_as: "IRegisteredTask.Run"
+interface:
+  signature: "HRESULT IRegisteredTask::get_NumberOfMissedRuns(LONG*)"
+rules:
+  values: "0 for a new task and after runs by hand"
+errors:
+  null_pointer: "0x80004003"
+side_effects: "none"
+threading: "free-threaded class (threading model Both); the tests call from a multithreaded apartment"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 0
+  held_out: 0
+building_tests: >
+  Rust tests (ADR 0075); the tests of this behaviour are the files of the entry named in the summary (see its sheet for how they are built and what they never do).
+not_covered: >
+  Behaviour at run time that no test of the entry exercises.

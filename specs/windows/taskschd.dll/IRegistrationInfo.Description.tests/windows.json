@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "rgi_info",
+      "exe_sha256": "36924f11cfe0fb1fb3740290eb510f6249f8f0694d65340fd392297a2b2cf7f2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpkZWZhdWx0IERlc2NyaXB0aW9uOiBocj0weDAwMDAwMDAwIDxudWxsPgpkZWZhdWx0IERhdGU6IGhyPTB4MDAwMDAwMDAgPG51bGw+CmRlZmF1bHQgU291cmNlOiBocj0weDAwMDAwMDAwIDxudWxsPgpEZXNjcmlwdGlvbiA9ICIiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtdCkRlc2NyaXB0aW9uID0gInVuaWNvZGUtZnJlZSB0ZXh0IHdpdGggc3BhY2VzICAgYW5kICBydW5zIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbdW5pY29kZS1mcmVlIHRleHQgd2l0aCBzcGFjZXMgICBhbmQgIHJ1bnNdCkF1dGhvciA9ICIiOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtdClZlcnNpb24gPSAiIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbXQpEYXRlID0gIjIwMjYtMTEtMTciOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFsyMDI2LTExLTE3XQpEb2N1bWVudGF0aW9uID0gImh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2RvYyI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW2h0dHBzOi8vZXhhbXBsZS5pbnZhbGlkL2RvY10KVVJJID0gInBsYWluIjogcHV0IGhyPTB4MDAwMDAwMDAgcmVhZHMgYmFjayBbcGxhaW5dClNlY3VyaXR5RGVzY3JpcHRvciA9IGEgYmFkIHN0cmluZzogaHI9MHgwMDAwMDAwMApyZWdpc3RyYXRpb24geG1sIGFmdGVyIHJlZ2lzdGVyaW5nOiA8UmVnaXN0cmF0aW9uSW5mbz48MDAwZD4gPERlc2NyaXB0aW9uPm9ubHkgYSBkZXNjcmlwdGlvbjwvRGVzY3JpcHRpb24+PDAwMGQ+IDxVUkk+XFBvbHlTcGVjXHRyZ2lccjE8L1VSST48MDAwZD4gPC9SZWdpc3RyYXRpb25JbmZvPjwwMDBkPiAKZ2V0X1htbFRleHQgb2YgdGhlIHJlZ2lzdHJhdGlvbiBpbmZvOiBocj0weDgwMDA0MDAxCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\ndefault Description: hr=0x00000000 <null>\ndefault Date: hr=0x00000000 <null>\ndefault Source: hr=0x00000000 <null>\nDescription = \"\": put hr=0x00000000 reads back []\nDescription = \"unicode-free text with spaces   and  runs\": put hr=0x00000000 reads back [unicode-free text with spaces   and  runs]\nAuthor = \"\": put hr=0x00000000 reads back []\nVersion = \"\": put hr=0x00000000 reads back []\nDate = \"2026-11-17\": put hr=0x00000000 reads back [2026-11-17]\nDocumentation = \"https://example.invalid/doc\": put hr=0x00000000 reads back [https://example.invalid/doc]\nURI = \"plain\": put hr=0x00000000 reads back [plain]\nSecurityDescriptor = a bad string: hr=0x00000000\nregistration xml after registering: <RegistrationInfo><000d> <Description>only a description</Description><000d> <URI>\\PolySpec\\trgi\\r1</URI><000d> </RegistrationInfo><000d> \nget_XmlText of the registration info: hr=0x80004001\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 118
+    },
+    {
+      "name": "rgi_info_c",
+      "exe_sha256": "d86a3d82bab297fe8ea427351577f9748177511800ab98a19ccfd23097ad0be0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpkZWZhdWx0IFZlcnNpb246IGhyPTB4MDAwMDAwMDAgPG51bGw+CmRlZmF1bHQgVVJJOiBocj0weDAwMDAwMDAwIDxudWxsPgpEZXNjcmlwdGlvbiA9ICJQb2x5U3BlYyB0ZXN0IHRhc2siOiBwdXQgaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIFtQb2x5U3BlYyB0ZXN0IHRhc2tdCkRlc2NyaXB0aW9uID0gImxpbmUgb25lXG5saW5lIHR3byI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW2xpbmUgb25lPDAwMGE+bGluZSB0d29dCkF1dGhvciA9ICJTb21lYm9keSI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW1NvbWVib2R5XQpWZXJzaW9uID0gInYgMiI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW3YgMl0KRGF0ZSA9ICIyMDI2LTExLTE3VDEwOjAwOjAwWiI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgWzIwMjYtMTEtMTdUMTA6MDA6MDBaXQpEYXRlID0gIiI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW10KVVJJID0gIlxcU29tZVxcUGF0aCI6IHB1dCBocj0weDAwMDAwMDAwIHJlYWRzIGJhY2sgW1xTb21lXFBhdGhdClNlY3VyaXR5RGVzY3JpcHRvciA9IFNEREwgc3RyaW5nOiBwdXQgaHI9MHgwMDAwMDAwMCBnZXQgaHI9MHgwMDAwMDAwMCB0eXBlIDgKcmVnaXN0ZXJlZDogaHI9MHgwMDAwMDAwMApyZWdpc3RyYXRpb24geG1sIGFmdGVyIHJlZ2lzdGVyaW5nOiA8UmVnaXN0cmF0aW9uSW5mbz48MDAwZD4gPERhdGU+MjAyNi0xMS0xN1QxMDowMDowMDwvRGF0ZT48MDAwZD4gPEF1dGhvcj5OVCBBVVRIT1JJVFlcU1lTVEVNPC9BdXRob3I+PDAwMGQ+IDxEZXNjcmlwdGlvbj5vbmx5IGEgZGVzY3JpcHRpb248L0Rlc2NyaXB0aW9uPjwwMDBkPiA8VVJJPlxQb2x5U3BlY1x0cmdpXHIyPC9VUkk+PDAwMGQ+IDwvUmVnaXN0cmF0aW9uSW5mbz48MDAwZD4gCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\ndefault Version: hr=0x00000000 <null>\ndefault URI: hr=0x00000000 <null>\nDescription = \"PolySpec test task\": put hr=0x00000000 reads back [PolySpec test task]\nDescription = \"line one\\nline two\": put hr=0x00000000 reads back [line one<000a>line two]\nAuthor = \"Somebody\": put hr=0x00000000 reads back [Somebody]\nVersion = \"v 2\": put hr=0x00000000 reads back [v 2]\nDate = \"2026-11-17T10:00:00Z\": put hr=0x00000000 reads back [2026-11-17T10:00:00Z]\nDate = \"\": put hr=0x00000000 reads back []\nURI = \"\\\\Some\\\\Path\": put hr=0x00000000 reads back [\\Some\\Path]\nSecurityDescriptor = SDDL string: put hr=0x00000000 get hr=0x00000000 type 8\nregistered: hr=0x00000000\nregistration xml after registering: <RegistrationInfo><000d> <Date>2026-11-17T10:00:00</Date><000d> <Author>NT AUTHORITY\\SYSTEM</Author><000d> <Description>only a description</Description><000d> <URI>\\PolySpec\\trgi\\r2</URI><000d> </RegistrationInfo><000d> \nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 123
+    }
+  ]
+}
