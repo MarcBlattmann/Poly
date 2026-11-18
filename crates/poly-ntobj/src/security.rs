@@ -269,6 +269,14 @@ impl ObjectManager {
         Privileges { create_permanent: enabled(16), security: enabled(8) }
     }
 
+    /// Whether `caller`'s effective token holds privilege `luid`, enabled or not (no token: no).
+    pub fn holds_privilege(&self, caller: &Caller, luid: u32) -> bool {
+        self.security
+            .effective(caller.process, caller.thread)
+            .and_then(|i| self.security.token(i))
+            .is_some_and(|t| t.privileges.iter().any(|&(l, _)| l == luid))
+    }
+
     /// What `desired` access to `id` the descriptor leaves `caller`:
     /// `None` when nothing is to be checked (no descriptor, no token, a
     /// kernel-mode caller), else the access granted or why not.
@@ -474,8 +482,33 @@ impl ObjectManager {
     /// 0222) are given so when the volume or the registry is made. False if `sddl` does not parse.
     pub fn seed_path_security(&mut self, key: &str, sddl: &str) -> bool {
         let w: Vec<u16> = sddl.encode_utf16().collect();
-        let Ok(rel) = poly_security::sdstr::parse(&w) else { return false };
-        let Some(parts) = Parts::from_relative(&rel) else { return false };
+        let parses = poly_security::sdstr::parse(&w).ok().and_then(|rel| Parts::from_relative(&rel)).is_some();
+        if parses {
+            self.set_path_security(key, sddl);
+        }
+        parses
+    }
+
+    /// Give `id` (of type `kind`) the descriptor `sddl_text` (generic rights mapped): an object a
+    /// parse procedure makes whose descriptor is fixed (the volume device of `\\.\C:`). A string
+    /// that does not parse leaves the object without one.
+    pub fn assign_sddl(&mut self, id: ObjectId, kind: ObjectType, sddl_text: &str) {
+        let w: Vec<u16> = sddl_text.encode_utf16().collect();
+        if let Ok(rel) = poly_security::sdstr::parse(&w)
+            && let Some(parts) = Parts::from_relative(&rel)
+        {
+            self.replace_security(id, kind, parts);
+        }
+    }
+
+    /// Keep `sddl` as what was set on the file or directory at `key` (a [`path_key`]) before any
+    /// object of it is opened: a directory of the layout whose descriptor is not the file
+    /// system's default (`C:\Windows\SystemTemp`, `specs/windows/kernel32.dll/SystemTemp.yaml`).
+    /// A string that does not parse is left out.
+    pub fn set_path_security(&mut self, key: &str, sddl_text: &str) {
+        let w: Vec<u16> = sddl_text.encode_utf16().collect();
+        let Ok(rel) = poly_security::sdstr::parse(&w) else { return };
+        let Some(parts) = Parts::from_relative(&rel) else { return };
         let st = Stored {
             owner: parts.owner.clone(),
             group: parts.group.clone(),
@@ -485,7 +518,40 @@ impl ObjectManager {
             sacl: parts.sacl.clone(),
         };
         self.security.paths.insert(key.into(), st);
-        true
+    }
+
+    /// Whether `caller` may have `desired` (file rights) on the file or directory at `key` (a
+    /// [`path_key`]), by the descriptor that path has: what creating a name in a directory asks of
+    /// the directory (`FILE_ADD_FILE`, `FILE_ADD_SUBDIRECTORY`; Learn: "File Security and Access
+    /// Rights"). Only a path with a descriptor set on it or above (by path) is checked: Poly's
+    /// volumes keep no descriptors of their own, and the flat default stands in for what NTFS
+    /// would have. Kernel-mode callers and callers without a token are not checked.
+    pub fn path_access(&self, caller: &Caller, key: &str, container: bool, desired: AccessMask) -> Result<()> {
+        if caller.mode == Mode::Kernel {
+            return Ok(());
+        }
+        let mut prefix = String::new();
+        let mut any = false;
+        for (i, c) in key.split('\\').enumerate() {
+            if i > 0 {
+                prefix.push('\\');
+            }
+            prefix.push_str(c);
+            any |= self.security.paths.contains_key(&prefix);
+        }
+        if !any {
+            return Ok(());
+        }
+        let Some(token) = self.security.effective(caller.process, caller.thread).and_then(|t| self.security.token(t))
+        else {
+            return Ok(());
+        };
+        let parts = self.path_descriptor(DefaultSd::File, key, container);
+        let mapping = mapping_of(ObjectType::File);
+        match access::check(&parts, &token.check_view(), mapping.map(desired), &mapping).status {
+            Ok(()) => Ok(()),
+            Err(_) => Err(STATUS_ACCESS_DENIED),
+        }
     }
 
     /// Give a file or key object (made by the file system or the registry)
@@ -633,5 +699,37 @@ mod tests {
         assert!(matches!(om.dacl_grant(&c, mine, WRITE_DAC, false), Some(Ok(_))));
         let system = file(&mut om, r"F0\WINDOWS\X");
         assert!(matches!(om.dacl_grant(&c, system, WRITE_DAC, false), Some(Err(_))));
+    }
+
+    /// The administrator's filtered token: Administrators deny-only, no `SeDebugPrivilege`.
+    fn filtered() -> Token {
+        let mut t = token(0x2000, true);
+        let ba = poly_security::sid::builtin(poly_security::sid::rid::DOMAIN_ALIAS_RID_ADMINS);
+        for g in t.groups.iter_mut().filter(|g| g.0 == ba) {
+            g.1 = poly_security::token::SE_GROUP_USE_FOR_DENY_ONLY;
+        }
+        t.privileges.retain(|&(l, _)| l != 20);
+        t
+    }
+
+    #[test]
+    fn a_directory_for_the_administrators_refuses_the_filtered_token() {
+        // `C:\Windows\SystemTemp`'s descriptor (the sheet `SystemTemp`).
+        let key = "F1\\WINDOWS\\SYSTEMTEMP";
+        let sddl = "O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        for (tok, allowed) in [(Token::poly_user(), true), (filtered(), false)] {
+            let (mut om, c) = setup(tok.clone(), tok);
+            // Nothing set: not checked.
+            assert_eq!(om.path_access(&c, key, true, 2), Ok(()));
+            om.set_path_security(key, sddl);
+            let want = if allowed { Ok(()) } else { Err(STATUS_ACCESS_DENIED) };
+            assert_eq!(om.path_access(&c, key, true, 2), want, "add file");
+            assert_eq!(om.path_access(&c, key, true, 4), want, "add subdirectory");
+            // A directory below inherits the entries.
+            assert_eq!(om.path_access(&c, &alloc::format!("{key}\\SUB"), true, 2), want);
+            // Elsewhere nothing changes.
+            assert_eq!(om.path_access(&c, "F1\\WINDOWS", true, 2), Ok(()));
+            assert_eq!(om.holds_privilege(&c, 20), allowed);
+        }
     }
 }

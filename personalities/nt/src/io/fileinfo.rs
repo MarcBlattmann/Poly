@@ -134,6 +134,7 @@ impl IoState {
             Target::PipeDevice => Some((pipe_device(), Some(Vec::new()))),
             Target::Pipe(_) => Some((pipe_device(), None)),
             Target::Null => Some((wide(super::NULL_DEVICE), Some(Vec::new()))),
+            Target::Volume(v) => Some((self.volume_device_path(*v), Some(Vec::new()))),
             Target::Console(_) | Target::Host(_) | Target::Socket(_) => None,
         }
     }
@@ -144,6 +145,22 @@ impl IoState {
         let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
         let facts = match &rec.target {
             Target::Disk(d) => self.facts(&d.node)?,
+            // A volume device has a position and its handle's facts, no file information (the
+            // sheet: `GetFileSizeEx` fails with `ERROR_INVALID_FUNCTION`).
+            Target::Volume(_) => {
+                let handle =
+                    HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
+                let fixed = |bytes: Vec<u8>| {
+                    let n = bytes.len();
+                    InfoBytes { bytes, fixed: n }
+                };
+                return match class {
+                    FILE_ACCESS_INFORMATION => Ok(fixed(granted.to_le_bytes().to_vec())),
+                    FILE_POSITION_INFORMATION => Ok(fixed(rec.position.to_le_bytes().to_vec())),
+                    FILE_MODE_INFORMATION => Ok(fixed(handle.mode.to_le_bytes().to_vec())),
+                    _ => Err(STATUS_INVALID_DEVICE_REQUEST),
+                };
+            }
             Target::Pipe(key) => info::Facts {
                 size: self.pipe_buffered(key).unwrap_or(0) as u64,
                 links: 1,
@@ -511,8 +528,13 @@ impl IoState {
         if class == FILE_FS_DEVICE_INFORMATION {
             // A console is FILE_DEVICE_CONSOLE (GetFileType: FILE_TYPE_CHAR);
             // an inherited file is what its node is (ADR 0080).
+            if let Target::Volume(_) = rec.target {
+                let mut b = FILE_DEVICE_DISK.to_le_bytes().to_vec();
+                b.extend_from_slice(&super::volume::VOLUME_CHARACTERISTICS.to_le_bytes());
+                return Ok(fixed(b, 8));
+            }
             let kind = match &rec.target {
-                Target::Disk(_) => FILE_DEVICE_DISK,
+                Target::Disk(_) | Target::Volume(_) => FILE_DEVICE_DISK,
                 Target::Pipe(_) | Target::NamedPipe(_) | Target::PipeRoot | Target::PipeDevice => {
                     FILE_DEVICE_NAMED_PIPE
                 }

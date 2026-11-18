@@ -58,9 +58,18 @@ pub unsafe extern "system" fn AdjustTokenPrivileges(
     TRUE
 }
 
-/// `GetFileSecurityW`: the file (or directory) opened for `READ_CONTROL`, then its descriptor as
-/// `GetKernelObjectSecurity` gives it (ADR 0171's descriptors of files; ObjectIntegrityLabel.yaml:
-/// a new file has no label).
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
+}
+
+/// `GetFileSecurityW(lpFileName, RequestedInformation, pSecurityDescriptor, nLength,
+/// lpnLengthNeeded)`: the file's or directory's descriptor, as `NtQuerySecurityObject` gives it on
+/// a handle opened for it (Learn: `READ_CONTROL`, and `ACCESS_SYSTEM_SECURITY` for the SACL; the
+/// open asks for backup intent so that a directory opens too). A file the caller cannot open is
+/// that open's error (the sheet of `SystemTemp`: `ERROR_ACCESS_DENIED` for the filtered token); a
+/// buffer that is too small is `ERROR_INSUFFICIENT_BUFFER` with the size in `*lpnLengthNeeded`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetFileSecurityW(
     name: *const u16,
@@ -69,23 +78,36 @@ pub unsafe extern "system" fn GetFileSecurityW(
     length: u32,
     needed: *mut u32,
 ) -> i32 {
-    // `READ_CONTROL`, and `ACCESS_SYSTEM_SECURITY` for the SACL (`winnt.h`; Learn:
-    // "GetFileSecurityW"); a directory opens too (`FILE_OPEN_FOR_BACKUP_INTENT`).
-    const READ_CONTROL: u32 = 0x0002_0000;
+    /// `SACL_SECURITY_INFORMATION`, `ACCESS_SYSTEM_SECURITY`, `READ_CONTROL`,
+    /// `FILE_OPEN_FOR_BACKUP_INTENT` (`winnt.h`, `winternl.h`).
+    const SACL_SECURITY_INFORMATION: u32 = 8;
     const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
-    const SACL_SECURITY_INFORMATION: u32 = 0x8;
+    const READ_CONTROL: u32 = 0x0002_0000;
     const FILE_OPEN_FOR_BACKUP_INTENT: u32 = 0x4000;
     // SAFETY: the caller's string.
     let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
+    if needed.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
     let access = READ_CONTROL | if requested & SACL_SECURITY_INFORMATION != 0 { ACCESS_SYSTEM_SECURITY } else { 0 };
     let h = match crate::file::open_for(name, access, FILE_OPEN_FOR_BACKUP_INTENT) {
         Ok(h) => h,
         Err(e) => return fail(e, FALSE),
     };
-    // SAFETY: the caller's buffer of `length` bytes and variable; our handle.
-    let r = unsafe { crate::security::GetKernelObjectSecurity(h, requested, descriptor, length, needed) };
-    crate::base::close(h);
-    r
+    let mut need = 0u32;
+    // SAFETY: the caller's buffer of `length` bytes (or NULL with 0); a local count.
+    let st = unsafe { NtQuerySecurityObject(h, requested, descriptor, length, &mut need) };
+    close(h);
+    // SAFETY: the caller's out-pointer.
+    unsafe { needed.write_unaligned(need) };
+    if st.is_success() {
+        TRUE
+    } else if st.0 == 0xC000_0023 {
+        // STATUS_BUFFER_TOO_SMALL: ERROR_INSUFFICIENT_BUFFER (122).
+        fail(122, FALSE)
+    } else {
+        fail_status(st, FALSE)
+    }
 }
 
 /// `SetFileSecurityW`: not kept yet (`ERROR_NOT_SUPPORTED` once the file is known to exist;

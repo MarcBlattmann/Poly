@@ -17,7 +17,6 @@ poly_win32_rt::fail_exports!(
         CoGetMarshalSizeMax,
         CoGetObject,
         CoImpersonateClient,
-        CoIncrementMTAUsage,
         CoLockObjectExternal,
         CoMarshalInterface,
         CoRegisterChannelHook,

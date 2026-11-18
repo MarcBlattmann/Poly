@@ -90,6 +90,12 @@ pub trait Backend {
         false
     }
 
+    /// Whether the page at `addr` is in the process's working set: it has a frame (a page that was
+    /// only read counts, as Windows maps a zero page for it). A backend that cannot tell says no.
+    fn page_resident(&mut self, _addr: u64) -> bool {
+        false
+    }
+
     /// Make the pages of a new section; returns the kernel's id for them.
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus>;
 

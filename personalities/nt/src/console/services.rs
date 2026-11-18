@@ -79,6 +79,13 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     let (file, reply) = k.with_state(|sys, _, _| -> Result<((ObjectId, u64), Reply)> {
         let file = file_handle(sys, &caller, Handle(h), 0)?;
         n.check_event(sys, &caller)?;
+        // A volume opened as a device (`crate::io::volume`).
+        if let Some(v) = sys.io.volume_of(file.1) {
+            let granted = sys.objects.granted_access(&caller, Handle(h))?;
+            let facts = sys.io.volume_facts(v);
+            let data = crate::io::volume::control(&facts, code, granted, outlen)?;
+            return Ok((file, Reply::Data(STATUS_SUCCESS, data)));
+        }
         // A file on a volume: the file-system controls it answers (ADR 0091).
         if sys.io.is_disk(file.1) {
             let (status, data) = sys.io.fs_control(file.1, code, &input, outlen)?;

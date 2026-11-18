@@ -194,6 +194,13 @@ impl Backend for MemBackend<'_> {
         self.memory.page_written(addr)
     }
 
+    fn page_resident(&mut self, addr: u64) -> bool {
+        matches!(
+            self.memory.page_kind(addr),
+            crate::user::memory::PageKind::Present | crate::user::memory::PageKind::Zero
+        )
+    }
+
     fn create_section(&mut self, source: &SectionSource) -> Result<u64, NtStatus> {
         let page_source: Arc<dyn PageSource> = match source {
             SectionSource::Pagefile { size, .. } => Arc::new(AnonShared::new(*size)),

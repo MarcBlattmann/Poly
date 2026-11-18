@@ -22,6 +22,7 @@ use poly_win32_rt as _;
 mod ansi;
 mod appcontainer;
 mod attrlist;
+mod b0;
 mod base;
 mod console;
 mod copy;

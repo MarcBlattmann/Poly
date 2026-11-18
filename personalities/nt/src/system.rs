@@ -91,6 +91,9 @@ pub struct NtSystem {
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
     /// defaults.
     pub proc_attrs: BTreeMap<ProcessId, crate::procattrs::ProcAttrs>,
+    /// The working set limits a process was given (`SetProcessWorkingSetSize`); a process without
+    /// an entry has the defaults (not inherited: a child starts with them).
+    pub working_sets: BTreeMap<ProcessId, poly_kernelbase::workingset::WorkingSet>,
     /// Poly's i686 `ntdll.dll` (ADR 0186), mapped into every 32-bit process as the 64-bit one is
     /// into the others; empty when the kernel has none (a 32-bit executable is then refused).
     pub ntdll32: &'static [u8],
@@ -155,6 +158,7 @@ impl NtSystem {
             lowbox_sids: Vec::new(),
             winsta: crate::winsta::WinSta::default(),
             proc_attrs: BTreeMap::new(),
+            working_sets: BTreeMap::new(),
             ntdll32: &[],
             logon: poly_security::token::Logon::Admin,
             consent: crate::consent::Broker::default(),
@@ -243,6 +247,7 @@ impl NtSystem {
                 ObjectType::Process => {
                     self.process_exits.remove(&ProcessId(d.cookie as u32));
                     self.proc_attrs.remove(&ProcessId(d.cookie as u32));
+                    self.working_sets.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),

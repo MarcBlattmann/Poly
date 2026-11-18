@@ -557,6 +557,17 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
     ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
     ("K32GetModuleInformation", "api-ms-win-core-psapi-l1-1-0"),
+    // Batch B0 of the Chrome installers (docs/windows/chrome-installer-plan.md; Learn's "API set"
+    // rows, the session one a guess: its page names kernel32.dll only).
+    ("GetDriveTypeW", "api-ms-win-core-file-l1-1-0"),
+    ("GetVolumeInformationByHandleW", "api-ms-win-core-file-l1-1-0"),
+    ("GetTempPath2W", "api-ms-win-core-file-l1-2-4"),
+    ("SetProcessWorkingSetSize", "api-ms-win-core-memory-l1-1-1"),
+    ("SetProcessWorkingSetSizeEx", "api-ms-win-core-memory-l1-1-1"),
+    ("GetProcessWorkingSetSize", "api-ms-win-core-memory-l1-1-1"),
+    ("GetProcessWorkingSetSizeEx", "api-ms-win-core-memory-l1-1-1"),
+    ("K32QueryWorkingSetEx", "api-ms-win-core-psapi-l1-1-0"),
+    ("WTSGetActiveConsoleSessionId", "api-ms-win-core-kernel32-legacy-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -602,9 +613,13 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("SafeArrayGetVartype", 77),
     ("SysStringByteLen", 149),
     ("SysAllocStringByteLen", 150),
+    ("LoadTypeLib", 161),
     ("LoadRegTypeLib", 162),
+    // Batch B0 of the Chrome installers (docs/windows/chrome-installer-plan.md).
+    ("SystemTimeToVariantTime", 184),
     ("VarBstrCmp", 314),
     ("SafeArrayCreateVector", 411),
+    ("OleLoadPicturePath", 424),
 ];
 
 /// The exports of our `user32.dll` (ADR 0087): two string functions until

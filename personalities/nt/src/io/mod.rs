@@ -69,6 +69,7 @@ pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
+pub mod volume;
 pub mod walk;
 
 #[cfg(test)]
@@ -211,6 +212,8 @@ pub enum Target {
     /// The null device (`NUL`): what is written is dropped, a read is at the
     /// end of the file.
     Null,
+    /// A volume opened as a device (`\\.\C:`, [`volume`]), by its index.
+    Volume(usize),
 }
 
 /// The kernel's data for one file object.
@@ -362,6 +365,14 @@ pub fn status_of(e: Errno) -> NtStatus {
         _ => STATUS_UNSUCCESSFUL,
     }
 }
+
+/// `C:\Windows\SystemTemp` below the system volume's root, and the descriptor it has on Windows
+/// (`specs/windows/kernel32.dll/SystemTemp.yaml`): owner and group the local system, a protected
+/// DACL that gives full control, inherited by files and directories, to the local system and the
+/// Administrators group only. The filtered token of an administrator (Administrators deny-only)
+/// can neither open nor create anything in it.
+pub const SYSTEM_TEMP: &str = "\\Windows\\SystemTemp";
+pub const SYSTEM_TEMP_SDDL: &str = "O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
 
 /// The name of the volume device with `number`, as Windows spells a disk
 /// volume's device (`\Device\HarddiskVolume<number>`; ADR 0185).
@@ -522,6 +533,8 @@ impl IoState {
                 // rights owns what it makes there, as on Windows.
                 let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(&profile_path()));
                 om.seed_path_security(&key, &profile_sddl());
+                let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(SYSTEM_TEMP));
+                om.set_path_security(&key, SYSTEM_TEMP_SDDL);
             }
             self.volumes.push(Volume {
                 device,
@@ -581,6 +594,24 @@ impl IoState {
         add_named(om, &kernel, &wide("\\??\\NUL"), NewObject::SymbolicLink { target: &null })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
+    }
+
+    /// What a handle of volume `v` opened as a device answers about it ([`volume`]).
+    pub fn volume_facts(&self, v: usize) -> volume::VolumeFacts {
+        let vol = &self.volumes[v];
+        let (size, free) = vol.root.statfs().map_or((64 << 30, 32 << 30), |s| {
+            let unit = s.block_size.max(1);
+            (s.blocks.saturating_mul(unit), s.blocks_avail.saturating_mul(unit))
+        });
+        volume::VolumeFacts { serial: vol.serial, size, free }
+    }
+
+    /// The volume a file object opened as a device, if it is one.
+    pub fn volume_of(&self, cookie: u64) -> Option<usize> {
+        match self.files.get(&cookie)?.target {
+            Target::Volume(v) => Some(v),
+            _ => None,
+        }
     }
 
     pub fn vfs(&self) -> Result<&VfsRoot, NtStatus> {
@@ -721,7 +752,7 @@ impl IoState {
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot | Target::PipeDevice | Target::Null => {}
+            Target::PipeRoot | Target::PipeDevice | Target::Null | Target::Volume(_) => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),
