@@ -48,6 +48,7 @@ pub mod sdops;
 pub mod sdstr;
 #[cfg(test)]
 mod sdstr_sheet;
+pub mod service;
 pub mod sid;
 pub mod status;
 pub mod token;

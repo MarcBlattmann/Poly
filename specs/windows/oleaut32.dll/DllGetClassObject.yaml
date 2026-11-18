@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/DllGetClassObject.yaml
+id: windows/api/oleaut32.dll/DllGetClassObject
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  oleaut32's class factory for the automation marshaller PSOAInterface `{00020424-0000-0000-C000-000000000046}` (also answered for the older PSDispatch `{00020420-...}`): the class COM uses to make proxies and stubs from a registered type library. The tests use it directly (IPSFactoryBuffer) and through the calls that carry IDispatch and errors across processes.
+interface:
+  signature: "HRESULT DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv) (reached with CoGetClassObject(CLSID_PSOAInterface, CLSCTX_INPROC_SERVER, ...) )"
+installer: "Every Interface key of the updater names this class as its ProxyStubClsid32."
+rules:
+  factory: "CoGetClassObject for {00020424-...} with CLSCTX_INPROC_SERVER returns the interface IPSFactoryBuffer {D5F569D0-593B-101A-B569-08002B2DBF7A}; the same pointer on a second call; the factory answers IUnknown and IPSFactoryBuffer only (IClassFactory, IMarshal and IRpcStubBuffer: E_NOINTERFACE, and asking for IClassFactory fails with 0x80004002); CoGetClassObject for {00020420-...} returns the same factory object"
+  create_proxy: "CreateProxy(NULL, iid, &proxy, &pv) for a registered interface of the library (ITlEcho, ITlCallback, ITlDual) and for IDispatch: S_OK, an IRpcProxyBuffer (QueryInterface works) in *ppProxy; *ppv is set to NULL in every case; IUnknown and an unregistered id: REGDB_E_IIDNOTREG 0x80040155 with no proxy; with an outer object: IUnknown fails (0x80040155), ITlEcho succeeds"
+  create_stub: "CreateStub(iid, object, &stub) for ITlEcho and ITlDual with an object that implements them, and (no check) for ITlCallback with an object that does not: S_OK, an IRpcStubBuffer, CountRefs = 1 (the stub holds the object), IsIIDSupported(its id) returns the stub's interface and IsIIDSupported(an unrelated id) returns NULL, Connect(object) leaves CountRefs 1, Disconnect makes it 0; CreateStub with a NULL object: S_OK with CountRefs 0, then Connect(object) 1; an unregistered id: REGDB_E_IIDNOTREG"
+  hresults_cross: "any HRESULT the server method returns reaches the caller unchanged: failures, S_FALSE (1) and other success codes (2, 0x00040200), codes the RPC layer itself uses (0x80010108, 0x80010114, 0x800706ba, 0x800706be) and 0xffffffff"
+  error_info: "IErrorInfo set by the server with SetErrorInfo (a CreateErrorInfo object with GUID, source, description, help file and help context) before it returns a failure arrives at the client: GetErrorInfo on the calling thread returns an object with the same GUID (the interface's), source `PolyWsTl.Server`, description, help file `polyws.hlp` and context 4711; reading it clears it (the next GetErrorInfo gives S_FALSE 1 and no object); a failing call that set none leaves none; a successful call after a failing one leaves none either; a second failing call replaces it"
+  out_after_failure: "an [in, out] call that the server completes keeps both new values; a proxy released while another call is made does not disturb the first connection"
+  dual_dispatch: "QueryInterface(IDispatch) on a proxy of an object that implements a dual interface succeeds; GetTypeInfoCount returns 1; GetTypeInfo(0) returns a type info that is a proxy (its name, from GetDocumentation(-1), is ITlDual); GetIDsOfNames: `AddLong` and `addlong` both give id 1 (names are not case sensitive); parameter names resolve by position (`AddLong, b, a` gives 1, 1, 0); a name that does not exist: DISP_E_UNKNOWNNAME 0x80020006 with id -1 (also for the second name of a pair after the first resolved)"
+  invoke: "Invoke(id, IID_NULL, ...) with the arguments in reverse order (last array element = first parameter): AddLong(3, 8) returns a VT_I4 result 11 and the method flag with or without PROPERTYGET works, PROPERTYGET alone on a method: DISP_E_MEMBERNOTFOUND 0x80020003; ConcatBstr returns a BSTR result; numbers where strings are expected are converted by the server's type info (6 and 5 give `65`) and the string \"12\" where a long is expected gives 13; \"twelve\": DISP_E_TYPEMISMATCH 0x80020005 with the argument index 1 in the error argument output; too few or too many arguments: DISP_E_BADPARAMCOUNT 0x8002000e; unknown or negative ids: DISP_E_MEMBERNOTFOUND; a method that returns a failure: DISP_E_EXCEPTION 0x80020009 with the failure HRESULT in the exception structure's scode (0x80040222) and exception code 0; a success code (1) gives S_OK; a property get of the dual interface (Label) with DISPATCH_PROPERTYGET returns a BSTR, with DISPATCH_METHOD alone: DISP_E_MEMBERNOTFOUND; a non-NULL interface id: DISP_E_UNKNOWNINTERFACE 0x80020001 without reaching the server; a NULL result pointer is accepted"
+errors:
+  iid_not_registered: "REGDB_E_IIDNOTREG 0x80040155"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  member_not_found: "DISP_E_MEMBERNOTFOUND 0x80020003"
+  type_mismatch: "DISP_E_TYPEMISMATCH 0x80020005"
+  bad_param_count: "DISP_E_BADPARAMCOUNT 0x8002000e"
+  exception: "DISP_E_EXCEPTION 0x80020009"
+  unknown_name: "DISP_E_UNKNOWNNAME 0x80020006"
+  unknown_interface: "DISP_E_UNKNOWNINTERFACE 0x80020001"
+side_effects: "none"
+threading: "the factory is free-threaded: a proxy or stub can be created in any apartment"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  IRpcProxyBuffer::Connect with a real channel (the channel interface is private to the RPC layer), IRpcStubBuffer::Invoke, DebugServerQueryInterface, named arguments, DISPATCH_PROPERTYPUT, by-reference arguments of Invoke, IDispatchEx, DllCanUnloadNow, DllRegisterServer of oleaut32.

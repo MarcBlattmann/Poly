@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "cfg2_failure",
+      "exe_sha256": "9fefc19e6fd6f10ee12f2a69eca7f07924b4fd18443bf0b824f248e5b6c9ad44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNGYWlsKTogb2sKaW5pdGlhbDogbGV2ZWwgMjogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQwOyByZXNldD0wIHJlYm9vdF9tc2c9W05VTExdIGNvbW1hbmQ9W05VTExdIG49MCBbXQpyZXN0YXJ0IDEgcywgcmVzdGFydCAyIHMsIG5vbmU7IHJlc2V0IDg2NDAwOiBvawogIGxldmVsIDI6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA2NDsgcmVzZXQ9ODY0MDAgcmVib290X21zZz1bTlVMTF0gY29tbWFuZD1bTlVMTF0gbj0zIFsxOjEwMDAgMToyMDAwIDA6MCBdCnJlZ2lzdHJ5OiB2YWx1ZSBFcnJvckNvbnRyb2wgdHlwZT00IDEKcmVnaXN0cnk6IHZhbHVlIEZhaWx1cmVBY3Rpb25zIHR5cGU9MyA4MDUxMDEwMDAwMDAwMDAwMDAwMDAwMDAwMzAwMDAwMDE0MDAwMDAwMDEwMDAwMDBlODAzMDAwMDAxMDAwMDAwZDAwNzAwMDAwMDAwMDAwMDAwMDAwMDAwCnJlZ2lzdHJ5OiB2YWx1ZSBJbWFnZVBhdGggdHlwZT0yICI8aW1hZ2U+IiAtLWNoaWxkIHJ1bgpyZWdpc3RyeTogdmFsdWUgT2JqZWN0TmFtZSB0eXBlPTEgTG9jYWxTeXN0ZW0KcmVnaXN0cnk6IHZhbHVlIFN0YXJ0IHR5cGU9NCAzCnJlZ2lzdHJ5OiB2YWx1ZSBUeXBlIHR5cGU9NCAxNgpyZWdpc3RyeTogc3Via2V5cyBbXQpvbmUgcmVzdGFydDsgcmVzZXQgSU5GSU5JVEU6IG9rCiAgbGV2ZWwgMjogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ4OyByZXNldD00Mjk0OTY3Mjk1IHJlYm9vdF9tc2c9W05VTExdIGNvbW1hbmQ9W05VTExdIG49MSBbMToxMDAwIF0KcmVib290IGFjdGlvbjogb2sKICBsZXZlbCAyOiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNDg7IHJlc2V0PTYwIHJlYm9vdF9tc2c9W05VTExdIGNvbW1hbmQ9W05VTExdIG49MSBbMjo2MDAwMCBdCnJ1bi1jb21tYW5kIGFjdGlvbiB3aXRob3V0IGEgY29tbWFuZDogb2sKICBsZXZlbCAyOiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNDg7IHJlc2V0PTYwIHJlYm9vdF9tc2c9W05VTExdIGNvbW1hbmQ9W05VTExdIG49MSBbMzoxMDAwIF0KYWN0aW9uIHR5cGUgOTogZXJyIDg3Cm9uZSBhY3Rpb24gbm9uZTsgcmVzZXQgMDogb2sKICBsZXZlbCAyOiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNDg7IHJlc2V0PTAgcmVib290X21zZz1bTlVMTF0gY29tbWFuZD1bTlVMTF0gbj0xIFswOjAgXQpyZWdpc3RyeTogdmFsdWUgRXJyb3JDb250cm9sIHR5cGU9NCAxCnJlZ2lzdHJ5OiB2YWx1ZSBGYWlsdXJlQWN0aW9ucyB0eXBlPTMgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDEwMDAwMDAxNDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAKcmVnaXN0cnk6IHZhbHVlIEltYWdlUGF0aCB0eXBlPTIgIjxpbWFnZT4iIC0tY2hpbGQgcnVuCnJlZ2lzdHJ5OiB2YWx1ZSBPYmplY3ROYW1lIHR5cGU9MSBMb2NhbFN5c3RlbQpyZWdpc3RyeTogdmFsdWUgU3RhcnQgdHlwZT00IDMKcmVnaXN0cnk6IHZhbHVlIFR5cGUgdHlwZT00IDE2CnJlZ2lzdHJ5OiBzdWJrZXlzIFtdCk5VTEwgc3RydWN0dXJlOiBvawpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcFail): ok\ninitial: level 2: first call err 122, size 40; reset=0 reboot_msg=[NULL] command=[NULL] n=0 []\nrestart 1 s, restart 2 s, none; reset 86400: ok\n  level 2: first call err 122, size 64; reset=86400 reboot_msg=[NULL] command=[NULL] n=3 [1:1000 1:2000 0:0 ]\nregistry: value ErrorControl type=4 1\nregistry: value FailureActions type=3 805101000000000000000000030000001400000001000000e803000001000000d00700000000000000000000\nregistry: value ImagePath type=2 \"<image>\" --child run\nregistry: value ObjectName type=1 LocalSystem\nregistry: value Start type=4 3\nregistry: value Type type=4 16\nregistry: subkeys []\none restart; reset INFINITE: ok\n  level 2: first call err 122, size 48; reset=4294967295 reboot_msg=[NULL] command=[NULL] n=1 [1:1000 ]\nreboot action: ok\n  level 2: first call err 122, size 48; reset=60 reboot_msg=[NULL] command=[NULL] n=1 [2:60000 ]\nrun-command action without a command: ok\n  level 2: first call err 122, size 48; reset=60 reboot_msg=[NULL] command=[NULL] n=1 [3:1000 ]\naction type 9: err 87\none action none; reset 0: ok\n  level 2: first call err 122, size 48; reset=0 reboot_msg=[NULL] command=[NULL] n=1 [0:0 ]\nregistry: value ErrorControl type=4 1\nregistry: value FailureActions type=3 00000000000000000000000001000000140000000000000000000000\nregistry: value ImagePath type=2 \"<image>\" --child run\nregistry: value ObjectName type=1 LocalSystem\nregistry: value Start type=4 3\nregistry: value Type type=4 16\nregistry: subkeys []\nNULL structure: ok\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "cfg2_flags",
+      "exe_sha256": "a8bf7db91aa4a2a3eb34a79c15e8010587c2634c1ae0bc97a0c3107d30b9aaa1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNGbGFncyk6IG9rCmRlZmF1bHQ6IGxldmVsIDM6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0wCmRlZmF1bHQ6IGxldmVsIDQ6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0wCmRlZmF1bHQ6IGxldmVsIDU6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0wCmRlZmF1bHQ6IGxldmVsIDc6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0xMDAwMApzdGFydCB0eXBlIGF1dG86IG9rCmRlbGF5ZWQgYXV0byBzdGFydCA9IDE6IG9rCiAgbGV2ZWwgMzogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ7IHZhbHVlPTEKcmVnaXN0cnk6IHZhbHVlIERlbGF5ZWRBdXRvc3RhcnQgdHlwZT00IDEKcmVnaXN0cnk6IHZhbHVlIEVycm9yQ29udHJvbCB0eXBlPTQgMQpyZWdpc3RyeTogdmFsdWUgSW1hZ2VQYXRoIHR5cGU9MiAiPGltYWdlPiIgLS1jaGlsZCBydW4KcmVnaXN0cnk6IHZhbHVlIE9iamVjdE5hbWUgdHlwZT0xIExvY2FsU3lzdGVtCnJlZ2lzdHJ5OiB2YWx1ZSBTdGFydCB0eXBlPTQgMgpyZWdpc3RyeTogdmFsdWUgVHlwZSB0eXBlPTQgMTYKcmVnaXN0cnk6IHN1YmtleXMgW10Kc3RhcnQgdHlwZSBkZW1hbmQ6IG9rCiAgZGVsYXllZDogbGV2ZWwgMzogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ7IHZhbHVlPTEKZGVsYXllZCBhdXRvIHN0YXJ0ID0gMSBvbiBhIGRlbWFuZC1zdGFydCBzZXJ2aWNlOiBvawpkZWxheWVkIGF1dG8gc3RhcnQgPSAwOiBvawpmYWlsdXJlIGFjdGlvbnMgZmxhZyA9IDE6IG9rCiAgbGV2ZWwgNDogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ7IHZhbHVlPTEKc2VydmljZSBTSUQgdHlwZSA9IDE6IG9rCiAgbGV2ZWwgNTogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ7IHZhbHVlPTEKc2VydmljZSBTSUQgdHlwZSA9IDM6IG9rCiAgbGV2ZWwgNTogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDQ7IHZhbHVlPTMKc2VydmljZSBTSUQgdHlwZSA9IDI6IGVyciA4NwogIGxldmVsIDU6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0zCnNlcnZpY2UgU0lEIHR5cGUgPSAwOiBvawogIGxldmVsIDU6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0OyB2YWx1ZT0wCnNlcnZpY2UgU0lEIHR5cGUgPSA0OiBlcnIgODcKICBsZXZlbCA1OiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNDsgdmFsdWU9MApwcmVzaHV0ZG93biB0aW1lb3V0ID0gNTAwMDogb2sKICBsZXZlbCA3OiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNDsgdmFsdWU9NTAwMApyZWdpc3RyeTogdmFsdWUgRGVsYXllZEF1dG9zdGFydCB0eXBlPTQgMApyZWdpc3RyeTogdmFsdWUgRXJyb3JDb250cm9sIHR5cGU9NCAxCnJlZ2lzdHJ5OiB2YWx1ZSBGYWlsdXJlQWN0aW9uc09uTm9uQ3Jhc2hGYWlsdXJlcyB0eXBlPTQgMQpyZWdpc3RyeTogdmFsdWUgSW1hZ2VQYXRoIHR5cGU9MiAiPGltYWdlPiIgLS1jaGlsZCBydW4KcmVnaXN0cnk6IHZhbHVlIE9iamVjdE5hbWUgdHlwZT0xIExvY2FsU3lzdGVtCnJlZ2lzdHJ5OiB2YWx1ZSBQcmVzaHV0ZG93blRpbWVvdXQgdHlwZT00IDUwMDAKcmVnaXN0cnk6IHZhbHVlIFNlcnZpY2VTaWRUeXBlIHR5cGU9NCAwCnJlZ2lzdHJ5OiB2YWx1ZSBTdGFydCB0eXBlPTQgMwpyZWdpc3RyeTogdmFsdWUgVHlwZSB0eXBlPTQgMTYKcmVnaXN0cnk6IHN1YmtleXMgW10Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcFlags): ok\ndefault: level 3: first call err 122, size 4; value=0\ndefault: level 4: first call err 122, size 4; value=0\ndefault: level 5: first call err 122, size 4; value=0\ndefault: level 7: first call err 122, size 4; value=10000\nstart type auto: ok\ndelayed auto start = 1: ok\n  level 3: first call err 122, size 4; value=1\nregistry: value DelayedAutostart type=4 1\nregistry: value ErrorControl type=4 1\nregistry: value ImagePath type=2 \"<image>\" --child run\nregistry: value ObjectName type=1 LocalSystem\nregistry: value Start type=4 2\nregistry: value Type type=4 16\nregistry: subkeys []\nstart type demand: ok\n  delayed: level 3: first call err 122, size 4; value=1\ndelayed auto start = 1 on a demand-start service: ok\ndelayed auto start = 0: ok\nfailure actions flag = 1: ok\n  level 4: first call err 122, size 4; value=1\nservice SID type = 1: ok\n  level 5: first call err 122, size 4; value=1\nservice SID type = 3: ok\n  level 5: first call err 122, size 4; value=3\nservice SID type = 2: err 87\n  level 5: first call err 122, size 4; value=3\nservice SID type = 0: ok\n  level 5: first call err 122, size 4; value=0\nservice SID type = 4: err 87\n  level 5: first call err 122, size 4; value=0\npreshutdown timeout = 5000: ok\n  level 7: first call err 122, size 4; value=5000\nregistry: value DelayedAutostart type=4 0\nregistry: value ErrorControl type=4 1\nregistry: value FailureActionsOnNonCrashFailures type=4 1\nregistry: value ImagePath type=2 \"<image>\" --child run\nregistry: value ObjectName type=1 LocalSystem\nregistry: value PreshutdownTimeout type=4 5000\nregistry: value ServiceSidType type=4 0\nregistry: value Start type=4 3\nregistry: value Type type=4 16\nregistry: subkeys []\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "svc_crash_restart",
+      "exe_sha256": "7900b75da2a691197ee3b2e452e3e6e1a97ca45496c277f017a88373f976b299",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNDcmFzaEEpOiBvawpTdGFydFNlcnZpY2VXOiBvawpzdG9wcGVkIGJ5IGl0c2VsZiB3aXRoaW4gNCBzOiAxCmFmdGVyIHRoZSBjcmFzaCwgbm8gYWN0aW9uczogdHlwZT0weDEwIHN0YXRlPVNUT1BQRUQgYWNjZXB0ZWQ9MHgwIHdpbjMyPTEwNjcgc3BlY2lmaWM9MCBjaGVja3BvaW50PTAgaGludD0wIGhhc19waWQ9MCBmbGFncz0wCjEuNSBzIGxhdGVyIHN0aWxsIFNUT1BQRUQKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNDcmFzaEIpOiBvawpDaGFuZ2VTZXJ2aWNlQ29uZmlnMlcoZmFpbHVyZSBhY3Rpb25zKTogb2sKbGV2ZWwgMjogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDU2OyByZXNldD04NjQwMCByZWJvb3RfbXNnPVtOVUxMXSBjb21tYW5kPVtOVUxMXSBuPTIgWzE6NTAwIDA6MCBdClN0YXJ0U2VydmljZVc6IG9rCnJlc3RhcnRlZCB3aXRoIGEgbmV3IHByb2Nlc3Mgd2l0aGluIDYgczogMQpzdG9wcGVkIGFnYWluIHdpdGhpbiA0IHM6IDEKMS41IHMgbGF0ZXIgU1RPUFBFRCB3aW4zMj0xMDY3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcCrashA): ok\nStartServiceW: ok\nstopped by itself within 4 s: 1\nafter the crash, no actions: type=0x10 state=STOPPED accepted=0x0 win32=1067 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\n1.5 s later still STOPPED\nCreateServiceW(PolySpecSvcCrashB): ok\nChangeServiceConfig2W(failure actions): ok\nlevel 2: first call err 122, size 56; reset=86400 reboot_msg=[NULL] command=[NULL] n=2 [1:500 0:0 ]\nStartServiceW: ok\nrestarted with a new process within 6 s: 1\nstopped again within 4 s: 1\n1.5 s later STOPPED win32=1067\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4922
+    }
+  ]
+}

@@ -164,7 +164,9 @@ pub fn install_file(vr: &VfsRoot, root: &NodeRef, dir: &str, name: &str, bytes: 
         }
     }
     let flags = OpenFlags::WRONLY | OpenFlags::CREAT | OpenFlags::TRUNC;
-    let file = vr.vfs.open(&vr.ctx, &vr.cred, At::Node(&folder), &on_disk, flags, 0o644).map_err(status_of)?;
+    // A program the kernel itself starts (`services.exe`, ADR 0221) needs the execute bits.
+    let mode = if name.ends_with(".exe") { 0o755 } else { 0o644 };
+    let file = vr.vfs.open(&vr.ctx, &vr.cred, At::Node(&folder), &on_disk, flags, mode).map_err(status_of)?;
     let mut done = 0;
     while done < bytes.len() {
         match file.write_at(done as u64, &bytes[done..]).map_err(status_of)? {

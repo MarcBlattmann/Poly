@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "create_defaults",
+      "exe_sha256": "a69f4c64859ee9b5dda1092a76bf06377a1c2a2cb88f1cdc4115eec6e7d156a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNEZWYpOiBvawpkZWZhdWx0czogdHlwZT0weDEwIHN0YXJ0PTMgZXJyb3I9MSBwYXRoPVsiPGltYWdlPiIgLS1jaGlsZCBydW5dIGdyb3VwPVtdIHRhZz0wIGRlcHM9W10gYWNjb3VudD1bTG9jYWxTeXN0ZW1dIGRpc3BsYXk9W1BvbHlTcGVjU3ZjRGVmXQpzdGF0dXM6IHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0xMDc3IHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MApDcmVhdGVTZXJ2aWNlVyhhY2Nlc3MgUVVFUllfU1RBVFVTKTogb2sKcXVlcnkgc3RhdHVzIHRocm91Z2ggaXQ6IHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0xMDc3IHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MApDb250cm9sU2VydmljZShJTlRFUlJPR0FURSkgdGhyb3VnaCBpdDogZXJyIDUKU3RhcnRTZXJ2aWNlVyB0aHJvdWdoIGl0OiBlcnIgNQpEZWxldGVTZXJ2aWNlIHRocm91Z2ggaXQ6IGVyciA1ClF1ZXJ5U2VydmljZUNvbmZpZ1cgdGhyb3VnaCBpdDogZXJyIDUKT3BlblNlcnZpY2VXKEFMTF9BQ0NFU1MpOiBvawpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcDef): ok\ndefaults: type=0x10 start=3 error=1 path=[\"<image>\" --child run] group=[] tag=0 deps=[] account=[LocalSystem] display=[PolySpecSvcDef]\nstatus: type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nCreateServiceW(access QUERY_STATUS): ok\nquery status through it: type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nControlService(INTERROGATE) through it: err 5\nStartServiceW through it: err 5\nDeleteService through it: err 5\nQueryServiceConfigW through it: err 5\nOpenServiceW(ALL_ACCESS): ok\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "create_errors",
+      "exe_sha256": "f462c375258115a1deac7ba0a000495d51fc02db5cc9c006776e1fc61c36fae3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNFcnJBKTogb2sKQ3JlYXRlU2VydmljZVcobmFtZSBleGlzdHMpOiBlcnIgMTA3MwpDcmVhdGVTZXJ2aWNlVyhuYW1lIGV4aXN0cyBpbiBvdGhlciBjYXNlKTogZXJyIDEwNzMKQ3JlYXRlU2VydmljZVcoZGlzcGxheSBuYW1lID0gdGhlIG5hbWUgb2YgYW5vdGhlciBzZXJ2aWNlKTogZXJyIDEwNzgKQ3JlYXRlU2VydmljZVcoZGlzcGxheSBuYW1lID0gdGhhdCBuYW1lIGluIG90aGVyIGNhc2UpOiBlcnIgMTA3OApDcmVhdGVTZXJ2aWNlVyhnb29kKTogb2sKQ3JlYXRlU2VydmljZVcobmFtZSB3aXRoIGJhY2tzbGFzaCk6IGVyciAxMjMKQ3JlYXRlU2VydmljZVcobmFtZSB3aXRoIHNsYXNoKTogZXJyIDEyMwpDcmVhdGVTZXJ2aWNlVyhlbXB0eSBuYW1lKTogZXJyIDEyMwpDcmVhdGVTZXJ2aWNlVyhOVUxMIG5hbWUpOiBlcnIgNDg3CkNyZWF0ZVNlcnZpY2VXKE5VTEwgcGF0aCk6IGVyciA0ODcKQ3JlYXRlU2VydmljZVcoZW1wdHkgcGF0aCk6IGVyciA4NwpDcmVhdGVTZXJ2aWNlVyh0eXBlIDB4OTkpOiBlcnIgODcKQ3JlYXRlU2VydmljZVcodHlwZSAwKTogZXJyIDg3CkNyZWF0ZVNlcnZpY2VXKHR5cGUgb3dufHNoYXJlKTogZXJyIDg3CkNyZWF0ZVNlcnZpY2VXKHN0YXJ0IHR5cGUgNSk6IGVyciA4NwpDcmVhdGVTZXJ2aWNlVyhzdGFydCB0eXBlIDB4RkZGRkZGRkYpOiBlcnIgODcKQ3JlYXRlU2VydmljZVcoc3RhcnQgdHlwZSBib290IGZvciBhbiBvd24tcHJvY2VzcyBzZXJ2aWNlKTogZXJyIDg3CkNyZWF0ZVNlcnZpY2VXKHN0YXJ0IHR5cGUgc3lzdGVtIGZvciBhbiBvd24tcHJvY2VzcyBzZXJ2aWNlKTogZXJyIDg3CkNyZWF0ZVNlcnZpY2VXKHN0YXJ0IHR5cGUgYXV0byk6IG9rCkNyZWF0ZVNlcnZpY2VXKHN0YXJ0IHR5cGUgZGlzYWJsZWQpOiBvawpDcmVhdGVTZXJ2aWNlVyhlcnJvciBjb250cm9sIDQpOiBlcnIgODcKQ3JlYXRlU2VydmljZVcoZXJyb3IgY29udHJvbCAwKTogb2sKQ3JlYXRlU2VydmljZVcoZXJyb3IgY29udHJvbCBzZXZlcmUpOiBvawpDcmVhdGVTZXJ2aWNlVyhlcnJvciBjb250cm9sIGNyaXRpY2FsKTogb2sKQ3JlYXRlU2VydmljZVcoc2hhcmUgcHJvY2Vzcyk6IG9rCkNyZWF0ZVNlcnZpY2VXKG93biBwcm9jZXNzIGludGVyYWN0aXZlKTogb2sKQ3JlYXRlU2VydmljZVcoa2VybmVsIGRyaXZlciwgYm9vdCBzdGFydCk6IGVyciA4NwpDcmVhdGVTZXJ2aWNlVyhkZXBlbmRzIG9uIGl0c2VsZik6IGVyciAxMDU5CkNyZWF0ZVNlcnZpY2VXKGRlcGVuZHMgb24gYSBzZXJ2aWNlIHRoYXQgZG9lcyBub3QgZXhpc3QpOiBvawpDcmVhdGVTZXJ2aWNlVyhhY2NvdW50IHRoYXQgZG9lcyBub3QgZXhpc3QpOiBlcnIgMTA1NwpDcmVhdGVTZXJ2aWNlVyhhY2NvdW50IExvY2FsU3lzdGVtKTogb2sKQ3JlYXRlU2VydmljZVcoYWNjb3VudCBOVCBBVVRIT1JJVFlcTG9jYWxTZXJ2aWNlKTogb2sKQ3JlYXRlU2VydmljZVcoYWNjb3VudCBOVCBBVVRIT1JJVFlcTmV0d29ya1NlcnZpY2UpOiBvawpDcmVhdGVTZXJ2aWNlVyhuYW1lIG9mIDI1NiB1bml0cyk6IG9rCkNyZWF0ZVNlcnZpY2VXKG5hbWUgb2YgMjU3IHVuaXRzKTogZXJyIDE3ODMKQ3JlYXRlU2VydmljZVcoZGlzcGxheSBuYW1lIG9mIDI1NiB1bml0cyk6IG9rCkNyZWF0ZVNlcnZpY2VXKGRpc3BsYXkgbmFtZSBvZiAyNTcgdW5pdHMpOiBlcnIgMTc4MwpDcmVhdGVTZXJ2aWNlVyhwYXRoIG9mIGEgZmlsZSB0aGF0IGRvZXMgbm90IGV4aXN0KTogb2sKQ3JlYXRlU2VydmljZVcocGF0aCB0aGF0IGlzIG5vdCBhIHBhdGgpOiBvawpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcErrA): ok\nCreateServiceW(name exists): err 1073\nCreateServiceW(name exists in other case): err 1073\nCreateServiceW(display name = the name of another service): err 1078\nCreateServiceW(display name = that name in other case): err 1078\nCreateServiceW(good): ok\nCreateServiceW(name with backslash): err 123\nCreateServiceW(name with slash): err 123\nCreateServiceW(empty name): err 123\nCreateServiceW(NULL name): err 487\nCreateServiceW(NULL path): err 487\nCreateServiceW(empty path): err 87\nCreateServiceW(type 0x99): err 87\nCreateServiceW(type 0): err 87\nCreateServiceW(type own|share): err 87\nCreateServiceW(start type 5): err 87\nCreateServiceW(start type 0xFFFFFFFF): err 87\nCreateServiceW(start type boot for an own-process service): err 87\nCreateServiceW(start type system for an own-process service): err 87\nCreateServiceW(start type auto): ok\nCreateServiceW(start type disabled): ok\nCreateServiceW(error control 4): err 87\nCreateServiceW(error control 0): ok\nCreateServiceW(error control severe): ok\nCreateServiceW(error control critical): ok\nCreateServiceW(share process): ok\nCreateServiceW(own process interactive): ok\nCreateServiceW(kernel driver, boot start): err 87\nCreateServiceW(depends on itself): err 1059\nCreateServiceW(depends on a service that does not exist): ok\nCreateServiceW(account that does not exist): err 1057\nCreateServiceW(account LocalSystem): ok\nCreateServiceW(account NT AUTHORITY\\LocalService): ok\nCreateServiceW(account NT AUTHORITY\\NetworkService): ok\nCreateServiceW(name of 256 units): ok\nCreateServiceW(name of 257 units): err 1783\nCreateServiceW(display name of 256 units): ok\nCreateServiceW(display name of 257 units): err 1783\nCreateServiceW(path of a file that does not exist): ok\nCreateServiceW(path that is not a path): ok\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 538
+    },
+    {
+      "name": "create_non_admin",
+      "exe_sha256": "edeaaabbed94f5f54e6e74d5d73a934395e5c40f606deb0356ca756b48e874a0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "T3BlblNDTWFuYWdlclcoQ09OTkVDVCk6IG9rCkNyZWF0ZVNlcnZpY2VXIHRocm91Z2ggdGhlIGNvbm5lY3Qtb25seSBoYW5kbGU6IGVyciA1Cm5vbi1hZG1pbiBPcGVuU0NNYW5hZ2VyVyhBTExfQUNDRVNTKTogZXJyIDUKbm9uLWFkbWluIENyZWF0ZVNlcnZpY2VXIHRocm91Z2ggYSBjb25uZWN0IGhhbmRsZTogZXJyIDUgKDEpCnJlc3RyaWN0ZWQgdG9rZW4gbWFkZTogMQpzZXJ2aWNlIGV4aXN0cyBhZnRlcndhcmRzOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "OpenSCManagerW(CONNECT): ok\nCreateServiceW through the connect-only handle: err 5\nnon-admin OpenSCManagerW(ALL_ACCESS): err 5\nnon-admin CreateServiceW through a connect handle: err 5 (1)\nrestricted token made: 1\nservice exists afterwards: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

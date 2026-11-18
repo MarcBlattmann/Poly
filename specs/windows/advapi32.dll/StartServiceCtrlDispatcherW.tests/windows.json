@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "ssd_not_a_service",
+      "exe_sha256": "7e485c7190740e39ce3668e95667460ef64a2fc30b887221a6899fb4403658a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U3RhcnRTZXJ2aWNlQ3RybERpc3BhdGNoZXJXKGNvbnNvbGUgcHJvY2Vzcywgb25lIGVudHJ5KTogZXJyIDEwNjMKU3RhcnRTZXJ2aWNlQ3RybERpc3BhdGNoZXJXKGVtcHR5IHRhYmxlKTogZXJyIDEwNTYKU3RhcnRTZXJ2aWNlQ3RybERpc3BhdGNoZXJXKE5VTEwpOiBlcnIgMTA1NgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "StartServiceCtrlDispatcherW(console process, one entry): err 1063\nStartServiceCtrlDispatcherW(empty table): err 1056\nStartServiceCtrlDispatcherW(NULL): err 1056\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "svc_identity",
+      "exe_sha256": "12bedc7172f445b042b79b2a43f7c782650d36d6e02cda4d2dc65caf612e6814",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNXaG8pOiBvawpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoU1RPUCk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpzdmM6IG1haW46IGFyZ2M9MSBhcmd2PVtQb2x5U3BlY1N2Y1dob10Kc3ZjOiBtYWluOiBoYW5kbGVyIHJlZ2lzdGVyZWQ9MQpzdmM6IG1haW46IFJVTk5JTkcgcmVwb3J0ZWQ9MQpzdmM6IGlkZW50aXR5OiB1c2VyPVMtMS01LTE4CnN2YzogaWRlbnRpdHk6IHNlc3Npb249MApzdmM6IGlkZW50aXR5OiBpbnRlZ3JpdHk9Uy0xLTE2LTE2Mzg0CnN2YzogaWRlbnRpdHk6IGdyb3VwcyBTRVJWSUNFPTAgRXZlcnlvbmU9MSBBdXRoZW50aWNhdGVkVXNlcnM9MQpzdmM6IGlkZW50aXR5OiB3aW5kb3ctc3RhdGlvbj1TZXJ2aWNlLTB4MC0zZTckCnN2YzogaWRlbnRpdHk6IHdpbmRvdy1zdGF0aW9uLXZpc2libGU9MApzdmM6IGlkZW50aXR5OiBkZXNrdG9wPURlZmF1bHQKc3ZjOiBjb250cm9sIDEKc3ZjOiBtYWluOiBzdG9wIHJlcXVlc3RlZCwgbGFzdCBjb250cm9sIDEKc3ZjOiBtYWluOiByZXBvcnRpbmcgU1RPUFBFRApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcWho): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcWho]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: identity: user=S-1-5-18\nsvc: identity: session=0\nsvc: identity: integrity=S-1-16-16384\nsvc: identity: groups SERVICE=0 Everyone=1 AuthenticatedUsers=1\nsvc: identity: window-station=Service-0x0-3e7$\nsvc: identity: window-station-visible=0\nsvc: identity: desktop=Default\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 198
+    },
+    {
+      "name": "svc_service_sid",
+      "exe_sha256": "d5c6f0441cbc919cc9bb818948250e9cdda34ceb58253091f9eb4ec7e0005cc5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNTaWQxKTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3ZjOiBtYWluOiBhcmdjPTEgYXJndj1bUG9seVNwZWNTdmNTaWQxXQpzdmM6IG1haW46IGhhbmRsZXIgcmVnaXN0ZXJlZD0xCnN2YzogbWFpbjogUlVOTklORyByZXBvcnRlZD0xCnN2YzogaWRlbnRpdHk6IHVzZXI9Uy0xLTUtMTgKc3ZjOiBpZGVudGl0eTogc2Vzc2lvbj0wCnN2YzogaWRlbnRpdHk6IGludGVncml0eT1TLTEtMTYtMTYzODQKc3ZjOiBpZGVudGl0eTogZ3JvdXBzIFNFUlZJQ0U9MCBFdmVyeW9uZT0xIEF1dGhlbnRpY2F0ZWRVc2Vycz0xCnN2YzogaWRlbnRpdHk6IHdpbmRvdy1zdGF0aW9uPVNlcnZpY2UtMHgwLTNlNyQKc3ZjOiBpZGVudGl0eTogd2luZG93LXN0YXRpb24tdmlzaWJsZT0wCnN2YzogaWRlbnRpdHk6IGRlc2t0b3A9RGVmYXVsdApzdmM6IGNvbnRyb2wgMQpzdmM6IG1haW46IHN0b3AgcmVxdWVzdGVkLCBsYXN0IGNvbnRyb2wgMQpzdmM6IG1haW46IHJlcG9ydGluZyBTVE9QUEVECkNyZWF0ZVNlcnZpY2VXKFBvbHlTcGVjU3ZjU2lkMik6IG9rCnNlcnZpY2UgU0lEIHR5cGUgMTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3ZjOiBtYWluOiBhcmdjPTEgYXJndj1bUG9seVNwZWNTdmNTaWQyXQpzdmM6IG1haW46IGhhbmRsZXIgcmVnaXN0ZXJlZD0xCnN2YzogbWFpbjogUlVOTklORyByZXBvcnRlZD0xCnN2YzogaWRlbnRpdHk6IHVzZXI9Uy0xLTUtMTgKc3ZjOiBpZGVudGl0eTogc2Vzc2lvbj0wCnN2YzogaWRlbnRpdHk6IGludGVncml0eT1TLTEtMTYtMTYzODQKc3ZjOiBpZGVudGl0eTogc2VydmljZS1zaWQtZ3JvdXA9Uy0xLTUtODAtMTI3NzY3MjYwNS0zODM1MDEwMzQtMjQ0MzIyOTEzMC0yMjUzMzkzMTY5LTYwMzk0NjMwMiBhdHRycz0weGUKc3ZjOiBpZGVudGl0eTogZ3JvdXBzIFNFUlZJQ0U9MSBFdmVyeW9uZT0xIEF1dGhlbnRpY2F0ZWRVc2Vycz0xCnN2YzogaWRlbnRpdHk6IHdpbmRvdy1zdGF0aW9uPVNlcnZpY2UtMHgwLTNlNyQKc3ZjOiBpZGVudGl0eTogd2luZG93LXN0YXRpb24tdmlzaWJsZT0wCnN2YzogaWRlbnRpdHk6IGRlc2t0b3A9RGVmYXVsdApzdmM6IGNvbnRyb2wgMQpzdmM6IG1haW46IHN0b3AgcmVxdWVzdGVkLCBsYXN0IGNvbnRyb2wgMQpzdmM6IG1haW46IHJlcG9ydGluZyBTVE9QUEVECnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcSid1): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcSid1]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: identity: user=S-1-5-18\nsvc: identity: session=0\nsvc: identity: integrity=S-1-16-16384\nsvc: identity: groups SERVICE=0 Everyone=1 AuthenticatedUsers=1\nsvc: identity: window-station=Service-0x0-3e7$\nsvc: identity: window-station-visible=0\nsvc: identity: desktop=Default\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nCreateServiceW(PolySpecSvcSid2): ok\nservice SID type 1: ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcSid2]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: identity: user=S-1-5-18\nsvc: identity: session=0\nsvc: identity: integrity=S-1-16-16384\nsvc: identity: service-sid-group=S-1-5-80-1277672605-383501034-2443229130-2253393169-603946302 attrs=0xe\nsvc: identity: groups SERVICE=1 Everyone=1 AuthenticatedUsers=1\nsvc: identity: window-station=Service-0x0-3e7$\nsvc: identity: window-station-visible=0\nsvc: identity: desktop=Default\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 336
+    }
+  ]
+}
