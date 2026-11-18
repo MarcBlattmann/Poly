@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "psclsid_process",
+      "exe_sha256": "890eb3d057e5bf4317b8e3d1ba61e4b51249fb6f0ddbe6f8c3636e0ef06150ae",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhpcyBwcm9jZXNzOiBDb0dldFBTQ2xzaWQoSVRsRWNobykgPSAweDAwMDAwMDAwIFBTT0FJbnRlcmZhY2UKU1RBIHRocmVhZDogQ29Jbml0aWFsaXplRXggPSAweDAwMDAwMDAwLCBDb0dldFBTQ2xzaWQoSVRsQ2FsbGJhY2spID0gMHgwMDAwMDAwMCBQU09BSW50ZXJmYWNlIChlbmRlZCAxKQp0aGUgb3RoZXIgcHJvY2VzcyBlbmRlZCB3aXRoIGNvZGUgMApjaGlsZDogQ29Jbml0aWFsaXplRXggPSAweDAwMDAwMDAwCmNoaWxkOiBJVGxFY2hvOiAweDAwMDAwMDAwIFBTT0FJbnRlcmZhY2UKY2hpbGQ6IElUbER1YWw6IDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZQpVblJlZ2lzdGVyVHlwZUxpYiA9IDB4MDAwMDAwMDAKdGhpcyBwcm9jZXNzIGFmdGVyIHRoZSB1bnJlZ2lzdHJhdGlvbiAoY2FjaGVkKTogMHgwMDAwMDAwMCBQU09BSW50ZXJmYWNlCnRoaXMgcHJvY2VzcywgSVRsQ2FsbGJhY2sgKGxvb2tlZCB1cCBvbiB0aGUgU1RBIHRocmVhZCBiZWZvcmUpOiAweDAwMDAwMDAwIFBTT0FJbnRlcmZhY2UKdGhlIG90aGVyIHByb2Nlc3MgZW5kZWQgd2l0aCBjb2RlIDAKY2hpbGQ6IENvSW5pdGlhbGl6ZUV4ID0gMHgwMDAwMDAwMApjaGlsZDogSVRsRWNobzogMHg4MDA0MDE1NSAoemVybykKY2hpbGQ6IElUbER1YWw6IDB4ODAwNDAxNTUgKHplcm8pCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "this process: CoGetPSClsid(ITlEcho) = 0x00000000 PSOAInterface\nSTA thread: CoInitializeEx = 0x00000000, CoGetPSClsid(ITlCallback) = 0x00000000 PSOAInterface (ended 1)\nthe other process ended with code 0\nchild: CoInitializeEx = 0x00000000\nchild: ITlEcho: 0x00000000 PSOAInterface\nchild: ITlDual: 0x00000000 PSOAInterface\nUnRegisterTypeLib = 0x00000000\nthis process after the unregistration (cached): 0x00000000 PSOAInterface\nthis process, ITlCallback (looked up on the STA thread before): 0x00000000 PSOAInterface\nthe other process ended with code 0\nchild: CoInitializeEx = 0x00000000\nchild: ITlEcho: 0x80040155 (zero)\nchild: ITlDual: 0x80040155 (zero)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 103
+    }
+  ]
+}

@@ -190,6 +190,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0226.
         ("taskschd.dll", super::TASKSCHD),
         ("schedsvc.exe", super::SCHEDSVC),
+        // ADR 0221.
+        ("services.exe", super::SERVICES_EXE),
     ] {
         if bytes.is_empty() {
             continue;

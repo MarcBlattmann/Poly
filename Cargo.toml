@@ -65,6 +65,7 @@ members = [
     "crates/poly-procfs",
     "crates/poly-random",
     "crates/poly-registry",
+    "crates/poly-scm",
     "crates/poly-rt",
     "crates/poly-rtc",
     "crates/poly-rtl",
@@ -181,6 +182,7 @@ poly-png = { path = "crates/poly-png" }
 poly-procfs = { path = "crates/poly-procfs" }
 poly-random = { path = "crates/poly-random" }
 poly-registry = { path = "crates/poly-registry" }
+poly-scm = { path = "crates/poly-scm", default-features = false }
 poly-rt = { path = "crates/poly-rt" }
 poly-rtc = { path = "crates/poly-rtc" }
 poly-rtl = { path = "crates/poly-rtl" }

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "qsse_basic",
+      "exe_sha256": "aec883f9e47b833203ca75f43aeeaf58805a7993d7ad4c7950fb03a9f51f3030",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNRUyk6IG9rCm5ldmVyIHN0YXJ0ZWQ6IHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0xMDc3IHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MApsZXZlbCAwLCAzNiBieXRlczogb2sKbGV2ZWwgMCwgNjQgYnl0ZXM6IG9rCmxldmVsIDAsIDM1IGJ5dGVzOiBlcnIgMTIyLCBuZWVkZWQgMzYKbGV2ZWwgMCwgMCBieXRlczogZXJyIDEyMiwgbmVlZGVkIDM2CmxldmVsIDE6IGVyciAxMjQKbGV2ZWwgNzogZXJyIDEyNApOVUxMIHNpemUgcG9pbnRlcjogZXJyIDQ4NwpOVUxMIGJ1ZmZlcjogZXJyIDQ4NwpPcGVuU2VydmljZVcoYWxsIGJ1dCBRVUVSWV9TVEFUVVMpOiBvawpRdWVyeVNlcnZpY2VTdGF0dXNFeCB3aXRob3V0IFFVRVJZX1NUQVRVUzogZXJyIDUKUXVlcnlTZXJ2aWNlU3RhdHVzRXgobWFuYWdlciBoYW5kbGUpOiBlcnIgNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcQS): ok\nnever started: type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nlevel 0, 36 bytes: ok\nlevel 0, 64 bytes: ok\nlevel 0, 35 bytes: err 122, needed 36\nlevel 0, 0 bytes: err 122, needed 36\nlevel 1: err 124\nlevel 7: err 124\nNULL size pointer: err 487\nNULL buffer: err 487\nOpenServiceW(all but QUERY_STATUS): ok\nQueryServiceStatusEx without QUERY_STATUS: err 5\nQueryServiceStatusEx(manager handle): err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

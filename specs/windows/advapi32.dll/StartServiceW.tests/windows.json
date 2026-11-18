@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "start_dependencies",
+      "exe_sha256": "65ff70404dd531a6c0f8212a76ce43465c5fc5824bcb42053209fe7245fac1e4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNEZXBBKTogb2sKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNEZXBCLCBkZXBlbmRzIG9uIEEpOiBvawpBIGJlZm9yZTogdHlwZT0weDEwIHN0YXRlPVNUT1BQRUQgYWNjZXB0ZWQ9MHgwIHdpbjMyPTEwNzcgc3BlY2lmaWM9MCBjaGVja3BvaW50PTAgaGludD0wIGhhc19waWQ9MCBmbGFncz0wClN0YXJ0U2VydmljZVcoQik6IG9rCkIgUlVOTklORyB3aXRoaW4gOCBzOiAxCkEgUlVOTklORzogMQpDb250cm9sU2VydmljZShTVE9QKSBvbiBBIHdoaWxlIEIgcnVuczogZXJyIDEwNTEKQ29udHJvbFNlcnZpY2UoU1RPUCk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCkNyZWF0ZVNlcnZpY2VXKEMsIGRlcGVuZHMgb24gYSBzZXJ2aWNlIHRoYXQgZG9lcyBub3QgZXhpc3QpOiBvawpTdGFydFNlcnZpY2VXKEMpOiBlcnIgMTA3NQpDcmVhdGVTZXJ2aWNlVyhFLCBkaXNhYmxlZCk6IG9rCkNyZWF0ZVNlcnZpY2VXKEQsIGRlcGVuZHMgb24gdGhlIGRpc2FibGVkIEUpOiBvawpTdGFydFNlcnZpY2VXKEQpOiBlcnIgMTA2OApPcGVuU2VydmljZVcoUnBjU3MpOiBvawpScGNTcyBpcyBSVU5OSU5HOiAxClJwY1NzIHN0YXJ0IHR5cGU6IDIKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcDepA): ok\nCreateServiceW(PolySpecSvcDepB, depends on A): ok\nA before: type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nStartServiceW(B): ok\nB RUNNING within 8 s: 1\nA RUNNING: 1\nControlService(STOP) on A while B runs: err 1051\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nCreateServiceW(C, depends on a service that does not exist): ok\nStartServiceW(C): err 1075\nCreateServiceW(E, disabled): ok\nCreateServiceW(D, depends on the disabled E): ok\nStartServiceW(D): err 1068\nOpenServiceW(RpcSs): ok\nRpcSs is RUNNING: 1\nRpcSs start type: 2\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 420
+    },
+    {
+      "name": "start_errors",
+      "exe_sha256": "8a9e65827b833d368468895d963f6efa24ac5e4b90173501bc120180aa5c8250",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcocHJvZ3JhbSB0aGF0IGRvZXMgbm90IGV4aXN0KTogb2sKU3RhcnRTZXJ2aWNlVzogZXJyIDIKYWZ0ZXIgdGhlIGZhaWxlZCBzdGFydDogdHlwZT0weDEwIHN0YXRlPVNUT1BQRUQgYWNjZXB0ZWQ9MHgwIHdpbjMyPTAgc3BlY2lmaWM9MCBjaGVja3BvaW50PTAgaGludD0yMDAwIGhhc19waWQ9MCBmbGFncz0wCmRpc2FibGU6IG9rClN0YXJ0U2VydmljZVcgKGRpc2FibGVkKTogZXJyIDEwNTgKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNTdCk6IG9rCk9wZW5TZXJ2aWNlVyhhbGwgYnV0IFNUQVJUKTogb2sKU3RhcnRTZXJ2aWNlVyB3aXRob3V0IFNFUlZJQ0VfU1RBUlQ6IGVyciA1ClN0YXJ0U2VydmljZVcobWFuYWdlciBoYW5kbGUpOiBlcnIgNgpTdGFydFNlcnZpY2VXKE5VTEwpOiBlcnIgNgpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKU3RhcnRTZXJ2aWNlVyAoYWxyZWFkeSBydW5uaW5nKTogZXJyIDEwNTYKQ29udHJvbFNlcnZpY2UoU1RPUCk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoU1RPUCk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(program that does not exist): ok\nStartServiceW: err 2\nafter the failed start: type=0x10 state=STOPPED accepted=0x0 win32=0 specific=0 checkpoint=0 hint=2000 has_pid=0 flags=0\ndisable: ok\nStartServiceW (disabled): err 1058\nCreateServiceW(PolySpecSvcSt): ok\nOpenServiceW(all but START): ok\nStartServiceW without SERVICE_START: err 5\nStartServiceW(manager handle): err 6\nStartServiceW(NULL): err 6\nStartServiceW: ok\nRUNNING within 5 s: 1\nStartServiceW (already running): err 1056\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 328
+    },
+    {
+      "name": "start_timing",
+      "exe_sha256": "93ebe48d0d6a1e5b649eca59751236f4b94827b08ee5fd55deb2cb7e580b8adc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNTbG93KTogb2sKU3RhcnRTZXJ2aWNlVzogb2sgKHJldHVybmVkIGJlZm9yZSAxLjkgczogMSkKc2F3IFNUQVJUX1BFTkRJTkc6IDEKc2F3IGNoZWNrcG9pbnQgMSB3aXRoIHdhaXQgaGludCA1MDAwOiAxCnNhdyBjaGVja3BvaW50IDIgd2l0aCB3YWl0IGhpbnQgNTAwMDogMQpSVU5OSU5HIG5vdzogdHlwZT0weDEwIHN0YXRlPVJVTk5JTkcgYWNjZXB0ZWQ9MHgxIHdpbjMyPTAgc3BlY2lmaWM9MCBjaGVja3BvaW50PTAgaGludD0wIGhhc19waWQ9MSBmbGFncz0wCkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcSlow): ok\nStartServiceW: ok (returned before 1.9 s: 1)\nsaw START_PENDING: 1\nsaw checkpoint 1 with wait hint 5000: 1\nsaw checkpoint 2 with wait hint 5000: 1\nRUNNING now: type=0x10 state=RUNNING accepted=0x1 win32=0 specific=0 checkpoint=0 hint=0 has_pid=1 flags=0\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2156
+    }
+  ]
+}
