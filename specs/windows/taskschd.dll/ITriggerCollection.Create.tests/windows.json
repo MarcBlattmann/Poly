@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "trc_collection_b",
+      "exe_sha256": "ceb82c5f68071a480210514f291d7815b2f1c542c572b4cf89c1c21ad452df6e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpDcmVhdGUoLTEpOiBocj0weDgwMDcwMDU3IG5vIHRyaWdnZXIKQ3JlYXRlKDIpOiBocj0weDAwMDAwMDAwIHR5cGUgcmVwb3J0ZWQ9MiBlbmFibGVkPXRydWUKQ3JlYXRlKDUpOiBocj0weDAwMDAwMDAwIHR5cGUgcmVwb3J0ZWQ9NSBlbmFibGVkPXRydWUKQ3JlYXRlKDgpOiBocj0weDAwMDAwMDAwIHR5cGUgcmVwb3J0ZWQ9OCBlbmFibGVkPXRydWUKQ3JlYXRlKDExKTogaHI9MHgwMDAwMDAwMCB0eXBlIHJlcG9ydGVkPTExIGVuYWJsZWQ9dHJ1ZQpDcmVhdGUoMTQpOiBocj0weDgwMDcwMDU3IG5vIHRyaWdnZXIKSXRlbSgxKTogaHI9MHgwMDAwMDAwMCB0eXBlPTAKSXRlbSgxMyk6IGhyPTB4ODAwMDQwMDUgdHlwZT0tOTkKYSBkYWlseSB0cmlnZ2VyIGFuc3dlcnMgZm9yOiBJVHJpZ2dlcj0xIElEYWlseVRyaWdnZXI9MSBJTG9nb25UcmlnZ2VyPTAgSVRpbWVUcmlnZ2VyPTAgSUJvb3RUcmlnZ2VyPTAgSVVua25vd249MSAKUmVtb3ZlKDEpOiBocj0weDAwMDAwMDAwIGNvdW50IDE1IC0+IDE0ClJlbW92ZSgtMSk6IGhyPTB4ODAwNzAwNTcKUmVtb3ZlKGNvdW50KTogaHI9MHgwMDAwMDAwMCBjb3VudCAxNCAtPiAxMwpDbGVhciBvZiBhbiBlbXB0eSBjb2xsZWN0aW9uOiBocj0weDAwMDAwMDAwCnR5cGUgMjogY3JlYXRlIGhyPTB4MDAwMDAwMDAgeG1sIGhyPTB4MDAwMDAwMDAgdHJpZ2dlcnM6IDxDYWxlbmRhclRyaWdnZXI+PDAwMGQ+IDxFbmFibGVkPnRydWU8L0VuYWJsZWQ+PDAwMGQ+IDxTY2hlZHVsZUJ5RGF5PjwwMDBkPiA8RGF5c0ludGVydmFsPjE8L0RheXNJbnRlcnZhbD48MDAwZD4gPC9TY2hlZHVsZUJ5RGF5PjwwMDBkPiA8L0NhbGVuZGFyVHJpZ2dlcj48MDAwZD4gCnR5cGUgNTogY3JlYXRlIGhyPTB4MDAwMDAwMDAgeG1sIGhyPTB4MDAwMDAwMDAgdHJpZ2dlcnM6IDxDYWxlbmRhclRyaWdnZXI+PDAwMGQ+IDxFbmFibGVkPnRydWU8L0VuYWJsZWQ+PDAwMGQ+IDxTY2hlZHVsZUJ5TW9udGhEYXlPZldlZWs+PDAwMGQ+IDxXZWVrcz48MDAwZD4gPFdlZWs+MTwvV2Vlaz48MDAwZD4gPC9XZWVrcz48MDAwZD4gPERheXNPZldlZWs+PDAwMGQ+IDxTdW5kYXkgLz48MDAwZD4gPC9EYXlzT2ZXZWVrPjwwMDBkPiA8TW9udGhzPjwwMDBkPiA8SmFudWFyeSAvPjwwMDBkPiA8L01vbnRocz48MDAwZD4gPC9TY2hlZHVsZUJ5TW9udGhEYXlPZldlZWs+PDAwMGQ+IDwvQ2FsZW5kYXJUcmlnZ2VyPjwwMDBkPiAKdHlwZSA4OiBjcmVhdGUgaHI9MHgwMDAwMDAwMCB4bWwgaHI9MHgwMDAwMDAwMCB0cmlnZ2VyczogPEJvb3RUcmlnZ2VyPjwwMDBkPiA8RW5hYmxlZD50cnVlPC9FbmFibGVkPjwwMDBkPiA8L0Jvb3RUcmlnZ2VyPjwwMDBkPiAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nCreate(-1): hr=0x80070057 no trigger\nCreate(2): hr=0x00000000 type reported=2 enabled=true\nCreate(5): hr=0x00000000 type reported=5 enabled=true\nCreate(8): hr=0x00000000 type reported=8 enabled=true\nCreate(11): hr=0x00000000 type reported=11 enabled=true\nCreate(14): hr=0x80070057 no trigger\nItem(1): hr=0x00000000 type=0\nItem(13): hr=0x80004005 type=-99\na daily trigger answers for: ITrigger=1 IDailyTrigger=1 ILogonTrigger=0 ITimeTrigger=0 IBootTrigger=0 IUnknown=1 \nRemove(1): hr=0x00000000 count 15 -> 14\nRemove(-1): hr=0x80070057\nRemove(count): hr=0x00000000 count 14 -> 13\nClear of an empty collection: hr=0x00000000\ntype 2: create hr=0x00000000 xml hr=0x00000000 triggers: <CalendarTrigger><000d> <Enabled>true</Enabled><000d> <ScheduleByDay><000d> <DaysInterval>1</DaysInterval><000d> </ScheduleByDay><000d> </CalendarTrigger><000d> \ntype 5: create hr=0x00000000 xml hr=0x00000000 triggers: <CalendarTrigger><000d> <Enabled>true</Enabled><000d> <ScheduleByMonthDayOfWeek><000d> <Weeks><000d> <Week>1</Week><000d> </Weeks><000d> <DaysOfWeek><000d> <Sunday /><000d> </DaysOfWeek><000d> <Months><000d> <January /><000d> </Months><000d> </ScheduleByMonthDayOfWeek><000d> </CalendarTrigger><000d> \ntype 8: create hr=0x00000000 xml hr=0x00000000 triggers: <BootTrigger><000d> <Enabled>true</Enabled><000d> </BootTrigger><000d> \nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "trc_collection_c",
+      "exe_sha256": "4312391da502510026e076968dff76f5eae3bc926911aed4952805dd2ef7cfbb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpDcmVhdGUoMCk6IGhyPTB4MDAwMDAwMDAgdHlwZSByZXBvcnRlZD0wIGVuYWJsZWQ9dHJ1ZQpDcmVhdGUoMyk6IGhyPTB4MDAwMDAwMDAgdHlwZSByZXBvcnRlZD0zIGVuYWJsZWQ9dHJ1ZQpDcmVhdGUoNik6IGhyPTB4MDAwMDAwMDAgdHlwZSByZXBvcnRlZD02IGVuYWJsZWQ9dHJ1ZQpDcmVhdGUoOSk6IGhyPTB4MDAwMDAwMDAgdHlwZSByZXBvcnRlZD05IGVuYWJsZWQ9dHJ1ZQpDcmVhdGUoMTIpOiBocj0weDAwMDAwMDAwIHR5cGUgcmVwb3J0ZWQ9MTIgZW5hYmxlZD10cnVlCmNvdW50IG5vdzogMTIKSXRlbSgyKTogaHI9MHgwMDAwMDAwMCB0eXBlPTEKSXRlbSgtMSk6IGhyPTB4ODAwNzAwNTcgdHlwZT0tOTkKYSBsb2dvbiB0cmlnZ2VyIGFuc3dlcnMgZm9yOiBJVHJpZ2dlcj0xIElEYWlseVRyaWdnZXI9MCBJTG9nb25UcmlnZ2VyPTEgSVRpbWVUcmlnZ2VyPTAgSUJvb3RUcmlnZ2VyPTAgSVVua25vd249MSAKUmVtb3ZlKDApOiBocj0weDgwMDcwMDU3ClJlbW92ZShlbXB0eSB2YXJpYW50KTogaHI9MHg4MDA3MDA1NwphIHJlbW92ZWQgdHJpZ2dlcidzIG9iamVjdDogcmVtb3ZlIGhyPTB4MDAwMDAwMDAgZ2V0X1R5cGUgaHI9MHgwMDAwMDAwMCAxCnR5cGUgMDogY3JlYXRlIGhyPTB4MDAwMDAwMDAgeG1sIGhyPTB4MDAwMDAwMDAgdHJpZ2dlcnM6IDxFdmVudFRyaWdnZXI+PDAwMGQ+IDxFbmFibGVkPnRydWU8L0VuYWJsZWQ+PDAwMGQ+IDwvRXZlbnRUcmlnZ2VyPjwwMDBkPiAKdHlwZSAzOiBjcmVhdGUgaHI9MHgwMDAwMDAwMCB4bWwgaHI9MHgwMDAwMDAwMCB0cmlnZ2VyczogPENhbGVuZGFyVHJpZ2dlcj48MDAwZD4gPEVuYWJsZWQ+dHJ1ZTwvRW5hYmxlZD48MDAwZD4gPFNjaGVkdWxlQnlXZWVrPjwwMDBkPiA8RGF5c09mV2VlayAvPjwwMDBkPiA8V2Vla3NJbnRlcnZhbD4xPC9XZWVrc0ludGVydmFsPjwwMDBkPiA8L1NjaGVkdWxlQnlXZWVrPjwwMDBkPiA8L0NhbGVuZGFyVHJpZ2dlcj48MDAwZD4gCnR5cGUgNjogY3JlYXRlIGhyPTB4MDAwMDAwMDAgeG1sIGhyPTB4MDAwMDAwMDAgdHJpZ2dlcnM6IDxJZGxlVHJpZ2dlcj48MDAwZD4gPEVuYWJsZWQ+dHJ1ZTwvRW5hYmxlZD48MDAwZD4gPC9JZGxlVHJpZ2dlcj48MDAwZD4gCnR5cGUgOTogY3JlYXRlIGhyPTB4MDAwMDAwMDAgeG1sIGhyPTB4MDAwMDAwMDAgdHJpZ2dlcnM6IDxMb2dvblRyaWdnZXI+PDAwMGQ+IDxFbmFibGVkPnRydWU8L0VuYWJsZWQ+PDAwMGQ+IDwvTG9nb25UcmlnZ2VyPjwwMDBkPiAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nCreate(0): hr=0x00000000 type reported=0 enabled=true\nCreate(3): hr=0x00000000 type reported=3 enabled=true\nCreate(6): hr=0x00000000 type reported=6 enabled=true\nCreate(9): hr=0x00000000 type reported=9 enabled=true\nCreate(12): hr=0x00000000 type reported=12 enabled=true\ncount now: 12\nItem(2): hr=0x00000000 type=1\nItem(-1): hr=0x80070057 type=-99\na logon trigger answers for: ITrigger=1 IDailyTrigger=0 ILogonTrigger=1 ITimeTrigger=0 IBootTrigger=0 IUnknown=1 \nRemove(0): hr=0x80070057\nRemove(empty variant): hr=0x80070057\na removed trigger's object: remove hr=0x00000000 get_Type hr=0x00000000 1\ntype 0: create hr=0x00000000 xml hr=0x00000000 triggers: <EventTrigger><000d> <Enabled>true</Enabled><000d> </EventTrigger><000d> \ntype 3: create hr=0x00000000 xml hr=0x00000000 triggers: <CalendarTrigger><000d> <Enabled>true</Enabled><000d> <ScheduleByWeek><000d> <DaysOfWeek /><000d> <WeeksInterval>1</WeeksInterval><000d> </ScheduleByWeek><000d> </CalendarTrigger><000d> \ntype 6: create hr=0x00000000 xml hr=0x00000000 triggers: <IdleTrigger><000d> <Enabled>true</Enabled><000d> </IdleTrigger><000d> \ntype 9: create hr=0x00000000 xml hr=0x00000000 triggers: <LogonTrigger><000d> <Enabled>true</Enabled><000d> </LogonTrigger><000d> \nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

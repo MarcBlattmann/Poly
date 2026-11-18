@@ -111,10 +111,14 @@ pub const OUTPUTS: &[&str] = &[
     "dxgi.dll",
     "d3d11.dll",
     "dcomp.dll",
+    // ADR 0220.
+    "comlaunch.exe",
     // ADR 0199.
     "vcruntime140.dll",
     "vcruntime140_1.dll",
     "msvcp140.dll",
+    // ADR 0221.
+    "services.exe",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -340,6 +344,8 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/dxgi",
             "personalities/nt/win32/d3d11",
             "personalities/nt/win32/dcomp",
+            // ADR 0220.
+            "personalities/nt/win32/comlaunch",
             // ADR 0199.
             "personalities/nt/win32/vcruntime140",
             "personalities/nt/win32/vcruntime140_1",
@@ -471,6 +477,8 @@ fn verify(dir: &Path) -> Result {
     // The test programs (ADR 0079, 0080, 0083).
     verify_exe(dir, "k32test.exe", &["kernel32.dll"])?;
     verify_exe(dir, "contest.exe", &["kernel32.dll"])?;
+    // ADR 0221.
+    verify_exe(dir, "services.exe", &["ntdll.dll"])?;
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;

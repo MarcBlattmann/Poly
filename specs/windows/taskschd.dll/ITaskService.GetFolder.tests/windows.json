@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tsg_getfolder",
+      "exe_sha256": "a7b4940671671b39a9eb06113e1aca8432e9260f9110ce4b313ff379ac0880ce",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpHZXRGb2xkZXIoIlxcIik6IGhyPTB4MDAwMDAwMDAgbmFtZT1bXF0gcGF0aD1bXF0KR2V0Rm9sZGVyKCJcXE1pY3Jvc29mdCIpOiBocj0weDAwMDAwMDAwIG5hbWU9W01pY3Jvc29mdF0gcGF0aD1bXE1pY3Jvc29mdF0KR2V0Rm9sZGVyKCJcXE1JQ1JPU09GVFxcd2luZG93cyIpOiBocj0weDAwMDAwMDAwIG5hbWU9W3dpbmRvd3NdIHBhdGg9W1xNSUNST1NPRlRcd2luZG93c10KR2V0Rm9sZGVyKCJcXE1pY3Jvc29mdFxcV2luZG93cyIpOiBocj0weDAwMDAwMDAwIG5hbWU9W1dpbmRvd3NdIHBhdGg9W1xNaWNyb3NvZnRcV2luZG93c10KR2V0Rm9sZGVyKCJcXE5vU3VjaEZvbGRlciIpOiBocj0weDgwMDcwMDAyIG5vIGZvbGRlcgpHZXRGb2xkZXIoIlxcTWljcm8qIik6IGhyPTB4ODAwNzAwMDIgbm8gZm9sZGVyCkdldEZvbGRlcigiIFxcTWljcm9zb2Z0Iik6IGhyPTB4ODAwNzAwN0Igbm8gZm9sZGVyCkdldEZvbGRlcigiXFwuIik6IGhyPTB4ODAwNzAwMDIgbm8gZm9sZGVyCnJvb3QuR2V0Rm9sZGVyKE1pY3Jvc29mdFxXaW5kb3dzKSBwYXRoPVtcTWljcm9zb2Z0XFdpbmRvd3NdCnR3byBvYmplY3RzIGZvciBvbmUgZm9sZGVyOiBkaWZmZXJlbnQgcG9pbnRlcnM9MQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nGetFolder(\"\\\\\"): hr=0x00000000 name=[\\] path=[\\]\nGetFolder(\"\\\\Microsoft\"): hr=0x00000000 name=[Microsoft] path=[\\Microsoft]\nGetFolder(\"\\\\MICROSOFT\\\\windows\"): hr=0x00000000 name=[windows] path=[\\MICROSOFT\\windows]\nGetFolder(\"\\\\Microsoft\\\\Windows\"): hr=0x00000000 name=[Windows] path=[\\Microsoft\\Windows]\nGetFolder(\"\\\\NoSuchFolder\"): hr=0x80070002 no folder\nGetFolder(\"\\\\Micro*\"): hr=0x80070002 no folder\nGetFolder(\" \\\\Microsoft\"): hr=0x8007007B no folder\nGetFolder(\"\\\\.\"): hr=0x80070002 no folder\nroot.GetFolder(Microsoft\\Windows) path=[\\Microsoft\\Windows]\ntwo objects for one folder: different pointers=1\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "tsg_getfolder_c",
+      "exe_sha256": "7f2494f78654bccc693ce4e876fc5a10267a4f34b21b3567997f5d861727ab99",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpHZXRGb2xkZXIoIlxcXFwiKTogaHI9MHg4MDA3MDA3QiBubyBmb2xkZXIKR2V0Rm9sZGVyKCJcXG1pY3Jvc29mdCIpOiBocj0weDAwMDAwMDAwIG5hbWU9W21pY3Jvc29mdF0gcGF0aD1bXG1pY3Jvc29mdF0KR2V0Rm9sZGVyKCJNaWNyb3NvZnRcXCIpOiBocj0weDgwMDcwMDdCIG5vIGZvbGRlcgpHZXRGb2xkZXIoIi9NaWNyb3NvZnQiKTogaHI9MHg4MDA3MDA3QiBubyBmb2xkZXIKR2V0Rm9sZGVyKCJcXE5vU3VjaEZvbGRlclxcV2luZG93cyIpOiBocj0weDgwMDcwMDAyIG5vIGZvbGRlcgpHZXRGb2xkZXIoIlxcPHg+Iik6IGhyPTB4ODAwNzAwMDIgbm8gZm9sZGVyCkdldEZvbGRlcigiLiIpOiBocj0weDgwMDcwMDAyIG5vIGZvbGRlcgpHZXRGb2xkZXIgd2l0aCBhIE5VTEwgb3V0IHBvaW50ZXI6IGhyPTB4ODAwMDQwMDMKZm9sZGVyLkdldEZvbGRlcihcTWljcm9zb2Z0KSBmcm9tIGEgc3ViZm9sZGVyOiBocj0weDgwMDcwMDAyIG5hbWU9PG51bGw+CnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nGetFolder(\"\\\\\\\\\"): hr=0x8007007B no folder\nGetFolder(\"\\\\microsoft\"): hr=0x00000000 name=[microsoft] path=[\\microsoft]\nGetFolder(\"Microsoft\\\\\"): hr=0x8007007B no folder\nGetFolder(\"/Microsoft\"): hr=0x8007007B no folder\nGetFolder(\"\\\\NoSuchFolder\\\\Windows\"): hr=0x80070002 no folder\nGetFolder(\"\\\\<x>\"): hr=0x80070002 no folder\nGetFolder(\".\"): hr=0x80070002 no folder\nGetFolder with a NULL out pointer: hr=0x80004003\nfolder.GetFolder(\\Microsoft) from a subfolder: hr=0x80070002 name=<null>\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tft_gettask_b",
+      "exe_sha256": "f296e15d98d8ba49aa4df9fa46d78997580fa9d480115d2d771d141d7945dff8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlciBBbHBoYQpHZXRUYXNrIHJvb3QsIGZ1bGwgcGF0aCB3aXRoIGEgbGVhZGluZyBiYWNrc2xhc2ggKGhyPTB4MDAwMDAwMDApOiBuYW1lPVtBbHBoYV0gcGF0aD1bXFBvbHlTcGVjXHRmdFxBbHBoYV0gc3RhdGU9MyAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD10cnVlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwNDEzMDMgKGhyPTB4MDAwNDEzMDMpIGV2ZXIgcmFuPTAgbWlzc2VkPTAKR2V0VGFzayBmb2xkZXIsIG5hbWUgd2l0aCBhIGxlYWRpbmcgYmFja3NsYXNoIChocj0weDAwMDAwMDAwKTogbmFtZT1bQWxwaGFdIHBhdGg9W1xQb2x5U3BlY1x0ZnRcQWxwaGFdIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wCkdldFRhc2sgc3ViZm9sZGVyLCBuYW1lIChocj0weDAwMDAwMDAwKTogbmFtZT1bQmV0YV0gcGF0aD1bXFBvbHlTcGVjXHRmdFxzdWJcQmV0YV0gc3RhdGU9MyAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD10cnVlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwNDEzMDMgKGhyPTB4MDAwNDEzMDMpIGV2ZXIgcmFuPTAgbWlzc2VkPTAKR2V0VGFzayBmb2xkZXIsIG1pc3NpbmcgbmFtZTogaHI9MHg4MDA3MDAwMiBubyB0YXNrCkdldFRhc2sgZm9sZGVyLCBlbXB0eSBuYW1lOiBocj0weDgwMDcwMDAyIG5vIHRhc2sKR2V0VGFzayBmb2xkZXIsIG5hbWUgb2YgYSBtaXNzaW5nIGZvbGRlcjogaHI9MHg4MDA3MDAwMiBubyB0YXNrCnR3byBvYmplY3RzIGZvciBvbmUgdGFzazogZGlmZmVyZW50IHBvaW50ZXJzPTEKZ2V0X0VuYWJsZWQgb2YgYSBkZWxldGVkIHRhc2sncyBvYmplY3Q6IGhyPTB4ODAwNzAwMDIKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register Alpha\nGetTask root, full path with a leading backslash (hr=0x00000000): name=[Alpha] path=[\\PolySpec\\tft\\Alpha] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nGetTask folder, name with a leading backslash (hr=0x00000000): name=[Alpha] path=[\\PolySpec\\tft\\Alpha] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nGetTask subfolder, name (hr=0x00000000): name=[Beta] path=[\\PolySpec\\tft\\sub\\Beta] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nGetTask folder, missing name: hr=0x80070002 no task\nGetTask folder, empty name: hr=0x80070002 no task\nGetTask folder, name of a missing folder: hr=0x80070002 no task\ntwo objects for one task: different pointers=1\nget_Enabled of a deleted task's object: hr=0x80070002\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 121
+    },
+    {
+      "name": "tft_gettask_c",
+      "exe_sha256": "abbb93a9996269b9c234537080ce58a2f198b6b9a465d4b0d94dec629ba06d12",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlciBBbHBoYQpHZXRUYXNrIHJvb3QsIG90aGVyIGNhc2UgKGhyPTB4MDAwMDAwMDApOiBuYW1lPVthbHBoYV0gcGF0aD1bXHBvbHlzcGVjXFRGVFxhbHBoYV0gc3RhdGU9MyAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD10cnVlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwNDEzMDMgKGhyPTB4MDAwNDEzMDMpIGV2ZXIgcmFuPTAgbWlzc2VkPTAKR2V0VGFzayBmb2xkZXIsIG90aGVyIGNhc2UgKGhyPTB4MDAwMDAwMDApOiBuYW1lPVtBTFBIQV0gcGF0aD1bXFBvbHlTcGVjXHRmdFxBTFBIQV0gc3RhdGU9MyAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD10cnVlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwNDEzMDMgKGhyPTB4MDAwNDEzMDMpIGV2ZXIgcmFuPTAgbWlzc2VkPTAKR2V0VGFzayBzdWJmb2xkZXIsIGEgbmFtZSBvZiB0aGUgcGFyZW50OiBocj0weDgwMDcwMDAyIG5vIHRhc2sKR2V0VGFzayBmb2xkZXIsIG5hbWUgb2YgYSBmb2xkZXI6IGhyPTB4ODAwNzAwMDIgbm8gdGFzawpHZXRUYXNrIGZvbGRlciwgd2lsZGNhcmQ6IGhyPTB4ODAwNzAwMDIgbm8gdGFzawpHZXRUYXNrKE5VTEwpOiBocj0weDgwMDcwMDU3IGdvdD0wCmdldF9OYW1lIG9mIGEgZGVsZXRlZCB0YXNrJ3Mgb2JqZWN0OiBocj0weDAwMDAwMDAwIFtBbHBoYV0KR2V0VGFzayhBbHBoYSkgYWZ0ZXIgdGhlIGRlbGV0ZTogaHI9MHg4MDA3MDAwMiBnb3Q9MApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register Alpha\nGetTask root, other case (hr=0x00000000): name=[alpha] path=[\\polyspec\\TFT\\alpha] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nGetTask folder, other case (hr=0x00000000): name=[ALPHA] path=[\\PolySpec\\tft\\ALPHA] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nGetTask subfolder, a name of the parent: hr=0x80070002 no task\nGetTask folder, name of a folder: hr=0x80070002 no task\nGetTask folder, wildcard: hr=0x80070002 no task\nGetTask(NULL): hr=0x80070057 got=0\nget_Name of a deleted task's object: hr=0x00000000 [Alpha]\nGetTask(Alpha) after the delete: hr=0x80070002 got=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 119
+    }
+  ]
+}

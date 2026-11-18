@@ -107,10 +107,14 @@ fn embed_win32() {
         "dxgi.dll",
         "d3d11.dll",
         "dcomp.dll",
+        // ADR 0220: the COM activation process.
+        "comlaunch.exe",
         // ADR 0199.
         "vcruntime140.dll",
         "vcruntime140_1.dll",
         "msvcp140.dll",
+        // ADR 0221.
+        "services.exe",
     ] {
         match &dir {
             Some(d) => {

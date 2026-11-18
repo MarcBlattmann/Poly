@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tsn_newtask_b",
+      "exe_sha256": "9f8f18dac96efb337e80c755ff581116f83118b91569b4dfdfb06bb21261c786",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayBOZXdUYXNrCk5ld1Rhc2soMHgxKTogaHI9MHg4MDA3MDA1NyBnb3Q9MApOZXdUYXNrKDB4ZmZmZmZmZmYpOiBocj0weDgwMDcwMDU3IGdvdD0wCnhtbHw8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtMTYiPz4KeG1sfCAgPFRyaWdnZXJzIC8+CnhtbHwgICAgPERpc2FsbG93U3RhcnRJZk9uQmF0dGVyaWVzPnRydWU8L0Rpc2FsbG93U3RhcnRJZk9uQmF0dGVyaWVzPgp4bWx8ICAgIDxTdGFydFdoZW5BdmFpbGFibGU+ZmFsc2U8L1N0YXJ0V2hlbkF2YWlsYWJsZT4KeG1sfCAgICAgIDxEdXJhdGlvbj5QVDEwTTwvRHVyYXRpb24+CnhtbHwgICAgICA8UmVzdGFydE9uSWRsZT5mYWxzZTwvUmVzdGFydE9uSWRsZT4KeG1sfCAgICA8RW5hYmxlZD50cnVlPC9FbmFibGVkPgp4bWx8ICAgIDxXYWtlVG9SdW4+ZmFsc2U8L1dha2VUb1J1bj4KeG1sfCAgPC9TZXR0aW5ncz4KeG1sIGxpbmVzOiAyNwpnZXRfRGF0YTogaHI9MHgwMDAwMDAwMCA8bnVsbD4KZmlyc3QgZGVmaW5pdGlvbidzIGRlc2NyaXB0aW9uIGFmdGVyIGNoYW5naW5nIHRoZSBzZWNvbmQ6IDxudWxsPgp4bWwyfCAgPFJlZ2lzdHJhdGlvbkluZm8+CnhtbDJ8ICA8VHJpZ2dlcnMgLz4KeG1sMnwgICAgPERpc2FsbG93U3RhcnRJZk9uQmF0dGVyaWVzPnRydWU8L0Rpc2FsbG93U3RhcnRJZk9uQmF0dGVyaWVzPgp4bWwyfCAgICA8U3RhcnRXaGVuQXZhaWxhYmxlPmZhbHNlPC9TdGFydFdoZW5BdmFpbGFibGU+CnhtbDJ8ICAgICAgPER1cmF0aW9uPlBUMTBNPC9EdXJhdGlvbj4KeG1sMnwgICAgICA8UmVzdGFydE9uSWRsZT5mYWxzZTwvUmVzdGFydE9uSWRsZT4KeG1sMnwgICAgPEVuYWJsZWQ+dHJ1ZTwvRW5hYmxlZD4KeG1sMnwgICAgPFdha2VUb1J1bj5mYWxzZTwvV2FrZVRvUnVuPgp4bWwyfCAgPC9TZXR0aW5ncz4KeG1sMiBsaW5lczogMjkKeG1sM3w8VGFzayB2ZXJzaW9uPSIxLjIiIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dpbmRvd3MvMjAwNC8wMi9taXQvdGFzayI+CnhtbDN8ICA8L1JlZ2lzdHJhdGlvbkluZm8+CnhtbDN8ICAgIDxNdWx0aXBsZUluc3RhbmNlc1BvbGljeT5JZ25vcmVOZXc8L011bHRpcGxlSW5zdGFuY2VzUG9saWN5Pgp4bWwzfCAgICA8QWxsb3dIYXJkVGVybWluYXRlPnRydWU8L0FsbG93SGFyZFRlcm1pbmF0ZT4KeG1sM3wgICAgPElkbGVTZXR0aW5ncz4KeG1sM3wgICAgPC9JZGxlU2V0dGluZ3M+CnhtbDN8ICAgIDxIaWRkZW4+ZmFsc2U8L0hpZGRlbj4KeG1sM3wgICAgPEV4ZWN1dGlvblRpbWVMaW1pdD5QVDcySDwvRXhlY3V0aW9uVGltZUxpbWl0Pgp4bWwzfCAgPEFjdGlvbnMgQ29udGV4dD0iQXV0aG9yIj4KeG1sM3wgICAgPC9FeGVjPgp4bWwzIGxpbmVzOiAzMQpwdXRfWG1sVGV4dCAod3Jvbmcgcm9vdCk6IGhyPTB4ODAwNDEzMTYKcHV0X1htbFRleHQgKHVua25vd24gZWxlbWVudCk6IGhyPTB4ODAwNDEzMTYKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok NewTask\nNewTask(0x1): hr=0x80070057 got=0\nNewTask(0xffffffff): hr=0x80070057 got=0\nxml|<?xml version=\"1.0\" encoding=\"UTF-16\"?>\nxml|  <Triggers />\nxml|    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>\nxml|    <StartWhenAvailable>false</StartWhenAvailable>\nxml|      <Duration>PT10M</Duration>\nxml|      <RestartOnIdle>false</RestartOnIdle>\nxml|    <Enabled>true</Enabled>\nxml|    <WakeToRun>false</WakeToRun>\nxml|  </Settings>\nxml lines: 27\nget_Data: hr=0x00000000 <null>\nfirst definition's description after changing the second: <null>\nxml2|  <RegistrationInfo>\nxml2|  <Triggers />\nxml2|    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>\nxml2|    <StartWhenAvailable>false</StartWhenAvailable>\nxml2|      <Duration>PT10M</Duration>\nxml2|      <RestartOnIdle>false</RestartOnIdle>\nxml2|    <Enabled>true</Enabled>\nxml2|    <WakeToRun>false</WakeToRun>\nxml2|  </Settings>\nxml2 lines: 29\nxml3|<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\nxml3|  </RegistrationInfo>\nxml3|    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\nxml3|    <AllowHardTerminate>true</AllowHardTerminate>\nxml3|    <IdleSettings>\nxml3|    </IdleSettings>\nxml3|    <Hidden>false</Hidden>\nxml3|    <ExecutionTimeLimit>PT72H</ExecutionTimeLimit>\nxml3|  <Actions Context=\"Author\">\nxml3|    </Exec>\nxml3 lines: 31\nput_XmlText (wrong root): hr=0x80041316\nput_XmlText (unknown element): hr=0x80041316\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    },
+    {
+      "name": "tsn_newtask_c",
+      "exe_sha256": "5dad8a0c90febdc7a256a8959116f60c3bf8c42abdf94307b715c392d1a2cf7b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayBOZXdUYXNrCk5ld1Rhc2soMHgyKTogaHI9MHg4MDA3MDA1NyBnb3Q9MApOZXdUYXNrIHdpdGggYSBOVUxMIG91dCBwb2ludGVyOiBocj0weDgwMDA0MDAzCnhtbHw8VGFzayB2ZXJzaW9uPSIxLjIiIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dpbmRvd3MvMjAwNC8wMi9taXQvdGFzayI+CnhtbHwgIDxTZXR0aW5ncz4KeG1sfCAgICA8U3RvcElmR29pbmdPbkJhdHRlcmllcz50cnVlPC9TdG9wSWZHb2luZ09uQmF0dGVyaWVzPgp4bWx8ICAgIDxSdW5Pbmx5SWZOZXR3b3JrQXZhaWxhYmxlPmZhbHNlPC9SdW5Pbmx5SWZOZXR3b3JrQXZhaWxhYmxlPgp4bWx8ICAgICAgPFdhaXRUaW1lb3V0PlBUMUg8L1dhaXRUaW1lb3V0Pgp4bWx8ICAgIDwvSWRsZVNldHRpbmdzPgp4bWx8ICAgIDxIaWRkZW4+ZmFsc2U8L0hpZGRlbj4KeG1sfCAgICA8RXhlY3V0aW9uVGltZUxpbWl0PlBUNzJIPC9FeGVjdXRpb25UaW1lTGltaXQ+CnhtbHwgIDxBY3Rpb25zIC8+CnBhcnRzOiByZWdpc3RyYXRpb249MSB0cmlnZ2Vycz0xIHNldHRpbmdzPTEgcHJpbmNpcGFsPTEgYWN0aW9ucz0xCmdldF9SZWdpc3RyYXRpb25JbmZvIHR3aWNlOiBzYW1lIHBvaW50ZXI9MQp4bWwyfDw/eG1sIHZlcnNpb249IjEuMCIgZW5jb2Rpbmc9IlVURi0xNiI/Pgp4bWwyfCAgICA8RGVzY3JpcHRpb24+SGVsbG8gJmx0OyZhbXA7Jmd0OyAieCI8L0Rlc2NyaXB0aW9uPgp4bWwyfCAgPFNldHRpbmdzPgp4bWwyfCAgICA8U3RvcElmR29pbmdPbkJhdHRlcmllcz50cnVlPC9TdG9wSWZHb2luZ09uQmF0dGVyaWVzPgp4bWwyfCAgICA8UnVuT25seUlmTmV0d29ya0F2YWlsYWJsZT5mYWxzZTwvUnVuT25seUlmTmV0d29ya0F2YWlsYWJsZT4KeG1sMnwgICAgICA8V2FpdFRpbWVvdXQ+UFQxSDwvV2FpdFRpbWVvdXQ+CnhtbDJ8ICAgIDwvSWRsZVNldHRpbmdzPgp4bWwyfCAgICA8SGlkZGVuPmZhbHNlPC9IaWRkZW4+CnhtbDJ8ICAgIDxFeGVjdXRpb25UaW1lTGltaXQ+UFQ3Mkg8L0V4ZWN1dGlvblRpbWVMaW1pdD4KeG1sMnwgIDxBY3Rpb25zIC8+CnB1dF9YbWxUZXh0ICh2YWxpZCk6IGhyPTB4MDAwMDAwMDAKeG1sM3wgIDxSZWdpc3RyYXRpb25JbmZvPgp4bWwzfCAgPFRyaWdnZXJzIC8+CnhtbDN8ICAgIDxEaXNhbGxvd1N0YXJ0SWZPbkJhdHRlcmllcz50cnVlPC9EaXNhbGxvd1N0YXJ0SWZPbkJhdHRlcmllcz4KeG1sM3wgICAgPFN0YXJ0V2hlbkF2YWlsYWJsZT5mYWxzZTwvU3RhcnRXaGVuQXZhaWxhYmxlPgp4bWwzfCAgICAgIDxTdG9wT25JZGxlRW5kPnRydWU8L1N0b3BPbklkbGVFbmQ+CnhtbDN8ICAgIDxBbGxvd1N0YXJ0T25EZW1hbmQ+dHJ1ZTwvQWxsb3dTdGFydE9uRGVtYW5kPgp4bWwzfCAgICA8UnVuT25seUlmSWRsZT5mYWxzZTwvUnVuT25seUlmSWRsZT4KeG1sM3wgICAgPFByaW9yaXR5Pjc8L1ByaW9yaXR5Pgp4bWwzfCAgICA8RXhlYz4KeG1sM3wgIDwvQWN0aW9ucz4KZGVzY3JpcHRpb24gYWZ0ZXIgcHV0X1htbFRleHQ6IFtmcm9tIHhtbF0KcHV0X1htbFRleHQgKHdyb25nIG5hbWVzcGFjZSk6IGhyPTB4ODAwNDEzMTcKcHV0X1htbFRleHQgKHZlcnNpb24gOS45KTogaHI9MHg4MDA0MTMxOApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok NewTask\nNewTask(0x2): hr=0x80070057 got=0\nNewTask with a NULL out pointer: hr=0x80004003\nxml|<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\nxml|  <Settings>\nxml|    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>\nxml|    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>\nxml|      <WaitTimeout>PT1H</WaitTimeout>\nxml|    </IdleSettings>\nxml|    <Hidden>false</Hidden>\nxml|    <ExecutionTimeLimit>PT72H</ExecutionTimeLimit>\nxml|  <Actions />\nparts: registration=1 triggers=1 settings=1 principal=1 actions=1\nget_RegistrationInfo twice: same pointer=1\nxml2|<?xml version=\"1.0\" encoding=\"UTF-16\"?>\nxml2|    <Description>Hello &lt;&amp;&gt; \"x\"</Description>\nxml2|  <Settings>\nxml2|    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>\nxml2|    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>\nxml2|      <WaitTimeout>PT1H</WaitTimeout>\nxml2|    </IdleSettings>\nxml2|    <Hidden>false</Hidden>\nxml2|    <ExecutionTimeLimit>PT72H</ExecutionTimeLimit>\nxml2|  <Actions />\nput_XmlText (valid): hr=0x00000000\nxml3|  <RegistrationInfo>\nxml3|  <Triggers />\nxml3|    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>\nxml3|    <StartWhenAvailable>false</StartWhenAvailable>\nxml3|      <StopOnIdleEnd>true</StopOnIdleEnd>\nxml3|    <AllowStartOnDemand>true</AllowStartOnDemand>\nxml3|    <RunOnlyIfIdle>false</RunOnlyIfIdle>\nxml3|    <Priority>7</Priority>\nxml3|    <Exec>\nxml3|  </Actions>\ndescription after put_XmlText: [from xml]\nput_XmlText (wrong namespace): hr=0x80041317\nput_XmlText (version 9.9): hr=0x80041318\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

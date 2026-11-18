@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "qcfg2_after_set",
+      "exe_sha256": "3031a8ec1a871640571dcfcc506f5d9fc73c3526117e4c4e0ffa4244363815a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNRMkIpOiBvawpkZXNjcmlwdGlvbiBvZiAxIHVuaXRzOiBvawogIGxldmVsIDE6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSAxMjsgZGVzY3JpcHRpb249W3hdCmRlc2NyaXB0aW9uIG9mIDQ4IHVuaXRzOiBvawogIGxldmVsIDE6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSAxMDY7IGRlc2NyaXB0aW9uPVthIGxvbmdlciBkZXNjcmlwdGlvbiBvZiB0aGUgc2VydmljZSBmb3IgdGhlIHNpemVdCmRlc2NyaXB0aW9uIG9mIDAgdW5pdHM6IG9rCiAgbGV2ZWwgMTogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDg7IGRlc2NyaXB0aW9uPVtOVUxMXQoxIGZhaWx1cmUgYWN0aW9uKHMpOiBvawogIGxldmVsIDI6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA0ODsgcmVzZXQ9MzYwMCByZWJvb3RfbXNnPVtOVUxMXSBjb21tYW5kPVtOVUxMXSBuPTEgWzE6MTAwIF0KMiBmYWlsdXJlIGFjdGlvbihzKTogb2sKICBsZXZlbCAyOiBmaXJzdCBjYWxsIGVyciAxMjIsIHNpemUgNTY7IHJlc2V0PTM2MDAgcmVib290X21zZz1bTlVMTF0gY29tbWFuZD1bTlVMTF0gbj0yIFsxOjEwMCAxOjIwMCBdCjMgZmFpbHVyZSBhY3Rpb24ocyk6IG9rCiAgbGV2ZWwgMjogZmlyc3QgY2FsbCBlcnIgMTIyLCBzaXplIDY0OyByZXNldD0zNjAwIHJlYm9vdF9tc2c9W05VTExdIGNvbW1hbmQ9W05VTExdIG49MyBbMToxMDAgMToyMDAgMTozMDAgXQo0IGZhaWx1cmUgYWN0aW9uKHMpOiBvawogIGxldmVsIDI6IGZpcnN0IGNhbGwgZXJyIDEyMiwgc2l6ZSA3MjsgcmVzZXQ9MzYwMCByZWJvb3RfbXNnPVtOVUxMXSBjb21tYW5kPVtOVUxMXSBuPTQgWzE6MTAwIDE6MjAwIDE6MzAwIDE6NDAwIF0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcQ2B): ok\ndescription of 1 units: ok\n  level 1: first call err 122, size 12; description=[x]\ndescription of 48 units: ok\n  level 1: first call err 122, size 106; description=[a longer description of the service for the size]\ndescription of 0 units: ok\n  level 1: first call err 122, size 8; description=[NULL]\n1 failure action(s): ok\n  level 2: first call err 122, size 48; reset=3600 reboot_msg=[NULL] command=[NULL] n=1 [1:100 ]\n2 failure action(s): ok\n  level 2: first call err 122, size 56; reset=3600 reboot_msg=[NULL] command=[NULL] n=2 [1:100 1:200 ]\n3 failure action(s): ok\n  level 2: first call err 122, size 64; reset=3600 reboot_msg=[NULL] command=[NULL] n=3 [1:100 1:200 1:300 ]\n4 failure action(s): ok\n  level 2: first call err 122, size 72; reset=3600 reboot_msg=[NULL] command=[NULL] n=4 [1:100 1:200 1:300 1:400 ]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 112
+    }
+  ]
+}

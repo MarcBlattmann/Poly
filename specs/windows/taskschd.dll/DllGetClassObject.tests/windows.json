@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tsc_create_b",
+      "exe_sha256": "7ff8570a55c50d303cf53ff5a6b7aeddd5931c4e82a8291776f20bd3a2376572",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY3JlYXRlClF1ZXJ5SW50ZXJmYWNlIElVbmtub3duOiBocj0weDAwMDAwMDAwIGdvdD0xClF1ZXJ5SW50ZXJmYWNlIElDbGFzc0ZhY3Rvcnk6IGhyPTB4ODAwMDQwMDIgZ290PTAKUXVlcnlJbnRlcmZhY2UgSVRhc2tGb2xkZXI6IGhyPTB4ODAwMDQwMDIgZ290PTAKSVVua25vd24gaWRlbnRpdHk6IHNhbWU9MQpzZWNvbmQgb2JqZWN0IGlzIGFub3RoZXIgcG9pbnRlcjogMQpnZXRfQ29ubmVjdGVkVXNlciBiZWZvcmUgQ29ubmVjdDogaHI9MHg4MDA3MDRFMyA8bnVsbD4KR2V0Rm9sZGVyIGJlZm9yZSBDb25uZWN0OiBocj0weDgwMDcwNEUzIGdvdD0wCmdldF9Db25uZWN0ZWQgYWZ0ZXIgQ29ubmVjdDogaHI9MHgwMDAwMDAwMCB0cnVlCkNvQ3JlYXRlSW5zdGFuY2UgbG9jYWwgc2VydmVyIG9ubHk6IGhyPTB4ODAwNDAxNTQgZ290PTAKQ29HZXRDbGFzc09iamVjdCBJQ2xhc3NGYWN0b3J5OiBocj0weDAwMDAwMDAwIGdvdD0xCkxvY2tTZXJ2ZXIoVFJVRSk6IGhyPTB4MDAwMDAwMDAKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok create\nQueryInterface IUnknown: hr=0x00000000 got=1\nQueryInterface IClassFactory: hr=0x80004002 got=0\nQueryInterface ITaskFolder: hr=0x80004002 got=0\nIUnknown identity: same=1\nsecond object is another pointer: 1\nget_ConnectedUser before Connect: hr=0x800704E3 <null>\nGetFolder before Connect: hr=0x800704E3 got=0\nget_Connected after Connect: hr=0x00000000 true\nCoCreateInstance local server only: hr=0x80040154 got=0\nCoGetClassObject IClassFactory: hr=0x00000000 got=1\nLockServer(TRUE): hr=0x00000000\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    },
+    {
+      "name": "tsc_create_c",
+      "exe_sha256": "40026114c1e60cce48933d8532739e469d4d17fa01409b7320ca506f5ebc0918",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY3JlYXRlClF1ZXJ5SW50ZXJmYWNlIElEaXNwYXRjaDogaHI9MHgwMDAwMDAwMCBnb3Q9MQpRdWVyeUludGVyZmFjZSBJTWFyc2hhbDogaHI9MHg4MDAwNDAwMiBnb3Q9MApRdWVyeUludGVyZmFjZSBJUmVnaXN0ZXJlZFRhc2s6IGhyPTB4ODAwMDQwMDIgZ290PTAKSVRhc2tTZXJ2aWNlIGFuZCBJRGlzcGF0Y2ggcG9pbnRlcnM6IHNhbWU9MQpnZXRfQ29ubmVjdGVkIGJlZm9yZSBDb25uZWN0OiBocj0weDAwMDAwMDAwIGZhbHNlCmdldF9Db25uZWN0ZWREb21haW4gYmVmb3JlIENvbm5lY3Q6IGhyPTB4ODAwNzA0RTMgPG51bGw+Ck5ld1Rhc2sgYmVmb3JlIENvbm5lY3Q6IGhyPTB4MDAwMDAwMDAgZ290PTEKZ2V0X0Nvbm5lY3RlZCBvZiB0aGUgc2Vjb25kIG9iamVjdDogaHI9MHgwMDAwMDAwMCBmYWxzZQpDb0NyZWF0ZUluc3RhbmNlIGFsbCBjb250ZXh0czogaHI9MHgwMDAwMDAwMCBnb3Q9MQpJQ2xhc3NGYWN0b3J5OjpDcmVhdGVJbnN0YW5jZTogaHI9MHgwMDAwMDAwMCBnb3Q9MQpMb2NrU2VydmVyKEZBTFNFKTogaHI9MHgwMDAwMDAwMApzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok create\nQueryInterface IDispatch: hr=0x00000000 got=1\nQueryInterface IMarshal: hr=0x80004002 got=0\nQueryInterface IRegisteredTask: hr=0x80004002 got=0\nITaskService and IDispatch pointers: same=1\nget_Connected before Connect: hr=0x00000000 false\nget_ConnectedDomain before Connect: hr=0x800704E3 <null>\nNewTask before Connect: hr=0x00000000 got=1\nget_Connected of the second object: hr=0x00000000 false\nCoCreateInstance all contexts: hr=0x00000000 got=1\nIClassFactory::CreateInstance: hr=0x00000000 got=1\nLockServer(FALSE): hr=0x00000000\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

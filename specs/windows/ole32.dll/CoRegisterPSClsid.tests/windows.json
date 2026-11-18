@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "regps_threads",
+      "exe_sha256": "e09ab562860e5b6ca362a995a7d75b468018c7338af52fd98e2f9ebf1814a014",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29Jbml0aWFsaXplRXgoTVRBKSA9IDB4MDAwMDAwMDAKYmVmb3JlOiBDb0dldFBTQ2xzaWQoYSkgKHplcm8pCltTVEEgdGhyZWFkOiBDb0luaXRpYWxpemVFeCAweDAwMDAwMDAwLCBDb1JlZ2lzdGVyUFNDbHNpZCAweDAwMDAwMDAwXSAgZW5kZWQgMQptYWluIE1UQSB0aHJlYWQgYWZ0ZXIgdGhlIFNUQSB0aHJlYWQgcmVnaXN0ZXJlZDogMHgwMDAwMDAwMCBQU0Rpc3BhdGNoCnRoZSBtYWluIHRocmVhZCByZWdpc3RlcnMgYW5vdGhlciBjbGFzcyBmb3IgYTogMHgwMDAwMDAwMApbTVRBIHRocmVhZDogQ29Jbml0aWFsaXplRXggMHgwMDAwMDAwMCwgQ29HZXRQU0Nsc2lkIDB4MDAwMDAwMDAgUFNPQUludGVyZmFjZV0gIGVuZGVkIDEKW3RocmVhZCB3aXRob3V0IENPTTogQ29SZWdpc3RlclBTQ2xzaWQgMHgwMDAwMDAwMCwgQ29HZXRQU0Nsc2lkIDB4MDAwMDAwMDBdICBlbmRlZCAxCmIgKHJlZ2lzdGVyZWQgYnkgdGhlIHRocmVhZCB3aXRob3V0IENPTSk6IDB4MDAwMDAwMDAgUFNEaXNwYXRjaApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoInitializeEx(MTA) = 0x00000000\nbefore: CoGetPSClsid(a) (zero)\n[STA thread: CoInitializeEx 0x00000000, CoRegisterPSClsid 0x00000000]  ended 1\nmain MTA thread after the STA thread registered: 0x00000000 PSDispatch\nthe main thread registers another class for a: 0x00000000\n[MTA thread: CoInitializeEx 0x00000000, CoGetPSClsid 0x00000000 PSOAInterface]  ended 1\n[thread without COM: CoRegisterPSClsid 0x00000000, CoGetPSClsid 0x00000000]  ended 1\nb (registered by the thread without COM): 0x00000000 PSDispatch\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

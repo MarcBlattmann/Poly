@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "close_variants",
+      "exe_sha256": "c9456f79f6a50e00ce05d542c33df8905c4a58fc2d216174f130f0714c964e62",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNDbHMpOiBvawpDbG9zZVNlcnZpY2VIYW5kbGUobWFuYWdlciBoYW5kbGUpOiBvayAob3BlbmVkOiAxKQpDbG9zZVNlcnZpY2VIYW5kbGUobWFuYWdlciBoYW5kbGUgYWdhaW4pOiBlcnIgNgpPcGVuU2VydmljZVcgdGhyb3VnaCB0aGUgY2xvc2VkIG1hbmFnZXIgaGFuZGxlOiBlcnIgNgpPcGVuU2VydmljZVc6IG9rCkNsb3NlU2VydmljZUhhbmRsZShzZXJ2aWNlIGhhbmRsZSk6IG9rCkNsb3NlU2VydmljZUhhbmRsZShzZXJ2aWNlIGhhbmRsZSBhZ2Fpbik6IGVyciA2ClF1ZXJ5U2VydmljZVN0YXR1c0V4IHRocm91Z2ggdGhlIGNsb3NlZCBoYW5kbGU6IGVyciA2CkNsb3NlU2VydmljZUhhbmRsZShOVUxMKTogZXJyIDYKQ2xvc2VTZXJ2aWNlSGFuZGxlKElOVkFMSURfSEFORExFX1ZBTFVFKTogZXJyIDYKQ2xvc2VTZXJ2aWNlSGFuZGxlKGdhcmJhZ2UpOiBlcnIgNgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcCls): ok\nCloseServiceHandle(manager handle): ok (opened: 1)\nCloseServiceHandle(manager handle again): err 6\nOpenServiceW through the closed manager handle: err 6\nOpenServiceW: ok\nCloseServiceHandle(service handle): ok\nCloseServiceHandle(service handle again): err 6\nQueryServiceStatusEx through the closed handle: err 6\nCloseServiceHandle(NULL): err 6\nCloseServiceHandle(INVALID_HANDLE_VALUE): err 6\nCloseServiceHandle(garbage): err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 117
+    }
+  ]
+}

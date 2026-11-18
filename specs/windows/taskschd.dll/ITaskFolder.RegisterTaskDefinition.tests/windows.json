@@ -1,0 +1,98 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tfg_updater",
+      "exe_sha256": "7b5f9359afe445f855d628db495040e2f2a0b48aed3b3ec0e3bf3797af043dd5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpSZWdpc3RlclRhc2tEZWZpbml0aW9uKENSRUFURV9PUl9VUERBVEUsIG5vIHVzZXIsIFNFUlZJQ0VfQUNDT1VOVCk6IGhyPTB4MDAwMDAwMDAKb2sgcmVnaXN0ZXIKeG1sfDw/eG1sIHZlcnNpb249IjEuMCIgZW5jb2Rpbmc9IlVURi0xNiI/Pgp4bWx8ICAgIDxEZXNjcmlwdGlvbj5Qb2x5U3BlYyB1cGRhdGVyLWxpa2UgdGFzayAxLjA8L0Rlc2NyaXB0aW9uPgp4bWx8ICA8UHJpbmNpcGFscz4KeG1sfCAgICAgIDxSdW5MZXZlbD5IaWdoZXN0QXZhaWxhYmxlPC9SdW5MZXZlbD4KeG1sfCAgPFNldHRpbmdzPgp4bWx8ICAgIDxFeGVjdXRpb25UaW1lTGltaXQ+UFQwUzwvRXhlY3V0aW9uVGltZUxpbWl0Pgp4bWx8ICAgIDxJZGxlU2V0dGluZ3M+CnhtbHwgICAgICA8U3RvcE9uSWRsZUVuZD50cnVlPC9TdG9wT25JZGxlRW5kPgp4bWx8ICA8L1NldHRpbmdzPgp4bWx8ICAgICAgPFN0YXJ0Qm91bmRhcnk+MjAzMC0wMS0wMVQwMDowMDowMDwvU3RhcnRCb3VuZGFyeT4KeG1sfCAgICAgICAgPER1cmF0aW9uPlAxRDwvRHVyYXRpb24+CnhtbHwgICAgICAgIDxEYXlzSW50ZXJ2YWw+MTwvRGF5c0ludGVydmFsPgp4bWx8ICAgIDxMb2dvblRyaWdnZXI+CnhtbHwgICAgICA8L1JlcGV0aXRpb24+CnhtbHwgIDxBY3Rpb25zIENvbnRleHQ9IkF1dGhvciI+CnhtbHwgICAgICA8QXJndW1lbnRzPi0tY2hpbGQgbWFyazwvQXJndW1lbnRzPgp4bWx8PC9UYXNrPgp0aGUgcmVnaXN0ZXJlZCBkZWZpbml0aW9uIGhhcyAyIHRyaWdnZXJzCmFuZCAxIGFjdGlvbihzKQpyZWdpc3RlcmluZyB0aGUgbmV3IHZlcnNpb246IGhyPTB4MDAwMDAwMDAKaXRzIFhNTCBoYXMgdGhlIG5ldyBkZXNjcmlwdGlvbjogMQpEZWxldGVGb2xkZXIgb2YgdGhlIG5vdyBlbXB0eSBmb2xkZXI6IGhyPTB4MDAwMDAwMDAKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nRegisterTaskDefinition(CREATE_OR_UPDATE, no user, SERVICE_ACCOUNT): hr=0x00000000\nok register\nxml|<?xml version=\"1.0\" encoding=\"UTF-16\"?>\nxml|    <Description>PolySpec updater-like task 1.0</Description>\nxml|  <Principals>\nxml|      <RunLevel>HighestAvailable</RunLevel>\nxml|  <Settings>\nxml|    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\nxml|    <IdleSettings>\nxml|      <StopOnIdleEnd>true</StopOnIdleEnd>\nxml|  </Settings>\nxml|      <StartBoundary>2030-01-01T00:00:00</StartBoundary>\nxml|        <Duration>P1D</Duration>\nxml|        <DaysInterval>1</DaysInterval>\nxml|    <LogonTrigger>\nxml|      </Repetition>\nxml|  <Actions Context=\"Author\">\nxml|      <Arguments>--child mark</Arguments>\nxml|</Task>\nthe registered definition has 2 triggers\nand 1 action(s)\nregistering the new version: hr=0x00000000\nits XML has the new description: 1\nDeleteFolder of the now empty folder: hr=0x00000000\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 140
+    },
+    {
+      "name": "tfg_updater_b",
+      "exe_sha256": "db1642fae4e53b98622526a205eb3808595cea202e4bbf8e7a206917dda0a04a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpyZWdpc3RlcmVkOiBuYW1lPVtUYXNrMXs5QkMzMDhCQi05OEQzLTQ4MzgtOUFFNi02NkFGNjJDNzQ5QkR9XSBwYXRoPVtcUG9seVNwZWNcdGZnXEd1XFRhc2sxezlCQzMwOEJCLTk4RDMtNDgzOC05QUU2LTY2QUY2MkM3NDlCRH1dIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wCnhtbHw8VGFzayB2ZXJzaW9uPSIxLjIiIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dpbmRvd3MvMjAwNC8wMi9taXQvdGFzayI+CnhtbHwgICAgPFVSST5cUG9seVNwZWNcdGZnXEd1XFRhc2sxezlCQzMwOEJCLTk4RDMtNDgzOC05QUU2LTY2QUY2MkM3NDlCRH08L1VSST4KeG1sfCAgICA8UHJpbmNpcGFsIGlkPSJBdXRob3IiPgp4bWx8ICAgIDwvUHJpbmNpcGFsPgp4bWx8ICAgIDxEaXNhbGxvd1N0YXJ0SWZPbkJhdHRlcmllcz5mYWxzZTwvRGlzYWxsb3dTdGFydElmT25CYXR0ZXJpZXM+CnhtbHwgICAgPE11bHRpcGxlSW5zdGFuY2VzUG9saWN5Pklnbm9yZU5ldzwvTXVsdGlwbGVJbnN0YW5jZXNQb2xpY3k+CnhtbHwgICAgICA8RHVyYXRpb24+UFQxME08L0R1cmF0aW9uPgp4bWx8ICAgICAgPFJlc3RhcnRPbklkbGU+ZmFsc2U8L1Jlc3RhcnRPbklkbGU+CnhtbHwgIDxUcmlnZ2Vycz4KeG1sfCAgICAgIDxSZXBldGl0aW9uPgp4bWx8ICAgICAgPC9SZXBldGl0aW9uPgp4bWx8ICAgICAgPC9TY2hlZHVsZUJ5RGF5Pgp4bWx8ICAgICAgPFJlcGV0aXRpb24+CnhtbHwgICAgPC9Mb2dvblRyaWdnZXI+CnhtbHwgICAgPEV4ZWM+CnhtbHwgICAgPC9FeGVjPgp4bWwgbGluZXM6IDQ5CiAgdHJpZ2dlciAxOiB0eXBlIDIgZW5hYmxlZD10cnVlCkRlbGV0ZVRhc2s6IGhyPTB4MDAwMDAwMDAKbmV3OiBuYW1lPVtUYXNrMns3MTcxRUVGNS03NEIzLTQ3RDMtQjNEOC1GNEM5NUUwQUFENDN9XSBwYXRoPVtcUG9seVNwZWNcdGZnXEd1XFRhc2syezcxNzFFRUY1LTc0QjMtNDdEMy1CM0Q4LUY0Qzk1RTBBQUQ0M31dIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wCnRhc2tzIGluIHRoZSBmb2xkZXI6IDEgKFtUYXNrMns3MTcxRUVGNS03NEIzLTQ3RDMtQjNEOC1GNEM5NUUwQUFENDN9XSkKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nregistered: name=[Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}] path=[\\PolySpec\\tfg\\Gu\\Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nxml|<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\nxml|    <URI>\\PolySpec\\tfg\\Gu\\Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}</URI>\nxml|    <Principal id=\"Author\">\nxml|    </Principal>\nxml|    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\nxml|    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\nxml|      <Duration>PT10M</Duration>\nxml|      <RestartOnIdle>false</RestartOnIdle>\nxml|  <Triggers>\nxml|      <Repetition>\nxml|      </Repetition>\nxml|      </ScheduleByDay>\nxml|      <Repetition>\nxml|    </LogonTrigger>\nxml|    <Exec>\nxml|    </Exec>\nxml lines: 49\n  trigger 1: type 2 enabled=true\nDeleteTask: hr=0x00000000\nnew: name=[Task2{7171EEF5-74B3-47D3-B3D8-F4C95E0AAD43}] path=[\\PolySpec\\tfg\\Gu\\Task2{7171EEF5-74B3-47D3-B3D8-F4C95E0AAD43}] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\ntasks in the folder: 1 ([Task2{7171EEF5-74B3-47D3-B3D8-F4C95E0AAD43}])\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 139
+    },
+    {
+      "name": "tfg_updater_c",
+      "exe_sha256": "123e35d00986a73adc8ffd3dbd1e8aab33fd7a17d1a55ca7d1d83322e1d9aeb2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpnZXRfWG1sOiBocj0weDAwMDAwMDAwCnhtbHwgIDxSZWdpc3RyYXRpb25JbmZvPgp4bWx8ICA8L1JlZ2lzdHJhdGlvbkluZm8+CnhtbHwgICAgICA8VXNlcklkPlMtMS01LTE4PC9Vc2VySWQ+CnhtbHwgIDwvUHJpbmNpcGFscz4KeG1sfCAgICA8U3RvcElmR29pbmdPbkJhdHRlcmllcz5mYWxzZTwvU3RvcElmR29pbmdPbkJhdHRlcmllcz4KeG1sfCAgICA8U3RhcnRXaGVuQXZhaWxhYmxlPnRydWU8L1N0YXJ0V2hlbkF2YWlsYWJsZT4KeG1sfCAgICAgIDxXYWl0VGltZW91dD5QVDFIPC9XYWl0VGltZW91dD4KeG1sfCAgICA8L0lkbGVTZXR0aW5ncz4KeG1sfCAgICA8Q2FsZW5kYXJUcmlnZ2VyPgp4bWx8ICAgICAgICA8SW50ZXJ2YWw+UFQxSDwvSW50ZXJ2YWw+CnhtbHwgICAgICA8U2NoZWR1bGVCeURheT4KeG1sfCAgICA8L0NhbGVuZGFyVHJpZ2dlcj4KeG1sfCAgICAgICAgPEludGVydmFsPlBUMUg8L0ludGVydmFsPgp4bWx8ICA8L1RyaWdnZXJzPgp4bWx8ICAgICAgPENvbW1hbmQ+IjxpbWFnZT4iPC9Db21tYW5kPgp4bWx8ICA8L0FjdGlvbnM+Cm5leHQgcnVuIGlzIHRoZSBmaXJzdCBzdGFydCBib3VuZGFyeTogMQogIHRyaWdnZXIgMjogdHlwZSA5IGVuYWJsZWQ9dHJ1ZQpHZXRUYXNrIGFmdGVyd2FyZHM6IGhyPTB4ODAwNzAwMDIgZ290PTAKcmVnaXN0ZXJpbmcgdGhlIHNhbWUgbmFtZSBhZ2FpbjogaHI9MHgwMDAwMDAwMApEZWxldGVUYXNrOiBocj0weDAwMDAwMDAwCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nget_Xml: hr=0x00000000\nxml|  <RegistrationInfo>\nxml|  </RegistrationInfo>\nxml|      <UserId>S-1-5-18</UserId>\nxml|  </Principals>\nxml|    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\nxml|    <StartWhenAvailable>true</StartWhenAvailable>\nxml|      <WaitTimeout>PT1H</WaitTimeout>\nxml|    </IdleSettings>\nxml|    <CalendarTrigger>\nxml|        <Interval>PT1H</Interval>\nxml|      <ScheduleByDay>\nxml|    </CalendarTrigger>\nxml|        <Interval>PT1H</Interval>\nxml|  </Triggers>\nxml|      <Command>\"<image>\"</Command>\nxml|  </Actions>\nnext run is the first start boundary: 1\n  trigger 2: type 9 enabled=true\nGetTask afterwards: hr=0x80070002 got=0\nregistering the same name again: hr=0x00000000\nDeleteTask: hr=0x00000000\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 137
+    },
+    {
+      "name": "tfr_create",
+      "exe_sha256": "f0b5154effbc329e18a71ee4a94697f759390f04e9eaa089cc237de555dc9da2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpDUkVBVEUgbmV3OiBocj0weDAwMDAwMDAwCm9rIGNyZWF0ZQpVUERBVEUgZXhpc3Rpbmc6IGhyPTB4MDAwMDAwMDAKQ1JFQVRFX09SX1VQREFURSBuZXc6IGhyPTB4MDAwMDAwMDAKZmxhZ3MgMHgxMDA6IGhyPTB4ODAwNzAwNTcgZ290PTAKVkFMSURBVEVfT05MWTogaHI9MHgwMDAwMDAwMCBnb3Q9MAogIHRoZSB0YXNrIGV4aXN0cyBhZnRlcndhcmRzOiBocj0weDgwMDcwMDAyCnRoZSBzYW1lIGRlZmluaXRpb24gdW5kZXIgYW5vdGhlciBuYW1lOiBocj0weDAwMDAwMDAwCiAgZm9sZGVycyBpbiB4OiAxCnBhdGggZm9ybSB0cmFpbGluZyBiYWNrc2xhc2g6IGhyPTB4ODAwNzAwNTcgbmFtZT0KcGF0aCBmb3JtIGEgbmFtZSB3aXRoIHNwYWNlcyBhbmQgZG90czogaHI9MHgwMDAwMDAwMCBuYW1lPVtOYW1lIFdpdGggU3BhY2VzIHYxLjJdCkNSRUFURSBjYXNlIGFmdGVyIENBU0U6IGhyPTB4ODAwNzAwQjcKYmFkIG5hbWUgc3RhcjogaHI9MHg4MDA3MDA3QiBnb3Q9MApiYWQgbmFtZSBsZXNzIHRoYW46IGhyPTB4ODAwNzAwN0IgZ290PTAKYmFkIG5hbWUgb25seSBhIGJhY2tzbGFzaDogaHI9MHg4MDA3MDA1NyBnb3Q9MApOVUxMIGRlZmluaXRpb246IGhyPTB4ODAwNzA2RjQgZ290PTAKZW1wdHkgZGVmaW5pdGlvbjogaHI9MHg4MDA0MTMxOSBnb3Q9MAp0aGUgdGFzaydzIGRlZmluaXRpb24gaXMgYW5vdGhlciBvYmplY3Q6IDEKc3VtbWFyeSAyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nCREATE new: hr=0x00000000\nok create\nUPDATE existing: hr=0x00000000\nCREATE_OR_UPDATE new: hr=0x00000000\nflags 0x100: hr=0x80070057 got=0\nVALIDATE_ONLY: hr=0x00000000 got=0\n  the task exists afterwards: hr=0x80070002\nthe same definition under another name: hr=0x00000000\n  folders in x: 1\npath form trailing backslash: hr=0x80070057 name=\npath form a name with spaces and dots: hr=0x00000000 name=[Name With Spaces v1.2]\nCREATE case after CASE: hr=0x800700B7\nbad name star: hr=0x8007007B got=0\nbad name less than: hr=0x8007007B got=0\nbad name only a backslash: hr=0x80070057 got=0\nNULL definition: hr=0x800706F4 got=0\nempty definition: hr=0x80041319 got=0\nthe task's definition is another object: 1\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 380
+    },
+    {
+      "name": "tfr_create_c",
+      "exe_sha256": "977ad3e0de054bccf6c95ddf1e5c8fba430fb0852217031283adc3dafdf79533",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayBjcmVhdGUKQ1JFQVRFIGV4aXN0aW5nOiBocj0weDgwMDcwMEI3IGdvdD0wClVQREFURSBtaXNzaW5nOiBocj0weDgwMDcwMDAyIGdvdD0wCmZsYWdzIG5vbmUgKDApOiBocj0weDAwMDAwMDAwIGdvdD0xCmZsYWdzIC0xOiBocj0weDgwMDcwMDU3IGdvdD0wClZBTElEQVRFX09OTFkgfCBDUkVBVEU6IGhyPTB4ODAwNzAwNTcgZ290PTAKICB0aGUgdGFzazogbmFtZT1bdGRdIHBhdGg9W1xQb2x5U3BlY1x0ZnJcdGRdIHN0YXRlPTEgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9ZmFsc2UgKGhyPTB4MDAwMDAwMDApIGxhc3RyZXN1bHQ9MHgwMDA0MTMwMyAoaHI9MHgwMDA0MTMwMykgZXZlciByYW49MCBtaXNzZWQ9MAogIHRoZSBmb2xkZXIgeiBleGlzdHM6IGhyPTB4MDAwMDAwMDAgbmFtZT1bel0KcGF0aCBmb3JtIGxvd2VyIGNhc2UgZm9sZGVyOiBocj0weDAwMDAwMDAwIG5hbWU9W2xvd2VyXQpwYXRoIGZvcm0gZG91YmxlIGJhY2tzbGFzaDogaHI9MHg4MDA3MDA1NyBuYW1lPQpDUkVBVEUgQ0FTRTogaHI9MHgwMDAwMDAwMApiYWQgbmFtZSBlbXB0eTogaHI9MHgwMDAwMDAwMCBnb3Q9MQpiYWQgbmFtZSBjb2xvbjogaHI9MHg4MDA3MDA1NyBnb3Q9MApiYWQgbmFtZSBzbGFzaDogaHI9MHg4MDA3MDA1NyBnb3Q9MApOVUxMIHBhdGg6IGhyPTB4MDAwMDAwMDAgZ290PTEgcGF0aCBpcyB0aGUgcm9vdCBhbmQgYSBicmFjZWQgR1VJRD0xCiAgYSB0YXNrIG1hZGUgYnkgdGhhdCBjYWxsOiBEZWxldGVUYXNrIGhyPTB4MDAwMDAwMDAKYW4gZXhlYyBhY3Rpb24gd2l0aCBhbiBlbXB0eSBwYXRoOiBocj0weDgwMDQxMzE5IGdvdD0wCnN1bW1hcnkgMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok create\nCREATE existing: hr=0x800700B7 got=0\nUPDATE missing: hr=0x80070002 got=0\nflags none (0): hr=0x00000000 got=1\nflags -1: hr=0x80070057 got=0\nVALIDATE_ONLY | CREATE: hr=0x80070057 got=0\n  the task: name=[td] path=[\\PolySpec\\tfr\\td] state=1 (hr=0x00000000) enabled=false (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\n  the folder z exists: hr=0x00000000 name=[z]\npath form lower case folder: hr=0x00000000 name=[lower]\npath form double backslash: hr=0x80070057 name=\nCREATE CASE: hr=0x00000000\nbad name empty: hr=0x00000000 got=1\nbad name colon: hr=0x80070057 got=0\nbad name slash: hr=0x80070057 got=0\nNULL path: hr=0x00000000 got=1 path is the root and a braced GUID=1\n  a task made by that call: DeleteTask hr=0x00000000\nan exec action with an empty path: hr=0x80041319 got=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 381
+    },
+    {
+      "name": "tfr_logon_c",
+      "exe_sha256": "ccfa2982a35f076aa9fd46be0f3511aa359ac5bc27df781dbc745249e73c9428",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQp1c2VyIGFyZ3VtZW50ICJTLTEtNS0xOCIsIGxvZ29uIHR5cGUgNTogaHI9MHgwMDAwMDAwMCB1c2VyaWQ9W1NZU1RFTV0gbG9nb250eXBlPTUgcnVubGV2ZWw9MAp1c2VyIGFyZ3VtZW50ICJMb2NhbFNlcnZpY2UiLCBsb2dvbiB0eXBlIDU6IGhyPTB4MDAwMDAwMDAgdXNlcmlkPVtMT0NBTCBTRVJWSUNFXSBsb2dvbnR5cGU9NSBydW5sZXZlbD0wCnVzZXIgYXJndW1lbnQgIlMtMS01LTIwIiwgbG9nb24gdHlwZSA1OiBocj0weDAwMDAwMDAwIHVzZXJpZD1bTkVUV09SSyBTRVJWSUNFXSBsb2dvbnR5cGU9NSBydW5sZXZlbD0wCnByaW5jaXBhbCB1c2VyICJOVCBBVVRIT1JJVFlcXExvY2FsU2VydmljZSIgKHB1dCBocj0weDAwMDAwMDAwKSwgbm8gYXJndW1lbnQsIHR5cGUgNTogaHI9MHgwMDAwMDAwMCB1c2VyaWQ9W0xPQ0FMIFNFUlZJQ0VdIGxvZ29udHlwZT01IHJ1bmxldmVsPTAKU1lTVEVNIHdpdGggbG9nb24gdHlwZSAxOiBocj0weDAwMDAwMDAwIHVzZXJpZD1bU1lTVEVNXSBsb2dvbnR5cGU9NSBydW5sZXZlbD0wClNZU1RFTSB3aXRoIGxvZ29uIHR5cGUgNDogaHI9MHgwMDAwMDAwMCB1c2VyaWQ9W1NZU1RFTV0gbG9nb250eXBlPTUgcnVubGV2ZWw9MApTWVNURU0gd2l0aCBsb2dvbiB0eXBlIDc6IGhyPTB4ODAwNzAwNTcgCiAgdGhlIHN0b3JlZCBsb2dvbiB0eXBlIGlzIDMsIGEgdXNlciBpZCBpcyBzdG9yZWQ9MQpjdXJyZW50IHVzZXIsIGxvZ29uIHR5cGUgZ3JvdXAgKDQpOiBocj0weDgwMDQxMzE4IGdvdD0wCnVzZXIgIk5vU3VjaEFjY291bnQ0MiIsIGxvZ29uIHR5cGUgNTogaHI9MHg4MDA3MDUzNCBnb3Q9MAp1c2VyICJOT0RPTUFJTjQyXFxzb21lb25lIiwgbG9nb24gdHlwZSAxIGFuZCBubyBwYXNzd29yZDogaHI9MHg4MDA3MDUzNCBnb3Q9MApzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nuser argument \"S-1-5-18\", logon type 5: hr=0x00000000 userid=[SYSTEM] logontype=5 runlevel=0\nuser argument \"LocalService\", logon type 5: hr=0x00000000 userid=[LOCAL SERVICE] logontype=5 runlevel=0\nuser argument \"S-1-5-20\", logon type 5: hr=0x00000000 userid=[NETWORK SERVICE] logontype=5 runlevel=0\nprincipal user \"NT AUTHORITY\\\\LocalService\" (put hr=0x00000000), no argument, type 5: hr=0x00000000 userid=[LOCAL SERVICE] logontype=5 runlevel=0\nSYSTEM with logon type 1: hr=0x00000000 userid=[SYSTEM] logontype=5 runlevel=0\nSYSTEM with logon type 4: hr=0x00000000 userid=[SYSTEM] logontype=5 runlevel=0\nSYSTEM with logon type 7: hr=0x80070057 \n  the stored logon type is 3, a user id is stored=1\ncurrent user, logon type group (4): hr=0x80041318 got=0\nuser \"NoSuchAccount42\", logon type 5: hr=0x80070534 got=0\nuser \"NODOMAIN42\\\\someone\", logon type 1 and no password: hr=0x80070534 got=0\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 571
+    }
+  ]
+}
