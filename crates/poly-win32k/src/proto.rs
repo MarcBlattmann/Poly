@@ -390,6 +390,11 @@ crate::wire_enum! {
         /// `SetClassLongPtrW(hwnd, index, value)`: the class value `index` (`GCL_*` or an extra byte offset) of the
         /// window's class set; the old value in a `Value`.
         116 => SetClassLong { hwnd: u64, index: i32, value: u64 },
+        /// Open the file or folder of the caller's file `handle` with the desktop's program for
+        /// it (`show` false), or show it selected in Poly's Files (`show` true): the NT
+        /// personality finds its path and sends a `link::ToCompositor::Shell` (ADR 0223). An
+        /// `Ok`, or an `Error`: 6 for a handle that is no file of a disk, 50 without a desktop.
+        117 => ShellOpen { handle: u64, show: bool },
     }
 }
 
