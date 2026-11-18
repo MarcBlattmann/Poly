@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/UnRegisterTypeLib.yaml
+id: windows/api/oleaut32.dll/UnRegisterTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Removes the registration RegisterTypeLib wrote, for one version, LCID and system kind. It reads the registered file to find the interfaces whose Interface keys it removes.
+interface:
+  signature: "HRESULT UnRegisterTypeLib(REFGUID libID, WORD wVerMajor, WORD wVerMinor, LCID lcid, SYSKIND syskind)"
+installer: "The updater's uninstall removes its registrations; Poly needs the call to leave a clean registry."
+rules:
+  one_version: "with one version registered the call removes the version key, the library key and the Interface keys of all three interfaces of the test library; the call returns S_OK; a second call returns TYPE_E_REGISTRYACCESS 0x8002801c"
+  two_versions: "with 1.0 and 2.0 registered (the Interface keys point to version 2.0) unregistering 1.0 removes the key `1.0` and leaves the library key with `2.0` and all Interface keys; unregistering 2.0 then removes everything"
+  extra_keys: "a subkey of the version key that the registration did not make (`Extra`) is kept: the call returns S_OK, the library key and the version key remain, the Interface keys are removed"
+  arguments_must_match: "version 2.0/2.2/2.4/1.0/3.3 against a registered 2.3, LCID 0 or 0x407 against a registered 0x409, SYS_WIN32 and system kind 0: TYPE_E_REGISTRYACCESS 0x8002801c and nothing is removed; the matching numbers (2, 3, 0x409, SYS_WIN64) remove it"
+  invalid_syskind: "system kind 2 (SYS_MAC) and 9: E_INVALIDARG 0x80070057, nothing removed"
+  file_gone: "when the registered file has been deleted the call fails with TYPE_E_CANTLOADLIBRARY 0x80029c4a and the registration stays"
+  unregistered: "a library that was never registered: TYPE_E_REGISTRYACCESS 0x8002801c"
+errors:
+  registry_access: "TYPE_E_REGISTRYACCESS 0x8002801c"
+  file_gone: "TYPE_E_CANTLOADLIBRARY 0x80029c4a"
+  invalid_arg: "E_INVALIDARG 0x80070057"
+side_effects: "deletes registry keys under HKLM\\SOFTWARE\\Classes\\TypeLib and \\Interface"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  UnRegisterTypeLib for libraries registered in HKCU, Interface keys that point to a different library or version than the one removed (not tried), win32 registrations.

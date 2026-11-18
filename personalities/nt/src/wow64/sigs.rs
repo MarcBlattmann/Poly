@@ -116,6 +116,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::PolyDebugPrint, &[P, V]),
     (Service::PolyRandomBytes, &[P, V]),
     (Service::PolyPhysicalMemory, &[P]),
+    (Service::PolyServiceCall, &[V, P, V, P, V, P]),
     (Service::CreateKey, &[OH, V, OA, V, US, V, P]),
     (Service::OpenKey, &[OH, V, OA]),
     (Service::OpenKeyEx, &[OH, V, OA, V]),

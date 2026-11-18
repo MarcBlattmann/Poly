@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "rtr_run_b",
+      "exe_sha256": "5a053a2d79fbc095e49df1a12ae1ea87571d61b3a0806413ee359cf293225422",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpMYXN0UnVuVGltZSBiZWZvcmUgYW55IHJ1biBpcyB0aGUgcGxhY2Vob2xkZXIgZGF0ZTogMQpvayBydW4KaW5zdGFuY2UgZ2V0X05hbWU6IGhyPTB4MDAwMDAwMDAgW29uY2VdCmluc3RhbmNlIGdldF9FbmdpbmVQSUQ6IGhyPTB4MDAwMDAwMDAgbm9uLXplcm89MQpvayBwcm9jZXNzIHJhbgpzdGF0ZSBhZnRlciB0aGUgcHJvY2VzcyBlbmRlZDogMwpzZWNvbmQgUnVuOiBocj0weDAwMDAwMDAwClJ1biB3aXRoIFZUX0k0OiBocj0weDAwMDAwMDAwIGdvdCBhbiBpbnN0YW5jZT0xCnN0YXRlIG9mIGEgZGlzYWJsZWQgdGFzazogMQpzdGF0ZSBhZnRlciBlbmFibGluZyBhZ2FpbjogMwpzdW1tYXJ5IDQgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nLastRunTime before any run is the placeholder date: 1\nok run\ninstance get_Name: hr=0x00000000 [once]\ninstance get_EnginePID: hr=0x00000000 non-zero=1\nok process ran\nstate after the process ended: 3\nsecond Run: hr=0x00000000\nRun with VT_I4: hr=0x00000000 got an instance=1\nstate of a disabled task: 1\nstate after enabling again: 3\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1070
+    },
+    {
+      "name": "rtr_run_c",
+      "exe_sha256": "ba6734effe7c11ddbe28b5ebb501a345a9033e11e94ac357fbc24ad5af39737d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpSdW46IGhyPTB4MDAwMDAwMDAgZ290IGFuIGluc3RhbmNlPTEKb2sgcnVuCmluc3RhbmNlIGdldF9QYXRoOiBocj0weDAwMDAwMDAwIFtcUG9seVNwZWNcdHJyXG9uY2VdCmluc3RhbmNlIGdldF9DdXJyZW50QWN0aW9uOiBocj0weDAwMDAwMDAwIFs8aW1hZ2U+XQpvayBwcm9jZXNzIHJhbgphZnRlciB0aGUgZmlyc3QgcnVuOiBuYW1lPVtvbmNlXSBwYXRoPVtcUG9seVNwZWNcdHJyXG9uY2VdIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDAwMDAwIChocj0weDAwMDAwMDAwKSBldmVyIHJhbj0xIG1pc3NlZD0wCnNlY29uZCBydW4gaGFwcGVuZWQ6IDEKUnVuIHdpdGggYSBCU1RSOiBocj0weDAwMDAwMDAwIGdvdCBhbiBpbnN0YW5jZT0xClJ1biBvZiBhIGRpc2FibGVkIHRhc2s6IGhyPTB4ODAwNDEzMjYgZ290IGFuIGluc3RhbmNlPTAKcmVnaXN0ZXJpbmcgYSB0YXNrIHRoYXQgY2Fubm90IGJlIHN0YXJ0ZWQgb24gZGVtYW5kOiBocj0weDAwMDAwMDAwCnN1bW1hcnkgNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nRun: hr=0x00000000 got an instance=1\nok run\ninstance get_Path: hr=0x00000000 [\\PolySpec\\trr\\once]\ninstance get_CurrentAction: hr=0x00000000 [<image>]\nok process ran\nafter the first run: name=[once] path=[\\PolySpec\\trr\\once] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00000000 (hr=0x00000000) ever ran=1 missed=0\nsecond run happened: 1\nRun with a BSTR: hr=0x00000000 got an instance=1\nRun of a disabled task: hr=0x80041326 got an instance=0\nregistering a task that cannot be started on demand: hr=0x00000000\nsummary 4 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1061
+    }
+  ]
+}
