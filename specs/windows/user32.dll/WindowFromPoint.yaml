@@ -47,7 +47,7 @@ rules:
   ma_noactivate: "MA_NOACTIVATE (3): no activation, the WM_LBUTTONDOWN and WM_LBUTTONUP are delivered"
   child_activate: "a click into child K of an inactive popup P: P gets WM_PARENTNOTIFY(WM_LBUTTONDOWN) first, then K WM_MOUSEACTIVATE (top P), which DefWindowProc passes to P (P WM_MOUSEACTIVATE top P, answers 1, K answers 1), then P's activation, then WM_SETCURSOR to K and to P (DefWindowProc passes it up), K WM_LBUTTONDOWN"
   wheel: "the wheel (SendInput MOUSEEVENTF_WHEEL, 120) went to the window under the cursor, not the focus window: with A active and focused and the cursor over B, B got WM_NCHITTEST and WM_MOUSEWHEEL (keys 0, delta 120, screen coordinates); over A, A got it"
-  at_200_units: "WindowFromPoint takes the caller's units (tests dpi_wfp_*): for a popup whose rectangle the caller reads as 100,100,500,400 (400x300 at 100,100), the centre (300,250), the top-left pixel (100,100) and the last pixel (499,399) give the window and (500,250) and (10,10) do not, for an unaware, a system and a per-monitor-v2 caller alike; (100,100) and (200,200) lie inside the rectangle and give the window"
+  at_200_units: "WindowFromPoint takes the caller's units: for a popup whose rectangle the caller reads as 100,100,500,400 (400x300 at 100,100), the centre (300,250), the top-left pixel (100,100) and the last pixel (499,399) give the window and (500,250) and (10,10) do not, for an unaware, a system and a per-monitor-v2 caller alike; (100,100) and (200,200) lie inside the rectangle and give the window"
 
 errors:
   none: "none observed"
@@ -58,8 +58,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 5  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

@@ -31,7 +31,7 @@ rules:
   rect: "MonitorFromRect: a rectangle overlapping the screen by any amount is on it; touching an edge from outside (-50,10,0,100; 1920,10,2000,100) is not; empty (50,50,50,50), inverted (100,100,10,10) and zero-width rectangles inside the screen are on it, an empty one outside is not"
   threads: "the handle from another thread is the same value"
   last_error: "unchanged on success (a value set before stays)"
-  at_200_edges: "the screen is the caller's: an unaware caller (1280x800) gets the primary monitor for (0,0), (640,400) and (1279,799) and NULL (MONITOR_DEFAULTTONULL) from (1280,800) on, for (-1,-1) and for the physical size (2559,1599); an aware caller (2560x1600) gets the primary monitor up to (2559,1599) and NULL from (2560,1600); MONITOR_DEFAULTTONEAREST gives the primary monitor everywhere (tests dpi_mfp_*)"
+  at_200_edges: "the screen is the caller's: an unaware caller (1280x800) gets the primary monitor for (0,0), (640,400) and (1279,799) and NULL (MONITOR_DEFAULTTONULL) from (1280,800) on, for (-1,-1) and for the physical size (2559,1599); an aware caller (2560x1600) gets the primary monitor up to (2559,1599) and NULL from (2560,1600); MONITOR_DEFAULTTONEAREST gives the primary monitor everywhere"
 
 errors:
   bad_flags: "flags other than 0, 1, 2 (3, 4, 0x10, 0x100, 0x80000000, 0xFFFFFFFF): NULL, ERROR_INVALID_FLAGS (1004), for points on and off the screen"
@@ -42,8 +42,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 4  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

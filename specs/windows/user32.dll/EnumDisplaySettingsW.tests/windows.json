@@ -12,48 +12,6 @@
   "started": "2026-11-09T14:40:32Z",
   "tests": [
     {
-      "name": "dpi_eds_p",
-      "exe_sha256": "446d9de324dde8e7a31e545f3a587b14a778eeb5adb172eea4d482c83e43320f",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvcjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAxKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAyKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor: SetProcessDpiAwarenessContext -> true error 0\nENUM_CURRENT_SETTINGS (call 1) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nENUM_CURRENT_SETTINGS (call 2) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 71,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_eds_u",
-      "exe_sha256": "b425853007d3a7e595f1ce60894ed35dcf460d8bfc3efa3936c6416a68593032",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAxKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAyKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\nENUM_CURRENT_SETTINGS (call 1) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nENUM_CURRENT_SETTINGS (call 2) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 56,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_eds_v",
-      "exe_sha256": "bce352abdabb8db5e69df3a5d01b6677553cfa71da658714c0aa72fce62be361",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAxKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCkVOVU1fQ1VSUkVOVF9TRVRUSU5HUyAoY2FsbCAyKSAtPiB0cnVlIHBlbHMgMjU2MHgxNjAwIGJpdHMgMzIgcG9zaXRpb24gMCwwIGZpZWxkcyAweDIwN2MwMGEwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\nENUM_CURRENT_SETTINGS (call 1) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nENUM_CURRENT_SETTINGS (call 2) -> true pels 2560x1600 bits 32 position 0,0 fields 0x207c00a0\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 59,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "eds_errors",
       "exe_sha256": "1f0e1044cbb29364047dc76f6099ff80995df47ccd1d261bfe161cb4991f9773",
       "status": "ran",

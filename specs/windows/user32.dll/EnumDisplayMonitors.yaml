@@ -38,7 +38,7 @@ rules:
   stop: "a callback that returns FALSE stops the enumeration and the function returns FALSE (last error unchanged); returning FALSE at a call that never happens (the second) changes nothing; with a clip that finds no monitor FALSE-returning callbacks are never called and the function returns TRUE"
   monitor_in_callback: "the monitor handle is the primary monitor's (MonitorFromPoint), GetMonitorInfoW on it works inside the callback (monitor 0,0,1920,1080)"
   bad_dc: "a memory DC (also one with a 200x200 bitmap, with or without clip), a made-up handle and a deleted DC: FALSE without any callback; the last error is left as it was"
-  at_200_units: "see GetMonitorInfoW (tests dpi_mi_*): one monitor, whose rectangle is the screen in the caller's units (1280x800 unaware, 2560x1600 aware)"
+  at_200_units: "see GetMonitorInfoW: one monitor, whose rectangle is the screen in the caller's units (1280x800 unaware, 2560x1600 aware)"
 
 errors:
   bad_dc: "FALSE, no callback, last error unchanged"

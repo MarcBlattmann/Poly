@@ -65,7 +65,7 @@ rules:
     CXMIN: 45 58 94 120 136 154 158 178 206 216 236 246 270 300 332 402 464 532 594 662 788 1044
     CXMENUCHECK: 3 5 11 13 15 19 19 21 25 27 29 31 35 37 41 51 59 67 73 85 99 133
   flags: "SM_MOUSEPRESENT 0, SM_CMOUSEBUTTONS 0 and SM_MOUSEWHEELPRESENT 0 (the oracle has no mouse attached; SendInput still moves the cursor), SM_DEBUG 0, SM_SWAPBUTTON 0, SM_MENUDROPALIGNMENT 0, SM_PENWINDOWS 0, SM_DBCSENABLED 0, SM_SECURE 0, SM_ARRANGE 8 (ARW_HIDE, winuser.h: minimized windows are hidden), SM_CLEANBOOT 0, SM_SHOWSOUNDS 0, SM_SLOWMACHINE 0, SM_MIDEASTENABLED 0, SM_IMMENABLED 1, SM_TABLETPC 0, SM_MEDIACENTER 0, SM_STARTER 0, SM_SERVERR2 0, SM_MOUSEHORIZONTALWHEELPRESENT 0, SM_DIGITIZER 0, SM_MAXIMUMTOUCHES 0, SM_REMOTESESSION 0, SM_SHUTTINGDOWN 0, SM_REMOTECONTROL 0, SM_CARETBLINKINGENABLED 1, SM_CONVERTIBLESLATEMODE 0, SM_SYSTEMDOCKED 0, SM_NETWORK bit 0 set"
-  at_200_table: "GetSystemMetrics(i) equals GetSystemMetricsForDpi(i, the caller's system DPI): the 96 values for an unaware or GDI-scaled caller and the 192 values for an aware one (tests dpi_gsm_*); SM_CXSCREEN x SM_CYSCREEN is 1280x800 or 2560x1600. The values at 96/192: CXVSCROLL 17/34, CYHSCROLL 17/34, CYCAPTION 23/45, CXBORDER 1/1, CYBORDER 1/1, CYVTHUMB 17/34, CXHTHUMB 17/34, CXICON 32/64, CYICON 32/64, CYMENU 20/39, CXMIN 136/258, CYMIN 39/71, CXSIZE 36/72, CYSIZE 22/44, CXFRAME 4/5, CYFRAME 4/5, CXMINTRACK 136/258, CYMINTRACK 39/71, CXDOUBLECLK 4/4, CXICONSPACING 75/150, CXEDGE 2/2, CXSMICON 16/32, CYSMICON 16/32, CYSMCAPTION 23/45, CXSMSIZE 22/44, CXMENUSIZE 19/38, CXDRAG 4/4, CXMENUCHECK 15/31, CXPADDEDBORDER 4/8"
+  at_200_table: "GetSystemMetrics(i) equals GetSystemMetricsForDpi(i, the caller's system DPI): the 96 values for an unaware or GDI-scaled caller and the 192 values for an aware one; SM_CXSCREEN x SM_CYSCREEN is 1280x800 or 2560x1600. The values at 96/192: CXVSCROLL 17/34, CYHSCROLL 17/34, CYCAPTION 23/45, CXBORDER 1/1, CYBORDER 1/1, CYVTHUMB 17/34, CXHTHUMB 17/34, CXICON 32/64, CYICON 32/64, CYMENU 20/39, CXMIN 136/258, CYMIN 39/71, CXSIZE 36/72, CYSIZE 22/44, CXFRAME 4/5, CYFRAME 4/5, CXMINTRACK 136/258, CYMINTRACK 39/71, CXDOUBLECLK 4/4, CXICONSPACING 75/150, CXEDGE 2/2, CXSMICON 16/32, CYSMICON 16/32, CYSMCAPTION 23/45, CXSMSIZE 22/44, CXMENUSIZE 19/38, CXDRAG 4/4, CXMENUCHECK 15/31, CXPADDEDBORDER 4/8"
 
 errors:
   undefined: "an index winuser.h does not define returns 0. The last error: ERROR_INVALID_PARAMETER (87) for negative indices, 97, 0x1001 and 0x7FFFFFFF; unchanged (0) for 24..27, 64..66, 90, 96 and 0x2005"
@@ -77,8 +77,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 8  # count in <symbol>.tests/
-  held_out: 3  # count kept by the diff runner
+  visible: 5  # count in <symbol>.tests/
+  held_out: 6  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

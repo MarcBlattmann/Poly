@@ -36,7 +36,7 @@ rules:
   modes: "index 0,1,2,... gives TRUE for each mode until FALSE (no error set); the list is non-empty, sorted ascending by size, all 32 bits, contains the current mode (1920x1080, 32, 60 Hz), the first is 800x600 32 bits 60 Hz with dmFields 0x7C0080 (no position), position 0,0, device name \"cdd\" (lower case)"
   special_mode: "mode 0xFFFFFFFD: TRUE with an empty mode: dmFields 0x580000, frequency 64, zero size and no name"
   not_found: "device names \"\\\\.\\DISPLAY9\" and \"nonsense\", or mode 100000: FALSE, last error unchanged, the structure is left as it was (the fields the caller set stay, the name and spec fields stay zero, dmSize 188 is written)"
-  at_200_current: "ENUM_CURRENT_SETTINGS gives the PHYSICAL mode for every caller, also an unaware one: 2560x1600, 32 bits, position 0,0, dmFields 0x207C00A0 (it is not divided by the scale); a second call gives the same (tests dpi_eds_*)"
+  at_200_current: "ENUM_CURRENT_SETTINGS gives the PHYSICAL mode for every caller, also an unaware one: 2560x1600, 32 bits, position 0,0, dmFields 0x207C00A0 (it is not divided by the scale); a second call gives the same"
 
 errors:
   not_found: "FALSE, no last error"
@@ -47,8 +47,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 5  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 2  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

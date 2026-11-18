@@ -39,7 +39,7 @@ rules:
   unsupported_actions: "SPI_GETWORKAREA, GETBEEP, GETMOUSE, ICONHORIZONTALSPACING, GETWHEELSCROLLLINES, GETFONTSMOOTHING, GETMENUSHOWDELAY, GETCARETWIDTH at DPI 96 and 144: FALSE, ERROR_INVALID_PARAMETER (87), output untouched; at DPI 0 each works as SystemParametersInfoW (e.g. GETBEEP 1, GETMOUSE first value 6, ICONHORIZONTALSPACING 75, GETWHEELSCROLLLINES 3, GETMENUSHOWDELAY 400, GETCARETWIDTH 1)"
   ncm_arguments: "cbSize 504 with uiParam 504: TRUE; uiParam 0 or 4 with cbSize 504: FALSE, 87; cbSize 0, 500 or 508: FALSE, 87 (500, the size without the padded border, is refused here though SystemParametersInfoW accepts it); a NULL pvParam: FALSE, 87; the structure is left alone on failure"
   last_error: "the tests print the last error after a successful call as \"-1\" when the call left it as it was or cleared it (both happen, depending on earlier calls in the process): a success does not promise either"
-  at_200_table: "SystemParametersInfoForDpi does not depend on the caller's awareness (tests dpi_spifd_*: unaware and per-monitor-v2 callers read the same ForDpi values; SystemParametersInfoW follows the caller): the values of SPI_GETNONCLIENTMETRICS (border; scroll width x height; caption width x height; small caption; menu; padded border; every font height) at 96 DPI: 1; 17x17; 36x22; 22x22; 19x19; 4; -12. At 144: 2; 26x26; 54x33; 33x33; 29x29; 6; -18. At 192: 2; 34x34; 72x44; 44x44; 38x38; 8; -24. At 288: 3; 51x51; 109x66; 66x66; 57x57; 12; -36. SPI_GETICONMETRICS: horizontal and vertical spacing 75 and font height -12 at 96, spacing 150 and font -24 at 192; SPI_GETICONTITLELOGFONT height -12 at 96, -24 at 192"
+  at_200_table: "SystemParametersInfoForDpi does not depend on the caller's awareness (unaware and per-monitor-v2 callers read the same ForDpi values; SystemParametersInfoW follows the caller): the values of SPI_GETNONCLIENTMETRICS (border; scroll width x height; caption width x height; small caption; menu; padded border; every font height) at 96 DPI: 1; 17x17; 36x22; 22x22; 19x19; 4; -12. At 144: 2; 26x26; 54x33; 33x33; 29x29; 6; -18. At 192: 2; 34x34; 72x44; 44x44; 38x38; 8; -24. At 288: 3; 51x51; 109x66; 66x66; 57x57; 12; -36. SPI_GETICONMETRICS: horizontal and vertical spacing 75 and font height -12 at 96, spacing 150 and font -24 at 192; SPI_GETICONTITLELOGFONT height -12 at 96, -24 at 192"
 
 errors:
   invalid: "FALSE, ERROR_INVALID_PARAMETER (87): unsupported action, wrong cbSize/uiParam, NULL pvParam"
@@ -50,8 +50,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 2  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

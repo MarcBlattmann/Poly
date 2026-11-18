@@ -12,34 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_mfp_u",
-      "exe_sha256": "324fafea5302e0834a1feb17fb6e72c70afbd688fceeb5240516ee939244e368",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCnNjcmVlbiAxMjgweDgwMAooMCwwKTogbnVsbC1mbGFnIHByaW1hcnkgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooNjQwLDQwMCk6IG51bGwtZmxhZyBwcmltYXJ5IG5lYXJlc3QtZmxhZyBwcmltYXJ5IHRydWUKKDEyNzksNzk5KTogbnVsbC1mbGFnIHByaW1hcnkgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMTI4MCw4MDApOiBudWxsLWZsYWcgbnVsbCBuZWFyZXN0LWZsYWcgcHJpbWFyeSB0cnVlCigxMzgwLDkwMCk6IG51bGwtZmxhZyBudWxsIG5lYXJlc3QtZmxhZyBwcmltYXJ5IHRydWUKKC0xLC0xKTogbnVsbC1mbGFnIG51bGwgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMjU1OSwxNTk5KTogbnVsbC1mbGFnIG51bGwgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMjU2MCwxNjAwKTogbnVsbC1mbGFnIG51bGwgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\nscreen 1280x800\n(0,0): null-flag primary nearest-flag primary true\n(640,400): null-flag primary nearest-flag primary true\n(1279,799): null-flag primary nearest-flag primary true\n(1280,800): null-flag null nearest-flag primary true\n(1380,900): null-flag null nearest-flag primary true\n(-1,-1): null-flag null nearest-flag primary true\n(2559,1599): null-flag null nearest-flag primary true\n(2560,1600): null-flag null nearest-flag primary true\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 56,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_mfp_v",
-      "exe_sha256": "6c9e454a25c8bb3391a0eab725f9e1937f262607f99ff205cb2946d2487bcb56",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnNjcmVlbiAyNTYweDE2MDAKKDAsMCk6IG51bGwtZmxhZyBwcmltYXJ5IG5lYXJlc3QtZmxhZyBwcmltYXJ5IHRydWUKKDEyODAsODAwKTogbnVsbC1mbGFnIHByaW1hcnkgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMjU1OSwxNTk5KTogbnVsbC1mbGFnIHByaW1hcnkgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMjU2MCwxNjAwKTogbnVsbC1mbGFnIG51bGwgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooMjY2MCwxNzAwKTogbnVsbC1mbGFnIG51bGwgbmVhcmVzdC1mbGFnIHByaW1hcnkgdHJ1ZQooLTEsLTEpOiBudWxsLWZsYWcgbnVsbCBuZWFyZXN0LWZsYWcgcHJpbWFyeSB0cnVlCig1MTE5LDMxOTkpOiBudWxsLWZsYWcgbnVsbCBuZWFyZXN0LWZsYWcgcHJpbWFyeSB0cnVlCig1MTIwLDMyMDApOiBudWxsLWZsYWcgbnVsbCBuZWFyZXN0LWZsYWcgcHJpbWFyeSB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\nscreen 2560x1600\n(0,0): null-flag primary nearest-flag primary true\n(1280,800): null-flag primary nearest-flag primary true\n(2559,1599): null-flag primary nearest-flag primary true\n(2560,1600): null-flag null nearest-flag primary true\n(2660,1700): null-flag null nearest-flag primary true\n(-1,-1): null-flag null nearest-flag primary true\n(5119,3199): null-flag null nearest-flag primary true\n(5120,3200): null-flag null nearest-flag primary true\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 54,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "mfp_flags",
       "exe_sha256": "39311adcc91191c3164da4fa3815b830d7f3e7f041260ea7972b7c232a8ae498",
       "status": "ran",

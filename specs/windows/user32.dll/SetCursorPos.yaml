@@ -31,7 +31,7 @@ rules:
   leaving: "moving off the test's windows sends them nothing (no tracking requested)"
   caption: "onto a framed window's caption: WM_SETCURSOR (hit HTCAPTION 2), WM_NCMOUSEMOVE (hit 2, screen point), no WM_NCHITTEST seen; then into the client area: WM_NCHITTEST, WM_SETCURSOR, WM_MOUSEMOVE, WM_NCMOUSELEAVE"
   other_thread: "SetCursorPos by a second thread: the messages go to the thread of the window under the cursor"
-  at_200_units: "see GetCursorPos (tests dpi_cursor_*): the position is in the caller's units; an unaware caller's point is doubled to physical; out-of-screen points clamp to the screen's last pixel (1280,800 as read by an unaware caller, 2559,1599 by an aware one)"
+  at_200_units: "see GetCursorPos: the position is in the caller's units; an unaware caller's point is doubled to physical; out-of-screen points clamp to the screen's last pixel (1280,800 as read by an unaware caller, 2559,1599 by an aware one)"
 
 errors:
   none: "no failing case observed"

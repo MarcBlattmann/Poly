@@ -12,48 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_mi_p",
-      "exe_sha256": "4a773f08234f387136274c3186749d15c8c4f25a65ea6ce6e9af50a5506517ff",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvcjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCkdldE1vbml0b3JJbmZvVyAtPiB0cnVlIGVycm9yIDAgbW9uaXRvciAwLDAsMjU2MCwxNjAwIGZsYWdzIDEKd29yayBhcmVhIDAsMCwyNTYwLDE1MDQ6IGxlZnQgMCB0b3AgMCByaWdodF9nYXAgMCBib3R0b21fZ2FwIDk2ClNQSV9HRVRXT1JLQVJFQSBlcXVhbHMgdGhlIHdvcmsgYXJlYSB0cnVlCkVudW1EaXNwbGF5TW9uaXRvcnMgLT4gdHJ1ZSBjb3VudCAxIHJlY3QgMCwwLDI1NjAsMTYwMAp2aXJ0dWFsIHNjcmVlbiAwLDAgMjU2MHgxNjAwIG1vbml0b3JzIDEKU01fQ1hTQ1JFRU4geCBTTV9DWVNDUkVFTiAyNTYweDE2MDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor: SetProcessDpiAwarenessContext -> true error 0\nGetMonitorInfoW -> true error 0 monitor 0,0,2560,1600 flags 1\nwork area 0,0,2560,1504: left 0 top 0 right_gap 0 bottom_gap 96\nSPI_GETWORKAREA equals the work area true\nEnumDisplayMonitors -> true count 1 rect 0,0,2560,1600\nvirtual screen 0,0 2560x1600 monitors 1\nSM_CXSCREEN x SM_CYSCREEN 2560x1600\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 53,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_mi_s",
-      "exe_sha256": "e2450de235fdc310a2a70ccd7222fc5d266b85ec615187e5489a48ff9fbacbac",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMApHZXRNb25pdG9ySW5mb1cgLT4gdHJ1ZSBlcnJvciAwIG1vbml0b3IgMCwwLDI1NjAsMTYwMCBmbGFncyAxCndvcmsgYXJlYSAwLDAsMjU2MCwxNTA0OiBsZWZ0IDAgdG9wIDAgcmlnaHRfZ2FwIDAgYm90dG9tX2dhcCA5NgpTUElfR0VUV09SS0FSRUEgZXF1YWxzIHRoZSB3b3JrIGFyZWEgdHJ1ZQpFbnVtRGlzcGxheU1vbml0b3JzIC0+IHRydWUgY291bnQgMSByZWN0IDAsMCwyNTYwLDE2MDAKdmlydHVhbCBzY3JlZW4gMCwwIDI1NjB4MTYwMCBtb25pdG9ycyAxClNNX0NYU0NSRUVOIHggU01fQ1lTQ1JFRU4gMjU2MHgxNjAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\nGetMonitorInfoW -> true error 0 monitor 0,0,2560,1600 flags 1\nwork area 0,0,2560,1504: left 0 top 0 right_gap 0 bottom_gap 96\nSPI_GETWORKAREA equals the work area true\nEnumDisplayMonitors -> true count 1 rect 0,0,2560,1600\nvirtual screen 0,0 2560x1600 monitors 1\nSM_CXSCREEN x SM_CYSCREEN 2560x1600\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 57,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_mi_u",
-      "exe_sha256": "570473d33a1aca951e443c050181c6f39374be179e5a3eabd5473b1bfa9c02bc",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCkdldE1vbml0b3JJbmZvVyAtPiB0cnVlIGVycm9yIDAgbW9uaXRvciAwLDAsMTI4MCw4MDAgZmxhZ3MgMQp3b3JrIGFyZWEgMCwwLDEyODAsNzUyOiBsZWZ0IDAgdG9wIDAgcmlnaHRfZ2FwIDAgYm90dG9tX2dhcCA0OApTUElfR0VUV09SS0FSRUEgZXF1YWxzIHRoZSB3b3JrIGFyZWEgdHJ1ZQpFbnVtRGlzcGxheU1vbml0b3JzIC0+IHRydWUgY291bnQgMSByZWN0IDAsMCwxMjgwLDgwMAp2aXJ0dWFsIHNjcmVlbiAwLDAgMTI4MHg4MDAgbW9uaXRvcnMgMQpTTV9DWFNDUkVFTiB4IFNNX0NZU0NSRUVOIDEyODB4ODAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\nGetMonitorInfoW -> true error 0 monitor 0,0,1280,800 flags 1\nwork area 0,0,1280,752: left 0 top 0 right_gap 0 bottom_gap 48\nSPI_GETWORKAREA equals the work area true\nEnumDisplayMonitors -> true count 1 rect 0,0,1280,800\nvirtual screen 0,0 1280x800 monitors 1\nSM_CXSCREEN x SM_CYSCREEN 1280x800\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 68,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "gmi_info",
       "exe_sha256": "55935d572d996d52ea3258a8d389b731dc0aff786fe0d20b8dee5ca4d9107f57",
       "status": "ran",

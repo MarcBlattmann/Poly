@@ -25,7 +25,7 @@ rules:
   value: "96; the last error is unchanged"
   consistency: "GetSystemMetricsForDpi(i, GetDpiForSystem()) equals GetSystemMetrics(i) for SM_CXSCREEN, SM_CYCAPTION, SM_CXVSCROLL, SM_CXICON, SM_CXFRAME, SM_CXPADDEDBORDER, SM_CYMENU"
   threads: "a second thread without windows gets the same value"
-  at_200_threads: "GetDpiForSystem depends on the calling thread's context, not on the process: unaware and GDI-scaled threads get 96, system, per-monitor and per-monitor-v2 threads 192 (tests dpi_sys_*). In the same thread, GetSystemDpiForProcess(current process) is 192 for every context, GetDpiForWindow(desktop window) is 96 for every context, LOGPIXELSX of the screen DC is 96 or 192 as GetDpiForSystem, and GetDpiForMonitor(primary, effective) is 96 or 192 as GetDpiForSystem. The context a program starts with is the process awareness; SetThreadDpiAwarenessContext changes it for the thread alone"
+  at_200_threads: "GetDpiForSystem depends on the calling thread's context, not on the process: unaware and GDI-scaled threads get 96, system, per-monitor and per-monitor-v2 threads 192. In the same thread, GetSystemDpiForProcess(current process) is 192 for every context, GetDpiForWindow(desktop window) is 96 for every context, LOGPIXELSX of the screen DC is 96 or 192 as GetDpiForSystem, and GetDpiForMonitor(primary, effective) is 96 or 192 as GetDpiForSystem. The context a program starts with is the process awareness; SetThreadDpiAwarenessContext changes it for the thread alone"
 
 errors:
   none: "no error cases (no parameters)"
@@ -36,8 +36,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

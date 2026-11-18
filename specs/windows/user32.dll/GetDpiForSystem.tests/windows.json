@@ -12,48 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_sys_p",
-      "exe_sha256": "be196270a3bf7d712a3ff5244a578afe0f5382004359e5dfb1ef8a5793746750",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvcjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnRocmVhZCB1bmF3YXJlICh3YXMgcGVyLW1vbml0b3IpOiBHZXREcGlGb3JTeXN0ZW0gOTYgR2V0U3lzdGVtRHBpRm9yUHJvY2VzcyAxOTIgR2V0RHBpRm9yV2luZG93KGRlc2t0b3ApIDk2IExPR1BJWEVMU1ggOTYgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSA5Ngp0aHJlYWQgc3lzdGVtICh3YXMgdW5hd2FyZSk6IEdldERwaUZvclN5c3RlbSAxOTIgR2V0U3lzdGVtRHBpRm9yUHJvY2VzcyAxOTIgR2V0RHBpRm9yV2luZG93KGRlc2t0b3ApIDk2IExPR1BJWEVMU1ggMTkyIEdldERwaUZvck1vbml0b3IocHJpbWFyeSkgMTkyCnRocmVhZCBwZXItbW9uaXRvciAod2FzIHN5c3RlbSk6IEdldERwaUZvclN5c3RlbSAxOTIgR2V0U3lzdGVtRHBpRm9yUHJvY2VzcyAxOTIgR2V0RHBpRm9yV2luZG93KGRlc2t0b3ApIDk2IExPR1BJWEVMU1ggMTkyIEdldERwaUZvck1vbml0b3IocHJpbWFyeSkgMTkyCnRocmVhZCBwZXItbW9uaXRvci12MiAod2FzIHBlci1tb25pdG9yKTogR2V0RHBpRm9yU3lzdGVtIDE5MiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCAxOTIgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSAxOTIKdGhyZWFkIGdkaS1zY2FsZWQgKHdhcyBwZXItbW9uaXRvci12Mik6IEdldERwaUZvclN5c3RlbSA5NiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCA5NiBHZXREcGlGb3JNb25pdG9yKHByaW1hcnkpIDk2CmJhY2sgb24gdGhlIHN0YXJ0aW5nIGNvbnRleHQ6IHBlci1tb25pdG9yCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor: SetProcessDpiAwarenessContext -> true error 0\nthread unaware (was per-monitor): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nthread system (was unaware): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor (was system): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor-v2 (was per-monitor): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread gdi-scaled (was per-monitor-v2): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nback on the starting context: per-monitor\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 56,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_sys_s",
-      "exe_sha256": "ee73533036b27d71f33b6e233ccb99fb63ac2702042a6a386ab5d1994bcb26fe",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMAp0aHJlYWQgdW5hd2FyZSAod2FzIHN5c3RlbSk6IEdldERwaUZvclN5c3RlbSA5NiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCA5NiBHZXREcGlGb3JNb25pdG9yKHByaW1hcnkpIDk2CnRocmVhZCBzeXN0ZW0gKHdhcyB1bmF3YXJlKTogR2V0RHBpRm9yU3lzdGVtIDE5MiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCAxOTIgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSAxOTIKdGhyZWFkIHBlci1tb25pdG9yICh3YXMgc3lzdGVtKTogR2V0RHBpRm9yU3lzdGVtIDE5MiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCAxOTIgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSAxOTIKdGhyZWFkIHBlci1tb25pdG9yLXYyICh3YXMgcGVyLW1vbml0b3IpOiBHZXREcGlGb3JTeXN0ZW0gMTkyIEdldFN5c3RlbURwaUZvclByb2Nlc3MgMTkyIEdldERwaUZvcldpbmRvdyhkZXNrdG9wKSA5NiBMT0dQSVhFTFNYIDE5MiBHZXREcGlGb3JNb25pdG9yKHByaW1hcnkpIDE5Mgp0aHJlYWQgZ2RpLXNjYWxlZCAod2FzIHBlci1tb25pdG9yLXYyKTogR2V0RHBpRm9yU3lzdGVtIDk2IEdldFN5c3RlbURwaUZvclByb2Nlc3MgMTkyIEdldERwaUZvcldpbmRvdyhkZXNrdG9wKSA5NiBMT0dQSVhFTFNYIDk2IEdldERwaUZvck1vbml0b3IocHJpbWFyeSkgOTYKYmFjayBvbiB0aGUgc3RhcnRpbmcgY29udGV4dDogc3lzdGVtCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\nthread unaware (was system): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nthread system (was unaware): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor (was system): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor-v2 (was per-monitor): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread gdi-scaled (was per-monitor-v2): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nback on the starting context: system\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 57,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_sys_u",
-      "exe_sha256": "442f467e9209cde6cee8d70e4ed2dc363f583f7fee01d7c4c0814867c2caaa0f",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCnRocmVhZCB1bmF3YXJlICh3YXMgdW5hd2FyZSk6IEdldERwaUZvclN5c3RlbSA5NiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCA5NiBHZXREcGlGb3JNb25pdG9yKHByaW1hcnkpIDk2CnRocmVhZCBzeXN0ZW0gKHdhcyB1bmF3YXJlKTogR2V0RHBpRm9yU3lzdGVtIDE5MiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCAxOTIgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSAxOTIKdGhyZWFkIHBlci1tb25pdG9yICh3YXMgc3lzdGVtKTogR2V0RHBpRm9yU3lzdGVtIDE5MiBHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzIDE5MiBHZXREcGlGb3JXaW5kb3coZGVza3RvcCkgOTYgTE9HUElYRUxTWCAxOTIgR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5KSAxOTIKdGhyZWFkIHBlci1tb25pdG9yLXYyICh3YXMgcGVyLW1vbml0b3IpOiBHZXREcGlGb3JTeXN0ZW0gMTkyIEdldFN5c3RlbURwaUZvclByb2Nlc3MgMTkyIEdldERwaUZvcldpbmRvdyhkZXNrdG9wKSA5NiBMT0dQSVhFTFNYIDE5MiBHZXREcGlGb3JNb25pdG9yKHByaW1hcnkpIDE5Mgp0aHJlYWQgZ2RpLXNjYWxlZCAod2FzIHBlci1tb25pdG9yLXYyKTogR2V0RHBpRm9yU3lzdGVtIDk2IEdldFN5c3RlbURwaUZvclByb2Nlc3MgMTkyIEdldERwaUZvcldpbmRvdyhkZXNrdG9wKSA5NiBMT0dQSVhFTFNYIDk2IEdldERwaUZvck1vbml0b3IocHJpbWFyeSkgOTYKYmFjayBvbiB0aGUgc3RhcnRpbmcgY29udGV4dDogdW5hd2FyZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\nthread unaware (was unaware): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nthread system (was unaware): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor (was system): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread per-monitor-v2 (was per-monitor): GetDpiForSystem 192 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 192 GetDpiForMonitor(primary) 192\nthread gdi-scaled (was per-monitor-v2): GetDpiForSystem 96 GetSystemDpiForProcess 192 GetDpiForWindow(desktop) 96 LOGPIXELSX 96 GetDpiForMonitor(primary) 96\nback on the starting context: unaware\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 55,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "gds_basic",
       "exe_sha256": "9ce141396df2c169f17c8757c197fb2f833b3b7733b301aac937b3eaf6ae58bf",
       "status": "ran",

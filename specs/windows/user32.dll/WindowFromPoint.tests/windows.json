@@ -12,34 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_wfp_u",
-      "exe_sha256": "d8352f5437948908576ce6591d941674bf84942d81182a939a9abd641eca238a",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCnBvcHVwIHJlY3QgMTAwLDEwMCw1MDAsNDAwCmluc2lkZSB0aGUgcmVjdCAoY2VudHJlKSAoMzAwLDI1MCk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCnRoZSB0b3AtbGVmdCBwaXhlbCAoMTAwLDEwMCk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCm9uZSByaWdodCBvZiB0aGUgd2luZG93ICg1MDAsMjUwKTogdGhlIHRlc3Qgd2luZG93IGZhbHNlCnRoZSBsYXN0IHBpeGVsIGluc2lkZSAoNDk5LDM5OSk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCjEwLDEwIChvdXRzaWRlKSAoMTAsMTApOiB0aGUgdGVzdCB3aW5kb3cgZmFsc2UKMTAwLDEwMCBpbiBsb2dpY2FsIHVuaXRzICgxMDAsMTAwKTogdGhlIHRlc3Qgd2luZG93IHRydWUKMjAwLDIwMCBpbiBsb2dpY2FsIHVuaXRzICgyMDAsMjAwKTogdGhlIHRlc3Qgd2luZG93IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\npopup rect 100,100,500,400\ninside the rect (centre) (300,250): the test window true\nthe top-left pixel (100,100): the test window true\none right of the window (500,250): the test window false\nthe last pixel inside (499,399): the test window true\n10,10 (outside) (10,10): the test window false\n100,100 in logical units (100,100): the test window true\n200,200 in logical units (200,200): the test window true\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 258,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_wfp_v",
-      "exe_sha256": "918e50c5224408b9a96868795852211ac387d57fbececbe5a60059bf052ca7b0",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnBvcHVwIHJlY3QgMTAwLDEwMCw1MDAsNDAwCmluc2lkZSB0aGUgcmVjdCAoY2VudHJlKSAoMzAwLDI1MCk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCnRoZSB0b3AtbGVmdCBwaXhlbCAoMTAwLDEwMCk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCm9uZSByaWdodCBvZiB0aGUgd2luZG93ICg1MDAsMjUwKTogdGhlIHRlc3Qgd2luZG93IGZhbHNlCnRoZSBsYXN0IHBpeGVsIGluc2lkZSAoNDk5LDM5OSk6IHRoZSB0ZXN0IHdpbmRvdyB0cnVlCjEwLDEwIChvdXRzaWRlKSAoMTAsMTApOiB0aGUgdGVzdCB3aW5kb3cgZmFsc2UKMTAwLDEwMCBpbiBsb2dpY2FsIHVuaXRzICgxMDAsMTAwKTogdGhlIHRlc3Qgd2luZG93IHRydWUKMjAwLDIwMCBpbiBsb2dpY2FsIHVuaXRzICgyMDAsMjAwKTogdGhlIHRlc3Qgd2luZG93IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\npopup rect 100,100,500,400\ninside the rect (centre) (300,250): the test window true\nthe top-left pixel (100,100): the test window true\none right of the window (500,250): the test window false\nthe last pixel inside (499,399): the test window true\n10,10 (outside) (10,10): the test window false\n100,100 in logical units (100,100): the test window true\n200,200 in logical units (200,200): the test window true\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 249,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "wfp_activate",
       "exe_sha256": "4ec46a2e1258485d8bf7f8846c8f6c1ad41d244c78d0448fa90694d2bc7793d7",
       "status": "ran",

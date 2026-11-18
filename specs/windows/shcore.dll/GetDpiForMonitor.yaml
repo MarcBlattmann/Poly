@@ -38,7 +38,7 @@ rules:
   bad_type: "types 3, 100, -1, INT_MIN, INT_MAX: 0x800700A0, last error 0xA0, outputs untouched; the type is checked before the monitor, so this is the result also for an invalid monitor"
   same_in_all_modes: "results are identical in a system-aware and a per-monitor-v2 process; the window's monitor (MonitorFromWindow) is the primary monitor with 96x96, GetDpiForWindow 96, GetDpiForSystem 96"
   legacy: "GetProcessDpiAwareness(NULL or the current process) gives S_OK and 0 in a manifest-less process; a made-up process handle gives 0x80070057 and -1 in the output; IsProcessDPIAware 0"
-  at_200_values: "GetDpiForMonitor(primary monitor, MDT_EFFECTIVE_DPI) is 96 for an unaware caller and 192 for an aware one (system, per-monitor, per-monitor-v2); MDT_ANGULAR_DPI is 48 and 96 (the monitor has no EDID, so its physical DPI is assumed to be 96, and an unaware caller gets half of it); MDT_RAW_DPI: 0x80070032 (ERROR_NOT_SUPPORTED, as this monitor has no EDID) with both outputs 0 for every caller; a kind of 3 or -1: 0x800700A0 (ERROR_BAD_ARGUMENTS) with the outputs untouched; a NULL monitor: 0x80070006 (E_HANDLE) with the outputs untouched. The monitor of a window is the primary one and gives the same effective DPI (tests dpi_mon_*)"
+  at_200_values: "GetDpiForMonitor(primary monitor, MDT_EFFECTIVE_DPI) is 96 for an unaware caller and 192 for an aware one (system, per-monitor, per-monitor-v2); MDT_ANGULAR_DPI is 48 and 96 (the monitor has no EDID, so its physical DPI is assumed to be 96, and an unaware caller gets half of it); MDT_RAW_DPI: 0x80070032 (ERROR_NOT_SUPPORTED, as this monitor has no EDID) with both outputs 0 for every caller; a kind of 3 or -1: 0x800700A0 (ERROR_BAD_ARGUMENTS) with the outputs untouched; a NULL monitor: 0x80070006 (E_HANDLE) with the outputs untouched. The monitor of a window is the primary one and gives the same effective DPI"
   scale_factor: "GetScaleFactorForMonitor(primary) returns S_OK and 180 for every caller (observed on this monitor: SCALE_180_PERCENT although the DPI is 192; it is not the DPI times 100 / 96 here); GetScaleFactorForMonitor(NULL): S_OK and 100"
 
 errors:
@@ -52,8 +52,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 6  # count in <symbol>.tests/
-  held_out: 3  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 6  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

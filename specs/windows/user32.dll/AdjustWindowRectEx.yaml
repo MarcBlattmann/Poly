@@ -27,7 +27,7 @@ rules:
   adjustwindowrect: "AdjustWindowRect = AdjustWindowRectEx with ex style 0"
   roundtrip: "a window created with the adjusted size has exactly the asked client size, except WS_OVERLAPPED alone (the system adds WS_CAPTION at creation); with the menu flag but no menu the client is 20 taller"
   return: "1"
-  at_200_units: "see AdjustWindowRectExForDpi (tests dpi_awr_*): AdjustWindowRectEx gives the 96 DPI row to an unaware or GDI-scaled caller and the 192 DPI row to a system, per-monitor or per-monitor-v2 caller"
+  at_200_units: "see AdjustWindowRectExForDpi: AdjustWindowRectEx gives the 96 DPI row to an unaware or GDI-scaled caller and the 192 DPI row to a system, per-monitor or per-monitor-v2 caller"
 
 errors:
   none: "no error cases observed"

@@ -29,7 +29,7 @@ rules:
   device: "szDevice \"\\\\.\\DISPLAY1\" (12 characters) NUL-terminated; the characters after the NUL are not written"
   size_40: "with cbSize 40 nothing past the 40 bytes is written"
   cbsize_kept: "cbSize is left as given"
-  at_200_values: "an unaware caller (or GDI-scaled) gets rcMonitor 0,0,1280,800 and a work area 0,0,1280,752 (taskbar 48 high at the bottom); an aware caller gets 0,0,2560,1600 and 0,0,2560,1504 (taskbar 96 high); dwFlags 1 (primary) for both, error unchanged; SPI_GETWORKAREA equals the work area; EnumDisplayMonitors finds one monitor whose rectangle equals rcMonitor; SM_XVIRTUALSCREEN/SM_YVIRTUALSCREEN 0,0, SM_CXVIRTUALSCREEN x SM_CYVIRTUALSCREEN and SM_CXSCREEN x SM_CYSCREEN equal the monitor size in the caller's units, SM_CMONITORS 1 (tests dpi_mi_*)"
+  at_200_values: "an unaware caller (or GDI-scaled) gets rcMonitor 0,0,1280,800 and a work area 0,0,1280,752 (taskbar 48 high at the bottom); an aware caller gets 0,0,2560,1600 and 0,0,2560,1504 (taskbar 96 high); dwFlags 1 (primary) for both, error unchanged; SPI_GETWORKAREA equals the work area; EnumDisplayMonitors finds one monitor whose rectangle equals rcMonitor; SM_XVIRTUALSCREEN/SM_YVIRTUALSCREEN 0,0, SM_CXVIRTUALSCREEN x SM_CYVIRTUALSCREEN and SM_CXSCREEN x SM_CYSCREEN equal the monitor size in the caller's units, SM_CMONITORS 1"
 
 errors:
   bad_size: "cbSize 0, 39, 41, 72, 103, 105, 200: 0, ERROR_INVALID_PARAMETER (87), nothing written"
@@ -41,8 +41,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

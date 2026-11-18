@@ -34,7 +34,7 @@ rules:
   windows_inherit: "a window created by the thread has the thread's context at creation (GetWindowDpiAwarenessContext) and keeps it when the thread changes later; GetDpiForWindow is 96 for all contexts; a child window gets its parent's awareness whatever the thread's context is; an owned window gets the thread's"
   per_thread: "a new thread starts with the process awareness (not with its creator's thread context); changing the context in one thread does not change another thread's"
   invalid: "NULL, 1, 2, -6, -7, -100, 0x1234, 0x6012, 0x7FFFFFFF: returns NULL with ERROR_INVALID_PARAMETER (87) and the thread keeps its context"
-  at_200_returns: "SetThreadDpiAwarenessContext returns the previous context (test dpi_thr_*: unaware, system, per-monitor, per-monitor-v2, GDI-scaled in turn, each returns the one before); a window made under a context reports that context through GetWindowDpiAwarenessContext; the invalid values 0, 1, -6, -7, 0x1234 and 0x6012 give NULL with ERROR_INVALID_PARAMETER (87) and change nothing (the thread keeps its context). Every number a thread reads follows ITS context (see GetWindowRect and GetDpiForSystem): from a system, per-monitor or per-monitor-v2 thread the screen is 2560x1600 and CYCAPTION 45, from an unaware or GDI-scaled one 1280x800 and 23. The process can be unaware or per-monitor-v2: the thread contexts decide, the results are the same"
+  at_200_returns: "SetThreadDpiAwarenessContext returns the previous context (unaware, system, per-monitor, per-monitor-v2, GDI-scaled in turn, each returns the one before); a window made under a context reports that context through GetWindowDpiAwarenessContext; the invalid values 0, 1, -6, -7, 0x1234 and 0x6012 give NULL with ERROR_INVALID_PARAMETER (87) and change nothing (the thread keeps its context). Every number a thread reads follows ITS context (see GetWindowRect and GetDpiForSystem): from a system, per-monitor or per-monitor-v2 thread the screen is 2560x1600 and CYCAPTION 45, from an unaware or GDI-scaled one 1280x800 and 23. The process can be unaware or per-monitor-v2: the thread contexts decide, the results are the same"
 
 errors:
   invalid_context: "NULL, ERROR_INVALID_PARAMETER (87)"
@@ -45,8 +45,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

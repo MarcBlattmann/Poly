@@ -16,7 +16,7 @@ summary: >
 interface:
   signature: "UINT GetSystemDpiForProcess(HANDLE process)"
 rules:
-  values: "192 for the current process (the pseudo handle) in every mode (unaware, GDI-scaled, system, per-monitor, per-monitor-v2) while GetDpiForSystem gives 96 to an unaware or GDI-scaled caller (tests dpi_ctxfns_*, dpi_who_*, dpi_sys_*); from a thread of any context 192"
+  values: "192 for the current process (the pseudo handle) in every mode (unaware, GDI-scaled, system, per-monitor, per-monitor-v2) while GetDpiForSystem gives 96 to an unaware or GDI-scaled caller; from a thread of any context 192"
   context_functions: "GetDpiAwarenessContextForProcess(NULL) and of the current process give the mode's context name (unaware, system, per-monitor, per-monitor-v2, unaware-gdi-scaled); GetDpiFromDpiAwarenessContext(unaware) 96, (system) 192, (per-monitor) 0, (per-monitor-v2) 0, (GDI-scaled) 96; IsValidDpiAwarenessContext TRUE for -1..-5 and FALSE for 0, 1, -6, 0x1234"
 errors:
   none: "no error case was observed"

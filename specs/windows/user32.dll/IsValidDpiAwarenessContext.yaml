@@ -16,7 +16,7 @@ summary: >
 interface:
   signature: "BOOL IsValidDpiAwarenessContext(DPI_AWARENESS_CONTEXT value)"
 rules:
-  values: "TRUE for the pseudo values -1 to -5, FALSE for 0, 1, -6 and 0x1234; see GetSystemDpiForProcess (dpi_ctxfns_*)"
+  values: "TRUE for the pseudo values -1 to -5, FALSE for 0, 1, -6 and 0x1234; see GetSystemDpiForProcess"
 errors:
   none: "no error case was observed"
 side_effects: "none beyond the rules above"
@@ -34,7 +34,6 @@ building_tests: >
   a particular awareness sets it with SetProcessDpiAwarenessContext as its first call (or carries a manifest as a resource). Test windows
   are placed within the top-left 1000x500 pixels of their own coordinates and closed within seconds; the cursor is parked at the start
   and put back at the end. A test never prints handles, times or process ids.
-tests_are_in: "dpi_ctxfns_* of GetSystemDpiForProcess"
 not_covered: >
   Other scales than 200 percent (the scale change tests step to 175 percent and back), several monitors, monitors with an EDID
   (this one has none), a different physical screen size.

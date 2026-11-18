@@ -36,7 +36,7 @@ rules:
   for_process: "GetDpiAwarenessContextForProcess(current process) reported the calling thread's context (PER_MONITOR_AWARE_V2 while that thread had set it and the process was SYSTEM_AWARE)"
   windows: "a window created after a change gets the thread's context; windows made earlier keep theirs"
   last_error: "unchanged"
-  at_200_values: "see SetProcessDpiAwarenessContext (dpi_who_*) and SetThreadDpiAwarenessContext (dpi_thr_*): a thread's context is the process awareness until it sets its own; the names are unaware, system, per-monitor, per-monitor-v2, unaware-gdi-scaled"
+  at_200_values: "see SetProcessDpiAwarenessContext and SetThreadDpiAwarenessContext: a thread's context is the process awareness until it sets its own; the names are unaware, system, per-monitor, per-monitor-v2, unaware-gdi-scaled"
 
 errors:
   none: "the function cannot fail"

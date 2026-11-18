@@ -26,7 +26,7 @@ rules:
   vs_message_pos: "inside WM_MOUSEMOVE, GetMessagePos is the message's screen point; after a SetCursorPos inside the handler GetCursorPos is the new point while GetMessagePos stays the message's"
   coalescing: "two SetCursorPos (140,140 then 160,150) before the queue is read give one WM_MOUSEMOVE, at the last point (client 60,50 for a window at 100,100); a SetCursorPos inside the handler gives one more WM_MOUSEMOVE at the new point"
   buttons: "in WM_LBUTTONDOWN/UP, GetMessagePos and GetCursorPos agree when the cursor did not move"
-  at_200_units: "an unaware or GDI-scaled caller's cursor is in units of half a physical pixel (tests dpi_cursor_*): SetCursorPos(0,0), (300,200), (639,359) and (1000,700) read back unchanged by GetCursorPos for every caller; SetCursorPos(5000,5000) succeeds and clamps: GetCursorPos 1280,800 for an unaware caller and 2559,1599 for an aware one; SetCursorPos(-50,-50) clamps to 0,0; SendInput(MOUSEEVENTF_MOVE|ABSOLUTE) to the physical pixel 400,350 (normalised over the 2560x1600 screen): an aware caller reads 400,350 (and a window at 100,100 400x300 gets WM_MOUSEMOVE with client 287,192: 400-113, 350-158); an unaware caller reads 200,175 and the window gets client 92,44 (200-108, 175-131); physical 450,300: 225,150 and client 117,19 (unaware) or 450,300 and 337,142 (aware); physical 300,250: 150,125 (unaware, in the caption: no WM_MOUSEMOVE) or 300,250 and client 187,92 (aware)"
+  at_200_units: "an unaware or GDI-scaled caller's cursor is in units of half a physical pixel: SetCursorPos(0,0), (300,200), (639,359) and (1000,700) read back unchanged by GetCursorPos for every caller; SetCursorPos(5000,5000) succeeds and clamps: GetCursorPos 1280,800 for an unaware caller and 2559,1599 for an aware one; SetCursorPos(-50,-50) clamps to 0,0; SendInput(MOUSEEVENTF_MOVE|ABSOLUTE) to the physical pixel 400,350 (normalised over the 2560x1600 screen): an aware caller reads 400,350 (and a window at 100,100 400x300 gets WM_MOUSEMOVE with client 287,192: 400-113, 350-158); an unaware caller reads 200,175 and the window gets client 92,44 (200-108, 175-131); physical 450,300: 225,150 and client 117,19 (unaware) or 450,300 and 337,142 (aware); physical 300,250: 150,125 (unaware, in the caption: no WM_MOUSEMOVE) or 300,250 and client 187,92 (aware)"
 
 errors:
   null: "NULL pointer: 0, ERROR_NOACCESS (998)"
@@ -37,8 +37,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

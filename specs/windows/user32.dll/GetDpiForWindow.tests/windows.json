@@ -12,48 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_win_p",
-      "exe_sha256": "cd262948686b14d5cd588027836e0e3e2adca84aa27fec13d1fab5e70c6f45e4",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvcjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnRvcC1sZXZlbDogMTkyIGN0eCBwZXItbW9uaXRvciBlcnJvciAwCmNoaWxkOiAxOTIgY3R4IHBlci1tb25pdG9yIGVycm9yIDAKcG9wdXA6IDE5MiBjdHggcGVyLW1vbml0b3IgZXJyb3IgMApvd25lZDogMTkyIGN0eCBwZXItbW9uaXRvciBlcnJvciAwCm1lc3NhZ2Utb25seTogMTkyIGN0eCBwZXItbW9uaXRvciBlcnJvciAwCmRlc2t0b3A6IDk2IGN0eCBwZXItbW9uaXRvciBlcnJvciAwCk5VTEw6IDAgZXJyb3IgODcKYSBkZXN0cm95ZWQgd2luZG93OiAwIGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor: SetProcessDpiAwarenessContext -> true error 0\ntop-level: 192 ctx per-monitor error 0\nchild: 192 ctx per-monitor error 0\npopup: 192 ctx per-monitor error 0\nowned: 192 ctx per-monitor error 0\nmessage-only: 192 ctx per-monitor error 0\ndesktop: 96 ctx per-monitor error 0\nNULL: 0 error 87\na destroyed window: 0 error 87\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 723,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_win_s",
-      "exe_sha256": "7365bce091149b388dcdb130895ab0ee6056e83207711e968592ccfd125775f4",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMAp0b3AtbGV2ZWw6IDE5MiBjdHggc3lzdGVtIGVycm9yIDAKY2hpbGQ6IDE5MiBjdHggc3lzdGVtIGVycm9yIDAKcG9wdXA6IDE5MiBjdHggc3lzdGVtIGVycm9yIDAKb3duZWQ6IDE5MiBjdHggc3lzdGVtIGVycm9yIDAKbWVzc2FnZS1vbmx5OiAxOTIgY3R4IHN5c3RlbSBlcnJvciAwCmRlc2t0b3A6IDk2IGN0eCBwZXItbW9uaXRvciBlcnJvciAwCk5VTEw6IDAgZXJyb3IgODcKYSBkZXN0cm95ZWQgd2luZG93OiAwIGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\ntop-level: 192 ctx system error 0\nchild: 192 ctx system error 0\npopup: 192 ctx system error 0\nowned: 192 ctx system error 0\nmessage-only: 192 ctx system error 0\ndesktop: 96 ctx per-monitor error 0\nNULL: 0 error 87\na destroyed window: 0 error 87\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 747,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_win_v",
-      "exe_sha256": "7895942b26f50416c8ad50e17320950e03a16f6c96eb02909949c3d22ba3656f",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnRvcC1sZXZlbDogMTkyIGN0eCBwZXItbW9uaXRvci12MiBlcnJvciAwCmNoaWxkOiAxOTIgY3R4IHBlci1tb25pdG9yLXYyIGVycm9yIDAKcG9wdXA6IDE5MiBjdHggcGVyLW1vbml0b3ItdjIgZXJyb3IgMApvd25lZDogMTkyIGN0eCBwZXItbW9uaXRvci12MiBlcnJvciAwCm1lc3NhZ2Utb25seTogMTkyIGN0eCBwZXItbW9uaXRvci12MiBlcnJvciAwCmRlc2t0b3A6IDk2IGN0eCBwZXItbW9uaXRvciBlcnJvciAwCk5VTEw6IDAgZXJyb3IgODcKYSBkZXN0cm95ZWQgd2luZG93OiAwIGVycm9yIDg3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\ntop-level: 192 ctx per-monitor-v2 error 0\nchild: 192 ctx per-monitor-v2 error 0\npopup: 192 ctx per-monitor-v2 error 0\nowned: 192 ctx per-monitor-v2 error 0\nmessage-only: 192 ctx per-monitor-v2 error 0\ndesktop: 96 ctx per-monitor error 0\nNULL: 0 error 87\na destroyed window: 0 error 87\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 711,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "gdw_windows",
       "exe_sha256": "2ae1c84a217e1fe4a7b5aca13df8d589ad84109a93e8b2217480241a900fcf94",
       "status": "ran",

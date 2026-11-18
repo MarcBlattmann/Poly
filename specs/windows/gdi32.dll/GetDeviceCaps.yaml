@@ -25,7 +25,7 @@ rules:
   dc_kinds: "the DC of CreateDCW('DISPLAY'), of CreateICW('DISPLAY'), GetDC(window), GetWindowDC(window) and a fresh CreateCompatibleDC(screen) differ from the screen DC in no capability; a memory DC keeps BITSPIXEL 32 with CreateCompatibleBitmap(screen), CreateBitmap(w, h, 1, 32), 32-bit and 24-bit DIB sections and the initial 1x1 bitmap, and with CreateBitmap(12, 7, 1, 1) selected too (the memory DC reports the display's depth); a compatible DC of a memory DC likewise; CreateCompatibleBitmap of a monochrome DC is 1 bit per pixel"
   bad_index: "indexes -1, 1, 3, 5, 7, 9, 13, 15, 100, 122-124, 200, 399-401 (not defined): 0 with the last error unchanged"
   invalid_dc: "NULL, a made-up handle and a deleted DC: 0"
-  at_200_values: "for the screen DC, a window DC, a display DC (CreateDCW DISPLAY) and a memory DC alike (tests dpi_caps_*): an unaware or GDI-scaled caller gets HORZRES 1280, VERTRES 800, LOGPIXELSX/Y 96; an aware caller (system, per-monitor, per-monitor-v2) HORZRES 2560, VERTRES 1600, LOGPIXELSX/Y 192. DESKTOPHORZRES 2560 and DESKTOPVERTRES 1600 (physical) for every caller; HORZSIZE 677 and VERTSIZE 423 mm (no EDID: 96 DPI assumed) for every caller; BITSPIXEL 32, PLANES 1, ASPECTX 36, ASPECTY 36, ASPECTXY 51, SCALINGFACTORX/Y 0 for every caller"
+  at_200_values: "for the screen DC, a window DC, a display DC (CreateDCW DISPLAY) and a memory DC alike: an unaware or GDI-scaled caller gets HORZRES 1280, VERTRES 800, LOGPIXELSX/Y 96; an aware caller (system, per-monitor, per-monitor-v2) HORZRES 2560, VERTRES 1600, LOGPIXELSX/Y 192. DESKTOPHORZRES 2560 and DESKTOPVERTRES 1600 (physical) for every caller; HORZSIZE 677 and VERTSIZE 423 mm (no EDID: 96 DPI assumed) for every caller; BITSPIXEL 32, PLANES 1, ASPECTX 36, ASPECTY 36, ASPECTXY 51, SCALINGFACTORX/Y 0 for every caller"
 
 errors:
 side_effects: "none beyond the rules above"
@@ -35,8 +35,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 5  # count in <symbol>.tests/
-  held_out: 3  # count kept by the diff runner
+  visible: 2  # count in <symbol>.tests/
+  held_out: 6  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
   own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1

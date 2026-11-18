@@ -37,7 +37,7 @@ rules:
   child: "a child window: FALSE (in WM_NCCREATE, WM_CREATE and after), last error unchanged"
   messages_around: "WM_GETMINMAXINFO, WM_NCCREATE, WM_NCCALCSIZE(FALSE), WM_CREATE arrive in that order for overlapped windows; WM_SHOWWINDOW, WM_WINDOWPOSCHANGED (and WM_SIZE, WM_MOVE for overlapped) arrive on ShowWindow; WM_NCCALCSIZE(TRUE), WM_WINDOWPOSCHANGED, WM_MOVE, WM_SIZE on SetWindowPos; no WM_DPICHANGED, WM_GETDPISCALEDSIZE or WM_DPICHANGED_BEFOREPARENT/AFTERPARENT is sent in any mode (one monitor)"
   last_error: "the tests print the last error after a successful call as \"-1\" when the call left it as it was or cleared it (both happen, depending on earlier calls in the process): a success does not promise either"
-  at_200_calls: "called in WM_NCCREATE of a top-level window (tests dpi_encs_*): TRUE with the error 0 for a per-monitor (v1) and a per-monitor-v2 thread; FALSE with the error 0 for a system aware thread and for an unaware thread; EnableNonClientDpiScaling(NULL): FALSE, ERROR_INVALID_HANDLE (1400)"
+  at_200_calls: "called in WM_NCCREATE of a top-level window: TRUE with the error 0 for a per-monitor (v1) and a per-monitor-v2 thread; FALSE with the error 0 for a system aware thread and for an unaware thread; EnableNonClientDpiScaling(NULL): FALSE, ERROR_INVALID_HANDLE (1400)"
   at_200_sizes: "with or without the call a window made at 100,100 of 400x300 in a per-monitor, per-monitor-v2 or system thread has the window rectangle 100,100,500,400, client 374x229 and GetDpiForWindow 192; an unaware one 384x261 and 96; in a per-monitor (v1 or v2) thread the call itself sends WM_MOVE (113,158) and WM_SIZE (client 374x229) to the window before it returns (they are logged before the WM_NCCREATE line of the test); the non-client frame of an overlapped window at 192 DPI is 26 wide and 71 high (AdjustWindowRectExForDpi), at 96 DPI 16 and 39. Creating the window sends WM_NCCREATE, WM_CREATE, WM_SIZE (type 0, client size) and WM_MOVE (the client origin: 113,158 at 192, 108,131 at 96); SetWindowPos to 150,120 of 500x350 sends WM_MOVE then WM_SIZE (client 474x279 at 192, 484x311 at 96) after the window's own WM_MOVE"
 
 errors:
@@ -49,8 +49,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 6  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll and, as the entry
   needs, dwmapi.dll, imm32.dll and shcore.dll by name, each carrying its own

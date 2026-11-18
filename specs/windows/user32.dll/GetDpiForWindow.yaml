@@ -24,8 +24,8 @@ interface:
 rules:
   unaware: "96 for a visible popup, a child, a grandchild, a hidden popup, a hidden overlapped window, a message-only window, a window off the screen, the desktop window and a window of another thread"
   last_error: "unchanged on success"
-  at_200_kinds: "a window has the DPI of the awareness context of the thread that created it: 96 for unaware (and GDI-scaled), 192 for system, per-monitor and per-monitor-v2, for a top-level, child, popup, owned and message-only window alike (tests dpi_win_*); the desktop window is 96 with context per-monitor whatever the caller is; NULL and a destroyed window: 0 with ERROR_INVALID_PARAMETER (87)"
-  at_200_scale_change: "when the display scale changes while windows are open (tests dpi_change_*, display 200 percent -> 175 percent -> 200 percent): per-monitor and per-monitor-v2 windows get the new DPI (168, then 192) at once for top-level, child and popup windows; system aware windows and their GetDpiForSystem stay at 192; unaware windows stay at 96. See the rules of DisplayConfigSetDeviceInfo for the messages"
+  at_200_kinds: "a window has the DPI of the awareness context of the thread that created it: 96 for unaware (and GDI-scaled), 192 for system, per-monitor and per-monitor-v2, for a top-level, child, popup, owned and message-only window alike; the desktop window is 96 with context per-monitor whatever the caller is; NULL and a destroyed window: 0 with ERROR_INVALID_PARAMETER (87)"
+  at_200_scale_change: "when the display scale changes while windows are open: per-monitor and per-monitor-v2 windows get the new DPI (168, then 192) at once for top-level, child and popup windows; system aware windows and their GetDpiForSystem stay at 192; unaware windows stay at 96. See the rules of DisplayConfigSetDeviceInfo for the messages"
 
 errors:
   bad_window: "NULL, a made-up handle, HWND_MESSAGE (-3), -1, 1, a destroyed window: 0, ERROR_INVALID_PARAMETER (87) (not ERROR_INVALID_WINDOW_HANDLE)"
@@ -36,8 +36,8 @@ timing:                                       # envelopes, never exact values
   typical: "well under a millisecond per call on the oracle"
   guarantees: none
 tests:
-  visible: 4  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 1  # count in <symbol>.tests/
+  held_out: 5  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll and gdi32.dll by name, each
   carrying its own declarations (Learn prototypes, header constants) and a

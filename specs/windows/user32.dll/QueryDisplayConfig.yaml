@@ -34,7 +34,7 @@ rules:
   topology: "only QDC_DATABASE_CURRENT takes and requires the topology pointer: it returns 0 and writes DISPLAYCONFIG_TOPOLOGY_INTERNAL (1) for the single monitor; without the pointer it returns 87; with a pointer for ONLY_ACTIVE_PATHS or ALL_PATHS it returns 87 and does not write it"
   all_paths: "QDC_ALL_PATHS with large arrays returns 0; the active path is listed first and marked active, the others are inactive paths; the filled counts do not exceed those of GetDisplayConfigBufferSizes; with 16 paths and 32 modes it returns 122 on the oracle (it has more than 16)"
   last_error: "never set (except that a NULL topology pointer on DATABASE_CURRENT leaves 998 after the 87)"
-  at_200_values: "used by the scale change tests (dpi_change_*) to find the adapter and the source id of the one active path: QDC_ONLY_ACTIVE_PATHS (2) gives 1 path and 2 modes on the 2560x1600 display as at 1920x1080"
+  at_200_values: "used by the scale change tests to find the adapter and the source id of the one active path: QDC_ONLY_ACTIVE_PATHS (2) gives 1 path and 2 modes on the 2560x1600 display as at 1920x1080"
 
 errors:
   invalid_parameter: "87: invalid flags, zero path count, a topology pointer with the wrong flag or missing with DATABASE_CURRENT"

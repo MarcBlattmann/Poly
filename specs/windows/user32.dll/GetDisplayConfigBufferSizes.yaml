@@ -28,7 +28,7 @@ rules:
   invalid_flags: "flags 0, 8, 0x80, any two or three of the base flags together (3, 5, 6, 7) and VIRTUAL_MODE_AWARE alone return ERROR_INVALID_PARAMETER 87; the path count is set to 0 and the mode count is left as it was"
   null_pointers: "a NULL numPathArrayElements, a NULL numModeInfoArrayElements or both return 87 without a crash; the other count is left alone"
   last_error: "never set, in success and in failure: the thread's last error keeps its value"
-  at_200_values: "used by the scale change tests (dpi_change_*): flags 2 give 1 path and 2 modes on the 2560x1600 display at 200 percent"
+  at_200_values: "used by the scale change tests: flags 2 give 1 path and 2 modes on the 2560x1600 display at 200 percent"
 
 errors:
   invalid_parameter: "87: invalid flag combination or a NULL out pointer"

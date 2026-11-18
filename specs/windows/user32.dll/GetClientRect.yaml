@@ -25,7 +25,7 @@ rules:
   nccalcsize: "a procedure that answers WM_NCCALCSIZE itself decides: returning the rectangle unchanged makes the whole window the client area (also with a caption); insetting by 3,5,7,11 gives that; an inset larger than the window gives a negative width/height (-20x-20 observed)"
   during_creation: "0,0,0,0 until WM_CREATE"
   minimized: "0,0,0,0"
-  at_200_units: "see GetWindowRect (tests dpi_rect_*, dpi_thr_*, dpi_xproc_*): client sizes are those of the window's awareness (unaware 384x261 and aware 374x229 for a 400x300 overlapped window), also for a window of another process; the desktop's client rectangle is the screen in the caller's units"
+  at_200_units: "see GetWindowRect: client sizes are those of the window's awareness (unaware 384x261 and aware 374x229 for a 400x300 overlapped window), also for a window of another process; the desktop's client rectangle is the screen in the caller's units"
 
 errors:
   bad_handle: "0, ERROR_INVALID_WINDOW_HANDLE (1400); the RECT is left as it was"

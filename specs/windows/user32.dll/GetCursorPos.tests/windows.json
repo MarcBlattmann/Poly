@@ -12,48 +12,6 @@
   "started": "2026-11-02T17:18:20Z",
   "tests": [
     {
-      "name": "dpi_cursor_p",
-      "exe_sha256": "03ba445068b6340d3a89e1fdf32a2f4de306fc9cbeb1c3351ac3f32fd9b3ff99",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBwZXItbW9uaXRvcjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwClNldEN1cnNvclBvcygwLDApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMCwwClNldEN1cnNvclBvcygzMDAsMjAwKSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDMwMCwyMDAKU2V0Q3Vyc29yUG9zKDYzOSwzNTkpIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgNjM5LDM1OQpTZXRDdXJzb3JQb3MoMTAwMCw3MDApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMTAwMCw3MDAKU2V0Q3Vyc29yUG9zKDUwMDAsNTAwMCkgLT4gdHJ1ZSBlcnJvciAwIEdldEN1cnNvclBvcyAyNTU5LDE1OTkKU2V0Q3Vyc29yUG9zKC01MCwtNTApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMCwwCnBoeXNpY2FsIHNjcmVlbiAyNTYweDE2MDA7IHRoZSB3aW5kb3cncyBjbGllbnQgb3JpZ2luIG9uIHNjcmVlbiAxMTMsMTU4ClNlbmRJbnB1dCBtb3ZlIHRvIHBoeXNpY2FsIDQwMCwzNTAgLT4gMSBpbnNlcnRlZDsgR2V0Q3Vyc29yUG9zIDQwMCwzNTA7IG1lc3NhZ2VzOgogIHRvcCBXTV9NT1VTRU1PVkUgY2xpZW50IDI4NywxOTIKU2VuZElucHV0IG1vdmUgdG8gcGh5c2ljYWwgNDUwLDMwMCAtPiAxIGluc2VydGVkOyBHZXRDdXJzb3JQb3MgNDUwLDMwMDsgbWVzc2FnZXM6CiAgdG9wIFdNX01PVVNFTU9WRSBjbGllbnQgMzM3LDE0MgpTZW5kSW5wdXQgbW92ZSB0byBwaHlzaWNhbCAzMDAsMjUwIC0+IDEgaW5zZXJ0ZWQ7IEdldEN1cnNvclBvcyAzMDAsMjUwOyBtZXNzYWdlczoKICB0b3AgV01fTU9VU0VNT1ZFIGNsaWVudCAxODcsOTIKU2VuZElucHV0IG1vdmUgdG8gcGh5c2ljYWwgNDAwLDM1MCAtPiAxIGluc2VydGVkOyBHZXRDdXJzb3JQb3MgNDAwLDM1MDsgbWVzc2FnZXM6CiAgdG9wIFdNX01PVVNFTU9WRSBjbGllbnQgMjg3LDE5MgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode per-monitor: SetProcessDpiAwarenessContext -> true error 0\nSetCursorPos(0,0) -> true error 0 GetCursorPos 0,0\nSetCursorPos(300,200) -> true error 0 GetCursorPos 300,200\nSetCursorPos(639,359) -> true error 0 GetCursorPos 639,359\nSetCursorPos(1000,700) -> true error 0 GetCursorPos 1000,700\nSetCursorPos(5000,5000) -> true error 0 GetCursorPos 2559,1599\nSetCursorPos(-50,-50) -> true error 0 GetCursorPos 0,0\nphysical screen 2560x1600; the window's client origin on screen 113,158\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 400,350; messages:\n  top WM_MOUSEMOVE client 287,192\nSendInput move to physical 450,300 -> 1 inserted; GetCursorPos 450,300; messages:\n  top WM_MOUSEMOVE client 337,142\nSendInput move to physical 300,250 -> 1 inserted; GetCursorPos 300,250; messages:\n  top WM_MOUSEMOVE client 187,92\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 400,350; messages:\n  top WM_MOUSEMOVE client 287,192\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 1511,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_cursor_s",
-      "exe_sha256": "8c7975a2c1f356682427dced089d48dd1d96658fbf9f9f70e95c56511b2eefaa",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMApTZXRDdXJzb3JQb3MoMCwwKSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDAsMApTZXRDdXJzb3JQb3MoMzAwLDIwMCkgLT4gdHJ1ZSBlcnJvciAwIEdldEN1cnNvclBvcyAzMDAsMjAwClNldEN1cnNvclBvcyg2MzksMzU5KSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDYzOSwzNTkKU2V0Q3Vyc29yUG9zKDEwMDAsNzAwKSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDEwMDAsNzAwClNldEN1cnNvclBvcyg1MDAwLDUwMDApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMjU1OSwxNTk5ClNldEN1cnNvclBvcygtNTAsLTUwKSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDAsMApwaHlzaWNhbCBzY3JlZW4gMjU2MHgxNjAwOyB0aGUgd2luZG93J3MgY2xpZW50IG9yaWdpbiBvbiBzY3JlZW4gMTEzLDE1OApTZW5kSW5wdXQgbW92ZSB0byBwaHlzaWNhbCA0MDAsMzUwIC0+IDEgaW5zZXJ0ZWQ7IEdldEN1cnNvclBvcyA0MDAsMzUwOyBtZXNzYWdlczoKICB0b3AgV01fTU9VU0VNT1ZFIGNsaWVudCAyODcsMTkyClNlbmRJbnB1dCBtb3ZlIHRvIHBoeXNpY2FsIDQ1MCwzMDAgLT4gMSBpbnNlcnRlZDsgR2V0Q3Vyc29yUG9zIDQ1MCwzMDA7IG1lc3NhZ2VzOgogIHRvcCBXTV9NT1VTRU1PVkUgY2xpZW50IDMzNywxNDIKU2VuZElucHV0IG1vdmUgdG8gcGh5c2ljYWwgMzAwLDI1MCAtPiAxIGluc2VydGVkOyBHZXRDdXJzb3JQb3MgMzAwLDI1MDsgbWVzc2FnZXM6CiAgdG9wIFdNX01PVVNFTU9WRSBjbGllbnQgMTg3LDkyClNlbmRJbnB1dCBtb3ZlIHRvIHBoeXNpY2FsIDQwMCwzNTAgLT4gMSBpbnNlcnRlZDsgR2V0Q3Vyc29yUG9zIDQwMCwzNTA7IG1lc3NhZ2VzOgogIHRvcCBXTV9NT1VTRU1PVkUgY2xpZW50IDI4NywxOTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\nSetCursorPos(0,0) -> true error 0 GetCursorPos 0,0\nSetCursorPos(300,200) -> true error 0 GetCursorPos 300,200\nSetCursorPos(639,359) -> true error 0 GetCursorPos 639,359\nSetCursorPos(1000,700) -> true error 0 GetCursorPos 1000,700\nSetCursorPos(5000,5000) -> true error 0 GetCursorPos 2559,1599\nSetCursorPos(-50,-50) -> true error 0 GetCursorPos 0,0\nphysical screen 2560x1600; the window's client origin on screen 113,158\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 400,350; messages:\n  top WM_MOUSEMOVE client 287,192\nSendInput move to physical 450,300 -> 1 inserted; GetCursorPos 450,300; messages:\n  top WM_MOUSEMOVE client 337,142\nSendInput move to physical 300,250 -> 1 inserted; GetCursorPos 300,250; messages:\n  top WM_MOUSEMOVE client 187,92\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 400,350; messages:\n  top WM_MOUSEMOVE client 287,192\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 1500,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
-      "name": "dpi_cursor_u",
-      "exe_sha256": "69abd5522b15d82efad8360a9c7b144320df2c24aebe669f8840954ac7fe00cb",
-      "status": "ran",
-      "exit_code": 0,
-      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsClNldEN1cnNvclBvcygwLDApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMCwwClNldEN1cnNvclBvcygzMDAsMjAwKSAtPiB0cnVlIGVycm9yIDAgR2V0Q3Vyc29yUG9zIDMwMCwyMDAKU2V0Q3Vyc29yUG9zKDYzOSwzNTkpIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgNjM5LDM1OQpTZXRDdXJzb3JQb3MoMTAwMCw3MDApIC0+IHRydWUgZXJyb3IgMCBHZXRDdXJzb3JQb3MgMTAwMCw3MDAKU2V0Q3Vyc29yUG9zKDUwMDAsNTAwMCkgLT4gdHJ1ZSBlcnJvciAwIEdldEN1cnNvclBvcyAxMjgwLDgwMApTZXRDdXJzb3JQb3MoLTUwLC01MCkgLT4gdHJ1ZSBlcnJvciAwIEdldEN1cnNvclBvcyAwLDAKcGh5c2ljYWwgc2NyZWVuIDI1NjB4MTYwMDsgdGhlIHdpbmRvdydzIGNsaWVudCBvcmlnaW4gb24gc2NyZWVuIDEwOCwxMzEKU2VuZElucHV0IG1vdmUgdG8gcGh5c2ljYWwgNDAwLDM1MCAtPiAxIGluc2VydGVkOyBHZXRDdXJzb3JQb3MgMjAwLDE3NTsgbWVzc2FnZXM6CiAgdG9wIFdNX01PVVNFTU9WRSBjbGllbnQgOTIsNDQKU2VuZElucHV0IG1vdmUgdG8gcGh5c2ljYWwgNDUwLDMwMCAtPiAxIGluc2VydGVkOyBHZXRDdXJzb3JQb3MgMjI1LDE1MDsgbWVzc2FnZXM6CiAgdG9wIFdNX01PVVNFTU9WRSBjbGllbnQgMTE3LDE5ClNlbmRJbnB1dCBtb3ZlIHRvIHBoeXNpY2FsIDMwMCwyNTAgLT4gMSBpbnNlcnRlZDsgR2V0Q3Vyc29yUG9zIDE1MCwxMjU7IG1lc3NhZ2VzOgpTZW5kSW5wdXQgbW92ZSB0byBwaHlzaWNhbCA0MDAsMzUwIC0+IDEgaW5zZXJ0ZWQ7IEdldEN1cnNvclBvcyAyMDAsMTc1OyBtZXNzYWdlczoKICB0b3AgV01fTU9VU0VNT1ZFIGNsaWVudCA5Miw0NApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
-      "stdout_b64": "",
-      "stderr_b64": "",
-      "output": "mode no call: no SetProcessDpiAwarenessContext call\nSetCursorPos(0,0) -> true error 0 GetCursorPos 0,0\nSetCursorPos(300,200) -> true error 0 GetCursorPos 300,200\nSetCursorPos(639,359) -> true error 0 GetCursorPos 639,359\nSetCursorPos(1000,700) -> true error 0 GetCursorPos 1000,700\nSetCursorPos(5000,5000) -> true error 0 GetCursorPos 1280,800\nSetCursorPos(-50,-50) -> true error 0 GetCursorPos 0,0\nphysical screen 2560x1600; the window's client origin on screen 108,131\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 200,175; messages:\n  top WM_MOUSEMOVE client 92,44\nSendInput move to physical 450,300 -> 1 inserted; GetCursorPos 225,150; messages:\n  top WM_MOUSEMOVE client 117,19\nSendInput move to physical 300,250 -> 1 inserted; GetCursorPos 150,125; messages:\nSendInput move to physical 400,350 -> 1 inserted; GetCursorPos 200,175; messages:\n  top WM_MOUSEMOVE client 92,44\nsummary 0 passed, 0 failed\n",
-      "error": null,
-      "stable": true,
-      "ms": 1534,
-      "session": "interactive-bottom/2560x1600/200"
-    },
-    {
       "name": "gcp_messagepos",
       "exe_sha256": "51dc3bb5d33b15f612c884e25bc1704f6b6d71677e6143ddb420d9770bd95980",
       "status": "ran",

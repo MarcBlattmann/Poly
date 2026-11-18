@@ -32,7 +32,7 @@ rules:
   support_virtual_resolution: "writes 0 in the 32-bit word that follows the header (virtual resolution not disabled); header size 20 or 28 returns 87"
   preferred_mode: "width and height of the target's preferred mode are not 0 (1024x768 for the generic monitor of the oracle), only with the header size 80"
   last_error: "not set by the call, except for the 31/87 case above"
-  at_200_dpi_scale: "the DPI-scale packet, type -3 (not documented on Learn), size 32: after the 20-byte header three int32: the minimum, the current and the maximum scale step relative to the recommended scale; the steps are 100 125 150 175 200 225 250 300 350 400 450 500 percent. On the 2560x1600 display at 200 percent: minimum 0, current 4, maximum 6 (100 to 250 percent; on the 1920x1080 display at 100 percent: 0, 0, 3). The call returns 0. See DisplayConfigSetDeviceInfo (tests dpi_change_*)"
+  at_200_dpi_scale: "the DPI-scale packet, type -3 (not documented on Learn), size 32: after the 20-byte header three int32: the minimum, the current and the maximum scale step relative to the recommended scale; the steps are 100 125 150 175 200 225 250 300 350 400 450 500 percent. On the 2560x1600 display at 200 percent: minimum 0, current 4, maximum 6 (100 to 250 percent; on the 1920x1080 display at 100 percent: 0, 0, 3). The call returns 0. See DisplayConfigSetDeviceInfo"
 
 errors:
   invalid_parameter: "87: wrong size, unknown or SET type, unknown id or adapter for names and color"
