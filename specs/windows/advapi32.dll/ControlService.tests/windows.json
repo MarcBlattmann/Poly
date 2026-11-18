@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "ctl_codes",
+      "exe_sha256": "a9758b1449dbdffa65586d83e5023dd91ce595369d870b1fa784ac9c0f296d30",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNDb2Rlcyk6IG9rClN0YXJ0U2VydmljZVc6IG9rClJVTk5JTkcgd2l0aGluIDUgczogMQpydW5uaW5nOiB0eXBlPTB4MTAgc3RhdGU9UlVOTklORyBhY2NlcHRlZD0weDMgd2luMzI9MCBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAgaGFzX3BpZD0xIGZsYWdzPTAKQ29udHJvbFNlcnZpY2UoUEFVU0UpOiBvayBzdGF0ZSBpcyBwYXVzZWQgb3IgcGF1c2luZzogMQogIHN0YXRlIG5vdyBQQVVTRUQKQ29udHJvbFNlcnZpY2UoSU5URVJST0dBVEUpOiBvayBzdGF0ZSBpcyBwYXVzZWQgb3IgcGF1c2luZzogMQogIHN0YXRlIG5vdyBQQVVTRUQKQ29udHJvbFNlcnZpY2UoQ09OVElOVUUpOiBvayBzdGF0ZSBpcyBwYXVzZWQgb3IgcGF1c2luZzogMAogIHN0YXRlIG5vdyBSVU5OSU5HCkNvbnRyb2xTZXJ2aWNlKHVzZXIgMTI4KTogb2sgc3RhdGUgaXMgcGF1c2VkIG9yIHBhdXNpbmc6IDAKICBzdGF0ZSBub3cgUlVOTklORwpDb250cm9sU2VydmljZSh1c2VyIDIwMCk6IG9rIHN0YXRlIGlzIHBhdXNlZCBvciBwYXVzaW5nOiAwCiAgc3RhdGUgbm93IFJVTk5JTkcKQ29udHJvbFNlcnZpY2UodXNlciAyNTUpOiBvayBzdGF0ZSBpcyBwYXVzZWQgb3IgcGF1c2luZzogMAogIHN0YXRlIG5vdyBSVU5OSU5HCkNvbnRyb2xTZXJ2aWNlKFBBVVNFKTogb2sgc3RhdGUgaXMgcGF1c2VkIG9yIHBhdXNpbmc6IDEKICBzdGF0ZSBub3cgUEFVU0VECkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3ZjOiBtYWluOiBhcmdjPTEgYXJndj1bUG9seVNwZWNTdmNDb2Rlc10Kc3ZjOiBtYWluOiBoYW5kbGVyIHJlZ2lzdGVyZWQ9MQpzdmM6IG1haW46IFJVTk5JTkcgcmVwb3J0ZWQ9MQpzdmM6IGNvbnRyb2wgMgpzdmM6IGNvbnRyb2wgNApzdmM6IGNvbnRyb2wgMwpzdmM6IGNvbnRyb2wgMTI4CnN2YzogY29udHJvbCAyMDAKc3ZjOiBjb250cm9sIDI1NQpzdmM6IGNvbnRyb2wgMgpzdmM6IGNvbnRyb2wgMQpzdmM6IG1haW46IHN0b3AgcmVxdWVzdGVkLCBsYXN0IGNvbnRyb2wgMQpzdmM6IG1haW46IHJlcG9ydGluZyBTVE9QUEVECkNyZWF0ZVNlcnZpY2VXKFBvbHlTcGVjU3ZjQ29kZXMyKTogb2sKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCnNlcnZpY2UgdGhhdCBhY2NlcHRzIG5vIGNvbnRyb2w6IHR5cGU9MHgxMCBzdGF0ZT1SVU5OSU5HIGFjY2VwdGVkPTB4MCB3aW4zMj0wIHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTEgZmxhZ3M9MApDb250cm9sU2VydmljZShTVE9QKTogZXJyIDEwNTIKQ29udHJvbFNlcnZpY2UoSU5URVJST0dBVEUpOiBvawpDb250cm9sU2VydmljZSgxNDApOiBvawpzdmM6IG1haW46IGFyZ2M9MSBhcmd2PVtQb2x5U3BlY1N2Y0NvZGVzMl0Kc3ZjOiBtYWluOiBoYW5kbGVyIHJlZ2lzdGVyZWQ9MQpzdmM6IG1haW46IFJVTk5JTkcgcmVwb3J0ZWQ9MQpzdmM6IGNvbnRyb2wgNApzdmM6IGNvbnRyb2wgMTQwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcCodes): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nrunning: type=0x10 state=RUNNING accepted=0x3 win32=0 specific=0 checkpoint=0 hint=0 has_pid=1 flags=0\nControlService(PAUSE): ok state is paused or pausing: 1\n  state now PAUSED\nControlService(INTERROGATE): ok state is paused or pausing: 1\n  state now PAUSED\nControlService(CONTINUE): ok state is paused or pausing: 0\n  state now RUNNING\nControlService(user 128): ok state is paused or pausing: 0\n  state now RUNNING\nControlService(user 200): ok state is paused or pausing: 0\n  state now RUNNING\nControlService(user 255): ok state is paused or pausing: 0\n  state now RUNNING\nControlService(PAUSE): ok state is paused or pausing: 1\n  state now PAUSED\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcCodes]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: control 2\nsvc: control 4\nsvc: control 3\nsvc: control 128\nsvc: control 200\nsvc: control 255\nsvc: control 2\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nCreateServiceW(PolySpecSvcCodes2): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nservice that accepts no control: type=0x10 state=RUNNING accepted=0x0 win32=0 specific=0 checkpoint=0 hint=0 has_pid=1 flags=0\nControlService(STOP): err 1052\nControlService(INTERROGATE): ok\nControlService(140): ok\nsvc: main: argc=1 argv=[PolySpecSvcCodes2]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: control 4\nsvc: control 140\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4722
+    },
+    {
+      "name": "ctl_errors",
+      "exe_sha256": "0a9c0f3dd7adc23094171fd1f8988ab4d6985cf83d71d893a6a2424513f08739",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNDdGwpOiBvawpDb250cm9sU2VydmljZShTVE9QKSBvbiB0aGUgc3RvcHBlZCBzZXJ2aWNlOiBlcnIgMTA2MgpDb250cm9sU2VydmljZShJTlRFUlJPR0FURSkgb24gdGhlIHN0b3BwZWQgc2VydmljZTogZXJyIDEwNjIKQ29udHJvbFNlcnZpY2UoUEFVU0UpIG9uIHRoZSBzdG9wcGVkIHNlcnZpY2U6IGVyciAxMDYyCkNvbnRyb2xTZXJ2aWNlKGNvZGUgMCkgb24gdGhlIHN0b3BwZWQgc2VydmljZTogZXJyIDg3CkNvbnRyb2xTZXJ2aWNlKGNvZGUgOTkpIG9uIHRoZSBzdG9wcGVkIHNlcnZpY2U6IGVyciA4NwpDb250cm9sU2VydmljZSh1c2VyLWRlZmluZWQgMTI4KSBvbiB0aGUgc3RvcHBlZCBzZXJ2aWNlOiBlcnIgMTA2MgpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoUEFVU0UpIG9uIHRoZSBydW5uaW5nIHNlcnZpY2U6IGVyciAxMDUyCkNvbnRyb2xTZXJ2aWNlKENPTlRJTlVFKSBvbiB0aGUgcnVubmluZyBzZXJ2aWNlOiBlcnIgMTA1MgpDb250cm9sU2VydmljZShjb2RlIDApIG9uIHRoZSBydW5uaW5nIHNlcnZpY2U6IGVyciA4NwpDb250cm9sU2VydmljZShjb2RlIDk5KSBvbiB0aGUgcnVubmluZyBzZXJ2aWNlOiBlcnIgODcKQ29udHJvbFNlcnZpY2UoY29kZSAyNTYpIG9uIHRoZSBydW5uaW5nIHNlcnZpY2U6IGVyciA4NwpDb250cm9sU2VydmljZSh1c2VyLWRlZmluZWQgMTI4KSBvbiB0aGUgcnVubmluZyBzZXJ2aWNlOiBvawpDb250cm9sU2VydmljZSh1c2VyLWRlZmluZWQgMjU1KSBvbiB0aGUgcnVubmluZyBzZXJ2aWNlOiBvawpPcGVuU2VydmljZVcoYWxsIGJ1dCBTVE9QKTogb2sKQ29udHJvbFNlcnZpY2UoU1RPUCkgd2l0aG91dCBTRVJWSUNFX1NUT1A6IGVyciA1CkNvbnRyb2xTZXJ2aWNlKElOVEVSUk9HQVRFKSB3aXRoIElOVEVSUk9HQVRFOiBvawpPcGVuU2VydmljZVcoYWxsIGJ1dCBJTlRFUlJPR0FURSk6IG9rCkNvbnRyb2xTZXJ2aWNlKElOVEVSUk9HQVRFKSB3aXRob3V0IFNFUlZJQ0VfSU5URVJST0dBVEU6IGVyciA1Ck9wZW5TZXJ2aWNlVyhhbGwgYnV0IFVTRVJfREVGSU5FRF9DT05UUk9MKTogb2sKQ29udHJvbFNlcnZpY2UoMTI4KSB3aXRob3V0IFNFUlZJQ0VfVVNFUl9ERUZJTkVEX0NPTlRST0w6IGVyciA1CkNvbnRyb2xTZXJ2aWNlKG1hbmFnZXIgaGFuZGxlKTogZXJyIDYKQ29udHJvbFNlcnZpY2UoU1RPUCk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpDcmVhdGVTZXJ2aWNlVyhQb2x5U3BlY1N2Y0N0bDIpOiBvawpTdGFydFNlcnZpY2VXKHNlcnZpY2UgdGhhdCBzdGF5cyBTVEFSVF9QRU5ESU5HKTogb2sKcGVuZGluZzogdHlwZT0weDEwIHN0YXRlPVNUQVJUX1BFTkRJTkcgYWNjZXB0ZWQ9MHgxIHdpbjMyPTAgc3BlY2lmaWM9MCBjaGVja3BvaW50PTEgaGludD0yMDAwMCBoYXNfcGlkPTEgZmxhZ3M9MApDb250cm9sU2VydmljZShJTlRFUlJPR0FURSkgd2hpbGUgU1RBUlRfUEVORElORzogb2sKQ29udHJvbFNlcnZpY2UoUEFVU0UpIHdoaWxlIFNUQVJUX1BFTkRJTkc6IGVyciAxMDYxCkNvbnRyb2xTZXJ2aWNlKFNUT1ApIHdoaWxlIFNUQVJUX1BFTkRJTkcgKHRoZSBzZXJ2aWNlIGFjY2VwdHMgaXQpOiBvawpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcCtl): ok\nControlService(STOP) on the stopped service: err 1062\nControlService(INTERROGATE) on the stopped service: err 1062\nControlService(PAUSE) on the stopped service: err 1062\nControlService(code 0) on the stopped service: err 87\nControlService(code 99) on the stopped service: err 87\nControlService(user-defined 128) on the stopped service: err 1062\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(PAUSE) on the running service: err 1052\nControlService(CONTINUE) on the running service: err 1052\nControlService(code 0) on the running service: err 87\nControlService(code 99) on the running service: err 87\nControlService(code 256) on the running service: err 87\nControlService(user-defined 128) on the running service: ok\nControlService(user-defined 255) on the running service: ok\nOpenServiceW(all but STOP): ok\nControlService(STOP) without SERVICE_STOP: err 5\nControlService(INTERROGATE) with INTERROGATE: ok\nOpenServiceW(all but INTERROGATE): ok\nControlService(INTERROGATE) without SERVICE_INTERROGATE: err 5\nOpenServiceW(all but USER_DEFINED_CONTROL): ok\nControlService(128) without SERVICE_USER_DEFINED_CONTROL: err 5\nControlService(manager handle): err 6\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nCreateServiceW(PolySpecSvcCtl2): ok\nStartServiceW(service that stays START_PENDING): ok\npending: type=0x10 state=START_PENDING accepted=0x1 win32=0 specific=0 checkpoint=1 hint=20000 has_pid=1 flags=0\nControlService(INTERROGATE) while START_PENDING: ok\nControlService(PAUSE) while START_PENDING: err 1061\nControlService(STOP) while START_PENDING (the service accepts it): ok\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 243
+    }
+  ]
+}

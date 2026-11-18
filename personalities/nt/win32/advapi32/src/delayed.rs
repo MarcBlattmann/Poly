@@ -15,15 +15,11 @@ poly_win32_rt::fail_exports!(
         CryptSignHashW,
         ImpersonateAnonymousToken,
         LogonUserW,
-        QueryServiceStatus,
-        CloseServiceHandle,
         CreateProcessWithTokenW,
         CryptCreateHash,
         CryptDestroyHash,
         CryptGetHashParam,
         DeregisterEventSource,
-        OpenSCManagerW,
-        OpenServiceW,
         RegisterEventSourceA,
         ReportEventA
     ]
