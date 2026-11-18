@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "loadex_regkind",
+      "exe_sha256": "5482f1ab6d397c86583c84c93c5215e395e58c59d6dfdf641c8537f12a535653",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UkVHS0lORF9OT05FOiAweDAwMDAwMDAwLCBsaWJyYXJ5IHNldCwgbmFtZSBQb2x5V3NUbDsgVHlwZUxpYiBrZXkgMCwgSW50ZXJmYWNlIGtleXMgMDAwClJFR0tJTkRfREVGQVVMVDogMHgwMDAwMDAwMCwgbGlicmFyeSBzZXQsIG5hbWUgUG9seVdzVGw7IFR5cGVMaWIga2V5IDAsIEludGVyZmFjZSBrZXlzIDAwMApSRUdLSU5EX1JFR0lTVEVSOiAweDAwMDAwMDAwLCBsaWJyYXJ5IHNldCwgbmFtZSBQb2x5V3NUbDsgVHlwZUxpYiBrZXkgMSwgSW50ZXJmYWNlIGtleXMgMTExCiAgSEtMTSBUeXBlTGliXDxMSUJJRD4KICAxLjAKICAgIChkZWZhdWx0KSA9IFBvbHkgdGVzdCBsaWJyYXJ5CiAgICAwCiAgICAgIHdpbjY0CiAgICAgICAgKGRlZmF1bHQpID0gPGZpbGU+CiAgICBGTEFHUwogICAgICAoZGVmYXVsdCkgPSAwCiAgICBIRUxQRElSCiAgICAgIChkZWZhdWx0KSA9IDxkaXI+CmFscmVhZHkgcmVnaXN0ZXJlZCB3aXRoIGFub3RoZXIgZmlsZSwgUkVHS0lORF9OT05FOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwYXRoIGlzIHRoZSBmaWxlIHJlZ2lzdGVyZWQgYmVmb3JlCmFscmVhZHkgcmVnaXN0ZXJlZCB3aXRoIGFub3RoZXIgZmlsZSwgUkVHS0lORF9ERUZBVUxUOiAweDAwMDAwMDAwLCB0aGUgcmVnaXN0ZXJlZCBwYXRoIGlzIHRoZSBmaWxlIHJlZ2lzdGVyZWQgYmVmb3JlCmFscmVhZHkgcmVnaXN0ZXJlZCB3aXRoIGFub3RoZXIgZmlsZSwgUkVHS0lORF9SRUdJU1RFUjogMHgwMDAwMDAwMCwgdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyB0aGUgZmlsZSBqdXN0IGxvYWRlZApyZWdraW5kIDM6IDB4ODAwNzAwNTcsIGxpYnJhcnkgbm90IHdyaXR0ZW47IFR5cGVMaWIga2V5IDAsIEludGVyZmFjZSBrZXlzIDAwMApyZWdraW5kIC0xOiAweDgwMDcwMDU3LCBsaWJyYXJ5IG5vdCB3cml0dGVuOyBUeXBlTGliIGtleSAwLCBJbnRlcmZhY2Uga2V5cyAwMDAKcmVna2luZCAxMDA6IDB4ODAwNzAwNTcsIGxpYnJhcnkgbm90IHdyaXR0ZW47IFR5cGVMaWIga2V5IDAsIEludGVyZmFjZSBrZXlzIDAwMAphIHJlbGF0aXZlIG5hbWUgdGhhdCBkb2VzIG5vdCBleGlzdDogMHg4MDAyOWM0YSwgbGlicmFyeSBOVUxMCk5VTEwgcGF0aDogMHg4MDA3MDA1NywgbGlicmFyeSBub3Qgd3JpdHRlbgpOVUxMIG91dHB1dDogMHg4MDA3MDA1NwphZnRlciB0aGUgZmlsZSB3YXMgZGVsZXRlZDogbmFtZSBQb2x5V3NUbCwgdmVyc2lvbiAxLjAsIHR5cGUgaW5mb3MgMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "REGKIND_NONE: 0x00000000, library set, name PolyWsTl; TypeLib key 0, Interface keys 000\nREGKIND_DEFAULT: 0x00000000, library set, name PolyWsTl; TypeLib key 0, Interface keys 000\nREGKIND_REGISTER: 0x00000000, library set, name PolyWsTl; TypeLib key 1, Interface keys 111\n  HKLM TypeLib\\<LIBID>\n  1.0\n    (default) = Poly test library\n    0\n      win64\n        (default) = <file>\n    FLAGS\n      (default) = 0\n    HELPDIR\n      (default) = <dir>\nalready registered with another file, REGKIND_NONE: 0x00000000, the registered path is the file registered before\nalready registered with another file, REGKIND_DEFAULT: 0x00000000, the registered path is the file registered before\nalready registered with another file, REGKIND_REGISTER: 0x00000000, the registered path is the file just loaded\nregkind 3: 0x80070057, library not written; TypeLib key 0, Interface keys 000\nregkind -1: 0x80070057, library not written; TypeLib key 0, Interface keys 000\nregkind 100: 0x80070057, library not written; TypeLib key 0, Interface keys 000\na relative name that does not exist: 0x80029c4a, library NULL\nNULL path: 0x80070057, library not written\nNULL output: 0x80070057\nafter the file was deleted: name PolyWsTl, version 1.0, type infos 3\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 78
+    }
+  ]
+}

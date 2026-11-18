@@ -187,6 +187,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dcomp.dll", super::DCOMP),
         // ADR 0220.
         ("comlaunch.exe", super::COMLAUNCH),
+        // ADR 0221.
+        ("services.exe", super::SERVICES_EXE),
     ] {
         if bytes.is_empty() {
             continue;

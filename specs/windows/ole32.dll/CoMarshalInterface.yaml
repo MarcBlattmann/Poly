@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoMarshalInterface.yaml
+id: windows/api/ole32.dll/CoMarshalInterface
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  Writes the marshalling data of an interface pointer into a stream (an OBJREF). For an object of the test library the standard marshaller is used: the interface's proxy/stub class is found through CoGetPSClsid (`{00020424-...}`, built from the registered type library). The tests also cover what the data does when another process reads it, and interface pointers passed as parameters of calls (callbacks), which are marshalled the same way.
+interface:
+  signature: "HRESULT CoMarshalInterface(IStream *pStm, REFIID riid, IUnknown *pUnk, DWORD dwDestContext, void *pvDestContext, DWORD mshlflags)"
+installer: "The updater's callbacks (IUpdaterCallback, IUpdaterObserver, IUpdaterAppStatesCallback) and the state objects it passes to them are marshalled this way implicitly on every call."
+rules:
+  objref: "success writes an OBJREF: bytes 0..3 `MEOW` (0x574f454d), bytes 4..7 the flags (1 = OBJREF_STANDARD for MSHCTX_LOCAL, NOSHAREDMEM and every context but INPROC; 4 = OBJREF_CUSTOM for MSHCTX_INPROC), bytes 8..23 the interface id asked for; for MSHCTX_LOCAL and MSHLFLAGS_NORMAL, TABLESTRONG, TABLEWEAK or NORMAL|NOPING the data of ITlEcho, IUnknown and IDispatch is 68 bytes (24 + 40 + 4: the standard object reference and an empty string-binding array), the stream position is at the end of the data"
+  references: "marshalling holds references on the object (its count goes up) until the data is released (CoReleaseMarshalData or the last unmarshal and release); after CoReleaseMarshalData the count is the one before"
+  interfaces: "ITlEcho, IUnknown, ITlDual and IDispatch (a QueryInterface by the marshaller) of the same object all marshal; a stream that already holds bytes gets the data appended at the position"
+  contexts_and_flags: "contexts 0, 1, 3 and 4 (LOCAL, NOSHAREDMEM, 3, INPROC) succeed; 5: E_UNEXPECTED 0x8000ffff; 6 and 0x80000000: E_INVALIDARG; flags 0x10, 3 and 0x80000000 are accepted (no validation)"
+  no_proxy_stub: "an interface with no proxy/stub registration (UnRegisterTypeLib run): ITlEcho fails with REGDB_E_IIDNOTREG 0x80040155 and writes nothing; IUnknown still works"
+  errors: "thread without COM: CO_E_NOTINITIALIZED 0x800401f0; NULL stream or NULL object: E_INVALIDARG; an interface the object does not implement (also an id nobody registered): E_NOINTERFACE 0x80004002, nothing written. A NULL interface id crashes the caller with an access violation (not specified)"
+  other_process: "bytes written for an MTA object and given to a second process (through a file) unmarshal there into a proxy (QueryInterface, AddRef and Release answered, IMarshal supported): AddLong, EchoBstr and GetPid calls reach the object in the first process while that process only waits (no message loop needed in an MTA); the object's references return to their start within 5 s after the second process ended; NORMAL data unmarshalled by one process: the first unmarshal succeeds; TABLESTRONG data can be unmarshalled by two processes in a row; after CoReleaseMarshalData of the table entry a third process's CoUnmarshalInterface fails with 0x800401fb"
+  proxy: "an interface pointer received from another process can itself be marshalled (LOCAL NORMAL gives the same 24-byte header, flags 1, a size no larger than CoGetMarshalSizeMax says); unmarshalling that data in the same process gives a proxy that reaches the same server process; INPROC and TABLESTRONG marshalling of a proxy succeed"
+  callback_parameter: "a server method that takes an interface pointer (Notify(ITlCallback*, long)) receives a proxy to the client's object and can call it while the client's call is still running: the callback runs on the client's STA thread when the client is an STA (the client needs no explicit message loop; COM dispatches it during the blocked call), on another thread of the client's MTA when it is an MTA; a callback that fails with 0x80040300 makes the server's call return that HRESULT to the client; a NULL interface pointer arrives as NULL; an ITlEcho proxy given where ITlCallback is expected: E_NOINTERFACE; two Notify calls in a row call the object four times"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
+  invalid_arg: "E_INVALIDARG 0x80070057"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  iid_not_registered: "REGDB_E_IIDNOTREG 0x80040155"
+  bad_context: "0x8000ffff for context 5"
+side_effects: "adds references on the marshalled object; the stream is written"
+threading: "the calling thread's apartment owns the object; data can be read in any apartment or process"
+ordering: []
+timing:
+  typical: "well under a millisecond in a process; a call through the result takes about a millisecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  MSHCTX_DIFFERENTMACHINE (the data holds machine-specific bindings), custom marshalling (IMarshal of the object), the free-threaded marshaller, security of the data, lifetimes after the exporting process died (the dead-server cases are in CoUnmarshalInterface).
