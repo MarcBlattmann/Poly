@@ -1,0 +1,34 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "edition": "Core",
+    "display": "25H2",
+    "session": "interactive"
+  },
+  "bundle": "29c555d308a1",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:56:21Z",
+  "timeout_ms": 90000,
+  "test_timeouts_s": {},
+  "runs": 2,
+  "tests": [
+    {
+      "name": "dpi_ctxfns_v",
+      "exe_sha256": "fa839c0154e783ffb4f441773f9b64cad7d45bddebde42576097052b06f95688",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnRocmVhZCBjb250ZXh0IHBlci1tb25pdG9yLXYyCkdldFByb2Nlc3NEcGlBd2FyZW5lc3MoTlVMTCkgaHIgMHgwIHZhbHVlIDIKR2V0UHJvY2Vzc0RwaUF3YXJlbmVzcyhjdXJyZW50IHByb2Nlc3MpIGhyIDB4MCB2YWx1ZSAyCklzUHJvY2Vzc0RQSUF3YXJlIHRydWUKR2V0RHBpQXdhcmVuZXNzQ29udGV4dEZvclByb2Nlc3MoTlVMTCkgcGVyLW1vbml0b3ItdjIKR2V0RHBpQXdhcmVuZXNzQ29udGV4dEZvclByb2Nlc3MoY3VycmVudCkgcGVyLW1vbml0b3ItdjIKR2V0U3lzdGVtRHBpRm9yUHJvY2VzcyhjdXJyZW50KSAxOTIKSXNWYWxpZERwaUF3YXJlbmVzc0NvbnRleHQ6IDB4ZmZmZmZmZmZmZmZmZmZmZi0+dHJ1ZSAweGZmZmZmZmZmZmZmZmZmZmUtPnRydWUgMHhmZmZmZmZmZmZmZmZmZmZkLT50cnVlIDB4ZmZmZmZmZmZmZmZmZmZmYy0+dHJ1ZSAweGZmZmZmZmZmZmZmZmZmZmItPnRydWUgMHgwLT5mYWxzZSAweDEtPmZhbHNlIDB4ZmZmZmZmZmZmZmZmZmZmYS0+ZmFsc2UgMHgxMjM0LT5mYWxzZQpHZXREcGlGb3JTeXN0ZW0gMTkyCkdldERwaUZyb21EcGlBd2FyZW5lc3NDb250ZXh0KHVuYXdhcmUpIDk2CkdldERwaUZyb21EcGlBd2FyZW5lc3NDb250ZXh0KHN5c3RlbSkgMTkyCkdldERwaUZyb21EcGlBd2FyZW5lc3NDb250ZXh0KHBlci1tb25pdG9yKSAwCkdldERwaUZyb21EcGlBd2FyZW5lc3NDb250ZXh0KHBlci1tb25pdG9yLXYyKSAwCkdldERwaUZyb21EcGlBd2FyZW5lc3NDb250ZXh0KGdkaS1zY2FsZWQpIDk2CmEgbmV3IHRvcC1sZXZlbCB3aW5kb3c6IGNvbnRleHQgcGVyLW1vbml0b3ItdjIgR2V0RHBpRm9yV2luZG93IDE5MgpkZXNrdG9wIHdpbmRvdzogY29udGV4dCBwZXItbW9uaXRvciBHZXREcGlGb3JXaW5kb3cgOTYKU01fQ1hTQ1JFRU4geCBTTV9DWVNDUkVFTiAyNTYweDE2MDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\nthread context per-monitor-v2\nGetProcessDpiAwareness(NULL) hr 0x0 value 2\nGetProcessDpiAwareness(current process) hr 0x0 value 2\nIsProcessDPIAware true\nGetDpiAwarenessContextForProcess(NULL) per-monitor-v2\nGetDpiAwarenessContextForProcess(current) per-monitor-v2\nGetSystemDpiForProcess(current) 192\nIsValidDpiAwarenessContext: 0xffffffffffffffff->true 0xfffffffffffffffe->true 0xfffffffffffffffd->true 0xfffffffffffffffc->true 0xfffffffffffffffb->true 0x0->false 0x1->false 0xfffffffffffffffa->false 0x1234->false\nGetDpiForSystem 192\nGetDpiFromDpiAwarenessContext(unaware) 96\nGetDpiFromDpiAwarenessContext(system) 192\nGetDpiFromDpiAwarenessContext(per-monitor) 0\nGetDpiFromDpiAwarenessContext(per-monitor-v2) 0\nGetDpiFromDpiAwarenessContext(gdi-scaled) 96\na new top-level window: context per-monitor-v2 GetDpiForWindow 192\ndesktop window: context per-monitor GetDpiForWindow 96\nSM_CXSCREEN x SM_CYSCREEN 2560x1600\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 233,
+      "session": "interactive-bottom/2560x1600/200"
+    }
+  ]
+}
