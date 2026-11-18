@@ -71,6 +71,7 @@ pub mod pe_writer;
 pub mod procattrs;
 pub mod protect;
 pub mod registry;
+pub mod scm;
 pub mod section;
 pub mod security;
 pub mod services;
@@ -293,6 +294,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         }
         PolyRandomBytes => sysinfo::random_bytes(k, regs),
         PolyPhysicalMemory => sysinfo::physical_memory(k, regs),
+        PolyServiceCall => scm::service_call(k, regs),
         PolyRequestElevation => consent::request_elevation(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),

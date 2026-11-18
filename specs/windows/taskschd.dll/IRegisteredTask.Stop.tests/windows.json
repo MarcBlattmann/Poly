@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "rts_stop_b",
+      "exe_sha256": "ae27a912196d011a1b9add73420d3d1904690d0939d215cb3c0a8fba5c4ce0fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpTdG9wIG9mIGEgdGFzayB0aGF0IGlzIG5vdCBydW5uaW5nOiBocj0weDAwMDAwMDAxCm9rIHByb2Nlc3MgdXAKd2hpbGUgcnVubmluZzogbmFtZT1baG9sZF0gcGF0aD1bXFBvbHlTcGVjXHRyc1xob2xkXSBzdGF0ZT00IChocj0weDAwMDAwMDAwKSBlbmFibGVkPXRydWUgKGhyPTB4MDAwMDAwMDApIGxhc3RyZXN1bHQ9MHgwMDA0MTMwMSAoaHI9MHgwMDAwMDAwMCkgZXZlciByYW49MSBtaXNzZWQ9MAp0aGUgaW5zdGFuY2Ugb2JqZWN0J3Mgc3RhdGU6IGhyPTB4MDAwMDAwMDAgNApHZXRJbnN0YW5jZXMgYWZ0ZXIgdGhlIHNlY29uZCBSdW46IGNvdW50PTEKc3RhdGUgYWZ0ZXIgU3RvcDogMwp0aGUgZW5kZWQgcHJvY2VzcyB3cm90ZSBpdHMgZW5kIG1hcmtlcjogMAppbnN0YW5jZSBTdG9wIGFmdGVyIHRoZSB0YXNrIHdhcyBzdG9wcGVkOiBocj0weDgwMDQxMzBCCmluc3RhbmNlIFN0b3A6IGhyPTB4MDAwMDAwMDAKUnVuIHdpdGggdGhlIGdvIG1hcmtlciBhbHJlYWR5IHRoZXJlOiBocj0weDAwMDAwMDAwCmFmdGVyIGEgcHJvY2VzcyB0aGF0IGVuZHMgd2l0aCA3OiBuYW1lPVtleGl0N10gcGF0aD1bXFBvbHlTcGVjXHRyc1xleGl0N10gc3RhdGU9MyAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD10cnVlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwMDAwMDcgKGhyPTB4MDAwMDAwMDApIGV2ZXIgcmFuPTEgbWlzc2VkPTAKc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nStop of a task that is not running: hr=0x00000001\nok process up\nwhile running: name=[hold] path=[\\PolySpec\\trs\\hold] state=4 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041301 (hr=0x00000000) ever ran=1 missed=0\nthe instance object's state: hr=0x00000000 4\nGetInstances after the second Run: count=1\nstate after Stop: 3\nthe ended process wrote its end marker: 0\ninstance Stop after the task was stopped: hr=0x8004130B\ninstance Stop: hr=0x00000000\nRun with the go marker already there: hr=0x00000000\nafter a process that ends with 7: name=[exit7] path=[\\PolySpec\\trs\\exit7] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00000007 (hr=0x00000000) ever ran=1 missed=0\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1746
+    },
+    {
+      "name": "rts_stop_c",
+      "exe_sha256": "5bd6d6a69591af97aed1b3951ded2233760e334487239f690509165a64275fe3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpSdW46IGhyPTB4MDAwMDAwMDAKb2sgcHJvY2VzcyB1cApzdGF0ZSB3aGlsZSB0aGUgcHJvY2VzcyBydW5zOiA0CkdldFJ1bm5pbmdUYXNrcygwKTogaHI9MHgwMDAwMDAwMCBsaXN0cyB0aGlzIHRhc2sgMSB0aW1lKHMpCmluc3RhbmNlIFJlZnJlc2g6IGhyPTB4MDAwMDAwMDAKR2V0SW5zdGFuY2VzIGFmdGVyIFN0b3A6IGNvdW50PTAKU3RvcCBhZ2FpbjogaHI9MHgwMDAwMDAwMQp0aGUgb2xkIGluc3RhbmNlIG9iamVjdCdzIHN0YXRlOiBocj0weDAwMDAwMDAwIDQKc3RhdGUgYWZ0ZXIgdGhlIGluc3RhbmNlJ3MgU3RvcDogMwp0aGUgcHJvY2VzcyBlbmRlZCBieSBpdHNlbGY6IDEKc3VtbWFyeSAzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nRun: hr=0x00000000\nok process up\nstate while the process runs: 4\nGetRunningTasks(0): hr=0x00000000 lists this task 1 time(s)\ninstance Refresh: hr=0x00000000\nGetInstances after Stop: count=0\nStop again: hr=0x00000001\nthe old instance object's state: hr=0x00000000 4\nstate after the instance's Stop: 3\nthe process ended by itself: 1\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1808
+    }
+  ]
+}

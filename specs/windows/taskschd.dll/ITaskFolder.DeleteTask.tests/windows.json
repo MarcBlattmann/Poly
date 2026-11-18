@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "tfd_deletetask",
+      "exe_sha256": "7f96bab4c747e55e5512b6c9b78954744809a97c19cb5c2230b6b4f57de4bc1a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpEZWxldGVUYXNrKGEpIGJ5IGEgbmFtZSBpbiB0aGUgZm9sZGVyOiBocj0weDAwMDAwMDAwCkRlbGV0ZVRhc2sgYnkgYW4gYWJzb2x1dGUgcGF0aCwgb3RoZXIgY2FzZTogaHI9MHgwMDAwMDAwMApEZWxldGVUYXNrKGVtcHR5KTogaHI9MHg4MDA3MDA5MQpEZWxldGVUYXNrKE5VTEwpOiBocj0weDgwMDcwMDkxCkRlbGV0ZVRhc2soYywgZmxhZ3MgMik6IGhyPTB4ODAwNzAwNTcKICBHZXRUYXNrKGMpOiBocj0weDAwMDAwMDAwCkRlbGV0ZVRhc2soc3ViXGUpIG9uY2UgbW9yZTogaHI9MHg4MDA3MDAwMgp0aGUgcHJvY2VzcyBzdGFydGVkOiAxCiAgR2V0VGFzayhydW4pIGFmdGVyd2FyZHM6IGhyPTB4ODAwNzAwMDIKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nok register\nok register\nok register\nok register\nDeleteTask(a) by a name in the folder: hr=0x00000000\nDeleteTask by an absolute path, other case: hr=0x00000000\nDeleteTask(empty): hr=0x80070091\nDeleteTask(NULL): hr=0x80070091\nDeleteTask(c, flags 2): hr=0x80070057\n  GetTask(c): hr=0x00000000\nDeleteTask(sub\\e) once more: hr=0x80070002\nthe process started: 1\n  GetTask(run) afterwards: hr=0x80070002\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 344
+    },
+    {
+      "name": "tfd_deletetask_c",
+      "exe_sha256": "839a5b939feb3a1adebfd91172d12c90a54456dd6d14a9e7be8af8f9f91be78e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpvayByZWdpc3RlcgpEZWxldGVUYXNrKGEpIGFnYWluOiBocj0weDgwMDcwMDAyCkRlbGV0ZVRhc2soc3ViKSB3aGljaCBpcyBhIGZvbGRlcjogaHI9MHgwMDAwMDAwMApEZWxldGVUYXNrKGMqKTogaHI9MHg4MDA3MDAwMgogIEdldFRhc2soYyk6IGhyPTB4MDAwMDAwMDAKRGVsZXRlVGFzayhjLCBmbGFncyAxNik6IGhyPTB4ODAwNzAwNTcKICBHZXRUYXNrKGMpOiBocj0weDAwMDAwMDAwClJ1bjogaHI9MHgwMDAwMDAwMApEZWxldGVUYXNrKHJ1bikgd2hpbGUgaXQgcnVuczogaHI9MHgwMDAwMDAwMAp0aGUgcHJvY2VzcyB3cm90ZSBpdHMgZW5kIG1hcmtlciBhZnRlciBiZWluZyBsZXQgZ286IDEKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nok register\nok register\nok register\nok register\nDeleteTask(a) again: hr=0x80070002\nDeleteTask(sub) which is a folder: hr=0x00000000\nDeleteTask(c*): hr=0x80070002\n  GetTask(c): hr=0x00000000\nDeleteTask(c, flags 16): hr=0x80070057\n  GetTask(c): hr=0x00000000\nRun: hr=0x00000000\nDeleteTask(run) while it runs: hr=0x00000000\nthe process wrote its end marker after being let go: 1\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 325
+    }
+  ]
+}

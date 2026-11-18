@@ -96,7 +96,7 @@ As ADR 0171 made them, now visible with two levels:
 
 ### The consent broker (`personalities/nt/src/consent.rs`)
 
-`PolyRequestElevation(Path, PathLength, Token*)` is Poly's own service (`TABLE_POLY` 5, exported
+`PolyRequestElevation(Path, PathLength, Token*)` is Poly's own service (`TABLE_POLY` 6, exported
 by both `ntdll`s). The calling thread waits on an event until an answer comes. Three things can
 answer, in this order:
 

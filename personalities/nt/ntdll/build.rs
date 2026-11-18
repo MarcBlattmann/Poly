@@ -85,6 +85,8 @@ fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:PolyRandomBytes");
     // And the physical memory sizes, for `GlobalMemoryStatusEx` (ADR 0206).
     println!("cargo:rustc-link-arg=/EXPORT:PolyPhysicalMemory");
+    // And the service control manager's message call, for advapi32 and services.exe (ADR 0221).
+    println!("cargo:rustc-link-arg=/EXPORT:PolyServiceCall");
     println!("cargo:rustc-link-arg=/EXPORT:PolyRequestElevation");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.

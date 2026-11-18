@@ -318,6 +318,10 @@ pub enum Service {
     /// from a system call, not from a `/proc` file a sandboxed token cannot open).
     /// `STATUS_NOT_IMPLEMENTED` from a kernel that does not count memory.
     PolyPhysicalMemory,
+    /// `PolyServiceCall(Operation, In, InLength, Out, OutLength, ReturnLength*)`: one message to
+    /// the service control manager and its reply (ADR 0221, [`crate::scm`]); `advapi32`'s service
+    /// functions and `services.exe` are its callers.
+    PolyServiceCall,
     /// `PolyRequestElevation(Path, PathLength, Token*)`: the consent broker of User Account
     /// Control (ADR 0222, [`crate::consent`]): asks the user whether the program at `Path` may run
     /// elevated and waits; `STATUS_SUCCESS` with a full primary token for a yes, `STATUS_CANCELLED`
@@ -486,7 +490,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 80] = [
+pub const SERVICES: [(Service, u32, &str); 81] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -566,7 +570,8 @@ pub const SERVICES: [(Service, u32, &str); 80] = [
     (Service::PolyDebugPrint, (TABLE_POLY << 12) | 2, "PolyDebugPrint"),
     (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
     (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
-    (Service::PolyRequestElevation, (TABLE_POLY << 12) | 5, "PolyRequestElevation"),
+    (Service::PolyServiceCall, (TABLE_POLY << 12) | 5, "PolyServiceCall"),
+    (Service::PolyRequestElevation, (TABLE_POLY << 12) | 6, "PolyRequestElevation"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the

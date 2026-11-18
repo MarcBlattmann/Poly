@@ -95,3 +95,11 @@ Left for B2b to B2d: everything that needs more than `IUnknown` / `IClassFactory
   for the in-process context are **per apartment**.
 - The tests write class keys under `HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...}` and (for services) the service
   `PolyWsComSvc<n>`; Poly's registry and SCM entries (B1) have to let a test program do the same.
+
+## 5. Status
+
+B2a is implemented by [ADR 0220](../adr/0220-com-across-processes-an-activation-process-object-exporters-on-named-pipes-and-the-class-table.md)
+(track `impl-chrome-installer-com`): the class table, `comlaunch.exe` (the activation process), proxies for
+`IUnknown`/`IClassFactory` across apartments and processes, the server count and initialisation spies. 22 of the 24
+visible tests pass on Poly; the two LocalService tests wait for B1's service functions. The ADR's section 6 says
+where B2b's marshalling and B2c's security plug in.

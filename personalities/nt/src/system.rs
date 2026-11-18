@@ -87,6 +87,8 @@ pub struct NtSystem {
 
     /// The window stations and desktops and who is on them (ADR 0192).
     pub winsta: crate::winsta::WinSta,
+    /// The service control manager (ADR 0221).
+    pub scm: crate::scm::ScmState,
     /// What a process keeps that another can set and a child inherits: error mode, memory
     /// priority, power throttling ([`crate::procattrs`]). A process without an entry has the
     /// defaults.
@@ -157,6 +159,7 @@ impl NtSystem {
             jobs: crate::job::Jobs::default(),
             lowbox_sids: Vec::new(),
             winsta: crate::winsta::WinSta::default(),
+            scm: crate::scm::ScmState::default(),
             proc_attrs: BTreeMap::new(),
             working_sets: BTreeMap::new(),
             ntdll32: &[],
