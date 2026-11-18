@@ -610,8 +610,7 @@ Exec=mine
             ("/root/.local/share/applications/poly-appimage-hello-pixels.desktop", OWN),
         ]);
         let apps = installed_for_user(&disk, user, &mut |_, _| {});
-        let as_user: Vec<&str> =
-            apps.iter().filter(|a| runs_as_user(&disk, user, a)).map(|a| a.id.as_str()).collect();
+        let as_user: Vec<&str> = apps.iter().filter(|a| runs_as_user(&disk, user, a)).map(|a| a.id.as_str()).collect();
         assert_eq!(as_user, ["google-chrome.desktop"], "not Poly's apps, a terminal app, nor the user's own");
         let chrome = apps.iter().find(|a| a.id == "google-chrome.desktop").unwrap();
         assert_eq!(

@@ -17,9 +17,9 @@
 //!    `chrome-sandbox` is set-user-ID root.
 //! 3. The installer's **Open** starts it the way the launcher does: as user
 //!    `poly` (Chrome refuses to run its sandbox as root), and a window shows.
-//! 4. Chrome opens a test page, which is drawn: the four colours of
-//!    `colours.html` fill the window's quadrants. Its first-run dialogs are
-//!    answered if they come.
+//! 4. Its first start's windows are answered (Terms, Welcome, sign-in)
+//!    until its new tab page shows; then a test page in a new window is
+//!    drawn: the four colours of `colours.html` fill its quadrants.
 //! 5. bash's process substitution, which Chrome's launch script uses
 //!    (`exec > >(exec cat)`), works: a pipe's `/dev/fd` link opens the pipe.
 
@@ -83,27 +83,21 @@ fn installer_step(m: &mut Machine, from: usize, what: &str) -> Result {
     }
 }
 
-/// Answer Chrome's first-run dialogs (its Terms, Welcome) if one is the
-/// newest window after `from`; whether one was.
-fn answer_first_run(m: &mut Machine, from: usize) -> Result<bool> {
-    let text = m.text();
-    let after = text.get(from..).unwrap_or_default();
-    let newest = after.lines().rfind(|l| l.contains("poly-compositor: window \"") && l.contains(" shown at "));
-    let Some(line) = newest else { return Ok(false) };
-    let Some((x, y, w, h)) = line.split_once("\" shown at").and_then(|(_, r)| window_place(&format!(" shown at{r}")))
-    else {
-        return Ok(false);
-    };
-    if line.contains("Terms of Service") {
-        // Accept: the main button in the bottom right corner.
-        m.click(x + w - 62, y + h - 40)?;
+/// Answer one of Chrome's first-run windows shown at `place` with title
+/// line `line`: its Terms (**Accept**), Welcome (**OK**), the sign-in page
+/// (**Stay signed out**); the buttons are in the bottom right corner.
+fn answer_first_run(m: &mut Machine, line: &str, (x, y, w, h): (i32, i32, i32, i32)) -> Result<bool> {
+    let at = if line.contains("Terms of Service") {
+        (x + w - 62, y + h - 40)
     } else if line.contains("Welcome to Google Chrome") {
-        // OK, bottom right.
-        m.click(x + w - 53, y + h - 39)?;
+        (x + w - 53, y + h - 39)
+    } else if line.contains("window \"Google Chrome\" shown") {
+        (x + w - 237, y + h - 43)
     } else {
         return Ok(false);
-    }
-    std::thread::sleep(Duration::from_secs(3));
+    };
+    m.click(at.0, at.1)?;
+    eprintln!("==> answered {line}");
     Ok(true)
 }
 
@@ -173,31 +167,50 @@ fn scenario(m: &mut Machine) -> Result {
     let out = m.run(&format!("echo uid-$(awk '/^Uid:/ {{print $2}}' /proc/{pid}/status)"))?;
     expect(&format!("Chrome runs as user poly ({out:?})"), out.contains("uid-1000"))?;
 
-    // 4. A test page drawn. The first-run dialogs first, if they come.
-    let from_first = m.text_len().saturating_sub(4096);
-    let page = format!("file:///{}/colours.html", chromium::PAGES_DIR);
-    let from = m.text_len();
-    m.send_line(&format!(
-        "/usr/local/bin/poly-as-user /usr/bin/google-chrome-stable --no-default-browser-check {page} > /tmp/gc.log 2>&1 &"
-    ))?;
-    let deadline = std::time::Instant::now() + WINDOW_WAIT;
-    let place = loop {
+    // Its first start: each first-run window answered once, until its own
+    // window, the new tab page.
+    let deadline = std::time::Instant::now() + 2 * WINDOW_WAIT;
+    let mut answered = 0;
+    loop {
         let text = m.text();
-        if let Some(at) = text.get(from..).and_then(|t| t.find("window \"Poly Chromium colours")) {
-            let line = &text[from + at..];
-            let line = &line[..line.find('\n').unwrap_or(line.len())];
-            if let Some(p) = line.split_once("\" shown at").and_then(|(_, r)| window_place(&format!(" shown at{r}"))) {
-                break p;
-            }
+        let after = text.get(from..).unwrap_or_default();
+        if after.contains("window \"New Tab - Google Chrome\" shown") {
+            break;
         }
-        if answer_first_run(m, from_first)? {
+        let shown: Vec<String> = after
+            .lines()
+            .filter(|l| l.contains("poly-compositor: window \"") && l.contains(" shown at "))
+            .map(String::from)
+            .collect();
+        if shown.len() > answered {
+            answered = shown.len();
+            let line = &shown[answered - 1];
+            if let Some(place) =
+                line.split_once("\" shown at").and_then(|(_, r)| window_place(&format!(" shown at{r}")))
+            {
+                std::thread::sleep(Duration::from_secs(2));
+                if answer_first_run(m, line, place)? {
+                    m.shot("chrome-first-run")?;
+                }
+            }
             continue;
         }
         if std::time::Instant::now() > deadline {
-            return Err(format!("no window of the test page within {} s", WINDOW_WAIT.as_secs()));
+            m.shot("chrome-first-run-stuck")?;
+            return Err(format!("Chrome's new tab page did not come within {} s", (2 * WINDOW_WAIT).as_secs()));
         }
         std::thread::sleep(Duration::from_secs(2));
-    };
+    }
+    m.shot("chrome-new-tab")?;
+
+    // 4. A test page in a window of its own, drawn.
+    let page = format!("file:///{}/colours.html", chromium::PAGES_DIR);
+    let from = m.text_len();
+    m.send_line(&format!(
+        "/usr/local/bin/poly-as-user /usr/bin/google-chrome-stable --new-window {page} > /tmp/gc.log 2>&1 &"
+    ))?;
+    let rest = m.seen(from, "window \"Poly Chromium colours - Google Chrome\"", WINDOW_WAIT)?;
+    let place = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
     let (px, py, pw, ph) = place;
     let deadline = std::time::Instant::now() + WINDOW_WAIT;
     loop {

@@ -131,14 +131,19 @@ pub const APPS_USER_HOME: &str = "POLY_APPS_USER_HOME";
 /// (`apps_home`, [`APPS_USER_HOME`]) after Home, labelled Downloads, when
 /// it exists and the list has no Downloads place of its own: what a browser
 /// downloaded is one click away.
-pub fn with_apps_user_downloads(mut places: Vec<Place>, apps_home: Option<&str>, exists: &dyn Fn(&str) -> bool) -> Vec<Place> {
+pub fn with_apps_user_downloads(
+    mut places: Vec<Place>,
+    apps_home: Option<&str>,
+    exists: &dyn Fn(&str) -> bool,
+) -> Vec<Place> {
     let Some(apps_home) = apps_home.filter(|h| h.starts_with('/')) else { return places };
     let path = crate::path::join(&normalize(apps_home), "Downloads");
     if places.iter().any(|p| p.kind == PlaceKind::Downloads || p.path == path) || !exists(&path) {
         return places;
     }
     let at = places.iter().position(|p| p.kind == PlaceKind::Home).map_or(0, |i| i + 1);
-    places.insert(at, Place { label: "Downloads".into(), path, icon: PlaceIcon::Downloads, kind: PlaceKind::Downloads });
+    places
+        .insert(at, Place { label: "Downloads".into(), path, icon: PlaceIcon::Downloads, kind: PlaceKind::Downloads });
     places
 }
 

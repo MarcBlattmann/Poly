@@ -317,7 +317,7 @@ fn writeback_takes_more_dirty_pages_than_a_batch() {
     let (da, db) = (pattern(5, 70 * PAGE_SIZE), pattern(6, 33 * PAGE_SIZE + 1));
     fs.write(a, 0, &da).unwrap();
     fs.write(b, 0, &db).unwrap();
-    assert!(70 + 34 > 2 * WRITEBACK_BATCH);
+    const { assert!(70 + 34 > 2 * WRITEBACK_BATCH) };
     assert_eq!(cache.writeback_all().unwrap(), 70 + 34);
     assert_eq!(fs.page_counts().1, 0, "nothing dirty left");
     assert_eq!((probe.contents(a), probe.contents(b)), (da, db));

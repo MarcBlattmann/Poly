@@ -76,7 +76,11 @@ pub fn launcher_reopen(
         Some(since) if now_ms.saturating_sub(since) >= REOPEN_WAIT_MS => (true, None),
         Some(since) => (false, Some(since)),
         None if had_windows || app_exited => {
-            if apps_running { (false, Some(now_ms)) } else { (true, None) }
+            if apps_running {
+                (false, Some(now_ms))
+            } else {
+                (true, None)
+            }
         }
         None => (false, None),
     }
@@ -336,11 +340,27 @@ mod tests {
 
     #[test]
     fn an_empty_desktop_returns_to_the_launcher_after_an_app_exits() {
-        assert_eq!(launcher_reopen(false, false, false, true, false, None, 0), (true, None), "no-window apps such as notify-send");
+        assert_eq!(
+            launcher_reopen(false, false, false, true, false, None, 0),
+            (true, None),
+            "no-window apps such as notify-send"
+        );
         assert_eq!(launcher_reopen(false, false, true, false, false, None, 0), (true, None), "the last window closed");
-        assert_eq!(launcher_reopen(true, false, false, true, false, None, 0), (false, None), "do not toggle a visible launcher off");
-        assert_eq!(launcher_reopen(false, true, true, true, false, None, 0), (false, None), "another window is still open");
-        assert_eq!(launcher_reopen(false, false, false, false, true, None, 0), (false, None), "a live app has not opened a window yet");
+        assert_eq!(
+            launcher_reopen(true, false, false, true, false, None, 0),
+            (false, None),
+            "do not toggle a visible launcher off"
+        );
+        assert_eq!(
+            launcher_reopen(false, true, true, true, false, None, 0),
+            (false, None),
+            "another window is still open"
+        );
+        assert_eq!(
+            launcher_reopen(false, false, false, false, true, None, 0),
+            (false, None),
+            "a live app has not opened a window yet"
+        );
     }
 
     #[test]
