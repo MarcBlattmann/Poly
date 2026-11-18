@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoUnmarshalInterface.yaml
+id: windows/api/ole32.dll/CoUnmarshalInterface
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. [MS-DCOM] 2.2.18 (OBJREF: signature `MEOW`, flags, interface id) for the first bytes of a marshalled interface; [MS-OAUT] for the automation types (BSTR, VARIANT, SAFEARRAY) as far as the tests' results are about them; Microsoft Learn: "CoMarshalInterface", "CoUnmarshalInterface", "CoReleaseMarshalData", "CoGetMarshalSizeMax", "CoGetStandardMarshal", "CoGetPSClsid", "CoRegisterPSClsid", "IMarshal", "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IDispatch", "IErrorInfo", "ICreateErrorInfo", "MSHCTX", "MSHLFLAGS".
+summary: >
+  Reads the marshalling data from a stream and returns the interface: the original pointer when the object lives in the same apartment, a proxy otherwise. Calls through such a proxy to a server in another process are the type-library marshaller at work; the five `call_*` tests specify it: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], interface pointers and QueryInterface, the death of the server.
+interface:
+  signature: "HRESULT CoUnmarshalInterface(IStream *pStm, REFIID riid, LPVOID *ppv)"
+installer: "Every call from the installer to the update service, and the callbacks back, are such calls."
+rules:
+  same_apartment: "NORMAL data of an object of this apartment returns the original pointer; the stream position moves to the end of the data; the same NORMAL data again fails with CO_E_OBJNOTCONNECTED 0x800401fd and so does data that was released; TABLESTRONG data can be unmarshalled many times (each gives the original pointer) until CoReleaseMarshalData, after which 0x800401fd"
+  other_apartment: "unmarshalled in an STA thread of the same process the object comes back as a proxy that answers calls (AddLong returns the right sum)"
+  interface_asked: "data marshalled as ITlEcho can be unmarshalled as IUnknown, IDispatch and ITlDual (the interfaces the object has); as ITlCallback (not implemented) and as an unregistered id: E_NOINTERFACE, pointer NULL"
+  damaged_streams: "an empty stream: STG_E_READFAULT 0x8003001e; 10 bytes of 1 to 10: 0x8003001e; the first 40 bytes of valid data: 0x8003001e; valid data with the signature damaged: RPC_E_INVALID_OBJREF 0x8001011d; NULL stream: E_INVALIDARG with the output untouched; thread without COM: CO_E_NOTINITIALIZED 0x800401f0"
+  call_proxy: "a CoCreateInstance(LOCAL_SERVER) object is a proxy (it answers IMarshal); QueryInterface for IUnknown gives a pointer different from the interface pointer and calls work through it; AddRef and Release on a proxy return counts that differ by one"
+  integers_and_bstr: "AddLong passes 32-bit values unchanged (wrap-around included); a BSTR sent and returned arrives with the same contents: empty (a non-NULL empty BSTR stays non-NULL), ASCII, non-ASCII, with embedded NULs (length kept), 5000 characters; NULL stays NULL; a BSTR of 5 bytes (odd byte length) reaches the server with byte length 5; two BSTRs in and one out work, with a NULL input treated as empty by the server"
+  lpwstr: "[in] LPWSTR (vt 31) arrives intact (empty, ASCII, non-ASCII, 3000 characters; the server counts the characters); a NULL LPWSTR fails in the client with RPC_X_NULL_REF_POINTER 0x800706f4 and the server is not called"
+  int64_property: "a property get returning a 64-bit integer ([out, retval] hyper*) returns the whole 64-bit value"
+  variants: "the variant types VT_EMPTY, NULL, I2, I4, R8, BOOL, ERROR, UI1, UI8, DATE, CY, BSTR (a NULL string comes back as a non-NULL empty one), ARRAY|I4 (bounds kept) and VT_BYREF|I4 (the server receives vt 0x4003 and the returned copy is the pointed-to value, vt 3) all return unchanged; VT_UNKNOWN or VT_DISPATCH with a NULL pointer returns the same type with NULL; an interface pointer inside a VARIANT: the client's own object comes back as the original pointer (not a proxy); an array of two IDispatch proxies (VT_ARRAY|VT_DISPATCH) comes back as two proxies that answer QueryInterface(ITlDual) and calls; invalid types 0x1234, 15 and 0x7f: DISP_E_BADVARTYPE 0x80020008 in the client, the server is not called"
+  safearrays: "SAFEARRAY(long) in: lower bounds 0, 1 and -3, 4 elements, 1 element and an empty array arrive with their bounds (the server reports them) and the right contents; NULL arrives as NULL; a 2-dimensional array is accepted (the server sees dimension 1's bounds); a returned SAFEARRAY(long) keeps its lower bound (the server made 5), dimension count 1, element type 3 and contents, for 0, 1, 4 and 1000 elements"
+  in_out: "[in, out] long* and BSTR*: the server sees the old values and the caller gets the new ones (including a NULL BSTR going in)"
+  objects_returned: "an interface pointer returned from a method (IUnknown** or ITlEcho**) is a new proxy each time; QueryInterface on it for ITlEcho works and calls it; QueryInterface for an interface of the library the object does not implement or for an unregistered id: E_NOINTERFACE, pointer NULL; the server frees an object when the last proxy reference of every client is gone (the server log shows the release)"
+  dead_server: "after the server process ended, a call through any proxy fails with RPC_S_SERVER_UNAVAILABLE 0x800706ba (the out parameters are not written), QueryInterface(IUnknown) on a proxy that was not released still answers from the proxy, Release of the last reference returns 0; a CoCreateInstance for the class afterwards starts a new server and works"
+  server_crash: "a server that fails (not specified here): the call returns 0x800706be RPC_S_CALL_FAILED and later calls 0x800706ba"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401f0"
+  used_up: "CO_E_OBJNOTCONNECTED 0x800401fd"
+  read_fault: "STG_E_READFAULT 0x8003001e"
+  invalid_objref: "RPC_E_INVALID_OBJREF 0x8001011d"
+  bad_vartype: "DISP_E_BADVARTYPE 0x80020008"
+  null_ref: "RPC_X_NULL_REF_POINTER 0x800706f4"
+  server_unavailable: "RPC_S_SERVER_UNAVAILABLE 0x800706ba"
+  no_interface: "E_NOINTERFACE 0x80004002"
+side_effects: "creates proxies; releases of proxies reach the server"
+threading: "proxies in an STA are called from that thread; calls block in a message-dispatching wait so callbacks can arrive"
+ordering: ["calls on one proxy from one thread are executed by the server in order"]
+timing:
+  typical: "about a millisecond per call between two processes"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image builds, registers and removes its own type library (see CreateTypeLib2), and, for the tests that call a server, is its own COM server (`--child tls <tag> seed=<n>`: a class registered under HKLM with `LocalServer32` = the image, a class factory, objects implementing the custom interface ITlEcho (15 methods: integers, BSTR, LPWSTR, VARIANT, SAFEARRAY, [in, out], failing methods, IErrorInfo, objects returned, a callback, a 64-bit property) and the dual interface ITlDual (IDispatch with 6 methods and a property)). Observations are results, booleans and counts, never process ids or addresses; the server's own log lines (which calls it received) are printed too.
+not_covered: >
+  VT_RECORD, VT_DECIMAL, VT_VARIANT|VT_BYREF, arrays of BSTR, VARIANT or records, SAFEARRAY(interface) outside a VARIANT, [in] structures, user-defined types, [size_is] arrays, very large buffers, asynchronous calls and cancel, multithreaded callers, the exact count of references held by proxies and stubs.

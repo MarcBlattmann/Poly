@@ -282,6 +282,7 @@ dependencies = [
  "poly-pe",
  "poly-registry",
  "poly-rtl",
+ "poly-scm",
  "poly-security",
  "poly-seh",
  "poly-vfs",
@@ -333,6 +334,14 @@ dependencies = [
 [[package]]
 name = "poly-sched"
 version = "0.0.1"
+
+[[package]]
+name = "poly-scm"
+version = "0.0.1"
+dependencies = [
+ "poly-registry",
+ "poly-security",
+]
 
 [[package]]
 name = "poly-security"

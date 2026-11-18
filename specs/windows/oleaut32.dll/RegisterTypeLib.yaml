@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/RegisterTypeLib.yaml
+id: windows/api/oleaut32.dll/RegisterTypeLib
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Writes the registration of a loaded library under HKLM\SOFTWARE\Classes (the process is elevated): the TypeLib key and an Interface key for each interface of the library that the automation marshaller can handle. This is what puts `ProxyStubClsid32 = {00020424-0000-0000-C000-000000000046}` and `TypeLib` under each of the updater's 37 interfaces.
+interface:
+  signature: "HRESULT RegisterTypeLib(ITypeLib *ptlib, LPCOLESTR szFullPath, LPCOLESTR szHelpDir)"
+installer: "The 37 Interface keys and the TypeLib keys of the install are exactly what this call writes (win64 value `...\\updater.exe\\4`)."
+rules:
+  type_lib_keys: "TypeLib\\{LIBID} gets one subkey per version `<major>.<minor>` (decimal): its default value is the library's doc string (`Poly test library`); subkey `<lcid in hex>` (`0` for the neutral LCID, `409` for 0x409) with subkey `win64` (for a syskind 3 library; `win32` for syskind 1) whose default value is the full path as given, verbatim (also a path that does not exist, an empty path, a relative name); subkey `FLAGS` with default value the library flags as a decimal text (`0`; `5` for RESTRICTED|HIDDEN set with SetLibFlags; LIBFLAG_FHASDISKIMAGE is not included); subkey `HELPDIR` with the directory of the file when the help directory argument is NULL, else the argument as given"
+  interface_keys: "for each interface type of the library (kind 3, and kind 4 with the dual flag) that is oleautomation or dual: Interface\\{IID} with default value the interface's name, subkey `ProxyStubClsid32` with default value `{00020424-0000-0000-C000-000000000046}` and subkey `TypeLib` with default value the library id in braces and a string value `Version` = `<major>.<minor>` of the library; interfaces not flagged oleautomation get no key (a library whose custom interfaces lack the flag registers only its dual interface); a dual interface made as a dispatch type is registered the same way as one made as an interface"
+  hives: "nothing is written under HKCU"
+  again: "registering the same file again succeeds and leaves the same keys; a different help directory replaces HELPDIR"
+  versions: "registering version 1.1 of a library registered at 1.0 adds subkey `1.1` (the 1.0 key stays) and the Interface keys' `TypeLib\\Version` becomes `1.1`"
+  null_arguments: "NULL library or NULL path: E_INVALIDARG 0x80070057"
+errors:
+  invalid_arg: "E_INVALIDARG 0x80070057"
+side_effects: "writes HKLM\\SOFTWARE\\Classes\\TypeLib and \\Interface; needs an elevated token"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "a few milliseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  RegisterTypeLib as a non-administrator (HKLM write fails: not observed), 32-bit libraries registered from a 64-bit process (win32 value in the WOW6432Node view), coclass registration (none is made), the keys for libraries with enums, records and aliases.

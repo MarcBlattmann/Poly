@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/EnumServicesStatusExW.yaml
+id: windows/api/advapi32.dll/EnumServicesStatusExW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory; the tests create throwaway services named PolySpecSvc* with the test program's own image as the service process, and delete them again; the non-elevated observations were also made through the runner's -Interactive mode (a UAC-filtered token)"
+  observed_by: spec-win-services
+  date: 2026-11-17
+sources: "Observations of our own test programs on the machine above and one-off probes (a PowerShell script that calls the same functions, a 30 second timing probe, a run through the runner's interactive session for the non-elevated caller). Microsoft Learn: \"Service Control Manager\", \"Service Security and Access Rights\", \"Service Functions\", the page of each function; winsvc.h, winnt.h, winerror.h for constants and layouts. The imports of the installers, the updater, setup.exe and elevation_service.exe of Google Chrome (names only, survey-chrome-installer) say which calls matter. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled; nothing of Chrome is committed. The facts the entries share are in specs/windows/advapi32.dll/SERVICES.md."
+summary: "Lists the services of the database with their status, filtered by type and state, in a caller's buffer of ENUM_SERVICE_STATUS_PROCESSW entries (service name, display name, status process) with the strings in the same buffer, with a resume handle for buffers that are too small."
+shared_facts: "Sections 5 of specs/windows/advapi32.dll/SERVICES.md, copied here so that this sheet stands alone:\n\n## 5. Listing\n\n`EnumServicesStatusExW` (SC_ENUM_PROCESS_INFO only; 124 for other levels) lists services by type and state filter\n(the type needs one of the SERVICE_* masks, state 1 active, 2 inactive, 3 all; 0, 4 and a type of 0 are 87), in an\nunspecified but stable order; a buffer that is too small gives ERROR_MORE_DATA (234) with the entries that fit and a\nresume handle, and the pages together are the whole list once. A group name that no service is in gives 1060.\n"
+interface:
+  signature: "BOOL EnumServicesStatusExW(SC_HANDLE scm, SC_ENUM_TYPE level, DWORD type, DWORD state, LPBYTE buffer, DWORD size, LPDWORD needed, LPDWORD count, LPDWORD resume, LPCWSTR group)"
+  result: "TRUE when all entries fit, FALSE with 234 when more remain"
+rules:
+  levels: "SC_ENUM_PROCESS_INFO (0) only; 1 is 124"
+  "size query": "no buffer: FALSE with 234 (ERROR_MORE_DATA), count 0, `needed` the size for everything"
+  entries: "one per service: the name, the display name (the name when none), and the status as QueryServiceStatusEx would give it (a running service RUNNING with accepted 1; the stopped ones STOPPED with 1077); the services of the test were all found among the others"
+  "type filter": "SERVICE_WIN32 (0x30) finds both own-process and share-process services; SERVICE_WIN32_OWN_PROCESS only own-process ones; SERVICE_WIN32_SHARE_PROCESS only share-process ones; SERVICE_KERNEL_DRIVER none of the test's; a type of 0 is 87"
+  "state filter": "SERVICE_ACTIVE (1) only the running ones, SERVICE_INACTIVE (2) only the stopped ones, SERVICE_STATE_ALL (3) all; 0 and 4 are 87"
+  group: "a group name that no service is in: FALSE with 1060 and count 0"
+  paging: "a buffer of 512 bytes: 234 with the entries that fit and a resume handle; the pages continue where the previous stopped; no entry twice; the total equals one call with a large buffer; the last page returns TRUE"
+  rights: "SC_MANAGER_ENUMERATE_SERVICE (a connect-only manager handle: 5; a caller without Administrators can enumerate when its token has the rights of its descriptor: the restricted token of the tests cannot); a service handle as manager handle is 6"
+errors:
+  more_data: "234"
+  invalid_level: "124"
+  invalid_parameter: "87"
+  not_found: "1060"
+  access_denied: "5"
+  invalid_handle: "6"
+side_effects: "none"
+threading: "any thread"
+ordering: 
+  - "the order is the database's and is the same for the pages of one enumeration"
+timing:
+  typical: "a few milliseconds for a database of a few hundred services"
+  guarantees: "none"
+tests:
+  visible: 2
+  held_out: 1
+building_tests: "Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). The program is also its own service: started by the service control manager with `--child <mode>` on its command line (the service's ImagePath) it calls StartServiceCtrlDispatcherW, registers a handler, reports its status as the mode says (run, slow, pend, ckpt, crash, exitcode, failexit, noaccept, pause, who, stopslow, runex, exret, badname, nullname, badstate, exit_early, no_dispatch) and appends what it sees to `<image>.rep`, which the test prints after the service has stopped. Observations are error codes, states, counts and booleans, never process ids, handles, times or the path of the image (printed as <image>). Every wait is bounded; a test ends its service even when a step fails. The tests run in the SSH logon session of the oracle (session 0) as an elevated administrator; the non-elevated caller is a restricted copy of the test's token made with CreateRestrictedToken (Administrators deny-only, privileges removed) used as the thread's impersonation token."
+not_covered: "the A variant, the exact content and number of the system's own services, EnumServicesStatusW, a changing database during paging; the A variants, the services of other processes (share-process services started by name), drivers, boot and system start, delayed auto start at boot, services of other accounts than LocalSystem (LocalService and NetworkService cannot read the test program's directory under the runner's scratch path: their identities are in SERVICES.md from a run elsewhere), 32-bit callers (the WOW64 value), the Windows event log entries the manager writes, group and tag ordering."

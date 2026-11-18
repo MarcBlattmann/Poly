@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "loadreg_errors",
+      "exe_sha256": "2ebf066723608636ce597162928bd695be9f62e7457038542c9d873217554531",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90IHJlZ2lzdGVyZWQ6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCnJlZ2lzdGVyZWQ6IDB4MDAwMDAwMDAsIGxpYnJhcnkgcG9pbnRlciBzZXQKcmVnaXN0ZXJlZCwgdmVyc2lvbiA5Ljk6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCnJlZ2lzdGVyZWQsIHRoZSBmaWxlIHdhcyByZW5hbWVkOiAweDgwMDI5YzRhLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTAp0aGUgZmlsZSBpcyBiYWNrOiAweDAwMDAwMDAwLCBsaWJyYXJ5IHBvaW50ZXIgc2V0CnRoZSByZWdpc3RlcmVkIGZpbGUgaG9sZHMgdGV4dDogMHg4MDAyOWM0YSwgbGlicmFyeSBwb2ludGVyIE5VTEwKdGhlIHJlZ2lzdGVyZWQgZmlsZSBpcyBlbXB0eTogMHg4MDAyOWM0YSwgbGlicmFyeSBwb2ludGVyIE5VTEwKdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyBlbXB0eTogMHg4MDAzMDAwMiwgbGlicmFyeSBwb2ludGVyIE5VTEwKdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyBhIG5hbWUgd2l0aG91dCBhIGRpcmVjdG9yeTogMHg4MDAyOWM0YSwgbGlicmFyeSBwb2ludGVyIE5VTEwKdGhlIHJlZ2lzdGVyZWQgcGF0aCBpcyB0aGUgdHlwZSBsaWJyYXJ5IGZpbGUgd2l0aCBcMSBhZGRlZDogMHg4MDAyOWM0YSwgbGlicmFyeSBwb2ludGVyIE5VTEwKdGhlIHJlZ2lzdGVyZWQgcGF0aCBoYXMgYSB0cmFpbGluZyBibGFuazogMHgwMDAwMDAwMCwgbGlicmFyeSBwb2ludGVyIHNldApyZXN0b3JlZDogMHgwMDAwMDAwMCwgbGlicmFyeSBwb2ludGVyIHNldApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "not registered: 0x8002801d, library pointer NULL\nregistered: 0x00000000, library pointer set\nregistered, version 9.9: 0x8002801d, library pointer NULL\nregistered, the file was renamed: 0x80029c4a, library pointer NULL\nthe file is back: 0x00000000, library pointer set\nthe registered file holds text: 0x80029c4a, library pointer NULL\nthe registered file is empty: 0x80029c4a, library pointer NULL\nthe registered path is empty: 0x80030002, library pointer NULL\nthe registered path is a name without a directory: 0x80029c4a, library pointer NULL\nthe registered path is the type library file with \\1 added: 0x80029c4a, library pointer NULL\nthe registered path has a trailing blank: 0x00000000, library pointer set\nrestored: 0x00000000, library pointer set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 86
+    },
+    {
+      "name": "loadreg_versions",
+      "exe_sha256": "a1dfdf54f5b7f654536708f65764fee5ecda7131fc517d7afeca948e3c638805",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90aGluZyByZWdpc3RlcmVkLCAxLjA6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCnJlcXVlc3QgMS4wOiAweDAwMDAwMDAwIGxvYWRlZCB2ZXJzaW9uIDEuMCBuYW1lZCBQb2x5V3NUbApyZXF1ZXN0IDEuMTogMHgwMDAwMDAwMCBsb2FkZWQgdmVyc2lvbiAxLjIgbmFtZWQgUG9seVdzVGwKcmVxdWVzdCAxLjI6IDB4MDAwMDAwMDAgbG9hZGVkIHZlcnNpb24gMS4yIG5hbWVkIFBvbHlXc1RsCnJlcXVlc3QgMS4zOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTApyZXF1ZXN0IDIuMDogMHgwMDAwMDAwMCBsb2FkZWQgdmVyc2lvbiAyLjAgbmFtZWQgUG9seVdzVGwKcmVxdWVzdCAyLjE6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCnJlcXVlc3QgMy4wOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTApyZXF1ZXN0IDAuMDogMHg4MDAyODAxZCwgbGlicmFyeSBwb2ludGVyIE5VTEwKcmVxdWVzdCAwLjU6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCnJlcXVlc3QgMS42NTUzNTogMHg4MDAyODAxZCwgbGlicmFyeSBwb2ludGVyIE5VTEwKMS4yIHVucmVnaXN0ZXJlZCwgcmVxdWVzdCAxLjA6IDB4MDAwMDAwMDAgbG9hZGVkIHZlcnNpb24gMS4wIG5hbWVkIFBvbHlXc1RsCjEuMiB1bnJlZ2lzdGVyZWQsIHJlcXVlc3QgMS4yOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTApvbmx5IDB4NDA5IHJlZ2lzdGVyZWQsIHJlcXVlc3QgMHg0MDk6IDB4MDAwMDAwMDAgbG9hZGVkIHZlcnNpb24gMS4wIG5hbWVkIFBvbHlXc1RsCiAgcmVxdWVzdCAwOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTAogIHJlcXVlc3QgMHg4MDkgKEVuZ2xpc2ggVUspOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTAogIHJlcXVlc3QgMHgwOSAoRW5nbGlzaCwgcHJpbWFyeSk6IDB4ODAwMjgwMWQsIGxpYnJhcnkgcG9pbnRlciBOVUxMCiAgcmVxdWVzdCAweDQwNyAoR2VybWFuKTogMHg4MDAyODAxZCwgbGlicmFyeSBwb2ludGVyIE5VTEwKICByZXF1ZXN0IDB4NDAwICh1c2VyIGRlZmF1bHQpOiAweDgwMDI4MDFkLCBsaWJyYXJ5IHBvaW50ZXIgTlVMTAogIHJlcXVlc3QgMHg4MDAgKHN5c3RlbSBkZWZhdWx0KTogMHg4MDAyODAxZCwgbGlicmFyeSBwb2ludGVyIE5VTEwKb25seSB0aGUgbmV1dHJhbCBvbmUgcmVnaXN0ZXJlZCwgcmVxdWVzdCAwOiAweDAwMDAwMDAwIGxvYWRlZCB2ZXJzaW9uIDEuMCBuYW1lZCBQb2x5V3NUbAogIHJlcXVlc3QgMHg0MDk6IDB4MDAwMDAwMDAgbG9hZGVkIHZlcnNpb24gMS4wIG5hbWVkIFBvbHlXc1RsCiAgcmVxdWVzdCAweDQwMDogMHgwMDAwMDAwMCBsb2FkZWQgdmVyc2lvbiAxLjAgbmFtZWQgUG9seVdzVGwKbG9hZGVkIHR3aWNlOiB0aGUgc2FtZSBsaWJyYXJ5IG9iamVjdCAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "nothing registered, 1.0: 0x8002801d, library pointer NULL\nrequest 1.0: 0x00000000 loaded version 1.0 named PolyWsTl\nrequest 1.1: 0x00000000 loaded version 1.2 named PolyWsTl\nrequest 1.2: 0x00000000 loaded version 1.2 named PolyWsTl\nrequest 1.3: 0x8002801d, library pointer NULL\nrequest 2.0: 0x00000000 loaded version 2.0 named PolyWsTl\nrequest 2.1: 0x8002801d, library pointer NULL\nrequest 3.0: 0x8002801d, library pointer NULL\nrequest 0.0: 0x8002801d, library pointer NULL\nrequest 0.5: 0x8002801d, library pointer NULL\nrequest 1.65535: 0x8002801d, library pointer NULL\n1.2 unregistered, request 1.0: 0x00000000 loaded version 1.0 named PolyWsTl\n1.2 unregistered, request 1.2: 0x8002801d, library pointer NULL\nonly 0x409 registered, request 0x409: 0x00000000 loaded version 1.0 named PolyWsTl\n  request 0: 0x8002801d, library pointer NULL\n  request 0x809 (English UK): 0x8002801d, library pointer NULL\n  request 0x09 (English, primary): 0x8002801d, library pointer NULL\n  request 0x407 (German): 0x8002801d, library pointer NULL\n  request 0x400 (user default): 0x8002801d, library pointer NULL\n  request 0x800 (system default): 0x8002801d, library pointer NULL\nonly the neutral one registered, request 0: 0x00000000 loaded version 1.0 named PolyWsTl\n  request 0x409: 0x00000000 loaded version 1.0 named PolyWsTl\n  request 0x400: 0x00000000 loaded version 1.0 named PolyWsTl\nloaded twice: the same library object 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 109
+    }
+  ]
+}
