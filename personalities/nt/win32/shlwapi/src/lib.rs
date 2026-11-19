@@ -3,8 +3,9 @@
 //! three it calls in a headless run are `PathMatchSpecW`, `QISearch` (ordinal 219) and `IsOS`
 //! (ordinal 437); the others are there so that their delay loads bind.
 //!
-//! The behaviour is Learn's (`shlwapi.h`); the logic is `poly_kernelbase::shlwapi`, host-tested.
-//! Nothing here was observed on Windows.
+//! The behaviour is Learn's (`shlwapi.h`) and, for `IsOS`, `UrlCanonicalizeW` and
+//! `AssocQueryStringW` (what Chrome's setup calls), the sheets under `specs/windows/shlwapi.dll`;
+//! the logic is `poly_kernelbase::shlwapi` and `poly_kernelbase::assoc`, host-tested.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -17,6 +18,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use poly_kernelbase::shlwapi as logic;
 
+mod assoc;
 mod path;
 
 poly_win32_rt::process_heap_allocator!();
@@ -26,9 +28,6 @@ const S_OK: u32 = 0;
 const E_NOINTERFACE: u32 = 0x8000_4002;
 const E_POINTER: u32 = 0x8000_4003;
 const E_INVALIDARG: u32 = 0x8007_0057;
-/// `HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION)` (`winerror.h`: 1155): no application is
-/// associated with the file type.
-const E_NO_ASSOCIATION: u32 = 0x8007_0483;
 
 /// The characters of a NUL-terminated string (empty for a null pointer).
 ///
@@ -94,21 +93,6 @@ pub unsafe extern "system" fn PathRemoveExtensionW(path: *mut u16) {
     }
 }
 
-/// `AssocQueryStringW(flags, str, pszAssoc, pszExtra, pszOut, pcchOut)`: Poly has no file
-/// associations for Windows programs yet, so nothing is associated with any type. Learn:
-/// `E_POINTER` when `pcchOut` is null.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn AssocQueryStringW(
-    _flags: u32,
-    _what: u32,
-    _assoc: *const u16,
-    _extra: *const u16,
-    _out: *mut u16,
-    count: *mut u32,
-) -> u32 {
-    if count.is_null() { E_POINTER } else { E_NO_ASSOCIATION }
-}
-
 /// `SHCreateMemStream(pInit, cbInit)` (ordinal 12): "NULL on failure" (Learn). Poly's COM has no
 /// stream object yet, so no stream can be made.
 #[unsafe(no_mangle)]
@@ -120,6 +104,39 @@ pub extern "system" fn SHCreateMemStream(_init: *const u8, _size: u32) -> *mut u
 #[unsafe(no_mangle)]
 pub extern "system" fn IsOS(os: u32) -> i32 {
     i32::from(logic::is_os(os))
+}
+
+/// `UrlCanonicalizeW(pszUrl, pszCanonicalized, pcchCanonicalized, dwFlags)`: the canonical
+/// form is `logic::url::canonicalize`'s; the buffer rules are the sheet's
+/// (`UrlCanonicalizeW.yaml`): a null pointer or a capacity of 0 is `E_INVALIDARG` (the count
+/// unchanged), too little room is `E_POINTER` with the count needed including the NUL (nothing
+/// written), else the text and its NUL are written and the count is its length. The output may
+/// be the input buffer: the input is read whole first.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn UrlCanonicalizeW(url: *const u16, out: *mut u16, count: *mut u32, flags: u32) -> u32 {
+    if url.is_null() || out.is_null() || count.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's count.
+    let capacity = unsafe { count.read() };
+    if capacity == 0 {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's NUL-terminated URL.
+    let text = logic::url::canonicalize(unsafe { wide(url) }, flags);
+    let n = text.len() as u32;
+    if n + 1 > capacity {
+        // SAFETY: the caller's count.
+        unsafe { count.write(n + 1) };
+        return E_POINTER;
+    }
+    // SAFETY: the caller's buffer holds `capacity` units, at least n + 1.
+    unsafe {
+        core::ptr::copy(text.as_ptr(), out, text.len());
+        out.add(text.len()).write(0);
+        count.write(n);
+    }
+    S_OK
 }
 
 /// `QITAB` (`shlwapi.h`): `const IID *piid; DWORD dwOffset;`, 16 bytes on x64.

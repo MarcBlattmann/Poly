@@ -1,8 +1,8 @@
 //! Files, second part (Chrome batch 2, ADR 0155): the argument rules and
 //! structure conversions behind `FindFirstFileExW`, `GetFileAttributesExW`,
 //! `GetFileInformationByHandleEx`, `SetFileInformationByHandle`,
-//! `LockFileEx`/`UnlockFileEx`, `ReplaceFileW`, `GetFinalPathNameByHandleW`
-//! and `GetLongPathNameW`.
+//! `LockFileEx`/`UnlockFileEx`, `ReplaceFileW` and `GetFinalPathNameByHandleW`
+//! (`GetLongPathNameW`: [`crate::shortname`]).
 //!
 //! Sources (clean room): Learn's pages for each function, "FILE_INFO_BY_HANDLE_CLASS"
 //! (`minwinbase.h`), "FINDEX_INFO_LEVELS", "FINDEX_SEARCH_OPS",
@@ -16,8 +16,6 @@ use alloc::vec::Vec;
 
 /// Makes the NT path of a Win32 name (or says why it cannot).
 pub type NtPathFn<'a> = &'a dyn Fn(&[u16]) -> Result<Vec<u16>, u32>;
-/// Finds the name a directory holds for a component (see [`long_path`]).
-pub type LookupFn<'a> = &'a mut dyn FnMut(&[u16], &[u16]) -> Result<Option<Vec<u16>>, u32>;
 
 /// `ERROR_UNABLE_TO_REMOVE_REPLACED`, `ERROR_UNABLE_TO_MOVE_REPLACEMENT`,
 /// `ERROR_UNABLE_TO_MOVE_REPLACEMENT_2` (`winerror.h`).
@@ -454,63 +452,6 @@ pub fn final_path(volume: u32, drive: u16, below_volume: &[u16]) -> Vec<u16> {
     out
 }
 
-// ----- GetLongPathNameW ---------------------------------------------------------------------------
-
-/// Expand each component of `path` to the name the directory holds
-/// (Learn, "GetLongPathNameW": a short `8.3` name becomes its long form;
-/// a name that does not exist fails with `ERROR_FILE_NOT_FOUND` for the last
-/// component and `ERROR_PATH_NOT_FOUND` for one before it). `lookup(dir,
-/// name)` returns the name `dir` holds for `name` (`None`: no such entry),
-/// `dir` being the path up to (not including) the component, as given.
-/// The root (`C:\`, `\\?\C:\`, `\\server\share\`), `.` and `..` are kept
-/// as they are; a component with a wildcard is `ERROR_INVALID_NAME`.
-pub fn long_path(path: &[u16], lookup: LookupFn<'_>) -> Result<Vec<u16>, u32> {
-    if path.is_empty() {
-        return Err(ERROR_INVALID_PARAMETER);
-    }
-    let sep = |c: u16| c == u16::from(b'\\') || c == u16::from(b'/');
-    let root = crate::path::root_len(path);
-    let mut out: Vec<u16> = path[..root].to_vec();
-    let rest = &path[root..];
-    let mut parts: Vec<&[u16]> = Vec::new();
-    let mut start = 0;
-    for (i, &c) in rest.iter().enumerate() {
-        if sep(c) {
-            parts.push(&rest[start..i]);
-            start = i + 1;
-        }
-    }
-    let tail = &rest[start..];
-    let last = parts.len();
-    parts.push(tail);
-    for (n, comp) in parts.iter().enumerate() {
-        let is_last = n == last;
-        if comp.is_empty() {
-            // `a\\b`, or a trailing separator: kept.
-            if !is_last {
-                out.push(u16::from(b'\\'));
-            }
-            continue;
-        }
-        let dots = comp.iter().all(|&c| c == u16::from(b'.')) && comp.len() <= 2;
-        if comp.iter().any(|&c| c == u16::from(b'*') || c == u16::from(b'?')) {
-            return Err(ERROR_INVALID_NAME);
-        }
-        if dots {
-            out.extend_from_slice(comp);
-        } else {
-            match lookup(&out, comp)? {
-                Some(found) => out.extend_from_slice(&found),
-                None => return Err(if is_last { ERROR_FILE_NOT_FOUND } else { ERROR_PATH_NOT_FOUND }),
-            }
-        }
-        if !is_last {
-            out.push(u16::from(b'\\'));
-        }
-    }
-    Ok(out)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -723,41 +664,5 @@ mod tests {
         assert_eq!(final_path(0, u16::from(b'C'), &wide(r"\Users\a.txt")), wide(r"\\?\C:\Users\a.txt"));
         assert_eq!(final_path(4, u16::from(b'C'), &wide(r"\Users\a.txt")), wide(r"\Users\a.txt"));
         assert_eq!(final_path(0, u16::from(b'C'), &wide(r"\")), wide(r"\\?\C:\"));
-    }
-
-    /// A fake directory tree for `long_path`.
-    fn fs_lookup(dir: &[u16], name: &[u16]) -> Result<Option<Vec<u16>>, u32> {
-        let tree: &[(&str, &str, &str)] = &[
-            (r"C:\", "PROGRA~1", "Program Files"),
-            (r"C:\", "windows", "Windows"),
-            (r"C:\Program Files\", "Chrome", "Chrome"),
-            (r"C:\Program Files\Chrome\", "CHROME~1.EXE", "chrome.exe"),
-            (r"C:\Program Files\Chrome\", "chrome.exe", "chrome.exe"),
-        ];
-        let d = std::string::String::from_utf16_lossy(dir);
-        let n = std::string::String::from_utf16_lossy(name);
-        Ok(tree
-            .iter()
-            .find(|(td, tn, _)| td.eq_ignore_ascii_case(&d) && tn.eq_ignore_ascii_case(&n))
-            .map(|(_, _, long)| wide(long)))
-    }
-
-    #[test]
-    fn long_paths() {
-        let mut l = fs_lookup;
-        assert_eq!(
-            long_path(&wide(r"C:\PROGRA~1\Chrome\CHROME~1.EXE"), &mut l),
-            Ok(wide(r"C:\Program Files\Chrome\chrome.exe"))
-        );
-        assert_eq!(long_path(&wide(r"c:\WINDOWS"), &mut l), Ok(wide(r"c:\Windows")));
-        assert_eq!(long_path(&wide(r"C:\"), &mut l), Ok(wide(r"C:\")));
-        assert_eq!(long_path(&wide(r"C:\nope\x"), &mut l), Err(ERROR_PATH_NOT_FOUND));
-        assert_eq!(long_path(&wide(r"C:\PROGRA~1\nope"), &mut l), Err(ERROR_FILE_NOT_FOUND));
-        assert_eq!(long_path(&wide(r"C:\PROGRA~1\*"), &mut l), Err(ERROR_INVALID_NAME));
-        assert_eq!(long_path(&wide(r"C:\PROGRA~1\."), &mut l), Ok(wide(r"C:\Program Files\.")));
-        assert_eq!(long_path(&wide(""), &mut l), Err(ERROR_INVALID_PARAMETER));
-        // A lookup error is passed on.
-        let mut deny = |_: &[u16], _: &[u16]| Err(ERROR_ACCESS_DENIED);
-        assert_eq!(long_path(&wide(r"C:\a"), &mut deny), Err(ERROR_ACCESS_DENIED));
     }
 }

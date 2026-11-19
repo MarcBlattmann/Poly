@@ -16,7 +16,8 @@
 //!
 //! Volatile keys are made at every boot ([`volatile_keys`]):
 //! `HKLM\HARDWARE`, the `HKLM\SYSTEM\CurrentControlSet` symbolic link to
-//! `ControlSet001`, and the user's `Volatile Environment`.
+//! `ControlSet001`, the user's `Volatile Environment`, and `HKU\<user>_Classes`,
+//! a symbolic link to the user's `Software\Classes`.
 //!
 //! The values that name folders (`ProgramFilesDir`, `SystemRoot`, the
 //! environment's paths, the user's profile) must agree with the Windows
@@ -122,6 +123,18 @@ const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> Defau
 /// the same numbers when they exist.
 pub const BUILD: &str = "26200";
 
+/// System variables (`Session Manager\Environment`, `REG_EXPAND_SZ`) that every process has
+/// (`specs/windows/userenv.dll/CreateEnvironmentBlock.yaml` `variables_present`), with Poly's
+/// values: PowerShell's module folders (Learn: "about_PSModulePath") and the drivers' data folder
+/// (Learn: "DriverData"). The layout sync adds them to a hive made before they were here.
+pub const SYSTEM_ENVIRONMENT_EXTRA: [(&str, &str); 2] = [
+    (
+        "PSModulePath",
+        "%ProgramFiles%\\WindowsPowerShell\\Modules;%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\Modules",
+    ),
+    ("DriverData", "%SystemRoot%\\System32\\Drivers\\DriverData"),
+];
+
 pub const SYSTEM_KEYS: &[DefaultKey] = &[
     k("Select", &[("Current", Dword(1)), ("Default", Dword(1)), ("Failed", Dword(0)), ("LastKnownGood", Dword(1))]),
     k("ControlSet001\\Control\\ComputerName\\ComputerName", &[("ComputerName", Sz(POLY_COMPUTER_NAME))]),
@@ -131,12 +144,22 @@ pub const SYSTEM_KEYS: &[DefaultKey] = &[
         &[
             ("ComSpec", ExpandSz("%SystemRoot%\\system32\\cmd.exe")),
             ("OS", Sz("Windows_NT")),
-            ("Path", ExpandSz("%SystemRoot%\\system32;%SystemRoot%")),
+            // The system folders, then those of the command-line tools of WMI and PowerShell
+            // (Learn: "WMIC", "about_PSModulePath"); CreateEnvironmentBlock.yaml: the Path has
+            // more after `%SystemRoot%;`.
+            (
+                "Path",
+                ExpandSz(
+                    "%SystemRoot%\\system32;%SystemRoot%;%SystemRoot%\\System32\\Wbem;%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\",
+                ),
+            ),
             ("PATHEXT", Sz(".COM;.EXE;.BAT;.CMD")),
             ("PROCESSOR_ARCHITECTURE", Sz("AMD64")),
             ("TEMP", ExpandSz("%SystemRoot%\\TEMP")),
             ("TMP", ExpandSz("%SystemRoot%\\TEMP")),
             ("windir", ExpandSz("%SystemRoot%")),
+            ("PSModulePath", ExpandSz(SYSTEM_ENVIRONMENT_EXTRA[0].1)),
+            ("DriverData", ExpandSz(SYSTEM_ENVIRONMENT_EXTRA[1].1)),
         ],
     ),
     k("ControlSet001\\Control\\Nls\\CodePage", &[("ACP", Sz("1252")), ("OEMCP", Sz("437"))]),
@@ -244,6 +267,10 @@ pub const USER_KEYS: &[DefaultKey] = &[
     k("Software\\Microsoft\\Windows\\CurrentVersion\\Run", &[]),
 ];
 
+/// What follows the user's SID in the name of the user's classes hive below
+/// `HKEY_USERS` (`<SID>_Classes`).
+pub const USER_CLASSES_SUFFIX: &str = "_Classes";
+
 /// The user's `Volatile Environment` (Learn: "Recognized environment
 /// variables" names each).
 pub const VOLATILE_ENVIRONMENT: &[(&str, Data)] = &[
@@ -253,6 +280,9 @@ pub const VOLATILE_ENVIRONMENT: &[(&str, Data)] = &[
     ("LOCALAPPDATA", Sz("C:\\Users\\poly\\AppData\\Local")),
     ("LOGONSERVER", Sz("\\\\POLY")),
     ("USERDOMAIN", Sz(POLY_COMPUTER_NAME)),
+    // The domain of a roaming profile: the machine's own on a workgroup machine (the sheet:
+    // present beside `USERDOMAIN`).
+    ("USERDOMAIN_ROAMINGPROFILE", Sz(POLY_COMPUTER_NAME)),
     ("USERNAME", Sz(POLY_USER_NAME)),
     ("USERPROFILE", Sz("C:\\Users\\poly")),
 ];
@@ -376,6 +406,19 @@ pub fn volatile_keys(reg: &mut Registry, now: u64) -> Result<(), NtStatus> {
     if let Some(me) = reg.find(user, POLY_USER_SID) {
         let env = make_path(reg, me, "Volatile Environment", true, now)?;
         set(reg, env, VOLATILE_ENVIRONMENT, now)?;
+    }
+    // `\REGISTRY\USER\<user>_Classes`, the user's classes hive (RtlFormatCurrentUserKeyPath.yaml
+    // `usable`: it opens). Poly keeps the user's classes in `<user>\Software\Classes`, so the
+    // name is a link there and both reach the same keys.
+    let classes = alloc::format!("{POLY_USER_SID}{USER_CLASSES_SUFFIX}");
+    if reg.child(user, &wide(&classes)).is_none() {
+        let opts = CreateOptions { volatile: true, link: true, class: &[] };
+        let (link, _) = reg.create_key(user, &wide(&classes), opts, now)?;
+        let target: Vec<u8> = alloc::format!("\\REGISTRY\\USER\\{POLY_USER_SID}\\Software\\Classes")
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        reg.set_value(link, &wide(SYMBOLIC_LINK_VALUE), REG_LINK, &target, now)?;
     }
     Ok(())
 }

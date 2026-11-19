@@ -52,6 +52,9 @@ pub type Result<T> = core::result::Result<T, NtStatus>;
 
 /// A synchronous transfer moves through the kernel in pieces this big.
 const CHUNK: usize = 64 * 1024;
+/// The change-notification filter bits a write to a file covers ([`super::notify`]).
+const WRITTEN: u32 = super::notify::CHANGE_LAST_WRITE | super::notify::CHANGE_SIZE;
+
 /// The most an asynchronous or pipe write copies in at once.
 pub const MAX_CAPTURED_WRITE: usize = 16 << 20;
 
@@ -695,6 +698,9 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                     return Ok(Plan::Inline { open, offset: start, file, append: at.is_none() });
                 }
                 let data = captured.unwrap_or_default();
+                if !data.is_empty() {
+                    sys.io.note_file_change(file.1, super::notify::Change::Modified { mask: WRITTEN });
+                }
                 let irp = n.irp(sys, &caller, file, false, IrpOp::Write { offset: at, data, key })?;
                 let id = sys.io.queue(irp, volume);
                 Ok(Plan::Pending { irp: id, file: file.0, sync: false })
@@ -719,6 +725,9 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             k.with_state(|sys, _, _| {
                 if let Some(rec) = sys.io.file_mut(file.1) {
                     rec.position = end;
+                }
+                if total > 0 {
+                    sys.io.note_file_change(file.1, super::notify::Change::Modified { mask: WRITTEN });
                 }
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, total as u64);
             });

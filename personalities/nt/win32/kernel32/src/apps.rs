@@ -289,7 +289,6 @@ poly_win32_rt::fail_exports!(
         QueryThreadCycleTime,
         ReadConsoleInputA,
         ReadConsoleOutputW,
-        ReadDirectoryChangesW,
         ReleaseActCtx,
         RemoveDllDirectory,
         ReplaceFileA,
