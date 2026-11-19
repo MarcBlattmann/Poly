@@ -55,10 +55,10 @@ pub fn visible_names(root: &Path) -> Result<Vec<(String, Origin)>, String> {
     if corpus.is_dir() {
         for e in std::fs::read_dir(&corpus).map_err(|e| format!("{}: {e}", corpus.display()))? {
             let path = e.map_err(|e| e.to_string())?.path();
-            if path.is_file() {
-                if let Some(n) = stem_of_test(&path) {
-                    out.push((n, Origin("the corpus (tests/windows)".into())));
-                }
+            if path.is_file()
+                && let Some(n) = stem_of_test(&path)
+            {
+                out.push((n, Origin("the corpus (tests/windows)".into())));
             }
         }
     }
@@ -80,10 +80,10 @@ fn walk_tests(root: &Path, dir: &Path, out: &mut Vec<(String, Origin)>) -> Resul
             let entry = rel.trim_end_matches(".tests").to_string();
             for f in std::fs::read_dir(&path).map_err(|e| format!("{}: {e}", path.display()))? {
                 let f = f.map_err(|e| e.to_string())?.path();
-                if f.is_file() {
-                    if let Some(n) = stem_of_test(&f) {
-                        out.push((n, Origin(entry.clone())));
-                    }
+                if f.is_file()
+                    && let Some(n) = stem_of_test(&f)
+                {
+                    out.push((n, Origin(entry.clone())));
                 }
             }
         } else {
@@ -120,10 +120,10 @@ pub fn heldout_names(store: &Path) -> Vec<(String, Origin)> {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
         let entry = v.get("entry").and_then(|e| e.as_str()).unwrap_or("?").to_string();
         for h in v.get("held_out").and_then(|h| h.as_array()).into_iter().flatten() {
-            if let Some(p) = h.get("path").and_then(|p| p.as_str()) {
-                if let Some(n) = stem_of_test(Path::new(p)) {
-                    out.push((n, Origin(format!("{entry} (held out)"))));
-                }
+            if let Some(p) = h.get("path").and_then(|p| p.as_str())
+                && let Some(n) = stem_of_test(Path::new(p))
+            {
+                out.push((n, Origin(format!("{entry} (held out)"))));
             }
         }
     }
@@ -147,12 +147,21 @@ fn collect_manifests(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
 /// another entry is a warning: the store exists on the integrator's machine only, and older entries
 /// may already collide there; `strict_heldout` makes them errors too.
 pub fn check(root: &Path, strict_heldout: bool) -> Result<(Vec<String>, Vec<String>), String> {
+    check_with(root, heldout_store(root).as_deref(), strict_heldout)
+}
+
+/// [`check`] with the held-out store given (`None`: there is none).
+pub fn check_with(
+    root: &Path,
+    store: Option<&Path>,
+    strict_heldout: bool,
+) -> Result<(Vec<String>, Vec<String>), String> {
     let visible = visible_names(root)?;
     let errors = duplicates(&visible);
     let mut warnings = Vec::new();
-    if let Some(store) = heldout_store(root) {
+    if let Some(store) = store {
         let mut all = visible;
-        all.extend(heldout_names(&store));
+        all.extend(heldout_names(store));
         warnings = duplicates(&all).into_iter().filter(|d| !errors.contains(d)).collect();
     }
     if strict_heldout {
@@ -173,9 +182,18 @@ mod tests {
 
     #[test]
     fn a_name_in_two_entries_is_reported_with_both() {
-        let d = duplicates(&[n("uc_basic", "shlwapi/UrlCanonicalizeW"), n("other", "a/B"), n("uc_basic", "user32/UnregisterClassW")]);
+        let d = duplicates(&[
+            n("uc_basic", "shlwapi/UrlCanonicalizeW"),
+            n("other", "a/B"),
+            n("uc_basic", "user32/UnregisterClassW"),
+        ]);
         assert_eq!(d.len(), 1);
-        assert!(d[0].contains("`uc_basic`") && d[0].contains("shlwapi/UrlCanonicalizeW") && d[0].contains("user32/UnregisterClassW"), "{d:?}");
+        assert!(
+            d[0].contains("`uc_basic`")
+                && d[0].contains("shlwapi/UrlCanonicalizeW")
+                && d[0].contains("user32/UnregisterClassW"),
+            "{d:?}"
+        );
     }
 
     #[test]
@@ -223,7 +241,11 @@ mod tests {
         assert_eq!(got, ["nt_file_rw", "uc_basic", "uc_basic"]);
         let d = duplicates(&names);
         assert_eq!(d.len(), 1, "{d:?}");
-        assert!(d[0].contains("specs/windows/shlwapi.dll/UrlCanonicalizeW") && d[0].contains("specs/windows/user32.dll/UnregisterClassW"), "{d:?}");
+        assert!(
+            d[0].contains("specs/windows/shlwapi.dll/UrlCanonicalizeW")
+                && d[0].contains("specs/windows/user32.dll/UnregisterClassW"),
+            "{d:?}"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -262,16 +284,17 @@ mod tests {
         let store = scratch("strict-store");
         let dir = store.join("windows/api/k.dll/F");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("MANIFEST.json"), r#"{"entry":"windows/api/k.dll/F","held_out":[{"path":"v.rs","sha256":"0"}]}"#).unwrap();
-        // SAFETY: tests of this module are the only ones that touch this variable, and they run in one thread each.
-        unsafe { std::env::set_var("POLY_HELDOUT_DIR", &store) };
-        let (errors, warnings) = check(&root, false).unwrap();
+        std::fs::write(
+            dir.join("MANIFEST.json"),
+            r#"{"entry":"windows/api/k.dll/F","held_out":[{"path":"v.rs","sha256":"0"}]}"#,
+        )
+        .unwrap();
+        let (errors, warnings) = check_with(&root, Some(&store), false).unwrap();
         assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(warnings.len(), 1, "{warnings:?}");
-        let (errors, warnings) = check(&root, true).unwrap();
+        let (errors, warnings) = check_with(&root, Some(&store), true).unwrap();
         assert_eq!(errors.len(), 1, "{errors:?}");
         assert!(warnings.is_empty());
-        unsafe { std::env::remove_var("POLY_HELDOUT_DIR") };
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&store);
     }
