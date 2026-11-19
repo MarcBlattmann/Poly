@@ -64,6 +64,7 @@ pub(super) fn draw(
                 let dark = scene.theme().title_active & 0xff < 0x80;
                 busy::draw(fb, clip, x, y, s, *phase, dark);
             }
+            CursorLook::Named(n) => draw_named(fb, clip, x, y, s, *n),
             CursorLook::Hidden => {}
         }
     }
@@ -80,6 +81,27 @@ fn hides(w: &Window, clip: Rect, s: Scale) -> bool {
     let shown = if w.is_decorated() { placed.bounds } else { placed.surface };
     let drawn = shown.intersect(&placed.surface);
     drawn.intersect(&clip) == clip
+}
+
+/// A named look ([`super::NamedCursor`]) with its hot spot at logical (`x`, `y`), its cells as
+/// large as the scale makes a logical pixel; only the physical pixels of the rectangle the scene
+/// damages for it (`Scene::cursor_rect`), as [`draw_cursor`].
+fn draw_named(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: Scale, n: super::NamedCursor) {
+    let ((w, h), (hx, hy)) = (n.size(), n.hotspot());
+    let (lx, ly) = (x - hx, y - hy);
+    let (ox, oy) = (s.px(lx), s.px(ly));
+    let area = s.rect(Rect::new(lx, ly, w, h)).intersect(&clip);
+    for py in area.y..area.bottom() {
+        let cy = s.to_logical(py - oy).min(h - 1);
+        let row = fb.row_mut(py as u32);
+        for px in area.x..area.right() {
+            match n.cell(s.to_logical(px - ox).min(w - 1), cy) {
+                super::cursors::BLACK => row[px as usize] = OPAQUE,
+                super::cursors::WHITE => row[px as usize] = OPAQUE | 0x00ff_ffff,
+                _ => {}
+            }
+        }
+    }
 }
 
 /// The arrow: `X` outline (black), `.` fill (white), hot spot top left.

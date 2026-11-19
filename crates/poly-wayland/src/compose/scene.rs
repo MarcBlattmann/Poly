@@ -199,6 +199,9 @@ pub enum CursorLook {
     /// The arrow with a spinner: an app is starting (ADR 0167). The number
     /// is the spinner's picture, `0..BUSY_PHASES`.
     Busy(u8),
+    /// A named look of Poly's own (ADR 0234): the hand, the I-beam, the resize arrows. Never
+    /// [`NamedCursor::Arrow`] or [`NamedCursor::Progress`] (those are `Arrow` and `Busy`).
+    Named(super::NamedCursor),
 }
 
 /// The composed picture of what lies behind a window (the layers below it
@@ -564,6 +567,10 @@ impl Scene {
                 Rect::new(x - hx, y - hy, w, h)
             }
             CursorLook::Busy(_) => Rect::new(x, y, BUSY_SIZE.0, BUSY_SIZE.1),
+            CursorLook::Named(n) => {
+                let ((w, h), (hx, hy)) = (n.size(), n.hotspot());
+                Rect::new(x - hx, y - hy, w, h)
+            }
             CursorLook::Hidden => Rect::default(),
         }
     }

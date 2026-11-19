@@ -433,6 +433,26 @@ fn cursor_images_and_hidden_cursors() {
     assert_eq!(scene.cursor_rect(5, 5), Rect::default());
 }
 
+/// A named look is drawn at the scale with its hot spot at the pointer, and leaves nothing
+/// behind when the pointer moves on (ADR 0234).
+#[test]
+fn named_cursors_are_drawn_scaled_around_their_hot_spot() {
+    let mut scene = Scene::new(40, 40, 2);
+    scene.set_cursor(Some((10, 10)));
+    scene.set_cursor_look(CursorLook::Named(NamedCursor::ResizeEW));
+    // Hot spot (9, 4): the picture's top left is at logical (1, 6), physical (2, 12).
+    assert_eq!(scene.cursor_rect(10, 10), Rect::new(1, 6, 19, 9));
+    let mut fb = MemoryFramebuffer::new(40, 40);
+    scene.render(&mut fb);
+    // The left tip (cell 0,4) is black, two physical pixels wide; the cell after it white.
+    assert_eq!((fb.pixel(2, 20), fb.pixel(3, 21)), (Some(0x000000), Some(0x000000)));
+    assert_eq!(fb.pixel(4, 20), Some(0xffffff));
+    assert_eq!(fb.pixel(2, 12), Some(BG), "clear cells show what is below");
+    scene.set_cursor(Some((15, 15)));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(2, 20), Some(BG));
+}
+
 /// The picture behind a window: what is under it, without it, kept up to
 /// date with damage as things below it change, and left alone by changes
 /// elsewhere (ADR 0116; Liquid Glass samples it later).

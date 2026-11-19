@@ -660,6 +660,8 @@ pub struct Link {
     moves: Vec<WindowId>,
     /// Interactive resizes (`SC_SIZE` by a border), likewise.
     resizes: Vec<(WindowId, Edges)>,
+    /// Cursors win32k set over windows (`SetCursor`), shown by the server (ADR 0234).
+    cursors: Vec<(WindowId, poly_win32k::link::CursorShape)>,
     /// The keyboard layout win32k was told (`poly-input`'s name).
     layout: alloc::string::String,
     /// What Windows programs asked the desktop to open (`false`) or show in Files (`true`),
@@ -737,6 +739,7 @@ impl Link {
             incoming: Stream::new(),
             moves: Vec::new(),
             resizes: Vec::new(),
+            cursors: Vec::new(),
             layout: alloc::string::String::new(),
             shell: Vec::new(),
             consents: Vec::new(),
@@ -850,6 +853,15 @@ impl Link {
                 server.release_internal_window(w);
             }
         }
+        // The cursor a Windows program set over its window (ADR 0234): a standard one by its
+        // name; a picture of its own is not shown yet (the arrow).
+        for (w, shape) in core::mem::take(&mut self.cursors) {
+            let named = match shape {
+                poly_win32k::link::CursorShape::Standard(idc) => poly_wayland::compose::NamedCursor::of_windows(idc),
+                poly_win32k::link::CursorShape::Image { .. } => poly_wayland::compose::NamedCursor::Arrow,
+            };
+            server.set_internal_cursor(w, Some(named));
+        }
         for &(w, _) in &after {
             // Its own sizing borders take the pointer too.
             server.set_internal_margins(w, self.surfaces.margins_of(w));
@@ -950,7 +962,8 @@ impl Link {
                     a @ Action::Consent { .. } => self.consents.push(a),
                     // The copy was made with the buffer record; cursors
                     // come with a later slice.
-                    Action::TakeBuffer(_) | Action::Cursor(..) => {}
+                    Action::Cursor(w, shape) => self.cursors.push((w, shape)),
+                    Action::TakeBuffer(_) => {}
                 }
             }
         }
