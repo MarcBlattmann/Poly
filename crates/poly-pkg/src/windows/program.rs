@@ -17,8 +17,9 @@
 //!   twice its height with the AND mask below it). A DIB becomes a PNG here
 //!   (stored deflate blocks: the launcher decodes PNG files).
 //! - **The certificate table** (data directory 4, its "RVA" a file offset):
-//!   present means the file is Authenticode-signed. Who signed it is read by
-//!   the program (`poly_x509::authenticode` of ADR 0222 where it exists).
+//!   present means the file is Authenticode-signed; who signed it is
+//!   `poly_x509::authenticode::publisher_of`, the reader the consent prompt
+//!   uses too (ADR 0222), named the same way (`publisher_label`).
 //! - **Windows Installer packages** ([MS-CFB]): a compound file whose root
 //!   storage has the class `{000C1084-0000-0000-C000-000000000046}`.
 
@@ -72,7 +73,7 @@ pub struct Program {
     pub installer: bool,
     /// Authenticode-signed (it has a certificate table).
     pub signed: bool,
-    /// Who signed it, when the program could read that.
+    /// Who signed it (the first signer's name; the signature is not checked).
     pub publisher: Option<String>,
     /// Its own icon, as a PNG file.
     pub icon: Option<Vec<u8>>,
@@ -82,7 +83,7 @@ impl Program {
     /// The window's "Publisher" fact.
     pub fn publisher_text(&self) -> String {
         match (&self.publisher, self.signed) {
-            (Some(p), _) => p.clone(),
+            (Some(p), _) => poly_x509::authenticode::publisher_label(p),
             (None, true) => "Unknown publisher (signed)".to_string(),
             (None, false) => "Unknown publisher".to_string(),
         }
@@ -444,7 +445,7 @@ pub fn read_program(file_name: &str, size: u64, read: ReadAt<'_>) -> Result<Prog
         gui: image.gui(),
         installer,
         signed: image.signed(),
-        publisher: None,
+        publisher: poly_x509::authenticode::publisher_of(&mut *image.read),
         icon: image.icon(0),
     })
 }

@@ -48,10 +48,11 @@ nearly all one resource): the headers, the resource directory, then single resou
   `FileDescription` (or `CompanyName`). **Version**: `ProductVersion` (`1, 2, 3, 4` written with dots), else
   `FileVersion`, else the fixed version. **Size**: the file's. **Kind**: "Windows installer (32-bit)" or "Windows
   program (64-bit)".
-- **Publisher**: the Authenticode signer when Poly can read it, else "Unknown publisher" ("(signed)" when the file has
-  a certificate table). The signer's name is ADR 0222's `poly_x509::authenticode` (batch B0), which is not on `main`
-  yet; the installer has the hook (`publisher_of`) and says only whether the file is signed until then. The signature
-  is not verified (ADR 0222 says the same of its prompt).
+- **Publisher**: the Authenticode signer, read by `poly_x509::authenticode::publisher_of` (the headers, the
+  certificate table, the first signer's certificate subject), the same function the consent prompt of ADR 0222
+  uses, and worded by the same `publisher_label`: "Google LLC (signature not verified)" in both places for Google's
+  installer. Else "Unknown publisher" ("(signed)" when the file has a certificate table whose signer Poly cannot
+  read). The signature itself is not verified (ADR 0222 says the same of its prompt).
 - **Icon**: the largest image of the program's first icon group; a PNG image as it is, a DIB (1-, 4-, 8-, 24- or
   32-bit, transparency from its alpha or its AND mask) written as a PNG file (stored deflate blocks), because the
   launcher reads PNG files.
@@ -171,7 +172,7 @@ refused or failed start.
 ## Not in this ADR
 
 - **MSI** (B6), and running an `.msi` through `msiexec`.
-- **The publisher's name** until B0's Authenticode reader is on `main`; verifying signatures.
+- **Verifying signatures** (the image digest, the chain to a trusted root): the name is shown as not verified.
 - **Shortcuts whose target is only in an ID list Poly's `ShellLink` did not write** (`poly-lnk`'s reading of the
   shell's items is Poly's own layout; the public specification does not give them).
 - **Installers that elevate**: B0's consent prompt is theirs; this window only waits.

@@ -176,6 +176,9 @@ pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/servi
 /// Poly's `explorer.exe`, the stand-in of the session's shell (ADR 0222), installed in
 /// `C:\Windows` by [`layout`] and started for the elevated logon; empty without `xtask`.
 pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explorer.exe"));
+/// Poly's `cmd.exe`, the command processor (ADR 0240), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static CMD_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cmd.exe"));
 /// Poly's `polyopen.exe` (ADR 0230): starts a program as the shell opens it (`ShellExecuteExW`,
 /// so its manifest is honoured), for Poly's installer window; installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.

@@ -211,20 +211,11 @@ fn reader_of(path: &str) -> Option<impl FnMut(u64, &mut [u8]) -> usize> {
     })
 }
 
-/// Who signed the Windows program at `path`. ADR 0222's Authenticode reader
-/// (`poly_x509::authenticode`, batch B0) names the signer; until it is on
-/// this tree the window says only whether the file is signed.
-fn publisher_of(_path: &str) -> Option<String> {
-    None
-}
-
 /// What the Windows program at `path` says about itself (ADR 0230).
 fn read_windows(path: &str) -> Result<program::Program, poly_pkg::Error> {
     let size = poly_rt::fs::metadata(path).map_err(|_| poly_pkg::Error::Truncated)?.len();
     let mut read = reader_of(path).ok_or(poly_pkg::Error::Truncated)?;
-    let mut p = program::read_program(path, size, &mut read)?;
-    p.publisher = publisher_of(path);
-    Ok(p)
+    program::read_program(path, size, &mut read)
 }
 
 /// The installer for `path`, with what the base root has.

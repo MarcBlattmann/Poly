@@ -587,6 +587,7 @@ impl Server {
                         pixels: alloc::vec![0; width as usize * height as usize],
                         view,
                         smooth: false,
+                        opaque: false,
                     };
                 }
                 for r in rects(resized) {

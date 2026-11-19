@@ -115,6 +115,9 @@ pub struct WindowsSurfaces {
     surfaces: BTreeMap<SurfaceId, Surface>,
     /// Pictures shown over surfaces' own buffers (ADR 0224).
     layers: BTreeMap<(SurfaceId, LayerId), Layer>,
+    /// How many pixels of each window's content are not opaque, counted as they are copied in:
+    /// none means the window hides what is below it (ADR 0232).
+    translucent: core::cell::RefCell<BTreeMap<WindowId, u64>>,
     /// Windows pixels per logical pixel (ADR 0219): 1, or the output's whole scale when Windows
     /// apps live in output pixels (`--windows-hidpi`). Positions and sizes on the link are in
     /// these; the scene's are logical.
@@ -129,7 +132,12 @@ impl Default for WindowsSurfaces {
 
 impl WindowsSurfaces {
     pub fn new() -> WindowsSurfaces {
-        WindowsSurfaces { surfaces: BTreeMap::new(), layers: BTreeMap::new(), units: 1 }
+        WindowsSurfaces {
+            surfaces: BTreeMap::new(),
+            layers: BTreeMap::new(),
+            translucent: core::cell::RefCell::new(BTreeMap::new()),
+            units: 1,
+        }
     }
 
     /// Windows apps live in `units` output pixels per logical pixel (ADR 0219).
@@ -230,6 +238,11 @@ impl WindowsSurfaces {
         self.layers.values().find_map(|l| l.buffers.get(&id)).map(|&(_, h, stride)| stride as usize * h as usize)
     }
 
+    /// Whether window `window`'s content is known to be opaque (ADR 0232).
+    pub fn is_opaque(&self, window: WindowId) -> bool {
+        self.translucent.borrow().get(&window) == Some(&0)
+    }
+
     /// Surface `surface`'s layers go (with it): their buffers are dropped.
     fn drop_layers(&mut self, surface: SurfaceId, actions: &mut Vec<Action>) {
         let keys: Vec<(SurfaceId, LayerId)> =
@@ -251,6 +264,7 @@ impl WindowsSurfaces {
             copy(
                 scene,
                 window,
+                &self.translucent,
                 src,
                 (bw, bh, stride, format),
                 (r.x as u32, r.y as u32, r.width as u32, r.height as u32),
@@ -282,7 +296,7 @@ impl WindowsSurfaces {
                 continue;
             }
             let from = ((shown.x - x) as u32, (shown.y - y) as u32);
-            blit(scene, window, src, stride, from, shown, opaque);
+            blit(scene, window, src, stride, from, shown, opaque, &self.translucent);
         }
     }
 
@@ -292,6 +306,7 @@ impl WindowsSurfaces {
         for (_, l) in core::mem::take(&mut self.layers) {
             actions.extend(l.buffers.keys().map(|&b| Action::DropBuffer(b)));
         }
+        self.translucent.borrow_mut().clear();
         for (_, s) in core::mem::take(&mut self.surfaces) {
             scene.remove_window(s.window);
             if let Some((b, ..)) = s.buffer {
@@ -312,6 +327,7 @@ impl WindowsSurfaces {
             ToCompositor::Create { surface, kind, owner, framed } => {
                 if let Some(old) = self.surfaces.remove(&surface) {
                     scene.remove_window(old.window);
+                    self.translucent.borrow_mut().remove(&old.window);
                 }
                 self.drop_layers(surface, &mut actions);
                 let framed = framed && kind == SurfaceKind::TopLevel;
@@ -378,8 +394,16 @@ impl WindowsSurfaces {
                     let u = self.units.max(1) as u32;
                     let logical = s.geometry.2;
                     let scale = if logical > 0 { width.div_ceil(logical).clamp(1, u) } else { u };
+                    let fresh = scene.window(s.window).is_none_or(|w| {
+                        (w.content().width, w.content().height, w.content().scale) != (width, height, scale)
+                    });
                     scene.resize_content(s.window, width, height, scale);
                     scene.set_smooth(s.window, true);
+                    if fresh {
+                        // New content starts transparent until it is copied in (ADR 0232).
+                        self.translucent.borrow_mut().insert(s.window, u64::from(width) * u64::from(height));
+                        scene.set_opaque(s.window, false);
+                    }
                     actions.push(Action::TakeBuffer(buffer));
                 }
             }
@@ -388,7 +412,7 @@ impl WindowsSurfaces {
                     self.surfaces.get(&surface)
                     && let Some(src) = buffers.pixels(b)
                 {
-                    copy(scene, window, src, (bw, bh, stride, format), (x, y, width, height));
+                    copy(scene, window, &self.translucent, src, (bw, bh, stride, format), (x, y, width, height));
                     // Its layers stay over it.
                     let r = Rect::new(x as i32, y as i32, width.min(bw) as i32, height.min(bh) as i32);
                     self.overlay(scene, surface, r, buffers, None);
@@ -493,6 +517,7 @@ impl WindowsSurfaces {
                 self.drop_layers(surface, &mut actions);
                 if let Some(s) = self.surfaces.remove(&surface) {
                     scene.remove_window(s.window);
+                    self.translucent.borrow_mut().remove(&s.window);
                     if let Some((b, ..)) = s.buffer {
                         actions.push(Action::DropBuffer(b));
                         actions.push(Action::Send(FromCompositor::Released { buffer: b }));
@@ -507,9 +532,11 @@ impl WindowsSurfaces {
 /// Copy rectangle `r` (buffer pixels) of a surface buffer into the window's
 /// content: `B, G, R, A` bytes read as little-endian `0xAARRGGBB`, made
 /// opaque for `Xrgb8888`, premultiplied already for `Argb8888`.
+#[allow(clippy::too_many_arguments)]
 fn copy(
     scene: &mut Scene,
     window: WindowId,
+    translucent: &core::cell::RefCell<BTreeMap<WindowId, u64>>,
     src: (*const u8, usize),
     (bw, bh, stride, format): (u32, u32, u32, PixelFormat),
     (x, y, width, height): (u32, u32, u32, u32),
@@ -521,13 +548,14 @@ fn copy(
     let y1 = y.saturating_add(height).min(bh);
     let r = Rect::new(x as i32, y as i32, x1.saturating_sub(x) as i32, y1.saturating_sub(y) as i32);
     let opaque = if format == PixelFormat::Xrgb8888 { 0xFF00_0000 } else { 0 };
-    blit(scene, window, src, stride, (x, y), r, opaque);
+    blit(scene, window, src, stride, (x, y), r, opaque, translucent);
 }
 
 /// Copy `dst.width` x `dst.height` pixels from (`sx`, `sy`) of `src` (rows `stride` bytes apart,
 /// `B, G, R, A`) to `dst` of the window's content, or'ed with `opaque`, and damage it there: a row
 /// at a time with one `memcpy` each (ADR 0224; the per-pixel copy took milliseconds for a whole
 /// window at 200 %). Rows past the end of `src` and pixels outside the content are left.
+#[allow(clippy::too_many_arguments)]
 fn blit(
     scene: &mut Scene,
     window: WindowId,
@@ -536,7 +564,16 @@ fn blit(
     (sx, sy): (u32, u32),
     dst: Rect,
     opaque: u32,
+    translucent: &core::cell::RefCell<BTreeMap<WindowId, u64>>,
 ) {
+    let not_opaque = |px: &[u32]| px.iter().filter(|&&p| p < 0xff00_0000).count() as u64;
+    // The alpha of every pixel and'ed together: 0xff when all are opaque (one pass the compiler
+    // vectorises; the count is taken only when it fails).
+    let all_opaque = |px: &[u32]| px.iter().fold(u32::MAX, |a, &p| a & p) >= 0xff00_0000;
+    // Pixels overwritten need counting only while some are known translucent.
+    let counting = translucent.borrow().get(&window).is_some_and(|&c| c > 0);
+    let mut gone = 0u64;
+    let mut came = 0u64;
     let Some(content) = scene.content_mut(window) else { return };
     let cw = content.width as i32;
     let d = dst.intersect(&Rect::new(0, 0, cw, content.height as i32));
@@ -555,6 +592,9 @@ fn blit(
         }
         let start = (d.y as usize + row) * cw as usize + d.x as usize;
         let out = &mut content.pixels[start..start + n];
+        if counting {
+            gone += not_opaque(out);
+        }
         // SAFETY: `at .. at + 4n` is inside the `len` bytes at `ptr` (checked above), which stay
         // mapped (or allocated) during this call; `out` is `n` pixels of 4 bytes in the scene's
         // own memory, so they do not overlap. The bytes land as little-endian words, as the
@@ -564,11 +604,19 @@ fn blit(
             for p in out.iter_mut() {
                 *p |= opaque;
             }
+        } else if !all_opaque(out) {
+            came += not_opaque(out);
         }
         done += 1;
     }
     if done > 0 {
         scene.damage_content(window, Rect::new(d.x, d.y, d.width, done));
+    }
+    // What is below shows through none of it any more, or again (ADR 0232). A window whose
+    // count is not known (made before the link counted) stays not opaque.
+    if let Some(count) = translucent.borrow_mut().get_mut(&window) {
+        *count = count.saturating_sub(gone).saturating_add(came);
+        scene.set_opaque(window, *count == 0);
     }
 }
 
@@ -1246,6 +1294,53 @@ mod tests {
         pump(&mut d, &mut ws, &mut scene, &mem);
         assert_eq!(px(&scene, 0, 0), 0, "a transparent corner stays transparent");
         assert_eq!(px(&scene, 1, 0), 0xFFFF_FFFF);
+    }
+
+    /// ADR 0232: a window's content is opaque once every pixel copied in is: at once for an
+    /// `Xrgb8888` surface fully damaged, for a premultiplied one when no translucent pixel is left;
+    /// a translucent pixel copied in makes it not opaque again.
+    #[test]
+    fn a_windows_content_is_opaque_when_every_pixel_copied_in_is() {
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mut mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        let s = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s, 10, 10, 4, 2);
+        let b = d.attach_buffer(s, 4, 2, 16, PixelFormat::Xrgb8888).unwrap();
+        mem.0.insert(b, vec![0x40; 32]);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+        assert!(!ws.is_opaque(w) && !content_of(&scene, w).unwrap().opaque, "nothing copied yet");
+        d.damage(s, 0, 0, 2, 2);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(!ws.is_opaque(w), "half of it");
+        d.damage(s, 2, 0, 2, 2);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(ws.is_opaque(w) && content_of(&scene, w).unwrap().opaque);
+
+        // A premultiplied surface: its own pixels' alpha counts.
+        let t = d.create(SurfaceKind::Popup, 0, false);
+        d.set_geometry(t, 50, 50, 2, 1);
+        let tb = d.attach_buffer(t, 2, 1, 8, PixelFormat::Argb8888).unwrap();
+        mem.0.insert(tb, vec![0xff, 0xff, 0xff, 0xff, 0x10, 0x10, 0x10, 0x80]);
+        d.damage(t, 0, 0, 2, 1);
+        d.set_visible(t, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let tw = ws.window(t).unwrap();
+        assert!(!ws.is_opaque(tw), "one pixel is translucent");
+        mem.0.get_mut(&tb).unwrap()[7] = 0xff;
+        d.damage(t, 1, 0, 1, 1);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(ws.is_opaque(tw), "it was replaced by an opaque one");
+        mem.0.get_mut(&tb).unwrap()[3] = 0;
+        d.damage(t, 0, 0, 1, 1);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(!ws.is_opaque(tw) && !content_of(&scene, tw).unwrap().opaque);
     }
 
     #[test]

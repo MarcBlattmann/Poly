@@ -242,11 +242,12 @@ pub fn query_value(block: &[u8], sub_block: &[u16]) -> Result<(usize, u32), u32>
 pub const SYSTEM_VERSION: [u16; 4] = [10, 0, 26200, 9974];
 
 /// `VS_FFI_SIGNATURE`, `VS_FFI_STRUCVERSION`, `VS_FFI_FILEFLAGSMASK`, `VOS_NT_WINDOWS32`,
-/// `VFT_DLL` (`verrsrc.h`).
+/// `VFT_APP`, `VFT_DLL` (`verrsrc.h`).
 const VS_FFI_SIGNATURE: u32 = 0xFEEF_04BD;
 const VS_FFI_STRUCVERSION: u32 = 0x0001_0000;
 const VS_FFI_FILEFLAGSMASK: u32 = 0x3F;
 const VOS_NT_WINDOWS32: u32 = 0x0004_0004;
+const VFT_APP: u32 = 1;
 const VFT_DLL: u32 = 2;
 
 /// One node of a version resource (Learn, "VS_VERSIONINFO", "StringFileInfo", "String"):
@@ -278,6 +279,11 @@ fn build_node(key: &str, text: bool, value_len: u16, value: &[u8], children: &[V
 /// the product version, and `strings` (name, value) for U.S. English in Unicode (`040904B0`),
 /// with the translation that names that block.
 pub fn build_version_info(version: [u16; 4], strings: &[(&str, &str)]) -> Vec<u8> {
+    build_file_version_info(VFT_DLL, version, strings)
+}
+
+/// [`build_version_info`] for a file of type `file_type` (`VFT_APP`, `VFT_DLL`, ...).
+fn build_file_version_info(file_type: u32, version: [u16; 4], strings: &[(&str, &str)]) -> Vec<u8> {
     let ms = (u32::from(version[0]) << 16) | u32::from(version[1]);
     let ls = (u32::from(version[2]) << 16) | u32::from(version[3]);
     let mut fixed = Vec::with_capacity(52);
@@ -291,7 +297,7 @@ pub fn build_version_info(version: [u16; 4], strings: &[(&str, &str)]) -> Vec<u8
         VS_FFI_FILEFLAGSMASK,
         0,
         VOS_NT_WINDOWS32,
-        VFT_DLL,
+        file_type,
         0,
         0,
         0,
@@ -317,10 +323,21 @@ pub fn build_version_info(version: [u16; 4], strings: &[(&str, &str)]) -> Vec<u8
 /// "Version Information" lists as required for a file (`CompanyName`, `FileDescription`,
 /// `FileVersion`, `InternalName`, `OriginalFilename`, `ProductName`, `ProductVersion`).
 pub fn system_dll_version_info(file: &str, description: &str) -> Vec<u8> {
+    system_file_version_info(VFT_DLL, file, description)
+}
+
+/// [`system_dll_version_info`] for one of Poly's system programs (`VFT_APP`, Learn:
+/// "VS_FIXEDFILEINFO"), such as `cmd.exe` (ADR 0240).
+pub fn system_exe_version_info(file: &str, description: &str) -> Vec<u8> {
+    system_file_version_info(VFT_APP, file, description)
+}
+
+fn system_file_version_info(file_type: u32, file: &str, description: &str) -> Vec<u8> {
     let v = SYSTEM_VERSION;
     let text = alloc::format!("{}.{}.{}.{}", v[0], v[1], v[2], v[3]);
-    let internal = file.strip_suffix(".dll").unwrap_or(file);
-    build_version_info(
+    let internal = file.strip_suffix(".dll").or_else(|| file.strip_suffix(".exe")).unwrap_or(file);
+    build_file_version_info(
+        file_type,
         v,
         &[
             ("CompanyName", "Poly"),
@@ -510,6 +527,25 @@ mod tests {
             Ok(n)
         };
         assert_eq!(read_version_resource(&mut read), Ok(block));
+    }
+
+    /// A system program's version resource (`cmd.exe`, ADR 0240): `VFT_APP`, and the
+    /// description `AssocQueryStringW`'s `ASSOCSTR_FRIENDLYAPPNAME` returns
+    /// (`specs/windows/shlwapi.dll/AssocQueryStringW.yaml`, `progid`).
+    #[test]
+    fn a_system_program_version() {
+        let block = system_exe_version_info("cmd.exe", "Windows Command Processor");
+        let (at, _) = query_value(&block, &wide("\\")).unwrap();
+        let q = |o: usize| u32::from_le_bytes(block[at + o..at + o + 4].try_into().unwrap());
+        assert_eq!((q(32), q(36)), (0x0004_0004, 1));
+        for (name, want) in
+            [("FileDescription", "Windows Command Processor"), ("OriginalFilename", "cmd.exe"), ("InternalName", "cmd")]
+        {
+            let path = std::format!("\\StringFileInfo\\040904B0\\{name}");
+            let (at, len) = query_value(&block, &wide(&path)).unwrap();
+            assert_eq!(len as usize, want.len() + 1, "{name}");
+            assert_eq!(utf16(&block, at, want.len()), want, "{name}");
+        }
     }
 
     /// A PE32+ file with only a `.rsrc` section holding `version` as the
