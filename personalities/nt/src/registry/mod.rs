@@ -104,7 +104,10 @@ impl NtRegistry {
         // writes its settings under `HKEY_CURRENT_USER`, as on Windows.
         let u = poly_registry::defaults::POLY_USER_SID;
         let key = poly_ntobj::path_key("K", &poly_ntobj::name::wide(&alloc::format!("\\REGISTRY\\USER\\{u}")));
-        om.seed_path_security(&key, &alloc::format!("O:{u}G:{u}D:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KA;;;{u})(A;CI;KR;;;RC)"));
+        om.seed_path_security(
+            &key,
+            &alloc::format!("O:{u}G:{u}D:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KA;;;{u})(A;CI;KR;;;RC)"),
+        );
     }
 
     /// A key object was deleted (the object manager's `Deleted`): its open

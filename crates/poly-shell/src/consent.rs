@@ -166,7 +166,8 @@ impl Consent {
         let h = 2 * look::PADDING + look::TITLE_LINE + 3 * look::LINE + look::PADDING + look::BUTTON_HEIGHT;
         let card = Rect::new((width - w) / 2, (height - h) / 2, w, h);
         let by = card.bottom() - look::PADDING - look::BUTTON_HEIGHT;
-        let no = Rect::new(card.right() - look::PADDING - look::BUTTON_WIDTH, by, look::BUTTON_WIDTH, look::BUTTON_HEIGHT);
+        let no =
+            Rect::new(card.right() - look::PADDING - look::BUTTON_WIDTH, by, look::BUTTON_WIDTH, look::BUTTON_HEIGHT);
         let yes = Rect::new(no.x - look::BUTTON_GAP - look::BUTTON_WIDTH, by, look::BUTTON_WIDTH, look::BUTTON_HEIGHT);
         Some(Layout { card, yes, no })
     }
@@ -188,10 +189,28 @@ impl Consent {
         let strong = Style::new(Face::Medium, look::TEXT_SIZE).scaled(s);
         let top = c.y + pad;
         let icon = look::ICON * s;
-        lucide::INFO.draw(fb, clip, (c.x + pad) as f32, (top + (look::TITLE_LINE * s - icon) / 2) as f32, icon as f32, ink, 255);
+        lucide::INFO.draw(
+            fb,
+            clip,
+            (c.x + pad) as f32,
+            (top + (look::TITLE_LINE * s - icon) / 2) as f32,
+            icon as f32,
+            ink,
+            255,
+        );
         let tx = c.x + pad + icon + 10 * s;
         let right = c.right() - pad;
-        text.draw_style(fb, clip, tx as f32, text.centre(top, look::TITLE_LINE * s, title), right, look::TITLE, title, ink, 255);
+        text.draw_style(
+            fb,
+            clip,
+            tx as f32,
+            text.centre(top, look::TITLE_LINE * s, title),
+            right,
+            look::TITLE,
+            title,
+            ink,
+            255,
+        );
         // The program, its publisher, its path.
         let mut y = top + look::TITLE_LINE * s;
         let line = look::LINE * s;
@@ -201,9 +220,29 @@ impl Consent {
             Some(name) => alloc::format!("Publisher: {name} (signature not verified)"),
             None => String::from("Publisher: Unknown"),
         };
-        text.draw_style(fb, clip, tx as f32, text.centre(y, line, body), right, &publisher, body, ink, look::SECONDARY_ALPHA);
+        text.draw_style(
+            fb,
+            clip,
+            tx as f32,
+            text.centre(y, line, body),
+            right,
+            &publisher,
+            body,
+            ink,
+            look::SECONDARY_ALPHA,
+        );
         y += line;
-        text.draw_style(fb, clip, tx as f32, text.centre(y, line, body), right, &p.path, body, ink, look::SECONDARY_ALPHA);
+        text.draw_style(
+            fb,
+            clip,
+            tx as f32,
+            text.centre(y, line, body),
+            right,
+            &p.path,
+            body,
+            ink,
+            look::SECONDARY_ALPHA,
+        );
         // Yes and No.
         for (b, label, focused) in [(l.yes, "Yes", self.yes_focused), (l.no, "No", !self.yes_focused)] {
             let b = b.scale(s);
@@ -213,7 +252,17 @@ impl Consent {
                 rounded_border(fb, clip, b, br, 2 * s, ink, look::FOCUS_ALPHA);
             }
             let wl = text.measure(label, strong) as i32;
-            text.draw_style(fb, clip, (b.x + (b.width - wl) / 2) as f32, text.centre(b.y, b.height, strong), b.right(), label, strong, ink, 255);
+            text.draw_style(
+                fb,
+                clip,
+                (b.x + (b.width - wl) / 2) as f32,
+                text.centre(b.y, b.height, strong),
+                b.right(),
+                label,
+                strong,
+                ink,
+                255,
+            );
         }
     }
 }

@@ -383,7 +383,11 @@ impl CreateHook<'_> {
                         None => &[][..],
                     };
                     let key = poly_ntobj::path_key(&alloc::format!("F{volume}"), parent);
-                    let want = if self.params.options & FILE_DIRECTORY_FILE != 0 { FILE_ADD_SUBDIRECTORY } else { FILE_ADD_FILE };
+                    let want = if self.params.options & FILE_DIRECTORY_FILE != 0 {
+                        FILE_ADD_SUBDIRECTORY
+                    } else {
+                        FILE_ADD_FILE
+                    };
                     om.path_access(c, &key, true, want)?;
                 }
                 self.create_new(&found, trailing)?

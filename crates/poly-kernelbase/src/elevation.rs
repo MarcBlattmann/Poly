@@ -10,8 +10,8 @@
 //! that is not elevated fails with `ERROR_ELEVATION_REQUIRED` (740) and creates nothing;
 //! `ShellExecuteEx` turns that into a consent prompt, as it does for the verb `runas`.
 
-pub use crate::verinfo::ReadAt;
 use crate::verinfo;
+pub use crate::verinfo::ReadAt;
 use alloc::vec::Vec;
 
 /// `ERROR_ELEVATION_REQUIRED` (`winerror.h`).

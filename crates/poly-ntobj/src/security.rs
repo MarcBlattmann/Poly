@@ -689,7 +689,10 @@ mod tests {
         assert!(!om.seed_path_security(r"F0\X", "not sddl"));
         let file = |om: &mut ObjectManager, path: &str| {
             let id = om
-                .new_object(NewObject::Opaque { kind: ObjectType::File, cookie: 1, signaled: None, parse: false }, c.thread)
+                .new_object(
+                    NewObject::Opaque { kind: ObjectType::File, cookie: 1, signaled: None, parse: false },
+                    c.thread,
+                )
                 .unwrap();
             om.assign_path_security(id, DefaultSd::File, path, false);
             id

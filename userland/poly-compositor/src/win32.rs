@@ -80,7 +80,13 @@ pub enum Action {
     BeginResize(WindowId, Edges),
     /// A Windows program asks for administrator rights (ADR 0222): the desktop shows its
     /// consent prompt for `request` and answers on the link.
-    Consent { request: u32, pid: u32, program: alloc::string::String, path: alloc::string::String, file: alloc::string::String },
+    Consent {
+        request: u32,
+        pid: u32,
+        program: alloc::string::String,
+        path: alloc::string::String,
+        file: alloc::string::String,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]

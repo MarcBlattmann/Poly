@@ -69,8 +69,8 @@ pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
-pub mod volume;
 pub mod streams;
+pub mod volume;
 pub mod walk;
 
 #[cfg(test)]

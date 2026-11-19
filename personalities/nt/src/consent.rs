@@ -118,9 +118,14 @@ fn file_name(path: &str) -> &str {
 }
 
 /// Open request `request`: decide it at once or ask the desktop. Returns the event to wait on.
-fn ask(sys: &mut NtSystem, pid: ProcessId, path: &str, file: Option<String>, thread: poly_ntobj::ThreadRef) -> Result<(u32, ObjectId)> {
-    let event =
-        sys.objects.new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, thread)?;
+fn ask(
+    sys: &mut NtSystem,
+    pid: ProcessId,
+    path: &str,
+    file: Option<String>,
+    thread: poly_ntobj::ThreadRef,
+) -> Result<(u32, ObjectId)> {
+    let event = sys.objects.new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, thread)?;
     // The broker holds one reference, the waiting call the other.
     sys.objects.reference(event)?;
     sys.consent.next = sys.consent.next.wrapping_add(1).max(1);
@@ -168,13 +173,8 @@ pub fn request_elevation<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
         let (request, event, wait) = k.with_state(|sys, _, _| {
             let file = sys.io.vfs_path_of_dos(&wide).map(|b| String::from_utf8_lossy(&b).into_owned());
             let (request, event) = ask(sys, caller.process, &text, file, caller.thread)?;
-            let wait = sys.objects.wait_objects(
-                caller.thread,
-                &[event],
-                WaitType::Any,
-                false,
-                poly_ntobj::Timeout::Infinite,
-            );
+            let wait =
+                sys.objects.wait_objects(caller.thread, &[event], WaitType::Any, false, poly_ntobj::Timeout::Infinite);
             Ok::<_, NtStatus>((request, event, wait))
         })?;
         let _ = match wait {
@@ -191,19 +191,17 @@ pub fn request_elevation<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
             sys.reap(b);
             allow.unwrap_or(false)
         });
-        k.debug_print(alloc::format!("uac: request {request} for {text}: {}", if allow { "yes" } else { "no" }).as_bytes());
+        k.debug_print(
+            alloc::format!("uac: request {request} for {text}: {}", if allow { "yes" } else { "no" }).as_bytes(),
+        );
         if !allow {
             return Ok(STATUS_CANCELLED);
         }
     }
     let handle = k.with_state(|sys, _, b| {
         let id = sys.objects.security.new_luid();
-        let full = sys
-            .objects
-            .security
-            .token(source)
-            .and_then(|t| t.elevated_for_consent(id))
-            .ok_or(STATUS_ACCESS_DENIED)?;
+        let full =
+            sys.objects.security.token(source).and_then(|t| t.elevated_for_consent(id)).ok_or(STATUS_ACCESS_DENIED)?;
         let (_, obj) = sys.objects.new_token(full, caller.thread)?;
         sys.objects.assign_security(obj, ObjectType::Token, Some(source), None);
         let kernel = poly_ntobj::Caller::kernel(caller.process, caller.thread);
@@ -279,7 +277,8 @@ mod tests {
         let mut b = Broker::default();
         let mut f = Fake::new();
         let t = f.caller().thread;
-        let ev = f.sys.objects.new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, t).unwrap();
+        let ev =
+            f.sys.objects.new_object(NewObject::Event { kind: EventType::Notification, signaled: false }, t).unwrap();
         b.pending.insert(1, Pending { event: ev, pid: ProcessId(1), answer: None });
         b.pending.insert(2, Pending { event: ev, pid: ProcessId(1), answer: None });
         b.desktop_answered(&mut f.sys.objects, 1, true);

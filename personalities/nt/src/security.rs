@@ -31,9 +31,9 @@ use poly_security::err::SecErr;
 use poly_security::sd::{self, Parts};
 use poly_security::sdops;
 use poly_security::sid::Sid;
-use poly_security::token::{self, SetData, Token, class};
 /// The logon kinds (ADR 0222), for the kernel's `poly.win.token`.
 pub use poly_security::token::Logon;
+use poly_security::token::{self, SetData, Token, class};
 
 type Result<T> = core::result::Result<T, NtStatus>;
 

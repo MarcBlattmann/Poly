@@ -36,7 +36,7 @@ const fn line_bytes(t: &[u8], start: usize, end: usize, dll: &[u8], name: &[u8])
     // The DLL, case ignored.
     let mut k = 0;
     while k < dll.len() {
-        if p >= end || t[p].to_ascii_lowercase() != dll[k].to_ascii_lowercase() {
+        if p >= end || !t[p].eq_ignore_ascii_case(&dll[k]) {
             return -2;
         }
         p += 1;

@@ -541,13 +541,9 @@ impl Record for ToCompositor {
             }
             LayerGone { surface, layer } => Out::new(out, kind::LAYER_GONE).u32(*surface).u32(*layer).done(),
             Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
-            Consent { request, pid, program, path, file } => Out::new(out, kind::CONSENT)
-                .u32(*request)
-                .u32(*pid)
-                .string(program)
-                .string(path)
-                .string(file)
-                .done(),
+            Consent { request, pid, program, path, file } => {
+                Out::new(out, kind::CONSENT).u32(*request).u32(*pid).string(program).string(path).string(file).done()
+            }
         }
     }
 
@@ -636,13 +632,9 @@ impl Record for ToCompositor {
             kind::LAYER_DROP => LayerDrop { surface: b.u32()?, layer: b.u32()?, buffer: b.u32()? },
             kind::LAYER_GONE => LayerGone { surface: b.u32()?, layer: b.u32()? },
             kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
-            kind::CONSENT => Consent {
-                request: b.u32()?,
-                pid: b.u32()?,
-                program: b.string()?,
-                path: b.string()?,
-                file: b.string()?,
-            },
+            kind::CONSENT => {
+                Consent { request: b.u32()?, pid: b.u32()?, program: b.string()?, path: b.string()?, file: b.string()? }
+            }
             other => return Err(Error::UnknownKind(other)),
         })
     }
