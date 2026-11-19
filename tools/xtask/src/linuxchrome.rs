@@ -209,8 +209,10 @@ fn scenario(m: &mut Machine) -> Result {
     m.send_line(&format!(
         "/usr/local/bin/poly-as-user /usr/bin/google-chrome-stable --new-window {page} > /tmp/gc.log 2>&1 &"
     ))?;
-    let rest = m.seen(from, "window \"Poly Chromium colours - Google Chrome\"", WINDOW_WAIT)?;
-    let place = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
+    // The new window is often mapped as "Untitled - Google Chrome" before the
+    // page's <title> is parsed; the colour check below proves the page loaded.
+    let rest = m.seen(from, "Google Chrome\" shown at", WINDOW_WAIT)?;
+    let place = window_place(&format!(" shown at{rest}")).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
     let (px, py, pw, ph) = place;
     let deadline = std::time::Instant::now() + WINDOW_WAIT;
     loop {
