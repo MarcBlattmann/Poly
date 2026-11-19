@@ -175,8 +175,19 @@ impl IoState {
             FILE_NETWORK_OPEN_INFORMATION => fixed(info::network_open(&facts).to_vec()),
             FILE_ATTRIBUTE_TAG_INFORMATION => fixed(info::attribute_tag(&facts).to_vec()),
             FILE_STREAM_INFORMATION => {
-                let on_disk = matches!(rec.target, Target::Disk(_));
-                InfoBytes { bytes: info::streams(&facts, on_disk), fixed: STREAM_INFO_FIXED }
+                let bytes = match &rec.target {
+                    // A stream's own handle: that stream only (its file's
+                    // other streams are not asked for this way).
+                    Target::Disk(d) if d.stream.is_some() => {
+                        let mut name: Vec<u16> = ":".encode_utf16().collect();
+                        name.extend_from_slice(d.stream.as_deref().unwrap_or_default());
+                        name.extend(":$DATA".encode_utf16());
+                        info::stream_entries(&[(name, facts.size, facts.allocation)])
+                    }
+                    Target::Disk(d) => self.stream_information(Some(d.volume), Some(&d.node), &facts),
+                    _ => self.stream_information(None, None, &facts),
+                };
+                InfoBytes { bytes, fixed: STREAM_INFO_FIXED }
             }
             // The device itself has no name in its file system.
             FILE_NAME_INFORMATION if matches!(rec.target, Target::PipeDevice) => return Err(STATUS_INVALID_PARAMETER),
@@ -284,12 +295,16 @@ impl IoState {
     /// (Learn: "FILE_RENAME_INFORMATION"). Renaming a file to its own name
     /// in another case changes the case.
     pub fn rename(&mut self, cookie: u64, to: RenameTo, replace: bool) -> Result<(), NtStatus> {
+        // A stream keeps its file (renaming streams is not supported).
+        if self.files.get(&cookie).and_then(|f| f.disk()).is_some_and(|d| d.stream.is_some()) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
         let n = self.new_name(cookie, to)?;
         let NewName { key, src_parent, src_name, dst_parent, new_bytes, new_path, existing } = n;
         if let Some((target, name)) = &existing {
             let tkey = NodeKey::of(target)?;
             if tkey != key {
-                self.make_room(target, name, &dst_parent, replace)?;
+                self.make_room(self.volume_of(cookie), target, name, &dst_parent, replace)?;
             } else if *name == new_bytes && src_name == new_bytes {
                 // Its own name, same case: nothing to do.
                 return Ok(());
@@ -430,7 +445,7 @@ impl IoState {
             if NodeKey::of(target)? == key {
                 return if replace { Ok(()) } else { Err(STATUS_OBJECT_NAME_COLLISION) };
             }
-            self.make_room(target, name, &dst_parent, replace)?;
+            self.make_room(self.volume_of(cookie), target, name, &dst_parent, replace)?;
         }
         let vr = self.vfs()?;
         vr.vfs.link_node(&vr.ctx, &vr.cred, &node, PathArg::new(At::Node(&dst_parent), &new_bytes)).map_err(status_of)
@@ -440,7 +455,14 @@ impl IoState {
     /// by `target`: `STATUS_OBJECT_NAME_COLLISION` without `replace`,
     /// `STATUS_ACCESS_DENIED` when `target` is a directory, read-only or
     /// open (Learn: "FILE_RENAME_INFORMATION").
-    fn make_room(&mut self, target: &NodeRef, name: &[u8], dir: &NodeRef, replace: bool) -> Result<(), NtStatus> {
+    fn make_room(
+        &mut self,
+        volume: usize,
+        target: &NodeRef,
+        name: &[u8],
+        dir: &NodeRef,
+        replace: bool,
+    ) -> Result<(), NtStatus> {
         if !replace {
             return Err(STATUS_OBJECT_NAME_COLLISION);
         }
@@ -451,7 +473,10 @@ impl IoState {
             return Err(STATUS_ACCESS_DENIED);
         }
         let vr = self.vfs()?;
-        vr.vfs.unlink(&vr.ctx, &vr.cred, At::Node(dir), name).map_err(status_of)
+        vr.vfs.unlink(&vr.ctx, &vr.cred, At::Node(dir), name).map_err(status_of)?;
+        // The replaced file's streams go with its last name (ADR 0223).
+        self.drop_streams_if_gone(volume, target);
+        Ok(())
     }
 
     /// Resolve where a new name (`to`) for file object `cookie`'s file goes.
@@ -575,8 +600,12 @@ impl IoState {
                 // FileSystemNameLength, FileSystemName (16 bytes fixed).
                 let mut attrs = FILE_CASE_PRESERVED_NAMES
                     | FILE_UNICODE_ON_DISK
+                    | FILE_PERSISTENT_ACLS
                     | FILE_SUPPORTS_REPARSE_POINTS
                     | FILE_SUPPORTS_HARD_LINKS;
+                if self.has_streams(d.volume) {
+                    attrs |= FILE_NAMED_STREAMS;
+                }
                 if d.node.mount().read_only() {
                     attrs |= FILE_READ_ONLY_VOLUME;
                 }
@@ -602,7 +631,10 @@ impl IoState {
     }
 }
 
-/// The file system name our volumes report (`FileFsAttributeInformation`).
-/// Poly's own: applications that look for `NTFS` features should probe
-/// them, as Learn advises; to be revisited when an app needs otherwise.
-pub const FS_NAME: &str = "PolyFS";
+/// The file system name our volumes report (`FileFsAttributeInformation`):
+/// `NTFS`, as the system volume of every Windows (sheet
+/// `kernel32.dll/GetVolumeInformationW`: Chrome sizes the names of its
+/// downloads by the volume; programs read the name to know which NTFS
+/// features to expect: long names, case-preserved Unicode names, named
+/// streams, hard links, reparse points).
+pub const FS_NAME: &str = "NTFS";
