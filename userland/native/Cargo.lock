@@ -32,6 +32,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-com"
+version = "0.0.1"
+
+[[package]]
 name = "poly-compositor"
 version = "0.0.1"
 dependencies = [
@@ -143,6 +147,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+]
+
+[[package]]
 name = "poly-nls"
 version = "0.0.1"
 dependencies = [
@@ -173,6 +184,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-pe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-native"
 version = "0.0.1"
 dependencies = [
@@ -185,7 +200,10 @@ name = "poly-pkg"
 version = "0.0.1"
 dependencies = [
  "poly-compress",
+ "poly-lnk",
+ "poly-pe",
  "poly-png",
+ "poly-registry",
  "poly-squashfs",
  "poly-vfs",
 ]
@@ -193,6 +211,13 @@ dependencies = [
 [[package]]
 name = "poly-png"
 version = "0.0.1"
+
+[[package]]
+name = "poly-registry"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-rt"

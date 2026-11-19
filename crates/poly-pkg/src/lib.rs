@@ -20,6 +20,9 @@
 //!   writes for a front end;
 //! - [`remove`]: which apps can be uninstalled and what removing one takes
 //!   away (ADR 0180);
+//! - [`windows`]: Windows programs and installers (ADR 0230): what a
+//!   `.exe` says about itself, the shortcuts and `Uninstall` keys an installer
+//!   leaves, the launcher entries made from them;
 //! - [`installer`]: the installer's model: what its window says and which
 //!   command comes next.
 //!
@@ -44,6 +47,7 @@ pub mod format;
 pub mod installer;
 pub mod remove;
 pub mod tar;
+pub mod windows;
 
 /// Why a package file could not be read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +68,8 @@ pub enum Error {
     OldAppImage,
     /// An AppImage without a desktop file that names the app.
     NoDesktopEntry,
+    /// A Windows library (DLL), not a program.
+    Library,
 }
 
 impl Error {
@@ -78,6 +84,7 @@ impl Error {
             Error::TooLarge => "The package's description is larger than a package's may be.",
             Error::OldAppImage => "This is an AppImage of the old type 1. Look for a newer version of the app.",
             Error::NoDesktopEntry => "This AppImage does not say what app it is (no desktop file).",
+            Error::Library => "This is a part of a Windows program (a library, .dll), not a program to run or install.",
         }
     }
 }

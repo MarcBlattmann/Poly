@@ -495,7 +495,10 @@ name = "poly-pkg"
 version = "0.0.1"
 dependencies = [
  "poly-compress",
+ "poly-lnk",
+ "poly-pe",
  "poly-png",
+ "poly-registry",
  "poly-squashfs",
  "poly-vfs",
 ]
