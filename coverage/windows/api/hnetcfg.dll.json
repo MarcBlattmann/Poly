@@ -3,5 +3,5 @@
 {"symbol":"DllGetClassObject","src":["wine-spec"]},
 {"symbol":"DllRegisterServer","src":["wine-spec"]},
 {"symbol":"DllUnregisterServer","src":["wine-spec"]},
-{"symbol":"NetFwPolicy2","status":"claimed","claimed_by":"impl-chrome-installer","src":["ms-learn-netfw"]}
+{"symbol":"NetFwPolicy2","status":"green","tests_visible":3,"src":["ms-learn-netfw"]}
 ]

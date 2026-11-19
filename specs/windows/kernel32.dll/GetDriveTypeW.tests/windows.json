@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "gdt_forms",
-      "exe_sha256": "49d851002ca3556e98018979930f856d46190a436834e23105ce9b1b85760ccc",
+      "exe_sha256": "7ca5d73a6658a098b32b93e81f42fb6b64260566e6aa9841418782fe6e265401",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "gdt_more",
-      "exe_sha256": "36713dc984ed8433a2da2678aaa1defcdecb82350b124b55c2b7f3c3fe9239de",
+      "exe_sha256": "fedfce74543d8b6245091ef1e22ee8b65c75883bf4f40e6daaf67851de294cf4",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
