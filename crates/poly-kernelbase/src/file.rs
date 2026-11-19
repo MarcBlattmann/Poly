@@ -436,9 +436,68 @@ pub fn named_stream_suffixes(records: &[[u8; FIND_STREAM_DATA_SIZE]]) -> Vec<Vec
         .collect()
 }
 
+/// The strings `MoveFileExW(.., MOVEFILE_DELAY_UNTIL_REBOOT)` appends to the
+/// `PendingFileRenameOperations` list (sheet `kernel32.dll/MoveFileExW.DelayUntilReboot`), each
+/// NUL-terminated: the old name as `*1` and its NT path (`\??\C:\...`), then for a deletion an
+/// empty string, for a rename `*1`, a `!` with `MOVEFILE_REPLACE_EXISTING`, and the new NT path.
+pub fn pending_rename_strings(nt_old: &[u16], nt_new: Option<&[u16]>, replace: bool) -> Vec<u16> {
+    let mut out: Vec<u16> = "*1".encode_utf16().collect();
+    out.extend_from_slice(nt_old);
+    out.push(0);
+    if let Some(new) = nt_new {
+        out.extend("*1".encode_utf16());
+        if replace {
+            out.push(u16::from(b'!'));
+        }
+        out.extend_from_slice(new);
+    }
+    out.push(0);
+    out
+}
+
+/// A `REG_MULTI_SZ` value's bytes (`existing`, empty for a value that does not exist) with the
+/// NUL-terminated `strings` appended in front of the list's final terminator: the strings already
+/// there stay first, byte for byte.
+pub fn multi_sz_append(existing: &[u8], strings: &[u16]) -> Vec<u8> {
+    let mut units: Vec<u16> = existing.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    // Drop the list's terminator: the empty string after the last one (or the lone NUL of an
+    // empty list). A list whose last string lacks it keeps that string's NUL.
+    if units.len() >= 2 && units[units.len() - 1] == 0 && units[units.len() - 2] == 0 {
+        units.pop();
+    } else if units == [0] {
+        units.clear();
+    } else if units.last().is_some_and(|&c| c != 0) {
+        units.push(0);
+    }
+    units.extend_from_slice(strings);
+    units.push(0);
+    units.iter().flat_map(|c| c.to_le_bytes()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_renames_append_pairs_in_front_of_the_terminator() {
+        let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        let delete = pending_rename_strings(&w("\\??\\C:\\a"), None, false);
+        assert_eq!(delete, w("*1\\??\\C:\\a\0\0"));
+        let rename = pending_rename_strings(&w("\\??\\C:\\a"), Some(&w("\\??\\C:\\b")), true);
+        assert_eq!(rename, w("*1\\??\\C:\\a\0*1!\\??\\C:\\b\0"));
+        let bytes = |s: &str| w(s).iter().flat_map(|c| c.to_le_bytes()).collect::<Vec<u8>>();
+        // A new value: the pair and the list's terminator.
+        assert_eq!(multi_sz_append(&[], &delete), bytes("*1\\??\\C:\\a\0\0\0"));
+        assert_eq!(multi_sz_append(&[0, 0], &delete), bytes("*1\\??\\C:\\a\0\0\0"));
+        // After an existing list: its strings stay first.
+        let old = bytes("x\0y\0\0");
+        let both = multi_sz_append(&old, &delete);
+        assert_eq!(both, bytes("x\0y\0*1\\??\\C:\\a\0\0\0"));
+        assert_eq!(both[..old.len() - 2], old[..old.len() - 2]);
+        // A list without its terminator, and one without its last NUL.
+        assert_eq!(multi_sz_append(&bytes("x\0"), &w("z\0")), bytes("x\0z\0\0"));
+        assert_eq!(multi_sz_append(&bytes("x"), &w("z\0")), bytes("x\0z\0\0"));
+    }
 
     #[test]
     fn named_streams_are_the_ones_after_the_default() {

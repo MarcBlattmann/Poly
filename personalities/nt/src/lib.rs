@@ -68,6 +68,7 @@ pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
 pub mod procattrs;
+pub mod proclist;
 pub mod protect;
 pub mod registry;
 pub mod scm;
@@ -294,6 +295,8 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyRandomBytes => sysinfo::random_bytes(k, regs),
         PolyPhysicalMemory => sysinfo::physical_memory(k, regs),
         PolyServiceCall => scm::service_call(k, regs),
+        PolyProcessList => proclist::process_list(k, regs),
+        NotifyChangeDirectoryFile => io::notify::notify_change_directory_file(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

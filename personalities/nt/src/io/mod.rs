@@ -66,6 +66,7 @@ pub mod irp;
 pub mod locks;
 pub mod names;
 pub mod npfs;
+pub mod notify;
 pub mod npservices;
 pub mod services;
 pub mod share;
@@ -320,6 +321,8 @@ pub struct IoState {
     pub(crate) sync_done: BTreeMap<u64, (NtStatus, u64)>,
     /// The consoles (ADR 0080).
     pub(crate) consoles: crate::console::Consoles,
+    /// The directory watches of change notification, by file object ([`notify`]).
+    pub(crate) watches: BTreeMap<u64, notify::DirWatch>,
     next_cookie: u64,
     pub(crate) next_irp: u64,
 }
@@ -444,6 +447,7 @@ impl IoState {
             consoles: crate::console::Consoles::default(),
             next_cookie: COOKIE_BASE,
             next_irp: 1,
+            watches: BTreeMap::new(),
             accept_targets: BTreeMap::new(),
         }
     }
@@ -746,6 +750,10 @@ impl IoState {
                         self.delete_node(d.key, &d.node, state.link);
                         if d.stream.is_none() {
                             self.drop_streams_if_gone(d.volume, &d.node);
+                            let directory = rec.kind == FileType::Directory;
+                            let change =
+                                notify::Change::Name { action: notify::FILE_ACTION_REMOVED, directory };
+                            self.note_change(d.volume, &d.path, change);
                         }
                     }
                 }
