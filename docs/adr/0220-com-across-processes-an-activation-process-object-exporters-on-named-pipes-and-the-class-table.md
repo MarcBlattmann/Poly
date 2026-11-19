@@ -161,8 +161,17 @@ with their thread (`DLL_THREAD_DETACH`).
 - **Withdrawing does not wait.** `CoReleaseServerProcess` reaching 0, `CoRevokeClassObject` and the end of an
   apartment return at once, as on Windows (a test server logs its count before its own polling loop notices the
   last object); the factory's export is disconnected synchronously and the activation process is told by an
-  ordered sender thread. A client that was served a factory in that moment finds it disconnected when it first
-  calls it and asks the activation process again (three times at most, 20 ms apart).
+  ordered sender thread (started when the process first publishes, so the withdrawal itself costs a queue entry
+  and an event). A client that was served a factory in that moment finds it disconnected when it first calls it
+  and asks the activation process again.
+- **Stale and fresh registrations (2026-11-19, the three races).** A server can end before its withdrawal arrives,
+  so `comlaunch.exe` checks a registration that existed before the request (a call on the factory that needs no
+  apartment: `RPC_E_DISCONNECTED` or no pipe means it is gone, and it is dropped). A registration that arrives
+  while the request waits is handed out at once, without the check, and the waiting request looks every 1 ms:
+  the visible test that restarts a service after its stop gets a server that leaves on its first 10 ms poll, and
+  Windows serves the caller inside that time. Both pipes always have a listening instance (the next one is made
+  before a connected one is handed on, the exporter's first one before its name is published): a client takes
+  "no pipe" for "no server".
 - **Spies and `OleInitialize`.** The spies see the result of `OleInitialize`'s COM part (`S_FALSE` on a thread that
   already has its STA), while `OleInitialize` keeps returning its own result.
 
