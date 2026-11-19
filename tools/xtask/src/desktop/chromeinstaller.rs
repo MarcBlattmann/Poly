@@ -333,8 +333,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             MEMORY,
             &super::append(&format!(
                 "poly.mount=virtio0:/mnt{}",
-                // POLY_B7_TRACE=1: one serial line per system call of the Windows programs (poly.nt.trace).
-                if std::env::var_os("POLY_B7_TRACE").is_some() { " poly.nt.trace" } else { "" }
+                // POLY_B7_TRACE=1: one serial line per system call of the Windows programs (poly.nt.trace),
+                // and every exception with its module, offset and 64 stack quadwords.
+                if std::env::var_os("POLY_B7_TRACE").is_some() { " poly.nt.trace poly.nt.exceptions=64" } else { "" }
             )),
             crate::Devices::None,
             &qemu_args,
