@@ -105,6 +105,13 @@ fn wait_watching(d: &mut Driver, text: &str, secs: u64, what: &str) -> std::resu
         let left = deadline.saturating_duration_since(Instant::now());
         match wait_line(&d.lines, text, left.min(Duration::from_secs(30))) {
             Ok(l) => return Ok(l),
+            // The front door says the installer ended without an app: nothing more will come.
+            Err(_)
+                if super::count(&d.lines, "installed no app") + super::count(&d.lines, ": no launcher entry") > 0 =>
+            {
+                let _ = d.shot(&format!("{what}-ended"));
+                return Err(format!("no line {text:?}: the installer ended without installing an app"));
+            }
             Err(e) if left <= Duration::from_secs(30) => return Err(e),
             Err(_) => {
                 n += 1;
@@ -302,7 +309,11 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
             kernel,
             syms,
             MEMORY,
-            &super::append("poly.mount=virtio0:/mnt"),
+            &super::append(&format!(
+                "poly.mount=virtio0:/mnt{}",
+                // POLY_B7_TRACE=1: one serial line per system call of the Windows programs (poly.nt.trace).
+                if std::env::var_os("POLY_B7_TRACE").is_some() { " poly.nt.trace" } else { "" }
+            )),
             crate::Devices::None,
             &qemu_args,
             None,
