@@ -22,7 +22,6 @@ poly_win32_rt::fail_exports!(
         RegCreateKeyTransactedW,
         RegCreateKeyW,
         RegDeleteKeyValueW,
-        RegDeleteTreeW,
         RegEnumKeyA,
         RegEnumKeyExA,
         RegEnumKeyW,

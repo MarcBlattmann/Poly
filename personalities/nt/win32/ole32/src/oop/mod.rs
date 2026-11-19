@@ -14,8 +14,10 @@
 
 pub(crate) mod activate;
 pub(crate) mod apt;
+pub(crate) mod channel;
 pub(crate) mod entries;
 pub(crate) mod exporter;
+pub(crate) mod marshal;
 pub(crate) mod pipe;
 pub(crate) mod proxy;
 

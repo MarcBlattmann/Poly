@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/mprotect.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mprotect.tests/macos.json.
+id: macos/syscall/bsd/mprotect
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 74,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 74, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. mprotect(address, length, protection) changes the
+  protection (PROT_READ 1, PROT_WRITE 2, PROT_EXEC 4, 0 = PROT_NONE) of
+  the pages that [address, address + length) touches: a length of 1 covers
+  a whole page, a length of 0 changes nothing and succeeds. The content of
+  the pages is kept, whatever protection they pass through (RW, RO,
+  PROT_NONE, RW again). The address must be page aligned (16384 bytes on
+  arm64). A write to a read-only page and a read of a PROT_NONE page kill
+  the process: the signal is SIGBUS (10) on the arm64 oracle (a value; an
+  access to an address that is not mapped at all is SIGSEGV 11). A mapping
+  of a file opened read-only cannot become writable when it is MAP_SHARED
+  (EACCES); a MAP_PRIVATE one can, but not together with PROT_EXEC. On
+  arm64 anonymous memory cannot be writable and executable at once:
+  PROT_READ|PROT_WRITE|PROT_EXEC is EACCES (13, a value for x86_64); read
+  and execute is fine. A protection value the call does not know (0x40)
+  was accepted in a probe, not tested.
+returns:
+  success: "0"
+errors:
+  not_aligned: "EINVAL (22): an address that is not page aligned; a negative length"
+  not_mapped: "ENOMEM (12): pages that are not mapped, an unmapped mapping, a range that leaves the mapping"
+  not_allowed: "EACCES (13): read-only shared file mapping to writable; private read-only file mapping to read+write+execute"
+side_effects: "the protection of the pages changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

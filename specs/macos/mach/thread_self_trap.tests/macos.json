@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "thread_self_fork",
+      "source_sha256": "ab7013fbe68b33e1cb7371349f4bc35461009585a807add063621e023212d7fb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a128df7e9cb9e5b11f007fbd7989354fd376a8b66253dd8b1e91125bb076e6e5",
+          "exit_code": 0,
+          "stdout": "ok the child's name is a send right (exit 10 or 11)\nvalue the child's name equals the parent's (10 = yes, 11 = no) 11\nok the parent's name is unchanged\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "thread_self_stable",
+      "source_sha256": "991ca3292b4d7c1af6bee128081b0400472d3c7c2ffad6fa35be66509f8ab114",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0d0d3edb734d21c4ada65f4830cc0266d99bc4609d283d314c0541547bff5394",
+          "exit_code": 0,
+          "stdout": "ok not MACH_PORT_NULL\nok not MACH_PORT_DEAD\nok a 32-bit name\nok the same on every call\nok a send right\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

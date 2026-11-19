@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 19:58:57",
+  "tests": [
+    {
+      "name": "madvise_advice",
+      "source_sha256": "5e46e18be70983868a9616538377e2463a94c5a8f1b94456b53e017c6919a763",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c7b5a523e896d44481f9d773b0b718315c7c00e95261aae32bdf7d322cfe53ed",
+          "exit_code": 0,
+          "stdout": "ok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok advice accepted\nok and the memory is as it was\nok advice 12: EINVAL\nok advice -1: EINVAL\nvalue advice 10 (MADV_PAGEOUT): errno 45\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "madvise_ranges",
+      "source_sha256": "028e6e97c8ca56035e0aaa06a46b8d201801872b3c7c3ae85c0389414804b8c8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5690f0f99f97a4add23127cbeefed26fa2de7330f3c597563d216efc37ffccb6",
+          "exit_code": 0,
+          "stdout": "ok pages that are not mapped: ENOMEM\nok a length of 0\nok the whole mapping\nvalue a range of 5 pages over a mapping of 2: errno 22\nvalue an unaligned address: errno 0\nvalue a hole where a mapping was unmapped: errno 22\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "port_insert_right_errors",
+      "source_sha256": "59429c74c1903de3bae05686502a419867568a4141e7e3c5799b7303f0e53ac0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "15c00525f3c490cdc865f5b4aad1f9b7fc8ab5859956177a771a53e662024e14",
+          "exit_code": 0,
+          "stdout": "ok an invalid task: MACH_SEND_INVALID_DEST\nvalue a name that is not in the task as the port: kern_return 15\nvalue a message type 99: kern_return 17\nvalue MAKE_SEND of a port set: kern_return 17\nok a good call afterwards\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "port_insert_right_name_chosen",
+      "source_sha256": "e396904ef183c0bde8f27ac2acadaa2a5606ece32ce00d963bb3cd7dce0d24ad",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3f8a8e1c6311f9bb337bba96c2d7eaad466936cb927e204dc62dc9ad7a7857b5",
+          "exit_code": 0,
+          "stdout": "value MAKE_SEND of a under b's name (b is a receive right): kern_return 21\nok a still has only its receive right\nok MAKE_SEND under a's own name works\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

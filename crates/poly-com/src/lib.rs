@@ -13,6 +13,8 @@
 //!   `StringFromGUID2`, `IIDFromString`).
 //! - [`propvariant`]: which `PROPVARIANT` types exist and what each owns
 //!   (`PropVariantClear`, `PropVariantCopy`).
+//! - [`typelib`]: type libraries (ADR 0220, B2b): the model `oleaut32`'s `ITypeLib`/`ITypeInfo`
+//!   and its marshaller work on, its file format, registration rules and `stdole`.
 //! - [`inproc`]: the in-process classes Poly's own DLLs serve (ADR 0223).
 //! - [`hstring`]: `HSTRING`s (`WindowsCreateString` and friends, Learn:
 //!   "HSTRING", "Windows Runtime strings").
@@ -33,8 +35,10 @@ pub mod guid;
 pub mod hresult;
 pub mod hstring;
 pub mod inproc;
+pub mod marshal;
 pub mod propvariant;
 pub mod spy;
+pub mod typelib;
 pub mod wire;
 
 /// What `ole32.dll` must export, as code (`cargo xtask win32` checks it).
@@ -64,6 +68,19 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoRegisterInitializeSpy",
     "CoRevokeInitializeSpy",
     "CoDisconnectObject",
+    // ADR 0220 (B2b).
+    "CreateErrorInfo",
+    "SetErrorInfo",
+    "GetErrorInfo",
+    "CreateStreamOnHGlobal",
+    "GetHGlobalFromStream",
+    "CoGetPSClsid",
+    "CoRegisterPSClsid",
+    "CoMarshalInterface",
+    "CoUnmarshalInterface",
+    "CoReleaseMarshalData",
+    "CoGetMarshalSizeMax",
+    "CoGetStandardMarshal",
     "RoGetActivationFactory",
     "RoActivateInstance",
     "CoCreateFreeThreadedMarshaler",
