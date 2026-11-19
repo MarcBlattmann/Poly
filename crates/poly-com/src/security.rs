@@ -126,6 +126,7 @@ impl Blanket {
             Some((name, true)) => Some(String::from(name)),
             Some((_, false)) => return Err(NONE_MAPPED),
         };
+        let named = principal.is_some();
         let anonymous = level == RPC_C_AUTHN_LEVEL_NONE && imp == RPC_C_IMP_LEVEL_ANONYMOUS;
         let imp = match imp {
             RPC_C_IMP_LEVEL_DEFAULT => RPC_C_IMP_LEVEL_IDENTIFY,
@@ -139,7 +140,8 @@ impl Blanket {
             principal,
             level: RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
             imp,
-            caps,
+            // Mutual authentication needs a principal name: without one it is not kept.
+            caps: if caps == EOAC_MUTUAL_AUTH && !named { EOAC_NONE } else { caps },
             refuse: anonymous,
         })
     }
@@ -348,6 +350,8 @@ mod tests {
         let refused = all.set(RPC_C_AUTHN_DEFAULT, RPC_C_AUTHZ_DEFAULT, None, 1, 1, 0).unwrap();
         assert_eq!((refused.imp, refused.refuse), (3, true));
         assert_eq!(all.set(10, 0, None, 3, 4, EOAC_DYNAMIC_CLOAKING).unwrap().caps, 0x40);
+        assert_eq!(all.set(10, 0, None, 3, 3, EOAC_MUTUAL_AUTH).unwrap().caps, 0);
+        assert_eq!(all.set(10, 0, None, 3, 3, EOAC_STATIC_CLOAKING).unwrap().caps, 0x20);
     }
 
     #[test]
