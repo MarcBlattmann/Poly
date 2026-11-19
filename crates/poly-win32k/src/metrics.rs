@@ -605,8 +605,16 @@ pub fn hidden_frame_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
 /// plain popup: 2,2; one with a sizing frame: 14,14; a tool window with a
 /// caption: 16,16). The largest is the screen plus 20.
 pub fn minmax(style: u32, ex: u32, d: &Display) -> [(i32, i32); 4] {
+    minmax_dpi(style, ex, d, 96)
+}
+
+/// [`minmax`] of a window whose frame is measured at `dpi` (ADR 0231): the hidden frame is the
+/// one at that DPI, 13 for an overlapped window at 192 (ADR 0234: a maximized Chrome at 200 %
+/// takes 13 off each side in its `WM_NCCALCSIZE`; with 8 hidden, 5 pixels of the desktop showed
+/// at the right edge).
+pub fn minmax_dpi(style: u32, ex: u32, d: &Display, dpi: u32) -> [(i32, i32); 4] {
     let (style, ex) = had_styles(style, ex);
-    let s = hidden_frame(style, ex);
+    let s = hidden_frame_dpi(style, ex, dpi);
     let min = if style & (WS_BORDER | WS_DLGFRAME) != 0 && ex & WS_EX_TOOLWINDOW == 0 {
         MIN_TRACK
     } else {
@@ -627,9 +635,21 @@ pub const WS_EX_APPWINDOW: u32 = 0x0004_0000;
 /// 0,24,1920,1080); any other takes the position and size as they are and
 /// covers the taskbar (GetSystemMetrics.yaml `window_metrics`).
 pub fn maximized_rect(style: u32, ex: u32, d: &Display, max_size: (i32, i32), max_pos: (i32, i32)) -> Rect {
+    maximized_rect_dpi(style, ex, d, max_size, max_pos, 96)
+}
+
+/// [`maximized_rect`] of a window whose frame is measured at `dpi` ([`minmax_dpi`]).
+pub fn maximized_rect_dpi(
+    style: u32,
+    ex: u32,
+    d: &Display,
+    max_size: (i32, i32),
+    max_pos: (i32, i32),
+    dpi: u32,
+) -> Rect {
     let (style, ex) = had_styles(style, ex);
     if style & WS_MAXIMIZEBOX != 0 && has_caption(style) {
-        let s = hidden_frame(style, ex);
+        let s = hidden_frame_dpi(style, ex, dpi);
         let (x, y) = (d.work.left + max_pos.0, d.work.top + max_pos.1);
         let w = max_size.0.min(d.work.width() + 2 * s);
         let h = max_size.1.min(d.work.height() + 2 * s);
@@ -1081,5 +1101,22 @@ mod tests {
             minmax(WS_CAPTION | WS_THICKFRAME, 0, &Display::SERVICE),
             [(1040, 784), (-8, -8), (136, 39), (1044, 788)]
         );
+    }
+
+    /// A maximized window hides the frame of its own DPI (ADR 0234): at 192 DPI an overlapped
+    /// window overhangs the work area by 13 on each side, as `WM_NCCALCSIZE` (Chrome's too) takes
+    /// off; at 96 DPI by 8, as the sheets observed.
+    #[test]
+    fn a_maximized_window_hides_the_frame_of_its_dpi() {
+        let ow = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let d = Display { width: 2560, height: 1600, work: Rect::new(0, 48, 2560, 1600), interactive: true };
+        let [ms, mp, _, _] = minmax_dpi(ow, 0, &d, 192);
+        assert_eq!((ms, mp), ((2586, 1626), (-13, -13)));
+        assert_eq!(maximized_rect_dpi(ow, 0, &d, ms, mp, 192), Rect::new(-13, 35, 2573, 1613));
+        let [ms, mp, _, _] = minmax(ow, 0, &d);
+        assert_eq!(maximized_rect(ow, 0, &d, ms, mp), Rect::new(-8, 40, 2568, 1608));
+        // The client area of the 192-DPI rectangle is the work area's width.
+        let i = client_insets_dpi(ow, 0, false, 192);
+        assert_eq!((i.left, i.right), (13, 13));
     }
 }
