@@ -265,3 +265,27 @@ No third-party source.
 
 - **The `MSFT` reader** (format sheet), which loading `updater.exe\N` needs.
 - **Not done here:** `RegisterTypeLibForUser`, records (`VT_RECORD`, `IRecordInfo`), `CreateStdDispatch`/`DispInvoke`, 32-bit proxies (B2d), and reclaiming the references of a client process that ended (held-out rule `other_process`: references back within 5 s).
+
+### B2b-2 (2026-11-19): reading MIDL's type libraries
+
+- **The reader.** `typelib::msft` reads the `MSFT` file and resource form from the format sheet `docs/windows/typelib-file-format.md` (track `spec-win-typelib-format`) and nothing else. It covers:
+  - the header, directory, GUID/name/string tables and custom data;
+  - imports (by GUID, or by index into `stdole`);
+  - type records, functions, variables and module entries;
+  - default values, and a win32 file's slots scaled for 64-bit processes.
+
+  `file::read` routes by the first bytes, as planned. Imports carry no version, so the loader takes the highest registered (or live) version of the imported library.
+- **The model gained:** help-string contexts, the help-string DLL, custom data (library, type, function, parameter, variable), default values, module entry points, variable docs, `cbSizeInstance` as stored, and statistics. Poly's own file format moved to version 2 to carry them.
+- **What `oleaut32` now answers:**
+  - `ITypeLib2` and `ITypeInfo2` (custom data, `GetDocumentation2`, statistics, index lookups);
+  - `ITypeInfo::GetDllEntry`;
+  - `ClearCustData`;
+  - `PARAMDESCEX` default values;
+  - the help file as `<directory>\<name>` and a NUL.
+- **Section 9 of the sheet** applies to every library, in `view`:
+  - a dual's dispatch form puts the functions of every local dual base before its own;
+  - it reports `IDispatch` as the base (the new `HREFTYPE` kind `Href::Stdole`);
+  - the `IUnknown`/`IDispatch` methods are folded too (`QueryInterface` returns `void`) and refer to `stdole`'s `GUID`, `DISPPARAMS` and `EXCEPINFO`;
+  - a dispinterface's functions have vtable offset 0;
+  - parameters without names are left out of `GetNames`.
+- **One fact the sheet's table does not list:** a module's type record word 21 holds the offset of its first DLL name, which a function without its own DLL reports (rule `modules`). It was seen in the sample `kinds.tlb` and is noted for the spec agent.

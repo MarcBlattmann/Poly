@@ -148,6 +148,34 @@ pub enum TypeDesc {
     CArray(Box<TypeDesc>, Vec<(u32, i32)>),
 }
 
+impl Default for TypeDesc {
+    fn default() -> TypeDesc {
+        TypeDesc::Base(VT_EMPTY)
+    }
+}
+
+/// A custom-data value (`ITypeLib2::GetCustData` and friends) or a default value of a parameter:
+/// the variant types the format sheet saw (`i4`, `ui4`, `bstr`) and others by their bits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CustValue {
+    I4(i32),
+    Ui4(u32),
+    Bstr(String),
+    Other { vt: u16, bits: u64 },
+}
+
+/// Custom data: (GUID, value) in the order the API reports them.
+pub type CustData = Vec<(Guid, CustValue)>;
+
+/// The entry point of a module's function (`ITypeInfo::GetDllEntry`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DllEntry {
+    pub dll: String,
+    /// The entry point's name, or `None` with `ordinal` (0 when there is neither).
+    pub name: Option<String>,
+    pub ordinal: u16,
+}
+
 impl TypeDesc {
     /// The `vt` of the outermost level.
     pub fn vt(&self) -> u16 {
@@ -170,15 +198,18 @@ impl TypeDesc {
 }
 
 /// One parameter of a function.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Param {
     pub td: TypeDesc,
     pub flags: u16,
     pub name: String,
+    /// Its default value (`PARAMFLAG_FHASDEFAULT`).
+    pub default: Option<CustValue>,
+    pub cust: CustData,
 }
 
 /// One function (`FUNCDESC` and its names) as it was added.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Func {
     pub memid: i32,
     pub funckind: i32,
@@ -196,10 +227,14 @@ pub struct Func {
     pub help_context: u32,
     /// Whether `SetFuncAndParamNames` has named it.
     pub named: bool,
+    pub help_string_context: u32,
+    pub cust: CustData,
+    /// A module function's DLL and entry point.
+    pub entry: Option<DllEntry>,
 }
 
 /// One variable or record field (`VARDESC`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Var {
     pub memid: i32,
     pub name: String,
@@ -209,6 +244,12 @@ pub struct Var {
     pub varkind: i32,
     /// The offset of a field, or the value of a constant.
     pub value: i64,
+    /// A constant's value with its type, when it is not a plain `i4`.
+    pub const_value: Option<CustValue>,
+    pub doc: String,
+    pub help_context: u32,
+    pub help_string_context: u32,
+    pub cust: CustData,
 }
 
 /// One implemented (base) type: its `HREFTYPE` and `IMPLTYPEFLAGS`.
@@ -219,7 +260,7 @@ pub struct ImplType {
 }
 
 /// One type of a library as stored.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeEntry {
     pub name: String,
     pub doc: String,
@@ -238,10 +279,14 @@ pub struct TypeEntry {
     pub laid_out: bool,
     /// The vtable size `LayOut` computed (bytes).
     pub vft: u16,
+    pub help_string_context: u32,
+    pub cust: CustData,
+    /// `cbSizeInstance` as a file states it (0: computed).
+    pub size_instance: u32,
 }
 
 /// A type of another library a library refers to (an imported `HREFTYPE`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Import {
     pub lib_guid: Guid,
     pub lib_major: u16,
@@ -249,10 +294,13 @@ pub struct Import {
     pub lib_lcid: u32,
     pub type_guid: Guid,
     pub type_name: String,
+    /// The type's index in the imported library, when it is named by index rather than GUID
+    /// (`stdole`'s `GUID`, `DISPPARAMS`, `EXCEPINFO`).
+    pub type_index: Option<u32>,
 }
 
 /// A whole library.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Library {
     pub guid: Guid,
     pub lcid: u32,
@@ -266,6 +314,11 @@ pub struct Library {
     pub help_context: u32,
     pub types: Vec<TypeEntry>,
     pub imports: Vec<Import>,
+    pub help_string_context: u32,
+    pub help_string_dll: String,
+    pub cust: CustData,
+    /// `ITypeLib2::GetLibStatistics` as a file states it (distinct names, their characters).
+    pub stats: Option<(u32, u32)>,
 }
 
 // ----- HREFTYPE values ---------------------------------------------------------------------------
@@ -276,6 +329,7 @@ pub struct Library {
 const HREF_INTERNAL: u32 = 0;
 const HREF_IMPORT: u32 = 1;
 const HREF_DUAL_INTERFACE: u32 = 2;
+const HREF_STDOLE: u32 = 3;
 
 /// What an `HREFTYPE` names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -286,6 +340,9 @@ pub enum Href {
     Import(usize),
     /// The interface form of the dual type `i` (what `GetRefTypeOfImplType(-1)` returns).
     DualInterface(usize),
+    /// Type `i` of `stdole` (the references of a dual interface's `IUnknown` and `IDispatch`
+    /// methods, and its reported base `IDispatch`).
+    Stdole(usize),
 }
 
 impl Href {
@@ -294,6 +351,7 @@ impl Href {
             Href::Internal(i) => ((i as u32) << 2) | HREF_INTERNAL,
             Href::Import(i) => ((i as u32) << 2) | HREF_IMPORT,
             Href::DualInterface(i) => ((i as u32) << 2) | HREF_DUAL_INTERFACE,
+            Href::Stdole(i) => ((i as u32) << 2) | HREF_STDOLE,
         }
     }
 
@@ -303,7 +361,7 @@ impl Href {
             HREF_INTERNAL => Some(Href::Internal(i)),
             HREF_IMPORT => Some(Href::Import(i)),
             HREF_DUAL_INTERFACE => Some(Href::DualInterface(i)),
-            _ => None,
+            _ => Some(Href::Stdole(i)),
         }
     }
 }
@@ -330,6 +388,7 @@ impl Library {
             help_context: 0,
             types: Vec::new(),
             imports: Vec::new(),
+            ..Library::default()
         }
     }
 
@@ -361,6 +420,7 @@ impl Library {
             alias: None,
             laid_out: false,
             vft: 0,
+            ..TypeEntry::default()
         });
         Ok(self.types.len() - 1)
     }
