@@ -11,6 +11,7 @@ extern crate alloc;
 
 mod controls;
 mod imagelist;
+mod subclass;
 
 use poly_win32_gui as _;
 use poly_win32_rt as _;
