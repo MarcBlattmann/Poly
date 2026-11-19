@@ -2,8 +2,8 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64",
     "session": "interactive",
     "token": "elevated"
@@ -14,17 +14,17 @@
   "tests": [
     {
       "name": "ics_methods",
-      "exe_sha256": "dff9f0a443451a89b917a7ae22dfbc66d5435772fe3cac560f16b2c91ddeb85d",
+      "exe_sha256": "ff708f0f276d6096f914876b442bbdd89fc668b02ffa53cf0155f55fc1990963",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "UXVlcnlJbnRlcmZhY2UoSUNsaWVudFNlY3VyaXR5KSBvbiB0aGUgcHJveHkgPSAweDAwMDAwMDAwIHBvaW50ZXIgMSBzYW1lIHBvaW50ZXIgMApJQ2xpZW50U2VjdXJpdHk6OlF1ZXJ5QmxhbmtldCA9IDB4MDAwMDAwMDAgYXV0aG4gMTAgYXV0aHogMCBsZXZlbCA2IGltcCAyIGNhcHMgMHgxOyB0aGUgZnVuY3Rpb24gc2F5cyAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MiBjYXBzPTB4MSBwcmluYz1XSU5ESVxzZXJ2ZXIgYXV0aGluZm89bnVsbApJQ2xpZW50U2VjdXJpdHk6OlNldEJsYW5rZXQoQ0FMTCwgSU1QRVJTT05BVEUpID0gMHgwMDAwMDAwMDsgdGhlIGZ1bmN0aW9uIHNheXMgMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKSUNsaWVudFNlY3VyaXR5OjpDb3B5UHJveHkgPSAweDAwMDAwMDAwIGNvcHkgcG9pbnRlciAxIGRpZmZlcmVudCAxIGJsYW5rZXQgMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKSUNsaWVudFNlY3VyaXR5OjpTZXRCbGFua2V0KHBsYWluIG9iamVjdCkgPSAweDgwMDA0MDAyCklDbGllbnRTZWN1cml0eTo6U2V0QmxhbmtldChOVUxMKSA9IDB4ODAwMDQwMDIKQWRkUmVmL1JlbGVhc2Ugb2YgdGhlIGludGVyZmFjZTogMiB0aGVuIDAKUXVlcnlJbnRlcmZhY2UoSUNsaWVudFNlY3VyaXR5KSBvbiB0aGUgSVVua25vd24gb2YgdGhlIHByb3h5ID0gMHgwMDAwMDAwMApvYmplY3QgKENvQ3JlYXRlSW5zdGFuY2UgMHgwMDAwMDAwMCk6IFF1ZXJ5SW50ZXJmYWNlKElDbGllbnRTZWN1cml0eSkgPSAweDAwMDAwMDAwCm9iamVjdCBvZiB0aGlzIHByb2Nlc3M6IFF1ZXJ5SW50ZXJmYWNlKElDbGllbnRTZWN1cml0eSkgPSAweDgwMDA0MDAyCnNydjogc3RhcnQKc3J2OiBpbml0IG10YSAweDAwMDAwMDAwCnNydjogY3JlYXRlIG91dGVyPW51bGwgaWlkPUlVbmtub3duCnNydjogY3JlYXRlIC0+IDB4MDAwMDAwMDAKc3J2OiByZXZva2UgLT4gMHgwMDAwMDAwMApzcnY6IGV4aXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "output_b64": "UXVlcnlJbnRlcmZhY2UoSUNsaWVudFNlY3VyaXR5KSBvbiB0aGUgcHJveHkgPSAweDAwMDAwMDAwIHBvaW50ZXIgMSBzYW1lIHBvaW50ZXIgMApJQ2xpZW50U2VjdXJpdHk6OlF1ZXJ5QmxhbmtldCA9IDB4MDAwMDAwMDAgYXV0aG4gMTAgYXV0aHogMCBsZXZlbCA2IGltcCAyIGNhcHMgMHgxOyB0aGUgZnVuY3Rpb24gc2F5cyAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MiBjYXBzPTB4MSBwcmluYz1hY2NvdW50IG9mIHRoaXMgdXNlciBhdXRoaW5mbz1udWxsCklDbGllbnRTZWN1cml0eTo6U2V0QmxhbmtldChDQUxMLCBJTVBFUlNPTkFURSkgPSAweDAwMDAwMDAwOyB0aGUgZnVuY3Rpb24gc2F5cyAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MyBjYXBzPTB4MCBwcmluYz08bnVsbD4gYXV0aGluZm89bnVsbApJQ2xpZW50U2VjdXJpdHk6OkNvcHlQcm94eSA9IDB4MDAwMDAwMDAgY29weSBwb2ludGVyIDEgZGlmZmVyZW50IDEgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MiBjYXBzPTB4MSBwcmluYz1hY2NvdW50IG9mIHRoaXMgdXNlciBhdXRoaW5mbz1udWxsCklDbGllbnRTZWN1cml0eTo6U2V0QmxhbmtldChwbGFpbiBvYmplY3QpID0gMHg4MDAwNDAwMgpJQ2xpZW50U2VjdXJpdHk6OlNldEJsYW5rZXQoTlVMTCkgPSAweDgwMDA0MDAyCkFkZFJlZi9SZWxlYXNlIG9mIHRoZSBpbnRlcmZhY2U6IDIgdGhlbiAwClF1ZXJ5SW50ZXJmYWNlKElDbGllbnRTZWN1cml0eSkgb24gdGhlIElVbmtub3duIG9mIHRoZSBwcm94eSA9IDB4MDAwMDAwMDAKb2JqZWN0IChDb0NyZWF0ZUluc3RhbmNlIDB4MDAwMDAwMDApOiBRdWVyeUludGVyZmFjZShJQ2xpZW50U2VjdXJpdHkpID0gMHgwMDAwMDAwMApvYmplY3Qgb2YgdGhpcyBwcm9jZXNzOiBRdWVyeUludGVyZmFjZShJQ2xpZW50U2VjdXJpdHkpID0gMHg4MDAwNDAwMgpzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogcmV2b2tlIC0+IDB4MDAwMDAwMDAKc3J2OiBleGl0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "QueryInterface(IClientSecurity) on the proxy = 0x00000000 pointer 1 same pointer 0\nIClientSecurity::QueryBlanket = 0x00000000 authn 10 authz 0 level 6 imp 2 caps 0x1; the function says 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nIClientSecurity::SetBlanket(CALL, IMPERSONATE) = 0x00000000; the function says 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nIClientSecurity::CopyProxy = 0x00000000 copy pointer 1 different 1 blanket 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nIClientSecurity::SetBlanket(plain object) = 0x80004002\nIClientSecurity::SetBlanket(NULL) = 0x80004002\nAddRef/Release of the interface: 2 then 0\nQueryInterface(IClientSecurity) on the IUnknown of the proxy = 0x00000000\nobject (CoCreateInstance 0x00000000): QueryInterface(IClientSecurity) = 0x00000000\nobject of this process: QueryInterface(IClientSecurity) = 0x80004002\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
+      "output": "QueryInterface(IClientSecurity) on the proxy = 0x00000000 pointer 1 same pointer 0\nIClientSecurity::QueryBlanket = 0x00000000 authn 10 authz 0 level 6 imp 2 caps 0x1; the function says 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=account of this user authinfo=null\nIClientSecurity::SetBlanket(CALL, IMPERSONATE) = 0x00000000; the function says 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nIClientSecurity::CopyProxy = 0x00000000 copy pointer 1 different 1 blanket 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=account of this user authinfo=null\nIClientSecurity::SetBlanket(plain object) = 0x80004002\nIClientSecurity::SetBlanket(NULL) = 0x80004002\nAddRef/Release of the interface: 2 then 0\nQueryInterface(IClientSecurity) on the IUnknown of the proxy = 0x00000000\nobject (CoCreateInstance 0x00000000): QueryInterface(IClientSecurity) = 0x00000000\nobject of this process: QueryInterface(IClientSecurity) = 0x80004002\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 191
+      "ms": 193
     }
   ]
 }
