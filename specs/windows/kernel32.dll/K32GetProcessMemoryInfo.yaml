@@ -33,6 +33,6 @@ tests:
   visible: 1
   held_out: 1
 building_tests: >
-  Rust tests (ADR 0075), one file per test: pm_basic (the structure, plausibility and the allocation) and pm_err (sizes, rights, bad handles). Observations are relations and sizes, never counter values.
+  Rust tests (ADR 0075), one file per test: k32gpmi_basic (the structure, plausibility and the allocation) and pm_err (sizes, rights, bad handles). Observations are relations and sizes, never counter values.
 not_covered: >
   The pool quotas (QuotaPagedPoolUsage and friends: written, values not specified), other processes, a 32-bit caller's 40- and 44-byte structures, a protected process, memory that is shared or mapped, the exact working-set number after the trim of a minimised window.
