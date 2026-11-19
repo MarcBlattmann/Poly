@@ -89,8 +89,18 @@ impl Server {
             xdg_activation_v1::Request::Activate { token, surface } => {
                 // A launch waiting for this token is over, whatever else.
                 self.token_activated(&token);
-                let Some(i) = self.tokens.iter().position(|t| *t == token) else { return Ok(()) };
-                self.tokens.remove(i);
+                let Some(i) = self.tokens.iter().position(|t| t.0 == token) else { return Ok(()) };
+                let (_, scope) = self.tokens.remove(i);
+                // A client's token from before the focus went to another app (Chromium after it
+                // started the installer) brings nothing to the front.
+                let honoured = match scope {
+                    super::TokenScope::Desktop => true,
+                    super::TokenScope::Focused(at) => at == self.focus_moves,
+                    super::TokenScope::Unfocused => false,
+                };
+                if !honoured {
+                    return Ok(());
+                }
                 let main = self.main_surface(c, surface);
                 let toplevel = self
                     .surface_ref(c, main)
@@ -128,7 +138,12 @@ impl Server {
                 t.committed = true;
                 self.token_serial += 1;
                 let token = format!("poly-activation-{}-{}", c.0, self.token_serial);
-                self.remember_token(&token);
+                // The client has the focus, or nobody has (its first window, after the last one
+                // closed).
+                let focused = self.active_internal.is_none() && self.active.is_none_or(|(ac, _)| ac == c);
+                let scope =
+                    if focused { super::TokenScope::Focused(self.focus_moves) } else { super::TokenScope::Unfocused };
+                self.remember_token_scoped(&token, scope);
                 self.client(c).send(id, xdg_activation_token_v1::Event::Done { token });
             }
             xdg_activation_token_v1::Request::SetSerial { .. } | xdg_activation_token_v1::Request::Destroy => {}
@@ -148,9 +163,14 @@ impl Server {
     /// `token` can be used to activate a surface (once); the oldest unused
     /// ones are forgotten past [`TOKENS`].
     pub(super) fn remember_token(&mut self, token: &str) {
+        self.remember_token_scoped(token, super::TokenScope::Desktop);
+    }
+
+    /// [`Self::remember_token`] for a token with a scope of its own.
+    pub(super) fn remember_token_scoped(&mut self, token: &str, scope: super::TokenScope) {
         if self.tokens.len() == TOKENS {
             self.tokens.remove(0);
         }
-        self.tokens.push(token.into());
+        self.tokens.push((token.into(), scope));
     }
 }

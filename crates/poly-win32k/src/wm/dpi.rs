@@ -396,7 +396,7 @@ impl Wm {
     fn system_send(&mut self, hwnd: u32, to: Key, msg: u32, w: u64, l: u64, fx: &mut Effects) {
         let id = self.next_send;
         self.next_send += 1;
-        let incoming = Incoming { id, hwnd, msg, w, l, wndproc: 0 };
+        let incoming = Incoming { id, hwnd, msg, w, l, wndproc: 0, data: None };
         self.sends.insert(id, Send { from: DESKTOP_SENDER, to, incoming, result: None, collected: false });
         let q = self.queue(to);
         q.sent.push_back(id);
