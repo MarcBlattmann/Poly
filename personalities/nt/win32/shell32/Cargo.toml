@@ -1,6 +1,6 @@
 [package]
 name = "shell32"
-description = "Our shell32.dll (ADR 0155): CommandLineToArgvW and SHGetFolderPathW; the rest of shell32 is polystub"
+description = "Our shell32.dll (ADR 0155, 0223): command lines, known folders, shell items, IFileOperation, ShellExecuteExW; the rest of shell32 is polystub"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,6 +13,8 @@ crate-type = ["cdylib"]
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+poly-com = { path = "../../../../crates/poly-com" }
+poly-win32k = { path = "../../../../crates/poly-win32k" }
 
 [lints]
 workspace = true

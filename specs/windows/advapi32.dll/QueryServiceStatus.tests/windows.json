@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "qs_basic",
+      "exe_sha256": "7d0f742120357de12626d8a5a11fc2e6307e74e7c4e25db16e2c424efa5461dc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNRUzMpOiBvawpuZXZlciBzdGFydGVkOiB0eXBlPTB4MTAgc3RhdGU9U1RPUFBFRCBhY2NlcHRlZD0weDAgd2luMzI9MTA3NyBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAKU3RhcnRTZXJ2aWNlVzogb2sKUlVOTklORyB3aXRoaW4gNSBzOiAxCnJ1bm5pbmc6IHR5cGU9MHgxMCBzdGF0ZT1SVU5OSU5HIGFjY2VwdGVkPTB4MSB3aW4zMj0wIHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MApDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCnN0b3BwZWQ6IHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0wIHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MApPcGVuU2VydmljZVcoYWxsIGJ1dCBRVUVSWV9TVEFUVVMpOiBvawp3aXRob3V0IFFVRVJZX1NUQVRVUzogUXVlcnlTZXJ2aWNlU3RhdHVzIGVyciA1Ck5VTEwgc3RydWN0dXJlOiBlcnIgNDg3Cm1hbmFnZXIgaGFuZGxlOiBRdWVyeVNlcnZpY2VTdGF0dXMgZXJyIDYKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcQS3): ok\nnever started: type=0x10 state=STOPPED accepted=0x0 win32=1077 specific=0 checkpoint=0 hint=0\nStartServiceW: ok\nRUNNING within 5 s: 1\nrunning: type=0x10 state=RUNNING accepted=0x1 win32=0 specific=0 checkpoint=0 hint=0\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nstopped: type=0x10 state=STOPPED accepted=0x0 win32=0 specific=0 checkpoint=0 hint=0\nOpenServiceW(all but QUERY_STATUS): ok\nwithout QUERY_STATUS: QueryServiceStatus err 5\nNULL structure: err 487\nmanager handle: QueryServiceStatus err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 260
+    },
+    {
+      "name": "qs_exit",
+      "exe_sha256": "0f0c76b2e712b2a998efeca85689ea6797131d06a9c4616efef14139fe483cf5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNRU0UxKTogb2sKU3RhcnRTZXJ2aWNlVyhleGl0Y29kZSk6IG9rClNUT1BQRUQgd2l0aGluIDUgczogMQpleGl0Y29kZTogc3RhdGU9U1RPUFBFRCB3aW4zMj0xMDY2IHNwZWNpZmljPTQyIGFjY2VwdGVkPTB4MApDcmVhdGVTZXJ2aWNlVyhQb2x5U3BlY1N2Y1FTRTIpOiBvawpTdGFydFNlcnZpY2VXKGNyYXNoKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCmNyYXNoOiBzdGF0ZT1TVE9QUEVEIHdpbjMyPTEwNjcgc3BlY2lmaWM9MCBhY2NlcHRlZD0weDAKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNRU0UzKTogb2sKU3RhcnRTZXJ2aWNlVyhydW4pOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKcnVuOiBzdGF0ZT1TVE9QUEVEIHdpbjMyPTAgc3BlY2lmaWM9MCBhY2NlcHRlZD0weDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcQSE1): ok\nStartServiceW(exitcode): ok\nSTOPPED within 5 s: 1\nexitcode: state=STOPPED win32=1066 specific=42 accepted=0x0\nCreateServiceW(PolySpecSvcQSE2): ok\nStartServiceW(crash): ok\nSTOPPED within 5 s: 1\ncrash: state=STOPPED win32=1067 specific=0 accepted=0x0\nCreateServiceW(PolySpecSvcQSE3): ok\nStartServiceW(run): ok\nSTOPPED within 5 s: 1\nrun: state=STOPPED win32=0 specific=0 accepted=0x0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 717
+    }
+  ]
+}

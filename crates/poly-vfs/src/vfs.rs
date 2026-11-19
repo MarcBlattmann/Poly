@@ -122,6 +122,19 @@ impl Vfs {
         Location { mount: mount.clone(), ino }.pin()
     }
 
+    /// The inode of an anonymous pipe (pipe(2)): an [`anon_node`](Self::anon_node)
+    /// of kind FIFO that opens as `pipe` itself. A pipe's ends are reached by
+    /// that inode through `/proc/<pid>/fd/<n>` (proc_pid_fd(5)): opening it
+    /// opens another end of the same pipe, as fifo(7) opens a named one
+    /// (bash's process substitution writes to `/dev/fd/63`, the write end of
+    /// a pipe to the command's input).
+    pub fn pipe_node(&self, pipe: &Arc<crate::pipe::Pipe>, perm: u16, cred: &Cred) -> Result<NodeRef> {
+        let node = self.anon_node(FileType::Fifo, perm, cred)?;
+        let fs = Arc::as_ptr(node.mount().fs()) as *const () as usize;
+        self.fifos.adopt(fs, node.ino(), pipe);
+        Ok(node)
+    }
+
     /// A mount of `fs` that no path reaches, for files that never get a
     /// name (memfd_create(2)'s, [`memfd_file`](Self::memfd_file)).
     pub fn detached_mount(&self, fs: Arc<dyn FileSystem>) -> Arc<Mount> {

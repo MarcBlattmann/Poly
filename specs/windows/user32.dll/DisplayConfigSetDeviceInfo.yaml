@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/DisplayConfigSetDeviceInfo.yaml
+id: windows/api/user32.dll/DisplayConfigSetDeviceInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
+  observed_by: spec-win-dpi
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: "High DPI Desktop Application Development on Windows",
+  "DPI_AWARENESS_CONTEXT", "Setting the default DPI awareness for a process", "Mixed-Mode DPI Scaling and DPI-aware APIs", "Multiple Display Monitors",
+  "Application manifests" (dpiAware, dpiAwareness), and the Learn reference page of the function named here; winuser.h, windef.h, shellscalingapi.h
+  and winerror.h for constants and layouts. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Sets one property of a display configuration device. The DPI-scale packet (type -4, not documented on Learn; its layout is observed) changes the scale
+  of the display by steps relative to the recommended one; the scale changes at once for the session, and every window gets the messages of the rules.
+interface:
+  signature: "LONG DisplayConfigSetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)"
+  related: "DisplayConfigGetDeviceInfo, QueryDisplayConfig, GetDisplayConfigBufferSizes"
+rules:
+  packets: "header: type (int32), size (uint32), adapterId (LUID, 8 bytes), id (uint32, the source id of the active path); GetDeviceInfo type -3 (size 32) fills three int32 after the header: minimum, current and maximum scale steps relative to the recommended scale (current 4 above the minimum 0 here: 100, 125, 150, 175, 200 percent; the maximum was 2 steps above current: 250 percent); SetDeviceInfo type -4 (size 24) takes one int32, the wanted step; the scale steps are 100 125 150 175 200 225 250 300 350 400 450 500 percent. The adapter and source come from QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS=2) (path info 72 bytes, mode info 64 bytes, one path)"
+  one_step_down: "from 200 percent one step down (to 175 percent, 168 DPI) the call returns 0 (ERROR_SUCCESS); after 2.5 seconds the display is at 168 DPI: a per-monitor (v1 and v2) thread's GetDpiForWindow of top-level, child and popup windows is 168 and GetDpiForMonitor(primary, effective) 168, GetDpiForSystem stays 192, LOGPIXELSX stays 192, SM_CXSCREEN x SM_CYSCREEN stays 2560x1600, SM_CYCAPTION stays 45"
+  messages_per_monitor_v2: "a per-monitor-v2 top-level window with a child and a popup (window rectangles 100,100,500,400 and 600,150,850,270 at 192 DPI): the popup first gets WM_GETDPISCALEDSIZE (wParam the new DPI 168, SIZE in lParam 250x120 = the current size) then WM_DPICHANGED (wParam low and high word 168, suggested rectangle 600,150,819,255) then WM_SIZE (type 0, client 219x105); the top-level window gets WM_GETDPISCALEDSIZE (168, 400x300), the child WM_DPICHANGED_BEFOREPARENT, the top-level WM_DPICHANGED (168,168, suggested 100,100,450,363), WM_MOVE (112,152), WM_SIZE (client 376x236), the child WM_DPICHANGED_AFTERPARENT, and the top-level a final WM_SIZE (client 326x199). Afterwards the top-level rectangle is 100,100,450,363, client 326x199, the child 122,162,222,212 (client 100x50 unchanged), the popup 600,150,819,255 (client 219x105)"
+  messages_per_monitor_v1: "a per-monitor (v1) window gets no WM_GETDPISCALEDSIZE and no BEFORE/AFTERPARENT messages: the popup WM_SIZE (client 219x105) then WM_DPICHANGED (168, suggested 600,150,819,255); the top-level WM_SIZE (client 324x192), WM_DPICHANGED (168, 100,100,450,363), WM_MOVE (112,152), WM_SIZE (client 326x199) (the first WM_SIZE comes before WM_DPICHANGED; after it, DefWindowProc applies the suggested rectangle: WM_MOVE and the last WM_SIZE)"
+  back_up: "one step back up to 200 percent (192 DPI) mirrors it: v2: popup WM_GETDPISCALEDSIZE (192, 219x105), WM_DPICHANGED (192, suggested 600,150,850,270), WM_SIZE (client 250x120); top-level WM_GETDPISCALEDSIZE (192, 350x263), child BEFOREPARENT, WM_DPICHANGED (192, 100,100,500,400), WM_MOVE (113,158), WM_SIZE (client 324x192), child AFTERPARENT, and a last top-level WM_SIZE (client 374x229); the windows return to exactly their first rectangles"
+  system_aware: "a system aware process gets WM_MOVE only (popup 686,171 and top-level 129,172 when the scale goes down; 600,150 and 113,158 on the way back) and no DPI message: its windows are scaled by the system, GetDpiForWindow stays 192, GetDpiForMonitor effective stays 192, and the screen it sees becomes 2926x1829 (2560*192/168, 1600*192/168) while the scale is 175 percent; the windows' rectangles it reads are 116,114,516,414 (top-level), 139,182,239,232 (child), 686,171,936,291 (popup)"
+  unaware: "an unaware process gets WM_MOVE only (popup 686,171 and top-level 123,145 on the way down, 600,150 and 108,131 back), GetDpiForSystem stays 96, the screen it sees becomes 1463x914 (1280 and 800 times 192/168, rounded) at 175 percent, rectangles 115,114,515,414 (top-level), 133,155,233,205 (child), 686,171,936,291 (popup)"
+  restored: "stepping back to the first step restores every number to its first value; the DisplayConfigGetDeviceInfo read shows the same step as at the start"
+errors:
+  refused: "none observed with a valid packet; the call fails (not zero) for a step outside the range the get call reports"
+side_effects: "none beyond the rules above"
+threading: "windows belong to the thread that created them; the DPI awareness context is per thread, set by SetThreadDpiAwarenessContext, and a thread without one of its own has the process awareness"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each assembled from the same declarations (Learn prototypes, header constants) and a few
+  helpers; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) on a display set to 2560x1600 at 200 percent. A test that needs
+  a particular awareness sets it with SetProcessDpiAwarenessContext as its first call (or carries a manifest as a resource). Test windows
+  are placed within the top-left 1000x500 pixels of their own coordinates and closed within seconds; the cursor is parked at the start
+  and put back at the end. A test never prints handles, times or process ids.
+not_covered: >
+  Other scales than 200 percent (the scale change tests step to 175 percent and back), several monitors, monitors with an EDID
+  (this one has none), a different physical screen size.

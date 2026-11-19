@@ -153,7 +153,7 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,432 | 791 | 3,559 | 3,753 | 53,033 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,564 | 791 | 3,532 | 3,934 | 53,011 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
@@ -171,6 +171,7 @@ Seeded from (names only):
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-shell-download`: Microsoft Learn and the public SDK headers shobjidl_core.h, shellapi.h, shlobj_core.h, fileapi.h, winbase.h: the COM interfaces and methods Chrome's download path uses in shell32.dll, comdlg32.dll (entries named Interface.Method) and the kernel32.dll functions beside them @ `Windows SDK 10.0.26100.0`
 - `ms-learn-systemtemp`: Microsoft Learn file system and temporary file reference: the C:\Windows\SystemTemp directory that installers extract into, observed by the spec agents (spec-win-elevation); entries named by directory @ `Windows 11 25H2 build 26200.9974`
+- `ms-learn-taskschd`: Microsoft Learn Task Scheduler 2.0 reference and the public SDK headers taskschd.h, winerror.h: the COM interfaces of taskschd.dll (entries named Interface.Method, and Interface.Property for a get/put pair; spec-win-taskschd) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-uac`: User Account Control: Microsoft Learn (Access Tokens, Mandatory Integrity Control, ShellExecuteEx, Application Manifests) and the oracle's behaviour for the split token of an administrator: the standard (filtered) token and the elevated (full) token (entries named by the behaviour; docs/windows/chrome-installer-plan.md) @ `Windows 11 build 26200.9974`
 - `ms-learn-volume`: Microsoft Learn volume management and CreateFile reference (opening a volume as \\.\C: or \??\C:), observed by the spec agents (spec-win-elevation); entries named by operation @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-winuser`: Microsoft Learn window messages and system commands of user32 (winuser.h): behaviour that is not an export, entries named by message or command (WM_NCHITTEST, WM_ENTERSIZEMOVE, WM_MOUSEHWHEEL, SC_MAXIMIZE; spec-win-input) @ `Windows SDK 10.0.26100.0`

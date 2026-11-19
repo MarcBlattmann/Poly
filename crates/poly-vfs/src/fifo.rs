@@ -46,4 +46,13 @@ impl Fifos {
         }
         Ok(PipeEnd::new(&pipe, read, write))
     }
+
+    /// Make the inode `(fs, ino)` open as `pipe` (an anonymous pipe's
+    /// inode, `Vfs::pipe_node`): every open of it is an end of that pipe
+    /// while any end of it is open.
+    pub(crate) fn adopt(&self, fs: usize, ino: Ino, pipe: &Arc<Pipe>) {
+        let mut pipes = self.pipes.lock();
+        pipes.retain(|_, w| w.strong_count() > 0);
+        pipes.insert((fs, ino), Arc::downgrade(pipe));
+    }
 }

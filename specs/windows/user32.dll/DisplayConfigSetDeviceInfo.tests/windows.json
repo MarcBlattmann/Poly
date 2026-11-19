@@ -1,0 +1,62 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "edition": "Core",
+    "display": "25H2",
+    "session": "interactive"
+  },
+  "bundle": "29c555d308a1",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:56:21Z",
+  "timeout_ms": 90000,
+  "test_timeouts_s": {},
+  "runs": 2,
+  "tests": [
+    {
+      "name": "dpi_change_s",
+      "exe_sha256": "42d188d86d7f12d05e5bce063eb8da0fd24a53e5efef914c53888ae0826a408f",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBzeXN0ZW06IFNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0IC0+IHRydWUgZXJyb3IgMApzY2FsZSBzdGVwczogY3VycmVudCA0IChhYm92ZSB0aGUgbWluaW11bSBieSA0LCBiZWxvdyB0aGUgbWF4aW11bSBieSAyKQpiZWZvcmU6IEdldERwaUZvclN5c3RlbSAxOTIgTE9HUElYRUxTWCAxOTIgbW9uaXRvciBkcGkgMTkyIHNjcmVlbiAyNTYweDE2MDAgQ1lDQVBUSU9OIDQ1CiAgdG9wLWxldmVsOiBHZXREcGlGb3JXaW5kb3cgMTkyIHJlY3QgMTAwLDEwMCw1MDAsNDAwIGNsaWVudCAwLDAsMzc0LDIyOQogIGNoaWxkOiBHZXREcGlGb3JXaW5kb3cgMTkyIHJlY3QgMTIzLDE2OCwyMjMsMjE4IGNsaWVudCAwLDAsMTAwLDUwCiAgcG9wdXA6IEdldERwaUZvcldpbmRvdyAxOTIgcmVjdCA2MDAsMTUwLDg1MCwyNzAgY2xpZW50IDAsMCwyNTAsMTIwCnNjYWxlIG9uZSBzdGVwIGRvd24gLT4gdHJ1ZQptc2cgIHBvcHVwIFdNX01PVkUgNjg2LDE3MQptc2cgIHRvcCBXTV9NT1ZFIDEyOSwxNzIKb25lIHN0ZXAgZG93bjogR2V0RHBpRm9yU3lzdGVtIDE5MiBMT0dQSVhFTFNYIDE5MiBtb25pdG9yIGRwaSAxOTIgc2NyZWVuIDI5MjZ4MTgyOSBDWUNBUFRJT04gNDUKICB0b3AtbGV2ZWw6IEdldERwaUZvcldpbmRvdyAxOTIgcmVjdCAxMTYsMTE0LDUxNiw0MTQgY2xpZW50IDAsMCwzNzQsMjI5CiAgY2hpbGQ6IEdldERwaUZvcldpbmRvdyAxOTIgcmVjdCAxMzksMTgyLDIzOSwyMzIgY2xpZW50IDAsMCwxMDAsNTAKICBwb3B1cDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDY4NiwxNzEsOTM2LDI5MSBjbGllbnQgMCwwLDI1MCwxMjAKc2NhbGUgYmFjayB1cCAtPiB0cnVlCm1zZyAgcG9wdXAgV01fTU9WRSA2MDAsMTUwCm1zZyAgdG9wIFdNX01PVkUgMTEzLDE1OApiYWNrOiBHZXREcGlGb3JTeXN0ZW0gMTkyIExPR1BJWEVMU1ggMTkyIG1vbml0b3IgZHBpIDE5MiBzY3JlZW4gMjU2MHgxNjAwIENZQ0FQVElPTiA0NQogIHRvcC1sZXZlbDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDEwMCwxMDAsNTAwLDQwMCBjbGllbnQgMCwwLDM3NCwyMjkKICBjaGlsZDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDEyMywxNjgsMjIzLDIxOCBjbGllbnQgMCwwLDEwMCw1MAogIHBvcHVwOiBHZXREcGlGb3JXaW5kb3cgMTkyIHJlY3QgNjAwLDE1MCw4NTAsMjcwIGNsaWVudCAwLDAsMjUwLDEyMAp0aGUgc2NhbGUgaXMgdGhlIHN0YXJ0aW5nIG9uZSBhZ2FpbjogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode system: SetProcessDpiAwarenessContext -> true error 0\nscale steps: current 4 (above the minimum by 4, below the maximum by 2)\nbefore: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 192 screen 2560x1600 CYCAPTION 45\n  top-level: GetDpiForWindow 192 rect 100,100,500,400 client 0,0,374,229\n  child: GetDpiForWindow 192 rect 123,168,223,218 client 0,0,100,50\n  popup: GetDpiForWindow 192 rect 600,150,850,270 client 0,0,250,120\nscale one step down -> true\nmsg  popup WM_MOVE 686,171\nmsg  top WM_MOVE 129,172\none step down: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 192 screen 2926x1829 CYCAPTION 45\n  top-level: GetDpiForWindow 192 rect 116,114,516,414 client 0,0,374,229\n  child: GetDpiForWindow 192 rect 139,182,239,232 client 0,0,100,50\n  popup: GetDpiForWindow 192 rect 686,171,936,291 client 0,0,250,120\nscale back up -> true\nmsg  popup WM_MOVE 600,150\nmsg  top WM_MOVE 113,158\nback: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 192 screen 2560x1600 CYCAPTION 45\n  top-level: GetDpiForWindow 192 rect 100,100,500,400 client 0,0,374,229\n  child: GetDpiForWindow 192 rect 123,168,223,218 client 0,0,100,50\n  popup: GetDpiForWindow 192 rect 600,150,850,270 client 0,0,250,120\nthe scale is the starting one again: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5699,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
+      "name": "dpi_change_u",
+      "exe_sha256": "d29b84a299bf6270e99ebb361f5758eff46e40d5ed576c688fead1f59ce2a57d",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBubyBjYWxsOiBubyBTZXRQcm9jZXNzRHBpQXdhcmVuZXNzQ29udGV4dCBjYWxsCnNjYWxlIHN0ZXBzOiBjdXJyZW50IDQgKGFib3ZlIHRoZSBtaW5pbXVtIGJ5IDQsIGJlbG93IHRoZSBtYXhpbXVtIGJ5IDIpCmJlZm9yZTogR2V0RHBpRm9yU3lzdGVtIDk2IExPR1BJWEVMU1ggOTYgbW9uaXRvciBkcGkgOTYgc2NyZWVuIDEyODB4ODAwIENZQ0FQVElPTiAyMwogIHRvcC1sZXZlbDogR2V0RHBpRm9yV2luZG93IDk2IHJlY3QgMTAwLDEwMCw1MDAsNDAwIGNsaWVudCAwLDAsMzg0LDI2MQogIGNoaWxkOiBHZXREcGlGb3JXaW5kb3cgOTYgcmVjdCAxMTgsMTQxLDIxOCwxOTEgY2xpZW50IDAsMCwxMDAsNTAKICBwb3B1cDogR2V0RHBpRm9yV2luZG93IDk2IHJlY3QgNjAwLDE1MCw4NTAsMjcwIGNsaWVudCAwLDAsMjUwLDEyMApzY2FsZSBvbmUgc3RlcCBkb3duIC0+IHRydWUKbXNnICBwb3B1cCBXTV9NT1ZFIDY4NiwxNzEKbXNnICB0b3AgV01fTU9WRSAxMjMsMTQ1Cm9uZSBzdGVwIGRvd246IEdldERwaUZvclN5c3RlbSA5NiBMT0dQSVhFTFNYIDk2IG1vbml0b3IgZHBpIDk2IHNjcmVlbiAxNDYzeDkxNCBDWUNBUFRJT04gMjMKICB0b3AtbGV2ZWw6IEdldERwaUZvcldpbmRvdyA5NiByZWN0IDExNSwxMTQsNTE1LDQxNCBjbGllbnQgMCwwLDM4NCwyNjEKICBjaGlsZDogR2V0RHBpRm9yV2luZG93IDk2IHJlY3QgMTMzLDE1NSwyMzMsMjA1IGNsaWVudCAwLDAsMTAwLDUwCiAgcG9wdXA6IEdldERwaUZvcldpbmRvdyA5NiByZWN0IDY4NiwxNzEsOTM2LDI5MSBjbGllbnQgMCwwLDI1MCwxMjAKc2NhbGUgYmFjayB1cCAtPiB0cnVlCm1zZyAgcG9wdXAgV01fTU9WRSA2MDAsMTUwCm1zZyAgdG9wIFdNX01PVkUgMTA4LDEzMQpiYWNrOiBHZXREcGlGb3JTeXN0ZW0gOTYgTE9HUElYRUxTWCA5NiBtb25pdG9yIGRwaSA5NiBzY3JlZW4gMTI4MHg4MDAgQ1lDQVBUSU9OIDIzCiAgdG9wLWxldmVsOiBHZXREcGlGb3JXaW5kb3cgOTYgcmVjdCAxMDAsMTAwLDUwMCw0MDAgY2xpZW50IDAsMCwzODQsMjYxCiAgY2hpbGQ6IEdldERwaUZvcldpbmRvdyA5NiByZWN0IDExOCwxNDEsMjE4LDE5MSBjbGllbnQgMCwwLDEwMCw1MAogIHBvcHVwOiBHZXREcGlGb3JXaW5kb3cgOTYgcmVjdCA2MDAsMTUwLDg1MCwyNzAgY2xpZW50IDAsMCwyNTAsMTIwCnRoZSBzY2FsZSBpcyB0aGUgc3RhcnRpbmcgb25lIGFnYWluOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode no call: no SetProcessDpiAwarenessContext call\nscale steps: current 4 (above the minimum by 4, below the maximum by 2)\nbefore: GetDpiForSystem 96 LOGPIXELSX 96 monitor dpi 96 screen 1280x800 CYCAPTION 23\n  top-level: GetDpiForWindow 96 rect 100,100,500,400 client 0,0,384,261\n  child: GetDpiForWindow 96 rect 118,141,218,191 client 0,0,100,50\n  popup: GetDpiForWindow 96 rect 600,150,850,270 client 0,0,250,120\nscale one step down -> true\nmsg  popup WM_MOVE 686,171\nmsg  top WM_MOVE 123,145\none step down: GetDpiForSystem 96 LOGPIXELSX 96 monitor dpi 96 screen 1463x914 CYCAPTION 23\n  top-level: GetDpiForWindow 96 rect 115,114,515,414 client 0,0,384,261\n  child: GetDpiForWindow 96 rect 133,155,233,205 client 0,0,100,50\n  popup: GetDpiForWindow 96 rect 686,171,936,291 client 0,0,250,120\nscale back up -> true\nmsg  popup WM_MOVE 600,150\nmsg  top WM_MOVE 108,131\nback: GetDpiForSystem 96 LOGPIXELSX 96 monitor dpi 96 screen 1280x800 CYCAPTION 23\n  top-level: GetDpiForWindow 96 rect 100,100,500,400 client 0,0,384,261\n  child: GetDpiForWindow 96 rect 118,141,218,191 client 0,0,100,50\n  popup: GetDpiForWindow 96 rect 600,150,850,270 client 0,0,250,120\nthe scale is the starting one again: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5654,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
+      "name": "dpi_change_v",
+      "exe_sha256": "e82deddd6be0a93f2c212ec8e90b00ff8c14160ab94408d762a7a4c0ed12274e",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "bW9kZSBwZXItbW9uaXRvci12MjogU2V0UHJvY2Vzc0RwaUF3YXJlbmVzc0NvbnRleHQgLT4gdHJ1ZSBlcnJvciAwCnNjYWxlIHN0ZXBzOiBjdXJyZW50IDQgKGFib3ZlIHRoZSBtaW5pbXVtIGJ5IDQsIGJlbG93IHRoZSBtYXhpbXVtIGJ5IDIpCmJlZm9yZTogR2V0RHBpRm9yU3lzdGVtIDE5MiBMT0dQSVhFTFNYIDE5MiBtb25pdG9yIGRwaSAxOTIgc2NyZWVuIDI1NjB4MTYwMCBDWUNBUFRJT04gNDUKICB0b3AtbGV2ZWw6IEdldERwaUZvcldpbmRvdyAxOTIgcmVjdCAxMDAsMTAwLDUwMCw0MDAgY2xpZW50IDAsMCwzNzQsMjI5CiAgY2hpbGQ6IEdldERwaUZvcldpbmRvdyAxOTIgcmVjdCAxMjMsMTY4LDIyMywyMTggY2xpZW50IDAsMCwxMDAsNTAKICBwb3B1cDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDYwMCwxNTAsODUwLDI3MCBjbGllbnQgMCwwLDI1MCwxMjAKc2NhbGUgb25lIHN0ZXAgZG93biAtPiB0cnVlCm1zZyAgcG9wdXAgV01fR0VURFBJU0NBTEVEU0laRSBkcGkgMTY4IHNpemUgMjUweDEyMAptc2cgIHBvcHVwIFdNX0RQSUNIQU5HRUQgZHBpIHggMTY4IHkgMTY4IHN1Z2dlc3RlZCA2MDAsMTUwLDgxOSwyNTUKbXNnICBwb3B1cCBXTV9TSVpFIHR5cGUgMCBjbGllbnQgMjE5eDEwNQptc2cgIHRvcCBXTV9HRVREUElTQ0FMRURTSVpFIGRwaSAxNjggc2l6ZSA0MDB4MzAwCm1zZyAgY2hpbGQgV01fRFBJQ0hBTkdFRF9CRUZPUkVQQVJFTlQKbXNnICB0b3AgV01fRFBJQ0hBTkdFRCBkcGkgeCAxNjggeSAxNjggc3VnZ2VzdGVkIDEwMCwxMDAsNDUwLDM2Mwptc2cgIHRvcCBXTV9NT1ZFIDExMiwxNTIKbXNnICB0b3AgV01fU0laRSB0eXBlIDAgY2xpZW50IDM3NngyMzYKbXNnICBjaGlsZCBXTV9EUElDSEFOR0VEX0FGVEVSUEFSRU5UCm1zZyAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCAzMjZ4MTk5Cm9uZSBzdGVwIGRvd246IEdldERwaUZvclN5c3RlbSAxOTIgTE9HUElYRUxTWCAxOTIgbW9uaXRvciBkcGkgMTY4IHNjcmVlbiAyNTYweDE2MDAgQ1lDQVBUSU9OIDQ1CiAgdG9wLWxldmVsOiBHZXREcGlGb3JXaW5kb3cgMTY4IHJlY3QgMTAwLDEwMCw0NTAsMzYzIGNsaWVudCAwLDAsMzI2LDE5OQogIGNoaWxkOiBHZXREcGlGb3JXaW5kb3cgMTY4IHJlY3QgMTIyLDE2MiwyMjIsMjEyIGNsaWVudCAwLDAsMTAwLDUwCiAgcG9wdXA6IEdldERwaUZvcldpbmRvdyAxNjggcmVjdCA2MDAsMTUwLDgxOSwyNTUgY2xpZW50IDAsMCwyMTksMTA1CnNjYWxlIGJhY2sgdXAgLT4gdHJ1ZQptc2cgIHBvcHVwIFdNX0dFVERQSVNDQUxFRFNJWkUgZHBpIDE5MiBzaXplIDIxOXgxMDUKbXNnICBwb3B1cCBXTV9EUElDSEFOR0VEIGRwaSB4IDE5MiB5IDE5MiBzdWdnZXN0ZWQgNjAwLDE1MCw4NTAsMjcwCm1zZyAgcG9wdXAgV01fU0laRSB0eXBlIDAgY2xpZW50IDI1MHgxMjAKbXNnICB0b3AgV01fR0VURFBJU0NBTEVEU0laRSBkcGkgMTkyIHNpemUgMzUweDI2Mwptc2cgIGNoaWxkIFdNX0RQSUNIQU5HRURfQkVGT1JFUEFSRU5UCm1zZyAgdG9wIFdNX0RQSUNIQU5HRUQgZHBpIHggMTkyIHkgMTkyIHN1Z2dlc3RlZCAxMDAsMTAwLDUwMCw0MDAKbXNnICB0b3AgV01fTU9WRSAxMTMsMTU4Cm1zZyAgdG9wIFdNX1NJWkUgdHlwZSAwIGNsaWVudCAzMjR4MTkyCm1zZyAgY2hpbGQgV01fRFBJQ0hBTkdFRF9BRlRFUlBBUkVOVAptc2cgIHRvcCBXTV9TSVpFIHR5cGUgMCBjbGllbnQgMzc0eDIyOQpiYWNrOiBHZXREcGlGb3JTeXN0ZW0gMTkyIExPR1BJWEVMU1ggMTkyIG1vbml0b3IgZHBpIDE5MiBzY3JlZW4gMjU2MHgxNjAwIENZQ0FQVElPTiA0NQogIHRvcC1sZXZlbDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDEwMCwxMDAsNTAwLDQwMCBjbGllbnQgMCwwLDM3NCwyMjkKICBjaGlsZDogR2V0RHBpRm9yV2luZG93IDE5MiByZWN0IDEyMywxNjgsMjIzLDIxOCBjbGllbnQgMCwwLDEwMCw1MAogIHBvcHVwOiBHZXREcGlGb3JXaW5kb3cgMTkyIHJlY3QgNjAwLDE1MCw4NTAsMjcwIGNsaWVudCAwLDAsMjUwLDEyMAp0aGUgc2NhbGUgaXMgdGhlIHN0YXJ0aW5nIG9uZSBhZ2FpbjogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "mode per-monitor-v2: SetProcessDpiAwarenessContext -> true error 0\nscale steps: current 4 (above the minimum by 4, below the maximum by 2)\nbefore: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 192 screen 2560x1600 CYCAPTION 45\n  top-level: GetDpiForWindow 192 rect 100,100,500,400 client 0,0,374,229\n  child: GetDpiForWindow 192 rect 123,168,223,218 client 0,0,100,50\n  popup: GetDpiForWindow 192 rect 600,150,850,270 client 0,0,250,120\nscale one step down -> true\nmsg  popup WM_GETDPISCALEDSIZE dpi 168 size 250x120\nmsg  popup WM_DPICHANGED dpi x 168 y 168 suggested 600,150,819,255\nmsg  popup WM_SIZE type 0 client 219x105\nmsg  top WM_GETDPISCALEDSIZE dpi 168 size 400x300\nmsg  child WM_DPICHANGED_BEFOREPARENT\nmsg  top WM_DPICHANGED dpi x 168 y 168 suggested 100,100,450,363\nmsg  top WM_MOVE 112,152\nmsg  top WM_SIZE type 0 client 376x236\nmsg  child WM_DPICHANGED_AFTERPARENT\nmsg  top WM_SIZE type 0 client 326x199\none step down: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 168 screen 2560x1600 CYCAPTION 45\n  top-level: GetDpiForWindow 168 rect 100,100,450,363 client 0,0,326,199\n  child: GetDpiForWindow 168 rect 122,162,222,212 client 0,0,100,50\n  popup: GetDpiForWindow 168 rect 600,150,819,255 client 0,0,219,105\nscale back up -> true\nmsg  popup WM_GETDPISCALEDSIZE dpi 192 size 219x105\nmsg  popup WM_DPICHANGED dpi x 192 y 192 suggested 600,150,850,270\nmsg  popup WM_SIZE type 0 client 250x120\nmsg  top WM_GETDPISCALEDSIZE dpi 192 size 350x263\nmsg  child WM_DPICHANGED_BEFOREPARENT\nmsg  top WM_DPICHANGED dpi x 192 y 192 suggested 100,100,500,400\nmsg  top WM_MOVE 113,158\nmsg  top WM_SIZE type 0 client 324x192\nmsg  child WM_DPICHANGED_AFTERPARENT\nmsg  top WM_SIZE type 0 client 374x229\nback: GetDpiForSystem 192 LOGPIXELSX 192 monitor dpi 192 screen 2560x1600 CYCAPTION 45\n  top-level: GetDpiForWindow 192 rect 100,100,500,400 client 0,0,374,229\n  child: GetDpiForWindow 192 rect 123,168,223,218 client 0,0,100,50\n  popup: GetDpiForWindow 192 rect 600,150,850,270 client 0,0,250,120\nthe scale is the starting one again: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5758,
+      "session": "interactive-bottom/2560x1600/200"
+    }
+  ]
+}

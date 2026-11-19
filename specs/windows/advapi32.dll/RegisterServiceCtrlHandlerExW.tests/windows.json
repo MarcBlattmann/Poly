@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "rschex_returns",
+      "exe_sha256": "dbd51a8df5566ae9efc9cfe1e968685af28e9e87d2c803594a147d314d195d7e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNIeHIpOiBvawpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoMTQwKTogb2sKQ29udHJvbFNlcnZpY2UoNCk6IG9rCkNvbnRyb2xTZXJ2aWNlKDIwMCk6IG9rCkNvbnRyb2xTZXJ2aWNlKFNUT1ApOiBvawpTVE9QUEVEIHdpdGhpbiA1IHM6IDEKc3ZjOiBtYWluOiBhcmdjPTEgYXJndj1bUG9seVNwZWNTdmNIeHJdCnN2YzogbWFpbjogaGFuZGxlciByZWdpc3RlcmVkPTEKc3ZjOiBtYWluOiBSVU5OSU5HIHJlcG9ydGVkPTEKc3ZjOiBjb250cm9sIDE0MCBldmVudHR5cGU9MCBjb250ZXh0LW9rPTEKc3ZjOiBjb250cm9sIDQgZXZlbnR0eXBlPTAgY29udGV4dC1vaz0xCnN2YzogY29udHJvbCAyMDAgZXZlbnR0eXBlPTAgY29udGV4dC1vaz0xCnN2YzogY29udHJvbCAxIGV2ZW50dHlwZT0wIGNvbnRleHQtb2s9MQpzdmM6IG1haW46IHN0b3AgcmVxdWVzdGVkLCBsYXN0IGNvbnRyb2wgMQpzdmM6IG1haW46IHJlcG9ydGluZyBTVE9QUEVECnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcHxr): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(140): ok\nControlService(4): ok\nControlService(200): ok\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcHxr]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: control 140 eventtype=0 context-ok=1\nsvc: control 4 eventtype=0 context-ok=1\nsvc: control 200 eventtype=0 context-ok=1\nsvc: control 1 eventtype=0 context-ok=1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 203
+    }
+  ]
+}

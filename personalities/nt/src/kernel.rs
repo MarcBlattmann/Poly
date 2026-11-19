@@ -328,6 +328,11 @@ pub trait NtKernel {
         None
     }
 
+    /// Start `services.exe`, the host of the service control manager (ADR 0221), as soon as the
+    /// current call is done: the kernel runs `C:\Windows\System32\services.exe`. A kernel that
+    /// cannot does nothing (services then cannot start).
+    fn start_service_host(&mut self) {}
+
     /// Fill `buf` from the kernel's random generator (`PolyRandomBytes`, ADR 0206); false from a
     /// kernel that has none.
     fn random_bytes(&mut self, _buf: &mut [u8]) -> bool {

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "rsch_names",
+      "exe_sha256": "ef3229a8bdac7e3276b4531cb76a9b0dbb168da6f8285b2176e3421e16231ec5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNSTjEpOiBvawpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoSU5URVJST0dBVEUpOiBvawpDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCnN2YzogbWFpbjogYXJnYz0xIGFyZ3Y9W1BvbHlTcGVjU3ZjUk4xXQpzdmM6IG1haW46IGhhbmRsZXIgcmVnaXN0ZXJlZD0xCnN2YzogbWFpbjogUlVOTklORyByZXBvcnRlZD0xCnN2YzogY29udHJvbCA0CnN2YzogY29udHJvbCAxCnN2YzogbWFpbjogc3RvcCByZXF1ZXN0ZWQsIGxhc3QgY29udHJvbCAxCnN2YzogbWFpbjogcmVwb3J0aW5nIFNUT1BQRUQKQ3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNSTjIpOiBvawpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKQ29udHJvbFNlcnZpY2UoSU5URVJST0dBVEUpOiBvawpDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCnN2YzogbWFpbjogYXJnYz0xIGFyZ3Y9W1BvbHlTcGVjU3ZjUk4yXQpzdmM6IG1haW46IGhhbmRsZXIgcmVnaXN0ZXJlZD0xCnN2YzogbWFpbjogUlVOTklORyByZXBvcnRlZD0xCnN2YzogY29udHJvbCA0CnN2YzogY29udHJvbCAxCnN2YzogbWFpbjogc3RvcCByZXF1ZXN0ZWQsIGxhc3QgY29udHJvbCAxCnN2YzogbWFpbjogcmVwb3J0aW5nIFNUT1BQRUQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcRN1): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(INTERROGATE): ok\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcRN1]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: control 4\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nCreateServiceW(PolySpecSvcRN2): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nControlService(INTERROGATE): ok\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nsvc: main: argc=1 argv=[PolySpecSvcRN2]\nsvc: main: handler registered=1\nsvc: main: RUNNING reported=1\nsvc: control 4\nsvc: control 1\nsvc: main: stop requested, last control 1\nsvc: main: reporting STOPPED\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 319
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "open_variants",
+      "exe_sha256": "57efff43db0e084140b2c05a83941274fb28cbcc655cb96b5c5ac879a7aa6e11",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVc6IG9rCk9wZW5TZXJ2aWNlVyhzZXJ2aWNlIG5hbWUpOiBvawpPcGVuU2VydmljZVcoc2VydmljZSBuYW1lIGluIGxvd2VyIGNhc2UpOiBvawpPcGVuU2VydmljZVcoZGlzcGxheSBuYW1lKTogZXJyIDEwNjAKT3BlblNlcnZpY2VXKG5hbWUgdGhhdCBkb2VzIG5vdCBleGlzdCk6IGVyciAxMDYwCk9wZW5TZXJ2aWNlVyhlbXB0eSBuYW1lKTogZXJyIDEyMwpPcGVuU2VydmljZVcobmFtZSB3aXRoIGEgYmFja3NsYXNoKTogZXJyIDEyMwpPcGVuU2VydmljZVcobmFtZSBvZiAyNTcgdW5pdHMpOiBlcnIgMTc4MwpPcGVuU2VydmljZVcoTlVMTCBuYW1lKTogZXJyIDQ4NwpPcGVuU2VydmljZVcoYWNjZXNzIDApOiBlcnIgNQpPcGVuU2VydmljZVcoYWNjZXNzIE1BWElNVU1fQUxMT1dFRCk6IG9rCk9wZW5TZXJ2aWNlVyhhY2Nlc3MgR0VORVJJQ19BTEwpOiBvawpPcGVuU2VydmljZVcoYWNjZXNzIEdFTkVSSUNfUkVBRCk6IG9rCk9wZW5TZXJ2aWNlVyhhY2Nlc3MgU0VSVklDRV9BTExfQUNDRVNTKTogb2sKT3BlblNlcnZpY2VXKGFjY2VzcyBTRVJWSUNFX1NUQVJUIHwgU0VSVklDRV9TVE9QKTogb2sKT3BlblNlcnZpY2VXKGFjY2VzcyBBQ0NFU1NfU1lTVEVNX1NFQ1VSSVRZKTogb2sKT3BlblNlcnZpY2VXKE5VTEwgbWFuYWdlciBoYW5kbGUpOiBlcnIgNgpPcGVuU2VydmljZVcoYSBzZXJ2aWNlIGhhbmRsZSBhcyBtYW5hZ2VyIGhhbmRsZSk6IGVyciA2Ck9wZW5TZXJ2aWNlVyhtYW5hZ2VyIGhhbmRsZSB3aXRob3V0IENPTk5FQ1Q6IG9rKSBvawpzZWNvbmQgaGFuZGxlOiBvayAoZGlmZmVyZW50IGhhbmRsZSB2YWx1ZTogMSkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW: ok\nOpenServiceW(service name): ok\nOpenServiceW(service name in lower case): ok\nOpenServiceW(display name): err 1060\nOpenServiceW(name that does not exist): err 1060\nOpenServiceW(empty name): err 123\nOpenServiceW(name with a backslash): err 123\nOpenServiceW(name of 257 units): err 1783\nOpenServiceW(NULL name): err 487\nOpenServiceW(access 0): err 5\nOpenServiceW(access MAXIMUM_ALLOWED): ok\nOpenServiceW(access GENERIC_ALL): ok\nOpenServiceW(access GENERIC_READ): ok\nOpenServiceW(access SERVICE_ALL_ACCESS): ok\nOpenServiceW(access SERVICE_START | SERVICE_STOP): ok\nOpenServiceW(access ACCESS_SYSTEM_SECURITY): ok\nOpenServiceW(NULL manager handle): err 6\nOpenServiceW(a service handle as manager handle): err 6\nOpenServiceW(manager handle without CONNECT: ok) ok\nsecond handle: ok (different handle value: 1)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 122
+    }
+  ]
+}
