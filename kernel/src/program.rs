@@ -214,7 +214,11 @@ fn prepare_full(
                 poly_personality_nt::image::VfsFile(Arc::clone(&file)),
             ))
             .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not be loaded: {e:?}")))?;
-            let process = Arc::new(Process::new_nt(process::alloc_pid(), format, traced));
+            // Its creator is its parent in /proc (ADR 0230: Poly's installer
+            // waits for a Windows installer and what it started by that).
+            let mut nt = Process::new_nt(process::alloc_pid(), format, traced);
+            nt.ppid = ppid;
+            let process = Arc::new(nt);
             // Its DOS path and arguments go into its process parameters.
             let launch = crate::nt::Launch::of(path, argv);
             return Ok(Prepared::Nt { process, image: Box::new(image), launch });

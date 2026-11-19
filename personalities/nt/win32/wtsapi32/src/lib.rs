@@ -187,6 +187,99 @@ pub unsafe extern "system" fn WTSQuerySessionInformationW(
     1
 }
 
+/// The handle `WTSOpenServerW` gives for this computer: it works like `WTS_CURRENT_SERVER_HANDLE`.
+const LOCAL_SERVER: usize = 0x5754_5300;
+/// `RPC_S_SERVER_UNAVAILABLE` (`winerror.h`): a server that is not this computer.
+const RPC_S_SERVER_UNAVAILABLE: u32 = 1722;
+
+/// Whether `name` names this computer: `localhost`, `.`, or the computer's name (any case).
+fn is_local_name(name: &[u16]) -> bool {
+    let fold = |s: &[u16]| -> alloc::vec::Vec<u16> {
+        s.iter().map(|&c| if (0x61..=0x7A).contains(&c) { c - 0x20 } else { c }).collect()
+    };
+    let n = fold(name);
+    if n.is_empty() || n == fold(&"localhost".encode_utf16().collect::<alloc::vec::Vec<_>>()) || n == [u16::from(b'.')]
+    {
+        return true;
+    }
+    let mut computer = [0u16; 64];
+    let mut len = 64u32;
+    // SAFETY: the buffer holds `len` characters.
+    let ok = unsafe { GetComputerNameW(computer.as_mut_ptr(), &mut len) } != 0;
+    ok && fold(&computer[..(len as usize).min(63)]) == n
+}
+
+/// `WTSOpenServerW(pServerName)`: a handle of the server. Poly answers for this computer only; any
+/// other name fails (`RPC_S_SERVER_UNAVAILABLE`, a NULL handle).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WTSOpenServerW(name: *const u16) -> usize {
+    let mut n = 0;
+    if !name.is_null() {
+        // SAFETY: the caller's NUL-terminated name.
+        while unsafe { *name.add(n) } != 0 {
+            n += 1;
+        }
+    }
+    // SAFETY: `n` characters of the caller's name (none for NULL).
+    let s = if name.is_null() { &[][..] } else { unsafe { core::slice::from_raw_parts(name, n) } };
+    if is_local_name(s) {
+        LOCAL_SERVER
+    } else {
+        fail(RPC_S_SERVER_UNAVAILABLE);
+        0
+    }
+}
+
+/// `WTSCloseServer(hServer)`: nothing to release.
+#[unsafe(no_mangle)]
+pub extern "system" fn WTSCloseServer(_server: usize) {}
+
+/// `WTSEnumerateSessionsW(hServer, Reserved, Version, ppSessionInfo, pCount)`: the sessions of
+/// this computer (`poly_kernelbase::wtsenum`), an array of `WTS_SESSION_INFOW` and their names in
+/// one block freed with `WTSFreeMemory` (`specs/windows/wtsapi32.dll/WTSEnumerateSessionsW.yaml`).
+/// A NULL output pointer is `ERROR_INVALID_USER_BUFFER` (nothing written); `Reserved` other than
+/// 0 or `Version` other than 1 is `ERROR_INVALID_PARAMETER` with the outputs set to NULL and 0.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WTSEnumerateSessionsW(
+    server: usize,
+    reserved: u32,
+    version: u32,
+    info: *mut *mut u8,
+    count: *mut u32,
+) -> i32 {
+    use poly_kernelbase::wtsenum;
+    if info.is_null() || count.is_null() {
+        return fail(wtsenum::ERROR_INVALID_USER_BUFFER);
+    }
+    // SAFETY: the caller's out-pointers.
+    unsafe {
+        info.write(core::ptr::null_mut());
+        count.write_unaligned(0);
+    }
+    if reserved != 0 || version != 1 {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    if server != 0 && server != LOCAL_SERVER {
+        return fail(ERROR_INVALID_HANDLE);
+    }
+    let entries = wtsenum::sessions(session_id());
+    let pointer = core::mem::size_of::<usize>();
+    let size = wtsenum::block_size(&entries, pointer);
+    // SAFETY: the process heap.
+    let block = unsafe { process_heap::HeapAlloc(process_heap::GetProcessHeap(), 0, size) };
+    if block.is_null() {
+        return fail(ERROR_NOT_ENOUGH_MEMORY);
+    }
+    let bytes = wtsenum::session_block(&entries, block as u64, pointer);
+    // SAFETY: `block` holds `size` bytes (= `bytes.len()`); the out-pointers are the caller's.
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), block, bytes.len());
+        info.write(block);
+        count.write_unaligned(entries.len() as u32);
+    }
+    1
+}
+
 /// `WTSFreeMemory(pMemory)`: frees what a `WTS*` function allocated; NULL is ignored.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn WTSFreeMemory(memory: *mut u8) {

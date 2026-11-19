@@ -20,7 +20,6 @@ poly_win32_rt::fail_exports!(
         ord_18,
         ord_181,
         ord_182,
-        ord_184,
         ord_185,
         ord_187,
         ord_188,

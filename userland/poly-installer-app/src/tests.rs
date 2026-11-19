@@ -40,6 +40,14 @@ struct Fake {
     ran: Vec<String>,
     refuse_place: bool,
     refuse_run: bool,
+    /// Windows programs run and waited for, run without waiting, waits
+    /// stopped; what the shortcuts gave; what an uninstall leaves.
+    windows: Vec<Vec<String>>,
+    programs: Vec<String>,
+    stopped: usize,
+    collected: Vec<(String, String, Option<String>)>,
+    left: Vec<(String, String)>,
+    forgot: Vec<Vec<(String, String)>>,
 }
 
 struct FakeHost(Rc<RefCell<Fake>>);
@@ -90,6 +98,30 @@ impl Host for FakeHost {
         let mut f = self.0.borrow_mut();
         f.deleted.push(slug.into());
         if f.refuse_delete { Err("permission denied".into()) } else { Ok(()) }
+    }
+
+    fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
+        self.0.borrow_mut().windows.push(argv.to_vec());
+        Ok(())
+    }
+
+    fn stop_waiting(&mut self) {
+        self.0.borrow_mut().stopped += 1;
+    }
+
+    fn collect_windows(&mut self) -> Vec<(String, String, Option<String>)> {
+        self.0.borrow().collected.clone()
+    }
+
+    fn forget_windows(&mut self, apps: &[(String, String)]) -> Vec<(String, String)> {
+        let mut f = self.0.borrow_mut();
+        f.forgot.push(apps.to_vec());
+        f.left.clone()
+    }
+
+    fn run_program(&mut self, path: &str) -> Result<(), String> {
+        self.0.borrow_mut().programs.push(path.into());
+        Ok(())
     }
 
     fn apps_changed(&mut self) {
@@ -147,7 +179,12 @@ fn key(app: &mut InstallerApp, key: Key) -> Cx {
 }
 
 fn ended(ok: bool, output: &[&str]) -> Pumped {
-    Pumped { output: output.iter().map(ToString::to_string).collect(), status: Vec::new(), ended: Some(ok) }
+    Pumped {
+        output: output.iter().map(ToString::to_string).collect(),
+        status: Vec::new(),
+        ended: Some(ok),
+        waiting: None,
+    }
 }
 
 #[test]
@@ -169,6 +206,7 @@ fn one_click_installs_and_the_desktop_hears_of_the_new_app() {
             output: alloc::vec!["Unpacking galculator (2.1.4-2) ...".into()],
             status: alloc::vec!["pmstatus:galculator:50.0:Unpacking galculator (amd64)".into()],
             ended: None,
+            waiting: None,
         },
         ended(true, &["Setting up galculator (2.1.4-2) ..."]),
     ];
@@ -523,4 +561,103 @@ fn an_appimage_that_cannot_be_copied_says_why() {
     assert_eq!(app.model.phase, Phase::Failed("The app could not be installed: no space left.".into()));
     assert_eq!(fake.borrow().changed, 0);
     assert!(fake.borrow().reports.iter().any(|l| l.starts_with("failed: ")));
+}
+
+fn windows_app(installer: bool) -> (InstallerApp, Rc<RefCell<Fake>>) {
+    let program = poly_pkg::windows::program::Program {
+        name: "Poly Test App".into(),
+        description: "Installs Poly Test App".into(),
+        company: "Poly".into(),
+        version: "1.0.0.0".into(),
+        size: 40_000,
+        bits: 64,
+        gui: false,
+        installer,
+        signed: false,
+        publisher: None,
+        icon: None,
+    };
+    let model = Installer::for_windows("/root/Downloads/poly-test-setup.exe", Ok(program));
+    let fake = Rc::new(RefCell::new(Fake::default()));
+    (InstallerApp::new(model, Box::new(FakeHost(Rc::clone(&fake)))), fake)
+}
+
+#[test]
+fn a_windows_installer_runs_with_its_windows_and_its_shortcuts_become_apps() {
+    let (mut app, fake) = windows_app(true);
+    assert_eq!(app.title(), "Install Poly Test App");
+    click(&mut app, Action::Install);
+    // The window shows that it runs first, then starts it.
+    assert_eq!(app.model.phase, Phase::Working(Step::Program));
+    assert!(fake.borrow().windows.is_empty());
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(fake.borrow().windows, [["/root/Downloads/poly-test-setup.exe"]]);
+    assert!(fake.borrow().reports.contains(&"running /root/Downloads/poly-test-setup.exe".to_string()));
+    // It ends, a program it started still runs: the window says so and
+    // offers to stop waiting.
+    fake.borrow_mut().script.push(Pumped { waiting: Some(1), ..Pumped::default() });
+    app.tick(&mut cx);
+    assert_eq!(app.model.waiting, Some(1));
+    assert_eq!(app.model.buttons(), [("Stop waiting", Action::Finish)]);
+    click(&mut app, Action::Finish);
+    assert_eq!(fake.borrow().stopped, 1);
+    // Then the host says it ended: the shortcuts are read.
+    fake.borrow_mut().collected =
+        alloc::vec![("poly-windows-poly-test-app.desktop".into(), "Poly Test App".into(), Some("/h/i.png".into()))];
+    fake.borrow_mut().script.push(Pumped { ended: Some(true), ..Pumped::default() });
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1);
+    assert!(
+        fake.borrow().reports.contains(
+            &"installed Poly Test App 1.0.0.0: Poly Test App (poly-windows-poly-test-app.desktop)".to_string()
+        ),
+        "{:?}",
+        fake.borrow().reports
+    );
+    // Open asks the desktop for the new entry.
+    click(&mut app, Action::Open);
+    assert_eq!(fake.borrow().opened, ["poly-windows-poly-test-app.desktop"]);
+}
+
+#[test]
+fn a_plain_windows_program_is_run_and_the_window_closes() {
+    let (mut app, fake) = windows_app(false);
+    let cx = click(&mut app, Action::Run);
+    assert!(quit(&cx));
+    assert_eq!(fake.borrow().programs, ["/root/Downloads/poly-test-setup.exe"]);
+    assert!(fake.borrow().windows.is_empty());
+}
+
+#[test]
+fn a_windows_app_is_uninstalled_by_its_uninstaller_and_its_entries_go() {
+    let plan = Plan {
+        app: "Poly Test App".into(),
+        removal: Removal::Windows {
+            command: alloc::vec!["/nt/c/Program Files/Poly Test App/uninstall.exe".into(), "/S".into()],
+            publisher: "Poly".into(),
+            version: "1.0".into(),
+        },
+        package: None,
+        apps: alloc::vec![("poly-windows-poly-test-app.desktop".into(), "Poly Test App".into())],
+    };
+    let (mut app, fake) = uninstall_app(Ok(plan.clone()));
+    click(&mut app, Action::Uninstall);
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(fake.borrow().windows, [["/nt/c/Program Files/Poly Test App/uninstall.exe", "/S"]]);
+    fake.borrow_mut().script.push(Pumped { ended: Some(true), ..Pumped::default() });
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().forgot, core::slice::from_ref(&plan.apps));
+    assert_eq!(fake.borrow().changed, 1);
+    // The app still there: the window says so.
+    let (mut app, fake) = uninstall_app(Ok(plan.clone()));
+    fake.borrow_mut().left = plan.apps.clone();
+    click(&mut app, Action::Uninstall);
+    app.tick(&mut cx);
+    fake.borrow_mut().script.push(Pumped { ended: Some(false), ..Pumped::default() });
+    app.tick(&mut cx);
+    assert!(matches!(&app.model.phase, Phase::Failed(why) if why.contains("still installed")));
 }

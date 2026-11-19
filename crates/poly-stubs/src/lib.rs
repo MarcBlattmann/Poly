@@ -57,6 +57,7 @@ use poly_ldr::builder::{Export, Import, PeBuilder, RDATA, Section, Sym, TEXT, Ta
 
 pub mod sysdlls;
 pub mod system;
+pub mod x86slots;
 
 pub use poly_ldr::{STUB_DLL, stub_key};
 
@@ -536,7 +537,7 @@ mod tests {
             }
             let ((dll, name), sig) = parse_signature(line).unwrap_or_else(|| panic!("bad line: {line}"));
             assert_eq!(dll, dll.to_ascii_lowercase(), "{line}: the DLL is lower case, without .dll");
-            assert!(!name.is_empty() && sig.slots <= 12, "{line}");
+            assert!(!name.is_empty() && sig.slots <= 16, "{line}");
             assert!(seen.insert((dll, name)), "{line}: twice");
         }
         assert!(seen.len() > 250);

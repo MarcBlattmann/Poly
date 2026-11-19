@@ -1365,7 +1365,10 @@ fn selftest_boot(kernel: &Path, syms: &Arc<Symbols>, config: SelfTest) -> Result
     eprintln!("==> boot test: self-test passes on {cpus} CPU(s) with {memory} of RAM, {how} and {with}{on}");
     let disk = test_disk()?;
     let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
-    let mut append = format!("poly.qemu_exit {}", devices.flags());
+    // The kernel's own NT test programs (a32test, s1test, sys32, ...) check the API as the elevated
+    // administrator of ADR 0171 they were written for (HKLM, C:\Windows, Program Files); User
+    // Account Control's own rules have their visible tests and host tests (ADR 0222).
+    let mut append = format!("poly.qemu_exit {} poly.win.token=admin", devices.flags());
     if initrd.is_some() {
         append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
     }
@@ -1710,6 +1713,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // Poly's own Files and Terminal on the desktop: a shell command typed
     // into the Terminal, its file found in Files (desktop.rs, ADR 0134).
     ("desktop-apps", desktop::apps_boot_test),
+    // A Windows installer opened from Downloads by Poly's installer, run on the NT
+    // personality, its shortcut a launcher entry (desktop/wininstaller.rs, ADR 0230).
+    ("win-installer", desktop::wininstaller::boot_test),
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
@@ -1829,8 +1835,9 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     ("desktop", &["wayland", "wayland-kms", "desktop", "desktop-resize", "desktop-scale", "desktop-win32"]),
     // About 55 s: window management, notifications and the settings window.
     ("desktop-shell", &["desktop-shell"]),
-    // About 85 s: Poly's own Files and Terminal on the desktop.
-    ("desktop-apps", &["desktop-apps"]),
+    // About 85 s: Poly's own Files and Terminal on the desktop; about 40 s: a Windows installer
+    // through the front door.
+    ("desktop-apps", &["desktop-apps", "win-installer"]),
     // X11 apps through Xwayland and Mesa: about 85 s.
     ("x11", &["xwayland", "mesa"]),
     // About 50 s.
