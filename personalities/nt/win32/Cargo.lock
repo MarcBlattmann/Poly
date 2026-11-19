@@ -52,6 +52,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmd"
+version = "0.0.1"
+dependencies = [
+ "poly-cmd",
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "comctl32"
 version = "0.0.1"
 dependencies = [
@@ -368,6 +377,10 @@ version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
 ]
+
+[[package]]
+name = "poly-cmd"
+version = "0.0.1"
 
 [[package]]
 name = "poly-com"
