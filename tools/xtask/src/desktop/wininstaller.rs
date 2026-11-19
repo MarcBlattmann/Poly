@@ -9,7 +9,10 @@
 //! 1. The Terminal runs `poly-installer FILE`, what Files and `xdg-open` run
 //!    for a `.exe`: the desktop is asked and opens the installer's window,
 //!    which says it is a Windows installer (from the PE headers).
-//! 2. **Install** runs it on the NT personality. It copies itself to
+//! 2. **Install** runs it on the NT personality, un-elevated. Like Google's
+//!    installer it asks for administrator rights itself (`ShellExecuteExW`
+//!    `runas`): Poly's consent prompt (ADR 0222) shows, and the test answers
+//!    Yes (Tab, Enter). The elevated copy copies itself to
 //!    `C:\Program Files`, writes a shortcut into the common Start menu and an
 //!    `Uninstall` key, starts a helper that lingers a few seconds, and ends.
 //!    The window waits for the helper too (its parent in `/proc`).
@@ -106,6 +109,22 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     let (x, y) = crate::installer::main_button(place);
     click(d, x, y)?;
     d.wait(&format!("poly-installer: running {DOWNLOAD}"), 60)?;
+    // It asks for administrator rights as Google's installer does (`runas`): Poly's consent
+    // prompt (ADR 0222). No has the focus first; Tab moves it to Yes, Enter answers.
+    let prompt = d.wait("poly-compositor: consent prompt ", 120)?;
+    expect(&format!("the prompt names the installer ({prompt:?})"), prompt.contains("poly-test-setup.exe"))?;
+    let request = prompt
+        .split("consent prompt ")
+        .nth(1)
+        .and_then(|r| r.split_whitespace().next())
+        .ok_or_else(|| format!("unreadable consent line {prompt:?}"))?
+        .to_string();
+    thread::sleep(Duration::from_millis(1500));
+    d.shot("win-installer-consent")?;
+    d.type_text(&["tab"])?;
+    thread::sleep(Duration::from_millis(300));
+    d.type_text(&["ret"])?;
+    d.wait(&format!("poly-compositor: consent {request}: yes"), 30)?;
     let waiting = d.wait("poly-installer: the program has ended; waiting for", 120)?;
     expect(
         &format!("the window waits for what the installer started ({waiting:?})"),
