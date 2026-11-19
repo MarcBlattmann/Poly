@@ -71,6 +71,27 @@ fn report_state(d: &mut Driver, what: &str) -> std::result::Result<(usize, usize
     Ok((num("chrome"), num("services"), num("tasks")))
 }
 
+/// When the install fails: Google's updater logs to `updater.log` (a failed check's message
+/// too); a new Terminal prints its end on the serial line (`b7-log:` lines), since the disk image
+/// is not readable afterwards.
+fn dump_logs(d: &mut Driver) {
+    let _ = (|| -> std::result::Result<(), String> {
+        chord(d, &["ctrl", "spc"])?;
+        d.wait(super::LAUNCHER_SHOWN, 30)?;
+        type_str(d, "terminal")?;
+        thread::sleep(Duration::from_millis(800));
+        d.type_text(&["ret"])?;
+        thread::sleep(Duration::from_secs(4));
+        let cmd = format!(
+            "for f in '{C}/Program Files (x86)/Google/GoogleUpdater/updater.log' {C}/Windows/SystemTemp/*/updater.log; \
+             do tail -n 60 \"$f\" 2>/dev/null | sed 's/^/b7-log: /'; done > /dev/console; echo b7-log-end > /dev/console\n"
+        );
+        type_str(d, &cmd)?;
+        d.wait("b7-log-end", 60)?;
+        Ok(())
+    })();
+}
+
 /// The cached installer on the host (downloaded once; `POLY_CHROME_SETUP` overrides).
 fn installer() -> std::result::Result<PathBuf, String> {
     if let Ok(p) = std::env::var("POLY_CHROME_SETUP") {
@@ -249,6 +270,7 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let r = steps(&mut d);
     if r.is_err() {
         let _ = d.shot("chrome-installer-failed");
+        dump_logs(&mut d);
     }
     d.qmp.quit();
     r
@@ -335,6 +357,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
                     || l.contains("stub:")
                     || l.contains("exception")
                     || l.contains("exited")
+                    || l.contains("b7-log")
             }) {
                 eprintln!("    {l}");
             }
