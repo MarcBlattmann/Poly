@@ -730,7 +730,7 @@ fn test(t: &mut Test) {
     probe(t, "NULL", core::ptr::null());
     probe(t, "a backslash", wide("\\").as_ptr());
     probe(t, "an empty string", wide("").as_ptr());
-    probe(t, "a drive that is not there", wide("Z:\\").as_ptr());
+    probe(t, "a drive that is not there", wide("Q:\\").as_ptr());
     probe(t, "a folder", beside("").as_ptr());
     probe(t, "a relative name", wide("x").as_ptr());
     probe(t, "a file name", wide("C:\\x.txt").as_ptr());

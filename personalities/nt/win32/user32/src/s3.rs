@@ -47,10 +47,10 @@ pub extern "system" fn PrivateLayoutInstalled(hkl: usize) -> i32 {
 
 // ----- display configuration: the desktop's monitor as one path (`poly_win32k::dispcfg`)
 
-/// The size of the monitor (the screen of the session).
+/// The size of the monitor in physical pixels, for every caller (ADR 0231).
 fn monitor_size() -> (u32, u32) {
-    let d = poly_win32k::user::screen(&SYS);
-    (d.width.max(1) as u32, d.height.max(1) as u32)
+    let (w, h) = crate::display::desk().phys;
+    (w.max(1) as u32, h.max(1) as u32)
 }
 
 /// `GetDisplayConfigBufferSizes`: the error code itself; the last error is not touched.
@@ -144,12 +144,41 @@ pub unsafe extern "system" fn DisplayConfigGetDeviceInfo(packet: *mut u8) -> i32
     // SAFETY: the header says the packet has `size` bytes.
     unsafe { core::ptr::copy_nonoverlapping(packet, buf.as_mut_ptr(), size) };
     let (w, h) = monitor_size();
-    let code = dispcfg::device_info(&mut buf, w, h);
+    let code = if dispcfg::get32_at(&buf, 0) == dispcfg::GET_DPI_SCALE {
+        let d = crate::display::desk();
+        let step = poly_win32k::dpiscale::step_of(d.scale) as u32;
+        dispcfg::dpi_scale_get(&mut buf, step, poly_win32k::dpiscale::max_step(w, h) as u32)
+    } else {
+        dispcfg::device_info(&mut buf, w, h)
+    };
     if code == 0 {
         // SAFETY: as above.
         unsafe { core::ptr::copy_nonoverlapping(buf.as_ptr(), packet, size) };
     }
     code
+}
+
+/// `DisplayConfigSetDeviceInfo`: the DPI-scale packet changes the monitor's scale (ADR 0231,
+/// DisplayConfigSetDeviceInfo.yaml); the return value is the error code.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn DisplayConfigSetDeviceInfo(packet: *const u8) -> i32 {
+    if packet.is_null() {
+        return dispcfg::ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: a DISPLAYCONFIG_DEVICE_INFO_HEADER (20 bytes): type, size, adapter, id.
+    let size = unsafe { core::ptr::read_unaligned(packet.add(4) as *const u32) } as usize;
+    if !(20..=4096).contains(&size) {
+        return dispcfg::ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: the header says the packet has `size` bytes.
+    let buf = unsafe { core::slice::from_raw_parts(packet, size) };
+    match dispcfg::dpi_scale_set(buf) {
+        Ok(step) => match super::call(poly_win32k::proto::Request::SetScale { step }) {
+            poly_win32k::proto::Reply::Ok {} => 0,
+            _ => dispcfg::ERROR_INVALID_PARAMETER,
+        },
+        Err(e) => e,
+    }
 }
 
 #[allow(dead_code)]

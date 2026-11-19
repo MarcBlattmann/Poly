@@ -207,6 +207,13 @@ pub const USER32_EXPORTS: &[&str] = &[
     "IsProcessDPIAware",
     "SetProcessDPIAware",
     "GetSystemDpiForProcess",
+    // ADR 0231: DPI above 96.
+    "GetDpiFromDpiAwarenessContext",
+    "LogicalToPhysicalPoint",
+    "PhysicalToLogicalPoint",
+    "LogicalToPhysicalPointForPerMonitorDPI",
+    "PhysicalToLogicalPointForPerMonitorDPI",
+    "DisplayConfigSetDeviceInfo",
     "EnableNonClientDpiScaling",
     "AdjustWindowRectExForDpi",
     "GetSysColorBrush",

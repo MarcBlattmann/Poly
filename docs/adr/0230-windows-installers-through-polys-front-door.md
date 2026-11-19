@@ -135,8 +135,11 @@ commands; `installer.rs`: install, run, wait, stop waiting, failures, uninstall;
 Boot group **`win-installer`** (shard `desktop-apps`): the desktop with a small Windows installer in `/root/Downloads`
 (`tests/windows/win_test_setup.rs`: it copies itself to `C:\Program Files`, writes a shortcut with an argument into the
 common Start menu and an `Uninstall` key, starts a helper that lingers four seconds) and a disk with a `poly` folder
-for `C:` and the hive files. The Terminal runs `poly-installer FILE`; the window opens, **Install** runs it, the window
-waits for the helper, the shortcut becomes the launcher entry with the key as its registration, the desktop reads its
+for `C:` and the hive files. The Terminal runs `poly-installer FILE`; the window opens, **Install** runs it. Like Google's
+installer, the test installer asks for administrator rights itself: un-elevated (ADR 0222's filtered token, the
+default since #313) it starts itself again with `ShellExecuteExW` `runas`; the boot test answers Poly's consent
+prompt with Yes (Tab, Enter: No has the focus first), and the elevated copy installs (declined, it would install for
+the user: `HKCU`, `%LOCALAPPDATA%`). The window waits for the elevated copy and the helper, the shortcut becomes the launcher entry with the key as its registration, the desktop reads its
 apps again, and **Open** and the launcher start the installed app with the shortcut's argument.
 
 ## Not in this ADR
