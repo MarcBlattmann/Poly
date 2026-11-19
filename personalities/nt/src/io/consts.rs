@@ -190,6 +190,10 @@ pub const FILE_DEVICE_UNKNOWN: u32 = 0x0000_0022;
 pub const FILE_CASE_SENSITIVE_SEARCH: u32 = 0x0000_0001;
 pub const FILE_CASE_PRESERVED_NAMES: u32 = 0x0000_0002;
 pub const FILE_UNICODE_ON_DISK: u32 = 0x0000_0004;
+/// `FILE_PERSISTENT_ACLS` (`winnt.h`): files carry security descriptors (ADR 0171).
+pub const FILE_PERSISTENT_ACLS: u32 = 0x0000_0008;
+/// `FILE_NAMED_STREAMS` (`winnt.h`): the volume keeps named streams (ADR 0223).
+pub const FILE_NAMED_STREAMS: u32 = 0x0004_0000;
 pub const FILE_SUPPORTS_REPARSE_POINTS: u32 = 0x0000_0080;
 pub const FILE_SUPPORTS_HARD_LINKS: u32 = 0x0040_0000;
 pub const FILE_READ_ONLY_VOLUME: u32 = 0x0008_0000;

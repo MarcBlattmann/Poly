@@ -94,6 +94,14 @@ pub unsafe extern "system" fn DuplicateHandle(
     inherit: i32,
     options: u32,
 ) -> i32 {
+    // A power request's handle is not duplicated (sheet `kernel32.dll/PowerCreateRequest`).
+    if source_process == nt::CURRENT_PROCESS && crate::power::is_request(source) {
+        if !target.is_null() {
+            // SAFETY: the caller's out-pointer.
+            unsafe { target.write_unaligned(0) };
+        }
+        return fail(poly_kernelbase::error::ERROR_NOT_SUPPORTED, FALSE);
+    }
     let attributes = if inherit != 0 { nt::OBJ_INHERIT } else { 0 };
     let mut h: Handle = 0;
     // SAFETY: valid pointers; the kernel checks the handles.

@@ -225,6 +225,12 @@ pub enum ToCompositor {
     LayerDrop { surface: SurfaceId, layer: LayerId, buffer: BufferId },
     /// The layer goes with its buffers; the surface's own picture shows where it was.
     LayerGone { surface: SurfaceId, layer: LayerId },
+    /// A Windows program asks the desktop to open a file or folder with the program Poly's
+    /// Files would use (`show` false: `ShellExecuteExW` with no association, ADR 0223), or to
+    /// show it in Files, selected in its folder (`show` true: `SHOpenFolderAndSelectItems`).
+    /// `path` is the object's path in Poly's file system. Not replayed. A compositor that does
+    /// not know the record skips it.
+    Shell { show: bool, path: String },
 }
 
 /// compositor → win32k.
@@ -398,11 +404,12 @@ mod kind {
     pub const DESTROY: u16 = 0x000D;
     pub const PROCESS: u16 = 0x000E;
     pub const MARGINS: u16 = 0x000F;
-    pub const LAYER_BUFFER: u16 = 0x0010;
-    pub const LAYER_PLACE: u16 = 0x0011;
-    pub const LAYER_DAMAGE: u16 = 0x0012;
-    pub const LAYER_DROP: u16 = 0x0013;
-    pub const LAYER_GONE: u16 = 0x0014;
+    pub const SHELL: u16 = 0x0010;
+    pub const LAYER_BUFFER: u16 = 0x0011;
+    pub const LAYER_PLACE: u16 = 0x0012;
+    pub const LAYER_DAMAGE: u16 = 0x0013;
+    pub const LAYER_DROP: u16 = 0x0014;
+    pub const LAYER_GONE: u16 = 0x0015;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -521,6 +528,7 @@ impl Record for ToCompositor {
                 Out::new(out, kind::LAYER_DROP).u32(*surface).u32(*layer).u32(*buffer).done()
             }
             LayerGone { surface, layer } => Out::new(out, kind::LAYER_GONE).u32(*surface).u32(*layer).done(),
+            Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
         }
     }
 
@@ -608,6 +616,7 @@ impl Record for ToCompositor {
             },
             kind::LAYER_DROP => LayerDrop { surface: b.u32()?, layer: b.u32()?, buffer: b.u32()? },
             kind::LAYER_GONE => LayerGone { surface: b.u32()?, layer: b.u32()? },
+            kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -874,6 +883,16 @@ mod tests {
         s.push(&[0x01, 0x00, 2, 0, 9, 9, 9]);
         assert_eq!(s.next_record(), Some(Err(Error::BadLength)));
         assert_eq!(s.pending(), 0);
+    }
+
+    #[test]
+    fn shell_records_carry_the_path() {
+        let mut out = Vec::new();
+        let r = ToCompositor::Shell { show: true, path: String::from("/nt/c/Users/poly/Downloads/a b.zip") };
+        r.encode(&mut out);
+        let mut s = Stream::<ToCompositor>::new();
+        s.push(&out);
+        assert_eq!(s.next_record(), Some(Ok(r)));
     }
 
     #[test]

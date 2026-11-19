@@ -9,7 +9,6 @@ poly_win32_rt::fail_exports!(
     hresult,
     [
         GetCurrentProcessExplicitAppUserModelID,
-        SHCreateItemFromIDList,
         SHCreateShellItem,
         SHCreateShellItemArrayFromShellItem,
         SHGetIDListFromObject,

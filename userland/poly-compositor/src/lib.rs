@@ -1001,6 +1001,14 @@ fn run(args: &[String]) -> Result<u8, String> {
                 stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
             }
         }
+        // A Windows program's "open" with no program of its own, or its "show in folder":
+        // Files does it (ADR 0223).
+        if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
+            for (show, path) in l.take_shell() {
+                println!("poly-compositor: a Windows program asks to {} {path}", if show { "show" } else { "open" });
+                start_app(d, &mut server, &env, &poly_shell::apps::files_entry(&path, show));
+            }
+        }
         // Input to Windows windows goes to win32k (ADR 0136).
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
             // Windows apps type with the desktop's keyboard layout (ADR 0209).

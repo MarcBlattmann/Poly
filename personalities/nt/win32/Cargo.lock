@@ -638,8 +638,10 @@ dependencies = [
 name = "shell32"
 version = "0.0.1"
 dependencies = [
+ "poly-com",
  "poly-kernelbase",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]
