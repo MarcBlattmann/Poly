@@ -1,4 +1,4 @@
-//! The event log of `advapi32` (ADR 0224): `RegisterEventSourceA/W`,
+//! The event log of `advapi32` (ADR 0227): `RegisterEventSourceA/W`,
 //! `ReportEventA/W`, `DeregisterEventSource`, `OpenEventLogA/W`,
 //! `ReadEventLogW` and `CloseEventLog`, as the sheets `RegisterEventSourceA`,
 //! `ReportEventA`, `EventLogSourceRegistration` and `RegisterEventSourceW`

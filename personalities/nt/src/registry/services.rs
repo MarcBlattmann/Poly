@@ -312,7 +312,7 @@ pub fn flush_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
         Ok(reg.key(key)?.hive().filter(|hv| reg.hive(*hv).dirty).map(|hv| (hv, reg.hive(hv).external)))
     })?;
     match hive {
-        // A hive a program loaded is written to its own file (ADR 0224).
+        // A hive a program loaded is written to its own file (ADR 0227).
         Some((hive, true)) => super::hivefile::flush_external(k, hive)?,
         Some((hive, false)) => {
             let (file, bytes) = k.with_state(|sys, _, _| {

@@ -1,4 +1,4 @@
-//! The event log (ADR 0224): `RegisterEventSourceA/W`, `ReportEventA/W`,
+//! The event log (ADR 0227): `RegisterEventSourceA/W`, `ReportEventA/W`,
 //! `DeregisterEventSource`, `OpenEventLogA/W`, `ReadEventLogW` and
 //! `CloseEventLog`. The formats and decisions are `poly_kernelbase::eventlog`'s
 //! (host-tested); this file keeps the process's handle table and reads and

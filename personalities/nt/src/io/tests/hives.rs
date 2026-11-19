@@ -1,5 +1,5 @@
 //! Tests: hive files of programs (`NtSaveKey`, `NtLoadKey`, `NtUnloadKey`,
-//! ADR 0224) on the tmpfs VFS, as `RegSaveKeyW.yaml`, `RegLoadKeyW.yaml` and
+//! ADR 0227) on the tmpfs VFS, as `RegSaveKeyW.yaml`, `RegLoadKeyW.yaml` and
 //! `RegUnLoadKeyW.yaml` describe them.
 
 use super::*;

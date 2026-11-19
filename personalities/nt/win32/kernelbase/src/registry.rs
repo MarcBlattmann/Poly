@@ -2,7 +2,7 @@
 //! `RegQueryValueExW`, `RegSetValueExW`, `RegGetValueW`, `RegEnumKeyExW`,
 //! `RegEnumValueW`, `RegDeleteKeyExW`, `RegDeleteValueW`, `RegCloseKey`,
 //! `RegFlushKey`, `RegQueryInfoKeyW`, `RegDeleteTreeW`, the hive files
-//! (`RegSaveKeyW`, `RegLoadKeyW`, `RegUnLoadKeyW`, ADR 0224) and the `A` forms
+//! (`RegSaveKeyW`, `RegLoadKeyW`, `RegUnLoadKeyW`, ADR 0227) and the `A` forms
 //! of the common ones, over our `ntdll`'s `Nt*Key` services (ADR 0066). `advapi32` forwards
 //! them here through `api-ms-win-core-registry-l1-1-0`.
 //!
@@ -1097,7 +1097,7 @@ pub unsafe extern "system" fn RegDeleteTreeA(hkey: HKey, sub: *const u8) -> u32 
     unsafe { RegDeleteTreeW(hkey, sub.as_ref().map_or(core::ptr::null(), |s| s.as_ptr())) }
 }
 
-// ----- hive files (ADR 0224) --------------------------------------------------------------
+// ----- hive files (ADR 0227) --------------------------------------------------------------
 
 /// `GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE` (`winnt.h`), `FILE_CREATE`,
 /// `FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE` (`wdm.h`) and

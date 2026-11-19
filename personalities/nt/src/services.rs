@@ -291,14 +291,14 @@ pub enum Service {
     /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,
     /// KeySetInformation, Length)`.
     SetInformationKey,
-    /// `NtSaveKey(KeyHandle, FileHandle)` (Learn: "ZwSaveKey"; ADR 0224).
+    /// `NtSaveKey(KeyHandle, FileHandle)` (Learn: "ZwSaveKey"; ADR 0227).
     SaveKey,
     /// `NtLoadKey(TargetKey*, SourceFile*)`: two `OBJECT_ATTRIBUTES`, the
     /// key to make and the hive file (the documented `RegLoadKeyW`'s
-    /// arguments as native names; ADR 0224).
+    /// arguments as native names; ADR 0227).
     LoadKey,
     /// `NtUnloadKey(TargetKey*)`: the `OBJECT_ATTRIBUTES` of a loaded hive's
-    /// root (`RegUnLoadKeyW`'s; ADR 0224).
+    /// root (`RegUnLoadKeyW`'s; ADR 0227).
     UnloadKey,
 
     // ----- Poly

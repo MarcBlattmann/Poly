@@ -1,4 +1,4 @@
-//! Hive files of programs (ADR 0224): `NtSaveKey` writes a key and its
+//! Hive files of programs (ADR 0227): `NtSaveKey` writes a key and its
 //! subtree to a file the caller opened, `NtLoadKey` mounts such a file as a
 //! new key directly below `\REGISTRY\MACHINE` or `\REGISTRY\USER`, and
 //! `NtUnloadKey` writes a loaded hive back to its file and takes it out of
