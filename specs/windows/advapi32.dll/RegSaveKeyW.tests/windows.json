@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "hive_save",
+      "exe_sha256": "0517c3b48c1406a589f0bb727145cfe94d2dbf43c2838dd08c9f3e384e8be3e6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlIFNlQmFja3VwUHJpdmlsZWdlOiBhZGp1c3QgMSBsYXN0IGVycm9yIDAKUmVnU2F2ZUtleVcgb2YgYSBrZXkgd2l0aCB0d28gdmFsdWVzIGFuZCBhIHN1YmtleTogMDsgZmlsZSBleGlzdHMgdHJ1ZQpmaWxlOiBhdCBsZWFzdCA4IEtpQiB0cnVlOyBzaXplIGEgbXVsdGlwbGUgb2YgNDA5NiB0cnVlCmZpbGUgc3RhcnRzIHdpdGggdGhlIHNpZ25hdHVyZSByZWdmOiB0cnVlClJlZ1NhdmVLZXlXIHRvIGFuIGV4aXN0aW5nIGZpbGU6IDE4MwpSZWdTYXZlS2V5VyBvZiB0aGUgc3Via2V5OiAwOyBmaWxlIGV4aXN0cyB0cnVlClJlZ1NhdmVLZXlXIHRvIGEgbWlzc2luZyBkcml2ZTogMwpSZWdTYXZlS2V5VyBpbnRvIGEgbWlzc2luZyBkaXJlY3Rvcnk6IDMKUmVnU2F2ZUtleVcgd2l0aCBhIE5VTEwga2V5IGhhbmRsZTogNgpSZWdTYXZlS2V5VyB3aXRoIGEgTlVMTCBmaWxlIG5hbWU6IDg3ClJlZ1NhdmVLZXlXIHdpdGggYW4gZW1wdHkgZmlsZSBuYW1lOiA4NwpvcGVuIHdpdGggS0VZX1NFVF9WQUxVRSBvbmx5OiAwClJlZ1NhdmVLZXlXIHRocm91Z2ggYSBoYW5kbGUgdGhhdCBoYXMgbm8gcmVhZCBhY2Nlc3M6IDAKc291cmNlIGtleSBsZWZ0IGJlaGluZDogZmFsc2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enable SeBackupPrivilege: adjust 1 last error 0\nRegSaveKeyW of a key with two values and a subkey: 0; file exists true\nfile: at least 8 KiB true; size a multiple of 4096 true\nfile starts with the signature regf: true\nRegSaveKeyW to an existing file: 183\nRegSaveKeyW of the subkey: 0; file exists true\nRegSaveKeyW to a missing drive: 3\nRegSaveKeyW into a missing directory: 3\nRegSaveKeyW with a NULL key handle: 6\nRegSaveKeyW with a NULL file name: 87\nRegSaveKeyW with an empty file name: 87\nopen with KEY_SET_VALUE only: 0\nRegSaveKeyW through a handle that has no read access: 0\nsource key left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "hive_std_save",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "25c6983fb46ecb6df7917f8900e0f9f9ee1c054964792091ceadf5f3cdaac32c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlIFNlQmFja3VwUHJpdmlsZWdlOiBhZGp1c3QgMSBsYXN0IGVycm9yIDEzMDAKZW5hYmxlIFNlUmVzdG9yZVByaXZpbGVnZTogYWRqdXN0IDEgbGFzdCBlcnJvciAxMzAwCmNyZWF0ZSBzb3VyY2Uga2V5IGluIEhLQ1U6IDAKUmVnU2F2ZUtleVcgb2YgdGhlIEhLQ1Uga2V5OiAxMzE0OyBmaWxlIGV4aXN0cyB0cnVlClJlZ1NhdmVLZXlXIHRvIGEgc2Vjb25kIGZpbGU6IDEzMTQKc291cmNlIGtleSBsZWZ0IGJlaGluZDogZmFsc2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enable SeBackupPrivilege: adjust 1 last error 1300\nenable SeRestorePrivilege: adjust 1 last error 1300\ncreate source key in HKCU: 0\nRegSaveKeyW of the HKCU key: 1314; file exists true\nRegSaveKeyW to a second file: 1314\nsource key left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

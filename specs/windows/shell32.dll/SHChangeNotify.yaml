@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHChangeNotify.yaml
+id: windows/api/shell32.dll/SHChangeNotify
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). scn_calls ran in the SSH logon (session 0, elevated token, no desktop shell); scn_desktop with -Token elevated (the interactive session 1 of the same account, where Explorer runs). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine. Microsoft Learn: "SHChangeNotify function (shlobj_core.h)", "SHChangeNotifyRegister", "SHCNE_ (change notification events)", "SHCNF_ flags". Chrome's setup.exe imports it (survey-chrome-installer: shell32!SHChangeNotify is on its import list) and calls it after it writes the shortcuts and the file-association keys. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Tells the shell that something changed (a file or folder was created, updated, renamed or deleted, or the file associations changed) so that Explorer and other watchers refresh. The call has no return value and no result the caller can see: it returns at once, whatever the event, flags and items are, with the thread's last error set to 0, and it changes nothing on disk or in the registry. Whether and when a watcher is told is not visible to the caller.
+interface:
+  signature: "void SHChangeNotify(LONG wEventId, UINT uFlags, LPCVOID dwItem1, LPCVOID dwItem2)"
+  events: "SHCNE_RENAMEITEM 0x1, SHCNE_CREATE 0x2, SHCNE_DELETE 0x4, SHCNE_UPDATEDIR 0x1000, SHCNE_UPDATEITEM 0x2000, SHCNE_UPDATEIMAGE 0x8000, SHCNE_ASSOCCHANGED 0x08000000 (shlobj_core.h)"
+  flags: "SHCNF_IDLIST 0x0, SHCNF_DWORD 0x3, SHCNF_PATHW 0x5, SHCNF_FLUSH 0x1000, SHCNF_FLUSHNOWAIT 0x3000 (the type is in the low nibble)"
+rules:
+  returns: "every call in the tests returns normally (no exception, no hang), in the SSH session with no shell and in the interactive session with Explorer running: SHCNE_CREATE / SHCNE_UPDATEITEM / SHCNE_DELETE / SHCNE_RENAMEITEM / SHCNE_UPDATEDIR with SHCNF_PATHW and an existing, a missing or (for RENAMEITEM) two paths; the same with SHCNF_FLUSH and SHCNF_FLUSHNOWAIT; SHCNE_ASSOCCHANGED with SHCNF_IDLIST and two NULL items, with and without SHCNF_FLUSH, and with SHCNF_PATHW and a path (the items are ignored for this event); SHCNE_UPDATEIMAGE with SHCNF_DWORD and NULL; event 0 with NULL or with a path; SHCNE_CREATE with SHCNF_PATHW and a NULL item, and with SHCNF_IDLIST and a NULL item."
+  last_error: "after each of those calls GetLastError is 0 (the test sets a marker value 0xDEAD first; the call replaces it by 0)."
+  no_visible_effect: "a file named in a SHCNE_CREATE/UPDATEITEM/DELETE call is not created, changed or removed: the existing file keeps its 5 bytes, a missing name stays missing, the second path of a RENAMEITEM is not created. For a real file in the all-users Desktop folder (created before, deleted after by the test) the notifications for create, update, association change and delete return and leave the file as the test made it."
+  delivery_not_observed: "probe, not a recorded test: in the interactive session SHChangeNotifyRegister(window, SHCNRF_InterruptLevel|ShellLevel|NewDelivery 0x8003, SHCNE_ALLEVENTS, own message, one entry NULL idlist recursive) returned a non-zero registration id, and no message arrived in 2.5 s after SHCNE_CREATE, SHCNE_UPDATEITEM (also with SHCNF_FLUSH and FLUSHNOWAIT) and SHCNE_ASSOCCHANGED for a file in a temporary directory; in the SSH session (no shell) SHChangeNotifyRegister returned 0. So a sink in the same process was not told within that time; this is not a statement that nobody is."
+errors:
+  none: "no result code exists; the last error is 0 after the call"
+side_effects: "none visible to the caller. Windows lets Explorer refresh its windows, icons and associations."
+threading: "any thread"
+ordering: []
+timing:
+  typical: "returns at once in all runs; SHCNF_FLUSH did not make a measurable difference in the SSH session"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test. scn_calls makes the calls above (files only in the test's scratch directory) and prints for each "returned; last error 0" and the file checks; scn_desktop is recorded with -Token elevated and works on one temporary file in the all-users Desktop folder.
+not_covered: >
+  The delivery to SHChangeNotifyRegister sinks (see delivery_not_observed), SHCNE_ events for drives, media and network items, item identifier lists as items (no pidl was passed), SHCNE_ASSOCCHANGED's effect on Explorer's icon cache, a call with a pointer that is not an item, and the cost of SHCNF_FLUSH with many watchers.

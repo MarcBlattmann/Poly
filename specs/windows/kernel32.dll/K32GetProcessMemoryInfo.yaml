@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/K32GetProcessMemoryInfo.yaml
+id: windows/api/kernel32.dll/K32GetProcessMemoryInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS and PROCESS_MEMORY_COUNTERS_EX, psapi.h and winerror.h. Chrome's setup.exe and updater read the memory counters for diagnostics (docs/windows/chrome-setup-plan.md); not on the install path. The kernel32 export is K32GetProcessMemoryInfo (psapi!GetProcessMemoryInfo forwards to it). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Fills PROCESS_MEMORY_COUNTERS (72 bytes on x64) or, when cb is 80 or more, PROCESS_MEMORY_COUNTERS_EX (80 bytes, with PrivateUsage). cb below 72 fails with ERROR_INSUFFICIENT_BUFFER (122) (also 40, the x86 size); 72 to 79 fills the basic structure and leaves PrivateUsage alone; 80 fills it all. The counters follow the process: committing 16 MiB with VirtualAlloc raises PrivateUsage and PagefileUsage by at least 16 MiB, touching every page raises WorkingSetSize by at least 14 MiB and PageFaultCount by at least 3000, releasing the block lowers PrivateUsage by at least 15 MiB; the peak values never fall. Handles need PROCESS_QUERY_INFORMATION or PROCESS_QUERY_LIMITED_INFORMATION (with or without PROCESS_VM_READ); SYNCHRONIZE only and PROCESS_VM_READ only give 5; NULL, a closed handle and an event give 6.
+interface:
+  signature: "BOOL K32GetProcessMemoryInfo(HANDLE Process, PPROCESS_MEMORY_COUNTERS ppsmemCounters, DWORD cb)"
+  layout: "x64: cb u32 @0, PageFaultCount u32 @4, PeakWorkingSetSize usize @8, WorkingSetSize @16, QuotaPeakPagedPoolUsage @24, QuotaPagedPoolUsage @32, QuotaPeakNonPagedPoolUsage @40, QuotaNonPagedPoolUsage @48, PagefileUsage @56, PeakPagefileUsage @64 (72 bytes), then PrivateUsage @72 in the _EX form (80 bytes) (psapi.h)"
+rules:
+  sizes: "cb 0, 8, 39, 40, 71: FALSE, ERROR_INSUFFICIENT_BUFFER (122), nothing written. cb 72 and 79: TRUE, the first 72 bytes written, PrivateUsage not written. cb 80: TRUE, all fields written. The cb field of the structure is kept (the caller's)."
+  plausibility: "WorkingSetSize > 0, PeakWorkingSetSize >= WorkingSetSize, PagefileUsage > 0, PeakPagefileUsage >= PagefileUsage, PrivateUsage > 0, PageFaultCount > 0 for a running process."
+  follows_allocation: "VirtualAlloc(16 MiB, MEM_COMMIT|MEM_RESERVE): PrivateUsage and PagefileUsage up by at least 16 MiB at once (before any page is touched). Writing one byte in every 4 KiB page: WorkingSetSize up by at least 14 MiB, PageFaultCount up by at least 3000, PeakWorkingSetSize >= WorkingSetSize. VirtualFree(MEM_RELEASE): PrivateUsage down by at least 15 MiB; PeakWorkingSetSize and PeakPagefileUsage do not fall."
+  rights: "pseudo handle -1, and real handles with PROCESS_QUERY_LIMITED_INFORMATION (0x1000), PROCESS_QUERY_INFORMATION (0x400) or both with PROCESS_VM_READ (0x10): TRUE. SYNCHRONIZE only or PROCESS_VM_READ only: FALSE, ERROR_ACCESS_DENIED (5)."
+  bad_handles: "NULL, a closed handle, the handle of an event: FALSE, ERROR_INVALID_HANDLE (6)."
+errors:
+  insufficient_buffer: "122"
+  access_denied: "5"
+  invalid_handle: "6"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: pm_basic (the structure, plausibility and the allocation) and pm_err (sizes, rights, bad handles). Observations are relations and sizes, never counter values.
+not_covered: >
+  The pool quotas (QuotaPagedPoolUsage and friends: written, values not specified), other processes, a 32-bit caller's 40- and 44-byte structures, a protected process, memory that is shared or mapped, the exact working-set number after the trim of a minimised window.

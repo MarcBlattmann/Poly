@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/RegisterEventSourceA.yaml
+id: windows/api/advapi32.dll/RegisterEventSourceA
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for RegisterEventSourceA, ReportEventA, DeregisterEventSource, OpenEventLogW/A, ReadEventLogW, "EVENTLOGRECORD" and "Event Logging" / "Event Sources" (winbase.h, winnt.h); error codes from winerror.h. Chrome''s own setup.exe imports RegisterEventSourceA, ReportEventA and DeregisterEventSource, and writes the registry key SYSTEM\CurrentControlSet\Services\EventLog\Application\Chrome (survey-chrome-installer log and registry diff). The existing sheets RegisterEventSourceW, ReportEventW and DeregisterEventSource cover the wide variants; this sheet adds what the ANSI variants do. Nothing of Windows or Google''s programs was read or disassembled.'
+summary: 'Returns a handle for writing events under a source name given as an ANSI string. Any name works: a source with no registry key logs to the Application log under that name. The handle is closed with DeregisterEventSource.'
+interface:
+  signature: 'HANDLE RegisterEventSourceA(LPCSTR lpUNCServerName, LPCSTR lpSourceName)'
+rules:
+  register: 'With a NULL server, or an empty server string, a name that was never registered (PolySpecB4RegA) gives a non-NULL handle; the same name again gives another handle (different from the first); the same name in other case, a name with a space and a backslash, a name with a byte E9, and a 300 character name all give handles; DeregisterEventSource on each returns TRUE with the last error unchanged.'
+  bad_args: 'A NULL or an empty source name: NULL and ERROR_INVALID_PARAMETER (87). A server name that does not exist (\\poly-no-such-computer-xyz): NULL and RPC_S_SERVER_UNAVAILABLE (1722).'
+  deregister: 'DeregisterEventSource on a handle already closed: FALSE and ERROR_INVALID_HANDLE (6); on NULL: FALSE and 6.'
+  no_event: 'Registering writes no event.'
+errors:
+  invalid_parameter: '87'
+  server_unavailable: '1722'
+  invalid_handle: '6'
+side_effects: 'opens a log handle'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075): they register a unique source (PolySpecB4*), write a few events to it, and read them back from the Application log with OpenEventLogW and ReadEventLogW (EVENTLOG_BACKWARDS_READ | EVENTLOG_SEQUENTIAL_READ), decoding the EVENTLOGRECORD fields they print (event id, type, category, string count and texts, user SID length, closing record number, data length and bytes) for the newest records of the source. Each test run adds its events to the oracle''s Application log (a handful per run; they are not removed). Record numbers, times and the computer name are never printed.'
+not_covered: 'Custom logs (a key outside Application needs the Event Log service restarted), message files and formatting of the text (FormatMessage on the record), remote servers other than the failing case, the Unicode variants (their own sheets), a user SID passed in, very large strings or data (limits of the log), event log size and retention.'

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "ver_size_b",
+      "exe_sha256": "90c1a14c1f04add03480b05d76814f7fb45e95f118d7a5f9f3b2f0f5e2624c93",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvZiBhIGJhcmUgc3lzdGVtIGZpbGUgbmFtZSAoa2VybmVsMzIuZGxsKTogcmVzdWx0IG5vbi16ZXJvIGxhc3QgZXJyb3IgLTIgaGFuZGxlIG91dCAwCnNpemUgb2YgYSBOVUxMIGhhbmRsZSBwb2ludGVyIChvd24gaW1hZ2UpOiByZXN1bHQgMCBsYXN0IGVycm9yIDE4MTMgaGFuZGxlIG91dCAtMQprZXJuZWwzMi5kbGw6IHNpemUgPiAwIHRydWU7IHNpemUgPD0gMTYzODQgdHJ1ZTsgaGFuZGxlIG91dCAwCnNpemUgb2Yga2VybmVsMzIuZGxsIGFnYWluIChzYW1lIHNpemUpOiByZXN1bHQgbm9uLXplcm8gbGFzdCBlcnJvciAtMiBoYW5kbGUgb3V0IDAKc2FtZSBzaXplIGJvdGggdGltZXM6IHRydWUKc2l6ZSBvZiBrZXJuZWwzMi5kbGwgaW4gdXBwZXIgY2FzZTogcmVzdWx0IG5vbi16ZXJvIGxhc3QgZXJyb3IgLTIgaGFuZGxlIG91dCAwCnNhbWUgc2l6ZSBpbiB1cHBlciBjYXNlOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size of a bare system file name (kernel32.dll): result non-zero last error -2 handle out 0\nsize of a NULL handle pointer (own image): result 0 last error 1813 handle out -1\nkernel32.dll: size > 0 true; size <= 16384 true; handle out 0\nsize of kernel32.dll again (same size): result non-zero last error -2 handle out 0\nsame size both times: true\nsize of kernel32.dll in upper case: result non-zero last error -2 handle out 0\nsame size in upper case: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

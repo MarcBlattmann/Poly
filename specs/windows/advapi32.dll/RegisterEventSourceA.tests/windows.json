@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "resa_basic",
+      "exe_sha256": "0dc7fc8d42989770a43efd065e9fa0ab2b3cba545cffd59b59c502a7b784155a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVnaXN0ZXJFdmVudFNvdXJjZUEgTlVMTCBzZXJ2ZXIsIGEgbmV3IG5hbWU6IGhhbmRsZSBzZXQgbGFzdCBlcnJvciAtMgpSZWdpc3RlckV2ZW50U291cmNlQSB0aGUgc2FtZSBuYW1lIGFnYWluOiBoYW5kbGUgc2V0IGxhc3QgZXJyb3IgLTIKdGhlIHR3byBoYW5kbGVzIGRpZmZlcjogdHJ1ZQpSZWdpc3RlckV2ZW50U291cmNlQSBlbXB0eSBzZXJ2ZXIgc3RyaW5nOiBoYW5kbGUgc2V0IGxhc3QgZXJyb3IgLTIKUmVnaXN0ZXJFdmVudFNvdXJjZUEgdGhlIHNhbWUgbmFtZSBpbiBvdGhlciBjYXNlOiBoYW5kbGUgc2V0IGxhc3QgZXJyb3IgLTIKUmVnaXN0ZXJFdmVudFNvdXJjZUEgYSBuYW1lIHdpdGggYSBzcGFjZSBhbmQgYSBiYWNrc2xhc2g6IGhhbmRsZSBzZXQgbGFzdCBlcnJvciAtMgpSZWdpc3RlckV2ZW50U291cmNlQSBhIG5hbWUgd2l0aCBhIG5vbi1BU0NJSSBieXRlICgweEU5KTogaGFuZGxlIHNldCBsYXN0IGVycm9yIC0yClJlZ2lzdGVyRXZlbnRTb3VyY2VBIGEgMzAwIGNoYXJhY3RlciBuYW1lOiBoYW5kbGUgc2V0IGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSAwOiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSAxOiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSAyOiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSAzOiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSA0OiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSA1OiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGhhbmRsZSA2OiAxIGxhc3QgZXJyb3IgLTIKRGVyZWdpc3RlckV2ZW50U291cmNlIG9mIGEgY2xvc2VkIGhhbmRsZTogMCBsYXN0IGVycm9yIDYKZXZlbnRzIHdyaXR0ZW4gYnkgdGhpcyB0ZXN0IGZvciB0aGUgc291cmNlOiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RegisterEventSourceA NULL server, a new name: handle set last error -2\nRegisterEventSourceA the same name again: handle set last error -2\nthe two handles differ: true\nRegisterEventSourceA empty server string: handle set last error -2\nRegisterEventSourceA the same name in other case: handle set last error -2\nRegisterEventSourceA a name with a space and a backslash: handle set last error -2\nRegisterEventSourceA a name with a non-ASCII byte (0xE9): handle set last error -2\nRegisterEventSourceA a 300 character name: handle set last error -2\nDeregisterEventSource of handle 0: 1 last error -2\nDeregisterEventSource of handle 1: 1 last error -2\nDeregisterEventSource of handle 2: 1 last error -2\nDeregisterEventSource of handle 3: 1 last error -2\nDeregisterEventSource of handle 4: 1 last error -2\nDeregisterEventSource of handle 5: 1 last error -2\nDeregisterEventSource of handle 6: 1 last error -2\nDeregisterEventSource of a closed handle: 0 last error 6\nevents written by this test for the source: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}
