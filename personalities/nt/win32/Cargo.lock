@@ -452,6 +452,13 @@ name = "poly-libm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+]
+
+[[package]]
 name = "poly-msvc32"
 version = "0.0.1"
 
@@ -640,6 +647,7 @@ version = "0.0.1"
 dependencies = [
  "poly-com",
  "poly-kernelbase",
+ "poly-lnk",
  "poly-win32-rt",
  "poly-win32k",
 ]

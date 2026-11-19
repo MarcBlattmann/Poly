@@ -705,6 +705,7 @@ mod exec;
 mod fileop;
 mod folder;
 mod item;
+mod link;
 mod taskbar;
 
 #[cfg(target_arch = "x86_64")]

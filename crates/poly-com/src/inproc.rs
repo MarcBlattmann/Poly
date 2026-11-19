@@ -24,6 +24,10 @@ pub const CLSID_DESTINATION_LIST: Guid =
 pub const CLSID_FILE_SAVE_DIALOG: Guid =
     Guid { data1: 0xC0B4_E2F3, data2: 0xBA21, data3: 0x4773, data4: [0x8D, 0xBA, 0x33, 0x5E, 0xC9, 0x46, 0xEB, 0x8B] };
 
+/// `CLSID_ShellLink` (`shobjidl_core.h`): {00021401-0000-0000-C000-000000000046}.
+pub const CLSID_SHELL_LINK: Guid =
+    Guid { data1: 0x0002_1401, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+
 /// `IID_IClassFactory` (`unknwn.h`): {00000001-0000-0000-C000-000000000046}.
 pub const IID_ICLASS_FACTORY: Guid = Guid { data1: 1, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 /// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
@@ -37,12 +41,20 @@ const CLASSES: &[(Guid, &str)] = &[
     (CLSID_FILE_OPERATION, "shell32.dll\0"),
     (CLSID_TASKBAR_LIST, "shell32.dll\0"),
     (CLSID_DESTINATION_LIST, "shell32.dll\0"),
+    (CLSID_SHELL_LINK, "shell32.dll\0"),
     (CLSID_FILE_SAVE_DIALOG, "comdlg32.dll\0"),
 ];
 
 /// The DLL that serves `clsid` in the process, if Poly has the class.
 pub fn server_of(clsid: &Guid) -> Option<&'static str> {
     CLASSES.iter().find(|(c, _)| c == clsid).map(|&(_, dll)| dll)
+}
+
+/// Whether the class gives an object also to a request for a local server alone
+/// (`CLSCTX_LOCAL_SERVER`): the shell link does on Windows (`ShellLink.yaml`,
+/// `create_any_interface`); Poly serves it from its DLL in the process as for any other context.
+pub fn served_for_local_server(clsid: &Guid) -> bool {
+    *clsid == CLSID_SHELL_LINK
 }
 
 /// Whether a `CLSCTX` value lets an in-process server run the class. Every Poly class is one, so
@@ -61,6 +73,8 @@ mod tests {
         assert_eq!(server_of(&CLSID_FILE_OPERATION), Some("shell32.dll\0"));
         assert_eq!(server_of(&CLSID_TASKBAR_LIST), Some("shell32.dll\0"));
         assert_eq!(server_of(&CLSID_DESTINATION_LIST), Some("shell32.dll\0"));
+        assert_eq!(server_of(&CLSID_SHELL_LINK), Some("shell32.dll\0"));
+        assert!(served_for_local_server(&CLSID_SHELL_LINK) && !served_for_local_server(&CLSID_FILE_OPERATION));
         assert_eq!(server_of(&CLSID_FILE_SAVE_DIALOG), Some("comdlg32.dll\0"));
         assert_eq!(server_of(&crate::git::CLSID_BACKGROUND_COPY_MANAGER), None);
         assert_eq!(server_of(&IID_IUNKNOWN), None);
