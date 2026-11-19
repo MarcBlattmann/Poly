@@ -143,3 +143,37 @@ Checks: unit tests for the pictures, the names, the drawing at scale 2, the serv
 (shape requests, frame borders, internal windows, resize grabs), and DefWindowProc's sizing
 cursors. Live at 200 %: the hand over a link, the I-beam over text and an input field, and the
 left-right arrows at the window's edge, both in Chrome for Windows and in Linux Chromium.
+
+## Addendum: the open items
+
+1. **The strip at the right edge of a maximized Chrome at 200 %** (6 pixels of desktop). There
+   were two causes:
+   - win32k fitted a maximized window with the frame it hides at 96 DPI (8), while
+     `WM_NCCALCSIZE` at the window's DPI (ADR 0231; Chrome's too) takes 13 off each side at 192.
+     `WM_GETMINMAXINFO`'s defaults and the maximized rectangle now use the window's frame DPI
+     (`metrics::minmax_dpi`, `maximized_rect_dpi`): −13,35–2573,1613 on the 2560x1600 screen.
+   - The largest tracking size stayed the 96-DPI "screen + 20" (2580), below the 2586-wide
+     maximized window. Chrome sets its maximized size again with `SetWindowPos`, which cut it
+     to the tracking size. At 96 DPI the sheets' "+ 20" is both hidden frames and 4 more. Above
+     96 DPI the tracking size is the screen plus `2 × frame + 4` (at least 20): 2590 at 192 DPI.
+     The 96-DPI values are unchanged.
+
+   With both changes the maximized Chrome covers the screen from edge to edge.
+2. **The busy pointer after a hand-over.** Files starts the apps it opens files with. The
+   compositor knows their pids (Files says them on the control pipe) but cannot reap them, so a
+   second `chrome.exe` that handed the file to the running Chrome and exited kept the busy
+   pointer for the whole 30 s timeout. The launch tracker now asks whether a launch's processes
+   still exist (`Launches::set_alive_lookup`, the compositor's `os::alive`). Once none does, the
+   launch counts as one whose process ended well: the 3 s grace for a hand-over, then it ends.
+   Measured: busy pointer off 3.3 s after the click.
+3. **"Restore pages?" after a clean Ctrl+Shift+W: Chrome's own rule, not an unclean exit.**
+   - After a clean close the profile says `exit_type: "Normal"` (`Preferences`) and
+     `exited_cleanly: true` (`Local State`). Chrome writes both through temporary files that it
+     flushes and renames over the old ones, and every call succeeds. The next start shows no
+     bubble.
+   - The bubble came back only when the start before had itself shown it, after a real crash
+     (QEMU stopped with Chrome running), and nobody answered it. Chrome then keeps
+     `exit_type: "Crashed"` through a clean close, so the crashed session can still be
+     restored.
+   - So the bubble's cause is an unclean end before (a boot stopped with Chrome open, QA bug 2),
+     not Poly's file writes. Nothing changed here.
