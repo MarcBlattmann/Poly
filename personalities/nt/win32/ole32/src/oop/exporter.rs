@@ -32,6 +32,7 @@ static EXPORTS: Locked<Vec<Export>> = Locked::new(Vec::new());
 static NEXT_OID: AtomicU64 = AtomicU64::new(1);
 /// 0: no listener; 1: starting; 2: listening.
 static STATE: AtomicU32 = AtomicU32::new(0);
+static OXID: AtomicU64 = AtomicU64::new(0);
 static ENDPOINT: Locked<Option<String>> = Locked::new(None);
 
 /// The pipe name of this process's exporter; the listener starts on first use.
@@ -42,7 +43,9 @@ pub(crate) fn endpoint() -> String {
                 let mut r = [0u8; 8];
                 // SAFETY: a buffer of 8 bytes.
                 unsafe { crate::ProcessPrng(r.as_mut_ptr(), 8) };
-                let name = alloc::format!(r"\\.\pipe\poly-com-ox-{}-{:016x}", pid(), u64::from_le_bytes(r));
+                let oxid = u64::from_le_bytes(r);
+                OXID.store(oxid, Ordering::Release);
+                let name = poly_com::marshal::endpoint_for(pid(), oxid);
                 ENDPOINT.with(|e| *e = Some(name.clone()));
                 let mut tid = 0u32;
                 // SAFETY: the listener runs for the life of the process.
@@ -55,6 +58,12 @@ pub(crate) fn endpoint() -> String {
             Err(_) => core::hint::spin_loop(),
         }
     }
+}
+
+/// This process's exporter OXID (starts the exporter listener on first use).
+pub(crate) fn oxid() -> u64 {
+    let _ = endpoint();
+    OXID.load(Ordering::Acquire)
 }
 
 unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
@@ -157,7 +166,7 @@ pub(crate) fn export_object(identity: usize, owner: Owner) -> ObjRef {
 }
 
 /// Give back `n` proxy references of `oid`; the last one releases the object.
-fn release_refs(oid: u64, n: u32) {
+pub(crate) fn release_refs(oid: u64, n: u32) {
     let gone = EXPORTS.with(|x| {
         let i = x.iter().position(|e| e.oid == oid && !e.factory)?;
         x[i].refs = x[i].refs.saturating_sub(n);

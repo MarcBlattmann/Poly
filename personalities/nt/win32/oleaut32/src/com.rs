@@ -224,7 +224,7 @@ unsafe extern "system" {
         nc: *mut u32,
         time: *mut u64,
     ) -> i32;
-    fn RegDeleteTreeW(key: isize, sub: *const u16) -> i32;
+    fn RegDeleteKeyW(key: isize, sub: *const u16) -> i32;
     fn RegCloseKey(key: isize) -> i32;
 }
 
@@ -324,19 +324,16 @@ impl Key {
 
 /// Delete `path` below `root` with everything in it (and the key itself).
 pub(crate) fn delete_tree(root: isize, path: &str) {
+    if let Some(k) = Key::open(root, path) {
+        let kids = k.subkeys();
+        drop(k);
+        for sub in kids {
+            delete_tree(root, &alloc::format!("{path}\\{sub}"));
+        }
+    }
     let p = wide(path);
     // SAFETY: a NUL-terminated path; deleting a key that is already gone fails harmlessly.
-    unsafe {
-        RegDeleteTreeW(root, p.as_ptr());
-        delete_key(root, p.as_ptr());
-    }
-}
-
-#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
-unsafe extern "system" {
-    #[link_name = "RegDeleteKeyW"]
-    fn delete_key(key: isize, sub: *const u16) -> i32;
+    unsafe { RegDeleteKeyW(root, p.as_ptr()) };
 }
 
 /// A class-root key: the user's when it exists, else the machine's.

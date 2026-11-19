@@ -266,7 +266,8 @@ fn number(vt: u16, bits: u64) -> Option<(f64, Option<i128>)> {
 /// Round half to even (Learn: conversions to integers round "to the nearest even integer").
 fn round_even(f: f64) -> f64 {
     let r = libm_round(f);
-    if (f - trunc(f)).abs() == 0.5 && r % 2.0 != 0.0 { r - f.signum() } else { r }
+    // A half-way value `(f - trunc(f)).abs() == 0.5` has `|f| < 2^52`, so `r` fits in `i64`.
+    if (f - trunc(f)).abs() == 0.5 && (r as i64) & 1 != 0 { r - f.signum() } else { r }
 }
 
 fn trunc(f: f64) -> f64 {

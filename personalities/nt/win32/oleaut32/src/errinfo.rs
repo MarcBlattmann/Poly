@@ -45,7 +45,7 @@ pub(crate) fn new_error(data: ErrorData) -> *mut c_void {
 pub(crate) fn read(ei: *mut c_void) -> ErrorData {
     let mut d = ErrorData::default();
     vcall!(ei, 3, (*mut Guid) -> Hresult, &mut d.guid);
-    let mut get = |slot: usize| -> Option<String> {
+    let get = |slot: usize| -> Option<String> {
         let mut b: *mut u16 = core::ptr::null_mut();
         vcall!(ei, slot, (*mut *mut u16) -> Hresult, &mut b);
         // SAFETY: a BSTR the call returned (or NULL), freed here.

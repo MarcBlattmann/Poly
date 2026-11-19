@@ -61,7 +61,36 @@ struct MarVtbl {
     qi: Qi,
     add_ref: Ref,
     release: Ref,
-    rest: [unsafe extern "system" fn() -> Hresult; 6],
+    get_unmarshal_class: unsafe extern "system" fn(
+        *mut c_void,
+        *const Guid,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut Guid,
+    ) -> Hresult,
+    get_marshal_size_max: unsafe extern "system" fn(
+        *mut c_void,
+        *const Guid,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+        *mut u32,
+    ) -> Hresult,
+    marshal_interface: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *const Guid,
+        *mut c_void,
+        u32,
+        *mut c_void,
+        u32,
+    ) -> Hresult,
+    unmarshal_interface: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
+    release_marshal_data: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult,
+    disconnect_object: unsafe extern "system" fn(*mut c_void, u32) -> Hresult,
 }
 
 // SAFETY: tables of function pointers.
@@ -74,11 +103,17 @@ unsafe impl Sync for MarVtbl {}
 static UNK: UnkVtbl = UnkVtbl { qi: unk_qi, add_ref: unk_add_ref, release: unk_release };
 static FAC: FacVtbl =
     FacVtbl { qi: fac_qi, add_ref: fac_add_ref, release: fac_release, create: fac_create, lock: fac_lock };
-static MAR: MarVtbl = MarVtbl { qi: mar_qi, add_ref: mar_add_ref, release: mar_release, rest: [not_impl; 6] };
-
-unsafe extern "system" fn not_impl() -> Hresult {
-    E_NOTIMPL
-}
+static MAR: MarVtbl = MarVtbl {
+    qi: mar_qi,
+    add_ref: mar_add_ref,
+    release: mar_release,
+    get_unmarshal_class: marshal::proxy_get_unmarshal_class,
+    get_marshal_size_max: marshal::proxy_get_marshal_size_max,
+    marshal_interface: marshal::proxy_marshal_interface,
+    unmarshal_interface: marshal::proxy_unmarshal_interface,
+    release_marshal_data: marshal::proxy_release_marshal_data,
+    disconnect_object: marshal::proxy_disconnect_object,
+};
 
 /// The proxies of the process, for identity: (object key, proxy).
 #[derive(Clone, PartialEq, Eq)]
@@ -157,6 +192,28 @@ pub(crate) fn is_proxy(p: *mut c_void) -> bool {
     // SAFETY: a COM interface pointer: its first word is its vtable.
     let v = unsafe { *(p as *const usize) };
     v == (&raw const UNK) as usize || v == (&raw const FAC) as usize || v == (&raw const MAR) as usize
+}
+
+/// Marshalling target of one of our proxies.
+pub(crate) enum ProxyMarshalInfo {
+    Local { owner: Owner, object: usize },
+    Remote { endpoint: String, oid: u64 },
+}
+
+/// If `p` is one of our proxies, return its underlying target for marshalling.
+pub(crate) fn marshal_info(p: *mut c_void) -> Option<ProxyMarshalInfo> {
+    if !is_proxy(p) {
+        return None;
+    }
+    // SAFETY: one of our proxies' interfaces: find the block from its vtable.
+    let base = unsafe { base_of(p) };
+    // SAFETY: a live proxy.
+    match unsafe { &(*base).target } {
+        Target::Local { owner, object } => Some(ProxyMarshalInfo::Local { owner: *owner, object: *object }),
+        Target::Remote { endpoint, oid, .. } => {
+            Some(ProxyMarshalInfo::Remote { endpoint: endpoint.clone(), oid: *oid })
+        }
+    }
 }
 
 /// Whether `p` is a proxy of an object in another process.

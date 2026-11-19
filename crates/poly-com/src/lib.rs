@@ -33,6 +33,7 @@ pub mod git;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
+pub mod marshal;
 pub mod propvariant;
 pub mod spy;
 pub mod typelib;
@@ -65,6 +66,19 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoRegisterInitializeSpy",
     "CoRevokeInitializeSpy",
     "CoDisconnectObject",
+    // ADR 0220 (B2b).
+    "CreateErrorInfo",
+    "SetErrorInfo",
+    "GetErrorInfo",
+    "CreateStreamOnHGlobal",
+    "GetHGlobalFromStream",
+    "CoGetPSClsid",
+    "CoRegisterPSClsid",
+    "CoMarshalInterface",
+    "CoUnmarshalInterface",
+    "CoReleaseMarshalData",
+    "CoGetMarshalSizeMax",
+    "CoGetStandardMarshal",
     "RoGetActivationFactory",
     "RoActivateInstance",
     "CoCreateFreeThreadedMarshaler",

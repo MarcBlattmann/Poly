@@ -173,6 +173,7 @@ pub unsafe extern "system" fn CoDisconnectObject(object: *mut c_void, _reserved:
     // SAFETY: the caller's COM object.
     let (_, id) = unsafe { query(object, &IID_IUNKNOWN) };
     if !id.is_null() {
+        marshal::disconnect(id as usize);
         exporter::disconnect(id as usize);
         // SAFETY: the query's reference.
         unsafe { release_unknown(id) };
@@ -318,6 +319,7 @@ pub(crate) fn com_initialised() {
 /// The apartment `owner` ended: its registrations and exports go.
 pub(crate) fn apartment_ended(owner: Owner) {
     let gone = CLASSES.with(|t| t.end_apartment(owner));
+    marshal::apartment_ended(owner);
     exporter::end_apartment(owner);
     for o in gone {
         // SAFETY: the registrations' references.
