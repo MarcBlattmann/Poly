@@ -167,7 +167,8 @@ pub extern "system" fn IsUserAnAdmin() -> i32 {
     let saved = unsafe { GetLastError() };
     let answer = match effective_token() {
         Some((t, thread)) => {
-            let usable = !thread || token_u32(t, TOKEN_IMPERSONATION_LEVEL).is_some_and(|l| l >= SECURITY_IMPERSONATION);
+            let usable =
+                !thread || token_u32(t, TOKEN_IMPERSONATION_LEVEL).is_some_and(|l| l >= SECURITY_IMPERSONATION);
             let a = usable && admins_enabled(t);
             // SAFETY: our handle.
             unsafe { CloseHandle(t) };
