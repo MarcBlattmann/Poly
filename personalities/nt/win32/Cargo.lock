@@ -691,6 +691,7 @@ name = "userenv"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+ "poly-kernelbase",
  "poly-security",
  "poly-win32-cryptrt",
  "poly-win32-rt",

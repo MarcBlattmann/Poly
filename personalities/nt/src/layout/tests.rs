@@ -355,7 +355,7 @@ fn fixed_values_are_restored_and_user_choices_kept() {
     assert_eq!(value(&reg, u, &usf, "Personal"), Some((REG_EXPAND_SZ, "%USERPROFILE%\\My Stuff".into())));
     let sf = alloc::format!("{}\\{}", POLY_USER.sid, sync::SHELL_FOLDERS);
     assert_eq!(value(&reg, u, &sf, "Personal"), Some((REG_SZ, "C:\\Users\\poly\\My Stuff".into())));
-    let e = env::build(&reg, &POLY_USER, Machine { processors: 1 });
+    let e = env::build(&reg, &POLY_USER, Machine { processors: 1, processor: None });
     assert_eq!(e.get("TEMP"), Some("C:\\T"));
     assert_eq!(e.get("TMP"), Some("C:\\Users\\poly\\AppData\\Local\\Temp"));
 }
@@ -365,7 +365,7 @@ fn fixed_values_are_restored_and_user_choices_kept() {
 fn default_env() -> Block {
     let mut reg = registry();
     sync(&mut reg, &POLY_USER, 1).unwrap();
-    env::build(&reg, &POLY_USER, Machine { processors: 4 })
+    env::build(&reg, &POLY_USER, Machine { processors: 4, processor: None })
 }
 
 #[test]
@@ -394,7 +394,10 @@ fn a_process_gets_every_documented_variable() {
         ("USERNAME", "poly"),
         ("USERDOMAIN", "POLY"),
         ("COMPUTERNAME", "POLY"),
-        ("PATH", "C:\\Windows\\system32;C:\\Windows"),
+        (
+            "PATH",
+            "C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\",
+        ),
         ("PATHEXT", ".COM;.EXE;.BAT;.CMD"),
         ("OS", "Windows_NT"),
         ("PROCESSOR_ARCHITECTURE", "AMD64"),
@@ -421,17 +424,76 @@ fn the_user_path_is_appended_and_user_variables_override() {
     reg.set_value(ue, &wide("Path"), REG_EXPAND_SZ, &sz("%USERPROFILE%\\bin"), 1).unwrap();
     reg.set_value(ue, &wide("OS"), REG_SZ, &sz("Mine"), 1).unwrap();
     reg.set_value(ue, &wide("Count"), poly_registry::consts::REG_DWORD, &7u32.to_le_bytes(), 1).unwrap();
-    let e = env::build(&reg, &POLY_USER, Machine { processors: 0 });
-    assert_eq!(e.get("path"), Some("C:\\Windows\\system32;C:\\Windows;C:\\Users\\poly\\bin"));
+    let e = env::build(&reg, &POLY_USER, Machine { processors: 0, processor: None });
+    assert_eq!(
+        e.get("path"),
+        Some(
+            "C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Users\\poly\\bin"
+        )
+    );
     assert_eq!(e.get("OS"), Some("Mine"));
     assert_eq!(e.get("Count"), None, "non-string values are skipped");
     assert_eq!(e.get("NUMBER_OF_PROCESSORS"), Some("1"));
 }
 
 #[test]
+fn userenv_uses_the_same_layout() {
+    // `userenv.dll`'s CreateEnvironmentBlock falls back to `POLY_LAYOUT`; the kernel to the
+    // layout's constants. They are one layout.
+    assert_eq!(env::LAYOUT, poly_kernelbase::defenv::POLY_LAYOUT);
+}
+
+#[test]
+fn the_default_environment_has_the_sheets_variables() {
+    // CreateEnvironmentBlock.yaml `variables_present` (SESSIONNAME only in an interactive
+    // session; the processor's variables when the processor is known).
+    let mut reg = registry();
+    sync(&mut reg, &POLY_USER, 1).unwrap();
+    let cpu = env::Processor::from_cpuid(*b"GenuineIntel", 0x0005_0657);
+    let e = env::build(&reg, &POLY_USER, Machine { processors: 2, processor: Some(cpu) });
+    for name in [
+        "ALLUSERSPROFILE",
+        "APPDATA",
+        "COMPUTERNAME",
+        "ComSpec",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "LOCALAPPDATA",
+        "LOGONSERVER",
+        "NUMBER_OF_PROCESSORS",
+        "OS",
+        "Path",
+        "PATHEXT",
+        "PROCESSOR_ARCHITECTURE",
+        "ProgramData",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "PUBLIC",
+        "SystemDrive",
+        "SystemRoot",
+        "TEMP",
+        "TMP",
+        "USERDOMAIN",
+        "USERDOMAIN_ROAMINGPROFILE",
+        "USERNAME",
+        "USERPROFILE",
+        "windir",
+        "PSModulePath",
+        "CommonProgramFiles",
+        "DriverData",
+        "ProgramW6432",
+        "PROCESSOR_IDENTIFIER",
+    ] {
+        assert!(e.get(name).is_some(), "{name} missing");
+    }
+    assert_eq!(e.get("SESSIONNAME"), None);
+    assert_eq!(e.get("USERDOMAIN_ROAMINGPROFILE"), e.get("USERDOMAIN"));
+}
+
+#[test]
 fn an_empty_registry_still_gives_the_layout_values() {
     let reg = Registry::new();
-    let e = env::build(&reg, &POLY_USER, Machine { processors: 2 });
+    let e = env::build(&reg, &POLY_USER, Machine { processors: 2, processor: None });
     assert_eq!(e.get("SystemRoot"), Some(SYSTEM_ROOT));
     assert_eq!(e.get("ProgramFiles"), Some(PROGRAM_FILES));
     assert_eq!(e.get("USERPROFILE"), Some("C:\\Users\\poly"));

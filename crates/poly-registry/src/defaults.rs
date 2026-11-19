@@ -122,6 +122,18 @@ const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> Defau
 /// the same numbers when they exist.
 pub const BUILD: &str = "26200";
 
+/// System variables (`Session Manager\Environment`, `REG_EXPAND_SZ`) that every process has
+/// (`specs/windows/userenv.dll/CreateEnvironmentBlock.yaml` `variables_present`), with Poly's
+/// values: PowerShell's module folders (Learn: "about_PSModulePath") and the drivers' data folder
+/// (Learn: "DriverData"). The layout sync adds them to a hive made before they were here.
+pub const SYSTEM_ENVIRONMENT_EXTRA: [(&str, &str); 2] = [
+    (
+        "PSModulePath",
+        "%ProgramFiles%\\WindowsPowerShell\\Modules;%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\Modules",
+    ),
+    ("DriverData", "%SystemRoot%\\System32\\Drivers\\DriverData"),
+];
+
 pub const SYSTEM_KEYS: &[DefaultKey] = &[
     k("Select", &[("Current", Dword(1)), ("Default", Dword(1)), ("Failed", Dword(0)), ("LastKnownGood", Dword(1))]),
     k("ControlSet001\\Control\\ComputerName\\ComputerName", &[("ComputerName", Sz(POLY_COMPUTER_NAME))]),
@@ -131,12 +143,22 @@ pub const SYSTEM_KEYS: &[DefaultKey] = &[
         &[
             ("ComSpec", ExpandSz("%SystemRoot%\\system32\\cmd.exe")),
             ("OS", Sz("Windows_NT")),
-            ("Path", ExpandSz("%SystemRoot%\\system32;%SystemRoot%")),
+            // The system folders, then those of the command-line tools of WMI and PowerShell
+            // (Learn: "WMIC", "about_PSModulePath"); CreateEnvironmentBlock.yaml: the Path has
+            // more after `%SystemRoot%;`.
+            (
+                "Path",
+                ExpandSz(
+                    "%SystemRoot%\\system32;%SystemRoot%;%SystemRoot%\\System32\\Wbem;%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\",
+                ),
+            ),
             ("PATHEXT", Sz(".COM;.EXE;.BAT;.CMD")),
             ("PROCESSOR_ARCHITECTURE", Sz("AMD64")),
             ("TEMP", ExpandSz("%SystemRoot%\\TEMP")),
             ("TMP", ExpandSz("%SystemRoot%\\TEMP")),
             ("windir", ExpandSz("%SystemRoot%")),
+            ("PSModulePath", ExpandSz(SYSTEM_ENVIRONMENT_EXTRA[0].1)),
+            ("DriverData", ExpandSz(SYSTEM_ENVIRONMENT_EXTRA[1].1)),
         ],
     ),
     k("ControlSet001\\Control\\Nls\\CodePage", &[("ACP", Sz("1252")), ("OEMCP", Sz("437"))]),
@@ -212,6 +234,9 @@ pub const VOLATILE_ENVIRONMENT: &[(&str, Data)] = &[
     ("LOCALAPPDATA", Sz("C:\\Users\\poly\\AppData\\Local")),
     ("LOGONSERVER", Sz("\\\\POLY")),
     ("USERDOMAIN", Sz(POLY_COMPUTER_NAME)),
+    // The domain of a roaming profile: the machine's own on a workgroup machine (the sheet:
+    // present beside `USERDOMAIN`).
+    ("USERDOMAIN_ROAMINGPROFILE", Sz(POLY_COMPUTER_NAME)),
     ("USERNAME", Sz(POLY_USER_NAME)),
     ("USERPROFILE", Sz("C:\\Users\\poly")),
 ];

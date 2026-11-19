@@ -266,7 +266,9 @@ pub(super) fn prepare(sys: &mut NtSystem) {
 /// the NT lock).
 pub(super) fn environment(sys: &NtSystem) -> Vec<u16> {
     let processors = crate::thread::online_cpus().len() as u32;
-    env::build(&sys.registry.reg, &POLY_USER, env::Machine { processors }).to_utf16()
+    let id = crate::arch::cpu::identify();
+    let processor = env::Processor { vendor: id.vendor, family: id.family, model: id.model, stepping: id.stepping };
+    env::build(&sys.registry.reg, &POLY_USER, env::Machine { processors, processor: Some(processor) }).to_utf16()
 }
 
 /// The DOS path of an executable at VFS path `path`.

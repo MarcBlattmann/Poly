@@ -14,6 +14,7 @@ extern crate alloc;
 mod acctrl;
 mod etw;
 mod lsa;
+mod withtoken;
 
 use alloc::vec::Vec;
 use poly_security::sd::{self, SdPtr};
