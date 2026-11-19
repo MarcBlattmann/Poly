@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "f57b87b13541",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-19T14:00:18Z",
+  "tests": [
+    {
+      "name": "layout_attrs",
+      "exe_sha256": "951ead585217a45c1a5f3d24b9f5a3f60c522c1bd527bc710224a995cc3e04f2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gbGliX2F0dHJzOiAxNTQ4IGJ5dGVzLCBMb2FkVHlwZUxpYkV4ID0gMHgwMDAwMDAwMApMSUIgZ3VpZD17QjJCMEYwMDEtMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfSBsY2lkPTEwMzMgc3lza2luZD0zIHZlcj0yLjMgZmxhZ3M9YgpMSUIgZG9jIGhyPTB4MDAwMDAwMDAgbmFtZT1BdHRyTGliIGRvYz1MaWJyYXJ5IHdpdGggYWxsIGF0dHJpYnV0ZXMgaGVscGN0eD00NjYwIGhlbHBmaWxlPWF0dHJzLmhscDwwMDAwPgpMSUIgZG9jMiBocj0weDAwMDAwMDAwIGhlbHBzdHJpbmc9TGlicmFyeSB3aXRoIGFsbCBhdHRyaWJ1dGVzIGhzY3R4PTExOSBoc2RsbD1hdHRyc19zdHJpbmdzLmRsbApMSUIgY3VzdG9tIGRhdGE6IGN1c3Rbe0IyQjBGMEM0LTAwMDAtNDAwMC04MDAwLTcwNkY2Qzc5Nzc3M31dPWk0PTUgY3VzdFt7QjJCMEYwQzMtMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfV09YnN0cj1DdXN0b20gdGV4dCB2YWx1ZSBjdXN0W3tCMkIwRjBDMi0wMDAwLTQwMDAtODAwMC03MDZGNkM3OTc3NzN9XT11aTQ9NDAwMDAwMDAwMCBjdXN0W3tCMkIwRjBDMS0wMDAwLTQwMDAtODAwMC03MDZGNkM3OTc3NzN9XT1pND0tNwpMSUIgc3RhdGlzdGljczogdW5pcXVlIG5hbWVzIDIsIGNoYXJhY3RlcnMgMTEKTElCIHR5cGUgaW5mb3M6IDEKVFlQRSAwIGtpbmQ9My8zIGd1aWQ9e0IyQjBGMTAxLTAwMDAtNDAwMC04MDAwLTcwNkY2Qzc5Nzc3M30gbGNpZD0xMDMzIGN0b3I9ZmZmZmZmZmYgZHRvcj1mZmZmZmZmZiBzY2hlbWE9MApUWVBFIDAgY2JpbnN0PTggZnVuY3M9MCB2YXJzPTAgaW1wbHM9MSBjYnZmdD0yNCBhbGlnbj00IGZsYWdzPTEwMCB2ZXI9MS40IGlkbD0wClRZUEUgZG9jIGhyPTB4MDAwMDAwMDAgbmFtZT1JT25lIGRvYz1GaXJzdCBpbnRlcmZhY2UgaGVscGN0eD0zMyBoZWxwZmlsZT1hdHRycy5obHA8MDAwMD4KVFlQRSBkb2MyIGhyPTB4MDAwMDAwMDAgaGVscHN0cmluZz1GaXJzdCBpbnRlcmZhY2UgaHNjdHg9MzQgaHNkbGw9YXR0cnNfc3RyaW5ncy5kbGwKVFlQRSAwIEdldFR5cGVJbmZvT2ZHdWlkIGhyPTB4MDAwMDAwMDAgaW5kZXg9MApUWVBFIDAgRmluZE5hbWUodXBwZXIpIGhyPTB4MDAwMDAwMDAgZm91bmQ9MSBmaXJzdF9pbl90eXBlPTAgSXNOYW1lIGhyPTB4MDAwMDAwMDAKVFlQRSBjdXN0b20gZGF0YTogY3VzdFt7QjJCMEYwQzUtMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfV09aTQ9MQpJTVBMIDAgZmxhZ3M9MCB0bz1JVW5rbm93biB0b2d1aWQ9ezAwMDAwMDAwLTAwMDAtMDAwMC1DMDAwLTAwMDAwMDAwMDA0Nn0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== lib_attrs: 1548 bytes, LoadTypeLibEx = 0x00000000\nLIB guid={B2B0F001-0000-4000-8000-706F6C797773} lcid=1033 syskind=3 ver=2.3 flags=b\nLIB doc hr=0x00000000 name=AttrLib doc=Library with all attributes helpctx=4660 helpfile=attrs.hlp<0000>\nLIB doc2 hr=0x00000000 helpstring=Library with all attributes hsctx=119 hsdll=attrs_strings.dll\nLIB custom data: cust[{B2B0F0C4-0000-4000-8000-706F6C797773}]=i4=5 cust[{B2B0F0C3-0000-4000-8000-706F6C797773}]=bstr=Custom text value cust[{B2B0F0C2-0000-4000-8000-706F6C797773}]=ui4=4000000000 cust[{B2B0F0C1-0000-4000-8000-706F6C797773}]=i4=-7\nLIB statistics: unique names 2, characters 11\nLIB type infos: 1\nTYPE 0 kind=3/3 guid={B2B0F101-0000-4000-8000-706F6C797773} lcid=1033 ctor=ffffffff dtor=ffffffff schema=0\nTYPE 0 cbinst=8 funcs=0 vars=0 impls=1 cbvft=24 align=4 flags=100 ver=1.4 idl=0\nTYPE doc hr=0x00000000 name=IOne doc=First interface helpctx=33 helpfile=attrs.hlp<0000>\nTYPE doc2 hr=0x00000000 helpstring=First interface hsctx=34 hsdll=attrs_strings.dll\nTYPE 0 GetTypeInfoOfGuid hr=0x00000000 index=0\nTYPE 0 FindName(upper) hr=0x00000000 found=1 first_in_type=0 IsName hr=0x00000000\nTYPE custom data: cust[{B2B0F0C5-0000-4000-8000-706F6C797773}]=i4=1\nIMPL 0 flags=0 to=IUnknown toguid={00000000-0000-0000-C000-000000000046}\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "layout_resource",
+      "exe_sha256": "a5e950360cefc584a836398026a04c8a21c3a510fbcae5f702c9b7f52c5f0f69",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d3JvdGUgdGhlIERMTDogMQpwYXRoXDM6IDB4MDAwMDAwMDAsIGxpYnJhcnkgc2V0CkxJQiBndWlkPXtCMkIwRjAwMS0wMDAwLTQwMDAtODAwMC03MDZGNkM3OTc3NzN9IGxjaWQ9MTAzMyBzeXNraW5kPTMgdmVyPTIuMyBmbGFncz1iCkxJQiBkb2MgaHI9MHgwMDAwMDAwMCBuYW1lPUF0dHJMaWIgZG9jPUxpYnJhcnkgd2l0aCBhbGwgYXR0cmlidXRlcyBoZWxwY3R4PTQ2NjAgaGVscGZpbGU9YXR0cnMuaGxwPDAwMDA+CkxJQiBkb2MyIGhyPTB4MDAwMDAwMDAgaGVscHN0cmluZz1MaWJyYXJ5IHdpdGggYWxsIGF0dHJpYnV0ZXMgaHNjdHg9MTE5IGhzZGxsPWF0dHJzX3N0cmluZ3MuZGxsCkxJQiBjdXN0b20gZGF0YTogY3VzdFt7QjJCMEYwQzQtMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfV09aTQ9NSBjdXN0W3tCMkIwRjBDMy0wMDAwLTQwMDAtODAwMC03MDZGNkM3OTc3NzN9XT1ic3RyPUN1c3RvbSB0ZXh0IHZhbHVlIGN1c3Rbe0IyQjBGMEMyLTAwMDAtNDAwMC04MDAwLTcwNkY2Qzc5Nzc3M31dPXVpND00MDAwMDAwMDAwIGN1c3Rbe0IyQjBGMEMxLTAwMDAtNDAwMC04MDAwLTcwNkY2Qzc5Nzc3M31dPWk0PS03CkxJQiBzdGF0aXN0aWNzOiB1bmlxdWUgbmFtZXMgMiwgY2hhcmFjdGVycyAxMQpMSUIgdHlwZSBpbmZvczogMQpUWVBFIDAga2luZD0zLzMgZ3VpZD17QjJCMEYxMDEtMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfSBsY2lkPTEwMzMgY3Rvcj1mZmZmZmZmZiBkdG9yPWZmZmZmZmZmIHNjaGVtYT0wClRZUEUgMCBjYmluc3Q9OCBmdW5jcz0wIHZhcnM9MCBpbXBscz0xIGNidmZ0PTI0IGFsaWduPTQgZmxhZ3M9MTAwIHZlcj0xLjQgaWRsPTAKVFlQRSBkb2MgaHI9MHgwMDAwMDAwMCBuYW1lPUlPbmUgZG9jPUZpcnN0IGludGVyZmFjZSBoZWxwY3R4PTMzIGhlbHBmaWxlPWF0dHJzLmhscDwwMDAwPgpUWVBFIGRvYzIgaHI9MHgwMDAwMDAwMCBoZWxwc3RyaW5nPUZpcnN0IGludGVyZmFjZSBoc2N0eD0zNCBoc2RsbD1hdHRyc19zdHJpbmdzLmRsbApUWVBFIDAgR2V0VHlwZUluZm9PZkd1aWQgaHI9MHgwMDAwMDAwMCBpbmRleD0wClRZUEUgMCBGaW5kTmFtZSh1cHBlcikgaHI9MHgwMDAwMDAwMCBmb3VuZD0xIGZpcnN0X2luX3R5cGU9MCBJc05hbWUgaHI9MHgwMDAwMDAwMApUWVBFIGN1c3RvbSBkYXRhOiBjdXN0W3tCMkIwRjBDNS0wMDAwLTQwMDAtODAwMC03MDZGNkM3OTc3NzN9XT1pND0xCklNUEwgMCBmbGFncz0wIHRvPUlVbmtub3duIHRvZ3VpZD17MDAwMDAwMDAtMDAwMC0wMDAwLUMwMDAtMDAwMDAwMDAwMDQ2fQpwYXRoIChubyBudW1iZXIpOiAweDgwMDI5YzRhLCBsaWJyYXJ5IE5VTEwKcGF0aFwxOiAweDgwMDI5YzRhLCBsaWJyYXJ5IE5VTEwKcGF0aFwwMzogMHgwMDAwMDAwMCwgbGlicmFyeSBzZXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "wrote the DLL: 1\npath\\3: 0x00000000, library set\nLIB guid={B2B0F001-0000-4000-8000-706F6C797773} lcid=1033 syskind=3 ver=2.3 flags=b\nLIB doc hr=0x00000000 name=AttrLib doc=Library with all attributes helpctx=4660 helpfile=attrs.hlp<0000>\nLIB doc2 hr=0x00000000 helpstring=Library with all attributes hsctx=119 hsdll=attrs_strings.dll\nLIB custom data: cust[{B2B0F0C4-0000-4000-8000-706F6C797773}]=i4=5 cust[{B2B0F0C3-0000-4000-8000-706F6C797773}]=bstr=Custom text value cust[{B2B0F0C2-0000-4000-8000-706F6C797773}]=ui4=4000000000 cust[{B2B0F0C1-0000-4000-8000-706F6C797773}]=i4=-7\nLIB statistics: unique names 2, characters 11\nLIB type infos: 1\nTYPE 0 kind=3/3 guid={B2B0F101-0000-4000-8000-706F6C797773} lcid=1033 ctor=ffffffff dtor=ffffffff schema=0\nTYPE 0 cbinst=8 funcs=0 vars=0 impls=1 cbvft=24 align=4 flags=100 ver=1.4 idl=0\nTYPE doc hr=0x00000000 name=IOne doc=First interface helpctx=33 helpfile=attrs.hlp<0000>\nTYPE doc2 hr=0x00000000 helpstring=First interface hsctx=34 hsdll=attrs_strings.dll\nTYPE 0 GetTypeInfoOfGuid hr=0x00000000 index=0\nTYPE 0 FindName(upper) hr=0x00000000 found=1 first_in_type=0 IsName hr=0x00000000\nTYPE custom data: cust[{B2B0F0C5-0000-4000-8000-706F6C797773}]=i4=1\nIMPL 0 flags=0 to=IUnknown toguid={00000000-0000-0000-C000-000000000046}\npath (no number): 0x80029c4a, library NULL\npath\\1: 0x80029c4a, library NULL\npath\\03: 0x00000000, library set\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "layout_win32",
+      "exe_sha256": "cb9e2731e6c1552637d955eea6800345f7ced909978bf340609978ac20e5e84f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gbGliX3dpbjMyOiAxMzI4IGJ5dGVzLCBMb2FkVHlwZUxpYkV4ID0gMHgwMDAwMDAwMApMSUIgZ3VpZD17QjJCMEYwMDItMDAwMC00MDAwLTgwMDAtNzA2RjZDNzk3NzczfSBsY2lkPTAgc3lza2luZD0xIHZlcj0xLjAgZmxhZ3M9OApMSUIgZG9jIGhyPTB4MDAwMDAwMDAgbmFtZT1MaWIzMiBkb2M9KG51bGwpIGhlbHBjdHg9MCBoZWxwZmlsZT0obnVsbCkKTElCIGRvYzIgaHI9MHgwMDAwMDAwMCBoZWxwc3RyaW5nPShudWxsKSBoc2N0eD0wIGhzZGxsPShudWxsKQpMSUIgc3RhdGlzdGljczogdW5pcXVlIG5hbWVzIDQsIGNoYXJhY3RlcnMgMTYKTElCIHR5cGUgaW5mb3M6IDEKVFlQRSAwIGtpbmQ9My8zIGd1aWQ9e0IyQjBGMTAyLTAwMDAtNDAwMC04MDAwLTcwNkY2Qzc5Nzc3M30gbGNpZD0wIGN0b3I9ZmZmZmZmZmYgZHRvcj1mZmZmZmZmZiBzY2hlbWE9MApUWVBFIDAgY2JpbnN0PTggZnVuY3M9MSB2YXJzPTAgaW1wbHM9MSBjYnZmdD0zMiBhbGlnbj04IGZsYWdzPTEwMCB2ZXI9MC4wIGlkbD0wClRZUEUgZG9jIGhyPTB4MDAwMDAwMDAgbmFtZT1JUGxhaW4gZG9jPShudWxsKSBoZWxwY3R4PTAgaGVscGZpbGU9KG51bGwpClRZUEUgZG9jMiBocj0weDAwMDAwMDAwIGhlbHBzdHJpbmc9KG51bGwpIGhzY3R4PTAgaHNkbGw9KG51bGwpClRZUEUgMCBHZXRUeXBlSW5mb09mR3VpZCBocj0weDAwMDAwMDAwIGluZGV4PTAKVFlQRSAwIEZpbmROYW1lKHVwcGVyKSBocj0weDAwMDAwMDAwIGZvdW5kPTEgZmlyc3RfaW5fdHlwZT0wIElzTmFtZSBocj0weDAwMDAwMDAwCklNUEwgMCBmbGFncz0wIHRvPUlVbmtub3duIHRvZ3VpZD17MDAwMDAwMDAtMDAwMC0wMDAwLUMwMDAtMDAwMDAwMDAwMDQ2fQpGVU5DIDAuMCBpZD02MDAxMDAwMCBmaz0xIGludj0xIGNjPTQgY3BhcmFtcz0xIGNvcHQ9MCB2ZnQ9MjQgbnNjb2Rlcz0wIGZsYWdzPTAgcmV0PWhyZXN1bHQgbmFtZXM9UGluZyxuCiAgRlVOQyBkb2MgaHI9MHgwMDAwMDAwMCBuYW1lPVBpbmcgZG9jPShudWxsKSBoZWxwY3R4PTAgaGVscGZpbGU9KG51bGwpCiAgRlVOQyBkb2MyIGhyPTB4MDAwMDAwMDAgaGVscHN0cmluZz0obnVsbCkgaHNjdHg9MCBoc2RsbD0obnVsbCkKICBQQVJBTSAwLjAuMCBmbGFncz0xIHR5PWk0Cj09IGxpYl9lbXB0eTogOTY0IGJ5dGVzLCBMb2FkVHlwZUxpYkV4ID0gMHgwMDAwMDAwMApMSUIgZ3VpZD17MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwfSBsY2lkPTgxOTIgc3lza2luZD0zIHZlcj0wLjAgZmxhZ3M9OApMSUIgZG9jIGhyPTB4MDAwMDAwMDAgbmFtZT0obnVsbCkgZG9jPShudWxsKSBoZWxwY3R4PTAgaGVscGZpbGU9KG51bGwpCkxJQiBkb2MyIGhyPTB4MDAwMDAwMDAgaGVscHN0cmluZz0obnVsbCkgaHNjdHg9MCBoc2RsbD0obnVsbCkKTElCIHN0YXRpc3RpY3M6IHVuaXF1ZSBuYW1lcyAwLCBjaGFyYWN0ZXJzIDAKTElCIHR5cGUgaW5mb3M6IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== lib_win32: 1328 bytes, LoadTypeLibEx = 0x00000000\nLIB guid={B2B0F002-0000-4000-8000-706F6C797773} lcid=0 syskind=1 ver=1.0 flags=8\nLIB doc hr=0x00000000 name=Lib32 doc=(null) helpctx=0 helpfile=(null)\nLIB doc2 hr=0x00000000 helpstring=(null) hsctx=0 hsdll=(null)\nLIB statistics: unique names 4, characters 16\nLIB type infos: 1\nTYPE 0 kind=3/3 guid={B2B0F102-0000-4000-8000-706F6C797773} lcid=0 ctor=ffffffff dtor=ffffffff schema=0\nTYPE 0 cbinst=8 funcs=1 vars=0 impls=1 cbvft=32 align=8 flags=100 ver=0.0 idl=0\nTYPE doc hr=0x00000000 name=IPlain doc=(null) helpctx=0 helpfile=(null)\nTYPE doc2 hr=0x00000000 helpstring=(null) hsctx=0 hsdll=(null)\nTYPE 0 GetTypeInfoOfGuid hr=0x00000000 index=0\nTYPE 0 FindName(upper) hr=0x00000000 found=1 first_in_type=0 IsName hr=0x00000000\nIMPL 0 flags=0 to=IUnknown toguid={00000000-0000-0000-C000-000000000046}\nFUNC 0.0 id=60010000 fk=1 inv=1 cc=4 cparams=1 copt=0 vft=24 nscodes=0 flags=0 ret=hresult names=Ping,n\n  FUNC doc hr=0x00000000 name=Ping doc=(null) helpctx=0 helpfile=(null)\n  FUNC doc2 hr=0x00000000 helpstring=(null) hsctx=0 hsdll=(null)\n  PARAM 0.0.0 flags=1 ty=i4\n== lib_empty: 964 bytes, LoadTypeLibEx = 0x00000000\nLIB guid={00000000-0000-0000-0000-000000000000} lcid=8192 syskind=3 ver=0.0 flags=8\nLIB doc hr=0x00000000 name=(null) doc=(null) helpctx=0 helpfile=(null)\nLIB doc2 hr=0x00000000 helpstring=(null) hsctx=0 hsdll=(null)\nLIB statistics: unique names 0, characters 0\nLIB type infos: 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

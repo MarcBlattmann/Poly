@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/TypeLibFile.Layout.yaml
+id: windows/api/oleaut32.dll/TypeLibFile.Layout
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-typelib-format
+  date: 2026-11-19
+sources: >
+  Observations of our own programs on the machine above: a script-driven caller of CreateTypeLib2, ICreateTypeLib2 and ICreateTypeInfo(2) (declarations from Microsoft Learn and oaidl.h) wrote about 150 libraries, their bytes were compared across controlled variations (one more function, one more parameter, another VARTYPE, another flag, ...) and read back through ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2; the eight sample libraries in specs/windows/oleaut32.dll/TypeLibFile.samples/ are the files those programs wrote. The updater's own six libraries (updater.exe 159.0.8140.0, TYPELIB resources 1 to 6) were read as data (the resource bytes) and compared with what the same API reports for them. The format is described in docs/windows/typelib-file-format.md. Microsoft Learn: "LoadTypeLibEx", "ITypeLib", "ITypeLib2", "ITypeInfo", "ITypeInfo2", "TYPEATTR", "TLIBATTR", "FUNCDESC", "VARDESC", "ELEMDESC", "TYPEDESC", "PARAMDESCEX", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "FUNCFLAGS", "VARENUM", oaidl.h, wtypes.h, winerror.h. No Microsoft or Google binary was decompiled or disassembled; no Wine, ReactOS or third-party description of the file format was read.
+summary: >
+  The container of a type-library file: header, directory of sections, string, name and GUID tables, custom data, hash tables, and how a TYPELIB resource of an exe or dll holds the same bytes. LoadTypeLibEx / LoadTypeLib must read it to report the library's attributes (GUID, LCID, syskind, version, flags), its names and doc strings, help contexts, help string DLL, custom data and the list of types, and to answer GetTypeInfoOfGuid, FindName and IsName. Poly must read it at run time: the owner downloads Google's installer, so no build-time conversion is possible.
+interface:
+  format: "docs/windows/typelib-file-format.md sections 2 to 4 and 7: a 0x54 byte header, one offset per type, a directory of 15 sections, GUID/name/string tables, hash tables that a reader does not need"
+  samples: "specs/windows/oleaut32.dll/TypeLibFile.samples/lib_attrs.tlb, lib_win32.tlb, lib_empty.tlb, lib_many.tlb"
+installer: "The updater's six libraries (resources 1 to 6 of updater.exe) are in this container form; each starts with the magic MSFT, has library custom data (MIDL's three stamps), the LCID words 0x409 and 0, syskind 3 and imports stdole2.tlb."
+rules:
+  library_attributes: "GetLibAttr reports the GUID (all zero when the file has none), the LCID of header word 0x10 (0x2000 when SetLcid was never called, 0 when it was called with 0), syskind from the low bits of word 0x14, the version, and the flags of word 0x1C with FHASDISKIMAGE (8) always added"
+  documentation: "name and doc string; the doc string is also the help string (GetDocumentation2 returns it with the help string context and DLL); the help file name is reported as the directory of the library file, a backslash, the stored name and a NUL character"
+  statistics: "ITypeLib2::GetLibStatistics returns the count of distinct names and their total characters (header words 0x30, 0x34)"
+  custom_data: "library custom data lists come back in the reverse order the writer added them; values of type i4, ui4 and bstr were seen"
+  lookups: "GetTypeInfoOfGuid finds a type by its GUID and FindName / IsName find names in any case, for every type of a 70-type library (layout_many); the type found is the type with that GUID or name"
+  resource_form: "a TYPELIB resource is the file's bytes unchanged: file.dll\\3 loads the sample and gives the same library; the path without a number or with another number fails with TYPE_E_CANTLOADLIBRARY 0x80029c4a (layout_resource)"
+  syskind_1: "a library of syskind 1 loads in a 64-bit process; its sizes, alignments and vtable offsets are reported for 8-byte slots (layout_win32)"
+  empty_library: "a library with no GUID, name or types loads (layout_win32): zero GUID, version 0.0, no types, statistics 0/0"
+errors:
+  cannot_load: "a file that is not a type library: TYPE_E_CANTLOADLIBRARY 0x80029c4a (see LoadTypeLibEx); not exercised here with damaged files"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image holds the bytes of one or two sample libraries (the same files as under TypeLibFile.samples/), writes them beside itself, loads them with LoadTypeLibEx(REGKIND_NONE) (layout_resource: as the TYPELIB resource of a DLL image the test writes, headers and one .rsrc section per Microsoft Learn "PE Format") and reports every value ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2 return: library and type attributes, documentation (name, doc string, help context, help file name without its directory, help string, help string context and DLL), custom data, implemented types, functions and parameters with their types written out, variables, module entry points, GetTypeInfoOfGuid, FindName and IsName for every type. References to types are shown by the name of the type they refer to, never as numbers. The sample files carry made-up ids {B2B0F0xx-0000-4000-8000-706F6C797773}; nothing is registered.
+not_covered: >
+  damaged or truncated files, files of other formats (OLE structured storage libraries of older tools), libraries above 20 KB with a name hash chain longer than one entry for several names, non-ASCII names and other code pages, 16-bit and Macintosh syskinds.

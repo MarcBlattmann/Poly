@@ -69,6 +69,10 @@
       "description": "Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b)",
       "revision": "Windows 11 25H2 build 26200.9974"
     },
+    "windows-typelib-file": {
+      "description": "The binary type-library file (.tlb and the TYPELIB resource of an exe or dll) as ITypeLib and ITypeInfo read it, by black-box observation of files written with CreateTypeLib2 and of the updater's own libraries (docs/windows/typelib-file-format.md; spec-win-typelib-format)",
+      "revision": "Windows 11 25H2 build 26200.9974"
+    },
     "wine-spec": {
       "description": "Wine .spec export lists (wine-mirror/wine dlls/*/*.spec)",
       "revision": "840a939ee526137639665ff5f587224d6a36403f"
