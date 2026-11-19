@@ -350,6 +350,26 @@ fn make_executable(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// How a Windows program is started from the window: through
+/// `polyopen.exe` (ADR 0230), which opens it as the Windows shell does
+/// (`ShellExecuteExW`): its manifest's `requestedExecutionLevel` is read and
+/// the consent prompt asked first (ADR 0222). `argv[0]` is the program (a
+/// path of Poly's file system: the kernel hands it on as its DOS path). On a
+/// disk without `polyopen.exe` the program is started itself.
+fn opened(argv: &[String]) -> Result<Vec<String>, String> {
+    let program = argv.first().ok_or("nothing to run")?;
+    match winapps::vfs_path(winapps::POLYOPEN, &VfsFiles).filter(|p| poly_rt::fs::exists(p)) {
+        Some(opener) => {
+            make_executable(&opener)?;
+            Ok(core::iter::once(opener).chain(argv.iter().cloned()).collect())
+        }
+        None => {
+            make_executable(program)?;
+            Ok(argv.to_vec())
+        }
+    }
+}
+
 /// The file system as `poly_pkg::windows::apps` reads it.
 struct VfsFiles;
 
@@ -712,13 +732,12 @@ impl view::Host for Native {
     }
 
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
-        let program = argv.first().ok_or("nothing to run")?;
-        make_executable(program)?;
+        let argv = opened(argv)?;
         self.before = (scan_links(), uninstall_keys());
         let [read, write] = poly_rt::sys::pipe().map_err(|e| alloc::format!("a pipe: {e}"))?;
         let (read, write) = (File::from_handle(read), File::from_handle(write));
         poly_rt::sys::set_nonblocking(read.handle(), true).map_err(|e| alloc::format!("a pipe: {e}"))?;
-        let mut cmd = Command::new(program);
+        let mut cmd = Command::new(&argv[0]);
         cmd.args(argv.iter().skip(1).map(String::as_str))
             .envs(
                 poly_rt::env::vars()
@@ -812,17 +831,18 @@ impl view::Host for Native {
     }
 
     fn run_program(&mut self, path: &str) -> Result<(), String> {
-        make_executable(path)?;
+        let argv = opened(&[path.to_string()])?;
         // The desktop shows a busy pointer until the program has a window.
         let mut startup = poly_app::startup::Startup::begin(path);
-        let mut cmd = Command::new(path);
-        cmd.envs(
-            poly_rt::env::vars()
-                .filter_map(|v| core::str::from_utf8(v).ok())
-                .filter(|v| !poly_app::startup::is_token_var(v)),
-        )
-        .envs(startup.environment().iter().map(String::as_str))
-        .stdin(Stdio::Null);
+        let mut cmd = Command::new(&argv[0]);
+        cmd.args(argv.iter().skip(1).map(String::as_str))
+            .envs(
+                poly_rt::env::vars()
+                    .filter_map(|v| core::str::from_utf8(v).ok())
+                    .filter(|v| !poly_app::startup::is_token_var(v)),
+            )
+            .envs(startup.environment().iter().map(String::as_str))
+            .stdin(Stdio::Null);
         match cmd.spawn() {
             Ok(child) => {
                 startup.started(child.id());

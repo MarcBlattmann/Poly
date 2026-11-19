@@ -27,6 +27,13 @@ use crate::windows::program::Program;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+/// What `polyopen.exe` (ADR 0230: how the window starts a Windows program,
+/// through `ShellExecuteExW`) writes when the shell would not start it; the
+/// Win32 error follows.
+pub const OPEN_FAILED: &str = "polyopen: ShellExecuteExW failed: ";
+/// `ERROR_CANCELLED` (`winerror.h`): the user said no to the consent prompt.
+pub const ERROR_CANCELLED: u32 = 1223;
+
 /// The descriptor number `apt-get` finds its progress pipe under, unless
 /// the program has it under another ([`Installer::status_fd`]).
 pub const STATUS_FD: u32 = 3;
@@ -693,6 +700,22 @@ impl Installer {
     fn program_ended(&mut self, ok: bool, apps: impl FnOnce(&str) -> Vec<(String, String)>) -> Option<Vec<String>> {
         let found = apps(self.name());
         self.percent = Some(100);
+        // The shell did not start it at all: why, in words.
+        let refused =
+            self.log.iter().rev().find_map(|l| l.trim().strip_prefix(OPEN_FAILED)?.trim().parse::<u32>().ok());
+        if let Some(error) = refused.filter(|_| !ok) {
+            let what = if self.uninstalling() {
+                alloc::format!("{}'s uninstaller", self.name())
+            } else {
+                self.name().to_string()
+            };
+            self.phase = Phase::Failed(if error == ERROR_CANCELLED {
+                alloc::format!("{what} did not run: it asks for administrator rights, and they were not given.")
+            } else {
+                alloc::format!("{what} could not be started (Windows error {error}).")
+            });
+            return None;
+        }
         if self.uninstalling() {
             if found.is_empty() {
                 self.phase = Phase::Done;
@@ -1247,5 +1270,51 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
                 "The uninstaller has ended, but Example Browser is still installed (it reported an error).".into()
             )
         );
+    }
+
+    #[test]
+    fn a_program_the_shell_would_not_start_says_why() {
+        // The consent prompt was answered No: polyopen.exe says so, nothing ran.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.output(&alloc::format!("{OPEN_FAILED}{ERROR_CANCELLED}"));
+        it.finished(false, |_| Vec::new());
+        assert_eq!(
+            it.phase,
+            Phase::Failed(
+                "Example Browser did not run: it asks for administrator rights, and they were not given.".into()
+            )
+        );
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        // Another error of the shell.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.output("polyopen: ShellExecuteExW failed: 2");
+        it.finished(false, |_| Vec::new());
+        assert_eq!(it.phase, Phase::Failed("Example Browser could not be started (Windows error 2).".into()));
+        // An uninstaller refused the same way.
+        let plan = Plan {
+            app: "Example Browser".into(),
+            removal: Removal::Windows {
+                command: alloc::vec!["/x/u.exe".into()],
+                publisher: String::new(),
+                version: String::new(),
+            },
+            package: None,
+            apps: alloc::vec![("poly-windows-example-browser.desktop".into(), "Example Browser".into())],
+        };
+        let mut it = Installer::for_removal("poly-windows-example-browser.desktop", Ok(plan));
+        it.start();
+        it.output(&alloc::format!("{OPEN_FAILED}{ERROR_CANCELLED}"));
+        it.finished(false, |_| alloc::vec![("poly-windows-example-browser.desktop".into(), "Example Browser".into())]);
+        assert!(
+            matches!(&it.phase, Phase::Failed(why) if why.starts_with("Example Browser's uninstaller did not run"))
+        );
+        // A program that ran and failed by itself is not mistaken for one the shell refused.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.output("setup: something went wrong");
+        it.finished(false, |_| Vec::new());
+        assert!(matches!(&it.phase, Phase::Failed(why) if why.contains("installed no app")));
     }
 }

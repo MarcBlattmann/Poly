@@ -611,6 +611,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "polyopen"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "powrprof"
 version = "0.0.1"
 dependencies = [

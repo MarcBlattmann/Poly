@@ -205,6 +205,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0221.
         ("services.exe", super::SERVICES_EXE),
         ("hnetcfg.dll", super::HNETCFG),
+        // ADR 0230.
+        ("polyopen.exe", super::POLYOPEN_EXE),
     ] {
         if bytes.is_empty() {
             continue;
