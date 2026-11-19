@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "seta_errors",
+      "source_sha256": "fe46874ca9b75752a1bd406425a95a9f3b28c9fc9627d5aca6e872cb3ab952a4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a0705f1e4245bee48af84067102b56bc46c089c06be2006e862e8a399c530162",
+          "exit_code": 0,
+          "stdout": "ok the name cannot be set: EINVAL\nok the object type cannot be set: EINVAL\nok a buffer too small for a timespec is EINVAL\nok a missing file is ENOENT\nok a path through a file is ENOTDIR\nok an unreadable path is EFAULT\nok through a link\nok the target changed\nok with FSOPT_NOFOLLOW\nok the target did not\nok the link itself did\nok a dangling link followed is ENOENT\nok a dangling link with FSOPT_NOFOLLOW works\nok a directory's modification time\nok is changed\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "seta_times_mode",
+      "source_sha256": "5c1a9134e357689e6fe023d8fd651c194628590a82c346967e03c2b3ab906e47",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b7b712a6a5fcc72dc21dd630f2d23e26bc2bd1f51e4482a6ef3e9af5a201d994",
+          "exit_code": 0,
+          "stdout": "ok set the modification time: 0\nok stat shows it\nok set the access time\nok with its nanoseconds\nok the modification time is unchanged\nok both at once\nok the modification time comes first in the buffer\nok set the mode\nok stat shows 0640\nok and it is still a regular file\nok set the file flags to UF_HIDDEN\nok st_flags is 0x8000\nok and can be cleared\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

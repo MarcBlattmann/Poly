@@ -27,6 +27,16 @@ summary: >
   directory's name for a directory. A command number the object does not
   know (999 on a file) failed with ENODEV (19) (a value). The map names
   the entry sys_fcntl.
+  More behaviour, file-system commands. F_FULLFSYNC (51) returns 0 for a
+  regular file and a directory, ENODEV (19) for /dev/null, EBADF (9) for a
+  pipe; F_BARRIERFSYNC (85), F_NOCACHE (48, argument 1 or 0),
+  F_GLOBAL_NOCACHE (55) and F_RDAHEAD (45) return 0 on a file; F_NOCACHE
+  and F_RDAHEAD on a pipe are EBADF. F_GETPATH (50) stores the absolute
+  path (a buffer of 1024 bytes) of an open file or directory, the string
+  /dev/null for the null device, EBADF for a pipe or a descriptor not
+  open, EFAULT for an unwritable or NULL buffer; the path follows a rename
+  and an unlinked file still succeeds; F_GETPATH_NOFIRMLINK (102) works
+  too. F_PREALLOCATE (42) with a zeroed argument is EINVAL (22).
 returns:
   success: "the command's result: a descriptor, flags, or 0"
 errors:
@@ -40,5 +50,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner

@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
     {
       "name": "fcntl_dup",
@@ -21,6 +21,21 @@
           "executable_sha256": "1d31768642fed825270f3c4d2909a5abada7ad97ffb558aecc8003155e739c94",
           "exit_code": 0,
           "stdout": "ok F_DUPFD 20: the lowest free from 20\nok again: 21\nok the copy has no close-on-exec\nok F_DUPFD_CLOEXEC 30: 30\nok with close-on-exec\nok F_DUPFD 0: the lowest free (4)\nok a copy shares the offset\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "fcntl_fs",
+      "source_sha256": "bed66d277eb30a92d8b67ab846acf0a8f7a2e6238427dcc9d59c6ed5533d52e0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "349f4147d19e6664156b87dafead9688de96b98852a5f1dade01ecffcd5ecd16",
+          "exit_code": 0,
+          "stdout": "ok F_FULLFSYNC on a regular file\nok it returns 0\nok F_FULLFSYNC on a directory\nok F_FULLFSYNC on /dev/null is ENODEV\nok F_FULLFSYNC on a pipe is EBADF\nok F_BARRIERFSYNC on a file\nok F_NOCACHE on\nok F_NOCACHE off\nok F_GLOBAL_NOCACHE\nok F_RDAHEAD on\nok F_NOCACHE on a pipe is EBADF\nok F_RDAHEAD on a pipe is EBADF\nok F_GETPATH: 0 and an absolute path ending in /file\nok F_GETPATH_NOFIRMLINK: an absolute path ending in /file too\nok F_GETPATH of a directory\nok it is absolute and does not end in a slash\nok F_GETPATH of /dev/null\nok the path is /dev/null\nok F_GETPATH of a pipe is EBADF\nok F_GETPATH of a descriptor not open is EBADF\nok F_GETPATH with an unwritable buffer is EFAULT\nok F_GETPATH with a NULL buffer is EFAULT\nok after a rename F_GETPATH shows the new name\nok F_GETPATH of an unlinked file still succeeds\nvalue F_LOG2PHYS with zeros on a file with data: errno 0\nok F_PREALLOCATE with zeros is EINVAL\nsummary 25 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true

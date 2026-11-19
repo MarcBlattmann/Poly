@@ -22,6 +22,22 @@ summary: >
   255 works, 256 is ENAMETOOLONG (also without O_CREAT). Flag values are
   those of <sys/fcntl.h> (O_CREAT 0x200, O_TRUNC 0x400, O_EXCL 0x800,
   O_DIRECTORY 0x100000).
+  More behaviour, the case-insensitive and case-preserving file system. A
+  name is found whatever its case (file.TXT finds File.txt, also in
+  directory components); O_CREAT on a different spelling of an existing
+  name opens the existing file, O_CREAT|O_EXCL is EEXIST (17), mkdir and
+  link to another spelling of an existing name are EEXIST; the directory
+  listing keeps the spelling used at creation; F_GETPATH of a descriptor
+  shows the stored spelling, not the one asked for; stat through any
+  spelling gives the same inode; unlink and rmdir work through any
+  spelling (rmdir of a non-empty directory ENOTEMPTY 66); a file used as a
+  directory is ENOTDIR whatever the case. Names that differ only in
+  Unicode normalisation are one name (the precomposed and the decomposed
+  form of a letter find each other, upper case too, O_EXCL on either is
+  EEXIST) and the stored form is kept in the listing. A name that is not
+  valid UTF-8 is EILSEQ (92). Names of 255 bytes work, 256 bytes is
+  ENAMETOOLONG (63); the limit counts characters: 255 two-byte characters
+  (510 bytes) work, 256 are ENAMETOOLONG.
 returns:
   success: "the lowest free descriptor"
 errors:
@@ -38,5 +54,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

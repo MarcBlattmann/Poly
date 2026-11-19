@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "rx_swap",
+      "source_sha256": "093ce102453e430857fdfac58d40519106d396d2707f64a89b9f36fff2fb8c84",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "efa7718d574cd1bb5ac17f70a4ff4de008642bda97eb15dc99246a742718fe9d",
+          "exit_code": 0,
+          "stdout": "ok swap two files: 0\nok a has b's content and inode\nok b has a's content and inode\nok swap with a missing destination is ENOENT\nok swap with a missing source is ENOENT\nok nothing changed\nvalue swapping a name with itself: errno 0\nok swap two directories\nok their contents changed places\nok swap a directory with a file\nok now a is the directory\nok and d1 the file\nok a descriptor follows its file through a swap\nok SWAP and EXCL together are EINVAL\nok flag 8 is EINVAL\nok flag 0x100 is EINVAL\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
