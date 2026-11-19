@@ -92,7 +92,7 @@ fn the_well_known_folders_are_where_learn_puts_them() {
     assert_eq!(at("FOLDERID_RoamingAppData"), "C:\\Users\\poly\\AppData\\Roaming");
     assert_eq!(at("FOLDERID_LocalAppData"), "C:\\Users\\poly\\AppData\\Local");
     assert_eq!(at("FOLDERID_Documents"), "C:\\Users\\poly\\Documents");
-    assert_eq!(at("FOLDERID_CommonStartup"), "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp");
+    assert_eq!(at("FOLDERID_CommonStartup"), "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup");
     assert!(known_folder("FOLDERID_NoSuchThing").is_none());
     assert_eq!(folder_of_variable("temp").unwrap().dos_path(u), u.temp());
     assert_eq!(folder_of_variable("ALLUSERSPROFILE").unwrap().dos_path(u), PROGRAM_DATA);

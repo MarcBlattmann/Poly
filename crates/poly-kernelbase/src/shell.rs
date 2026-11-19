@@ -18,22 +18,23 @@ fn is_space(c: u16) -> bool {
     c == u16::from(b' ') || c == u16::from(b'\t')
 }
 
-/// Split a command line into its arguments the way `CommandLineToArgvW` documents it.
+/// Split a command line into its arguments the way `CommandLineToArgvW` does (the sheet
+/// `shell32.dll/CommandLineToArgvW.yaml`; Learn documents the backslash rules).
 ///
-/// * The first argument is the program name: a part in quotation marks is taken as it stands
-///   (the marks are dropped, white space inside does not end it, backslashes are plain
-///   characters); it ends at the first white space outside quotation marks.
-/// * The other arguments are separated by spaces and tabs. A quotation mark starts or ends a
-///   quoted part, in which white space belongs to the argument, and is itself dropped.
-/// * 2n backslashes followed by a quotation mark give n backslashes and the mark starts or
-///   ends a quoted part; 2n+1 backslashes followed by a quotation mark give n backslashes and
-///   a literal quotation mark; backslashes not followed by a quotation mark stand for
-///   themselves.
+/// * The first argument is the program name. If it starts with a quotation mark it ends at the
+///   next one (no escapes; an unterminated mark takes the rest) and the next argument starts
+///   right behind that mark, white space or not; otherwise it ends at the first space or tab
+///   and quotation marks and backslashes in it are plain characters. A command line that
+///   starts with white space so has an empty program name.
+/// * The other arguments are separated by runs of spaces and tabs. A quotation mark starts or
+///   ends a quoted part, in which white space belongs to the argument, and is itself dropped;
+///   in a quoted part two marks in a row give one literal mark and end the quoted part.
+/// * 2n backslashes followed by a quotation mark give n backslashes and the mark acts as
+///   above; 2n+1 backslashes followed by a quotation mark give n backslashes and a literal
+///   mark; backslashes not followed by a quotation mark stand for themselves.
 ///
 /// `cmd` has no terminating NUL. An empty command line gives no arguments here; the caller
-/// then returns the executable's path, as Learn says. (Learn does not say what two
-/// quotation marks in a row inside a quoted part mean; here the second one ends the part
-/// like any other.)
+/// then returns the executable's path, as Learn says.
 pub fn command_line_to_argv(cmd: &[u16]) -> Vec<Vec<u16>> {
     let mut args = Vec::new();
     if cmd.is_empty() {
@@ -42,17 +43,19 @@ pub fn command_line_to_argv(cmd: &[u16]) -> Vec<Vec<u16>> {
     // The program name.
     let mut i = 0;
     let mut name = Vec::new();
-    let mut quoted = false;
-    while i < cmd.len() {
-        let c = cmd[i];
-        if c == QUOTE {
-            quoted = !quoted;
-        } else if is_space(c) && !quoted {
-            break;
-        } else {
-            name.push(c);
+    if cmd[0] == QUOTE {
+        i = 1;
+        while i < cmd.len() && cmd[i] != QUOTE {
+            name.push(cmd[i]);
+            i += 1;
         }
+        // Skip the closing mark (if any): the next argument starts behind it.
         i += 1;
+    } else {
+        while i < cmd.len() && !is_space(cmd[i]) {
+            name.push(cmd[i]);
+            i += 1;
+        }
     }
     args.push(name);
     // The arguments.
@@ -77,16 +80,21 @@ pub fn command_line_to_argv(cmd: &[u16]) -> Vec<Vec<u16>> {
                     arg.extend(core::iter::repeat_n(BACKSLASH, n / 2));
                     if n % 2 == 1 {
                         arg.push(QUOTE);
-                    } else {
-                        quoted = !quoted;
+                        i += 1;
                     }
-                    i += 1;
+                    // An even run: the mark is handled as a mark in the next round.
                 } else {
                     arg.extend(core::iter::repeat_n(BACKSLASH, n));
                 }
             } else if c == QUOTE {
-                quoted = !quoted;
-                i += 1;
+                if quoted && cmd.get(i + 1) == Some(&QUOTE) {
+                    arg.push(QUOTE);
+                    quoted = false;
+                    i += 2;
+                } else {
+                    quoted = !quoted;
+                    i += 1;
+                }
             } else if is_space(c) && !quoted {
                 break;
             } else {
@@ -140,6 +148,18 @@ pub const CSIDL_SYSTEM: u32 = 0x0025;
 pub const CSIDL_PROGRAM_FILES: u32 = 0x0026;
 /// `CSIDL_PROFILE` (`shlobj_core.h`).
 pub const CSIDL_PROFILE: u32 = 0x0028;
+/// The Start menu's and the desktop's folders and the 32-bit program files (`shlobj_core.h`):
+/// `CSIDL_PROGRAMS`, `CSIDL_STARTUP`, `CSIDL_STARTMENU`, `CSIDL_COMMON_STARTMENU`,
+/// `CSIDL_COMMON_PROGRAMS`, `CSIDL_COMMON_STARTUP`, `CSIDL_COMMON_DESKTOPDIRECTORY`,
+/// `CSIDL_PROGRAM_FILESX86`.
+pub const CSIDL_PROGRAMS: u32 = 0x0002;
+pub const CSIDL_STARTUP: u32 = 0x0007;
+pub const CSIDL_STARTMENU: u32 = 0x000B;
+pub const CSIDL_COMMON_STARTMENU: u32 = 0x0016;
+pub const CSIDL_COMMON_PROGRAMS: u32 = 0x0017;
+pub const CSIDL_COMMON_STARTUP: u32 = 0x0018;
+pub const CSIDL_COMMON_DESKTOPDIRECTORY: u32 = 0x0019;
+pub const CSIDL_PROGRAM_FILESX86: u32 = 0x002A;
 /// The highest folder id `shlobj_core.h` defines (`CSIDL_COMPUTERSNEARME`).
 pub const CSIDL_LAST: u32 = 0x003D;
 
@@ -171,6 +191,15 @@ pub fn folder(n_folder: u32) -> Result<Folder, u32> {
         CSIDL_SYSTEM => f("SystemRoot", "\\System32"),
         CSIDL_PROGRAM_FILES => f("ProgramFiles", ""),
         CSIDL_PROFILE => f("USERPROFILE", ""),
+        // The paths of the sheets `SHGetSpecialFolderLocation.yaml` and `KnownFolders.Common.yaml`.
+        CSIDL_PROGRAMS => f("APPDATA", "\\Microsoft\\Windows\\Start Menu\\Programs"),
+        CSIDL_STARTUP => f("APPDATA", "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"),
+        CSIDL_STARTMENU => f("APPDATA", "\\Microsoft\\Windows\\Start Menu"),
+        CSIDL_COMMON_STARTMENU => f("ProgramData", "\\Microsoft\\Windows\\Start Menu"),
+        CSIDL_COMMON_PROGRAMS => f("ProgramData", "\\Microsoft\\Windows\\Start Menu\\Programs"),
+        CSIDL_COMMON_STARTUP => f("ProgramData", "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"),
+        CSIDL_COMMON_DESKTOPDIRECTORY => f("PUBLIC", "\\Desktop"),
+        CSIDL_PROGRAM_FILESX86 => f("ProgramFiles(x86)", ""),
         n if n <= CSIDL_LAST => Err(E_FAIL),
         _ => Err(E_INVALIDARG),
     }
@@ -230,6 +259,38 @@ mod tests {
         assert_eq!(split("x a\\\\\\b C:\\dir\\"), ["x", "a\\\\\\b", "C:\\dir\\"]);
     }
 
+    /// The sheet's examples (`CommandLineToArgvW.yaml`), quotation marks and the program name.
+    #[test]
+    fn the_sheets_examples() {
+        let cases: &[(&str, &[&str])] = &[
+            (r#"p "a""b" c"#, &["p", r#"a"b c"#]),
+            (r#"p """a" c"#, &["p", r#""a c"#]),
+            (r#"p a"" b"#, &["p", "a", "b"]),
+            (r#"p "" """#, &["p", "", ""]),
+            (r#"p "abc def"#, &["p", "abc def"]),
+            (r#"p "abc\"#, &["p", r"abc\"]),
+            (r#"p a\\"b c" d"#, &["p", r"a\b c", "d"]),
+            (r#"p a\\\"b c"#, &["p", r#"a\"b"#, "c"]),
+            (r#"p "a\\\\" b"#, &["p", r"a\\", "b"]),
+            (r#"p "C:\a b\" c"#, &["p", r#"C:\a b" c"#]),
+            (r"p \\a \b", &["p", r"\\a", r"\b"]),
+            (r#""a b"x y"#, &["a b", "x", "y"]),
+            (r#""C:\a\" b" x"#, &[r"C:\a\", "b x"]),
+            (r#"C:\a\"b c d"#, &[r#"C:\a\"b"#, "c", "d"]),
+            (r#"C:\a"b c".exe x"#, &[r#"C:\a"b"#, "c.exe x"]),
+            (r#""a b"#, &["a b"]),
+            (r#""" x"#, &["", "x"]),
+            (r#""""x y"#, &["", "x y"]),
+            (" ", &[""]),
+            ("   a b", &["", "a", "b"]),
+            ("\t", &[""]),
+            (r#"  "a b" c"#, &["", "a b", "c"]),
+        ];
+        for (line, want) in cases {
+            assert_eq!(split(line), *want, "{line}");
+        }
+    }
+
     #[test]
     fn the_block_is_the_pointers_then_the_strings() {
         let args = command_line_to_argv(&"p.exe ab c".encode_utf16().collect::<Vec<u16>>());
@@ -281,5 +342,20 @@ mod tests {
         assert_eq!(folder(0x05), Err(E_FAIL));
         assert_eq!(folder(0x7F), Err(E_INVALIDARG));
         assert_eq!((S_OK, E_FAIL, E_INVALIDARG), (0, 0x8000_4005, 0x8007_0057));
+    }
+
+    /// The shortcut folders an installer writes into (`KnownFolders.Common.yaml`).
+    #[test]
+    fn the_start_menu_and_desktop_folders() {
+        let start = "\\Microsoft\\Windows\\Start Menu";
+        assert_eq!(folder(0x19), Ok(Folder { variable: "PUBLIC", suffix: "\\Desktop" }));
+        assert_eq!(folder(0x16), Ok(Folder { variable: "ProgramData", suffix: start }));
+        let programs = "\\Microsoft\\Windows\\Start Menu\\Programs";
+        assert_eq!(folder(0x17), Ok(Folder { variable: "ProgramData", suffix: programs }));
+        assert_eq!(folder(0x02 | CSIDL_FLAG_CREATE), Ok(Folder { variable: "APPDATA", suffix: programs }));
+        let startup = "\\Microsoft\\Windows\\Start Menu\\Programs\\Startup";
+        assert_eq!(folder(0x18), Ok(Folder { variable: "ProgramData", suffix: startup }));
+        assert_eq!(folder(0x07), Ok(Folder { variable: "APPDATA", suffix: startup }));
+        assert_eq!(folder(0x2A), Ok(Folder { variable: "ProgramFiles(x86)", suffix: "" }));
     }
 }

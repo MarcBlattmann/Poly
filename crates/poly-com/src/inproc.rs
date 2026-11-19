@@ -30,6 +30,13 @@ pub const CLSID_NET_FW_POLICY2: Guid =
 pub const CLSID_NET_FW_RULE: Guid =
     Guid { data1: 0x2C5B_C43E, data2: 0x3369, data3: 0x4C33, data4: [0xAB, 0x0C, 0xBE, 0x94, 0x69, 0x67, 0x7A, 0xF4] };
 
+/// `CLSID_Shell` (`shldisp.h`, `Shell.Application`): {13709620-C279-11CE-A49E-444553540000}.
+pub const CLSID_SHELL: Guid =
+    Guid { data1: 0x1370_9620, data2: 0xC279, data3: 0x11CE, data4: [0xA4, 0x9E, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00] };
+/// `CLSID_ShellWindows` (`exdisp.h`): {9BA05972-F6A8-11CF-A442-00A0C90A8F39}.
+pub const CLSID_SHELL_WINDOWS: Guid =
+    Guid { data1: 0x9BA0_5972, data2: 0xF6A8, data3: 0x11CF, data4: [0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39] };
+
 /// `IID_IClassFactory` (`unknwn.h`): {00000001-0000-0000-C000-000000000046}.
 pub const IID_ICLASS_FACTORY: Guid = Guid { data1: 1, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 /// `IID_IUnknown` (`unknwn.h`): {00000000-0000-0000-C000-000000000046}.
@@ -47,7 +54,19 @@ const CLASSES: &[(Guid, &str)] = &[
     // The Windows Firewall's policy and rule objects.
     (CLSID_NET_FW_POLICY2, "hnetcfg.dll\0"),
     (CLSID_NET_FW_RULE, "hnetcfg.dll\0"),
+    (CLSID_SHELL, "shell32.dll\0"),
 ];
+
+/// The classes Windows serves from the desktop's own process (Explorer) as a local server.
+/// Poly's desktop is no Windows process, so the DLL named here serves them in the caller's
+/// process when the context allows a local server (`CLSCTX_LOCAL_SERVER`); the objects say what
+/// that means for each (`shell32`'s `ShellWindows`: the sheet `ShellDispatch.ShellExecute.yaml`).
+const DESKTOP_CLASSES: &[(Guid, &str)] = &[(CLSID_SHELL_WINDOWS, "shell32.dll\0")];
+
+/// The DLL that serves `clsid`, one of the desktop's classes, in the process, if it is one.
+pub fn desktop_server_of(clsid: &Guid) -> Option<&'static str> {
+    DESKTOP_CLASSES.iter().find(|(c, _)| c == clsid).map(|&(_, dll)| dll)
+}
 
 /// The DLL that serves `clsid` in the process, if Poly has the class.
 pub fn server_of(clsid: &Guid) -> Option<&'static str> {
@@ -75,6 +94,11 @@ mod tests {
         assert_eq!(server_of(&CLSID_NET_FW_RULE), Some("hnetcfg.dll\0"));
         assert_eq!(server_of(&crate::git::CLSID_BACKGROUND_COPY_MANAGER), None);
         assert_eq!(server_of(&IID_IUNKNOWN), None);
+        assert_eq!(server_of(&CLSID_SHELL), Some("shell32.dll\0"));
+        // ShellWindows is the desktop's: a local server on Windows.
+        assert_eq!(server_of(&CLSID_SHELL_WINDOWS), None);
+        assert_eq!(desktop_server_of(&CLSID_SHELL_WINDOWS), Some("shell32.dll\0"));
+        assert_eq!(desktop_server_of(&CLSID_SHELL), None);
     }
 
     #[test]
@@ -84,6 +108,8 @@ mod tests {
         assert_eq!(text(&CLSID_TASKBAR_LIST), "{56FDF344-FD6D-11D0-958A-006097C9A090}");
         assert_eq!(text(&CLSID_DESTINATION_LIST), "{77F10CF0-3DB5-4966-B520-B7C54FD35ED6}");
         assert_eq!(text(&CLSID_FILE_SAVE_DIALOG), "{C0B4E2F3-BA21-4773-8DBA-335EC946EB8B}");
+        assert_eq!(text(&CLSID_SHELL), "{13709620-C279-11CE-A49E-444553540000}");
+        assert_eq!(text(&CLSID_SHELL_WINDOWS), "{9BA05972-F6A8-11CF-A442-00A0C90A8F39}");
     }
 
     #[test]

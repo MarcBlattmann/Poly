@@ -11,7 +11,8 @@ use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 pub use poly_com::guid::Guid;
 use poly_com::inproc::{
-    CLSID_DESTINATION_LIST, CLSID_FILE_OPERATION, CLSID_TASKBAR_LIST, IID_ICLASS_FACTORY, IID_IUNKNOWN,
+    CLSID_DESTINATION_LIST, CLSID_FILE_OPERATION, CLSID_SHELL, CLSID_SHELL_WINDOWS, CLSID_TASKBAR_LIST,
+    IID_ICLASS_FACTORY, IID_IUNKNOWN,
 };
 
 pub type Hresult = i32;
@@ -221,6 +222,8 @@ macro_rules! factory {
 factory!(FILE_OPERATION_FACTORY, crate::fileop::create);
 factory!(TASKBAR_LIST_FACTORY, crate::taskbar::create_taskbar_list);
 factory!(DESTINATION_LIST_FACTORY, crate::taskbar::create_destination_list);
+factory!(SHELL_FACTORY, crate::dispatch::create_shell_app);
+factory!(SHELL_WINDOWS_FACTORY, crate::dispatch::create_shell_windows);
 
 unsafe extern "system" fn factory_create(
     this: *mut c_void,
@@ -269,6 +272,10 @@ pub unsafe extern "system" fn DllGetClassObject(
             &TASKBAR_LIST_FACTORY
         } else if clsid == CLSID_DESTINATION_LIST {
             &DESTINATION_LIST_FACTORY
+        } else if clsid == CLSID_SHELL {
+            &SHELL_FACTORY
+        } else if clsid == CLSID_SHELL_WINDOWS {
+            &SHELL_WINDOWS_FACTORY
         } else {
             return CLASS_E_CLASSNOTAVAILABLE;
         };
