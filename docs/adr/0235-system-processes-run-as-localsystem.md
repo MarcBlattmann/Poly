@@ -65,7 +65,19 @@ programs did not get it:
    token. They are applied after the creator's handles are opened, as explicit descriptors
    already were, so the creator keeps the handles the call returns. Without this, a server
    started by the SYSTEM activation process would carry SYSTEM's descriptor and its own user
-   could not open it.
+   could not open it. The process's copy of a given token is described by that token's own
+   defaults too (no sheet records it): a standard server started by the activation process could
+   not read its own token otherwise, so COM's default access descriptor (B2c) lost its user and
+   the server refused its own client.
+7. **The kernel's SYSTEM token may be given by a caller of lower integrity once.** The rule of
+   ADR 0222 (a token of higher integrity than the creator's needs the consent mark or
+   `SeAssignPrimaryToken`/`SeTcb`) stays for tokens a program hands in; `spawn_as` marks the
+   token it made for this one start, as the consent broker marks its tokens.
+8. **The shell stand-in runs in every interactive logon** (`standard` and `elevated`), with the
+   filtered token, as Windows' `explorer.exe` does; before, only `elevated` had it. The kernel
+   gives it the token before its first thread runs, and the start keeps that token: the start
+   used to replace it with the logon's (the full token, for `elevated`), so a program that
+   copied the shell's token (B2c's "standard client", `CreateProcessWithTokenW`) ran elevated.
 
 ## Consequences
 
