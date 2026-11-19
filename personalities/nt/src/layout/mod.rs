@@ -167,6 +167,9 @@ pub const FOLDERS: &[Folder] = &[
     drive("Windows\\Fonts", Some("FOLDERID_Fonts")),
     // The system TEMP of `Session Manager\Environment` (ADR 0066).
     drive("Windows\\Temp", None),
+    // The system and the elevated administrators' temporary directory (Google's installers unpack
+    // their updater there; its descriptor: `poly_nt::io::SYSTEM_TEMP_SDDL`).
+    drive("Windows\\SystemTemp", None),
     // Side-by-side assemblies (ADR 0055: the VC++ 2005/2008 runtimes).
     drive("Windows\\WinSxS", None),
     // Programs.

@@ -373,6 +373,11 @@ unsafe fn create(
         Ok(i) => i,
         Err(e) => return fail(e, FALSE),
     };
+    // User Account Control (ADR 0222): an image that requests administrator rights is not
+    // started for a token that is not elevated; only ShellExecuteEx asks the user.
+    if crate::elevate::elevation_required(&image, r.token) {
+        return fail(poly_kernelbase::elevation::ERROR_ELEVATION_REQUIRED, FALSE);
+    }
     // Learn: without a command line, the application name is it.
     let line: Vec<u16> = cmd.or(app).unwrap_or(&[]).to_vec();
     // SAFETY: the caller's block.

@@ -397,6 +397,9 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
     const PROCESS_MITIGATION_POLICY: u64 = 52;
     /// `ProcessPriorityClass`: a `PROCESS_PRIORITY_CLASS` (foreground flag, class 1 to 6).
     const PROCESS_PRIORITY_CLASS: u64 = 18;
+    if class == u64::from(PROCESS_POLY_WORKING_SET) {
+        return set_working_set(k, h, info, length);
+    }
     if class == PROCESS_PRIORITY_CLASS {
         let pid = process_of(k, Handle(h), PROCESS_SET_INFORMATION)?;
         if length != 2 {
@@ -452,6 +455,39 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
         poly_kernelbase::mitigation::SetError::InvalidParameter => STATUS_INVALID_PARAMETER,
         poly_kernelbase::mitigation::SetError::NotSupported => STATUS_NOT_SUPPORTED,
         poly_kernelbase::mitigation::SetError::AccessDenied => STATUS_ACCESS_DENIED,
+    })
+}
+
+/// Poly's own process information class for the working set limits (`kernelbase`'s
+/// `SetProcessWorkingSetSize(Ex)` and `GetProcessWorkingSetSize(Ex)`, `poly_kernelbase::workingset`):
+/// set takes a request of four `u64`s and needs `PROCESS_SET_QUOTA`; query answers three `u64`s
+/// (minimum, maximum, flags) to a handle with a query right. The same layout for 32- and 64-bit
+/// callers, so the WOW64 thunk passes it through.
+pub const PROCESS_POLY_WORKING_SET: u32 = 0x1002;
+/// `PROCESS_SET_QUOTA` (`winnt.h`).
+const PROCESS_SET_QUOTA: u32 = 0x0100;
+
+/// Set a process's working set limits (the request `kernelbase` checked): a limit above the
+/// machine's memory is `STATUS_INSUFFICIENT_RESOURCES` (`ERROR_NO_SYSTEM_RESOURCES`, the sheet of
+/// `SetProcessWorkingSetSize`) and changes nothing; the trim changes nothing Poly keeps.
+fn set_working_set<K: NtKernel>(k: &mut K, h: u64, info: u64, length: u64) -> Result<NtStatus> {
+    let pid = process_of(k, Handle(h), PROCESS_SET_QUOTA)?;
+    if length != 32 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mut b = [0u8; 32];
+    abi::read(k, info, &mut b)?;
+    let (request, flags) = poly_kernelbase::workingset::request_from_bytes(&b).ok_or(STATUS_INVALID_PARAMETER)?;
+    // Without a count of the machine's memory, 64 GiB.
+    let limit = k.physical_memory().map_or(64 << 30, |(total, _)| total);
+    k.with_state(|sys, _, _| {
+        let ws = sys.working_sets.entry(pid).or_default();
+        let mut next = *ws;
+        if !next.apply(request, flags, limit) {
+            return Err(STATUS_INSUFFICIENT_RESOURCES);
+        }
+        *ws = next;
+        Ok(STATUS_SUCCESS)
     })
 }
 
@@ -688,6 +724,13 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
             }
             let c = k.memory_counters(pid).unwrap_or_default();
             reply(k, buf, length, ret, &c.bytes()[..length as usize])
+        }
+        PROCESS_POLY_WORKING_SET => {
+            if length != 24 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let ws = k.with_state(|sys, _, _| sys.working_sets.get(&pid).copied().unwrap_or_default());
+            reply(k, buf, length, ret, &ws.to_bytes())
         }
         // QuotaLimits has a length Poly's callers do not use.
         1 => Err(STATUS_INFO_LENGTH_MISMATCH),

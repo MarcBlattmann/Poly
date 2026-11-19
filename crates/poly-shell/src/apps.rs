@@ -248,13 +248,19 @@ pub const INSTALLER_ID: &str = "poly-installer.desktop";
 /// The MIME types of the package files the installer opens (the shared
 /// MIME database's names): Debian packages, which it installs, and the
 /// formats it knows by sight and says so about (RPM, Flatpak references,
-/// snaps; ADR 0132).
-pub const PACKAGE_MIME_TYPES: [&str; 5] = [
+/// snaps; ADR 0132); Windows programs, which it runs or installs, under the
+/// three names the shared MIME database, `file` and older databases give
+/// them, and Windows Installer packages (ADR 0230).
+pub const PACKAGE_MIME_TYPES: [&str; 9] = [
     "application/vnd.debian.binary-package",
     "application/vnd.appimage",
     "application/x-rpm",
     "application/vnd.flatpak.ref",
     "application/vnd.snap",
+    "application/x-msdownload",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-ms-dos-executable",
+    "application/x-msi",
 ];
 
 /// The installer's desktop file: it opens the package types and is not

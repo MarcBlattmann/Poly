@@ -450,14 +450,47 @@ pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut
             S_OK
         }
         None => {
+            // The sheet: type -1 (`APTTYPE_CURRENT`) and qualifier 0.
             // SAFETY: the caller's out parameters.
             unsafe {
-                *kind = 0;
+                *kind = -1;
                 *qualifier = APTTYPEQUALIFIER_NONE;
             }
             CO_E_NOTINITIALIZED
         }
     }
+}
+
+/// The cookies `CoIncrementMTAUsage` hands out: distinct, never NULL.
+static MTA_COOKIES: AtomicUsize = AtomicUsize::new(0x4D54_0000);
+
+/// `CoIncrementMTAUsage(pCookie)`: keeps the process's multithreaded apartment alive without a
+/// thread in it, so threads that never initialised COM are in the implicit MTA (`APTTYPE_MTA`
+/// with `APTTYPEQUALIFIER_IMPLICIT_MTA`) while any cookie is held; a thread with its own apartment
+/// keeps it
+/// (`specs/windows/ole32.dll/CoIncrementMTAUsage.yaml`). A NULL cookie pointer is `E_INVALIDARG`
+/// (Windows raises).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoIncrementMTAUsage(cookie: *mut usize) -> Hresult {
+    if cookie.is_null() {
+        return E_INVALIDARG;
+    }
+    MTA_THREADS.enter();
+    let c = MTA_COOKIES.fetch_add(0x10, Ordering::AcqRel) + 0x10;
+    // SAFETY: the caller's CO_MTA_USAGE_COOKIE.
+    unsafe { cookie.write(c) };
+    S_OK
+}
+
+/// `CoDecrementMTAUsage(Cookie)`: gives back what `CoIncrementMTAUsage` took; when nothing else
+/// keeps the MTA, threads without an apartment are no longer in it.
+#[unsafe(no_mangle)]
+pub extern "system" fn CoDecrementMTAUsage(cookie: usize) -> Hresult {
+    if cookie == 0 {
+        return E_INVALIDARG;
+    }
+    MTA_THREADS.leave();
+    S_OK
 }
 
 #[unsafe(no_mangle)]

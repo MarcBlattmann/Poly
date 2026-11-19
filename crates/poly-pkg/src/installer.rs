@@ -11,11 +11,19 @@
 //! then `apt-get install` of the file, with the progress `apt` reports),
 //! then [`Phase::Done`] or [`Phase::Failed`]. A file that is no package Poly installs stays in
 //! [`Phase::Refused`] with the reason.
+//!
+//! A Windows program (ADR 0230) is shown from its version resource; an
+//! installer's **Install** runs it on the NT personality with its own
+//! windows ([`Step::Program`]: the program waits for it and every process it
+//! started), then the launcher entries are the shortcuts it made. A plain
+//! program gets **Run**. Uninstalling a Windows app runs its own uninstaller
+//! the same way.
 
 use crate::appimage::Image;
 use crate::apt::{self, Progress};
 use crate::deb::{self, Info};
 use crate::format::{self, Format};
+use crate::windows::program::Program;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -45,6 +53,9 @@ pub enum Step {
     /// Copy an AppImage into the user's folder and add its launcher entry
     /// (the program does it).
     Place,
+    /// A Windows installer or uninstaller runs, with its own windows; the
+    /// program waits for it and what it started (ADR 0230).
+    Program,
 }
 
 /// What the window is for.
@@ -56,6 +67,8 @@ pub enum Task {
     Uninstall,
     /// Install an AppImage, or run it without (ADR 0180).
     Image,
+    /// Run a Windows installer, or a Windows program (ADR 0230).
+    Windows,
 }
 
 /// Where the installer is.
@@ -84,8 +97,12 @@ pub enum Action {
     Open,
     /// Remove the app (ADR 0180).
     Uninstall,
-    /// Start the AppImage from where it is, without installing it.
+    /// Start the AppImage or Windows program from where it is, without
+    /// installing it.
     Run,
+    /// Stop waiting for the programs a Windows installer left running, and
+    /// pick up what it installed.
+    Finish,
 }
 
 /// What an uninstall removes (ADR 0180).
@@ -96,6 +113,9 @@ pub enum Removal {
     /// An AppImage Poly installed: its slug ([`crate::appimage::slug`]) and
     /// the size of its file in bytes.
     Image { slug: String, size: u64 },
+    /// A Windows app (ADR 0230): its uninstaller's command (the program a
+    /// path of Poly's file system), and who made the app.
+    Windows { command: Vec<String>, publisher: String, version: String },
 }
 
 /// What the program found out about an app to uninstall.
@@ -124,6 +144,11 @@ pub struct Installer {
     pub removal: Option<Removal>,
     /// For an AppImage: what was read from it.
     pub image: Option<Image>,
+    /// For a Windows program: what was read from it (ADR 0230).
+    pub program: Option<Program>,
+    /// While a Windows program runs: `Some(n)` once it has ended and `n`
+    /// programs it started still run.
+    pub waiting: Option<usize>,
     /// What the package says about itself, if it could be read.
     pub package: Option<Info>,
     /// The version of this package installed already, if any.
@@ -164,6 +189,8 @@ impl Installer {
             title: None,
             removal: None,
             image: None,
+            program: None,
+            waiting: None,
             package: None,
             installed: None,
             phase: Phase::Ready,
@@ -223,6 +250,35 @@ impl Installer {
         it
     }
 
+    /// The window for the Windows program at `path` (ADR 0230): what was
+    /// read of it, or why it cannot be run. An installer gets **Install**, a
+    /// plain program **Run**.
+    pub fn for_windows(path: &str, program: Result<Program, crate::Error>) -> Installer {
+        let mut it = Installer::new(path, Err("nothing to read"), None);
+        it.task = Task::Windows;
+        it.phase = Phase::Ready;
+        it.have_lists = true;
+        match program {
+            Ok(program) => it.program = Some(program),
+            Err(e) => it.phase = Phase::Refused(e.describe().to_string()),
+        }
+        it
+    }
+
+    /// Whether the Windows program installs something (**Install**), not
+    /// just runs (**Run**).
+    pub fn windows_installer(&self) -> bool {
+        self.program.as_ref().is_some_and(|p| p.installer)
+    }
+
+    /// While a Windows program runs: it ended and `others` programs it
+    /// started still run (`None`: it still runs).
+    pub fn waiting_for(&mut self, others: Option<usize>) {
+        if self.phase == Phase::Working(Step::Program) {
+            self.waiting = others;
+        }
+    }
+
     /// The window that uninstalls the app with desktop file ID `id`: what
     /// the program found out about it (`Err`: why it cannot be removed).
     pub fn for_removal(id: &str, plan: Result<Plan, String>) -> Installer {
@@ -264,11 +320,17 @@ impl Installer {
         if let Some(image) = &self.image {
             return &image.name;
         }
+        if let Some(program) = &self.program {
+            return &program.name;
+        }
         self.package.as_ref().map_or_else(|| file_name(&self.path), |p| p.name.as_str())
     }
 
     /// The line under the heading: the package's own summary.
     pub fn summary(&self) -> &str {
+        if let Some(p) = &self.program {
+            return if !p.description.is_empty() && p.description != p.name { &p.description } else { &p.company };
+        }
         match &self.image {
             Some(image) => image.summary.as_str(),
             None => self.package.as_ref().map_or("", |p| p.summary.as_str()),
@@ -295,6 +357,27 @@ impl Installer {
             }
             out.push(("Size", deb::human_kib(image.size.div_ceil(1024))));
             out.push(("Kind", alloc::format!("Linux app, {}", Format::AppImage.name())));
+            return out;
+        }
+        if let Some(p) = &self.program {
+            let mut out = Vec::new();
+            if !p.version.is_empty() {
+                out.push(("Version", p.version.clone()));
+            }
+            out.push(("Size", deb::human_kib(p.size.div_ceil(1024))));
+            out.push(("Publisher", p.publisher_text()));
+            out.push(("Kind", p.kind()));
+            return out;
+        }
+        if let Some(Removal::Windows { publisher, version, .. }) = &self.removal {
+            let mut out = Vec::new();
+            if !version.is_empty() {
+                out.push(("Version", version.clone()));
+            }
+            if !publisher.is_empty() {
+                out.push(("Publisher", publisher.clone()));
+            }
+            out.push(("Kind", "Windows app".to_string()));
             return out;
         }
         if let Some(Removal::Image { size, .. }) = &self.removal {
@@ -334,9 +417,21 @@ impl Installer {
                 "Install copies the app to your user folder and adds it to the launcher and to Applications. Run starts it from where it is."
                     .to_string()
             }
+            Phase::Ready if self.windows_installer() => {
+                "Install runs this installer as on Windows. Its own windows ask what they need; when it is done, what it installed is in the launcher and in Applications."
+                    .to_string()
+            }
+            Phase::Ready if self.program.is_some() => "Run starts this Windows program. Nothing is installed.".to_string(),
             Phase::Ready => {
                 "Installing adds the app and what it needs from Debian's archive to this computer.".to_string()
             }
+            Phase::Working(Step::Program) => match self.waiting {
+                None => "The installer is running. Follow its own windows; Poly waits until it is done.".to_string(),
+                Some(n) => alloc::format!(
+                    "The installer has ended. Waiting for {n} program{} it started\u{2026}",
+                    if n == 1 { "" } else { "s" }
+                ),
+            },
             Phase::Working(Step::Configure) if self.activity.is_empty() => {
                 "Preparing this computer for Linux apps (once)\u{2026}".to_string()
             }
@@ -348,6 +443,9 @@ impl Installer {
             Phase::Working(_) => self.activity.clone(),
             Phase::Done => match self.apps.first() {
                 Some((_, name)) => alloc::format!("{name} is installed. It is in the launcher and in Applications."),
+                None if self.program.is_some() => {
+                    "The installer has ended. It added no app to the launcher.".to_string()
+                }
                 None => alloc::format!("{} is installed.", self.name()),
             },
         }
@@ -358,6 +456,9 @@ impl Installer {
         match &self.phase {
             Phase::Refused(why) | Phase::Failed(why) => why.clone(),
             Phase::Ready => match &self.removal {
+                Some(Removal::Windows { .. }) => alloc::format!(
+                    "Uninstalling runs {app}'s own uninstaller, as on Windows. Its windows ask what they need; then {app} is gone from the launcher."
+                ),
                 Some(Removal::Image { .. }) => alloc::format!(
                     "Uninstalling removes {app} and its files from your user folder. Your own files stay."
                 ),
@@ -370,6 +471,10 @@ impl Installer {
             }
             Phase::Working(Step::Autoremove) => self.activity.clone(),
             Phase::Working(Step::Remove) if !self.activity.is_empty() => self.activity.clone(),
+            Phase::Working(Step::Program) => match self.waiting {
+                None => alloc::format!("{app}'s uninstaller is running. Follow its own windows."),
+                Some(_) => alloc::format!("{app}'s uninstaller has ended. Waiting for what it started\u{2026}"),
+            },
             Phase::Working(_) => alloc::format!("Removing {app}\u{2026}"),
             Phase::Done => alloc::format!("{app} is uninstalled. It is gone from the launcher and from Applications."),
         }
@@ -380,6 +485,9 @@ impl Installer {
         if self.uninstalling() {
             return match &self.phase {
                 Phase::Ready => alloc::vec![("Cancel", Action::Close), ("Uninstall", Action::Uninstall)],
+                Phase::Working(Step::Program) if self.waiting.is_some() => {
+                    alloc::vec![("Stop waiting", Action::Finish)]
+                }
                 Phase::Working(_) => Vec::new(),
                 _ => alloc::vec![("Close", Action::Close)],
             };
@@ -389,6 +497,11 @@ impl Installer {
             Phase::Ready if self.image.is_some() => {
                 alloc::vec![("Cancel", Action::Close), ("Run", Action::Run), ("Install", Action::Install)]
             }
+            Phase::Ready if self.windows_installer() => {
+                alloc::vec![("Cancel", Action::Close), ("Install", Action::Install)]
+            }
+            Phase::Ready if self.program.is_some() => alloc::vec![("Cancel", Action::Close), ("Run", Action::Run)],
+            Phase::Working(Step::Program) if self.waiting.is_some() => alloc::vec![("Stop waiting", Action::Finish)],
             Phase::Ready => {
                 let same = self.package.as_ref().is_some_and(|p| self.installed.as_deref() == Some(p.version.as_str()));
                 alloc::vec![
@@ -416,7 +529,7 @@ impl Installer {
             Step::Remove => apt::remove(self.package.as_ref().map_or("", |p| p.name.as_str()), self.status_fd),
             Step::Autoremove => apt::autoremove(self.status_fd),
             // The program does it.
-            Step::Delete | Step::Place => Vec::new(),
+            Step::Delete | Step::Place | Step::Program => Vec::new(),
         }
     }
 
@@ -424,6 +537,7 @@ impl Installer {
     fn next_step(&self, done: Option<Step>) -> Option<Step> {
         let all: Vec<(Step, bool)> = match &self.removal {
             None if self.image.is_some() => alloc::vec![(Step::Place, true)],
+            None if self.program.is_some() => alloc::vec![(Step::Program, self.windows_installer())],
             None => alloc::vec![
                 (Step::Configure, self.unconfigured > 0),
                 (Step::Update, !self.have_lists),
@@ -431,6 +545,7 @@ impl Installer {
             ],
             Some(Removal::Package) => alloc::vec![(Step::Remove, true), (Step::Autoremove, true)],
             Some(Removal::Image { .. }) => alloc::vec![(Step::Delete, true)],
+            Some(Removal::Windows { .. }) => alloc::vec![(Step::Program, true)],
         };
         let from = done.map_or(0, |d| all.iter().position(|(s, _)| *s == d).map_or(all.len(), |i| i + 1));
         all[from..].iter().find(|(_, needed)| *needed).map(|(s, _)| *s)
@@ -439,6 +554,7 @@ impl Installer {
     fn begin(&mut self, step: Step) -> Vec<String> {
         self.phase = Phase::Working(step);
         self.percent = None;
+        self.waiting = None;
         self.activity.clear();
         self.command(step)
     }
@@ -446,8 +562,10 @@ impl Installer {
     /// **Install** was clicked: the first command to run, if the package
     /// can be installed.
     pub fn start(&mut self) -> Option<Vec<String>> {
-        let known =
-            self.package.is_some() || self.image.is_some() || matches!(self.removal, Some(Removal::Image { .. }));
+        let known = self.package.is_some()
+            || self.image.is_some()
+            || self.windows_installer()
+            || matches!(self.removal, Some(Removal::Image { .. } | Removal::Windows { .. }));
         if self.phase != Phase::Ready || !known {
             return None;
         }
@@ -507,6 +625,10 @@ impl Installer {
     /// **Open** starts.
     pub fn finished(&mut self, ok: bool, apps: impl FnOnce(&str) -> Vec<(String, String)>) -> Option<Vec<String>> {
         let Phase::Working(step) = self.phase else { return None };
+        self.waiting = None;
+        if step == Step::Program {
+            return self.program_ended(ok, apps);
+        }
         if !ok {
             let what = match step {
                 Step::Configure => "This computer could not be prepared for Linux apps",
@@ -515,7 +637,7 @@ impl Installer {
                 Step::Remove => "The app could not be uninstalled",
                 Step::Autoremove => "What only the app needed could not be removed",
                 Step::Delete => "The app's files could not be removed",
-                Step::Place => "The app could not be installed",
+                Step::Place | Step::Program => "The app could not be installed",
             };
             let lines: Vec<&str> = self.log.iter().map(String::as_str).collect();
             let why = match (step, apt::dpkg_error(&lines), apt::error_line(lines.iter().copied())) {
@@ -551,7 +673,7 @@ impl Installer {
                 self.phase = Phase::Done;
                 None
             }
-            Step::Install | Step::Place => {
+            Step::Install | Step::Place | Step::Program => {
                 let name = self.package.as_ref().map(|p| p.name.clone()).unwrap_or_default();
                 self.apps = apps(&name);
                 self.installed = self.package.as_ref().map(|p| p.version.clone());
@@ -560,6 +682,39 @@ impl Installer {
                 None
             }
         }
+    }
+}
+
+impl Installer {
+    /// A Windows installer or uninstaller and what it started have ended
+    /// (`ok`: with exit code 0). `apps` gives, for an installation, the
+    /// launcher entries made from its shortcuts; for an uninstall, the
+    /// app's entries that are still there.
+    fn program_ended(&mut self, ok: bool, apps: impl FnOnce(&str) -> Vec<(String, String)>) -> Option<Vec<String>> {
+        let found = apps(self.name());
+        self.percent = Some(100);
+        if self.uninstalling() {
+            if found.is_empty() {
+                self.phase = Phase::Done;
+            } else {
+                self.phase = Phase::Failed(alloc::format!(
+                    "The uninstaller has ended, but {} is still installed{}.",
+                    self.name(),
+                    if ok { "" } else { " (it reported an error)" }
+                ));
+            }
+            return None;
+        }
+        if found.is_empty() && !ok {
+            self.phase = Phase::Failed(
+                "The installer ended with an error and installed no app. Its own windows said why.".to_string(),
+            );
+            return None;
+        }
+        self.apps = found;
+        self.installed = self.program.as_ref().map(|p| p.version.clone());
+        self.phase = Phase::Done;
+        None
     }
 }
 
@@ -582,6 +737,7 @@ pub fn file_name(path: &str) -> &str {
 mod tests {
     use super::*;
     use crate::ar;
+    use crate::windows::program::Program;
 
     const CONTROL: &[u8] = b"Package: galculator\nVersion: 2.1.4-2\nArchitecture: amd64\n\
 Maintainer: Debian QA Group <packages@qa.debian.org>\nInstalled-Size: 1297\n\
@@ -951,5 +1107,145 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
         it.output("   \n");
         assert_eq!(it.log.len(), LOG_LINES);
         assert_eq!(it.log[0], "line 5");
+    }
+    fn setup_program(installer: bool) -> Program {
+        Program {
+            name: "Example Browser".into(),
+            description: "Example Browser Installer".into(),
+            company: "Example Corp".into(),
+            version: "157.0.8103.38".into(),
+            size: 13 * 1024 * 1024,
+            bits: 32,
+            gui: true,
+            installer,
+            signed: true,
+            publisher: None,
+            icon: None,
+        }
+    }
+
+    #[test]
+    fn a_windows_installer_runs_waits_and_picks_up_its_shortcuts() {
+        let mut it = Installer::for_windows("/root/Downloads/ExampleSetup.exe", Ok(setup_program(true)));
+        assert_eq!(it.task, Task::Windows);
+        assert_eq!((it.name(), it.summary()), ("Example Browser", "Example Browser Installer"));
+        assert_eq!(
+            it.facts(),
+            [
+                ("Version", "157.0.8103.38".to_string()),
+                ("Size", "13.0 MB".to_string()),
+                ("Publisher", "Unknown publisher (signed)".to_string()),
+                ("Kind", "Windows installer (32-bit)".to_string()),
+            ]
+        );
+        assert_eq!(it.buttons(), [("Cancel", Action::Close), ("Install", Action::Install)]);
+        assert!(it.message().starts_with("Install runs this installer as on Windows."));
+        // Install: the program runs it (no command line of the model's).
+        assert_eq!(it.start(), Some(Vec::new()));
+        assert_eq!(it.phase, Phase::Working(Step::Program));
+        assert!(it.busy() && it.buttons().is_empty());
+        assert!(it.message().starts_with("The installer is running."));
+        // It ended; two programs it started still run.
+        it.waiting_for(Some(2));
+        assert_eq!(it.message(), "The installer has ended. Waiting for 2 programs it started\u{2026}");
+        assert_eq!(it.buttons(), [("Stop waiting", Action::Finish)]);
+        it.waiting_for(Some(1));
+        assert!(it.message().contains("1 program it started"));
+        // All ended: its shortcuts are the launcher's entries.
+        let id = "poly-windows-example-browser.desktop".to_string();
+        assert_eq!(
+            it.finished(true, |name| {
+                assert_eq!(name, "Example Browser");
+                alloc::vec![(id.clone(), "Example Browser".to_string())]
+            }),
+            None
+        );
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.waiting, None);
+        assert_eq!(it.message(), "Example Browser is installed. It is in the launcher and in Applications.");
+        assert_eq!(it.buttons(), [("Close", Action::Close), ("Open", Action::Open)]);
+        assert_eq!(it.installed.as_deref(), Some("157.0.8103.38"));
+    }
+
+    #[test]
+    fn an_installer_that_adds_nothing_or_fails() {
+        // A non-zero exit with shortcuts made still installed them.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.finished(false, |_| alloc::vec![("poly-windows-x.desktop".to_string(), "X".to_string())]);
+        assert_eq!(it.phase, Phase::Done);
+        // Exit 0 and nothing made: done, said so.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.finished(true, |_| Vec::new());
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.message(), "The installer has ended. It added no app to the launcher.");
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        // An error and nothing made (the user cancelled it): failed.
+        let mut it = Installer::for_windows("/x/Setup.exe", Ok(setup_program(true)));
+        it.start();
+        it.finished(false, |_| Vec::new());
+        assert!(matches!(&it.phase, Phase::Failed(why) if why.contains("installed no app")));
+    }
+
+    #[test]
+    fn a_plain_windows_program_is_only_run() {
+        let mut p = setup_program(false);
+        p.description = p.name.clone();
+        let mut it = Installer::for_windows("/x/tool.exe", Ok(p));
+        assert_eq!(it.summary(), "Example Corp");
+        assert_eq!(it.buttons(), [("Cancel", Action::Close), ("Run", Action::Run)]);
+        assert_eq!(it.message(), "Run starts this Windows program. Nothing is installed.");
+        assert_eq!(it.facts()[3], ("Kind", "Windows program (32-bit)".to_string()));
+        // Install is not offered and does nothing.
+        assert_eq!(it.start(), None);
+        // A file that is not a program.
+        let it = Installer::for_windows("/x/a.dll", Err(crate::Error::Library));
+        assert!(matches!(&it.phase, Phase::Refused(why) if why.contains("library")));
+        assert_eq!(it.buttons(), [("Close", Action::Close)]);
+        assert_eq!(it.name(), "a.dll");
+    }
+
+    #[test]
+    fn a_windows_app_is_uninstalled_by_its_uninstaller() {
+        let plan = Plan {
+            app: "Example Browser".into(),
+            removal: Removal::Windows {
+                command: alloc::vec!["/nt/c/Program Files/Example/setup.exe".into(), "--uninstall".into()],
+                publisher: "Example Corp".into(),
+                version: "1.2".into(),
+            },
+            package: None,
+            apps: alloc::vec![("poly-windows-example-browser.desktop".to_string(), "Example Browser".to_string())],
+        };
+        let mut it = Installer::for_removal("poly-windows-example-browser.desktop", Ok(plan.clone()));
+        assert_eq!(
+            it.facts(),
+            [
+                ("Version", "1.2".to_string()),
+                ("Publisher", "Example Corp".to_string()),
+                ("Kind", "Windows app".to_string())
+            ]
+        );
+        assert!(it.message().starts_with("Uninstalling runs Example Browser's own uninstaller"));
+        assert_eq!(it.start(), Some(Vec::new()));
+        assert_eq!(it.phase, Phase::Working(Step::Program));
+        assert_eq!(it.message(), "Example Browser's uninstaller is running. Follow its own windows.");
+        it.waiting_for(Some(1));
+        assert_eq!(it.buttons(), [("Stop waiting", Action::Finish)]);
+        // Gone from the disk: done.
+        it.finished(true, |_| Vec::new());
+        assert_eq!(it.phase, Phase::Done);
+        assert!(it.message().contains("is uninstalled"));
+        // Still there (the user said no in the uninstaller): failed.
+        let mut it = Installer::for_removal("poly-windows-example-browser.desktop", Ok(plan));
+        it.start();
+        it.finished(false, |_| alloc::vec![("poly-windows-example-browser.desktop".into(), "Example Browser".into())]);
+        assert_eq!(
+            it.phase,
+            Phase::Failed(
+                "The uninstaller has ended, but Example Browser is still installed (it reported an error).".into()
+            )
+        );
     }
 }

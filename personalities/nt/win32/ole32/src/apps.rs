@@ -13,7 +13,6 @@ poly_win32_rt::fail_exports!(
         CoGetContextToken,
         CoGetDefaultContext,
         CoGetObject,
-        CoIncrementMTAUsage,
         CoLockObjectExternal,
         CoRegisterChannelHook,
         CoWaitForMultipleHandles,

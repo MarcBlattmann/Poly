@@ -179,7 +179,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] `.rpm` packages install with their dependencies (`dnf` and `rpm` in a shared base root) (ADR 0132)
 - [ ] Flatpak: Flathub apps install and run sandboxed (`flatpak` and `bubblewrap` unchanged; the desktop portals answered by Poly's shell) (ADR 0132)
 - [x] ⚖️ Decided (owner, ADR 0132): no Snap support; apps shipped as snaps are installed from Flathub or their `.deb`/`.rpm` instead
-- [ ] Windows installers (`.exe`, `.msi`), and later macOS `.dmg` and `.pkg`, go through the same installer (ADR 0132)
+- [ ] Windows installers (`.exe`, `.msi`), and later macOS `.dmg` and `.pkg`, go through the same installer (ADR 0132; ADR 0230: a `.exe` is shown from its PE resources, an installer runs with its own windows and is waited for, its shortcuts become launcher entries and its `Uninstall` key the uninstall in Applications, a plain program runs; `.msi` recognised, not installed yet)
 - [ ] Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)
 - [ ] One user home visible as `~`, `C:\Users\<name>` and `/Users/<name>`
 

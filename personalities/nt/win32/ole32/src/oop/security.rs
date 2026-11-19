@@ -742,17 +742,18 @@ unsafe extern "system" fn iss_is_impersonating(this: *mut ServerSecurity) -> i32
 
 // ----- the exports ------------------------------------------------------------------------
 
-/// `CoGetCallContext` (sheet `CoGetCallContext.InCall`): the call's `IServerSecurity` for
-/// `IID_IServerSecurity` or `IID_IUnknown` (the same object for the whole call), `E_NOINTERFACE`
-/// for anything else, `RPC_E_CALL_COMPLETE` on a thread that serves no call.
+/// `CoGetCallContext` (sheets `CoGetCallContext.InCall`, `CoGetCallContext`): the call's
+/// `IServerSecurity` for `IID_IServerSecurity` or `IID_IUnknown` (the same object for the whole
+/// call), `E_NOINTERFACE` for anything else; on a thread that serves no call
+/// `RPC_E_CALL_COMPLETE` for every interface id, with or without COM, the output left as it was.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn CoGetCallContext(iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    let Some(call) = current() else { return RPC_E_CALL_COMPLETE };
     if out.is_null() || iid.is_null() {
         return E_INVALIDARG;
     }
     // SAFETY: the caller's out parameter.
     unsafe { *out = core::ptr::null_mut() };
-    let Some(call) = current() else { return RPC_E_CALL_COMPLETE };
     // SAFETY: the caller's IID.
     let g = unsafe { *iid };
     if g != IID_ISERVER_SECURITY && g != crate::IID_IUNKNOWN {
