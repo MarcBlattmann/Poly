@@ -23,7 +23,7 @@ const STG_E_WRITEFAULT: Hresult = 0x8003_001D_u32 as i32;
 
 #[repr(C)]
 pub(crate) struct TypeLib {
-    tl: *const Vtbl<13>,
+    tl: *const Vtbl<17>,
     ctl: *const Vtbl<17>,
     refs: AtomicU32,
     pub(crate) lib: Locked<Library>,
@@ -94,6 +94,32 @@ fn live_by_guid(guid: &Guid, major: u16, minor: u16) -> Option<*mut TypeLib> {
     })
 }
 
+/// A live library with this id (any version, the highest), one reference added.
+fn live_any(guid: &Guid) -> Option<*mut TypeLib> {
+    LIBS.with(|l| {
+        let mut best: Option<(*mut TypeLib, (u16, u16))> = None;
+        for &(_, p) in l.iter() {
+            let t = p as *mut TypeLib;
+            // SAFETY: as above.
+            unsafe {
+                if (*t).refs.load(Ordering::Acquire) == 0 || (*t).creating {
+                    continue;
+                }
+                let v = (*t).lib.with(|x| (x.guid == *guid).then_some((x.major, x.minor)));
+                if let Some(v) = v {
+                    if best.is_none_or(|b| v > b.1) {
+                        best = Some((t, v));
+                    }
+                }
+            }
+        }
+        let (t, _) = best?;
+        // SAFETY: as above.
+        unsafe { (*t).refs.fetch_add(1, Ordering::AcqRel) };
+        Some(t)
+    })
+}
+
 /// Whether `p` is the `ITypeLib` of one of our blocks.
 pub(crate) fn as_ours(p: *mut c_void) -> Option<*mut TypeLib> {
     if p.is_null() {
@@ -160,7 +186,7 @@ unsafe fn lib_qi(t: *mut TypeLib, iid: *const Guid, out: *mut *mut c_void) -> Hr
             return E_INVALIDARG;
         }
         let g = *iid;
-        let p = if g == IID_IUNKNOWN || g == IID_ITYPELIB {
+        let p = if g == IID_IUNKNOWN || g == IID_ITYPELIB || g == IID_ITYPELIB2 {
             t as usize
         } else if (*t).creating && (g == IID_ICREATETYPELIB || g == IID_ICREATETYPELIB2) {
             t as usize + PTR
@@ -261,8 +287,17 @@ unsafe extern "system" fn tl_get_type_comp(_this: *mut c_void, out: *mut *mut c_
     E_NOTIMPL
 }
 /// Write the four documentation outputs.
+/// The help file of a library as `GetDocumentation` reports it.
+fn help_file_of(t: *mut TypeLib, lib: &Library) -> String {
+    // SAFETY: a live block.
+    let (path, loaded) = unsafe { ((*t).path.clone(), (*t).cache_key.is_some()) };
+    let dir = if loaded { poly_com::typelib::reg::directory_of(&path) } else { "" };
+    super::ext::help_file(dir, &lib.help_file)
+}
+
 fn put_doc(name: *mut *mut u16, doc: *mut *mut u16, ctx: *mut u32, file: *mut *mut u16, d: (&str, &str, u32, &str)) {
-    put(name, bstr(d.0));
+    // A library or type without a name reports none.
+    put(name, if d.0.is_empty() { core::ptr::null_mut() } else { bstr(d.0) });
     put(doc, if d.1.is_empty() { core::ptr::null_mut() } else { bstr(d.1) });
     put(ctx, d.2);
     put(file, if d.3.is_empty() { core::ptr::null_mut() } else { bstr(d.3) });
@@ -276,13 +311,14 @@ unsafe extern "system" fn tl_get_documentation(
     file: *mut *mut u16,
 ) -> Hresult {
     let lib = model(lib_of(this));
+    let hf = help_file_of(lib_of(this), &lib);
     if index == -1 {
-        put_doc(name, doc, ctx, file, (&lib.name, &lib.doc, lib.help_context, &lib.help_file));
+        put_doc(name, doc, ctx, file, (&lib.name, &lib.doc, lib.help_context, &hf));
         return S_OK;
     }
     match lib.types.get(index as usize) {
         Some(ty) if index >= 0 => {
-            put_doc(name, doc, ctx, file, (&ty.name, &ty.doc, ty.help_context, &lib.help_file));
+            put_doc(name, doc, ctx, file, (&ty.name, &ty.doc, ty.help_context, &hf));
             S_OK
         }
         _ => TYPE_E_ELEMENTNOTFOUND,
@@ -344,7 +380,7 @@ unsafe extern "system" fn tl_release_lib_attr(_this: *mut c_void, a: *mut CLibAt
     free_lib_attr(a);
 }
 
-static TL_VTBL: Vtbl<13> = Vtbl([
+static TL_VTBL: Vtbl<17> = Vtbl([
     tl_qi as *const (),
     tl_add_ref as *const (),
     tl_release as *const (),
@@ -358,6 +394,10 @@ static TL_VTBL: Vtbl<13> = Vtbl([
     tl_is_name as *const (),
     tl_find_name as *const (),
     tl_release_lib_attr as *const (),
+    super::ext::tl2_get_cust_data as *const (),
+    super::ext::tl2_get_lib_statistics as *const (),
+    super::ext::tl2_get_documentation2 as *const (),
+    super::ext::tl2_get_all_cust_data as *const (),
 ]);
 
 // ICreateTypeLib2
@@ -505,7 +545,7 @@ static CTL_VTBL: Vtbl<17> = Vtbl([
 
 #[repr(C)]
 pub(crate) struct TypeInfo {
-    ti: *const Vtbl<22>,
+    ti: *const Vtbl<37>,
     cti: *const Vtbl<26>,
     refs: AtomicU32,
     pub(crate) lib: *mut TypeLib,
@@ -547,7 +587,7 @@ unsafe fn ti_qi(t: *mut TypeInfo, iid: *const Guid, out: *mut *mut c_void) -> Hr
             return E_INVALIDARG;
         }
         let g = *iid;
-        let p = if g == IID_IUNKNOWN || g == IID_ITYPEINFO {
+        let p = if g == IID_IUNKNOWN || g == IID_ITYPEINFO || g == IID_ITYPEINFO2 {
             t as usize
         } else if g == IID_IMARSHAL && (*(*t).lib).copy.load(Ordering::Acquire) {
             *out = (&raw const COPY_MARSHAL) as *mut c_void;
@@ -741,17 +781,19 @@ unsafe extern "system" fn ti_get_documentation(
     // SAFETY: a live block.
     let (lib, i, form) = unsafe { (model((*t).lib), (*t).index, (*t).form) };
     let Some(ty) = lib.types.get(i) else { return TYPE_E_ELEMENTNOTFOUND };
+    // SAFETY: a live block.
+    let hf = help_file_of(unsafe { (*t).lib }, &lib);
     if memid == MEMBERID_NIL {
-        put_doc(name, doc, ctx, file, (&ty.name, &ty.doc, ty.help_context, &lib.help_file));
+        put_doc(name, doc, ctx, file, (&ty.name, &ty.doc, ty.help_context, &hf));
         return S_OK;
     }
     let Some(v) = view(&lib, i, form) else { return TYPE_E_ELEMENTNOTFOUND };
     if let Some(f) = v.funcs.iter().find(|f| f.memid == memid) {
-        put_doc(name, doc, ctx, file, (&f.name, &f.doc, f.help_context, &lib.help_file));
+        put_doc(name, doc, ctx, file, (&f.name, &f.doc, f.help_context, &hf));
         return S_OK;
     }
     if let Some(x) = v.vars.iter().find(|x| x.memid == memid) {
-        put_doc(name, doc, ctx, file, (&x.name, "", 0, &lib.help_file));
+        put_doc(name, doc, ctx, file, (&x.name, &x.doc, x.help_context, &hf));
         return S_OK;
     }
     TYPE_E_ELEMENTNOTFOUND
@@ -782,6 +824,16 @@ pub(crate) fn ref_type_info(t: *mut TypeLib, href: u32) -> Result<*mut c_void, H
             let imp = lib.import_of(href).ok_or(TYPE_E_ELEMENTNOTFOUND)?.clone();
             resolve_import(&imp)
         }
+        Some(Href::Stdole(i)) => {
+            let imp = Import {
+                lib_guid: stdole::LIBID,
+                lib_major: 2,
+                lib_minor: 0,
+                type_index: Some(i as u32),
+                ..Import::default()
+            };
+            resolve_import(&imp)
+        }
         _ => Err(TYPE_E_ELEMENTNOTFOUND),
     }
 }
@@ -789,9 +841,17 @@ pub(crate) fn ref_type_info(t: *mut TypeLib, href: u32) -> Result<*mut c_void, H
 /// The type an import names: from a live library of that id, else through the registry; `stdole`
 /// also from Poly's built-in copy.
 pub(crate) fn resolve_import(imp: &Import) -> Result<*mut c_void, Hresult> {
-    let lib = match live_by_guid(&imp.lib_guid, imp.lib_major, imp.lib_minor) {
+    // An MSFT file names the imported library by its GUID only (format sheet section 4): any
+    // registered version then.
+    let any = imp.lib_major == 0 && imp.lib_minor == 0;
+    let live = if any { live_any(&imp.lib_guid) } else { live_by_guid(&imp.lib_guid, imp.lib_major, imp.lib_minor) };
+    let lib = match live {
         Some(l) => l,
-        None => match super::load::load_registered(&imp.lib_guid, imp.lib_major, imp.lib_minor, imp.lib_lcid) {
+        None => match if any {
+            super::load::load_registered_any(&imp.lib_guid)
+        } else {
+            super::load::load_registered(&imp.lib_guid, imp.lib_major, imp.lib_minor, imp.lib_lcid)
+        } {
             Ok(l) => l,
             Err(hr) if imp.lib_guid == stdole::LIBID => {
                 let _ = hr;
@@ -800,7 +860,11 @@ pub(crate) fn resolve_import(imp: &Import) -> Result<*mut c_void, Hresult> {
             Err(hr) => return Err(hr),
         },
     };
-    let found = model(lib).find_guid(&imp.type_guid);
+    let m = model(lib);
+    let found = match imp.type_index {
+        Some(k) => ((k as usize) < m.types.len()).then_some(k as usize),
+        None => m.find_guid(&imp.type_guid),
+    };
     let r = match found {
         Some(i) => Ok(new_typeinfo(lib, i, Form::Stored)),
         None => Err(TYPE_E_ELEMENTNOTFOUND),
@@ -838,7 +902,7 @@ unsafe extern "system" fn null_out_not_impl(_this: *mut c_void, out: *mut *mut c
     E_NOTIMPL
 }
 
-static TI_VTBL: Vtbl<22> = Vtbl([
+static TI_VTBL: Vtbl<37> = Vtbl([
     ti_qi_entry as *const (),
     ti_add_ref as *const (),
     ti_release as *const (),
@@ -852,7 +916,7 @@ static TI_VTBL: Vtbl<22> = Vtbl([
     ti_get_ids_of_names as *const (),
     super::invoke::ti_invoke as *const (),
     ti_get_documentation as *const (),
-    not_impl as *const (),
+    super::ext::ti_get_dll_entry as *const (),
     ti_get_ref_type_info as *const (),
     not_impl as *const (),
     not_impl as *const (),
@@ -861,6 +925,21 @@ static TI_VTBL: Vtbl<22> = Vtbl([
     ti_release_type_attr as *const (),
     ti_release_func_desc as *const (),
     ti_release_var_desc as *const (),
+    super::ext::ti2_get_type_kind as *const (),
+    super::ext::ti2_get_type_flags as *const (),
+    super::ext::ti2_get_func_index_of_memid as *const (),
+    super::ext::ti2_get_var_index_of_memid as *const (),
+    super::ext::ti2_get_cust_data as *const (),
+    super::ext::ti2_get_func_cust_data as *const (),
+    super::ext::ti2_get_param_cust_data as *const (),
+    super::ext::ti2_get_var_cust_data as *const (),
+    super::ext::ti2_get_impl_type_cust_data as *const (),
+    super::ext::ti2_get_documentation2 as *const (),
+    super::ext::ti2_get_all_cust_data as *const (),
+    super::ext::ti2_get_all_func_cust_data as *const (),
+    super::ext::ti2_get_all_param_cust_data as *const (),
+    super::ext::ti2_get_all_var_cust_data as *const (),
+    super::ext::ti2_get_all_impl_type_cust_data as *const (),
 ]);
 
 // ICreateTypeInfo2
@@ -941,6 +1020,7 @@ unsafe extern "system" fn cti_add_ref_type_info(this: *mut c_void, other: *mut c
             lib_lcid: m.lcid,
             type_guid: ty.guid,
             type_name: ty.name.clone(),
+            type_index: None,
         };
         // SAFETY: as above.
         put(out, unsafe { (*my_lib).lib.with(|l| l.import(imp)) });
@@ -982,6 +1062,7 @@ fn foreign_import(ti: *mut c_void) -> Option<Import> {
                 lib_lcid: (*la).lcid,
                 type_guid: (*ta).guid,
                 type_name: bstr_text(name).unwrap_or_default(),
+                type_index: None,
             })
         }
     };
@@ -1048,7 +1129,7 @@ unsafe extern "system" fn cti_add_var_desc(this: *mut c_void, index: u32, vd: *c
         if index as usize > ty.vars.len() {
             return TYPE_E_ELEMENTNOTFOUND;
         }
-        ty.vars.insert(index as usize, Var { memid, name: String::new(), td, flags, varkind, value });
+        ty.vars.insert(index as usize, Var { memid, name: String::new(), td, flags, varkind, value, ..Var::default() });
         S_OK
     })
 }

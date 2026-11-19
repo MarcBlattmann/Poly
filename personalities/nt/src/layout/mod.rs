@@ -167,6 +167,9 @@ pub const FOLDERS: &[Folder] = &[
     drive("Windows\\Fonts", Some("FOLDERID_Fonts")),
     // The system TEMP of `Session Manager\Environment` (ADR 0066).
     drive("Windows\\Temp", None),
+    // The system and the elevated administrators' temporary directory (Google's installers unpack
+    // their updater there; its descriptor: `poly_nt::io::SYSTEM_TEMP_SDDL`).
+    drive("Windows\\SystemTemp", None),
     // Side-by-side assemblies (ADR 0055: the VC++ 2005/2008 runtimes).
     drive("Windows\\WinSxS", None),
     // Programs.
@@ -194,7 +197,7 @@ pub const FOLDERS: &[Folder] = &[
         "Common Programs",
     ),
     with_shell(
-        drive("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp", Some("FOLDERID_CommonStartup")),
+        drive("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", Some("FOLDERID_CommonStartup")),
         "Common Startup",
     ),
     with_shell(
@@ -236,10 +239,15 @@ pub const FOLDERS: &[Folder] = &[
         "Programs",
     ),
     with_shell(
-        profile("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp", Some("FOLDERID_Startup")),
+        profile("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", Some("FOLDERID_Startup")),
         "Startup",
     ),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\SendTo", Some("FOLDERID_SendTo")), "SendTo"),
+    // Where installers put the user's taskbar shortcuts: both exist on a clean Windows 11 (the
+    // sheet `shell32.dll/KnownFolders.Common.yaml`), and Chrome's setup writes into the first.
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer", None),
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch", Some("FOLDERID_QuickLaunch")),
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned", Some("FOLDERID_UserPinned")),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Templates", Some("FOLDERID_Templates")), "Templates"),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Recent", Some("FOLDERID_Recent")), "Recent"),
 ];

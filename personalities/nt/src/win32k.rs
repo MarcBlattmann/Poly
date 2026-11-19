@@ -66,6 +66,8 @@ pub struct Win32k {
     /// The window whose move or size the compositor drags (`Request::MoveSize`): it gets
     /// `WM_EXITSIZEMOVE` when the left button comes up (ADR 0212).
     dragging: Option<u32>,
+    /// The user's answers to consent prompts the compositor sent, for the broker (ADR 0222).
+    consent_answers: alloc::vec::Vec<(u32, bool)>,
 }
 
 impl Win32k {
@@ -135,6 +137,7 @@ impl Win32k {
                 }
                 FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
                 // Windows apps live in output pixels: the system DPI follows (ADR 0219).
+                FromCompositor::Consent { request, allow } => self.consent_answers.push((request, allow)),
                 FromCompositor::Units { units } => self.wm.set_system_dpi(96 * units.clamp(1, 8)),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.
@@ -182,6 +185,11 @@ impl Win32k {
             self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, ridge));
         }
         self.sync();
+    }
+
+    /// The answers to consent prompts that came with the last bytes (ADR 0222).
+    pub fn take_consent_answers(&mut self) -> alloc::vec::Vec<(u32, bool)> {
+        core::mem::take(&mut self.consent_answers)
     }
 
     /// The device: what to hand the compositor's next `read`.

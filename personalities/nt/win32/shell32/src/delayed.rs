@@ -4,20 +4,11 @@
 //! failing call it copes with (the fault-injection table of the gap map). An implementation
 //! replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 
-poly_win32_rt::fail_exports!(
-    "shell32",
-    win32,
-    [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW, ShellExecuteA, SHChangeNotify, IsUserAnAdmin]
-);
+poly_win32_rt::fail_exports!("shell32", win32, [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW]);
 
 // These return an `HRESULT`.
 poly_win32_rt::fail_exports!(
     "shell32",
     hresult,
-    [
-        SHGetStockIconInfo,
-        SHQueryUserNotificationState,
-        SetCurrentProcessExplicitAppUserModelID,
-        SHCreateAssociationRegistration
-    ]
+    [SHGetStockIconInfo, SHQueryUserNotificationState, SetCurrentProcessExplicitAppUserModelID]
 );

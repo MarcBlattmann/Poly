@@ -435,6 +435,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("EnumResourceNamesW", "api-ms-win-core-libraryloader-l1-1-0"),
     ("EnumResourceTypesW", "api-ms-win-core-libraryloader-l1-1-0"),
     ("CopyFileW", "api-ms-win-core-file-l2-1-0"),
+    ("ReadDirectoryChangesW", "api-ms-win-core-file-l2-1-0"),
     ("GetSystemDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetSystemWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
@@ -498,6 +499,16 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     // timezoneapi.h, sysinfoapi.h, winbase.h, wow64apiset.h).
     ("GetLocaleInfoEx", "api-ms-win-core-localization-l1-2-0"),
     ("IsValidLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    // Group L of the Chrome installer's batch B0: locale names, enumerations, date and time formats.
+    ("EnumSystemLocalesEx", "api-ms-win-core-localization-l1-2-0"),
+    ("EnumSystemLocalesW", "api-ms-win-core-localization-l1-2-0"),
+    ("GetDateFormatEx", "api-ms-win-core-localization-l1-2-0"),
+    ("GetDateFormatW", "api-ms-win-core-localization-l1-2-0"),
+    ("GetTimeFormatEx", "api-ms-win-core-localization-l1-2-0"),
+    ("GetTimeFormatW", "api-ms-win-core-localization-l1-2-0"),
+    ("LCIDToLocaleName", "api-ms-win-core-localization-l1-2-0"),
+    ("LocaleNameToLCID", "api-ms-win-core-localization-l1-2-0"),
+    ("GetUserPreferredUILanguages", "api-ms-win-core-localization-l1-2-0"),
     ("GetUserGeoID", "api-ms-win-core-localization-l1-2-0"),
     ("GetGeoInfoW", "api-ms-win-core-localization-l1-2-0"),
     ("GetTimeZoneInformation", "api-ms-win-core-timezone-l1-1-0"),
@@ -553,6 +564,17 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
     ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
     ("K32GetModuleInformation", "api-ms-win-core-psapi-l1-1-0"),
+    // Batch B0 of the Chrome installers (docs/windows/chrome-installer-plan.md; Learn's "API set"
+    // rows, the session one a guess: its page names kernel32.dll only).
+    ("GetDriveTypeW", "api-ms-win-core-file-l1-1-0"),
+    ("GetVolumeInformationByHandleW", "api-ms-win-core-file-l1-1-0"),
+    ("GetTempPath2W", "api-ms-win-core-file-l1-2-4"),
+    ("SetProcessWorkingSetSize", "api-ms-win-core-memory-l1-1-1"),
+    ("SetProcessWorkingSetSizeEx", "api-ms-win-core-memory-l1-1-1"),
+    ("GetProcessWorkingSetSize", "api-ms-win-core-memory-l1-1-1"),
+    ("GetProcessWorkingSetSizeEx", "api-ms-win-core-memory-l1-1-1"),
+    ("K32QueryWorkingSetEx", "api-ms-win-core-psapi-l1-1-0"),
+    ("WTSGetActiveConsoleSessionId", "api-ms-win-core-kernel32-legacy-l1-1-0"),
 ];
 
 /// `(function, contract)` of the `kernel32` exports that forward to our
@@ -598,9 +620,13 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("SafeArrayGetVartype", 77),
     ("SysStringByteLen", 149),
     ("SysAllocStringByteLen", 150),
+    ("LoadTypeLib", 161),
     ("LoadRegTypeLib", 162),
+    // Batch B0 of the Chrome installers (docs/windows/chrome-installer-plan.md).
+    ("SystemTimeToVariantTime", 184),
     ("VarBstrCmp", 314),
     ("SafeArrayCreateVector", 411),
+    ("OleLoadPicturePath", 424),
     // ADR 0220 (B2b): type libraries, error information, the automation marshaller.
     ("DllGetClassObject", 1),
     ("VariantCopyInd", 11),
@@ -609,7 +635,6 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("SafeArrayCopy", 27),
     ("DispCallFunc", 146),
     ("VariantChangeTypeEx", 147),
-    ("LoadTypeLib", 161),
     ("RegisterTypeLib", 163),
     ("QueryPathOfRegTypeLib", 164),
     ("CreateTypeLib2", 180),

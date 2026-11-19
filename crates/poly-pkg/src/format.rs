@@ -19,6 +19,14 @@ pub enum Format {
     Flatpak,
     /// A squashfs image (`hsqs`): what a snap is.
     Snap,
+    /// A Windows program (`.exe`): `MZ`, and the PE signature where the DOS
+    /// header's `e_lfanew` points (PE format specification), unless that is
+    /// past what was read. An installer is one too (ADR 0230).
+    WindowsProgram,
+    /// A compound file ([MS-CFB]: `D0 CF 11 E0 A1 B1 1A E1`), which a
+    /// Windows Installer package (`.msi`) is; whether it is one is
+    /// `windows::program::is_msi`'s to say.
+    WindowsInstaller,
 }
 
 /// How many bytes from the start of a file [`detect`] wants.
@@ -39,6 +47,16 @@ pub fn detect(head: &[u8]) -> Option<Format> {
     if head.starts_with(b"hsqs") {
         return Some(Format::Snap);
     }
+    if head.starts_with(b"MZ") {
+        let at = head.get(0x3C..0x40).map_or(usize::MAX, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
+        return match head.get(at..at.saturating_add(4)) {
+            Some(sig) => (sig == b"PE\0\0").then_some(Format::WindowsProgram),
+            None => Some(Format::WindowsProgram),
+        };
+    }
+    if head.starts_with(&crate::windows::program::CFB_SIGNATURE) {
+        return Some(Format::WindowsInstaller);
+    }
     let text = core::str::from_utf8(head).unwrap_or("");
     let first_line = text.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with('#'));
     if matches!(first_line, Some("[Flatpak Ref]" | "[Flatpak Repo]")) {
@@ -56,6 +74,8 @@ impl Format {
             Format::AppImage => "AppImage",
             Format::Flatpak => "Flatpak app",
             Format::Snap => "Snap package",
+            Format::WindowsProgram => "Windows program",
+            Format::WindowsInstaller => "Windows Installer package",
         }
     }
 
@@ -73,6 +93,12 @@ impl Format {
             // ADR 0132: Snap is not supported; say where to look instead.
             Format::Snap => Some(
                 "Poly does not install Snap packages. Most apps that come as a snap also offer a Debian package (.deb).",
+            ),
+            // Run on the NT personality since ADR 0230.
+            Format::WindowsProgram => None,
+            // MSI is batch B6 of the Chrome installer plan: deferred.
+            Format::WindowsInstaller => Some(
+                "Poly cannot install Windows Installer packages (.msi) yet. Look for the app's installer program (.exe).",
             ),
         }
     }
@@ -108,8 +134,9 @@ mod tests {
     fn debian_packages_and_appimages_are_installed_today() {
         assert_eq!(Format::Deb.not_yet(), None);
         assert_eq!(Format::AppImage.not_yet(), None);
-        for f in [Format::Rpm, Format::Flatpak, Format::Snap] {
-            assert!(f.not_yet().unwrap().contains(".deb"), "{}", f.name());
+        for f in [Format::Rpm, Format::Flatpak, Format::Snap, Format::WindowsInstaller] {
+            let why = f.not_yet().unwrap();
+            assert!(why.contains(".deb") || why.contains(".exe"), "{}", f.name());
         }
     }
 }

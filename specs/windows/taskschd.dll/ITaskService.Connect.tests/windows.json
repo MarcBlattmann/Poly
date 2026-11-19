@@ -2,31 +2,31 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "7c2463bf1568",
+  "bundle": "5476c1ba7b5b",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-17T13:22:14Z",
+  "started": "2026-11-19T17:23:41Z",
   "tests": [
     {
       "name": "tsc_connect",
-      "exe_sha256": "57b749e8de16d1e159b1e62ce57a0ab87da01fbc73526492dc4b48a9214f6088",
+      "exe_sha256": "9289a8e2d89dfe0d4c7736ec844dc9a9dc2580658d462f194b7ecb16e32ed835",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "Q29ubmVjdChlbXB0eSB2YXJpYW50KTogaHI9MHgwMDAwMDAwMCBjb25uZWN0ZWQ9dHJ1ZSB0YXJnZXQ9W1dJTkRJXSB0YXJnZXQgaXMgdGhlIGNvbXB1dGVyIG5hbWU9MQpDb25uZWN0KGxvY2FsaG9zdCk6IGhyPTB4MDAwMDAwMDAgY29ubmVjdGVkPXRydWUgdGFyZ2V0PVtsb2NhbGhvc3RdIHRhcmdldCBpcyB0aGUgY29tcHV0ZXIgbmFtZT0wCkNvbm5lY3QoZG90KTogaHI9MHg4MDA3MDAzNSBjb25uZWN0ZWQ9ZmFsc2UgdGFyZ2V0PTxudWxsPiB0YXJnZXQgaXMgdGhlIGNvbXB1dGVyIG5hbWU9MApvayBjb25uZWN0CmdldF9IaWdoZXN0VmVyc2lvbjogaHI9MHgwMDAwMDAwMCAweDAwMDEwMDA2CmdldF9UYXJnZXRTZXJ2ZXIgYWZ0ZXIgYW4gZW1wdHktc2VydmVyIENvbm5lY3Q6IGhyPTB4MDAwMDAwMDAgaXMgdGhlIGNvbXB1dGVyIG5hbWU9MQpnZXRfSGlnaGVzdFZlcnNpb24oTlVMTCk6IGhyPTB4ODAwMDQwMDMKZmFpbGVkIENvbm5lY3QoLikgYWZ0ZXIgYSBnb29kIG9uZTogaHI9MHg4MDA3MDAzNSBjb25uZWN0ZWQ9dHJ1ZSB0YXJnZXQ9W2xvY2FsaG9zdF0Kc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "output_b64": "Q29ubmVjdChlbXB0eSB2YXJpYW50KTogaHI9MHgwMDAwMDAwMCBjb25uZWN0ZWQ9dHJ1ZSB0YXJnZXQ9Wzxjb21wdXRlciBuYW1lPl0gdGFyZ2V0IGlzIHRoZSBjb21wdXRlciBuYW1lPTEKQ29ubmVjdChsb2NhbGhvc3QpOiBocj0weDAwMDAwMDAwIGNvbm5lY3RlZD10cnVlIHRhcmdldD1bbG9jYWxob3N0XSB0YXJnZXQgaXMgdGhlIGNvbXB1dGVyIG5hbWU9MApDb25uZWN0KGRvdCk6IGhyPTB4ODAwNzAwMzUgY29ubmVjdGVkPWZhbHNlIHRhcmdldD08bnVsbD4gdGFyZ2V0IGlzIHRoZSBjb21wdXRlciBuYW1lPTAKb2sgY29ubmVjdApnZXRfSGlnaGVzdFZlcnNpb246IGhyPTB4MDAwMDAwMDAgMHgwMDAxMDAwNgpnZXRfVGFyZ2V0U2VydmVyIGFmdGVyIGFuIGVtcHR5LXNlcnZlciBDb25uZWN0OiBocj0weDAwMDAwMDAwIGlzIHRoZSBjb21wdXRlciBuYW1lPTEKZ2V0X0hpZ2hlc3RWZXJzaW9uKE5VTEwpOiBocj0weDgwMDA0MDAzCmZhaWxlZCBDb25uZWN0KC4pIGFmdGVyIGEgZ29vZCBvbmU6IGhyPTB4ODAwNzAwMzUgY29ubmVjdGVkPXRydWUgdGFyZ2V0PVtsb2NhbGhvc3RdCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "Connect(empty variant): hr=0x00000000 connected=true target=[WINDI] target is the computer name=1\nConnect(localhost): hr=0x00000000 connected=true target=[localhost] target is the computer name=0\nConnect(dot): hr=0x80070035 connected=false target=<null> target is the computer name=0\nok connect\nget_HighestVersion: hr=0x00000000 0x00010006\nget_TargetServer after an empty-server Connect: hr=0x00000000 is the computer name=1\nget_HighestVersion(NULL): hr=0x80004003\nfailed Connect(.) after a good one: hr=0x80070035 connected=true target=[localhost]\nsummary 1 passed, 0 failed\n",
+      "output": "Connect(empty variant): hr=0x00000000 connected=true target=[<computer name>] target is the computer name=1\nConnect(localhost): hr=0x00000000 connected=true target=[localhost] target is the computer name=0\nConnect(dot): hr=0x80070035 connected=false target=<null> target is the computer name=0\nok connect\nget_HighestVersion: hr=0x00000000 0x00010006\nget_TargetServer after an empty-server Connect: hr=0x00000000 is the computer name=1\nget_HighestVersion(NULL): hr=0x80004003\nfailed Connect(.) after a good one: hr=0x80070035 connected=true target=[localhost]\nsummary 1 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 8230
+      "ms": 10762
     },
     {
       "name": "tsc_connect_b",
-      "exe_sha256": "f24c83553dac6fdc65df535160f3bfd62265b4aad03bac3513621136d50fb578",
+      "exe_sha256": "32f6ac988095398ba727b68c1eb766f9d8e3f515896c6f0b205a5f973373012e",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "Connect(NULL BSTR): hr=0x00000000 connected=true target=[] target is the computer name=0\nConnect(127.0.0.1): hr=0x00000000 connected=true target=[127.0.0.1] target is the computer name=0\nConnect(\\\\NOSUCH): hr=0x80070035 connected=false target=<null> target is the computer name=0\nok connect\nget_ConnectedUser: hr=0x00000000 non-empty=1\nget_Connected(NULL): hr=0x80004003\nsecond Connect to the local machine: hr=0x00000000\nGetFolder after the failed connect: hr=0x00000000 got=1\nsummary 1 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 2803
+      "ms": 5070
     }
   ]
 }

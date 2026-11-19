@@ -49,6 +49,7 @@ extern crate alloc;
 pub mod abi;
 pub mod afd;
 pub mod backend;
+pub mod consent;
 pub mod console;
 pub mod consts;
 pub mod context;
@@ -68,6 +69,7 @@ pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
 pub mod procattrs;
+pub mod proclist;
 pub mod protect;
 pub mod registry;
 pub mod scm;
@@ -276,6 +278,9 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         FlushKey => registry::services::flush_key(k, regs),
         NotifyChangeKey => registry::services::notify_change_key(k, regs),
         SetInformationKey => registry::services::set_information_key(k, regs),
+        SaveKey => registry::hivefile::save_key(k, regs),
+        LoadKey => registry::hivefile::load_key(k, regs),
+        UnloadKey => registry::hivefile::unload_key(k, regs),
 
         PolyTrace => {
             let values = abi::args::<K, 3>(k, regs)?;
@@ -294,6 +299,9 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyRandomBytes => sysinfo::random_bytes(k, regs),
         PolyPhysicalMemory => sysinfo::physical_memory(k, regs),
         PolyServiceCall => scm::service_call(k, regs),
+        PolyProcessList => proclist::process_list(k, regs),
+        NotifyChangeDirectoryFile => io::notify::notify_change_directory_file(k, regs),
+        PolyRequestElevation => consent::request_elevation(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

@@ -65,11 +65,13 @@ pub mod iocp;
 pub mod irp;
 pub mod locks;
 pub mod names;
+pub mod notify;
 pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
 pub mod streams;
+pub mod volume;
 pub mod walk;
 
 #[cfg(test)]
@@ -216,6 +218,8 @@ pub enum Target {
     /// The null device (`NUL`): what is written is dropped, a read is at the
     /// end of the file.
     Null,
+    /// A volume opened as a device (`\\.\C:`, [`volume`]), by its index.
+    Volume(usize),
 }
 
 /// The kernel's data for one file object.
@@ -320,6 +324,8 @@ pub struct IoState {
     pub(crate) sync_done: BTreeMap<u64, (NtStatus, u64)>,
     /// The consoles (ADR 0080).
     pub(crate) consoles: crate::console::Consoles,
+    /// The directory watches of change notification, by file object ([`notify`]).
+    pub(crate) watches: BTreeMap<u64, notify::DirWatch>,
     next_cookie: u64,
     pub(crate) next_irp: u64,
 }
@@ -368,6 +374,14 @@ pub fn status_of(e: Errno) -> NtStatus {
     }
 }
 
+/// `C:\Windows\SystemTemp` below the system volume's root, and the descriptor it has on Windows
+/// (`specs/windows/kernel32.dll/SystemTemp.yaml`): owner and group the local system, a protected
+/// DACL that gives full control, inherited by files and directories, to the local system and the
+/// Administrators group only. The filtered token of an administrator (Administrators deny-only)
+/// can neither open nor create anything in it.
+pub const SYSTEM_TEMP: &str = "\\Windows\\SystemTemp";
+pub const SYSTEM_TEMP_SDDL: &str = "O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+
 /// The name of the volume device with `number`, as Windows spells a disk
 /// volume's device (`\Device\HarddiskVolume<number>`; ADR 0185).
 pub fn harddisk_volume(number: usize) -> String {
@@ -406,7 +420,38 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
     v
 }
 
+/// The user's profile below `C:` (`\Users\<name>`).
+fn profile_path() -> String {
+    alloc::format!("\\Users\\{}", poly_registry::defaults::POLY_USER_NAME)
+}
+
+/// The profile's security (ADR 0222): owned by the user, SYSTEM, Administrators and the user in
+/// full control of everything below, nothing inherited from above (Windows' profile folders).
+pub fn profile_sddl() -> String {
+    let u = poly_registry::defaults::POLY_USER_SID;
+    alloc::format!("O:{u}G:{u}D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;{u})")
+}
+
 impl IoState {
+    /// The same file in Poly's own file system (the volume's root directory, then the path with
+    /// `/` separators), for the desktop's consent prompt to read the publisher from (ADR 0222).
+    /// The name is spelled as given: a file found only case-insensitively gives no such path.
+    pub fn vfs_path_of_dos(&self, dos: &[u16]) -> Option<Vec<u8>> {
+        let (device, path) = self.dos_file_name(dos)?;
+        let name = device.strip_prefix(wide(r"\Device\").as_slice())?;
+        let volume = self.volumes.iter().find(|v| v.device == name)?;
+        let mut out = volume.path.clone();
+        while out.last() == Some(&b'/') {
+            out.pop();
+        }
+        let text = String::from_utf16(&path).ok()?;
+        for part in text.split('\\').filter(|p| !p.is_empty()) {
+            out.push(b'/');
+            out.extend_from_slice(part.as_bytes());
+        }
+        Some(out)
+    }
+
     /// The file a DOS path (`X:\dir\file`, or `\??\X:\dir\file`) names, as the object manager spells
     /// it: `(\Device\HarddiskVolume<N>, the path below that volume)`. The drive letter picks the volume.
     pub fn dos_file_name(&self, dos: &[u16]) -> Option<(Vec<u16>, Vec<u16>)> {
@@ -444,6 +489,7 @@ impl IoState {
             consoles: crate::console::Consoles::default(),
             next_cookie: COOKIE_BASE,
             next_irp: 1,
+            watches: BTreeMap::new(),
             accept_targets: BTreeMap::new(),
         }
     }
@@ -491,6 +537,14 @@ impl IoState {
                 add_named(om, &kernel, &link, NewObject::SymbolicLink { target: &path })?;
             }
             self.devices.insert(cookie, Device::Volume(self.volumes.len()));
+            if config.letter == Some('C') {
+                // The user's profile is the user's (ADR 0222): a program without administrator
+                // rights owns what it makes there, as on Windows.
+                let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(&profile_path()));
+                om.seed_path_security(&key, &profile_sddl());
+                let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(SYSTEM_TEMP));
+                om.set_path_security(&key, SYSTEM_TEMP_SDDL);
+            }
             self.volumes.push(Volume {
                 device,
                 root,
@@ -549,6 +603,24 @@ impl IoState {
         add_named(om, &kernel, &wide("\\??\\NUL"), NewObject::SymbolicLink { target: &null })?;
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
+    }
+
+    /// What a handle of volume `v` opened as a device answers about it ([`volume`]).
+    pub fn volume_facts(&self, v: usize) -> volume::VolumeFacts {
+        let vol = &self.volumes[v];
+        let (size, free) = vol.root.statfs().map_or((64 << 30, 32 << 30), |s| {
+            let unit = s.block_size.max(1);
+            (s.blocks.saturating_mul(unit), s.blocks_avail.saturating_mul(unit))
+        });
+        volume::VolumeFacts { serial: vol.serial, size, free }
+    }
+
+    /// The volume a file object opened as a device, if it is one.
+    pub fn device_volume_of(&self, cookie: u64) -> Option<usize> {
+        match self.files.get(&cookie)?.target {
+            Target::Volume(v) => Some(v),
+            _ => None,
+        }
     }
 
     pub fn vfs(&self) -> Result<&VfsRoot, NtStatus> {
@@ -706,7 +778,7 @@ impl IoState {
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot | Target::PipeDevice | Target::Null => {}
+            Target::PipeRoot | Target::PipeDevice | Target::Null | Target::Volume(_) => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),
@@ -746,6 +818,9 @@ impl IoState {
                         self.delete_node(d.key, &d.node, state.link);
                         if d.stream.is_none() {
                             self.drop_streams_if_gone(d.volume, &d.node);
+                            let directory = rec.kind == FileType::Directory;
+                            let change = notify::Change::Name { action: notify::FILE_ACTION_REMOVED, directory };
+                            self.note_change(d.volume, &d.path, change);
                         }
                     }
                 }

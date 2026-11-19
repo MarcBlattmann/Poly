@@ -56,7 +56,7 @@ pub unsafe extern "system" fn InternetOpenW(
     }
     // SAFETY: the caller's string.
     let agent = unsafe { inet::wstr(agent) };
-    inet::new_handle(Object::Session(Session { agent, timeout_ms: 0 }))
+    inet::new_handle(Object::Session(Session { agent, ..Session::default() }))
 }
 
 /// `InternetConnectW`: HTTP only; port 0 is the service's default (80).
@@ -84,7 +84,7 @@ pub unsafe extern "system" fn InternetConnectW(
     let port = if port == 0 { INTERNET_DEFAULT_HTTP_PORT } else { port };
     ret_handle(inet::with_object(session, |o| {
         let s = inet::session_of(o)?.clone();
-        Ok(inet::new_handle(Object::Connect(Connect { session: s, host, port })))
+        Ok(inet::new_handle(Object::Connect(Connect::new(s, host, port))))
     }))
 }
 
@@ -210,7 +210,7 @@ pub unsafe extern "system" fn InternetOpenUrlW(
     };
     ret_handle(inet::with_object(session, |o| {
         let s = inet::session_of(o)?.clone();
-        let c = Connect { session: s, host: u.host.clone(), port: u.port };
+        let c = Connect::new(s, u.host.clone(), u.port);
         let mut r = Request::new(&c, "GET", &u.path, u.scheme == Scheme::Https);
         r.send(&extra, &[], 0)?;
         r.receive()?;

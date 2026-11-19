@@ -19,8 +19,9 @@ impl Disk for Mem {
         self.files
             .keys()
             .filter_map(|p| p.strip_prefix(&prefix))
-            .filter(|rest| !rest.contains('/'))
-            .map(ToString::to_string)
+            .map(|rest| rest.split('/').next().unwrap_or(rest).to_string())
+            .collect::<alloc::collections::BTreeSet<String>>()
+            .into_iter()
             .collect()
     }
 
@@ -143,4 +144,61 @@ fn an_appimage_is_planned_from_its_desktop_file() {
     let l = appimage::layout("/home/poly/.local/share", "other");
     d.put(&l.desktop, "[Desktop Entry]\nName=Other\nExec=x\n");
     assert!(super::plan(&l.id, "/home/poly/.local/share", &d).unwrap_err().contains("not installed by Poly"));
+}
+
+/// A Windows app as Poly's installer leaves it (ADR 0230): two launcher
+/// entries of one `Uninstall` key, and its uninstaller on `C:`.
+fn with_windows(d: &mut Mem) {
+    let apps = "/home/poly/.local/share/applications";
+    d.put(
+        &alloc::format!("{apps}/poly-windows-example-browser.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Example Browser\nExec=x\nX-Poly-Windows-Key=HKLM\\Example\n\
+         X-Poly-Windows-Uninstall=\"C:\\Program Files\\Example\\setup.exe\" --uninstall\n\
+         X-Poly-Windows-Publisher=Example Corp\nX-Poly-Windows-Version=1.2\n",
+    );
+    d.put(
+        &alloc::format!("{apps}/poly-windows-example-help.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Example Help\nExec=y\nX-Poly-Windows-Key=HKLM\\Example\n",
+    );
+    d.put(
+        &alloc::format!("{apps}/poly-windows-plain.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Plain\nExec=z\n",
+    );
+    d.put("/nt/c/Program Files/Example/setup.exe", "MZ");
+    d.sizes.insert("/nt/c/Program Files/Example/setup.exe".into(), 2);
+}
+
+#[test]
+fn a_windows_app_is_uninstalled_by_its_own_uninstaller() {
+    let mut d = disk();
+    with_windows(&mut d);
+    let home = "/home/poly/.local/share";
+    let removable = removable(&d, home);
+    assert!(removable.contains(&"poly-windows-example-browser.desktop".to_string()));
+    // Without an UninstallString there is nothing to run.
+    assert!(!removable.contains(&"poly-windows-plain.desktop".to_string()));
+    let plan = plan("poly-windows-example-browser.desktop", home, &d).unwrap();
+    assert_eq!(plan.app, "Example Browser");
+    assert_eq!(
+        plan.removal,
+        Removal::Windows {
+            command: alloc::vec!["/nt/c/Program Files/Example/setup.exe".into(), "--uninstall".into()],
+            publisher: "Example Corp".into(),
+            version: "1.2".into(),
+        }
+    );
+    assert_eq!(
+        plan.apps,
+        [
+            ("poly-windows-example-browser.desktop".to_string(), "Example Browser".to_string()),
+            ("poly-windows-example-help.desktop".to_string(), "Example Help".to_string())
+        ]
+    );
+    let why = super::plan("poly-windows-plain.desktop", home, &d).unwrap_err();
+    assert!(why.contains("did not register an uninstaller"), "{why}");
+    // The uninstaller is gone.
+    d.sizes.clear();
+    d.files.remove("/nt/c/Program Files/Example/setup.exe");
+    let why = super::plan("poly-windows-example-browser.desktop", home, &d).unwrap_err();
+    assert!(why.contains("uninstaller is not there"), "{why}");
 }

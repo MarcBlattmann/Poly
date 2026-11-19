@@ -17,7 +17,7 @@ use alloc::vec;
 /// The first bytes of a Poly type-library file.
 pub const MAGIC: &[u8; 8] = b"PolyTLB\0";
 /// The version of the layout below.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// Why a file is not a library this loader reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,6 +166,88 @@ impl R<'_> {
     }
 }
 
+impl W {
+    fn opt_str(&mut self, v: &Option<String>) {
+        match v {
+            None => self.u8(0),
+            Some(x) => {
+                self.u8(1);
+                self.str(x);
+            }
+        }
+    }
+    fn cust_value(&mut self, v: &CustValue) {
+        match v {
+            CustValue::I4(x) => {
+                self.u8(0);
+                self.i32(*x);
+            }
+            CustValue::Ui4(x) => {
+                self.u8(1);
+                self.u32(*x);
+            }
+            CustValue::Bstr(x) => {
+                self.u8(2);
+                self.str(x);
+            }
+            CustValue::Other { vt, bits } => {
+                self.u8(3);
+                self.u16(*vt);
+                self.i64(*bits as i64);
+            }
+        }
+    }
+    fn opt_cust_value(&mut self, v: &Option<CustValue>) {
+        match v {
+            None => self.u8(0),
+            Some(x) => {
+                self.u8(1);
+                self.cust_value(x);
+            }
+        }
+    }
+    fn cust(&mut self, c: &CustData) {
+        self.u32(c.len() as u32);
+        for (g, v) in c {
+            self.guid(g);
+            self.cust_value(v);
+        }
+    }
+}
+
+impl R<'_> {
+    fn opt_str(&mut self) -> Option<Option<String>> {
+        Some(match self.u8()? {
+            0 => None,
+            1 => Some(self.str()?),
+            _ => return None,
+        })
+    }
+    fn cust_value(&mut self) -> Option<CustValue> {
+        Some(match self.u8()? {
+            0 => CustValue::I4(self.i32()?),
+            1 => CustValue::Ui4(self.u32()?),
+            2 => CustValue::Bstr(self.str()?),
+            3 => CustValue::Other { vt: self.u16()?, bits: self.i64()? as u64 },
+            _ => return None,
+        })
+    }
+    fn opt_cust_value(&mut self) -> Option<Option<CustValue>> {
+        Some(match self.u8()? {
+            0 => None,
+            1 => Some(self.cust_value()?),
+            _ => return None,
+        })
+    }
+    fn cust(&mut self) -> Option<CustData> {
+        let mut out = Vec::new();
+        for _ in 0..self.count(17)? {
+            out.push((self.guid()?, self.cust_value()?));
+        }
+        Some(out)
+    }
+}
+
 /// The library as Poly's file format.
 pub fn encode(lib: &Library) -> Vec<u8> {
     let mut w = W(vec![]);
@@ -181,6 +263,17 @@ pub fn encode(lib: &Library) -> Vec<u8> {
     w.str(&lib.doc);
     w.str(&lib.help_file);
     w.u32(lib.help_context);
+    w.u32(lib.help_string_context);
+    w.str(&lib.help_string_dll);
+    w.cust(&lib.cust);
+    match lib.stats {
+        None => w.u8(0),
+        Some((a, b)) => {
+            w.u8(1);
+            w.u32(a);
+            w.u32(b);
+        }
+    }
     w.u32(lib.imports.len() as u32);
     for i in &lib.imports {
         w.guid(&i.lib_guid);
@@ -189,12 +282,14 @@ pub fn encode(lib: &Library) -> Vec<u8> {
         w.u32(i.lib_lcid);
         w.guid(&i.type_guid);
         w.str(&i.type_name);
+        w.u32(i.type_index.unwrap_or(u32::MAX));
     }
     w.u32(lib.types.len() as u32);
     for t in &lib.types {
         w.str(&t.name);
         w.str(&t.doc);
         w.u32(t.help_context);
+        w.u32(t.help_string_context);
         w.guid(&t.guid);
         w.i32(t.kind);
         w.u16(t.flags);
@@ -202,7 +297,9 @@ pub fn encode(lib: &Library) -> Vec<u8> {
         w.u16(t.minor);
         w.u16(t.align);
         w.u16(t.vft);
+        w.u32(t.size_instance);
         w.u8(u8::from(t.laid_out));
+        w.cust(&t.cust);
         w.u32(t.impl_types.len() as u32);
         for it in &t.impl_types {
             w.u32(it.href);
@@ -222,12 +319,25 @@ pub fn encode(lib: &Library) -> Vec<u8> {
             w.str(&f.name);
             w.str(&f.doc);
             w.u32(f.help_context);
+            w.u32(f.help_string_context);
             w.u8(u8::from(f.named));
+            w.cust(&f.cust);
+            match &f.entry {
+                None => w.u8(0),
+                Some(e) => {
+                    w.u8(1);
+                    w.str(&e.dll);
+                    w.opt_str(&e.name);
+                    w.u16(e.ordinal);
+                }
+            }
             w.u32(f.params.len() as u32);
             for p in &f.params {
                 w.td(&p.td);
                 w.u16(p.flags);
                 w.str(&p.name);
+                w.opt_cust_value(&p.default);
+                w.cust(&p.cust);
             }
         }
         w.u32(t.vars.len() as u32);
@@ -238,6 +348,11 @@ pub fn encode(lib: &Library) -> Vec<u8> {
             w.u16(v.flags);
             w.i32(v.varkind);
             w.i64(v.value);
+            w.opt_cust_value(&v.const_value);
+            w.str(&v.doc);
+            w.u32(v.help_context);
+            w.u32(v.help_string_context);
+            w.cust(&v.cust);
         }
         match &t.alias {
             None => w.u8(0),
@@ -267,7 +382,15 @@ pub fn decode(bytes: &[u8]) -> Option<Library> {
     lib.doc = r.str()?;
     lib.help_file = r.str()?;
     lib.help_context = r.u32()?;
-    for _ in 0..r.count(40)? {
+    lib.help_string_context = r.u32()?;
+    lib.help_string_dll = r.str()?;
+    lib.cust = r.cust()?;
+    lib.stats = match r.u8()? {
+        0 => None,
+        1 => Some((r.u32()?, r.u32()?)),
+        _ => return None,
+    };
+    for _ in 0..r.count(44)? {
         lib.imports.push(Import {
             lib_guid: r.guid()?,
             lib_major: r.u16()?,
@@ -275,93 +398,86 @@ pub fn decode(bytes: &[u8]) -> Option<Library> {
             lib_lcid: r.u32()?,
             type_guid: r.guid()?,
             type_name: r.str()?,
+            type_index: Some(r.u32()?).filter(|&x| x != u32::MAX),
         });
     }
-    for _ in 0..r.count(40)? {
-        let name = r.str()?;
-        let doc = r.str()?;
-        let help_context = r.u32()?;
-        let guid = r.guid()?;
-        let kind = r.i32()?;
-        let flags = r.u16()?;
-        let major = r.u16()?;
-        let minor = r.u16()?;
-        let align = r.u16()?;
-        let vft = r.u16()?;
-        let laid_out = r.u8()? != 0;
-        let mut impl_types = Vec::new();
+    for _ in 0..r.count(48)? {
+        let mut t = TypeEntry {
+            name: r.str()?,
+            doc: r.str()?,
+            help_context: r.u32()?,
+            help_string_context: r.u32()?,
+            guid: r.guid()?,
+            kind: r.i32()?,
+            flags: r.u16()?,
+            major: r.u16()?,
+            minor: r.u16()?,
+            align: r.u16()?,
+            vft: r.u16()?,
+            size_instance: r.u32()?,
+            laid_out: r.u8()? != 0,
+            cust: r.cust()?,
+            ..TypeEntry::default()
+        };
         for _ in 0..r.count(8)? {
-            impl_types.push(ImplType { href: r.u32()?, flags: r.i32()? });
+            t.impl_types.push(ImplType { href: r.u32()?, flags: r.i32()? });
         }
-        let mut funcs = Vec::new();
         for _ in 0..r.count(30)? {
-            let memid = r.i32()?;
-            let funckind = r.i32()?;
-            let invkind = r.i32()?;
-            let callconv = r.i32()?;
-            let opt_params = r.u16()? as i16;
-            let ovft = r.u16()? as i16;
-            let ret = r.td()?;
-            let ret_flags = r.u16()?;
-            let flags = r.u16()?;
-            let name = r.str()?;
-            let doc = r.str()?;
-            let help_context = r.u32()?;
-            let named = r.u8()? != 0;
-            let mut params = Vec::new();
+            let mut f = Func {
+                memid: r.i32()?,
+                funckind: r.i32()?,
+                invkind: r.i32()?,
+                callconv: r.i32()?,
+                opt_params: r.u16()? as i16,
+                ovft: r.u16()? as i16,
+                ret: r.td()?,
+                ret_flags: r.u16()?,
+                flags: r.u16()?,
+                name: r.str()?,
+                doc: r.str()?,
+                help_context: r.u32()?,
+                help_string_context: r.u32()?,
+                named: r.u8()? != 0,
+                cust: r.cust()?,
+                ..Func::default()
+            };
+            f.entry = match r.u8()? {
+                0 => None,
+                1 => Some(DllEntry { dll: r.str()?, name: r.opt_str()?, ordinal: r.u16()? }),
+                _ => return None,
+            };
             for _ in 0..r.count(9)? {
-                params.push(Param { td: r.td()?, flags: r.u16()?, name: r.str()? });
+                f.params.push(Param {
+                    td: r.td()?,
+                    flags: r.u16()?,
+                    name: r.str()?,
+                    default: r.opt_cust_value()?,
+                    cust: r.cust()?,
+                });
             }
-            funcs.push(Func {
-                memid,
-                funckind,
-                invkind,
-                callconv,
-                params,
-                opt_params,
-                ovft,
-                ret,
-                ret_flags,
-                flags,
-                name,
-                doc,
-                help_context,
-                named,
-            });
+            t.funcs.push(f);
         }
-        let mut vars = Vec::new();
         for _ in 0..r.count(20)? {
-            vars.push(Var {
+            t.vars.push(Var {
                 memid: r.i32()?,
                 name: r.str()?,
                 td: r.td()?,
                 flags: r.u16()?,
                 varkind: r.i32()?,
                 value: r.i64()?,
+                const_value: r.opt_cust_value()?,
+                doc: r.str()?,
+                help_context: r.u32()?,
+                help_string_context: r.u32()?,
+                cust: r.cust()?,
             });
         }
-        let alias = match r.u8()? {
+        t.alias = match r.u8()? {
             0 => None,
             1 => Some(r.td()?),
             _ => return None,
         };
-        lib.types.push(TypeEntry {
-            name,
-            doc,
-            help_context,
-            guid,
-            kind,
-            flags,
-            major,
-            minor,
-            align,
-            impl_types,
-            funcs,
-            vars,
-            alias,
-            laid_out,
-            vft,
-        });
+        lib.types.push(t);
     }
     r.b.is_empty().then_some(lib)
 }

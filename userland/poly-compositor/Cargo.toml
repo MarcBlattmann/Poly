@@ -17,6 +17,7 @@ poly-shell.workspace = true
 poly-wayland.workspace = true
 poly-win32k.workspace = true
 poly-x11.workspace = true
+poly-x509.workspace = true
 
 [lints]
 workspace = true

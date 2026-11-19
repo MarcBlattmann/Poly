@@ -10,6 +10,9 @@
 //! `RegisterGPNotification` and `UnregisterGPNotification` (Learn, `userenv.h`) are here
 //! because Chrome's policy loader delay-loads them, and a delay-load that finds no export is
 //! fatal for Chrome (ADR 0155). Poly has no Group Policy, so a registered event is never set.
+//!
+//! `CreateEnvironmentBlock` / `DestroyEnvironmentBlock` (`env`): the default environment of a
+//! token's user, by the rule the kernel gives its first process (`poly_kernelbase::defenv`).
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -100,6 +103,7 @@ pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *c
     0
 }
 
+mod env;
 mod profile;
 
 /// The entry point (`DllMain`): nothing to set up.

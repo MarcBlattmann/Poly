@@ -422,7 +422,7 @@
 <g><title>✔ ⚖️ Decided (owner, ADR 0132): no Snap support; apps shipped as snaps are installed from Flathub or their .deb/.rpm instead</title>
 <rect x="710.2" y="293.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
 </g>
-<g><title>Windows installers (.exe, .msi), and later macOS .dmg and .pkg, go through the same installer (ADR 0132)</title>
+<g><title>Windows installers (.exe, .msi), and later macOS .dmg and .pkg, go through the same installer (ADR 0132; ADR 0230: a .exe is shown from its PE resources, an installer runs with its own windows and is waited for, its shortcuts become launcher entries and its Uninstall key the uninstall in Applications, a plain program runs; .msi recognised, not installed yet)</title>
 <rect x="736.7" y="293.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <g><title>Shared fonts, HiDPI settings, keyboard layouts and input methods (IME)</title>

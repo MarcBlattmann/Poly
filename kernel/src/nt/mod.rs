@@ -173,6 +173,8 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// Poly's `services.exe`, the host of the service control manager (ADR 0221), installed in
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
+/// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
+pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -342,6 +344,16 @@ pub const SESSION_ARG: &str = "poly.win32k.session";
 /// `poly.win32k.display=WxH` and `poly.win32k.scale=P`: the interactive session's physical
 /// screen and its scale in percent (ADR 0231; 1920x1080 at 100 without them).
 static DISPLAY: Mutex<Option<((i32, i32), u32)>> = Mutex::new(None);
+/// `poly.win.token=standard|elevated|admin` (ADR 0222): the logon Windows programs run in. Without
+/// it they run as an administrator with User Account Control: the filtered token, elevation by
+/// consent. `admin` is the elevated administrator without a split token (ADR 0171) that the
+/// older spec sheets were recorded with. Kept as [`Logon`](poly_personality_nt::security::Logon) until the
+/// NT state is made.
+pub const TOKEN_ARG: &str = "poly.win.token";
+static LOGON: Mutex<poly_personality_nt::security::Logon> = Mutex::new(poly_personality_nt::security::Logon::Standard);
+/// `poly.uac.answer=yes|no` (ADR 0222): a test run answers every consent prompt at once (nobody is
+/// at the screen). Never on by default.
+static UAC_ANSWER: Mutex<Option<bool>> = Mutex::new(None);
 
 /// `poly.nt.trace` (`poly.nt.trace=all` for the noisy services too): one
 /// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
@@ -698,6 +710,19 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         TRACE.store(1, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: tracing system calls (poly.nt.trace)");
     }
+    if let Some(v) = boot.arg(TOKEN_ARG) {
+        match poly_personality_nt::security::Logon::parse(v) {
+            Some(l) => {
+                *LOGON.lock() = l;
+                crate::kprintln!("nt: Windows programs run with the {v} token (poly.win.token)");
+            }
+            None => crate::kprintln!("nt: poly.win.token={v} is not standard, elevated or admin; ignored"),
+        }
+    }
+    if let Some(v) = boot.arg(poly_personality_nt::consent::ANSWER_ARG) {
+        *UAC_ANSWER.lock() = poly_personality_nt::consent::Broker::parse_hook(v);
+        crate::kprintln!("nt: consent prompts are answered {v:?} at once (poly.uac.answer, a test hook)");
+    }
     if boot.arg(SESSION_ARG) == Some("interactive") {
         INTERACTIVE.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080)");
@@ -777,6 +802,9 @@ fn make_state(slot: &mut Option<NtState>) {
     let Some(state) = slot.as_mut() else { return };
     // The i686 ntdll every 32-bit process maps (ADR 0186).
     state.sys.ntdll32 = NTDLL32;
+    // The logon the programs run in (ADR 0222).
+    state.sys.logon = *LOGON.lock();
+    state.sys.consent.hook = *UAC_ANSWER.lock();
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
     layout::prepare(&mut state.sys);
@@ -1096,10 +1124,26 @@ impl NtKernel for Kernel {
         Some([created, seen[0], seen[1]])
     }
 
+    fn processes(&mut self) -> Vec<poly_personality_nt::proclist::ProcessSummary> {
+        // A process whose exit status is set is ending: no longer listed.
+        with(|s| {
+            s.processes
+                .values()
+                .filter(|p| p.exit_status.is_none())
+                .map(poly_personality_nt::proclist::ProcessSummary::of)
+                .collect()
+        })
+    }
+
     fn memory_counters(&self, pid: ProcessId) -> Option<poly_personality_nt::threads::VmCounters> {
         let memory = io::memory_of(pid.0)?;
         let (resident, cached, shared) = memory.page_counts();
-        let private = resident.saturating_sub(cached + shared);
+        // Private usage is the commit charge of the process's private memory (sheet of
+        // `K32GetProcessMemoryInfo`: committing 16 MiB raises it before a page is touched), or
+        // its private resident pages where the NT state does not know it.
+        let resident_private = resident.saturating_sub(cached + shared);
+        let committed = with(|s| s.processes.get(&pid).map(|p| p.vm.private_committed_bytes() / 4096));
+        let private = committed.unwrap_or(resident_private);
         let (faults, peak_resident) = crate::process::find(pid.0).map_or((0, 0), |p| p.cpu.memory_counts());
         let peak_private = with(|s| {
             let p = s.private_peak.entry(pid).or_insert(0);
@@ -1498,7 +1542,10 @@ fn create_process(
     // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
     let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
-    let process = Arc::new(Process::new_nt(pid, format, traced));
+    // The process that created it is its parent in /proc (ADR 0230).
+    let mut nt = Process::new_nt(pid, format, traced);
+    nt.ppid = creator_process.as_ref().map_or(0, |p| p.pid);
+    let process = Arc::new(nt);
     let want = HandlesFor {
         caller: creator,
         process_access: req.process_access,

@@ -211,6 +211,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hnetcfg"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "httptest"
 version = "0.0.1"
 dependencies = [
@@ -454,6 +463,13 @@ name = "poly-libm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+]
+
+[[package]]
 name = "poly-msvc32"
 version = "0.0.1"
 
@@ -654,6 +670,7 @@ version = "0.0.1"
 dependencies = [
  "poly-com",
  "poly-kernelbase",
+ "poly-lnk",
  "poly-win32-rt",
  "poly-win32k",
 ]
@@ -713,6 +730,7 @@ name = "userenv"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+ "poly-kernelbase",
  "poly-security",
  "poly-win32-cryptrt",
  "poly-win32-rt",

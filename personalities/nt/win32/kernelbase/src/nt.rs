@@ -35,6 +35,17 @@ unsafe extern "system" {
         share: u32,
         options: u32,
     ) -> NtStatus;
+    pub fn NtNotifyChangeDirectoryFile(
+        handle: Handle,
+        event: Handle,
+        apc: *const u8,
+        apc_context: *const u8,
+        iosb: *mut IoStatusBlock,
+        buffer: *mut u8,
+        length: u32,
+        filter: u32,
+        subtree: u8,
+    ) -> NtStatus;
     pub fn NtReadFile(
         handle: Handle,
         event: Handle,
@@ -353,6 +364,8 @@ unsafe extern "system" {
     pub fn NtGetCurrentProcessorNumber() -> u32;
     /// Poly's own: the physical memory and what is available, two 64-bit sizes (ADR 0206).
     pub fn PolyPhysicalMemory(out: *mut u64) -> NtStatus;
+    /// Poly's own: the system's process list as `poly_kernelbase::toolhelp` records.
+    pub fn PolyProcessList(buffer: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
     pub fn NtTerminateProcess(process: Handle, status: NtStatus) -> NtStatus;
 
     pub fn NtQuerySystemTime(time: *mut i64) -> NtStatus;

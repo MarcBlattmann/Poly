@@ -41,6 +41,7 @@ members = [
     "crates/poly-http",
     "crates/poly-comctl",
     "crates/poly-imagelist",
+    "crates/poly-lnk",
     "crates/poly-input",
     "crates/poly-iphlp",
     "crates/poly-irq",
@@ -165,6 +166,7 @@ poly-ldr = { path = "crates/poly-ldr" }
 poly-com = { path = "crates/poly-com" }
 poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
+poly-lnk = { path = "crates/poly-lnk" }
 poly-line = { path = "crates/poly-line" }
 poly-logline = { path = "crates/poly-logline" }
 poly-loop = { path = "crates/poly-loop" }

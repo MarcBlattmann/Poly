@@ -400,6 +400,22 @@ impl Desktop {
         true
     }
 
+    /// Ask the compositor for the user's consent (ADR 0222, [`ToCompositor::Consent`]). False
+    /// when no compositor is connected: then nobody can answer.
+    pub fn ask_consent(&mut self, request: u32, pid: u32, program: &str, path: &str, file: &str) -> bool {
+        if !self.connected {
+            return false;
+        }
+        self.send(ToCompositor::Consent {
+            request,
+            pid,
+            program: String::from(program),
+            path: String::from(path),
+            file: String::from(file),
+        });
+        true
+    }
+
     /// A Windows program's request to open `path` (a path of Poly's file system) with the
     /// desktop's program for it, or to show it selected in Files (ADR 0223). `false` without a
     /// compositor: nobody could do it.

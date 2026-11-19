@@ -1,0 +1,19 @@
+[package]
+name = "hnetcfg"
+description = "Our hnetcfg.dll: the Windows Firewall's COM objects (NetFwPolicy2, its rules, NetFwRule) over a rule table that enforces nothing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "hnetcfg"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+poly-com = { path = "../../../../crates/poly-com" }
+
+[lints]
+workspace = true
