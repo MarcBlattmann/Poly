@@ -218,13 +218,19 @@ pub fn read_security_descriptor<K: NtKernel>(k: &mut K, addr: u64) -> Result<Vec
             ptrs[i] = if off == 0 { 0 } else { addr + u64::from(off) };
         }
     } else {
-        let mut rest = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH - sd::RELATIVE_HEADER];
-        read(k, addr + sd::RELATIVE_HEADER as u64, &mut rest)?;
-        let mut full = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH];
+        // The caller's own layout: pointers of its width at 8, 16, 24, 32 (x64) or 4, 8, 12, 16
+        // (a 32-bit process, 20 bytes in all; ADR 0186 addendum `wow64-gui-overrun`).
+        let ptr = k.with_state(|_, p, _| p.layout().ptr) as usize;
+        let length = sd::abs_length(ptr);
+        let mut full = [0u8; 40];
         full[..sd::RELATIVE_HEADER].copy_from_slice(&h);
-        full[sd::RELATIVE_HEADER..].copy_from_slice(&rest);
-        for (i, at) in [sd::ABS_OWNER, sd::ABS_GROUP, sd::ABS_SACL, sd::ABS_DACL].into_iter().enumerate() {
-            ptrs[i] = u64::from_le_bytes(full[at..at + 8].try_into().expect("8 bytes"));
+        if length > sd::RELATIVE_HEADER {
+            read(k, addr + sd::RELATIVE_HEADER as u64, &mut full[sd::RELATIVE_HEADER..length])?;
+        }
+        for (i, at) in sd::abs_offsets(ptr).into_iter().enumerate() {
+            let mut v = [0u8; 8];
+            v[..ptr].copy_from_slice(&full[at..at + ptr]);
+            ptrs[i] = u64::from_le_bytes(v);
         }
     }
     let sid_at = |k: &mut K, p: u64| -> Result<Option<Vec<u8>>, NtStatus> {

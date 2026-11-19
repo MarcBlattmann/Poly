@@ -13,6 +13,10 @@
 //!   `GUITHREADINFO`, `CURSORINFO`, `WNDCLASSEXW` (`GetClassInfoExW`),
 //!   `LASTINPUTINFO`, `PAINTSTRUCT`, `RECT`, `POINT[2]` (`MapWindowPoints`), the key state,
 //!   `NONCLIENTMETRICSW`, `DEVMODEW`, `SCROLLINFO`.
+//! - `SECURITY_DESCRIPTOR`: 20 bytes on x86 (`winnt.h`: four pointers at 4, 8, 12, 16).
+//!   `InitializeSecurityDescriptor` and `SetSecurityDescriptorDacl` stay inside it, and a named
+//!   event made with that absolute descriptor in its `SECURITY_ATTRIBUTES` gets its DACL (read
+//!   back with `GetKernelObjectSecurity`): the kernel reads the descriptor in the caller's layout.
 //!
 //! One line per check on standard output; the exit code is the number of checks that failed.
 
@@ -127,8 +131,20 @@ unsafe extern "system" {
     fn SetScrollInfo(hwnd: Handle, bar: i32, si: *const u8, redraw: i32) -> i32;
 }
 
+#[link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn InitializeSecurityDescriptor(sd: *mut u8, revision: u32) -> i32;
+    fn SetSecurityDescriptorDacl(sd: *mut u8, present: i32, acl: *mut u8, defaulted: i32) -> i32;
+    fn InitializeAcl(acl: *mut u8, length: u32, revision: u32) -> i32;
+    fn AddAccessAllowedAce(acl: *mut u8, revision: u32, mask: u32, sid: *const u8) -> i32;
+    fn GetKernelObjectSecurity(h: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> i32;
+    fn GetSecurityDescriptorDacl(sd: *mut u8, present: *mut i32, acl: *mut *mut u8, defaulted: *mut i32) -> i32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
+    fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
+    fn CloseHandle(h: Handle) -> i32;
     fn GetStdHandle(which: u32) -> Handle;
     fn WriteFile(file: Handle, buffer: *const u8, length: u32, written: *mut u32, overlapped: *mut u8) -> i32;
     fn GetModuleHandleW(name: *const u16) -> Handle;
@@ -380,6 +396,38 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         let got = GetMessageW(&mut f.msg, h, WM_USER + 5, WM_USER + 5) > 0;
         check(b"GetMessageW MSG (28)", got && f.msg.lparam == 4, f.guard);
         DestroyWindow(h);
+
+        // SECURITY_DESCRIPTOR (x86: 20 bytes) and the kernel's reading of it.
+        let mut sd = Guarded::<20>::new();
+        let init = InitializeSecurityDescriptor(sd.ptr(), 1) != 0;
+        let guard_init = sd.guard;
+        // An ACL that grants Everyone (S-1-1-0) EVENT_ALL_ACCESS (0x1F0003).
+        let everyone: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+        let mut acl = [0u8; 64];
+        let acl_ok = InitializeAcl(acl.as_mut_ptr(), 64, 2) != 0
+            && AddAccessAllowedAce(acl.as_mut_ptr(), 2, 0x1F_0003, everyone.as_ptr()) != 0;
+        let set = SetSecurityDescriptorDacl(sd.ptr(), 1, acl.as_mut_ptr(), 0) != 0;
+        check(b"SECURITY_DESCRIPTOR (20): InitializeSecurityDescriptor", init, guard_init);
+        check(b"SECURITY_DESCRIPTOR (20): SetSecurityDescriptorDacl", acl_ok && set, sd.guard);
+        // SECURITY_ATTRIBUTES (x86): nLength 12, the descriptor, bInheritHandle.
+        let sa: [u32; 3] = [12, sd.ptr() as u32, 0];
+        let name: [u16; 20] = wide("PolyAbsoluteSd32");
+        let ev = CreateEventW(sa.as_ptr() as *const u8, 1, 0, name.as_ptr());
+        let mut back = [0u8; 256];
+        let mut needed = 0u32;
+        let got = ev != 0 && GetKernelObjectSecurity(ev, 4, back.as_mut_ptr(), 256, &mut needed) != 0;
+        let (mut present, mut dacl, mut defaulted) = (0i32, core::ptr::null_mut::<u8>(), 0i32);
+        let read = got && GetSecurityDescriptorDacl(back.as_mut_ptr(), &mut present, &mut dacl, &mut defaulted) != 0;
+        // ACL: AceCount at 4; the first ACE's mask at 8 + 4.
+        let ok = read
+            && present != 0
+            && !dacl.is_null()
+            && u16::from_le_bytes([*dacl.add(4), *dacl.add(5)]) == 1
+            && u32::from_le_bytes([*dacl.add(12), *dacl.add(13), *dacl.add(14), *dacl.add(15)]) == 0x1F_0003;
+        check(b"an event made with an absolute 32-bit descriptor has its DACL", ok, GUARD);
+        if ev != 0 {
+            CloseHandle(ev);
+        }
         let failed = FAILED.load(Ordering::SeqCst);
         out(b"failed: ");
         out(&hex(failed));
