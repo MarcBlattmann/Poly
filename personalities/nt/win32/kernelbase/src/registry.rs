@@ -1,8 +1,9 @@
 //! The registry API (ADR 0083): `RegOpenKeyExW`, `RegCreateKeyExW`,
 //! `RegQueryValueExW`, `RegSetValueExW`, `RegGetValueW`, `RegEnumKeyExW`,
 //! `RegEnumValueW`, `RegDeleteKeyExW`, `RegDeleteValueW`, `RegCloseKey`,
-//! `RegFlushKey`, `RegQueryInfoKeyW` and the `A` forms of the common ones,
-//! over our `ntdll`'s `Nt*Key` services (ADR 0066). `advapi32` forwards
+//! `RegFlushKey`, `RegQueryInfoKeyW`, `RegDeleteTreeW`, the hive files
+//! (`RegSaveKeyW`, `RegLoadKeyW`, `RegUnLoadKeyW`, ADR 0224) and the `A` forms
+//! of the common ones, over our `ntdll`'s `Nt*Key` services (ADR 0066). `advapi32` forwards
 //! them here through `api-ms-win-core-registry-l1-1-0`.
 //!
 //! Every function returns its Win32 error (Learn: "If the function fails,
@@ -62,6 +63,9 @@ unsafe extern "system" {
         size: u32,
     ) -> NtStatus;
     fn NtFlushKey(handle: Handle) -> NtStatus;
+    fn NtSaveKey(handle: Handle, file: Handle) -> NtStatus;
+    fn NtLoadKey(target: *const ObjectAttributes, file: *const ObjectAttributes) -> NtStatus;
+    fn NtUnloadKey(target: *const ObjectAttributes) -> NtStatus;
     #[allow(clippy::too_many_arguments)]
     fn NtNotifyChangeKey(
         handle: Handle,
@@ -961,4 +965,232 @@ pub unsafe extern "system" fn RegQueryInfoKeyW(
         put(class_len, info.class.len() as u32);
     }
     ERROR_SUCCESS
+}
+
+/// `RegEnumValueA` (`RegEnumValueA.yaml`): `RegEnumValueW`'s value with its
+/// name and string data in the ANSI code page. A name buffer without room for
+/// the name and its NUL is `ERROR_MORE_DATA` with the name length left as it
+/// was, the type and the data size still returned (`small_name_buffer`); a
+/// data buffer too small is `ERROR_MORE_DATA` with the size needed and no data
+/// written (`small_data_buffer`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegEnumValueA(
+    hkey: HKey,
+    index: u32,
+    name: *mut u8,
+    name_len: *mut u32,
+    reserved: *mut u32,
+    kind: *mut u32,
+    data: *mut u8,
+    size: *mut u32,
+) -> u32 {
+    if name.is_null() || name_len.is_null() || !reserved.is_null() || (!data.is_null() && size.is_null()) {
+        return ERROR_INVALID_PARAMETER;
+    }
+    let r = handle_of(hkey).and_then(|h| {
+        let info = query_info(|buf, len, ret| {
+            // SAFETY: `buf` holds `len` bytes.
+            unsafe { NtEnumerateValueKey(h, index, KEY_VALUE_FULL_INFORMATION, buf, len, ret) }
+        })
+        .map_err(err)?;
+        reg::parse_value_full(&info).ok_or(ERROR_INVALID_PARAMETER)
+    });
+    let (k, value_name, value) = match r {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
+    let ansi_name = poly_kernelbase::text::to_ansi(&value_name);
+    let ansi_data = reg::to_ansi_data(k, &value);
+    // SAFETY: the caller's buffers and counts, checked above.
+    unsafe {
+        let fits = (name_len.read() as usize) > ansi_name.len();
+        if fits {
+            core::ptr::copy_nonoverlapping(ansi_name.as_ptr(), name, ansi_name.len());
+            name.add(ansi_name.len()).write(0);
+            name_len.write(ansi_name.len() as u32);
+        }
+        let r = give_value(k, &ansi_data, kind, if fits { data } else { core::ptr::null_mut() }, size);
+        if fits { r } else { ERROR_MORE_DATA }
+    }
+}
+
+/// `KEY_QUERY_VALUE`, `KEY_SET_VALUE`, `KEY_ENUMERATE_SUB_KEYS` (`winnt.h`).
+const KEY_QUERY_VALUE: u32 = 0x1;
+const KEY_SET_VALUE: u32 = 0x2;
+const KEY_ENUMERATE_SUB_KEYS: u32 = 0x8;
+/// `STATUS_NO_MORE_ENTRIES` (`ntstatus.h`).
+const STATUS_NO_MORE_ENTRIES: NtStatus = NtStatus(0x8000_001A);
+/// What `RegDeleteTreeW` opens a key with.
+const TREE_ACCESS: u32 = reg::DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | KEY_SET_VALUE;
+
+/// Delete every subkey (with everything below it) and every value of key `h`.
+fn delete_contents(h: Handle) -> Result<(), u32> {
+    loop {
+        let info = query_info(|buf, len, ret| {
+            // SAFETY: `buf` holds `len` bytes.
+            unsafe { NtEnumerateKey(h, 0, KEY_NODE_INFORMATION, buf, len, ret) }
+        });
+        let info = match info {
+            Ok(i) => i,
+            Err(STATUS_NO_MORE_ENTRIES) => break,
+            Err(e) => return Err(err(e)),
+        };
+        let (_, name, _) = reg::parse_node_information(&info).ok_or(ERROR_INVALID_PARAMETER)?;
+        let child = nt_open(h, &name, TREE_ACCESS, 0).map_err(err)?;
+        let r = delete_contents(child).and_then(|()| {
+            // SAFETY: a key handle we opened.
+            let st = unsafe { NtDeleteKey(child) };
+            if st.is_success() { Ok(()) } else { Err(err(st)) }
+        });
+        close(child);
+        r?;
+    }
+    loop {
+        let info = query_info(|buf, len, ret| {
+            // SAFETY: `buf` holds `len` bytes.
+            unsafe { NtEnumerateValueKey(h, 0, KEY_VALUE_FULL_INFORMATION, buf, len, ret) }
+        });
+        let info = match info {
+            Ok(i) => i,
+            Err(STATUS_NO_MORE_ENTRIES) => return Ok(()),
+            Err(e) => return Err(err(e)),
+        };
+        let (_, name, _) = reg::parse_value_full(&info).ok_or(ERROR_INVALID_PARAMETER)?;
+        let s = UnicodeString::new(&name);
+        // SAFETY: a live UNICODE_STRING.
+        let st = unsafe { NtDeleteValueKey(h, &s) };
+        if !st.is_success() {
+            return Err(err(st));
+        }
+    }
+}
+
+/// `RegDeleteTreeW` (Learn): delete the subkey `sub` of `hkey` with every key
+/// and value below it; with no subkey, the subkeys and values of `hkey`
+/// itself (the key stays).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegDeleteTreeW(hkey: HKey, sub: *const u16) -> u32 {
+    // SAFETY: the caller's string or null.
+    let sub = unsafe { wide_arg(sub) }.unwrap_or(&[]);
+    if reg::components(sub).is_empty() {
+        return result(handle_of(hkey).and_then(delete_contents));
+    }
+    let h = match open_sub(hkey, sub, TREE_ACCESS, 0) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    let r = delete_contents(h).and_then(|()| {
+        // SAFETY: a key handle we opened.
+        let st = unsafe { NtDeleteKey(h) };
+        if st.is_success() { Ok(()) } else { Err(err(st)) }
+    });
+    close(h);
+    result(r)
+}
+
+/// `RegDeleteTreeA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegDeleteTreeA(hkey: HKey, sub: *const u8) -> u32 {
+    // SAFETY: the caller's string or null.
+    let sub = unsafe { ansi_arg(sub) }.map(|s| base::with_nul(&s));
+    // SAFETY: a NUL-terminated copy or null.
+    unsafe { RegDeleteTreeW(hkey, sub.as_ref().map_or(core::ptr::null(), |s| s.as_ptr())) }
+}
+
+// ----- hive files (ADR 0224) --------------------------------------------------------------
+
+/// `GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE` (`winnt.h`), `FILE_CREATE`,
+/// `FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE` (`wdm.h`) and
+/// `FILE_ATTRIBUTE_NORMAL` (`winnt.h`).
+const SAVE_ACCESS: u32 = 0x8000_0000 | 0x4000_0000 | 0x0010_0000;
+const FILE_CREATE: u32 = 2;
+const SAVE_OPTIONS: u32 = 0x20 | 0x40;
+const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
+/// `RegSaveKeyW` (`RegSaveKeyW.yaml`): the key and everything below it to a
+/// new file (`ERROR_ALREADY_EXISTS` when it exists). The file is made before
+/// the kernel checks `SeBackupPrivilege` (`privilege`: it exists after a
+/// refused save). The security attributes are not used.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegSaveKeyW(hkey: HKey, file: *const u16, _security: *const u8) -> u32 {
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    // SAFETY: the caller's string or null.
+    let Some(file) = (unsafe { wide_arg(file) }).filter(|f| !f.is_empty()) else { return ERROR_INVALID_PARAMETER };
+    let name = match base::nt_name(file) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let a = name.attributes();
+    let mut fh: Handle = 0;
+    let mut iosb = crate::nt::IoStatusBlock::default();
+    // SAFETY: the attributes and out-parameters are live locals.
+    let st = unsafe {
+        crate::nt::NtCreateFile(
+            &mut fh,
+            SAVE_ACCESS,
+            &a,
+            &mut iosb,
+            core::ptr::null(),
+            FILE_ATTRIBUTE_NORMAL,
+            0,
+            FILE_CREATE,
+            SAVE_OPTIONS,
+            core::ptr::null(),
+            0,
+        )
+    };
+    if !st.is_success() {
+        return err(st);
+    }
+    // SAFETY: a key handle and the file handle just made.
+    let st = unsafe { NtSaveKey(h, fh) };
+    close(fh);
+    if st.is_success() { ERROR_SUCCESS } else { err(st) }
+}
+
+/// `RegLoadKeyW` (`RegLoadKeyW.yaml`): mount hive file `file` as the key
+/// `sub` directly below `hkey` (`HKEY_LOCAL_MACHINE` or `HKEY_USERS`; the
+/// kernel refuses other places). An empty or missing name or file is
+/// `ERROR_INVALID_PARAMETER` before the privilege is looked at.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegLoadKeyW(hkey: HKey, sub: *const u16, file: *const u16) -> u32 {
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    // SAFETY: the caller's strings or null.
+    let (sub, file) = unsafe { (wide_arg(sub), wide_arg(file)) };
+    let (Some(sub), Some(file)) = (sub.filter(|s| !s.is_empty()), file.filter(|f| !f.is_empty())) else {
+        return ERROR_INVALID_PARAMETER;
+    };
+    let name = match base::nt_name(file) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    let s = UnicodeString::new(sub);
+    let target = attributes(h, &s, false);
+    let source = name.attributes();
+    // SAFETY: both attributes point at live locals.
+    let st = unsafe { NtLoadKey(&target, &source) };
+    if st.is_success() { ERROR_SUCCESS } else { err(st) }
+}
+
+/// `RegUnLoadKeyW` (`RegUnLoadKeyW.yaml`): unload the hive loaded as `sub`
+/// below `hkey`, writing it to its file.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegUnLoadKeyW(hkey: HKey, sub: *const u16) -> u32 {
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    // SAFETY: the caller's string or null.
+    let sub = unsafe { wide_arg(sub) }.unwrap_or(&[]);
+    let s = UnicodeString::new(sub);
+    let target = attributes(h, &s, false);
+    // SAFETY: the attributes point at live locals.
+    let st = unsafe { NtUnloadKey(&target) };
+    if st.is_success() { ERROR_SUCCESS } else { err(st) }
 }

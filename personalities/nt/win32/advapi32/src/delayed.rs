@@ -17,10 +17,7 @@ poly_win32_rt::fail_exports!(
         LogonUserW,
         CryptCreateHash,
         CryptDestroyHash,
-        CryptGetHashParam,
-        DeregisterEventSource,
-        RegisterEventSourceA,
-        ReportEventA
+        CryptGetHashParam
     ]
 );
 

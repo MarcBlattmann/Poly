@@ -51,6 +51,13 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RegQueryInfoKeyW", REGISTRY),
     // ADR 0155: Chrome watches keys in every process.
     ("RegNotifyChangeKeyValue", REGISTRY),
+    // Chrome's installer (ADR 0224): other users' hives, value enumeration, removal.
+    ("RegEnumValueA", REGISTRY),
+    ("RegDeleteTreeW", REGISTRY),
+    ("RegDeleteTreeA", REGISTRY),
+    ("RegSaveKeyW", REGISTRY),
+    ("RegLoadKeyW", REGISTRY),
+    ("RegUnLoadKeyW", REGISTRY),
     // Tokens (processthreadsapi.h, securitybaseapi.h).
     ("OpenProcessToken", PROCESS_THREADS),
     ("OpenThreadToken", PROCESS_THREADS),

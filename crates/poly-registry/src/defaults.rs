@@ -16,7 +16,8 @@
 //!
 //! Volatile keys are made at every boot ([`volatile_keys`]):
 //! `HKLM\HARDWARE`, the `HKLM\SYSTEM\CurrentControlSet` symbolic link to
-//! `ControlSet001`, and the user's `Volatile Environment`.
+//! `ControlSet001`, the user's `Volatile Environment`, and `HKU\<user>_Classes`,
+//! a symbolic link to the user's `Software\Classes`.
 //!
 //! The values that name folders (`ProgramFilesDir`, `SystemRoot`, the
 //! environment's paths, the user's profile) must agree with the Windows
@@ -225,6 +226,10 @@ pub const USER_KEYS: &[DefaultKey] = &[
     k("Software\\Microsoft\\Windows\\CurrentVersion\\Run", &[]),
 ];
 
+/// What follows the user's SID in the name of the user's classes hive below
+/// `HKEY_USERS` (`<SID>_Classes`).
+pub const USER_CLASSES_SUFFIX: &str = "_Classes";
+
 /// The user's `Volatile Environment` (Learn: "Recognized environment
 /// variables" names each).
 pub const VOLATILE_ENVIRONMENT: &[(&str, Data)] = &[
@@ -360,6 +365,19 @@ pub fn volatile_keys(reg: &mut Registry, now: u64) -> Result<(), NtStatus> {
     if let Some(me) = reg.find(user, POLY_USER_SID) {
         let env = make_path(reg, me, "Volatile Environment", true, now)?;
         set(reg, env, VOLATILE_ENVIRONMENT, now)?;
+    }
+    // `\REGISTRY\USER\<user>_Classes`, the user's classes hive (RtlFormatCurrentUserKeyPath.yaml
+    // `usable`: it opens). Poly keeps the user's classes in `<user>\Software\Classes`, so the
+    // name is a link there and both reach the same keys.
+    let classes = alloc::format!("{POLY_USER_SID}{USER_CLASSES_SUFFIX}");
+    if reg.child(user, &wide(&classes)).is_none() {
+        let opts = CreateOptions { volatile: true, link: true, class: &[] };
+        let (link, _) = reg.create_key(user, &wide(&classes), opts, now)?;
+        let target: Vec<u8> = alloc::format!("\\REGISTRY\\USER\\{POLY_USER_SID}\\Software\\Classes")
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        reg.set_value(link, &wide(SYMBOLIC_LINK_VALUE), REG_LINK, &target, now)?;
     }
     Ok(())
 }

@@ -277,6 +277,9 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         FlushKey => registry::services::flush_key(k, regs),
         NotifyChangeKey => registry::services::notify_change_key(k, regs),
         SetInformationKey => registry::services::set_information_key(k, regs),
+        SaveKey => registry::hivefile::save_key(k, regs),
+        LoadKey => registry::hivefile::load_key(k, regs),
+        UnloadKey => registry::hivefile::unload_key(k, regs),
 
         PolyTrace => {
             let values = abi::args::<K, 3>(k, regs)?;

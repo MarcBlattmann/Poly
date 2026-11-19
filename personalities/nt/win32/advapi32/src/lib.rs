@@ -13,6 +13,7 @@ extern crate alloc;
 
 mod acctrl;
 mod etw;
+mod eventlog;
 mod lsa;
 mod withtoken;
 

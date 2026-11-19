@@ -291,6 +291,15 @@ pub enum Service {
     /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,
     /// KeySetInformation, Length)`.
     SetInformationKey,
+    /// `NtSaveKey(KeyHandle, FileHandle)` (Learn: "ZwSaveKey"; ADR 0224).
+    SaveKey,
+    /// `NtLoadKey(TargetKey*, SourceFile*)`: two `OBJECT_ATTRIBUTES`, the
+    /// key to make and the hive file (the documented `RegLoadKeyW`'s
+    /// arguments as native names; ADR 0224).
+    LoadKey,
+    /// `NtUnloadKey(TargetKey*)`: the `OBJECT_ATTRIBUTES` of a loaded hive's
+    /// root (`RegUnLoadKeyW`'s; ADR 0224).
+    UnloadKey,
 
     // ----- Poly
     /// `PolyTrace(a, b, c)`: logs three values on the kernel log (a test
@@ -577,7 +586,7 @@ pub const SERVICES: [(Service, u32, &str); 80] = [
 
 /// The registry services (ADR 0066), kept in their own table so the
 /// groups grow independently; [`all`] chains every table.
-pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
+pub const REGISTRY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::CreateKey, 0x100, "NtCreateKey"),
     (Service::OpenKey, 0x101, "NtOpenKey"),
     (Service::OpenKeyEx, 0x102, "NtOpenKeyEx"),
@@ -591,6 +600,9 @@ pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
     (Service::FlushKey, 0x10A, "NtFlushKey"),
     (Service::NotifyChangeKey, 0x10B, "NtNotifyChangeKey"),
     (Service::SetInformationKey, 0x10C, "NtSetInformationKey"),
+    (Service::SaveKey, 0x10D, "NtSaveKey"),
+    (Service::LoadKey, 0x10E, "NtLoadKey"),
+    (Service::UnloadKey, 0x10F, "NtUnloadKey"),
 ];
 
 /// The exception services (ADR 0068), in the processes and threads group.

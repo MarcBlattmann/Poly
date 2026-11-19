@@ -22,6 +22,7 @@
 //! service); for a change made by the waiting process itself that is the
 //! same call, and its event is signalled after the block is written.
 
+pub mod hivefile;
 pub mod services;
 pub mod wow64;
 
@@ -79,12 +80,21 @@ pub struct NtRegistry {
     requests: BTreeMap<u64, Request>,
     next_request: u64,
     completions: Vec<Completion>,
+    /// The hives programs loaded from their own files ([`hivefile`]).
+    pub external: Vec<hivefile::External>,
 }
 
 impl NtRegistry {
     /// `reg` (with its hives mounted), not yet in a namespace.
     pub fn new(reg: Registry) -> NtRegistry {
-        NtRegistry { reg, root_object: None, requests: BTreeMap::new(), next_request: 1, completions: Vec::new() }
+        NtRegistry {
+            reg,
+            root_object: None,
+            requests: BTreeMap::new(),
+            next_request: 1,
+            completions: Vec::new(),
+            external: Vec::new(),
+        }
     }
 
     /// Make `\REGISTRY` in `om`: a permanent `Key` parse object for the

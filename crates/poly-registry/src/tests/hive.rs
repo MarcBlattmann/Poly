@@ -1,6 +1,7 @@
 use super::*;
 use crate::hive::*;
 use crate::tree::Value;
+use poly_ntobj::status::{STATUS_ACCESS_DENIED, STATUS_INVALID_PARAMETER};
 
 fn sample_file() -> HiveFile {
     HiveFile {
@@ -162,4 +163,77 @@ fn a_hive_mount_point_is_unique() {
         r.mount_hive(m, &wide("test"), "OTHER", None, T0).map(|_| ()),
         Err(poly_ntobj::status::STATUS_OBJECT_NAME_COLLISION)
     );
+}
+
+#[test]
+fn regf_container_round_trip() {
+    // RegSaveKeyW.yaml `file`: the signature regf, a size that is a multiple of 4096, at least 8 KiB.
+    let bytes = encode_regf(&sample_file());
+    assert_eq!(&bytes[..4], b"regf");
+    assert_eq!(bytes.len() % REGF_BLOCK, 0);
+    assert!(bytes.len() >= REGF_MIN_SIZE);
+    assert_eq!(decode_regf(&bytes).unwrap(), sample_file());
+    // Something else is no hive: text, a bare Poly hive file, a cut container.
+    assert_eq!(decode_regf(b"this is not a registry hive file, only text"), Err(STATUS_REGISTRY_CORRUPT));
+    assert_eq!(decode_regf(&encode(&sample_file())), Err(STATUS_REGISTRY_CORRUPT));
+    assert_eq!(decode_regf(&bytes[..REGF_BLOCK + 10]), Err(STATUS_REGISTRY_CORRUPT));
+    // A big hive grows by whole blocks.
+    let mut big = sample_file();
+    big.root.values.push(Value { name: wide("Big"), kind: REG_BINARY, data: alloc::vec![7; 10_000] });
+    let b = encode_regf(&big);
+    assert!(b.len() > REGF_MIN_SIZE && b.len().is_multiple_of(REGF_BLOCK));
+    assert_eq!(decode_regf(&b).unwrap(), big);
+}
+
+#[test]
+fn save_load_and_unload_an_external_hive() {
+    // RegSaveKeyW / RegLoadKeyW / RegUnLoadKeyW: the saved key's values and subkeys become the
+    // loaded key's; its own name is not part of the tree.
+    let (mut r, root) = with_hive();
+    let src = create(&mut r, root, "Src");
+    r.set_value(src, &wide("S"), REG_SZ, &sz("text value"), T0).unwrap();
+    let sub = create(&mut r, src, "Sub");
+    r.set_value(sub, &wide("X"), REG_SZ, &sz("inner"), T0).unwrap();
+    create_volatile(&mut r, src, "Vol");
+    let image = r.subtree(src).unwrap();
+    assert_eq!(image.name, wide("Src"));
+    let file = decode_regf(&encode_regf(&HiveFile { sequence: 1, root: image })).unwrap();
+
+    let m = r.machine();
+    let h = r.mount_external(m, &wide("Loaded"), "test", &file, T0).unwrap();
+    assert!(r.hive(h).external && !r.hive(h).dirty);
+    let loaded = r.find(m, "Loaded").unwrap();
+    assert_eq!(r.hive_rooted_at(loaded), Some(h));
+    assert_eq!(r.hive_rooted_at(src), None);
+    assert_eq!(r.value(loaded, &wide("s")).unwrap().data, sz("text value"));
+    assert!(r.find(m, "Loaded\\Sub").is_some());
+    assert!(r.find(m, "Loaded\\Src").is_none());
+    assert!(r.find(m, "Loaded\\Vol").is_none(), "volatile keys are not saved");
+
+    // Changes make it dirty, but it is never one of the store's hives to save.
+    let n = create(&mut r, loaded, "NewSub");
+    r.set_value(loaded, &wide("N"), REG_DWORD, &7u32.to_le_bytes(), T0).unwrap();
+    assert!(r.hive(h).dirty);
+    assert!(!r.dirty_hives().contains(&h));
+
+    // An open key keeps it loaded (RegUnLoadKeyW.yaml `open_handles`).
+    let o = r.open(n).unwrap();
+    assert!(r.hive_in_use(h));
+    assert_eq!(r.unmount_hive(h, T0).map(|_| ()), Err(STATUS_ACCESS_DENIED));
+    assert!(r.find(m, "Loaded").is_some());
+    r.close(o);
+    let before = r.key_count();
+    let out = r.unmount_hive(h, T0 + 1).unwrap();
+    assert!(out.subkeys.iter().any(|k| k.name == wide("NewSub")));
+    assert!(out.values.iter().any(|v| v.name == wide("N")));
+    assert!(r.find(m, "Loaded").is_none());
+    assert_eq!(r.key_count(), before - 3, "the root, Sub and NewSub are freed");
+    assert!(r.hive(h).unloaded);
+    assert_eq!(r.hive_rooted_at(loaded), None);
+    assert_eq!(r.unmount_hive(h, T0).map(|_| ()), Err(STATUS_INVALID_PARAMETER));
+    // The name can be used again, below either master key.
+    let u = r.user();
+    r.mount_external(u, &wide("Loaded"), "test", &HiveFile { sequence: 0, root: out }, T0).unwrap();
+    assert!(r.find(u, "Loaded\\NewSub").is_some());
+    assert!(r.find(m, "Loaded").is_none());
 }
