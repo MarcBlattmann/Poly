@@ -121,6 +121,14 @@ impl Device<'_> {
             Device::Ram(_) => None,
         }
     }
+
+    /// The watchdog's nudges and aborts so far, and the requests it has out.
+    pub fn watchdog(&self) -> (u64, u64, u64) {
+        match self {
+            Device::Virtio(d) => (d.nudges(), d.aborts(), d.outstanding()),
+            Device::Ram(_) => (0, 0, 0),
+        }
+    }
 }
 
 impl BlockDevice for Device<'_> {
@@ -282,6 +290,9 @@ pub struct Disk {
     vector: AtomicU8,
     interrupts: AtomicU64,
     sleeps: AtomicU64,
+    /// The watchdog's nudges and aborts already logged.
+    nudges_logged: AtomicU64,
+    aborts_logged: AtomicU64,
 }
 
 impl core::fmt::Debug for Disk {
@@ -325,6 +336,8 @@ impl Disk {
             vector: AtomicU8::new(0),
             interrupts: AtomicU64::new(0),
             sleeps: AtomicU64::new(0),
+            nudges_logged: AtomicU64::new(0),
+            aborts_logged: AtomicU64::new(0),
         })))
     }
 
@@ -433,13 +446,24 @@ impl Disk {
     /// wake the waiters (after releasing the queue). Also returns the
     /// device's watchdog deadline.
     fn run(&self, ticket: Option<Ticket>) -> (Option<Result<(), IoError>>, Option<u64>) {
-        let (result, finished, deadline) = {
+        let (result, finished, deadline, (nudges, aborts, out)) = {
             let mut q = self.queue.lock();
             let before = q.stats().finished;
             q.process();
             let result = ticket.and_then(|t| q.take(t));
-            (result, q.stats().finished != before, q.device().deadline())
+            (result, q.stats().finished != before, q.device().deadline(), q.device().watchdog())
         };
+        // What the watchdog did (after the queue lock): nudges 1, 2, 4, 8, ...
+        // (a slow host is not a flood of lines), every abort.
+        if nudges > self.nudges_logged.swap(nudges, SeqCst) && nudges.is_power_of_two() {
+            kprintln!(
+                "block: {}: no answer for a while with {out} request(s) out; notified the device again (nudge {nudges})",
+                self.name
+            );
+        }
+        if aborts > self.aborts_logged.swap(aborts, SeqCst) {
+            kprintln!("block: {}: no answer for too long: the device was reset and its requests failed", self.name);
+        }
         if finished {
             self.finished.fetch_add(1, SeqCst);
             self.waiters.wake_all();

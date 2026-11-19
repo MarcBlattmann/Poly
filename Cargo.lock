@@ -513,6 +513,7 @@ dependencies = [
  "poly-registry",
  "poly-squashfs",
  "poly-vfs",
+ "poly-x509",
 ]
 
 [[package]]
@@ -591,6 +592,7 @@ dependencies = [
  "poly-input",
  "poly-png",
  "poly-wayland",
+ "poly-x509",
 ]
 
 [[package]]

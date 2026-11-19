@@ -100,3 +100,29 @@ a disk. Devices are a `block::Device` enum (generics, not `dyn`, per ADR
   allocating them (a few KiB, once at boot).
 - The cache is per disk and separate from the page cache Phase 3 will
   bring; whether the two merge is decided then.
+
+## Addendum (2026-11-19): a slow device is nudged, not aborted
+
+Track `virtio-flush-eio`. Boots failed now and then with `fs: virtio0 flush of block 0 (+0) failed:
+Io(DeviceFailed)`, then `EIO` for the volume (a test disk failing to mount; `dpkg: unable to fsync` on
+Chromium's disk). The cause was this watchdog, not the cache (nothing outside `poly-block` pins
+buffers, so `AllPinned` cannot be met there): QEMU answers a flush only when the host's
+`fdatasync` of the image file is done, and on a busy host, or right after the host wrote the image,
+that took longer than the 10 s limit. The watchdog then reset the device, and every later request
+failed with `DeviceFailed`.
+
+- The watchdog has two times now: its **limit** (10 s), after which it **nudges** the device
+  (`Abort::nudge`; virtio-blk notifies the queue again, which a device that already has the
+  buffers ignores and which recovers a lost notification), and its **patience** (300 s), after
+  which it gives up as before. A lost interrupt was already recovered by the waiter polling the
+  used ring at the deadline. `Watchdog::new` keeps patience equal to the limit (the old behaviour);
+  the kernel's virtio-blk disks get `set_patience(WATCHDOG_PATIENCE_NS)`.
+- The block layer logs nudges (the 1st, 2nd, 4th, 8th, ...) and every abort: `block: virtio0: no
+  answer for a while with N request(s) out; notified the device again (nudge K)`.
+- Tests: `poly-block` (a slow device nudged until it answers; a lost request nudged, then aborted at
+  the patience); the kernel test `virtio_blk::a_slow_device_is_nudged_not_failed_under_concurrent_writes_and_flushes`
+  on a fifth virtio-blk function of the test machine, QEMU's `null-co` answering every request
+  after 300 ms, with the watchdog's limit at 50 ms: four threads write through the cache, sync
+  (writes and a FLUSH) and read past it, twice each, all succeed, no abort. With the old watchdog
+  (patience = limit) all four threads failed with `DeviceFailed`. The lost-request test now waits
+  for the patience (two nudges, then the abort).

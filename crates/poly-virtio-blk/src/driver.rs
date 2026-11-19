@@ -540,4 +540,14 @@ impl<M: Mmio, N: Mmio, T: Dma> Abort for VirtioBlk<'_, M, N, T> {
             self.fail();
         }
     }
+
+    /// Ring the doorbell again (VIRTIO 1.x, "Notifying The Device": a driver may notify at
+    /// any time; a device that already has the buffers ignores it). This
+    /// recovers a notification that went missing without resetting a
+    /// device that is only slow (a host flushing the image to its disk).
+    fn nudge(&mut self) {
+        if !self.failed && !self.drop_notifications {
+            self.notifier.notify(&self.notify);
+        }
+    }
 }
