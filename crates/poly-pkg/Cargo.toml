@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 poly-compress.workspace = true
+poly-lnk.workspace = true
 poly-pe.workspace = true
 poly-png.workspace = true
 poly-registry.workspace = true

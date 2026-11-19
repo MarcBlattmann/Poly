@@ -52,7 +52,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use poly_pkg::installer::Installer;
 use poly_pkg::windows::apps::{self as winapps, Seen, Uninstall};
-use poly_pkg::windows::{program, shlink};
+use poly_pkg::windows::program;
 use poly_pkg::{apt, deb, dpkgdb, format};
 use poly_rt::fs::File;
 use poly_rt::io::Read;
@@ -405,7 +405,7 @@ fn scan_links() -> Vec<Seen> {
     fn walk(dir: &str, depth: usize, out: &mut Vec<Seen>) {
         for e in poly_rt::fs::read_dir(dir).unwrap_or_default() {
             let path = alloc::format!("{dir}/{}", e.name);
-            if shlink::is_link_name(&e.name) {
+            if winapps::is_link_name(&e.name) {
                 if let Ok(bytes) = poly_rt::fs::read(&path)
                     && bytes.len() < 1 << 20
                 {
@@ -748,9 +748,7 @@ impl view::Host for Native {
         let mut entries = Vec::new();
         for path in changed {
             let Ok(bytes) = poly_rt::fs::read(&path) else { continue };
-            let made = shlink::parse(&bytes)
-                .map_err(|e| alloc::format!("{path}: {e:?}"))
-                .and_then(|link| winapps::entry_for(&path, &link, &VfsFiles));
+            let made = winapps::entry_from_file(&path, &bytes, &VfsFiles);
             match made {
                 Ok(e) => entries.push(e),
                 Err(why) => self.report(&alloc::format!("shortcut left out: {why}")),

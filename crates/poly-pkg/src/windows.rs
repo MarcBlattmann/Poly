@@ -9,13 +9,13 @@
 //!   anything runs (its name, version, maker, size and icon from the PE
 //!   version and icon resources), and whether it is an installer or a plain
 //!   program; whether a compound file is a Windows Installer package;
-//! - [`shlink`]: the shortcuts (`.lnk`) an installer leaves in the Start
-//!   menu and on the desktop, read with Microsoft's public **MS-SHLLINK**
-//!   specification;
-//! - [`apps`]: what the launcher gets from them (a desktop file per
-//!   shortcut, its `Exec` the shortcut's target and arguments as a path of
-//!   Poly's file system), and the app's `Uninstall` key in the registry,
-//!   which the Applications folder offers as **Uninstall**.
+//! - [`apps`]: what the launcher gets from the shortcuts (`.lnk`) an
+//!   installer leaves in the Start menu and on the desktop: a desktop file
+//!   per shortcut, its `Exec` the shortcut's target and arguments as a path
+//!   of Poly's file system. The shortcuts are read by `poly-lnk`, the one
+//!   reader Poly has, shared with `shell32`'s `ShellLink` (ADR 0227). Also
+//!   the app's `Uninstall` key in the registry, which the Applications
+//!   folder offers as **Uninstall**.
 //!
 //! Sources: the PE format specification (learn.microsoft.com/windows/win32/
 //! debug/pe-format: the resource and certificate directories), Learn's
@@ -27,7 +27,6 @@
 
 pub mod apps;
 pub mod program;
-pub mod shlink;
 
 #[cfg(test)]
 pub(crate) mod testfiles;

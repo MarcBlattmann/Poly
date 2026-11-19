@@ -1,10 +1,10 @@
 use super::apps::{self, Entry, Files, Seen, Uninstall};
 use super::program::{self, Image, Pick};
-use super::shlink::{self, Link};
 use super::testfiles::{dib4, dib32, fake_png, icon_group, pe, version_info};
 use crate::format::{self, Format};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use poly_lnk::Link;
 use std::collections::BTreeMap;
 
 fn reader(bytes: &[u8]) -> impl FnMut(u64, &mut [u8]) -> usize + '_ {
@@ -191,77 +191,70 @@ fn a_dib_that_is_not_one_is_refused() {
 
 // ----- shell links --------------------------------------------------------------------------------
 
-/// Fixtures written by hand from [MS-SHLLINK] (`tests/fixtures/`), not by
-/// [`shlink::build`]: a link with a Unicode `LinkInfo`, every string and a
+/// Fixtures written by hand from [MS-SHLLINK] with a separate script
+/// (`tests/fixtures/`): a link with a Unicode `LinkInfo`, every string and a
 /// target ID list; an ANSI link (no `IsUnicode`, a `LinkInfo` header of
 /// 0x1C bytes) with a `CommonPathSuffix`; one with only an environment
-/// block and a relative path.
+/// block and a relative path. They are read by `poly-lnk`, Poly's one
+/// reader of shell links (ADR 0227), as the installer reads them.
 const FIXTURE_UNICODE: &[u8] = include_bytes!("../../tests/fixtures/example-browser.lnk");
 const FIXTURE_ANSI: &[u8] = include_bytes!("../../tests/fixtures/tool-ansi.lnk");
 const FIXTURE_ENV: &[u8] = include_bytes!("../../tests/fixtures/editor-env.lnk");
 
+fn text(units: &[u16]) -> String {
+    String::from_utf16_lossy(units)
+}
+
+fn wide(s: &str) -> Vec<u16> {
+    s.encode_utf16().collect()
+}
+
 #[test]
 fn the_fixture_links_read_as_written() {
-    let l = shlink::parse(FIXTURE_UNICODE).unwrap();
-    assert_eq!(l.target.as_deref(), Some("C:\\Program Files\\Example\\Browser\\Application\\browser.exe"));
-    assert_eq!(l.arguments, "--profile-directory=\"Default User\" --flag");
-    assert_eq!(l.working_dir, "C:\\Program Files\\Example\\Browser\\Application");
-    assert_eq!(l.description, "Access the Internet");
-    assert_eq!(l.icon_location, "C:\\Program Files\\Example\\Browser\\Application\\browser.exe");
-    assert_eq!((l.icon_index, l.show), (0, 1));
+    let l = poly_lnk::parse(FIXTURE_UNICODE).unwrap();
+    assert_eq!(l.target().map(text).as_deref(), Some("C:\\Program Files\\Example\\Browser\\Application\\browser.exe"));
+    assert_eq!(text(l.arguments()), "--profile-directory=\"Default User\" --flag");
+    assert_eq!(text(l.working_dir()), "C:\\Program Files\\Example\\Browser\\Application");
+    assert_eq!(text(l.description()), "Access the Internet");
+    let (icon, index) = l.icon().unwrap();
+    assert_eq!((text(icon).as_str(), index), ("C:\\Program Files\\Example\\Browser\\Application\\browser.exe", 0));
+    assert_eq!(l.show_command(), 1);
 
-    let l = shlink::parse(FIXTURE_ANSI).unwrap();
-    assert_eq!(l.target.as_deref(), Some("C:\\Tools\\Caf\u{e9}\\tool.exe"));
-    assert_eq!(l.arguments, "/quiet");
+    let l = poly_lnk::parse(FIXTURE_ANSI).unwrap();
+    assert_eq!(l.target().map(text).as_deref(), Some("C:\\Tools\\Caf\u{e9}\\tool.exe"));
+    assert_eq!(text(l.arguments()), "/quiet");
     assert_eq!(l.icon_index, -101);
-    assert_eq!(l.show, 3);
+    assert_eq!(l.show_command(), 3);
 
-    let l = shlink::parse(FIXTURE_ENV).unwrap();
-    assert_eq!(l.target.as_deref(), Some("%ProgramFiles%\\Editor\\editor.exe"));
-    assert_eq!(l.relative_path, "..\\..\\..\\..\\..\\Program Files\\Editor\\editor.exe");
-    assert!(l.arguments.is_empty());
-}
-
-#[test]
-fn built_links_read_back() {
-    let bytes = shlink::build(
-        "C:\\Program Files\\\u{30a2}\u{30d7}\u{30ea}\\app.exe",
-        "-a \"b c\"",
-        "C:\\Program Files\\\u{30a2}\u{30d7}\u{30ea}",
-        "An app",
-        Some(("C:\\x\\icons.dll", -3)),
+    let l = poly_lnk::parse(FIXTURE_ENV).unwrap();
+    assert_eq!(l.env_path.as_deref().map(text).as_deref(), Some("%ProgramFiles%\\Editor\\editor.exe"));
+    assert_eq!(
+        l.relative_path.as_deref().map(text).as_deref(),
+        Some("..\\..\\..\\..\\..\\Program Files\\Editor\\editor.exe")
     );
-    let l = shlink::parse(&bytes).unwrap();
-    assert_eq!(l.target.as_deref(), Some("C:\\Program Files\\\u{30a2}\u{30d7}\u{30ea}\\app.exe"));
-    assert_eq!((l.arguments.as_str(), l.description.as_str()), ("-a \"b c\"", "An app"));
-    assert_eq!((l.icon_location.as_str(), l.icon_index), ("C:\\x\\icons.dll", -3));
-    let env = shlink::build_with_environment("%ProgramFiles(x86)%\\Old\\old.exe", "--x");
-    let l = shlink::parse(&env).unwrap();
-    assert_eq!((l.target.as_deref(), l.arguments.as_str()), (Some("%ProgramFiles(x86)%\\Old\\old.exe"), "--x"));
+    assert!(l.arguments().is_empty());
 }
 
 #[test]
-fn what_is_not_a_link_is_refused_and_cut_links_do_not_panic() {
-    assert_eq!(shlink::parse(b"not a link at all"), Err(shlink::LinkError::NotALink));
+fn what_is_not_a_link_makes_no_entry() {
+    let d = disk();
+    let why = apps::entry_from_file("/nt/c/Users/Public/Desktop/x.lnk", b"not a link at all", &d).unwrap_err();
+    assert!(why.contains("NotALink"), "{why}");
     let mut wrong = FIXTURE_UNICODE.to_vec();
     wrong[4] ^= 1;
-    assert_eq!(shlink::parse(&wrong), Err(shlink::LinkError::NotALink));
-    for cut in 0..FIXTURE_UNICODE.len() {
-        let _ = shlink::parse(&FIXTURE_UNICODE[..cut]);
-    }
+    assert!(apps::entry_from_file("/x.lnk", &wrong, &d).is_err());
+    // A cut link makes no entry, or one whose program is there; never a panic.
     for cut in 0..FIXTURE_ENV.len() {
-        let _ = shlink::parse(&FIXTURE_ENV[..cut]);
+        let _ = apps::entry_from_file("/nt/c/Users/Public/Desktop/Editor.lnk", &FIXTURE_ENV[..cut], &d);
     }
-    assert!(
-        shlink::is_link_name("Google Chrome.LNK") && !shlink::is_link_name(".lnk") && !shlink::is_link_name("a.exe")
-    );
+    assert!(apps::is_link_name("Google Chrome.LNK") && !apps::is_link_name(".lnk") && !apps::is_link_name("a.exe"));
 }
 
 #[test]
 fn a_relative_path_is_taken_from_the_links_folder() {
-    let l = Link { relative_path: "..\\App\\app.exe".into(), ..Link::default() };
-    assert_eq!(shlink::program(&l, "C:\\Users\\Public\\Desktop").as_deref(), Some("C:\\Users\\Public\\App\\app.exe"));
-    assert_eq!(shlink::program(&Link::default(), "C:\\"), None);
+    let l = Link { relative_path: Some(wide("..\\App\\app.exe")), ..Link::default() };
+    assert_eq!(apps::program(&l, "C:\\Users\\Public\\Desktop").as_deref(), Some("C:\\Users\\Public\\App\\app.exe"));
+    assert_eq!(apps::program(&Link::default(), "C:\\"), None);
 }
 
 // ----- launcher entries ------------------------------------------------------------------------------
@@ -408,7 +401,7 @@ fn poly_shell_parse(text: &str) -> Vec<String> {
 }
 
 fn browser_entry(d: &Disk) -> Entry {
-    let link = shlink::parse(FIXTURE_UNICODE).unwrap();
+    let link = poly_lnk::parse(FIXTURE_UNICODE).unwrap();
     apps::entry_for("/nt/c/ProgramData/Microsoft/Windows/Start Menu/Programs/Example Browser.lnk", &link, d).unwrap()
 }
 
@@ -453,21 +446,21 @@ fn a_shortcut_becomes_a_launcher_entry() {
 #[test]
 fn an_environment_shortcut_and_one_with_a_missing_target() {
     let d = disk();
-    let link = shlink::parse(FIXTURE_ENV).unwrap();
+    let link = poly_lnk::parse(FIXTURE_ENV).unwrap();
     let e = apps::entry_for("/nt/c/Users/Public/Desktop/Editor.lnk", &link, &d).unwrap();
     assert_eq!(e.argv, ["/nt/c/Program Files/Editor/editor.exe"]);
     assert_eq!(e.target, "C:\\Program Files\\Editor\\editor.exe");
     assert_eq!(e.working_dir, None);
     // An ANSI link whose icon is a resource id.
-    let link = shlink::parse(FIXTURE_ANSI).unwrap();
+    let link = poly_lnk::parse(FIXTURE_ANSI).unwrap();
     let e = apps::entry_for("/nt/c/Users/Public/Desktop/Tool.lnk", &link, &d).unwrap();
     assert_eq!(e.argv, ["/nt/c/Tools/Caf\u{e9}/tool.exe", "/quiet"]);
     // Nothing there; not a program; an uninstaller.
-    let gone = Link { target: Some("C:\\Gone\\gone.exe".into()), ..Link::default() };
+    let gone = Link { link_info_path: Some(wide("C:\\Gone\\gone.exe")), ..Link::default() };
     assert!(apps::entry_for("/nt/c/Users/Public/Desktop/Gone.lnk", &gone, &d).unwrap_err().contains("is not there"));
-    let doc = Link { target: Some("C:\\Tools\\readme.txt".into()), ..Link::default() };
+    let doc = Link { link_info_path: Some(wide("C:\\Tools\\readme.txt")), ..Link::default() };
     assert!(apps::entry_for("/nt/c/Users/Public/Desktop/Readme.lnk", &doc, &d).unwrap_err().contains("not a program"));
-    let un = Link { target: Some("C:\\Tools\\Caf\u{e9}\\tool.exe".into()), ..Link::default() };
+    let un = Link { link_info_path: Some(wide("C:\\Tools\\Caf\u{e9}\\tool.exe")), ..Link::default() };
     assert!(apps::entry_for("/nt/c/x/Uninstall Tool.lnk", &un, &d).is_err());
 }
 

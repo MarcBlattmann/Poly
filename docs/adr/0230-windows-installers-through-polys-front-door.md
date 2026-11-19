@@ -80,13 +80,13 @@ Chrome itself for one: `chrome.exe --from-installer`).
 Before the installer starts, the window notes the shortcut files (path and a checksum of their bytes) in the common
 Start menu (`C:\ProgramData\Microsoft\Windows\Start Menu\Programs`), the user's Start menu, the public desktop
 (`C:\Users\Public\Desktop`) and the user's desktop, with their sub-folders, and the `Uninstall` keys in the registry.
-Afterwards, every shortcut that is new or changed is read (`poly_pkg::windows::shlink`, [MS-SHLLINK]):
+Afterwards, every shortcut that is new or changed is read by **`poly-lnk`** (ADR 0227), the one reader of shell
+links Poly has, shared with `shell32`'s `ShellLink` object ([MS-SHLLINK]):
 
-- the target: the environment block's (`HasExpString`), else the `LinkInfo` path (`LocalBasePath` +
-  `CommonPathSuffix`, the Unicode ones when the header has them), else the relative path against the shortcut's
-  folder. The item ID list is skipped: its items belong to the shell's namespaces and are not specified there.
-  Batch B4's `IShellLinkW` therefore has to write a `LinkInfo` (or an environment block) for Poly to read its links;
-  Windows' own shell does;
+- the target: `poly_lnk::Link::target` (the `LinkInfo` path, else the ID list's path as Poly's `ShellLink` writes
+  it, else the environment block's), else the relative path against the shortcut's folder (this module's addition:
+  `poly-lnk` does not resolve a relative path alone); the arguments, working folder, description and icon as
+  `poly-lnk` reads them;
 - `%ProgramFiles%` and the other variables of Poly's NT environment are expanded; the Windows path is found on `C:`
   (`/nt/c`) without regard to case, each component as it is spelt on the disk.
 
@@ -127,7 +127,7 @@ Chrome's own shortcut is the installed Chrome's; replacing Chrome for Testing's 
 Host: `poly-pkg` (`windows/tests.rs`: formats; the version resource, names, versions, icon groups by index and by id,
 DIBs made PNG files, refused files; shell links from three fixture files written by hand from [MS-SHLLINK] with a
 separate script (`tests/fixtures/*.lnk`: Unicode `LinkInfo` with every string and an ID list; ANSI with a
-`CommonPathSuffix`; an environment block with a relative path), cut links; paths without case, variables, Windows
+`CommonPathSuffix`; an environment block with a relative path), read through `poly-lnk`, cut links; paths without case, variables, Windows
 command lines, `Exec` quoting read back; entries, duplicates; `Uninstall` keys from hive files, matching, uninstall
 commands; `installer.rs`: install, run, wait, stop waiting, failures, uninstall; `remove`: what can be uninstalled),
 `poly-installer-app` (the window with a made-up system: install with waiting, run, uninstall).
@@ -143,6 +143,7 @@ apps again, and **Open** and the launcher start the installed app with the short
 
 - **MSI** (B6), and running an `.msi` through `msiexec`.
 - **The publisher's name** until B0's Authenticode reader is on `main`; verifying signatures.
-- **Shortcuts whose target is only in the item ID list.**
+- **Shortcuts whose target is only in an ID list Poly's `ShellLink` did not write** (`poly-lnk`'s reading of the
+  shell's items is Poly's own layout; the public specification does not give them).
 - **Installers that elevate**: B0's consent prompt is theirs; this window only waits.
 - **Google's installer end to end** (B7): it needs B1 to B4.

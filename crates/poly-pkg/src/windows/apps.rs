@@ -20,9 +20,9 @@
 //! The registry is read from Poly's hive files (`poly_registry::hive`), which
 //! the kernel writes when an NT process ends (ADR 0066).
 
-use crate::windows::shlink::{self, Link};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use poly_lnk::Link;
 use poly_registry::hive::{self, KeyImage};
 
 /// Where `C:` is in Poly's file system (ADR 0067, 0073).
@@ -289,36 +289,76 @@ fn is_program(path: &str) -> bool {
     path.len() > 4 && path.is_char_boundary(path.len() - 4) && path[path.len() - 4..].eq_ignore_ascii_case(".exe")
 }
 
+/// Whether `name` is a shell link's file name (`.lnk`, any case).
+pub fn is_link_name(name: &str) -> bool {
+    name.len() > 4 && name.is_char_boundary(name.len() - 4) && name[name.len() - 4..].eq_ignore_ascii_case(".lnk")
+}
+
+fn text(units: &[u16]) -> String {
+    String::from_utf16_lossy(units)
+}
+
+/// The program a link starts: its target (`poly_lnk::Link::target`: the
+/// `LinkInfo` path, the ID list's, the environment block's), else its
+/// relative path against `link_dir`, the link's own folder as a Windows path
+/// (MS-SHLLINK 2.4, `RELATIVE_PATH`).
+pub fn program(link: &Link, link_dir: &str) -> Option<String> {
+    if let Some(t) = link.target().filter(|t| !t.is_empty()) {
+        return Some(text(t));
+    }
+    let relative = text(link.relative_path.as_deref().filter(|r| !r.is_empty())?);
+    let mut parts: Vec<&str> = link_dir.split('\\').filter(|p| !p.is_empty()).collect();
+    for p in relative.split('\\') {
+        match p {
+            "" | "." => {}
+            ".." => {
+                if parts.len() > 1 {
+                    parts.pop();
+                }
+            }
+            p => parts.push(p),
+        }
+    }
+    Some(parts.join("\\")).filter(|p| !p.is_empty())
+}
+
+/// The launcher entry for the shortcut file at `link_path` (a path in Poly's
+/// file system) with bytes `bytes`, or why there is none.
+pub fn entry_from_file(link_path: &str, bytes: &[u8], files: &dyn Files) -> Result<Entry, String> {
+    let link = poly_lnk::parse(bytes).map_err(|e| alloc::format!("{link_path}: {e:?}"))?;
+    entry_for(link_path, &link, files)
+}
+
 /// The launcher entry for the shortcut at `link_path` (a path in Poly's
 /// file system), or why there is none.
 pub fn entry_for(link_path: &str, link: &Link, files: &dyn Files) -> Result<Entry, String> {
     let file = link_path.rsplit('/').next().unwrap_or(link_path);
-    let name = if shlink::is_link_name(file) { &file[..file.len() - 4] } else { file };
+    let name = if is_link_name(file) { &file[..file.len() - 4] } else { file };
     if name.to_ascii_lowercase().starts_with("uninstall") {
         return Err(alloc::format!("{name}: an uninstaller, not an app"));
     }
     let dir = link_path.rsplit_once('/').map_or("", |(d, _)| d);
     let link_dir = dos_path(dir).unwrap_or_default();
-    let target = shlink::program(link, &link_dir).ok_or_else(|| alloc::format!("{name}: names no program"))?;
+    let target = program(link, &link_dir).ok_or_else(|| alloc::format!("{name}: names no program"))?;
     let target = expand(&target);
     if !is_program(&target) {
         return Err(alloc::format!("{name}: {target} is not a program"));
     }
     let program = vfs_path(&target, files).ok_or_else(|| alloc::format!("{name}: {target} is not there"))?;
     let mut argv = alloc::vec![program.clone()];
-    argv.extend(split_command_line(&expand(&link.arguments)));
-    let working_dir = Some(expand(&link.working_dir))
+    argv.extend(split_command_line(&expand(&text(link.arguments()))));
+    let working_dir = Some(expand(&text(link.working_dir())))
         .filter(|w| !w.is_empty())
         .and_then(|w| vfs_path(&w, files))
         .filter(|w| files.is_dir(w));
-    let icon_source = Some(expand(&link.icon_location))
-        .filter(|i| !i.is_empty())
-        .and_then(|i| vfs_path(&i, files))
-        .map_or_else(|| (program.clone(), 0), |i| (i, link.icon_index));
+    let icon_source = link
+        .icon()
+        .and_then(|(file, index)| vfs_path(&expand(&text(file)), files).map(|p| (p, index)))
+        .unwrap_or_else(|| (program.clone(), 0));
     Ok(Entry {
         id: id_of(name),
         name: name.to_string(),
-        comment: link.description.clone(),
+        comment: text(link.description()),
         argv,
         target,
         working_dir,
