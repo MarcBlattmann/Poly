@@ -1396,8 +1396,8 @@
 <g><title>advapi32: 96 / 593 done (16.2%)</title>
 <rect x="366.0" y="504.0" width="33.0" height="31.7" fill="#21262d"/>
 <rect x="366.0" y="504.0" width="5.3" height="31.7" fill="#2ea043"/>
-<rect x="371.3" y="504.0" width="5.2" height="31.7" fill="#bb8009"/>
-<rect x="376.5" y="504.0" width="3.9" height="31.7" fill="#388bfd"/>
+<rect x="371.3" y="504.0" width="5.1" height="31.7" fill="#bb8009"/>
+<rect x="376.4" y="504.0" width="4.0" height="31.7" fill="#388bfd"/>
 <rect x="365.0" y="503.0" width="35.0" height="33.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="371.0" y="518.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">adv…</text>
 </g>
