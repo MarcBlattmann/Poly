@@ -8,7 +8,7 @@ use super::env::{self, Block, Machine};
 use super::sync::{self, sync};
 use super::*;
 use crate::io::VfsRoot;
-use crate::io::consts::{FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
+use crate::io::consts::{FILE_ATTRIBUTE_ARCHIVE, FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
 use crate::io::info::{NT_XATTR, Stored};
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
@@ -232,6 +232,25 @@ fn system_files_are_installed_and_restored() {
     // The folder is made when missing, in any case the caller names it.
     assert_eq!(install_file(&vr, &root, "windows\\SYSTEM32\\New", "a.dll", b"a"), Ok(Installed::Written));
     assert!(exists(&vr, "/nt/c/Windows/System32/New/a.dll"));
+}
+
+#[test]
+fn system_files_carry_the_archive_attribute() {
+    let (vr, root) = setup();
+    create(&vr, &root, &POLY_USER);
+    let dir = "Windows\\System32";
+    let stored = |path: &str| node(&vr, path).getxattr(&vr.cred, NT_XATTR).ok().map(|v| Stored::parse(&v).attributes);
+    assert_eq!(install_file(&vr, &root, dir, "kernel32.dll", b"MZ k"), Ok(Installed::Written));
+    assert_eq!(stored("/nt/c/Windows/System32/kernel32.dll"), Some(FILE_ATTRIBUTE_ARCHIVE));
+    // A file of an older disk without attributes gets them at the next boot.
+    node(&vr, "/nt/c/Windows/System32/kernel32.dll").removexattr(&vr.cred, NT_XATTR).unwrap();
+    assert_eq!(install_file(&vr, &root, dir, "kernel32.dll", b"MZ k"), Ok(Installed::Unchanged));
+    assert_eq!(stored("/nt/c/Windows/System32/kernel32.dll"), Some(FILE_ATTRIBUTE_ARCHIVE));
+    // Attributes a program set stay.
+    let hidden = Stored { attributes: FILE_ATTRIBUTE_HIDDEN, creation: None };
+    node(&vr, "/nt/c/Windows/System32/kernel32.dll").setxattr(&vr.cred, NT_XATTR, &hidden.encode(), 0).unwrap();
+    assert_eq!(install_file(&vr, &root, dir, "kernel32.dll", b"MZ k"), Ok(Installed::Unchanged));
+    assert_eq!(stored("/nt/c/Windows/System32/kernel32.dll"), Some(FILE_ATTRIBUTE_HIDDEN));
 }
 
 #[test]
