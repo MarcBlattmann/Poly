@@ -1735,6 +1735,9 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if host_needed {
         start_service_host();
     }
+    // Its children go to its own parent (ADR 0230), so `/proc` links every
+    // process to a living ancestor.
+    adopt_children(pid);
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
@@ -1745,6 +1748,18 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
+}
+
+/// The processes whose parent is `pid`, which is ending, get `pid`'s parent (ADR 0230): an
+/// installer's helper started by a short-lived elevated copy stays in the installer's tree.
+fn adopt_children(pid: u32) {
+    let Some(me) = crate::process::find(pid) else { return };
+    let parent = crate::linux::task::parent_of(&me);
+    for p in crate::process::all() {
+        if p.pid != pid && crate::linux::task::parent_of(&p) == pid {
+            p.adopted.store(parent, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// `services.exe` is being started (ADR 0221): one start at a time.

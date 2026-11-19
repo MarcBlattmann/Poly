@@ -407,7 +407,8 @@ fn grow(tree: &mut BTreeSet<u32>, main: u32, procs: &[(u32, u32, bool)]) -> usiz
             break;
         }
     }
-    procs.iter().filter(|(pid, _, ended)| *pid != main && !*ended && tree.contains(pid)).count()
+    let me = poly_rt::process::id();
+    procs.iter().filter(|(pid, _, ended)| *pid != main && *pid != me && !*ended && tree.contains(pid)).count()
 }
 
 /// The shortcut files in the folders an installer puts them in, with a
@@ -740,7 +741,10 @@ impl view::Host for Native {
             .stderr(Stdio::Handle(write.handle()));
         let child = cmd.spawn().map_err(|e| alloc::format!("{e}"))?;
         drop(write);
+        // The window itself is the tree's root: a process whose parent ended is adopted by
+        // its nearest living ancestor (the kernel, ADR 0230), which may be this window.
         let mut tree = BTreeSet::new();
+        tree.insert(poly_rt::process::id());
         tree.insert(child.id());
         self.windows =
             Some(WindowsRun { child, output: read, pending: Vec::new(), tree, ended: None, told: None, stop: false });
