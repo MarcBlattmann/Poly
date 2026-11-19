@@ -10,30 +10,29 @@ oracle:
   date: 2026-11-17
 summary: >
   Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 515,
-  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
-  `svc #0x80` with x16 = 515, arguments in x0..x5 (x0..x7 for calls with
-  more; second result in x1). On failure the carry flag is set and the
-  result register holds the errno (<sys/errno.h>); on success the carry
-  flag is clear. ulock_wait(operation, address, value, timeout) is the
-  kernel side of locks and condition waits in libSystem. Operations (XNU's
-  bsd/sys/ulock.h, not installed in the SDK): UL_COMPARE_AND_WAIT 1,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64 `svc
+  #0x80` with x16 = 515, arguments in x0..x5 (x0..x7 for calls with more;
+  second result in x1). On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. ulock_wait(operation, address, value, timeout) is the kernel side
+  of locks and condition waits in libSystem. Operations (numbers found by
+  experiment; there is no public header): UL_COMPARE_AND_WAIT 1,
   UL_UNFAIR_LOCK 2, UL_COMPARE_AND_WAIT_SHARED 3 (between processes),
   UL_COMPARE_AND_WAIT64 5 (an 8-byte word); flags ORed in: ULF_NO_ERRNO
   0x1000000. The timeout is in microseconds (0 = none). If the word at
-  address equals value the caller sleeps until a ulock_wake or the
-  timeout: the timeout fails with ETIMEDOUT (60) after the time (at least
-  15 ms went by for 20 ms on the oracle); if the word differs the call
-  returns 0 at once. With ULF_NO_ERRNO the errors come back as the
-  negative number (-60) in the result with the carry flag clear. A wait
-  that a wake ends returns without an error, the result a small number (0
-  or 1 on the oracle: the others still waiting). The address must be
-  4-byte aligned (8 for the 64-bit operation) and not NULL (EINVAL), and
-  mapped (address 8: EFAULT); UL_UNFAIR_LOCK with a value that is not the
-  id of a thread gave EOWNERDEAD (105, a value). Shared waits: on memory
-  two processes share, the process that has not touched the page since
-  fork gets EFAULT (14) from UL_COMPARE_AND_WAIT_SHARED (the kernel does
-  not fault the page in), and the same wait after one read of the word
-  works (ETIMEDOUT).
+  address equals value the caller sleeps until a ulock_wake or the timeout:
+  the timeout fails with ETIMEDOUT (60) after the time (at least 15 ms went
+  by for 20 ms on the oracle); if the word differs the call returns 0 at
+  once. With ULF_NO_ERRNO the errors come back as the negative number (-60)
+  in the result with the carry flag clear. A wait that a wake ends returns
+  without an error, the result a small number (0 or 1 on the oracle: the
+  others still waiting). The address must be 4-byte aligned (8 for the
+  64-bit operation) and not NULL (EINVAL), and mapped (address 8: EFAULT);
+  UL_UNFAIR_LOCK with a value that is not the id of a thread gave EOWNERDEAD
+  (105, a value). Shared waits: on memory two processes share, the process
+  that has not touched the page since fork gets EFAULT (14) from
+  UL_COMPARE_AND_WAIT_SHARED (the kernel does not fault the page in), and
+  the same wait after one read of the word works (ETIMEDOUT).
 returns:
   woken: "a number >= 0 (0 or 1: other waiters left)"
   value_differs: "0 at once"

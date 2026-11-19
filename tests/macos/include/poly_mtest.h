@@ -4,13 +4,14 @@
  * behaviour observed is the kernel's. Built by `cargo xtask pipeline mac
  * build` for x86_64 (the convention Poly's XNU personality speaks) and arm64.
  *
- * Written for Poly from public sources only: the system call conventions
- * are the ones open-source XNU documents (osfmk/mach/i386/syscall_sw.h:
- * class 2 in the top byte of rax for BSD calls, class 1 for Mach traps;
- * arm64: the number in x16, negative for Mach traps, `svc #0x80`); BSD
- * calls report an error with the carry flag set and the errno as the
+ * Written for Poly from public sources and from observation only: the
+ * system call conventions were found by experiment on the oracle Mac
+ * (x86_64: class 2 in the top byte of rax for BSD calls, class 1 for Mach
+ * traps; arm64: the number in x16, negative for Mach traps, `svc #0x80`);
+ * BSD calls report an error with the carry flag set and the errno as the
  * result. Numbers and values come from the macOS SDK headers named beside
- * them. Behaviour only; no code is copied from anywhere.
+ * them, or were found by experiment where there is no public header. No
+ * Apple or third-party source was read; no code is copied from anywhere.
  *
  * A test is one C file that includes this header and defines
  * `int test_main(void)`. The program is linked against libSystem (macOS
@@ -119,8 +120,8 @@ typedef unsigned long size_t;
 #define SYS_getdirentries64 344
 #define SYS_thread_selfid 372
 
-/* Mach trap numbers, the trap table of open-source XNU
- * (osfmk/kern/syscall_sw.c; the names in <mach/mach_traps.h>). */
+/* Mach trap numbers: the names are those of <mach/mach_traps.h>, the numbers
+ * are the coverage map's and were checked by calling each trap. */
 #define MACH_mach_reply_port 26
 #define MACH_thread_self_trap 27
 #define MACH_task_self_trap 28
@@ -339,7 +340,7 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define KERN_OSREV 3
 #define HW_BYTEORDER 4
 #define HW_MEMSIZE 24
-/* XNU bsd/sys/sysctl.h (not in the SDK): the name-to-number call. */
+/* The name-to-number call of sysctl (no public header: found by experiment). */
 #define CTL_SYSCTL 0
 #define CTL_SYSCTL_NAME2OID 3
 /* struct kinfo_proc of <sys/sysctl.h> (648 bytes): where the fields are. */
@@ -382,7 +383,7 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define MACH_PORT_TYPE_DEAD_NAME 0x100000
 /* <mach/vm_statistics.h> */
 #define VM_FLAGS_ANYWHERE 0x00000001
-/* Mach trap numbers: XNU's trap table (osfmk/kern/syscall_sw.c) */
+/* Mach trap numbers (the names of <mach/mach_traps.h>, checked by calling them) */
 #define MACH__kernelrpc_mach_vm_allocate_trap 10
 #define MACH__kernelrpc_mach_vm_deallocate_trap 12
 #define MACH__kernelrpc_mach_vm_protect_trap 14
@@ -392,7 +393,7 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define MACH__kernelrpc_mach_port_insert_right_trap 21
 #define MACH__kernelrpc_mach_port_type_trap 76
 #define MACH_mach_wait_until_trap 90
-/* XNU bsd/sys/ulock.h (not installed in the SDK) */
+/* ulock operations and flags (no public header: found by experiment) */
 #define UL_COMPARE_AND_WAIT 1
 #define UL_UNFAIR_LOCK 2
 #define UL_COMPARE_AND_WAIT_SHARED 3

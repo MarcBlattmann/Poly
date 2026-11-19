@@ -10,38 +10,37 @@ oracle:
   date: 2026-11-14
 summary: >
   Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 202,
-  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 =
-  202, arguments in x0..x5. On failure the carry flag is set and the
-  result register holds the errno (<sys/errno.h>); on success the carry
-  flag is clear. sysctl(name, namelen, oldp, oldlenp, newp, newlen) reads
-  (and with newp writes) the value named by an array of integers
-  (<sys/sysctl.h>). {CTL_KERN 1, KERN_OSTYPE 1} is "Darwin" with its NUL
-  (7 bytes); {CTL_KERN, KERN_OSRELEASE 2} the Darwin release ("27.0.0" on
-  the oracle); {CTL_HW 6, HW_PAGESIZE 7} a 4-byte integer (16384 for
-  arm64), 4 bytes even into an 8-byte buffer; {CTL_HW, HW_NCPU 3} a
-  positive 4-byte integer. With oldp NULL the call returns 0 and sets
-  *oldlenp to the size. A buffer too small is ENOMEM, *oldlenp becomes 0
-  and nothing is copied. Observed but not tested: an unwritable oldlenp
-  (address 8) made the call never return (the thread spun at full CPU
-  until killed); Poly should fail it with EFAULT instead.
-  More names. {CTL_HW, HW_MEMSIZE 24} is an 8-byte integer (more than 1
-  GiB); HW_BYTEORDER 4 is 1234; HW_MACHINE 1 a string ("arm64" on the
-  oracle, a value); KERN_OSREV 3 is 199506; KERN_ARGMAX 8 is at least
-  262144 (1048576 on the oracle); KERN_MAXPROC 6 and KERN_MAXFILES 7 are
-  positive; KERN_VERSION 4 starts "Darwin Kernel Version " and ends with a
-  NUL; KERN_HOSTNAME 10 is not empty; KERN_OSVERSION 65 is the build
-  ("26A428", a value); KERN_BOOTTIME 21 is a struct timeval of 16 bytes
-  after 2023 (an 8-byte buffer is ENOMEM). Processes: {CTL_KERN, KERN_PROC
-  14, KERN_PROC_PID 1, pid} fills struct kinfo_proc (<sys/sysctl.h>, 648
-  bytes: p_stat at 36 is 2 for a running process, p_pid at 40, p_comm at
-  243, the uid at 420, e_ppid at 560); a pid that does not exist succeeds
-  with length 0; a 100-byte buffer is ENOMEM; a size query reports more
-  than one record (3888 on the oracle, a value). {CTL_KERN, KERN_PROCARGS2
-  49, pid} gives an int argc and then the executable's path as the program
-  was started; it is EINVAL for a pid that does not exist and for another
-  user's process (pid 1). {CTL_SYSCTL 0, 3} (name to numbers; XNU's
-  bsd/sys/sysctl.h) takes the name as new data: "kern.ostype" gives {1, 1}
-  (8 bytes), "hw.memsize" {6, 24}, "kern.nosuch" ENOENT.
+  arguments in rdi, rsi, rdx, r10, r8, r9; arm64 `svc #0x80` with x16 = 202,
+  arguments in x0..x5. On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. sysctl(name, namelen, oldp, oldlenp, newp, newlen) reads (and with
+  newp writes) the value named by an array of integers (<sys/sysctl.h>).
+  {CTL_KERN 1, KERN_OSTYPE 1} is "Darwin" with its NUL (7 bytes); {CTL_KERN,
+  KERN_OSRELEASE 2} the Darwin release ("27.0.0" on the oracle); {CTL_HW 6,
+  HW_PAGESIZE 7} a 4-byte integer (16384 for arm64), 4 bytes even into an
+  8-byte buffer; {CTL_HW, HW_NCPU 3} a positive 4-byte integer. With oldp
+  NULL the call returns 0 and sets *oldlenp to the size. A buffer too small
+  is ENOMEM, *oldlenp becomes 0 and nothing is copied. Observed but not
+  tested: an unwritable oldlenp (address 8) made the call never return (the
+  thread spun at full CPU until killed); Poly should fail it with EFAULT
+  instead. More names. {CTL_HW, HW_MEMSIZE 24} is an 8-byte integer (more
+  than 1 GiB); HW_BYTEORDER 4 is 1234; HW_MACHINE 1 a string ("arm64" on the
+  oracle, a value); KERN_OSREV 3 is 199506; KERN_ARGMAX 8 is at least 262144
+  (1048576 on the oracle); KERN_MAXPROC 6 and KERN_MAXFILES 7 are positive;
+  KERN_VERSION 4 starts "Darwin Kernel Version " and ends with a NUL;
+  KERN_HOSTNAME 10 is not empty; KERN_OSVERSION 65 is the build ("26A428", a
+  value); KERN_BOOTTIME 21 is a struct timeval of 16 bytes after 2023 (an
+  8-byte buffer is ENOMEM). Processes: {CTL_KERN, KERN_PROC 14,
+  KERN_PROC_PID 1, pid} fills struct kinfo_proc (<sys/sysctl.h>, 648 bytes:
+  p_stat at 36 is 2 for a running process, p_pid at 40, p_comm at 243, the
+  uid at 420, e_ppid at 560); a pid that does not exist succeeds with length
+  0; a 100-byte buffer is ENOMEM; a size query reports more than one record
+  (3888 on the oracle, a value). {CTL_KERN, KERN_PROCARGS2 49, pid} gives an
+  int argc and then the executable's path as the program was started; it is
+  EINVAL for a pid that does not exist and for another user's process (pid
+  1). {CTL_SYSCTL 0, 3} (name to numbers; no public header: found by
+  experiment) takes the name as new data: "kern.ostype" gives {1, 1} (8
+  bytes), "hw.memsize" {6, 24}, "kern.nosuch" ENOENT.
 returns:
   success: "0, *oldlenp = bytes copied"
   size_query: "0 with oldp NULL, *oldlenp = the value's size"

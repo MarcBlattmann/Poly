@@ -10,26 +10,27 @@ oracle:
   date: 2026-11-17
 summary: >
   Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 305,
-  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
-  `svc #0x80` with x16 = 305, arguments in x0..x5 (x0..x7 for calls with
-  more; second result in x1). On failure the carry flag is set and the
-  result register holds the errno (<sys/errno.h>); on success the carry
-  flag is clear. The call takes eight arguments, x0..x7 on arm64 (the
-  tests pass them there; x86_64 passes the later ones on the stack and is
-  not observed yet). It is the kernel side of libpthread's mutexes and
-  condition variables; the arguments are libpthread's words (open-source
-  libpthread names them cv, cvlsgen, cvugen, mutex, mugen, flags, sec,
-  nsec) and the results carry sequence state in their upper bytes. The
-  tests use cvlsgen 0x100 (one waiter registered in user space) and zeroed
-  words. psynch_cvwait(cv, cvlsgen, cvugen, mutex, mugen, flags, sec,
-  nsec) waits on a condition variable with a relative timeout (sec 0, nsec
-  20000000 = 20 ms). With nobody to signal it, it fails with ETIMEDOUT
-  (60) in the low byte of the error; the whole error was 316 (256 + 60)
-  for these arguments (a value). The wait lasts the timeout (20 ms: at
-  least 15 ms and less than a second went by; 1 ms is much shorter). A
-  NULL mutex gives the same ETIMEDOUT; a NULL condition variable was also
-  316 (a value): the words are not read before the timeout. A signal that
-  was posted before the wait is consumed by it (see psynch_cvsignal).
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64 `svc
+  #0x80` with x16 = 305, arguments in x0..x5 (x0..x7 for calls with more;
+  second result in x1). On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. The call takes eight arguments, x0..x7 on arm64 (the tests pass
+  them there; x86_64 passes the later ones on the stack and is not observed
+  yet). It is the kernel side of libpthread's mutexes and condition
+  variables; the arguments are the library's synchronisation words (this
+  spec calls them cv, cvlsgen, cvugen, mutex, mugen, flags, sec, nsec, after
+  the way the tests use them; the numbers come from experiment) and the
+  results carry sequence state in their upper bytes. The tests use cvlsgen
+  0x100 (one waiter registered in user space) and zeroed words.
+  psynch_cvwait(cv, cvlsgen, cvugen, mutex, mugen, flags, sec, nsec) waits
+  on a condition variable with a relative timeout (sec 0, nsec 20000000 = 20
+  ms). With nobody to signal it, it fails with ETIMEDOUT (60) in the low
+  byte of the error; the whole error was 316 (256 + 60) for these arguments
+  (a value). The wait lasts the timeout (20 ms: at least 15 ms and less than
+  a second went by; 1 ms is much shorter). A NULL mutex gives the same
+  ETIMEDOUT; a NULL condition variable was also 316 (a value): the words are
+  not read before the timeout. A signal that was posted before the wait is
+  consumed by it (see psynch_cvsignal).
 returns:
   woken: "not reached by the tests: needs a second thread"
 errors:

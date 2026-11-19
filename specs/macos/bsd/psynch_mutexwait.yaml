@@ -10,22 +10,23 @@ oracle:
   date: 2026-11-17
 summary: >
   Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 301,
-  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
-  `svc #0x80` with x16 = 301, arguments in x0..x5 (x0..x7 for calls with
-  more; second result in x1). On failure the carry flag is set and the
-  result register holds the errno (<sys/errno.h>); on success the carry
-  flag is clear. The call takes eight arguments, x0..x7 on arm64 (the
-  tests pass them there; x86_64 passes the later ones on the stack and is
-  not observed yet). It is the kernel side of libpthread's mutexes and
-  condition variables; the arguments are libpthread's words (open-source
-  libpthread names them cv, cvlsgen, cvugen, mutex, mugen, flags, sec,
-  nsec) and the results carry sequence state in their upper bytes. The
-  tests use cvlsgen 0x100 (one waiter registered in user space) and zeroed
-  words. psynch_mutexwait(mutex, mgen, ugen, tid, flags) waits for a
-  mutex. On a mutex word that is 0 (as if locked, nobody to drop it) it
-  does not return: a child that makes the call was still running after 150
-  ms, and SIGKILL ends it (wait status 9), SIGTERM too (15). The same for
-  a NULL mutex address (the call blocks without reading the word).
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64 `svc
+  #0x80` with x16 = 301, arguments in x0..x5 (x0..x7 for calls with more;
+  second result in x1). On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. The call takes eight arguments, x0..x7 on arm64 (the tests pass
+  them there; x86_64 passes the later ones on the stack and is not observed
+  yet). It is the kernel side of libpthread's mutexes and condition
+  variables; the arguments are the library's synchronisation words (this
+  spec calls them cv, cvlsgen, cvugen, mutex, mugen, flags, sec, nsec, after
+  the way the tests use them; the numbers come from experiment) and the
+  results carry sequence state in their upper bytes. The tests use cvlsgen
+  0x100 (one waiter registered in user space) and zeroed words.
+  psynch_mutexwait(mutex, mgen, ugen, tid, flags) waits for a mutex. On a
+  mutex word that is 0 (as if locked, nobody to drop it) it does not return:
+  a child that makes the call was still running after 150 ms, and SIGKILL
+  ends it (wait status 9), SIGTERM too (15). The same for a NULL mutex
+  address (the call blocks without reading the word).
 returns:
   never: "does not return unless another thread drops the mutex"
 errors: {}
