@@ -361,6 +361,24 @@ fn opening_files_uses_their_apps() {
     assert_eq!(s.launched.borrow().last().unwrap(), &["/bin/poly-terminal", "--dir", "/home/m/Documents"]);
 }
 
+/// A Windows program's "open" (ADR 0223): the app that opens the file is the window wanted, and
+/// Files shows its own only when nothing opened it (ADR 0234: a text that no app claims opens in
+/// the terminal's editor, which Files' window used to cover).
+#[test]
+fn opening_for_a_windows_program_leaves_the_front_to_the_app_that_opened_it() {
+    let mut s = setup();
+    assert!(!s.app.start_from_shell(poly_shell::apps::FILES_OPEN, "/home/m/photo.png"));
+    assert_eq!(s.launched.borrow().last().unwrap(), &["viewer", "/home/m/photo.png"]);
+    assert!(!s.app.start_from_shell(poly_shell::apps::FILES_OPEN, "/home/m/notes.txt"));
+    assert_eq!(s.launched.borrow().last().unwrap(), &["/bin/poly-terminal", "-e", "vi", "/home/m/notes.txt"]);
+    // Nothing opens it: Files shows it selected in its folder, with the reason.
+    std::fs::write(s.root.join("home/m/data.bin"), [0u8, 1, 2, 0xff]).unwrap();
+    let before = s.launched.borrow().len();
+    assert!(s.app.start_from_shell(poly_shell::apps::FILES_OPEN, "/home/m/data.bin"));
+    assert_eq!(s.launched.borrow().len(), before);
+    assert!(s.app.status.starts_with("No app opens"), "{}", s.app.status);
+}
+
 /// The `mimeapps.list` files of the spec's locations are read, the user's
 /// before the system's (`$XDG_CONFIG_DIRS`, where Chromium's desktop names
 /// its browser the default).

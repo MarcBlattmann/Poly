@@ -77,13 +77,16 @@ fn exe_in_guest() -> String {
 /// the window check's). `%` is `%%` in `Exec` (Desktop Entry Specification, "The Exec key").
 pub fn desktop_entry(more: &[&str], icon: bool) -> String {
     let args: Vec<String> = switches().into_iter().chain(more.iter().map(|s| s.to_string())).collect();
-    let exec = format!("\"{}\" {}", exe_in_guest(), args.join(" ").replace('%', "%%"));
+    // `%U`: the files Files opens with Chrome (the launcher drops it); the kernel gives them to
+    // Chrome as their DOS paths (ADR 0234).
+    let exec = format!("\"{}\" {} %U", exe_in_guest(), args.join(" ").replace('%', "%%"));
     let icon = if icon { format!("Icon={ICON_IN_GUEST}\n") } else { String::new() };
     format!(
         "[Desktop Entry]\nType=Application\nName={ENTRY_NAME}\nGenericName=Web Browser\n\
          Comment=Chrome for Testing {} (a Windows program) running on Poly\n{icon}Exec={exec}\n\
-         Keywords=chrome;google;browser;web;internet;windows;\n",
-        crate::chromewin::VERSION
+         Keywords=chrome;google;browser;web;internet;windows;\nMimeType={};\n",
+        crate::chromewin::VERSION,
+        crate::chromium::VIEWER_MIME_TYPES.join(";")
     )
 }
 
@@ -310,6 +313,18 @@ mod tests {
             );
         }
         assert!(!gpu_off());
+    }
+
+    #[test]
+    fn chrome_opens_the_pages_texts_pictures_and_pdfs_files_gives_it() {
+        let text = desktop_entry(&[], false);
+        assert!(text.contains("\nMimeType=text/html;"), "{text}");
+        for mime in ["text/plain", "application/pdf", "image/png", "image/jpeg"] {
+            assert!(text.contains(&format!("{mime};")), "{mime}");
+        }
+        // Files expands %U to the files; the launcher starts Chrome without it.
+        assert!(text.contains(" %U\n"));
+        assert!(!entry(&[]).argv.iter().any(|a| a.contains('%')));
     }
 
     #[test]

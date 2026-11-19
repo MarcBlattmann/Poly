@@ -456,8 +456,16 @@ pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
         env.call(Request::SendDone { id: inc.id, result: 0 });
         return;
     }
-    env.sent_hook(inc.hwnd, inc.msg, inc.w, inc.l, false);
-    let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, inc.l);
+    // WM_COPYDATA from another thread: its own COPYDATASTRUCT of the copied bytes, valid while
+    // the procedure runs (Learn, WM_COPYDATA).
+    let copy = inc.data.as_ref().map(|d| CopyDataStruct {
+        dw_data: inc.l as usize,
+        cb_data: d.len() as u32,
+        lp_data: d.as_ptr() as usize,
+    });
+    let l = copy.as_ref().map_or(inc.l, |c| c as *const CopyDataStruct as u64);
+    env.sent_hook(inc.hwnd, inc.msg, inc.w, l, false);
+    let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, l);
     env.call(Request::SendDone { id: inc.id, result: r });
 }
 
@@ -545,7 +553,24 @@ fn def_dpi_changed<E: Env + ?Sized>(env: &E, hwnd: u64, l: u64) {
 /// `SendMessageW`: a procedure of this thread is called directly; another
 /// thread's runs there while we wait (receiving what is sent to us).
 pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u64 {
-    match env.call(Request::SendStart { hwnd, msg, w, l }) {
+    // WM_COPYDATA's data goes with the message, so a receiver in another process can read it
+    // (Learn, WM_COPYDATA: the data is copied to the receiving process; ADR 0234).
+    let start = if msg == WM_COPYDATA && l != 0 {
+        // SAFETY: the caller's COPYDATASTRUCT, and its cbData bytes at lpData.
+        let (dw_data, data) = unsafe {
+            let c = (l as *const CopyDataStruct).read_unaligned();
+            let data = if c.lp_data == 0 || c.cb_data == 0 {
+                Vec::new()
+            } else {
+                core::slice::from_raw_parts(c.lp_data as *const u8, c.cb_data as usize).to_vec()
+            };
+            (c.dw_data as u64, data)
+        };
+        Request::SendCopy { hwnd, w, dw_data, data }
+    } else {
+        Request::SendStart { hwnd, msg, w, l }
+    };
+    match env.call(start) {
         Reply::SameThread { wndproc, hwnd, .. } => {
             env.sent_hook(hwnd, msg, w, l, true);
             env.call_proc(wndproc, hwnd, msg, w, l)
@@ -563,6 +588,18 @@ pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u6
         }
         _ => 0,
     }
+}
+
+/// `WM_COPYDATA` (winuser.h).
+pub const WM_COPYDATA: u32 = 0x004A;
+
+/// `COPYDATASTRUCT` (winuser.h): `dwData` (ULONG_PTR), `cbData`, `lpData`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CopyDataStruct {
+    pub dw_data: usize,
+    pub cb_data: u32,
+    pub lp_data: usize,
 }
 
 /// The style bits that decide the size of a window's frame (and so of its
