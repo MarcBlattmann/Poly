@@ -1404,8 +1404,8 @@
 <g><title>gdi32: 37 / 545 done (6.8%)</title>
 <rect x="366.0" y="537.7" width="33.0" height="28.9" fill="#21262d"/>
 <rect x="366.0" y="537.7" width="2.2" height="28.9" fill="#2ea043"/>
-<rect x="368.2" y="537.7" width="5.8" height="28.9" fill="#bb8009"/>
-<rect x="374.0" y="537.7" width="0.5" height="28.9" fill="#388bfd"/>
+<rect x="368.2" y="537.7" width="5.6" height="28.9" fill="#bb8009"/>
+<rect x="373.8" y="537.7" width="0.7" height="28.9" fill="#388bfd"/>
 <rect x="365.0" y="536.7" width="35.0" height="30.9" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="371.0" y="551.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">gdi…</text>
 </g>
