@@ -344,7 +344,15 @@ pub unsafe extern "system" fn CoMarshalInterface(
         let token = MARSHALS.with(|m| m.insert(oid, identity, owner, kind, false));
         ObjRefData { flags, iid, mshlflags, pid: pid(), oxid, oid, token }
     };
-    let data = match proxy::marshal_info(punk) {
+    // A proxy is known by its identity (an interface proxy's IUnknown is its manager's).
+    // SAFETY: the caller's COM object.
+    let (_, ident) = unsafe { query(punk, &IID_IUNKNOWN) };
+    let info = if ident.is_null() { proxy::marshal_info(punk) } else { proxy::marshal_info(ident) };
+    if !ident.is_null() {
+        // SAFETY: the query's reference (the object stays alive through the caller's).
+        unsafe { release_unknown(ident) };
+    }
+    let data = match info {
         Some(proxy::ProxyMarshalInfo::Remote { endpoint, oid }) if dw_dest_context != MSHCTX_INPROC => {
             let Some((remote_pid, remote_oxid)) = parse_endpoint(&endpoint) else { return E_UNEXPECTED };
             // One more reference at the object's process, for whoever unmarshals this.
