@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/TypeLibFile.TypeInfo.yaml
+id: windows/api/oleaut32.dll/TypeLibFile.TypeInfo
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-typelib-format
+  date: 2026-11-19
+sources: >
+  Observations of our own programs on the machine above: a script-driven caller of CreateTypeLib2, ICreateTypeLib2 and ICreateTypeInfo(2) (declarations from Microsoft Learn and oaidl.h) wrote about 150 libraries, their bytes were compared across controlled variations (one more function, one more parameter, another VARTYPE, another flag, ...) and read back through ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2; the eight sample libraries in specs/windows/oleaut32.dll/TypeLibFile.samples/ are the files those programs wrote. The updater's own six libraries (updater.exe 159.0.8140.0, TYPELIB resources 1 to 6) were read as data (the resource bytes) and compared with what the same API reports for them. The format is described in docs/windows/typelib-file-format.md. Microsoft Learn: "LoadTypeLibEx", "ITypeLib", "ITypeLib2", "ITypeInfo", "ITypeInfo2", "TYPEATTR", "TLIBATTR", "FUNCDESC", "VARDESC", "ELEMDESC", "TYPEDESC", "PARAMDESCEX", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "FUNCFLAGS", "VARENUM", oaidl.h, wtypes.h, winerror.h. No Microsoft or Google binary was decompiled or disassembled; no Wine, ReactOS or third-party description of the file format was read.
+summary: >
+  The type records of a type-library file: kinds (enum, record, module, interface, dispatch, coclass, alias, union), flags, version, GUID, name, documentation, alignment, sizes, implemented types with their flags, references between types and to the imported stdole2 library, aliases and custom data on types. This is what GetTypeAttr, GetRefTypeOfImplType, GetImplTypeFlags, GetRefTypeInfo, GetDocumentation and the custom data calls report.
+interface:
+  format: "docs/windows/typelib-file-format.md sections 4, 5 and 9: the 25-word type record, reference table, import tables and the loader behaviour for duals"
+  samples: "specs/windows/oleaut32.dll/TypeLibFile.samples/kinds.tlb and updater_like.tlb"
+installer: "The updater's libraries hold coclasses (flags 2, one implemented type IUnknown with flag 1, doc string), custom interfaces (flags 0x100, implemented type IUnknown), dual interfaces (flags 0x1140 in the file, 0x1040 reported) and one alias (ULONG_PTR = ui8) with custom data on the type."
+rules:
+  kind_and_alignment: "the TKIND is the low 4 bits of record word 0 and the alignment its bits 11 to 15 (as numbers 1, 2, 4, 8); sizes of an instance are the pointer size for interface, dispatch and coclass types, 4 for enums, 2 for modules, the data size for records and unions"
+  dual: "a dual interface is stored as a dispatch type with a marker bit; the API reports it as kind 4 with the IUnknown and IDispatch methods before its own and flags 0x1040; a dual deriving from a local dual reports the base's functions first and IDispatch as its implemented type (typeinfo_updater_like, funcs_dual)"
+  implemented_types: "a coclass lists its implemented types with their flags (default, source, restricted); an interface lists its single base; a dispinterface reports IDispatch (typeinfo_kinds)"
+  flags: "type flags are reported as set, except that the flags meaningful only for coclasses are dropped for other kinds; the help string context, help context and doc string are per type"
+  aliases: "an alias reports the aliased type (built-in, pointer, or another type by name) and a zero GUID when it has none"
+  imports: "types of stdole2 (IUnknown, IDispatch by GUID, GUID/DISPPARAMS/EXCEPINFO by index) are found through the registered stdole library; references show as the target type's name"
+  custom_data_on_types: "ITypeInfo2::GetAllCustData returns what was stored (one i4 on the alias and on one interface in the samples)"
+errors:
+  cannot_load: "a file that is not a type library: TYPE_E_CANTLOADLIBRARY 0x80029c4a (see LoadTypeLibEx); not exercised here with damaged files"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image holds the bytes of one or two sample libraries (the same files as under TypeLibFile.samples/), writes them beside itself, loads them with LoadTypeLibEx(REGKIND_NONE) (layout_resource: as the TYPELIB resource of a DLL image the test writes, headers and one .rsrc section per Microsoft Learn "PE Format") and reports every value ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2 return: library and type attributes, documentation (name, doc string, help context, help file name without its directory, help string, help string context and DLL), custom data, implemented types, functions and parameters with their types written out, variables, module entry points, GetTypeInfoOfGuid, FindName and IsName for every type. References to types are shown by the name of the type they refer to, never as numbers. The sample files carry made-up ids {B2B0F0xx-0000-4000-8000-706F6C797773}; nothing is registered.
+not_covered: >
+  custom data on implemented types, interfaces with more than one implemented type, types holding both functions and variables, every flag combination.
