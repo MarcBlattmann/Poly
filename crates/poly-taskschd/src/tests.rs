@@ -697,3 +697,39 @@ fn the_clock_runs_the_updater_task() {
     assert_eq!(h2.spawned.len(), 1);
     let _ = RunPlan::Nothing;
 }
+
+#[test]
+fn calendar_triggers() {
+    let ev = Events::default();
+    let at = |s: &str| parse_datetime(s).unwrap();
+    let one = |t: Trigger| {
+        let mut d = Definition::default();
+        d.triggers.push(t);
+        d
+    };
+    // A new monthly day-of-week trigger: the first Sunday of January (2030-01-01 is a Tuesday).
+    let mut t = Trigger::new(trigger::MONTHLYDOW);
+    t.start_boundary = Some("2030-01-01T08:00:00".into());
+    let d = one(t);
+    assert_eq!(next_fire(&d, &ev, at("2029-06-01T00:00:00")), Some(at("2030-01-06T08:00:00")));
+    assert_eq!(next_fire(&d, &ev, at("2030-01-06T08:00:00")), Some(at("2031-01-05T08:00:00")));
+    // Wednesdays every second week.
+    let mut t = Trigger::new(trigger::WEEKLY);
+    t.start_boundary = Some("2030-01-01T08:00:00".into());
+    t.days_of_week = 1 << 3;
+    t.weeks_interval = 2;
+    let d = one(t);
+    assert_eq!(next_fire(&d, &ev, 0), Some(at("2030-01-02T08:00:00")));
+    assert_eq!(next_fire(&d, &ev, at("2030-01-02T08:00:00")), Some(at("2030-01-16T08:00:00")));
+    // The 15th and the last day of January and February.
+    let mut t = Trigger::new(trigger::MONTHLY);
+    t.start_boundary = Some("2030-01-01T08:00:00".into());
+    t.months_of_year = 0b11;
+    t.days_of_month = 1 << 14;
+    t.run_on_last_day_of_month = -1;
+    let d = one(t);
+    assert_eq!(next_fire(&d, &ev, 0), Some(at("2030-01-15T08:00:00")));
+    assert_eq!(next_fire(&d, &ev, at("2030-01-15T08:00:00")), Some(at("2030-01-31T08:00:00")));
+    assert_eq!(next_fire(&d, &ev, at("2030-02-15T08:00:00")), Some(at("2030-02-28T08:00:00")));
+    assert_eq!(next_fire(&d, &ev, at("2030-02-28T08:00:00")), Some(at("2031-01-15T08:00:00")));
+}

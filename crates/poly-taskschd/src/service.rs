@@ -61,10 +61,12 @@ impl Service {
     /// Whether any task has a trigger that fires (the scheduler must then start at boot).
     pub fn needs_boot_start(&self) -> bool {
         use crate::def::trigger::*;
-        self.store
-            .each_task()
-            .iter()
-            .any(|(_, t)| t.def.triggers.iter().any(|x| matches!(x.kind, TIME | DAILY | LOGON | BOOT | REGISTRATION)))
+        self.store.each_task().iter().any(|(_, t)| {
+            t.def
+                .triggers
+                .iter()
+                .any(|x| matches!(x.kind, TIME | DAILY | WEEKLY | MONTHLY | MONTHLYDOW | LOGON | BOOT | REGISTRATION))
+        })
     }
 
     fn update_boot_start(&mut self, h: &mut dyn Host) {
