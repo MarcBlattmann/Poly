@@ -384,7 +384,7 @@ refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
 (`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
 `kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`, and `ucrtbase` for the C runtime entries; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
-programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model), by ordinal, or delay-loaded. `win diff` compares per test the 32-bit exit code, the
+programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model; `msimg32` is for `AlphaBlend`), or delay-loaded. An import by ordinal (`raw-dylib` with `#[link_ordinal(n)]`) is allowed and kept in the manifest as `#n`: it is how comctl32's `SetWindowSubclass` and its relatives (410..413) are bound by their real users. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
 start is **unsupported**. `win show`, `win diff` and `win remote` read real
@@ -507,6 +507,8 @@ same result on every run, and writes the visible tests' results to
 `<symbol>.tests/windows.json` and the held-out tests' to the store, beside
 the tests (`win diff --reference <symbol>.tests/windows.json` compares Poly
 with them without the PC). The hand-off works as for Linux entries.
+
+**Test names are unique** (`coverage check`, run by `ci coverage` and `ci lint`): `win build` builds the tests of every entry it is given, and the corpus, as one Cargo package with one binary per file, and results are looked up by name, so two files with the same name (`uc_basic` of two entries ended a CI run once) cannot live together. The check lists every name used by two entries among the visible tests and the corpus (an error); where the held-out store is present it also warns about held-out names shared with another entry (`--strict-heldout` makes those errors), reading only the manifests. Prefix a test's name with something of its entry.
 
 **Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
 `cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds

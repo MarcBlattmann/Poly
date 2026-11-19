@@ -15,7 +15,10 @@
 //!                                FILE has one id per line, `#` lines are comments, `-` is standard input)
 //! coverage set-status --component <os>/<layer>/<component> [--component ...] <status>
 //!                                                    (every entry of those components)
-//! coverage check
+//! coverage check [--strict-heldout]
+//!                                invariants of the map, unique Windows test names (visible and corpus: an error; a held-out
+//!                                name shared with another entry, when the held-out store is present: a warning, an error
+//!                                with --strict-heldout), canonical files
 //! coverage readme [--check]      README progress section + docs/progress/*.svg + the ADR index
 //!                                (generated on main only, ADR 0213: previews it locally, do not commit it)
 //! coverage generated-check [--base <rev>]
@@ -29,6 +32,7 @@
 mod generated;
 mod import;
 mod model;
+mod names;
 mod objc;
 mod readme;
 mod roadmap;
@@ -247,7 +251,7 @@ fn set_status(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn check() -> Result<(), String> {
+fn check(args: &[String]) -> Result<(), String> {
     let c = load()?;
     let errors = c.check();
     for e in &errors {
@@ -255,6 +259,19 @@ fn check() -> Result<(), String> {
     }
     if !errors.is_empty() {
         return Err(format!("{} invariant violations", errors.len()));
+    }
+    let (duplicates, warnings) = names::check(&root(), args.iter().any(|a| a == "--strict-heldout"))?;
+    for w in &warnings {
+        eprintln!("coverage: warning: {w}");
+    }
+    for d in &duplicates {
+        eprintln!("coverage: {d}");
+    }
+    if !duplicates.is_empty() {
+        return Err(format!(
+            "{} Windows test names are used twice (rename one of the tests and record it again: `pipeline win build` builds all tests of its entries in one package)",
+            duplicates.len()
+        ));
     }
     let stale = c.stale_files(&coverage_dir())?;
     if !stale.is_empty() {
@@ -462,7 +479,7 @@ fn main() -> ExitCode {
         Some("claim") => claim(rest),
         Some("release") => release(rest),
         Some("set-status") => set_status(rest),
-        Some("check") => check(),
+        Some("check") => check(&args[1..]),
         Some("readme") => readme(rest),
         Some("generated-check") => generated_check(rest),
         _ => {

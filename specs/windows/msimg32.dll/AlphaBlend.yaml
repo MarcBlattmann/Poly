@@ -1,0 +1,64 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/msimg32.dll/AlphaBlend
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop): memory device contexts with DIB sections need no desktop; every test runs twice with identical output; the probes that led to the rules below were made with Python ctypes on the same machine"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above (pixels read back from DIB sections
+  selected into memory device contexts). Microsoft Learn reference pages of AlphaBlend,
+  BLENDFUNCTION, CreateDIBSection, SelectClipRgn, SetWindowOrgEx and "Alpha Blending";
+  wingdi.h, windef.h and winerror.h for constants and layouts. Wine's code and tests were not used,
+  no Microsoft binary was decompiled or disassembled.
+summary: >
+  Blends a rectangle of a source device context onto a rectangle of a destination device context
+  (stretching the source with the nearest-pixel rule when the rectangles differ in size) and returns
+  TRUE. Only BlendOp AC_SRC_OVER (0) exists. With AlphaFormat 0 every byte of a pixel, alpha byte
+  included, becomes (s*a + d*(255-a) + 127) / 255 where a is SourceConstantAlpha; with AC_SRC_ALPHA (1)
+  the source is a 32-bit bitmap of premultiplied pixels and each pixel is laid over the destination by
+  its own alpha, scaled by SourceConstantAlpha, as the rules below give to the byte.
+interface:
+  signature: "BOOL AlphaBlend(HDC hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest, HDC hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn)"
+  blendfunction: "BLENDFUNCTION { BYTE BlendOp; BYTE BlendFlags; BYTE SourceConstantAlpha; BYTE AlphaFormat; } passed by value (4 bytes, in one register); AC_SRC_OVER 0, AC_SRC_ALPHA 1"
+  exports: "exported by msimg32.dll (the coverage map lists it as forwarding gdi32 GdiAlphaBlend); the tests import it from msimg32.dll by name"
+rules:
+  constant_alpha: "AlphaFormat 0: every byte b of the destination pixel (blue, green, red AND the alpha byte of a 32-bit destination) becomes (s*a + d*(255-a) + 127) / 255 (integer division), s the source byte, d the destination byte, a = SourceConstantAlpha. Exact for every pair of bytes (65536 pairs) at 28 values of a (0..8, 21 to 242 in steps of 13, and 255) and for the table values of a = 0, 1, 2, 17, 64, 100, 127, 128, 129, 200, 254, 255. a = 0 leaves the destination unchanged, a = 255 copies the source (alpha byte included: source alpha 200 over destination alpha 50 gives 200, source alpha 0 gives 0). Blending a red byte of 255 at a = 128 over black again and again gives the red byte 128, 192, 224, 240, 248, 252."
+  alpha_bytes_from_24_and_16_bit_sources: "a 24 bit or 16 bit source has no alpha byte: onto a 32-bit destination its alpha counts as 255 (a = 100: the destination alpha byte 0 becomes 100)"
+  premultiplied: "AlphaFormat AC_SRC_ALPHA (the source must be a 32-bit bitmap with premultiplied pixels, colour byte <= alpha byte): per channel with s the source colour byte, sa its alpha byte, d the destination colour byte, da the destination's alpha byte, a = SourceConstantAlpha: if sa = 255: result = (s*a + d*(255-a) + 127) / 255 and alpha = a + (da*(255-a) + 127) / 255; otherwise let s2 = (s*a + 127) / 255, a2 = (sa*a + 127) / 255, result = s2 + (d*(255-a2) + 127) / 255 and alpha = a2 + (da*(255-a2) + 127) / 255. All integer divisions. A source pixel with sa = 0 and s = 0 leaves the destination as it is. Exact over all 65536 (sa, s <= sa) pairs of the grid for each of 40 combinations of a (255, 254, 200, 128, 64, 17, 1, 0) and destination colour/alpha ((0,0), (100,255), (255,255), (37,77), (200,0)), and for every table pixel."
+  non_premultiplied: "a source pixel whose colour byte exceeds its alpha byte (not premultiplied) is not clamped the same way: when the sum s2 + (d*(255-a2)+127)/255 exceeds 255 the result is the sum minus 255 (a = 255, s = 255, sa = 1, d = 100: 355 gives 100; s = 2, sa = 1, d = 255: 256 gives 1), and a source pixel with sa = 0 leaves the destination alone whatever its colour; the alpha byte of such a pixel's result can be one more than the formula gives (s = 255, sa = 1, a = 255: alpha 2). Not required of an implementation to be exact for these pixels (not covered below); the tests hash them separately."
+  per_pixel_alpha_depth: "AC_SRC_ALPHA needs a 32-bit source: with a 24-bit or 16-bit source the call fails (see errors); a 32-bit source of alpha 0 pixels changes nothing (AlphaFormat 1 with the pixels of a source that was only filled with colours leaves the destination unchanged). The destination may be 32, 24 or 16 bits per pixel (16 bits is the default 5-5-5 format); for 24 and 16 bits there is no alpha byte, and the 16-bit results are shown as raw 16-bit words in the tests."
+  stretching: "when the rectangles have different sizes, each destination column dx (0-based) takes the source column floor((dx*sw + k) / dw) where sw and dw are the source and destination widths in pixels and k = 0 if dw = sw or dw = sw - 1, k = sw - 1 if dw = sw + 1, and k = floor(sw/2) otherwise; rows the same with the heights. So 4 -> 8 takes columns 0 0 1 1 2 2 3 3; 4 -> 2 takes 1 3; 4 -> 3 takes 0 1 2 (the last source column is dropped); 4 -> 5 takes 0 1 2 3 3; 4 -> 6 takes 0 1 1 2 3 3; 5 -> 13 takes 0 0 0 1 1 2 2 2 3 3 4 4 4. Exact for all 288 pairs of sw 1..12 and dw 1..24 and in the tests for sw 1..40 with dw 1..100, vertically for heights 1..34 and 1..70. There is no filtering: the blend uses the one source pixel picked. The picked pixel is blended exactly as above (per-pixel alpha stretched with the pixel picked)."
+  rectangles: "(xoriginSrc, yoriginSrc, wSrc, hSrc) is the part of the source in the source DC's logical units; (xoriginDest, yoriginDest, wDest, hDest) the part of the destination in the destination DC's logical units. A destination that lies partly or wholly outside the destination bitmap is clipped (TRUE, the part inside is drawn: destination (-2,-1) 8x6 over a 20x14 bitmap draws 30 pixels; (16,11) 8x6 draws 12; wholly outside draws nothing). The clip region of the destination DC clips (clip (6,4,10,7) of a (3,2) 8x6 blend leaves 12 pixels; an empty clip region leaves none, and TRUE)."
+  dc_state: "the destination's and the source's window and viewport origins, mapping mode and world transform apply to their rectangles (destination window origin (-5,-3) puts a destination rectangle at (1,1) at device (6,4); viewport origin (4,2) puts it at (5,3); MM_ANISOTROPIC 2x doubles the destination rectangle (1,1) 4x3 to device (2,2) 8x6; a source window origin (2,1) makes the source rectangle (2,1) the bitmap's pixel (0,0)). The destination's clip region is in device units."
+  orientation: "top-down and bottom-up DIB sections (negative or positive biHeight) as source and destination give the same picture: row 0 as seen from the top stays row 0."
+  same_dc: "the same DC as source and destination works when the rectangles do not overlap (the blend of (2,0) 2x2 onto (0,0) at 128: red over blue gives 0080007f); when they overlap, or are identical, the call fails (FALSE, ERROR_INVALID_PARAMETER) and nothing is drawn."
+  zero_sizes: "a zero width or height of either rectangle: TRUE, nothing drawn, the last error is left alone."
+errors:
+  blendfunction: "BlendOp other than 0, AlphaFormat other than 0 or 1, BlendFlags other than 0, 1, 128 and 129 (the only values of the 256 that are accepted): FALSE (0), last error ERROR_INVALID_PARAMETER (87), nothing drawn; AlphaFormat 1 with a source that is not 32 bits per pixel: FALSE, 87"
+  device_contexts: "NULL or a made-up destination DC: FALSE, ERROR_INVALID_HANDLE (6); a made-up source DC or a brush handle as the source DC: FALSE, 87; a NULL source DC: FALSE with the last error not set"
+  sizes: "a negative width or height of either rectangle: FALSE, 87 (AlphaBlend does not mirror); a source rectangle that is not wholly inside the source bitmap (negative origin, or origin plus size beyond the bitmap, one pixel too wide, wholly outside): FALSE, 87; nothing is drawn"
+  success: "TRUE (1); the last error is left alone"
+side_effects: "paints pixels of the destination bitmap"
+threading: "a device context belongs to one thread at a time"
+ordering: []
+timing:
+  typical: "well under a millisecond per small rectangle"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll, kernel32.dll and msimg32.dll by name, each carrying its
+  own declarations (Learn prototypes, header constants). Each blends between 32-bit (or 24-bit and
+  16-bit) DIB sections in memory device contexts and prints pixel values as hexadecimal words (the
+  alpha byte first), tables, bounding boxes and counts of changed pixels, or an FNV hash of a whole grid
+  together with the number of pixels that differ from the sheet's formulas. The programs never print
+  handles or addresses.
+not_covered: >
+  Windows and printer device contexts (only memory device contexts were used), paletted (8-bit)
+  bitmaps, exact 16-bit rounding (the tests print the raw words as observed), device dependent
+  bitmaps as destinations, the non-premultiplied source pixels (see non_premultiplied), BlendFlags
+  128 and 129 beyond their being accepted, rotated or sheared world transforms, stretching beyond the
+  ranges listed, metafile device contexts.

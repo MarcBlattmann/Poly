@@ -1,0 +1,55 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/OffsetWindowOrgEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop): memory device contexts need no desktop; every test runs twice with identical output; the probes that led to the rules below were made with Python ctypes on the same machine"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of
+  OffsetWindowOrgEx, SetWindowOrgEx, GetWindowOrgEx, SetViewportOrgEx, SetMapMode, LPtoDP, DPtoLP,
+  SaveDC, RestoreDC, SetWorldTransform and "Coordinate Spaces and Transformations", "Mapping
+  Modes and Translations"; wingdi.h, windef.h and winerror.h for constants and layouts. Wine's
+  code and tests were not used, no Microsoft binary was decompiled or disassembled.
+summary: >
+  Moves the window origin of a device context by adding (x, y) to it, optionally returns the
+  previous origin, and returns TRUE. A logical point (lx, ly) then maps to the device point where
+  (lx - origin.x, ly - origin.y) maps without the origin, so everything drawn afterwards shifts
+  by (-x, -y) device units (scaled by the mapping's extents).
+interface:
+  signature: "BOOL OffsetWindowOrgEx(HDC hdc, int x, int y, LPPOINT lppt)"
+  lppt: "may be NULL; when given and the call succeeds it receives the origin before the change; on failure it is not written"
+rules:
+  start: "a new memory device context has window origin (0,0) (GetWindowOrgEx 1, 0, 0)."
+  add: "the origin becomes (ox + x, oy + y) as 32-bit integers: (0,0) + (5,7) = (5,7), + (-2,3) = (3,10), + (0,0) = (3,10) (TRUE, old point (3,10)), + (4,4) with a NULL pointer = (7,14), + (-7,0) = (0,14); SetWindowOrgEx(100,200) then Offset (1,1): old (100,200), new (101,201)."
+  old_point: "lppt receives the origin from before the call: the (0,0) of the new DC, then (5,7), (3,10), (3,10), (100,200)."
+  wrap: "the sum wraps like a 32-bit integer without an error: (2147483647, 2147483647) + (1,1) = (-2147483648, -2147483648); (-2147483648, -2147483648) + (-1,-1) = (2147483647, 2147483647); offsetting (0,0) by (2147483647, 2147483647) works and returns TRUE."
+  per_dc: "each device context has its own origin; saving and restoring the DC (SaveDC, RestoreDC) saves and restores the origin ((2,3) + (10,10) = (12,13), after RestoreDC (2,3))."
+  mapping_text: "in every mapping mode LPtoDP(0,0) after offsetting by (10,20) is the device point of the logical point (-10,-20) in that mode: MM_TEXT (1): (-10,-20) and DPtoLP(0,0) = (10,20); MM_LOMETRIC (2): (-4, 8) (a unit is a tenth of a millimetre and y runs up; the numbers depend on the device's size in millimetres and pixels, here a memory DC compatible with the screen of session 0) and (0,0) maps to (0,0) before the offset; MM_HIMETRIC (3): (0,1); MM_LOENGLISH (4): (-10,19); MM_HIENGLISH (5): (-1,2); MM_TWIPS (6): (-1,1); MM_ISOTROPIC (7): (-4,8) before any extent is set (the same numbers as MM_LOMETRIC); MM_ANISOTROPIC (8): (-10,-20). With y-up modes LPtoDP(10,10) after the offset is (0,-10) in MM_TEXT, (0,4) in MM_LOMETRIC, (0,10) in MM_LOENGLISH."
+  viewport: "the viewport origin is added on the device side and is not changed: viewport (100,200) plus window offset (10,20): LPtoDP(0,0) = (90,180), GetViewportOrgEx still (100,200)."
+  extents: "the window origin is in logical units and scales with the extents: MM_ISOTROPIC window extent 100 to viewport extent 200, offset (10,10): LPtoDP(10,10) = (0,0), LPtoDP(20,20) = (20,20), DPtoLP(0,0) = (10,10); MM_ANISOTROPIC window 100x50 to viewport 300x50, offset (-5,5): LPtoDP(0,0) = (15,-5), LPtoDP(10,10) = (45,5)."
+  advanced: "in GM_ADVANCED the world transform acts first and the window origin after it (the origin is in page space): scale 2 and offset (5,5): LPtoDP(10,10) = (15,15), LPtoDP(0,0) = (-5,-5); translation (7,3) and offset (5,5): LPtoDP(0,0) = (2,-2)."
+  drawing: "what is drawn afterwards moves by the negative offset: FillRgn of the region (20,10,30,18) after offset (5,3) lies at x 15..24, y 7..14; after (-5,-3) at x 25..34, y 13..20; after (13,-7) at x 7..16, y 17..24; after (-30,0), (0,40) or (100,100) it falls outside a 50x36 bitmap and nothing is painted. RoundRect with the null pen follows the same shift. Two offsets (3,2) and (4,1) give the same drawing as one of (7,3)."
+  clip: "a clip region selected into the DC is in device coordinates and is not moved by the offset, whether it was selected before or after the offset (clip (10,5,25,14) and offset (-6,-2): the fill of (0,0,40,30) paints x 10..24, y 5..13 in both orders)."
+errors:
+  invalid_dc: "NULL or a made-up handle: FALSE (0), last error ERROR_INVALID_HANDLE (6), lppt not written; a stock object handle (not a DC) gives the same"
+  deleted_dc: "a DC that was deleted with DeleteDC: FALSE (0), lppt not written, and the last error is not set (stays 0)"
+  success: "TRUE (1); the last error is left alone"
+side_effects: "changes the DC's window origin only"
+threading: "a device context belongs to one thread at a time"
+ordering: []
+timing:
+  typical: "well under a microsecond per call"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll and kernel32.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants). Observations are values of GetWindowOrgEx,
+  LPtoDP, DPtoLP, return values and last errors, and bounding boxes and counts of pixels painted
+  into a 32-bit DIB section in a memory DC. The programs never print handles or addresses.
+not_covered: >
+  Window and printer device contexts (only memory device contexts were used), metafile device
+  contexts (the offset is recorded as a record), rotated and sheared world transforms.
