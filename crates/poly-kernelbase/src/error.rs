@@ -16,6 +16,8 @@ pub const ERROR_INVALID_ACCESS: u32 = 12;
 pub const ERROR_OUTOFMEMORY: u32 = 14;
 /// `ERROR_FILE_EXISTS` (`winerror.h`).
 pub const ERROR_FILE_EXISTS: u32 = 80;
+/// `ERROR_DIR_NOT_ROOT` (`winerror.h`).
+pub const ERROR_DIR_NOT_ROOT: u32 = 144;
 /// `ERROR_NEGATIVE_SEEK` (`winerror.h`).
 pub const ERROR_NEGATIVE_SEEK: u32 = 131;
 /// `ERROR_BAD_ARGUMENTS` (`winerror.h`).

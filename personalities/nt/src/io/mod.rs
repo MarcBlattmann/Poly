@@ -69,6 +69,7 @@ pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
+pub mod streams;
 pub mod walk;
 
 #[cfg(test)]
@@ -185,6 +186,10 @@ pub struct DiskFile {
     /// The directory and name it was opened by (for rename and delete).
     pub parent: Option<NodeRef>,
     pub name: Vec<u8>,
+    /// The named stream this file object is open on (ADR 0223): then `node`
+    /// is the stream's backing file and `parent`/`name` its place in the
+    /// file's stream directory.
+    pub stream: Option<Vec<u16>>,
 }
 
 /// What a file object is open on.
@@ -558,6 +563,23 @@ impl IoState {
         self.files.get(&cookie)
     }
 
+    /// The path in Poly's file system of a file object of a disk volume: the volume's VFS
+    /// path and the file's path below it, with `/` between the names (ADR 0223: what a
+    /// Windows program's "open" or "show in folder" hands to the desktop).
+    pub fn native_path(&self, cookie: u64) -> Option<alloc::string::String> {
+        let disk = self.file(cookie)?.disk()?;
+        let volume = self.volumes.get(disk.volume)?;
+        let mut out = alloc::string::String::from_utf8_lossy(&volume.path).into_owned();
+        for part in disk.path.split(|&c| c == u16::from(b'\\')).filter(|p| !p.is_empty()) {
+            out.push('/');
+            out.push_str(&alloc::string::String::from_utf16_lossy(part));
+        }
+        if out.is_empty() {
+            out.push('/');
+        }
+        Some(out)
+    }
+
     pub fn file_mut(&mut self, cookie: u64) -> Option<&mut FileRecord> {
         self.files.get_mut(&cookie)
     }
@@ -722,6 +744,9 @@ impl IoState {
                     let state = self.nodes.remove(&d.key).expect("there");
                     if state.delete_pending {
                         self.delete_node(d.key, &d.node, state.link);
+                        if d.stream.is_none() {
+                            self.drop_streams_if_gone(d.volume, &d.node);
+                        }
                     }
                 }
             }

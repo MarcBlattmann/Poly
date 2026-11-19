@@ -4,8 +4,11 @@
 //! `SHGetKnownFolderPath`, `SHGetPropertyStoreForWindow` (the browser treats a failure of either
 //! as fatal) and `Shell_NotifyIconW` (delay-loaded: the export has to exist). The behaviour is
 //! Learn's (`shellapi.h`, `shlobj_core.h`, `propsys.h`); the logic is
-//! `poly_kernelbase::{shell, knownfolder, propstore}`. Every other shell32 function is bound to
-//! polystub by the loader.
+//! `poly_kernelbase::{shell, knownfolder, propstore}`. Chrome's downloads (ADR 0223) added
+//! shell items ([`item`]), the file operation object ([`fileop`]), the taskbar and jump lists
+//! ([`taskbar`]), the desktop folder and item lists ([`folder`]) and `ShellExecuteExW`
+//! ([`exec`]); the classes reach `ole32` through `DllGetClassObject` ([`com`]), Poly's desktop
+//! through win32k's link. Every other shell32 function is bound to polystub by the loader.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -564,7 +567,7 @@ pub unsafe extern "system" fn ILFree(pidl: *mut u8) {
 /// counts itself, then `cb - 2` bytes) holding the object's full path in UTF-16 without the NUL, then
 /// the `cb` 0 that ends a list. The Shell's lists are opaque to programs: they pass them back to the
 /// functions here (`SHGetPathFromIDListW`) and free them (`ILFree`).
-unsafe fn pidl_of_path(path: &[u16]) -> *mut u8 {
+pub(crate) unsafe fn pidl_of_path(path: &[u16]) -> *mut u8 {
     let cb = 2 + 2 * path.len();
     if cb > 0xFFFF {
         return core::ptr::null_mut();
@@ -579,6 +582,36 @@ unsafe fn pidl_of_path(path: &[u16]) -> *mut u8 {
         core::ptr::copy_nonoverlapping(path.as_ptr().cast::<u8>(), p.add(2), 2 * path.len());
         p.add(cb).cast::<u16>().write_unaligned(0);
         p
+    }
+}
+
+/// The desktop's list: no item, only the `cb` 0 that ends a list (`SHGetPathFromIDListW` gives
+/// no path for it).
+pub(crate) fn pidl_of_desktop() -> *mut u8 {
+    // SAFETY: the process heap (the task allocator); two bytes, both 0.
+    unsafe {
+        let p = HeapAlloc(GetProcessHeap(), 0, 2);
+        if !p.is_null() {
+            p.cast::<u16>().write_unaligned(0);
+        }
+        p
+    }
+}
+
+/// The path one of Poly's lists holds (`None` for the desktop's empty list, NULL, or a list
+/// whose item has no room for a path).
+pub(crate) unsafe fn pidl_path(pidl: *const u8) -> Option<Vec<u16>> {
+    if pidl.is_null() {
+        return None;
+    }
+    // SAFETY: a list the Shell functions here made: `cb`, then `cb - 2` bytes of path.
+    unsafe {
+        let cb = usize::from(pidl.cast::<u16>().read_unaligned());
+        if cb < 4 {
+            return None;
+        }
+        let units = (cb - 2) / 2;
+        Some((0..units).map(|i| pidl.add(2 + 2 * i).cast::<u16>().read_unaligned()).collect())
     }
 }
 
@@ -666,7 +699,13 @@ pub extern "system" fn shell32_main(_module: *mut u8, _reason: u32, _reserved: *
     1
 }
 
+mod com;
 mod delayed;
+mod exec;
+mod fileop;
+mod folder;
+mod item;
+mod taskbar;
 
 #[cfg(target_arch = "x86_64")]
 mod apps;

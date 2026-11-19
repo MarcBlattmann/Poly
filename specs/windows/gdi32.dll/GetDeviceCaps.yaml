@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
   observed_by: spec-chrome-win-s3
   date: 2026-11-14
+oracle_200: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
 sources: >
   Observations of our own test programs on the machine above, and the recording of Chrome for Testing
   157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
@@ -24,6 +25,8 @@ rules:
   dc_kinds: "the DC of CreateDCW('DISPLAY'), of CreateICW('DISPLAY'), GetDC(window), GetWindowDC(window) and a fresh CreateCompatibleDC(screen) differ from the screen DC in no capability; a memory DC keeps BITSPIXEL 32 with CreateCompatibleBitmap(screen), CreateBitmap(w, h, 1, 32), 32-bit and 24-bit DIB sections and the initial 1x1 bitmap, and with CreateBitmap(12, 7, 1, 1) selected too (the memory DC reports the display's depth); a compatible DC of a memory DC likewise; CreateCompatibleBitmap of a monochrome DC is 1 bit per pixel"
   bad_index: "indexes -1, 1, 3, 5, 7, 9, 13, 15, 100, 122-124, 200, 399-401 (not defined): 0 with the last error unchanged"
   invalid_dc: "NULL, a made-up handle and a deleted DC: 0"
+  at_200_values: "for the screen DC, a window DC, a display DC (CreateDCW DISPLAY) and a memory DC alike: an unaware or GDI-scaled caller gets HORZRES 1280, VERTRES 800, LOGPIXELSX/Y 96; an aware caller (system, per-monitor, per-monitor-v2) HORZRES 2560, VERTRES 1600, LOGPIXELSX/Y 192. DESKTOPHORZRES 2560 and DESKTOPVERTRES 1600 (physical) for every caller; HORZSIZE 677 and VERTSIZE 423 mm (no EDID: 96 DPI assumed) for every caller; BITSPIXEL 32, PLANES 1, ASPECTX 36, ASPECTY 36, ASPECTXY 51, SCALINGFACTORX/Y 0 for every caller"
+
 errors:
 side_effects: "none beyond the rules above"
 threading: "windows belong to the thread that created them; focus, activation, capture and key state are per thread (per input queue) unless noted"
@@ -33,7 +36,7 @@ timing:                                       # envelopes, never exact values
   guarantees: none
 tests:
   visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  held_out: 6  # count kept by the diff runner
 building_tests: >
   Rust tests (ADR 0075) importing user32.dll, gdi32.dll, dwmapi.dll and imm32.dll by name, each carrying its
   own declarations (Learn prototypes, header constants) and a message log; run with poly-oracle.ps1

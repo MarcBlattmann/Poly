@@ -280,6 +280,24 @@ pub fn installer_entry(path: &str) -> App {
     }
 }
 
+/// Files asked to open `path` with the program Poly opens such a file with (`show` false), or
+/// to show it selected in its folder (`show` true): a Windows program's `ShellExecuteExW` with
+/// no program of its own for the file, or its "show in folder" (ADR 0223).
+pub fn files_entry(path: &str, show: bool) -> App {
+    App {
+        name: "Files".into(),
+        comment: "Browse and organise your files".into(),
+        keywords: Vec::new(),
+        argv: alloc::vec![FILES.into(), (if show { FILES_SHOW } else { FILES_OPEN }).into(), path.into()],
+        id: "poly-files".into(),
+        icon: None,
+    }
+}
+
+/// Files' arguments for [`files_entry`]: show a file selected in its folder, open a file.
+pub const FILES_SHOW: &str = "--show";
+pub const FILES_OPEN: &str = "--open";
+
 /// The installer's window that uninstalls the app with desktop file ID
 /// `id`, as an app the desktop starts (Files asked for it, ADR 0180).
 pub fn uninstaller_entry(id: &str) -> App {
@@ -396,6 +414,33 @@ pub fn installed_for_user(files: &dyn AppFiles, user_dir: &str, skipped: &mut dy
     apps.extend(user);
     apps.sort_by(|a, b| a.id.cmp(&b.id));
     catalog(apps)
+}
+
+/// Whether the desktop starts `app` as the desktop's user (ADR 0218)
+/// rather than as itself: an app of a desktop file the system has (in
+/// [`APPLICATIONS`], not replaced by one of the user's own in `user_dir`:
+/// Debian's packages, Poly's Chromium), never Poly's own programs (the
+/// built-ins, the installer, which runs `dpkg`, and Poly's Terminal for a
+/// `Terminal=true` entry) or what the installer put in the user's folder
+/// (an AppImage, installed for the user that runs the desktop).
+pub fn runs_as_user(files: &dyn AppFiles, user_dir: &str, app: &App) -> bool {
+    let poly_program = app.argv.first().is_some_and(|p| [TERMINAL, INSTALLER, FILES].contains(&p.as_str()));
+    let own = |dir: &str| files.read(&alloc::format!("{}/{}", dir.trim_end_matches('/'), app.id)).is_some();
+    app.id.ends_with(".desktop")
+        && app.id != INSTALLER_ID
+        && app.internal().is_none()
+        && app.window().is_none()
+        && !poly_program
+        && own(APPLICATIONS)
+        && !own(user_dir)
+}
+
+/// `argv` started through `wrapper`, the program that runs another as the
+/// desktop's user (`poly-as-user PROGRAM [ARGUMENT...]`).
+pub fn through(wrapper: &str, argv: &[String]) -> Vec<String> {
+    let mut all = alloc::vec![String::from(wrapper)];
+    all.extend(argv.iter().cloned());
+    all
 }
 
 /// Every installed app: the one list the launcher offers and Files'
@@ -549,6 +594,50 @@ mod tests {
         assert_eq!(data_home(Some("/data/"), Some("/home/x")), "/data");
         assert_eq!(data_home(Some("relative"), Some("/home/x/")), "/home/x/.local/share");
         assert_eq!(data_home(None, None), "/root/.local/share");
+    }
+
+    #[test]
+    fn the_systems_apps_run_as_the_user_poly_s_own_and_the_users_do_not() {
+        const APP: &str = "[Desktop Entry]
+Type=Application
+Name=Google Chrome
+Exec=/usr/bin/google-chrome-stable %U
+";
+        const VIM: &str = "[Desktop Entry]
+Type=Application
+Name=Vim
+Exec=vim %F
+Terminal=true
+";
+        const OWN: &str = "[Desktop Entry]
+Type=Application
+Name=Hello Pixels
+Exec=/h/x.AppImage
+";
+        const MINE: &str = "[Desktop Entry]
+Type=Application
+Name=Mine
+Exec=mine
+";
+        let user = "/root/.local/share/applications";
+        let disk = Disk(vec![
+            ("/usr/share/applications/google-chrome.desktop", APP),
+            ("/usr/share/applications/vim.desktop", VIM),
+            ("/usr/share/applications/mine.desktop", APP),
+            ("/root/.local/share/applications/mine.desktop", MINE),
+            ("/root/.local/share/applications/poly-appimage-hello-pixels.desktop", OWN),
+        ]);
+        let apps = installed_for_user(&disk, user, &mut |_, _| {});
+        let as_user: Vec<&str> = apps.iter().filter(|a| runs_as_user(&disk, user, a)).map(|a| a.id.as_str()).collect();
+        assert_eq!(as_user, ["google-chrome.desktop"], "not Poly's apps, a terminal app, nor the user's own");
+        let chrome = apps.iter().find(|a| a.id == "google-chrome.desktop").unwrap();
+        assert_eq!(
+            through("/usr/local/bin/poly-as-user", &chrome.argv),
+            ["/usr/local/bin/poly-as-user", "/usr/bin/google-chrome-stable"]
+        );
+        // The installer's window runs dpkg: it stays the desktop's own.
+        let disk = Disk(vec![("/usr/share/applications/poly-installer.desktop", APP)]);
+        assert!(!runs_as_user(&disk, user, &installer_entry("/home/poly/Downloads/a.deb")));
     }
 
     #[test]

@@ -47,6 +47,17 @@ fn io_error(e: CacheError) -> IoError {
     }
 }
 
+/// Disk errors written to the log so far: the file system above only says
+/// `EIO`, so the first few say what the disk layer met, where.
+static REPORTED: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+fn reported(disk: &Disk, op: &str, first: u64, blocks: usize, e: CacheError) -> IoError {
+    if REPORTED.fetch_add(1, Ordering::Relaxed) < 20 {
+        kprintln!("fs: {} {op} of block {first} (+{blocks}) failed: {e:?}", disk.name());
+    }
+    io_error(e)
+}
+
 impl BlockIo for DiskIo {
     fn block_size(&self) -> u32 {
         self.0.info().block_size
@@ -61,7 +72,8 @@ impl BlockIo for DiskIo {
     }
 
     fn read(&self, first: u64, buf: &mut [u8]) -> Result<(), IoError> {
-        self.0.read(first, buf).map_err(io_error)
+        let bs = self.0.info().block_size as usize;
+        self.0.read(first, buf).map_err(|e| reported(self.0, "read", first, buf.len() / bs.max(1), e))
     }
 
     fn write(&self, first: u64, buf: &[u8]) -> Result<(), IoError> {
@@ -71,13 +83,13 @@ impl BlockIo for DiskIo {
         }
         let mut cache = self.0.lock();
         for (block, data) in (first..).zip(buf.chunks(bs)) {
-            cache.write_block(block, data).map_err(io_error)?;
+            cache.write_block(block, data).map_err(|e| reported(self.0, "write", block, 1, e))?;
         }
         Ok(())
     }
 
     fn flush(&self) -> Result<(), IoError> {
-        self.0.sync().map_err(io_error)
+        self.0.sync().map_err(|e| reported(self.0, "flush", 0, 0, e))
     }
 }
 
