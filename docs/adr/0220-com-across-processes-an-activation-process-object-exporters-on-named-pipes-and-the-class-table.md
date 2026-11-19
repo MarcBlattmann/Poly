@@ -289,3 +289,44 @@ No third-party source.
   - a dispinterface's functions have vtable offset 0;
   - parameters without names are left out of `GetNames`.
 - **One fact the sheet's table does not list:** a module's type record word 21 holds the offset of its first DLL name, which a function without its own DLL reports (rule `modules`). It was seen in the sample `kinds.tlb` and is noted for the spec agent.
+
+### B2c (2026-11-19): security and caller identity
+
+The 12 entries of track `spec-win-com-sec` (11 in `ole32`, and `rpcrt4!I_RpcOpenClientProcess`) are implemented on top of the
+exporters and pipes above, from the sheets and their visible tests only. The rules are in `poly_com::security` (host-tested), and the Win32 side is in `ole32`'s
+`oop::security`, `oop::proxy` and `comlaunch`.
+
+- **Who calls.** A call's message (`wire::Request::Call`) now carries a `Caller`: the impersonation level its proxy asks for, and
+  whether it is the `CreateInstance` of an activation. It does not carry the client's process id: the exporter asks the pipe for it
+  (`GetNamedPipeClientProcessId`), so a client cannot claim to be someone else.
+- **Process security.** `CoInitializeSecurity` checks its arguments first, so a refused call does not lock. It works once, and the
+  first attempt to reach a local server locks it too. It accepts these descriptors:
+  - none: no access check;
+  - an absolute descriptor, kept as a self-relative copy;
+  - with `EOAC_APPID`, the `AppID`'s `AccessPermission`.
+
+  Without the call, the default admits the process's own user, LocalSystem and Administrators. That is why a LocalSystem service
+  admits an elevated administrator and refuses a filtered one. The exporter checks every incoming call except reference counting:
+  it calls `AccessCheck` with an identification token of the client and `COM_RIGHTS_EXECUTE`, and a refused call gets
+  `E_ACCESSDENIED`. A descriptor whose entries lack `EXECUTE` is refused, and the process then admits nobody, as the sheet observed.
+- **Launch permission.** `comlaunch` checks the client against the class's `AppID\LaunchPermission` before it hands out a class
+  object:
+  - a legacy descriptor, whose entries hold `EXECUTE` alone, needs `EXECUTE`;
+  - any other needs `EXECUTE | ACTIVATE_LOCAL`;
+  - entries without `EXECUTE` give `REGDB_E_INVALIDVALUE`.
+- **The call context.** While the exporter runs a call, the serving thread holds it in a TLS slot. The context ends when the call
+  returns: impersonation is reverted, and a kept `IServerSecurity` goes stale (`RPC_E_CALL_COMPLETE`).
+  - `CoGetCallContext` gives one `IServerSecurity` per call.
+  - `ImpersonateClient` puts the client's token on the thread. Its level is impersonation for an activation, and the level of the
+    proxy's blanket for a direct call.
+  - `I_RpcOpenClientProcess` opens the client's process, or for an activation the activation process (noted from the activation
+    pipe). `rpcrt4` is still the generated stub DLL; that one export is a forwarder to `ole32`.
+- **Blankets.** Each interface of a proxy has its own blanket. A proxy block answers `IClientSecurity`.
+  - The blanket rules are those of the local transport: NTLMSSP and `PKT_PRIVACY` whatever is asked, the server's
+    `<DOMAIN>\<user>` as the default principal, and `NONE`+`ANONYMOUS` refusing the next calls without sending them.
+  - `CoCopyProxy` makes a copy block. It has its own interface pointer and blanket, it holds a reference on the original, and it
+    answers every other interface with the original's identity.
+- **Not done yet:**
+  - `comlaunch.exe` runs with the token of whichever client started it. On Windows the activation service is SYSTEM, so a
+    standard-token server cannot open it (`I_RpcOpenClientProcess` = 5). Poly should start `comlaunch` as SYSTEM.
+  - Remote (network) DCOM, `IAccessControl`, cloaking, and explicit `SEC_WINNT_AUTH_IDENTITY` credentials.
