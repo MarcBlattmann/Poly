@@ -1051,12 +1051,15 @@ unsafe extern "system" fn obj_release(this: *mut c_void) -> u32 {
         let n = (*(this as *mut Obj)).refs.fetch_sub(1, SeqCst) - 1;
         if n == 0 {
             CoTaskMemFree(this);
-            let left = LIVE_OBJECTS.fetch_sub(1, SeqCst) - 1;
+            let left = LIVE_OBJECTS.load(SeqCst) - 1;
             ssay!("obj released live={left}");
             if OBJ_RELEASE_SERVER.load(SeqCst) != 0 {
                 let c = CoReleaseServerProcess();
                 ssay!("CoReleaseServerProcess -> {c}");
             }
+            // The object only stops counting as alive now, after its release of the server process has been logged: the
+            // server's main thread leaves once no object is alive, so its "last object gone" line always follows these two.
+            LIVE_OBJECTS.fetch_sub(1, SeqCst);
         }
         n
     }
