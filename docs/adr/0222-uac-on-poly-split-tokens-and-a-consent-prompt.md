@@ -233,10 +233,13 @@ name as not found (`0xc0000139`).
 Batch B7 (the Chrome installer end to end) met this twice. Google's 32-bit `ChromeSetup.exe` stopped
 at `kernel32!QueryFullProcessImageNameW`, and its 32-bit `updater.exe` at `gdi32!FrameRgn`.
 
-**Now the lists are compiled for i686 as well, in all 40 crates**, through the 32-bit stubs above:
+**Now the lists are compiled for i686 as well, in all 41 crates**, through the 32-bit stubs above:
 - **In the table:** a function `x86_signatures.txt` knows pops its arguments and fails like its
   64-bit form (145 of the 1,036 names today).
 - **Not in the table:** any other name logs and ends the process when it is called.
+
+The C runtimes' exports (`msvcrt`, `ucrtbase`) are `cdecl`, and none is in the table, so their stubs end the process
+rather than pop anything.
 
 So a 32-bit program loads like a 64-bit one, and the serial log names the first function it
 really needs. A name gets its slots in the table when a program reaches it.
