@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/bsdthread_create.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# bsdthread_create.tests/macos.json.
+id: macos/syscall/bsd/bsdthread_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 360,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 360, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. bsdthread_create(start function, argument, stack, thread
+  structure, flags) makes a thread. A raw test cannot start a thread of
+  its own: libSystem registered libpthread's thread entry point at start-
+  up (bsdthread_register: a second registration is EINVAL), the kernel
+  starts every new thread there, and that code needs a thread structure
+  libpthread built (a probe with the flag for a caller-made stack,
+  0x01000000, got a thread back, and the process was killed by signal 5
+  when it started on a made-up structure: that is libpthread's reaction,
+  not specified here). What the kernel refuses is observed: all arguments
+  0 is EINVAL (22); a start function with no stack and no thread structure
+  is EINVAL (also with an argument); without the flag for a caller-made
+  stack (flags 0), a stack size with a thread structure that is not
+  libpthread's, or with none, is EINVAL.
+returns:
+  success: "not reached: a thread cannot be started from a raw test"
+errors:
+  bad_arguments: "EINVAL (22)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
