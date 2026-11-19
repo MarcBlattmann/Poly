@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "port_type_errors",
+      "source_sha256": "de91bdb4fab5c00fea4551dcad85e3b3ab706adb26d74e27349c6a57ac96f1ee",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d2deaa08a2adfa23a03e2100a6f75e209c41f1a8270186292cbae16fbd1b7164",
+          "exit_code": 0,
+          "stdout": "ok an unknown name: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_NAME\nok nothing was written for errors\nok MACH_PORT_DEAD: KERN_SUCCESS\nok and it is a dead name\nok an invalid task: MACH_SEND_INVALID_DEST\nvalue the type pointer 8: kern_return 10\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "port_type_values",
+      "source_sha256": "c1717419c8d750b2e015abed095147786d44d6e356be56dfa94bc7f74de98239",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8973310780f79750c9421b5987010cf21ef506a9c7856231e75a0d58ceaf4f49",
+          "exit_code": 0,
+          "stdout": "ok a new receive right: 0x20000\nok with a send right made from it: 0x30000\nok the task's own name: send\nok the thread's own name: send\nok the host's own name: send\nok the call returns KERN_SUCCESS\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

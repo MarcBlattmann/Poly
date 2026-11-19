@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_port_deallocate_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_port_deallocate_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_port_deallocate_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 18;
+  arm64 `svc #0x80` with x16 = -18. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  port_deallocate(task, name) gives up one user reference of a send right
+  or dead name; the right goes when its last reference does. After two
+  make-send inserts there are two references: the first deallocate leaves
+  receive + send (0x30000), the second leaves only the receive right
+  (0x20000). A receive right is KERN_INVALID_RIGHT (17) and stays; a
+  destroyed or unknown name is KERN_INVALID_NAME (15); MACH_PORT_NULL and
+  MACH_PORT_DEAD succeed (0); an invalid task is MACH_SEND_INVALID_DEST.
+  The task's own name is a send right that can be deallocated once and is
+  still a send right (0x10000) afterwards (mach_task_self hands out
+  references); a reply port is a receive right destroyed with mod_refs.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  receive_right: "KERN_INVALID_RIGHT (17)"
+  no_such_name: "KERN_INVALID_NAME (15): unknown or destroyed names"
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "a user reference is released"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
