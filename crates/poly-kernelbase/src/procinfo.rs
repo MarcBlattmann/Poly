@@ -330,6 +330,43 @@ pub fn process_memory_counters(vm: &[u8], cb: u32, word: usize) -> Result<Vec<u8
     Ok(out)
 }
 
+// ----- QueryFullProcessImageNameW (specs/windows/kernel32.dll/QueryFullProcessImageNameW.yaml)
+
+/// `PROCESS_NAME_NATIVE` (`winbase.h`): the device form (`\Device\HarddiskVolumeN\...`).
+pub const PROCESS_NAME_NATIVE: u32 = 1;
+
+/// Whether `QueryFullProcessImageNameW`'s `dwFlags` ask for the device form; any value but 0
+/// and `PROCESS_NAME_NATIVE` is `ERROR_INVALID_PARAMETER` (the sheet's rule `bad_flags`).
+pub fn image_name_native(flags: u32) -> Result<bool, u32> {
+    match flags {
+        0 => Ok(false),
+        PROCESS_NAME_NATIVE => Ok(true),
+        _ => Err(ERROR_INVALID_PARAMETER),
+    }
+}
+
+/// Whether a name of `len` characters fits a buffer of `size` characters with its NUL: a size
+/// that is at most the length is `ERROR_INSUFFICIENT_BUFFER` (the sheet's rule `size`; `*size`
+/// then stays as it was).
+pub fn image_name_fits(len: usize, size: u32) -> Result<(), u32> {
+    if (size as usize) > len { Ok(()) } else { Err(ERROR_INSUFFICIENT_BUFFER) }
+}
+
+/// A `GetFinalPathNameByHandleW` `VOLUME_NAME_DOS` path (`\\?\C:\...`, `\\?\UNC\server\...`)
+/// in the form without the long-path prefix (`C:\...`, `\\server\...`).
+pub fn without_long_prefix(path: &[u16]) -> Vec<u16> {
+    let is = |p: &[u16], t: &[u8]| p.len() >= t.len() && p.iter().zip(t).all(|(&a, &b)| a == u16::from(b));
+    if is(path, br"\\?\UNC\") {
+        let mut v = alloc::vec![u16::from(b'\\')];
+        v.extend_from_slice(&path[7..]);
+        return v;
+    }
+    if is(path, br"\\?\") {
+        return path[4..].to_vec();
+    }
+    path.to_vec()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,5 +555,22 @@ mod tests {
         assert_eq!(u64::from_le_bytes(mi[16..24].try_into().unwrap()), 0x1_8000_1234);
         assert_eq!(module_info(0x40_0000, 0x5000, 0x40_1000, 12, 4).unwrap().len(), 12);
         assert_eq!(module_info(0x40_0000, 0x5000, 0x40_1000, 11, 4), Err(122));
+    }
+
+    #[test]
+    fn image_name_flags_size_and_prefix() {
+        assert_eq!(image_name_native(0), Ok(false));
+        assert_eq!(image_name_native(1), Ok(true));
+        for f in [2, 0x10, 0xFFFF_FFFF] {
+            assert_eq!(image_name_native(f), Err(87));
+        }
+        for size in [0, 1, 4, 10] {
+            assert_eq!(image_name_fits(10, size), Err(122));
+        }
+        assert_eq!(image_name_fits(10, 11), Ok(()));
+        let w = |s: &str| s.encode_utf16().collect::<std::vec::Vec<u16>>();
+        assert_eq!(without_long_prefix(&w(r"\\?\C:\a\b.exe")), w(r"C:\a\b.exe"));
+        assert_eq!(without_long_prefix(&w(r"\\?\UNC\srv\s\b.exe")), w(r"\\srv\s\b.exe"));
+        assert_eq!(without_long_prefix(&w(r"C:\x")), w(r"C:\x"));
     }
 }

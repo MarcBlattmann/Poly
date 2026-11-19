@@ -2,13 +2,13 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "4b19c16f2075",
+  "bundle": "7de4c595ffea",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-17T10:40:04Z",
+  "started": "2026-11-19T20:12:00Z",
   "tests": [
     {
       "name": "release_below_zero",
@@ -22,7 +22,7 @@
       "output": "class CX registered for the local server, count 0 (never raised): 0x00000000\n  release 4294967295, release 4294967294\n  lookup after releases of a count that was never raised: 0x00000000\n  add 4294967295\n  lookup at count 1: 0x00000000\n  release 4294967294\n  lookup at count 0 reached by a release: 0x00000000\nrelease at zero: 4294967293, release 4294967292, release 4294967291\n  add 4294967292, add 4294967293, add 4294967294, add 4294967295\n  release 4294967294, release 4294967293, release 4294967292\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 56
+      "ms": 72
     },
     {
       "name": "release_no_com",
@@ -36,11 +36,11 @@
       "output": "fresh process: release 0, release 0\n  add 1, add 2\n  release 1, release 0\n  release at zero 4294967295, release 4294967294\n  add 4294967295, add 0, add 1\n  release 0, release 4294967295, release 4294967294\na thread initialised MTA, add 4294967295, release 4294967294, and uninitialised it\n  then in this thread (no COM): add 4294967295, add 0, release 4294967295, release 4294967294\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 52
+      "ms": 49
     },
     {
       "name": "release_server_quit",
-      "exe_sha256": "b53c71e67266caa467fd99b4f917f29ac1d40ba821652d08342f611bdca2929e",
+      "exe_sha256": "b84739c410555ae3a805903ad63ceb4754ff88207761ccb95f99901cfa6fe5b4",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -50,7 +50,7 @@
       "output": "two objects: 0x00000000 0x00000000, server processes 1\nafter the first release the server is still running: 1\nafter the last release the server left by itself 1\na new activation: 0x00000000, server processes 2\nboth servers left 1\n  CoAddRefServerProcess -> 2\n  CoAddRefServerProcess -> 3\n  CoReleaseServerProcess -> 1\n  CoReleaseServerProcess -> 0\n  last object gone\n  CoAddRefServerProcess -> 2\n  CoReleaseServerProcess -> 0\n  last object gone\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 354
+      "ms": 337
     }
   ]
 }

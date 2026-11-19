@@ -67,6 +67,8 @@ pub const SYSTEM_MODULES: &[&str] = &[
     "wintrust.dll",
     "cfgmgr32.dll",
     "dbghelp.dll",
+    // Google's 32-bit updater imports AlphaBlend.
+    "msimg32.dll",
 ];
 
 /// Every module of the set, in the cache under these names.
@@ -379,10 +381,14 @@ fn parse<'a>(name: &str, bytes: &'a [u8]) -> Result<poly_pe::Pe<'a>> {
     Ok(pe)
 }
 
-/// The names `pe` exports.
+/// The names `pe` exports, and its ordinals as `#<ordinal>`.
 fn export_names(name: &str, pe: &poly_pe::Pe<'_>) -> Result<std::collections::BTreeSet<String>> {
     let exports = pe.exports().map_err(|e| format!("{name} exports: {e:?}"))?.ok_or(format!("{name}: no exports"))?;
-    Ok(exports.names().filter_map(|r| r.ok()).map(|(n, _)| String::from_utf8_lossy(n).into_owned()).collect())
+    let mut out: std::collections::BTreeSet<String> =
+        exports.names().filter_map(|r| r.ok()).map(|(n, _)| String::from_utf8_lossy(n).into_owned()).collect();
+    // Imports by ordinal read `#<ordinal>` ([`imports`]).
+    out.extend(exports.functions().filter_map(|r| r.ok()).map(|e| format!("#{}", e.ordinal)));
+    Ok(out)
 }
 
 /// What `pe` imports, by DLL (lower case).

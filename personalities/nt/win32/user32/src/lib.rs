@@ -328,6 +328,14 @@ impl Env for Sys {
 
     fn set_cursor(&self, cursor: u64) {
         with_cursor(|c| *c = cursor as usize);
+        show_cursor_shape(cursor as usize);
+    }
+
+    fn set_system_cursor(&self, idc: u16) {
+        if let Some(i) = CURSORS.iter().position(|c| c.0 == idc) {
+            with_cursor(|c| *c = CURSOR_BASE + i);
+            show_cursor_shape(CURSOR_BASE + i);
+        }
     }
 
     fn region_rects(&self, rgn: u64) -> Option<Vec<Rect>> {
@@ -3055,6 +3063,10 @@ pub extern "system" fn SetCursor(cursor: H) -> H {
     prev
 }
 
+/// The window and cursor the compositor was told last ([`show_cursor_shape`]): a program that
+/// sets the same cursor at every mouse move tells it once.
+static CURSOR_SHOWN: SpinLock<(u32, u16)> = SpinLock::new((0, 0));
+
 /// Tell the compositor which system cursor to show over the window under
 /// the pointer (created cursors and NULL keep the previous look).
 fn show_cursor_shape(shape: H) {
@@ -3065,7 +3077,11 @@ fn show_cursor_shape(shape: H) {
         && let Reply::Handle { hwnd: root } = call(Request::Ancestor { hwnd: u64::from(hwnd), flags: 2 })
         && root != 0
     {
-        call(Request::CursorShape { hwnd: root, idc: CURSORS[i].0 });
+        let idc = CURSORS[i].0;
+        if CURSOR_SHOWN.with(|s| core::mem::replace(s, (root, idc)) == (root, idc)) {
+            return;
+        }
+        call(Request::CursorShape { hwnd: root, idc });
     }
 }
 
@@ -3313,5 +3329,4 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
 
 mod delayed;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

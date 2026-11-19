@@ -575,6 +575,42 @@ fn an_internal_windows_margins_take_the_pointer_where_no_window_is_above() {
 }
 
 #[test]
+fn the_pointer_shows_an_internal_windows_cursor_and_resize_arrows_on_a_frames_border() {
+    use crate::compose::{CursorLook, NamedCursor};
+    let (mut srv, _) = server();
+    let s = srv.add_internal_window("Chrome", "windows", 200, 100);
+    srv.set_internal_pixels(s, 200, 100, &[0x12_3456; 200 * 100], None);
+    let (x, y) = srv.scene().window(s).unwrap().position();
+    let look = |srv: &Server| srv.scene().cursor_look().clone();
+    motion(&mut srv, x + 50, y + 50);
+    assert_eq!(look(&srv), CursorLook::Arrow);
+    // The window's owner sets its cursor (a Windows program's SetCursor): shown over it.
+    srv.set_internal_cursor(s, Some(NamedCursor::Hand));
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::Hand));
+    // Off the window the desktop's arrow; back on it, its cursor again.
+    motion(&mut srv, x - 60, y + 50);
+    assert_eq!(look(&srv), CursorLook::Arrow);
+    motion(&mut srv, x + 60, y + 50);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::Hand));
+    // Poly's frame: the resize arrows on its border, by the edge and the corner.
+    let outer = srv.scene().frame_rect(s).unwrap();
+    motion(&mut srv, outer.x, y + 50);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::ResizeEW));
+    motion(&mut srv, x + 100, outer.bottom() - 1);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::ResizeNS));
+    motion(&mut srv, outer.right() - 1, outer.bottom() - 1);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::ResizeNWSE));
+    // While the window is resized by its border the arrows stay, wherever the pointer goes.
+    srv.handle_input(InputEvent::PointerButton { time: 1, button: BTN_LEFT, pressed: true });
+    srv.internal_start_resize(s, 8 | 2);
+    motion(&mut srv, outer.right() + 40, outer.bottom() + 30);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::ResizeNWSE));
+    srv.handle_input(InputEvent::PointerButton { time: 2, button: BTN_LEFT, pressed: false });
+    motion(&mut srv, x + 60, y + 50);
+    assert_eq!(look(&srv), CursorLook::Named(NamedCursor::Hand));
+}
+
+#[test]
 fn an_owned_internal_window_is_not_a_window_to_switch_to() {
     // A Windows app's status bubble or menu: a popup owned by its window.
     let (mut srv, _) = server();

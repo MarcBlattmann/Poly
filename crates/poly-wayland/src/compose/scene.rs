@@ -123,6 +123,9 @@ pub struct Content {
     /// Enlarged to a larger output scale with a bilinear filter rather than
     /// nearest neighbour (a Windows app's window that draws at 100 %, ADR 0219).
     pub smooth: bool,
+    /// Every pixel is opaque, as the content's owner knows (false when it does not): shown pixel
+    /// for pixel, it hides what is below it, which is then not drawn (ADR 0232).
+    pub opaque: bool,
 }
 
 impl Content {
@@ -196,6 +199,9 @@ pub enum CursorLook {
     /// The arrow with a spinner: an app is starting (ADR 0167). The number
     /// is the spinner's picture, `0..BUSY_PHASES`.
     Busy(u8),
+    /// A named look of Poly's own (ADR 0234): the hand, the I-beam, the resize arrows. Never
+    /// [`NamedCursor::Arrow`] or [`NamedCursor::Progress`] (those are `Arrow` and `Busy`).
+    Named(super::NamedCursor),
 }
 
 /// The composed picture of what lies behind a window (the layers below it
@@ -561,6 +567,10 @@ impl Scene {
                 Rect::new(x - hx, y - hy, w, h)
             }
             CursorLook::Busy(_) => Rect::new(x, y, BUSY_SIZE.0, BUSY_SIZE.1),
+            CursorLook::Named(n) => {
+                let ((w, h), (hx, hy)) = (n.size(), n.hotspot());
+                Rect::new(x - hx, y - hy, w, h)
+            }
             CursorLook::Hidden => Rect::default(),
         }
     }
@@ -947,8 +957,16 @@ impl Scene {
                 pixels: vec![0; width as usize * height as usize],
                 view,
                 smooth,
+                opaque: false,
             };
         });
+    }
+
+    /// Whether every pixel of window `id`'s content is opaque ([`Content::opaque`]).
+    pub fn set_opaque(&mut self, id: WindowId, opaque: bool) {
+        if let Some(c) = self.content_mut(id) {
+            c.opaque = opaque;
+        }
     }
 
     /// Enlarge window `id`'s content smoothly (bilinear) when the output's

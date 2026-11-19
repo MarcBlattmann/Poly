@@ -19,7 +19,7 @@ rules:
   file: "a DOS path (C:\\a\\b c.txt) or UNC path (\\\\server\\share\\a b) becomes file:///C:/a/b%20c.txt resp. file://server/share/a%20b; file:c:/a/b becomes file:///c:/a/b; with URL_FILE_USE_PATHURL or URL_WININET_COMPATIBILITY a file URL becomes file://C:\\a\\b c (backslash form); URL_CONVERT_IF_DOSPATH and URL_INTERNAL_PATH also turn DOS paths into file URLs"
   guess: "URL_APPLY_GUESSSCHEME alone returns www.example.com unchanged in these runs (no scheme is added); URL_APPLY_GUESSFILE turns C:\\a\\b into file:///C:/a/b"
   buffer: "capacity (*pcch on entry) counts units including the NUL: a result of n units needs n+1; with enough room the result is written, NUL-terminated, *pcch = n and the result is S_OK (0); with too little room the buffer is not written, the result is E_POINTER (0x80004003) and *pcch = n+1; capacity 0 gives E_INVALIDARG (0x80070057) and *pcch stays 0; an empty URL gives S_OK, *pcch 0, the buffer holds a NUL (capacity 1 is enough)"
-  in_place: "the output buffer may be the input buffer (the examples in uc_buffers)"
+  in_place: "the output buffer may be the input buffer (the examples in ucanon_buffers)"
   null_arguments: "a NULL URL, a NULL output buffer or a NULL length pointer: E_INVALIDARG (0x80070057); *pcch is left as it was"
   long: "URLs of 250 and 310 units work with a buffer of 400 units (no extra limit seen below that)"
 examples:
@@ -138,7 +138,7 @@ ordering: []
 timing:
   typical: "microseconds"
   guarantees: "none"
-building_tests: "Rust tests (ADR 0075). uc_basic: 51 URLs and paths with flags 0; uc_flags: the flags above on suitable inputs, each line `flags <hex> <input> -> hr, cch, result`; uc_buffers: buffer capacities, NULL arguments, in-place, long input. Non-ASCII units print as <xxxx>."
+building_tests: "Rust tests (ADR 0075). ucanon_basic: 51 URLs and paths with flags 0; ucanon_flags: the flags above on suitable inputs, each line `flags <hex> <input> -> hr, cch, result`; ucanon_buffers: buffer capacities, NULL arguments, in-place, long input. Non-ASCII units print as <xxxx>."
 not_covered: "URL_UNESCAPE_INPLACE, UTF-8 escaping flags (URL_ESCAPE_AS_UTF8), URLs over 2084 units, IPv6 hosts, internationalized hosts, other schemes' special handling (about:, javascript:) beyond the examples, the A form (UrlCanonicalizeA), the shlwapi 'Wrap' ordinals."
 tests:
   visible: 2

@@ -176,8 +176,13 @@ pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/servi
 /// Poly's `explorer.exe`, the stand-in of the session's shell (ADR 0222), installed in
 /// `C:\Windows` by [`layout`] and started for the elevated logon; empty without `xtask`.
 pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explorer.exe"));
+/// Poly's `cmd.exe`, the command processor (ADR 0240), installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static CMD_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cmd.exe"));
 /// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
 pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
+/// Our `msimg32.dll`: `AlphaBlend` over `gdi32!GdiAlphaBlend`.
+pub static MSIMG32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msimg32.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -1304,7 +1309,9 @@ impl Launch {
     pub fn of(path: &[u8], argv: &[&[u8]]) -> Launch {
         Launch {
             image_path: layout::dos_path(path),
-            args: argv.iter().skip(1).map(|a| String::from_utf8_lossy(a).into_owned()).collect(),
+            // A path naming a file reaches the program as its DOS path (Files opening a
+            // download with a Windows program, ADR 0234).
+            args: argv.iter().skip(1).map(|a| layout::dos_argument(String::from_utf8_lossy(a).into_owned())).collect(),
         }
     }
 
