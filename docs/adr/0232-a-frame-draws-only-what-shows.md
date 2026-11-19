@@ -110,3 +110,30 @@ the same session:
 
 Presentation feedback (`wp_presentation`) and frame callbacks were already in place and were not
 the cause; Xwayland is not involved.
+
+## Addendum: a commit's copy in one pass (2026-11-20)
+
+With the scene fixed, taking Chromium's buffers in was the next cost: about 3.5 ms per frame of
+the whole-page animation (`take_avg_ms`). The copy was already limited to the damage, the
+`wl_shm` buffer's damaged rectangles only, but it went through the client's memory twice per row:
+`ShmMap::read` copied the row into a scratch buffer, and a loop then put each pixel together from
+its four bytes into the window's content. `ShmMap::read_pixels` (new; its default still reads
+bytes) now lets the compositor's mapping copy a row straight into the content with one `memcpy`;
+`Buffer::copy_rect` then sets the alpha of `xrgb8888` in place and swaps red and blue only for the
+`bgr` formats. Chrome for Windows already copied its rows this way (ADR 0224) and is unchanged.
+
+Measured as before (same session, the commit before this one against this one):
+
+| Linux Chromium | Before | After |
+|---|---|---|
+| Whole-page animation (65 %): take; fps | 3.4–3.7 ms; 70–74 | 0.67–0.76 ms; 74–75 |
+| Text field: take | 0.17–0.21 ms | 0.06–0.07 ms |
+| Chrome for Windows animation: take; fps | 1.8–1.9 ms; 57–60 | 1.9–2.0 ms; 53–60 |
+
+The 0.7 ms left is the copy of 2.65 million pixels at memory speed. Composing straight from the
+client's memory (no copy) was considered and not done: Poly would have to keep each buffer until the
+next commit replaced it instead of releasing it after the copy, which costs a client one more buffer
+in flight and is a protocol-visible change (`wl_buffer.release` comes later); the scene would read
+memory another process owns and could change after a misbehaving client's early reuse, at every
+redraw instead of once; and the formats would have to be converted while drawing. All that for at
+most 0.7 ms of a 13 ms frame.
