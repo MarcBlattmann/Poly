@@ -23,6 +23,7 @@
 
 extern crate alloc;
 
+pub mod authenticode;
 pub mod cert;
 pub mod chain;
 pub mod der;

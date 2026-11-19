@@ -204,6 +204,7 @@ fn tools_files_after_native() -> Result<Vec<PathBuf>> {
     files.extend(crate::sevenzip_trace::staged_files());
     files.extend(crate::sevenzip::stage_prebuild()?);
     files.extend(crate::desktop::prebuild_windows_app()?);
+    files.extend(crate::desktop::wininstaller::prebuild()?);
     Ok(files)
 }
 

@@ -338,6 +338,11 @@ pub enum Service {
     /// Buffer, Length, CompletionFilter, WatchTree)` (Learn: "ZwNotifyChangeDirectoryFile";
     /// [`crate::io::notify`]).
     NotifyChangeDirectoryFile,
+    /// `PolyRequestElevation(Path, PathLength, Token*)`: the consent broker of User Account
+    /// Control (ADR 0222, [`crate::consent`]): asks the user whether the program at `Path` may run
+    /// elevated and waits; `STATUS_SUCCESS` with a full primary token for a yes, `STATUS_CANCELLED`
+    /// for a no.
+    PolyRequestElevation,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -501,7 +506,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 80] = [
+pub const SERVICES: [(Service, u32, &str); 81] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -582,6 +587,7 @@ pub const SERVICES: [(Service, u32, &str); 80] = [
     (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
     (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
     (Service::PolyServiceCall, (TABLE_POLY << 12) | 5, "PolyServiceCall"),
+    (Service::PolyRequestElevation, (TABLE_POLY << 12) | 6, "PolyRequestElevation"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the

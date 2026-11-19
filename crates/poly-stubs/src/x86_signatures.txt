@@ -313,3 +313,37 @@ winhttp!WinHttpSetOption 4
 
 winmm!PlaySoundA 3
 winmm!PlaySoundW 3
+
+# Google's Chrome installers (survey-chrome-installer, ADR 0222): what their 32-bit stub and
+# updater import that Poly fails or lacks, from the prototypes on Learn. Some of these are fail-only
+# exports of Poly's own i686 modules (`fail_exports!`), whose stubs pop the same bytes.
+advapi32!ChangeServiceConfig2W 3
+advapi32!ChangeServiceConfigW 11
+advapi32!CreateServiceW 13
+advapi32!DeleteService 1
+advapi32!ImpersonateNamedPipeClient 1
+advapi32!QueryServiceConfigW 4
+advapi32!StartServiceCtrlDispatcherW 1
+kernel32!GetTimeFormatW 6
+kernel32!GetUserPreferredUILanguages 4
+kernel32!K32QueryWorkingSetEx 3
+kernel32!LCIDToLocaleName 4
+kernel32!QueryFullProcessImageNameW 4
+kernel32!SetProcessWorkingSetSize 3
+kernel32!WTSGetActiveConsoleSessionId 0
+msimg32!AlphaBlend 11
+ole32!CoAddRefServerProcess 0
+ole32!CoGetCallContext 2
+ole32!CoIncrementMTAUsage 1
+ole32!CoRegisterClassObject 5
+ole32!CoReleaseServerProcess 0
+ole32!CoResumeClassObjects 0
+ole32!CoRevokeClassObject 1
+shell32!IsUserAnAdmin 0
+shell32!ShellExecuteExW 1
+wtsapi32!WTSEnumerateSessionsW 5
+shell32!DragQueryFileW 4
+shell32!SHAppBarMessage 2
+shell32!SHChangeNotify 4
+shell32!SHGetFileInfoW 5
+gdi32!SetBrushOrgEx 4

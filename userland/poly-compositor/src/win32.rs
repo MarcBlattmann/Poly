@@ -78,6 +78,15 @@ pub enum Action {
     /// Start an interactive move or resize of the window.
     BeginMove(WindowId),
     BeginResize(WindowId, Edges),
+    /// A Windows program asks for administrator rights (ADR 0222): the desktop shows its
+    /// consent prompt for `request` and answers on the link.
+    Consent {
+        request: u32,
+        pid: u32,
+        program: alloc::string::String,
+        path: alloc::string::String,
+        file: alloc::string::String,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -491,6 +500,15 @@ impl WindowsSurfaces {
                     }
                 }
             }
+            ToCompositor::Consent { request, pid, ref program, ref path, ref file } => {
+                actions.push(Action::Consent {
+                    request,
+                    pid,
+                    program: program.clone(),
+                    path: path.clone(),
+                    file: file.clone(),
+                });
+            }
             ToCompositor::Destroy { surface } => {
                 self.drop_layers(surface, &mut actions);
                 if let Some(s) = self.surfaces.remove(&surface) {
@@ -643,6 +661,8 @@ pub struct Link {
     /// What Windows programs asked the desktop to open (`false`) or show in Files (`true`),
     /// by path (ADR 0223), for the compositor's loop.
     shell: Vec<(bool, alloc::string::String)>,
+    /// Consent prompts win32k asked for, for the desktop (ADR 0222).
+    consents: Vec<Action>,
 }
 
 /// The `xdg_toplevel.resize_edge` bits of the server's interactive resize
@@ -715,6 +735,7 @@ impl Link {
             resizes: Vec::new(),
             layout: alloc::string::String::new(),
             shell: Vec::new(),
+            consents: Vec::new(),
         })
     }
 
@@ -859,6 +880,16 @@ impl Link {
         }
     }
 
+    /// The consent prompts asked for since the last call ([`Action::Consent`]).
+    pub fn take_consents(&mut self) -> Vec<Action> {
+        core::mem::take(&mut self.consents)
+    }
+
+    /// The user's answer to consent prompt `request` (ADR 0222).
+    pub fn answer_consent(&mut self, request: u32, allow: bool) {
+        self.send(FromCompositor::Consent { request, allow });
+    }
+
     fn send(&mut self, record: FromCompositor) {
         let mut bytes = Vec::new();
         record.encode(&mut bytes);
@@ -912,6 +943,7 @@ impl Link {
                     Action::Activate(w) => scene.raise(w),
                     Action::BeginMove(w) => self.moves.push(w),
                     Action::BeginResize(w, edges) => self.resizes.push((w, edges)),
+                    a @ Action::Consent { .. } => self.consents.push(a),
                     // The copy was made with the buffer record; cursors
                     // come with a later slice.
                     Action::TakeBuffer(_) | Action::Cursor(..) => {}

@@ -65,6 +65,17 @@ fn read_exact(read: ReadAt<'_>, at: u64, len: usize) -> Result<Vec<u8>, u32> {
 /// [`ERROR_NOT_AN_IMAGE`], an image without a version resource (or without
 /// resources at all) `ERROR_RESOURCE_TYPE_NOT_FOUND`.
 pub fn read_version_resource(read: ReadAt<'_>) -> Result<Vec<u8>, u32> {
+    let bytes = read_resource(read, resource_type::VERSION, 1)?;
+    if bytes.len() < 6 {
+        return Err(ERROR_RESOURCE_DATA_NOT_FOUND);
+    }
+    Ok(bytes)
+}
+
+/// The bytes of resource `kind` / `name` (both ids; the first language) of the PE file `read`
+/// reads, read at the offsets it needs only. Not a PE image: [`ERROR_NOT_AN_IMAGE`]; no such
+/// resource type: `ERROR_RESOURCE_TYPE_NOT_FOUND`, no such resource: `ERROR_RESOURCE_DATA_NOT_FOUND`.
+pub fn read_resource(read: ReadAt<'_>, kind: u32, name: u32) -> Result<Vec<u8>, u32> {
     let mut head = read_exact(read, 0, HEADER_READ)?;
     if head.len() < 0x40 || &head[..2] != b"MZ" {
         return Err(ERROR_NOT_AN_IMAGE);
@@ -74,19 +85,19 @@ pub fn read_version_resource(read: ReadAt<'_>) -> Result<Vec<u8>, u32> {
         Err(poly_pe::Error::Truncated) => {
             // Headers longer than a page (many sections): read more.
             head = read_exact(read, 0, 0x10000)?;
-            return finish(read, &head);
+            return finish(read, &head, kind, name);
         }
         Err(_) => return Err(ERROR_NOT_AN_IMAGE),
     };
-    finish_with(read, &pe)
+    finish_with(read, &pe, kind, name)
 }
 
-fn finish(read: ReadAt<'_>, head: &[u8]) -> Result<Vec<u8>, u32> {
+fn finish(read: ReadAt<'_>, head: &[u8], kind: u32, name: u32) -> Result<Vec<u8>, u32> {
     let pe = Pe::parse(head).map_err(|_| ERROR_NOT_AN_IMAGE)?;
-    finish_with(read, &pe)
+    finish_with(read, &pe, kind, name)
 }
 
-fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
+fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>, kind: u32, name: u32) -> Result<Vec<u8>, u32> {
     let d = pe.info().directory(dir::RESOURCE).filter(|d| d.virtual_address != 0 && d.size != 0);
     let Some(d) = d else { return Err(ERROR_RESOURCE_TYPE_NOT_FOUND) };
     let Some((_, section)) = pe.sections().find_rva(d.virtual_address) else {
@@ -99,7 +110,7 @@ fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
     let not_found = |_| ERROR_RESOURCE_DATA_NOT_FOUND;
     let root = ResourceDirectory::from_tree(tree).map_err(not_found)?;
     let by_name = root
-        .find(ResourceKey::Id(resource_type::VERSION))
+        .find(ResourceKey::Id(kind))
         .map_err(not_found)?
         .map(|e| e.directory())
         .transpose()
@@ -107,7 +118,7 @@ fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
         .flatten()
         .ok_or(ERROR_RESOURCE_TYPE_NOT_FOUND)?;
     let by_lang = by_name
-        .find(ResourceKey::Id(1))
+        .find(ResourceKey::Id(name))
         .map_err(not_found)?
         .map(|e| e.directory())
         .transpose()
@@ -118,9 +129,6 @@ fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
     let data = leaf.data().map_err(not_found)?.ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)?;
     let start = data.data_rva.checked_sub(section.virtual_address).ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)? as usize;
     let bytes = sec.get(start..start + data.size as usize).ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)?;
-    if bytes.len() < 6 {
-        return Err(ERROR_RESOURCE_DATA_NOT_FOUND);
-    }
     Ok(bytes.to_vec())
 }
 

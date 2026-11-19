@@ -212,6 +212,9 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if class as u32 == MEMORY_MAPPED_FILENAME_INFORMATION {
         return mapped_filename(k, process, addr, buf, length, ret);
     }
+    if class as u32 == MEMORY_POLY_WORKING_SET_EX {
+        return working_set_ex(k, process, buf, length);
+    }
     if class as u32 != MEMORY_BASIC_INFORMATION_CLASS {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -225,6 +228,58 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if ret != 0 {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;
     }
+    Ok(STATUS_SUCCESS)
+}
+
+/// Poly's own `NtQueryVirtualMemory` class for `K32QueryWorkingSetEx` (`kernelbase`): the buffer
+/// is an array of 16-byte entries, a `u64` address the caller fills and a `u64` attribute word of
+/// `PSAPI_WORKING_SET_EX_BLOCK` this service writes (`poly_kernelbase::workingset`). The same for
+/// 32- and 64-bit callers.
+pub const MEMORY_POLY_WORKING_SET_EX: u32 = 0x1004;
+/// `SeDebugPrivilege` (`winnt.h`: `SE_DEBUG_PRIVILEGE` 20).
+const SE_DEBUG_PRIVILEGE: u32 = 20;
+/// The most entries one call answers.
+const MAX_WS_ENTRIES: u64 = 0x10000;
+
+/// The working set attributes of the pages at the addresses of `buf` (`length / 16` entries) in
+/// the process `process` names (`specs/windows/kernel32.dll/K32QueryWorkingSetEx.yaml`). The
+/// handle needs `PROCESS_QUERY_INFORMATION`; `PROCESS_QUERY_LIMITED_INFORMATION` is enough for a
+/// caller whose token holds `SeDebugPrivilege` (enabled or not): the administrator's full token
+/// has it, the filtered token of the same user does not, which is the difference the sheet saw
+/// (`ERROR_ACCESS_DENIED` for the filtered token only). A page is valid when it is committed and
+/// has a frame; its protection is the region's, shared for image and section views.
+fn working_set_ex<K: NtKernel>(k: &mut K, process: u64, buf: u64, length: u64) -> Result<NtStatus> {
+    let n = (length / 16).min(MAX_WS_ENTRIES) as usize;
+    if n == 0 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mut entries = alloc::vec![0u8; 16 * n];
+    abi::read(k, buf, &mut entries)?;
+    let caller = k.caller();
+    let debug = k.with_state(|sys, _, _| sys.objects.holds_privilege(&caller, SE_DEBUG_PRIVILEGE));
+    let answer = |_: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn crate::backend::Backend| {
+        let mut out = entries.clone();
+        for e in out.chunks_exact_mut(16) {
+            let addr = u64::from_le_bytes(e[0..8].try_into().expect("8 bytes"));
+            let attrs = match proc.vm.query(addr) {
+                Ok(i) if i.state == MEM_COMMIT => {
+                    let i = i.with_copied_pages(|page| b.page_written(page));
+                    let shared = i.type_ != MEM_PRIVATE;
+                    poly_kernelbase::workingset::ws_ex_attributes(b.page_resident(addr), i.protect, shared, false)
+                }
+                _ => 0,
+            };
+            e[8..16].copy_from_slice(&attrs.to_le_bytes());
+        }
+        Ok(out)
+    };
+    let out = match on_process(k, process, PROCESS_QUERY_INFORMATION, answer) {
+        Err(e) if e == STATUS_ACCESS_DENIED && debug => {
+            on_process(k, process, PROCESS_QUERY_LIMITED_INFORMATION, answer)?
+        }
+        r => r?,
+    };
+    abi::write(k, buf, &out)?;
     Ok(STATUS_SUCCESS)
 }
 
