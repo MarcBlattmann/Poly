@@ -39,7 +39,8 @@
 //! to the chosen handler. Requiring the execute bit for desktop entries
 //! keeps a downloaded `photo.jpg.desktop` from running on a double click
 //! (without the bit it opens in the text editor). Windows programs (`.exe`)
-//! are opened by whatever handler claims `application/x-msdownload`.
+//! are opened by whatever handler claims `application/x-msdownload`: Poly's
+//! installer (ADR 0230), which runs a program or installs an installer.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

@@ -173,6 +173,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-pe"
+version = "0.0.1"
+
+[[package]]
 name = "poly-personality-native"
 version = "0.0.1"
 dependencies = [
@@ -185,7 +189,9 @@ name = "poly-pkg"
 version = "0.0.1"
 dependencies = [
  "poly-compress",
+ "poly-pe",
  "poly-png",
+ "poly-registry",
  "poly-squashfs",
  "poly-vfs",
 ]
@@ -193,6 +199,13 @@ dependencies = [
 [[package]]
 name = "poly-png"
 version = "0.0.1"
+
+[[package]]
+name = "poly-registry"
+version = "0.0.1"
+dependencies = [
+ "poly-ntobj",
+]
 
 [[package]]
 name = "poly-rt"

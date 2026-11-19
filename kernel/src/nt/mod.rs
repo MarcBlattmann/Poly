@@ -1476,7 +1476,10 @@ fn create_process(
     // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
     let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
-    let process = Arc::new(Process::new_nt(pid, format, traced));
+    // The process that created it is its parent in /proc (ADR 0230).
+    let mut nt = Process::new_nt(pid, format, traced);
+    nt.ppid = creator_process.as_ref().map_or(0, |p| p.pid);
+    let process = Arc::new(nt);
     let want = HandlesFor {
         caller: creator,
         process_access: req.process_access,

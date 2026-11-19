@@ -50,6 +50,9 @@ pub struct Pumped {
     pub status: Vec<String>,
     /// It ended: whether with exit status 0.
     pub ended: Option<bool>,
+    /// A Windows program has ended and this many programs it started still
+    /// run (ADR 0230).
+    pub waiting: Option<usize>,
 }
 
 /// What the installer does to the system.
@@ -79,6 +82,24 @@ pub trait Host {
     /// Take an installed AppImage's files away (its directory and desktop
     /// file); `slug` names it (ADR 0180).
     fn delete_image(&mut self, slug: &str) -> Result<(), String>;
+    /// Run the Windows installer or uninstaller `argv` (the program a path
+    /// of Poly's file system) with its own windows, and wait for it and for
+    /// every program it starts; [`Host::pump`] says when they have ended
+    /// (ADR 0230). What the shortcut folders and the registry hold now is
+    /// remembered, to tell what the installer made.
+    fn run_windows(&mut self, argv: &[String]) -> Result<(), String>;
+    /// Stop waiting for the programs a Windows installer left running: the
+    /// next [`Host::pump`] says it has ended.
+    fn stop_waiting(&mut self);
+    /// After a Windows installer: the launcher entries made from the
+    /// shortcuts it created (desktop file ID, name, icon file), their desktop
+    /// files and icons written.
+    fn collect_windows(&mut self) -> Vec<(String, String, Option<String>)>;
+    /// After a Windows uninstaller: the launcher entries `apps` whose
+    /// programs are gone are removed; the ones still there are returned.
+    fn forget_windows(&mut self, apps: &[(String, String)]) -> Vec<(String, String)>;
+    /// Start the Windows program at `path` from where it is, without waiting.
+    fn run_program(&mut self, path: &str) -> Result<(), String>;
     /// Tell the desktop that the installed apps changed.
     fn apps_changed(&mut self);
     /// Ask the desktop to start the app with desktop file ID `id`.
@@ -229,9 +250,19 @@ impl InstallerApp {
                     cx.quit();
                 }
             }
+            Action::Finish => {
+                self.host.stop_waiting();
+                self.host.report("stopped waiting for the programs the installer started");
+                cx.redraw();
+            }
             Action::Run => {
                 let path = self.model.path.clone();
-                match self.host.run_image(&path) {
+                let started = if self.model.program.is_some() {
+                    self.host.run_program(&path)
+                } else {
+                    self.host.run_image(&path)
+                };
+                match started {
                     Ok(()) => {
                         self.host.report(&alloc::format!("started {} from {path}", self.model.name()));
                         cx.quit();
@@ -266,6 +297,13 @@ impl InstallerApp {
         for line in &p.status {
             self.model.status(line);
         }
+        if p.waiting.is_some() && p.waiting != self.model.waiting {
+            self.model.waiting_for(p.waiting);
+            if let Some(n) = p.waiting {
+                self.host.report(&alloc::format!("the program has ended; waiting for {n} it started"));
+            }
+            cx.redraw();
+        }
         if let Some(ok) = p.ended {
             self.step_ended(ok, cx);
         }
@@ -278,11 +316,21 @@ impl InstallerApp {
     fn step_ended(&mut self, ok: bool, cx: &mut Cx) {
         let host = &mut self.host;
         let mut icon = None;
+        let windows = self.model.phase == Phase::Working(Step::Program);
+        let uninstalling = self.model.uninstalling();
+        let known = self.model.apps.clone();
         let next = self.model.finished(ok, |name| {
-            let apps = host.apps_of(name);
+            if windows && uninstalling {
+                return host.forget_windows(&known);
+            }
+            let apps = if windows { host.collect_windows() } else { host.apps_of(name) };
             icon = apps.first().and_then(|(_, _, icon)| icon.clone());
             apps.into_iter().map(|(id, name, _)| (id, name)).collect()
         });
+        if windows && uninstalling && self.model.phase == Phase::Done {
+            // The entries that went, for the console and the desktop.
+            self.model.apps = known;
+        }
         if self.model.phase == Phase::Done {
             if !self.model.uninstalling() {
                 self.app_icon = icon;
@@ -313,10 +361,28 @@ impl InstallerApp {
         cx.redraw();
     }
 
+    /// Start the Windows installer, or the app's uninstaller (ADR 0230).
+    fn start_program(&mut self, cx: &mut Cx) {
+        let argv = match &self.model.removal {
+            Some(Removal::Windows { command, .. }) => command.clone(),
+            _ => alloc::vec![self.model.path.clone()],
+        };
+        self.host.report(&alloc::format!("running {}", argv.join(" ")));
+        if let Err(why) = self.host.run_windows(&argv) {
+            self.model
+                .fail(&alloc::format!("{} could not be started: {why}.", poly_pkg::installer::file_name(&argv[0])));
+            self.report_end();
+        }
+        cx.redraw();
+    }
+
     /// The step the program does itself (an AppImage's files taken away).
     fn do_work(&mut self, cx: &mut Cx) {
         if self.model.phase == Phase::Working(Step::Place) {
             return self.place(cx);
+        }
+        if self.model.phase == Phase::Working(Step::Program) {
+            return self.start_program(cx);
         }
         let result = match (&self.model.phase, &self.model.removal) {
             (Phase::Working(Step::Delete), Some(Removal::Image { slug, .. })) => {
@@ -342,9 +408,10 @@ impl InstallerApp {
                 self.host.report(&alloc::format!("uninstalled {}: {}", self.model.name(), apps.join(", ")));
             }
             Phase::Done => {
-                let version = match (&self.model.package, &self.model.image) {
-                    (Some(p), _) => p.version.as_str(),
-                    (None, Some(i)) => i.version.as_str(),
+                let version = match (&self.model.package, &self.model.image, &self.model.program) {
+                    (Some(p), _, _) => p.version.as_str(),
+                    (None, Some(i), _) => i.version.as_str(),
+                    (None, None, Some(w)) => w.version.as_str(),
                     _ => "",
                 };
                 let apps: Vec<String> =

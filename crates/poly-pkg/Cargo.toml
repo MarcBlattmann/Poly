@@ -1,6 +1,6 @@
 [package]
 name = "poly-pkg"
-description = "Linux packages for Poly's installer (ADR 0132, 0173): which format a file is, by its content; reading a .deb (ar(5), tar(5), deb(5), deb-control(5)) for what the installer shows; the dpkg database a Debian base root needs so the distribution's own dpkg and apt work in it; what apt is run with and its progress lines; AppImages (type 2: the squashfs image read for its desktop file and icon, where an installed one lives); the installer's model. no_std + alloc, tested on the host"
+description = "Linux packages for Poly's installer (ADR 0132, 0173): which format a file is, by its content; reading a .deb (ar(5), tar(5), deb(5), deb-control(5)) for what the installer shows; the dpkg database a Debian base root needs so the distribution's own dpkg and apt work in it; what apt is run with and its progress lines; AppImages (type 2: the squashfs image read for its desktop file and icon, where an installed one lives); Windows programs (the PE version and icon resources), the shortcuts (.lnk, MS-SHLLINK) and Uninstall keys a Windows installer leaves, made launcher entries (ADR 0230); the installer's model. no_std + alloc, tested on the host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,9 @@ rust-version.workspace = true
 
 [dependencies]
 poly-compress.workspace = true
+poly-pe.workspace = true
 poly-png.workspace = true
+poly-registry.workspace = true
 poly-squashfs.workspace = true
 poly-vfs.workspace = true
 

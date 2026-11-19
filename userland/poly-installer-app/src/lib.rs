@@ -26,6 +26,14 @@
 //! today's disks); the click on **Install** there is the consent. Without a
 //! desktop to ask, the window opens from where it was started.
 //!
+//! **Windows programs** (ADR 0230): a `.exe` opens here too. The window says
+//! what it is from its version resource; an installer's **Install** runs it
+//! on the NT personality with its own windows, waits for it and for every
+//! process it started (their parents in `/proc`), then makes launcher
+//! entries of the shortcuts it left in the Start menu and on the desktop,
+//! with the app's `Uninstall` key from the registry. A plain program gets
+//! **Run**.
+//!
 //! [`view`] is the window; [`Native`] is what touches the system (the
 //! package tools as child processes with their output on pipes, dpkg's
 //! database, the control pipe).
@@ -39,9 +47,12 @@ extern crate std;
 pub mod view;
 
 use alloc::boxed::Box;
+use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use poly_pkg::installer::Installer;
+use poly_pkg::windows::apps::{self as winapps, Seen, Uninstall};
+use poly_pkg::windows::{program, shlink};
 use poly_pkg::{apt, deb, dpkgdb, format};
 use poly_rt::fs::File;
 use poly_rt::io::Read;
@@ -183,12 +194,50 @@ fn copy_file(from: &str, to: &str) -> Result<(), String> {
     }
 }
 
+/// A reader of the file at `path` at any offset, for `poly_pkg::windows`.
+fn reader_of(path: &str) -> Option<impl FnMut(u64, &mut [u8]) -> usize> {
+    let mut file = File::open(path).ok()?;
+    Some(move |at: u64, buf: &mut [u8]| {
+        if file.seek(at as i64, poly_rt::abi::Whence::Start).is_err() {
+            return 0;
+        }
+        loop {
+            match file.read(buf) {
+                Ok(n) => return n,
+                Err(poly_rt::Error::Interrupted) => {}
+                Err(_) => return 0,
+            }
+        }
+    })
+}
+
+/// Who signed the Windows program at `path`. ADR 0222's Authenticode reader
+/// (`poly_x509::authenticode`, batch B0) names the signer; until it is on
+/// this tree the window says only whether the file is signed.
+fn publisher_of(_path: &str) -> Option<String> {
+    None
+}
+
+/// What the Windows program at `path` says about itself (ADR 0230).
+fn read_windows(path: &str) -> Result<program::Program, poly_pkg::Error> {
+    let size = poly_rt::fs::metadata(path).map_err(|_| poly_pkg::Error::Truncated)?.len();
+    let mut read = reader_of(path).ok_or(poly_pkg::Error::Truncated)?;
+    let mut p = program::read_program(path, size, &mut read)?;
+    p.publisher = publisher_of(path);
+    Ok(p)
+}
+
 /// The installer for `path`, with what the base root has.
 fn model_for(path: &str) -> Installer {
-    if let Ok((head, _)) = read_package(path)
-        && format::detect(&head) == Some(format::Format::AppImage)
-    {
-        return Installer::for_image(path, read_image(path, &head));
+    if let Ok((head, _)) = read_package(path) {
+        match format::detect(&head) {
+            Some(format::Format::AppImage) => return Installer::for_image(path, read_image(path, &head)),
+            Some(format::Format::WindowsProgram) => return Installer::for_windows(path, read_windows(path)),
+            Some(format::Format::WindowsInstaller) if !reader_of(path).is_some_and(|mut r| program::is_msi(&mut r)) => {
+                return Installer::new(path, Ok(b""), None);
+            }
+            _ => {}
+        }
     }
     let mut model = match read_package(path) {
         Ok((head, control)) => Installer::new(path, Ok(&head), control.as_deref()),
@@ -275,10 +324,133 @@ struct Running {
     pending: Vec<u8>,
 }
 
+/// A running Windows installer or uninstaller (ADR 0230): the program, its
+/// output, and the processes it started.
+struct WindowsRun {
+    child: Child,
+    output: File,
+    pending: Vec<u8>,
+    /// The program's pid and every process seen below it.
+    tree: BTreeSet<u32>,
+    /// It has ended: whether with exit code 0.
+    ended: Option<bool>,
+    /// The others still running, as last told.
+    told: Option<usize>,
+    /// Waiting was stopped.
+    stop: bool,
+}
+
+/// Make the file at `path` executable if it is not: Poly's exec wants the
+/// bit, Windows has no such thing, and a download comes without it.
+fn make_executable(path: &str) -> Result<(), String> {
+    let executable = poly_rt::fs::metadata(path).is_ok_and(|m| m.mode() & 0o111 != 0);
+    if !executable {
+        poly_rt::fs::set_mode(path, 0o755).map_err(|e| alloc::format!("{path}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// The file system as `poly_pkg::windows::apps` reads it.
+struct VfsFiles;
+
+impl winapps::Files for VfsFiles {
+    fn list(&self, dir: &str) -> Vec<String> {
+        poly_rt::fs::read_dir(dir).map(|e| e.into_iter().map(|e| e.name).collect()).unwrap_or_default()
+    }
+
+    fn is_dir(&self, path: &str) -> bool {
+        poly_rt::fs::metadata(path).is_ok_and(|m| m.is_dir())
+    }
+
+    fn exists(&self, path: &str) -> bool {
+        poly_rt::fs::exists(path)
+    }
+}
+
+/// The processes there are: pid, parent's pid, whether it has ended (a
+/// zombie), from `/proc/<pid>/status`.
+fn processes() -> Vec<(u32, u32, bool)> {
+    let mut out = Vec::new();
+    for e in poly_rt::fs::read_dir("/proc").unwrap_or_default() {
+        let Ok(pid) = e.name.parse::<u32>() else { continue };
+        let Ok(status) = poly_rt::fs::read_to_string(&alloc::format!("/proc/{pid}/status")) else { continue };
+        let field = |name: &str| status.lines().find_map(|l| l.strip_prefix(name)).map(str::trim);
+        let ppid = field("PPid:").and_then(|v| v.parse().ok()).unwrap_or(0);
+        let ended = field("State:").is_some_and(|v| v.starts_with('Z') || v.starts_with('X'));
+        out.push((pid, ppid, ended));
+    }
+    out
+}
+
+/// Add to `tree` the processes whose parent is in it; how many of the tree
+/// other than `main` still run.
+fn grow(tree: &mut BTreeSet<u32>, main: u32, procs: &[(u32, u32, bool)]) -> usize {
+    loop {
+        let before = tree.len();
+        for &(pid, ppid, _) in procs {
+            if ppid != 0 && tree.contains(&ppid) {
+                tree.insert(pid);
+            }
+        }
+        if tree.len() == before {
+            break;
+        }
+    }
+    procs.iter().filter(|(pid, _, ended)| *pid != main && !*ended && tree.contains(pid)).count()
+}
+
+/// The shortcut files in the folders an installer puts them in, with a
+/// checksum of each (sub-folders of the Start menu too).
+fn scan_links() -> Vec<Seen> {
+    fn walk(dir: &str, depth: usize, out: &mut Vec<Seen>) {
+        for e in poly_rt::fs::read_dir(dir).unwrap_or_default() {
+            let path = alloc::format!("{dir}/{}", e.name);
+            if shlink::is_link_name(&e.name) {
+                if let Ok(bytes) = poly_rt::fs::read(&path)
+                    && bytes.len() < 1 << 20
+                {
+                    out.push(Seen { path, sum: winapps::checksum(&bytes) });
+                }
+            } else if depth < 4 && poly_rt::fs::metadata(&path).is_ok_and(|m| m.is_dir()) {
+                walk(&path, depth + 1, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for folder in winapps::link_folders() {
+        if let Some(dir) = winapps::vfs_path(&folder, &VfsFiles) {
+            walk(&dir, 0, &mut out);
+        }
+    }
+    out
+}
+
+/// The registry's hive files (ADR 0066): next to `C:` on the disk that keeps
+/// them; where `C:` is in memory only, there are none to read.
+fn hive_dir() -> Option<String> {
+    let mut candidates = alloc::vec![winapps::HIVE_DIR.to_string(), "/poly/nt/registry".to_string()];
+    for e in poly_rt::fs::read_dir("/").unwrap_or_default() {
+        candidates.push(alloc::format!("/{}/poly/nt/registry", e.name));
+    }
+    candidates.into_iter().find(|d| poly_rt::fs::exists(&alloc::format!("{d}/{}", winapps::SOFTWARE_HIVE)))
+}
+
+/// The `Uninstall` keys in the registry as its hive files have them.
+fn uninstall_keys() -> Vec<Uninstall> {
+    let Some(dir) = hive_dir() else { return Vec::new() };
+    let software = poly_rt::fs::read(&alloc::format!("{dir}/{}", winapps::SOFTWARE_HIVE)).ok();
+    let user = poly_rt::fs::read(&alloc::format!("{dir}/{}", winapps::USER_HIVE)).ok();
+    winapps::uninstall_entries(software.as_deref(), user.as_deref())
+}
+
 /// The system behind the window: the package tools as children, their
 /// output and progress on pipes.
 pub struct Native {
     running: Option<Running>,
+    /// A Windows installer or uninstaller that runs (ADR 0230).
+    windows: Option<WindowsRun>,
+    /// The shortcuts and `Uninstall` keys there were before it started.
+    before: (Vec<Seen>, Vec<Uninstall>),
     /// The progress pipe, kept for the program's life: the commands inherit
     /// its write end under its own number ([`Installer::status_fd`]).
     status_read: File,
@@ -298,6 +470,8 @@ impl Native {
         poly_rt::sys::set_nonblocking(read, true)?;
         Ok(Native {
             running: None,
+            windows: None,
+            before: (Vec::new(), Vec::new()),
             status_read: File::from_handle(read),
             status_write: File::from_handle(write),
             status_pending: Vec::new(),
@@ -321,6 +495,52 @@ impl Native {
                 Err(_) => return false,
             }
         }
+    }
+}
+
+impl Native {
+    /// A look at the running Windows program and what it started.
+    fn pump_windows(&mut self, mut pumped: view::Pumped) -> view::Pumped {
+        let Some(w) = &mut self.windows else { return pumped };
+        Native::drain(&mut w.output, &mut w.pending);
+        pumped.output = take_lines(&mut w.pending);
+        if w.ended.is_none() {
+            match w.child.try_wait() {
+                Ok(Some(status)) => w.ended = Some(matches!(status, poly_rt::abi::ExitStatus::Exited(0))),
+                Ok(None) => {}
+                Err(_) => w.ended = Some(false),
+            }
+        }
+        let main = w.child.id();
+        let others = grow(&mut w.tree, main, &processes());
+        let Some(ok) = w.ended else { return pumped };
+        if others > 0 && !w.stop {
+            if w.told != Some(others) {
+                w.told = Some(others);
+                pumped.waiting = Some(others);
+            }
+            return pumped;
+        }
+        if !w.pending.is_empty() {
+            pumped.output.push(String::from_utf8_lossy(&w.pending).into_owned());
+        }
+        pumped.ended = Some(ok);
+        self.windows = None;
+        pumped
+    }
+
+    /// The icon of a launcher entry: the program's own (its PE icon
+    /// resources), written as a PNG file where the entry's icons go.
+    fn write_icon(&self, entry: &winapps::Entry) -> Option<String> {
+        let (file, index) = &entry.icon_source;
+        let mut read = reader_of(file)?;
+        let mut image = program::Image::open(&mut read).ok()?;
+        let png = image.icon(*index)?;
+        let path = winapps::icon_path(&data_home(), &entry.id);
+        let dir = path.rsplit_once('/').map_or("/", |(d, _)| d);
+        poly_rt::fs::create_dir_all(dir).ok()?;
+        poly_rt::fs::write(&path, &png).ok()?;
+        Some(path)
     }
 }
 
@@ -352,6 +572,9 @@ impl view::Host for Native {
         if let Some(r) = &self.running {
             out.push((r.output.handle(), poly_rt::poll::READABLE));
         }
+        if let Some(w) = &self.windows {
+            out.push((w.output.handle(), poly_rt::poll::READABLE));
+        }
         out
     }
 
@@ -359,6 +582,9 @@ impl view::Host for Native {
         let mut pumped = view::Pumped::default();
         Native::drain(&mut self.status_read, &mut self.status_pending);
         pumped.status = take_lines(&mut self.status_pending);
+        if self.windows.is_some() {
+            return self.pump_windows(pumped);
+        }
         let Some(r) = &mut self.running else { return pumped };
         let ended = Native::drain(&mut r.output, &mut r.pending);
         pumped.output = take_lines(&mut r.pending);
@@ -485,6 +711,132 @@ impl view::Host for Native {
         }
     }
 
+    fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
+        let program = argv.first().ok_or("nothing to run")?;
+        make_executable(program)?;
+        self.before = (scan_links(), uninstall_keys());
+        let [read, write] = poly_rt::sys::pipe().map_err(|e| alloc::format!("a pipe: {e}"))?;
+        let (read, write) = (File::from_handle(read), File::from_handle(write));
+        poly_rt::sys::set_nonblocking(read.handle(), true).map_err(|e| alloc::format!("a pipe: {e}"))?;
+        let mut cmd = Command::new(program);
+        cmd.args(argv.iter().skip(1).map(String::as_str))
+            .envs(
+                poly_rt::env::vars()
+                    .filter_map(|v| core::str::from_utf8(v).ok())
+                    .filter(|v| !poly_app::startup::is_token_var(v)),
+            )
+            .stdin(Stdio::Null)
+            .stdout(Stdio::Handle(write.handle()))
+            .stderr(Stdio::Handle(write.handle()));
+        let child = cmd.spawn().map_err(|e| alloc::format!("{e}"))?;
+        drop(write);
+        let mut tree = BTreeSet::new();
+        tree.insert(child.id());
+        self.windows =
+            Some(WindowsRun { child, output: read, pending: Vec::new(), tree, ended: None, told: None, stop: false });
+        Ok(())
+    }
+
+    fn stop_waiting(&mut self) {
+        if let Some(w) = &mut self.windows {
+            w.stop = true;
+        }
+    }
+
+    fn collect_windows(&mut self) -> Vec<(String, String, Option<String>)> {
+        let changed = winapps::changed(&self.before.0, &scan_links());
+        let mut entries = Vec::new();
+        for path in changed {
+            let Ok(bytes) = poly_rt::fs::read(&path) else { continue };
+            let made = shlink::parse(&bytes)
+                .map_err(|e| alloc::format!("{path}: {e:?}"))
+                .and_then(|link| winapps::entry_for(&path, &link, &VfsFiles));
+            match made {
+                Ok(e) => entries.push(e),
+                Err(why) => self.report(&alloc::format!("shortcut left out: {why}")),
+            }
+        }
+        let made = winapps::new_uninstall_entries(&self.before.1, uninstall_keys());
+        for u in &made {
+            self.report(&alloc::format!(
+                "registered {} {} ({}) by {}: {}\\{}",
+                u.display_name,
+                u.display_version,
+                u.uninstall_string,
+                u.publisher,
+                u.view,
+                u.key
+            ));
+        }
+        let apps_dir = poly_pkg::appimage::applications_dir(&data_home());
+        let mut out = Vec::new();
+        for e in winapps::dedup(entries) {
+            // Files a Windows program writes have no execute bit; the
+            // launcher's exec wants one.
+            if let Err(why) = make_executable(&e.argv[0]) {
+                self.report(&why);
+            }
+            let icon = self.write_icon(&e);
+            let registration = winapps::registration_for(&e.target, &made);
+            let text = winapps::desktop_file(&e, icon.as_deref(), registration);
+            let path = alloc::format!("{apps_dir}/{}", e.id);
+            let written =
+                poly_rt::fs::create_dir_all(&apps_dir).and_then(|()| poly_rt::fs::write(&path, text.as_bytes()));
+            match written {
+                Ok(()) => {
+                    self.report(&alloc::format!("launcher entry {} for {} from {}", e.id, e.target, e.link));
+                    out.push((e.id, e.name, icon));
+                }
+                Err(err) => self.report(&alloc::format!("{path}: {err}")),
+            }
+        }
+        out
+    }
+
+    fn forget_windows(&mut self, apps: &[(String, String)]) -> Vec<(String, String)> {
+        let apps_dir = poly_pkg::appimage::applications_dir(&data_home());
+        let mut left = Vec::new();
+        for (id, name) in apps {
+            if !winapps::is_windows_id(id) {
+                continue;
+            }
+            let path = alloc::format!("{apps_dir}/{id}");
+            let text = poly_rt::fs::read_to_string(&path).unwrap_or_default();
+            let target = winapps::desktop_value(&text, winapps::TARGET_KEY).unwrap_or("");
+            if winapps::vfs_path(target, &VfsFiles).is_some_and(|p| poly_rt::fs::exists(&p)) {
+                left.push((id.clone(), name.clone()));
+                continue;
+            }
+            let _ = poly_rt::fs::remove_file(&path);
+            let _ = poly_rt::fs::remove_file(&winapps::icon_path(&data_home(), id));
+        }
+        left
+    }
+
+    fn run_program(&mut self, path: &str) -> Result<(), String> {
+        make_executable(path)?;
+        // The desktop shows a busy pointer until the program has a window.
+        let mut startup = poly_app::startup::Startup::begin(path);
+        let mut cmd = Command::new(path);
+        cmd.envs(
+            poly_rt::env::vars()
+                .filter_map(|v| core::str::from_utf8(v).ok())
+                .filter(|v| !poly_app::startup::is_token_var(v)),
+        )
+        .envs(startup.environment().iter().map(String::as_str))
+        .stdin(Stdio::Null);
+        match cmd.spawn() {
+            Ok(child) => {
+                startup.started(child.id());
+                Ok(())
+            }
+            Err(e) => {
+                startup.failed();
+                Err(alloc::format!("{e}"))
+            }
+        }
+    }
+
     fn apps_changed(&mut self) {
         poly_app::startup::ask(&Control::Rescan.line());
     }
@@ -558,12 +910,15 @@ pub fn main() -> i32 {
         }
     };
     model.status_fd = host.status_fd();
-    poly_rt::println!(
-        "poly-installer: {path}: {} {} ({:?})",
-        model.name(),
-        model.package.as_ref().map_or("", |p| p.version.as_str()),
-        model.phase
-    );
+    let version = match (&model.package, &model.program) {
+        (Some(p), _) => p.version.as_str(),
+        (None, Some(w)) => w.version.as_str(),
+        _ => "",
+    };
+    poly_rt::println!("poly-installer: {path}: {} {version} ({:?})", model.name(), model.phase);
+    if let Some(w) = &model.program {
+        poly_rt::println!("poly-installer: {path}: {}, {}", w.kind(), w.publisher_text());
+    }
     let mut app = view::InstallerApp::new(model, Box::new(host));
     app.set_icon_files(Box::new(Disk));
     let title = app.title();
