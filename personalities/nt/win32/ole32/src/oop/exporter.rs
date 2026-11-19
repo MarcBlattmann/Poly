@@ -165,6 +165,22 @@ pub(crate) fn export_object(identity: usize, owner: Owner) -> ObjRef {
     ObjRef { endpoint: endpoint(), oid }
 }
 
+/// Add `n` proxy references to the live export `oid`; whether it exists.
+pub(crate) fn add_refs(oid: u64, n: u32) -> bool {
+    EXPORTS.with(|x| match x.iter_mut().find(|e| e.oid == oid && !e.factory && e.refs > 0) {
+        Some(e) => {
+            e.refs += n;
+            true
+        }
+        None => false,
+    })
+}
+
+/// The object of the live export `oid` (its identity; the export keeps its reference).
+pub(crate) fn object_of(oid: u64) -> Option<(usize, Owner)> {
+    EXPORTS.with(|x| x.iter().find(|e| e.oid == oid && !e.factory && e.refs > 0).map(|e| (e.object, e.owner)))
+}
+
 /// Give back `n` proxy references of `oid`; the last one releases the object.
 pub(crate) fn release_refs(oid: u64, n: u32) {
     let gone = EXPORTS.with(|x| {
@@ -211,8 +227,24 @@ fn dispatch(oid: u64, op: Op) -> Reply {
     let Some(e) = find(oid) else { return Reply::hr(RPC_E_DISCONNECTED) };
     let object = e.object as *mut c_void;
     match op {
-        // B2b, WIP: calls through type-library stubs and references for marshalled proxies.
-        Op::Invoke { .. } | Op::AddRef { .. } => Reply::hr(poly_com::hresult::E_NOTIMPL),
+        // A method of an interface marshalled through its proxy/stub class (B2b).
+        Op::Invoke { iid, method, data } => {
+            COUNT.with(|c| c.enter_call());
+            let r = apt::run_in(e.owner, || super::channel::invoke_stub(e.object, &iid, method, &data));
+            COUNT.with(|c| c.leave_call());
+            match r {
+                Ok(data) => Reply { hr: S_OK, obj: None, data },
+                Err(hr) => Reply::hr(hr),
+            }
+        }
+        // References for a proxy another process marshalled on (B2b); with a token, only while
+        // that table registration lives.
+        Op::AddRef { n, token } => {
+            if token != 0 && !super::marshal::table_has(token) {
+                return Reply::hr(poly_com::hresult::CO_E_OBJNOTREG);
+            }
+            if add_refs(oid, n) { Reply::hr(S_OK) } else { Reply::hr(RPC_E_DISCONNECTED) }
+        }
         Op::Release(n) => {
             release_refs(oid, n);
             Reply::hr(S_OK)

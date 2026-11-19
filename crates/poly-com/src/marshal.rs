@@ -295,6 +295,11 @@ impl MarshalTable {
         }
     }
 
+    /// Whether `token` is a live entry.
+    pub fn contains(&self, token: u64) -> bool {
+        self.entries.iter().any(|e| e.token == token)
+    }
+
     /// Remove `token` for `CoReleaseMarshalData`, returning the entry whose reference must be
     /// released (or `None` if already consumed or released).
     pub fn release_data(&mut self, token: u64) -> Option<MarshalEntry> {

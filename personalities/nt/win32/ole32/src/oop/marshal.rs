@@ -15,7 +15,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::git::Owner;
 use poly_com::guid::Guid;
 use poly_com::hresult::{
-    CO_E_CLASSSTRING, CO_E_NOTINITIALIZED, CO_E_OBJNOTCONNECTED, E_INVALIDARG, E_NOINTERFACE, E_POINTER, Hresult,
+    CO_E_CLASSSTRING, CO_E_NOTINITIALIZED, CO_E_OBJNOTCONNECTED, CO_E_OBJNOTREG, E_INVALIDARG, E_UNEXPECTED, E_NOINTERFACE, E_POINTER, Hresult,
     REGDB_E_IIDNOTREG, RPC_E_INVALID_OBJREF, S_OK,
 };
 use poly_com::marshal::{
@@ -23,7 +23,7 @@ use poly_com::marshal::{
     OBJREF_STANDARD, ObjRefData, check_context, decode_custom_head, decode_custom_payload, decode_header,
     decode_standard_body, endpoint_for, marshal_size_max, objref_flags_for, parse_endpoint,
 };
-use poly_com::wire::ObjRef;
+use poly_com::wire::{ObjRef, Op, Request};
 
 /// `HKEY_CURRENT_USER`, `HKEY_LOCAL_MACHINE` (`winreg.h`).
 const HKCU: isize = 0x8000_0001_u32 as i32 as isize;
@@ -146,13 +146,25 @@ pub unsafe extern "system" fn CoRegisterPSClsid(riid: *const Guid, rclsid: *cons
 }
 
 // ----- marshal table lifetime helpers -----------------------------------------------------------
+//
+// A marshal entry of data for another process (LOCAL, NOSHAREDMEM) holds one reference of the
+// object's export (the export holds the object); an INPROC entry holds a reference of the object
+// itself. Data marshalled from a proxy of an object in another process makes no entry: the
+// object's own process is asked for one more reference (`Op::AddRef`), which whoever unmarshals
+// the data takes over.
 
 fn release_entry(e: MarshalEntry) {
-    // SAFETY: the entry owns one COM reference on `e.object`.
-    unsafe { release_unknown(e.object as *mut c_void) };
-    if !e.is_remote_proxy && e.oid != 0 {
+    if e.oid != 0 {
         exporter::release_refs(e.oid, 1);
+    } else {
+        // SAFETY: the entry's reference of the object.
+        unsafe { release_unknown(e.object as *mut c_void) };
     }
+}
+
+/// Whether the table registration `token` still exists.
+pub(crate) fn table_has(token: u64) -> bool {
+    MARSHALS.with(|m| m.contains(token))
 }
 
 /// Release all marshal entries belonging to `owner` when its apartment ends.
@@ -169,6 +181,37 @@ pub(crate) fn disconnect(identity: usize) {
     for e in gone {
         release_entry(e);
     }
+}
+
+/// Send `op` to the exporter of process `pid` with `oxid`.
+fn to_origin(pid: u32, oxid: u64, oid: u64, op: Op) -> Hresult {
+    let ep = endpoint_for(pid, oxid);
+    match pipe::transact(&ep, &Request::Call { oid, op }) {
+        Ok(r) => r.hr,
+        Err(f) => f.hr(),
+    }
+}
+
+/// The interface `want` of `object` of apartment `owner`: the object itself in the caller's
+/// apartment, a proxy otherwise.
+fn give(object: usize, owner: Owner, want: &Guid, ppv: *mut *mut c_void) -> Hresult {
+    let (hr, p) = if owner == current_owner() {
+        // SAFETY: a live object (its export or entry holds it).
+        unsafe { query(object as *mut c_void, want) }
+    } else {
+        let px = proxy::local(owner, object);
+        // SAFETY: our proxy's IUnknown with one reference, given back after the query.
+        let r = unsafe { query(px, want) };
+        // SAFETY: as above.
+        unsafe { release_unknown(px) };
+        r
+    };
+    if hr < 0 || p.is_null() {
+        return if hr < 0 { hr } else { E_NOINTERFACE };
+    }
+    // SAFETY: the caller's out parameter.
+    unsafe { *ppv = p };
+    S_OK
 }
 
 // ----- stream OBJREF helpers --------------------------------------------------------------------
@@ -224,8 +267,6 @@ unsafe fn read_objref(pstm: *mut c_void) -> Result<ObjRefData, Hresult> {
         _ => Err(RPC_E_INVALID_OBJREF),
     }
 }
-
-// ----- exported CoMarshal family ----------------------------------------------------------------
 
 /// `CoGetMarshalSizeMax` (sheet `CoGetMarshalSizeMax`).
 #[unsafe(no_mangle)]
@@ -288,38 +329,34 @@ pub unsafe extern "system" fn CoMarshalInterface(
     let kind = MarshalKind::from_flags(mshlflags);
     let flags = objref_flags_for(dw_dest_context);
 
+    let local = |identity: usize, owner: Owner| -> ObjRefData {
+        let (oxid, oid) = if dw_dest_context == MSHCTX_INPROC {
+            (0, 0)
+        } else {
+            // The export takes over the identity's reference.
+            let oref = exporter::export_object(identity, owner);
+            (exporter::oxid(), oref.oid)
+        };
+        let token = MARSHALS.with(|m| m.insert(oid, identity, owner, kind, false));
+        ObjRefData { flags, iid, mshlflags, pid: pid(), oxid, oid, token }
+    };
     let data = match proxy::marshal_info(punk) {
-        Some(proxy::ProxyMarshalInfo::Remote { endpoint, oid }) => {
-            let (remote_pid, remote_oxid) = parse_endpoint(&endpoint).unwrap_or((pid(), 0));
-            // Hold a reference on the proxy while the marshal packet is live.
-            // SAFETY: the caller's proxy object.
-            let (_, px_unk) = unsafe { query(punk, &IID_IUNKNOWN) };
-            let px_id = if px_unk.is_null() {
-                // SAFETY: fall back to the passed pointer.
-                unsafe { add_ref_unknown(punk) };
-                punk as usize
-            } else {
-                px_unk as usize
-            };
-            let token = MARSHALS.with(|m| m.insert(0, px_id, current_owner(), kind, true));
-            ObjRefData { flags, iid, mshlflags, pid: remote_pid, oxid: remote_oxid, oid, token }
+        Some(proxy::ProxyMarshalInfo::Remote { endpoint, oid }) if dw_dest_context != MSHCTX_INPROC => {
+            let Some((remote_pid, remote_oxid)) = parse_endpoint(&endpoint) else { return E_UNEXPECTED };
+            // One more reference at the object's process, for whoever unmarshals this.
+            let hr = to_origin(remote_pid, remote_oxid, oid, Op::AddRef { n: 1, token: 0 });
+            if hr < 0 {
+                return hr;
+            }
+            ObjRefData { flags, iid, mshlflags, pid: remote_pid, oxid: remote_oxid, oid, token: 0 }
         }
         Some(proxy::ProxyMarshalInfo::Local { owner, object }) => {
             // SAFETY: the local proxy's live target identity.
             unsafe { add_ref_unknown(object as *mut c_void) };
-            let (oxid, oid) = if dw_dest_context == MSHCTX_INPROC {
-                (0, 0)
-            } else {
-                // SAFETY: a second reference handed over to the exporter.
-                unsafe { add_ref_unknown(object as *mut c_void) };
-                let oref = exporter::export_object(object, owner);
-                (exporter::oxid(), oref.oid)
-            };
-            let token = MARSHALS.with(|m| m.insert(oid, object, owner, kind, false));
-            ObjRefData { flags, iid, mshlflags, pid: pid(), oxid, oid, token }
+            local(object, owner)
         }
-        None => {
-            // SAFETY: get the object's canonical IUnknown identity.
+        _ => {
+            // SAFETY: the object's identity (a proxy's is the proxy block).
             let (_, id) = unsafe { query(punk, &IID_IUNKNOWN) };
             let identity = if id.is_null() {
                 // SAFETY: fall back to the caller's pointer.
@@ -328,17 +365,7 @@ pub unsafe extern "system" fn CoMarshalInterface(
             } else {
                 id as usize
             };
-            let owner = current_owner();
-            let (oxid, oid) = if dw_dest_context == MSHCTX_INPROC {
-                (0, 0)
-            } else {
-                // SAFETY: a second reference handed over to the exporter.
-                unsafe { add_ref_unknown(identity as *mut c_void) };
-                let oref = exporter::export_object(identity, owner);
-                (exporter::oxid(), oref.oid)
-            };
-            let token = MARSHALS.with(|m| m.insert(oid, identity, owner, kind, false));
-            ObjRefData { flags, iid, mshlflags, pid: pid(), oxid, oid, token }
+            local(identity, current_owner())
         }
     };
 
@@ -346,8 +373,12 @@ pub unsafe extern "system" fn CoMarshalInterface(
     // SAFETY: the caller's IStream pointer.
     let hr = unsafe { stream::write_all(pstm, &bytes) };
     if hr < 0 {
-        if let Some(entry) = MARSHALS.with(|m| m.release_data(data.token)) {
-            release_entry(entry);
+        if data.token != 0 {
+            if let Some(entry) = MARSHALS.with(|m| m.release_data(data.token)) {
+                release_entry(entry);
+            }
+        } else {
+            let _ = to_origin(data.pid, data.oxid, data.oid, Op::Release(1));
         }
         return hr;
     }
@@ -382,56 +413,38 @@ pub unsafe extern "system" fn CoUnmarshalInterface(
     let want_iid = unsafe { *riid };
 
     if data.pid == pid() {
+        if data.token == 0 {
+            // Data a proxy elsewhere marshalled for an object of this process: the reference it
+            // asked for is taken over here.
+            let Some((object, owner)) = exporter::object_of(data.oid) else { return CO_E_OBJNOTCONNECTED };
+            let hr = give(object, owner, &want_iid, ppv);
+            exporter::release_refs(data.oid, 1);
+            return hr;
+        }
         let Some((entry, consumed)) = MARSHALS.with(|m| m.unmarshal(data.token)) else {
             return CO_E_OBJNOTCONNECTED;
         };
-        if entry.owner == current_owner() {
-            // Same apartment: return the original object's interface pointer.
-            // SAFETY: the marshal entry holds a live reference on `entry.object`.
-            let (hr, p) = unsafe { query(entry.object as *mut c_void, &want_iid) };
-            if consumed {
-                release_entry(entry);
+        let (object, owner) = if entry.oid != 0 {
+            match exporter::object_of(entry.oid) {
+                Some(x) => x,
+                None => return CO_E_OBJNOTCONNECTED,
             }
-            if hr < 0 || p.is_null() {
-                return if hr < 0 { hr } else { E_NOINTERFACE };
-            }
-            // SAFETY: the caller's out parameter.
-            unsafe { *ppv = p };
-            return S_OK;
-        }
-        // Different apartment of this process: return a local proxy.
-        let px = proxy::local(entry.owner, entry.object);
+        } else {
+            (entry.object, entry.owner)
+        };
+        let hr = give(object, owner, &want_iid, ppv);
         if consumed {
             release_entry(entry);
         }
-        // SAFETY: `px` is our local proxy's IUnknown with one reference.
-        let (hr, p) = unsafe { query(px, &want_iid) };
-        // SAFETY: release our temporary reference on `px`.
-        unsafe { release_unknown(px) };
-        if hr < 0 || p.is_null() {
-            return if hr < 0 { hr } else { E_NOINTERFACE };
-        }
-        // SAFETY: the caller's out parameter.
-        unsafe { *ppv = p };
-        return S_OK;
+        return hr;
     }
-
-    // Object from another process: if this process marshalled a remote proxy itself, release its
-    // local token and return the proxy.
-    if let Some((entry, consumed)) = MARSHALS.with(|m| m.unmarshal(data.token)) {
-        // SAFETY: the marshal entry holds a live reference on the proxy.
-        let (hr, p) = unsafe { query(entry.object as *mut c_void, &want_iid) };
-        if consumed {
-            release_entry(entry);
+    // An object of another process: table data needs a reference of its own first.
+    if MarshalKind::from_flags(data.mshlflags) != MarshalKind::Normal {
+        let hr = to_origin(data.pid, data.oxid, data.oid, Op::AddRef { n: 1, token: data.token });
+        if hr < 0 {
+            return CO_E_OBJNOTREG;
         }
-        if hr < 0 || p.is_null() {
-            return if hr < 0 { hr } else { E_NOINTERFACE };
-        }
-        // SAFETY: the caller's out parameter.
-        unsafe { *ppv = p };
-        return S_OK;
     }
-
     let endpoint = endpoint_for(data.pid, data.oxid);
     let px = proxy::remote(ObjRef { endpoint, oid: data.oid });
     // SAFETY: `px` is our remote proxy's IUnknown with one reference.
@@ -460,8 +473,15 @@ pub unsafe extern "system" fn CoReleaseMarshalData(pstm: *mut c_void) -> Hresult
         Ok(d) => d,
         Err(hr) => return hr,
     };
-    if let Some(entry) = MARSHALS.with(|m| m.release_data(data.token)) {
-        release_entry(entry);
+    if data.pid == pid() {
+        if data.token == 0 {
+            exporter::release_refs(data.oid, 1);
+        } else if let Some(entry) = MARSHALS.with(|m| m.release_data(data.token)) {
+            release_entry(entry);
+        }
+    } else if MarshalKind::from_flags(data.mshlflags) == MarshalKind::Normal {
+        // The reference the data carried goes back to the object's process.
+        let _ = to_origin(data.pid, data.oxid, data.oid, Op::Release(1));
     }
     S_OK
 }

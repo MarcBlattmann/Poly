@@ -29,6 +29,9 @@ pub(crate) struct TypeLib {
     pub(crate) lib: Locked<Library>,
     /// Made by `CreateTypeLib2`: answers `ICreateTypeLib2`, saves to `path`.
     creating: bool,
+    /// A copy sent by value from another process (`IDispatch::GetTypeInfo` through a proxy): its
+    /// type infos answer `IMarshal`, as proxies do (sheet `DllGetClassObject`, rule `dual_dispatch`).
+    pub(crate) copy: core::sync::atomic::AtomicBool,
     path: String,
     /// The key it is cached under (`LoadTypeLib` of the same file gives the same object).
     cache_key: Option<String>,
@@ -46,6 +49,7 @@ pub(crate) fn new_typelib(lib: Library, creating: bool, path: String, cache_key:
         refs: AtomicU32::new(1),
         lib: Locked::new(lib),
         creating,
+        copy: core::sync::atomic::AtomicBool::new(false),
         path,
         cache_key,
     }));
@@ -541,6 +545,9 @@ unsafe fn ti_qi(t: *mut TypeInfo, iid: *const Guid, out: *mut *mut c_void) -> Hr
         let g = *iid;
         let p = if g == IID_IUNKNOWN || g == IID_ITYPEINFO {
             t as usize
+        } else if g == IID_IMARSHAL && (*(*t).lib).copy.load(Ordering::Acquire) {
+            *out = (&raw const COPY_MARSHAL) as *mut c_void;
+            return S_OK;
         } else if (*(*t).lib).creating && g == IID_ICREATETYPEINFO {
             t as usize + PTR
         } else {
@@ -1165,3 +1172,43 @@ static CTI_VTBL: Vtbl<26> = Vtbl([
     ok2 as *const (),
     cti_lay_out as *const (),
 ]);
+
+// ----- the IMarshal of a copied type info -------------------------------------------------------
+//
+// A type info that came by value from another process is a copy; asked for `IMarshal` it answers
+// with this object (its methods are not implemented: the copy is not marshalled on).
+
+unsafe extern "system" fn cm_qi(this: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() || iid.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: the caller's IID.
+    let g = unsafe { *iid };
+    if g == IID_IUNKNOWN || g == IID_IMARSHAL {
+        put(out, this);
+        S_OK
+    } else {
+        put(out, core::ptr::null_mut());
+        E_NOINTERFACE
+    }
+}
+unsafe extern "system" fn cm_ref(_this: *mut c_void) -> u32 {
+    1
+}
+
+static CM_VTBL: Vtbl<9> = Vtbl([
+    cm_qi as *const (),
+    cm_ref as *const (),
+    cm_ref as *const (),
+    not_impl as *const (),
+    not_impl as *const (),
+    not_impl as *const (),
+    not_impl as *const (),
+    not_impl as *const (),
+    not_impl as *const (),
+]);
+
+struct CopyMarshal(*const Vtbl<9>);
+// SAFETY: an immutable pointer to a static table.
+unsafe impl Sync for CopyMarshal {}
+static COPY_MARSHAL: CopyMarshal = CopyMarshal(&CM_VTBL);

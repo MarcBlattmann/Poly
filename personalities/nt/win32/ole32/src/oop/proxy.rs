@@ -33,6 +33,9 @@ struct Proxy {
     /// Whether the object has `IClassFactory`: 0 not asked yet, 1 yes, 2 no.
     factory: AtomicU32,
     target: Target,
+    /// Interface proxies made by proxy/stub classes (B2b): (interface id, interface pointer,
+    /// its `IRpcProxyBuffer`). Their references count on this block.
+    ifaces: Locked<Vec<(Guid, usize, usize)>>,
 }
 
 const PTR: usize = core::mem::size_of::<usize>();
@@ -161,6 +164,7 @@ fn make(target: Target) -> *mut c_void {
         refs: AtomicU32::new(1),
         factory: AtomicU32::new(0),
         target,
+        ifaces: Locked::new(Vec::new()),
     }));
     // SAFETY: just made.
     let key = key_of(unsafe { &*p });
@@ -310,12 +314,120 @@ unsafe fn qi(p: *mut Proxy, iid: *const Guid, out: *mut *mut c_void) -> Hresult 
         } else if iid == IID_ICLASS_FACTORY && has_factory(&*p) {
             1
         } else {
-            return E_NOINTERFACE;
+            return iface_proxy(p, &iid, out);
         };
         (*p).refs.fetch_add(1, Ordering::AcqRel);
         *out = (p as usize + slot * PTR) as *mut c_void;
     }
     S_OK
+}
+
+/// The proxy of interface `iid` of the object (B2b): one made earlier, or a new one from the
+/// interface's proxy/stub class, connected to a channel to the object. `E_NOINTERFACE` when the
+/// object does not have the interface or nothing can marshal it.
+unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: a live proxy.
+    let proxy = unsafe { &*p };
+    if let Some(itf) = proxy.ifaces.with(|v| v.iter().find(|e| e.0 == *iid).map(|e| e.1)) {
+        // SAFETY: an interface of this block: its AddRef counts on the block.
+        unsafe {
+            add_ref(p);
+            *out = itf as *mut c_void;
+        }
+        return S_OK;
+    }
+    // Does the object have it?
+    let hr = match &proxy.target {
+        Target::Local { owner, object } => {
+            let o = *object as *mut c_void;
+            let g = *iid;
+            apt::run_in(*owner, || {
+                // SAFETY: the proxy's object; the query's reference is given back at once.
+                let (hr, q) = unsafe { query(o, &g) };
+                if !q.is_null() {
+                    // SAFETY: as above.
+                    unsafe { release_unknown(q) };
+                }
+                hr
+            })
+        }
+        Target::Remote { .. } => match call(proxy, Op::QueryInterface(*iid)) {
+            Ok(r) => r.hr,
+            Err(hr) => hr,
+        },
+    };
+    if hr < 0 {
+        return if hr == RPC_E_DISCONNECTED || hr == RPC_S_SERVER_UNAVAILABLE { hr } else { E_NOINTERFACE };
+    }
+    let Ok(f) = super::channel::ps_factory(iid) else { return E_NOINTERFACE };
+    let mut buf: *mut c_void = core::ptr::null_mut();
+    let mut pv: *mut c_void = core::ptr::null_mut();
+    // SAFETY: IPSFactoryBuffer::CreateProxy (slot 3) with this block's IUnknown as the outer object.
+    let hr = unsafe {
+        let v = *(f as *const *const usize);
+        let create: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void, *mut *mut c_void) -> Hresult =
+            core::mem::transmute(*v.add(3));
+        let hr = create(f, p.cast(), iid, &mut buf, &mut pv);
+        release_unknown(f);
+        hr
+    };
+    if hr < 0 || buf.is_null() {
+        return E_NOINTERFACE;
+    }
+    // The interface pointer: asked of the proxy buffer (its AddRef goes to this block).
+    // SAFETY: an IRpcProxyBuffer.
+    let (qhr, itf) = unsafe { query(buf, iid) };
+    if qhr < 0 || itf.is_null() {
+        // SAFETY: the buffer's reference.
+        unsafe { release_unknown(buf) };
+        return E_NOINTERFACE;
+    }
+    let target = match &proxy.target {
+        Target::Local { owner, object } => super::channel::Target::Local { owner: *owner, object: *object },
+        Target::Remote { endpoint, oid, .. } => super::channel::Target::Remote { endpoint: endpoint.clone(), oid: *oid },
+    };
+    let chan = super::channel::new_channel(*iid, target);
+    // SAFETY: IRpcProxyBuffer::Connect (slot 3); the channel keeps its own reference.
+    unsafe {
+        let v = *(buf as *const *const usize);
+        let connect: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult = core::mem::transmute(*v.add(3));
+        connect(buf, chan);
+        release_unknown(chan);
+    }
+    let raced = proxy.ifaces.with(|v| {
+        if let Some(e) = v.iter().find(|e| e.0 == *iid) {
+            Some(e.1)
+        } else {
+            v.push((*iid, itf as usize, buf as usize));
+            None
+        }
+    });
+    if let Some(other) = raced {
+        // Another thread made it first: use that one, drop ours.
+        // SAFETY: our interface reference (on this block) and our buffer.
+        unsafe {
+            release_unknown(itf);
+            disconnect_buffer(buf as usize);
+            add_ref(p);
+            *out = other as *mut c_void;
+        }
+        return S_OK;
+    }
+    // SAFETY: the caller's out pointer; the query added this block's reference.
+    unsafe { *out = itf };
+    S_OK
+}
+
+/// Disconnect and release an interface proxy's buffer.
+unsafe fn disconnect_buffer(buf: usize) {
+    let b = buf as *mut c_void;
+    // SAFETY: an IRpcProxyBuffer: Disconnect (slot 4), then its reference.
+    unsafe {
+        let v = *(b as *const *const usize);
+        let disconnect: unsafe extern "system" fn(*mut c_void) = core::mem::transmute(*v.add(4));
+        disconnect(b);
+        release_unknown(b);
+    }
 }
 
 unsafe fn add_ref(p: *mut Proxy) -> u32 {
@@ -341,6 +453,10 @@ unsafe fn release(p: *mut Proxy) -> u32 {
     if gone {
         // SAFETY: the last reference of a proxy made by `make`.
         let b = unsafe { Box::from_raw(p) };
+        for (_, _, buf) in b.ifaces.with(core::mem::take) {
+            // SAFETY: the block's interface proxies (their pointers' references were all on it).
+            unsafe { disconnect_buffer(buf) };
+        }
         match &b.target {
             Target::Local { object, .. } => {
                 // SAFETY: the proxy's reference of the object.
