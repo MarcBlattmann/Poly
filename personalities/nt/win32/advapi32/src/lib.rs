@@ -840,5 +840,4 @@ pub extern "system" fn advapi32_main(_module: *mut u8, _reason: u32, _reserved: 
 mod delayed;
 mod services;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

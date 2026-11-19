@@ -988,5 +988,4 @@ pub extern "system" fn bcrypt_main(_module: *mut u8, _reason: u32, _reserved: *m
     1
 }
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

@@ -2212,7 +2212,6 @@ mod delayed;
 mod oop;
 mod stream;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
 
 /// `IsEqualGUID(rguid1, rguid2)`: whether two GUIDs are equal (Learn: `guiddef.h`; the logic is

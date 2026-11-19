@@ -2305,5 +2305,4 @@ mod delayed;
 mod mapping;
 mod world;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
