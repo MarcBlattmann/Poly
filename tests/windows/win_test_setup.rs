@@ -14,17 +14,22 @@
 //!    ends: Poly's installer waits for what an installer started, too;
 //! 5. ends with 0.
 //!
-//! Without administrator rights (where `Program Files` or `HKLM` refuse it)
-//! it installs for the user instead: `%LOCALAPPDATA%\Programs`, the user's
-//! Start menu (`%APPDATA%`), `HKCU`. With `--app` (the installed app) it
-//! writes `poly-test-app.txt` next to itself and ends.
+//! Like Google's installer it asks for administrator rights itself: started
+//! without them (`IsUserAnAdmin` is FALSE for the filtered token, ADR 0222),
+//! it starts itself again with `ShellExecuteExW` and the verb `runas`, which
+//! is Poly's consent prompt, waits for that copy and ends with its exit
+//! code. If the user says no (`ERROR_CANCELLED`), it installs for the user
+//! instead: `%LOCALAPPDATA%\Programs`, the user's Start menu (`%APPDATA%`),
+//! `HKCU` (where `Program Files` or `HKLM` refuse it). With `--app` (the
+//! installed app) it writes `poly-test-app.txt` next to itself and ends.
 //!
 //! Every call is on Microsoft Learn (`GetModuleFileNameW`,
 //! `GetCommandLineW`, `CreateDirectoryW`, `CopyFileW`, `CreateFileW`,
 //! `WriteFile`, `CloseHandle`, `CreateProcessW`, `Sleep`,
-//! `GetEnvironmentVariableW`, `GetStdHandle`, `RegCreateKeyExW`,
-//! `RegSetValueExW`, `RegCloseKey`); constants from `winnt.h`, `winreg.h`,
-//! `fileapi.h`, `winbase.h`.
+//! `GetEnvironmentVariableW`, `GetStdHandle`, `WaitForSingleObject`,
+//! `GetExitCodeProcess`, `RegCreateKeyExW`, `RegSetValueExW`, `RegCloseKey`,
+//! `IsUserAnAdmin`, `ShellExecuteExW`); constants from `winnt.h`,
+//! `winreg.h`, `fileapi.h`, `winbase.h`, `shellapi.h`, `winerror.h`.
 #![no_std]
 #![no_main]
 
@@ -79,6 +84,31 @@ const KEY_ALL_ACCESS: u32 = 0xF003F;
 const REG_SZ: u32 = 1;
 /// winerror.h.
 const ERROR_SUCCESS: i32 = 0;
+const ERROR_CANCELLED: u32 = 1223;
+/// shellapi.h, winbase.h, winuser.h.
+const SEE_MASK_NOCLOSEPROCESS: u32 = 0x40;
+const INFINITE: u32 = 0xFFFF_FFFF;
+const SW_SHOWNORMAL: i32 = 1;
+
+/// `SHELLEXECUTEINFOW` (shellapi.h).
+#[repr(C)]
+struct ShellExecuteInfoW {
+    size: u32,
+    mask: u32,
+    hwnd: HANDLE,
+    verb: *const u16,
+    file: *const u16,
+    parameters: *const u16,
+    directory: *const u16,
+    show: i32,
+    inst_app: HANDLE,
+    id_list: *mut c_void,
+    class: *const u16,
+    key_class: HANDLE,
+    hot_key: u32,
+    icon_or_monitor: HANDLE,
+    process: HANDLE,
+}
 
 #[link(name = "kernel32", kind = "raw-dylib")]
 unsafe extern "system" {
@@ -113,6 +143,14 @@ unsafe extern "system" {
     fn GetEnvironmentVariableW(name: *const u16, buffer: *mut u16, size: u32) -> u32;
     fn GetStdHandle(which: u32) -> HANDLE;
     fn GetLastError() -> u32;
+    fn WaitForSingleObject(handle: HANDLE, milliseconds: u32) -> u32;
+    fn GetExitCodeProcess(process: HANDLE, code: *mut u32) -> BOOL;
+}
+
+#[link(name = "shell32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn IsUserAnAdmin() -> BOOL;
+    fn ShellExecuteExW(info: *mut ShellExecuteInfoW) -> BOOL;
 }
 
 #[link(name = "advapi32", kind = "raw-dylib")]
@@ -437,6 +475,48 @@ fn start_lingering() {
     }
 }
 
+/// Start this program again with the verb `runas` and wait for it: its exit
+/// code, or the error `ShellExecuteExW` failed with.
+fn run_elevated() -> Result<u32, u32> {
+    let me = own_path();
+    let verb = Wide::of(utf16!("runas"));
+    let params = Wide::of(utf16!("--elevated"));
+    let mut info = ShellExecuteInfoW {
+        size: core::mem::size_of::<ShellExecuteInfoW>() as u32,
+        mask: SEE_MASK_NOCLOSEPROCESS,
+        hwnd: core::ptr::null_mut(),
+        verb: verb.ptr(),
+        file: me.ptr(),
+        parameters: params.ptr(),
+        directory: core::ptr::null(),
+        show: SW_SHOWNORMAL,
+        inst_app: core::ptr::null_mut(),
+        id_list: core::ptr::null_mut(),
+        class: core::ptr::null(),
+        key_class: core::ptr::null_mut(),
+        hot_key: 0,
+        icon_or_monitor: core::ptr::null_mut(),
+        process: core::ptr::null_mut(),
+    };
+    say(b"poly-test-setup: asking for administrator rights (runas)");
+    // SAFETY: a valid SHELLEXECUTEINFOW whose strings outlive the call.
+    if unsafe { ShellExecuteExW(&mut info) } == 0 {
+        // SAFETY: no preconditions.
+        return Err(unsafe { GetLastError() });
+    }
+    if info.process.is_null() {
+        return Ok(0);
+    }
+    let mut code = 1u32;
+    // SAFETY: the process handle ShellExecuteExW returned (SEE_MASK_NOCLOSEPROCESS), closed once.
+    unsafe {
+        WaitForSingleObject(info.process, INFINITE);
+        GetExitCodeProcess(info.process, &mut code);
+        CloseHandle(info.process);
+    }
+    Ok(code)
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn mainCRTStartup() -> ! {
     if has_arg(utf16!("--linger")) {
@@ -457,6 +537,18 @@ pub extern "system" fn mainCRTStartup() -> ! {
     if has_arg(utf16!("--uninstall")) {
         say(b"poly-test-app: no uninstaller in this test program");
         poly_wtest::exit(1);
+    }
+    // Administrator rights, asked for as Google's installer asks: `runas`.
+    // A copy started elevated never asks again (no loop if the check disagrees).
+    // SAFETY: no preconditions.
+    if unsafe { IsUserAnAdmin() } == 0 && !has_arg(utf16!("--elevated")) {
+        match run_elevated() {
+            Ok(code) => poly_wtest::exit(code),
+            Err(ERROR_CANCELLED) => say(b"poly-test-setup: no administrator rights (declined); installing for the user"),
+            Err(_) => say(b"poly-test-setup: no administrator rights; installing for the user"),
+        }
+    } else {
+        say(b"poly-test-setup: running with administrator rights");
     }
     let ok = install();
     start_lingering();
