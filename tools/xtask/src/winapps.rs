@@ -429,7 +429,7 @@ fn report(o: &Opts, s: &crate::chromewin::Summary, text: &str) -> String {
         let _ = writeln!(r, "then {}: {exe} {args}", i + 1);
     }
     if o.runs.len() > 1 {
-        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT")) {
+        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT") && !l.contains(crate::console::RESULT_FRAME)) {
             let _ = writeln!(r, "  {}", l.trim());
         }
     }

@@ -140,6 +140,7 @@ dependencies = [
  "poly-irq",
  "poly-ldr",
  "poly-line",
+ "poly-logline",
  "poly-loop",
  "poly-mem",
  "poly-net",
@@ -196,6 +197,10 @@ dependencies = [
 
 [[package]]
 name = "poly-line"
+version = "0.0.1"
+
+[[package]]
+name = "poly-logline"
 version = "0.0.1"
 
 [[package]]

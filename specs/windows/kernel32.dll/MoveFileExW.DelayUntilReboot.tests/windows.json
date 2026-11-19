@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "71b69b27ca9b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:23:50Z",
+  "tests": [
+    {
+      "name": "mvd_delete",
+      "exe_sha256": "729213aee6319d17f2751228bdbf4f0bcb00b9f65c04806a5ff59d13c246c498",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVsZXRlIGEgYXQgcmVib290OiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMgp0aGUgZmlsZSBzdGlsbCBleGlzdHM6IHRydWUKdGhlIHZhbHVlIGV4aXN0cyBub3c6IHRydWUKYWZ0ZXIgb25lIGNhbGw6IHR5cGUgNzsgdGhlIG9sZCBzdHJpbmdzIGFyZSB1bmNoYW5nZWQgYW5kIGZpcnN0OiB0cnVlCmFmdGVyIG9uZSBjYWxsIGFkZGVkWzBdOiAqMVw/P1w8c2NyYXRjaD5cbXZkX2EudG1wCmFmdGVyIG9uZSBjYWxsIGFkZGVkWzFdOiAKZGVsZXRlIGIgYXQgcmVib290OiByZXN1bHQgdHJ1ZQp0aGUgZW50cnkgb2YgdGhlIGZpcnN0IGNhbGwgaXMga2VwdCBpbiBmcm9udCBvZiB0aGUgc2Vjb25kOiB0cnVlCmFmdGVyIHR3byBjYWxsczogdHlwZSA3OyB0aGUgb2xkIHN0cmluZ3MgYXJlIHVuY2hhbmdlZCBhbmQgZmlyc3Q6IHRydWUKYWZ0ZXIgdHdvIGNhbGxzIGFkZGVkWzBdOiAqMVw/P1w8c2NyYXRjaD5cbXZkX2EudG1wCmFmdGVyIHR3byBjYWxscyBhZGRlZFsxXTogCmFmdGVyIHR3byBjYWxscyBhZGRlZFsyXTogKjFcPz9cPHNjcmF0Y2g+XG12ZF9iLnRtcAphZnRlciB0d28gY2FsbHMgYWRkZWRbM106IAp0aGUgc2FtZSBmaWxlIGFnYWluOiByZXN1bHQgdHJ1ZSwgdGhlIHZhbHVlIGdyZXc6IHRydWUKcmVzdG9yZWQsIHRoZSB2YWx1ZSBpcyBhcyBpdCB3YXMgKGJ5dGVzLCBraW5kLCBwcmVzZW5jZSk6IHRydWUgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "delete a at reboot: result true, last error -2\nthe file still exists: true\nthe value exists now: true\nafter one call: type 7; the old strings are unchanged and first: true\nafter one call added[0]: *1\\??\\<scratch>\\mvd_a.tmp\nafter one call added[1]: \ndelete b at reboot: result true\nthe entry of the first call is kept in front of the second: true\nafter two calls: type 7; the old strings are unchanged and first: true\nafter two calls added[0]: *1\\??\\<scratch>\\mvd_a.tmp\nafter two calls added[1]: \nafter two calls added[2]: *1\\??\\<scratch>\\mvd_b.tmp\nafter two calls added[3]: \nthe same file again: result true, the value grew: true\nrestored, the value is as it was (bytes, kind, presence): true true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    },
+    {
+      "name": "mvd_rename",
+      "exe_sha256": "a862cc9133c99c8c5480b7e7d0704ccc258a078200468e2a7800f402d1c564fa",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVuYW1lIGEgdG8gYiBhdCByZWJvb3Q6IHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yCmEgc3RpbGwgZXhpc3RzOiB0cnVlOyBiIGV4aXN0czogZmFsc2UKcmVuYW1lOiB0eXBlIDc7IHRoZSBvbGQgc3RyaW5ncyBhcmUgdW5jaGFuZ2VkIGFuZCBmaXJzdDogdHJ1ZQpyZW5hbWUgYWRkZWRbMF06ICoxXD8/XDxzY3JhdGNoPlxtdnJfYS50bXAKcmVuYW1lIGFkZGVkWzFdOiAqMVw/P1w8c2NyYXRjaD5cbXZyX2IudG1wCnJlbmFtZSBjIHRvIGQgYXQgcmVib290IHdpdGggUkVQTEFDRV9FWElTVElORzogcmVzdWx0IHRydWUKcmVuYW1lK3JlcGxhY2U6IHR5cGUgNzsgdGhlIG9sZCBzdHJpbmdzIGFyZSB1bmNoYW5nZWQgYW5kIGZpcnN0OiB0cnVlCnJlbmFtZStyZXBsYWNlIGFkZGVkWzBdOiAqMVw/P1w8c2NyYXRjaD5cbXZyX2EudG1wCnJlbmFtZStyZXBsYWNlIGFkZGVkWzFdOiAqMVw/P1w8c2NyYXRjaD5cbXZyX2IudG1wCnJlbmFtZStyZXBsYWNlIGFkZGVkWzJdOiAqMVw/P1w8c2NyYXRjaD5cbXZyX2MudG1wCnJlbmFtZStyZXBsYWNlIGFkZGVkWzNdOiAqMSFcPz9cPHNjcmF0Y2g+XG12cl9kLnRtcApkZXN0aW5hdGlvbiBpbiBhIG1pc3NpbmcgZGlyZWN0b3J5OiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMgphIHNvdXJjZSB0aGF0IGRvZXMgbm90IGV4aXN0IChyZWxhdGl2ZSBuYW1lKTogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIKdGhlIHZhbHVlIGlzIGxvbmdlciB0aGFuIGFmdGVyIHRoZSB0d28gcmVuYW1lczogdHJ1ZQpyZXN0b3JlZCwgdGhlIHZhbHVlIGlzIGFzIGl0IHdhcyAoYnl0ZXMsIGtpbmQsIHByZXNlbmNlKTogdHJ1ZSB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "rename a to b at reboot: result true, last error -2\na still exists: true; b exists: false\nrename: type 7; the old strings are unchanged and first: true\nrename added[0]: *1\\??\\<scratch>\\mvr_a.tmp\nrename added[1]: *1\\??\\<scratch>\\mvr_b.tmp\nrename c to d at reboot with REPLACE_EXISTING: result true\nrename+replace: type 7; the old strings are unchanged and first: true\nrename+replace added[0]: *1\\??\\<scratch>\\mvr_a.tmp\nrename+replace added[1]: *1\\??\\<scratch>\\mvr_b.tmp\nrename+replace added[2]: *1\\??\\<scratch>\\mvr_c.tmp\nrename+replace added[3]: *1!\\??\\<scratch>\\mvr_d.tmp\ndestination in a missing directory: result true, last error -2\na source that does not exist (relative name): result true, last error -2\nthe value is longer than after the two renames: true\nrestored, the value is as it was (bytes, kind, presence): true true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

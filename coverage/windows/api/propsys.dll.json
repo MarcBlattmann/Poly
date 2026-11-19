@@ -29,7 +29,7 @@
 {"symbol":"GetProxyDllInfo","src":["wine-spec"]},
 {"symbol":"InitPropVariantFromBooleanVector","src":["wine-spec"]},
 {"symbol":"InitPropVariantFromBuffer","status":"stub","src":["wine-spec"],"seeds":["wine:propsys/tests/propsys.c:test_InitPropVariantFromBuffer","wine:propsys/tests/propsys.c:test_PropVariantToBuffer"]},
-{"symbol":"InitPropVariantFromCLSID","status":"stub","src":["wine-spec"],"seeds":["wine:propsys/tests/propsys.c:test_InitPropVariantFromCLSID","wine:propsys/tests/propsys.c:test_PropVariantChangeType_CLSID","wine:propsys/tests/propsys.c:test_PropVariantToGUID"]},
+{"symbol":"InitPropVariantFromCLSID","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:propsys/tests/propsys.c:test_InitPropVariantFromCLSID","wine:propsys/tests/propsys.c:test_PropVariantChangeType_CLSID","wine:propsys/tests/propsys.c:test_PropVariantToGUID"]},
 {"symbol":"InitPropVariantFromDoubleVector","src":["wine-spec"]},
 {"symbol":"InitPropVariantFromFileTime","status":"stub","src":["wine-spec"]},
 {"symbol":"InitPropVariantFromFileTimeVector","src":["wine-spec"]},

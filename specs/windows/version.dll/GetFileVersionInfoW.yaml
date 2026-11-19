@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: version.dll/GetFileVersionInfoW.yaml
+id: windows/api/version.dll/GetFileVersionInfoW
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for GetFileVersionInfoSizeW, GetFileVersionInfoW and VerQueryValueW, and Learn''s "VS_VERSIONINFO structure", "VS_FIXEDFILEINFO structure", "StringFileInfo" and "VarFileInfo" pages and "Version Information" (verrsrc.h, winver.h); constants and error codes from winerror.h. Chrome''s own setup.exe imports all three (to read the version of an installed chrome.exe and of the installer itself). The test programs carry their own RT_VERSION resource (a block of 820 bytes with two string tables, 040904B0 and 040704B0, and a Translation list of two pairs), written as data in the test source. Nothing of Windows or Google''s programs was read or disassembled.'
+summary: 'Copies the version resource of a file into a caller''s buffer in the layout VerQueryValueW reads (the block starts with the VS_VERSIONINFO header: its wLength, wValueLength, wType). The buffer must be at least the size GetFileVersionInfoSizeW returned. The handle argument is ignored.'
+interface:
+  signature: 'BOOL GetFileVersionInfoW(LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData)'
+rules:
+  success: 'With dwLen the size from GetFileVersionInfoSizeW (or larger) the call returns TRUE; the block''s first bytes are the resource: for the test image wLength 820, wValueLength 52, wType 0. A non-zero dwHandle (0x55AA) is ignored: the bytes are the same as with 0.'
+  small_buffer: 'dwLen smaller than the size (64) or 0: FALSE and ERROR_INSUFFICIENT_BUFFER (122); the buffer is not written (its first byte keeps its value).'
+  failures: 'A text file: FALSE and 1812; a file that does not exist: FALSE and 2; an image without a version resource: FALSE and 1813; a NULL file name: FALSE and 1812.'
+  system_file: 'C:\Windows\System32\kernel32.dll: size non-zero and at most 16 KiB, the call succeeds, and the block has a fixed file info with the signature 0xFEEF04BD, a Translation entry and string values (see VerQueryValueW).'
+errors:
+  insufficient_buffer: '122'
+  resource_data_not_found: '1812'
+  resource_type_not_found: '1813'
+  file_not_found: '2'
+side_effects: 'none'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075): the test image carries a version resource built by a script as global_asm data (the RT_VERSION layout of Learn''s "VS_VERSIONINFO structure": FILEVERSION 1.2.3.4, PRODUCTVERSION 5.6.7.8, string table 040904B0 with CompanyName, FileDescription, FileVersion, InternalName, LegalCopyright, OriginalFilename, ProductName, ProductVersion, a second table 040704B0, Translation 0x04B00409 and 0x04B00407); other tests read C:\Windows\System32\kernel32.dll and files they write themselves. Observations are return values, error codes and relations; numbers that differ between Windows builds are never printed.'
+not_covered: '16-bit (NE) images, MUI resource redirection (.mui files), the Ex variants with FILE_VER_GET_LOCALISED and FILE_VER_GET_NEUTRAL, files in a WOW64 redirected directory from a 32-bit caller, very large version resources, the A variants, VerQueryValueW with a NULL block (an access violation on Windows), GetFileVersionInfoW with a NULL buffer (an access violation).'

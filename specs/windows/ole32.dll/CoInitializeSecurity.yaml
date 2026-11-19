@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoInitializeSecurity.yaml
+id: windows/api/ole32.dll/CoInitializeSecurity
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 with -Token elevated (full administrator token, high integrity) and -Token standard (filtered administrator token, medium integrity, Administrators deny-only) in the interactive desktop session of the local account \"server\" (session 1); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Registers process-wide COM security settings and default incoming access control. May succeed at most once per process, after COM is initialised and before any out-of-process COM activation or marshalling locks the default security. Accepts NULL (process defaults), an absolute SECURITY_DESCRIPTOR whose DACL is checked on every incoming cross-process call, or an AppID GUID (with EOAC_APPID) whose registry AccessPermission value supplies the DACL.
+interface:
+  signature: "HRESULT CoInitializeSecurity(PSECURITY_DESCRIPTOR pSecDesc, LONG cAuthSvc, SOLE_AUTHENTICATION_SERVICE *asAuthSvc, void *pReserved1, DWORD dwAuthnLevel, DWORD dwImpLevel, void *pAuthList, DWORD dwCapabilities, void *pReserved3)"
+  forward: "ole32.dll!CoInitializeSecurity forwards to combase.dll!CoInitializeSecurity"
+installer: "Google's updater (157 and 159) and Chrome's elevation service import CoInitializeSecurity (PE import names); the updater also imports BuildSecurityDescriptorW and ConvertStringSecurityDescriptorToSecurityDescriptorW. What the arguments of their calls are was not observed. Observed here instead: a LocalSystem service whose CoInitializeSecurity does not admit them refuses standard (filtered) token clients with E_ACCESSDENIED 0x80070005, so a service that serves standard users has to pass a descriptor that admits them."
+rules:
+  requires_com: "calling before CoInitializeEx on the process (or after CoUninitialize brings the apartment count back to zero) returns CO_E_NOTINITIALIZED 0x800401F0; repeated calls before COM is initialised keep returning 0x800401F0"
+  once_per_process: "after CoInitializeEx (STA or MTA), the first valid call returns S_OK and any subsequent call returns RPC_E_TOO_LATE 0x80010119; calling after a successful out-of-process activation (proxy created) or even after a failed out-of-process activation (REGDB_E_CLASSNOTREG 0x80040154 for CLSCTX_LOCAL_SERVER) also returns RPC_E_TOO_LATE 0x80010119; creating an in-process class (CLSCTX_INPROC_SERVER, such as CLSID_StdGlobalInterfaceTable) does not lock security, so a call afterwards still returns S_OK"
+  invalid_args_do_not_lock: "calls that fail argument validation (E_INVALIDARG) do not mark process security as initialised; a subsequent valid call in the same process still returns S_OK"
+  levels: "with NULL descriptor, cAuthSvc = -1, EOAC_NONE: authentication levels 0..=6 (DEFAULT, NONE, CONNECT, CALL, PKT, PKT_INTEGRITY, PKT_PRIVACY) all return S_OK; values > 6 (7, 100, 0xFFFFFFFF) return E_INVALIDARG 0x80070057. Impersonation levels 1..=4 (ANONYMOUS, IDENTIFY, IMPERSONATE, DELEGATE) return S_OK; 0 (DEFAULT) and values > 4 (5, 0xFFFFFFFF) return E_INVALIDARG 0x80070057"
+  capabilities: "with NULL descriptor, cAuthSvc = -1, PKT_PRIVACY, IMPERSONATE: accepted (S_OK): EOAC_NONE (0), EOAC_MUTUAL_AUTH (0x1), EOAC_SECURE_REFS (0x2), EOAC_APPID (0x8, with NULL pSecDesc), EOAC_DYNAMIC (0x10), EOAC_STATIC_CLOAKING (0x20), EOAC_DYNAMIC_CLOAKING (0x40), EOAC_MAKE_FULLSIC (0x100), EOAC_REQUIRE_FULLSIC (0x200), EOAC_DISABLE_AAA (0x1000), EOAC_NO_CUSTOM_MARSHAL (0x2000), EOAC_RESERVED1 (0x4000), DISABLE_AAA|NO_CUSTOM_MARSHAL, SECURE_REFS|MUTUAL_AUTH. Rejected with E_INVALIDARG 0x80070057: EOAC_ACCESS_CONTROL (0x4, without IAccessControl), EOAC_ANY_AUTHORITY (0x80), EOAC_AUTO_IMPERSONATE (0x400), EOAC_DEFAULT (0x800), STATIC_CLOAKING|DYNAMIC_CLOAKING together, ACCESS_CONTROL|APPID together, and undefined bits (0x8000, 0x10000, 0x80000000)"
+  descriptor_forms: "NULL pSecDesc returns S_OK. A direct security descriptor must be in absolute format with both owner and group present: a self-relative descriptor fails with 0x80070551 (HRESULT_FROM_WIN32(ERROR_INVALID_SECURITY_DESCR), 1361); an absolute descriptor missing owner or missing group fails with E_INVALIDARG 0x80070057. An absolute descriptor with an empty present DACL, no DACL present, or a NULL DACL is accepted (S_OK)"
+  dacl_mask_validation: "ACE access masks in the DACL must include COM_RIGHTS_EXECUTE (0x1): masks 0x1, 0x3, 0x7, 0xf, 0x1f and 0x1fffff are accepted (S_OK); an ACE with mask 0x2 (COM_RIGHTS_EXECUTE_LOCAL without bit 0x1) causes CoInitializeSecurity to fail with E_INVALIDARG 0x80070057, after which incoming calls to the server are refused with E_ACCESSDENIED 0x80070005"
+  access_check: "when a server sets an absolute security descriptor, COM checks incoming cross-process calls (CoCreateInstance, CoGetClassObject, and direct proxy calls such as LockServer) against the DACL in ACE order: allowing Everyone (WD), Users (BU), or Interactive (IU) with mask containing bit 0x1 (e.g. 0x3 or 0x7) admits both elevated and standard (filtered) administrator tokens (S_OK); allowing only Administrators (BA) or SYSTEM+Administrators admits the elevated token (S_OK) and refuses the standard filtered token (E_ACCESSDENIED 0x80070005, as BA is deny-only in the filtered token); allowing SYSTEM only, an empty DACL, Deny Everyone, or Deny Administrators before Allow Everyone refuses both tokens (0x80070005, as a deny-only SID still matches a deny ACE); Allow Everyone before Deny Administrators admits both tokens (S_OK). A same-user server that does not call CoInitializeSecurity admits same-user clients (S_OK)"
+  appid_mode: "with EOAC_APPID (0x8) and pSecDesc pointing to an AppID GUID, COM loads AccessPermission from HKLM\\SOFTWARE\\Classes\\AppID\\{appid} (see AppID.Security); an invalid AccessPermission mask such as 0x2 causes CoInitializeSecurity to fail with E_INVALIDARG 0x80070057 and callers to receive E_ACCESSDENIED"
+  local_negotiation: "across local processes on one machine, regardless of the server's dwAuthnLevel (0..=6), dwImpLevel (2..=4) or EOAC_DYNAMIC_CLOAKING, local activation succeeds (S_OK), the client proxy blanket reports authn=10 (NTLMSSP), authz=0, level=6 (PKT_PRIVACY), imp=2 (IDENTIFY), caps=0x1, and the server's QueryBlanket reports authn=10, authz=0, level=6, imp=1, caps=0"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  too_late: "RPC_E_TOO_LATE 0x80010119"
+  invalid_argument: "E_INVALIDARG 0x80070057"
+  self_relative_descriptor: "0x80070551 (HRESULT_FROM_WIN32(ERROR_INVALID_SECURITY_DESCR), 1361)"
+  access_denied_to_caller: "E_ACCESSDENIED 0x80070005 (returned to refused clients)"
+side_effects: "sets process-wide COM security state permanently for the lifetime of the process"
+threading: "process-wide; must be called after COM has been initialised on the calling thread"
+ordering: ["CoInitializeEx on the thread, then CoInitializeSecurity once, before any out-of-process activation"]
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each, each image acting as client and COM server (and where needed a child process running scenarios in isolation). Classes are registered under HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} for elevated runs and HKCU\Software\Classes\CLSID\{B2A0xxxx-...} for standard-token runs (with a process-unique CLSID per run) and removed afterwards. Observations are HRESULTs, Win32 codes, blanket integers, booleans and domain/user comparisons, never raw process ids, thread ids, pointers or times.
+not_covered: >
+  non-NULL asAuthSvc or pAuthList (explicit authentication service lists and credentials), IAccessControl (EOAC_ACCESS_CONTROL with a valid object), remote DCOM calls across machines, and non-NULL reserved parameters.

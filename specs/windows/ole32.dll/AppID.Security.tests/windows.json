@@ -1,0 +1,58 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "appid_access_a",
+      "exe_sha256": "33e99e741db1715fd1c05e0e52014e29c6e79320622c349fb2d9e2edb43916c0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZWxldmF0ZWQgdG9rZW46IDEKQWNjZXNzUGVybWlzc2lvbiBhYnNlbnQgKHNlcnZlciB1c2VzIHRoZSBBcHBJRCk6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDAwMDAwMDAwIChwcm9jZXNzIGVuZGVkIHdpdGggMCk7IHNlcnZlciBDb0luaXRpYWxpemVTZWN1cml0eSAweDAwMDAwMDAwCkFjY2Vzc1Blcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweDM7OztXRCkgKHNlcnZlciB1c2VzIHRoZSBBcHBJRCk6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDAwMDAwMDAwIChwcm9jZXNzIGVuZGVkIHdpdGggMCk7IHNlcnZlciBDb0luaXRpYWxpemVTZWN1cml0eSAweDAwMDAwMDAwCkFjY2Vzc1Blcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweDM7OztCQSkgKHNlcnZlciB1c2VzIHRoZSBBcHBJRCk6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDgwMDcwMDA1IChwcm9jZXNzIGVuZGVkIHdpdGggMCk7IHNlcnZlciBDb0luaXRpYWxpemVTZWN1cml0eSAweDAwMDAwMDAwCkFjY2Vzc1Blcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweDM7OztCVSkgKHNlcnZlciB1c2VzIHRoZSBBcHBJRCk6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDAwMDAwMDAwIChwcm9jZXNzIGVuZGVkIHdpdGggMCk7IHNlcnZlciBDb0luaXRpYWxpemVTZWN1cml0eSAweDAwMDAwMDAwCkFjY2Vzc1Blcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweDM7OztTWSkgKHNlcnZlciB1c2VzIHRoZSBBcHBJRCk6IGVsZXZhdGVkIGNsaWVudCAweDgwMDcwMDA1IHN0YW5kYXJkIGNsaWVudCAweDgwMDcwMDA1IChwcm9jZXNzIGVuZGVkIHdpdGggMCk7IHNlcnZlciBDb0luaXRpYWxpemVTZWN1cml0eSAweDAwMDAwMDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "elevated token: 1\nAccessPermission absent (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;WD) (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;BA) (server uses the AppID): elevated client 0x00000000 standard client 0x80070005 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;BU) (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;SY) (server uses the AppID): elevated client 0x80070005 standard client 0x80070005 (process ended with 0); server CoInitializeSecurity 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3489
+    },
+    {
+      "name": "appid_launch_a",
+      "exe_sha256": "37e63658f92f74ce205c88aabbcc472b677bb2e8801d66bcfe9a62d5f50e20c6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZWxldmF0ZWQgdG9rZW46IDEKTGF1bmNoUGVybWlzc2lvbiBhYnNlbnQ6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDAwMDAwMDAwIChwcm9jZXNzIGVuZGVkIHdpdGggMCkKTGF1bmNoUGVybWlzc2lvbiBPOkJBRzpCQUQ6KEE7OzB4Yjs7O1dEKTogZWxldmF0ZWQgY2xpZW50IDB4MDAwMDAwMDAgc3RhbmRhcmQgY2xpZW50IDB4MDAwMDAwMDAgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpMYXVuY2hQZXJtaXNzaW9uIE86QkFHOkJBRDooQTs7MHhiOzs7QkEpOiBlbGV2YXRlZCBjbGllbnQgMHgwMDAwMDAwMCBzdGFuZGFyZCBjbGllbnQgMHg4MDA3MDAwNSAocHJvY2VzcyBlbmRlZCB3aXRoIDApCkxhdW5jaFBlcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweGI7OztCVSk6IGVsZXZhdGVkIGNsaWVudCAweDAwMDAwMDAwIHN0YW5kYXJkIGNsaWVudCAweDAwMDAwMDAwIChwcm9jZXNzIGVuZGVkIHdpdGggMCkKTGF1bmNoUGVybWlzc2lvbiBPOkJBRzpCQUQ6KEE7OzB4Yjs7O1NZKTogZWxldmF0ZWQgY2xpZW50IDB4ODAwNzAwMDUgc3RhbmRhcmQgY2xpZW50IDB4ODAwNzAwMDUgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpMYXVuY2hQZXJtaXNzaW9uIE86QkFHOkJBRDooRDs7MHhiOzs7QkEpKEE7OzB4Yjs7O1dEKTogZWxldmF0ZWQgY2xpZW50IDB4ODAwNzAwMDUgc3RhbmRhcmQgY2xpZW50IDB4ODAwNzAwMDUgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpMYXVuY2hQZXJtaXNzaW9uIE86QkFHOkJBRDooQTs7MHgxOzs7V0QpOiBlbGV2YXRlZCBjbGllbnQgMHgwMDAwMDAwMCBzdGFuZGFyZCBjbGllbnQgMHgwMDAwMDAwMCAocHJvY2VzcyBlbmRlZCB3aXRoIDApCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "elevated token: 1\nLaunchPermission absent: elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;WD): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;BA): elevated client 0x00000000 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;BU): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;SY): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(D;;0xb;;;BA)(A;;0xb;;;WD): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x1;;;WD): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4096
+    },
+    {
+      "name": "appid_launch_b",
+      "exe_sha256": "5c6d10e560dc165c211006c49fa54c19b68e1c8ce91f0dc925fdb1be112c86a5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZWxldmF0ZWQgdG9rZW46IDEKTGF1bmNoUGVybWlzc2lvbiBPOkJBRzpCQUQ6KEE7OzB4Mjs7O1dEKTogZWxldmF0ZWQgY2xpZW50IDB4ODAwNDAxNTMgc3RhbmRhcmQgY2xpZW50IDB4ODAwNDAxNTMgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpMYXVuY2hQZXJtaXNzaW9uIE86QkFHOkJBRDooQTs7MHg4Ozs7V0QpOiBlbGV2YXRlZCBjbGllbnQgMHg4MDA0MDE1MyBzdGFuZGFyZCBjbGllbnQgMHg4MDA0MDE1MyAocHJvY2VzcyBlbmRlZCB3aXRoIDApCkxhdW5jaFBlcm1pc3Npb24gTzpCQUc6QkFEOihBOzsweGE7OztXRCk6IGVsZXZhdGVkIGNsaWVudCAweDgwMDQwMTUzIHN0YW5kYXJkIGNsaWVudCAweDgwMDQwMTUzIChwcm9jZXNzIGVuZGVkIHdpdGggMCkKTGF1bmNoUGVybWlzc2lvbiBPOkJBRzpCQUQ6KEE7OzB4Mzs7O1dEKTogZWxldmF0ZWQgY2xpZW50IDB4ODAwNzAwMDUgc3RhbmRhcmQgY2xpZW50IDB4ODAwNzAwMDUgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpMYXVuY2hQZXJtaXNzaW9uIE86QkFHOkJBRDo6IGVsZXZhdGVkIGNsaWVudCAweDgwMDcwMDA1IHN0YW5kYXJkIGNsaWVudCAweDgwMDcwMDA1IChwcm9jZXNzIGVuZGVkIHdpdGggMCkKTGF1bmNoUGVybWlzc2lvbiBPOkJBRzpCQUQ6KEE7OzB4Yjs7O0lVKTogZWxldmF0ZWQgY2xpZW50IDB4MDAwMDAwMDAgc3RhbmRhcmQgY2xpZW50IDB4MDAwMDAwMDAgKHByb2Nlc3MgZW5kZWQgd2l0aCAwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "elevated token: 1\nLaunchPermission O:BAG:BAD:(A;;0x2;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x8;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xa;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x3;;;WD): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:: elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;IU): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2473
+    }
+  ]
+}

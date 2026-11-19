@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/TypeLibFile.Functions.yaml
+id: windows/api/oleaut32.dll/TypeLibFile.Functions
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-typelib-format
+  date: 2026-11-19
+sources: >
+  Observations of our own programs on the machine above: a script-driven caller of CreateTypeLib2, ICreateTypeLib2 and ICreateTypeInfo(2) (declarations from Microsoft Learn and oaidl.h) wrote about 150 libraries, their bytes were compared across controlled variations (one more function, one more parameter, another VARTYPE, another flag, ...) and read back through ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2; the eight sample libraries in specs/windows/oleaut32.dll/TypeLibFile.samples/ are the files those programs wrote. The updater's own six libraries (updater.exe 159.0.8140.0, TYPELIB resources 1 to 6) were read as data (the resource bytes) and compared with what the same API reports for them. The format is described in docs/windows/typelib-file-format.md. Microsoft Learn: "LoadTypeLibEx", "ITypeLib", "ITypeLib2", "ITypeInfo", "ITypeInfo2", "TYPEATTR", "TLIBATTR", "FUNCDESC", "VARDESC", "ELEMDESC", "TYPEDESC", "PARAMDESCEX", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "FUNCFLAGS", "VARENUM", oaidl.h, wtypes.h, winerror.h. No Microsoft or Google binary was decompiled or disassembled; no Wine, ReactOS or third-party description of the file format was read.
+summary: >
+  The function and variable records of a type-library file and the type descriptors they use: member ids, names, invoke kinds, calling conventions, function flags, return and parameter types (simple, pointer chains, safearrays, arrays, user types by reference, imported types), parameter flags, optional and default-valued parameters, help strings, module entry points, custom data on functions and parameters, enum constants and record fields. This is what GetFuncDesc, GetVarDesc, GetNames, GetDocumentation, GetDllEntry and the custom data calls report.
+interface:
+  format: "docs/windows/typelib-file-format.md sections 4 (type descriptors), 5.3 (function and variable records) and 9"
+  samples: "specs/windows/oleaut32.dll/TypeLibFile.samples/funcs.tlb and dual.tlb (and updater_like.tlb, kinds.tlb)"
+installer: "The updater's functions: ids 0x6001nnnn to 0x6003nnnn, invoke kinds function, get and put, calling convention stdcall, return HRESULT, parameters of type i4, ui4, ui2, uint, int, i8, ptr to those, bstr, bool, lpwstr, variant, date, dispatch, pointers to types of the same library and to the alias, flags in, out, in+out and out+retval; about 900 records were read and agreed."
+rules:
+  record_fields: "a function reports its id, invoke kind (1, 2, 4, 8), calling convention, function flags, vtable offset (slot index times the pointer size), parameter count and optional-parameter count as stored; the function kind comes from the type (pure virtual for interfaces, dispatch for dispinterfaces, static for modules)"
+  names: "GetNames returns the function name then the parameter names in order; a put with the same id as a get reports the get's name; parameters without names report none"
+  types: "simple types come back as stored (INT and UINT as themselves); pointers and safearrays nest; a carray reports its element type, the dimension count and per dimension the element count and lower bound; a reference to a type of the library or of stdole2 resolves to that type"
+  defaults_and_help: "default values (i4, bstr) come back with PARAMFLAG_FHASDEFAULT 0x20 set on the parameter; help context, doc string and help string context per function and per variable; custom data per function and per parameter (layout in the format sheet)"
+  modules: "a module's functions report their DLL and either an entry-point name or an ordinal; a function without an entry reports the first DLL name stored and ordinal 0 (typeinfo_kinds)"
+  variables: "enum constants report kind 2 (const) and their value; record fields kind 0 (per instance) and their offsets (adjusted to the file's syskind); union members offset 0"
+  dual_projection: "for a dual interface the API shows the pure-virtual records as dispatch functions: the [retval] parameter becomes the return type and is removed from the parameters, a function without it returns void; the 7 methods of IUnknown and IDispatch come first with ids 0x60000000..0x60010003 and flags FRESTRICTED (funcs_dual)"
+errors:
+  cannot_load: "a file that is not a type library: TYPE_E_CANTLOADLIBRARY 0x80029c4a (see LoadTypeLibEx); not exercised here with damaged files"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test: the image holds the bytes of one or two sample libraries (the same files as under TypeLibFile.samples/), writes them beside itself, loads them with LoadTypeLibEx(REGKIND_NONE) (layout_resource: as the TYPELIB resource of a DLL image the test writes, headers and one .rsrc section per Microsoft Learn "PE Format") and reports every value ITypeLib, ITypeInfo, ITypeLib2 and ITypeInfo2 return: library and type attributes, documentation (name, doc string, help context, help file name without its directory, help string, help string context and DLL), custom data, implemented types, functions and parameters with their types written out, variables, module entry points, GetTypeInfoOfGuid, FindName and IsName for every type. References to types are shown by the name of the type they refer to, never as numbers. The sample files carry made-up ids {B2B0F0xx-0000-4000-8000-706F6C797773}; nothing is registered.
+not_covered: >
+  a function with both function and variable blocks in one type, DeleteFuncDesc and other editing calls (writing side), scodes (not stored), every calling convention (stdcall, cdecl, pascal, fastcall seen), more than 8 parameters with custom data.

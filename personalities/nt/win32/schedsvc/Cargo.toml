@@ -1,0 +1,20 @@
+[package]
+name = "schedsvc"
+description = "schedsvc.exe (ADR 0226): Poly's Task Scheduler service, the task store, the processes of running tasks and the clock that fires triggers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "schedsvc"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-taskschd = { path = "../../../../crates/poly-taskschd" }
+
+[lints]
+workspace = true

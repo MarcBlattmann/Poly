@@ -97,6 +97,36 @@ impl Drop for Mapping {
     }
 }
 
+/// Part of a device's memory, mapped read-only and shared (a layer buffer of the desktop link,
+/// ADR 0224). The device's handle stays the caller's.
+#[derive(Debug)]
+pub struct DeviceView {
+    ptr: *mut u8,
+    len: usize,
+}
+
+impl DeviceView {
+    /// Map `len` bytes of device `fd` at `offset`.
+    pub fn map(fd: RawFd, offset: u64, len: usize) -> io::Result<DeviceView> {
+        let ptr = poly_rt::mem::map_handle(h(fd), offset, len, abi::prot::READ, true)
+            .map_err(|e| io::Error::new(e, format!("mapping {len} bytes at {offset:#x}: {e}")))?;
+        Ok(DeviceView { ptr, len })
+    }
+
+    /// The first byte and the length. The memory is another process's, which may write it at any
+    /// time: read it with copies, never through references held across its writes.
+    pub fn raw(&self) -> (*const u8, usize) {
+        (self.ptr, self.len)
+    }
+}
+
+impl Drop for DeviceView {
+    fn drop(&mut self) {
+        // SAFETY: `ptr`/`len` are exactly what `map_handle` returned; reads only copy out.
+        let _ = unsafe { poly_rt::mem::unmap(self.ptr, self.len) };
+    }
+}
+
 pub fn close(fd: RawFd) {
     let _ = sys::close(h(fd));
 }

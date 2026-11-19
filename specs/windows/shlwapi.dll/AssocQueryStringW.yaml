@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/AssocQueryStringW.yaml
+id: windows/api/shlwapi.dll/AssocQueryStringW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon (session 0, elevated token) as the local account \"server\" (member of Administrators). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine. Microsoft Learn: "AssocQueryStringW function (shlwapi.h)", "ASSOCF", "ASSOCSTR", "File Types and File Associations", "Application Registration" (App Paths, Applications), and the public header shlwapi.h for the constants. The registry patterns tested are the ones Google Chrome's setup.exe (--system-level) writes: a ProgID (ChromeHTML) with DefaultIcon and shell\open\command, extensions that carry only an OpenWithProgids value, HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe (survey-chrome-installer, docs/windows/chrome-installer-plan.md). Made-up names (PolySpecB4*) stand for Chrome's. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Reads one string of the registered handler of a file extension, a ProgID or an executable name (the open command, the executable, the friendly names, the icon) from the merged HKLM and HKCU "Classes" keys and the Applications and App Paths keys. A ProgID can be queried by its name; an extension is followed to its default ProgID, and an extension that has no default value but one OpenWithProgids value resolves to that ProgID (so Chrome's registrations work); a bare executable name is looked up only with ASSOCF_OPEN_BYEXENAME. ShellExecuteExW starts a program by the bare name found in HKLM App Paths.
+interface:
+  signature: "HRESULT AssocQueryStringW(ASSOCF flags, ASSOCSTR str, PCWSTR pszAssoc, PCWSTR pszExtra, PWSTR pszOut, DWORD *pcchOut)"
+  constants: "ASSOCSTR_COMMAND 1, ASSOCSTR_EXECUTABLE 2, ASSOCSTR_FRIENDLYDOCNAME 3, ASSOCSTR_FRIENDLYAPPNAME 4, ASSOCSTR_DEFAULTICON 15; ASSOCF_OPEN_BYEXENAME 0x2, ASSOCF_NOTRUNCATE 0x20, ASSOCF_INIT_IGNOREUNKNOWN 0x400 (shlwapi.h)"
+rules:
+  progid: "pszAssoc = a ProgID that has a default value (the friendly document name), DefaultIcon and shell\\open\\command (default value `\"C:\\Windows\\System32\\cmd.exe\" /c exit \"%1\"`): COMMAND with the verb \"open\" or with no verb gives S_OK and the command text exactly as stored (REG_SZ: the quotes and %1 stay); EXECUTABLE gives the path of the program in the command without quotes (C:\\Windows\\System32\\cmd.exe); FRIENDLYDOCNAME the default value of the ProgID key; FRIENDLYAPPNAME the file description of the executable (\"Windows Command Processor\" for cmd.exe), not a name from the registry; DEFAULTICON the default value of DefaultIcon unchanged (path,index). A verb that does not exist (\"edit\"): HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION) 0x80070483 and the buffer holds an empty string."
+  extension_default: "pszAssoc = an extension (\".polyspecb4a\") whose default value is the ProgID: the same answers as for the ProgID (COMMAND, EXECUTABLE, FRIENDLYDOCNAME, DEFAULTICON)."
+  extension_openwith: "an extension (\".polyspecb4b\") with no default value and a single value under its OpenWithProgids key (REG_SZ empty, as Chrome writes it) is resolved to that ProgID: COMMAND, EXECUTABLE and FRIENDLYDOCNAME give the ProgID's answers, also with ASSOCF_INIT_IGNOREUNKNOWN. With two OpenWithProgids values, one of them naming a ProgID that does not exist, the existing one is used."
+  unknown: "an extension nobody registered: with flags 0 the answer is S_OK and the open-with fallback `C:\\Windows\\system32\\OpenWith.exe \"%1\"` for COMMAND (the lower case in system32 is as returned); with ASSOCF_INIT_IGNOREUNKNOWN 0x80070483. A ProgID name nobody registered: 0x80070483 with flags 0 and with ASSOCF_INIT_IGNOREUNKNOWN."
+  exe_name: "an executable name (\"polyspecb4app.exe\"): with ASSOCF_OPEN_BYEXENAME, COMMAND with \"open\" gives the default value of HKLM\\SOFTWARE\\Classes\\Applications\\<exe>\\shell\\open\\command (stored text), EXECUTABLE the program the HKLM App Paths default value points to or the one in the command (C:\\Windows\\System32\\cmd.exe), FRIENDLYAPPNAME the file description of that program; without the flag COMMAND gives 0x80070483."
+  hkcu_over_hklm: "a ProgID present in both HKLM\\SOFTWARE\\Classes and HKCU\\SOFTWARE\\Classes: the values of HKCU win when both have the value (COMMAND: the HKCU command; FRIENDLYDOCNAME the HKCU name), a value present only in HKLM is still used (FRIENDLYDOCNAME with the HKLM name when the HKCU key has none); after the HKCU key is deleted the HKLM answers return."
+  registry_views: "HKLM\\SOFTWARE\\Classes is shared between the 32-bit and the 64-bit view: a ProgID written through KEY_WOW64_32KEY is opened by a 64-bit caller and found by this 64-bit caller's AssocQueryStringW."
+  buffer: "pcchOut counts units including the NUL. The full command text of the test is 43 units. A buffer of 8 units: HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) 0x8007007A, *pcchOut = 43, the start of the text is written; the same call with ASSOCF_NOTRUNCATE: E_POINTER 0x80004003, *pcchOut = 43, nothing written. A NULL output buffer with *pcchOut = 0: S_FALSE (1) and *pcchOut = 43. On success *pcchOut is the length of the text plus the NUL."
+  bad_arguments: "pszAssoc NULL: E_INVALIDARG 0x80070057; an ASSOCSTR of 99: E_INVALIDARG."
+  shellexecute_app_paths: "ShellExecuteExW with SEE_MASK_NOCLOSEPROCESS and a bare file name (\"polyspecb4app.exe\", parameters \"/c exit 7\") finds the program through HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\<exe> (default value = full path of the program) and starts it: TRUE, the process runs (exit code 7). An App Paths entry of the user (HKCU) with another program does not change which program is started when the HKLM entry exists, and an HKCU entry alone is not used: with SEE_MASK_FLAG_NO_UI (0x400) the call fails with last error 2 and hInstApp 2, as it does when no App Paths entry exists. (Without SEE_MASK_FLAG_NO_UI a failing lookup shows Windows' \"cannot find\" message box; the process then hangs until it is closed.) The `Path` value of an entry was written but is not tested for its effect."
+errors:
+  no_association: "0x80070483"
+  insufficient_buffer: "0x8007007A"
+  e_pointer: "0x80004003 (ASSOCF_NOTRUNCATE and a small buffer)"
+  invalid_arg: "0x80070057"
+side_effects: "the tests create and delete keys named PolySpecB4* under HKLM\\SOFTWARE\\Classes, HKLM and HKCU ...\\App Paths and HKLM\\SOFTWARE\\Classes\\Applications; aq_apppaths starts cmd.exe (and the 32-bit cmd.exe by its full path as a check) with /c exit 7"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per query on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, run in the SSH logon with its elevated token (the keys go into HKLM). Every test removes its keys at the start (a crashed run) and at the end, and checks that they are gone. Paths in the answers are shown with the Windows directory as <Windows>.
+not_covered: >
+  Per-user choices (UserChoice) and the hash protection, ASSOCF flags other than the ones above, ASSOCSTR types other than 1, 2, 3, 4 and 15, DDE and DelegateExecute, "Perceived" types and content types, the Path value of App Paths, HKCU App Paths with a non-elevated caller, 32-bit callers and the Wow6432Node for keys outside Classes, extensions with several OpenWithProgids that are all registered (which one wins), AssocCreate and IQueryAssociations.

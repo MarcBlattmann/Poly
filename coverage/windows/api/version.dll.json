@@ -5,8 +5,8 @@
 {"symbol":"GetFileVersionInfoSizeA","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_info_size","wine:version/tests/info.c:test_info","wine:version/tests/info.c:test_extra_block","wine:version/tests/info.c:test_VerQueryValueA","wine:version/tests/info.c:test_32bit_win"]},
 {"symbol":"GetFileVersionInfoSizeExA","src":["wine-spec"]},
 {"symbol":"GetFileVersionInfoSizeExW","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_GetFileVersionInfoEx"]},
-{"symbol":"GetFileVersionInfoSizeW","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_32bit_win"]},
-{"symbol":"GetFileVersionInfoW","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_32bit_win"]},
+{"symbol":"GetFileVersionInfoSizeW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_32bit_win"]},
+{"symbol":"GetFileVersionInfoW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_32bit_win"]},
 {"symbol":"VerFindFileA","src":["wine-spec"],"seeds":["wine:version/tests/install.c:test_find_file"]},
 {"symbol":"VerFindFileW","src":["wine-spec"]},
 {"symbol":"VerInstallFileA","src":["wine-spec"],"seeds":["wine:version/tests/install.c:test_install_file"]},
@@ -14,5 +14,5 @@
 {"symbol":"VerLanguageNameA","forward":"kernel32.VerLanguageNameA","src":["wine-spec"]},
 {"symbol":"VerLanguageNameW","forward":"kernel32.VerLanguageNameW","src":["wine-spec"]},
 {"symbol":"VerQueryValueA","status":"stub","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValueA","wine:version/tests/info.c:test_info","wine:version/tests/info.c:test_wow64_redirection","wine:version/tests/info.c:test_extra_block","wine:version/tests/info.c:test_GetFileVersionInfoEx","wine:version/tests/info.c:test_32bit_win"]},
-{"symbol":"VerQueryValueW","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValue_EmptyData","wine:version/tests/info.c:test_32bit_win"]}
+{"symbol":"VerQueryValueW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:version/tests/info.c:test_VerQueryValue_EmptyData","wine:version/tests/info.c:test_32bit_win"]}
 ]
