@@ -173,6 +173,9 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// Poly's `services.exe`, the host of the service control manager (ADR 0221), installed in
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
+/// Poly's `explorer.exe`, the stand-in of the session's shell (ADR 0222), installed in
+/// `C:\Windows` by [`layout`] and started for the elevated logon; empty without `xtask`.
+pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explorer.exe"));
 /// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
 pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 
@@ -801,6 +804,12 @@ fn make_state(slot: &mut Option<NtState>) {
     if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
         let _ = thread::detach(tid);
     }
+    // The elevated logon's session has a shell holding the filtered token (ADR 0222).
+    if state.sys.logon == poly_personality_nt::security::Logon::Elevated
+        && let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0)
+    {
+        let _ = thread::detach(tid);
+    }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
         let display = if TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed) {
             poly_win32k::metrics::Display::INTERACTIVE_BOTTOM
@@ -1418,6 +1427,8 @@ fn start_params(
                 handles.and_then(|h| h.token),
                 thread,
             )?;
+            // Its session, from the token (ADR 0222).
+            poly_personality_nt::security::write_session_id(&s.sys, proc, &mut b)?;
             poly_personality_nt::security::assign_process_security(
                 &mut s.sys,
                 pid,
@@ -1735,6 +1746,29 @@ fn services_main(_: usize) -> usize {
         Err(e) => crate::kprintln!("nt: services.exe could not start: {e}"),
     }
     HOST_STARTING.store(false, core::sync::atomic::Ordering::SeqCst);
+    0
+}
+
+/// Start `C:\Windows\explorer.exe`, the stand-in of the session's shell (ADR 0222), with the
+/// logon's filtered token: an elevated program finds it and starts a process de-elevated with a
+/// copy of that token.
+fn shell_main(_: usize) -> usize {
+    if EXPLORER_EXE.is_empty() {
+        return 0;
+    }
+    let path = alloc::format!("{}/Windows/explorer.exe", layout::C_PATH);
+    let started = crate::program::prepare(path.as_bytes(), &[path.as_bytes()], &[], false).and_then(|p| {
+        let pid = p.process().pid;
+        if let Err(e) = with(|s| poly_personality_nt::security::become_shell(&mut s.sys, ProcessId(pid), ThreadRef(0)))
+        {
+            crate::kprintln!("nt: explorer.exe keeps its creator's token ({:#x})", e.0);
+        }
+        p.start()
+    });
+    match started {
+        Ok(p) => crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid),
+        Err(e) => crate::kprintln!("nt: explorer.exe could not start: {e}"),
+    }
     0
 }
 

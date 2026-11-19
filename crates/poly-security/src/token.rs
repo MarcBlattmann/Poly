@@ -465,6 +465,9 @@ fn with_container_ace(dacl: &Option<Vec<u8>>, sid: &Sid) -> Option<Vec<u8>> {
     Some(crate::sdops::acl_of(d.first().copied().unwrap_or(acl::ACL_REVISION), &aces))
 }
 
+/// The console session the interactive logon is in (ADR 0222; `WTSGetActiveConsoleSessionId`).
+pub const CONSOLE_SESSION: u32 = 1;
+
 /// The single user's logon session LUID: its logon SID `S-1-5-5-0-123456789`
 /// has the length the strings of the sheets show (ADR 0171).
 pub const POLY_LOGON_LUID: u64 = 123_456_789;
@@ -558,8 +561,26 @@ impl Token {
         filtered
     }
 
-    fn uac_full_alone() -> Token {
+    /// What both halves of an administrator's split token share (ADR 0222): an interactive
+    /// logon in the console session. Learn ("Well-known SIDs"): INTERACTIVE (S-1-5-4) is the group
+    /// of users who logged on interactively, NETWORK (S-1-5-2) that of network logons such as the
+    /// SSH logon of [`Token::poly_user`]; the UAC sheets' tokens come from an interactive logon in
+    /// session 1 (UacStandardToken.yaml, UacElevatedToken.yaml; `TokenSessionId` matches the
+    /// client's session, CoImpersonateClient.yaml).
+    fn interactive_logon() -> Token {
         let mut t = Token::poly_user();
+        let network = sid::nt(rid::SECURITY_NETWORK_RID);
+        for (g, _) in t.groups.iter_mut() {
+            if *g == network {
+                *g = sid::nt(rid::SECURITY_INTERACTIVE_RID);
+            }
+        }
+        t.session = CONSOLE_SESSION;
+        t
+    }
+
+    fn uac_full_alone() -> Token {
+        let mut t = Token::interactive_logon();
         const ON: u32 = SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT;
         for (luid, attrs) in t.privileges.iter_mut() {
             *attrs = match *luid {
@@ -573,7 +594,7 @@ impl Token {
     }
 
     fn uac_filtered_alone() -> Token {
-        let mut t = Token::poly_user();
+        let mut t = Token::interactive_logon();
         let admins = sid::builtin(rid::DOMAIN_ALIAS_RID_ADMINS);
         let local_admin = sid::nt(114);
         for (g, a) in t.groups.iter_mut() {

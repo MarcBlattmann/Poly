@@ -118,6 +118,8 @@ fn embed_win32() {
         "msvcp140.dll",
         // ADR 0221.
         "services.exe",
+        // ADR 0222.
+        "explorer.exe",
         // The Windows Firewall's COM objects.
         "hnetcfg.dll",
     ] {
