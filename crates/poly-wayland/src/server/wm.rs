@@ -108,6 +108,8 @@ pub(crate) struct Internal {
     /// Borders around the content that take the pointer too (left, top,
     /// right, bottom; logical): a Windows window's own sizing borders.
     pub margins: [i32; 4],
+    /// The pointer's look over the window, as its owner last set it ([`Server::set_internal_cursor`]).
+    pub cursor: Option<crate::compose::NamedCursor>,
 }
 
 /// Where `r`, laid out in work area `before`, goes in work area `after`: the
@@ -455,6 +457,7 @@ impl Server {
             restore: None,
             size: (width, height),
             margins: [0; 4],
+            cursor: None,
         };
         self.internal.insert(win, state);
         self.activate_internal(win);
@@ -470,8 +473,15 @@ impl Server {
             return;
         }
         let size = self.scene.window(w).map_or((0, 0), |win| win.content().logical_size());
-        let state =
-            Internal { app_id: app_id.into(), maximized: false, tile: None, restore: None, size, margins: [0; 4] };
+        let state = Internal {
+            app_id: app_id.into(),
+            maximized: false,
+            tile: None,
+            restore: None,
+            size,
+            margins: [0; 4],
+            cursor: None,
+        };
         self.internal.insert(w, state);
         if activate {
             self.activate_internal(w);

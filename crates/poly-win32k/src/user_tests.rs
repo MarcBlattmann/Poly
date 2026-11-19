@@ -19,6 +19,8 @@ struct TestEnv {
     err: Cell<u32>,
     /// The cursor shape DefWindowProc's WM_SETCURSOR set last.
     cursor: Cell<u64>,
+    /// The standard cursor DefWindowProc set last (`Env::set_system_cursor`).
+    system_cursor: Cell<u16>,
     /// GDI regions the tests made: handle and rectangles.
     regions: RefCell<Vec<(u64, Vec<Rect>)>>,
     /// Give each thread its default IME window with its first window, as
@@ -88,6 +90,9 @@ impl Env for TestEnv {
     fn set_cursor(&self, cursor: u64) {
         self.cursor.set(cursor);
     }
+    fn set_system_cursor(&self, idc: u16) {
+        self.system_cursor.set(idc);
+    }
     fn window_created(&self, hwnd: u32) {
         if self.ime.get() {
             replay::make_ime_window(self, hwnd);
@@ -114,6 +119,7 @@ fn with_env(f: impl FnOnce(&TestEnv)) {
         tid: Cell::new(1),
         err: Cell::new(0),
         cursor: Cell::new(0),
+        system_cursor: Cell::new(0),
         regions: RefCell::new(Vec::new()),
         ime: Cell::new(false),
         moves: RefCell::new(Vec::new()),
@@ -960,6 +966,13 @@ fn def_window_proc_sets_the_class_cursor_for_a_client_hit_only_for_itself() {
         e.cursor.set(0x60001);
         assert_eq!(def_window_proc(e, a, input::WM_SETCURSOR, a, hit(2)), 0);
         assert_eq!(e.cursor.get(), 0x60001);
+        assert_eq!(e.system_cursor.get(), 0, "no sizing cursor on the caption");
+        // On a sizing border: the sizing cursor of its direction (ADR 0234).
+        for (code, idc) in [(10, 32644), (15, 32645), (13, 32642), (17, 32642), (14, 32643), (16, 32643)] {
+            assert_eq!(def_window_proc(e, a, input::WM_SETCURSOR, a, hit(code)), 0);
+            assert_eq!(e.system_cursor.get(), idc, "hit {code}");
+        }
+        e.system_cursor.set(0);
         // The child's class has none: its DefWindowProc asks the parent first
         // (on the child's behalf: the parent changes nothing), then FALSE.
         take_log();

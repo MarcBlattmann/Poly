@@ -411,6 +411,9 @@ struct SeatState {
     input: input::InputState,
     /// What the client the pointer is over asked it to look like.
     cursor: Option<cursor::CursorRequest>,
+    /// The look the server chooses itself, which wins over the client's (ADR 0234): the resize
+    /// arrows over a frame's border and during a resize, a Windows window's own cursor.
+    hint: Option<crate::compose::NamedCursor>,
 }
 
 /// What one client's frame callbacks and feedback wait for: the frame

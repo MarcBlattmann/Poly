@@ -270,6 +270,9 @@ pub trait Env {
     /// Make `cursor` the calling thread's cursor shape (what DefWindowProc's
     /// `WM_SETCURSOR` does with the class cursor).
     fn set_cursor(&self, _cursor: u64) {}
+    /// Make the standard cursor `idc` (an `IDC_*` resource number, winuser.h) the calling
+    /// thread's cursor shape: DefWindowProc's sizing cursors on a window's borders.
+    fn set_system_cursor(&self, _idc: u16) {}
     /// A window of the calling thread got through `WM_NCCREATE`: `user32`
     /// gives the thread its default IME window with its first window
     /// (GetFocus.yaml `ime_window`).
@@ -937,6 +940,19 @@ struct Opts {
 const SWP_NOCOPYBITS: u32 = 0x0100;
 /// `HWND_BOTTOM` (winuser.h).
 const HWND_BOTTOM: u64 = 1;
+
+/// The standard cursor (`IDC_SIZE*`, winuser.h) of a sizing hit code: HTLEFT / HTRIGHT
+/// `IDC_SIZEWE` (32644), HTTOP / HTBOTTOM `IDC_SIZENS` (32645), HTTOPLEFT / HTBOTTOMRIGHT and
+/// HTGROWBOX `IDC_SIZENWSE` (32642), HTTOPRIGHT / HTBOTTOMLEFT `IDC_SIZENESW` (32643).
+pub fn sizing_cursor(hit: u64) -> Option<u16> {
+    Some(match hit {
+        10 | 11 => 32644,
+        12 | 15 => 32645,
+        4 | 13 | 17 => 32642,
+        14 | 16 => 32643,
+        _ => return None,
+    })
+}
 
 /// `ShowWindow` (`ShowWindow.yaml`): the previous `WS_VISIBLE` state.
 ///
@@ -2092,6 +2108,14 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 && value != 0
             {
                 env.set_cursor(value);
+            }
+            // On the window's own sizing border the cursor shows the directions it can be sized
+            // in (Learn, "About Cursors": the system shows the sizing cursors at a window's
+            // border; WM_NCHITTEST hit codes, winuser.h). ADR 0234.
+            if w == hwnd
+                && let Some(idc) = sizing_cursor(l & 0xFFFF)
+            {
+                env.set_system_cursor(idc);
             }
             0
         }
