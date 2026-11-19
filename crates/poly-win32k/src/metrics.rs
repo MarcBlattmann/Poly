@@ -620,7 +620,12 @@ pub fn minmax_dpi(style: u32, ex: u32, d: &Display, dpi: u32) -> [(i32, i32); 4]
     } else {
         ((2 * s).max(2), (2 * s).max(2))
     };
-    [(d.width + 2 * s, d.height + 2 * s), (-s, -s), min, (d.width + 20, d.height + 20)]
+    // The largest tracking size is the screen plus 20 at 96 DPI (the sheets): the hidden frame on
+    // both sides and 4 more. At a higher DPI the frame is larger, and so is the tracking size, or
+    // a maximized window that sets its size again (Chrome) would be cut to it (ADR 0234: 2580
+    // for a 2586-wide maximized window at 200 %).
+    let track = if dpi <= 96 { 20 } else { (2 * s + 4).max(20) };
+    [(d.width + 2 * s, d.height + 2 * s), (-s, -s), min, (d.width + track, d.height + track)]
 }
 
 /// `WS_MAXIMIZEBOX` (winuser.h).
@@ -1112,6 +1117,9 @@ mod tests {
         let d = Display { width: 2560, height: 1600, work: Rect::new(0, 48, 2560, 1600), interactive: true };
         let [ms, mp, _, _] = minmax_dpi(ow, 0, &d, 192);
         assert_eq!((ms, mp), ((2586, 1626), (-13, -13)));
+        // Its tracking size is not smaller than the maximized one.
+        assert_eq!(minmax_dpi(ow, 0, &d, 192)[3], (2590, 1630));
+        assert_eq!(minmax(ow, 0, &d)[3], (2580, 1620));
         assert_eq!(maximized_rect_dpi(ow, 0, &d, ms, mp, 192), Rect::new(-13, 35, 2573, 1613));
         let [ms, mp, _, _] = minmax(ow, 0, &d);
         assert_eq!(maximized_rect(ow, 0, &d, ms, mp), Rect::new(-8, 40, 2568, 1608));
