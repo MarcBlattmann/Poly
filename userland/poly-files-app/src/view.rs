@@ -656,7 +656,13 @@ impl FilesApp {
             Ok(Open::Folder(p)) => {
                 self.go(&p);
             }
-            Ok(Open::Launch(argv)) | Ok(Open::With(argv)) => self.run(&argv),
+            Ok(Open::Launch(argv)) => self.run(&argv),
+            // An app of the system opens the file as the desktop's user, as the launcher starts
+            // it (ADR 0218).
+            Ok(Open::With(argv)) => {
+                let wrapper = poly_rt::env::var(poly_shell::apps::APP_USER_VAR);
+                self.run(&poly_shell::apps::opener_argv(wrapper, &argv))
+            }
             Ok(Open::NoApp { mime }) if mime.starts_with("text/") || mime == "application/x-shellscript" => {
                 // Text without an app for it: the terminal's editor.
                 let argv: Vec<String> =

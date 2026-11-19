@@ -111,8 +111,8 @@ libdvdnav4 6.1.1-3+b1 debian 44532 8368250b65cc26911fd37acdeeed58e9ce5bd390e941f
 libdvdread8t64 6.1.3-2 debian 86248 f753a23580c00a2166211607a5511a9c25d75c9ebfc34598b6526637de150fec reference pool/main/libd/libdvdread/libdvdread8t64_6.1.3-2_amd64.deb
 libebur128-1 1.2.6-1+b2 debian 14964 ffeea31cb2a88deee3cb76ac04b8a4d4aa3d9e3e7ca3ca8485b0eefc6f3ba26f reference pool/main/libe/libebur128/libebur128-1_1.2.6-1+b2_amd64.deb
 libedit2 3.1-20250104-1 debian 93832 b002ea172b9c1e34a67bc497c523c67bb74c3f0a4e98113cb083990a1f1d3bfe disk pool/main/libe/libedit/libedit2_3.1-20250104-1_amd64.deb
-libegl-mesa0 25.0.7-2+deb13u1 debian 128456 0ddebd7e91b048aac812611d6bd008343386cb140b51e5e66df74c6b6263be65 reference pool/main/m/mesa/libegl-mesa0_25.0.7-2+deb13u1_amd64.deb
-libegl1 1.7.0-1+b2 debian 34588 62e7bc8ccd47a60e55aad17f83d8d474310d782eb8589bbce2ab714c31712406 reference pool/main/libg/libglvnd/libegl1_1.7.0-1+b2_amd64.deb
+libegl-mesa0 25.0.7-2+deb13u1 debian 128456 0ddebd7e91b048aac812611d6bd008343386cb140b51e5e66df74c6b6263be65 disk pool/main/m/mesa/libegl-mesa0_25.0.7-2+deb13u1_amd64.deb
+libegl1 1.7.0-1+b2 debian 34588 62e7bc8ccd47a60e55aad17f83d8d474310d782eb8589bbce2ab714c31712406 disk pool/main/libg/libglvnd/libegl1_1.7.0-1+b2_amd64.deb
 libelf1t64 0.192-4 debian 189408 94497b7e17b6f574a0605b380d454e20d3f01a9c63b70c2a2263f679d30053e1 disk pool/main/e/elfutils/libelf1t64_0.192-4_amd64.deb
 libepoxy0 1.5.10-2 debian 192728 4c4c8024f2175086de65bca9fdc3fbb967f2863ebf249d489c66d0c8103dd3a3 disk pool/main/libe/libepoxy/libepoxy0_1.5.10-2_amd64.deb
 libevdev2 1.13.4+dfsg-1 debian 32372 02e85fb9461b85b23f775d5fcf5a31c55d37bec40b63fd98ca5d3a2763714ae7 reference pool/main/libe/libevdev/libevdev2_1.13.4+dfsg-1_amd64.deb
@@ -137,7 +137,7 @@ libgdk-pixbuf2.0-common 2.42.12+dfsg-4+deb13u1 debian-security 311852 9f0c64e33c
 libgfortran5 14.2.0-19 debian 836252 11b62b53f4704de557e44b510e18a1a2106bcd9a3fc31a475a45952a9aa3dbb2 reference pool/main/g/gcc-14/libgfortran5_14.2.0-19_amd64.deb
 libgl1 1.7.0-1+b2 debian 89504 87fa2f6e5abaed4ed385fac879c8dd735af719ee2300222d901793c66e041678 disk pool/main/libg/libglvnd/libgl1_1.7.0-1+b2_amd64.deb
 libgl1-mesa-dri 25.0.7-2+deb13u1 debian 46240 722fad9944bdfd29eb6421576331a2697f83bc4b3551d693edb7aefdde6bb198 disk pool/main/m/mesa/libgl1-mesa-dri_25.0.7-2+deb13u1_amd64.deb
-libgles2 1.7.0-1+b2 debian 17256 e12c18aa77939d122ee1dea520ba0440b97dc19200b7396e03dff03a3ece74c1 reference pool/main/libg/libglvnd/libgles2_1.7.0-1+b2_amd64.deb
+libgles2 1.7.0-1+b2 debian 17256 e12c18aa77939d122ee1dea520ba0440b97dc19200b7396e03dff03a3ece74c1 disk pool/main/libg/libglvnd/libgles2_1.7.0-1+b2_amd64.deb
 libglib2.0-0t64 2.84.4-3~deb13u5 debian 1521120 e2baf92c57d1db1753e5781a61450d9a01e7833c7bd2dfe87776a6811c11ecc2 disk pool/main/g/glib2.0/libglib2.0-0t64_2.84.4-3~deb13u5_amd64.deb
 libglvnd0 1.7.0-1+b2 debian 51960 887f74008166549ce9e100c906aa937e95d6e5ce1c8d86efe8c95fd953359b9c disk pool/main/libg/libglvnd/libglvnd0_1.7.0-1+b2_amd64.deb
 libglx-mesa0 25.0.7-2+deb13u1 debian 143408 2e6ab57de9931e890621d3ade04213b06e7142a4ae8a72a1756c44d0271aaeb7 disk pool/main/m/mesa/libglx-mesa0_25.0.7-2+deb13u1_amd64.deb

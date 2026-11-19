@@ -446,8 +446,12 @@ pub struct Server {
     data: data_device::DataState,
     /// Popups with a grab, bottom to top: client and `xdg_popup`.
     popup_grabs: Vec<(ClientId, ObjectId)>,
-    /// Activation tokens handed out and not used yet.
-    tokens: Vec<String>,
+    /// Activation tokens handed out and not used yet, with the focus they may take
+    /// ([`TokenScope`]).
+    tokens: Vec<(String, TokenScope)>,
+    /// How many times the focus went from one client's window to another's (or to the shell):
+    /// a client's activation token is good while this has not changed since it was made.
+    focus_moves: u64,
     token_serial: u64,
     /// Launched apps without a window yet, and the pointer they make busy
     /// (`startup.rs`, ADR 0167).
@@ -529,6 +533,7 @@ impl Server {
             data: data_device::DataState::default(),
             popup_grabs: Vec::new(),
             tokens: Vec::new(),
+            focus_moves: 0,
             token_serial: 0,
             launches: crate::launch::Launches::new(),
             launch_now: 0,
@@ -1006,3 +1011,16 @@ impl Server {
 
 #[cfg(test)]
 mod tests;
+
+/// What an activation token may do (xdg-activation-v1: the compositor decides whether to honour
+/// an activation, "e.g. ... the token was not requested by a client that had focus").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TokenScope {
+    /// The desktop's own (a launch): good until used.
+    Desktop,
+    /// A client's, made while it had the focus: good while the focus has not moved to another
+    /// client since ([`Server::focus_moves`] still this value).
+    Focused(u64),
+    /// A client's, made without the focus: it activates nothing.
+    Unfocused,
+}

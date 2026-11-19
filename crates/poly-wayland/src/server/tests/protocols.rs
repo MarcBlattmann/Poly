@@ -1263,3 +1263,43 @@ fn a_new_output_size_reaches_every_bound_wl_output_with_a_mode_and_done() {
     assert_eq!((&geometry.args[2], &geometry.args[3]), (&Arg::Int(347), &Arg::Int(231)));
     assert_eq!(e.last().map(Received::name), Some(("wl_output", "done")));
 }
+
+/// A browser that started the installer must not pull itself back over the installer's new
+/// window with a token it made before (xdg-activation-v1 leaves honouring a request to the
+/// compositor): a client's token is good while the focus has not gone to another client since,
+/// and a client without the focus gets a token that activates nothing.
+#[test]
+fn a_token_made_before_another_app_took_the_focus_brings_nothing_to_the_front() {
+    let (mut srv, shared) = server();
+    let (mut browser, registry) = connect(&mut srv, &shared);
+    let g = globals(&mut browser, &mut srv, registry);
+    let activation = browser.bind(&mut srv, registry, &xdg_activation_v1::INTERFACE, 1);
+    let page = mapped(&mut browser, &mut srv, &g, "browser", 40, 40, 0);
+    assert_eq!(srv.active, Some((browser.id, page.toplevel)));
+    let token = |p: &mut Peer, srv: &mut Server| {
+        let token = p.new_id(&xdg_activation_token_v1::INTERFACE);
+        p.send(srv, activation, xdg_activation_v1::Request::GetActivationToken { id: token });
+        p.send(srv, token, xdg_activation_token_v1::Request::Commit);
+        let e = p.take();
+        let done = e.iter().find(|e| e.name() == ("xdg_activation_token_v1", "done")).expect("done");
+        let Arg::Str(Some(t)) = &done.args[0] else { panic!() };
+        t.clone()
+    };
+    // Made while the browser has the focus.
+    let early = token(&mut browser, &mut srv);
+    // The installer's window comes up and takes the focus.
+    let (mut installer, registry2) = connect(&mut srv, &shared);
+    let g2 = globals(&mut installer, &mut srv, registry2);
+    let window = mapped(&mut installer, &mut srv, &g2, "installer", 30, 30, 0);
+    assert_eq!(srv.active, Some((installer.id, window.toplevel)));
+    // The browser's earlier token, and one it makes now without the focus, do nothing.
+    browser.send(&mut srv, activation, xdg_activation_v1::Request::Activate { token: early, surface: page.surface });
+    assert_eq!(srv.active, Some((installer.id, window.toplevel)));
+    let late = token(&mut browser, &mut srv);
+    browser.send(&mut srv, activation, xdg_activation_v1::Request::Activate { token: late, surface: page.surface });
+    assert_eq!(srv.active, Some((installer.id, window.toplevel)));
+    // The desktop's own tokens (a launch) still work.
+    let t = srv.activation_token();
+    browser.send(&mut srv, activation, xdg_activation_v1::Request::Activate { token: t, surface: page.surface });
+    assert_eq!(srv.active, Some((browser.id, page.toplevel)));
+}
