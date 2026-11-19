@@ -88,3 +88,36 @@ artifacts when a window moves. Measured on Poly:
 - Before its first frame a bubble shows its window opaque white for a moment (the browser's own
   erase). On Windows a `WS_EX_NOREDIRECTIONBITMAP` window shows nothing of what GDI draws; Poly
   still shows it.
+
+## Addendum (chrome-feel-2): the heap's lock and writes in pieces
+
+**New tabs stalled.**
+- After Ctrl+T the browser's UI thread and about 12 other browser threads sat in back-to-back
+  waits of ~60 ms on one event, for 2–3 s: Ctrl+T reached Chrome after 2.7 s and the first frame
+  came 5.6 s later.
+- The event was the process heap's lock. The heap took a critical section, which on leave hands
+  itself to a waiting thread (the waiter owns it before it has even woken).
+- Once threads queued, every allocation of every thread waited for a full wake-up of the next
+  waiter: a lock convoy, which the new renderer's start set off.
+
+**Decision.**
+- A heap has its own lock (`poly_rtl::critsec::HeapLock`). A thread that runs takes a free lock
+  at once. A waiter is woken to try again, not handed the lock.
+- It spins before it blocks: Learn, "InitializeCriticalSectionAndSpinCount": "the heap manager
+  uses a spin count of roughly 4,000 for its per-heap critical sections".
+- Its owner may take it again (`RtlLockHeap`, then an allocation).
+- Critical sections that programs use keep their behaviour.
+- **Result, same scenario:**
+  - Ctrl+T reaches Chrome in 2 ms instead of 2756 ms;
+  - its first frame comes after 0.9 s instead of 5.6 s;
+  - a key typed during the new tab's start reaches Chrome in 8 ms instead of 1.7 s;
+  - browser waits over 40 ms on the heap lock: 28 instead of 8964.
+
+**Large writes.** Chrome writes up to 7 MB at once to its IPC named pipes (byte mode).
+- A captured write (overlapped, or to a pipe or console) is now copied into the kernel in pieces
+  of at most 1 MiB.
+- A byte named pipe queues the pieces as one write: the write completes, with all its bytes, when
+  its last piece is read. A byte read takes at most one piece.
+- A message pipe keeps a message whole, and other targets join the pieces. Where that is more than
+  the kernel heap gives in one piece, the write still fails with `STATUS_INSUFFICIENT_RESOURCES`.
+- `k32test` writes 7 MiB through a byte pipe and reads it back.
