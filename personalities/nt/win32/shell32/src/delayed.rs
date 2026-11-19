@@ -7,12 +7,7 @@
 poly_win32_rt::fail_exports!(
     "shell32",
     win32,
-    [
-        DragQueryFileW,
-        SHAppBarMessage,
-        SHGetFileInfoW,
-        SHChangeNotify
-    ]
+    [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW, SHChangeNotify]
 );
 
 // These return an `HRESULT`.
@@ -20,11 +15,7 @@ poly_win32_rt::fail_exports!(
     "shell32",
     hresult,
     [
-        SHCreateItemFromParsingName,
-        SHGetDesktopFolder,
         SHGetStockIconInfo,
-        SHOpenFolderAndSelectItems,
-        SHParseDisplayName,
         SHQueryUserNotificationState,
         SetCurrentProcessExplicitAppUserModelID,
         SHCreateAssociationRegistration

@@ -322,6 +322,8 @@ impl WindowsSurfaces {
                     (s.minimized, s.asked) = (state == WindowState::Minimized, false);
                 }
             }
+            // A request for the desktop, not for a surface ([`Link::take_shell`]).
+            ToCompositor::Shell { .. } => {}
             ToCompositor::Margins { surface, left, top, right, bottom } => {
                 let u = self.units;
                 if let Some(s) = self.surfaces.get_mut(&surface) {
@@ -411,6 +413,9 @@ pub struct Link {
     resizes: Vec<(WindowId, Edges)>,
     /// The keyboard layout win32k was told (`poly-input`'s name).
     layout: alloc::string::String,
+    /// What Windows programs asked the desktop to open (`false`) or show in Files (`true`),
+    /// by path (ADR 0223), for the compositor's loop.
+    shell: Vec<(bool, alloc::string::String)>,
     /// Consent prompts win32k asked for, for the desktop (ADR 0222).
     consents: Vec<Action>,
 }
@@ -483,6 +488,7 @@ impl Link {
             moves: Vec::new(),
             resizes: Vec::new(),
             layout: alloc::string::String::new(),
+            shell: Vec::new(),
             consents: Vec::new(),
         })
     }
@@ -605,6 +611,11 @@ impl Link {
     /// step with Poly's frame. (Closing needs no path of its own: the
     /// server reports a close of an adopted window as an internal event,
     /// which [`Link::input`] forwards.)
+    /// What Windows programs asked the desktop to open or show since the last call (ADR 0223).
+    pub fn take_shell(&mut self) -> Vec<(bool, alloc::string::String)> {
+        core::mem::take(&mut self.shell)
+    }
+
     pub fn sync_geometry(&mut self, scene: &Scene) {
         for record in self.surfaces.sync_geometry(scene) {
             self.send(record);
@@ -662,6 +673,7 @@ impl Link {
                     self.copies.0.insert(buffer, vec![0u8; stride as usize * height as usize]);
                 }
                 ToCompositor::Damage { surface, y, height, .. } => self.fetch(surface, y, height),
+                ToCompositor::Shell { show, ref path } => self.shell.push((show, path.clone())),
                 _ => {}
             }
             for a in self.surfaces.apply(scene, &r, &self.copies) {

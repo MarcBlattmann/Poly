@@ -37,7 +37,7 @@ use super::names::{self, split_path};
 use super::npfs::NpEnd;
 use super::share::ShareRequest;
 use super::walk::{self, Resolved};
-use super::{Device, DiskFile, FileRecord, IoState, NodeKey, Target, VfsRoot, status_of};
+use super::{Device, DiskFile, FileRecord, IoState, NodeKey, Target, VfsRoot, status_of, streams};
 use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::status::*;
@@ -340,26 +340,33 @@ impl CreateHook<'_> {
         start_path: &[u16],
         remaining: &[u16],
     ) -> Result<ObjectId, NtStatus> {
-        let p = self.params;
         let (mut parts, trailing) = split_path(remaining)?;
-        // `name::$DATA` is the file's default data stream, the file itself
-        // (Learn: "File Streams (Local File Systems)"); Poly's volumes have
-        // no other streams, so any other `:` stays an invalid name.
+        // `name:stream[:$DATA]` names a stream of `name`, `name::$DATA` the
+        // file itself (Learn: "File Streams (Local File Systems)"; ADR 0223).
+        let mut stream = None;
         if let Some(last) = parts.last_mut() {
-            *last = names::without_default_stream(last);
+            let (file, s) = names::split_stream(last)?;
+            *last = file;
+            stream = s.map(<[u16]>::to_vec);
         }
         // The whole name is checked before anything is looked up.
         for part in &parts {
             names::check_component(part)?;
         }
-        let follow = p.options & FILE_OPEN_REPARSE_POINT == 0;
+        let follow = self.params.options & FILE_OPEN_REPARSE_POINT == 0;
         let vr = self.io.vfs()?;
         let found = walk::resolve(vr, start, start_path, &parts, follow)?;
         // The root directory of a volume asked for as a file (`CreateFileW` without
         // `FILE_FLAG_BACKUP_SEMANTICS`): no such path (the sheet of `OpenVolume`: `C:\` and
         // `\\.\C:\` fail with `ERROR_PATH_NOT_FOUND`, other directories with access denied).
-        if found.parent.is_none() && start_path.is_empty() && p.options & FILE_NON_DIRECTORY_FILE != 0 {
+        if found.parent.is_none() && start_path.is_empty() && self.params.options & FILE_NON_DIRECTORY_FILE != 0 {
             return Err(STATUS_OBJECT_PATH_NOT_FOUND);
+        }
+        if let Some(stream) = stream {
+            if trailing {
+                return Err(STATUS_OBJECT_NAME_INVALID);
+            }
+            return self.open_stream(om, volume, found, &stream);
         }
         let (info, node, open) = match &found.node {
             Some(node) => self.open_existing(&found, node, trailing)?,
@@ -369,19 +376,96 @@ impl CreateHook<'_> {
                 // token cannot create in `C:\Windows\SystemTemp`). A name that is not there to
                 // open is not found first.
                 if let Some(c) = caller
-                    && !matches!(p.disposition, FILE_OPEN | FILE_OVERWRITE)
+                    && !matches!(self.params.disposition, FILE_OPEN | FILE_OVERWRITE)
                 {
                     let parent = match found.path.iter().rposition(|&ch| ch == u16::from(b'\\')) {
                         Some(i) => &found.path[..i],
                         None => &[][..],
                     };
                     let key = poly_ntobj::path_key(&alloc::format!("F{volume}"), parent);
-                    let want = if p.options & FILE_DIRECTORY_FILE != 0 { FILE_ADD_SUBDIRECTORY } else { FILE_ADD_FILE };
+                    let want = if self.params.options & FILE_DIRECTORY_FILE != 0 { FILE_ADD_SUBDIRECTORY } else { FILE_ADD_FILE };
                     om.path_access(c, &key, true, want)?;
                 }
                 self.create_new(&found, trailing)?
             }
         };
+        // New data for the file: its streams go with the old (ADR 0223).
+        if matches!(info, FILE_SUPERSEDED | FILE_OVERWRITTEN) {
+            self.io.drop_streams(volume, &node);
+        }
+        self.finish(om, volume, found, node, open, info, None)
+    }
+
+    /// Open or make stream `stream` of the file `found` names: the file is
+    /// made first when it is not there and the disposition makes things;
+    /// the disposition then applies to the stream (ADR 0223).
+    fn open_stream(
+        &mut self,
+        om: &mut ObjectManager,
+        volume: usize,
+        found: Resolved,
+        stream: &[u16],
+    ) -> Result<ObjectId, NtStatus> {
+        let p = self.params;
+        if p.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        let makes = !matches!(p.disposition, FILE_OPEN | FILE_OVERWRITE);
+        let file = match &found.node {
+            Some(node) => {
+                if self.io.nodes.get(&NodeKey::of(node)?).is_some_and(|n| n.delete_pending) {
+                    return Err(STATUS_DELETE_PENDING);
+                }
+                if !matches!(node.kind(), Ok(FileType::Regular | FileType::Directory)) {
+                    return Err(STATUS_ACCESS_DENIED);
+                }
+                node.clone()
+            }
+            None if !makes => return Err(STATUS_OBJECT_NAME_NOT_FOUND),
+            None => {
+                let saved = self.params;
+                self.params.disposition = FILE_CREATE;
+                self.params.options &= !FILE_DELETE_ON_CLOSE;
+                let made = self.create_new(&found, false);
+                self.params = saved;
+                made?.1
+            }
+        };
+        let dir = match self.io.stream_dir(volume, &file, makes)? {
+            Some(dir) => dir,
+            None => return Err(STATUS_OBJECT_NAME_NOT_FOUND),
+        };
+        let backing = match self.io.find_stream(volume, &file, stream) {
+            Some(b) => b,
+            None => streams::stream_to_vfs(stream)?,
+        };
+        let vr = self.io.vfs()?;
+        let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(&dir), &backing, false).ok();
+        let shown = names::vfs_to_wide(&backing);
+        let mut path = found.path.clone();
+        path.push(b':' as u16);
+        path.extend_from_slice(&shown);
+        let at = Resolved { parent: Some(dir), name: backing, path, node };
+        let (info, node, open) = match &at.node {
+            Some(node) => self.open_existing(&at, node, false)?,
+            None => self.create_new(&at, false)?,
+        };
+        self.finish(om, volume, at, node, open, info, Some(shown))
+    }
+
+    /// The file object on `node`, opened as `found` names it.
+    #[allow(clippy::too_many_arguments)]
+    fn finish(
+        &mut self,
+        om: &mut ObjectManager,
+        volume: usize,
+        found: Resolved,
+        node: NodeRef,
+        open: Option<alloc::sync::Arc<poly_vfs::OpenFile>>,
+        info: u64,
+        stream: Option<Vec<u16>>,
+    ) -> Result<ObjectId, NtStatus> {
+        let p = self.params;
         let kind = node.kind().map_err(status_of)?;
         let key = NodeKey::of(&node)?;
         let cookie = self.io.cookie();
@@ -396,7 +480,8 @@ impl CreateHook<'_> {
         if let Some(parent) = &found.parent {
             state.link = Some((parent.clone(), found.name.clone()));
         }
-        let disk = DiskFile { volume, node, key, open, path: found.path, parent: found.parent, name: found.name };
+        let disk =
+            DiskFile { volume, node, key, open, path: found.path, parent: found.parent, name: found.name, stream };
         let rec = self.record(object, Target::Disk(disk), kind);
         self.io.files.insert(cookie, rec);
         self.information = info;

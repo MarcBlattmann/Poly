@@ -80,7 +80,7 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
         let file = file_handle(sys, &caller, Handle(h), 0)?;
         n.check_event(sys, &caller)?;
         // A volume opened as a device (`crate::io::volume`).
-        if let Some(v) = sys.io.volume_of(file.1) {
+        if let Some(v) = sys.io.device_volume_of(file.1) {
             let granted = sys.objects.granted_access(&caller, Handle(h))?;
             let facts = sys.io.volume_facts(v);
             let data = crate::io::volume::control(&facts, code, granted, outlen)?;

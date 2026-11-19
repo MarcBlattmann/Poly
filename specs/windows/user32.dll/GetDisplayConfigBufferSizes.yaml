@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
   observed_by: spec-chrome-win-s3b
   date: 2026-11-15
+oracle_200: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
 sources: >
   Observations of our own test programs on the machine above, and the recording of Chrome for Testing
   157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
@@ -27,6 +28,8 @@ rules:
   invalid_flags: "flags 0, 8, 0x80, any two or three of the base flags together (3, 5, 6, 7) and VIRTUAL_MODE_AWARE alone return ERROR_INVALID_PARAMETER 87; the path count is set to 0 and the mode count is left as it was"
   null_pointers: "a NULL numPathArrayElements, a NULL numModeInfoArrayElements or both return 87 without a crash; the other count is left alone"
   last_error: "never set, in success and in failure: the thread's last error keeps its value"
+  at_200_values: "used by the scale change tests: flags 2 give 1 path and 2 modes on the 2560x1600 display at 200 percent"
+
 errors:
   invalid_parameter: "87: invalid flag combination or a NULL out pointer"
 side_effects: "none beyond the rules above"

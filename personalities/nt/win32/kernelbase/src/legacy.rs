@@ -90,7 +90,7 @@ const FILE_READ_ATTRIBUTES: u32 = 0x80;
 /// The streams of the file or directory `name`, as
 /// `WIN32_FIND_STREAM_DATA` records: `NtQueryInformationFile`'s
 /// `FileStreamInformation`, in a buffer that grows while it is too small.
-fn streams_of(name: &[u16]) -> Result<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>, u32> {
+pub(crate) fn streams_of(name: &[u16]) -> Result<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>, u32> {
     let name = nt_name(name)?;
     let oa = name.attributes();
     let mut h: Handle = 0;
@@ -122,9 +122,9 @@ fn streams_of(name: &[u16]) -> Result<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>, u32
 const STATUS_BUFFER_OVERFLOW: u32 = 0x8000_0005;
 
 /// `FindFirstStreamW`: the first stream of a file or directory
-/// (`FileStreamInformation`). Poly's volumes keep no named streams, so a
-/// file has its default data stream `::$DATA` only and a directory none,
-/// which Learn says fails with `ERROR_HANDLE_EOF` ("If no streams can be
+/// (`FileStreamInformation`): a file's default data stream `::$DATA`, then
+/// its named streams (ADR 0223). A directory has named streams only; one
+/// with none fails with `ERROR_HANDLE_EOF` (Learn: "If no streams can be
 /// found").
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn FindFirstStreamW(name: *const u16, level: u32, data: *mut u8, flags: u32) -> Handle {

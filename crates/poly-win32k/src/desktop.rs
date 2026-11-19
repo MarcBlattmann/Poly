@@ -331,6 +331,17 @@ impl Desktop {
         true
     }
 
+    /// A Windows program's request to open `path` (a path of Poly's file system) with the
+    /// desktop's program for it, or to show it selected in Files (ADR 0223). `false` without a
+    /// compositor: nobody could do it.
+    pub fn shell(&mut self, show: bool, path: &str) -> bool {
+        if !self.connected {
+            return false;
+        }
+        self.send(ToCompositor::Shell { show, path: String::from(path) });
+        true
+    }
+
     /// The bytes to hand to the compositor's next `read`.
     pub fn take_output(&mut self) -> Vec<u8> {
         core::mem::take(&mut self.out)
@@ -462,6 +473,26 @@ mod tests {
         let mut s = Stream::<ToCompositor>::new();
         s.push(bytes);
         s.map(Result::unwrap).collect()
+    }
+
+    #[test]
+    fn shell_requests_go_to_a_connected_compositor_and_are_not_replayed() {
+        let mut d = Desktop::new();
+        assert!(!d.shell(true, "/nt/c/Users/poly/Downloads/a.zip"));
+        assert!(d.receive(&hello()).is_empty());
+        d.take_output();
+        assert!(d.shell(true, "/nt/c/Users/poly/Downloads/a.zip"));
+        assert!(d.shell(false, "/nt/c/Users/poly/Downloads/b.pdf"));
+        assert_eq!(
+            records(&d.take_output()),
+            vec![
+                ToCompositor::Shell { show: true, path: String::from("/nt/c/Users/poly/Downloads/a.zip") },
+                ToCompositor::Shell { show: false, path: String::from("/nt/c/Users/poly/Downloads/b.pdf") },
+            ]
+        );
+        d.disconnect();
+        assert!(d.receive(&hello()).is_empty());
+        assert_eq!(records(&d.take_output()), vec![ToCompositor::Welcome { version: VERSION }]);
     }
 
     #[test]

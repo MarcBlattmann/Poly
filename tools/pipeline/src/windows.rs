@@ -462,13 +462,29 @@ pub fn token_kernel_args(token: Option<&str>) -> &'static str {
 
 /// The kernel arguments for a test recorded in `session` (ADR 0131):
 /// Poly's win32k reproduces the interactive desktop session (1920x1080,
-/// windows visible and painted, input) only when asked.
-pub fn session_kernel_args(session: Option<&str>) -> &'static str {
-    match session {
+/// windows visible and painted, input) only when asked. A session can name
+/// a display other than 1920x1080 at 100 percent as `<kind>/<width>x<height>/<scale percent>`
+/// (`interactive-bottom/2560x1600/200`): the arguments then also carry
+/// `poly.win32k.display=2560x1600` and `poly.win32k.scale=200`.
+pub fn session_kernel_args(session: Option<&str>) -> String {
+    let Some(session) = session else { return String::new() };
+    let mut parts = session.split('/');
+    let kind = match parts.next() {
         Some("interactive") => " poly.win32k.session=interactive",
         Some("interactive-bottom") => " poly.win32k.session=interactive-bottom",
-        _ => "",
+        _ => return String::new(),
+    };
+    let mut args = kind.to_string();
+    if let Some(display) = parts
+        .next()
+        .filter(|d| d.split_once('x').is_some_and(|(w, h)| w.parse::<u32>().is_ok() && h.parse::<u32>().is_ok()))
+    {
+        args.push_str(&format!(" poly.win32k.display={display}"));
     }
+    if let Some(scale) = parts.next().filter(|s| s.parse::<u32>().is_ok()) {
+        args.push_str(&format!(" poly.win32k.scale={scale}"));
+    }
+    args
 }
 
 /// The Rust tests: one generated Cargo package with a binary per test.
@@ -1293,6 +1309,18 @@ pub fn test_name(file: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_session_can_name_its_display_and_scale() {
+        assert_eq!(session_kernel_args(None), "");
+        assert_eq!(session_kernel_args(Some("interactive-bottom")), " poly.win32k.session=interactive-bottom");
+        assert_eq!(
+            session_kernel_args(Some("interactive-bottom/2560x1600/200")),
+            " poly.win32k.session=interactive-bottom poly.win32k.display=2560x1600 poly.win32k.scale=200"
+        );
+        assert_eq!(session_kernel_args(Some("interactive/x/y")), " poly.win32k.session=interactive");
+        assert_eq!(session_kernel_args(Some("other/2560x1600/200")), "");
+    }
+
     use super::*;
 
     fn result(name: &str, code: u32, output: &[u8]) -> RunResult {

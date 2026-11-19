@@ -48,6 +48,7 @@ mod npipe;
 mod nt;
 mod pathcch;
 mod pipe;
+mod power;
 mod priority;
 mod privilege;
 mod process;
@@ -64,6 +65,7 @@ mod system;
 mod threadpool;
 mod tls;
 mod toolhelp;
+mod volume;
 mod waits;
 
 #[global_allocator]

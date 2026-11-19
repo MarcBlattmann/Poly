@@ -193,6 +193,12 @@ pub enum ToCompositor {
     /// `HTLEFT` and the others (ADR 0155 addendum "browsing"). All 0 for
     /// none. A compositor that does not know the record skips it.
     Margins { surface: SurfaceId, left: u16, top: u16, right: u16, bottom: u16 },
+    /// A Windows program asks the desktop to open a file or folder with the program Poly's
+    /// Files would use (`show` false: `ShellExecuteExW` with no association, ADR 0223), or to
+    /// show it in Files, selected in its folder (`show` true: `SHOpenFolderAndSelectItems`).
+    /// `path` is the object's path in Poly's file system. Not replayed. A compositor that does
+    /// not know the record skips it.
+    Shell { show: bool, path: String },
     /// A Windows program asks to run a program with administrator rights (ADR 0222): the
     /// compositor shows its consent prompt (the program's name, its publisher, its path, Yes and
     /// No) and answers with [`FromCompositor::Consent`] for `request`. `pid` is the asking
@@ -376,7 +382,8 @@ mod kind {
     pub const DESTROY: u16 = 0x000D;
     pub const PROCESS: u16 = 0x000E;
     pub const MARGINS: u16 = 0x000F;
-    pub const CONSENT: u16 = 0x0010;
+    pub const SHELL: u16 = 0x0010;
+    pub const CONSENT: u16 = 0x0011;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -465,6 +472,7 @@ impl Record for ToCompositor {
             Margins { surface, left, top, right, bottom } => {
                 Out::new(out, kind::MARGINS).u32(*surface).u16(*left).u16(*top).u16(*right).u16(*bottom).done()
             }
+            Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
             Consent { request, pid, program, path, file } => Out::new(out, kind::CONSENT)
                 .u32(*request)
                 .u32(*pid)
@@ -533,6 +541,7 @@ impl Record for ToCompositor {
             kind::MARGINS => {
                 Margins { surface: b.u32()?, left: b.u16()?, top: b.u16()?, right: b.u16()?, bottom: b.u16()? }
             }
+            kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
             kind::CONSENT => Consent {
                 request: b.u32()?,
                 pid: b.u32()?,
@@ -803,6 +812,16 @@ mod tests {
         s.push(&[0x01, 0x00, 2, 0, 9, 9, 9]);
         assert_eq!(s.next_record(), Some(Err(Error::BadLength)));
         assert_eq!(s.pending(), 0);
+    }
+
+    #[test]
+    fn shell_records_carry_the_path() {
+        let mut out = Vec::new();
+        let r = ToCompositor::Shell { show: true, path: String::from("/nt/c/Users/poly/Downloads/a b.zip") };
+        r.encode(&mut out);
+        let mut s = Stream::<ToCompositor>::new();
+        s.push(&out);
+        assert_eq!(s.next_record(), Some(Ok(r)));
     }
 
     #[test]

@@ -1142,6 +1142,38 @@ fn descriptor_links_lead_to_the_open_file_whatever_the_root() {
     assert!(e.vfs.stat(&ctx, &e.cred, At::Cwd, b"/42/fd/0", true).is_err());
 }
 
+/// A pipe's descriptor link opens as another end of the same pipe, as on
+/// Linux (proc_pid_fd(5)): bash's process substitution, `exec > >(cat)`,
+/// opens `/dev/fd/63`, the write end of a pipe to `cat`, with `O_WRONLY |
+/// O_CREAT | O_TRUNC` (Google Chrome's launch script does that; it failed
+/// with `EROFS`, the link's text `pipe:[<ino>]` naming nothing in /proc).
+#[test]
+fn a_pipes_descriptor_link_opens_the_same_pipe() {
+    use poly_vfs::pipe::Pipe;
+    let e = env();
+    let (r, w) = Pipe::pair(false);
+    let node = e.vfs.pipe_node(r.pipe(), 0o600, &e.cred).unwrap();
+    let read = Arc::new(poly_vfs::OpenFile::on_object(node.clone(), Arc::new(r), OpenFlags::RDONLY));
+    let write = Arc::new(poly_vfs::OpenFile::on_object(node, Arc::new(w), OpenFlags::WRONLY));
+    *e.fake.fd5.lock().unwrap() = Some(write.clone());
+    let st = e.vfs.stat(&e.ctx, &e.cred, At::Cwd, b"/proc/42/fd/5", true).unwrap();
+    assert_eq!(st.kind(), Some(FileType::Fifo));
+    let flags = OpenFlags::WRONLY | OpenFlags::CREAT | OpenFlags::TRUNC;
+    let again = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/fd/5", flags, 0o666).unwrap();
+    assert_eq!(again.kind(), FileType::Fifo);
+    assert_eq!(again.write(b"to cat"), Ok(6));
+    let mut buf = [0u8; 16];
+    assert_eq!(read.read(&mut buf), Ok(6));
+    assert_eq!(&buf[..6], b"to cat");
+    // Its read side too; the pipe ends only when every write end is gone.
+    let reader = e.vfs.open(&e.ctx, &e.cred, At::Cwd, b"/proc/42/fd/5", OpenFlags::RDONLY, 0).unwrap();
+    assert_eq!(write.write(b"x"), Ok(1));
+    assert_eq!(reader.read(&mut buf), Ok(1));
+    drop((write, again));
+    *e.fake.fd5.lock().unwrap() = None;
+    assert_eq!(read.read(&mut buf), Ok(0), "end of file with no write end left");
+}
+
 /// `/proc/net` leads to the caller's `net` directory, whose files the
 /// source makes for the process named (ADR 0178).
 #[test]

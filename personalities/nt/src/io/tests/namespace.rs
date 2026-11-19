@@ -250,14 +250,14 @@ fn a_file_has_its_default_data_stream_only() {
     assert_eq!(t.query(h, FILE_STREAM_INFORMATION, 30).0, STATUS_BUFFER_OVERFLOW);
     assert_eq!(t.query(h, FILE_STREAM_INFORMATION, 8).0, STATUS_INFO_LENGTH_MISMATCH);
     t.close(h);
-    // The default stream's full name opens the file; another stream is no
-    // name on Poly's volumes.
+    // The default stream's full name opens the file; a named stream that is
+    // not there is not found.
     let (s, h, _) = t.create("\\??\\C:\\data.txt::$data", FILE_GENERIC_READ, SHARE_ALL, FILE_OPEN, SYNC, 0);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(t.read(h, 12, None).1, b"twelve bytes");
     t.close(h);
     let (s, _, _) = t.create("\\??\\C:\\data.txt:alt", FILE_GENERIC_READ, SHARE_ALL, FILE_OPEN, SYNC, 0);
-    assert_eq!(s, STATUS_OBJECT_NAME_INVALID);
+    assert_eq!(s, STATUS_OBJECT_NAME_NOT_FOUND);
     // A directory has no data stream.
     let (_, d, _) = t.create(
         "\\??\\C:\\dir",
