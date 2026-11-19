@@ -272,7 +272,6 @@ poly_win32_rt::fail_exports!(
         QueryDosDeviceA,
         QueryDosDeviceW,
         QueryFullProcessImageNameA,
-        QueryFullProcessImageNameW,
         QueryIdleProcessorCycleTime,
         QueryThreadCycleTime,
         ReadConsoleInputA,
