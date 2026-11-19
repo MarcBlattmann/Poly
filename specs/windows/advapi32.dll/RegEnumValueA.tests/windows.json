@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "enuma_buffers",
-      "exe_sha256": "5ad9f766fdee6cb8413c643a21d1fb49a041fe6937ecd7f10e3db03cd5554a6d",
+      "exe_sha256": "4ff51da6c417cf3ab32d0caa7823f0d854ebad2125bb4726a00e8d0aa81863d3",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

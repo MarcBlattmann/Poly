@@ -20,8 +20,8 @@
 //!   is registered) and the `HSTRING` functions ([`poly_com::hstring`]).
 //! - Drag and drop: `RegisterDragDrop`/`RevokeDragDrop` keep the target as the window's
 //!   `OleDropTargetInterface` property while the thread has OLE.
-//! - Small stand-ins that succeed without effect: `CoInitializeSecurity`,
-//!   `CoCreateFreeThreadedMarshaler` (an object that is only `IUnknown`).
+//! - A small stand-in that succeeds without effect: `CoCreateFreeThreadedMarshaler` (an object
+//!   that is only `IUnknown`).
 //!
 //! Sources: Microsoft Learn's page for each function, `combaseapi.h`,
 //! `objbase.h`, `roapi.h`, `winstring.h`, `propidl.h`, `wtypes.h`.
@@ -459,18 +459,6 @@ pub unsafe extern "system" fn CoGetApartmentType(kind: *mut i32, qualifier: *mut
             CO_E_NOTINITIALIZED
         }
     }
-}
-
-/// `RPC_E_CALL_COMPLETE` (`winerror.h`): no call is being served on the thread.
-const RPC_E_CALL_COMPLETE: Hresult = 0x8001_0117_u32 as i32;
-
-/// `CoGetCallContext(riid, ppInterface)`: the context of the call this thread serves for another
-/// apartment or process. Poly serves no calls across apartments yet, so there never is one:
-/// `RPC_E_CALL_COMPLETE` for every interface id, with or without COM on the thread, and the
-/// output is left as it was (`specs/windows/ole32.dll/CoGetCallContext.yaml`).
-#[unsafe(no_mangle)]
-pub extern "system" fn CoGetCallContext(_iid: *const Guid, _out: *mut *mut c_void) -> Hresult {
-    RPC_E_CALL_COMPLETE
 }
 
 /// The cookies `CoIncrementMTAUsage` hands out: distinct, never NULL.
@@ -1533,37 +1521,6 @@ unsafe fn new_unknown(out: *mut *mut c_void) -> Hresult {
         *out = p.cast();
     }
     S_OK
-}
-
-/// `CoInitializeSecurity`: accepted, nothing enforced.
-#[unsafe(no_mangle)]
-pub extern "system" fn CoInitializeSecurity(
-    _sd: *mut c_void,
-    _count: i32,
-    _services: *mut c_void,
-    _reserved1: *mut c_void,
-    _authn_level: u32,
-    _imp_level: u32,
-    _auth_list: *mut c_void,
-    _capabilities: u32,
-    _reserved3: *mut c_void,
-) -> Hresult {
-    S_OK
-}
-
-/// `CoSetProxyBlanket`: there are no proxies here, so the object has none.
-#[unsafe(no_mangle)]
-pub extern "system" fn CoSetProxyBlanket(
-    proxy: *mut c_void,
-    _authn_svc: u32,
-    _authz_svc: u32,
-    _server_princ: *mut u16,
-    _authn_level: u32,
-    _imp_level: u32,
-    _auth_info: *mut c_void,
-    _capabilities: u32,
-) -> Hresult {
-    if proxy.is_null() { E_INVALIDARG } else { E_NOINTERFACE }
 }
 
 /// `CoRegisterMessageFilter`: only a single-threaded apartment has a message filter

@@ -270,6 +270,9 @@ pub trait Env {
     /// Make `cursor` the calling thread's cursor shape (what DefWindowProc's
     /// `WM_SETCURSOR` does with the class cursor).
     fn set_cursor(&self, _cursor: u64) {}
+    /// Make the standard cursor `idc` (an `IDC_*` resource number, winuser.h) the calling
+    /// thread's cursor shape: DefWindowProc's sizing cursors on a window's borders.
+    fn set_system_cursor(&self, _idc: u16) {}
     /// A window of the calling thread got through `WM_NCCREATE`: `user32`
     /// gives the thread its default IME window with its first window
     /// (GetFocus.yaml `ime_window`).
@@ -456,8 +459,16 @@ pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
         env.call(Request::SendDone { id: inc.id, result: 0 });
         return;
     }
-    env.sent_hook(inc.hwnd, inc.msg, inc.w, inc.l, false);
-    let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, inc.l);
+    // WM_COPYDATA from another thread: its own COPYDATASTRUCT of the copied bytes, valid while
+    // the procedure runs (Learn, WM_COPYDATA).
+    let copy = inc.data.as_ref().map(|d| CopyDataStruct {
+        dw_data: inc.l as usize,
+        cb_data: d.len() as u32,
+        lp_data: d.as_ptr() as usize,
+    });
+    let l = copy.as_ref().map_or(inc.l, |c| c as *const CopyDataStruct as u64);
+    env.sent_hook(inc.hwnd, inc.msg, inc.w, l, false);
+    let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, l);
     env.call(Request::SendDone { id: inc.id, result: r });
 }
 
@@ -545,7 +556,24 @@ fn def_dpi_changed<E: Env + ?Sized>(env: &E, hwnd: u64, l: u64) {
 /// `SendMessageW`: a procedure of this thread is called directly; another
 /// thread's runs there while we wait (receiving what is sent to us).
 pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u64 {
-    match env.call(Request::SendStart { hwnd, msg, w, l }) {
+    // WM_COPYDATA's data goes with the message, so a receiver in another process can read it
+    // (Learn, WM_COPYDATA: the data is copied to the receiving process; ADR 0234).
+    let start = if msg == WM_COPYDATA && l != 0 {
+        // SAFETY: the caller's COPYDATASTRUCT, and its cbData bytes at lpData.
+        let (dw_data, data) = unsafe {
+            let c = (l as *const CopyDataStruct).read_unaligned();
+            let data = if c.lp_data == 0 || c.cb_data == 0 {
+                Vec::new()
+            } else {
+                core::slice::from_raw_parts(c.lp_data as *const u8, c.cb_data as usize).to_vec()
+            };
+            (c.dw_data as u64, data)
+        };
+        Request::SendCopy { hwnd, w, dw_data, data }
+    } else {
+        Request::SendStart { hwnd, msg, w, l }
+    };
+    match env.call(start) {
         Reply::SameThread { wndproc, hwnd, .. } => {
             env.sent_hook(hwnd, msg, w, l, true);
             env.call_proc(wndproc, hwnd, msg, w, l)
@@ -563,6 +591,18 @@ pub fn send<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u6
         }
         _ => 0,
     }
+}
+
+/// `WM_COPYDATA` (winuser.h).
+pub const WM_COPYDATA: u32 = 0x004A;
+
+/// `COPYDATASTRUCT` (winuser.h): `dwData` (ULONG_PTR), `cbData`, `lpData`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CopyDataStruct {
+    pub dw_data: usize,
+    pub cb_data: u32,
+    pub lp_data: usize,
 }
 
 /// The style bits that decide the size of a window's frame (and so of its
@@ -620,6 +660,8 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let hwnd = c.hwnd;
     let h = u64::from(hwnd);
     let (mut x, mut y, mut cx, mut cy) = (c.x, c.y, c.cx, c.cy);
+    // The maximized size and position the window's procedure answered, for one created maximized.
+    let mut asked_max = None;
     if c.minmax {
         let [ms, mp, mt, xt] = metrics::minmax(style, c.ex_style, &screen(env));
         let mut mmi = MinMaxInfo {
@@ -630,6 +672,7 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
             max_track: CPoint { x: xt.0, y: xt.1 },
         };
         send(env, h, WM_GETMINMAXINFO, 0, ptr(&mut mmi));
+        asked_max = Some(((mmi.max_size.x, mmi.max_size.y), (mmi.max_position.x, mmi.max_position.y)));
         if metrics::track_limited(style) {
             cx = cx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
             cy = cy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
@@ -650,6 +693,23 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         x = parent.client.width() - x - cx;
     }
     let win_rel = Rect::new(x, y, x + cx, y + cy);
+    // The rectangle asked for is the one the window is restored to. A top-level window made
+    // hidden with WS_MAXIMIZE ("initially maximized", Learn: Window Styles) is made at its
+    // maximized rectangle, so that showing it later (SW_SHOWMAXIMIZED, SC_MAXIMIZE: "a hidden
+    // maximized window shown again" in `maximize`) shows it at that size; Chrome restoring a
+    // window that was closed maximized makes its window this way, and failed when it was shown
+    // at its restored size (ADR 0234). A visible one is maximized by `maximize` below.
+    let normal_rel = win_rel;
+    let win_rel = if style & WS_MAXIMIZE != 0 && style & (WS_VISIBLE | WS_MINIMIZE | WS_CHILD) == 0 {
+        let display = screen(env);
+        let (ms, mp) = asked_max.unwrap_or_else(|| {
+            let [ms, mp, _, _] = metrics::minmax(style, c.ex_style, &display);
+            (ms, mp)
+        });
+        metrics::maximized_rect(style, c.ex_style, &display, ms, mp)
+    } else {
+        win_rel
+    };
     env.call(Request::SetRects { hwnd, window_rel: Some(win_rel), client_rel: None });
     let Some(i) = info(env, h) else { return 0 };
     let (ox, oy) = origin_of(&i);
@@ -734,7 +794,7 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
                 visible: None,
                 minimized: Some(min),
                 maximized: Some(!min),
-                normal: Some(i.window_rel),
+                normal: Some(normal_rel),
                 size_move_pending: None,
             });
         }
@@ -937,6 +997,19 @@ struct Opts {
 const SWP_NOCOPYBITS: u32 = 0x0100;
 /// `HWND_BOTTOM` (winuser.h).
 const HWND_BOTTOM: u64 = 1;
+
+/// The standard cursor (`IDC_SIZE*`, winuser.h) of a sizing hit code: HTLEFT / HTRIGHT
+/// `IDC_SIZEWE` (32644), HTTOP / HTBOTTOM `IDC_SIZENS` (32645), HTTOPLEFT / HTBOTTOMRIGHT and
+/// HTGROWBOX `IDC_SIZENWSE` (32642), HTTOPRIGHT / HTBOTTOMLEFT `IDC_SIZENESW` (32643).
+pub fn sizing_cursor(hit: u64) -> Option<u16> {
+    Some(match hit {
+        10 | 11 => 32644,
+        12 | 15 => 32645,
+        4 | 13 | 17 => 32642,
+        14 | 16 => 32643,
+        _ => return None,
+    })
+}
 
 /// `ShowWindow` (`ShowWindow.yaml`): the previous `WS_VISIBLE` state.
 ///
@@ -1978,7 +2051,17 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 }
                 // The window commands act as the matching ShowWindow command (IsZoomed.yaml `chrome`).
                 SC_MAXIMIZE => {
-                    show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    // A window that is maximized already, also a hidden one (made with
+                    // WS_MAXIMIZE), is in the state asked for: nothing is shown or activated
+                    // (as ShowWindow's `same_state`). Chrome restoring a window closed
+                    // maximized makes it hidden with WS_MAXIMIZE, sends SC_MAXIMIZE while it
+                    // is still building it and shows it later; activating it here reached
+                    // Chrome before its window was ready, and it crashed (ADR 0234).
+                    let maximized_hidden =
+                        info(env, hwnd).is_some_and(|i| i.maximized && !i.minimized && i.style & WS_VISIBLE == 0);
+                    if !maximized_hidden {
+                        show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    }
                     // The window has no minimized position any more (GetWindowPlacement.yaml `chrome`).
                     env.call(Request::SetMinPos { hwnd: hwnd as u32, x: -1, y: -1 });
                 }
@@ -2092,6 +2175,14 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 && value != 0
             {
                 env.set_cursor(value);
+            }
+            // On the window's own sizing border the cursor shows the directions it can be sized
+            // in (Learn, "About Cursors": the system shows the sizing cursors at a window's
+            // border; WM_NCHITTEST hit codes, winuser.h). ADR 0234.
+            if w == hwnd
+                && let Some(idc) = sizing_cursor(l & 0xFFFF)
+            {
+                env.set_system_cursor(idc);
             }
             0
         }
