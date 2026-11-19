@@ -24,7 +24,6 @@ mod dlg;
 mod icons;
 mod kbdlayout;
 mod layered;
-pub mod feeltrace; // TEMP-FEEL
 mod menu;
 mod menuansi;
 mod menutrack;
@@ -957,9 +956,6 @@ pub unsafe extern "system" fn CreateWindowExW(
         ansi: ansiapi::ansi_next_window(),
     };
     let h = u::create_window(&SYS, spec, name as u64, param as u64) as H;
-    if style & 0x4000_0000 == 0 {
-        feeltrace::log(&alloc::format!("feel: create hwnd={h:#x} ex={ex_style:#x} style={style:#x} at {x},{y} w={w} owner={parent:#x}")); // TEMP-FEEL
-    }
     if h != 0 && menu != 0 && style & 0x4000_0000 == 0 {
         menu::after_create(h);
     }
@@ -1494,7 +1490,6 @@ pub extern "system" fn PostQuitMessage(code: i32) {
 pub unsafe extern "system" fn GetMessageW(msg: *mut CMsg, hwnd: H, min: u32, max: u32) -> i32 {
     let mut m = CMsg::default();
     let r = u::get_message(&SYS, &mut m, hwnd as u64, min, max);
-    feeltrace::msg("get", m.message, m.w as u64); // TEMP-FEEL
     if r != -1 {
         // SAFETY: the caller's MSG.
         unsafe { *msg = m };
@@ -1506,9 +1501,6 @@ pub unsafe extern "system" fn GetMessageW(msg: *mut CMsg, hwnd: H, min: u32, max
 pub unsafe extern "system" fn PeekMessageW(msg: *mut CMsg, hwnd: H, min: u32, max: u32, remove: u32) -> i32 {
     let mut m = CMsg::default();
     let r = u::peek_message(&SYS, &mut m, hwnd as u64, min, max, remove);
-    if r && remove & 1 != 0 {
-        feeltrace::msg("peek", m.message, m.w as u64); // TEMP-FEEL
-    }
     if r {
         // SAFETY: the caller's MSG.
         unsafe { *msg = m };

@@ -157,9 +157,6 @@ impl WindowsSurfaces {
             }
         }
         let u = self.units;
-        for m in &moved {
-            println!("feel-link: configure {m:?} us={}", os::monotonic_ns() / 1000); // TEMP-FEEL
-        }
         moved
             .into_iter()
             .map(|(surface, (x, y, width, height))| FromCompositor::Configure {
@@ -213,10 +210,6 @@ impl WindowsSurfaces {
     /// Apply one record to the scene.
     pub fn apply(&mut self, scene: &mut Scene, record: &ToCompositor, buffers: &dyn Buffers) -> Vec<Action> {
         let mut actions = Vec::new();
-        // TEMP-FEEL: what the link says about windows.
-        if !matches!(record, ToCompositor::Damage { .. } | ToCompositor::Title { .. } | ToCompositor::Process { .. }) {
-            println!("feel-link: {record:?} us={}", os::monotonic_ns() / 1000);
-        }
         match *record {
             ToCompositor::Welcome { .. } => {
                 // A (re)connection: the replay that follows rebuilds everything.
@@ -291,7 +284,6 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Damage { surface, x, y, width, height } => {
-                println!("feel-t: damage s={surface} {x},{y} {width}x{height} us={}", os::monotonic_ns() / 1000); // TEMP-FEEL
                 if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
                     && let Some(bytes) = buffers.bytes(b)
@@ -512,13 +504,6 @@ impl Link {
         };
         let Some(surface) = self.surfaces.surface_of(window) else { return false };
         let time = (os::monotonic_ns() / 1_000_000) as u32;
-        // TEMP-FEEL
-        if let E::Key { key, pressed: true, .. } = *ev {
-            println!("feel-t: in key={key} us={}", os::monotonic_ns() / 1000);
-        }
-        if let E::Button { pressed: true, .. } = *ev {
-            println!("feel-t: in button us={}", os::monotonic_ns() / 1000);
-        }
         // Logical positions to Windows pixels (ADR 0219).
         let u = self.surfaces.units();
         let records: Vec<FromCompositor> = match *ev {

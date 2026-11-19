@@ -39,9 +39,6 @@ pub const PROFILE_FLAG: &str = "poly.debug.profile";
 
 static ON: AtomicBool = AtomicBool::new(false);
 
-/// TEMP-FEEL: `poly.debug.herd` parks every thread on one queue again (A/B measurement).
-pub static HERD: AtomicBool = AtomicBool::new(false);
-
 const SLOTS: usize = 4096;
 
 /// One table: addresses (0 for a free slot) and their counts.
@@ -346,8 +343,6 @@ pub const MEMBENCH_FLAG: &str = "poly.debug.membench";
 
 /// Read the flag (once, at boot).
 pub fn init(boot: &BootInfo) {
-    // TEMP-FEEL: the old shared park queue, for an A/B measurement.
-    HERD.store(boot.has_flag("poly.debug.herd"), Ordering::Relaxed);
     ON.store(boot.has_flag(PROFILE_FLAG), Ordering::Relaxed);
     if boot.has_flag(PROFILE_FLAG) {
         start_sampler();

@@ -607,11 +607,10 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
             || process.exiting.load(Ordering::SeqCst)
     };
     // Its own queue: only what concerns this thread wakes it.
-    let q = if crate::profile::HERD.load(Ordering::Relaxed) { &EVENTS } else { &flags.parked }; // TEMP-FEEL
     let in_time = match deadline_ns {
-        Some(d) => q.wait_until_deadline(ready, d),
+        Some(d) => flags.parked.wait_until_deadline(ready, d),
         None => {
-            q.wait_until(ready);
+            flags.parked.wait_until(ready);
             true
         }
     };
@@ -647,9 +646,6 @@ pub fn wake_waiters() {
 pub fn unpark(flags: &ThreadFlags) {
     flags.unparked.store(true, Ordering::SeqCst);
     flags.parked.wake_all();
-    if crate::profile::HERD.load(Ordering::Relaxed) {
-        EVENTS.wake_all(); // TEMP-FEEL
-    }
 }
 
 /// Set thread `flags`' signal notification and end its [`park`].

@@ -25,13 +25,6 @@ unsafe extern "system" {
     fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
 }
 
-// TEMP-FEEL
-#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
-unsafe extern "system" {
-    fn QueryPerformanceCounter(out: *mut i64) -> i32;
-}
-
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "gdi32", kind = "raw-dylib"))]
 unsafe extern "system" {
@@ -413,16 +406,9 @@ unsafe extern "system" fn present(this: *mut c_void, sync: u32, flags: u32) -> H
     s.presents.fetch_add(1, Ordering::Relaxed);
     // SAFETY: the back buffer is a live texture of this DLL.
     let Some(t) = (unsafe { texture::tex(s.back) }) else { return S_OK };
-    let mut t0 = 0i64;
-    // SAFETY: TEMP-FEEL
-    unsafe { QueryPerformanceCounter(&mut t0) };
     if s.hwnd != 0 {
         show(s.hwnd, t);
     }
-    let mut t1 = 0i64;
-    // SAFETY: TEMP-FEEL
-    unsafe { QueryPerformanceCounter(&mut t1) };
-    log(&alloc::format!("feel-t: present hwnd={:#x} {}x{} us={} took={}", s.hwnd, t.width(), t.height(), t0 / 10, (t1 - t0) / 10)); // TEMP-FEEL
     S_OK
 }
 
