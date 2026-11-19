@@ -51,6 +51,7 @@ members = [
     "crates/poly-line",
     "crates/poly-logline",
     "crates/poly-loop",
+    "crates/poly-mach",
     "crates/poly-macho",
     "crates/poly-mem",
     "crates/poly-ntobj",
@@ -170,6 +171,7 @@ poly-lnk = { path = "crates/poly-lnk" }
 poly-line = { path = "crates/poly-line" }
 poly-logline = { path = "crates/poly-logline" }
 poly-loop = { path = "crates/poly-loop" }
+poly-mach = { path = "crates/poly-mach" }
 poly-macho = { path = "crates/poly-macho" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
