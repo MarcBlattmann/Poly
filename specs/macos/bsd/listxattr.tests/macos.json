@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "listx_names",
+      "source_sha256": "9627031328dfcfdd23732b1a6ed8c3b508600e639aeca96638858c90251c00f6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fb79df571c86cef8857a52f5db992a5e81e01d68da5c97139d4a2196c5dd8c40",
+          "exit_code": 0,
+          "stdout": "ok a new file has no attributes of its own\nok three names, joined by |: user.one|user.two|user.three in some order\nok user.one is among them\nok each of the three is listed\nok a NULL buffer: the byte count\nok a buffer of exactly that size returns the same count\nok the list ends with a NUL\nok a buffer one byte short is ERANGE\nok size 0 with a buffer: the byte count\nok an unwritable buffer is EFAULT\nok setting an existing name again adds nothing\nok a removed name is gone\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "listx_paths",
+      "source_sha256": "6c2c5ca92cfe79cdf10795a1be4d339197a682697c71d26dab24caaf86cd7250",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "80c3093a08fa8fa60a847beb2a6aaaa35198ec5c8c2d7bc9a3bed2655e86292a",
+          "exit_code": 0,
+          "stdout": "ok a missing path is ENOENT\nok a path through a file is ENOTDIR\nok an unreadable path is EFAULT\nok a file with mode 0 is EACCES\nok through a link: the target's names (user.target, 11 bytes)\nok with XATTR_NOFOLLOW: the link's own, none yet\nok after setting one on the link (user.mine, 10 bytes)\nok the target still has only its own\nok a directory (user.d, 7 bytes)\nok a dangling link followed is ENOENT\nok not followed it can be listed\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
