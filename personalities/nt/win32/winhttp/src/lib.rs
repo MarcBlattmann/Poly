@@ -560,5 +560,4 @@ pub unsafe extern "system" fn WinHttpGetProxyForUrl(
 
 mod delayed;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

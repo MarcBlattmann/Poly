@@ -67,6 +67,8 @@ pub const SYSTEM_MODULES: &[&str] = &[
     "wintrust.dll",
     "cfgmgr32.dll",
     "dbghelp.dll",
+    // Google's 32-bit updater imports AlphaBlend.
+    "msimg32.dll",
 ];
 
 /// Every module of the set, in the cache under these names.
