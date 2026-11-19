@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "reply_port_many",
+      "source_sha256": "666fbf5d2967da9c0d0879d70b5eb9308ba3e57407c038543fc9e0a9d3c3451b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "eccc3f5db0631372e09159af622f64f0a4d0e2f47dbda9e139ebd47d0c30c5fa",
+          "exit_code": 0,
+          "stdout": "ok a hundred different names\nok all receive rights\nok all destroyed\nok a destroyed name is invalid\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "reply_port_names",
+      "source_sha256": "a1f38ff41afb8c1751d465c9d8d37207adfadae0e8c6294e55da791e7787cf8c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4b0f7115330f5bf70a7fbd9d1e7f16057f2c20009a45b35a2d7214aa0a7dd957",
+          "exit_code": 0,
+          "stdout": "ok a name that is not MACH_PORT_NULL\nok a different one each time\nok 32-bit names\nok neither is the task's own name\nok a receive right\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

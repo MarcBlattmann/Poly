@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 16:36:10",
+  "tests": [
+    {
+      "name": "signal_thread_invalid_names",
+      "source_sha256": "c3ed92b15706dc286317db67c4800f0f42fa47b58e8949c1d45f9bbe892318b9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ffe4cba45919680be01032908ca8ff3cd5a8e0453cd9ec1f9d06482e7d9d5f72",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: KERN_INVALID_NAME\nok MACH_PORT_DEAD: KERN_INVALID_NAME\nok an unknown name: KERN_INVALID_NAME\nok it returned at once (under 50 ms)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "signal_thread_thread_argument",
+      "source_sha256": "b27be2660f59a25783b8c718cd2ebed17ecd5dc34ffee40f3eb303fc59584b73",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b3c385f19875fae4166f3268c1e67ec361f51c37796c6a1a33bf62c5ec7c6ea5",
+          "exit_code": 0,
+          "stdout": "ok a thread name that is not a thread: KERN_INVALID_ARGUMENT for every semaphore name\nok a thread port or 0: the semaphore name's own error\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

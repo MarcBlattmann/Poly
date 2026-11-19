@@ -604,7 +604,7 @@ fn name<K: NtKernel>(k: &mut K, cookie: u64, input: &[u8]) -> Result<Option<Done
 // ----- send and receive
 
 fn read_data<K: NtKernel>(k: &mut K, buf: u64, len: usize) -> Result<Vec<u8>> {
-    let mut data = alloc::vec![0u8; len];
+    let mut data = crate::io::services::capture_buffer(len)?;
     if len > 0 {
         abi::read(k, buf, &mut data)?;
     }

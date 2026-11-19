@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/mach_msg_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mach_msg_trap.tests/macos.json.
+id: macos/syscall/mach/mach_msg_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 31;
+  arm64 `svc #0x80` with x16 = -31. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  mach_msg_trap(message, option, send size, receive size, receive name,
+  timeout in ms, notify) arm64 only observed (seven arguments). Receiving:
+  with MACH_RCV_MSG|MACH_RCV_TIMEOUT on a receive right with nothing
+  queued the call returns MACH_RCV_TIMED_OUT (0x10004003) after the
+  timeout (20 ms took 15 to 500 ms, a timeout of 0 returned at once), also
+  for a port set, with MACH_RCV_LARGE, with a trailer option, with a
+  receive size of 0 and with a message buffer that is not mapped (address
+  8): nothing is written while nothing is queued. A receive name that is
+  not a receive right (an unknown name, MACH_PORT_NULL, MACH_PORT_DEAD, a
+  send right, a dead name) is MACH_RCV_INVALID_NAME (0x10004002); a call
+  with no option does nothing and returns 0; a port that is a member of a
+  set can be received from by name. Sending does not work: a call with
+  MACH_SEND_MSG (alone or with MACH_RCV_MSG) does not return, the process
+  is killed by SIGKILL (the crash report says an exception of type
+  EXC_GUARD, a Mach port guard violation 'invalid options'); programs send
+  with mach_msg2_trap (47), not covered here. The sending side (message
+  layout, rights in messages, size errors) is therefore not specified.
+returns:
+  timeout: "MACH_RCV_TIMED_OUT (0x10004003): nothing to receive within the timeout"
+  no_option: "0: a call without a send or receive option"
+errors:
+  invalid_name: "MACH_RCV_INVALID_NAME (0x10004002): the receive name is not a receive right"
+  send_fatal: "no return: the process is killed by SIGKILL when a send option is set"
+side_effects: "none for the paths observed"
+threading: "a receive with a timeout blocks the calling thread only"
+ordering: []
+timing:
+  typical: "microseconds without a timeout; the timeout in milliseconds otherwise"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

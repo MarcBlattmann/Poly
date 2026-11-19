@@ -4,13 +4,14 @@
  * behaviour observed is the kernel's. Built by `cargo xtask pipeline mac
  * build` for x86_64 (the convention Poly's XNU personality speaks) and arm64.
  *
- * Written for Poly from public sources only: the system call conventions
- * are the ones open-source XNU documents (osfmk/mach/i386/syscall_sw.h:
- * class 2 in the top byte of rax for BSD calls, class 1 for Mach traps;
- * arm64: the number in x16, negative for Mach traps, `svc #0x80`); BSD
- * calls report an error with the carry flag set and the errno as the
+ * Written for Poly from public sources and from observation only: the
+ * system call conventions were found by experiment on the oracle Mac
+ * (x86_64: class 2 in the top byte of rax for BSD calls, class 1 for Mach
+ * traps; arm64: the number in x16, negative for Mach traps, `svc #0x80`);
+ * BSD calls report an error with the carry flag set and the errno as the
  * result. Numbers and values come from the macOS SDK headers named beside
- * them. Behaviour only; no code is copied from anywhere.
+ * them, or were found by experiment where there is no public header. No
+ * Apple or third-party source was read; no code is copied from anywhere.
  *
  * A test is one C file that includes this header and defines
  * `int test_main(void)`. The program is linked against libSystem (macOS
@@ -91,6 +92,23 @@ typedef unsigned long size_t;
 #define SYS_fstatat64 470
 #define SYS_getentropy 500
 #define SYS_munmap 73
+#define SYS_mknod 14
+#define SYS_msync 65
+#define SYS_madvise 75
+#define SYS_mincore 78
+#define SYS_mlock 203
+#define SYS_munlock 204
+#define SYS_minherit 250
+#define SYS_psynch_mutexwait 301
+#define SYS_psynch_mutexdrop 302
+#define SYS_psynch_cvbroad 303
+#define SYS_psynch_cvsignal 304
+#define SYS_psynch_cvwait 305
+#define SYS_bsdthread_create 360
+#define SYS_bsdthread_terminate 361
+#define SYS_ulock_wait 515
+#define SYS_ulock_wake 516
+#define SYS_ulock_wait2 544
 #define SYS_mprotect 74
 #define SYS_mkdir 136
 #define SYS_rmdir 137
@@ -102,8 +120,8 @@ typedef unsigned long size_t;
 #define SYS_getdirentries64 344
 #define SYS_thread_selfid 372
 
-/* Mach trap numbers, the trap table of open-source XNU
- * (osfmk/kern/syscall_sw.c; the names in <mach/mach_traps.h>). */
+/* Mach trap numbers: the names are those of <mach/mach_traps.h>, the numbers
+ * are the coverage map's and were checked by calling each trap. */
 #define MACH_mach_reply_port 26
 #define MACH_thread_self_trap 27
 #define MACH_task_self_trap 28
@@ -128,6 +146,10 @@ typedef unsigned long size_t;
 #define EISDIR 21
 #define EINVAL 22
 #define ENOTTY 25
+#define EAGAIN 35
+#define ENOTSUP 45
+#define ETIMEDOUT 60
+#define EOWNERDEAD 105
 #define EPIPE 32
 #define ELOOP 62
 #define ERANGE 34
@@ -164,6 +186,29 @@ typedef unsigned long size_t;
 #define MAP_PRIVATE 0x0002
 #define MAP_FIXED 0x0010
 #define MAP_ANON 0x1000
+
+/* <sys/mman.h>, <mach/vm_inherit.h> */
+#define MS_ASYNC 0x0001
+#define MS_INVALIDATE 0x0002
+#define MS_SYNC 0x0010
+#define MADV_NORMAL 0
+#define MADV_RANDOM 1
+#define MADV_SEQUENTIAL 2
+#define MADV_WILLNEED 3
+#define MADV_DONTNEED 4
+#define MADV_FREE 5
+#define MADV_ZERO_WIRED_PAGES 6
+#define MADV_FREE_REUSABLE 7
+#define MADV_FREE_REUSE 8
+#define MADV_CAN_REUSE 9
+#define MADV_ZERO 11
+#define MINCORE_INCORE 0x1
+#define MINCORE_REFERENCED 0x2
+#define MINCORE_MODIFIED 0x4
+#define VM_INHERIT_SHARE 0
+#define VM_INHERIT_COPY 1
+#define VM_INHERIT_NONE 2
+#define VM_INHERIT_DONATE_COPY 3
 
 /* <sys/stat.h> */
 #define S_IFMT 0170000
@@ -265,10 +310,83 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define PROX_FDTYPE_KQUEUE 5
 #define PROX_FDTYPE_PIPE 6
 
+/* <mach/message.h>: messages. */
+#define MACH_MSGH_BITS(remote, local) ((remote) | ((local) << 8))
+#define MACH_MSGH_BITS_COMPLEX 0x80000000u
+#define MACH_MSG_TYPE_MOVE_RECEIVE 16
+#define MACH_MSG_TYPE_MOVE_SEND 17
+#define MACH_MSG_TYPE_MOVE_SEND_ONCE 18
+#define MACH_MSG_TYPE_COPY_SEND 19
+#define MACH_MSG_TYPE_MAKE_SEND_ONCE 21
+#define MACH_MSG_TYPE_PORT_SEND 17
+#define MACH_MSG_TYPE_PORT_SEND_ONCE 18
+#define MACH_MSG_PORT_DESCRIPTOR 0
+#define MACH_MSG_OOL_DESCRIPTOR 1
+#define MACH_MSG_PHYSICAL_COPY 0
+#define MACH_MSG_VIRTUAL_COPY 1
+#define MACH_SEND_MSG 0x00000001
+#define MACH_RCV_MSG 0x00000002
+#define MACH_RCV_LARGE 0x00000004
+#define MACH_SEND_TIMEOUT 0x00000010
+#define MACH_RCV_TIMEOUT 0x00000100
+#define MACH_RCV_TRAILER_AUDIT 3
+#define MACH_RCV_TRAILER_TYPE(x) (((x) & 0xf) << 28)
+#define MACH_RCV_TRAILER_ELEMENTS(x) (((x) & 0xf) << 24)
+#define MACH_SEND_INVALID_DATA 0x10000002
+#define MACH_SEND_TIMED_OUT 0x10000004
+#define MACH_SEND_MSG_TOO_SMALL 0x10000008
+#define MACH_SEND_INVALID_RIGHT 0x1000000a
+#define MACH_SEND_INVALID_MEMORY 0x1000000c
+#define MACH_SEND_INVALID_HEADER 0x10000010
+#define MACH_RCV_INVALID_NAME 0x10004002
+#define MACH_RCV_TIMED_OUT 0x10004003
+#define MACH_RCV_TOO_LARGE 0x10004004
+/* <mach/kern_return.h> */
+#define KERN_NAME_EXISTS 13
+#define KERN_ABORTED 14
+#define KERN_RIGHT_EXISTS 21
+#define KERN_TERMINATED 37
+#define KERN_SEMAPHORE_DESTROYED 42
+#define KERN_NOT_WAITING 48
+#define KERN_OPERATION_TIMED_OUT 49
+/* The semaphore traps (numbers of the coverage map). */
+#define MACH_mach_msg_trap 31
+#define MACH_semaphore_signal_trap 33
+#define MACH_semaphore_signal_all_trap 34
+#define MACH_semaphore_signal_thread_trap 35
+#define MACH_semaphore_wait_trap 36
+#define MACH_semaphore_wait_signal_trap 37
+#define MACH_semaphore_timedwait_trap 38
+#define MACH_semaphore_timedwait_signal_trap 39
+struct poly_msg_header {
+    u32 bits, size, remote_port, local_port, voucher_port;
+    i32 id;
+};
+struct poly_port_descriptor {
+    u32 name, pad1;
+    u16 pad2;
+    u8 disposition, type;
+};
+struct poly_ool_descriptor {
+    u64 address;
+    u32 size;
+    u8 deallocate, copy, pad1, type;
+};
+struct poly_audit_trailer {
+    u32 type, size, seqno, security_token[2], audit_token[8];
+};
+_Static_assert(sizeof(struct poly_msg_header) == 24, "mach_msg_header_t is 24 bytes");
+_Static_assert(sizeof(struct poly_port_descriptor) == 12, "mach_msg_port_descriptor_t is 12 bytes");
+_Static_assert(sizeof(struct poly_ool_descriptor) == 16, "mach_msg_ool_descriptor_t is 16 bytes");
+_Static_assert(sizeof(struct poly_audit_trailer) == 52, "mach_msg_audit_trailer_t is 52 bytes");
+
 /* <sys/dirent.h> */
 #define DT_UNKNOWN 0
 #define DT_DIR 4
+#define DT_FIFO 1
+#define DT_CHR 2
 #define DT_REG 8
+#define DT_LNK 10
 
 /* <sys/sysctl.h> */
 #define CTL_MAXNAME 12
@@ -279,11 +397,79 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define HW_MACHINE 1
 #define HW_NCPU 3
 #define HW_PAGESIZE 7
+#define KERN_VERSION 4
+#define KERN_MAXPROC 6
+#define KERN_MAXFILES 7
+#define KERN_ARGMAX 8
+#define KERN_HOSTNAME 10
+#define KERN_PROC 14
+#define KERN_BOOTTIME 21
+#define KERN_PROCARGS2 49
+#define KERN_OSVERSION 65
+#define KERN_PROC_PID 1
+#define KERN_OSREV 3
+#define HW_BYTEORDER 4
+#define HW_MEMSIZE 24
+/* The name-to-number call of sysctl (no public header: found by experiment). */
+#define CTL_SYSCTL 0
+#define CTL_SYSCTL_NAME2OID 3
+/* struct kinfo_proc of <sys/sysctl.h> (648 bytes): where the fields are. */
+#define KINFO_PROC_SIZE 648
+#define KP_P_STAT 36
+#define KP_P_PID 40
+#define KP_P_COMM 243
+#define KP_E_UID 420
+#define KP_E_PPID 560
 
 /* <mach/kern_return.h>, <mach/port.h> */
 #define KERN_SUCCESS 0
 #define MACH_PORT_NULL 0u
 #define MACH_PORT_DEAD 0xffffffffu
+#define KERN_INVALID_ADDRESS 1
+#define KERN_PROTECTION_FAILURE 2
+#define KERN_NO_SPACE 3
+#define KERN_INVALID_ARGUMENT 4
+#define KERN_NOT_RECEIVER 7
+#define KERN_MEMORY_ERROR 10
+#define KERN_INVALID_NAME 15
+#define KERN_INVALID_TASK 16
+#define KERN_INVALID_RIGHT 17
+#define KERN_INVALID_VALUE 18
+#define KERN_UREFS_OVERFLOW 19
+#define KERN_INVALID_CAPABILITY 20
+/* <mach/message.h>: what a trap returns when the task port is not valid */
+#define MACH_SEND_INVALID_DEST 0x10000003
+#define MACH_MSG_TYPE_MAKE_SEND 20
+/* <mach/port.h> */
+#define MACH_PORT_RIGHT_SEND 0
+#define MACH_PORT_RIGHT_RECEIVE 1
+#define MACH_PORT_RIGHT_SEND_ONCE 2
+#define MACH_PORT_RIGHT_PORT_SET 3
+#define MACH_PORT_RIGHT_DEAD_NAME 4
+#define MACH_PORT_TYPE_SEND 0x10000
+#define MACH_PORT_TYPE_RECEIVE 0x20000
+#define MACH_PORT_TYPE_SEND_ONCE 0x40000
+#define MACH_PORT_TYPE_PORT_SET 0x80000
+#define MACH_PORT_TYPE_DEAD_NAME 0x100000
+/* <mach/vm_statistics.h> */
+#define VM_FLAGS_ANYWHERE 0x00000001
+/* Mach trap numbers (the names of <mach/mach_traps.h>, checked by calling them) */
+#define MACH__kernelrpc_mach_vm_allocate_trap 10
+#define MACH__kernelrpc_mach_vm_deallocate_trap 12
+#define MACH__kernelrpc_mach_vm_protect_trap 14
+#define MACH__kernelrpc_mach_port_allocate_trap 16
+#define MACH__kernelrpc_mach_port_deallocate_trap 18
+#define MACH__kernelrpc_mach_port_mod_refs_trap 19
+#define MACH__kernelrpc_mach_port_insert_right_trap 21
+#define MACH__kernelrpc_mach_port_type_trap 76
+#define MACH_mach_wait_until_trap 90
+/* ulock operations and flags (no public header: found by experiment) */
+#define UL_COMPARE_AND_WAIT 1
+#define UL_UNFAIR_LOCK 2
+#define UL_COMPARE_AND_WAIT_SHARED 3
+#define UL_COMPARE_AND_WAIT64 5
+#define ULF_WAKE_ALL 0x100
+#define ULF_NO_ERRNO 0x01000000
 
 /* struct stat64 (struct stat with 64-bit inodes, the SDK's default),
  * <sys/stat.h>: 144 bytes. */
@@ -400,6 +586,58 @@ static inline i64 poly_mach6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
 }
 #else
 #error "macOS tests are built for x86_64 and arm64"
+#endif
+
+#if defined(__arm64__) || defined(__aarch64__)
+#define POLY_ARM64 1
+/* Calls with seven or eight arguments (psynch): x0..x7 on arm64. x86_64
+ * passes them on the stack and is not done yet, so those tests are
+ * arm64-only for now. */
+static inline sysret poly_bsd8(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, i64 g, i64 h) {
+    register i64 x0 __asm__("x0") = a;
+    register i64 x1 __asm__("x1") = b;
+    register i64 x2 __asm__("x2") = c;
+    register i64 x3 __asm__("x3") = d;
+    register i64 x4 __asm__("x4") = e;
+    register i64 x5 __asm__("x5") = f;
+    register i64 x6 __asm__("x6") = g;
+    register i64 x7 __asm__("x7") = h;
+    register i64 x16 __asm__("x16") = n;
+    i64 carry;
+    __asm__ volatile("svc #0x80\n\tcset %[c], cs"
+                     : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x7), "+r"(x16), [c] "=r"(carry)
+                     :
+                     : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x17", "memory", "cc");
+    sysret r = {x0, x1, 0};
+    if (carry) r.err = x0;
+    return r;
+}
+/* mach_absolute_time() on arm64 is the virtual counter (24 MHz here:
+ * mach_timebase_info 125/3). */
+static inline u64 poly_mach_now(void) {
+    u64 t;
+    __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(t));
+    return t;
+}
+#endif
+
+#if defined(POLY_ARM64)
+/* Mach traps with seven arguments (mach_msg_trap): x0..x6, trap number negated in x16. */
+static inline i64 poly_mach7(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, i64 g) {
+    register i64 x0 __asm__("x0") = a;
+    register i64 x1 __asm__("x1") = b;
+    register i64 x2 __asm__("x2") = c;
+    register i64 x3 __asm__("x3") = d;
+    register i64 x4 __asm__("x4") = e;
+    register i64 x5 __asm__("x5") = f;
+    register i64 x6 __asm__("x6") = g;
+    register i64 x16 __asm__("x16") = -n;
+    __asm__ volatile("svc #0x80"
+                     : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x16)
+                     :
+                     : "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x17", "memory", "cc");
+    return x0;
+}
 #endif
 
 #define bsd0(n) poly_bsd6((n), 0, 0, 0, 0, 0, 0)
@@ -607,6 +845,14 @@ static __attribute__((unused)) void poly_report_child(void) {
     put_num(poly_sigmask());
     put("\n");
 }
+
+#if defined(POLY_ARM64)
+/* mach_msg_trap(message, option, send size, receive size, receive port, timeout in ms, 0): arm64 only for now
+ * (the trap has seven arguments). */
+static __attribute__((unused)) u32 poly_mach_msg(void *msg, u32 option, u32 send_size, u32 rcv_size, u32 rcv_name, u32 timeout_ms) {
+    return (u32)poly_mach7(MACH_mach_msg_trap, (i64)msg, option, send_size, rcv_size, rcv_name, timeout_ms, 0);
+}
+#endif
 
 int test_main(void);
 

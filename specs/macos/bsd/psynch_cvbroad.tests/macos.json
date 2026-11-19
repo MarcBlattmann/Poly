@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "cvbroad_no_waiters",
+      "source_sha256": "1ec024051b302f5bda87f51e4c279f40a5051a900aa896e72be646a67ff266aa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "70fedd83b3eac5d965ae4f5a18eede8cbc5cd3d9e4575f2b06b3fe8464ea7f5d",
+          "exit_code": 0,
+          "stdout": "ok returns without an error\nok again\nok on another word\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cvbroad_with_waiter",
+      "source_sha256": "5d300cca8031e757dc4b3501b392c3961572894365f84bae8b8dfaf8ca8652bf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "783008d466a02cb701ef0a90880694d0056355836f16e7689af1ac1f6c57103e",
+          "exit_code": 0,
+          "stdout": "ok broadcast on one word\nok a wait on another word still times out\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

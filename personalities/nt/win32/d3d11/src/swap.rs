@@ -29,6 +29,7 @@ unsafe extern "system" {
 #[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
 unsafe extern "system" {
+    fn PolyUserCall(req: *const u8, len: usize, out: *mut u8, cap: usize, out_len: *mut usize) -> u32;
     fn PolyUserPresentBuffer(
         hwnd: usize,
         section: usize,
@@ -362,9 +363,28 @@ pub unsafe fn bind(p: *mut c_void, hwnd: usize) -> bool {
     if s.shared.as_ref().is_some_and(|sh| sh.hwnd != hwnd) {
         end_shared(s);
     }
+    if s.hwnd != hwnd && hwnd != 0 {
+        tell_alpha(hwnd, s.desc[10] == DXGI_ALPHA_MODE_PREMULTIPLIED);
+    }
     s.hwnd = hwnd;
     deliver(s, &[]);
     true
+}
+
+/// `DXGI_ALPHA_MODE_PREMULTIPLIED` (`dxgi1_2.h`).
+const DXGI_ALPHA_MODE_PREMULTIPLIED: u32 = 1;
+
+/// Tell win32k whether what this swap chain shows in window `hwnd` has premultiplied alpha, so
+/// the window is composed with it (ADR 0225; Learn, "DXGI_ALPHA_MODE": a composition swap chain's
+/// premultiplied pixels are blended over what is below the window). Chrome's menus and bubbles
+/// are transparent outside their rounded corners and in their shadow.
+fn tell_alpha(hwnd: usize, premultiplied: bool) {
+    use poly_win32k::proto::Request;
+    let req = poly_win32k::wire::encode(&Request::SurfaceAlpha { hwnd: hwnd as u32, premultiplied });
+    let mut out = [0u8; 64];
+    let mut len = 0usize;
+    // SAFETY: the buffers are ours and sized as passed.
+    unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
 }
 
 fn client_size(hwnd: usize) -> (u32, u32) {

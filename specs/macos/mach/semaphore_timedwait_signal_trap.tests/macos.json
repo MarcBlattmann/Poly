@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 16:36:10",
+  "tests": [
+    {
+      "name": "timedwait_signal_invalid_names",
+      "source_sha256": "12ff142569be9bcf63e0fcf3d409e7280b1efd6aceedfdd7e6d92a1c4d072670",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "067510ec369a8fc1a4c572ac815ec01e48c21988d51df8d8fbe9c6ffcfb3ac31",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: KERN_INVALID_NAME\nok MACH_PORT_DEAD: KERN_INVALID_NAME\nok an unknown name: KERN_INVALID_NAME\nok it returned at once (under 50 ms)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "timedwait_signal_wrong_objects",
+      "source_sha256": "4284d792bcbd9a162e3608b3a5138040599a7ec1fcc334f2e3bf2b852b80face",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e78dedb16ce182a780a5f4c6d0d0e7fd5fbcb2e11d70a5b857c491ebdb5e255f",
+          "exit_code": 0,
+          "stdout": "ok the task's own port: KERN_INVALID_CAPABILITY\nok the thread's own port: KERN_INVALID_CAPABILITY\nok a receive right (a reply port): KERN_INVALID_RIGHT\nok the reply port is untouched: its type is still a receive right\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

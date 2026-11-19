@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/mincore.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mincore.tests/macos.json.
+id: macos/syscall/bsd/mincore
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 78,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 78, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. mincore(address, length, vector) writes one byte per page
+  of the range: MINCORE_INCORE (1) is set for a page the process has
+  touched, MINCORE_ANONYMOUS (0x80) for anonymous memory (0x87 for a page
+  that was written, 0x80 for one that was not touched on the oracle:
+  INCORE, REFERENCED (2) and MODIFIED (4) are values); for a page of a
+  file mapping that was written through the mapping INCORE is set and 0x80
+  is not (0x07). A length of 1 fills one byte, a length of 0 succeeds and
+  writes nothing. An unwritable vector is EFAULT (14). Pages that are not
+  mapped and an address that is not page aligned returned 0 in a probe
+  (values).
+returns:
+  success: "0, vector filled"
+errors:
+  bad_pointer: "EFAULT (14): vector at address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

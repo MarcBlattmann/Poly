@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:01:55",
+  "tests": [
+    {
+      "name": "ulock_wake_all",
+      "source_sha256": "060f42429f36a0d61f0d166c01e786c9252fec61337bfeee0fbebccdc6cb1432",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8f20f4a7f9dd71cfaaec0b676dc9defd83b9e1182173830415776334a856c638",
+          "exit_code": 0,
+          "stdout": "ok one wake call with ULF_WAKE_ALL returned 0\nok the first waiter's wait ended without an error\nok and the second's\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ulock_wake_nobody",
+      "source_sha256": "6e38df1d14578f0c4a0f891e4c393cc93b0378c6c4d2ff57176e32dd5978f45a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9d2fd9769eee370a0e05615cf02dde4d1c621b5112ef13215c5f389d26cc0390",
+          "exit_code": 0,
+          "stdout": "ok nobody waiting: ENOENT\nok ULF_WAKE_ALL, nobody waiting: ENOENT\nok ULF_NO_ERRNO: -ENOENT as the result, no carry\nok the shared operation too: ENOENT\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

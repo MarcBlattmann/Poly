@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 16:36:10",
+  "tests": [
+    {
+      "name": "msg_receive_errors",
+      "source_sha256": "a1336e28cf60c5fb55cf25e8649a8332714fca6a026a731f7876c64e4ed68ed6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c5430ed9ab5290a9f4f4be7344bc8b115d48e2378b999dd004425a514118877a",
+          "exit_code": 0,
+          "stdout": "ok an unknown name: MACH_RCV_INVALID_NAME\nok MACH_PORT_NULL: MACH_RCV_INVALID_NAME\nok MACH_PORT_DEAD: MACH_RCV_INVALID_NAME\nok a send right (the task's own name): MACH_RCV_INVALID_NAME\nok a dead name: MACH_RCV_INVALID_NAME\nok no option at all: returns 0\nok a port moved into a set (move_member trap 20)\nok receiving from the member itself: MACH_RCV_TIMED_OUT\nok receiving from the set: MACH_RCV_TIMED_OUT\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msg_receive_timeouts",
+      "source_sha256": "726daf9f53835f5e9207b5768c1c7a301a0404445852ad11af1c6b866f11ae7a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "354ab1491933ada7e613937213cee7fe0637f32c5afa771c840020b795da6b1b",
+          "exit_code": 0,
+          "stdout": "ok 20 ms on an empty port: MACH_RCV_TIMED_OUT\nok it took at least 15 ms and less than 500 ms\nok a timeout of 0: MACH_RCV_TIMED_OUT\nok and at once (under 5 ms)\nok an empty port set: MACH_RCV_TIMED_OUT\nok with MACH_RCV_LARGE: MACH_RCV_TIMED_OUT\nok with an audit trailer asked for: MACH_RCV_TIMED_OUT\nok a receive size of 0: MACH_RCV_TIMED_OUT\nok a buffer at address 8: MACH_RCV_TIMED_OUT\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
