@@ -75,6 +75,7 @@ pub mod cpu;
 pub mod env;
 pub mod errmode;
 pub mod error;
+pub mod eventlog;
 pub mod exports;
 pub mod file;
 pub mod fileex;

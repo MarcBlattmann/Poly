@@ -238,6 +238,12 @@ pub struct Hive {
     pub dirty: bool,
     /// Incremented by every save.
     pub sequence: u64,
+    /// Loaded from a file a program named (`NtLoadKey`): saved through that
+    /// file when it is unloaded or flushed, never to the kernel's hive store.
+    pub external: bool,
+    /// Unloaded (`NtUnloadKey`): its keys are gone and its id is never
+    /// reused.
+    pub unloaded: bool,
 }
 
 /// An open instance.
@@ -721,7 +727,14 @@ impl Registry {
         let hive = HiveId(self.hives.len() as u32);
         let root = self.insert_key(name.to_vec(), Some(parent), false, Some(hive), now);
         let sequence = loaded.map_or(0, |l| l.sequence);
-        self.hives.push(Hive { file: file.into(), root, dirty: loaded.is_none(), sequence });
+        self.hives.push(Hive {
+            file: file.into(),
+            root,
+            dirty: loaded.is_none(),
+            sequence,
+            external: false,
+            unloaded: false,
+        });
         if let Some(img) = loaded.map(|l| &l.root) {
             let k = self.raw_mut(root);
             k.class = img.class.clone();
@@ -755,7 +768,73 @@ impl Registry {
 
     /// The hive saved under `file`.
     pub fn hive_by_file(&self, file: &str) -> Option<HiveId> {
-        self.hives.iter().position(|h| h.file == file).map(|i| HiveId(i as u32))
+        self.hives.iter().position(|h| h.file == file && !h.unloaded).map(|i| HiveId(i as u32))
+    }
+
+    /// Mount a hive a program loads from a file of its own (`NtLoadKey`,
+    /// `RegLoadKeyW.yaml`): as [`mount_hive`](Self::mount_hive), but marked
+    /// [`Hive::external`] and clean (its file holds what was loaded).
+    pub fn mount_external(
+        &mut self,
+        parent: KeyId,
+        name: &[u16],
+        label: &str,
+        loaded: &HiveFile,
+        now: u64,
+    ) -> Result<HiveId> {
+        let id = self.mount_hive(parent, name, label, Some(loaded), now)?;
+        let h = &mut self.hives[id.0 as usize];
+        h.external = true;
+        h.dirty = false;
+        self.changed(parent, REG_NOTIFY_CHANGE_NAME);
+        Ok(id)
+    }
+
+    /// The hive whose root is `key`, if `key` is one.
+    pub fn hive_rooted_at(&self, key: KeyId) -> Option<HiveId> {
+        self.hives.iter().position(|h| h.root == key && !h.unloaded).map(|i| HiveId(i as u32))
+    }
+
+    /// Whether any key of `hive` (also one deleted but still open) has an
+    /// open instance.
+    pub fn hive_in_use(&self, hive: HiveId) -> bool {
+        self.keys.iter().any(|(_, k)| k.hive == Some(hive) && k.opens > 0)
+    }
+
+    /// Take `hive` out of the tree (`NtUnloadKey`, `RegUnLoadKeyW.yaml`):
+    /// `STATUS_ACCESS_DENIED` while any of its keys is open (`open_handles`),
+    /// `STATUS_INVALID_PARAMETER` for a hive that is already gone. Returns
+    /// the hive's contents as they were, for its file; the parent's watchers
+    /// learn that a subkey went.
+    pub fn unmount_hive(&mut self, hive: HiveId, now: u64) -> Result<KeyImage> {
+        let h = self.hives.get(hive.0 as usize).filter(|h| !h.unloaded).ok_or(STATUS_INVALID_PARAMETER)?;
+        let root = h.root;
+        if self.hive_in_use(hive) {
+            return Err(STATUS_ACCESS_DENIED);
+        }
+        let image = self.image_of(root);
+        let parent = self.raw(root).parent.expect("a hive root has a parent");
+        let gone: Vec<(u32, u32)> = self.keys.iter().filter(|(_, k)| k.hive == Some(hive)).map(|(id, _)| id).collect();
+        // No key of the hive is open, so none has a watch left to complete.
+        for (index, generation) in gone {
+            self.keys.remove(index, generation);
+        }
+        let p = self.raw_mut(parent);
+        p.subkeys.retain(|_, k| *k != root);
+        p.last_write = now;
+        let h = &mut self.hives[hive.0 as usize];
+        h.unloaded = true;
+        h.dirty = false;
+        self.changed(parent, REG_NOTIFY_CHANGE_NAME);
+        Ok(image)
+    }
+
+    /// The non-volatile contents of `key` and everything below it, `key`'s
+    /// own name included (`NtSaveKey`): `STATUS_KEY_DELETED` for a deleted
+    /// key.
+    pub fn subtree(&self, key: KeyId) -> Result<KeyImage> {
+        self.key(key)?;
+        Ok(self.image_of(key))
     }
 
     /// The non-volatile contents of a hive.
@@ -790,8 +869,15 @@ impl Registry {
         self.hives[hive.0 as usize].dirty = true;
     }
 
-    /// Hives changed since their last save.
+    /// Hives of the kernel's store changed since their last save (an
+    /// [external](Hive::external) hive is saved through its own file).
     pub fn dirty_hives(&self) -> Vec<HiveId> {
-        (0..self.hives.len() as u32).map(HiveId).filter(|h| self.hives[h.0 as usize].dirty).collect()
+        (0..self.hives.len() as u32)
+            .map(HiveId)
+            .filter(|h| {
+                let h = &self.hives[h.0 as usize];
+                h.dirty && !h.external && !h.unloaded
+            })
+            .collect()
     }
 }

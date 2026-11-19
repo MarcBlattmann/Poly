@@ -58,6 +58,27 @@ fn current_control_set_is_a_link() {
 }
 
 #[test]
+fn the_user_classes_hive_name_links_to_software_classes() {
+    // RtlFormatCurrentUserKeyPath.yaml `usable`: `<path>_Classes` opens.
+    let mut r = Registry::new();
+    install(&mut r, T0, &mut no_files).unwrap();
+    let u = r.user();
+    let name = POLY_USER_SID.to_string() + USER_CLASSES_SUFFIX;
+    let link = r.child(u, &wide(&name.to_lowercase())).unwrap();
+    assert!(r.key(link).unwrap().is_link() && r.key(link).unwrap().is_volatile());
+    let Ok(Resolved::Reparse(p)) = r.resolve(u, &wide(&(name.clone() + "\\CLSID")), false) else {
+        panic!("not a reparse")
+    };
+    assert_eq!(
+        String::from_utf16(&p).unwrap(),
+        std::format!("\\REGISTRY\\USER\\{POLY_USER_SID}\\Software\\Classes\\CLSID")
+    );
+    // Made once: the volatile keys of the next start find it.
+    volatile_keys(&mut r, T0).unwrap();
+    assert!(r.dirty_hives().iter().all(|h| !r.hive(*h).external));
+}
+
+#[test]
 fn saved_hives_load_on_the_next_boot() {
     let mut r = Registry::new();
     install(&mut r, T0, &mut no_files).unwrap();

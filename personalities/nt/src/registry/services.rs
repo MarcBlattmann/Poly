@@ -28,7 +28,9 @@ use crate::objects::return_handle;
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::status::*;
-use poly_ntobj::{EventType, Handle, NewObject, NtStatus, OBJ_OPENLINK, ObjectType, WaitOutcome, WaitType};
+use poly_ntobj::{
+    EventType, Handle, NewObject, NtStatus, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK, ObjectType, WaitOutcome, WaitType,
+};
 use poly_registry::consts::*;
 use poly_registry::info;
 
@@ -56,6 +58,9 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     if options & REG_OPTION_OPEN_LINK != 0 {
         attrs.attributes |= OBJ_OPENLINK;
     }
+    // Registry names match without regard to case, with or without
+    // `OBJ_CASE_INSENSITIVE` (`NtOpenKeyEx.yaml` `paths`), `\REGISTRY` too.
+    attrs.attributes |= OBJ_CASE_INSENSITIVE;
     let now = k.system_time();
     let caller = k.caller();
     let (handle, d) = k.with_state(|sys, p, b| {
@@ -116,6 +121,8 @@ fn open<K: NtKernel>(k: &mut K, out: u64, access: u64, attrs: Attributes, open_o
     if open_options & REG_OPTION_OPEN_LINK != 0 {
         attrs.attributes |= OBJ_OPENLINK;
     }
+    // Always without regard to case (`NtOpenKeyEx.yaml` `paths`).
+    attrs.attributes |= OBJ_CASE_INSENSITIVE;
     let now = k.system_time();
     let caller = k.caller();
     let h = k.with_state(|sys, p, b| {
@@ -223,7 +230,16 @@ pub fn set_value_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtSta
 /// Copy `e` to the caller's buffer by the buffer-size rules of
 /// [`info::fit`] and return the status.
 fn copy_out<K: NtKernel>(k: &mut K, e: &info::Encoded, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
-    let fit = info::fit(e, length as u32 as usize);
+    write_fit(k, info::fit(e, length as u32 as usize), buf, ret)
+}
+
+/// [`copy_out`] for the value classes ([`info::fit_value`]: what fits of the
+/// name or data is copied too).
+fn copy_value_out<K: NtKernel>(k: &mut K, e: &info::Encoded, buf: u64, length: u64, ret: u64) -> Result<NtStatus> {
+    write_fit(k, info::fit_value(e, length as u32 as usize), buf, ret)
+}
+
+fn write_fit<K: NtKernel>(k: &mut K, fit: info::Fit<'_>, buf: u64, ret: u64) -> Result<NtStatus> {
     if !fit.write.is_empty() {
         abi::write(k, buf, fit.write)?;
     }
@@ -270,7 +286,7 @@ pub fn query_value_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
     check_value_buffer(class, buf)?;
     let name = value_name(k, name)?;
     let e = with_key(k, h, KEY_QUERY_VALUE, |reg, key| info::value_information(reg.value(key, &name)?, class))?;
-    copy_out(k, &e, buf, length, ret)
+    copy_value_out(k, &e, buf, length, ret)
 }
 
 /// `NtEnumerateValueKey(KeyHandle, Index, KeyValueInformationClass,
@@ -282,7 +298,7 @@ pub fn enumerate_value_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     let e = with_key(k, h, KEY_QUERY_VALUE, |reg, key| {
         info::value_information(reg.value_at(key, index as u32 as usize)?, class)
     })?;
-    copy_out(k, &e, buf, length, ret)
+    copy_value_out(k, &e, buf, length, ret)
 }
 
 /// `NtFlushKey(KeyHandle)`: write the key's hive to its file now (Learn:
@@ -292,15 +308,23 @@ pub fn enumerate_value_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// `STATUS_REGISTRY_IO_FAILED` and leaves the hive to be written later.
 pub fn flush_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let h = abi::arg(k, regs, 0)?;
-    let save = with_key(k, h, 0, |reg, key| {
-        let hive = reg.key(key)?.hive().filter(|hv| reg.hive(*hv).dirty);
-        Ok(hive.map(|hv| (hv, reg.hive(hv).file.clone(), reg.save(hv))))
+    let hive = with_key(k, h, 0, |reg, key| {
+        Ok(reg.key(key)?.hive().filter(|hv| reg.hive(*hv).dirty).map(|hv| (hv, reg.hive(hv).external)))
     })?;
-    if let Some((hive, file, bytes)) = save
-        && k.save_hive(&file, &bytes).is_err()
-    {
-        k.with_state(|sys, _, _| sys.registry.reg.mark_hive_dirty(hive));
-        return Err(STATUS_REGISTRY_IO_FAILED);
+    match hive {
+        // A hive a program loaded is written to its own file (ADR 0224).
+        Some((hive, true)) => super::hivefile::flush_external(k, hive)?,
+        Some((hive, false)) => {
+            let (file, bytes) = k.with_state(|sys, _, _| {
+                let reg = &mut sys.registry.reg;
+                (reg.hive(hive).file.clone(), reg.save(hive))
+            });
+            if k.save_hive(&file, &bytes).is_err() {
+                k.with_state(|sys, _, _| sys.registry.reg.mark_hive_dirty(hive));
+                return Err(STATUS_REGISTRY_IO_FAILED);
+            }
+        }
+        None => {}
     }
     Ok(STATUS_SUCCESS)
 }

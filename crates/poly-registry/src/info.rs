@@ -20,9 +20,9 @@
 //! Strings are not NUL-terminated (Learn says so of every name and class
 //! in these structures). `TitleIndex` is always 0. Where a class string is
 //! empty, `ClassOffset` still points where it would start (to be
-//! confirmed). `KEY_VALUE_FULL_INFORMATION.DataOffset` is the offset just
-//! after the name ("the data immediately following the Name string"); in
-//! the `Align64` variant it is rounded up to 8.
+//! confirmed). `KEY_VALUE_FULL_INFORMATION.DataOffset` is the offset after
+//! the name rounded up to 8, in both the plain and the `Align64` variant
+//! (`NtQueryValueKey.yaml` `full`: a 4-character name gives offset 32, not 28).
 
 use crate::consts::*;
 use crate::tree::{KeyId, Registry, Result, Value};
@@ -46,6 +46,17 @@ pub struct Fit<'a> {
     pub write: &'a [u8],
     /// What goes to `ResultLength`.
     pub result_length: u32,
+}
+
+/// [`fit`] for the value classes: a buffer that holds the fixed part but not
+/// the rest gets the fixed part and the bytes of the rest that fit
+/// (`NtQueryValueKey.yaml` `buffers`).
+pub fn fit_value(e: &Encoded, length: usize) -> Fit<'_> {
+    let f = fit(e, length);
+    if f.status == STATUS_BUFFER_OVERFLOW {
+        return Fit { write: &e.bytes[..length.min(e.bytes.len())], ..f };
+    }
+    f
 }
 
 /// Apply the buffer-size rules to a buffer of `length` bytes.
@@ -189,8 +200,8 @@ pub fn key_information(reg: &Registry, key: KeyId, class: u32, enumerate: bool) 
 
 /// `NtQueryValueKey` / `NtEnumerateValueKey` information of class `class`
 /// about `value`. A class outside `KEY_VALUE_INFORMATION_CLASS` is
-/// `STATUS_INVALID_PARAMETER` (Learn). `KeyValueLayerInformation` is a
-/// `ULONG` of flags, all clear (no layered keys).
+/// `STATUS_INVALID_PARAMETER` (Learn), and so is `KeyValueLayerInformation`
+/// (class 5: `NtQueryValueKey.yaml` `classes`).
 pub fn value_information(value: &Value, class: u32) -> Result<Encoded> {
     let name = &value.name;
     let data = &value.data;
@@ -202,10 +213,7 @@ pub fn value_information(value: &Value, class: u32) -> Result<Encoded> {
             KEY_VALUE_BASIC_INFORMATION_SIZE
         }
         KEY_VALUE_FULL_INFORMATION | KEY_VALUE_FULL_INFORMATION_ALIGN64 => {
-            let mut offset = KEY_VALUE_FULL_INFORMATION_SIZE + name.len() * 2;
-            if class == KEY_VALUE_FULL_INFORMATION_ALIGN64 {
-                offset = offset.div_ceil(8) * 8;
-            }
+            let offset = (KEY_VALUE_FULL_INFORMATION_SIZE + name.len() * 2).div_ceil(8) * 8;
             u32s(&mut out, &[0, value.kind, offset as u32, data.len() as u32, bytes_of(name)]);
             text(&mut out, name);
             out.resize(offset, 0);
@@ -221,10 +229,6 @@ pub fn value_information(value: &Value, class: u32) -> Result<Encoded> {
             u32s(&mut out, &[value.kind, data.len() as u32]);
             out.extend_from_slice(data);
             KEY_VALUE_PARTIAL_INFORMATION_ALIGN64_SIZE
-        }
-        KEY_VALUE_LAYER_INFORMATION => {
-            u32s(&mut out, &[0]);
-            KEY_VALUE_LAYER_INFORMATION_SIZE
         }
         _ => return Err(STATUS_INVALID_PARAMETER),
     };
