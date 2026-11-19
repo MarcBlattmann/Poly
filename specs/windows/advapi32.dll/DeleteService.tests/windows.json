@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "del_access",
+      "exe_sha256": "3536c7003f4861b5c2ba0f66dbe083e735aedd79b76d83d925949328d3a1cee2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNEZWxBY2MpOiBvawpPcGVuU2VydmljZVcoYWxsIGJ1dCBERUxFVEUpOiBvawpEZWxldGVTZXJ2aWNlIHdpdGhvdXQgREVMRVRFOiBlcnIgNQpEZWxldGVTZXJ2aWNlKE5VTEwpOiBlcnIgNgpEZWxldGVTZXJ2aWNlKG1hbmFnZXIgaGFuZGxlKTogZXJyIDYKc2VydmljZSBzdGlsbCB0aGVyZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcDelAcc): ok\nOpenServiceW(all but DELETE): ok\nDeleteService without DELETE: err 5\nDeleteService(NULL): err 6\nDeleteService(manager handle): err 6\nservice still there: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 62
+    },
+    {
+      "name": "del_running",
+      "exe_sha256": "6c4f819236f1936c5f7382a9dfef7f4ae212c3adfa57e9fc158b2579b663b460",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlU2VydmljZVcoUG9seVNwZWNTdmNEZWxSdW4pOiBvawpTdGFydFNlcnZpY2VXOiBvawpSVU5OSU5HIHdpdGhpbiA1IHM6IDEKRGVsZXRlU2VydmljZSB3aGlsZSBydW5uaW5nOiBvawphZnRlciBEZWxldGVTZXJ2aWNlOiB0eXBlPTB4MTAgc3RhdGU9UlVOTklORyBhY2NlcHRlZD0weDEgd2luMzI9MCBzcGVjaWZpYz0wIGNoZWNrcG9pbnQ9MCBoaW50PTAgaGFzX3BpZD0xIGZsYWdzPTAKbWFya2VkIGFuZCBydW5uaW5nOiB2YWx1ZSBEZWxldGVGbGFnIHR5cGU9NCAxCm1hcmtlZCBhbmQgcnVubmluZzogdmFsdWUgRXJyb3JDb250cm9sIHR5cGU9NCAxCm1hcmtlZCBhbmQgcnVubmluZzogdmFsdWUgSW1hZ2VQYXRoIHR5cGU9MiAiPGltYWdlPiIgLS1jaGlsZCBydW4KbWFya2VkIGFuZCBydW5uaW5nOiB2YWx1ZSBPYmplY3ROYW1lIHR5cGU9MSBMb2NhbFN5c3RlbQptYXJrZWQgYW5kIHJ1bm5pbmc6IHZhbHVlIFN0YXJ0IHR5cGU9NCA0Cm1hcmtlZCBhbmQgcnVubmluZzogdmFsdWUgVHlwZSB0eXBlPTQgMTYKbWFya2VkIGFuZCBydW5uaW5nOiBzdWJrZXlzIFtdCkNvbnRyb2xTZXJ2aWNlKElOVEVSUk9HQVRFKTogb2sgc3RhdGU9UlVOTklORwpDb250cm9sU2VydmljZShTVE9QKTogb2sKU1RPUFBFRCB3aXRoaW4gNSBzOiAxCmFmdGVyIHN0b3A6IHR5cGU9MHgxMCBzdGF0ZT1TVE9QUEVEIGFjY2VwdGVkPTB4MCB3aW4zMj0wIHNwZWNpZmljPTAgY2hlY2twb2ludD0wIGhpbnQ9MCBoYXNfcGlkPTAgZmxhZ3M9MAprZXkgcHJlc2VudCBhZnRlciBzdG9wIGFuZCBjbG9zZTogMApPcGVuU2VydmljZVcgYWZ0ZXJ3YXJkczogZXJyIDEwNjAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateServiceW(PolySpecSvcDelRun): ok\nStartServiceW: ok\nRUNNING within 5 s: 1\nDeleteService while running: ok\nafter DeleteService: type=0x10 state=RUNNING accepted=0x1 win32=0 specific=0 checkpoint=0 hint=0 has_pid=1 flags=0\nmarked and running: value DeleteFlag type=4 1\nmarked and running: value ErrorControl type=4 1\nmarked and running: value ImagePath type=2 \"<image>\" --child run\nmarked and running: value ObjectName type=1 LocalSystem\nmarked and running: value Start type=4 4\nmarked and running: value Type type=4 16\nmarked and running: subkeys []\nControlService(INTERROGATE): ok state=RUNNING\nControlService(STOP): ok\nSTOPPED within 5 s: 1\nafter stop: type=0x10 state=STOPPED accepted=0x0 win32=0 specific=0 checkpoint=0 hint=0 has_pid=0 flags=0\nkey present after stop and close: 0\nOpenServiceW afterwards: err 1060\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 257
+    }
+  ]
+}

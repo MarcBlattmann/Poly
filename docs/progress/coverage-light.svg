@@ -1369,7 +1369,7 @@
 <rect x="321.0" y="579.6" width="43.0" height="42.0" fill="#e6eaef"/>
 <rect x="321.0" y="579.6" width="9.4" height="42.0" fill="#2da44e"/>
 <rect x="330.4" y="579.6" width="8.6" height="42.0" fill="#d4a72c"/>
-<rect x="339.1" y="579.6" width="2.7" height="42.0" fill="#218bff"/>
+<rect x="339.0" y="579.6" width="3.2" height="42.0" fill="#218bff"/>
 <rect x="320.0" y="578.6" width="45.0" height="44.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="326.0" y="593.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">user…</text>
 </g>
@@ -1396,8 +1396,8 @@
 <g><title>advapi32: 88 / 592 done (14.9%)</title>
 <rect x="401.1" y="469.0" width="31.6" height="33.0" fill="#e6eaef"/>
 <rect x="401.1" y="469.0" width="4.7" height="33.0" fill="#2da44e"/>
-<rect x="405.8" y="469.0" width="6.4" height="33.0" fill="#d4a72c"/>
-<rect x="412.2" y="469.0" width="2.7" height="33.0" fill="#218bff"/>
+<rect x="405.8" y="469.0" width="5.3" height="33.0" fill="#d4a72c"/>
+<rect x="411.1" y="469.0" width="3.7" height="33.0" fill="#218bff"/>
 <rect x="400.1" y="468.0" width="33.6" height="35.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>gdi32: 37 / 545 done (6.8%)</title>
@@ -1438,8 +1438,8 @@
 </g>
 <g><title>oleaut32: 0 / 418 done (0.0%)</title>
 <rect x="366.1" y="575.5" width="25.8" height="27.9" fill="#e6eaef"/>
-<rect x="366.1" y="575.5" width="0.6" height="27.9" fill="#d4a72c"/>
-<rect x="366.6" y="575.5" width="1.7" height="27.9" fill="#218bff"/>
+<rect x="366.1" y="575.5" width="0.4" height="27.9" fill="#d4a72c"/>
+<rect x="366.4" y="575.5" width="2.2" height="27.9" fill="#218bff"/>
 <rect x="365.1" y="574.5" width="27.8" height="29.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>icuin: 0 / 416 done (0.0%)</title>
@@ -1471,8 +1471,8 @@
 <g><title>ole32: 14 / 309 done (4.5%)</title>
 <rect x="393.8" y="588.3" width="21.9" height="23.7" fill="#e6eaef"/>
 <rect x="393.8" y="588.3" width="1.0" height="23.7" fill="#2da44e"/>
-<rect x="394.8" y="588.3" width="5.2" height="23.7" fill="#d4a72c"/>
-<rect x="400.1" y="588.3" width="1.7" height="23.7" fill="#218bff"/>
+<rect x="394.8" y="588.3" width="5.0" height="23.7" fill="#d4a72c"/>
+<rect x="399.8" y="588.3" width="2.2" height="23.7" fill="#218bff"/>
 <rect x="392.8" y="587.3" width="23.9" height="25.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvcm80: 0 / 306 done (0.0%)</title>
@@ -1588,6 +1588,7 @@
 <rect x="531.6" y="526.4" width="16.3" height="18.3" fill="#e6eaef"/>
 <rect x="531.6" y="526.4" width="0.1" height="18.3" fill="#2da44e"/>
 <rect x="531.7" y="526.4" width="0.6" height="18.3" fill="#d4a72c"/>
+<rect x="532.3" y="526.4" width="0.3" height="18.3" fill="#218bff"/>
 <rect x="530.6" y="525.4" width="18.3" height="20.3" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>comctl32: 4 / 184 done (2.2%)</title>

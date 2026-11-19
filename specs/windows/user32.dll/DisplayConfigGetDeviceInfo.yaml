@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware, Intel UHD 630, one monitor 1920x1080 at 32 bpp, 96 DPI, scale 100%); tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner 'keeper' window in the foreground and the cursor at (1500, 600) at the start of each run, two runs each, identical; explorer running, its taskbar 48 px high at the bottom; no mouse attached (mouse input comes from SendInput)"
   observed_by: spec-chrome-win-s3b
   date: 2026-11-15
+oracle_200: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
 sources: >
   Observations of our own test programs on the machine above, and the recording of Chrome for Testing
   157.0.8103.38 for Windows (specs/windows/apps/chrome: traces, gap-map.md section 7, s3-windows.md) for which
@@ -31,6 +32,8 @@ rules:
   support_virtual_resolution: "writes 0 in the 32-bit word that follows the header (virtual resolution not disabled); header size 20 or 28 returns 87"
   preferred_mode: "width and height of the target's preferred mode are not 0 (1024x768 for the generic monitor of the oracle), only with the header size 80"
   last_error: "not set by the call, except for the 31/87 case above"
+  at_200_dpi_scale: "the DPI-scale packet, type -3 (not documented on Learn), size 32: after the 20-byte header three int32: the minimum, the current and the maximum scale step relative to the recommended scale; the steps are 100 125 150 175 200 225 250 300 350 400 450 500 percent. On the 2560x1600 display at 200 percent: minimum 0, current 4, maximum 6 (100 to 250 percent; on the 1920x1080 display at 100 percent: 0, 0, 3). The call returns 0. See DisplayConfigSetDeviceInfo"
+
 errors:
   invalid_parameter: "87: wrong size, unknown or SET type, unknown id or adapter for names and color"
   gen_failure: "31: unknown adapter, source or target for a source name or advanced color request; sizes below the header"

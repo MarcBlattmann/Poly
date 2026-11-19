@@ -469,10 +469,33 @@ pub enum Step {
     Click(i32, i32),
     /// `key:QCODE`: press and release a key (QEMU's key names).
     Key(String),
-    /// `type:TEXT`: type lower-case letters, digits, spaces and `-`.
+    /// `type:TEXT`: type text a US keyboard has (shifted characters with
+    /// Shift held).
     Type(String),
     /// `sleep:SECONDS`.
     Sleep(u64),
+    /// `move:X,Y`: move the pointer there (hover).
+    Move(i32, i32),
+    /// `rclick:X,Y`: a click of the right button.
+    RightClick(i32, i32),
+    /// `dclick:X,Y`: a double click.
+    DoubleClick(i32, i32),
+    /// `drag:X1,Y1,X2,Y2`: press at the first point, release at the second.
+    Drag(i32, i32, i32, i32),
+    /// `wheel:up|down,N`: N notches of the wheel where the pointer is.
+    Wheel(bool, u32),
+    /// `tail:N`: the console's last N lines.
+    Tail(usize),
+    /// `follow:FILE`: steps read from FILE as lines are added to it, until a
+    /// line `end` (a boot driven by hand or by another program); what each
+    /// step did is appended to `FILE.out`.
+    Follow(String),
+}
+
+/// Numbers separated by commas, exactly `n` of them.
+fn numbers<T: std::str::FromStr>(arg: &str, n: usize) -> Option<Vec<T>> {
+    let v: Vec<T> = arg.split(',').map(|x| x.trim().parse().ok()).collect::<Option<_>>()?;
+    (v.len() == n).then_some(v)
 }
 
 impl Step {
@@ -496,20 +519,85 @@ impl Step {
                 Step::Type(arg.into())
             }
             "sleep" => Step::Sleep(arg.parse().map_err(|_| bad())?),
+            "move" | "rclick" | "dclick" => {
+                let v = numbers::<i32>(arg, 2).ok_or_else(bad)?;
+                match kind {
+                    "move" => Step::Move(v[0], v[1]),
+                    "rclick" => Step::RightClick(v[0], v[1]),
+                    _ => Step::DoubleClick(v[0], v[1]),
+                }
+            }
+            "drag" => {
+                let v = numbers::<i32>(arg, 4).ok_or_else(bad)?;
+                Step::Drag(v[0], v[1], v[2], v[3])
+            }
+            "wheel" => {
+                let (dir, n) = arg.split_once(',').unwrap_or((arg, "1"));
+                let up = match dir.trim() {
+                    "up" => true,
+                    "down" => false,
+                    _ => return Err(bad()),
+                };
+                Step::Wheel(up, n.trim().parse().map_err(|_| bad())?)
+            }
+            "tail" => Step::Tail(arg.trim().parse().map_err(|_| bad())?),
+            "follow" => Step::Follow(arg.into()),
             _ => {
-                return Err(format!("step {s:?}: no kind {kind:?} (run, send, expect, shot, click, key, type, sleep)"));
+                return Err(format!(
+                    "step {s:?}: no kind {kind:?} (run, send, expect, shot, click, rclick, dclick, move, drag, \
+                     wheel, key, type, sleep, tail, follow)"
+                ));
             }
         })
     }
 }
 
-/// QEMU's key name for a character [`Step::Type`] types.
+/// QEMU's key name for a character [`Step::Type`] types on a US layout
+/// (the desktop's default), as a chord [`Machine::key`] presses.
 fn qcode(c: char) -> Option<String> {
+    const PLAIN: [(char, &str); 11] = [
+        (' ', "spc"),
+        ('-', "minus"),
+        ('=', "equal"),
+        ('.', "dot"),
+        (',', "comma"),
+        ('/', "slash"),
+        (';', "semicolon"),
+        ('\'', "apostrophe"),
+        ('[', "bracket_left"),
+        (']', "bracket_right"),
+        ('`', "grave_accent"),
+    ];
+    const SHIFTED: [(char, &str); 20] = [
+        ('!', "1"),
+        ('@', "2"),
+        ('#', "3"),
+        ('$', "4"),
+        ('%', "5"),
+        ('^', "6"),
+        ('&', "7"),
+        ('*', "8"),
+        ('(', "9"),
+        (')', "0"),
+        ('_', "minus"),
+        ('+', "equal"),
+        (':', "semicolon"),
+        ('"', "apostrophe"),
+        ('<', "comma"),
+        ('>', "dot"),
+        ('?', "slash"),
+        ('{', "bracket_left"),
+        ('}', "bracket_right"),
+        ('~', "grave_accent"),
+    ];
     match c {
         'a'..='z' | '0'..='9' => Some(c.to_string()),
-        ' ' => Some("spc".into()),
-        '-' => Some("minus".into()),
-        _ => None,
+        'A'..='Z' => Some(format!("shift+{}", c.to_ascii_lowercase())),
+        _ => PLAIN
+            .iter()
+            .find(|p| p.0 == c)
+            .map(|p| p.1.to_string())
+            .or_else(|| SHIFTED.iter().find(|p| p.0 == c).map(|p| format!("shift+{}", p.1))),
     }
 }
 
@@ -519,6 +607,11 @@ fn key_event(qcode: &str, down: bool) -> String {
 
 fn button_event(down: bool) -> String {
     format!(r#"{{"type": "btn", "data": {{"down": {down}, "button": "left"}}}}"#)
+}
+
+fn wheel_event(up: bool, down: bool) -> String {
+    let b = if up { "wheel-up" } else { "wheel-down" };
+    format!(r#"{{"type": "btn", "data": {{"down": {down}, "button": "{b}"}}}}"#)
 }
 
 fn right_button_event(down: bool) -> String {
@@ -748,8 +841,79 @@ impl Machine {
             Step::Key(k) => self.key(k)?,
             Step::Type(text) => self.type_text(text)?,
             Step::Sleep(secs) => std::thread::sleep(Duration::from_secs(*secs)),
+            Step::Move(x, y) => self.send_events(&abs_events(*x, *y))?,
+            Step::RightClick(x, y) => self.right_click(*x, *y)?,
+            Step::DoubleClick(x, y) => self.double_click(*x, *y)?,
+            Step::Drag(x1, y1, x2, y2) => self.drag((*x1, *y1), (*x2, *y2))?,
+            Step::Wheel(up, n) => {
+                for _ in 0..*n {
+                    self.send_events(&[wheel_event(*up, true)])?;
+                    self.send_events(&[wheel_event(*up, false)])?;
+                }
+            }
+            Step::Tail(n) => eprintln!("{}", self.tail(*n)),
+            Step::Follow(file) => self.follow(Path::new(file))?,
         }
         Ok(())
+    }
+
+    /// The console's last `n` lines.
+    fn tail(&mut self, n: usize) -> String {
+        let text = self.text();
+        let lines: Vec<&str> = text.lines().collect();
+        lines[lines.len().saturating_sub(n)..].join("\n")
+    }
+
+    /// [`Step::Follow`]: run the steps of `file` as they come, one per
+    /// line, until `end`; each step's result (and a `run`'s output, a
+    /// `tail`'s lines) goes to `file.out`. A failed step is reported there
+    /// and the next one runs.
+    fn follow(&mut self, file: &Path) -> Result {
+        use std::io::Write as _;
+        let out_path = PathBuf::from(format!("{}.out", file.display()));
+        let mut out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&out_path)
+            .map_err(|e| format!("{}: {e}", out_path.display()))?;
+        let say = |out: &mut std::fs::File, text: &str| {
+            let _ = writeln!(out, "{text}");
+            let _ = out.flush();
+        };
+        say(&mut out, "ready");
+        let mut done = 0;
+        loop {
+            let text = std::fs::read_to_string(file).unwrap_or_default();
+            let lines: Vec<&str> = text.split_inclusive('\n').collect();
+            let complete = lines.iter().take_while(|l| l.ends_with('\n')).count();
+            if complete <= done {
+                std::thread::sleep(Duration::from_millis(200));
+                continue;
+            }
+            for line in &lines[done..complete] {
+                done += 1;
+                let line = line.trim_end_matches(['\r', '\n']);
+                if line.trim().is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if line.trim() == "end" {
+                    say(&mut out, &format!("{done} end"));
+                    return Ok(());
+                }
+                let result = match Step::parse(line) {
+                    Ok(Step::Run(cmd)) => self.s.run(&cmd),
+                    Ok(Step::Tail(n)) => Ok(self.tail(n)),
+                    Ok(Step::Follow(_)) => Err("follow inside follow".to_string()),
+                    Ok(step) => self.step(&step).map(|()| String::new()),
+                    Err(e) => Err(e),
+                };
+                match result {
+                    Ok(text) if text.is_empty() => say(&mut out, &format!("{done} ok {line}")),
+                    Ok(text) => say(&mut out, &format!("{done} ok {line}\n{text}")),
+                    Err(e) => say(&mut out, &format!("{done} FAILED {line}: {e}")),
+                }
+            }
+        }
     }
 
     /// Wait for the disk and the desktop, then for the console's prompt.
@@ -1425,7 +1589,15 @@ mod tests {
         assert_eq!(Step::parse("click: 10, 20").unwrap(), Step::Click(10, 20));
         assert_eq!(Step::parse("type:4 hello").unwrap(), Step::Type("4 hello".into()));
         assert_eq!(Step::parse("sleep:3").unwrap(), Step::Sleep(3));
-        assert!(Step::parse("type:Hello").is_err());
+        assert!(Step::parse("type:Hello, https://a.b/c?d=e_f").is_ok());
+        assert!(Step::parse("type:\u{e9}").is_err());
+        assert_eq!(Step::parse("wheel:down,3").unwrap(), Step::Wheel(false, 3));
+        assert_eq!(Step::parse("drag:1,2,3,4").unwrap(), Step::Drag(1, 2, 3, 4));
+        assert_eq!(Step::parse("dclick:5,6").unwrap(), Step::DoubleClick(5, 6));
+        assert!(Step::parse("drag:1,2,3").is_err());
+        assert_eq!(qcode('H').as_deref(), Some("shift+h"));
+        assert_eq!(qcode(':').as_deref(), Some("shift+semicolon"));
+        assert_eq!(qcode('/').as_deref(), Some("slash"));
         assert!(Step::parse("click:1").is_err());
         assert!(Step::parse("nothing").is_err());
         assert!(Step::parse("dance:1").is_err());

@@ -425,9 +425,36 @@ pub fn find_stream_data(buf: &[u8]) -> Vec<[u8; FIND_STREAM_DATA_SIZE]> {
     out
 }
 
+/// The full names of the named streams (`:name:$DATA`) among `WIN32_FIND_STREAM_DATA` records,
+/// without the NUL: what `CopyFileW` appends to a file's name to copy each one. The default
+/// stream (`::$DATA`, the file itself) is not one.
+pub fn named_stream_suffixes(records: &[[u8; FIND_STREAM_DATA_SIZE]]) -> Vec<Vec<u16>> {
+    records
+        .iter()
+        .map(|r| r[8..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect())
+        .filter(|name: &Vec<u16>| name.len() > 1 && name[0] == u16::from(b':') && name[1] != u16::from(b':'))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn named_streams_are_the_ones_after_the_default() {
+        let record = |name: &str| {
+            let mut d = [0u8; FIND_STREAM_DATA_SIZE];
+            for (i, c) in name.encode_utf16().enumerate() {
+                d[8 + 2 * i..10 + 2 * i].copy_from_slice(&c.to_le_bytes());
+            }
+            d
+        };
+        let records = [record("::$DATA"), record(":Zone.Identifier:$DATA"), record(":a<b:$DATA")];
+        let names: Vec<alloc::string::String> =
+            named_stream_suffixes(&records).iter().map(|n| alloc::string::String::from_utf16_lossy(n)).collect();
+        assert_eq!(names, [":Zone.Identifier:$DATA", ":a<b:$DATA"]);
+        assert!(named_stream_suffixes(&[]).is_empty());
+    }
 
     #[test]
     fn stream_information_becomes_find_stream_data() {

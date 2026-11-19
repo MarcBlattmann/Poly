@@ -57,6 +57,29 @@ minute). The app is then in the launcher and in Files' Applications. A disk made
 before this needs **Fresh disk** once (`--fresh-disk`). `cargo xtask boot-tests
 linux-installer` runs the whole thing with galculator.
 
+**Install Google Chrome for Linux** (ADR 0218): on the desktop with Chromium (`cargo xtask
+desktop --chromium`, or the menu's default; a disk made before this needs **Fresh disk** once):
+
+1. In Chromium open `https://www.google.com/chrome/`, click **Download Chrome**, keep *64 bit
+   .deb (For Debian/Ubuntu)* and click **Accept and Install** (or open
+   `https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb`). The 141 MB file
+   arrives in about half a minute.
+2. Click it in Chromium's downloads (the arrow at the top right, then the file; the installer can
+   take a minute to come up the first time, and may open behind Chromium). Poly's installer shows
+   *google-chrome-stable, The web browser from Google*: click **Install**. On a new disk it first
+   configures the disk's own packages (one to six minutes, longer while Chromium is busy), then
+   fetches the package lists and installs Chrome with 13 packages it needs from Debian's archive
+   (about a minute and a half).
+3. **Open**, or later the launcher (Super, type *google*, Enter): Chrome starts as user `poly` with
+   its sandbox. The first start shows Google's Terms (**Accept**), Welcome (**OK**) and the sign-in
+   page (**Stay signed out**), then its new tab page.
+4. Downloads land in `/home/poly/Downloads`: **Downloads** in Files' sidebar. A downloaded `.deb`
+   opens in the installer from there.
+
+Chrome draws in software (its GPU process finds no EGL on the disk and exits), so scrolling shows
+unpainted tiles for a moment. `cargo xtask chromium fetch-chrome` then `cargo xtask boot-tests
+linux-chrome` installs and starts it in a boot (Linux or `polyd`; the guest needs network).
+
 **Uninstalling and AppImages** (ADR 0180): in Files' Applications folder, an app the
 installer owns (a package installed after the disk was made, or an AppImage) has
 *Uninstall* in its right-click menu (and on the Delete key); the installer's window

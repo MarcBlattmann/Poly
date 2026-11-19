@@ -196,8 +196,11 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0214](0214-ci-runs-chrome-for-windows-stage-1-and-the-window-check-on-every-pull-request.md) | CI runs Chrome for Windows, stage 1 and the window check, on every pull request | Accepted |
 | [0216](0216-chrome-for-windows-on-the-desktop-to-try-by-hand.md) | Chrome for Windows on the desktop, to try by hand | Accepted |
 | [0217](0217-chrome-s2-failures-were-a-full-host-disk-the-buffer-cache-reads-past-an-unwritable-block.md) | Chrome's sandbox stage failed on a full host disk; the buffer cache reads past a block it cannot write | Accepted |
+| [0218](0218-google-chrome-for-linux-from-its-deb-the-desktops-apps-run-as-its-user.md) | Google Chrome for Linux from its `.deb`: the desktop's apps run as its user | Accepted |
 | [0219](0219-a-window-s-surface-takes-only-what-a-process-drew.md) | A window's surface takes only what a process drew | Accepted |
 | [0220](0220-com-across-processes-an-activation-process-object-exporters-on-named-pipes-and-the-class-table.md) | COM across processes: an activation process, object exporters on named pipes, and the class table | Accepted |
+| [0221](0221-windows-services-a-service-control-manager-in-the-nt-personality-and-services-exe-as-its-host.md) | Windows services: a service control manager in the NT personality, `services.exe` as its host | Accepted |
+| [0223](0223-windows-downloads-streams-shell-classes-and-the-desktop.md) | Chrome's downloads: alternate data streams, Poly's own COM classes, and Windows shell requests reaching the desktop | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "stdmarshal_basic",
+      "exe_sha256": "5d102cc0044c640ad2071e05561d6114a60e14110b7b18d5388530a6671a7526",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b24gYSB0aHJlYWQgd2l0aG91dCBDT006IDB4ODAwNDAxZjAsIHBvaW50ZXIgd3JpdHRlbiAxCkNvR2V0U3RhbmRhcmRNYXJzaGFsKElUbEVjaG8sIG9iamVjdCwgTE9DQUwsIE5PUk1BTCkgPSAweDAwMDAwMDAwCiAgUUkoSVVua25vd24pID0gMHgwMDAwMDAwMAogIFFJKElNYXJzaGFsKSA9IDB4MDAwMDAwMDAKICBRSShJVGxFY2hvKSA9IDB4ODAwMDQwMDIKICBRSShJU3RkTWFyc2hhbEluZm8pID0gMHg4MDAwNDAwMgogIEdldFVubWFyc2hhbENsYXNzID0gMHgwMDAwMDAwMCwgdGhlIHN0YW5kYXJkIG1hcnNoYWxsZXIncyBjbGFzcyB7MDAwMDAwMTctLi4ufSAxCiAgR2V0TWFyc2hhbFNpemVNYXggPSAweDAwMDAwMDAwLCBub24temVybyAxCiAgTWFyc2hhbEludGVyZmFjZSA9IDB4MDAwMDAwMDAsIHN0cmVhbSBzaWduYXR1cmUgMHg1NzRmNDU0ZCwgZmxhZ3MgMSwgYm91bmQgY292ZXJzIHRoZSBzdHJlYW0gMQogIFVubWFyc2hhbEludGVyZmFjZSA9IDB4MDAwMDAwMDAsIHRoZSBvcmlnaW5hbCBwb2ludGVyIDEKICBSZWxlYXNlTWFyc2hhbERhdGEgb24gdXNlZCBkYXRhID0gMHgwMDAwMDAwMAogIFJlbGVhc2VNYXJzaGFsRGF0YSBvbiB1bnVzZWQgVEFCTEVTVFJPTkcgZGF0YSA9IDB4MDAwMDAwMDAKICBEaXNjb25uZWN0T2JqZWN0ID0gMHgwMDAwMDAwMApDb0dldFN0YW5kYXJkTWFyc2hhbChJVW5rbm93bikgPSAweDAwMDAwMDAwCkNvR2V0U3RhbmRhcmRNYXJzaGFsKElUbEVjaG8sIElOUFJPQykgPSAweDAwMDAwMDAwCkNvR2V0U3RhbmRhcmRNYXJzaGFsKElUbENhbGxiYWNrIChub3QgaW1wbGVtZW50ZWQgYnkgdGhlIG9iamVjdCkpID0gMHgwMDAwMDAwMApDb0dldFN0YW5kYXJkTWFyc2hhbChhbiB1bnJlZ2lzdGVyZWQgaWQpID0gMHgwMDAwMDAwMApDb0dldFN0YW5kYXJkTWFyc2hhbChJVGxFY2hvLCBOVUxMIG9iamVjdCkgPSAweDAwMDAwMDAwCiAgR2V0VW5tYXJzaGFsQ2xhc3MgPSAweDAwMDAwMDAwLCB0aGUgc3RhbmRhcmQgbWFyc2hhbGxlcidzIGNsYXNzIDEKTlVMTCBvdXRwdXQgcG9pbnRlcjogMHg4MDA3MDA1NwpOVUxMIGludGVyZmFjZSBpZDogMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "on a thread without COM: 0x800401f0, pointer written 1\nCoGetStandardMarshal(ITlEcho, object, LOCAL, NORMAL) = 0x00000000\n  QI(IUnknown) = 0x00000000\n  QI(IMarshal) = 0x00000000\n  QI(ITlEcho) = 0x80004002\n  QI(IStdMarshalInfo) = 0x80004002\n  GetUnmarshalClass = 0x00000000, the standard marshaller's class {00000017-...} 1\n  GetMarshalSizeMax = 0x00000000, non-zero 1\n  MarshalInterface = 0x00000000, stream signature 0x574f454d, flags 1, bound covers the stream 1\n  UnmarshalInterface = 0x00000000, the original pointer 1\n  ReleaseMarshalData on used data = 0x00000000\n  ReleaseMarshalData on unused TABLESTRONG data = 0x00000000\n  DisconnectObject = 0x00000000\nCoGetStandardMarshal(IUnknown) = 0x00000000\nCoGetStandardMarshal(ITlEcho, INPROC) = 0x00000000\nCoGetStandardMarshal(ITlCallback (not implemented by the object)) = 0x00000000\nCoGetStandardMarshal(an unregistered id) = 0x00000000\nCoGetStandardMarshal(ITlEcho, NULL object) = 0x00000000\n  GetUnmarshalClass = 0x00000000, the standard marshaller's class 1\nNULL output pointer: 0x80070057\nNULL interface id: 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    }
+  ]
+}

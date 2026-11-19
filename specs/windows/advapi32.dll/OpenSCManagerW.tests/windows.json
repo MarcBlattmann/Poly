@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "954158fdfc98",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:44:50Z",
+  "tests": [
+    {
+      "name": "scm_non_admin",
+      "exe_sha256": "da16f8da8d0e8642f4f44e932febfad85983e4fd326ecb3b8f5bf73dc2301e96",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm9uLWFkbWluIE9wZW5TQ01hbmFnZXJXKENPTk5FQ1QpOiBvawpub24tYWRtaW4gT3BlblNDTWFuYWdlclcoQ1JFQVRFX1NFUlZJQ0UpOiBlcnIgNQpub24tYWRtaW4gT3BlblNDTWFuYWdlclcoTE9DSyk6IGVyciA1Cm5vbi1hZG1pbiBPcGVuU0NNYW5hZ2VyVyhNT0RJRllfQk9PVF9DT05GSUcpOiBlcnIgNQpub24tYWRtaW4gT3BlblNDTWFuYWdlclcoQUxMX0FDQ0VTUyk6IGVyciA1CnJlc3RyaWN0ZWQgdG9rZW4gbWFkZTogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "non-admin OpenSCManagerW(CONNECT): ok\nnon-admin OpenSCManagerW(CREATE_SERVICE): err 5\nnon-admin OpenSCManagerW(LOCK): err 5\nnon-admin OpenSCManagerW(MODIFY_BOOT_CONFIG): err 5\nnon-admin OpenSCManagerW(ALL_ACCESS): err 5\nrestricted token made: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "scm_open_variants",
+      "exe_sha256": "c442f06089e2b4384229aaedd4444ab4dc3408847f45bcd1e912e5060d5113d0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "T3BlblNDTWFuYWdlclcoTlVMTCBtYWNoaW5lLCBOVUxMIGRhdGFiYXNlLCBDT05ORUNUKTogb2sKT3BlblNDTWFuYWdlclcoTlVMTCwgTlVMTCwgQUxMX0FDQ0VTUyk6IG9rCk9wZW5TQ01hbmFnZXJXKGVtcHR5IG1hY2hpbmUgbmFtZSk6IG9rCk9wZW5TQ01hbmFnZXJXKG1hY2hpbmUgIi4iKTogb2sKT3BlblNDTWFuYWdlclcobWFjaGluZSAiXFw8dGhpcyBjb21wdXRlcj4iKTogb2sKT3BlblNDTWFuYWdlclcoZGF0YWJhc2UgU2VydmljZXNBY3RpdmUpOiBvawpPcGVuU0NNYW5hZ2VyVyhkYXRhYmFzZSBzZXJ2aWNlc2FjdGl2ZSAobG93ZXIgY2FzZSkpOiBvawpPcGVuU0NNYW5hZ2VyVyhkYXRhYmFzZSBTZXJ2aWNlc0ZhaWxlZCk6IGVyciAxMDY1Ck9wZW5TQ01hbmFnZXJXKGRhdGFiYXNlIE5vU3VjaERhdGFiYXNlKTogZXJyIDEyMwpPcGVuU0NNYW5hZ2VyVyhlbXB0eSBkYXRhYmFzZSBuYW1lKTogZXJyIDEyMwpPcGVuU0NNYW5hZ2VyVyhhY2Nlc3MgMCk6IG9rCk9wZW5TQ01hbmFnZXJXKE1BWElNVU1fQUxMT1dFRCk6IG9rCk9wZW5TQ01hbmFnZXJXKEdFTkVSSUNfUkVBRCk6IG9rCk9wZW5TQ01hbmFnZXJXKEdFTkVSSUNfQUxMKTogb2sKT3BlblNDTWFuYWdlclcoYWNjZXNzIDB4MDBGRjAwMDApOiBlcnIgNQpPcGVuU0NNYW5hZ2VyVyhhY2Nlc3MgMHhGRkZGRkZGRik6IGVyciA1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "OpenSCManagerW(NULL machine, NULL database, CONNECT): ok\nOpenSCManagerW(NULL, NULL, ALL_ACCESS): ok\nOpenSCManagerW(empty machine name): ok\nOpenSCManagerW(machine \".\"): ok\nOpenSCManagerW(machine \"\\\\<this computer>\"): ok\nOpenSCManagerW(database ServicesActive): ok\nOpenSCManagerW(database servicesactive (lower case)): ok\nOpenSCManagerW(database ServicesFailed): err 1065\nOpenSCManagerW(database NoSuchDatabase): err 123\nOpenSCManagerW(empty database name): err 123\nOpenSCManagerW(access 0): ok\nOpenSCManagerW(MAXIMUM_ALLOWED): ok\nOpenSCManagerW(GENERIC_READ): ok\nOpenSCManagerW(GENERIC_ALL): ok\nOpenSCManagerW(access 0x00FF0000): err 5\nOpenSCManagerW(access 0xFFFFFFFF): err 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}
