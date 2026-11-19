@@ -101,6 +101,15 @@ Each Windows batch = spec sheets on the oracle, implementer, integrator, as in
 well with `waveOut` (its latency, its buffer sizes) is unknown until W1 runs. If it does not, W2 is the path and W1
 still serves other programs.
 
+### Status
+
+- **A0 done** (`desktop-sound`). `cargo xtask desktop` gives the guest virtio-sound (else Intel HDA) on the host's
+  backend: `dsound`, `pa`/`pipewire`/`alsa` or `coreaudio`. `--no-sound` and `--record-sound=FILE` are there too.
+  A host whose output cannot start keeps a card that plays into nothing, after a short probe and with one line in
+  the log. Checked on WHPX: the plain desktop boots on `dsound` with the mixer control present, and Linux
+  Chromium's 440 Hz tone was recorded through `--record-sound`. In the `polyd` container, `alsa` fails and the
+  probe falls back quietly.
+
 ## 4. Where this plan is least certain
 
 - **What Chrome does with WASAPI when it works.** Not traced yet (no oracle trace plays sound). The method list
