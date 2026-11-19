@@ -67,6 +67,7 @@
 
 use super::{Boot, Result, Symbols, boot_with, has_desktop, initramfs, root, screen};
 
+pub mod chromeinstaller;
 pub mod wininstaller;
 use crate::hostscreen;
 use std::path::{Path, PathBuf};

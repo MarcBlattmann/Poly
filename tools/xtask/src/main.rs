@@ -1716,6 +1716,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // A Windows installer opened from Downloads by Poly's installer, run on the NT
     // personality, its shortcut a launcher entry (desktop/wininstaller.rs, ADR 0230).
     ("win-installer", desktop::wininstaller::boot_test),
+    // Google's own Chrome installer from Downloads to Chrome running (desktop/chromeinstaller.rs,
+    // batch B7 of the Chrome installer plan); never in a CI shard (it downloads Google's installer).
+    ("chrome-installer", desktop::chromeinstaller::boot_test),
     // X11 apps through Xwayland on the desktop, from the root disk
     // (xwayland.rs, ADR 0118).
     ("xwayland", xwayland::boot_test),
