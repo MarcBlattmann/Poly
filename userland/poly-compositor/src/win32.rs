@@ -1014,6 +1014,12 @@ mod tests {
         let c = content_of(&scene, w2).unwrap();
         assert_eq!((c.width, c.height, c.scale), (4, 3, 1));
         assert_eq!(c.logical_size(), (4, 3), "as large as the aware window's");
+        // Drawn over 8x6 output pixels, enlarged.
+        let mut fb = poly_wayland::compose::MemoryFramebuffer::new(2560, 1600);
+        scene.render(&mut fb);
+        assert_eq!(fb.pixel(200, 200), Some(0x60_6060));
+        assert_eq!(fb.pixel(207, 205), Some(0x60_6060));
+        assert_ne!(fb.pixel(208, 200), Some(0x60_6060), "8 output pixels wide");
     }
 
     #[test]
