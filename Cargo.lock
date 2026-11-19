@@ -208,6 +208,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-dyld"
+version = "0.0.1"
+dependencies = [
+ "poly-macho",
+]
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 

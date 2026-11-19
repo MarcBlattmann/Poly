@@ -9,11 +9,13 @@
 use super::*;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::git::Owner;
 use poly_com::hresult::{E_INVALIDARG, E_NOINTERFACE, E_NOTIMPL, E_OUTOFMEMORY, E_POINTER, S_OK};
-use poly_com::wire::{Op, Request};
+use poly_com::security::{Blanket, E_ACCESSDENIED};
+use poly_com::wire::{Caller, Op, Request};
 
 /// `IID_IRpcChannelBuffer` (`objidl.h`): {D5F56B60-593B-101A-B569-08002B2DBF7A}.
 const IID_IRPC_CHANNEL_BUFFER: Guid =
@@ -64,6 +66,9 @@ struct Channel {
     refs: AtomicU32,
     iid: Guid,
     target: Target,
+    /// The blanket of the interface proxy the channel serves (B2c): calls carry its impersonation
+    /// level, and a refusing one stops them here.
+    blanket: Option<Arc<Locked<Blanket>>>,
 }
 
 #[repr(C)]
@@ -93,8 +98,8 @@ static VTBL: ChannelVtbl = ChannelVtbl {
 };
 
 /// A new channel (one reference) as its `IRpcChannelBuffer`.
-pub(crate) fn new_channel(iid: Guid, target: Target) -> *mut c_void {
-    Box::into_raw(Box::new(Channel { vtbl: &VTBL, refs: AtomicU32::new(1), iid, target })).cast()
+pub(crate) fn new_channel(iid: Guid, target: Target, blanket: Option<Arc<Locked<Blanket>>>) -> *mut c_void {
+    Box::into_raw(Box::new(Channel { vtbl: &VTBL, refs: AtomicU32::new(1), iid, target, blanket })).cast()
 }
 
 unsafe extern "system" fn ch_qi(this: *mut Channel, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
@@ -197,7 +202,12 @@ unsafe extern "system" fn ch_send_receive(this: *mut Channel, msg: *mut RpcMsg, 
     let iid = ch.iid;
     let r = match &ch.target {
         Target::Remote { endpoint, oid } => {
-            let req = Request::Call { oid: *oid, op: Op::Invoke { iid, method, data } };
+            let (refuse, level) = ch.blanket.as_ref().map_or((false, 1), |b| b.with(|b| (b.refuse, b.token_level())));
+            if refuse {
+                return E_ACCESSDENIED;
+            }
+            let caller = Caller { level, activation: false };
+            let req = Request::Call { oid: *oid, op: Op::Invoke { iid, method, data }, caller };
             let ep = endpoint.clone();
             // An STA caller keeps serving calls into its apartment (callbacks) while it waits.
             apt::blocking(move || match pipe::transact(&ep, &req) {
@@ -278,7 +288,7 @@ pub(crate) fn invoke_stub(object: usize, iid: &Guid, method: u32, data: &[u8]) -
     if hr < 0 || stub.is_null() {
         return Err(if hr < 0 { hr } else { E_NOINTERFACE });
     }
-    let chan = new_channel(*iid, Target::Server);
+    let chan = new_channel(*iid, Target::Server, None);
     let mut msg = RpcMsg {
         reserved1: core::ptr::null_mut(),
         data_rep: 0x10,

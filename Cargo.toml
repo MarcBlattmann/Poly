@@ -53,6 +53,7 @@ members = [
     "crates/poly-loop",
     "crates/poly-mach",
     "crates/poly-macho",
+    "crates/poly-dyld",
     "crates/poly-mem",
     "crates/poly-ntobj",
     "crates/poly-overlayfs",
@@ -173,6 +174,7 @@ poly-logline = { path = "crates/poly-logline" }
 poly-loop = { path = "crates/poly-loop" }
 poly-mach = { path = "crates/poly-mach" }
 poly-macho = { path = "crates/poly-macho" }
+poly-dyld = { path = "crates/poly-dyld" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
 poly-overlayfs = { path = "crates/poly-overlayfs" }

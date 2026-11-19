@@ -15,7 +15,9 @@
 //! psynch. [`call`] is the architecture-neutral entry the arm64 translator
 //! uses (its `x16` decoded with [`decode_arm64`], arguments `x0..x7`).
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+
+pub mod bsd;
 
 extern crate alloc;
 

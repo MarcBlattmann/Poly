@@ -11,9 +11,9 @@
 //! the interpreter its `PT_INTERP` names, opened the same way (ADR 0049).
 //! A PE executable goes to the NT personality's loader (`crate::nt`), and
 //! a native Poly program (an ELF with Poly's ABI note, ADR 0125) is loaded
-//! like a static ELF into a native process. Other formats are refused with
-//! a reason: Mach-O needs its personality's loader; `#!` scripts are left
-//! to `execve` (a program can run one).
+//! like a static ELF into a native process. An x86-64 Mach-O program is
+//! linked by Poly's own dyld into an XNU process (`crate::xnu`, ADR 0237).
+//! Other formats are refused with a reason.
 
 use crate::boot_info::BootInfo;
 use crate::fs::cache::FileSource;
@@ -87,6 +87,8 @@ pub enum Prepared {
     /// A native Poly program (ADR 0125): its process record and loaded
     /// image, started like a Linux ELF.
     Native { process: Arc<Process>, image: exec::Image },
+    /// A Mach-O program linked by Poly's dyld (`crate::xnu`, ADR 0237).
+    Xnu { process: Arc<Process>, loaded: crate::xnu::Loaded },
 }
 
 impl Prepared {
@@ -94,9 +96,10 @@ impl Prepared {
     /// [`start`](Self::start)).
     pub fn process(&self) -> &Arc<Process> {
         match self {
-            Prepared::Linux { process, .. } | Prepared::Nt { process, .. } | Prepared::Native { process, .. } => {
-                process
-            }
+            Prepared::Linux { process, .. }
+            | Prepared::Nt { process, .. }
+            | Prepared::Native { process, .. }
+            | Prepared::Xnu { process, .. } => process,
         }
     }
 
@@ -108,6 +111,10 @@ impl Prepared {
                     .map_err(|e| ExecPathError::Exec(ExecError::Spawn(e)))?;
                 // Nobody joins the thread: the process is what callers wait for.
                 let _ = thread::detach(tid);
+                Ok(process)
+            }
+            Prepared::Xnu { process, loaded } => {
+                crate::xnu::start(&process, loaded).map_err(|e| ExecPathError::Exec(ExecError::Spawn(e)))?;
                 Ok(process)
             }
             Prepared::Nt { process, image, launch } => {
@@ -243,7 +250,23 @@ fn prepare_full(
             fs::proc::record_exec(&process, &file, &image.memory, &image.info.stack, argv, envp);
             return Ok(Prepared::Native { process, image });
         }
-        Some(p) => return Err(ExecPathError::Unsupported(format!("{} programs cannot run yet", p.name()))),
+        Some(Personality::Xnu) => {
+            // Poly's own dyld links and maps it (ADR 0237); x86-64 only
+            // until the arm64 translator (ADR 0151).
+            if let poly_binfmt::Format::MachO { arch, .. } = format
+                && arch != poly_binfmt::Arch::X86_64
+            {
+                return Err(ExecPathError::Unsupported(format!(
+                    "a {arch:?} Mach-O program (x86-64 ones run; arm64 needs the translator, ADR 0151)"
+                )));
+            }
+            let loaded = crate::xnu::prepare(path, argv, envp).map_err(ExecPathError::Unsupported)?;
+            let process = crate::xnu::new_process(ppid, format, traced);
+            if let Some(p) = parent {
+                process.files.adopt_context(&p.files);
+            }
+            return Ok(Prepared::Xnu { process, loaded });
+        }
         None => return Err(ExecPathError::Unsupported("a #! script without an interpreter".into())),
     }
     let source = FileSource::of(&file);

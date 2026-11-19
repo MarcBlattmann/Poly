@@ -271,3 +271,21 @@ fn a_file_has_its_default_data_stream_only() {
     assert_eq!((s, b.len()), (STATUS_SUCCESS, 0));
     t.close(d);
 }
+
+#[test]
+fn a_renamed_file_is_marked_for_archiving_and_keeps_its_other_attributes() {
+    let mut t = setup();
+    let access = DELETE | FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | SYNCHRONIZE;
+    let (s, h, _) = t.create("\\??\\C:\\ro.bin", access, SHARE_ALL, FILE_CREATE, SYNC, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    // Read-only and nothing else (the archive bit cleared).
+    let mut basic = [0u8; 40];
+    basic[32..36].copy_from_slice(&FILE_ATTRIBUTE_READONLY.to_le_bytes());
+    assert_eq!(t.set(h, FILE_BASIC_INFORMATION, &basic), STATUS_SUCCESS);
+    let (_, b) = t.query(h, FILE_BASIC_INFORMATION, 40);
+    assert_eq!(u32::from_le_bytes(b[32..36].try_into().unwrap()), FILE_ATTRIBUTE_READONLY);
+    assert_eq!(t.set(h, FILE_RENAME_INFORMATION, &rename_info(false, 0, "ro-moved.bin")), STATUS_SUCCESS);
+    let (_, b) = t.query(h, FILE_BASIC_INFORMATION, 40);
+    assert_eq!(u32::from_le_bytes(b[32..36].try_into().unwrap()), FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE);
+    t.close(h);
+}
