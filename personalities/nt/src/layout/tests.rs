@@ -127,6 +127,26 @@ fn vfs_paths_map_to_c_or_z() {
     assert_eq!(dos_path_of_vfs(b"rel/a.exe", roots), "Z:\\rel\\a.exe");
 }
 
+#[test]
+fn a_path_argument_that_names_a_file_reaches_a_windows_program_as_its_dos_path() {
+    let roots: &[&[u8]] = &[b"/nt/c", b"/winc/poly/nt/c"];
+    let files = ["/nt/c/Users/poly/Downloads/qa test.txt", "/winc/poly/nt/c/a.pdf", "/home/poly/b.png"];
+    let exists = |p: &str| files.contains(&p);
+    let arg = |a: &str| dos_argument(a, roots, exists);
+    assert_eq!(
+        arg("/nt/c/Users/poly/Downloads/qa test.txt").as_deref(),
+        Some("C:\\Users\\poly\\Downloads\\qa test.txt")
+    );
+    assert_eq!(arg("/winc/poly/nt/c/a.pdf").as_deref(), Some("C:\\a.pdf"));
+    assert_eq!(arg("/home/poly/b.png").as_deref(), Some("Z:\\home\\poly\\b.png"));
+    // Switches, missing files, relative paths, URLs and the like stay as they are.
+    for a in
+        ["/S", "/quiet", "/nt/c/missing.txt", "a.txt", "--user-data-dir=C:\\p", "https://example.com/", "//srv/x", "/"]
+    {
+        assert_eq!(arg(a), None, "{a}");
+    }
+}
+
 // ----- creation
 
 #[test]

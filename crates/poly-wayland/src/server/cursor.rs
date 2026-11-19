@@ -6,8 +6,11 @@
 //!   pointer instead of Poly's arrow, and replaced with every commit of
 //!   that surface; an offset in a commit moves the hot spot back by as
 //!   much (wayland.xml). No surface hides the cursor.
-//! - A **shape** asks for a named cursor; Poly has only its arrow, so every
-//!   shape shows it (the shape is remembered for when there are more).
+//! - A **shape** asks for a named cursor: Poly's picture of it
+//!   ([`NamedCursor::of_shape`], ADR 0234), the arrow for names it has none of.
+//! - The server's own look wins over the client's: the resize arrows over a
+//!   frame's border and while a window is resized, and an internal window's
+//!   cursor (a Windows window's, [`Server::set_internal_cursor`]).
 //! - When the pointer focus moves to another client (or the desktop) the
 //!   arrow is back; clients set their cursor on `enter`.
 //! - While an app that was launched has no window yet (`startup.rs`, ADR
@@ -17,7 +20,7 @@
 
 use super::surface::Role;
 use super::{ClientId, Data, Res, Server, error};
-use crate::compose::CursorLook;
+use crate::compose::{CursorLook, NamedCursor, WindowId};
 use crate::protocol::{wl_pointer, wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1};
 use crate::wire::ObjectId;
 use alloc::format;
@@ -68,15 +71,48 @@ impl Server {
         }
     }
 
+    /// The look of a named cursor: the arrow and the busy arrow are the scene's own.
+    fn named_look(&self, n: NamedCursor) -> CursorLook {
+        match n {
+            NamedCursor::Arrow => CursorLook::Arrow,
+            NamedCursor::Progress => CursorLook::Busy(self.busy_phase()),
+            n => CursorLook::Named(n),
+        }
+    }
+
+    /// The look the server chooses itself (`None`: the client's, or the desktop's arrow).
+    pub(super) fn set_cursor_hint(&mut self, hint: Option<NamedCursor>) {
+        if self.seat.hint != hint {
+            self.seat.hint = hint;
+            self.update_cursor_look();
+        }
+    }
+
+    /// The pointer's look over internal window `w` (a Windows window's cursor, ADR 0234): shown
+    /// while the pointer is over it (or holds a button pressed on it); `None` for the arrow.
+    pub fn set_internal_cursor(&mut self, w: WindowId, cursor: Option<NamedCursor>) {
+        let Some(i) = self.internal.get_mut(&w) else { return };
+        i.cursor = cursor;
+        let over = self.seat.input.internal_hover == Some(w) || self.seat.input.internal_grab == Some(w);
+        if over && self.seat.input.grab.is_none() {
+            self.set_cursor_hint(cursor);
+        }
+    }
+
     /// Show what the pointer should look like.
     pub(super) fn update_cursor_look(&mut self) {
+        if let Some(n) = self.seat.hint {
+            let look = self.named_look(n);
+            self.scene.set_cursor_look(look);
+            return;
+        }
         let look = match self.seat.cursor {
             Some(CursorRequest::Surface { client, surface, hx, hy }) => match self.surface_ref(client, surface) {
                 Some(s) if s.buffer_size.is_some() => CursorLook::Image { content: s.stash.clone(), hx, hy },
                 _ => CursorLook::Hidden,
             },
             Some(CursorRequest::Hidden) => CursorLook::Hidden,
-            Some(CursorRequest::Shape(_)) => CursorLook::Arrow,
+            Some(CursorRequest::Shape(s)) => self.named_look(NamedCursor::of_shape(s)),
             None if self.launch_busy() => CursorLook::Busy(self.busy_phase()),
             None => CursorLook::Arrow,
         };
