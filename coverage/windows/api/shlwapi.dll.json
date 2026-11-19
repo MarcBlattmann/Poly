@@ -220,7 +220,7 @@
 {"symbol":"IsCharXDigitW","src":["wine-spec"]},
 {"symbol":"IsDialogMessageWrapW","forward":"user32.IsDialogMessageW","src":["wine-spec"]},
 {"symbol":"IsInternetESCEnabled","src":["wine-spec"]},
-{"symbol":"IsOS","status":"claimed","claimed_by":"impl-chrome-installer","forward":"shcore.IsOS","src":["wine-spec"]},
+{"symbol":"IsOS","status":"green","tests_visible":1,"forward":"shcore.IsOS","src":["wine-spec"]},
 {"symbol":"IsQSForward","src":["wine-spec"]},
 {"symbol":"LoadAcceleratorsWrapW","forward":"user32.LoadAcceleratorsW","src":["wine-spec"]},
 {"symbol":"LoadBitmapWrapW","forward":"user32.LoadBitmapW","src":["wine-spec"]},

@@ -15,6 +15,7 @@ poly-png.workspace = true
 poly-registry.workspace = true
 poly-squashfs.workspace = true
 poly-vfs.workspace = true
+poly-x509.workspace = true
 
 [lints]
 workspace = true

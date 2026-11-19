@@ -305,6 +305,13 @@ impl Server {
             return;
         }
         let hit = self.hit(x, y);
+        // The resize arrows over a frame's border; an internal window's own cursor over it.
+        let hint = match hit {
+            Hit::Border(w) => crate::compose::NamedCursor::of_edges(self.border_edges(w, x, y)),
+            Hit::Surface { window, .. } => self.internal.get(&window).and_then(|i| i.cursor),
+            _ => None,
+        };
+        self.set_cursor_hint(hint);
         // Internal windows hear the pointer as events (ADR 0117).
         let over_internal = match hit {
             Hit::Surface { window, x: lx, y: ly } if self.internal.contains_key(&window) => Some((window, lx, ly)),
@@ -563,6 +570,7 @@ impl Server {
         let start = (self.seat.pointer.0.floor(), self.seat.pointer.1.floor());
         self.set_pointer_focus(None);
         self.seat.input.grab = Some(Grab::InternalResize { window: w, edges, start, from, last: from });
+        self.set_cursor_hint(crate::compose::NamedCursor::of_edges(edges));
     }
 
     /// The pointer moved while an internal window is resized: the rectangle
@@ -655,6 +663,7 @@ impl Server {
             right: b.right(),
             bottom: b.bottom(),
         });
+        self.set_cursor_hint(crate::compose::NamedCursor::of_edges(edges));
         if let Some(t) = self.toplevel(client, toplevel) {
             t.resizing = true;
         }

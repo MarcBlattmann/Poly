@@ -29,9 +29,9 @@ Chrome on Windows (in progress), then Chrome on macOS.
 | Step | ADR | What it unlocks |
 |---|---|---|
 | Import map | 0157 | this plan |
-| A static x86_64 Mach-O runs (loader, initial stack, first BSD calls) | 0158 | the XNU personality runs code |
+| A static x86_64 Mach-O runs (loader, initial stack, first BSD calls) | 0237 | the XNU personality runs code (done) |
 | BSD system calls, first slice (Darwin errno, carry flag, `stat64`, `O_*`) | 0159 | a C "hello" and Chrome's early start-up |
-| Our `dyld` v0 and a Poly-built `libSystem.B.dylib` | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
+| Our `dyld` v0 (done, ADR 0237) and a Poly-built `libSystem.B.dylib` | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
 | Mach IPC core (ports, rights, `mach_msg`, bootstrap) | 0161 | the 85 Mach / XPC imports, Chrome's process model |
 | arm64 hello through the interpreter | 0162 | arm64-only apps (not Chrome on x86) |
 

@@ -209,6 +209,9 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0228](0228-boot-test-result-lines-cannot-be-torn-by-kernel-log-output.md) | Boot-test result lines cannot be torn by kernel log output | Accepted |
 | [0230](0230-windows-installers-through-polys-front-door.md) | Windows installers through Poly's front door | Accepted |
 | [0231](0231-windows-dpi-awareness-a-thread-works-in-its-own-units.md) | Windows DPI awareness: each thread works in its own units, win32k in physical pixels | Accepted |
+| [0234](0234-chrome-qa-fixes-a-window-made-maximized-waits-for-its-show.md) | Chrome QA fixes: a window made maximized waits for its show | Accepted |
+| [0237](0237-mach-o-loading-and-polys-own-dyld.md) | Mach-O loading and Poly's own dyld | Accepted |
+| [0240](0240-a-small-cmd-exe.md) | A small `cmd.exe` in `C:\Windows\System32` | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

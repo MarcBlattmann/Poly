@@ -1,0 +1,13 @@
+[package]
+name = "poly-cmd"
+description = "The logic of Poly's cmd.exe (ADR 0240): its own command line, %VAR% expansion, the command grammar and the interpreter, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

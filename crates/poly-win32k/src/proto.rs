@@ -225,6 +225,9 @@ crate::wire_struct! {
         pub w: u64,
         pub l: u64,
         pub wndproc: u64,
+        /// `WM_COPYDATA`'s bytes, copied from the sender (`Request::SendCopy`): the receiver
+        /// makes its own `COPYDATASTRUCT` of them, `l` being its `dwData`.
+        pub data: Option<Vec<u8>>,
     }
 }
 
@@ -261,6 +264,9 @@ crate::wire_enum! {
         28 => PostQuit { code: u32 },
         29 => Peek { filter: u64, min: u32, max: u32, flags: u32 },
         30 => SendStart { hwnd: u64, msg: u32, w: u64, l: u64 },
+        /// `SendStart` of `WM_COPYDATA` (Learn: the system copies the data to the receiving
+        /// process): `dw_data` and the bytes of the sender's `COPYDATASTRUCT` (ADR 0234).
+        123 => SendCopy { hwnd: u64, w: u64, dw_data: u64, data: Vec<u8> },
         31 => SendWait { id: u64 },
         32 => SendDone { id: u64, result: u64 },
         33 => Reply { result: u64 },

@@ -9,7 +9,9 @@
 //! BSD calls report failure by setting the carry flag and putting the errno
 //! in `rax`; Mach traps return a `kern_return_t` in `rax`.
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+
+pub mod bsd;
 
 use poly_abi::{Outcome, Personality, RFLAGS_CF, SyscallDispatch, SyscallRegs};
 
