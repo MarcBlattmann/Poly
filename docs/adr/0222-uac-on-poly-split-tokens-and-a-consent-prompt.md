@@ -167,7 +167,21 @@ jumped to a stack address (survey stop 1). Now:
 | Windows programs started by the desktop or as the first process | elevated admin | filtered (Medium) token; `IsUserAnAdmin` FALSE |
 | A program asking for admin (`runas`, `requireAdministrator`) | ran elevated | Poly's consent prompt; No → 1223 / `hInstApp` 5 |
 | Kernel self-test programs, 7-Zip steps, `wintrace` | elevated admin | the same, by `poly.win.token=admin` |
-| Chrome for Windows (all groups), desktop groups, `desktop-apps`, `git-win` | elevated admin | un-elevated; results in the hand-back |
+| Chrome for Windows (all groups), desktop groups, `desktop-apps`, `git-win` | elevated admin | un-elevated: CI's Chrome stages s1, s2, s3 and s5 and every boot shard pass |
+| Files a program makes in the user's profile, keys under `HKEY_CURRENT_USER` | owned by Administrators | the user's (the profile and hive are seeded so); Chrome's sandbox grants work there |
+| Google's `ChromeSetup.exe` | stopped at its first fail stub, which corrupted the stack | asks `IsUserAnAdmin`, relaunches itself with `runas`; Poly's prompt shows "ChromeSetup.exe, Publisher: Google LLC (signature not verified)"; after Yes the elevated copy unpacks and starts `updater.exe`, which does not load yet (`advapi32!ImpersonateNamedPipeClient`, the updater's batch) |
+
+## Verification
+
+- **Host tests:** `poly-security` (the token pair, the linked token, consent marks, logon kinds),
+  `poly-ntobj` (seeded folders), `poly-personality-nt` (the broker through the dispatcher),
+  `poly-kernelbase` (manifests), `poly-shell` (the prompt's keys, buttons and drawing),
+  `poly-x509` (the Authenticode publisher), `poly-stubs` (the `const fn` slot lookup against the
+  table), `poly-win32k` (the link records).
+- **Visible tests on Poly:** the 8 elevation entries pass 20 of 22. The two failures are the
+  `cmd.exe` lines of `CreateProcessElevation`. `ShellExecuteExW` (ADR 0223) still passes.
+- **The i686 stubs** pop the bytes the table gives (`add esp, 0x10` for `DragQueryFileW`).
+- **The prompt with Google's installer:** the hand-back's screenshots `uac-01` to `uac-04`.
 
 ## Not done
 
