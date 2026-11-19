@@ -153,7 +153,7 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,564 | 791 | 3,532 | 3,934 | 53,011 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,573 | 791 | 3,508 | 3,977 | 53,001 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 40 | 477 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
@@ -169,7 +169,11 @@ Seeded from (names only):
 - `ms-learn-commctrl`: Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-d3d11`: Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
+- `ms-learn-eventlog`: Microsoft Learn event logging reference (event sources, EVENTLOGRECORD, the EventLog registry keys) as Chrome's setup.exe uses it, observed by the spec agents (spec-win-chrome-setup); entries named by behaviour @ `Windows 11 25H2 build 26200.9974`
+- `ms-learn-netfw`: Microsoft Learn Windows Firewall with Advanced Security API (netfw.h: INetFwPolicy2, INetFwRules, INetFwRule) as Chrome's setup.exe uses it to add its inbound mDNS rule, observed by the spec agents (spec-win-chrome-setup); entries named by class @ `Windows 11 25H2 build 26200.9974`
+- `ms-learn-setup-files`: Microsoft Learn file, process and snapshot reference (winbase.h, fileapi.h, tlhelp32.h) for what Chrome's own setup.exe calls, observed by the spec agent spec-win-chrome-setup (docs/windows/chrome-setup-plan.md); entries named by function or behaviour @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-shell-download`: Microsoft Learn and the public SDK headers shobjidl_core.h, shellapi.h, shlobj_core.h, fileapi.h, winbase.h: the COM interfaces and methods Chrome's download path uses in shell32.dll, comdlg32.dll (entries named Interface.Method) and the kernel32.dll functions beside them @ `Windows SDK 10.0.26100.0`
+- `ms-learn-shell-link`: Microsoft Learn and the public SDK headers shobjidl_core.h, shlobj_core.h, propsys.h, propvarutil.h, objidl.h and the Microsoft format specification MS-SHLLINK: shell links (CLSID_ShellLink, IShellLinkW/A, IPersistFile, IPropertyStore on a link, the .lnk file) as Chrome's setup.exe uses them; entries named Interface or Class.Interface (spec-win-chrome-setup, docs/windows/chrome-installer-plan.md) @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-systemtemp`: Microsoft Learn file system and temporary file reference: the C:\Windows\SystemTemp directory that installers extract into, observed by the spec agents (spec-win-elevation); entries named by directory @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-taskschd`: Microsoft Learn Task Scheduler 2.0 reference and the public SDK headers taskschd.h, winerror.h: the COM interfaces of taskschd.dll (entries named Interface.Method, and Interface.Property for a get/put pair; spec-win-taskschd) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-uac`: User Account Control: Microsoft Learn (Access Tokens, Mandatory Integrity Control, ShellExecuteEx, Application Manifests) and the oracle's behaviour for the split token of an administrator: the standard (filtered) token and the elevated (full) token (entries named by the behaviour; docs/windows/chrome-installer-plan.md) @ `Windows 11 build 26200.9974`
