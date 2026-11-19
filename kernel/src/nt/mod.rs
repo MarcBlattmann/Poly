@@ -169,6 +169,8 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// Poly's `services.exe`, the host of the service control manager (ADR 0221), installed in
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
+/// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
+pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.

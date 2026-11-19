@@ -7,7 +7,7 @@
 //! classes are listed here instead of in a registry hive: `ole32` loads the DLL named for a class and
 //! goes the same way through its `DllGetClassObject` and `IClassFactory::CreateInstance`.
 //!
-//! The class ids are the SDK headers' (`shobjidl_core.h`, `shobjidl.h`).
+//! The class ids are the SDK headers' (`shobjidl_core.h`, `shobjidl.h`, `netfw.h`).
 
 use crate::guid::Guid;
 
@@ -23,6 +23,12 @@ pub const CLSID_DESTINATION_LIST: Guid =
 /// `CLSID_FileSaveDialog` (`shobjidl_core.h`): {C0B4E2F3-BA21-4773-8DBA-335EC946EB8B}.
 pub const CLSID_FILE_SAVE_DIALOG: Guid =
     Guid { data1: 0xC0B4_E2F3, data2: 0xBA21, data3: 0x4773, data4: [0x8D, 0xBA, 0x33, 0x5E, 0xC9, 0x46, 0xEB, 0x8B] };
+/// `CLSID_NetFwPolicy2` (`netfw.h`): {E2B3C97F-6AE1-41AC-817A-F6F92166D7DD}.
+pub const CLSID_NET_FW_POLICY2: Guid =
+    Guid { data1: 0xE2B3_C97F, data2: 0x6AE1, data3: 0x41AC, data4: [0x81, 0x7A, 0xF6, 0xF9, 0x21, 0x66, 0xD7, 0xDD] };
+/// `CLSID_NetFwRule` (`netfw.h`): {2C5BC43E-3369-4C33-AB0C-BE9469677AF4}.
+pub const CLSID_NET_FW_RULE: Guid =
+    Guid { data1: 0x2C5B_C43E, data2: 0x3369, data3: 0x4C33, data4: [0xAB, 0x0C, 0xBE, 0x94, 0x69, 0x67, 0x7A, 0xF4] };
 
 /// `IID_IClassFactory` (`unknwn.h`): {00000001-0000-0000-C000-000000000046}.
 pub const IID_ICLASS_FACTORY: Guid = Guid { data1: 1, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
@@ -38,6 +44,9 @@ const CLASSES: &[(Guid, &str)] = &[
     (CLSID_TASKBAR_LIST, "shell32.dll\0"),
     (CLSID_DESTINATION_LIST, "shell32.dll\0"),
     (CLSID_FILE_SAVE_DIALOG, "comdlg32.dll\0"),
+    // The Windows Firewall's policy and rule objects.
+    (CLSID_NET_FW_POLICY2, "hnetcfg.dll\0"),
+    (CLSID_NET_FW_RULE, "hnetcfg.dll\0"),
 ];
 
 /// The DLL that serves `clsid` in the process, if Poly has the class.
@@ -62,6 +71,8 @@ mod tests {
         assert_eq!(server_of(&CLSID_TASKBAR_LIST), Some("shell32.dll\0"));
         assert_eq!(server_of(&CLSID_DESTINATION_LIST), Some("shell32.dll\0"));
         assert_eq!(server_of(&CLSID_FILE_SAVE_DIALOG), Some("comdlg32.dll\0"));
+        assert_eq!(server_of(&CLSID_NET_FW_POLICY2), Some("hnetcfg.dll\0"));
+        assert_eq!(server_of(&CLSID_NET_FW_RULE), Some("hnetcfg.dll\0"));
         assert_eq!(server_of(&crate::git::CLSID_BACKGROUND_COPY_MANAGER), None);
         assert_eq!(server_of(&IID_IUNKNOWN), None);
     }

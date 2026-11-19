@@ -210,6 +210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hnetcfg"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "httptest"
 version = "0.0.1"
 dependencies = [

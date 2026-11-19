@@ -189,6 +189,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("comlaunch.exe", super::COMLAUNCH),
         // ADR 0221.
         ("services.exe", super::SERVICES_EXE),
+        ("hnetcfg.dll", super::HNETCFG),
     ] {
         if bytes.is_empty() {
             continue;

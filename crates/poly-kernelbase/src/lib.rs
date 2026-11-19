@@ -41,6 +41,7 @@
 //!   section services take them.
 //! - [`time`]: `FILETIME` and `SYSTEMTIME`.
 //! - [`namedpipe`]: named pipes and overlapped I/O (ADR 0169).
+//! - [`netfw`]: the Windows Firewall rules of `hnetcfg.dll` (a table that enforces nothing).
 //! - [`pipe`]: `CreatePipe`'s anonymous pipes on Poly's pipe device (ADR
 //!   0093).
 //!
@@ -86,6 +87,7 @@ pub mod memory;
 pub mod message;
 pub mod mitigation;
 pub mod namedpipe;
+pub mod netfw;
 pub mod nls;
 pub mod oleaut;
 pub mod path;
