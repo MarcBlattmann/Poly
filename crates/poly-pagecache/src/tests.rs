@@ -307,6 +307,26 @@ fn writeback_writes_runs_of_pages_in_one_call() {
     assert_eq!(probe.contents(ino), data);
 }
 
+/// More dirty pages than one batch collects (`WRITEBACK_BATCH`, 40 in
+/// tests): writeback takes them all, batch after batch, across files.
+#[test]
+fn writeback_takes_more_dirty_pages_than_a_batch() {
+    let (cache, probe, fs) = setup(1000);
+    let a = fs.create(fs.root(), b"a", &REG).unwrap();
+    let b = fs.create(fs.root(), b"b", &REG).unwrap();
+    let (da, db) = (pattern(5, 70 * PAGE_SIZE), pattern(6, 33 * PAGE_SIZE + 1));
+    fs.write(a, 0, &da).unwrap();
+    fs.write(b, 0, &db).unwrap();
+    const { assert!(70 + 34 > 2 * WRITEBACK_BATCH) };
+    assert_eq!(cache.writeback_all().unwrap(), 70 + 34);
+    assert_eq!(fs.page_counts().1, 0, "nothing dirty left");
+    assert_eq!((probe.contents(a), probe.contents(b)), (da, db));
+    // One file alone, the same.
+    fs.write(a, 0, &pattern(7, 70 * PAGE_SIZE)).unwrap();
+    assert_eq!(fs.writeback(Some(a)).unwrap(), 70);
+    assert_eq!(probe.contents(a), pattern(7, 70 * PAGE_SIZE));
+}
+
 #[test]
 fn partial_writes_read_the_page_first() {
     let (_cache, probe, fs) = setup(1000);
@@ -456,6 +476,106 @@ fn allocation_failure_evicts_then_reports_out_of_memory() {
     // A write that gets one page of two writes that much.
     assert_eq!(fs.write(written, 0, &[3; 2 * PAGE_SIZE]).unwrap(), PAGE_SIZE);
     BUDGET.with(|x| x.set(None));
+}
+
+/// Files of more pages than one batch (`DROP_BATCH`, 40 in tests) are
+/// dropped whole, a batch at a time: by eviction (only what is clean and
+/// held by nobody), an unlink, shrinking. A 1 GiB file deleted at once
+/// was a kernel panic, the list of its pages larger than any heap block.
+#[test]
+fn big_files_leave_the_cache_a_batch_at_a_time() {
+    let (cache, _probe, fs) = setup(10_000);
+    let before = live();
+    let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(ino, 0, &pattern(1, 130 * PAGE_SIZE)).unwrap();
+    assert_eq!(fs.page_counts(), (130, 130));
+    assert_eq!(fs.evict_clean(), 0, "dirty pages stay");
+    fs.writeback(None).unwrap();
+    // One page held (a mapping) and one dirty again: the rest go.
+    let held = fs.page(ino, 7).unwrap();
+    fs.write(ino, 100 * PAGE_SIZE as u64, b"again").unwrap();
+    assert_eq!(fs.evict_clean(), 128);
+    assert_eq!(fs.page_counts(), (2, 1));
+    drop(held);
+    // Cached whole again, then unlinked.
+    let data = pattern(2, 130 * PAGE_SIZE);
+    fs.write(ino, 0, &data).unwrap();
+    assert_eq!(read_all(&*fs, ino), data);
+    assert_eq!(fs.page_counts().0, 130);
+    fs.unlink(fs.root(), b"f").unwrap();
+    assert_eq!(fs.page_counts(), (0, 0));
+    assert_eq!(live(), before);
+    // Shrinking the cache by more than a batch.
+    let g = fs.create(fs.root(), b"g", &REG).unwrap();
+    fs.write(g, 0, &pattern(3, 150 * PAGE_SIZE)).unwrap();
+    fs.writeback(None).unwrap();
+    assert_eq!(cache.shrink(20), 130);
+    assert_eq!(fs.page_counts().0, 20);
+}
+
+/// A full cache whose oldest pages are dirty or mapped: each page added
+/// evicts a clean one without walking past those again and again (they get
+/// a second chance at the new end of the order). Unpacking Google Chrome's
+/// package into a full cache took ten minutes in the kernel before.
+#[test]
+fn eviction_does_not_walk_past_the_same_busy_pages_again() {
+    let (cache, _probe, fs) = setup(100);
+    // 60 dirty pages first (the oldest), then clean ones up to the limit.
+    let busy = fs.create(fs.root(), b"busy", &REG).unwrap();
+    fs.write(busy, 0, &pattern(1, 60 * PAGE_SIZE)).unwrap();
+    let clean = fs.create(fs.root(), b"clean", &REG).unwrap();
+    fs.write(clean, 0, &pattern(2, 40 * PAGE_SIZE)).unwrap();
+    fs.writeback(Some(clean)).unwrap();
+    assert_eq!(fs.page_counts(), (100, 60));
+    // 30 more pages, one at a time, each over the limit.
+    let more = fs.create(fs.root(), b"more", &REG).unwrap();
+    let before = cache.stats().scanned;
+    for i in 0..30u64 {
+        fs.write(more, i * PAGE_SIZE as u64, &pattern(3, PAGE_SIZE)).unwrap();
+        fs.writeback(Some(more)).unwrap();
+    }
+    let scanned = cache.stats().scanned - before;
+    assert_eq!(cache.stats().evicted, 30);
+    assert!(scanned < 60 + 2 * 30, "the dirty pages were looked at once, not 30 times: {scanned}");
+    assert_eq!(fs.page_counts(), (100, 60), "the dirty pages stay");
+    // The clean file's oldest pages went first.
+    assert_eq!(read_all(&*fs, clean), pattern(2, 40 * PAGE_SIZE));
+}
+
+/// fsync of one file writes that file's pages, not every dirty page of
+/// the file system; sync writes them all.
+#[test]
+fn fsync_writes_back_only_its_file() {
+    let (_cache, probe, fs) = setup(1000);
+    let a = fs.create(fs.root(), b"a", &REG).unwrap();
+    let b = fs.create(fs.root(), b"b", &REG).unwrap();
+    fs.write(a, 0, &pattern(1, 3 * PAGE_SIZE)).unwrap();
+    fs.write(b, 0, &pattern(2, 50 * PAGE_SIZE)).unwrap();
+    fs.sync_inode(a, false).unwrap();
+    assert_eq!(probe.contents(a), pattern(1, 3 * PAGE_SIZE));
+    assert_eq!(fs.page_counts(), (53, 50), "b's pages are still dirty");
+    fs.sync().unwrap();
+    assert_eq!(fs.page_counts(), (53, 0));
+    assert_eq!(probe.contents(b), pattern(2, 50 * PAGE_SIZE));
+}
+
+/// A cache over its limit with only dirty pages (a copy faster than
+/// writeback): a page added looks at a few pages, not all of them, and the
+/// cache stays over its limit until writeback; then it shrinks again.
+#[test]
+fn a_page_added_to_a_cache_of_dirty_pages_looks_at_few() {
+    let (cache, _probe, fs) = setup(100);
+    let f = fs.create(fs.root(), b"f", &REG).unwrap();
+    fs.write(f, 0, &pattern(1, 100 * PAGE_SIZE)).unwrap();
+    let before = cache.stats().scanned;
+    fs.write(f, 100 * PAGE_SIZE as u64, &pattern(2, 50 * PAGE_SIZE)).unwrap();
+    let scanned = cache.stats().scanned - before;
+    assert!(scanned <= 50 * INSERT_SCAN as u64, "{scanned}");
+    assert!(scanned < 50 * 100, "not every page for every page added: {scanned}");
+    assert_eq!(fs.page_counts(), (150, 150), "over the limit, nothing clean");
+    fs.writeback(None).unwrap();
+    assert_eq!(cache.shrink(100), 50);
+    assert_eq!(read_all(&*fs, f).len(), 150 * PAGE_SIZE);
 }
 
 #[test]

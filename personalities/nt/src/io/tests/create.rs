@@ -154,7 +154,9 @@ fn create_parameter_and_path_errors() {
     assert_eq!(t.create("\\??\\C:\\no\\such\\file", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_PATH_NOT_FOUND);
     assert_eq!(t.create("\\??\\C:\\a*b", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
     assert_eq!(t.create("\\??\\C:\\a\\..\\b", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
-    assert_eq!(t.create("\\??\\C:\\f:stream", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
+    assert_eq!(t.create("\\??\\C:\\f:", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
+    assert_eq!(t.create("\\??\\C:\\f:s:$INDEX", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
+    assert_eq!(t.create("\\??\\C:\\d:s\\f", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_NAME_INVALID);
     assert_eq!(t.create("\\??\\Q:\\x", RW, 0, FILE_CREATE, 0, 0).0, STATUS_OBJECT_PATH_NOT_FOUND);
     let h = t.file("\\??\\C:\\plain");
     t.close(h);

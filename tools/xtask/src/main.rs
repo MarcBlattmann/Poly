@@ -154,6 +154,7 @@ mod installer;
 mod installer2;
 mod ktest;
 mod libsearch;
+mod linuxchrome;
 mod macimports;
 mod mesa;
 mod native;
@@ -1732,6 +1733,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // uninstalled; skipped until the packages are fetched (installer2.rs,
     // ADR 0180).
     ("linux-installer-2", installer2::boot_test),
+    // Google Chrome for Linux from its .deb, installed by Poly's installer,
+    // started as the desktop's user, a page drawn; skipped until the packages
+    // and Chrome's .deb are fetched (linuxchrome.rs, ADR 0218).
+    ("linux-chrome", linuxchrome::boot_test),
     // Networking: virtio-net on QEMU's user networking, against servers on
     // the host (see net.rs).
     ("net", net::boot_tests),
@@ -1805,6 +1810,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "chromium-desktop",
             "linux-installer",
             "linux-installer-2",
+            "linux-chrome",
         ],
     ),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per

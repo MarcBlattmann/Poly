@@ -623,9 +623,17 @@ impl Server {
     }
 
     /// A surface of client `c` was destroyed: whatever pointed at it lets
-    /// go (its viewport, the cursor).
+    /// go (its viewport, the cursor, the pointer's and the keyboard's focus:
+    /// no `leave` is sent for an object that is gone, and its ID may name
+    /// another object of the client's by the time the focus moves).
     pub(crate) fn surface_gone(&mut self, c: ClientId, surface: ObjectId) {
         self.viewport_surface_gone(c, surface);
+        if self.seat.input.pointer_focus.is_some_and(|f| (f.client, f.surface) == (c, surface)) {
+            self.seat.input.pointer_focus = None;
+        }
+        if self.seat.input.keyboard_focus == Some((c, surface)) {
+            self.seat.input.keyboard_focus = None;
+        }
         if matches!(self.seat.cursor, Some(cursor::CursorRequest::Surface { client, surface: s, .. }) if (client, s) == (c, surface))
         {
             self.seat.cursor = Some(cursor::CursorRequest::Hidden);

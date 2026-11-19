@@ -2208,6 +2208,8 @@ impl Wm {
             | Request::LayeredContent { .. }
             | Request::SurfaceAlpha { .. }
             | Request::MoveSize { .. } => Reply::Ok {},
+            // The NT personality answers it (it owns the file handles); without it, no desktop.
+            Request::ShellOpen { .. } => Reply::Error { code: 50 },
             Request::KeyboardLayout {} => Reply::Value { value: u64::from(self.layout.id()) },
             Request::LayeredChildren {} => {
                 self.layered_children.insert(ctx.pid);
