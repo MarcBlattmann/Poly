@@ -12,9 +12,12 @@ pub const WINHTTP_EXPORTS: &[&str] = &[
     "WinHttpOpenRequest",
     "WinHttpQueryDataAvailable",
     "WinHttpQueryHeaders",
+    "WinHttpQueryOption",
     "WinHttpReadData",
     "WinHttpReceiveResponse",
     "WinHttpSendRequest",
+    "WinHttpSetOption",
+    "WinHttpSetStatusCallback",
     "WinHttpSetTimeouts",
     "WinHttpWriteData",
 ];
