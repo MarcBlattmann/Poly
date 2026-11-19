@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "hive_load",
+      "exe_sha256": "d27d640bd47f0f7cef9059edea8b5432ffd20ff37a39f55cc7ac15b50f3d0627",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlIFNlQmFja3VwUHJpdmlsZWdlOiBhZGp1c3QgMSBsYXN0IGVycm9yIDAKZW5hYmxlIFNlUmVzdG9yZVByaXZpbGVnZTogYWRqdXN0IDEgbGFzdCBlcnJvciAwClJlZ1NhdmVLZXlXOiAwClJlZ0xvYWRLZXlXIGludG8gSEtMTTogMApvcGVuIGxvYWRlZCBoaXZlOiAwCmxvYWRlZCB2YWx1ZSBTOiAwIHR5cGUgMSBsZW4gMjIgdGV4dCAndGV4dCB2YWx1ZScKbG9hZGVkIHZhbHVlIEQ6IDAgdHlwZSA0IGRhdGEgNDIKbG9hZGVkIHN1YmtleSBTdWI6IDAKbG9hZGVkIHZhbHVlIFN1YlxYOiAwIHR5cGUgMSB0ZXh0ICdpbm5lcicKdGhlIHNhdmVkIGtleSdzIG93biBuYW1lIGlzIG5vdCBwYXJ0IG9mIHRoZSBsb2FkZWQgdHJlZSAob3BlbiBQb2x5U3BlY0I0SGl2ZUxvYWRTcmMpOiAyCndyaXRlIGludG8gdGhlIGxvYWRlZCBoaXZlOiAwCmNyZWF0ZSBhIHN1YmtleSBpbiB0aGUgbG9hZGVkIGhpdmU6IDAgbmV3IHRydWUKUmVnTG9hZEtleVcgYWdhaW4sIHNhbWUgbmFtZSwgc2FtZSBmaWxlOiAwClJlZ0xvYWRLZXlXIGFnYWluLCBvdGhlciBuYW1lLCBzYW1lIGZpbGU6IDMyCnRoZSBzZWNvbmQgbmFtZSBleGlzdHM6IDIKUmVnVW5Mb2FkS2V5VyB3aXRoIGEgaGFuZGxlIHN0aWxsIG9wZW46IDUKdGhlIGxvYWRlZCBrZXkgaXMgc3RpbGwgdGhlcmU6IDAKUmVnVW5Mb2FkS2V5VyBhZnRlciBjbG9zaW5nOiAwCm9wZW4gYWZ0ZXIgdW5sb2FkOiAyClJlZ1VuTG9hZEtleVcgYWdhaW4gKG5vdCBsb2FkZWQpOiA4Nwpsb2cgZmlsZXMgYmVzaWRlIHRoZSBoaXZlOiBMT0cxIHRydWU7IExPRzIgdHJ1ZQpSZWdMb2FkS2V5VyBpbnRvIEhLRVlfVVNFUlM6IDAKcmVsb2FkZWQ6IG9wZW4gMDsgdmFsdWUgTiB3cml0dGVuIGVhcmxpZXI6IDAgdHlwZSA0IGRhdGEgNwpyZWxvYWRlZDogc3Via2V5IE5ld1N1YiBjcmVhdGVkIGVhcmxpZXI6IDAKUmVnVW5Mb2FkS2V5VyBmcm9tIEhLRVlfVVNFUlM6IDAKbG9hZCBpbnRvIEhLTE0gYWdhaW46IDA7IHZpc2libGUgaW4gSEtVOiAyClJlZ0xvYWRLZXlXIGludG8gSEtFWV9DVVJSRU5UX1VTRVI6IDUKUmVnTG9hZEtleVcgb2YgYSBmaWxlIHRoYXQgaXMgbm90IGEgaGl2ZTogMTAxNjsga2V5IGV4aXN0cyAyClJlZ0xvYWRLZXlXIHdpdGggYW4gZW1wdHkga2V5IG5hbWU6IDg3ClJlZ0xvYWRLZXlXIHdpdGggYSBOVUxMIGtleSBuYW1lOiA4NwpSZWdMb2FkS2V5VyB3aXRoIGEgTlVMTCBmaWxlOiA4NwpSZWdVbkxvYWRLZXlXIG9mIGEgbmFtZSB0aGF0IHdhcyBuZXZlciBsb2FkZWQ6IDg3ClJlZ1VuTG9hZEtleVcgb2YgYW4gb3JkaW5hcnkga2V5IChub3QgYSBsb2FkZWQgaGl2ZSByb290KTogODcKbm8tc3VjaC5oaXYgZXhpc3RzIGJlZm9yZTogZmFsc2UKUmVnTG9hZEtleVcgb2YgYSBtaXNzaW5nIGZpbGU6IDA7IHRoZSBmaWxlIGV4aXN0cyBub3c6IHRydWUKdGhlIG5ldyBoaXZlIG9wZW5zOiAwOyB2YWx1ZSBTIGluIGl0OiAyCnVubG9hZCBpdDogMApsb2FkZWQgbmFtZXMgbGVmdCBiZWhpbmQ6IGZhbHNlIGZhbHNlCnNvdXJjZSBrZXkgbGVmdCBiZWhpbmQ6IGZhbHNlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enable SeBackupPrivilege: adjust 1 last error 0\nenable SeRestorePrivilege: adjust 1 last error 0\nRegSaveKeyW: 0\nRegLoadKeyW into HKLM: 0\nopen loaded hive: 0\nloaded value S: 0 type 1 len 22 text 'text value'\nloaded value D: 0 type 4 data 42\nloaded subkey Sub: 0\nloaded value Sub\\X: 0 type 1 text 'inner'\nthe saved key's own name is not part of the loaded tree (open PolySpecB4HiveLoadSrc): 2\nwrite into the loaded hive: 0\ncreate a subkey in the loaded hive: 0 new true\nRegLoadKeyW again, same name, same file: 0\nRegLoadKeyW again, other name, same file: 32\nthe second name exists: 2\nRegUnLoadKeyW with a handle still open: 5\nthe loaded key is still there: 0\nRegUnLoadKeyW after closing: 0\nopen after unload: 2\nRegUnLoadKeyW again (not loaded): 87\nlog files beside the hive: LOG1 true; LOG2 true\nRegLoadKeyW into HKEY_USERS: 0\nreloaded: open 0; value N written earlier: 0 type 4 data 7\nreloaded: subkey NewSub created earlier: 0\nRegUnLoadKeyW from HKEY_USERS: 0\nload into HKLM again: 0; visible in HKU: 2\nRegLoadKeyW into HKEY_CURRENT_USER: 5\nRegLoadKeyW of a file that is not a hive: 1016; key exists 2\nRegLoadKeyW with an empty key name: 87\nRegLoadKeyW with a NULL key name: 87\nRegLoadKeyW with a NULL file: 87\nRegUnLoadKeyW of a name that was never loaded: 87\nRegUnLoadKeyW of an ordinary key (not a loaded hive root): 87\nno-such.hiv exists before: false\nRegLoadKeyW of a missing file: 0; the file exists now: true\nthe new hive opens: 0; value S in it: 2\nunload it: 0\nloaded names left behind: false false\nsource key left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 183
+    },
+    {
+      "name": "hive_std_load",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "1c80b616c38da37d02d0db6b4957c0b4b79e6edd191af4d0278d73c3a7035370",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlIFNlQmFja3VwUHJpdmlsZWdlOiBhZGp1c3QgMSBsYXN0IGVycm9yIDEzMDAKZW5hYmxlIFNlUmVzdG9yZVByaXZpbGVnZTogYWRqdXN0IDEgbGFzdCBlcnJvciAxMzAwCmNyZWF0ZSBzb3VyY2Uga2V5IGluIEhLQ1U6IDAKUmVnTG9hZEtleVcgaW50byBIS0xNOiAxMzE0ClJlZ0xvYWRLZXlXIGludG8gSEtVOiAxMzE0ClJlZ0xvYWRLZXlXIGludG8gSEtFWV9DVVJSRU5UX1VTRVI6IDEzMTQKUmVnTG9hZEtleVcgd2l0aCBhbiBlbXB0eSBmaWxlIG5hbWU6IDg3ClJlZ0xvYWRLZXlXIHdpdGggYSBOVUxMIG5hbWU6IDg3CmxvYWRlZCBrZXkgZXhpc3RzOiBmYWxzZQpzb3VyY2Uga2V5IGxlZnQgYmVoaW5kOiBmYWxzZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enable SeBackupPrivilege: adjust 1 last error 1300\nenable SeRestorePrivilege: adjust 1 last error 1300\ncreate source key in HKCU: 0\nRegLoadKeyW into HKLM: 1314\nRegLoadKeyW into HKU: 1314\nRegLoadKeyW into HKEY_CURRENT_USER: 1314\nRegLoadKeyW with an empty file name: 87\nRegLoadKeyW with a NULL name: 87\nloaded key exists: false\nsource key left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

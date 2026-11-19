@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetThreadLocale.yaml
+id: windows/api/kernel32.dll/GetThreadLocale
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain; its regional settings are a custom locale), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for GetThreadLocale, SetThreadLocale and "Locale Identifiers", winnls.h and winerror.h. Chrome's setup.exe formats dates with it (docs/windows/chrome-setup-plan.md). Locale and time formatting calls are in spec-win-elevation's sheets (GetDateFormatW and relatives); this sheet is the per-thread locale itself. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Returns the locale identifier (LCID) of the calling thread, which locale-dependent calls use. It does not change between calls; a new thread starts with the same value as the first thread had at the start; SetThreadLocale changes it for the calling thread only (0x0409, 0x0407 and 0x0411 were each returned back exactly by the next GetThreadLocale, and a new thread was not affected). SetThreadLocale(0xFFFFFFFF) fails with ERROR_INVALID_PARAMETER (87) and leaves the locale as it was; SetThreadLocale(0) succeeds and the locale afterwards is not 0 (the default). The value is a plain LCID: not 0, not the invariant locale 0x7F, the sort id (bits 16-19) 0, below 0x100000. Note on the oracle: its regional settings are a custom locale, so there GetThreadLocale started as 0x0C00 (LOCALE_CUSTOM_DEFAULT) while GetUserDefaultLCID gave 0x2000; the tests therefore compare the thread's values only with each other. On a machine with an ordinary locale the start value is that locale's LCID.
+interface:
+  signature: "LCID GetThreadLocale(void)"
+rules:
+  stable: "two calls in a row give the same value."
+  valid_value: "not 0, not 0x7F (the invariant locale), bits 16-19 are 0, the value is below 0x100000."
+  new_threads: "a new thread's value equals the first thread's start value, also after the first thread called SetThreadLocale (the setting is per thread)."
+  set_and_get: "SetThreadLocale(0x0409), (0x0407), (0x0411): TRUE; GetThreadLocale returns that LCID exactly."
+  set_refused: "SetThreadLocale(0xFFFFFFFF): FALSE, ERROR_INVALID_PARAMETER (87), the locale unchanged."
+  set_zero: "SetThreadLocale(0): TRUE; GetThreadLocale afterwards is not 0 (it is the machine's default for the thread)."
+errors:
+  invalid_parameter: "87 (SetThreadLocale)"
+side_effects: "none (SetThreadLocale changes the calling thread)"
+threading: "the value belongs to the calling thread"
+ordering: []
+timing:
+  typical: "nanoseconds"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: tl_default (stability, validity, new threads) and tl_set (SetThreadLocale round trips, a new thread unaffected, refused and zero values). Observations are relations, never LCID values of the machine.
+not_covered: >
+  The relation to GetUserDefaultLCID and GetUserDefaultLangID on a machine with an ordinary locale (the oracle's custom locale gave different values), SetThreadLocale with locales that are not installed, the effect on GetLocaleInfoW, GetDateFormatW and other callers (see their sheets), SetThreadUILanguage, the thread's UI language, a process-wide change (Windows 11 has none; the thread keeps its own value).

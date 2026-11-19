@@ -21,6 +21,12 @@
 //! [`READ_BUFFER`](poly_win32k::link::READ_BUFFER) request before the
 //! scene copies them ([`Copies`]), and writes back what the scene's end
 //! answers (buffer releases).
+//!
+//! A surface may have layers (ADR 0224): pictures an app hands over as
+//! sections instead of copying them into win32k (a DXGI swap chain presenting
+//! into the window or into one of its child windows). The link maps a layer's
+//! buffers from the device itself and copies each present's damage straight
+//! from them into the window's content, over the surface's own picture.
 
 use crate::os;
 use alloc::collections::BTreeMap;
@@ -29,18 +35,31 @@ use alloc::vec::Vec;
 use poly_wayland::compose::{Content, Rect, Scene, WindowId};
 use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, PixelFormat, READ_BUFFER, ReadBuffer, Record, Stream,
-    SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
+    BufferId, CursorShape, DEVICE, Edges, FromCompositor, LayerId, PixelFormat, READ_BUFFER, ReadBuffer, Record,
+    Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState, layer_buffer_offset,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
 /// keeps them apart from Wayland clients' windows.
 pub const OWNER_TAG: u64 = 1 << 62;
 
-/// The mapped bytes of the buffers win32k handed over.
+/// The bytes of the buffers win32k handed over: the compositor's copies of surface buffers and
+/// the mapped layer buffers.
 pub trait Buffers {
-    /// Buffer `id`'s bytes, if it is mapped.
-    fn bytes(&self, id: BufferId) -> Option<&[u8]>;
+    /// Buffer `id`'s first byte and length, if it is there. A layer buffer is another process's
+    /// memory, which it may write at any time: it is only copied from, never borrowed.
+    fn pixels(&self, id: BufferId) -> Option<(*const u8, usize)>;
+}
+
+/// A layer of a surface (ADR 0224), as the link described it.
+#[derive(Clone, Debug, Default)]
+struct Layer {
+    /// Its buffers: width, height, stride.
+    buffers: BTreeMap<BufferId, (u32, u32, u32)>,
+    /// Its buffers' first pixel in the surface's buffer, and the rectangle of that buffer it shows in.
+    place: Option<(i32, i32, Rect)>,
+    /// The buffer it shows.
+    current: Option<BufferId>,
 }
 
 /// What the compositor's loop must do besides the scene.
@@ -85,6 +104,8 @@ struct Surface {
 #[derive(Debug)]
 pub struct WindowsSurfaces {
     surfaces: BTreeMap<SurfaceId, Surface>,
+    /// Pictures shown over surfaces' own buffers (ADR 0224).
+    layers: BTreeMap<(SurfaceId, LayerId), Layer>,
     /// Windows pixels per logical pixel (ADR 0219): 1, or the output's whole scale when Windows
     /// apps live in output pixels (`--windows-hidpi`). Positions and sizes on the link are in
     /// these; the scene's are logical.
@@ -99,7 +120,7 @@ impl Default for WindowsSurfaces {
 
 impl WindowsSurfaces {
     pub fn new() -> WindowsSurfaces {
-        WindowsSurfaces { surfaces: BTreeMap::new(), units: 1 }
+        WindowsSurfaces { surfaces: BTreeMap::new(), layers: BTreeMap::new(), units: 1 }
     }
 
     /// Windows apps live in `units` output pixels per logical pixel (ADR 0219).
@@ -195,9 +216,67 @@ impl WindowsSurfaces {
         out
     }
 
+    /// The size of layer buffer `id` in bytes (`stride` x `height`), if one of the layers has it.
+    pub fn layer_buffer_len(&self, id: BufferId) -> Option<usize> {
+        self.layers.values().find_map(|l| l.buffers.get(&id)).map(|&(_, h, stride)| stride as usize * h as usize)
+    }
+
+    /// Surface `surface`'s layers go (with it): their buffers are dropped.
+    fn drop_layers(&mut self, surface: SurfaceId, actions: &mut Vec<Action>) {
+        let keys: Vec<(SurfaceId, LayerId)> =
+            self.layers.range((surface, 0)..=(surface, LayerId::MAX)).map(|(k, _)| *k).collect();
+        for k in keys {
+            if let Some(l) = self.layers.remove(&k) {
+                actions.extend(l.buffers.keys().map(|&b| Action::DropBuffer(b)));
+            }
+        }
+    }
+
+    /// Rectangle `r` of surface `surface`'s content again: its own picture, then its layers over it.
+    fn refresh(&self, scene: &mut Scene, surface: SurfaceId, r: Rect, buffers: &dyn Buffers) {
+        if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) = self.surfaces.get(&surface)
+            && let Some(src) = buffers.pixels(b)
+            && !r.is_empty()
+        {
+            let r = r.intersect(&Rect::new(0, 0, bw as i32, bh as i32));
+            copy(
+                scene,
+                window,
+                src,
+                (bw, bh, stride, format),
+                (r.x as u32, r.y as u32, r.width as u32, r.height as u32),
+            );
+        }
+        self.overlay(scene, surface, r, buffers, None);
+    }
+
+    /// Surface `surface`'s layers (all, or only `only`) over rectangle `r` of its content (buffer
+    /// pixels).
+    fn overlay(&self, scene: &mut Scene, surface: SurfaceId, r: Rect, buffers: &dyn Buffers, only: Option<LayerId>) {
+        let Some(window) = self.window(surface) else { return };
+        for (&(_, id), l) in self.layers.range((surface, 0)..=(surface, LayerId::MAX)) {
+            if only.is_some_and(|o| o != id) {
+                continue;
+            }
+            let (Some((x, y, clip)), Some(b)) = (l.place, l.current) else { continue };
+            let Some(&(lw, lh, stride)) = l.buffers.get(&b) else { continue };
+            let Some(src) = buffers.pixels(b) else { continue };
+            // The part of `r` the layer covers, in surface pixels, then in the layer's.
+            let shown = r.intersect(&clip).intersect(&Rect::new(x, y, lw as i32, lh as i32));
+            if shown.is_empty() {
+                continue;
+            }
+            let from = ((shown.x - x) as u32, (shown.y - y) as u32);
+            blit(scene, window, src, stride, from, shown, 0xFF00_0000);
+        }
+    }
+
     /// win32k's connection ended: its windows leave the scene.
     pub fn clear(&mut self, scene: &mut Scene) -> Vec<Action> {
         let mut actions = Vec::new();
+        for (_, l) in core::mem::take(&mut self.layers) {
+            actions.extend(l.buffers.keys().map(|&b| Action::DropBuffer(b)));
+        }
         for (_, s) in core::mem::take(&mut self.surfaces) {
             scene.remove_window(s.window);
             if let Some((b, ..)) = s.buffer {
@@ -219,6 +298,7 @@ impl WindowsSurfaces {
                 if let Some(old) = self.surfaces.remove(&surface) {
                     scene.remove_window(old.window);
                 }
+                self.drop_layers(surface, &mut actions);
                 let framed = framed && kind == SurfaceKind::TopLevel;
                 let window = scene.add_window(OWNER_TAG | u64::from(surface), framed);
                 // Not shown until win32k says so.
@@ -286,9 +366,59 @@ impl WindowsSurfaces {
             ToCompositor::Damage { surface, x, y, width, height } => {
                 if let Some(&Surface { window, buffer: Some((b, bw, bh, stride, format)), .. }) =
                     self.surfaces.get(&surface)
-                    && let Some(bytes) = buffers.bytes(b)
+                    && let Some(src) = buffers.pixels(b)
                 {
-                    copy(scene, window, bytes, (bw, bh, stride, format), (x, y, width, height));
+                    copy(scene, window, src, (bw, bh, stride, format), (x, y, width, height));
+                    // Its layers stay over it.
+                    let r = Rect::new(x as i32, y as i32, width.min(bw) as i32, height.min(bh) as i32);
+                    self.overlay(scene, surface, r, buffers, None);
+                }
+            }
+            ToCompositor::LayerBuffer { surface, layer, buffer, width, height, stride } => {
+                if self.surfaces.contains_key(&surface) {
+                    self.layers.entry((surface, layer)).or_default().buffers.insert(buffer, (width, height, stride));
+                } else {
+                    actions.push(Action::DropBuffer(buffer));
+                }
+            }
+            ToCompositor::LayerPlace { surface, layer, x, y, clip } => {
+                let clip = Rect::new(clip.0 as i32, clip.1 as i32, clip.2 as i32, clip.3 as i32);
+                let Some(l) = self.layers.get_mut(&(surface, layer)) else { return actions };
+                let old = l.place.replace((x, y, clip));
+                if old != Some((x, y, clip)) {
+                    // Where it was shows the surface again; where it is now shows the layer.
+                    if let Some((_, _, before)) = old {
+                        self.refresh(scene, surface, before, buffers);
+                    }
+                    self.overlay(scene, surface, clip, buffers, Some(layer));
+                }
+            }
+            ToCompositor::LayerDamage { surface, layer, buffer, x, y, width, height } => {
+                let Some(l) = self.layers.get_mut(&(surface, layer)) else { return actions };
+                if !l.buffers.contains_key(&buffer) {
+                    return actions;
+                }
+                l.current = Some(buffer);
+                let Some((lx, ly, _)) = l.place else { return actions };
+                let r = Rect::new(lx + x as i32, ly + y as i32, width as i32, height as i32);
+                self.overlay(scene, surface, r, buffers, Some(layer));
+            }
+            ToCompositor::LayerDrop { surface, layer, buffer } => {
+                if let Some(l) = self.layers.get_mut(&(surface, layer))
+                    && l.buffers.remove(&buffer).is_some()
+                {
+                    if l.current == Some(buffer) {
+                        l.current = None;
+                    }
+                    actions.push(Action::DropBuffer(buffer));
+                }
+            }
+            ToCompositor::LayerGone { surface, layer } => {
+                if let Some(l) = self.layers.remove(&(surface, layer)) {
+                    actions.extend(l.buffers.keys().map(|&b| Action::DropBuffer(b)));
+                    if let Some((_, _, clip)) = l.place {
+                        self.refresh(scene, surface, clip, buffers);
+                    }
                 }
             }
             ToCompositor::Activate { surface } => {
@@ -331,6 +461,7 @@ impl WindowsSurfaces {
                 }
             }
             ToCompositor::Destroy { surface } => {
+                self.drop_layers(surface, &mut actions);
                 if let Some(s) = self.surfaces.remove(&surface) {
                     scene.remove_window(s.window);
                     if let Some((b, ..)) = s.buffer {
@@ -344,33 +475,72 @@ impl WindowsSurfaces {
     }
 }
 
-/// Copy rectangle `r` (buffer pixels) of a mapped buffer into the window's
+/// Copy rectangle `r` (buffer pixels) of a surface buffer into the window's
 /// content: `B, G, R, A` bytes read as little-endian `0xAARRGGBB`, made
 /// opaque for `Xrgb8888`, premultiplied already for `Argb8888`.
 fn copy(
     scene: &mut Scene,
     window: WindowId,
-    bytes: &[u8],
+    src: (*const u8, usize),
     (bw, bh, stride, format): (u32, u32, u32, PixelFormat),
     (x, y, width, height): (u32, u32, u32, u32),
 ) {
-    let x1 = x.saturating_add(width).min(bw);
-    let y1 = y.saturating_add(height).min(bh);
-    let Some(content) = scene.content_mut(window) else { return };
-    if content.width != bw || content.height != bh {
+    if scene.content_mut(window).is_none_or(|c| c.width != bw || c.height != bh) {
         return;
     }
+    let x1 = x.saturating_add(width).min(bw);
+    let y1 = y.saturating_add(height).min(bh);
+    let r = Rect::new(x as i32, y as i32, x1.saturating_sub(x) as i32, y1.saturating_sub(y) as i32);
     let opaque = if format == PixelFormat::Xrgb8888 { 0xFF00_0000 } else { 0 };
-    for row in y..y1 {
-        for col in x..x1 {
-            let at = row as usize * stride as usize + col as usize * 4;
-            let Some(px) = bytes.get(at..at + 4) else { return };
-            let v = u32::from_le_bytes([px[0], px[1], px[2], px[3]]) | opaque;
-            content.pixels[row as usize * bw as usize + col as usize] = v;
-        }
+    blit(scene, window, src, stride, (x, y), r, opaque);
+}
+
+/// Copy `dst.width` x `dst.height` pixels from (`sx`, `sy`) of `src` (rows `stride` bytes apart,
+/// `B, G, R, A`) to `dst` of the window's content, or'ed with `opaque`, and damage it there: a row
+/// at a time with one `memcpy` each (ADR 0224; the per-pixel copy took milliseconds for a whole
+/// window at 200 %). Rows past the end of `src` and pixels outside the content are left.
+fn blit(
+    scene: &mut Scene,
+    window: WindowId,
+    src: (*const u8, usize),
+    stride: u32,
+    (sx, sy): (u32, u32),
+    dst: Rect,
+    opaque: u32,
+) {
+    let Some(content) = scene.content_mut(window) else { return };
+    let cw = content.width as i32;
+    let d = dst.intersect(&Rect::new(0, 0, cw, content.height as i32));
+    if d.is_empty() {
+        return;
     }
-    let damaged = Rect::new(x as i32, y as i32, x1.saturating_sub(x) as i32, y1.saturating_sub(y) as i32);
-    scene.damage_content(window, damaged);
+    // The source moves with the clipped destination.
+    let (sx, sy) = (sx as usize + (d.x - dst.x) as usize, sy as usize + (d.y - dst.y) as usize);
+    let n = d.width as usize;
+    let (ptr, len) = src;
+    let mut done = 0;
+    for row in 0..d.height as usize {
+        let at = (sy + row) * stride as usize + sx * 4;
+        if at + n * 4 > len {
+            break;
+        }
+        let start = (d.y as usize + row) * cw as usize + d.x as usize;
+        let out = &mut content.pixels[start..start + n];
+        // SAFETY: `at .. at + 4n` is inside the `len` bytes at `ptr` (checked above), which stay
+        // mapped (or allocated) during this call; `out` is `n` pixels of 4 bytes in the scene's
+        // own memory, so they do not overlap. The bytes land as little-endian words, as the
+        // per-pixel copy read them.
+        unsafe { core::ptr::copy_nonoverlapping(ptr.add(at), out.as_mut_ptr() as *mut u8, n * 4) };
+        if opaque != 0 {
+            for p in out.iter_mut() {
+                *p |= opaque;
+            }
+        }
+        done += 1;
+    }
+    if done > 0 {
+        scene.damage_content(window, Rect::new(d.x, d.y, d.width, done));
+    }
 }
 
 /// The compositor's copies of win32k's buffers, `stride` x `height` bytes
@@ -379,8 +549,20 @@ fn copy(
 pub struct Copies(pub BTreeMap<BufferId, Vec<u8>>);
 
 impl Buffers for Copies {
-    fn bytes(&self, id: BufferId) -> Option<&[u8]> {
-        self.0.get(&id).map(Vec::as_slice)
+    fn pixels(&self, id: BufferId) -> Option<(*const u8, usize)> {
+        self.0.get(&id).map(|v| (v.as_ptr(), v.len()))
+    }
+}
+
+/// The surface buffers' copies and the mapped layer buffers together.
+struct Sources<'a> {
+    copies: &'a Copies,
+    views: &'a BTreeMap<BufferId, os::DeviceView>,
+}
+
+impl Buffers for Sources<'_> {
+    fn pixels(&self, id: BufferId) -> Option<(*const u8, usize)> {
+        self.copies.pixels(id).or_else(|| self.views.get(&id).map(os::DeviceView::raw))
     }
 }
 
@@ -393,6 +575,8 @@ pub struct Link {
     fd: os::RawFd,
     surfaces: WindowsSurfaces,
     copies: Copies,
+    /// Layer buffers mapped from the device (ADR 0224).
+    views: BTreeMap<BufferId, os::DeviceView>,
     incoming: Stream<ToCompositor>,
     /// Interactive moves win32k asked for (`DefWindowProc`'s `SC_MOVE`),
     /// started once the server is at hand.
@@ -470,6 +654,7 @@ impl Link {
             fd,
             surfaces,
             copies: Copies::default(),
+            views: BTreeMap::new(),
             incoming: Stream::new(),
             moves: Vec::new(),
             resizes: Vec::new(),
@@ -648,13 +833,25 @@ impl Link {
                     self.copies.0.insert(buffer, vec![0u8; stride as usize * height as usize]);
                 }
                 ToCompositor::Damage { surface, y, height, .. } => self.fetch(surface, y, height),
+                // A layer's buffer: the app's section, mapped from the device (ADR 0224).
+                ToCompositor::LayerBuffer { buffer, height, stride, .. } => {
+                    let len = stride as usize * height as usize;
+                    match os::DeviceView::map(self.fd, layer_buffer_offset(buffer), len) {
+                        Ok(v) => {
+                            self.views.insert(buffer, v);
+                        }
+                        Err(e) => eprintln!("poly-compositor: layer buffer {buffer}: {e}"),
+                    }
+                }
                 ToCompositor::Shell { show, ref path } => self.shell.push((show, path.clone())),
                 _ => {}
             }
-            for a in self.surfaces.apply(scene, &r, &self.copies) {
+            let sources = Sources { copies: &self.copies, views: &self.views };
+            for a in self.surfaces.apply(scene, &r, &sources) {
                 match a {
                     Action::DropBuffer(b) => {
                         self.copies.0.remove(&b);
+                        self.views.remove(&b);
                     }
                     Action::Send(rec) => rec.encode(&mut out),
                     Action::Activate(w) => scene.raise(w),
@@ -717,8 +914,8 @@ mod tests {
     struct Memory(BTreeMap<BufferId, Vec<u8>>);
 
     impl Buffers for Memory {
-        fn bytes(&self, id: BufferId) -> Option<&[u8]> {
-            self.0.get(&id).map(Vec::as_slice)
+        fn pixels(&self, id: BufferId) -> Option<(*const u8, usize)> {
+            self.0.get(&id).map(|v| (v.as_ptr(), v.len()))
         }
     }
 
@@ -881,6 +1078,65 @@ mod tests {
         let actions = pump(&mut d, &mut ws, &mut scene, &mem);
         assert!(scene.window(w).is_none());
         assert!(actions.contains(&Action::Send(FromCompositor::Released { buffer: b2 })));
+    }
+
+    /// ADR 0224: a layer (a swap chain's section) shows over its surface where win32k placed it,
+    /// clipped; its present's damage comes from its own buffer; the surface's own damage keeps it
+    /// on top; when it goes, the surface's picture is back and its buffers are dropped.
+    #[test]
+    fn a_layer_shows_over_its_surface_from_its_own_buffer() {
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mut mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        let s = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s, 10, 10, 8, 6);
+        let b = d.attach_buffer(s, 8, 6, 32, PixelFormat::Xrgb8888).unwrap();
+        // The surface's own picture: grey.
+        mem.0.insert(b, vec![0x40; 8 * 6 * 4]);
+        d.damage(s, 0, 0, 8, 6);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+        let px = |scene: &Scene, x: usize, y: usize| content_of(scene, w).unwrap().pixels[y * 8 + x];
+        // A 4x4 layer at (6, 3): only 2x3 of it is inside the surface. Its buffer has 16-byte rows
+        // of 0x11 (the app's section, alpha left 0).
+        let lb = d.layer_buffer(s, 1, 4, 4, 16).unwrap();
+        mem.0.insert(lb, vec![0x11; 64]);
+        d.place_layer(s, 1, 6, 3, (6, 3, 2, 3));
+        d.damage_layer(s, 1, lb, (0, 0, 4, 4));
+        let actions = pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(actions.is_empty(), "{actions:?}");
+        assert_eq!(ws.layer_buffer_len(lb), Some(64));
+        assert_eq!(px(&scene, 6, 3), 0xFF11_1111, "opaque");
+        assert_eq!(px(&scene, 7, 5), 0xFF11_1111);
+        assert_eq!(px(&scene, 5, 3), 0xFF40_4040, "left of the layer");
+        // A present of part of it: only that comes from the buffer.
+        mem.0.get_mut(&lb).unwrap().fill(0x22);
+        d.damage_layer(s, 1, lb, (0, 0, 1, 1));
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert_eq!(px(&scene, 6, 3), 0xFF22_2222);
+        assert_eq!(px(&scene, 7, 3), 0xFF11_1111, "not damaged: as it was");
+        // The surface's own damage under the layer keeps the layer on top.
+        d.damage(s, 0, 0, 8, 6);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert_eq!(px(&scene, 7, 3), 0xFF22_2222);
+        assert_eq!(px(&scene, 0, 0), 0xFF40_4040);
+        // The layer goes: the surface's picture is back, its buffer dropped.
+        d.remove_layer(s, 1);
+        let actions = pump(&mut d, &mut ws, &mut scene, &mem);
+        assert_eq!(actions, vec![Action::DropBuffer(lb)]);
+        assert_eq!(px(&scene, 7, 3), 0xFF40_4040);
+        assert_eq!(ws.layer_buffer_len(lb), None);
+        // A destroyed surface drops its layers' buffers too.
+        let lb2 = d.layer_buffer(s, 2, 4, 4, 16).unwrap();
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        d.destroy(s);
+        let actions = pump(&mut d, &mut ws, &mut scene, &mem);
+        assert!(actions.contains(&Action::DropBuffer(lb2)), "{actions:?}");
     }
 
     #[test]

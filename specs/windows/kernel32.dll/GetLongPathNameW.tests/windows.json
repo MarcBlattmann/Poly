@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6fd7dced7969",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:53:37Z",
+  "tests": [
+    {
+      "name": "gp_long_names",
+      "exe_sha256": "c048efc71b4823e8acfa4ac282543e03420d5f4328e32f05997b79b5347c1c7f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHNjcmF0Y2ggZGlyZWN0b3J5J3MgbG9uZyBwYXRoIGlzIGl0cyBvd24gcGF0aDogdHJ1ZQptYWtlIHRoZSBkaXJlY3Rvcnk6IHRydWUKYSBmaWxlIGluIGEgZGlyZWN0b3J5IHdpdGggbG9uZyBuYW1lczogc2hvcnQgLT4gbG9uZyBnaXZlcyB0aGUgb3JpZ2luYWwgcGF0aCBleGFjdGx5OiB0cnVlIChyZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMikKYSBmaWxlIHdpdGggYSBsb25nIG5hbWU6IHNob3J0IC0+IGxvbmcgZ2l2ZXMgdGhlIG9yaWdpbmFsIHBhdGggZXhhY3RseTogdHJ1ZSAocmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIpCmEgZmlsZSB3aXRoIGEgc2hvcnQgbmFtZSBpbiBtaXhlZCBjYXNlOiBzaG9ydCAtPiBsb25nIGdpdmVzIHRoZSBvcmlnaW5hbCBwYXRoIGV4YWN0bHk6IHRydWUgKHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yKQphIGxvbmcgcGF0aDogdW5jaGFuZ2VkIHRydWUgKHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yKQp0aGUgd2hvbGUgcGF0aCBpbiB1cHBlciBjYXNlOiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMjsgYmVsb3cgdGhlIHNjcmF0Y2ggZGlyZWN0b3J5IHRoZSByZXN1bHQga2VlcHMgdGhlIGlucHV0J3MgY2FzZSAodXBwZXIgY2FzZSBsb25nIG5hbWVzKTogdHJ1ZQphIG1peGVkIGNhc2UgbmFtZSB3cml0dGVuIGluIGxvd2VyIGNhc2U6IHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yOyBiZWxvdyB0aGUgc2NyYXRjaCBkaXJlY3RvcnkgdGhlIHJlc3VsdCBoYXMgdGhlIG9uLWRpc2sgY2FzZSBvZiB0aGUgbmFtZTogdHJ1ZSwgdGhlIGlucHV0J3MgY2FzZTogZmFsc2UKYSBkaXJlY3RvcnkgcGF0aCB3aXRoIGEgdHJhaWxpbmcgYmFja3NsYXNoIGlzIHJldHVybmVkIHdpdGggaXQ6IHRydWUgKHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yKQppdHMgc2hvcnQgZm9ybSBiYWNrOiB0cnVlIChyZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMikKY2xlYW46IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the scratch directory's long path is its own path: true\nmake the directory: true\na file in a directory with long names: short -> long gives the original path exactly: true (result true, last error -2)\na file with a long name: short -> long gives the original path exactly: true (result true, last error -2)\na file with a short name in mixed case: short -> long gives the original path exactly: true (result true, last error -2)\na long path: unchanged true (result true, last error -2)\nthe whole path in upper case: result true, last error -2; below the scratch directory the result keeps the input's case (upper case long names): true\na mixed case name written in lower case: result true, last error -2; below the scratch directory the result has the on-disk case of the name: true, the input's case: false\na directory path with a trailing backslash is returned with it: true (result true, last error -2)\nits short form back: true (result true, last error -2)\nclean: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

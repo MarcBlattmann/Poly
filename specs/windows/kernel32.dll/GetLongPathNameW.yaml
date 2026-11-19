@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetLongPathNameW.yaml
+id: windows/api/kernel32.dll/GetLongPathNameW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon), on an NTFS volume where short (8.3) names are enabled. Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output) and Microsoft Learn's pages for GetLongPathNameW, GetShortPathNameW and "Naming Files, Paths, and Namespaces". Chrome's setup.exe turns short names back into long ones (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Converts every short (8.3) component of an existing path to the name stored on disk and returns the length. A path made from the output of GetShortPathNameW comes back exactly as the original, with the on-disk case. A path that already is long is returned with its long names unchanged; the case of components that can be 8.3 names (like "GpMixed.Txt" written "gpmixed.txt") is corrected to the stored one, the case of longer names is kept as the caller wrote it (an upper-cased "GP_LONG_DIRECTORY\\A LONG FILE NAME.TEXT" comes back as written). The path must exist (2, 3). Buffer rules as for GetShortPathNameW: 0 or too small returns the size including the NUL, enough returns the length without it. A trailing backslash, forward slashes, the \\?\ prefix, ".." components and a bare drive "c:\\" are kept as written; a relative path gives a relative result. A name with '*' is invalid (123).
+interface:
+  signature: "DWORD GetLongPathNameW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer)"
+rules:
+  short_to_long: "for a file in a directory with long names, for a file with a long name and for a file with a short mixed-case name, GetLongPathNameW(GetShortPathNameW(path)) gives back the original path exactly (the stored case of every component)."
+  long_unchanged: "a path of long names is returned unchanged (same text, same length); the scratch directory's own path also comes back as it is."
+  case: "a short name written in lower case ('gp_lon~1\\alongf~1.tex') comes back with the stored long names in their stored case. A name that could be an 8.3 name ('GpMixed.Txt' given as 'gpmixed.txt') comes back in the stored case. The long names we created ('gp_long_directory', 'a long file name.text') given in upper case come back in the case the caller wrote (not corrected). (Observed also: some components above the test directory, like 'USERS', were corrected to the stored case and 'SERVER.HOMESERVER2' was not: the rule for those is not established beyond what is said here.)"
+  trailing_backslash: "a directory path with a trailing backslash is returned with it, also from its short form."
+  buffer: "cchBuffer 0: the return value is the size needed including the NUL, nothing is written. A too small buffer: the same return value; the content is not specified. A buffer of exactly length+1: the length without the NUL, NUL written."
+  forward_slashes: "a path written with '/' is accepted and the result keeps '/' (no backslash)."
+  extended_prefix: "a \\\\?\\ prefix is kept; the rest is the path."
+  dotdot: "'dir\\..\\gp.txt' comes back as written (the '..' is not collapsed)."
+  drive_only: "'c:\\' (lower case drive letter) returns 3 and the text 'c:\\' unchanged."
+  relative: "a relative short path ('GP_LON~1\\ALONGF~1.TEX') gives a relative long path ('gp_long_directory\\a long file name.text')."
+  errors: "a file that does not exist: 0, ERROR_FILE_NOT_FOUND (2); a directory part that does not exist: 0, ERROR_PATH_NOT_FOUND (3); an empty string: 0, 3; a name with '*': 0, ERROR_INVALID_NAME (123); a NULL source: 0, ERROR_INVALID_PARAMETER (87)."
+errors:
+  file_not_found: "2"
+  path_not_found: "3"
+  invalid_name: "123"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "about a millisecond per call on the oracle (it reads the directories)"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: gp_long_names (round trips from GetShortPathNameW, the case rules, trailing backslashes) and gp_long_api (buffer rules, errors, forward slashes, the prefix, '..', a drive, a relative path). The tests create their files and directory in the scratch directory and delete them. Observations never print the machine's directory names or path lengths.
+not_covered: >
+  A volume without short names, FAT, network and UNC paths, non-ASCII names, the full rule for the case of the components that were not short names (see "case"), a path longer than MAX_PATH, a short name that matches nothing on disk ('xx~1' in an existing directory), reparse points, 32-bit callers and the System32 redirection.

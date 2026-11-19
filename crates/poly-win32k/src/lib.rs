@@ -63,6 +63,7 @@ pub mod ime;
 pub mod kbd;
 pub mod kbdlist;
 pub mod kbdtab;
+pub mod layers;
 pub mod link;
 pub mod menu;
 pub mod metrics;

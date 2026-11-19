@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellLink.PropertyStore.yaml
+id: windows/api/shell32.dll/ShellLink.PropertyStore
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators, the SSH logon''s elevated token); every test ran twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine. Microsoft Learn: IPropertyStore (GetCount, GetAt, GetValue, SetValue, Commit), System.AppUserModel.ID, System.AppUserModel.ToastActivatorCLSID, "Application User Model IDs", PROPERTYKEY and PROPVARIANT (propkey.h, propidl.h: VT_LPWSTR 31, VT_CLSID 72, VT_UI4 19, VT_EMPTY 0), [MS-SHLLINK] for the PropertyStoreDataBlock (signature 0xA0000009) and [MS-PROPSTORE] for the serialized property storage inside it (the format-id bytes and the UTF-16 text appear in the file). Chrome's setup.exe sets a string AppUserModel.ID on its shortcuts (docs/windows/chrome-installer-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The property store of a shell link: QueryInterface(IID_IPropertyStore {886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}) on a ShellLink gives a generic store in the same object. It keeps any property it is given, whatever the key or the type; Commit does nothing visible (a value is visible at once); what Save writes into the file's PropertyStoreDataBlock is what the store holds at that moment, and Load puts it back. The one that matters for Chrome is System.AppUserModel.ID (fmtid {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, pid 5, a VT_LPWSTR string), which the taskbar and the Start menu use to group a program''s windows with its shortcut; System.AppUserModel.ToastActivatorCLSID (same fmtid, pid 26, VT_CLSID) is its sibling. A new link''s store is empty; the link sets a few properties of its own (volume id of an existing target, comment from the description).
+interface:
+  slots: 'IPropertyStore after IUnknown: GetCount 3 (DWORD*), GetAt 4 (DWORD index, PROPERTYKEY*), GetValue 5 (const PROPERTYKEY*, PROPVARIANT*), SetValue 6 (const PROPERTYKEY*, const PROPVARIANT*), Commit 7'
+  keys: 'PROPERTYKEY is a GUID (16 bytes) and a DWORD pid (20 bytes). System.AppUserModel.ID {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3} pid 5; System.AppUserModel.ToastActivatorCLSID same fmtid, pid 26. PROPVARIANT is 24 bytes on x64: VARTYPE at offset 0, the value or a pointer at offset 8.'
+rules:
+  same_object: 'QueryInterface(IPropertyStore) on a link gives S_OK, and asking twice gives the same pointer; the store belongs to the link (Save writes it, Load fills it)'
+  fresh_store: 'GetCount is S_OK with 0 on a new link. GetValue of AppUserModel.ID or ToastActivatorCLSID: S_OK with VT_EMPTY.'
+  link_properties: 'SetPath of an existing target adds one entry: System.VolumeId {446D16B1-8DAD-4870-A748-402EA43D788C} pid 104, a VT_CLSID (the volume''s GUID; machine specific); SetPath of a missing file adds none. SetDescription adds System.Comment {F29F85E0-4FF9-1068-AB91-08002B27B3D9} pid 6, a VT_LPWSTR equal to the description. SetArguments, SetWorkingDirectory, SetIconLocation, SetShowCmd and SetHotkey add nothing (a link with an existing target and all of these set has 2 entries: the volume id and the comment).'
+  set_get: 'SetValue(AppUserModel.ID, VT_LPWSTR "Chrome"): S_OK; GetValue at once (no Commit): S_OK, VT_LPWSTR "Chrome"; GetCount grows by one. Commit: S_OK; after SetValue and Commit the link is dirty (IPersistFile::IsDirty S_OK). Replacing the value: S_OK, the new text. The empty string is stored (GetValue: VT_LPWSTR, length 0). A string of 129 characters is stored whole (no 128-character limit). A value of another type is stored without a check: SetValue(AppUserModel.ID, VT_UI4 5) is S_OK and GetValue returns VT_UI4 5.'
+  empty: 'SetValue with VT_EMPTY on AppUserModel.ID: S_OK and GetValue then returns VT_EMPTY; the entry is not removed: GetCount stays one higher than before the first SetValue of that key'
+  toast: 'SetValue(ToastActivatorCLSID, VT_CLSID guid): S_OK; GetValue: VT_CLSID with the same GUID. SetValue(ToastActivatorCLSID, VT_LPWSTR "{...}") returns S_FALSE (1) (the string form of a CLSID is not stored as given).'
+  any_key: 'a key of our own (a made-up fmtid, pid 7) with a VT_LPWSTR: S_OK, GetValue returns it. System.Link.TargetParsingPath ({B9B4B3FC-2B51-4A42-B5D8-324146AFCF25} pid 2): SetValue is S_OK too and the value is kept and written to the file (nothing is read-only here).'
+  persist: 'after SetValue on AppUserModel.ID ("PolySpecB4.App"), ToastActivatorCLSID, a key of our own and Commit, Save writes a file whose bytes hold the AppUserModel format id (the 16 bytes 55 28 4C 9F 79 9F 39 4B A8 D0 E1 D4 2D E1 D5 F3) and the UTF-16 text of the ID, in an ExtraData block 0xA0000009; a fresh link that Loads it has GetValue AppUserModel.ID = "PolySpecB4.App", ToastActivatorCLSID = the GUID and the key of our own = its text, and a store of 6 entries (the three, the TargetParsingPath that had been set, the volume id, and one more entry {46588AE2-4CBC-4338-BBFC-139326986DCE} pid 4 that Save adds, a string that holds the user''s SID).'
+  chrome: 'Chrome''s shortcut flow (Chrome-like link, AppUserModel.ID "Chrome", Commit, Save to the all-users Desktop, Load into a fresh link) returns "Chrome" for AppUserModel.ID (entry ShellLink.IPersistFile)'
+errors:
+  none_observed: 'no failure HRESULT was returned by any call above; S_FALSE (1) once (the string form of the toast CLSID)'
+side_effects: 'none (the store lives in the object)'
+threading: 'apartment-threaded object: used from the thread that created it'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: ps_fresh (GetCount/GetAt/GetValue of a new link, after SetPath and the other setters, and for a missing target), ps_aumid (AppUserModel.ID and ToastActivatorCLSID: set, get, replace, empty, long, wrong type, VT_EMPTY, a key of our own, persistence through Save and Load). PROPVARIANTs are built by hand (24 bytes, strings and GUIDs from CoTaskMemAlloc) and cleared with PropVariantClear. No volume GUID, SID or path of the scratch directory is printed.
+not_covered: >
+  Property keys other than the ones listed (the store is generic), VT types beyond VT_LPWSTR, VT_CLSID, VT_UI4, VT_EMPTY, GetAt with an index beyond the count, the store of a link that was Loaded from a file written by another program, PropVariantClear of values the store returned in other apartments, System.AppUserModel.RelaunchCommand and the other AppUserModel properties (same store, not tried), long-term effects on the taskbar.

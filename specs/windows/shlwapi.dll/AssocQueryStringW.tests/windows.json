@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "aq_hkcu",
+      "exe_sha256": "9828a812fb7726f9c65d279f146c8bd6f3c86a1320416125facee26a1e30c5eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SEtMTSBvbmx5OiBDT01NQU5EOiBociAweDAgY2NoIDQwIHRleHQgWyI8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZSIgL2MgZXhpdCAxXQpIS0xNIGFuZCBIS0NVLCBib3RoIHdpdGggYSBjb21tYW5kOiBDT01NQU5EOiBociAweDAgY2NoIDQwIHRleHQgWyI8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZSIgL2MgZXhpdCAyXQpIS0xNIGFuZCBIS0NVOiBGUklFTkRMWURPQ05BTUUgKEhLQ1UgaGFzIG5vIG5hbWUpOiBociAweDAgY2NoIDI0IHRleHQgW1BvbHlTcGVjQjQgbWFjaGluZSBuYW1lXQpIS0xNIGFuZCBIS0NVOiBGUklFTkRMWURPQ05BTUUgKGJvdGggaGF2ZSBhIG5hbWUpOiBociAweDAgY2NoIDIxIHRleHQgW1BvbHlTcGVjQjQgdXNlciBuYW1lXQpIS0NVIHJlbW92ZWQ6IENPTU1BTkQ6IGhyIDB4MCBjY2ggNDAgdGV4dCBbIjxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlIiAvYyBleGl0IDFdCmtleSB3cml0dGVuIHRocm91Z2ggdGhlIDMyLWJpdCB2aWV3OiAwCm9wZW5lZCBpbiB0aGUgMzItYml0IHZpZXc6IDA7IGluIHRoZSBuYXRpdmUgKDY0LWJpdCkgdmlldzogMApQcm9nSUQgd3JpdHRlbiB0aHJvdWdoIHRoZSAzMi1iaXQgdmlldywgcXVlcmllZCBieSB0aGlzIDY0LWJpdCBwcm9jZXNzOiBDT01NQU5EOiBociAweDAgY2NoIDQwIHRleHQgWyI8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZSIgL2MgZXhpdCA1XQpjbGVhbmVkOiAyIDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "HKLM only: COMMAND: hr 0x0 cch 40 text [\"<Windows>\\System32\\cmd.exe\" /c exit 1]\nHKLM and HKCU, both with a command: COMMAND: hr 0x0 cch 40 text [\"<Windows>\\System32\\cmd.exe\" /c exit 2]\nHKLM and HKCU: FRIENDLYDOCNAME (HKCU has no name): hr 0x0 cch 24 text [PolySpecB4 machine name]\nHKLM and HKCU: FRIENDLYDOCNAME (both have a name): hr 0x0 cch 21 text [PolySpecB4 user name]\nHKCU removed: COMMAND: hr 0x0 cch 40 text [\"<Windows>\\System32\\cmd.exe\" /c exit 1]\nkey written through the 32-bit view: 0\nopened in the 32-bit view: 0; in the native (64-bit) view: 0\nProgID written through the 32-bit view, queried by this 64-bit process: COMMAND: hr 0x0 cch 40 text [\"<Windows>\\System32\\cmd.exe\" /c exit 5]\ncleaned: 2 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    },
+    {
+      "name": "aq_progid",
+      "exe_sha256": "50cb3573cadc3fc32e554661c65b4b6c6a2bc9e42e3e23c456daf99e772ba81d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2V0dXA6IGFsbCBjcmVhdGVkOiB0cnVlClByb2dJRCBDT01NQU5EIG9wZW46IGhyIDB4MCBjY2ggNDMgdGV4dCBbIjxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlIiAvYyBleGl0ICIlMSJdClByb2dJRCBDT01NQU5EIG5vIHZlcmI6IGhyIDB4MCBjY2ggNDMgdGV4dCBbIjxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlIiAvYyBleGl0ICIlMSJdClByb2dJRCBFWEVDVVRBQkxFOiBociAweDAgY2NoIDI4IHRleHQgWzxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlXQpQcm9nSUQgRlJJRU5ETFlET0NOQU1FOiBociAweDAgY2NoIDI1IHRleHQgW1BvbHlTcGVjQjQgSFRNTCBEb2N1bWVudF0KUHJvZ0lEIEZSSUVORExZQVBQTkFNRTogaHIgMHgwIGNjaCAyNiB0ZXh0IFtXaW5kb3dzIENvbW1hbmQgUHJvY2Vzc29yXQpQcm9nSUQgREVGQVVMVElDT046IGhyIDB4MCBjY2ggMzAgdGV4dCBbPFdpbmRvd3M+XFN5c3RlbTMyXGNtZC5leGUsMF0KUHJvZ0lEIENPTU1BTkQgd2l0aCBhIHZlcmIgdGhhdCBkb2VzIG5vdCBleGlzdDogaHIgMHg4MDA3MDQ4MyB0ZXh0IFtdCmV4dGVuc2lvbiB3aXRoIHRoZSBQcm9nSUQgYXMgaXRzIGRlZmF1bHQgdmFsdWU6IENPTU1BTkQ6IGhyIDB4MCBjY2ggNDMgdGV4dCBbIjxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlIiAvYyBleGl0ICIlMSJdCmV4dGVuc2lvbiB3aXRoIHRoZSBQcm9nSUQgYXMgaXRzIGRlZmF1bHQgdmFsdWU6IEVYRUNVVEFCTEU6IGhyIDB4MCBjY2ggMjggdGV4dCBbPFdpbmRvd3M+XFN5c3RlbTMyXGNtZC5leGVdCmV4dGVuc2lvbiB3aXRoIHRoZSBQcm9nSUQgYXMgaXRzIGRlZmF1bHQgdmFsdWU6IEZSSUVORExZRE9DTkFNRTogaHIgMHgwIGNjaCAyNSB0ZXh0IFtQb2x5U3BlY0I0IEhUTUwgRG9jdW1lbnRdCmV4dGVuc2lvbiB3aXRoIHRoZSBQcm9nSUQgYXMgaXRzIGRlZmF1bHQgdmFsdWU6IERFRkFVTFRJQ09OOiBociAweDAgY2NoIDMwIHRleHQgWzxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlLDBdCmV4dGVuc2lvbiB3aXRoIG9ubHkgT3BlbldpdGhQcm9naWRzOiBDT01NQU5EOiBociAweDAgY2NoIDQzIHRleHQgWyI8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZSIgL2MgZXhpdCAiJTEiXQpleHRlbnNpb24gd2l0aCBvbmx5IE9wZW5XaXRoUHJvZ2lkczogRVhFQ1VUQUJMRTogaHIgMHgwIGNjaCAyOCB0ZXh0IFs8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZV0KZXh0ZW5zaW9uIHdpdGggb25seSBPcGVuV2l0aFByb2dpZHM6IEZSSUVORExZRE9DTkFNRTogaHIgMHgwIGNjaCAyNSB0ZXh0IFtQb2x5U3BlY0I0IEhUTUwgRG9jdW1lbnRdCmV4dGVuc2lvbiB3aXRoIG9ubHkgT3BlbldpdGhQcm9naWRzLCBJR05PUkVVTktOT1dOOiBociAweDAgY2NoIDQzIHRleHQgWyI8V2luZG93cz5cU3lzdGVtMzJcY21kLmV4ZSIgL2MgZXhpdCAiJTEiXQp1bmtub3duIGV4dGVuc2lvbjogQ09NTUFORDogaHIgMHgwIGNjaCAzOCB0ZXh0IFs8V2luZG93cz5cc3lzdGVtMzJcT3BlbldpdGguZXhlICIlMSJdCnVua25vd24gZXh0ZW5zaW9uOiBDT01NQU5ELCBJR05PUkVVTktOT1dOOiBociAweDgwMDcwNDgzIHRleHQgW10KdW5rbm93biBQcm9nSUQ6IENPTU1BTkQ6IGhyIDB4ODAwNzA0ODMgdGV4dCBbXQp1bmtub3duIFByb2dJRDogQ09NTUFORCwgSUdOT1JFVU5LTk9XTjogaHIgMHg4MDA3MDQ4MyB0ZXh0IFtdCmV4dGVuc2lvbiB3aXRoIHR3byBPcGVuV2l0aFByb2dpZHMgKG9uZSBvZiB0aGVtIHVucmVnaXN0ZXJlZCk6IENPTU1BTkQ6IGhyIDB4MCBjY2ggNDMgdGV4dCBbIjxXaW5kb3dzPlxTeXN0ZW0zMlxjbWQuZXhlIiAvYyBleGl0ICIlMSJdCmJ1ZmZlciBvZiA4IHVuaXRzOiBociAweDgwMDcwMDdhLCBjY2ggNDMsIGZpcnN0IHVuaXQgd3JpdHRlbjogdHJ1ZQpOVUxMIGJ1ZmZlcjogaHIgMHgxLCBjY2ggNDMKYnVmZmVyIG9mIDggdW5pdHMgd2l0aCBOT1RSVU5DQVRFOiBociAweDgwMDA0MDAzLCBjY2ggNDMsIGZpcnN0IHVuaXQgd3JpdHRlbjogZmFsc2UKTlVMTCBhc3NvY2lhdGlvbiBzdHJpbmc6IGhyIDB4ODAwNzAwNTcKQVNTT0NTVFIgOTk6IGhyIDB4ODAwNzAwNTcKY2xlYW5lZDogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "setup: all created: true\nProgID COMMAND open: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nProgID COMMAND no verb: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nProgID EXECUTABLE: hr 0x0 cch 28 text [<Windows>\\System32\\cmd.exe]\nProgID FRIENDLYDOCNAME: hr 0x0 cch 25 text [PolySpecB4 HTML Document]\nProgID FRIENDLYAPPNAME: hr 0x0 cch 26 text [Windows Command Processor]\nProgID DEFAULTICON: hr 0x0 cch 30 text [<Windows>\\System32\\cmd.exe,0]\nProgID COMMAND with a verb that does not exist: hr 0x80070483 text []\nextension with the ProgID as its default value: COMMAND: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nextension with the ProgID as its default value: EXECUTABLE: hr 0x0 cch 28 text [<Windows>\\System32\\cmd.exe]\nextension with the ProgID as its default value: FRIENDLYDOCNAME: hr 0x0 cch 25 text [PolySpecB4 HTML Document]\nextension with the ProgID as its default value: DEFAULTICON: hr 0x0 cch 30 text [<Windows>\\System32\\cmd.exe,0]\nextension with only OpenWithProgids: COMMAND: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nextension with only OpenWithProgids: EXECUTABLE: hr 0x0 cch 28 text [<Windows>\\System32\\cmd.exe]\nextension with only OpenWithProgids: FRIENDLYDOCNAME: hr 0x0 cch 25 text [PolySpecB4 HTML Document]\nextension with only OpenWithProgids, IGNOREUNKNOWN: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nunknown extension: COMMAND: hr 0x0 cch 38 text [<Windows>\\system32\\OpenWith.exe \"%1\"]\nunknown extension: COMMAND, IGNOREUNKNOWN: hr 0x80070483 text []\nunknown ProgID: COMMAND: hr 0x80070483 text []\nunknown ProgID: COMMAND, IGNOREUNKNOWN: hr 0x80070483 text []\nextension with two OpenWithProgids (one of them unregistered): COMMAND: hr 0x0 cch 43 text [\"<Windows>\\System32\\cmd.exe\" /c exit \"%1\"]\nbuffer of 8 units: hr 0x8007007a, cch 43, first unit written: true\nNULL buffer: hr 0x1, cch 43\nbuffer of 8 units with NOTRUNCATE: hr 0x80004003, cch 43, first unit written: false\nNULL association string: hr 0x80070057\nASSOCSTR 99: hr 0x80070057\ncleaned: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 65
+    }
+  ]
+}

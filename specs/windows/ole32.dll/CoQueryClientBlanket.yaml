@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoQueryClientBlanket.yaml
+id: windows/api/ole32.dll/CoQueryClientBlanket
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 with -Token elevated (full administrator token, high integrity) and -Token standard (filtered administrator token, medium integrity, Administrators deny-only) in the interactive desktop session of the local account \"server\" (session 1); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Convenience wrapper that obtains the active call's IServerSecurity via CoGetCallContext and calls IServerSecurity::QueryBlanket. Returns the caller's authentication parameters and DOMAIN\user string inside a served cross-process COM call, and RPC_E_CALL_COMPLETE outside a call.
+interface:
+  signature: "HRESULT CoQueryClientBlanket(DWORD *pAuthnSvc, DWORD *pAuthzSvc, OLECHAR **pServerPrincName, DWORD *pAuthnLevel, DWORD *pImpLevel, RPC_AUTHZ_HANDLE *pPrivs, DWORD *pCapabilities)"
+  forward: "ole32.dll!CoQueryClientBlanket forwards to combase.dll!CoQueryClientBlanket"
+installer: "Standard COM caller-identity query (wrapper over CoGetCallContext + IServerSecurity::QueryBlanket)."
+rules:
+  in_call_values: "during a local cross-process call (activation or direct call, LocalServer32 or LocalSystem service, elevated or standard client, at any proxy blanket impersonation level), returns S_OK with the exact same values as IServerSecurity::QueryBlanket: pAuthnSvc = 10 (RPC_C_AUTHN_WINNT), pAuthzSvc = 0 (RPC_C_AUTHZ_NONE), pServerPrincName = NULL, pAuthnLevel = 6 (RPC_C_AUTHN_LEVEL_PKT_PRIVACY), pImpLevel = 1, pCapabilities = 0x0, and pPrivs a COM-owned wide string (do not free) of the form <COMPUTERNAME>\\<client_user>"
+  optional_outputs: "every output parameter may be NULL: calling with all outputs NULL or with any single output pointer (such as only pAuthnSvc, only pAuthnLevel, only pServerPrincName, or only pPrivs) returns S_OK and writes only the requested output(s)"
+  outside_call: "when the calling thread is not serving an incoming call — whether COM is not initialised on the thread, in an STA, in an MTA, or on another thread of a server process while a different thread serves a call — returns RPC_E_CALL_COMPLETE 0x80010117 (even when all outputs are NULL) and leaves all output variables untouched"
+errors:
+  call_complete: "RPC_E_CALL_COMPLETE 0x80010117 (no incoming call active on the calling thread)"
+side_effects: "none (pPrivs points to COM-owned memory valid for the call; pServerPrincName is NULL on local NTLMSSP calls)"
+threading: "per thread: reflects only a call actively served on the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each: local-server tests run under both -Token elevated and -Token standard (same-user LocalServer32 server); service tests run under -Token elevated with a LocalSystem service (CreateServiceW, AppID LocalService, CoInitializeSecurity admitting Everyone) called by both the elevated test and a de-elevated child client created with the interactive session shell's (explorer.exe) filtered token; out-of-call tests run across no-COM, STA and MTA threads. Classes and services use unique {B2A0xxxx-...} / PolyWsSecSvc* names and are cleaned up. Observations are HRESULTs, Win32 codes, blanket fields, token attributes and booleans, never raw process ids, thread ids or pointers.
+not_covered: >
+  remote DCOM callers, Kerberos principal names, and in-process cross-apartment calls.

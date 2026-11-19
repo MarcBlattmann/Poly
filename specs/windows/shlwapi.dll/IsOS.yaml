@@ -1,0 +1,76 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shlwapi.dll/IsOS.yaml
+id: windows/api/shlwapi.dll/IsOS
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Default mode: the SSH logon (session 0, no interactive desktop, the administrator's elevated token, 24 privileges). The machine is Windows 11 Home (edition ID Core) 25H2, a workgroup computer with fast user switching; the edition- and machine-dependent answers below (OS_HOME, OS_PROFESSIONAL, OS_FASTUSERSWITCHING, OS_PERSONALTERMINALSERVER, OS_DOMAINMEMBER, OS_WELCOMELOGONUI) are what this machine says. Every test ran twice with identical output."
+  observed_by: "spec-win-chrome-setup"
+  date: "2026-11-17"
+sources: "Observations of our own test programs on the oracle machine. Microsoft Learn: IsOS (shlwapi.h, \"IsOS function\": the OS_* values 0-36 are listed there; the function is exported by ordinal 437 only), Windows version information. Nothing of Windows or Google's programs was read or disassembled."
+summary: "Answers whether the running system matches a property named by an OS_* constant. It is exported by ordinal 437 only (no name in the export table: GetProcAddress by name fails, by ordinal 437 works) and imported by ordinal by Chrome's setup.exe (shlwapi #437). The result is 1 or 0 (a BOOL). On this Windows 11 Home machine the documented constants give the table below."
+interface:
+  signature: "BOOL IsOS(DWORD os)  (shlwapi, ordinal 437)"
+  export: "ordinal 437, no name"
+rules:
+  values_on_this_machine:
+    - "IsOS(0) OS_WINDOWS = 0"
+    - "IsOS(1) OS_NT = 1"
+    - "IsOS(2) OS_WIN95ORGREATER = 0"
+    - "IsOS(3) OS_NT4ORGREATER = 1"
+    - "IsOS(4) (4) = 1"
+    - "IsOS(5) OS_WIN98ORGREATER = 0"
+    - "IsOS(6) OS_WIN98_GOLD = 0"
+    - "IsOS(7) OS_WIN2000ORGREATER = 1"
+    - "IsOS(8) OS_WIN2000PRO = 0"
+    - "IsOS(9) OS_WIN2000SERVER = 0"
+    - "IsOS(10) OS_WIN2000ADVSERVER = 0"
+    - "IsOS(11) OS_WIN2000DATACENTER = 0"
+    - "IsOS(12) OS_WIN2000TERMINAL = 0"
+    - "IsOS(13) OS_EMBEDDED = 0"
+    - "IsOS(14) OS_TERMINALCLIENT = 0"
+    - "IsOS(15) OS_TERMINALREMOTEADMIN = 0"
+    - "IsOS(16) OS_WIN95_GOLD = 0"
+    - "IsOS(17) OS_MEORGREATER = 0"
+    - "IsOS(18) OS_XPORGREATER = 1"
+    - "IsOS(19) OS_HOME = 1"
+    - "IsOS(20) OS_PROFESSIONAL = 1"
+    - "IsOS(21) OS_DATACENTER = 0"
+    - "IsOS(22) OS_ADVSERVER = 0"
+    - "IsOS(23) OS_SERVER = 0"
+    - "IsOS(24) OS_TERMINALSERVER = 0"
+    - "IsOS(25) OS_PERSONALTERMINALSERVER = 1"
+    - "IsOS(26) OS_FASTUSERSWITCHING = 1"
+    - "IsOS(27) OS_WELCOMELOGONUI = 0"
+    - "IsOS(28) OS_DOMAINMEMBER = 0"
+    - "IsOS(29) OS_ANYSERVER = 0"
+    - "IsOS(30) OS_WOW6432 = 0"
+    - "IsOS(31) OS_WEBSERVER = 0"
+    - "IsOS(32) OS_SMALLBUSINESSSERVER = 0"
+    - "IsOS(33) OS_TABLETPC = 0"
+    - "IsOS(34) OS_SERVERADMINUI = 0"
+    - "IsOS(35) OS_MEDIACENTER = 0"
+    - "IsOS(36) OS_APPLIANCE = 0"
+  above_the_list:
+    - "IsOS(0x25): 1"
+    - "IsOS(0x26): 0"
+    - "IsOS(0x32): 0"
+    - "IsOS(0x64): 0"
+    - "IsOS(0xff): 0"
+    - "IsOS(0x80000000): 0"
+    - "IsOS(0xffffffff): 0"
+    - "IsOS(1) twice: 1 1"
+    - "shlwapi exports a function named IsOS: true; by ordinal 437: true"
+  repeatable: "the same constant gives the same answer on every call"
+errors:
+  none: "no error is reported; unknown constants give 0 (except 37, which gave 1 here: see values)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "microseconds (the first call loads policy and edition data)"
+  guarantees: "none"
+building_tests: "Rust tests (ADR 0075); the program gets the function with GetProcAddress(shlwapi, 437) because the export has no name. isos_all prints IsOS(0..36); isos_other the values outside the list, the repeat and the export check."
+not_covered: "other Windows editions, servers, domain-joined machines, remote desktop sessions (OS_TERMINALCLIENT stays 0 here), the shcore forward (shlwapi forwards IsOS to shcore)."
+tests:
+  visible: 1
+  held_out: 1
