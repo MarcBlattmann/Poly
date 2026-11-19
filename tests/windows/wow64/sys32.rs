@@ -26,7 +26,8 @@
 //!   the device form starts with `\Device\`, a buffer without room for the NUL is
 //!   `ERROR_INSUFFICIENT_BUFFER`) and `msimg32.dll`'s `AlphaBlend` (bound, and a call with no
 //!   device contexts returns FALSE with the stack as it was: eleven 4-byte arguments), and gdi32's
-//!   `FrameRgn`, `RoundRect` and `OffsetWindowOrgEx` on a memory device context.
+//!   `FrameRgn`, `RoundRect` and `OffsetWindowOrgEx` on a memory device context, and
+//!   comctl32's subclass functions by their ordinals 410 to 413.
 //!
 //! Not part of the x64 test corpus (the oracle pipeline builds `tests/windows/*.rs` for x64 only).
 
@@ -162,6 +163,14 @@ unsafe extern "system" {
 #[link(name = "comctl32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn InitCommonControlsEx(init: *const u32) -> i32;
+    #[link_ordinal(410)]
+    fn SetWindowSubclass(hwnd: Handle, proc_: usize, id: usize, data: usize) -> i32;
+    #[link_ordinal(411)]
+    fn GetWindowSubclass(hwnd: Handle, proc_: usize, id: usize, data: *mut usize) -> i32;
+    #[link_ordinal(412)]
+    fn RemoveWindowSubclass(hwnd: Handle, proc_: usize, id: usize) -> i32;
+    #[link_ordinal(413)]
+    fn DefSubclassProc(hwnd: Handle, msg: u32, w: usize, l: isize) -> isize;
 }
 
 #[link(name = "ws2_32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -632,7 +641,19 @@ fn updater() -> bool {
             && core::hint::black_box(probe) == 0x5EED;
         DeleteObject(rgn);
         DeleteDC(dc);
-        ok
+        if !ok {
+            return false;
+        }
+        at(7);
+        // comctl32's subclass functions by ordinal (410..413), on no window: all fail, the
+        // reference data reads 0, and the stack is as it was.
+        let mut data = 77usize;
+        SetWindowSubclass(0, 0x1234, 1, 2) == 0
+            && GetWindowSubclass(0, 0x1234, 1, &mut data) == 0
+            && data == 0
+            && RemoveWindowSubclass(0, 0x1234, 1) == 0
+            && DefSubclassProc(0, 0x400, 1, 2) == 0
+            && core::hint::black_box(probe) == 0x5EED
     }
 }
 

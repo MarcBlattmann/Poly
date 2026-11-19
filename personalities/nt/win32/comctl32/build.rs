@@ -4,6 +4,16 @@
 
 fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:InitCommonControls,@17");
+    // Window subclassing: by name and by these ordinals (`commctrl.h`'s functions; Google's
+    // updater imports them by ordinal), in both widths.
+    for (name, ordinal) in [
+        ("SetWindowSubclass", 410),
+        ("GetWindowSubclass", 411),
+        ("RemoveWindowSubclass", 412),
+        ("DefSubclassProc", 413),
+    ] {
+        println!("cargo:rustc-link-arg=/EXPORT:{name},@{ordinal}");
+    }
     // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
     // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
     if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
@@ -20,9 +30,5 @@ fn main() {
 const APPS_ORDINALS: &[u32] = &[
     345,
     381,
-    410,
-    411,
-    412,
-    413,
 ];
 // END generated consts
