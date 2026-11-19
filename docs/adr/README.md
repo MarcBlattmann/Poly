@@ -201,6 +201,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0220](0220-com-across-processes-an-activation-process-object-exporters-on-named-pipes-and-the-class-table.md) | COM across processes: an activation process, object exporters on named pipes, and the class table | Accepted |
 | [0221](0221-windows-services-a-service-control-manager-in-the-nt-personality-and-services-exe-as-its-host.md) | Windows services: a service control manager in the NT personality, `services.exe` as its host | Accepted |
 | [0223](0223-windows-downloads-streams-shell-classes-and-the-desktop.md) | Chrome's downloads: alternate data streams, Poly's own COM classes, and Windows shell requests reaching the desktop | Accepted |
+| [0224](0224-nt-windows-hand-their-frames-to-the-compositor-as-sections.md) | NT windows hand their frames to the compositor as sections | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
