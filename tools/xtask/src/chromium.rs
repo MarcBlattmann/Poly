@@ -163,6 +163,10 @@ pub const DISK_SEEDS: &[&str] = &[
     "libegl1",
     "libegl-mesa0",
     "libgles2",
+    // Chinese, Japanese and Korean text (ADR 0234): DejaVu has no CJK glyphs, so example.com's
+    // Chinese line was empty boxes. Droid Sans Fallback (Apache 2.0, TrueType, about 4 MB); the
+    // Windows world gets the same file in C:\Windows\Fonts (`fonts.rs`).
+    "fonts-droid-fallback",
 ];
 
 /// What the initramfs takes from the lock: a statically linked BusyBox for
@@ -711,6 +715,20 @@ pub(crate) fn missing<'a>(locked: &'a [Locked], sets: &[&str]) -> Vec<&'a Locked
 
 /// The sets every host needs (the reference is the spec agent's).
 pub(crate) const BUILD_SETS: [&str; 3] = ["disk", "boot", "install"];
+
+/// Download one locked package into the cache and check it.
+pub(crate) fn fetch_one(p: &Locked) -> Result {
+    let file = debs_dir().join(p.file_name());
+    if matches(&file, p.size, &p.sha256) {
+        return Ok(());
+    }
+    download(&p.url()?, &file)?;
+    if !matches(&file, p.size, &p.sha256) {
+        let _ = std::fs::remove_file(&file);
+        return Err(format!("{}: not as locked (size {}, SHA-256 {})", p.file_name(), p.size, p.sha256));
+    }
+    Ok(())
+}
 
 /// `cargo xtask chromium fetch [--reference]`: download what is missing
 /// of the disk's and the initramfs's packages (and the reference's), check

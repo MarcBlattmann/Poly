@@ -126,6 +126,8 @@ pub const OUTPUTS: &[&str] = &[
     "explorer.exe",
     // ADR 0240: the command processor.
     "cmd.exe",
+    // ADR 0230: how Poly's installer window starts a Windows program.
+    "polyopen.exe",
     // The Windows Firewall's COM objects.
     "hnetcfg.dll",
     // AlphaBlend, for 64-bit and 32-bit programs (it was a generated stub DLL).
@@ -371,6 +373,8 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/explorer",
             // ADR 0240.
             "personalities/nt/win32/cmd",
+            // ADR 0230.
+            "personalities/nt/win32/polyopen",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -508,6 +512,8 @@ fn verify(dir: &Path) -> Result {
     verify_exe(dir, "explorer.exe", &["ntdll.dll"])?;
     // ADR 0240.
     verify_exe(dir, "cmd.exe", &["kernel32.dll"])?;
+    // ADR 0230.
+    verify_exe(dir, "polyopen.exe", &["kernel32.dll", "shell32.dll"])?;
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;

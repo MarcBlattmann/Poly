@@ -77,10 +77,17 @@ const QUEUE_ENTRIES: u16 = 128;
 /// Status reads after a reset before giving up on the device.
 const RESET_POLLS: u32 = 1_000_000;
 /// How long requests may be out with none coming back before the watchdog
-/// resets the device and fails them. QEMU's device answers within
-/// milliseconds; on a host stalled for longer than this the disk breaks for
-/// good, so the limit is generous.
+/// nudges the device (notifies it again: a lost notification is picked up).
+/// QEMU's device usually answers within milliseconds, but a flush waits for
+/// the host's `fdatasync` of the image, which on a busy host (or right after
+/// the host wrote the image) took longer than this: the watchdog then reset
+/// the device and every later request failed, `EIO` for the file system
+/// above (`fs: virtio0 flush of block 0 (+0) failed: Io(DeviceFailed)`).
 pub const WATCHDOG_LIMIT_NS: u64 = 10 * time::NANOS_PER_SEC;
+/// How long the silence may last before the watchdog gives up for good:
+/// resets the device and fails what it has. A slow host is waited for this
+/// long; a device that does not answer in five minutes is not coming back.
+pub const WATCHDOG_PATIENCE_NS: u64 = 300 * time::NANOS_PER_SEC;
 /// The MSI-X table entry the request queue uses.
 const QUEUE_ENTRY: u16 = 0;
 
@@ -277,7 +284,9 @@ pub fn bring_up_device(dev: &Device) -> Option<Found> {
         if info.read_only { ", read-only" } else { "" },
     );
     let clock: Clock = time::now_ns;
-    Some(Found { bdf, disk: Watchdog::new(driver, clock, WATCHDOG_LIMIT_NS), msix })
+    let mut disk = Watchdog::new(driver, clock, WATCHDOG_LIMIT_NS);
+    disk.set_patience(WATCHDOG_PATIENCE_NS);
+    Some(Found { bdf, disk, msix })
 }
 
 /// Point the request queue's MSI-X entry at `disk`'s interrupt handler,
@@ -391,8 +400,8 @@ kernel_test! {
             if w.device().features() & feature::VERSION_1 == 0 || w.device().queue_size() < 4 {
                 return Err("the driver runs without VERSION_1 or with a tiny queue");
             }
-            if w.limit() != WATCHDOG_LIMIT_NS {
-                return Err("the watchdog does not have its time limit");
+            if w.limit() != WATCHDOG_LIMIT_NS || w.patience() != WATCHDOG_PATIENCE_NS {
+                return Err("the watchdog does not have its time limit and patience");
             }
             // Runs after the block tests (names sort): none of their
             // requests may have been lost.
@@ -458,8 +467,10 @@ kernel_test! {
     }
 }
 
-/// How long the lost-request test lets the watchdog wait.
+/// How long the lost-request test lets the watchdog wait between nudges,
+/// and before it gives up.
 const LOST_LIMIT_NS: u64 = 200 * time::NANOS_PER_MILLI;
+const LOST_PATIENCE_NS: u64 = 3 * LOST_LIMIT_NS;
 /// How long the tests wait for something another CPU does (handle an
 /// interrupt, run a thread), which a busy host may hold off for a while.
 const OTHER_CPU_DEADLINE_NS: u64 = 10 * time::NANOS_PER_SEC;
@@ -579,6 +590,7 @@ fn lost_request(disk: &'static block::Disk, interrupt_driven: bool) -> TestResul
     disk.with_device(|d| {
         if let block::Device::Virtio(w) = d {
             w.set_limit(LOST_LIMIT_NS);
+            w.set_patience(LOST_PATIENCE_NS);
             w.device_mut().set_drop_notifications(true);
         }
     });
@@ -606,16 +618,133 @@ fn lost_request(disk: &'static block::Disk, interrupt_driven: bool) -> TestResul
     if interrupt_driven && (!blocked || disk.stats().sleeps == sleeps) {
         return Err("the thread waiting for the lost request did not sleep");
     }
-    if !(LOST_LIMIT_NS..=LOST_LIMIT_NS + 2 * time::NANOS_PER_SEC).contains(&took) {
-        return Err("the lost request did not fail at the watchdog's deadline");
+    if !(LOST_PATIENCE_NS..=LOST_PATIENCE_NS + 2 * time::NANOS_PER_SEC).contains(&took) {
+        return Err("the lost request did not fail when the watchdog's patience ran out");
     }
+    // Nudged first (the nudges were dropped too), then aborted once.
     disk.with_device(|d| match d {
-        block::Device::Virtio(w) if w.aborts() == 1 && w.device().is_failed() => Ok(()),
-        _ => Err("the watchdog did not abort the device exactly once"),
+        block::Device::Virtio(w) if w.aborts() == 1 && w.nudges() >= 2 && w.device().is_failed() => Ok(()),
+        _ => Err("the watchdog did not nudge the device, then abort it exactly once"),
     })?;
     let mut buf = vec![0u8; SECTOR_SIZE as usize];
     if disk.read_uncached(0, &mut buf) != Err(poly_block::IoError::DeviceFailed) {
         return Err("the aborted device took another request");
     }
     Ok(())
+}
+
+/// The watchdog's limit in the slow-device test: far below the device's
+/// answer time (`poly.test.disk`'s fifth virtio-blk function answers every
+/// request, flushes too, after 300 ms: `tools/xtask`'s `SLOW_DISK_LATENCY`).
+const SLOW_LIMIT_NS: u64 = 50 * time::NANOS_PER_MILLI;
+/// Threads and rounds of the slow-device test.
+const SLOW_THREADS: usize = 4;
+const SLOW_ROUNDS: usize = 2;
+/// The slow disk, for the test's threads.
+static SLOW_DISK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+/// Thread body: `SLOW_ROUNDS` times, write four blocks through the cache
+/// (block numbers of thread `n`), sync them (the writes and a FLUSH), and
+/// read a block past the cache. Exit code 0: success, 1: `DeviceFailed`,
+/// 2: another error.
+fn slow_writer(n: usize) -> usize {
+    use core::sync::atomic::Ordering;
+    // SAFETY: the test stores the address of a `&'static block::Disk` before
+    // it spawns the threads.
+    let disk = unsafe { &*(SLOW_DISK.load(Ordering::SeqCst) as *const block::Disk) };
+    let code = |e: poly_block::IoError| if e == poly_block::IoError::DeviceFailed { 1 } else { 2 };
+    let cache = |e: poly_block::CacheError| match e {
+        poly_block::CacheError::Io(e) => code(e),
+        poly_block::CacheError::AllPinned => 2,
+    };
+    let data = vec![n as u8; SECTOR_SIZE as usize];
+    let mut back = vec![0u8; SECTOR_SIZE as usize];
+    for round in 0..SLOW_ROUNDS {
+        let first = (n * 64 + round * 8) as u64;
+        for b in first..first + 4 {
+            if let Err(e) = disk.write_block(b, &data) {
+                return cache(e);
+            }
+        }
+        if let Err(e) = disk.sync() {
+            return cache(e);
+        }
+        if let Err(e) = disk.read_uncached(first + 32, &mut back) {
+            return code(e);
+        }
+    }
+    0
+}
+
+kernel_test! {
+    /// A device that answers every request, and every flush, long after the
+    /// watchdog's limit (a host whose `fdatasync` of the image takes its
+    /// time) is nudged and waited for, not reset: concurrent writes, syncs
+    /// (writes and a FLUSH) and reads from several threads all finish, the
+    /// device is never aborted. With the watchdog of before (giving up at
+    /// the limit) the first request failed with `DeviceFailed` and every
+    /// later one too.
+    fn a_slow_device_is_nudged_not_failed_under_concurrent_writes_and_flushes(env: &TestEnv) -> TestResult {
+        use core::sync::atomic::Ordering;
+        if !env.boot.has_flag(block::TEST_DISK_FLAG) {
+            return Ok(());
+        }
+        let dev = pci::devices()
+            .iter()
+            .filter(|d| is_virtio_blk(d))
+            .nth(4)
+            .ok_or("poly.test.disk is set but there is no slow virtio-blk device")?;
+        let found = bring_up_device(dev).ok_or("the slow virtio-blk device did not come up")?;
+        let what = alloc::format!("virtio-blk {}", found.bdf);
+        let disk = block::Disk::new("slow", what, block::Device::Virtio(Box::new(found.disk)))
+            .map_err(|_| "no queue or cache for the slow device")?;
+        let mut msix = found.msix;
+        let vector = match &mut msix {
+            Some(m) => Some(connect_interrupt(disk, m).map_err(|_| "cannot connect the slow device's interrupt")?),
+            None => None,
+        };
+        disk.with_device(|d| {
+            if let block::Device::Virtio(w) = d {
+                w.set_limit(SLOW_LIMIT_NS);
+            }
+        });
+        SLOW_DISK.store(disk as *const block::Disk as usize, Ordering::SeqCst);
+        let start = time::now_ns();
+        let result = (|| {
+            let mut threads = Vec::new();
+            for n in 0..SLOW_THREADS {
+                threads.push(thread::spawn(slow_writer, n).map_err(|_| "spawn failed")?);
+            }
+            let mut codes = Vec::new();
+            for t in threads {
+                codes.push(thread::join(t).map_err(|_| "join failed")?);
+            }
+            let (nudges, aborts, failed) = disk.with_device(|d| match d {
+                block::Device::Virtio(w) => (w.nudges(), w.aborts(), w.device().is_failed()),
+                block::Device::Ram(_) => (0, 0, false),
+            });
+            kprintln!(
+                "virtio-blk: slow device: {SLOW_THREADS} threads x {SLOW_ROUNDS} rounds of writes, syncs and reads in {} ms; {nudges} nudge(s), {aborts} abort(s); exit codes {codes:?}",
+                (time::now_ns() - start) / time::NANOS_PER_MILLI
+            );
+            if codes.iter().any(|&c| c != 0) {
+                return Err("a write, sync or read on the slow device failed");
+            }
+            if aborts != 0 || failed {
+                return Err("the watchdog gave up on a device that was only slow");
+            }
+            if nudges == 0 {
+                return Err("the watchdog never nudged the slow device (it answers after its limit)");
+            }
+            Ok(())
+        })();
+        disk.use_polling();
+        if let (Some(m), Some(vector)) = (msix, vector) {
+            m.disable();
+            if crate::arch::irq::free_vector(vector) {
+                return result.and(Err("the slow device's vector was not freed"));
+            }
+        }
+        result
+    }
 }

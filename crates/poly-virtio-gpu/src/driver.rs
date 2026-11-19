@@ -777,6 +777,100 @@ impl<M: Mmio, C: Mmio, N: Mmio> VirtioGpu<'_, M, C, N> {
         Ok(())
     }
 
+    /// Put each of the damaged `rects` of `fb` on the screen as it is (no
+    /// bounding box): a `TRANSFER_TO_HOST_2D` and a `RESOURCE_FLUSH` per
+    /// rectangle, clipped to the framebuffer, as many pairs per notification
+    /// as there are slots, and wait for the device (ADR 0243). Rectangles that
+    /// clip to nothing are not sent; with none left nothing is.
+    pub fn update_rects(&mut self, fb: &Framebuffer, rects: &[Rect]) -> Result<(), Error> {
+        self.update_rects_with(fb, rects, false)
+    }
+
+    /// [`VirtioGpu::update_rects`] without waiting for the device (ADR 0243):
+    /// the commands are queued (waiting only for free slots) and the device
+    /// is notified; nobody collects the responses (an error counts in
+    /// `stats().errors`). The device answers the control queue in order, so
+    /// any later command that is waited for (a backing swap) also waits for
+    /// these; [`VirtioGpu::wait_posted`] waits for them alone.
+    pub fn post_update_rects(&mut self, fb: &Framebuffer, rects: &[Rect]) -> Result<(), Error> {
+        self.update_rects_with(fb, rects, true)
+    }
+
+    fn update_rects_with(&mut self, fb: &Framebuffer, rects: &[Rect], post: bool) -> Result<(), Error> {
+        const PAIRS: usize = SLOTS / 2;
+        if self.broken {
+            return Err(Error::Broken);
+        }
+        let id = fb.resource_id;
+        let filler = Command::ResourceFlush { resource_id: id, rect: Rect::ZERO };
+        let mut cmds = [filler; SLOTS];
+        let mut n = 0;
+        let mut sent = 0;
+        let send = |gpu: &mut Self, cmds: &[Command<'_>]| -> Result<(), Error> {
+            if !post {
+                return gpu.run(cmds).map(drop);
+            }
+            let mut tickets = [None; SLOTS];
+            let r = gpu.send_all(cmds, &mut tickets[..cmds.len()], true);
+            for t in tickets.iter().flatten() {
+                gpu.forget(*t);
+            }
+            r
+        };
+        for r in rects {
+            let rect = r.clip(fb.width, fb.height);
+            if rect.is_empty() {
+                continue;
+            }
+            let offset = rect.y as u64 * fb.stride as u64 + rect.x as u64 * BYTES_PER_PIXEL as u64;
+            cmds[2 * n] = Command::TransferToHost2d { resource_id: id, rect, offset };
+            cmds[2 * n + 1] = Command::ResourceFlush { resource_id: id, rect };
+            n += 1;
+            if n == PAIRS {
+                send(self, &cmds[..2 * n])?;
+                sent += n;
+                n = 0;
+            }
+        }
+        if n > 0 {
+            send(self, &cmds[..2 * n])?;
+            sent += n;
+        }
+        self.stats.updates += sent as u64;
+        Ok(())
+    }
+
+    /// Wait (polling, within the timeout) until the device has answered every
+    /// request [`VirtioGpu::post_update_rects`] queued.
+    pub fn wait_posted(&mut self) -> Result<(), Error> {
+        let started = (self.clock.now_ns)();
+        loop {
+            self.reap()?;
+            let waiting = self.slots.iter().find_map(|s| s.pending.filter(|p| p.discard && p.done.is_none()));
+            let Some(p) = waiting else { return Ok(()) };
+            if (self.clock.now_ns)().wrapping_sub(started) > self.clock.timeout_ns {
+                return Err(self.give_up(Error::Timeout { request: p.request }));
+            }
+            core::hint::spin_loop();
+        }
+    }
+
+    /// Give resource `resource_id` the backing `entries` in place of the one
+    /// it has: `RESOURCE_DETACH_BACKING` and `RESOURCE_ATTACH_BACKING` in one
+    /// notification (ADR 0243: the screen's resource is backed by whichever
+    /// framebuffer is shown, so a page flip copies nothing in the guest).
+    /// Once it returns `Ok` the device no longer uses the old memory.
+    pub fn replace_backing(&mut self, resource_id: u32, entries: &[MemEntry]) -> Result<(), Error> {
+        if entries.is_empty() || entries.len() > MAX_BACKING_ENTRIES {
+            return Err(Error::BadBacking);
+        }
+        self.run(&[
+            Command::ResourceDetachBacking { resource_id },
+            Command::ResourceAttachBacking { resource_id, entries },
+        ])
+        .map(drop)
+    }
+
     /// Make a framebuffer for `plan` and show it (§5.7.6.1): create
     /// resource `resource_id` of the plan's size in B8G8R8X8 (lines of
     /// `width * 4` bytes), attach `backing` (guest memory holding at least

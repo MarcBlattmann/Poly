@@ -2,16 +2,16 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "4e50bc609e5a",
+  "bundle": "d1de14dc9e73",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-14T20:17:03Z",
+  "started": "2026-11-19T21:12:39Z",
   "tests": [
     {
-      "name": "sti_classes",
+      "name": "sti_th_classes",
       "exe_sha256": "ab21b970b320059f5b541ee1a484886279508ff29d6ff962038832175e93c7f9",
       "status": "ran",
       "exit_code": 0,
@@ -22,10 +22,10 @@
       "output": "fresh thread: GetThreadInformation(ThreadPowerThrottling) = 1 Version 1 Control 0x0 State 0x0 last error unchanged\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x0, size 12) = 1 last error unchanged\nafter control 0: GetThreadInformation(ThreadPowerThrottling) = 1 Version 1 Control 0x0 State 0x0 last error unchanged\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x8 State 0x8, size 12) = 0 last error 87\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 8) = 0 last error 87\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 16) = 1 last error unchanged\nSetThreadInformation(ThreadMemoryPriority, 1, size 4) = 1 last error unchanged\nafter: GetThreadInformation(ThreadMemoryPriority) = 1 priority 3 last error unchanged\nSetThreadInformation(ThreadMemoryPriority, 0, size 4) = 0 last error 87\nafter: GetThreadInformation(ThreadMemoryPriority) = 1 priority 5 last error unchanged\nSetThreadInformation(ThreadMemoryPriority, 5, size 0) = 0 last error 24\nclass 2, size 4: = 0 last error 5\nclass 99, size 4: = 0 last error 87\nhandle with THREAD_SET_INFORMATION (opened 1)\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x0, size 12) = 0 last error 5\nhandle with THREAD_SUSPEND_RESUME (opened 1)\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 39
+      "ms": 41
     },
     {
-      "name": "sti_classes_b",
+      "name": "sti_th_classes_b",
       "exe_sha256": "2e22b6c3c65fef76044afc6e68d4c1cc3dae4d5423e26deec3d8436eded8bdef",
       "status": "ran",
       "exit_code": 0,
@@ -36,7 +36,7 @@
       "output": "SetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 12) = 1 last error unchanged\nafter EXEC off: GetThreadInformation(ThreadPowerThrottling) = 1 Version 1 Control 0x1 State 0x0 last error unchanged\nSetThreadInformation(ThreadPowerThrottling, Version 0 Control 0x1 State 0x1, size 12) = 1 last error unchanged\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 0) = 0 last error 87\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 11) = 0 last error 87\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x0 State 0x0, size 12) = 1 last error unchanged\nafter: GetThreadInformation(ThreadMemoryPriority) = 1 priority 1 last error unchanged\nSetThreadInformation(ThreadMemoryPriority, 5, size 4) = 1 last error unchanged\nafter: GetThreadInformation(ThreadMemoryPriority) = 1 priority 5 last error unchanged\nSetThreadInformation(ThreadMemoryPriority, 5, size 8) = 0 last error 24\nSetThreadInformation(ThreadMemoryPriority, 5, size 12) = 0 last error 24\nclass 4, size 4: = 0 last error 87\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x1, size 12) = 1 last error unchanged\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x0, size 12) = 1 last error unchanged\nhandle with THREAD_QUERY_LIMITED_INFORMATION (opened 1)\nSetThreadInformation(ThreadPowerThrottling, Version 1 Control 0x1 State 0x0, size 12) = 0 last error 5\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 39
+      "ms": 40
     }
   ]
 }

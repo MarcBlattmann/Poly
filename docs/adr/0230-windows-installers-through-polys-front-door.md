@@ -48,10 +48,11 @@ nearly all one resource): the headers, the resource directory, then single resou
   `FileDescription` (or `CompanyName`). **Version**: `ProductVersion` (`1, 2, 3, 4` written with dots), else
   `FileVersion`, else the fixed version. **Size**: the file's. **Kind**: "Windows installer (32-bit)" or "Windows
   program (64-bit)".
-- **Publisher**: the Authenticode signer when Poly can read it, else "Unknown publisher" ("(signed)" when the file has
-  a certificate table). The signer's name is ADR 0222's `poly_x509::authenticode` (batch B0), which is not on `main`
-  yet; the installer has the hook (`publisher_of`) and says only whether the file is signed until then. The signature
-  is not verified (ADR 0222 says the same of its prompt).
+- **Publisher**: the Authenticode signer, read by `poly_x509::authenticode::publisher_of` (the headers, the
+  certificate table, the first signer's certificate subject), the same function the consent prompt of ADR 0222
+  uses, and worded by the same `publisher_label`: "Google LLC (signature not verified)" in both places for Google's
+  installer. Else "Unknown publisher" ("(signed)" when the file has a certificate table whose signer Poly cannot
+  read). The signature itself is not verified (ADR 0222 says the same of its prompt).
 - **Icon**: the largest image of the program's first icon group; a PNG image as it is, a DIB (1-, 4-, 8-, 24- or
   32-bit, transparency from its alpha or its AND mask) written as a PNG file (stored deflate blocks), because the
   launcher reads PNG files.
@@ -74,6 +75,32 @@ an NT process's creator as its parent (`Process::ppid`, read by `/proc/<pid>/sta
 had none). Every tick the window adds the processes whose parent is in the tree; once the installer itself has ended,
 the window says how many it still waits for and offers **Stop waiting** (an installer may leave a program running,
 Chrome itself for one: `chrome.exe --from-installer`).
+
+### 3a. Started as the shell opens it: the manifest is honoured (addendum, track `frontdoor-manifest`)
+
+On Windows a double click is the shell's `ShellExecuteEx`: the program's manifest is read and a
+`requireAdministrator` program (or `highestAvailable`, for an administrator) gets the consent prompt **before** it
+runs. The installer window is a native program and cannot call `ShellExecuteExW`, and the kernel's exec reads no
+manifest; so programs ran un-elevated and only installers that ask for themselves (`runas`, as Google's does) got
+the rights. Now the window (**Install**, **Run**, an app's **Uninstall**) starts every Windows program through
+**`polyopen.exe`**, Poly's own small program in `C:\Windows\System32` (`personalities/nt/win32/polyopen`): it calls
+`ShellExecuteExW` with the default verb, which is ADR 0222's path (`CreateProcessW` refuses with
+`ERROR_ELEVATION_REQUIRED`, `ShellExecuteExW` then asks the consent broker and starts the program with the full
+token), waits for the program and for everything it started, and ends with the program's exit code. That wait
+is exact: `polyopen.exe` puts itself into a job object before it opens the program, every process of the tree joins
+it (ADR 0169), and it waits until it is the job's only process, saying `polyopen: the program has ended; waiting
+for N it started` while it does. The window then waits for `polyopen.exe` alone; the `/proc` tree of decision 3
+remains for a disk without it. (Watching `/proc` lost short-lived processes in between, such as an elevated copy
+that starts a helper and ends within one look; the kernel now also hands an ending NT process's children to its
+parent.) The program is still a child of the window's process
+tree, so the wait of decision 3 holds. If the shell does not start it, `polyopen.exe` writes `polyopen:
+ShellExecuteExW failed: <error>` and the window says so: for `ERROR_CANCELLED` (1223, the prompt answered No) "...
+did not run: it asks for administrator rights, and they were not given." On a disk without `polyopen.exe` the
+program is started directly, as before.
+
+Windows' *installer detection* (32-bit images without a manifest whose names say "setup" or "install" are elevated)
+is **not** done: it has no spec sheet (ADR 0222 lists it as missing). The front door's own "installer by its names"
+only chooses between **Install** and **Run**; it never asks for rights.
 
 ### 4. Afterwards: shortcuts become launcher entries
 
@@ -142,10 +169,16 @@ prompt with Yes (Tab, Enter: No has the focus first), and the elevated copy inst
 the user: `HKCU`, `%LOCALAPPDATA%`). The window waits for the elevated copy and the helper, the shortcut becomes the launcher entry with the key as its registration, the desktop reads its
 apps again, and **Open** and the launcher start the installed app with the shortcut's argument.
 
+Boot group `win-installer`, addendum: a second copy of the test installer with a `requireAdministrator` manifest
+embedded by xtask (`with_manifest`: a new `.rsrc` section with `RT_MANIFEST` 1, host-tested by reading it back with
+`poly_kernelbase::elevation`, B0's reader) installs "Poly Admin App": the consent prompt comes once, before it
+runs; it runs elevated without asking itself, and its `Uninstall` key is under `HKLM`. Host: the model's words for a
+refused or failed start.
+
 ## Not in this ADR
 
 - **MSI** (B6), and running an `.msi` through `msiexec`.
-- **The publisher's name** until B0's Authenticode reader is on `main`; verifying signatures.
+- **Verifying signatures** (the image digest, the chain to a trusted root): the name is shown as not verified.
 - **Shortcuts whose target is only in an ID list Poly's `ShellLink` did not write** (`poly-lnk`'s reading of the
   shell's items is Poly's own layout; the public specification does not give them).
 - **Installers that elevate**: B0's consent prompt is theirs; this window only waits.

@@ -3131,7 +3131,10 @@ fn tl_server(args: &str) -> u32 {
     }
     let (hr, cookie) =
         reg_class_obj(&clsid, &TFACTORY as *const Factory as *mut c_void, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE);
-    ssay!("register -> {}", hex8(hr).as_str());
+    // only a failure is logged: a client may already be served (and log its calls) before this line could be written
+    if hr != S_OK {
+        ssay!("register failed -> {}", hex8(hr).as_str());
+    }
     let life = flag_num(rest, "life", 8000);
     let quit = quit_path(tag);
     let mut waited = 0u32;
@@ -3438,7 +3441,7 @@ fn finish_run(t: &mut Test, run: TlRun, objs: &[*mut c_void], log: bool) {
         say!(t, "server did not leave");
     }
     if log {
-        print_log(t, run.tag);
+        print_tl_log(t, run.tag);
     }
     // SAFETY: plain call.
     unsafe { CoUninitialize() };
@@ -3471,7 +3474,7 @@ fn finish_run_n(t: &mut Test, run: TlRun, objs: &[*mut c_void], servers: usize) 
     if !wait_log_count(run.tag, "exit", servers, 5000) {
         say!(t, "a server did not leave");
     }
-    print_log(t, run.tag);
+    print_tl_log(t, run.tag);
     // SAFETY: plain call.
     unsafe { CoUninitialize() };
     run.teardown();
@@ -3584,6 +3587,36 @@ fn local_end(run: TlRun) {
 /// A new object of the test library living in this process (one reference).
 fn local_echo() -> *mut c_void {
     new_eobj() as *mut c_void
+}
+
+/// Print the server's log. The lines of the calls the client makes one after the other keep their order; the lines
+/// "object released live=N" (written by the server when COM drops the last reference of an object, which can happen
+/// on another thread, before or after the client's next call) are not printed where they are but as one sorted summary.
+fn print_tl_log(t: &mut Test, tag: &str) {
+    let txt = read_text(&srv_log_path(tag));
+    let mut live = [0i32; 64];
+    let mut n = 0usize;
+    for l in txt.s().split(char::from(10)) {
+        if l.is_empty() {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("object released live=") {
+            if n < 64 {
+                live[n] = v.trim().parse().unwrap_or(-1);
+                n += 1;
+            }
+        } else {
+            say!(t, "srv: {l}");
+        }
+    }
+    if n > 0 {
+        live[..n].sort_unstable_by(|a, b| b.cmp(a));
+        let mut b = Buf::<300>::new();
+        for (i, v) in live[..n].iter().enumerate() {
+            let _ = write!(b, "{}{v}", if i == 0 { "" } else { " " });
+        }
+        say!(t, "srv: objects released, {n} times, live counts after each: {}", b.as_str());
+    }
 }
 
 main_with_child!(child, test);
