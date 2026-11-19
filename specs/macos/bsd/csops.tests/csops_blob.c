@@ -2,11 +2,11 @@
  * with the magic of an embedded signature, the bytes fa de 0c c0 (CSMAGIC_EMBEDDED_SIGNATURE,
  * big endian), followed by its length (big endian u32, a value). Operations
  * 4 (path) and 5 (hash of the code directory) are refused with EINVAL
- * for an ordinary caller on this system (values). Operation numbers are
- * those of XNU's bsd/sys/codesign.h; the blob magic is public. */
+ * for an ordinary caller on this system (values). Operation numbers were
+ * found by experiment; the blob magic is public. */
 #include "poly_mtest.h"
 
-/* XNU bsd/sys/codesign.h (not installed in the SDK): operations and flags. */
+/* Operations and flags: no public header; found by experiment. */
 #define CS_OPS_STATUS 0
 #define CS_VALID 0x00000001u
 

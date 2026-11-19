@@ -135,11 +135,13 @@ fn create_set_query_enumerate() {
     let (s, _, b) = query_value(&mut f, h2, "", KEY_VALUE_PARTIAL_INFORMATION, 64);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(&b[12..28], &sz("default")[..]);
-    // Full information: name then data at DataOffset.
+    // Full information: name then data at DataOffset, the next multiple of 8
+    // (NtQueryValueKey.yaml `full`).
     let (s, len, b) = query_value(&mut f, h2, "BLOB", KEY_VALUE_FULL_INFORMATION, 64);
-    assert_eq!((s, len), (STATUS_SUCCESS, 20 + 8 + 3));
+    assert_eq!((s, len), (STATUS_SUCCESS, 32 + 3));
     assert_eq!(utf16(&b[20..28]), "Blob");
-    assert_eq!(&b[28..31], &[1, 2, 3]);
+    assert_eq!(u32::from_le_bytes(b[8..12].try_into().unwrap()), 32);
+    assert_eq!(&b[32..35], &[1, 2, 3]);
 
     // Enumerate the values, in the order they were set.
     let mut names = Vec::new();

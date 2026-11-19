@@ -19,15 +19,23 @@
 
 extern crate alloc;
 
+mod call;
+#[macro_use]
+mod com;
+mod errinfo;
+mod marshal;
+mod typelib;
+mod variant;
+
 use poly_kernelbase::oleaut::{self, *};
 use poly_win32_rt as _;
 
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn GetProcessHeap() -> *mut u8;
-    fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
-    fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
+    pub(crate) fn GetProcessHeap() -> *mut u8;
+    pub(crate) fn HeapAlloc(heap: *mut u8, flags: u32, bytes: usize) -> *mut u8;
+    pub(crate) fn HeapFree(heap: *mut u8, flags: u32, p: *mut u8) -> i32;
     fn SetLastError(error: u32);
 }
 
@@ -211,6 +219,14 @@ pub unsafe extern "system" fn VariantClear(v: *mut u8) -> u32 {
     unsafe {
         let vt = v.cast::<u16>().read_unaligned();
         let value = v.add(VARIANT_VALUE).cast::<*mut u8>().read_unaligned();
+        if vt & VT_ARRAY != 0 && vt & VT_BYREF == 0 && oleaut::held(vt) == Held::Unsupported {
+            let r = SafeArrayDestroy(value);
+            if r != S_OK {
+                return r;
+            }
+            VariantInit(v);
+            return S_OK;
+        }
         match oleaut::held(vt) {
             Held::Bad => return DISP_E_BADVARTYPE,
             Held::Unsupported => return E_NOTIMPL,
@@ -233,6 +249,9 @@ pub unsafe extern "system" fn VariantCopy(dest: *mut u8, src: *const u8) -> u32 
     // SAFETY: the caller's VARIANTs.
     unsafe {
         let vt = src.cast::<u16>().read_unaligned();
+        if vt & VT_ARRAY != 0 && vt & VT_BYREF == 0 && oleaut::held(vt) == Held::Unsupported {
+            return variant::copy(dest, src) as u32;
+        }
         let held = oleaut::held(vt);
         match held {
             Held::Bad => return DISP_E_BADVARTYPE,
@@ -318,24 +337,6 @@ pub unsafe extern "system" fn VarBstrCmp(left: Bstr, right: Bstr, lcid: u32, fla
     let r = if right.is_null() { empty.as_ptr() } else { right.cast_const() };
     // SAFETY: two strings of the stated lengths.
     poly_kernelbase::safearray::varcmp(unsafe { CompareStringW(lcid, flags, l, ln as i32, r, rn as i32) })
-}
-
-/// `LoadRegTypeLib(rguid, wVerMajor, wVerMinor, lcid, pptlib)`: Poly's registry has no type
-/// libraries, so none is registered under any id.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn LoadRegTypeLib(
-    _guid: *const u8,
-    _major: u16,
-    _minor: u16,
-    _lcid: u32,
-    lib: *mut *mut u8,
-) -> u32 {
-    if lib.is_null() {
-        return E_INVALIDARG;
-    }
-    // SAFETY: the caller's out-pointer.
-    unsafe { lib.write(core::ptr::null_mut()) };
-    poly_kernelbase::safearray::TYPE_E_LIBNOTREGISTERED
 }
 
 // ----- safe arrays (ADR 0155, step 9) ------------------------------------------------------------
@@ -435,7 +436,7 @@ pub unsafe extern "system" fn SafeArrayDestroy(psa: *mut u8) -> u32 {
                 sa_release(kind, data.add(i * size));
             }
         }
-        if features & sa::FADF_HAVEVARTYPE != 0 && sa_read::<u16>(psa, sa::SA_DIMS) == 1 {
+        if features & sa::FADF_HAVEVARTYPE != 0 {
             HeapFree(GetProcessHeap(), 0, data);
             HeapFree(GetProcessHeap(), 0, psa.sub(sa::SA_HIDDEN));
         }

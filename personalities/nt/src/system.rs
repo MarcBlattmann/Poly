@@ -297,7 +297,7 @@ pub struct NtProcess {
     /// Set by the security milestone; off for every process until then.
     pub win32k_disabled: bool,
     /// The file its executable was started from, as `(device name, path below the volume)`
-    /// (set by the kernel before the process starts).
+    /// (set by the kernel before the process starts; kept for the process list, `crate::proclist`).
     pub image_name: Option<(Vec<u16>, Vec<u16>)>,
     /// A 32-bit process (WOW64, ADR 0186): its executable is a PE32 image, it runs Poly's i686
     /// `ntdll`, its address space ends at 2 or 4 GiB, its PEB, TEBs and parameters have the

@@ -24,6 +24,19 @@ pub fn is_valid_lcid(lcid: u32, flags: u32) -> bool {
     flags & !3 == 0 && VALID_LCIDS.contains(&lcid)
 }
 
+/// What `SetThreadLocale(lcid)` makes the thread's locale (sheet `kernel32.dll/GetThreadLocale`):
+/// `Some(0)` for 0 (back to the default), `Some(lcid)` for an LCID of the `MAKELCID` shape
+/// (`winnt.h`: a language id in the low 16 bits with a primary language that is not 0, a sort id in
+/// bits 16-19, nothing above), `None` (`ERROR_INVALID_PARAMETER`) for anything else, such as
+/// 0xFFFFFFFF. A thread may hold a locale whose tables Poly does not have (de-DE, ja-JP); the
+/// locale functions answer for English (United States) whatever the thread's locale is.
+pub fn thread_locale_to_set(lcid: u32) -> Option<u32> {
+    if lcid == 0 {
+        return Some(0);
+    }
+    (lcid >> 20 == 0 && lcid & 0x3FF != 0).then_some(lcid)
+}
+
 /// An answer of `GetLocaleInfoW`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Info {
@@ -378,6 +391,17 @@ pub const COMPARE_FLAGS_KNOWN: u32 = 0x1 | 0x2 | 0x4 | 0x10 | 0x20 | 0x1000 | 0x
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thread_locales_of_the_lcid_shape_are_taken() {
+        for lcid in [0x0409, 0x0407, 0x0411, 0x0001_0407] {
+            assert_eq!(thread_locale_to_set(lcid), Some(lcid));
+        }
+        assert_eq!(thread_locale_to_set(0), Some(0), "0: back to the default");
+        assert_eq!(thread_locale_to_set(0xFFFF_FFFF), None);
+        assert_eq!(thread_locale_to_set(0x0010_0409), None, "bits above the sort id");
+        assert_eq!(thread_locale_to_set(0x0400), None, "no primary language");
+    }
 
     #[test]
     fn character_types_match_learns_flags() {

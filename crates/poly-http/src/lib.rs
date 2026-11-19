@@ -18,6 +18,8 @@
 //! - [`query`]: `WinHttpQueryHeaders` / `HttpQueryInfoW`'s information
 //!   levels (`winhttp.h`, `wininet.h`: the same numbering) answered from a
 //!   parsed response.
+//! - [`options`]: `WinHttpSetOption` / `WinHttpQueryOption`'s options of
+//!   each kind of handle and `WinHttpSetStatusCallback`'s callback.
 //! - [`consts`]: the WinHTTP and WinINet constants and error codes the
 //!   DLLs use.
 //!
@@ -34,6 +36,7 @@ extern crate alloc;
 pub mod consts;
 pub mod date;
 pub mod exports;
+pub mod options;
 pub mod query;
 pub mod request;
 pub mod response;

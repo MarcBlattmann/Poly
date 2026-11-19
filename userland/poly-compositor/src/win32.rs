@@ -254,6 +254,12 @@ impl WindowsSurfaces {
     /// pixels).
     fn overlay(&self, scene: &mut Scene, surface: SurfaceId, r: Rect, buffers: &dyn Buffers, only: Option<LayerId>) {
         let Some(window) = self.window(surface) else { return };
+        // A layer is read as its surface is: premultiplied alpha when win32k said so (a
+        // DirectComposition swap chain of `DXGI_ALPHA_MODE_PREMULTIPLIED`, ADR 0225), else opaque.
+        let opaque = match self.surfaces.get(&surface).and_then(|s| s.buffer) {
+            Some((.., PixelFormat::Argb8888)) => 0,
+            _ => 0xFF00_0000,
+        };
         for (&(_, id), l) in self.layers.range((surface, 0)..=(surface, LayerId::MAX)) {
             if only.is_some_and(|o| o != id) {
                 continue;
@@ -267,7 +273,7 @@ impl WindowsSurfaces {
                 continue;
             }
             let from = ((shown.x - x) as u32, (shown.y - y) as u32);
-            blit(scene, window, src, stride, from, shown, 0xFF00_0000);
+            blit(scene, window, src, stride, from, shown, opaque);
         }
     }
 
@@ -1137,6 +1143,39 @@ mod tests {
         d.destroy(s);
         let actions = pump(&mut d, &mut ws, &mut scene, &mem);
         assert!(actions.contains(&Action::DropBuffer(lb2)), "{actions:?}");
+    }
+
+    /// ADR 0225: a layer of a surface win32k made premultiplied (Chrome's menus and bubbles, shown
+    /// by a premultiplied composition swap chain) keeps its alpha: a transparent corner stays
+    /// transparent instead of turning opaque black.
+    #[test]
+    fn a_layer_of_a_premultiplied_surface_keeps_its_alpha() {
+        let mut scene = Scene::new(800, 600, 1);
+        let mut ws = WindowsSurfaces::new();
+        let mut d = Desktop::new();
+        let mut mem = Memory(BTreeMap::new());
+        let hello =
+            FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+        d.receive(&encode_all(&[hello]));
+        let s = d.create(SurfaceKind::Popup, 0, false);
+        d.set_geometry(s, 10, 10, 4, 4);
+        let b = d.attach_buffer(s, 4, 4, 16, PixelFormat::Argb8888).unwrap();
+        mem.0.insert(b, vec![0; 64]);
+        d.damage(s, 0, 0, 4, 4);
+        d.set_visible(s, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w = ws.window(s).unwrap();
+        let px = |scene: &Scene, x: usize, y: usize| content_of(scene, w).unwrap().pixels[y * 4 + x];
+        // The layer: transparent at (0, 0), opaque white elsewhere.
+        let lb = d.layer_buffer(s, 1, 4, 4, 16).unwrap();
+        let mut pixels = vec![0xFF; 64];
+        pixels[..4].copy_from_slice(&[0, 0, 0, 0]);
+        mem.0.insert(lb, pixels);
+        d.place_layer(s, 1, 0, 0, (0, 0, 4, 4));
+        d.damage_layer(s, 1, lb, (0, 0, 4, 4));
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        assert_eq!(px(&scene, 0, 0), 0, "a transparent corner stays transparent");
+        assert_eq!(px(&scene, 1, 0), 0xFFFF_FFFF);
     }
 
     #[test]

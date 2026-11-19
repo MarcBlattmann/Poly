@@ -7,17 +7,12 @@
 poly_win32_rt::fail_exports!(
     "shell32",
     win32,
-    [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW, ShellExecuteA, SHChangeNotify, IsUserAnAdmin]
+    [DragQueryFileW, SHAppBarMessage, SHGetFileInfoW, ShellExecuteA, IsUserAnAdmin]
 );
 
 // These return an `HRESULT`.
 poly_win32_rt::fail_exports!(
     "shell32",
     hresult,
-    [
-        SHGetStockIconInfo,
-        SHQueryUserNotificationState,
-        SetCurrentProcessExplicitAppUserModelID,
-        SHCreateAssociationRegistration
-    ]
+    [SHGetStockIconInfo, SHQueryUserNotificationState, SetCurrentProcessExplicitAppUserModelID]
 );

@@ -32,9 +32,11 @@ static EXPORTS: Locked<Vec<Export>> = Locked::new(Vec::new());
 static NEXT_OID: AtomicU64 = AtomicU64::new(1);
 /// 0: no listener; 1: starting; 2: listening.
 static STATE: AtomicU32 = AtomicU32::new(0);
+static OXID: AtomicU64 = AtomicU64::new(0);
 static ENDPOINT: Locked<Option<String>> = Locked::new(None);
 
-/// The pipe name of this process's exporter; the listener starts on first use.
+/// The pipe name of this process's exporter; the listener starts on first use, and the pipe exists
+/// when this returns.
 pub(crate) fn endpoint() -> String {
     loop {
         match STATE.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire) {
@@ -42,11 +44,16 @@ pub(crate) fn endpoint() -> String {
                 let mut r = [0u8; 8];
                 // SAFETY: a buffer of 8 bytes.
                 unsafe { crate::ProcessPrng(r.as_mut_ptr(), 8) };
-                let name = alloc::format!(r"\\.\pipe\poly-com-ox-{}-{:016x}", pid(), u64::from_le_bytes(r));
+                let oxid = u64::from_le_bytes(r);
+                OXID.store(oxid, Ordering::Release);
+                let name = poly_com::marshal::endpoint_for(pid(), oxid);
                 ENDPOINT.with(|e| *e = Some(name.clone()));
+                // The first instance exists before the name is handed out: whoever is told the
+                // endpoint (the activation process checking a registration's factory) finds it.
+                let first = new_instance(&wide(&name));
                 let mut tid = 0u32;
-                // SAFETY: the listener runs for the life of the process.
-                let t = unsafe { CreateThread(core::ptr::null(), 0, listener, core::ptr::null_mut(), 0, &mut tid) };
+                // SAFETY: the listener runs for the life of the process and owns `first`.
+                let t = unsafe { CreateThread(core::ptr::null(), 0, listener, first as *mut c_void, 0, &mut tid) };
                 close(t);
                 STATE.store(2, Ordering::Release);
                 return name;
@@ -57,25 +64,37 @@ pub(crate) fn endpoint() -> String {
     }
 }
 
-unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
+/// This process's exporter OXID (starts the exporter listener on first use).
+pub(crate) fn oxid() -> u64 {
+    let _ = endpoint();
+    OXID.load(Ordering::Acquire)
+}
+
+/// A new listening instance of the exporter's pipe (`INVALID_HANDLE` on failure).
+fn new_instance(name: &[u16]) -> Handle {
+    // SAFETY: a NUL-terminated name; byte mode, blocking.
+    unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            pipe::PIPE_ACCESS_DUPLEX,
+            0,
+            pipe::PIPE_UNLIMITED_INSTANCES,
+            65536,
+            65536,
+            0,
+            core::ptr::null(),
+        )
+    }
+}
+
+unsafe extern "system" fn listener(first: *mut c_void) -> u32 {
     let name = wide(&ENDPOINT.with(|e| e.clone()).unwrap_or_default());
+    let mut h = first as Handle;
     loop {
-        // SAFETY: a NUL-terminated name; byte mode, blocking.
-        let h = unsafe {
-            CreateNamedPipeW(
-                name.as_ptr(),
-                pipe::PIPE_ACCESS_DUPLEX,
-                0,
-                pipe::PIPE_UNLIMITED_INSTANCES,
-                65536,
-                65536,
-                0,
-                core::ptr::null(),
-            )
-        };
         if h == INVALID_HANDLE {
             // SAFETY: a plain sleep.
             unsafe { Sleep(20) };
+            h = new_instance(&name);
             continue;
         }
         // SAFETY: a pipe instance of ours.
@@ -84,13 +103,18 @@ unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
             || unsafe { GetLastError() } == pipe::ERROR_PIPE_CONNECTED;
         if !ok {
             close(h);
+            h = new_instance(&name);
             continue;
         }
+        // The next instance listens before this connection is handed on, so that a client never
+        // finds the pipe without a listening instance (calls come one connection each).
+        let connected = h;
+        h = new_instance(&name);
         let mut tid = 0u32;
         // SAFETY: the connection thread owns the handle from here.
-        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, h as *mut c_void, 0, &mut tid) };
+        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, connected as *mut c_void, 0, &mut tid) };
         if t == 0 {
-            close(h);
+            close(connected);
         } else {
             close(t);
         }
@@ -156,8 +180,24 @@ pub(crate) fn export_object(identity: usize, owner: Owner) -> ObjRef {
     ObjRef { endpoint: endpoint(), oid }
 }
 
+/// Add `n` proxy references to the live export `oid`; whether it exists.
+pub(crate) fn add_refs(oid: u64, n: u32) -> bool {
+    EXPORTS.with(|x| match x.iter_mut().find(|e| e.oid == oid && !e.factory && e.refs > 0) {
+        Some(e) => {
+            e.refs += n;
+            true
+        }
+        None => false,
+    })
+}
+
+/// The object of the live export `oid` (its identity; the export keeps its reference).
+pub(crate) fn object_of(oid: u64) -> Option<(usize, Owner)> {
+    EXPORTS.with(|x| x.iter().find(|e| e.oid == oid && !e.factory && e.refs > 0).map(|e| (e.object, e.owner)))
+}
+
 /// Give back `n` proxy references of `oid`; the last one releases the object.
-fn release_refs(oid: u64, n: u32) {
+pub(crate) fn release_refs(oid: u64, n: u32) {
     let gone = EXPORTS.with(|x| {
         let i = x.iter().position(|e| e.oid == oid && !e.factory)?;
         x[i].refs = x[i].refs.saturating_sub(n);
@@ -202,6 +242,24 @@ fn dispatch(oid: u64, op: Op) -> Reply {
     let Some(e) = find(oid) else { return Reply::hr(RPC_E_DISCONNECTED) };
     let object = e.object as *mut c_void;
     match op {
+        // A method of an interface marshalled through its proxy/stub class (B2b).
+        Op::Invoke { iid, method, data } => {
+            COUNT.with(|c| c.enter_call());
+            let r = apt::run_in(e.owner, || super::channel::invoke_stub(e.object, &iid, method, &data));
+            COUNT.with(|c| c.leave_call());
+            match r {
+                Ok(data) => Reply { hr: S_OK, obj: None, data },
+                Err(hr) => Reply::hr(hr),
+            }
+        }
+        // References for a proxy another process marshalled on (B2b); with a token, only while
+        // that table registration lives.
+        Op::AddRef { n, token } => {
+            if token != 0 && !super::marshal::table_has(token) {
+                return Reply::hr(poly_com::hresult::CO_E_OBJNOTREG);
+            }
+            if add_refs(oid, n) { Reply::hr(S_OK) } else { Reply::hr(RPC_E_DISCONNECTED) }
+        }
         Op::Release(n) => {
             release_refs(oid, n);
             Reply::hr(S_OK)
@@ -257,7 +315,7 @@ fn dispatch(oid: u64, op: Op) -> Reply {
             if identity.is_null() {
                 return Reply::hr(if hr >= 0 { E_UNEXPECTED } else { hr });
             }
-            Reply { hr, obj: Some(export_object(identity as usize, e.owner)) }
+            Reply { hr, obj: Some(export_object(identity as usize, e.owner)), data: Vec::new() }
         }
     }
 }

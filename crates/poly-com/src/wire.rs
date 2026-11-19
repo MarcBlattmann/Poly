@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 pub const ACTIVATION_PIPE: &str = r"\\.\pipe\poly-com-activation";
 
 /// The longest payload accepted.
-pub const MAX_FRAME: usize = 64 * 1024;
+pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// How the activation process starts a class's server.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +44,12 @@ pub enum Op {
     CreateInstance(Guid),
     /// `IClassFactory::LockServer(lock)`.
     LockServer(bool),
+    /// A method of interface `iid` (B2b): the vtable slot and the marshalled arguments, which the
+    /// interface's stub reads; the reply carries the marshalled results.
+    Invoke { iid: Guid, method: u32, data: Vec<u8> },
+    /// Add `n` references for a proxy that another party marshalled (B2b); with `token` not 0,
+    /// only while the table registration `token` still exists (`CO_E_OBJNOTREG` otherwise).
+    AddRef { n: u32, token: u64 },
 }
 
 /// A request.
@@ -66,6 +72,8 @@ pub enum Request {
 pub struct Reply {
     pub hr: Hresult,
     pub obj: Option<ObjRef>,
+    /// The marshalled results of an `Invoke`.
+    pub data: Vec<u8>,
 }
 
 /// A message that does not parse.
@@ -96,6 +104,10 @@ impl W {
         for u in units {
             self.0.extend_from_slice(&u.to_le_bytes());
         }
+    }
+    fn bytes(&mut self, b: &[u8]) {
+        self.u32(b.len() as u32);
+        self.0.extend_from_slice(b);
     }
     fn objref(&mut self, o: &ObjRef) {
         self.str(&o.endpoint);
@@ -139,6 +151,10 @@ impl R<'_> {
         let b = self.take(n * 2)?;
         let units: Vec<u16> = b.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
         String::from_utf16(&units).map_err(|_| Malformed)
+    }
+    fn bytes(&mut self) -> Result<Vec<u8>, Malformed> {
+        let n = self.u32()? as usize;
+        Ok(self.take(n)?.to_vec())
     }
     fn objref(&mut self) -> Result<ObjRef, Malformed> {
         Ok(ObjRef { endpoint: self.str()?, oid: self.u64()? })
@@ -205,6 +221,17 @@ impl Request {
                         w.u8(4);
                         w.u8(u8::from(*l));
                     }
+                    Op::Invoke { iid, method, data } => {
+                        w.u8(5);
+                        w.guid(iid);
+                        w.u32(*method);
+                        w.bytes(data);
+                    }
+                    Op::AddRef { n, token } => {
+                        w.u8(6);
+                        w.u32(*n);
+                        w.u64(*token);
+                    }
                 }
             }
         }
@@ -250,6 +277,8 @@ impl Request {
                     2 => Op::Release(r.u32()?),
                     3 => Op::CreateInstance(r.guid()?),
                     4 => Op::LockServer(r.u8()? != 0),
+                    5 => Op::Invoke { iid: r.guid()?, method: r.u32()?, data: r.bytes()? },
+                    6 => Op::AddRef { n: r.u32()?, token: r.u64()? },
                     _ => return Err(Malformed),
                 };
                 Request::Call { oid, op }
@@ -263,7 +292,7 @@ impl Request {
 
 impl Reply {
     pub fn hr(hr: Hresult) -> Reply {
-        Reply { hr, obj: None }
+        Reply { hr, obj: None, data: Vec::new() }
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -276,6 +305,7 @@ impl Reply {
                 w.objref(o);
             }
         }
+        w.bytes(&self.data);
         w.0
     }
 
@@ -287,8 +317,9 @@ impl Reply {
             1 => Some(r.objref()?),
             _ => return Err(Malformed),
         };
+        let data = r.bytes()?;
         r.end()?;
-        Ok(Reply { hr, obj })
+        Ok(Reply { hr, obj, data })
     }
 }
 
@@ -329,10 +360,17 @@ mod tests {
             clsid: G,
             plan: Some(Plan::Service { name: "Svc".to_string(), args: vec!["--one".to_string(), "ü".to_string()] }),
         });
-        for op in [Op::QueryInterface(G), Op::Release(3), Op::CreateInstance(G), Op::LockServer(true)] {
+        for op in [
+            Op::QueryInterface(G),
+            Op::Release(3),
+            Op::CreateInstance(G),
+            Op::LockServer(true),
+            Op::Invoke { iid: G, method: 7, data: vec![1, 2, 3] },
+            Op::AddRef { n: 1, token: 9 },
+        ] {
             round(Request::Call { oid: 9, op });
         }
-        let rep = Reply { hr: -2_147_221_164, obj: Some(o) };
+        let rep = Reply { hr: -2_147_221_164, obj: Some(o), data: vec![9, 8] };
         assert_eq!(Reply::decode(&rep.encode()), Ok(rep));
         assert_eq!(Reply::decode(&Reply::hr(0).encode()), Ok(Reply::hr(0)));
     }

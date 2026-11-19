@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:01:55",
+  "tests": [
+    {
+      "name": "ulock_wait2_errors",
+      "source_sha256": "6aeec4499fc515d2bd0acc48a2a7ae7ca257f98479b883d7a1b32bf864ea3b00",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "28369575408094323d8d7dd6776895f691616c81f6f734dfab7d0f54408f4fe6",
+          "exit_code": 0,
+          "stdout": "ok operation 99: EINVAL\nok a NULL address: EINVAL\nok an unaligned address: EINVAL\nok the address 8: EFAULT\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ulock_wait2_timeout",
+      "source_sha256": "9f62f2186bc17d27b7ff3ff338b3fbbebf4f7c8b7bfd0849141d2ec3c9ac750d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dd8499c1fbf0fdd615b69beb1f8a18d9e3dc699989ba664513650dc4e1c51ed4",
+          "exit_code": 0,
+          "stdout": "ok the word equals the value: ETIMEDOUT\nok the word differs: 0 at once\nok ULF_NO_ERRNO: -ETIMEDOUT, no carry\nok the shared operation: ETIMEDOUT\nok the wait took at least 15 ms\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

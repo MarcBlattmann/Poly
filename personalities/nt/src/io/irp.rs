@@ -49,6 +49,9 @@ pub enum IrpOp {
     Write { offset: Option<u64>, data: Vec<u8>, key: u32 },
     /// Take a byte-range lock once it can be granted.
     Lock { lock: ByteLock },
+    /// Wait for changes in a directory and put their records in the caller's `buf` of `len`
+    /// bytes ([`super::notify`]).
+    Notify { buf: u64, len: usize },
 }
 
 /// The `key` of the requests `AcceptEx` and `ConnectEx` make on a socket (the byte-range lock key
@@ -291,7 +294,7 @@ impl IoState {
                         !self.locks.may_write(key, LockOwner { file, key: *k }, at, data.len() as u64),
                     )
                 }
-                IrpOp::Lock { .. } => {
+                IrpOp::Lock { .. } | IrpOp::Notify { .. } => {
                     self.complete(id, STATUS_INVALID_DEVICE_REQUEST, 0, None);
                     continue;
                 }
@@ -411,7 +414,7 @@ impl IoState {
         for id in ids {
             let accept_or_connect = self.irps.get(&id).is_some_and(|i| match &i.op {
                 IrpOp::Read { key, .. } | IrpOp::Write { key, .. } => *key == SOCKET_CONNECT_KEY,
-                IrpOp::Lock { .. } => false,
+                IrpOp::Lock { .. } | IrpOp::Notify { .. } => false,
             });
             let status = if accept_or_connect { STATUS_CANCELLED } else { STATUS_CONNECTION_ABORTED };
             self.complete_with(id, status, 0, None, false, false);

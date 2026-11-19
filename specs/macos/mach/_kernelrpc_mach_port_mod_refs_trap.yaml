@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_port_mod_refs_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_port_mod_refs_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_port_mod_refs_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 19;
+  arm64 `svc #0x80` with x16 = -19. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  port_mod_refs(task, name, right, delta) changes the user references of
+  one kind of right on a name. Delta -1 of the receive right (1) destroys
+  the port: the name is invalid afterwards (KERN_INVALID_NAME 15, also on
+  a second destroy and for an unknown name); a send right (0) of a port
+  with two make-send inserts takes +1 and -1, -1, and is gone after the
+  last (the receive right stays, 0x20000). Errors: a right the name does
+  not hold (send or port-set references of a receive-only name, -1 of a
+  send right that is not there) is KERN_INVALID_RIGHT (17); a right number
+  that does not exist (99) and (values) a receive delta of -2 or +1 are
+  KERN_INVALID_VALUE (18); an invalid task is MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  no_such_right: "KERN_INVALID_RIGHT (17)"
+  bad_value: "KERN_INVALID_VALUE (18): right 99, receive delta -2 or +1"
+  no_such_name: "KERN_INVALID_NAME (15)"
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "user references change; the last receive reference destroys the port"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

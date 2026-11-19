@@ -131,6 +131,7 @@ version = "0.0.1"
 dependencies = [
  "poly-d3d",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]
@@ -206,6 +207,15 @@ dependencies = [
 name = "hid"
 version = "0.0.1"
 dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "hnetcfg"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 
@@ -340,6 +350,7 @@ dependencies = [
 name = "oleaut32"
 version = "0.0.1"
 dependencies = [
+ "poly-com",
  "poly-kernelbase",
  "poly-win32-rt",
 ]
@@ -450,6 +461,13 @@ dependencies = [
 [[package]]
 name = "poly-libm"
 version = "0.0.1"
+
+[[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+]
 
 [[package]]
 name = "poly-msvc32"
@@ -652,6 +670,7 @@ version = "0.0.1"
 dependencies = [
  "poly-com",
  "poly-kernelbase",
+ "poly-lnk",
  "poly-win32-rt",
  "poly-win32k",
 ]
@@ -711,6 +730,7 @@ name = "userenv"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+ "poly-kernelbase",
  "poly-security",
  "poly-win32-cryptrt",
  "poly-win32-rt",

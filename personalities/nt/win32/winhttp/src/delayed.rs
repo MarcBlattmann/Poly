@@ -12,7 +12,3 @@ poly_win32_rt::fail_exports!(
     value(120),
     [WinHttpCreateProxyResolver, WinHttpGetProxyForUrlEx, WinHttpGetProxyResult]
 );
-
-// `WinHttpSetStatusCallback`: `WINHTTP_INVALID_STATUS_CALLBACK` (-1) "if the callback function could
-// not be installed".
-poly_win32_rt::fail_exports!("winhttp", value(u64::MAX), [WinHttpSetStatusCallback]);

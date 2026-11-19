@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 19:58:57",
+  "tests": [
+    {
+      "name": "mlock_fork",
+      "source_sha256": "7a452414feef04db7ee361d3acee370bea028b0d10edd3a201dd7d640df3d56e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "10e251a306c0523f708b2a73b71f060e6b15b48aca8fa8753e01d17b253c8c05",
+          "exit_code": 0,
+          "stdout": "ok mlock\nok the child saw the content and could munlock\nok its write did not reach the parent\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mlock_ranges",
+      "source_sha256": "0f4567cac6e3dcf730857fcb3fb4753dfa77e1ed478ec608af3cde2b70caab85",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b47facd84a9ce315561019e3bbb3e6b3d4f8f89a783b75486fc4bebbfdb79ee7",
+          "exit_code": 0,
+          "stdout": "ok a length of 0\nok a length of 1\nok a length of 1 << 40: ENOMEM\nvalue pages that are not mapped: errno 0\nvalue an unaligned address: errno 12\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

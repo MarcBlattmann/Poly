@@ -12,10 +12,8 @@ poly_win32_rt::fail_exports!(
         CoGetInterfaceAndReleaseStream,
         CoMarshalInterThreadInterfaceInStream,
         CreateILockBytesOnHGlobal,
-        CreateStreamOnHGlobal,
         DoDragDrop,
         GetHGlobalFromILockBytes,
-        GetHGlobalFromStream,
         ReleaseStgMedium,
         RoGetAgileReference,
         StgCreateDocfileOnILockBytes

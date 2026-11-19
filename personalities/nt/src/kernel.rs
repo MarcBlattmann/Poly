@@ -368,6 +368,12 @@ pub trait NtKernel {
         None
     }
 
+    /// Every live NT process of the system, for `PolyProcessList` ([`crate::proclist`]). A kernel
+    /// that keeps no list answers with the calling process only.
+    fn processes(&mut self) -> alloc::vec::Vec<crate::proclist::ProcessSummary> {
+        alloc::vec![self.with_state(|_, p, _| crate::proclist::ProcessSummary::of(p))]
+    }
+
     /// Process `pid`'s memory as `NtQueryInformationProcess(ProcessVmCounters)` reports it:
     /// [`VmCounters`]; `None` when the kernel does not know the process (all zero then).
     fn memory_counters(&self, pid: poly_ntobj::ProcessId) -> Option<crate::threads::VmCounters> {
