@@ -27,36 +27,40 @@ unsafe extern "system" fn sender(_: *mut c_void) -> u32 {
     }
 }
 
-/// Tell the activation process to forget a registration, without waiting: the factory is already
-/// disconnected (a client served it meanwhile asks again), and `CoReleaseServerProcess`,
-/// `CoRevokeClassObject` and `CoUninitialize` return at once, as on Windows.
-fn withdraw_later(req: Request) {
-    WITHDRAWALS.with(|q| q.push(req));
-    let mut ev = SENDER_EVENT.load(core::sync::atomic::Ordering::Acquire);
-    if ev == 0 {
-        // SAFETY: an unnamed auto-reset event, kept for the life of the process.
-        let made = unsafe { CreateEventW(core::ptr::null(), 0, 0, core::ptr::null()) };
-        match SENDER_EVENT.compare_exchange(
-            0,
-            made,
-            core::sync::atomic::Ordering::AcqRel,
-            core::sync::atomic::Ordering::Acquire,
-        ) {
-            Ok(_) => {
-                ev = made;
-                let mut tid = 0u32;
-                // SAFETY: the sender runs for the life of the process.
-                let t = unsafe { CreateThread(core::ptr::null(), 0, sender, core::ptr::null_mut(), 0, &mut tid) };
-                close(t);
-            }
-            Err(other) => {
-                close(made);
-                ev = other;
-            }
+/// The sender thread's event, the thread started on first use. A process starts it when it first
+/// publishes a class, so that a withdrawal later (`CoReleaseServerProcess` reaching 0 inside an
+/// object's last `Release`) costs a queue entry and an event, not a new thread.
+fn sender_event() -> isize {
+    use core::sync::atomic::Ordering::{AcqRel, Acquire};
+    let ev = SENDER_EVENT.load(Acquire);
+    if ev != 0 {
+        return ev;
+    }
+    // SAFETY: an unnamed auto-reset event, kept for the life of the process.
+    let made = unsafe { CreateEventW(core::ptr::null(), 0, 0, core::ptr::null()) };
+    match SENDER_EVENT.compare_exchange(0, made, AcqRel, Acquire) {
+        Ok(_) => {
+            let mut tid = 0u32;
+            // SAFETY: the sender runs for the life of the process.
+            let t = unsafe { CreateThread(core::ptr::null(), 0, sender, core::ptr::null_mut(), 0, &mut tid) };
+            close(t);
+            made
+        }
+        Err(other) => {
+            close(made);
+            other
         }
     }
+}
+
+/// Tell the activation process to forget a registration, without waiting: the factory is already
+/// disconnected (a client served it meanwhile is not handed it: the activation process checks),
+/// and `CoReleaseServerProcess`, `CoRevokeClassObject` and `CoUninitialize` return at once, as on
+/// Windows.
+fn withdraw_later(req: Request) {
+    WITHDRAWALS.with(|q| q.push(req));
     // SAFETY: the sender's event.
-    unsafe { SetEvent(ev) };
+    unsafe { SetEvent(sender_event()) };
 }
 
 /// Tell the activation process what changed in the class table: newly servable registrations are
@@ -70,6 +74,9 @@ pub(crate) fn publish_changes() {
     for cookie in p.withdraw {
         exporter::withdraw_factory(cookie);
         withdraw_later(Request::Revoke { pid: me, cookie });
+    }
+    if !p.publish.is_empty() {
+        sender_event();
     }
     for (cookie, clsid, object, single) in p.publish {
         let owner = CLASSES.with(|t| t.get(cookie)).map_or(Owner::Mta, |r| r.owner);
