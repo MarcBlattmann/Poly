@@ -13,7 +13,7 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!(
     "shlwapi",
     value(120),
-    [SHDeleteEmptyKeyW, SHDeleteKeyW, SHDeleteValueW, SHGetValueA, SHGetValueW, SHRegGetUSValueW, SHSetValueW,]
+    [SHDeleteEmptyKeyW, SHGetValueA, SHGetValueW, SHRegGetUSValueW, SHSetValueW,]
 );
 
 poly_win32_rt::fail_exports!(
