@@ -281,7 +281,12 @@ impl Store {
 
     /// `CreateFolder(rel, sddl)`: makes the folder and the missing ones above it; returns the
     /// canonical paths of the folders made.
-    pub fn create_folder(&mut self, folder: &str, rel: Option<&str>, sddl: Option<&str>) -> Result<Vec<String>, Hresult> {
+    pub fn create_folder(
+        &mut self,
+        folder: &str,
+        rel: Option<&str>,
+        sddl: Option<&str>,
+    ) -> Result<Vec<String>, Hresult> {
         if let Some(s) = sddl
             && !sddl_ok(s)
         {
@@ -480,7 +485,8 @@ impl Store {
         let own = def.principal.user_id.clone().filter(|u| !u.is_empty());
         let given = r.user.clone().filter(|u| !u.is_empty());
         let user = if r.from_xml { own.or(given) } else { given.or(own) };
-        let logon_type = if r.from_xml && def.principal.user_id.is_some() { def.principal.logon_type } else { r.logon_type };
+        let logon_type =
+            if r.from_xml && def.principal.user_id.is_some() { def.principal.logon_type } else { r.logon_type };
         match user {
             Some(u) if account::is_service_account(&u) => {
                 def.principal.user_id = Some(account::canonical(&u));
@@ -491,7 +497,11 @@ impl Store {
                 def.principal.user_id = Some(account::canonical(&u));
                 def.principal.logon_type = if logon_type == 0 { logon::INTERACTIVE_TOKEN } else { logon_type };
             }
-            Some(u) if same(&u, &caller.name) || same(&u, &caller.sid) || caller.name.rsplit('\\').next().is_some_and(|n| same(n, &u)) => {
+            Some(u)
+                if same(&u, &caller.name)
+                    || same(&u, &caller.sid)
+                    || caller.name.rsplit('\\').next().is_some_and(|n| same(n, &u)) =>
+            {
                 def.principal.user_id = Some(caller.sid.clone());
                 def.principal.logon_type = Self::own_logon(logon_type)?;
             }
@@ -526,7 +536,8 @@ impl Store {
         boot: i64,
     ) -> Result<Option<Registered>, Hresult> {
         let f = r.flags;
-        if f < 0 || f & !TASK_CREATION_ALL != 0 || (f & TASK_VALIDATE_ONLY != 0 && f & (TASK_CREATE | TASK_UPDATE) != 0) {
+        if f < 0 || f & !TASK_CREATION_ALL != 0 || (f & TASK_VALIDATE_ONLY != 0 && f & (TASK_CREATE | TASK_UPDATE) != 0)
+        {
             return Err(E_INVALIDARG);
         }
         if !(0..=6).contains(&r.logon_type) {

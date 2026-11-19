@@ -157,7 +157,14 @@ fn new_definition_is_the_recorded_text() {
 fn updater_task_registers_as_recorded() {
     let mut s = Store::new(1);
     let r = s
-        .register("\\", &updater_like("PolySpec updater-like task 1.0"), &reg(r"PolySpec\tfg\Gu\Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}", 6, None, 5), &caller(), 100, 0)
+        .register(
+            "\\",
+            &updater_like("PolySpec updater-like task 1.0"),
+            &reg(r"PolySpec\tfg\Gu\Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}", 6, None, 5),
+            &caller(),
+            100,
+            0,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(r.path, r"\PolySpec\tfg\Gu\Task1{9BC308BB-98D3-4838-9AE6-66AF62C749BD}");
@@ -255,18 +262,36 @@ fn put_xml_text_replaces_the_definition() {
     let bad = |s: &str| parse_task(s).unwrap_err();
     assert_eq!(bad("hello"), SCHED_E_MALFORMEDXML);
     assert_eq!(bad(""), SCHED_E_MALFORMEDXML);
-    assert_eq!(bad("<?xml version=\"1.0\"?><Job xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"/>"), SCHED_E_UNEXPECTEDNODE);
+    assert_eq!(
+        bad("<?xml version=\"1.0\"?><Job xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"/>"),
+        SCHED_E_UNEXPECTEDNODE
+    );
     assert_eq!(bad("<?xml version=\"1.0\"?><Task version=\"1.2\" xmlns=\"urn:other\"/>"), SCHED_E_NAMESPACE);
-    assert_eq!(bad("<?xml version=\"1.0\"?><Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"><Bogus/></Task>"), SCHED_E_UNEXPECTEDNODE);
-    assert_eq!(bad("<?xml version=\"1.0\"?><Task version=\"9.9\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"/>"), SCHED_E_INVALIDVALUE);
+    assert_eq!(
+        bad(
+            "<?xml version=\"1.0\"?><Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"><Bogus/></Task>"
+        ),
+        SCHED_E_UNEXPECTEDNODE
+    );
+    assert_eq!(
+        bad(
+            "<?xml version=\"1.0\"?><Task version=\"9.9\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"/>"
+        ),
+        SCHED_E_INVALIDVALUE
+    );
     let ns = "xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\"";
     let act = "<Actions><Exec><Command>c</Command></Exec></Actions>";
-    assert_eq!(bad(&format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Task version=\"1.2\" {ns}>{act}</Task>")), SCHED_E_MALFORMEDXML);
+    assert_eq!(
+        bad(&format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Task version=\"1.2\" {ns}>{act}</Task>")),
+        SCHED_E_MALFORMEDXML
+    );
     assert_eq!(bad(&format!("<Task version=\"1.0\" {ns}>{act}</Task>")), SCHED_E_UNEXPECTEDNODE);
     assert_eq!(bad(&format!("<Task version=\"\" {ns}>{act}</Task>")), SCHED_E_UNEXPECTEDNODE);
     assert_eq!(bad(&format!("<Task version=\"1.7\" {ns}>{act}</Task>")), SCHED_E_INVALIDVALUE);
     assert_eq!(
-        bad(&format!("<Task version=\"1.2\" {ns}><Triggers><TimeTrigger><StartBoundary>x</StartBoundary></TimeTrigger></Triggers>{act}</Task>")),
+        bad(&format!(
+            "<Task version=\"1.2\" {ns}><Triggers><TimeTrigger><StartBoundary>x</StartBoundary></TimeTrigger></Triggers>{act}</Task>"
+        )),
         SCHED_E_INVALIDVALUE
     );
     assert!(parse_task(&format!("<Task {ns}>{act}</Task>")).is_ok());
@@ -299,7 +324,16 @@ fn paths() {
     assert_eq!(components("\\").unwrap().len(), 0);
     assert_eq!(components("").unwrap().len(), 0);
     assert_eq!(components("\\MICROSOFT\\windows").unwrap(), vec!["MICROSOFT", "windows"]);
-    for bad in ["\\\\", "\\Microsoft\\", "Microsoft\\", "\\Microsoft\\\\Windows", "/Microsoft", "\\Microsoft:", " \\Microsoft", ".."] {
+    for bad in [
+        "\\\\",
+        "\\Microsoft\\",
+        "Microsoft\\",
+        "\\Microsoft\\\\Windows",
+        "/Microsoft",
+        "\\Microsoft:",
+        " \\Microsoft",
+        "..",
+    ] {
         assert_eq!(components(bad), Err(INVALID_NAME), "{bad}");
     }
     assert_eq!(task_to_register("\\"), Err(E_INVALIDARG));
@@ -320,7 +354,10 @@ fn folders() {
     assert_eq!(s.get_folder("\\", "."), Err(NOT_FOUND));
     assert_eq!(s.get_folder("\\Microsoft\\Windows", "\\Microsoft"), Err(NOT_FOUND));
     assert_eq!(s.create_folder("\\", Some(r"PolySpec\tff"), None).unwrap().len(), 2);
-    assert_eq!(s.create_folder("\\", Some(r"PolySpec\tff\p\q"), None).unwrap(), vec![r"\PolySpec\tff\p".to_string(), r"\PolySpec\tff\p\q".to_string()]);
+    assert_eq!(
+        s.create_folder("\\", Some(r"PolySpec\tff\p\q"), None).unwrap(),
+        vec![r"\PolySpec\tff\p".to_string(), r"\PolySpec\tff\p\q".to_string()]
+    );
     assert_eq!(s.create_folder(r"\PolySpec\tff", Some("a"), None).unwrap().len(), 1);
     assert_eq!(s.create_folder(r"\PolySpec\tff", Some("A"), None), Err(ALREADY_EXISTS));
     assert_eq!(s.create_folder(r"\PolySpec\tff", None, None), Err(ALREADY_EXISTS));
@@ -382,7 +419,10 @@ fn tasks_register_get_delete() {
     assert_eq!(s.delete_task(r"\PolySpec\tfs", Some("c*"), 0), Err(NOT_FOUND));
     assert_eq!(s.delete_task(r"\PolySpec\tfs", Some("c\\"), 0), Err(INVALID_NAME));
     assert_eq!(s.delete_task("\\", Some(r"\PolySpec\tfs\TB"), 0), Ok(Deleted::Task(r"\PolySpec\tfs\Tb".into())));
-    assert_eq!(s.delete_task(r"\PolySpec\tfs", Some("sub\\Below"), 0), Ok(Deleted::Task(r"\PolySpec\tfs\sub\Below".into())));
+    assert_eq!(
+        s.delete_task(r"\PolySpec\tfs", Some("sub\\Below"), 0),
+        Ok(Deleted::Task(r"\PolySpec\tfs\sub\Below".into()))
+    );
     assert_eq!(s.delete_task(r"\PolySpec\tfs", Some("sub"), 0), Ok(Deleted::Folder(r"\PolySpec\tfs\sub".into())));
     // A NULL path: the root, a braced GUID.
     let mut n = reg("", 2, None, 5);
@@ -446,7 +486,15 @@ fn times() {
     assert_eq!(parse_datetime("2030-01-01T00:00:00Z"), parse_datetime("2030-01-01T00:00:00"));
     assert_eq!(parse_datetime("2030-01-01T01:00:00+01:00"), parse_datetime("2030-01-01T00:00:00"));
     assert_eq!(parse_datetime("2030-01-01T12:34:56.789"), parse_datetime("2030-01-01T12:34:56"));
-    for bad in ["2030-02-30T00:00:00", "2030-13-01T00:00:00", "2030-01-01T24:00:00", "20300101T000000", "yesterday", "2030-01-01", "2030-01-01 00:00:00"] {
+    for bad in [
+        "2030-02-30T00:00:00",
+        "2030-13-01T00:00:00",
+        "2030-01-01T24:00:00",
+        "20300101T000000",
+        "yesterday",
+        "2030-01-01",
+        "2030-01-01 00:00:00",
+    ] {
         assert_eq!(parse_datetime(bad), None, "{bad}");
     }
     assert_eq!(format_datetime(parse_datetime("2030-06-01T08:00:00").unwrap()), "2030-06-01T08:00:00");
@@ -515,6 +563,7 @@ struct Fake {
     forgotten: Vec<String>,
     files: Vec<String>,
     next_pid: u32,
+    boot_start: Option<bool>,
 }
 
 impl Host for Fake {
@@ -542,6 +591,9 @@ impl Host for Fake {
     fn make_folder(&mut self, _path: &str) {}
     fn remove_folder(&mut self, _path: &str) {}
     fn save_state(&mut self, _text: &str) {}
+    fn set_boot_start(&mut self, on: bool) {
+        self.boot_start = Some(on);
+    }
 }
 
 fn register_req(path: &str, def: Definition) -> Request {
@@ -566,6 +618,7 @@ fn run_stop_and_end() {
     let r = s.handle(register_req(r"PolySpec\trs\hold", sys_def()), &mut h);
     assert_eq!(r.hr, S_OK);
     assert_eq!(h.files, vec![r"\PolySpec\trs\hold".to_string()]);
+    assert_eq!(h.boot_start, Some(false));
     let p = r"\PolySpec\trs\hold".to_string();
     assert_eq!(s.handle(Request::Stop { path: p.clone(), flags: 0 }, &mut h).hr, S_FALSE);
     let run = s.handle(Request::Run { path: p.clone() }, &mut h);
@@ -616,6 +669,7 @@ fn the_clock_runs_the_updater_task() {
     let mut d = updater_like("u");
     d.triggers[0].start_boundary = Some(format_datetime(1300));
     s.handle(register_req(r"GoogleSystem\GoogleUpdater\Task", d), &mut h);
+    assert_eq!(h.boot_start, Some(true));
     h.now = 1299;
     s.tick(&mut h);
     assert!(h.spawned.is_empty());

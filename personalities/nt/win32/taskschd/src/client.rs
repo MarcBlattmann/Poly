@@ -190,8 +190,44 @@ fn running() -> bool {
     unsafe { GetLastError() == ERROR_PIPE_BUSY }
 }
 
-/// Start `C:\Windows\System32\schedsvc.exe` unless another process did; wait until its pipe exists
-/// (10 s at most). Whether it runs.
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn OpenSCManagerW(machine: *const u16, database: *const u16, access: u32) -> isize;
+    fn OpenServiceW(scm: isize, name: *const u16, access: u32) -> isize;
+    fn StartServiceW(service: isize, argc: u32, argv: *const *const u16) -> i32;
+    fn CloseServiceHandle(h: isize) -> i32;
+}
+
+/// `SC_MANAGER_CONNECT`, `SERVICE_START` (winsvc.h); `ERROR_SERVICE_ALREADY_RUNNING`.
+const SC_MANAGER_CONNECT: u32 = 1;
+const SERVICE_START: u32 = 0x10;
+const ERROR_SERVICE_ALREADY_RUNNING: u32 = 1056;
+
+/// Start the `Schedule` service through the service control manager (ADR 0221). Whether it was
+/// started (or already ran); false when there is no such service or the caller may not start it.
+fn start_service() -> bool {
+    let name = wide("Schedule");
+    // SAFETY: the documented calls (Learn: OpenSCManagerW, OpenServiceW, StartServiceW); every
+    // handle is closed here.
+    unsafe {
+        let scm = OpenSCManagerW(core::ptr::null(), core::ptr::null(), SC_MANAGER_CONNECT);
+        if scm == 0 {
+            return false;
+        }
+        let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_START);
+        let ok = svc != 0 && (StartServiceW(svc, 0, core::ptr::null()) != 0 || GetLastError() == ERROR_SERVICE_ALREADY_RUNNING);
+        if svc != 0 {
+            CloseServiceHandle(svc);
+        }
+        CloseServiceHandle(scm);
+        ok
+    }
+}
+
+/// Start the scheduler unless another process did: the `Schedule` service, or (no service, no
+/// right to start it) `C:\Windows\System32\schedsvc.exe` as a plain process; wait until its pipe
+/// exists (10 s at most). Whether it runs.
 fn start_scheduler() -> bool {
     let mname = wide(START_MUTEX);
     // SAFETY: a named mutex; closed below.
@@ -201,6 +237,16 @@ fn start_scheduler() -> bool {
         unsafe { WaitForSingleObject(m, 15_000) };
     }
     let mut up = running();
+    if !up && start_service() {
+        for _ in 0..1000 {
+            if running() {
+                up = true;
+                break;
+            }
+            // SAFETY: a plain sleep.
+            unsafe { Sleep(10) };
+        }
+    }
     if !up {
         let mut dir = [0u16; 260];
         // SAFETY: the buffer holds 260 units.

@@ -133,7 +133,9 @@ impl<'a> Dec<'a> {
 /// A definition in full (every field, so nothing is lost between the processes).
 pub fn put_definition(e: &mut Enc, d: &Definition) {
     let r = &d.reg;
-    for t in [&r.description, &r.author, &r.version, &r.date, &r.documentation, &r.uri, &r.source, &r.security_descriptor] {
+    for t in
+        [&r.description, &r.author, &r.version, &r.date, &r.documentation, &r.uri, &r.source, &r.security_descriptor]
+    {
         e.opt(t);
     }
     let p = &d.principal;
@@ -330,13 +332,36 @@ pub fn get_definition(x: &mut Dec) -> D<Definition> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Request {
     Ping,
-    GetFolder { folder: String, rel: String },
-    CreateFolder { folder: String, rel: Option<String>, sddl: Option<String> },
-    DeleteFolder { folder: String, rel: Option<String> },
-    Folders { folder: String, flags: i32 },
-    Tasks { folder: String, flags: i32 },
-    GetTask { folder: String, rel: String },
-    DeleteTask { folder: String, rel: Option<String>, flags: i32 },
+    GetFolder {
+        folder: String,
+        rel: String,
+    },
+    CreateFolder {
+        folder: String,
+        rel: Option<String>,
+        sddl: Option<String>,
+    },
+    DeleteFolder {
+        folder: String,
+        rel: Option<String>,
+    },
+    Folders {
+        folder: String,
+        flags: i32,
+    },
+    Tasks {
+        folder: String,
+        flags: i32,
+    },
+    GetTask {
+        folder: String,
+        rel: String,
+    },
+    DeleteTask {
+        folder: String,
+        rel: Option<String>,
+        flags: i32,
+    },
     Register {
         folder: String,
         def: Definition,
@@ -349,16 +374,38 @@ pub enum Request {
         caller_name: String,
         caller_sid: String,
     },
-    Info { path: String },
-    SetEnabled { path: String, on: bool },
-    Xml { path: String },
-    Definition { path: String },
-    Run { path: String },
-    Stop { path: String, flags: i32 },
-    Instances { path: String },
-    Running { flags: i32 },
-    StopInstance { guid: String },
-    SecurityDescriptor { path: String },
+    Info {
+        path: String,
+    },
+    SetEnabled {
+        path: String,
+        on: bool,
+    },
+    Xml {
+        path: String,
+    },
+    Definition {
+        path: String,
+    },
+    Run {
+        path: String,
+    },
+    Stop {
+        path: String,
+        flags: i32,
+    },
+    Instances {
+        path: String,
+    },
+    Running {
+        flags: i32,
+    },
+    StopInstance {
+        guid: String,
+    },
+    SecurityDescriptor {
+        path: String,
+    },
 }
 
 impl Request {
@@ -403,7 +450,18 @@ impl Request {
                 e.opt(rel);
                 e.i32(*flags);
             }
-            Request::Register { folder, def, path, flags, user, logon_type, sddl, from_xml, caller_name, caller_sid } => {
+            Request::Register {
+                folder,
+                def,
+                path,
+                flags,
+                user,
+                logon_type,
+                sddl,
+                from_xml,
+                caller_name,
+                caller_sid,
+            } => {
                 e.u8(9);
                 e.str(folder);
                 put_definition(&mut e, def);

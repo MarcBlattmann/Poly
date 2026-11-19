@@ -86,6 +86,68 @@ unsafe extern "system" {
     fn ExitProcess(code: u32) -> !;
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn StartServiceCtrlDispatcherW(table: *const ServiceTableEntry) -> i32;
+    fn RegisterServiceCtrlHandlerExW(
+        name: *const u16,
+        handler: unsafe extern "system" fn(u32, u32, *mut c_void, *mut c_void) -> u32,
+        context: *mut c_void,
+    ) -> isize;
+    fn SetServiceStatus(handle: isize, status: *const ServiceStatus) -> i32;
+    fn OpenSCManagerW(machine: *const u16, database: *const u16, access: u32) -> isize;
+    fn OpenServiceW(scm: isize, name: *const u16, access: u32) -> isize;
+    fn ChangeServiceConfigW(
+        service: isize,
+        ty: u32,
+        start: u32,
+        error: u32,
+        path: *const u16,
+        group: *const u16,
+        tag: *mut u32,
+        deps: *const u16,
+        account: *const u16,
+        password: *const u16,
+        display: *const u16,
+    ) -> i32;
+    fn CloseServiceHandle(h: isize) -> i32;
+}
+
+/// `SERVICE_TABLE_ENTRYW` (winsvc.h).
+#[repr(C)]
+struct ServiceTableEntry {
+    name: *const u16,
+    main: Option<unsafe extern "system" fn(u32, *mut *mut u16)>,
+}
+
+/// `SERVICE_STATUS` (winsvc.h).
+#[repr(C)]
+struct ServiceStatus {
+    ty: u32,
+    state: u32,
+    accepted: u32,
+    exit: u32,
+    service_exit: u32,
+    checkpoint: u32,
+    wait_hint: u32,
+}
+
+// winsvc.h / winnt.h.
+const SERVICE_WIN32_OWN_PROCESS: u32 = 0x10;
+const SERVICE_RUNNING: u32 = 4;
+const SERVICE_STOPPED: u32 = 1;
+const SERVICE_ACCEPT_STOP: u32 = 1;
+const SERVICE_CONTROL_STOP: u32 = 1;
+const SERVICE_CONTROL_SHUTDOWN: u32 = 5;
+const SERVICE_NO_CHANGE: u32 = 0xFFFF_FFFF;
+const SERVICE_AUTO_START: u32 = 2;
+const SERVICE_DEMAND_START: u32 = 3;
+const SC_MANAGER_CONNECT: u32 = 1;
+const SERVICE_CHANGE_CONFIG: u32 = 2;
+/// The service's name (ADR 0226): Windows' Task Scheduler service is `Schedule`.
+const SERVICE_NAME: &str = "Schedule";
+
 /// `STARTUPINFOW`.
 #[repr(C)]
 struct StartupInfo {
@@ -358,6 +420,38 @@ impl Host for Sys {
     fn save_state(&mut self, text: &str) {
         write_file(STATE_FILE, text.as_bytes());
     }
+
+    fn set_boot_start(&mut self, on: bool) {
+        let name = wide(SERVICE_NAME);
+        // SAFETY: the documented calls (Learn: OpenSCManagerW, OpenServiceW, ChangeServiceConfigW);
+        // every handle is closed here. A scheduler that is not the service (no right) changes nothing.
+        unsafe {
+            let scm = OpenSCManagerW(core::ptr::null(), core::ptr::null(), SC_MANAGER_CONNECT);
+            if scm == 0 {
+                return;
+            }
+            let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_CHANGE_CONFIG);
+            if svc != 0 {
+                let start = if on { SERVICE_AUTO_START } else { SERVICE_DEMAND_START };
+                let null = core::ptr::null();
+                ChangeServiceConfigW(
+                    svc,
+                    SERVICE_NO_CHANGE,
+                    start,
+                    SERVICE_NO_CHANGE,
+                    null,
+                    null,
+                    core::ptr::null_mut(),
+                    null,
+                    null,
+                    null,
+                    null,
+                );
+                CloseServiceHandle(svc);
+            }
+            CloseServiceHandle(scm);
+        }
+    }
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -517,9 +611,65 @@ unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     0
 }
 
-/// The entry point: load the store, start the clock, serve the pipe until the machine stops.
+/// The status handle of the service (0 when the scheduler runs as a plain process).
+static STATUS: core::sync::atomic::AtomicIsize = core::sync::atomic::AtomicIsize::new(0);
+
+fn report(state: u32) {
+    let st = ServiceStatus {
+        ty: SERVICE_WIN32_OWN_PROCESS,
+        state,
+        accepted: if state == SERVICE_RUNNING { SERVICE_ACCEPT_STOP } else { 0 },
+        exit: 0,
+        service_exit: 0,
+        checkpoint: 0,
+        wait_hint: 0,
+    };
+    let h = STATUS.load(core::sync::atomic::Ordering::Acquire);
+    if h != 0 {
+        // SAFETY: our status handle and a live structure.
+        unsafe { SetServiceStatus(h, &st) };
+    }
+}
+
+/// The service's control handler: Stop and shutdown end the scheduler (its state is on disk).
+unsafe extern "system" fn control(code: u32, _event: u32, _data: *mut c_void, _context: *mut c_void) -> u32 {
+    if code == SERVICE_CONTROL_STOP || code == SERVICE_CONTROL_SHUTDOWN {
+        report(SERVICE_STOPPED);
+        // SAFETY: ends this process.
+        unsafe { ExitProcess(0) };
+    }
+    0
+}
+
+/// The service main (`Schedule`): report RUNNING, then run the scheduler on this thread.
+unsafe extern "system" fn service_main(_argc: u32, _argv: *mut *mut u16) {
+    let name = wide(SERVICE_NAME);
+    // SAFETY: a NUL-terminated name and a handler of the documented prototype.
+    let h = unsafe { RegisterServiceCtrlHandlerExW(name.as_ptr(), control, core::ptr::null_mut()) };
+    STATUS.store(h, core::sync::atomic::Ordering::Release);
+    report(SERVICE_RUNNING);
+    scheduler();
+}
+
+/// The entry point: as the `Schedule` service when the service control manager started this
+/// process (ADR 0221), else (started by `taskschd.dll` without a manager) as a plain process.
 #[unsafe(no_mangle)]
 pub extern "system" fn schedsvc_main(_peb: *mut u8) -> u32 {
+    let name = wide(SERVICE_NAME);
+    let table = [
+        ServiceTableEntry { name: name.as_ptr(), main: Some(service_main) },
+        ServiceTableEntry { name: core::ptr::null(), main: None },
+    ];
+    // SAFETY: a table ending with a NULL entry; returns when the service stopped or at once when
+    // this process is not a service (ERROR_FAILED_SERVICE_CONTROLLER_CONNECT).
+    if unsafe { StartServiceCtrlDispatcherW(table.as_ptr()) } != 0 {
+        return 0;
+    }
+    scheduler()
+}
+
+/// Load the store, start the clock, serve the pipe until the machine stops.
+fn scheduler() -> ! {
     let name = wide(PIPE);
     // The first instance must be ours alone: a second scheduler leaves at once.
     let mut first = FILE_FLAG_FIRST_PIPE_INSTANCE;

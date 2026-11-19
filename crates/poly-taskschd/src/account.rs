@@ -19,7 +19,13 @@ const KNOWN: &[Known] = &[
         name: "LOCAL SERVICE",
         sid: "S-1-5-19",
         service: true,
-        aliases: &["LOCAL SERVICE", "LocalService", "NT AUTHORITY\\LocalService", "NT AUTHORITY\\LOCAL SERVICE", "S-1-5-19"],
+        aliases: &[
+            "LOCAL SERVICE",
+            "LocalService",
+            "NT AUTHORITY\\LocalService",
+            "NT AUTHORITY\\LOCAL SERVICE",
+            "S-1-5-19",
+        ],
     },
     Known {
         name: "NETWORK SERVICE",

@@ -30,11 +30,16 @@ pub trait Host {
     fn make_folder(&mut self, path: &str);
     fn remove_folder(&mut self, path: &str);
     fn save_state(&mut self, text: &str);
+    /// Make the scheduler start at boot (`on`) or only on demand: it starts at boot while it holds
+    /// tasks whose triggers fire.
+    fn set_boot_start(&mut self, on: bool);
 }
 
 #[derive(Debug)]
 pub struct Service {
     pub store: Store,
+    /// What the scheduler's start type was last set to.
+    boot_start: Option<bool>,
 }
 
 fn info_of(i: &Instance, path: &str, state: i32) -> InstanceInfo {
@@ -50,12 +55,31 @@ fn info_of(i: &Instance, path: &str, state: i32) -> InstanceInfo {
 
 impl Service {
     pub fn new(seed: u64) -> Service {
-        Service { store: Store::new(seed) }
+        Service { store: Store::new(seed), boot_start: None }
+    }
+
+    /// Whether any task has a trigger that fires (the scheduler must then start at boot).
+    pub fn needs_boot_start(&self) -> bool {
+        use crate::def::trigger::*;
+        self.store
+            .each_task()
+            .iter()
+            .any(|(_, t)| t.def.triggers.iter().any(|x| matches!(x.kind, TIME | DAILY | LOGON | BOOT | REGISTRATION)))
+    }
+
+    fn update_boot_start(&mut self, h: &mut dyn Host) {
+        let want = self.needs_boot_start();
+        if self.boot_start != Some(want) {
+            self.boot_start = Some(want);
+            h.set_boot_start(want);
+        }
     }
 
     /// Persist every task's state.
-    pub fn save(&self, h: &mut dyn Host) {
-        let states: Vec<TaskState> = self.store.each_task().into_iter().map(|(p, t)| persist::state_of(&p, t)).collect();
+    pub fn save(&mut self, h: &mut dyn Host) {
+        self.update_boot_start(h);
+        let states: Vec<TaskState> =
+            self.store.each_task().into_iter().map(|(p, t)| persist::state_of(&p, t)).collect();
         h.save_state(&persist::encode(&states));
     }
 
@@ -104,7 +128,14 @@ impl Service {
             RunPlan::Nothing => {
                 self.store.ran_without_process(path, S_OK, now);
                 let guid = self.store.guid();
-                Ok(InstanceInfo { path: canon.clone(), name: name_of(&canon), guid, pid: 0, action: String::new(), state: 3 })
+                Ok(InstanceInfo {
+                    path: canon.clone(),
+                    name: name_of(&canon),
+                    guid,
+                    pid: 0,
+                    action: String::new(),
+                    state: 3,
+                })
             }
             RunPlan::Start { guid, command_line, working_directory, action } => {
                 match h.spawn(&guid, &command_line, working_directory.as_deref()) {
@@ -177,7 +208,18 @@ impl Service {
                 }
                 ok
             }
-            Request::Register { folder, def, path, flags, user, logon_type, sddl, from_xml, caller_name, caller_sid } => {
+            Request::Register {
+                folder,
+                def,
+                path,
+                flags,
+                user,
+                logon_type,
+                sddl,
+                from_xml,
+                caller_name,
+                caller_sid,
+            } => {
                 let r = Registration { path, flags, user, logon_type, sddl, from_xml };
                 let caller = Caller { name: caller_name, sid: caller_sid };
                 let now = h.now();
@@ -246,10 +288,9 @@ impl Service {
                 let t = self.store.task(&path).ok_or(NOT_FOUND)?;
                 Reply { instances: t.instances.iter().map(|i| info_of(i, &canon, 4)).collect(), ..ok }
             }
-            Request::Running { flags } => Reply {
-                instances: self.store.running(flags)?.iter().map(|(p, i)| info_of(i, p, 4)).collect(),
-                ..ok
-            },
+            Request::Running { flags } => {
+                Reply { instances: self.store.running(flags)?.iter().map(|(p, i)| info_of(i, p, 4)).collect(), ..ok }
+            }
             Request::StopInstance { guid } => {
                 let i = self.store.stop_instance(&guid)?;
                 h.terminate(&i.guid);

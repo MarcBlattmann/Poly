@@ -469,7 +469,9 @@ fn one_action(w: &mut Writer, a: &Action) {
         None => &[],
     };
     let (name, items): (&str, [(&str, &Text); 3]) = match a.kind {
-        action::EXEC => ("Exec", [("Command", &a.path), ("Arguments", &a.arguments), ("WorkingDirectory", &a.working_directory)]),
+        action::EXEC => {
+            ("Exec", [("Command", &a.path), ("Arguments", &a.arguments), ("WorkingDirectory", &a.working_directory)])
+        }
         action::COM_HANDLER => ("ComHandler", [("ClassId", &a.class_id), ("Data", &a.data), ("", &None)]),
         action::SHOW_MESSAGE => ("ShowMessage", [("Title", &a.title), ("Body", &a.message_body), ("", &None)]),
         _ => {
