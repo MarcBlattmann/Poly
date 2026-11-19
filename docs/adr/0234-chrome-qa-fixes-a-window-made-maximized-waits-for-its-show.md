@@ -177,3 +177,36 @@ left-right arrows at the window's edge, both in Chrome for Windows and in Linux 
      restored.
    - So the bubble's cause is an unclean end before (a boot stopped with Chrome open, QA bug 2),
      not Poly's file writes. Nothing changed here.
+
+## Addendum: CJK text, and the two tooltips
+
+1. **Empty boxes on example.com: no font for Chinese.** example.com's script adds a Chinese
+   paragraph (`<p lang=zh>`). Poly's only fonts were DejaVu, which has no CJK glyphs, so
+   DirectWrite's system fallback (its family list) had nothing to fall back to.
+   - Poly now carries **Droid Sans Fallback**: Chinese, Japanese and Korean, TrueType, about
+     4 MB, **Apache 2.0**.
+   - It comes from Debian's `fonts-droid-fallback`, a seed of the Chromium disk, pinned in
+     `chromium.lock` like every package there. The Linux Chromium disk installs the package.
+   - The Chrome for Windows disk carries the file in `/usr/share/fonts/truetype/droid/`, with the
+     package's copyright and the Apache text, linked into `C:\Windows\Fonts`
+     (`fonts::add_cjk_to_root`).
+   - The spec tests' disks keep the DejaVu-only set their sheets were recorded with.
+   - `poly_dwrite::system::fallback_families` tries the CJK family first for CJK, kana and
+     Hangul code points, and last for everything else. The Windows CJK family names (Microsoft
+     YaHei, SimSun, …) stay aliases of DejaVu, as recorded.
+   - `THIRD_PARTY.md` records the font.
+   - The Chrome disk is made again by itself (the font stamp changed). A Chromium disk made
+     before needs `--fresh-disk` once, as for every package added to it.
+2. **Two tooltips at once ("Downloads" and "Close"): not Poly's window management. No code
+   change.**
+   - The compositor's records show Poly hiding and destroying each tooltip window as Chrome asks.
+   - Both tooltips are new windows Chrome shows after the bubble opens:
+     - The browser window's tooltip for the hovered download button comes back because its
+       text changes ("New download available" → "Downloads") while the pointer stays on it.
+       With only mouse input and no new download it does not come back.
+     - "Close" belongs to the bubble's close button, which Chrome focuses when the bubble opens,
+       with a focus ring.
+   - Linux Chromium on Poly shows the same two, also with mouse input only. Reporting a mouse in
+     `GetSystemMetrics` (`SM_MOUSEPRESENT`, the oracle reports none) changed nothing.
+   - Whether Chrome on Windows shows the "Close" tooltip in this case needs an observation on
+     the oracle (a spec agent's job). Until then it is taken as Chrome's own behaviour.
