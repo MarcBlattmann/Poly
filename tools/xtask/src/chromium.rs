@@ -1364,6 +1364,25 @@ fn unpacked_certs(entries: &[Unpacked], blobs: &Path) -> Result<Vec<(String, Vec
 const BROWSER_MIME_TYPES: [&str; 4] =
     ["text/html", "application/xhtml+xml", "x-scheme-handler/http", "x-scheme-handler/https"];
 
+/// What a browser shows besides web links: pages, text, PDF and pictures. The browser's desktop
+/// file lists them in `MimeType=` (not as defaults in `mimeapps.list`, so an app installed for
+/// one of them is not overruled), and Files opens a downloaded text or picture in the browser
+/// when no other app of the disk claims it, instead of the terminal's editor (ADR 0234). Chrome
+/// for Windows' entry lists them too (`chrometry.rs`).
+pub const VIEWER_MIME_TYPES: [&str; 11] = [
+    "text/html",
+    "application/xhtml+xml",
+    "text/plain",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "image/bmp",
+    "image/x-icon",
+];
+
 /// The desktop file ID of Poly's Chromium entry ([`desktop_file`]).
 pub const DESKTOP_ID: &str = "poly-chromium.desktop";
 
@@ -1379,7 +1398,7 @@ fn desktop_file(start_page: Option<&str>) -> String {
         "[Desktop Entry]\nType=Application\nName=Chromium\nGenericName=Web Browser\n\
          Comment=Web browser (Debian's Chromium)\nKeywords=browser;chrome;web;internet;\nIcon=chromium\n\
          Exec=/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS} {url}\nMimeType={};\n",
-        BROWSER_MIME_TYPES.join(";")
+        VIEWER_MIME_TYPES.iter().chain(&BROWSER_MIME_TYPES[2..]).copied().collect::<Vec<_>>().join(";")
     )
 }
 

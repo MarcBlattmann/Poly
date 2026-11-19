@@ -641,8 +641,15 @@ impl FilesApp {
                 !self.status.starts_with("Opened ")
             }
             _ => {
-                shown(self);
+                // Text no app claims opens in the terminal's editor: that window is the one
+                // wanted, in front, not Files' over it (ADR 0234).
                 self.open_path(path);
+                if self.status.starts_with("Opened ") {
+                    return false;
+                }
+                let status = core::mem::take(&mut self.status);
+                shown(self);
+                self.status = status;
                 true
             }
         }

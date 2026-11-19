@@ -1713,7 +1713,7 @@ impl Wm {
         }
         let id = self.next_send;
         self.next_send += 1;
-        let incoming = Incoming { id, hwnd, msg: DESKTOP_SET_POS, w, l, wndproc: 0 };
+        let incoming = Incoming { id, hwnd, msg: DESKTOP_SET_POS, w, l, wndproc: 0, data: None };
         self.sends.insert(id, Send { from: DESKTOP_SENDER, to, incoming, result: None, collected: false });
         let q = self.queue(to);
         q.sent.push_back(id);
@@ -1859,7 +1859,17 @@ impl Wm {
         Reply::Empty { next_timer_ms: next }
     }
 
-    fn send_start(&mut self, ctx: Ctx, hwnd: u64, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
+    #[allow(clippy::too_many_arguments)]
+    fn send_start(
+        &mut self,
+        ctx: Ctx,
+        hwnd: u64,
+        msg: u32,
+        w: u64,
+        l: u64,
+        data: Option<Vec<u8>>,
+        fx: &mut Effects,
+    ) -> Reply {
         let Some(win) = self.get(hwnd) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let to = win.thread;
         let (wndproc, unicode) = (win.wndproc, win.unicode);
@@ -1870,7 +1880,7 @@ impl Wm {
         }
         let id = self.next_send;
         self.next_send += 1;
-        let incoming = Incoming { id, hwnd: hwnd as u32, msg, w, l, wndproc };
+        let incoming = Incoming { id, hwnd: hwnd as u32, msg, w, l, wndproc, data };
         self.sends.insert(id, Send { from: ctx.key(), to, incoming, result: None, collected: false });
         let q = self.queue(to);
         q.sent.push_back(id);
@@ -2383,7 +2393,10 @@ impl Wm {
                 let (t, x, y) = self.queue(ctx.key()).last;
                 Reply::Value { value: u64::from(t) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48) }
             }
-            Request::SendStart { hwnd, msg, w, l } => self.send_start(ctx, hwnd, msg, w, l, fx),
+            Request::SendStart { hwnd, msg, w, l } => self.send_start(ctx, hwnd, msg, w, l, None, fx),
+            Request::SendCopy { hwnd, w, dw_data, data } => {
+                self.send_start(ctx, hwnd, crate::user::WM_COPYDATA, w, dw_data, Some(data), fx)
+            }
             Request::SendWait { id } => self.send_wait(ctx, id),
             Request::SendDone { id, result } => {
                 self.send_done(ctx, id, result, fx);
@@ -2822,6 +2835,27 @@ mod tests {
     fn set_pos_rectangles_round_trip() {
         let (w, l) = pack_set_pos(Rect::new(-8, -3, 1000, 600));
         assert_eq!(unpack_set_pos(w, l), (-8, -3, 1008, 603));
+    }
+
+    /// WM_COPYDATA to another process carries its bytes: the receiver gets them and `dwData`
+    /// (ADR 0234: Chrome hands a second start's command line to the running one this way).
+    #[test]
+    fn copy_data_sent_to_another_thread_carries_its_bytes() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let h = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let mut fx = Effects::default();
+        let send = Request::SendCopy { hwnd: u64::from(h), w: 9, dw_data: 0xC0DE, data: b"open a.txt".to_vec() };
+        let Reply::Started { .. } = wm.handle(B, send, &mut fx) else { panic!() };
+        let Reply::Incoming { incoming } = wm.handle(A, Request::Peek { filter: 0, min: 0, max: 0, flags: 0 }, &mut fx)
+        else {
+            panic!()
+        };
+        assert_eq!((incoming.msg, incoming.w, incoming.l), (crate::user::WM_COPYDATA, 9, 0xC0DE));
+        assert_eq!(incoming.data.as_deref(), Some(&b"open a.txt"[..]));
+        // Within the thread the sender's own structure is used.
+        let send = Request::SendCopy { hwnd: u64::from(h), w: 0, dw_data: 1, data: Vec::new() };
+        assert!(matches!(wm.handle(A, send, &mut fx), Reply::SameThread { .. }));
     }
 
     #[test]
