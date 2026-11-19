@@ -822,18 +822,23 @@ fn exclusives() {
 }
 
 #[test]
-fn exclusive_and_atomic_accesses_must_be_aligned() {
+fn exclusive_and_atomic_accesses_stay_in_16_bytes() {
+    // FEAT_LSE2 as Apple silicon has it: unaligned is fine within an aligned
+    // 16-byte block; crossing a block boundary is an alignment fault.
     let mut t = T::new();
-    t.cpu.x[1] = DATA + 4;
+    t.cpu.x[1] = DATA + 12;
     let r = t.run(&["ldxr x0, [x1]"]);
-    assert_eq!(r, Outcome::Fault(MemFault { addr: DATA + 4, access: Access::Read, alignment: true }));
+    assert_eq!(r, Outcome::Fault(MemFault { addr: DATA + 12, access: Access::Read, alignment: true }));
     assert!(matches!(t.run(&["ldar x0, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     assert!(matches!(t.run(&["ldadd x0, x1, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     assert!(matches!(t.run(&["cas x0, x1, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
-    // CASP needs the whole pair aligned.
+    // CASP needs the whole pair in one block.
     t.cpu.x[4] = DATA + 8;
     assert!(matches!(t.run(&["casp x0, x1, x2, x3, [x4]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     t.ok(&["ldar w0, [x1]"]);
+    t.cpu.x[1] = DATA + 4;
+    t.ok(&["ldxr x0, [x1]"]);
+    t.ok(&["ldadd x0, x1, [x1]"]);
 }
 
 #[test]

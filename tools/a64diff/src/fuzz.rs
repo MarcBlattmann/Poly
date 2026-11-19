@@ -75,6 +75,10 @@ impl Rng {
 /// then the body.
 pub struct Case {
     pub family: &'static str,
+    /// Point `x5` at the middle of the memory window before `setup` (the
+    /// qemu programs do it with `adrp`; the native runner sets `x5` in the
+    /// initial state instead).
+    pub base5: bool,
     pub setup: Vec<String>,
     pub body: Vec<String>,
 }
@@ -84,18 +88,16 @@ fn inst(w: u32) -> String {
 }
 
 fn word_case(family: &'static str, w: u32) -> Case {
-    Case { family, setup: vec![], body: vec![inst(w)] }
+    Case { family, base5: false, setup: vec![], body: vec![inst(w)] }
 }
 
 /// Lines that point `x5` at the middle of the memory window.
-fn base5() -> Vec<String> {
+pub fn base5() -> Vec<String> {
     vec!["adrp x5, scratch".into(), "add x5, x5, :lo12:scratch".into(), "add x5, x5, #2048".into()]
 }
 
 fn mem_case(family: &'static str, w: u32, extra: Vec<String>) -> Case {
-    let mut setup = base5();
-    setup.extend(extra);
-    Case { family, setup, body: vec![inst(w)] }
+    Case { family, base5: true, setup: extra, body: vec![inst(w)] }
 }
 
 // ---------------------------------------------------------------------
@@ -224,7 +226,7 @@ impl State {
         }
     }
 
-    fn words(&self) -> Vec<u64> {
+    pub fn words(&self) -> Vec<u64> {
         let mut w = Vec::with_capacity(REC_WORDS);
         w.extend_from_slice(&self.x);
         w.push(self.sp);
@@ -304,6 +306,11 @@ fn block_asm(s: &mut String, i: usize, case: &Case, tag: u32) {
         w(s, &format!("ldp x{a}, x{b}, [x0, #{}]", 8 * a));
     }
     w(s, "ldr x0, [x0]");
+    if case.base5 {
+        for l in base5() {
+            w(s, &l);
+        }
+    }
     for l in &case.setup {
         w(s, l);
     }
@@ -556,20 +563,20 @@ fn skeleton(branch: String) -> Vec<String> {
 
 fn branch_cond(rng: &mut Rng) -> Case {
     let c = rng.below(15);
-    Case { family: "b.cond", setup: vec![], body: skeleton(format!("b.{} 1f", cond_name(c))) }
+    Case { family: "b.cond", base5: false, setup: vec![], body: skeleton(format!("b.{} 1f", cond_name(c))) }
 }
 
 fn cbz(rng: &mut Rng) -> Case {
     let op = if rng.flag() == 1 { "cbz" } else { "cbnz" };
     let r = if rng.flag() == 1 { format!("x{}", rng.below(31)) } else { format!("w{}", rng.below(31)) };
-    Case { family: "cbz", setup: vec![], body: skeleton(format!("{op} {r}, 1f")) }
+    Case { family: "cbz", base5: false, setup: vec![], body: skeleton(format!("{op} {r}, 1f")) }
 }
 
 fn tbz(rng: &mut Rng) -> Case {
     let op = if rng.flag() == 1 { "tbz" } else { "tbnz" };
     let bit = rng.below(64);
     let r = if bit < 32 && rng.flag() == 1 { format!("w{}", rng.below(31)) } else { format!("x{}", rng.below(31)) };
-    Case { family: "tbz", setup: vec![], body: skeleton(format!("{op} {r}, #{bit}, 1f")) }
+    Case { family: "tbz", base5: false, setup: vec![], body: skeleton(format!("{op} {r}, #{bit}, 1f")) }
 }
 
 fn branch_link(rng: &mut Rng) -> Case {
@@ -582,7 +589,7 @@ fn branch_link(rng: &mut Rng) -> Case {
     .into_iter()
     .map(String::from)
     .collect();
-    Case { family: "branch-link", setup: vec![], body }
+    Case { family: "branch-link", base5: false, setup: vec![], body }
 }
 
 // ---- system ----
@@ -605,7 +612,7 @@ fn system(rng: &mut Rng) -> Case {
         7 => vec![format!("mrs x{}, dczid_el0", rng.below(31))],
         _ => vec![format!("mrs x{}, tpidrro_el0", rng.below(31))],
     };
-    Case { family: "system", setup: vec![], body }
+    Case { family: "system", base5: false, setup: vec![], body }
 }
 
 // ---- loads and stores ----
@@ -751,7 +758,7 @@ fn ls_literal(rng: &mut Rng) -> Case {
     body.push(format!(".quad 0x{:x}", rng.next()));
     body.push("2:".into());
     let _ = bytes;
-    Case { family: "ls-literal", setup: vec![], body }
+    Case { family: "ls-literal", base5: false, setup: vec![], body }
 }
 
 fn excl(rng: &mut Rng) -> Case {
@@ -776,7 +783,7 @@ fn excl(rng: &mut Rng) -> Case {
     if rng.below(3) == 0 {
         body.push(format!("{st} w4, {r2}3, [x5]"));
     }
-    Case { family: "exclusive", setup: base5(), body }
+    Case { family: "exclusive", base5: true, setup: vec![], body }
 }
 
 fn excl_pair(rng: &mut Rng) -> Case {
@@ -788,7 +795,7 @@ fn excl_pair(rng: &mut Rng) -> Case {
         body.push("clrex".into());
     }
     body.push(format!("{st} w2, {r}3, {r}4, [x5]"));
-    Case { family: "exclusive-pair", setup: base5(), body }
+    Case { family: "exclusive-pair", base5: true, setup: vec![], body }
 }
 
 fn ordered(rng: &mut Rng) -> Case {
@@ -849,7 +856,7 @@ fn casp(rng: &mut Rng) -> Case {
 
 fn dc_zva(rng: &mut Rng) -> Case {
     let _ = rng;
-    Case { family: "dc-zva", setup: base5(), body: vec!["add x5, x5, #17".into(), "dc zva, x5".into()] }
+    Case { family: "dc-zva", base5: true, setup: vec![], body: vec!["add x5, x5, #17".into(), "dc zva, x5".into()] }
 }
 
 // ---- scalar floating point ----
@@ -1198,7 +1205,69 @@ fn v_ldst_single(rng: &mut Rng) -> Case {
     mem_case("v-ldst-single", w, extra)
 }
 
+// ---- random words over whole encoding classes ----
+//
+// These find what the hardware executes that poly-a64 does not decode
+// (`unsupported`), and encodings the two disagree on. Branches and system
+// instructions are left out (a random branch would leave the case), and the
+// base register of loads and stores is `x5`.
+
+fn rand_dp(rng: &mut Rng) -> Case {
+    let op0 = rng.pick(&[0b1000u32, 0b1001, 0b0101, 0b1101]);
+    let w = (rng.next() as u32) & !(0xF << 25) | op0 << 25;
+    word_case("rand-dp", w)
+}
+
+fn rand_fp_simd(rng: &mut Rng) -> Case {
+    let op0 = rng.pick(&[0b0111u32, 0b1111]);
+    let w = (rng.next() as u32) & !(0xF << 25) | op0 << 25;
+    word_case("rand-fp-simd", w)
+}
+
+fn rand_ldst(rng: &mut Rng) -> Case {
+    loop {
+        let op0 = rng.pick(&[0b0100u32, 0b0110, 0b1100, 0b1110]);
+        let w = (rng.next() as u32) & !(0xF << 25) & !(0x1F << 5) | op0 << 25 | 5 << 5;
+        // Literal loads read anywhere within 1 MiB of the code: leave them to `ls-literal`.
+        if (w >> 27) & 7 == 0b011 && (w >> 24) & 3 == 0 {
+            continue;
+        }
+        return mem_case("rand-ldst", w, vec![]);
+    }
+}
+
+/// Ordered, atomic and exclusive accesses at a misaligned `x5`: which of
+/// them the core allows unaligned (FEAT_LSE2 lets some through within a
+/// 16-byte block).
+fn unaligned_atomic(rng: &mut Rng) -> Case {
+    let size = rng.below(4);
+    let rt = rng.reg_not(&[5]);
+    let rs = rng.reg_not(&[5]);
+    let w = match rng.below(6) {
+        // LDAR/STLR (o0 = 1), LDLAR/STLLR (o0 = 0)
+        0 => size << 30 | 0b001000 << 24 | 1 << 23 | rng.flag() << 22 | 0x1F << 16 | rng.flag() << 15 | 0x1F << 10 | 5 << 5 | rt,
+        // LDAPUR/STLUR with a small offset
+        1 => {
+            let opc = if size == 3 { rng.below(2) } else { rng.below(3) };
+            size << 30 | 0b011001 << 24 | opc << 22 | (rng.below(16) & 0x1FF) << 12 | 5 << 5 | rt
+        }
+        // LSE atomics
+        2 => size << 30 | 0b111 << 27 | 1 << 21 | rs << 16 | rng.below(8) << 12 | 5 << 5 | rt,
+        // CAS
+        3 => size << 30 | 0b001000 << 24 | 1 << 23 | 1 << 21 | rs << 16 | rng.flag() << 15 | 0x1F << 10 | 5 << 5 | rt,
+        // LDAPR
+        4 => size << 30 | 0b111000 << 24 | 1 << 23 | 1 << 21 | 0x1F << 16 | 1 << 15 | 0b100 << 12 | 5 << 5 | rt,
+        // LDXR / LDAXR
+        _ => size << 30 | 0b001000 << 24 | 1 << 22 | 0x1F << 16 | rng.flag() << 15 | 0x1F << 10 | 5 << 5 | rt,
+    };
+    mem_case("unaligned-atomic", w, vec![format!("add x5, x5, #{}", rng.below(16))])
+}
+
 fams! {
+    "unaligned-atomic" => unaligned_atomic,
+    "rand-dp" => rand_dp,
+    "rand-fp-simd" => rand_fp_simd,
+    "rand-ldst" => rand_ldst,
     "add-sub-imm" => add_sub_imm,
     "add-sub-shifted" => add_sub_shifted,
     "add-sub-ext" => add_sub_ext,

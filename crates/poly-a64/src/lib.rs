@@ -66,10 +66,12 @@ extern crate std;
 pub mod cpu;
 pub mod decode;
 mod decode_simd;
+mod decode_simd2;
 mod exec_fp;
 mod exec_int;
 mod exec_mem;
 mod exec_simd;
+mod exec_simd2;
 pub mod fp;
 pub mod inst;
 

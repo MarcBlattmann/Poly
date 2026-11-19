@@ -11,6 +11,8 @@
 
 #![no_std]
 
+pub mod arm64;
+
 use poly_abi::{Outcome, Personality, RFLAGS_CF, SyscallDispatch, SyscallRegs};
 
 /// `ENOSYS` on Darwin (macOS SDK `sys/errno.h`).
