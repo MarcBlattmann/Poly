@@ -10,7 +10,7 @@
 //! 1. The Terminal runs `poly-installer ~/Downloads/ChromeSetup.exe`, what a double click in
 //!    Files runs: the installer window opens.
 //! 2. **Install** runs it un-elevated; it relaunches itself with `runas`, and Poly's consent prompt
-//!    (ADR 0222) is answered **Yes** with the keyboard (Yes has the focus).
+//!    (ADR 0222) is answered **Yes** (clicked: No has the focus, as on Windows).
 //! 3. The elevated copy unpacks Google's updater, which installs its services (B1), serves COM
 //!    (B2) and registers its task (B3), downloads Chrome and runs Chrome's `setup.exe` (B4).
 //! 4. Chrome's shortcut becomes a launcher entry; the launcher starts Chrome and it browses.
@@ -36,6 +36,8 @@ const DISK: &str = "poly-chrome-installer-disk.img";
 const SPARE_MB: u64 = 4096;
 /// Chrome's launcher entry, from the shortcut its setup writes into the common Start menu.
 const APP: &str = "Google Chrome";
+/// The consent prompt's Yes button (ADR 0222's prompt, centred on the 1280x800 screen).
+const YES: (i32, i32) = (719, 457);
 /// Guest memory: the installer, the updater's processes, then Chrome.
 const MEMORY: &str = "4G";
 
@@ -110,8 +112,10 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     expect(&format!("the prompt names Google's installer ({asked:?})"), asked.contains("ChromeSetup"))?;
     thread::sleep(Duration::from_secs(2));
     d.shot("chrome-installer-prompt")?;
-    d.type_text(&["ret"])?;
-    d.wait("poly-compositor: consent ", 30)?;
+    // No has the focus, as on Windows: Yes is clicked (the prompt is centred on the 1280x800 screen).
+    click(d, YES.0, YES.1)?;
+    let answer = d.wait("poly-compositor: consent 1: ", 30)?;
+    expect(&format!("the prompt was answered Yes ({answer:?})"), answer.ends_with("yes"))?;
     d.shot("chrome-installer-after-yes")?;
 
     // 3. Google's updater installs Chrome: its shortcut becomes a launcher entry.
