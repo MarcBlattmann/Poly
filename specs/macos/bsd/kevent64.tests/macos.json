@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "k64_flags",
+      "source_sha256": "094f212416b5eaa289c26b3fed08dddad8fb3a747af19ec320a9583842e727bc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3db90a8c0c4e0c85aa607aed6a5bc26c5465ab1b7033c5af018eed94d94a0bc8",
+          "exit_code": 0,
+          "stdout": "ok IMMEDIATE with a NULL timeout polls: 0 events\nok ERROR_EVENTS: a good change reports nothing\nok a bad change reports one event\nok flags: EV_ERROR plus EV_ADD\nok data is EINVAL\nok ident, filter and udata are echoed\nok no room for the error event: the call fails with EINVAL\nok without ERROR_EVENTS the same error is an event too\nok EVFILT_READ on a descriptor that is not open: EBADF as an event\nok unknown flag bits are ignored\nok a descriptor that is not open is EBADF\nok a pipe is not a queue: EBADF\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "k64_user",
+      "source_sha256": "e14af29c0e06006e66f589b50c26a429a2d7844e35714e5f30bbc2fa18b77194",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2cbaeb8ef674fb5d85c9957233771f125ad5071c9bc7fef5d6eaddc45166582a",
+          "exit_code": 0,
+          "stdout": "ok add: no events\nok nothing before the trigger\nok a trigger: one event\nok ident 7, filter EVFILT_USER\nok flags as added: EV_ADD|EV_CLEAR\nok data 99 from the trigger\nok fflags 0 (no fflag operation was given)\nok the 64-bit udata is echoed whole\nok ext values from the add\nok EV_CLEAR: nothing more\nok a trigger whose change has udata 0: udata is 0 in the event\nok data 5\nok ext unchanged\nok fflags OR: low 24 bits 0x0f|0xf0 = 0xff, top bits 0xc0000000\nok fflags AND 0x3c: 0x3c\nok delete\nok triggering a deleted event: an error event ENOENT\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

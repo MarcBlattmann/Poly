@@ -28,6 +28,15 @@ summary: >
   does not know are accepted (0x4000000 behaved as 0). An unwritable
   status pointer (address 8) is EFAULT (14) and the child stays waitable
   afterwards (the next wait4 succeeded).
+  More behaviour, which child is waited for. pid > 0 waits for that child
+  only (others that exited stay); pid -1 any child; pid 0 any child in the
+  caller's process group; pid -pgid any child of that group; a child that
+  moved into a group of its own is not matched by 0 (ECHILD with nothing
+  else to wait for). Several exited children are returned one per call,
+  each once. A zombie exists until waited for (kill(pid, 0) succeeds,
+  afterwards ESRCH 3). The rusage pointer (fourth argument) is filled for
+  the reaped child (ru_utime seconds small); an unwritable rusage pointer
+  is EFAULT (14) and does not reap (the next call returns the child).
 returns:
   success: "the child's pid; *status filled"
   nohang_nothing: "0 (WNOHANG, a child exists, nothing to report)"
@@ -41,5 +50,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner

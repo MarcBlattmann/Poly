@@ -10,8 +10,23 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
+    {
+      "name": "exec_edges",
+      "source_sha256": "23034a17136aba9613c7a6ac3267cca2e7332816cf7629adbbc48137e03512f4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ed910e71d4730348948a7ad484215164480da73e8e21b28949f38bba1843a5b2",
+          "exit_code": 0,
+          "stdout": "ok an empty executable file: ENOEXEC\nok a text file without #! is ENOEXEC\nok a script with a missing interpreter is ENOENT\nok a directory is EACCES\nok a path through a file is ENOTDIR\nok a missing file is ENOENT\nok a name of 256 bytes is ENAMETOOLONG\nok an unreadable path is EFAULT\nok an unreadable argv is EFAULT\nok arguments over ARG_MAX (1 MiB) are E2BIG\nok after the failures the process goes on\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
     {
       "name": "exec_errors",
       "source_sha256": "e534eb189cc148c2f7115c10cf9c752d36cbe2475cab8b9d521d1e84e7e744a3",

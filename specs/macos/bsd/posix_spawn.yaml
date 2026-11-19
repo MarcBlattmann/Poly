@@ -27,6 +27,17 @@ summary: >
   being torn down and return 0). Observed in a probe, not tested: a NULL
   or unwritable pid_ptr is not an error; the child is started and the pid
   is not stored.
+  More behaviour, with descriptor 0 (no attributes, no file actions). A
+  script with #! is run through its interpreter (the interpreter's own
+  argument and the script path come before the arguments); a text file
+  without #! is ENOEXEC (8) returned by the call; arguments over 1 MiB are
+  E2BIG (7); a path of 256 bytes ENAMETOOLONG (63); an unreadable argv or
+  path EFAULT (14). The child's parent is the caller; each call gives a
+  new pid; the exit status 255 and a death by SIGKILL (sent by the caller)
+  are reported by wait4; an envp of two entries gives the child two
+  environment strings, an empty envp none. The attributes and file actions
+  need a descriptor structure whose layout is not in the public SDK; they
+  are not covered yet.
 returns:
   success: "0; *pid_ptr = the child's pid (positive)"
 errors:
@@ -41,5 +52,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner

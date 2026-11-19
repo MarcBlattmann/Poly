@@ -39,6 +39,31 @@ summary: >
   exits (ident = pid, fflags NOTE_EXIT, EV_EOF set, data 0), and the child
   can still be waited for; a pid that does not exist is an error event
   with data ESRCH (3).
+  More behaviour. EVFILT_USER (-10): an event added with EV_ADD|EV_CLEAR
+  is reported once after a change with NOTE_TRIGGER (0x01000000), flags as
+  added (0x21), data from the trigger, udata echoed; without EV_CLEAR it
+  is reported by every call until deleted; fflags operations NOTE_FFCOPY
+  0xc0000000, FFOR 0x80000000, FFAND 0x40000000 combine the low 24 bits
+  and the event reports the result with the top bits 0xc0000000;
+  EV_DISPATCH (0x80) reports once and disables the event until EV_ENABLE
+  (a trigger while disabled is kept and delivered by the enable);
+  EV_DISABLE hides a ready event until EV_ENABLE; EV_ONESHOT removes the
+  event after one report (triggering it again is an error event ENOENT);
+  adding an ident twice keeps one event with the later udata; triggering
+  an ident never added is an error event with ENOENT (2). Pipes and
+  sockets: with EV_CLEAR EVFILT_READ is reported once per change (again
+  only after more data arrives); EV_ONESHOT removes it although data is
+  unread; EV_DISPATCH reports once then needs EV_ENABLE; EVFILT_WRITE on a
+  pipe is ready with data > 0; deleting the registration of a descriptor
+  that was closed is an error event (ENOENT 2); on a socket pair whose
+  peer closed, EVFILT_READ reports EV_EOF (0x8000) with data 0 and
+  EVFILT_WRITE reports EV_EOF too. EVFILT_PROC on a child's pid with
+  NOTE_FORK (0x40000000), NOTE_EXEC (0x20000000), NOTE_EXIT and
+  NOTE_EXITSTATUS (0x04000000): the child's fork, exec and exit are
+  reported (events of one process merge, fflags ORed, ident the pid), the
+  exit with EV_EOF and data the wait status (exit 3 is 0x300); the child
+  can still be waited for; a pid that does not exist is an error event
+  ESRCH (3).
 returns:
   success: "the number of events stored in eventlist (0 when none)"
 errors:
@@ -53,5 +78,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 5  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "spd_exec",
+      "source_sha256": "3cc815ea66872415bf901f91225873080b902a65619e343124a2d09054af78aa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "58665cf415ef74734919f07ef54fd2ab7e7c0d2faff49e21832debbe36205fd6",
+          "exit_code": 0,
+          "stdout": "ok pending before the exec\nchild mask=536870913 pending=0\nok the child ran\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

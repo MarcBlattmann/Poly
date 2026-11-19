@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "sas_fault",
+      "source_sha256": "224c927f68e35cd115d121afd2d9bfc590cce3501bf611fb65484977bdf5d8d2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "871882f7b6ced2061cb6ae7dfa853e3ec1964f685d8903feb82718895adcb2e2",
+          "exit_code": 0,
+          "stdout": "ok with an alternate stack the handler runs after the overflow: exit 77\nok without one the child is killed by a signal\nvalue the signal that kills it 4\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sas_handler",
+      "source_sha256": "80d1e531436c7ca8d7e4ca4e6777191d466a4680775e7cf51b7a991e487c17fa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "71bad4b88877864a818db6cb6b6cc18b3f007325db3ec2465703f0066b490468",
+          "exit_code": 0,
+          "stdout": "ok a handler without SA_ONSTACK runs on the normal stack\nok and sees flags 0\nok changing the stack there is allowed (not on it)\nok a handler with SA_ONSTACK runs on the alternate stack\nok and sees SS_ONSTACK\nok changing the stack from inside it is EPERM\nok after the handler the flags are 0 again\nok with the stack disabled, SA_ONSTACK handlers use the normal stack\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
