@@ -60,14 +60,6 @@ fn thread_awareness() -> u8 {
     }
 }
 
-/// The process's awareness as set (by a call or its manifest; unaware without).
-fn process_awareness() -> u8 {
-    match call(Request::Dpi { set: false, process: true, awareness: 0 }) {
-        Reply::Value { value } => value as u8,
-        _ => 0,
-    }
-}
-
 /// What win32k says of the desktop for this thread (ADR 0231).
 pub(crate) struct Desk {
     /// The thread's system DPI (`GetDpiForSystem`) and the monitor's effective DPI for it.
@@ -101,10 +93,11 @@ pub extern "system" fn GetThreadDpiAwarenessContext() -> isize {
     guic::context_handle(thread_awareness()) as isize
 }
 
-/// The process's own context (NULL or the current process), whatever its threads set.
+/// The context of NULL or the current process: the calling thread's, as at 96 DPI
+/// (`GetThreadDpiAwarenessContext.yaml`; polycheck `gtdac_process_set`).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiAwarenessContextForProcess(_process: usize) -> isize {
-    guic::context_handle(process_awareness()) as isize
+    guic::context_handle(thread_awareness()) as isize
 }
 
 /// `GetDpiFromDpiAwarenessContext`: the DPI of a context with one of its own (unaware and
@@ -164,10 +157,10 @@ pub extern "system" fn GetAwarenessFromDpiAwarenessContext(ctx: isize) -> i32 {
     }
 }
 
-/// `IsProcessDPIAware`: whether the process is system or per-monitor aware.
+/// `IsProcessDPIAware`: whether the calling thread's context is system or per-monitor aware.
 #[unsafe(no_mangle)]
 pub extern "system" fn IsProcessDPIAware() -> i32 {
-    i32::from(guic::dpi_awareness(process_awareness()) != 0)
+    i32::from(guic::dpi_awareness(thread_awareness()) != 0)
 }
 
 /// `SetProcessDPIAware`: system awareness; TRUE again on a second call (SetProcessDPIAware.yaml).
@@ -816,7 +809,7 @@ pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut
         return E_INVALIDARG;
     }
     // SAFETY: the caller's output.
-    unsafe { *value = guic::dpi_awareness(process_awareness()) as u32 };
+    unsafe { *value = guic::dpi_awareness(thread_awareness()) as u32 };
     0
 }
 

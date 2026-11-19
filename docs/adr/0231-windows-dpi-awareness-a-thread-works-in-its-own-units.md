@@ -45,8 +45,9 @@ programs ran, and `WM_DPICHANGED` was never sent.
    (`interactive-bottom/2560x1600/200`): the taskbar is 48 pixels at 100 %, scaled.
 6. **The values of the new and changed calls.** `GetSystemDpiForProcess` is the session's system
    DPI in every mode; `GetDpiFromDpiAwarenessContext` 96, the system DPI or 0;
-   `GetDpiAwarenessContextForProcess`, `GetProcessDpiAwareness` and `IsProcessDPIAware` read the
-   process's awareness, not the thread's; `SetProcessDPIAware` succeeds again;
+   `GetDpiAwarenessContextForProcess`, `GetProcessDpiAwareness` and `IsProcessDPIAware` keep
+   reading the calling thread's context, as the 96 DPI sheets observed (a thread that set its own
+   context reports it for the process too); `SetProcessDPIAware` succeeds again;
    `GetScaleFactorForMonitor` gives the `DEVICE_SCALE_FACTOR` of the scale, 180 at 200 % as the
    oracle's monitor (`dpiscale::device_scale_factor`) and 100 for a NULL monitor;
    `GetDpiForMonitor` the monitor's DPI in the caller's units (angular: 96 scaled the same way);

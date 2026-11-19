@@ -67,8 +67,9 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: i32, dpi_x:
     unsafe { user32_dpi_for_monitor(monitor, kind as u32, dpi_x, dpi_y) }
 }
 
-/// `GetProcessDpiAwareness`: the process's awareness for NULL or the
-/// current process, E_INVALIDARG and -1 for another handle.
+/// `GetProcessDpiAwareness`: the calling thread's awareness for NULL or
+/// the current process (user32's process context is the thread's), E_INVALIDARG
+/// and -1 for another handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut i32) -> i32 {
     if value.is_null() {
