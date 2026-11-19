@@ -321,6 +321,20 @@ pub fn dos_path_of_vfs(path: &[u8], c_roots: &[&[u8]]) -> String {
     alloc::format!("Z:\\{}", rest.replace('/', "\\"))
 }
 
+/// An argument of a Windows program started from Poly's side (a launcher entry, Files' "open
+/// with", `xdg-open`) as the program is given it (ADR 0234): an absolute path that names a file or
+/// folder of Poly's file system (`exists`) becomes its DOS path ([`dos_path_of_vfs`]:
+/// `/nt/c/Users/poly/Downloads/a.txt` is `C:\Users\poly\Downloads\a.txt`), since a Windows program
+/// cannot open the other kind. `None` for every other argument: switches such as `/S` (no such
+/// file), relative paths, URLs, `//` names.
+pub fn dos_argument(arg: &str, c_roots: &[&[u8]], exists: impl Fn(&str) -> bool) -> Option<String> {
+    let path = arg.strip_prefix('/')?;
+    if path.is_empty() || path.starts_with('/') || !exists(arg) {
+        return None;
+    }
+    Some(dos_path_of_vfs(arg.as_bytes(), c_roots))
+}
+
 /// The folders of the layout as full DOS paths, in [`FOLDERS`] order.
 pub fn dos_paths(user: &User) -> Vec<String> {
     FOLDERS.iter().map(|f| f.dos_path(user)).collect()

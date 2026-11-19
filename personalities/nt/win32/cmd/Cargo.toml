@@ -1,0 +1,23 @@
+[package]
+name = "cmd"
+description = "Poly's cmd.exe (ADR 0240): a small command processor (/c, /k, the basic built-ins, programs, batch files) over poly-cmd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cmd"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-cmd = { path = "../../../../crates/poly-cmd" }
+
+[build-dependencies]
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+
+[lints]
+workspace = true

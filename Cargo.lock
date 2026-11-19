@@ -115,6 +115,10 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-cmd"
+version = "0.0.1"
+
+[[package]]
 name = "poly-com"
 version = "0.0.1"
 
