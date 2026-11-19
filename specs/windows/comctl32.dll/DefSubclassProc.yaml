@@ -31,6 +31,7 @@ rules:
   nested: "a message sent to the window from inside a subclass procedure with SendMessage goes through the whole chain from the newest (N2 sent WM_USER+2 and got 888 back, then passed its own WM_USER+1 on)."
   outside: "called outside any subclass procedure it returns 0 and no procedure of the window is called: with no subclass on the window, with one on it, with a NULL window and from another thread, all 0."
   deep_chain: "a chain of 20 subclasses (and the 17 left after removing three of them) is walked in order newest to oldest to the window procedure."
+  x86: "the same programs built for 32-bit (i686, run under WOW64 on the same machine) printed the same lines as the 64-bit ones except for the values that are pointer wide: uIdSubclass and dwRefData are 32-bit there (the largest value is 0xFFFFFFFF, and 0xFFFFFFFE and 0xFFFFFFFA were returned unchanged); the chain order, identity, removal, destroy and error rules held line for line (verified outside the recorded tests: the pipeline's test build is 64-bit only). The 32-bit user32 has no SetWindowLongPtrW and GetWindowLongPtrW (they are the 32-bit SetWindowLongW and GetWindowLongW); the window procedure rules held through them."
 errors:
   outside: "returns 0 outside a subclass procedure, no error, nothing is called"
 side_effects: "none of its own (the procedures it calls do their own)"

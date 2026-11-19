@@ -37,6 +37,7 @@ rules:
   coordinates: "all coordinates are logical: the window origin and the viewport origin move the drawing (window origin (-10,-5): pen box (12,7)-(29,16), the unmoved one is (2,2)-(19,11)), mapping modes and the world transform scale the box and the corners (MM_ANISOTROPIC window 1:1, viewport 2:2: box 2..10,2..8 corner 3x3 gives pen pixels (3,3)-(19,15)); a negative viewport extent flips it. The result is clipped by the device context's clip region (clip (8,4,18,10) leaves only brush pixels, 60 of them) and by the bitmap."
   device_state: "the current position is unchanged by the call (MoveToEx(7,9) then RoundRect: position still (7,9)); the pen and brush stay selected."
   hatch_brush: "a hatch brush paints its pattern pixels only (null pen, horizontal hatch in green on white, box (2,2,20,12): the 15 green pixels are in the one row y = 3, x 3..17)"
+  x86: "the same programs built for 32-bit (i686, run under WOW64 on the same machine, in the SSH session) printed exactly the lines the 64-bit ones did, line for line (verified outside the recorded tests: the pipeline's test build is 64-bit only), so the rules hold for the 32-bit DLL as they are (the whole of the tests: fills, pens, widths, arguments, device context state)."
 errors:
   invalid_dc: "NULL or a made-up handle: FALSE (0), last error ERROR_INVALID_HANDLE (6)"
   success: "TRUE (1), also when nothing is drawn (empty box, null pen and brush, wholly outside the bitmap); the last error is left alone"
