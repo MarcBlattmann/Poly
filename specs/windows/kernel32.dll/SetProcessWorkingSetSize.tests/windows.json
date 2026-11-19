@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "sws_basic",
-      "exe_sha256": "387d9049cb996aaad8c5c06314cc3b11b2e28cd7492a37db73d9f1a6f8838994",
+      "exe_sha256": "55f31313ddff8985520155b03e326ca2de7c82d502c3e67ac3d8e95a0e65edb9",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "sws_child",
-      "exe_sha256": "c05f4de349f862ad0868ad3a129445fa8ea3e54c115163fc930e3e47565288f3",
+      "exe_sha256": "8815a11105bc3ef1452400dc275f5b28eb8ff3f2d2edf9721e8959a964227e8b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
