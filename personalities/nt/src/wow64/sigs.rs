@@ -197,6 +197,8 @@ pub const WIN32K_SIGNATURES: &[(Win32kService, &[Arg])] = &[
     (Win32kService::CommitSurface, &[V, P, V, V, V]),
     // PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)
     (Win32kService::CommitSurfaceArea, &[V, P, V, V, V, P]),
+    // PolyUserPresentBuffer(hwnd, section, width, height, stride, rects, count)
+    (Win32kService::PresentBuffer, &[V, H, V, V, V, P, V]),
 ];
 
 /// The 32-bit signature of win32k service `service`.

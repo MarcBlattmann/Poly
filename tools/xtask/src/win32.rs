@@ -113,6 +113,9 @@ pub const OUTPUTS: &[&str] = &[
     "dcomp.dll",
     // ADR 0220.
     "comlaunch.exe",
+    // ADR 0226.
+    "taskschd.dll",
+    "schedsvc.exe",
     // ADR 0199.
     "vcruntime140.dll",
     "vcruntime140_1.dll",
@@ -348,6 +351,9 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/dcomp",
             // ADR 0220.
             "personalities/nt/win32/comlaunch",
+            // ADR 0226.
+            "personalities/nt/win32/taskschd",
+            "personalities/nt/win32/schedsvc",
             // ADR 0199.
             "personalities/nt/win32/vcruntime140",
             "personalities/nt/win32/vcruntime140_1",

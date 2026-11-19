@@ -1,0 +1,13 @@
+[package]
+name = "poly-logline"
+description = "Whole lines on a shared serial console (ADR 0228): kernel log lines buffered per writer and held back while a program's terminal row is open"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

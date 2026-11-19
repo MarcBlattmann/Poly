@@ -109,11 +109,22 @@ const RUNS: &[(&str, &str, &[&str])] = &[
     ("cmd/git.exe", "log --stat", &["Author: Poly <poly@example.invalid>", "    first", " LICENSE.txt | 360 +"]),
 ];
 
-/// What each run of a serial log printed: `(standard output lines, LAUNCH-EXIT line)`.
+/// What each run of a serial log printed: `(standard output lines, LAUNCH-EXIT line)`. The
+/// launcher's checksummed `POLY-RESULT` copies of its exit lines are read when the log has them
+/// (ADR 0228: whole, where the console's line can be cut by a kernel line).
 fn runs_of(text: &str) -> Vec<(Vec<String>, String)> {
+    let framed = !crate::console::result_frames(text).0.is_empty();
     let mut out = Vec::new();
     let (mut lines, mut inside) = (Vec::new(), false);
     for l in text.lines() {
+        if l.contains(crate::console::RESULT_FRAME) {
+            for f in crate::console::result_frames(l).0 {
+                if f.starts_with("LAUNCH-EXIT ") {
+                    out.push((std::mem::take(&mut lines), f));
+                }
+            }
+            continue;
+        }
         if l.contains("LAUNCH-END stdout") {
             inside = false;
         }
@@ -123,7 +134,7 @@ fn runs_of(text: &str) -> Vec<(Vec<String>, String)> {
         if l.contains("LAUNCH-BEGIN stdout") {
             inside = true;
         }
-        if let Some(i) = l.find("LAUNCH-EXIT") {
+        if !framed && let Some(i) = l.find("LAUNCH-EXIT") {
             out.push((std::mem::take(&mut lines), l[i..].trim().to_string()));
         }
     }
@@ -195,5 +206,28 @@ mod tests {
         assert_eq!(r[0], (vec!["hi".to_string(), "git.exe".to_string()], "LAUNCH-EXIT code=0x0".to_string()));
         assert_eq!(r[1].1, "LAUNCH-EXIT code=0x80");
         assert_eq!(check(log), Some("run 2 (cmd/git.exe --version): LAUNCH-EXIT code=0x80".into()));
+        // With the launcher's framed copies (ADR 0228) those are the exits; the console's are not
+        // counted twice, and a console exit line cut by a kernel line does not matter.
+        let frame = |t: &str| format!("nt: pid 1: POLY-RESULT {t} crc32={:08x}", crate::unzip::crc32(t.as_bytes()));
+        let framed = format!(
+            "LAUNCH-BEGIN stdout
+hi
+git.exe
+LAUNCH-END stdout
+LAUNCH-EXIT code=0xfs: noise
+0
+{}
+             LAUNCH-BEGIN stdout
+LAUNCH-END stdout
+LAUNCH-EXIT code=0x80
+{}
+",
+            frame("LAUNCH-EXIT code=0x0"),
+            frame("LAUNCH-EXIT code=0x80")
+        );
+        let r = runs_of(&framed);
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0], (vec!["hi".to_string(), "git.exe".to_string()], "LAUNCH-EXIT code=0x0".to_string()));
+        assert_eq!(r[1].1, "LAUNCH-EXIT code=0x80");
     }
 }

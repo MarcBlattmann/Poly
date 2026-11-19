@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoImpersonateClient.yaml
+id: windows/api/ole32.dll/CoImpersonateClient
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 with -Token elevated (full administrator token, high integrity) and -Token standard (filtered administrator token, medium integrity, Administrators deny-only) in the interactive desktop session of the local account \"server\" (session 1); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Convenience wrapper over CoGetCallContext(IID_IServerSecurity) + IServerSecurity::ImpersonateClient. Attaches an impersonation token representing the COM caller to the calling server thread, or fails with RPC_E_CALL_COMPLETE when the thread is not serving a call.
+interface:
+  signature: "HRESULT CoImpersonateClient(void)"
+  forward: "ole32.dll!CoImpersonateClient forwards to combase.dll!CoImpersonateClient"
+installer: "Standard COM client impersonation helper; mirrors IServerSecurity::ImpersonateClient used by COM servers."
+rules:
+  in_call_token: "inside an incoming local cross-process call (LocalServer32 or LocalSystem service), returns S_OK and sets an impersonation token (TokenType = 2) on the calling thread matching the client's security context: user SID is the client's user (different from SYSTEM when the server is a LocalSystem service, same as server for a same-user LocalServer32), TokenSessionId matches the client's session; for an elevated administrator client TokenElevation = 1, TokenElevationType = 2 (Full), integrity level = 0x3000 (12288, High), CheckTokenMembership(Administrators) = true; for a standard (filtered) administrator client TokenElevation = 0, TokenElevationType = 3 (Limited), integrity level = 0x2000 (8192, Medium), CheckTokenMembership(Administrators) = false (Administrators is deny-only)"
+  impersonation_level_follows_call: "the thread token's TokenImpersonationLevel follows the call's impersonation level: activation (CoCreateInstance) yields 2 (SecurityImpersonation); a direct call on a proxy with default blanket or RPC_C_IMP_LEVEL_IDENTIFY yields 1 (SecurityIdentification — cannot open files); a direct call at RPC_C_IMP_LEVEL_IMPERSONATE yields 2 (SecurityImpersonation); a direct call at RPC_C_IMP_LEVEL_DELEGATE yields 3 (SecurityDelegation)"
+  revert: "calling CoRevertToSelf afterwards returns S_OK and removes the thread token (OpenThreadToken fails with ERROR_NO_TOKEN 1008)"
+  outside_call: "when the calling thread is not serving an incoming call (no COM, STA, MTA, or another thread of a server process), returns RPC_E_CALL_COMPLETE 0x80010117 and does not attach any thread token (OpenThreadToken fails with error 1008)"
+errors:
+  call_complete: "RPC_E_CALL_COMPLETE 0x80010117 (no incoming call active on the calling thread)"
+side_effects: "attaches an impersonation token to the calling thread until CoRevertToSelf / IServerSecurity::RevertToSelf"
+threading: "per thread: affects only the calling thread"
+ordering: ["CoImpersonateClient during a served call, followed by CoRevertToSelf before accessing server-owned resources"]
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each: local-server tests run under both -Token elevated and -Token standard (same-user LocalServer32 server); service tests run under -Token elevated with a LocalSystem service (CreateServiceW, AppID LocalService, CoInitializeSecurity admitting Everyone) called by both the elevated test and a de-elevated child client created with the interactive session shell's (explorer.exe) filtered token; out-of-call tests run across no-COM, STA and MTA threads. Classes and services use unique {B2A0xxxx-...} / PolyWsSecSvc* names and are cleaned up. Observations are HRESULTs, Win32 codes, blanket fields, token attributes and booleans, never raw process ids, thread ids or pointers.
+not_covered: >
+  ANONYMOUS impersonation level (refused before reaching the server), cloaking, and remote DCOM callers.

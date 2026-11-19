@@ -25,6 +25,7 @@ members = [
     "crates/poly-fbdev",
     "crates/poly-files",
     "crates/poly-com",
+    "crates/poly-taskschd",
     "crates/poly-fuse",
     "crates/poly-cpio",
     "crates/poly-dbus",
@@ -48,6 +49,7 @@ members = [
     "crates/poly-ldr",
     "crates/poly-libm",
     "crates/poly-line",
+    "crates/poly-logline",
     "crates/poly-loop",
     "crates/poly-macho",
     "crates/poly-mem",
@@ -165,6 +167,7 @@ poly-com = { path = "crates/poly-com" }
 poly-stubs = { path = "crates/poly-stubs" }
 poly-libm = { path = "crates/poly-libm" }
 poly-line = { path = "crates/poly-line" }
+poly-logline = { path = "crates/poly-logline" }
 poly-loop = { path = "crates/poly-loop" }
 poly-macho = { path = "crates/poly-macho" }
 poly-mem = { path = "crates/poly-mem" }

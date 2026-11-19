@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "qpb_defaults",
+      "exe_sha256": "7c2fe6cae33827d9ee64e4fef1eabffaf99b75ca1a6534288783e468844a53d1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3Mgb2JqZWN0IDB4MDAwMDAwMDA6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPVdJTkRJXHNlcnZlciBhdXRoaW5mbz1udWxsCml0cyBJVW5rbm93bjogMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKb2JqZWN0IDB4MDAwMDAwMDA6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPVdJTkRJXHNlcnZlciBhdXRoaW5mbz1udWxsCmNsYXNzIG9iamVjdCBhZnRlciBhIGNhbGw6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPVdJTkRJXHNlcnZlciBhdXRoaW5mbz1udWxsCm9iamVjdCB0aHJvdWdoIENvQ3JlYXRlSW5zdGFuY2UgMHgwMDAwMDAwMDogMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKb2JqZWN0IG9mIHRoaXMgcHJvY2VzczogMHg4MDAwNDAwMiBhdXRobj11bnNldCBhdXRoej11bnNldCBsZXZlbD11bnNldCBpbXA9dW5zZXQgY2Fwcz0weDAKaW4tcHJvY2VzcyBjbGFzcyAoQ29DcmVhdGVJbnN0YW5jZSAweDAwMDAwMDAwKTogMHg4MDAwNDAwMiBhdXRobj11bnNldCBhdXRoej11bnNldCBsZXZlbD11bnNldCBpbXA9dW5zZXQgY2Fwcz0weDAKTlVMTCBwb2ludGVyOiAweDgwMDcwMDU3IGF1dGhuPXVuc2V0IGF1dGh6PXVuc2V0IGxldmVsPXVuc2V0IGltcD11bnNldCBjYXBzPTB4MApzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogY3JlYXRlIG91dGVyPW51bGwgaWlkPUlVbmtub3duCnNydjogY3JlYXRlIC0+IDB4MDAwMDAwMDAKc3J2OiByZXZva2UgLT4gMHgwMDAwMDAwMApzcnY6IGV4aXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class object 0x00000000: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nits IUnknown: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nobject 0x00000000: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nclass object after a call: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nobject through CoCreateInstance 0x00000000: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nobject of this process: 0x80004002 authn=unset authz=unset level=unset imp=unset caps=0x0\nin-process class (CoCreateInstance 0x00000000): 0x80004002 authn=unset authz=unset level=unset imp=unset caps=0x0\nNULL pointer: 0x80070057 authn=unset authz=unset level=unset imp=unset caps=0x0\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 175
+    }
+  ]
+}

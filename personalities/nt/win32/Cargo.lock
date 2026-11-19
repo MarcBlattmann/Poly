@@ -520,6 +520,10 @@ name = "poly-seh"
 version = "0.0.1"
 
 [[package]]
+name = "poly-taskschd"
+version = "0.0.1"
+
+[[package]]
 name = "poly-win32-crt"
 version = "0.0.1"
 dependencies = [
@@ -620,6 +624,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "schedsvc"
+version = "0.0.1"
+dependencies = [
+ "poly-taskschd",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "secur32"
 version = "0.0.1"
 dependencies = [
@@ -666,6 +678,14 @@ name = "shlwapi"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "taskschd"
+version = "0.0.1"
+dependencies = [
+ "poly-taskschd",
  "poly-win32-rt",
 ]
 
