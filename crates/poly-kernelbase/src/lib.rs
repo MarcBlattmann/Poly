@@ -74,6 +74,7 @@ pub mod apps;
 pub mod assoc;
 pub mod atoms;
 pub mod cpu;
+pub mod defenv;
 pub mod env;
 pub mod errmode;
 pub mod error;
@@ -122,6 +123,7 @@ pub mod volume;
 pub mod waitreg;
 pub mod winmm;
 pub mod winpath;
+pub mod withtoken;
 pub mod wow64;
 pub mod wsprintf;
 

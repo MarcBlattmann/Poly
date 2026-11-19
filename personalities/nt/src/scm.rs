@@ -149,7 +149,11 @@ fn ms<K: NtKernel>(k: &K) -> u64 {
 
 /// The environment the system's programs get (to expand `%SystemRoot%` and its kind).
 fn system_environment(sys: &NtSystem, processors: u32) -> crate::layout::env::Block {
-    crate::layout::env::build(&sys.registry.reg, &crate::layout::POLY_USER, crate::layout::env::Machine { processors })
+    crate::layout::env::build(
+        &sys.registry.reg,
+        &crate::layout::POLY_USER,
+        crate::layout::env::Machine { processors, processor: None },
+    )
 }
 
 fn lookup(env: &crate::layout::env::Block) -> impl Fn(&[u16]) -> Option<Vec<u16>> + '_ {

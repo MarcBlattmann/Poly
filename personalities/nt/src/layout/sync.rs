@@ -135,6 +135,11 @@ pub fn entries(reg: &Registry, user: &User) -> Vec<Entry> {
     for (name, data) in [("TEMP", "%SystemRoot%\\TEMP"), ("TMP", "%SystemRoot%\\TEMP"), ("windir", "%SystemRoot%")] {
         v.push(entry(Machine, &env, name, REG_EXPAND_SZ, data, Default));
     }
+    // The system variables every process has (CreateEnvironmentBlock.yaml `variables_present`),
+    // for a hive made before the defaults had them.
+    for (name, data) in poly_registry::defaults::SYSTEM_ENVIRONMENT_EXTRA {
+        v.push(entry(Machine, &env, name, REG_EXPAND_SZ, data, Default));
+    }
     let user_env = alloc::format!("{}\\Environment", user.sid);
     for name in ["TEMP", "TMP"] {
         v.push(entry(Users, &user_env, name, REG_EXPAND_SZ, "%USERPROFILE%\\AppData\\Local\\Temp", Default));

@@ -129,6 +129,8 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
 
 /// The functions `advapi32.dll` implements itself.
 pub const ADVAPI32_OWN: &[&str] = &[
+    // Learn names only `Advapi32.dll` (`winbase.h`); its checks are `crate::withtoken`.
+    "CreateProcessWithTokenW",
     "RegDeleteKeyW",
     "RegDeleteKeyA",
     // Poly caches no predefined key handle (sheet `RegDisablePredefinedCache`).
