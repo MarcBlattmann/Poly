@@ -206,6 +206,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0226](0226-the-task-scheduler-taskschd-dll-a-task-store-on-disk-and-a-scheduler-process.md) | The Task Scheduler: taskschd.dll, a task store on disk and a scheduler process | Accepted |
 | [0227](0227-chrome-setup-shell-links-hive-files-event-log-and-system-lists.md) | Chrome's own setup on Poly: shell links, hive files of programs, the event log and the system's lists | Accepted |
 | [0228](0228-boot-test-result-lines-cannot-be-torn-by-kernel-log-output.md) | Boot-test result lines cannot be torn by kernel log output | Accepted |
+| [0230](0230-windows-installers-through-polys-front-door.md) | Windows installers through Poly's front door | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
