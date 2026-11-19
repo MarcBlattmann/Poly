@@ -94,6 +94,74 @@ impl View {
         let (bx, by) = buffer_point(self.transform, u1 as i32 - 1, v1 as i32 - 1, tw, th);
         Rect::from_edges(ax.min(bx), ay.min(by), ax.max(bx) + 1, ay.max(by) + 1)
     }
+
+    /// The surface rectangle (logical pixels of the surface, before it is placed) that shows
+    /// buffer rectangle `r` of a `width` × `height` buffer at buffer scale `scale`: the inverse of
+    /// [`View::buffer_rect`], so a client's damage can be redrawn where it shows and not over its
+    /// whole surface. The transform undone, then the buffer scale, then cropped to the source and
+    /// scaled to the destination (wayland.xml, viewporter.xml). Rounded outwards; through a
+    /// scaling that is not a whole number of buffer pixels per logical pixel (a fractional scale,
+    /// a destination unlike the source) one logical pixel more on every side, for the filter that
+    /// draws it. Clipped to the surface.
+    pub fn logical_rect(&self, r: Rect, width: i32, height: i32, scale: i32) -> Rect {
+        let s = i64::from(scale.max(1));
+        let (tw, th) = if self.transform & 1 != 0 { (height, width) } else { (width, height) };
+        let r = r.intersect(&Rect::new(0, 0, width, height));
+        if tw <= 0 || th <= 0 || r.is_empty() {
+            return Rect::default();
+        }
+        // The buffer rectangle's corners in surface orientation (the transform undone).
+        let (ax, ay) = surface_point(self.transform, r.x, r.y, tw, th);
+        let (bx, by) = surface_point(self.transform, r.x + r.width - 1, r.y + r.height - 1, tw, th);
+        let (u0, u1) = (i64::from(ax.min(bx)), i64::from(ax.max(bx)) + 1);
+        let (v0, v1) = (i64::from(ay.min(by)), i64::from(ay.max(by)) + 1);
+        let (ltw, lth) = (i64::from(tw), i64::from(th));
+        // The source in 1/256 logical pixels, and the destination's size.
+        let (sx, sy, sw, sh) = match self.source {
+            Some((x, y, w, h)) => (i64::from(x), i64::from(y), i64::from(w), i64::from(h)),
+            None => (0, 0, ltw * 256 / s, lth * 256 / s),
+        };
+        let (dw, dh) = match self.destination {
+            Some((w, h)) => (i64::from(w), i64::from(h)),
+            None => (sw >> 8, sh >> 8),
+        };
+        if sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 {
+            return Rect::default();
+        }
+        // One axis: buffer pixel edges `a..b` (each 256/s of a logical pixel) inside a source
+        // `from` + `len` (1/256 pixels) shown `d` logical pixels long.
+        let axis = |a: i64, b: i64, from: i64, len: i64, d: i64| {
+            let den = len * s;
+            let low = ((a * 256 - from * s) * d).div_euclid(den);
+            let high = ((b * 256 - from * s) * d + den - 1).div_euclid(den);
+            // Whole buffer pixels per logical pixel, or whole logical pixels per buffer pixel:
+            // an exact mapping; else the filter's pixel.
+            let whole = (len * s) % (d * 256) == 0 || (d * 256) % (len * s) == 0;
+            let exact = whole && (from * s) % 256 == 0;
+            let pad = i64::from(!exact);
+            ((low - pad).clamp(0, d), (high + pad).clamp(0, d))
+        };
+        let (x0, x1) = axis(u0, u1, sx, sw, dw);
+        let (y0, y1) = axis(v0, v1, sy, sh, dh);
+        if x0 >= x1 || y0 >= y1 {
+            return Rect::default();
+        }
+        Rect::from_edges(x0 as i32, y0 as i32, x1 as i32, y1 as i32)
+    }
+}
+
+/// Where buffer pixel (`x`, `y`) of a buffer the client drew with `transform` applied is on the
+/// surface (in buffer pixels, the transform undone, a `w` × `h` surface): the inverse of
+/// [`buffer_point`].
+pub fn surface_point(transform: u32, x: i32, y: i32, w: i32, h: i32) -> (i32, i32) {
+    let (u, v) = match transform & 3 {
+        0 => (x, y),
+        1 => (w - 1 - y, x),
+        2 => (w - 1 - x, h - 1 - y),
+        _ => (y, h - 1 - x),
+    };
+    let u = if transform & 4 != 0 { w - 1 - u } else { u };
+    (u, v)
 }
 
 /// Where surface pixel (`u`, `v`) of a `w` × `h` surface (both in buffer
@@ -1005,9 +1073,12 @@ impl Scene {
             return;
         }
         if !c.view.is_identity() {
-            // Through a transform or a viewport: all of it.
-            let e = w.surface_rect();
-            self.damage_logical(e);
+            // Through a transform or a viewport: where it shows (a client drawing for a 2x
+            // output with a viewport damages a few pixels per key, not its whole surface).
+            let logical = c.view.logical_rect(r, c.width as i32, c.height as i32, c.scale as i32);
+            if !logical.is_empty() {
+                self.damage_logical(logical.translate(w.x, w.y));
+            }
             return;
         }
         let logical = r.scale_down_out(c.scale as i32).translate(w.x, w.y);
