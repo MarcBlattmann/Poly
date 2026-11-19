@@ -310,6 +310,76 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define PROX_FDTYPE_KQUEUE 5
 #define PROX_FDTYPE_PIPE 6
 
+/* <mach/message.h>: messages. */
+#define MACH_MSGH_BITS(remote, local) ((remote) | ((local) << 8))
+#define MACH_MSGH_BITS_COMPLEX 0x80000000u
+#define MACH_MSG_TYPE_MOVE_RECEIVE 16
+#define MACH_MSG_TYPE_MOVE_SEND 17
+#define MACH_MSG_TYPE_MOVE_SEND_ONCE 18
+#define MACH_MSG_TYPE_COPY_SEND 19
+#define MACH_MSG_TYPE_MAKE_SEND_ONCE 21
+#define MACH_MSG_TYPE_PORT_SEND 17
+#define MACH_MSG_TYPE_PORT_SEND_ONCE 18
+#define MACH_MSG_PORT_DESCRIPTOR 0
+#define MACH_MSG_OOL_DESCRIPTOR 1
+#define MACH_MSG_PHYSICAL_COPY 0
+#define MACH_MSG_VIRTUAL_COPY 1
+#define MACH_SEND_MSG 0x00000001
+#define MACH_RCV_MSG 0x00000002
+#define MACH_RCV_LARGE 0x00000004
+#define MACH_SEND_TIMEOUT 0x00000010
+#define MACH_RCV_TIMEOUT 0x00000100
+#define MACH_RCV_TRAILER_AUDIT 3
+#define MACH_RCV_TRAILER_TYPE(x) (((x) & 0xf) << 28)
+#define MACH_RCV_TRAILER_ELEMENTS(x) (((x) & 0xf) << 24)
+#define MACH_SEND_INVALID_DATA 0x10000002
+#define MACH_SEND_TIMED_OUT 0x10000004
+#define MACH_SEND_MSG_TOO_SMALL 0x10000008
+#define MACH_SEND_INVALID_RIGHT 0x1000000a
+#define MACH_SEND_INVALID_MEMORY 0x1000000c
+#define MACH_SEND_INVALID_HEADER 0x10000010
+#define MACH_RCV_INVALID_NAME 0x10004002
+#define MACH_RCV_TIMED_OUT 0x10004003
+#define MACH_RCV_TOO_LARGE 0x10004004
+/* <mach/kern_return.h> */
+#define KERN_NAME_EXISTS 13
+#define KERN_ABORTED 14
+#define KERN_RIGHT_EXISTS 21
+#define KERN_TERMINATED 37
+#define KERN_SEMAPHORE_DESTROYED 42
+#define KERN_NOT_WAITING 48
+#define KERN_OPERATION_TIMED_OUT 49
+/* The semaphore traps (numbers of the coverage map). */
+#define MACH_mach_msg_trap 31
+#define MACH_semaphore_signal_trap 33
+#define MACH_semaphore_signal_all_trap 34
+#define MACH_semaphore_signal_thread_trap 35
+#define MACH_semaphore_wait_trap 36
+#define MACH_semaphore_wait_signal_trap 37
+#define MACH_semaphore_timedwait_trap 38
+#define MACH_semaphore_timedwait_signal_trap 39
+struct poly_msg_header {
+    u32 bits, size, remote_port, local_port, voucher_port;
+    i32 id;
+};
+struct poly_port_descriptor {
+    u32 name, pad1;
+    u16 pad2;
+    u8 disposition, type;
+};
+struct poly_ool_descriptor {
+    u64 address;
+    u32 size;
+    u8 deallocate, copy, pad1, type;
+};
+struct poly_audit_trailer {
+    u32 type, size, seqno, security_token[2], audit_token[8];
+};
+_Static_assert(sizeof(struct poly_msg_header) == 24, "mach_msg_header_t is 24 bytes");
+_Static_assert(sizeof(struct poly_port_descriptor) == 12, "mach_msg_port_descriptor_t is 12 bytes");
+_Static_assert(sizeof(struct poly_ool_descriptor) == 16, "mach_msg_ool_descriptor_t is 16 bytes");
+_Static_assert(sizeof(struct poly_audit_trailer) == 52, "mach_msg_audit_trailer_t is 52 bytes");
+
 /* <sys/dirent.h> */
 #define DT_UNKNOWN 0
 #define DT_DIR 4
@@ -551,6 +621,25 @@ static inline u64 poly_mach_now(void) {
 }
 #endif
 
+#if defined(POLY_ARM64)
+/* Mach traps with seven arguments (mach_msg_trap): x0..x6, trap number negated in x16. */
+static inline i64 poly_mach7(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, i64 g) {
+    register i64 x0 __asm__("x0") = a;
+    register i64 x1 __asm__("x1") = b;
+    register i64 x2 __asm__("x2") = c;
+    register i64 x3 __asm__("x3") = d;
+    register i64 x4 __asm__("x4") = e;
+    register i64 x5 __asm__("x5") = f;
+    register i64 x6 __asm__("x6") = g;
+    register i64 x16 __asm__("x16") = -n;
+    __asm__ volatile("svc #0x80"
+                     : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x16)
+                     :
+                     : "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x17", "memory", "cc");
+    return x0;
+}
+#endif
+
 #define bsd0(n) poly_bsd6((n), 0, 0, 0, 0, 0, 0)
 #define bsd1(n, a) poly_bsd6((n), (i64)(a), 0, 0, 0, 0, 0)
 #define bsd2(n, a, b) poly_bsd6((n), (i64)(a), (i64)(b), 0, 0, 0, 0)
@@ -756,6 +845,14 @@ static __attribute__((unused)) void poly_report_child(void) {
     put_num(poly_sigmask());
     put("\n");
 }
+
+#if defined(POLY_ARM64)
+/* mach_msg_trap(message, option, send size, receive size, receive port, timeout in ms, 0): arm64 only for now
+ * (the trap has seven arguments). */
+static __attribute__((unused)) u32 poly_mach_msg(void *msg, u32 option, u32 send_size, u32 rcv_size, u32 rcv_name, u32 timeout_ms) {
+    return (u32)poly_mach7(MACH_mach_msg_trap, (i64)msg, option, send_size, rcv_size, rcv_name, timeout_ms, 0);
+}
+#endif
 
 int test_main(void);
 

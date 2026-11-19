@@ -21,13 +21,13 @@ summary: >
   KERN_INVALID_NAME (15); a message type that does not exist (99) and
   MAKE_SEND of a port set are KERN_INVALID_RIGHT (17); making a send right
   of one port under the name of another port's receive right is
-  KERN_NAME_EXISTS (21) and leaves the first port with its receive right
+  KERN_RIGHT_EXISTS (21) and leaves the first port with its receive right
   only.
 returns:
   success: "KERN_SUCCESS (0)"
 errors:
   invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
-  name_exists: "KERN_NAME_EXISTS (21): the name is a receive right of another port"
+  right_exists: "KERN_RIGHT_EXISTS (21): the name is a receive right of another port"
   bad_right: "KERN_INVALID_RIGHT (17): message type 99, a port set"
   no_such_name: "KERN_INVALID_NAME (15): port name not in the task"
 side_effects: "a send right (or a reference) is added"
