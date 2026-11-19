@@ -337,9 +337,7 @@ fn say(bytes: &[u8]) {
 /// Print the file at `path` between marker lines, then its length and
 /// SHA-256 (`LAUNCH-DIGEST <label> bytes=<n>` and `LAUNCH-SHA256 <label> <hex>`).
 fn show(label: &str, path: &[u16; PATH_UNITS]) {
-    say(b"LAUNCH-BEGIN ");
-    say(label.as_bytes());
-    say(b"\n");
+    say_line(&Line::new().text(b"LAUNCH-BEGIN ").text(label.as_bytes()));
     let mut sha = Sha256::new();
     let mut bytes = 0u64;
     if let Some(h) = open(path, false, false) {
@@ -360,41 +358,96 @@ fn show(label: &str, path: &[u16; PATH_UNITS]) {
         // SAFETY: opened above.
         unsafe { CloseHandle(h) };
     }
-    say(b"\nLAUNCH-END ");
-    say(label.as_bytes());
-    say(b"\nLAUNCH-DIGEST ");
-    say(label.as_bytes());
-    say_num(" bytes=", bytes, false);
-    say(b"LAUNCH-SHA256 ");
-    say(label.as_bytes());
-    say(b" ");
-    for b in sha.finish() {
-        say(&[b"0123456789abcdef"[usize::from(b >> 4)], b"0123456789abcdef"[usize::from(b & 15)]]);
-    }
-    say(b"\n");
+    // The file's last line may have no line end: `LAUNCH-END` starts a line of its own.
+    say_line(&Line::new().text(b"\nLAUNCH-END ").text(label.as_bytes()));
+    report(&Line::new().text(b"LAUNCH-DIGEST ").text(label.as_bytes()).text(b" bytes=").num(bytes, false));
+    report(&Line::new().text(b"LAUNCH-SHA256 ").text(label.as_bytes()).text(b" ").hex(&sha.finish()));
 }
 
-fn say_num(prefix: &str, v: u64, hex: bool) {
-    let mut digits = [0u8; 24];
-    let mut n = 0;
-    let base = if hex { 16 } else { 10 };
-    let mut x = v;
-    loop {
-        digits[n] = b"0123456789abcdef"[(x % base) as usize];
-        n += 1;
-        x /= base;
-        if x == 0 {
-            break;
+/// `LAUNCH-EXIT <what><v>` (decimal, or hex after `0x`): a result line.
+fn say_exit(what: &str, v: u64, hex: bool) {
+    report(&Line::new().text(b"LAUNCH-EXIT ").text(what.as_bytes()).num(v, hex));
+}
+
+/// One line of the launcher's output, built whole before it is written (ADR 0228): the
+/// console gets it in one `WriteFile`, so the serial console never shows it in pieces.
+struct Line {
+    buf: [u8; 512],
+    len: usize,
+}
+
+impl Line {
+    fn new() -> Line {
+        Line { buf: [0; 512], len: 0 }
+    }
+
+    /// Add `bytes` (what does not fit is left out).
+    fn text(mut self, bytes: &[u8]) -> Line {
+        let n = bytes.len().min(self.buf.len() - self.len);
+        self.buf[self.len..self.len + n].copy_from_slice(&bytes[..n]);
+        self.len += n;
+        self
+    }
+
+    /// Add `v` in decimal, or in hex after `0x`.
+    fn num(self, v: u64, hex: bool) -> Line {
+        let mut digits = [0u8; 24];
+        let mut n = 0;
+        let base = if hex { 16 } else { 10 };
+        let mut x = v;
+        loop {
+            digits[n] = b"0123456789abcdef"[(x % base) as usize];
+            n += 1;
+            x /= base;
+            if x == 0 {
+                break;
+            }
+        }
+        digits[..n].reverse();
+        let line = if hex { self.text(b"0x") } else { self };
+        line.text(&digits[..n])
+    }
+
+    /// Add `bytes` as lower-case hex.
+    fn hex(mut self, bytes: &[u8]) -> Line {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        for &b in bytes {
+            self = self.text(&[HEX[usize::from(b >> 4)], HEX[usize::from(b & 15)]]);
+        }
+        self
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+}
+
+/// Write `line` and its line end in one call.
+fn say_line(line: &Line) {
+    let mut out = Line::new().text(line.bytes());
+    out.len = out.len.min(out.buf.len() - 1);
+    say(out.text(b"\n").bytes());
+}
+
+/// CRC-32 (IEEE 802.3: the reflected polynomial 0xEDB88320, as zlib computes it) of `bytes`.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for &b in bytes {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
         }
     }
-    say(prefix.as_bytes());
-    if hex {
-        say(b"0x");
-    }
-    for i in (0..n).rev() {
-        say(&digits[i..=i]);
-    }
-    say(b"\n");
+    !crc
+}
+
+/// A result line: on the console like any other, and on the kernel log framed and checksummed,
+/// `POLY-RESULT <line> crc32=<8 hex digits>`, the copy the host's boot tests trust (ADR 0228).
+fn report(line: &Line) {
+    say_line(line);
+    let framed = Line::new().text(b"POLY-RESULT ").text(line.bytes()).text(b" crc32=").hex(&crc32(line.bytes()).to_be_bytes());
+    // SAFETY: a readable buffer of `framed.len` bytes (at most 512, what the call logs).
+    unsafe { PolyDebugPrint(framed.buf.as_ptr(), framed.len) };
 }
 
 /// The lines of `stage.cmd`: (start, end) of each in `SPEC`.
@@ -433,7 +486,7 @@ poly_wtest::main!(launch);
 fn launch(t: &mut Test) {
     let mut dir = [0u16; PATH_UNITS];
     let Some(dir_len) = own_dir(&mut dir) else {
-        say(b"LAUNCH-EXIT driver-error no-module-name\n");
+        report(&Line::new().text(b"LAUNCH-EXIT driver-error no-module-name"));
         return;
     };
     // The stage number: the last run of digits of the command line.
@@ -492,7 +545,7 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     };
     let spec_path = beside(dir, dir_len, core::str::from_utf8(&name[..n]).unwrap_or("stage1.cmd"));
     let Some(h) = open(&spec_path, false, false) else {
-        say(b"LAUNCH-EXIT driver-error no-stage-cmd\n");
+        report(&Line::new().text(b"LAUNCH-EXIT driver-error no-stage-cmd"));
         return false;
     };
     let spec = SPEC.0.get();
@@ -538,7 +591,7 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     let mut cmd_w = [0u16; 2048];
     let mut cwd_w = [0u16; 1024];
     if app.len() >= 1024 || cmdline.len() >= 2048 || cwd.len() >= 1024 {
-        say(b"LAUNCH-EXIT driver-error stage-too-long\n");
+        report(&Line::new().text(b"LAUNCH-EXIT driver-error stage-too-long"));
         return false;
     }
     widen(app, &mut app_w);
@@ -552,7 +605,7 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     );
     let (Some(si_h), Some(so_h), Some(se_h)) = (open(&stdin_p, true, true), open(&stdout_p, true, true), open(&stderr_p, true, true))
     else {
-        say(b"LAUNCH-EXIT driver-error standard-handle-files\n");
+        report(&Line::new().text(b"LAUNCH-EXIT driver-error standard-handle-files"));
         return false;
     };
     // SAFETY: zeroed is a valid STARTUPINFOW (integers and null pointers).
@@ -563,9 +616,7 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     si.std_output = so_h;
     si.std_error = se_h;
     let mut pi = ProcessInformation { process: core::ptr::null_mut(), thread: core::ptr::null_mut(), process_id: 0, thread_id: 0 };
-    say(b"LAUNCH-START ");
-    say(app);
-    say(b"\n");
+    say_line(&Line::new().text(b"LAUNCH-START ").text(app));
     // SAFETY: valid strings (the command line writable), STARTUPINFOW and
     // PROCESS_INFORMATION; the standard handles are inheritable.
     let created = unsafe {
@@ -589,7 +640,7 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
         unsafe { CloseHandle(h) };
     }
     if created == 0 {
-        say_num("LAUNCH-EXIT spawn-error=", u64::from(create_error), false);
+        say_exit("spawn-error=", u64::from(create_error), false);
         t.check("spawned", false, i64::from(create_error));
         return false;
     }
@@ -659,13 +710,13 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     show("stdout", &stdout_p);
     show("stderr", &stderr_p);
     if waited == WAIT_OBJECT_0 {
-        say_num("LAUNCH-EXIT code=", u64::from(code), true);
+        say_exit("code=", u64::from(code), true);
         t.check("exited", true, i64::from(code));
     } else if waited == WAIT_TIMEOUT {
-        say_num("LAUNCH-EXIT timeout seconds=", u64::from(seconds), false);
+        say_exit("timeout seconds=", u64::from(seconds), false);
         t.check("exited", false, 0);
     } else {
-        say_num("LAUNCH-EXIT wait-failed=", u64::from(waited), true);
+        say_exit("wait-failed=", u64::from(waited), true);
         t.check("exited", false, i64::from(waited));
     }
     next

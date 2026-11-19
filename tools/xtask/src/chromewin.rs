@@ -761,6 +761,10 @@ pub struct Summary {
     /// as when the host's disk is full. Chrome's databases then fail and Chrome ends its network
     /// service on purpose: a run with these says nothing about Poly (ADR 0217).
     pub disk_errors: usize,
+    /// The launcher's result lines read from their checksummed copies on the kernel log
+    /// (`POLY-RESULT ... crc32=...`, ADR 0228), and copies with a bad checksum (not trusted).
+    pub frames: usize,
+    pub bad_frames: usize,
 }
 
 impl Summary {
@@ -833,6 +837,21 @@ impl Summary {
         }
         if !expect.is_empty() && stream.contains(expect) {
             s.expected = true;
+        }
+        // Last, the launcher's framed result lines (ADR 0228): whole and checked, so they win
+        // over whatever the console's rows gave above.
+        let (frames, bad) = crate::console::result_frames(log);
+        s.frames = frames.len();
+        s.bad_frames = bad;
+        for f in &frames {
+            if let Some(rest) = f.strip_prefix("LAUNCH-EXIT ") {
+                s.code = rest.strip_prefix("code=0x").and_then(|h| u32::from_str_radix(h, 16).ok());
+                s.exit = Some(rest.to_string());
+            } else if let Some(n) = f.strip_prefix("LAUNCH-DIGEST stdout bytes=") {
+                s.stdout_bytes = n.parse().ok();
+            } else if let Some(hex) = f.strip_prefix("LAUNCH-SHA256 stdout ") {
+                s.stdout_sha256 = Some(hex.to_string());
+            }
         }
         s
     }
@@ -1128,6 +1147,15 @@ impl Outcome {
         if let Some(note) = &self.digest_note {
             println!("  stdout digest: {note}");
         }
+        println!(
+            "  result lines from checksummed frames: {}{}",
+            self.summary.frames,
+            if self.summary.bad_frames > 0 {
+                format!(" ({} more with a bad checksum, not used)", self.summary.bad_frames)
+            } else {
+                String::new()
+            }
+        );
         if let Some(t) = &self.trace {
             println!("  poly-side call trace: {}", t.display());
         }
@@ -1142,10 +1170,15 @@ impl Outcome {
     }
 }
 
+/// Whether the spec recorded the standard output of stage `st` ([`digest_note`] checks it).
+fn has_spec_digest(st: &Stage) -> bool {
+    st.program.is_none() && st.number != 6
+}
+
 /// Whether the standard output the launcher digested is the one the spec
 /// recorded for the stage (`windows.json`); `None` when it is, else why not.
 fn digest_note(st: &Stage, summary: &Summary) -> Option<String> {
-    if st.program.is_some() {
+    if !has_spec_digest(st) {
         return None;
     }
     // The spec calls the headless network stage `s4-headless` (its window one is `s4-window`).
@@ -1222,7 +1255,10 @@ pub fn boot_stage(kernel: &Path, st: &Stage, o: &Options) -> Result<Outcome> {
     let text = std::fs::read(&log).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
     let summary = Summary::parse(&text, st.expect);
     let digest_note = digest_note(st, &summary);
-    let passed = summary.expected && summary.code == Some(0) && digest_note.is_none();
+    // Standard output that is the recorded one byte for byte holds the expected line too, even
+    // when a kernel line landed inside the console's copy of it.
+    let expected = summary.expected || (has_spec_digest(st) && digest_note.is_none());
+    let passed = expected && summary.code == Some(0) && digest_note.is_none();
     let trace = if o.kit.is_some() {
         // The browser's trace, and `<file>.N` for each child process the launcher printed.
         let file = work.join(format!("stage{stage}.ptrace.jsonl"));
@@ -1795,6 +1831,31 @@ mod tests {
         let late = Summary::parse("LAUNCH-EXIT timeout seconds=300\n", DOM_EXPECT);
         assert_eq!(late.exit.as_deref(), Some("timeout seconds=300"));
         assert_eq!(late.code, None);
+    }
+
+    /// PR #302's flake: a kernel line no prefix list knows (`d3d11:`) inside the console's
+    /// digest row lost the digest. The launcher's checksummed frames on the kernel log are whole
+    /// (ADR 0228) and win; a torn or altered frame is not used.
+    #[test]
+    fn checksummed_result_frames_win_over_a_torn_console_row() {
+        let sha = "7b79f8b475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea13807b";
+        let frame = |t: &str| format!("POLY-RESULT {t} crc32={:08x}", crate::unzip::crc32(t.as_bytes()));
+        let log = format!(
+            "\x1b[19;1HLAUNCH-DIGEST stdout bytes=440\x1b[20;1HLAUNCH-SHA256 stdout 7b79f8d3d11: loaded (process type \
+             gpu-process)\r\nb475542cce0f029ef2459918c36404fe1986144f2fd1f2bf8aea1\x1b[21;1H3807b\r\n\
+             nt: pid 1: {}\r\nnt: pid 1: {}\r\n\x1b[22;1HLAUNCH-EXIT code=0x0\r\nnt: pid 1: {}\r\n",
+            frame("LAUNCH-DIGEST stdout bytes=440"),
+            frame(&format!("LAUNCH-SHA256 stdout {sha}")),
+            frame("LAUNCH-EXIT code=0x0"),
+        );
+        let s = Summary::parse(&log, DOM_EXPECT);
+        assert_eq!((s.stdout_bytes, s.stdout_sha256.as_deref(), s.code), (Some(440), Some(sha), Some(0)));
+        assert_eq!((s.frames, s.bad_frames), (3, 0));
+        // An altered frame is not trusted: the console's (torn) row is all there is.
+        let altered = log.replace(&format!("{sha} crc32"), &format!("{} crc32", sha.replace('7', "8")));
+        let s = Summary::parse(&altered, DOM_EXPECT);
+        assert_eq!((s.frames, s.bad_frames), (2, 1));
+        assert_ne!(s.stdout_sha256.as_deref(), Some(sha.replace('7', "8").as_str()));
     }
 
     /// A log of an `--exceptions` run: tens of thousands of kernel lines between the
