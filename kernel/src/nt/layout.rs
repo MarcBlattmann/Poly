@@ -45,6 +45,18 @@ pub fn c_roots() -> Vec<String> {
     v
 }
 
+/// An argument of a Windows program started from Poly's side, as the program is given it
+/// ([`layout::dos_argument`], ADR 0234): an absolute path naming a file or folder is its DOS path.
+pub fn dos_argument(arg: String) -> String {
+    let roots = c_roots();
+    let roots: Vec<&[u8]> = roots.iter().map(|r| r.as_bytes()).collect();
+    let exists = |p: &str| {
+        let vfs = fs::vfs();
+        vfs.root_context().is_ok_and(|ctx| vfs.lookup(&ctx, &Cred::root(), At::Cwd, p.as_bytes(), true).is_ok())
+    };
+    layout::dos_argument(&arg, &roots, exists).unwrap_or(arg)
+}
+
 fn mkdir_all(path: &str) -> Result<(), Errno> {
     let vfs = fs::vfs();
     let ctx = vfs.root_context()?;

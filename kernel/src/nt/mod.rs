@@ -1306,7 +1306,9 @@ impl Launch {
     pub fn of(path: &[u8], argv: &[&[u8]]) -> Launch {
         Launch {
             image_path: layout::dos_path(path),
-            args: argv.iter().skip(1).map(|a| String::from_utf8_lossy(a).into_owned()).collect(),
+            // A path naming a file reaches the program as its DOS path (Files opening a
+            // download with a Windows program, ADR 0234).
+            args: argv.iter().skip(1).map(|a| layout::dos_argument(String::from_utf8_lossy(a).into_owned())).collect(),
         }
     }
 
