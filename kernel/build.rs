@@ -202,6 +202,7 @@ fn embed_wow64() {
         "sys32.exe",
         "safeseh32.exe",
         "ansi32.exe",
+        "msgloop32.exe",
     ]
     .iter()
     .map(|n| n.to_string())
