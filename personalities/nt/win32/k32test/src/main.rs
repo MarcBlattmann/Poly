@@ -221,6 +221,7 @@ macro_rules! w {
 }
 
 mod basic;
+mod bigpipe;
 mod chrome2;
 mod inherit;
 mod sevenzip;
@@ -452,6 +453,7 @@ pub extern "system" fn k32test_main(_peb: *mut u8) -> u32 {
         processes();
         inheritance_and_startup();
         chrome2::run();
+        bigpipe::run();
         out(b"k32test: all ");
         out_num(STEP.load(Ordering::Relaxed));
         out(b" checks passed\n");

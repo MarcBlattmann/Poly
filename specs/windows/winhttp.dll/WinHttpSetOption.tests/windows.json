@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wh_session_opts",
-      "exe_sha256": "b88b12dd33240c508c8468ff85c9ae00b8fa52d97685b3fcc7694859fc03b62b",
+      "exe_sha256": "20852ec7231e8db05e061f4b752821761f5c6d68ec7aa6341feffc2ecc82dc1b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

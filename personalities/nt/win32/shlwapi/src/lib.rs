@@ -20,6 +20,7 @@ use poly_kernelbase::shlwapi as logic;
 
 mod assoc;
 mod path;
+mod regkey;
 
 poly_win32_rt::process_heap_allocator!();
 

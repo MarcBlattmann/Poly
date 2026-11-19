@@ -1413,6 +1413,8 @@ fn the_client_rectangle_follows_a_frame_style_change_without_frame_changed() {
     });
 }
 
+#[path = "user_tests/dpi.rs"]
+mod dpi_hunt;
 #[path = "user_tests/focus.rs"]
 mod focus_hunt;
 #[path = "user_tests/input.rs"]
@@ -1462,5 +1464,43 @@ fn set_class_long_replaces_a_class_value_and_answers_the_old_one() {
             e.call(Request::SetClassLong { hwnd: 0xdead, index: -12, value: 1 }),
             Reply::Error { code: 1400 }
         ));
+    });
+}
+
+#[test]
+fn a_window_made_hidden_and_maximized_waits_for_its_show_at_the_maximized_size() {
+    // ADR 0234: Chrome restoring a window that was closed maximized makes it hidden with
+    // WS_MAXIMIZE, sends SC_MAXIMIZE while building it and shows it later.
+    with_env(|e| {
+        register(e, "Max");
+        let style = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | 0x0003_0000;
+        let h = create(e, 'X', 0, "Max", style | WS_MAXIMIZE, 100, 100, 300, 200, 0, 0);
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        // Made at the maximized rectangle (the 1024x768 screen grown by the hidden frame), the
+        // rectangle asked for kept as the one to restore to.
+        assert_eq!(info.window, Rect::new(-8, -8, 1032, 776));
+        assert!(info.maximized && info.style & WS_VISIBLE == 0);
+        let mut wp = place::WindowPlacement { length: place::WINDOWPLACEMENT_SIZE, ..Default::default() };
+        assert!(place::get_window_placement(e, h, &mut wp));
+        assert_eq!(Rect::from(wp.normal_position), Rect::new(100, 100, 400, 300));
+        // SC_MAXIMIZE of the maximized window: nothing is shown, sent or activated.
+        take_log();
+        def_window_proc(e, h, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+        let log = take_log();
+        assert!(log.iter().all(|l| !l.contains("WINDOWPOS") && !l.contains("ACTIVATE")), "{log:?}");
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        assert_eq!(info.style & WS_VISIBLE, 0);
+        assert_eq!(input_state(e).0, 0, "nothing is active");
+        // Shown later: where it is, maximized, and active.
+        show_window(e, h, SW_SHOWMAXIMIZED);
+        let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+        assert!(info.visible && info.maximized);
+        assert_eq!(info.window, Rect::new(-8, -8, 1032, 776));
+        assert_eq!(input_state(e).0 as u64, h);
+        // A hidden window that is not maximized yet is still maximized and shown by SC_MAXIMIZE.
+        let n = create(e, 'N', 0, "Max", style, 100, 100, 300, 200, 0, 0);
+        def_window_proc(e, n, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+        let Reply::Window { info } = e.call(Request::Window { hwnd: n }) else { panic!() };
+        assert!(info.visible && info.maximized);
     });
 }

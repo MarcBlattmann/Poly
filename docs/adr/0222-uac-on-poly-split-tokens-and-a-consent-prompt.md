@@ -194,3 +194,31 @@ jumped to a stack address (survey stop 1). Now:
   (all tokens keep session 0).
 - **`cmd.exe`.** `CreateProcessElevation`'s `cmd.exe /c exit 3` lines fail: Poly has no
   `cmd.exe`.
+
+## Addendum: the interactive logon's session and groups, and the session's shell
+
+The COM security batch (B2c) compares token facts of the standard and the elevated logons:
+`TokenSessionId` matches the client's session (`CoImpersonateClient.yaml`), and its recordings ran
+in the interactive desktop session (session 1). Its tests start a de-elevated client with a copy
+of the token of the session's shell (`explorer.exe`, found through the process list) and
+`CreateProcessWithTokenW` (`AppID.Security.yaml`, `CoQueryClientBlanket.yaml`).
+
+- **Session 1.** Both halves of the split token are in the console session
+  (`token::CONSOLE_SESSION`, as `WTSGetActiveConsoleSessionId` answers). `PEB.SessionId` is now
+  written from the process token when a process starts (`security::write_session_id`); before, it
+  was always 0. The administrator of ADR 0171 (the SSH logon) and services stay in session 0.
+- **INTERACTIVE instead of NETWORK.** Learn ("Well-known SIDs"): INTERACTIVE (S-1-5-4) is the
+  group of users who logged on interactively, NETWORK (S-1-5-2) that of network logons. The split
+  tokens come from an interactive logon; the SSH logon's token keeps NETWORK (as
+  `CheckTokenMembership.yaml` observed).
+- **The shell stand-in.** `C:\Windows\explorer.exe` is Poly's own program: it waits, nothing
+  else. For the elevated logon (`poly.win.token=elevated`), the kernel starts it at the first NT
+  use with the filtered token (`security::become_shell`), so an elevated program finds the
+  session's shell and can start a process de-elevated with a copy of its token. For the standard
+  logon (the desktop's default) it is not started yet; Google's installer starting Chrome
+  de-elevated will want it there too.
+- **The session's object namespace.** Learn ("Kernel object namespaces") puts a session's named
+  objects under `\Sessions\<n>\BaseNamedObjects`. Git for Windows' MSYS2 runtime, in session 1,
+  creates its directory under `\Sessions\BNOLINKS\1` (its own error message on Poly: the path was
+  not found). Both names are now links to `\BaseNamedObjects` (`poly_ntobj::WELL_KNOWN_LINKS`):
+  Poly keeps one namespace for named objects, as it already does for `Local\`.

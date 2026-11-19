@@ -312,8 +312,11 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
             Request::WindowFromPoint { x, y, below } => {
                 let mut below = below;
                 let mut fx = Effects::default();
+                // The caller's units to physical pixels (ADR 0231).
+                let u = sys.win32k.wm.units_of((ctx.pid, ctx.tid));
+                let (x, y) = (u.to_phys(x), u.to_phys(y));
                 loop {
-                    let r = sys.win32k.wm.handle(ctx, Request::WindowFromPoint { x, y, below }, &mut fx);
+                    let r = sys.win32k.wm.handle_phys(ctx, Request::WindowFromPoint { x, y, below }, &mut fx);
                     let Reply::Handle { hwnd } = r else { return r };
                     let w = &sys.win32k;
                     let mut top = hwnd;
@@ -332,6 +335,8 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
             }
             Request::ScreenPixel { x, y } => {
                 let w = &sys.win32k;
+                let u = w.wm.units_of((ctx.pid, ctx.tid));
+                let (x, y) = (u.to_phys(x), u.to_phys(y));
                 return Reply::Value { value: u64::from(w.surfaces.screen_pixel(&w.wm, &w.desktop, x, y)) };
             }
             // A premultiplied DirectComposition swap chain shows in the window (ADR 0225).

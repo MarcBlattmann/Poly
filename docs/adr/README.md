@@ -208,6 +208,8 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0227](0227-chrome-setup-shell-links-hive-files-event-log-and-system-lists.md) | Chrome's own setup on Poly: shell links, hive files of programs, the event log and the system's lists | Accepted |
 | [0228](0228-boot-test-result-lines-cannot-be-torn-by-kernel-log-output.md) | Boot-test result lines cannot be torn by kernel log output | Accepted |
 | [0230](0230-windows-installers-through-polys-front-door.md) | Windows installers through Poly's front door | Accepted |
+| [0231](0231-windows-dpi-awareness-a-thread-works-in-its-own-units.md) | Windows DPI awareness: each thread works in its own units, win32k in physical pixels | Accepted |
+| [0234](0234-chrome-qa-fixes-a-window-made-maximized-waits-for-its-show.md) | Chrome QA fixes: a window made maximized waits for its show | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

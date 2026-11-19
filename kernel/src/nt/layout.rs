@@ -213,6 +213,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
         }
     }
+    // The session shell's stand-in (ADR 0222), where Windows keeps its shell.
+    if !super::EXPLORER_EXE.is_empty() {
+        match create::install_file(&vr, &root, "Windows", "explorer.exe", super::EXPLORER_EXE) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: explorer.exe written to Windows"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install explorer.exe ({:#x})", e.0),
+        }
+    }
     // Poly's own Visual C++ runtime (ADR 0199). A user who installs
     // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
     // is not rewritten (owner decision 5).

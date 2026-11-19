@@ -430,6 +430,11 @@ unsafe extern "system" fn get_file_name(p: *mut c_void, out: *mut *mut u16) -> H
     // SAFETY: our object; the caller's out parameter gets task memory.
     unsafe {
         let (hr, name) = state(p).file_name();
+        // No name set (E_FAIL): no string either.
+        if hr != st::S_OK {
+            *out = core::ptr::null_mut();
+            return hr as Hresult;
+        }
         let block = CoTaskMemAlloc(2 * (name.len() + 1)).cast::<u16>();
         if block.is_null() {
             *out = core::ptr::null_mut();

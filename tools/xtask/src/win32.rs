@@ -122,6 +122,8 @@ pub const OUTPUTS: &[&str] = &[
     "msvcp140.dll",
     // ADR 0221.
     "services.exe",
+    // ADR 0222: the session's shell stand-in.
+    "explorer.exe",
     // The Windows Firewall's COM objects.
     "hnetcfg.dll",
 ];
@@ -359,6 +361,9 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/vcruntime140_1",
             "personalities/nt/win32/msvcp140",
             "personalities/nt/win32/hnetcfg",
+            // ADR 0221, 0222.
+            "personalities/nt/win32/services",
+            "personalities/nt/win32/explorer",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -492,6 +497,8 @@ fn verify(dir: &Path) -> Result {
     verify_exe(dir, "contest.exe", &["kernel32.dll"])?;
     // ADR 0221.
     verify_exe(dir, "services.exe", &["ntdll.dll"])?;
+    // ADR 0222.
+    verify_exe(dir, "explorer.exe", &["ntdll.dll"])?;
     verify_advapi32(dir)?;
     verify_exe(dir, "a32test.exe", &["advapi32.dll", "kernel32.dll"])?;
     verify_crt(dir)?;

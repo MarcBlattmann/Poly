@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "kfc_paths",
-      "exe_sha256": "1d691edc9de080a95d099b06a532f8e1bf4866183bc4b149603c8f02921fc3cc",
+      "exe_sha256": "2e728ff940c6639b6f5d5a6c3196afba340bc3b4e8ec1e667d547419ae6823c4",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
       "name": "kfc_write_adm",
       "session": "interactive",
       "token": "elevated",
-      "exe_sha256": "e6e478f3bf68fad6cc4babf9d2081ffd4d0f8d78ffad51e4aad6d28d246951e2",
+      "exe_sha256": "e582f30e4ede85f6888965df6fae229c33528c05e8e119c1bb65d5dfa7d85059",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

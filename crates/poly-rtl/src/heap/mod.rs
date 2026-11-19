@@ -45,7 +45,7 @@
 //! not modelled: segments are committed whole (Poly's memory is demand-zero,
 //! ADR 0063).
 
-use crate::critsec::{CriticalSection, Waiter};
+use crate::critsec::{HeapLock, Waiter};
 use core::ptr::{self, null_mut};
 
 #[cfg(test)]
@@ -160,7 +160,7 @@ struct HeapHeader {
     signature: u64,
     flags: u32,
     _pad: u32,
-    lock: CriticalSection,
+    lock: HeapLock,
     segments: *mut Segment,
     big: *mut BigBlock,
     next_segment: usize,
@@ -271,7 +271,7 @@ impl Heap {
                 signature: SIGNATURE,
                 flags,
                 _pad: 0,
-                lock: CriticalSection::new(),
+                lock: HeapLock::new(),
                 segments: null_mut(),
                 big: null_mut(),
                 next_segment: size.clamp(DEFAULT_RESERVE, MAX_SEGMENT),

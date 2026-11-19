@@ -58,6 +58,41 @@ const WRITTEN: u32 = super::notify::CHANGE_LAST_WRITE | super::notify::CHANGE_SI
 /// The most an asynchronous or pipe write copies in at once.
 pub const MAX_CAPTURED_WRITE: usize = 16 << 20;
 
+/// `len` bytes of the caller's at `buf`, copied into the kernel in pieces of at most
+/// [`npfs::PIECE`](super::npfs::PIECE) bytes (one empty piece for nothing): a write the kernel
+/// keeps until its reader takes it can be larger than the kernel heap gives in one allocation.
+fn capture_pieces<K: NtKernel>(k: &mut K, buf: u64, len: usize) -> Result<Vec<Vec<u8>>> {
+    if len == 0 {
+        return Ok(alloc::vec![Vec::new()]);
+    }
+    let piece = super::npfs::PIECE;
+    let mut pieces = Vec::new();
+    pieces.try_reserve_exact(len.div_ceil(piece)).map_err(|_| STATUS_INSUFFICIENT_RESOURCES)?;
+    let mut at = 0;
+    while at < len {
+        let n = piece.min(len - at);
+        let mut data = capture_buffer(n)?;
+        abi::read(k, buf + at as u64, &mut data)?;
+        pieces.push(data);
+        at += n;
+    }
+    Ok(pieces)
+}
+
+/// The pieces of a captured write as one buffer, for the targets that take it whole; a write
+/// larger than the kernel can allocate in one piece fails ([`capture_buffer`]).
+fn one_piece(mut pieces: Vec<Vec<u8>>) -> Result<Vec<u8>> {
+    if pieces.len() <= 1 {
+        return Ok(pieces.pop().unwrap_or_default());
+    }
+    let mut data = capture_buffer(0)?;
+    data.try_reserve_exact(pieces.iter().map(Vec::len).sum()).map_err(|_| STATUS_INSUFFICIENT_RESOURCES)?;
+    for p in pieces {
+        data.extend_from_slice(&p);
+    }
+    Ok(data)
+}
+
 /// A zeroed buffer of `len` bytes for data a request copies in whole, or
 /// `STATUS_INSUFFICIENT_RESOURCES` when the kernel cannot allocate it (Learn, "NtWriteFile":
 /// the system lacks the resources for the request). An allocation larger than the kernel heap
@@ -650,6 +685,18 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
 /// but not `FILE_WRITE_DATA`, or a `ByteOffset` of
 /// `FILE_WRITE_TO_END_OF_FILE`, writes at the end of the file.
 pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let r = write_file_whole(k, regs);
+    // A write refused for its size breaks what the program sends through it (Chrome's IPC pipes):
+    // the log says so, so that what follows (a hung tab, a process that ends) can be traced.
+    if r == Err(STATUS_INSUFFICIENT_RESOURCES) {
+        let len = abi::arg(k, regs, 6).unwrap_or(0) as u32;
+        let text = alloc::format!("NtWriteFile: a write of {len} bytes is more than the kernel can take at once");
+        k.debug_print(text.as_bytes());
+    }
+    r
+}
+
+fn write_file_whole<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, event, apc_routine, apc_context, iosb, buf, len, off_ptr, key_ptr] = abi::args::<K, 9>(k, regs)?;
     let len = len as u32 as usize;
     let offset = read_offset(k, off_ptr)?;
@@ -671,9 +718,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         if len > MAX_CAPTURED_WRITE {
             return Err(STATUS_INSUFFICIENT_RESOURCES);
         }
-        let mut data = capture_buffer(len)?;
-        abi::read(k, buf, &mut data).or_else(|e| if len == 0 { Ok(()) } else { Err(e) })?;
-        Some(data)
+        Some(capture_pieces(k, buf, len)?)
     } else {
         None
     };
@@ -688,7 +733,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             Target::Volume(_) => Err(STATUS_ACCESS_DENIED),
             Target::Pipe(name) => {
                 let name = name.clone();
-                let data = captured.unwrap_or_default();
+                let data = one_piece(captured.unwrap_or_default())?;
                 let written = sys.io.pipe_write(&name, &data)?;
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, written);
                 Ok(Plan::Done(STATUS_SUCCESS))
@@ -700,7 +745,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                 if t.kind != crate::console::ConsoleKind::Output {
                     return Err(STATUS_INVALID_HANDLE);
                 }
-                let data = captured.unwrap_or_default();
+                let data = one_piece(captured.unwrap_or_default())?;
                 let written = sys.io.console_write_bytes(t.console, &data)?;
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, written);
                 Ok(Plan::Done(STATUS_SUCCESS))
@@ -721,6 +766,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                 }
                 let data = captured.unwrap_or_default();
                 let irp = n.irp(sys, &caller, file, sync, IrpOp::Write { offset: None, data: Vec::new(), key })?;
+                // A byte pipe takes the pieces as they are (npfs::PIECE).
                 match sys.io.np_write(file.1, irp, data) {
                     Ok(super::npfs::NpDone::Done(s)) => Ok(Plan::Done(s)),
                     Ok(super::npfs::NpDone::Pending(id)) => Ok(Plan::Pending { irp: id, file: file.0, sync }),
@@ -756,7 +802,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                     }
                     return Ok(Plan::Inline { open, offset: start, file, append: at.is_none() });
                 }
-                let data = captured.unwrap_or_default();
+                let data = one_piece(captured.unwrap_or_default())?;
                 if !data.is_empty() {
                     sys.io.note_file_change(file.1, super::notify::Change::Modified { mask: WRITTEN });
                 }

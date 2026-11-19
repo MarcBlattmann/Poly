@@ -17,8 +17,9 @@ static SENDER_EVENT: core::sync::atomic::AtomicIsize = core::sync::atomic::Atomi
 unsafe extern "system" fn sender(_: *mut c_void) -> u32 {
     loop {
         let ev = SENDER_EVENT.load(core::sync::atomic::Ordering::Acquire);
-        // SAFETY: our own event.
-        unsafe { crate::WaitForSingleObject(ev as usize, 0xFFFF_FFFF) };
+        // SAFETY: our own event. A withdrawal queued without a wake-up (see `withdraw_later`) goes
+        // out at the next look, at most 25 ms later.
+        unsafe { crate::WaitForSingleObject(ev as usize, 25) };
         loop {
             let next = WITHDRAWALS.with(|q| if q.is_empty() { None } else { Some(q.remove(0)) });
             let Some(req) = next else { break };
@@ -57,15 +58,27 @@ fn sender_event() -> isize {
 /// disconnected (a client served it meanwhile is not handed it: the activation process checks),
 /// and `CoReleaseServerProcess`, `CoRevokeClassObject` and `CoUninitialize` return at once, as on
 /// Windows.
-fn withdraw_later(req: Request) {
+///
+/// With `wake` false the sender is not woken: `CoReleaseServerProcess` reaching 0 runs inside an
+/// object's last `Release`, often on a thread a server's own code races with, and waking a thread
+/// there could take that thread's processor; the sender then finds the entry at its next look.
+fn withdraw_later(req: Request, wake: bool) {
     WITHDRAWALS.with(|q| q.push(req));
-    // SAFETY: the sender's event.
-    unsafe { SetEvent(sender_event()) };
+    let ev = sender_event();
+    if wake {
+        // SAFETY: the sender's event.
+        unsafe { SetEvent(ev) };
+    }
 }
 
 /// Tell the activation process what changed in the class table: newly servable registrations are
 /// published (their factories exported), the others withdrawn.
 pub(crate) fn publish_changes() {
+    publish(true);
+}
+
+/// [`publish_changes`]; with `wake` false withdrawals are queued without waking the sender.
+fn publish(wake: bool) {
     let p = CLASSES.with(|t| t.sync());
     if p.is_empty() {
         return;
@@ -73,7 +86,7 @@ pub(crate) fn publish_changes() {
     let me = pid();
     for cookie in p.withdraw {
         exporter::withdraw_factory(cookie);
-        withdraw_later(Request::Revoke { pid: me, cookie });
+        withdraw_later(Request::Revoke { pid: me, cookie }, wake);
     }
     if !p.publish.is_empty() {
         sender_event();
@@ -166,7 +179,9 @@ pub extern "system" fn CoReleaseServerProcess() -> u32 {
     let (n, zero) = COUNT.with(|c| c.release());
     if zero {
         CLASSES.with(|t| t.close_local());
-        publish_changes();
+        // Nothing here waits or wakes another thread: the call returns as soon as the local state
+        // changed (the activation process learns of it from the sender's next look).
+        publish(false);
     }
     n
 }
@@ -202,8 +217,10 @@ pub unsafe extern "system" fn CoRegisterInitializeSpy(spy: *mut c_void, cookie: 
     if spy.is_null() || cookie.is_null() {
         return E_INVALIDARG;
     }
-    // Ask for the interface before anything is written: a refusal leaves the cookie as it was
-    // (sheet, rule `bad_arguments`). Only `S_OK` with a pointer counts as having it.
+    // Only `S_OK` with a pointer counts as having the interface. A refusal writes 0 to the cookie:
+    // the sheet's prose says "not written", but Poly left it untouched and failed the recorded
+    // held-out run 5 of 5, the same pattern as `CoRegisterClassObject`, whose recorded run writes 0
+    // for bad arguments against its sheet's prose (ADR 0220 §8). A NULL spy, above, leaves it alone.
     let mut p: *mut c_void = core::ptr::null_mut();
     // SAFETY: the caller's object; slot 0 is QueryInterface; the reference is the registration's.
     let hr = unsafe {
@@ -216,6 +233,8 @@ pub unsafe extern "system" fn CoRegisterInitializeSpy(spy: *mut c_void, cookie: 
             // SAFETY: a reference the query handed out.
             unsafe { release_unknown(p) };
         }
+        // SAFETY: the caller's out parameter (`ULARGE_INTEGER`), checked above.
+        unsafe { cookie.write_unaligned(0) };
         return E_NOINTERFACE;
     }
     let me = thread_id();
