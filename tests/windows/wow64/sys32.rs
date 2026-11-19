@@ -25,7 +25,8 @@
 //!   set lacked: `QueryFullProcessImageNameW` (the Win32 form equals `GetModuleFileNameW(NULL)`,
 //!   the device form starts with `\Device\`, a buffer without room for the NUL is
 //!   `ERROR_INSUFFICIENT_BUFFER`) and `msimg32.dll`'s `AlphaBlend` (bound, and a call with no
-//!   device contexts returns FALSE with the stack as it was: eleven 4-byte arguments).
+//!   device contexts returns FALSE with the stack as it was: eleven 4-byte arguments), and gdi32's
+//!   `FrameRgn`, `RoundRect` and `OffsetWindowOrgEx` on a memory device context.
 //!
 //! Not part of the x64 test corpus (the oracle pipeline builds `tests/windows/*.rs` for x64 only).
 
@@ -46,6 +47,18 @@ unsafe extern "system" {
     fn GetModuleFileNameW(module: Handle, buffer: *mut u16, size: u32) -> u32;
     fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
     fn GetLastError() -> u32;
+}
+
+#[link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn CreateCompatibleDC(dc: Handle) -> Handle;
+    fn DeleteDC(dc: Handle) -> i32;
+    fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> Handle;
+    fn DeleteObject(object: Handle) -> i32;
+    fn GetStockObject(index: i32) -> Handle;
+    fn FrameRgn(dc: Handle, rgn: Handle, brush: Handle, w: i32, h: i32) -> i32;
+    fn RoundRect(dc: Handle, l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> i32;
+    fn OffsetWindowOrgEx(dc: Handle, x: i32, y: i32, old: *mut i32) -> i32;
 }
 
 #[link(name = "msimg32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -601,7 +614,25 @@ fn updater() -> bool {
         // AC_SRC_OVER, no flags, a constant alpha of 255, AC_SRC_ALPHA; no device contexts.
         let probe = core::hint::black_box(0x5EED_u32);
         let r = AlphaBlend(0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0x01FF_0000);
-        r == 0 && core::hint::black_box(probe) == 0x5EED
+        if r != 0 || core::hint::black_box(probe) != 0x5EED {
+            return false;
+        }
+        at(6);
+        // gdi32's FrameRgn, RoundRect and OffsetWindowOrgEx on a memory DC (BLACK_BRUSH = 4).
+        let dc = CreateCompatibleDC(0);
+        let rgn = CreateRectRgn(0, 0, 10, 10);
+        let mut old = [7i32; 2];
+        let ok = dc != 0
+            && FrameRgn(dc, rgn, GetStockObject(4), 1, 1) == 1
+            && FrameRgn(dc, rgn, GetStockObject(4), 0, 1) == 0
+            && RoundRect(dc, 0, 0, 10, 10, 3, 3) == 1
+            && OffsetWindowOrgEx(dc, 2, 3, old.as_mut_ptr()) == 1
+            && OffsetWindowOrgEx(dc, 1, 1, old.as_mut_ptr()) == 1
+            && old == [2, 3]
+            && core::hint::black_box(probe) == 0x5EED;
+        DeleteObject(rgn);
+        DeleteDC(dc);
+        ok
     }
 }
 

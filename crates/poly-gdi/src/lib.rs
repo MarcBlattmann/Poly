@@ -41,6 +41,7 @@ pub mod gdi;
 pub mod outline;
 pub mod region;
 mod rgnshape;
+pub mod shapes;
 mod sysfont;
 pub mod text;
 pub mod xform;
