@@ -84,11 +84,11 @@ pub struct ShellExecuteInfo {
 }
 
 #[repr(C)]
-struct ProcessInformation {
-    process: usize,
-    thread: usize,
-    pid: u32,
-    tid: u32,
+pub struct ProcessInformation {
+    pub process: usize,
+    pub thread: usize,
+    pub pid: u32,
+    pub tid: u32,
 }
 
 /// `STARTUPINFOW` (`processthreadsapi.h`): 104 bytes on x64, 68 on x86; `cb` first.
@@ -387,11 +387,24 @@ fn execute(info: &ShellExecuteInfo) -> Executed {
     }
     let show = info.show;
     if class.is_none() && si::is_program(&path) {
-        if !is_open(verb) {
+        // `runas` asks for administrator rights (ADR 0222, [`crate::elevate`]).
+        let runas = verb.is_some_and(|v| si::same_path(v, &w("runas")));
+        if !is_open(verb) && !runas {
             return Err((ERROR_NO_ASSOCIATION, SE_ERR_NOASSOC));
         }
         let cmd = si::quote_for_command_line(&path, params);
-        return start(Some(&path), &cmd, dir, show).map(|pi| keep(info, pi)).map_err(|e| (e, inst_of(e)));
+        let elevated = crate::elevate::caller_elevated();
+        if runas && !elevated {
+            return crate::elevate::start_elevated(&path, &cmd, dir, show).map(|pi| keep(info, pi));
+        }
+        return match start(Some(&path), &cmd, dir, show) {
+            Ok(pi) => Ok(keep(info, pi)),
+            // The manifest asks for administrator rights: the Shell asks the user.
+            Err(crate::elevate::ERROR_ELEVATION_REQUIRED) if !elevated => {
+                crate::elevate::start_elevated(&path, &cmd, dir, show).map(|pi| keep(info, pi))
+            }
+            Err(e) => Err((e, inst_of(e))),
+        };
     }
     let class: Vec<u16> = match class {
         Some(c) => c.to_vec(),

@@ -119,6 +119,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::PolyServiceCall, &[V, P, V, P, V, P]),
     (Service::PolyProcessList, &[P, V, P]),
     (Service::NotifyChangeDirectoryFile, &[H, H, V, V, IO, P, V, V, V]),
+    (Service::PolyRequestElevation, &[P, V, P]),
     (Service::CreateKey, &[OH, V, OA, V, US, V, P]),
     (Service::OpenKey, &[OH, V, OA]),
     (Service::OpenKeyEx, &[OH, V, OA, V]),

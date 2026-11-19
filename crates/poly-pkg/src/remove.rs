@@ -9,6 +9,9 @@
 //! - an app of a **Debian package that was installed after the base root was
 //!   made**: removed by Debian's own `apt-get remove`, then `apt-get
 //!   autoremove` for what only it needed;
+//! - a **Windows app** Poly's installer saw being installed (ADR 0230: a
+//!   desktop file `poly-windows-<slug>` that names its `Uninstall` key's
+//!   `UninstallString`): removed by running that uninstaller;
 //! - anything else: the packages the base root is made of (Chromium among
 //!   them: the desktop's browser, ADR 0147) and desktop files nobody
 //!   installed. Those stay.
@@ -23,6 +26,7 @@ use crate::apt;
 use crate::deb::Info;
 use crate::dpkgdb;
 use crate::installer::{Plan, Removal};
+use crate::windows::apps as winapps;
 use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -86,8 +90,16 @@ pub fn removable(disk: &dyn Disk, data_home: &str) -> Vec<String> {
         let base = base_set(disk);
         out.extend(owned(disk, &base, false).into_iter().map(|(id, _)| id));
     }
-    for name in disk.list(&appimage::applications_dir(data_home)) {
-        if appimage::slug_of_id(&name).is_some() {
+    let dir = appimage::applications_dir(data_home);
+    for name in disk.list(&dir) {
+        // A Windows app is removable when it registered an uninstaller.
+        let windows = || {
+            winapps::is_windows_id(&name)
+                && disk
+                    .read(&alloc::format!("{dir}/{name}"))
+                    .is_some_and(|t| winapps::desktop_value(&t, winapps::UNINSTALL_KEY).is_some_and(|v| !v.is_empty()))
+        };
+        if appimage::slug_of_id(&name).is_some() || windows() {
             out.push(name);
         }
     }
@@ -126,6 +138,9 @@ pub fn plan(id: &str, data_home: &str, disk: &dyn Disk) -> Result<Plan, String> 
             package: None,
         });
     }
+    if winapps::is_windows_id(id) {
+        return windows_plan(id, data_home, disk);
+    }
     if !id.ends_with(".desktop") || id.contains('/') {
         return Err("This is not an app Poly knows how to uninstall.".to_string());
     }
@@ -163,6 +178,61 @@ pub fn plan(id: &str, data_home: &str, disk: &dyn Disk) -> Result<Plan, String> 
         .collect();
     let app = apps.iter().find(|(i, _)| i == id).map_or_else(|| package.clone(), |(_, n)| n.clone());
     Ok(Plan { app, removal: Removal::Package, package: Some(info), apps })
+}
+
+/// The disk as [`winapps`] reads it.
+struct AsFiles<'d>(&'d dyn Disk);
+
+impl winapps::Files for AsFiles<'_> {
+    fn list(&self, dir: &str) -> Vec<String> {
+        self.0.list(dir)
+    }
+
+    fn is_dir(&self, path: &str) -> bool {
+        !self.0.list(path).is_empty()
+    }
+
+    fn exists(&self, path: &str) -> bool {
+        self.0.size(path).is_some() || self.is_dir(path)
+    }
+}
+
+/// What uninstalling the Windows app `id` runs (ADR 0230): its
+/// `UninstallString`, and the launcher entries of the same `Uninstall` key.
+fn windows_plan(id: &str, data_home: &str, disk: &dyn Disk) -> Result<Plan, String> {
+    let dir = appimage::applications_dir(data_home);
+    let text = disk.read(&alloc::format!("{dir}/{id}")).ok_or("This app is not installed.")?;
+    let app = app_name(&text).unwrap_or_else(|| id.to_string());
+    let uninstall =
+        winapps::desktop_value(&text, winapps::UNINSTALL_KEY).filter(|v| !v.is_empty()).ok_or_else(|| {
+            alloc::format!("{app} did not register an uninstaller with Windows, so Poly cannot remove it.")
+        })?;
+    let command = winapps::uninstall_argv(uninstall, &AsFiles(disk))
+        .ok_or_else(|| alloc::format!("{app}'s uninstaller is not there ({uninstall})."))?;
+    let key = winapps::desktop_value(&text, winapps::REGISTRY_KEY).map(str::to_string);
+    let mut apps = alloc::vec![(id.to_string(), app.clone())];
+    if let Some(key) = &key {
+        for other in disk.list(&dir) {
+            if other == id || !winapps::is_windows_id(&other) {
+                continue;
+            }
+            let Some(t) = disk.read(&alloc::format!("{dir}/{other}")) else { continue };
+            if winapps::desktop_value(&t, winapps::REGISTRY_KEY) == Some(key.as_str()) {
+                apps.push((other.clone(), app_name(&t).unwrap_or(other)));
+            }
+        }
+    }
+    let value = |k: &str| winapps::desktop_value(&text, k).unwrap_or("").to_string();
+    Ok(Plan {
+        app,
+        removal: Removal::Windows {
+            command,
+            publisher: value(winapps::PUBLISHER_KEY),
+            version: value(winapps::VERSION_KEY),
+        },
+        package: None,
+        apps,
+    })
 }
 
 #[cfg(test)]

@@ -14,7 +14,6 @@ poly_win32_rt::fail_exports!(
         CoGetDefaultContext,
         CoGetObject,
         CoImpersonateClient,
-        CoIncrementMTAUsage,
         CoLockObjectExternal,
         CoRegisterChannelHook,
         CoRevertToSelf,

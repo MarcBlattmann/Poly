@@ -66,6 +66,8 @@
 //! PNGs, one per step.
 
 use super::{Boot, Result, Symbols, boot_with, has_desktop, initramfs, root, screen};
+
+pub mod wininstaller;
 use crate::hostscreen;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -297,6 +299,13 @@ fn build_image(
 fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     let mut tree = initramfs::Tree::default();
     tree.files.extend(application_files(test_apps));
+    // Poly's installer opens package files and Windows programs (ADR 0173,
+    // 0230): Files finds it by its desktop file.
+    tree.files.push((
+        format!("usr/share/applications/{}", poly_shell::apps::INSTALLER_ID),
+        0o644,
+        poly_shell::apps::installer_desktop_file().into_bytes(),
+    ));
     // The font store (ADR 0105): the shell uses DejaVu Sans, Windows
     // programs' logical fonts map onto all twelve files (ADR 0142; their
     // gdi32 looks in `C:\Windows\Fonts` and then here).

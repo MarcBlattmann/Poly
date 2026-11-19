@@ -200,12 +200,14 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0219](0219-a-window-s-surface-takes-only-what-a-process-drew.md) | A window's surface takes only what a process drew | Accepted |
 | [0220](0220-com-across-processes-an-activation-process-object-exporters-on-named-pipes-and-the-class-table.md) | COM across processes: an activation process, object exporters on named pipes, and the class table | Accepted |
 | [0221](0221-windows-services-a-service-control-manager-in-the-nt-personality-and-services-exe-as-its-host.md) | Windows services: a service control manager in the NT personality, `services.exe` as its host | Accepted |
+| [0222](0222-uac-on-poly-split-tokens-and-a-consent-prompt.md) | UAC on Poly: split tokens and a consent prompt | Accepted |
 | [0223](0223-windows-downloads-streams-shell-classes-and-the-desktop.md) | Chrome's downloads: alternate data streams, Poly's own COM classes, and Windows shell requests reaching the desktop | Accepted |
 | [0224](0224-nt-windows-hand-their-frames-to-the-compositor-as-sections.md) | NT windows hand their frames to the compositor as sections | Accepted |
 | [0225](0225-popups-with-alpha-owners-first-and-wake-ups-for-one-thread.md) | Popups with their alpha, owners before what they own, and a wake-up for one thread | Accepted |
 | [0226](0226-the-task-scheduler-taskschd-dll-a-task-store-on-disk-and-a-scheduler-process.md) | The Task Scheduler: taskschd.dll, a task store on disk and a scheduler process | Accepted |
 | [0227](0227-chrome-setup-shell-links-hive-files-event-log-and-system-lists.md) | Chrome's own setup on Poly: shell links, hive files of programs, the event log and the system's lists | Accepted |
 | [0228](0228-boot-test-result-lines-cannot-be-torn-by-kernel-log-output.md) | Boot-test result lines cannot be torn by kernel log output | Accepted |
+| [0230](0230-windows-installers-through-polys-front-door.md) | Windows installers through Poly's front door | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

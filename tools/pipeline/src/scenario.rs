@@ -982,9 +982,14 @@ pub fn report_markdown(r: &ScenarioReport, reference_path: &str) -> String {
 
 /// Kernel arguments: the driver as the first program in a directory of its
 /// own, and its observation file reported when it has ended. No
-/// `poly.test.capture`: only the observation file is reported as fd 1.
+/// `poly.test.capture`: only the observation file is reported as fd 1. The
+/// scenarios were recorded in the SSH logon's elevated administrator session, so
+/// Poly gives the driver that token (`poly.win.token=admin`, ADR 0222).
 pub fn kernel_args(test: &str) -> String {
-    format!("poly.qemu_exit poly.init=/{test}/{test}.exe poly.test.stdout=/{test}/{}", windows::OUTPUT_FILE)
+    format!(
+        "poly.qemu_exit poly.win.token=admin poly.init=/{test}/{test}.exe poly.test.stdout=/{test}/{}",
+        windows::OUTPUT_FILE
+    )
 }
 
 /// The initramfs: `/<test>/<test>.exe` and the files of `data` beside it.
@@ -1328,6 +1333,7 @@ mod tests {
         assert!(args.contains("poly.init=/sevenzip_scenario/sevenzip_scenario.exe"));
         assert!(args.ends_with("poly.test.stdout=/sevenzip_scenario/poly-test.out"));
         assert!(!args.contains("poly.test.capture"));
+        assert!(args.contains(" poly.win.token=admin "));
         let data = [("7za.exe".to_string(), b"MZ7".to_vec()), ("a.txt".to_string(), b"x".to_vec())];
         let entries = cpio::read(&initramfs("t", b"MZ", &data).unwrap()).unwrap();
         let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();

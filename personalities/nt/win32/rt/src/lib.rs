@@ -110,6 +110,33 @@ macro_rules! process_heap_allocator {
 unsafe extern "system" {
     fn PolyDebugPrint(text: *const u8, length: usize) -> u32;
     fn RtlSetLastWin32Error(error: u32);
+    fn NtTerminateProcess(process: isize, status: u32) -> u32;
+}
+
+/// The bytes a 32-bit `stdcall` function pops (`x86_signatures.txt`, ADR 0186 and 0222): the
+/// table and its lookup are `poly-stubs`'s, the same file compiled here.
+#[path = "../../../../../crates/poly-stubs/src/x86slots.rs"]
+#[doc(hidden)]
+pub mod x86slots;
+
+/// The table of 32-bit signatures, for [`fail_exports!`]'s i686 stubs.
+#[doc(hidden)]
+pub const X86_SIGNATURES: &str = include_str!("../../../../../crates/poly-stubs/src/x86_signatures.txt");
+
+/// What the 32-bit stub of a fail-only export whose arguments' size is unknown does (ADR 0222): it
+/// cannot return (`stdcall`: the callee pops what the caller pushed, and nobody knows how much), so
+/// it logs `stub: dll!name` and ends the process with `STATUS_NOT_IMPLEMENTED`, as the 32-bit
+/// `polystub.dll` does (ADR 0186). Returning anyway left the stack wrong and the program jumped to
+/// a stack address (Google's installer, survey stop 1).
+pub fn unimplemented_export_fatal(text: &str) -> ! {
+    // SAFETY: the service reads `text.len()` bytes; -1 is the current process.
+    unsafe {
+        PolyDebugPrint(text.as_ptr(), text.len());
+        NtTerminateProcess(-1, STATUS_NOT_IMPLEMENTED as u32);
+    }
+    loop {
+        core::hint::spin_loop();
+    }
 }
 
 /// `ERROR_CALL_NOT_IMPLEMENTED` (`winerror.h`): "This function is not supported on this system."
@@ -181,20 +208,60 @@ macro_rules! fail_exports {
     };
     (@make_error $dll:literal, $code:expr, $value:expr, [$($name:ident),*]) => {
         $(
-            #[doc = concat!("`", stringify!($name), "`: not implemented yet; the export exists so that a program binds it, and it fails (ADR 0155, step 10).")]
-            #[unsafe(no_mangle)]
-            pub extern "system" fn $name() -> u64 {
-                $crate::unimplemented_export_error(concat!("stub: ", $dll, "!", stringify!($name)), $code, $value)
-            }
+            $crate::fail_exports!(@one $dll, $name,
+                $crate::unimplemented_export_error(concat!("stub: ", $dll, "!", stringify!($name)), $code, $value));
         )*
     };
     (@make $dll:literal, $last_error:expr, $value:expr, [$($name:ident),*]) => {
         $(
-            #[doc = concat!("`", stringify!($name), "`: not implemented yet; the export exists so that a delay load of it binds, and fails (ADR 0155, step 9).")]
-            #[unsafe(no_mangle)]
-            pub extern "system" fn $name() -> u64 {
-                $crate::unimplemented_export(concat!("stub: ", $dll, "!", stringify!($name)), $last_error, $value)
-            }
+            $crate::fail_exports!(@one $dll, $name,
+                $crate::unimplemented_export(concat!("stub: ", $dll, "!", stringify!($name)), $last_error, $value));
         )*
+    };
+    // One export. On x64 the caller owns the argument area, so a function without parameters is
+    // right for every signature. A 32-bit `stdcall` function pops its arguments itself (ADR 0186):
+    // the i686 export is a naked stub that calls the body and returns with `ret` popping the bytes
+    // `x86_signatures.txt` gives the function, or, for a function the table does not know, a body
+    // that ends the process ([`unimplemented_export_fatal`]) instead of returning wrong (ADR 0222).
+    (@one $dll:literal, $name:ident, $body:expr) => {
+        #[cfg(not(target_arch = "x86"))]
+        #[doc = concat!("`", stringify!($name), "`: not implemented yet; the export exists so that a program binds it, and it fails (ADR 0155).")]
+        #[unsafe(no_mangle)]
+        pub extern "system" fn $name() -> u64 {
+            $body
+        }
+
+        #[cfg(target_arch = "x86")]
+        #[allow(non_snake_case)]
+        #[doc(hidden)]
+        pub mod $name {
+            /// The bytes the stub pops (-1: unknown, the body ends the process).
+            pub const BYTES: i32 = $crate::x86slots::stack_bytes($crate::X86_SIGNATURES, $dll, stringify!($name));
+            /// What the stub does before it returns.
+            pub extern "C" fn body() -> u64 {
+                if BYTES < 0 {
+                    $crate::unimplemented_export_fatal(concat!(
+                        "stub: ", $dll, "!", stringify!($name),
+                        " (32-bit, the size of its arguments is unknown: the process ends)"
+                    ));
+                }
+                $body
+            }
+        }
+
+        #[cfg(target_arch = "x86")]
+        #[doc = concat!("`", stringify!($name), "`: not implemented yet; the export exists so that a program binds it, and it fails (ADR 0155, 0222).")]
+        #[unsafe(no_mangle)]
+        #[unsafe(naked)]
+        pub extern "system" fn $name() {
+            core::arch::naked_asm!(
+                "call {body}",
+                "pop ecx",
+                "add esp, {bytes}",
+                "jmp ecx",
+                body = sym $name::body,
+                bytes = const if $name::BYTES < 0 { 0 } else { $name::BYTES },
+            )
+        }
     };
 }
