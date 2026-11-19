@@ -66,25 +66,31 @@ pub(crate) fn oxid() -> u64 {
     OXID.load(Ordering::Acquire)
 }
 
+/// A new listening instance of the exporter's pipe (`INVALID_HANDLE` on failure).
+fn new_instance(name: &[u16]) -> Handle {
+    // SAFETY: a NUL-terminated name; byte mode, blocking.
+    unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            pipe::PIPE_ACCESS_DUPLEX,
+            0,
+            pipe::PIPE_UNLIMITED_INSTANCES,
+            65536,
+            65536,
+            0,
+            core::ptr::null(),
+        )
+    }
+}
+
 unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
     let name = wide(&ENDPOINT.with(|e| e.clone()).unwrap_or_default());
+    let mut h = new_instance(&name);
     loop {
-        // SAFETY: a NUL-terminated name; byte mode, blocking.
-        let h = unsafe {
-            CreateNamedPipeW(
-                name.as_ptr(),
-                pipe::PIPE_ACCESS_DUPLEX,
-                0,
-                pipe::PIPE_UNLIMITED_INSTANCES,
-                65536,
-                65536,
-                0,
-                core::ptr::null(),
-            )
-        };
         if h == INVALID_HANDLE {
             // SAFETY: a plain sleep.
             unsafe { Sleep(20) };
+            h = new_instance(&name);
             continue;
         }
         // SAFETY: a pipe instance of ours.
@@ -93,13 +99,18 @@ unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
             || unsafe { GetLastError() } == pipe::ERROR_PIPE_CONNECTED;
         if !ok {
             close(h);
+            h = new_instance(&name);
             continue;
         }
+        // The next instance listens before this connection is handed on, so that a client never
+        // finds the pipe without a listening instance (calls come one connection each).
+        let connected = h;
+        h = new_instance(&name);
         let mut tid = 0u32;
         // SAFETY: the connection thread owns the handle from here.
-        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, h as *mut c_void, 0, &mut tid) };
+        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, connected as *mut c_void, 0, &mut tid) };
         if t == 0 {
-            close(h);
+            close(connected);
         } else {
             close(t);
         }

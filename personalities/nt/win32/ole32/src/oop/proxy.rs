@@ -515,7 +515,9 @@ unsafe fn create(p: *mut Proxy, outer: *mut c_void, iid: *const Guid, out: *mut 
             unsafe { release_unknown(id as *mut c_void) };
             px
         }
-        Target::Remote { .. } => match call(proxy, Op::CreateInstance(iid)) {
+        // The server is asked for IUnknown; the interface comes from a query (recorded runs: the
+        // servers log `create IUnknown` whatever the client asked for).
+        Target::Remote { .. } => match call(proxy, Op::CreateInstance(IID_IUNKNOWN)) {
             Ok(r) => match r.obj {
                 Some(o) if r.hr >= 0 => remote(o),
                 _ => return r.hr,

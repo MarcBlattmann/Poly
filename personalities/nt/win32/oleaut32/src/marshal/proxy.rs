@@ -225,46 +225,67 @@ pub(crate) unsafe extern "system" fn dispatch(args: *const u64, slot: u32, xmm: 
 
 fn call(px: &Proxy, slot: u32, args: *const u64, xmm: *const u64) -> Hresult {
     let Some(m) = px.info.method(slot) else { return E_NOTIMPL };
+    let (hr, sent) = marshal_call(px, m, slot, args, xmm);
+    if hr < 0 && !sent {
+        // A call that fails before it is sent leaves its pure [out] values empty (sheet
+        // `CoUnmarshalInterface`: `LpwstrLen(NULL)` result 0, a bad variant type result VT_EMPTY).
+        for (i, p) in m.params.iter().enumerate() {
+            if let (true, false, Ty::Ptr(inner)) = (p.output, p.input, &p.ty) {
+                let mem = arg_mem(args, xmm, i + 1, &p.ty);
+                // SAFETY: the argument slot holds the caller's out pointer (or NULL).
+                let q = unsafe { *(mem as *const usize) } as *mut u8;
+                if !q.is_null() {
+                    // SAFETY: the caller's storage for a value of `inner`.
+                    unsafe { core::ptr::write_bytes(q, 0, inner.size()) };
+                }
+            }
+        }
+    }
+    hr
+}
+
+fn marshal_call(px: &Proxy, m: &super::info::Method, slot: u32, args: *const u64, xmm: *const u64) -> (Hresult, bool) {
     let mut w = W::default();
     // The caller's out pointers (by parameter index).
     let mut outs: Vec<(usize, *mut u8, Ty)> = Vec::new();
     for (i, p) in m.params.iter().enumerate() {
         let mem = arg_mem(args, xmm, i + 1, &p.ty);
         if p.output {
-            let Ty::Ptr(inner) = &p.ty else { return E_INVALIDARG };
+            let Ty::Ptr(inner) = &p.ty else { return (E_INVALIDARG, false) };
             // SAFETY: the argument slot holds the out pointer.
             let q = unsafe { *(mem as *const usize) } as *mut u8;
             if q.is_null() {
-                return RPC_X_NULL_REF_POINTER;
+                return (RPC_X_NULL_REF_POINTER, false);
             }
             if p.input {
                 if let Err(hr) = codec::enc(&mut w, inner, q) {
-                    return hr;
+                    return (hr, false);
                 }
             }
             outs.push((i, q, (**inner).clone()));
         } else if let Err(hr) = codec::enc(&mut w, &p.ty, mem) {
-            return hr;
+            return (hr, false);
         }
     }
     let reply = match send(px.channel.load(Ordering::Acquire) as *mut c_void, &px.iid(), slot, &w.0) {
         Ok(r) => r,
-        Err(hr) => return hr,
+        // A failure of the channel: the [out] values are left alone (rule `dead_server`).
+        Err(hr) => return (hr, true),
     };
     let mut r = R(&reply);
-    let Ok(hr) = r.u32().map(|v| v as i32) else { return codec::RPC_E_INVALID_DATA };
+    let Ok(hr) = r.u32().map(|v| v as i32) else { return (codec::RPC_E_INVALID_DATA, true) };
     if hr >= 0 {
         for (i, q, ty) in &outs {
             if m.params[*i].input {
                 codec::free(ty, *q);
             }
             if let Err(e) = codec::dec(&mut r, ty, *q) {
-                return e;
+                return (e, true);
             }
         }
     }
     read_error_info(&mut r);
-    hr
+    (hr, true)
 }
 
 /// Write the error information a reply carries (or none) as the calling thread's.

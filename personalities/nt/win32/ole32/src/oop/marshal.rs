@@ -333,6 +333,10 @@ pub unsafe extern "system" fn CoMarshalInterface(
         let (oxid, oid) = if dw_dest_context == MSHCTX_INPROC {
             (0, 0)
         } else {
+            // Calls from other processes reach an STA through its window (callbacks).
+            if owner == current_owner() && matches!(owner, Owner::Sta(_)) {
+                apt::ensure_window();
+            }
             // The export takes over the identity's reference.
             let oref = exporter::export_object(identity, owner);
             (exporter::oxid(), oref.oid)

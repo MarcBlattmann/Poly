@@ -451,6 +451,13 @@ fn enc_variant(w: &mut W, p: *const u8) -> Result<(), Hresult> {
         }
         return enc(w, &value_ty(base), q);
     }
+    if vt == VT_BSTR && rd::<*mut u16>(value).is_null() {
+        // A NULL string in a VARIANT arrives as an empty one (sheet `CoUnmarshalInterface`, rule
+        // `variants`); a BSTR parameter keeps its NULL.
+        w.u8(1);
+        w.bytes(&[]);
+        return Ok(());
+    }
     enc(w, &value_ty(vt), value)
 }
 
