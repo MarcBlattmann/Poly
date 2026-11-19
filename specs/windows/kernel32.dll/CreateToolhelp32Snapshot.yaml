@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateToolhelp32Snapshot.yaml
+id: windows/api/kernel32.dll/CreateToolhelp32Snapshot
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for CreateToolhelp32Snapshot, Process32FirstW and Process32NextW, the public header tlhelp32.h (TH32CS_* values, PROCESSENTRY32W) and winerror.h. Chrome's own setup.exe uses the process snapshot to find running Chrome processes at update and uninstall (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Takes a point-in-time copy of the system's process list (and, for the other flags, of threads, modules, heaps), returned as a handle that the Process32FirstW and Process32NextW functions walk and CloseHandle frees. For TH32CS_SNAPPROCESS (2) the list holds every process of the system at the moment of the call (the process id argument is ignored), a process that starts afterwards is not in it, a child started before is, with its parent process id equal to the creator's. A process that has ended is no longer listed, even while another process still holds a handle to it. The call succeeds for every combination of flags tested, including 0 and flags with undefined bits, and gives a handle that is not inheritable unless TH32CS_INHERIT (0x80000000) is given; the only failure seen is a module snapshot of a process id that does not exist (87).
+interface:
+  signature: "HANDLE CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID)"
+  flags: "TH32CS_SNAPHEAPLIST 1, TH32CS_SNAPPROCESS 2, TH32CS_SNAPTHREAD 4, TH32CS_SNAPMODULE 8, TH32CS_SNAPMODULE32 0x10, TH32CS_SNAPALL 0xF, TH32CS_INHERIT 0x80000000 (tlhelp32.h)"
+rules:
+  handles: "success: a handle that is neither NULL nor INVALID_HANDLE_VALUE (-1); it is not inheritable (GetHandleInformation: HANDLE_FLAG_INHERIT clear) unless TH32CS_INHERIT is in the flags. CloseHandle(snapshot) returns TRUE; closing it again returns FALSE with ERROR_INVALID_HANDLE (6)."
+  process_list: "with TH32CS_SNAPPROCESS the list has an entry for every process, starting with pid 0 ('[System Process]'), and has an entry with pid 4 named 'System'; every pid occurs once. The th32ProcessID argument does not narrow it (our pid given: the same full list)."
+  point_in_time: "a snapshot taken before a child process is started does not list the child even when it is walked after the start; a snapshot taken after the start lists it with th32ParentProcessID equal to the creating process id and the child's image file name in szExeFile."
+  ended_processes: "after the child was ended (TerminateProcess and a wait) a new snapshot does NOT list it, although the parent still holds a handle to the child process; after the last handle is closed it is still not listed."
+  flags_accepted: "flags 0, SNAPPROCESS, SNAPTHREAD, SNAPMODULE for our own process and for pid 0 (the caller), SNAPALL (0xF), SNAPPROCESS|SNAPMODULE32 (0x12), SNAPPROCESS|INHERIT and a flags value with an undefined bit only (0x100) all return a valid handle; flags 0 gives a snapshot whose Process32FirstW fails with ERROR_NO_MORE_FILES (18) (nothing in it)."
+  module_of_missing_process: "TH32CS_SNAPMODULE with a process id that does not exist (0xFFFFF0): INVALID_HANDLE_VALUE with ERROR_INVALID_PARAMETER (87)."
+errors:
+  invalid_parameter: "87"
+  invalid_handle: "6 (CloseHandle of a closed snapshot)"
+  no_more_files: "18 (Process32FirstW on a snapshot without processes)"
+side_effects: "none beyond the handle"
+threading: "may be called from any thread; each snapshot has its own walk position"
+ordering: []
+timing:
+  typical: "a few milliseconds on the oracle (it reads the whole process list)"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: th_snap_flags (flag combinations, inheritance, closing, a missing module process) and th_child (the test starts itself as a child that sleeps, takes snapshots before and after the start, ends the child and snapshots again). The child writes no observation file. Observations are relations (listed or not, parent equals us), never process ids or counts of the machine.
+not_covered: >
+  The thread, module and heap lists themselves (Thread32First, Module32First, Heap32ListFirst), the process id argument for SNAPTHREAD/SNAPHEAPLIST, what a snapshot of another session's processes shows to a standard user, the elevation required for module lists of protected processes, a 32-bit caller (TH32CS_SNAPMODULE32), a snapshot of more than a few thousand processes, memory use of a held snapshot, the order of the list beyond "pid 0 first".

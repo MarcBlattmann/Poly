@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: ntdll.dll/NtQueryValueKey.yaml
+id: windows/api/ntdll.dll/NtQueryValueKey
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for ZwOpenKeyEx, ZwQueryValueKey, ZwDeleteKey, ZwCreateKey, ZwSetValueKey, RtlFormatCurrentUserKeyPath and the KEY_VALUE_*_INFORMATION structures, "Registry Key Object Routines"; constants and status codes from wdm.h, ntdef.h and ntstatus.h. Chrome''s own setup.exe imports NtOpenKeyEx, NtQueryValueKey, NtDeleteKey, NtClose and RtlFormatCurrentUserKeyPath (survey-chrome-installer) and uses them to read and delete registry keys by their native path. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Reads one value of an open key by name into a KEY_VALUE_BASIC_INFORMATION (class 0), KEY_VALUE_FULL_INFORMATION (1) or KEY_VALUE_PARTIAL_INFORMATION (2) structure. The value name match is case-insensitive; the empty name is the key''s default value. A buffer that holds the header but not all of the data gives STATUS_BUFFER_OVERFLOW with the needed length and the part that fits.'
+interface:
+  signature: 'NTSTATUS NtQueryValueKey(HANDLE KeyHandle, PUNICODE_STRING ValueName, KEY_VALUE_INFORMATION_CLASS KeyValueInformationClass, PVOID KeyValueInformation, ULONG Length, PULONG ResultLength)'
+rules:
+  partial: 'Class 2 for the REG_SZ value Text = ''abc'' (8 bytes stored): STATUS_SUCCESS, ResultLength 20; TitleIndex 0, Type 1, DataLength 8 at offset 8 of the structure, the data from offset 12 (61 00 62 00 63 00 00 00). REG_DWORD 5: ResultLength 16, type 4, DataLength 4. REG_BINARY of 3 bytes: ResultLength 15 (the structure is not padded), type 3. The default value (empty name) with ''d'': type 1, DataLength 4. A name in other case (TEXT) finds the value.'
+  basic: 'Class 0 for Text: ResultLength 20 = 12 + the name''s 8 bytes; TitleIndex 0, Type 1, NameLength 8 (bytes) at offset 8, Name ''Text'' from offset 12. For the default value: ResultLength 12, NameLength 0.'
+  full: 'Class 1 for Text: ResultLength 40; Type 1, DataOffset 32, DataLength 8, NameLength 8; the name follows the 20 byte header; class 3 (the Align64 form) gives the same numbers here. Class 4 (partial, Align64) succeeds with ResultLength 16 (the header is 16 bytes, the data follows at offset 16).'
+  classes: 'Class 5 (KeyValueLayerInformation), 6 and 99: STATUS_INVALID_PARAMETER (0xC000000D) and ResultLength is not written.'
+  buffers: 'Class 2 with a buffer of exactly the needed 20 bytes: success. A buffer of 12 (the header) or 15: STATUS_BUFFER_OVERFLOW (0x80000005), ResultLength 20, the header fields are filled and the data bytes that fit are copied (3 of the 8 with a buffer of 15, none with 12). A buffer smaller than the 12 byte header (11, 0): STATUS_BUFFER_TOO_SMALL (0xC0000023) with ResultLength 20 and nothing written. Class 0 with a buffer of 12 or 14: STATUS_BUFFER_OVERFLOW with ResultLength 20 (the name is copied as far as it fits, 2 bytes of it with a buffer of 14); with 24: success. Class 1 with 20: STATUS_BUFFER_OVERFLOW, ResultLength 40.'
+  missing: 'A value that does not exist: STATUS_OBJECT_NAME_NOT_FOUND (0xC0000034); ResultLength is not written.'
+  access: 'A handle opened with KEY_SET_VALUE only: STATUS_ACCESS_DENIED (0xC0000022).'
+errors:
+  buffer_overflow: '0x80000005'
+  buffer_too_small: '0xC0000023'
+  not_found: '0xC0000034'
+  invalid_parameter: '0xC000000D'
+  access_denied: '0xC0000022'
+side_effects: 'none'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075), one file per test; each declares the ntdll functions it calls from Learn''s prototypes. Keys the tests create are named PolySpecB4* below the current user''s key (\Registry\User\<sid>\Software), found with RtlFormatCurrentUserKeyPath, and are deleted by the test (a leftover of a crashed run is deleted first). The system keys they open (HKLM\SOFTWARE\Microsoft) are only read. Observations are status codes, lengths and structure fields; no SID is printed.'
+not_covered: 'Symbolic links in the registry, transacted keys, key notification, access checks for users other than the administrator (only the standard token run of RtlFormatCurrentUserKeyPath), the layered-key information class beyond its failure, and values with names of 32 K characters.'

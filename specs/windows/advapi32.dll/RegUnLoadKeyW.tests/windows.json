@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "hive_std_unload",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "298d5ea4770507c2354568a3f21815ec23d6f3dd9490fe7d1690dadd2258aad4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW5hYmxlIFNlQmFja3VwUHJpdmlsZWdlOiBhZGp1c3QgMSBsYXN0IGVycm9yIDEzMDAKZW5hYmxlIFNlUmVzdG9yZVByaXZpbGVnZTogYWRqdXN0IDEgbGFzdCBlcnJvciAxMzAwCmNyZWF0ZSBzb3VyY2Uga2V5IGluIEhLQ1U6IDAKUmVnVW5Mb2FkS2V5VyBvZiBhIG5hbWUgdGhhdCBpcyBub3QgbG9hZGVkIChIS0xNKTogMTMxNApSZWdVbkxvYWRLZXlXIChIS1UpOiAxMzE0ClJlZ1VuTG9hZEtleVcgKEhLRVlfQ1VSUkVOVF9VU0VSKTogMTMxNApSZWdVbkxvYWRLZXlXIHdpdGggYSBOVUxMIG5hbWU6IDEzMTQKUmVnVW5Mb2FkS2V5VyB3aXRoIGEgTlVMTCBrZXkgaGFuZGxlOiA2CnNvdXJjZSBrZXkgbGVmdCBiZWhpbmQ6IGZhbHNlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "enable SeBackupPrivilege: adjust 1 last error 1300\nenable SeRestorePrivilege: adjust 1 last error 1300\ncreate source key in HKCU: 0\nRegUnLoadKeyW of a name that is not loaded (HKLM): 1314\nRegUnLoadKeyW (HKU): 1314\nRegUnLoadKeyW (HKEY_CURRENT_USER): 1314\nRegUnLoadKeyW with a NULL name: 1314\nRegUnLoadKeyW with a NULL key handle: 6\nsource key left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "hive_unload_persist",
+      "exe_sha256": "29cc62cf9bc4975e459885f32cb0ab63cff3af127b3de373e2a538d1d3d90fa2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bG9hZDogMApzZXQgYSB2YWx1ZTogMApjcmVhdGUgYSBuZXN0ZWQga2V5OiAwCm92ZXJ3cml0ZSB0aGUgb2xkIHZhbHVlOiAwCnVubG9hZDogMApsb2cgZmlsZSBMT0cxIGJlc2lkZSB0aGUgaGl2ZSBhZnRlciB0aGUgdW5sb2FkOiB0cnVlOyBMT0cyOiB0cnVlCnRoZSBoaXZlIGZpbGUgaXMgc3RpbGwgYSByZWdmIGZpbGU6IHRydWUKdGhlIGZpbGUgc2l6ZSBpcyBhIG11bHRpcGxlIG9mIDQwOTY6IHRydWU7IG5vdCBzbWFsbGVyIHRoYW4gYmVmb3JlOiB0cnVlCnJlbG9hZCBpbnRvIEhLRVlfVVNFUlM6IDAKdmFsdWUgQWRkZWQ6IDAgdHlwZSAxIHRleHQgJ2FmdGVyIGxvYWQnCnZhbHVlIE9sZDogMCB0eXBlIDQgZGF0YSA5OQprZXkgQWRkZWRLZXlcRGVlcGVyOiAwCnVubG9hZCBmcm9tIEhLRVlfVVNFUlM6IDAKbG9hZGVkIG5hbWVzIGxlZnQgYmVoaW5kOiBmYWxzZSBmYWxzZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "load: 0\nset a value: 0\ncreate a nested key: 0\noverwrite the old value: 0\nunload: 0\nlog file LOG1 beside the hive after the unload: true; LOG2: true\nthe hive file is still a regf file: true\nthe file size is a multiple of 4096: true; not smaller than before: true\nreload into HKEY_USERS: 0\nvalue Added: 0 type 1 text 'after load'\nvalue Old: 0 type 4 data 99\nkey AddedKey\\Deeper: 0\nunload from HKEY_USERS: 0\nloaded names left behind: false false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 107
+    }
+  ]
+}

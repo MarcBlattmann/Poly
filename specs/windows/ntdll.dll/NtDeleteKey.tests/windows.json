@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "60f950d81b55",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:05:29Z",
+  "tests": [
+    {
+      "name": "ntreg_delete_err",
+      "exe_sha256": "e15bf22b80376b12911a7ecff2e0e341be465752319b3122023cab18a9b3333f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIHRoZSBwYXJlbnQ6IDB4MDAwMDAwMDAgZGlzcG9zaXRpb24gMQpvcGVuIHdpdGhvdXQgREVMRVRFIGFjY2VzczogMHgwMDAwMDAwMApOdERlbGV0ZUtleSB0aHJvdWdoIGl0OiAweGMwMDAwMDIyCk50RGVsZXRlS2V5KE5VTEwpOiAweGMwMDAwMDA4Ck50RGVsZXRlS2V5KC0xLCB0aGUgY3VycmVudCBwcm9jZXNzIHBzZXVkbyBoYW5kbGUpOiAweGMwMDAwMDI0CmZpbmFsIGRlbGV0ZSBvZiB0aGUgcGFyZW50OiAweDAwMDAwMDAwCnRoZSBwYXJlbnQgYWZ0ZXIgdGhlIGZpbmFsIGRlbGV0ZTogMHhjMDAwMDAzNApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create the parent: 0x00000000 disposition 1\nopen without DELETE access: 0x00000000\nNtDeleteKey through it: 0xc0000022\nNtDeleteKey(NULL): 0xc0000008\nNtDeleteKey(-1, the current process pseudo handle): 0xc0000024\nfinal delete of the parent: 0x00000000\nthe parent after the final delete: 0xc0000034\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

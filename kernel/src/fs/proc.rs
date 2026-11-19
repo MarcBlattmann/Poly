@@ -428,9 +428,9 @@ impl ProcSource for KernelProc {
     }
 
     /// Every descriptor's file is followed to its node (a socket's or an
-    /// event file's too, which stat(2) then describes), but a pipe's: its
-    /// node would open as a named FIFO, not as the pipe, so its link keeps
-    /// its text (`pipe:[<ino>]`, which names nothing).
+    /// event file's too, which stat(2) then describes). A pipe's node opens
+    /// as another end of the same pipe (`Vfs::pipe_node`), as on Linux:
+    /// bash's `exec > >(cat)` opens `/dev/fd/63` for writing.
     fn magic_target(&self, pid: u32, link: MagicLink) -> Option<poly_vfs::MagicTarget> {
         let pid = self.global(pid)?;
         use poly_vfs::MagicTarget;
@@ -438,8 +438,7 @@ impl ProcSource for KernelProc {
         match link {
             MagicLink::Fd(fd) => {
                 let (_, file, _) = p.files.fd_list().into_iter().find(|(n, _, _)| *n as u32 == fd)?;
-                let pipe = file.object().is_some() && file.kind() == FileType::Fifo;
-                (!pipe).then_some(MagicTarget::File(file))
+                Some(MagicTarget::File(file))
             }
             MagicLink::Exe => with_record(pid, |r| r.exe_file.upgrade()).flatten().map(MagicTarget::File),
             MagicLink::Cwd => Some(MagicTarget::Node(p.files.context().cwd().clone())),

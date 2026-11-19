@@ -1106,11 +1106,25 @@ fn run_modal(hdlg: H, owner: H) -> isize {
     } else {
         0
     };
+    // `DialogBox*` "displays the dialog box (regardless of whether the template specifies the
+    // WS_VISIBLE style)" (Learn, "DialogBoxW"): a dialog that is not shown yet is shown when its
+    // queue first has nothing waiting, after `WM_INITDIALOG` and what it posted.
+    let mut shown = false;
     loop {
         if dlg_state(hdlg, |d| d.ended) || info(hdlg).is_none() {
             break;
         }
         let mut m = CMsg::default();
+        if !shown {
+            // SAFETY: a message buffer of ours; nothing is removed (PM_NOREMOVE).
+            if unsafe { super::PeekMessageW(&mut m, 0, 0, 0, 0) } == 0 {
+                shown = true;
+                if super::IsWindowVisible(hdlg) == 0 {
+                    super::ShowWindow(hdlg, SW_SHOWNORMAL);
+                }
+                continue;
+            }
+        }
         let r = u::get_message(&SYS, &mut m, 0, 0, 0);
         if r == 0 {
             // WM_QUIT: the dialog ends and the quit goes on to the caller's loop.

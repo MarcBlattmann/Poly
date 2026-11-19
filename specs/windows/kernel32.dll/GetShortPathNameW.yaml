@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetShortPathNameW.yaml
+id: windows/api/kernel32.dll/GetShortPathNameW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon), on an NTFS volume where short (8.3) names are enabled. Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output) and Microsoft Learn's pages for GetShortPathNameW, GetLongPathNameW and "Naming Files, Paths, and Namespaces". Chrome's setup.exe uses short names for paths it hands to other programs (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Converts every component of an existing path to its 8.3 (short) form and returns the length. A component that is already a valid 8.3 name is returned as it is stored (case kept); a long name gets a generated name: the first six letters of the name in upper case with spaces and extra dots removed, "~" and a number, and the first three letters of the extension in upper case ("gp_long_directory" -> "GP_LON~1", "a long file name.text" -> "ALONGF~1.TEX", "gp my file.txt" -> "GPMYFI~1.TXT", "ab.c.d.txt" -> "ABCD~1.TXT"); names with the same start get the next number in creation order ("GP_SEC~1.TXT", "GP_SEC~2.TXT"). A very short base name with a long extension got a form with four hexadecimal digits in place of the letters ("a.verylongext" -> "A7903~1.VER"); how those digits are made is not specified here. The path must exist (2 file, 3 directory part). Buffer rules: a buffer of 0 (or too small) returns the size needed including the NUL; a big enough one returns the length without the NUL. The input may use forward slashes (kept), the \\?\ prefix (kept), ".." components (kept; the parts before are shortened) and a relative form (relative result). The same buffer may be source and destination.
+interface:
+  signature: "DWORD GetShortPathNameW(LPCWSTR lpszLongPath, LPWSTR lpszShortPath, DWORD cchBuffer)"
+rules:
+  generated_names: "on an NTFS volume with short names enabled (the oracle's C:): long name -> first 6 letters upper case (spaces and other characters that are not allowed removed, dots inside the base removed), '~', a number, '.', first 3 letters of the extension upper case; directories the same ('gp_long_directory' -> 'GP_LON~1'). The number counts up for names with the same generated start in the same directory (first created '~1', second '~2')."
+  valid_83_names: "a name that already fits 8.3 is returned as stored: 'gp.txt' stays 'gp.txt', 'GPUPPER.TXT' and 'GpMixed.Txt' stay as they are (the case is the stored one, not upper-cased)."
+  hashed_form: "'a.verylongext' (a one-letter base and a 12-letter extension) became 'A7903~1.VER': a letter, four hexadecimal digits, '~1', a 3-letter extension; the digits come from the name (not specified here, not reproducible from this sheet). An implementation that generates 'A~1.VER' differs from Windows for such names; names like 'gp_long_directory' and 'a long file name.text' are the common case."
+  trailing_backslash: "a path ending in a backslash is returned with it ('...\\GP_LON~1\\')."
+  whole_path: "every component is converted, also those above the scratch directory (the answer for a path inside a directory with long names is short all the way)."
+  buffer: "cchBuffer 0: the return value is the size needed including the NUL, nothing is written. A too small buffer (one unit less than the length): the same return value (needed size including the NUL); what is written to the buffer is not specified. A buffer of exactly length+1: the return value is the length without the NUL and the NUL is written."
+  in_place: "the same buffer as source and destination works (the buffer then holds the short path)."
+  forward_slashes: "a path written with '/' is accepted; the result still has '/' and no backslash, and is shorter than the input (the components were shortened)."
+  extended_prefix: "a \\\\?\\ prefix is kept and the rest is converted."
+  dotdot: "'..' components are not collapsed: 'dir\\..\\gp.txt' becomes 'GP_LON~1\\..\\gp.txt'."
+  relative: "a relative path is resolved against the current directory and the result is relative too ('gp_long_directory\\a long file name.text' -> 'GP_LON~1\\ALONGF~1.TEX')."
+  errors: "a file that does not exist: 0, ERROR_FILE_NOT_FOUND (2); a directory part that does not exist: 0, ERROR_PATH_NOT_FOUND (3); an empty string: 0, 3; a NULL source: 0, ERROR_INVALID_PARAMETER (87)."
+errors:
+  file_not_found: "2"
+  path_not_found: "3"
+  invalid_parameter: "87"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "about a millisecond per call on the oracle (it reads the directories)"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: gp_short_names (the generated names for twelve cases, shown relative to the scratch directory's own short form) and gp_short_api (buffer rules, errors, in-place, forward slashes, the prefix, '..', a relative path). The tests create their files and directory in the scratch directory and delete them. Observations never print the machine's directory names or path lengths.
+not_covered: >
+  A volume with short names disabled (the call then returns the long path: not observed, the oracle has them enabled), FAT, network and UNC paths, more than four collisions (where Windows switches to the hashed form), names with non-ASCII letters (their short form is an OEM-code-page conversion), the exact hashed form, the order in which a short name is picked for a name created while a name with the same start is being deleted, a path longer than MAX_PATH, 32-bit callers and the redirection of System32, the DOS device names, reparse points.

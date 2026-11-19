@@ -19,7 +19,7 @@
 
 use crate::frame::FrameMetrics;
 use crate::link::{
-    BufferId, CursorShape, Edges, Error, FromCompositor, PixelFormat, Record, Stream, SurfaceId, SurfaceKind,
+    BufferId, CursorShape, Edges, Error, FromCompositor, LayerId, PixelFormat, Record, Stream, SurfaceId, SurfaceKind,
     ToCompositor, VERSION, WindowState,
 };
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -53,6 +53,24 @@ pub struct Surface {
     /// The window's own borders around the surface that take input
     /// (`ToCompositor::Margins`): left, top, right, bottom.
     pub margins: [u16; 4],
+    /// Pictures shown over the surface's own buffer (ADR 0224).
+    pub layers: BTreeMap<LayerId, Layer>,
+}
+
+/// Where a layer is: (x, y) of its buffers' first pixel in the surface, and the surface rectangle
+/// it is shown in (x, y, width, height).
+pub type LayerPlace = (i32, i32, (u32, u32, u32, u32));
+
+/// A layer of a surface as the compositor is told about it (ADR 0224).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Layer {
+    /// Its buffers: id, width, height, stride.
+    pub buffers: Vec<(BufferId, u32, u32, u32)>,
+    /// Where it is: (x, y) of its buffers' first pixel in the surface, and the surface rectangle
+    /// it is shown in (x, y, width, height). `None` until placed.
+    pub place: Option<LayerPlace>,
+    /// The buffer it shows (after its first damage).
+    pub current: Option<BufferId>,
 }
 
 /// The output as the compositor reported it.
@@ -164,6 +182,7 @@ impl Desktop {
                 state: WindowState::Normal,
                 pid: 0,
                 margins: [0; 4],
+                layers: BTreeMap::new(),
             },
         );
         self.send(ToCompositor::Create { surface: id, kind, owner, framed });
@@ -298,6 +317,72 @@ impl Desktop {
         self.with(id, |_| Some(ToCompositor::BeginResize { surface: id, edges }))
     }
 
+    /// A new buffer for layer `layer` of the surface (made with the layer if it is new): memory of
+    /// the app's that the compositor maps (ADR 0224). `None` for an unknown surface.
+    pub fn layer_buffer(
+        &mut self,
+        id: SurfaceId,
+        layer: LayerId,
+        width: u32,
+        height: u32,
+        stride: u32,
+    ) -> Option<BufferId> {
+        let s = self.surfaces.get_mut(&id)?;
+        let buffer = self.next_buffer;
+        self.next_buffer += 1;
+        s.layers.entry(layer).or_default().buffers.push((buffer, width, height, stride));
+        self.send(ToCompositor::LayerBuffer { surface: id, layer, buffer, width, height, stride });
+        Some(buffer)
+    }
+
+    /// Where the layer is shown: its buffers' first pixel at (`x`, `y`) of the surface, inside the
+    /// surface rectangle `clip`. Sent only when it changes.
+    pub fn place_layer(&mut self, id: SurfaceId, layer: LayerId, x: i32, y: i32, clip: (u32, u32, u32, u32)) -> bool {
+        let Some(l) = self.surfaces.get_mut(&id).and_then(|s| s.layers.get_mut(&layer)) else { return false };
+        if l.place != Some((x, y, clip)) {
+            l.place = Some((x, y, clip));
+            self.send(ToCompositor::LayerPlace { surface: id, layer, x, y, clip });
+        }
+        true
+    }
+
+    /// The layer shows `buffer` now; `(x, y, width, height)` of it changed (clipped to the
+    /// buffer; an empty rectangle only switches buffers).
+    pub fn damage_layer(&mut self, id: SurfaceId, layer: LayerId, buffer: BufferId, r: (u32, u32, u32, u32)) -> bool {
+        let Some(l) = self.surfaces.get_mut(&id).and_then(|s| s.layers.get_mut(&layer)) else { return false };
+        let Some(&(_, bw, bh, _)) = l.buffers.iter().find(|b| b.0 == buffer) else { return false };
+        l.current = Some(buffer);
+        let (x, y) = (r.0.min(bw), r.1.min(bh));
+        let (width, height) = (r.2.min(bw - x), r.3.min(bh - y));
+        self.send(ToCompositor::LayerDamage { surface: id, layer, buffer, x, y, width, height });
+        true
+    }
+
+    /// The layer's buffer `buffer` goes.
+    pub fn drop_layer_buffer(&mut self, id: SurfaceId, layer: LayerId, buffer: BufferId) -> bool {
+        let Some(l) = self.surfaces.get_mut(&id).and_then(|s| s.layers.get_mut(&layer)) else { return false };
+        let before = l.buffers.len();
+        l.buffers.retain(|b| b.0 != buffer);
+        if l.buffers.len() == before {
+            return false;
+        }
+        if l.current == Some(buffer) {
+            l.current = None;
+        }
+        self.send(ToCompositor::LayerDrop { surface: id, layer, buffer });
+        true
+    }
+
+    /// The layer goes with its buffers.
+    pub fn remove_layer(&mut self, id: SurfaceId, layer: LayerId) -> bool {
+        let Some(s) = self.surfaces.get_mut(&id) else { return false };
+        if s.layers.remove(&layer).is_none() {
+            return false;
+        }
+        self.send(ToCompositor::LayerGone { surface: id, layer });
+        true
+    }
+
     /// The surface is gone; its buffers go once the compositor lets go of
     /// them (at once without a compositor). Surfaces it owned lose their
     /// owner.
@@ -312,6 +397,17 @@ impl Desktop {
             }
         }
         self.send(ToCompositor::Destroy { surface: id });
+        true
+    }
+
+    /// A Windows program's request to open `path` (a path of Poly's file system) with the
+    /// desktop's program for it, or to show it selected in Files (ADR 0223). `false` without a
+    /// compositor: nobody could do it.
+    pub fn shell(&mut self, show: bool, path: &str) -> bool {
+        if !self.connected {
+            return false;
+        }
+        self.send(ToCompositor::Shell { show, path: String::from(path) });
         true
     }
 
@@ -417,6 +513,17 @@ impl Desktop {
                     put(ToCompositor::Damage { surface: id, x: 0, y: 0, width: b.width, height: b.height });
                 }
             }
+            for (&layer, l) in &s.layers {
+                for &(buffer, width, height, stride) in &l.buffers {
+                    put(ToCompositor::LayerBuffer { surface: id, layer, buffer, width, height, stride });
+                }
+                if let Some((x, y, clip)) = l.place {
+                    put(ToCompositor::LayerPlace { surface: id, layer, x, y, clip });
+                }
+                if let Some(&(buffer, width, height, _)) = l.buffers.iter().find(|b| Some(b.0) == l.current) {
+                    put(ToCompositor::LayerDamage { surface: id, layer, buffer, x: 0, y: 0, width, height });
+                }
+            }
             if s.shown {
                 put(ToCompositor::Visible { surface: id, shown: true });
             }
@@ -446,6 +553,26 @@ mod tests {
         let mut s = Stream::<ToCompositor>::new();
         s.push(bytes);
         s.map(Result::unwrap).collect()
+    }
+
+    #[test]
+    fn shell_requests_go_to_a_connected_compositor_and_are_not_replayed() {
+        let mut d = Desktop::new();
+        assert!(!d.shell(true, "/nt/c/Users/poly/Downloads/a.zip"));
+        assert!(d.receive(&hello()).is_empty());
+        d.take_output();
+        assert!(d.shell(true, "/nt/c/Users/poly/Downloads/a.zip"));
+        assert!(d.shell(false, "/nt/c/Users/poly/Downloads/b.pdf"));
+        assert_eq!(
+            records(&d.take_output()),
+            vec![
+                ToCompositor::Shell { show: true, path: String::from("/nt/c/Users/poly/Downloads/a.zip") },
+                ToCompositor::Shell { show: false, path: String::from("/nt/c/Users/poly/Downloads/b.pdf") },
+            ]
+        );
+        d.disconnect();
+        assert!(d.receive(&hello()).is_empty());
+        assert_eq!(records(&d.take_output()), vec![ToCompositor::Welcome { version: VERSION }]);
     }
 
     #[test]

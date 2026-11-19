@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c6172fba81f",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:48:35Z",
+  "tests": [
+    {
+      "name": "pv_clsid_link",
+      "exe_sha256": "ab0f3b14d639e52d87dc65f037d3a3d63b7944dc781449fe8db28b64b637060b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RvcmVkIGFzIFRvYXN0QWN0aXZhdG9yQ0xTSUQ6IFNldFZhbHVlIGhyIDB4MCBHZXRWYWx1ZSBociAweDAgVlRfQ0xTSUQge0E2QjVFM0I1LTExMjItNEEwQi04MDAwLTExMjIzMzQ0NTU2Nn0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "stored as ToastActivatorCLSID: SetValue hr 0x0 GetValue hr 0x0 VT_CLSID {A6B5E3B5-1122-4A0B-8000-112233445566}\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

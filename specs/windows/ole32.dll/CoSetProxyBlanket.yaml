@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoSetProxyBlanket.yaml
+id: windows/api/ole32.dll/CoSetProxyBlanket
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token; where noted, tests also start a de-elevated child process holding the session shell's filtered standard token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Sets the authentication level, impersonation level, principal name and capabilities used for calls made through a specific COM interface proxy. Delegates to the proxy manager's IClientSecurity::SetBlanket. On local proxies the blanket is per interface pointer, failed calls leave the existing blanket unchanged, and the impersonation level controls the thread token level the server obtains when it impersonates the caller.
+interface:
+  signature: "HRESULT CoSetProxyBlanket(IUnknown *pProxy, DWORD dwAuthnSvc, DWORD dwAuthzSvc, OLECHAR *pServerPrincName, DWORD dwAuthnLevel, DWORD dwImpLevel, RPC_AUTH_IDENTITY_HANDLE pAuthInfo, DWORD dwCapabilities)"
+  forward: "ole32.dll!CoSetProxyBlanket forwards to combase.dll!CoSetProxyBlanket"
+installer: "Imported by the 64-bit Google updater (updater.exe 159) to configure security on COM proxies."
+rules:
+  valid_settings_local: "on a local cross-process proxy, returns S_OK for dwAuthnSvc in {RPC_C_AUTHN_DEFAULT (0xFFFFFFFF), RPC_C_AUTHN_WINNT (10), RPC_C_AUTHN_NONE (0, with level NONE)}, dwAuthzSvc in {RPC_C_AUTHZ_DEFAULT (0xFFFFFFFF), RPC_C_AUTHZ_NONE (0), or other integer values such as 77 which are stored as-is}, pServerPrincName = NULL, dwAuthnLevel in 0..=6 (DEFAULT, NONE, CONNECT, CALL, PKT, PKT_INTEGRITY, PKT_PRIVACY), dwImpLevel in 0..=4 (DEFAULT, ANONYMOUS, IDENTIFY, IMPERSONATE, DELEGATE), and dwCapabilities in {EOAC_NONE (0), EOAC_MUTUAL_AUTH (0x1), EOAC_STATIC_CLOAKING (0x20), EOAC_DYNAMIC_CLOAKING (0x40)}"
+  blanket_readback_local: "after a successful call with NULL principal on a local proxy, CoQueryProxyBlanket reports authn=10, level=6 (local transport keeps PKT_PRIVACY regardless of requested level 0..=6), pServerPrincName = NULL, pAuthInfo = NULL; imp updates to the requested level for IDENTIFY (2), IMPERSONATE (3) and DELEGATE (4), and RPC_C_IMP_LEVEL_DEFAULT 0 resolves to 2 IDENTIFY; the setting RPC_C_AUTHN_LEVEL_NONE with RPC_C_IMP_LEVEL_ANONYMOUS returns S_OK but reads back imp=3 (observed when the value before was 2); RPC_C_IMP_LEVEL_ANONYMOUS with a level other than NONE was not tried; caps reads back 0x0 for NONE or MUTUAL_AUTH-without-name, 0x20 for STATIC_CLOAKING, and 0x40 for DYNAMIC_CLOAKING"
+  effect_on_calls: "setting RPC_C_AUTHN_LEVEL_NONE with RPC_C_IMP_LEVEL_ANONYMOUS returns S_OK, and the next call through that proxy is refused with E_ACCESSDENIED 0x80070005 without reaching the server. Authenticated settings (CONNECT, CALL, PKT, PKT_INTEGRITY, PKT_PRIVACY, DEFAULT with IDENTIFY, IMPERSONATE, DELEGATE, DEFAULT, or cloaking) allow calls to succeed (S_OK); the proxy's impersonation level determines the TokenImpersonationLevel the server receives on CoImpersonateClient (IDENTIFY -> 1 SecurityIdentification, IMPERSONATE -> 2 SecurityImpersonation, DELEGATE -> 3 SecurityDelegation)"
+  per_interface_scope: "the blanket belongs to the interface proxy, not the whole object: changing the blanket on an IClassFactory proxy does not change the blanket of its IUnknown pointer (whether obtained by QueryInterface before or after), nor of a distinct object proxy of the same server, nor of a CoCopyProxy copy; a second CoGetClassObject for the same class in the same apartment shares the IClassFactory blanket; subsequent QueryInterface for IClassFactory or IUnknown sees the blanket already set on that interface; a CoCopyProxy made afterwards starts with the default blanket (imp=2)"
+  errors_leave_blanket_unchanged: "any failing call leaves the proxy's existing blanket unchanged: NULL pProxy -> E_INVALIDARG 0x80070057; plain in-process object -> E_NOINTERFACE 0x80004002; unsupported or unknown authentication service (RPC_C_AUTHN_GSS_NEGOTIATE 9 on a local workgroup proxy, or 9999) -> 0x800706D3 (RPC_S_UNKNOWN_AUTHN_SERVICE); authentication level 7 -> 0x800706D4 (RPC_S_UNKNOWN_AUTHN_LEVEL); impersonation level 5 -> E_INVALIDARG 0x80070057; invalid or server-only capabilities (0x10000, EOAC_ACCESS_CONTROL, EOAC_APPID, EOAC_SECURE_REFS) -> E_INVALIDARG 0x80070057; unresolvable server principal name -> 0x80070534 (ERROR_NONE_MAPPED)"
+  dead_server: "succeeds (S_OK) on a proxy even after the server process has exited (later calls through the proxy fail with 0x800706BA, RPC_S_SERVER_UNAVAILABLE)"
+errors:
+  invalid_argument: "E_INVALIDARG 0x80070057 (NULL proxy, invalid impersonation level, or invalid/server-only capabilities)"
+  no_interface: "E_NOINTERFACE 0x80004002 (object is not a proxy)"
+  unknown_authn_service: "0x800706D3 (HRESULT_FROM_WIN32(RPC_S_UNKNOWN_AUTHN_SERVICE))"
+  unknown_authn_level: "0x800706D4 (HRESULT_FROM_WIN32(RPC_S_UNKNOWN_AUTHN_LEVEL))"
+  none_mapped: "0x80070534 (HRESULT_FROM_WIN32(ERROR_NONE_MAPPED) for an unknown principal name)"
+  access_denied_on_call: "E_ACCESSDENIED 0x80070005 on a call made after setting NONE/ANONYMOUS"
+side_effects: "updates the security blanket stored on the target interface proxy"
+threading: "may be called from any thread allowed to use the proxy"
+ordering: ["takes effect on subsequent calls made through that interface proxy"]
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, each image acting as client and COM server (and where needed a child process running scenarios in isolation). Classes are registered under HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} for elevated runs and HKCU\Software\Classes\CLSID\{B2A0xxxx-...} for standard-token runs (with a process-unique CLSID per run) and removed afterwards. Observations are HRESULTs, Win32 codes, blanket integers, booleans and domain/user comparisons, never raw process ids, thread ids, pointers or times.
+not_covered: >
+  explicit RPC_AUTH_IDENTITY_HANDLE credentials (SEC_WINNT_AUTH_IDENTITY), COLE_DEFAULT_PRINCIPAL, and remote DCOM proxies.
