@@ -231,6 +231,14 @@ pub enum ToCompositor {
     /// `path` is the object's path in Poly's file system. Not replayed. A compositor that does
     /// not know the record skips it.
     Shell { show: bool, path: String },
+    /// A Windows program asks to run a program with administrator rights (ADR 0222): the
+    /// compositor shows its consent prompt (the program's name, its publisher, its path, Yes and
+    /// No) and answers with [`FromCompositor::Consent`] for `request`. `pid` is the asking
+    /// process, `path` the Windows path, `file` the same file in Poly's file system (empty if it
+    /// has none), from which the compositor reads the publisher. The texts come from the kernel
+    /// (the image the program named), never from the app's windows. A compositor that does not
+    /// know the record skips it, and the request is answered No when the link ends.
+    Consent { request: u32, pid: u32, program: String, path: String, file: String },
 }
 
 /// compositor → win32k.
@@ -265,6 +273,8 @@ pub enum FromCompositor {
     /// `Hello` and every position and size on the link are already in those pixels, and the
     /// system DPI is 96 times `units`. Without this record: 1.
     Units { units: u32 },
+    /// The user's answer to [`ToCompositor::Consent`] `request`: Yes (`allow`) or No.
+    Consent { request: u32, allow: bool },
 }
 
 /// Why bytes are not a record.
@@ -410,6 +420,7 @@ mod kind {
     pub const LAYER_DAMAGE: u16 = 0x0013;
     pub const LAYER_DROP: u16 = 0x0014;
     pub const LAYER_GONE: u16 = 0x0015;
+    pub const CONSENT: u16 = 0x0016;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -424,6 +435,7 @@ mod kind {
     pub const LAYOUT: u16 = 0x800B;
     pub const RELEASED: u16 = 0x800C;
     pub const UNITS: u16 = 0x800D;
+    pub const CONSENT_ANSWER: u16 = 0x800E;
 }
 
 fn kind_of(k: SurfaceKind) -> u8 {
@@ -529,6 +541,9 @@ impl Record for ToCompositor {
             }
             LayerGone { surface, layer } => Out::new(out, kind::LAYER_GONE).u32(*surface).u32(*layer).done(),
             Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
+            Consent { request, pid, program, path, file } => {
+                Out::new(out, kind::CONSENT).u32(*request).u32(*pid).string(program).string(path).string(file).done()
+            }
         }
     }
 
@@ -617,6 +632,9 @@ impl Record for ToCompositor {
             kind::LAYER_DROP => LayerDrop { surface: b.u32()?, layer: b.u32()?, buffer: b.u32()? },
             kind::LAYER_GONE => LayerGone { surface: b.u32()?, layer: b.u32()? },
             kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
+            kind::CONSENT => {
+                Consent { request: b.u32()?, pid: b.u32()?, program: b.string()?, path: b.string()?, file: b.string()? }
+            }
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -655,6 +673,7 @@ impl Record for FromCompositor {
             Layout { name } => Out::new(out, kind::LAYOUT).string(name).done(),
             Released { buffer } => Out::new(out, kind::RELEASED).u32(*buffer).done(),
             Units { units } => Out::new(out, kind::UNITS).u32(*units).done(),
+            Consent { request, allow } => Out::new(out, kind::CONSENT_ANSWER).u32(*request).bool(*allow).done(),
         }
     }
 
@@ -691,6 +710,7 @@ impl Record for FromCompositor {
             kind::LAYOUT => Layout { name: b.string()? },
             kind::RELEASED => Released { buffer: b.u32()? },
             kind::UNITS => Units { units: b.u32()? },
+            kind::CONSENT_ANSWER => Consent { request: b.u32()?, allow: b.bool()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -798,6 +818,13 @@ mod tests {
             LayerDamage { surface: 1, layer: 3, buffer: 11, x: 5, y: 6, width: 7, height: 8 },
             LayerDrop { surface: 1, layer: 3, buffer: 11 },
             LayerGone { surface: 1, layer: 3 },
+            Consent {
+                request: 7,
+                pid: 4242,
+                program: String::from("ChromeSetup.exe"),
+                path: String::from(r"C:\Users\poly\Downloads\ChromeSetup.exe"),
+                file: String::from("/win/c/Users/poly/Downloads/ChromeSetup.exe"),
+            },
         ]
     }
 
@@ -825,6 +852,7 @@ mod tests {
             Layout { name: String::from("ch") },
             Released { buffer: 9 },
             Units { units: 2 },
+            Consent { request: 7, allow: true },
         ]
     }
 

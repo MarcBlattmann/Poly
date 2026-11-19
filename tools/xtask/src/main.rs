@@ -1365,7 +1365,10 @@ fn selftest_boot(kernel: &Path, syms: &Arc<Symbols>, config: SelfTest) -> Result
     eprintln!("==> boot test: self-test passes on {cpus} CPU(s) with {memory} of RAM, {how} and {with}{on}");
     let disk = test_disk()?;
     let devices = if polled { Devices::PolledDisk(&disk) } else { Devices::Test(&disk) };
-    let mut append = format!("poly.qemu_exit {}", devices.flags());
+    // The kernel's own NT test programs (a32test, s1test, sys32, ...) check the API as the elevated
+    // administrator of ADR 0171 they were written for (HKLM, C:\Windows, Program Files); User
+    // Account Control's own rules have their visible tests and host tests (ADR 0222).
+    let mut append = format!("poly.qemu_exit {} poly.win.token=admin", devices.flags());
     if initrd.is_some() {
         append = format!("{append} {}", initramfs::TEST_INITRD_FLAG);
     }

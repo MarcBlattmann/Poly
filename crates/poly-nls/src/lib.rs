@@ -11,6 +11,8 @@
 //! - [`unicode`]: character classes (`ctype.h`'s bits) and simple case
 //!   mapping of UTF-16 units.
 //! - [`collate`]: Poly's documented collation and sort keys.
+//! - [`lcid`]: locale names and identifiers ([MS-LCID]), neutral locales, alternate sorts.
+//! - [`datefmt`]: the date and time formats of the locales and the format pictures.
 //!
 //! `kernelbase` serves the conversions (`MultiByteToWideChar` and friends);
 //! the C runtime converts through `kernel32` and links only the small
@@ -25,6 +27,8 @@ extern crate std;
 
 pub mod codepage;
 pub mod collate;
+pub mod datefmt;
+pub mod lcid;
 pub mod locale;
 #[rustfmt::skip]
 pub mod tables;

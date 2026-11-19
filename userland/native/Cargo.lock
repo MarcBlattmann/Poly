@@ -49,6 +49,7 @@ dependencies = [
  "poly-wayland",
  "poly-win32k",
  "poly-x11",
+ "poly-x509",
 ]
 
 [[package]]
@@ -322,3 +323,10 @@ dependencies = [
 [[package]]
 name = "poly-x11"
 version = "0.0.1"
+
+[[package]]
+name = "poly-x509"
+version = "0.0.1"
+dependencies = [
+ "poly-crypto",
+]

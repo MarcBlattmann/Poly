@@ -49,6 +49,7 @@ extern crate alloc;
 pub mod abi;
 pub mod afd;
 pub mod backend;
+pub mod consent;
 pub mod console;
 pub mod consts;
 pub mod context;
@@ -300,6 +301,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyServiceCall => scm::service_call(k, regs),
         PolyProcessList => proclist::process_list(k, regs),
         NotifyChangeDirectoryFile => io::notify::notify_change_directory_file(k, regs),
+        PolyRequestElevation => consent::request_elevation(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

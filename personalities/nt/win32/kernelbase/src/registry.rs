@@ -180,6 +180,40 @@ fn user_classes() -> Option<Handle> {
     (h > 0).then_some(h)
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
+}
+
+/// `RegGetKeySecurity(hKey, SecurityInformation, pSecurityDescriptor, lpcbSecurityDescriptor)`
+/// (Learn): the key's self-relative descriptor, the parts asked for. A buffer too small is
+/// `ERROR_INSUFFICIENT_BUFFER` with the size needed in `*lpcbSecurityDescriptor`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegGetKeySecurity(hkey: HKey, information: u32, sd: *mut u8, size: *mut u32) -> u32 {
+    if size.is_null() {
+        return ERROR_INVALID_PARAMETER;
+    }
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    let mut needed = 0u32;
+    // SAFETY: the caller's buffer of `*size` bytes; a local variable.
+    let st = unsafe { NtQuerySecurityObject(h, information, sd, size.read(), &mut needed) };
+    if st.0 == 0xC000_0023 {
+        // SAFETY: the caller's variable.
+        unsafe { size.write(needed) };
+        return ERROR_INSUFFICIENT_BUFFER;
+    }
+    if !st.is_success() {
+        return err(st);
+    }
+    // SAFETY: the caller's variable.
+    unsafe { size.write(needed) };
+    ERROR_SUCCESS
+}
+
 /// The NT handle an `HKEY` stands for.
 fn handle_of(hkey: HKey) -> Result<Handle, u32> {
     match reg::predefined(hkey as u64) {

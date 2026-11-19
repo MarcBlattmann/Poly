@@ -584,6 +584,7 @@ pub fn thread_exit(
 pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backend) {
     sys.job_process_exited(proc.pid, proc.exit_status.unwrap_or(STATUS_SUCCESS));
     sys.win32k.process_exited(&mut sys.objects, proc.pid.0);
+    sys.consent.process_exited(&mut sys.objects, proc.pid);
     sys.winsta.process_exited(&mut sys.objects, proc.pid);
     for a in proc.vm.clear() {
         if let Some(v) = a.view() {
