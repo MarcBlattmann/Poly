@@ -238,6 +238,22 @@ impl Surfaces {
             let client = i.client;
             let shown = i.visible && !i.minimized && client.right > client.left && client.bottom > client.top;
             let framed = poly_frames(i.style, i.window, client);
+            // The picture of a surface made again below, for its new one.
+            let mut carried = None;
+            // A window shown before its owner had a surface was told to the compositor without
+            // one: once the owner has its surface, the window's is made again with it, so that it
+            // moves with its owner and stays above it (an owned window is always above its
+            // owner; Learn, "Window Features": owned windows). Chrome shows its "Restore pages?"
+            // bubble before its main window.
+            if shown
+                && let Some(&s) = self.windows.get(&h)
+                && let Some(&owner) = self.windows.get(&i.owner)
+                && desktop.surface(s).is_some_and(|x| x.owner != owner)
+            {
+                carried = desktop.surface(s).and_then(|x| x.buffer).map(|b| b.id);
+                self.windows.remove(&h);
+                desktop.destroy(s);
+            }
             // The window changed its mind about its caption (a WM_NCCALCSIZE answer after
             // SWP_FRAMECHANGED): its surface is made again with the new frame.
             if shown
@@ -278,7 +294,7 @@ impl Surfaces {
                     // A resized window keeps what it showed, from its top-left corner: commits
                     // carry only what was drawn since (ADR 0219).
                     let mut new = Buffer::new(cw, ch);
-                    if let Some(old) = current.and_then(|c| self.buffers.get(&c.0)) {
+                    if let Some(old) = current.map(|c| c.0).or(carried).and_then(|b| self.buffers.get(&b)) {
                         new.keep(old);
                     }
                     self.buffers.insert(b, new);
@@ -995,6 +1011,64 @@ mod tests {
         assert!(s.set_premultiplied(&wm, menu, false));
         s.sync(&wm, &mut d);
         assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
+    }
+
+    /// A popup shown before its owner had a surface (Chrome's "Restore pages?" bubble, shown
+    /// before the browser window) gets a surface of its own owner once the owner has one: it then
+    /// moves with its owner and stays above it, and keeps its picture.
+    #[test]
+    fn a_popup_shown_before_its_owner_joins_the_owner_once_it_has_a_surface() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let owner = window(&mut wm, false);
+        let name: Vec<u16> = "Pop".encode_utf16().collect();
+        let spec = ClassSpec { name: name.clone(), wndproc: 1, unicode: true, ..ClassSpec::default() };
+        call(&mut wm, Request::RegisterClass { spec });
+        let spec = CreateSpec {
+            class: ClassRef::Name { name },
+            style: 0x8000_0000,
+            parent: u64::from(owner),
+            ..CreateSpec::default()
+        };
+        let Reply::Created { created } = call(&mut wm, Request::CreateWindow { spec }) else { panic!() };
+        let pop = created.hwnd;
+        let r = Some(Rect::new(150, 100, 190, 130));
+        call(&mut wm, Request::SetRects { hwnd: pop, window_rel: r, client_rel: r });
+        call(&mut wm, Request::FinishCreate { hwnd: pop });
+        let show = |wm: &mut Wm, h: u32| {
+            call(
+                wm,
+                Request::SetState {
+                    hwnd: h,
+                    visible: Some(true),
+                    minimized: None,
+                    maximized: None,
+                    normal: None,
+                    size_move_pending: None,
+                },
+            )
+        };
+        show(&mut wm, pop);
+        s.sync(&wm, &mut d);
+        let first = s.surface(pop).expect("the popup has a surface");
+        assert_eq!(d.surface(first).unwrap().owner, 0, "no owner surface yet");
+        let px: Vec<u8> = (0..40 * 30).flat_map(|_| [0, 0, 0xFF, 0xFF]).collect();
+        assert!(s.commit(&mut d, pop, 40, 30, &px));
+        // The owner is shown: the popup's surface is made again with it.
+        show(&mut wm, owner);
+        s.sync(&wm, &mut d);
+        let os = s.surface(owner).expect("the owner has a surface");
+        let again = s.surface(pop).unwrap();
+        assert_ne!(again, first);
+        assert_eq!(d.surface(again).unwrap().owner, os);
+        assert!(d.surface(again).unwrap().shown);
+        // Its picture came along.
+        assert_eq!(s.screen_pixel(&wm, &d, 160, 110), RED);
+        // Nothing changes at the next sync.
+        s.sync(&wm, &mut d);
+        assert_eq!(s.surface(pop), Some(again));
     }
 
     /// SetLayeredWindowAttributes.yaml `children`: a WS_CHILD window with

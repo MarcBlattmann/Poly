@@ -157,6 +157,9 @@ impl WindowsSurfaces {
             }
         }
         let u = self.units;
+        for m in &moved {
+            println!("feel-link: configure {m:?} us={}", os::monotonic_ns() / 1000); // TEMP-FEEL
+        }
         moved
             .into_iter()
             .map(|(surface, (x, y, width, height))| FromCompositor::Configure {
@@ -210,6 +213,10 @@ impl WindowsSurfaces {
     /// Apply one record to the scene.
     pub fn apply(&mut self, scene: &mut Scene, record: &ToCompositor, buffers: &dyn Buffers) -> Vec<Action> {
         let mut actions = Vec::new();
+        // TEMP-FEEL: what the link says about windows.
+        if !matches!(record, ToCompositor::Damage { .. } | ToCompositor::Title { .. } | ToCompositor::Process { .. }) {
+            println!("feel-link: {record:?} us={}", os::monotonic_ns() / 1000);
+        }
         match *record {
             ToCompositor::Welcome { .. } => {
                 // A (re)connection: the replay that follows rebuilds everything.

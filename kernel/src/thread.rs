@@ -405,11 +405,39 @@ fn idle_main(_: usize) -> usize {
                 cpu::enable_interrupts();
             } else {
                 let timer = crate::profile::start();
+                let feel_t0 = time::now_ns(); // TEMP-FEEL
                 cpu::enable_interrupts_and_halt();
                 crate::profile::since(crate::profile::Event::Halt, timer);
+                feel_idle(feel_t0); // TEMP-FEEL
             }
         }
     }
+}
+
+// TEMP-FEEL: busy share of each CPU and the runnable threads, every 500 ms.
+static FEEL_HALT: [AtomicU64; 16] = [const { AtomicU64::new(0) }; 16];
+static FEEL_LAST: AtomicU64 = AtomicU64::new(0);
+
+fn feel_idle(t0: u64) {
+    use core::sync::atomic::Ordering;
+    let now = time::now_ns();
+    let cpu_i = {
+        let _off = InterruptsOff::new();
+        this_cpu()
+    };
+    FEEL_HALT[cpu_i.min(15)].fetch_add(now.saturating_sub(t0), Ordering::Relaxed);
+    if cpu_i != 0 {
+        return;
+    }
+    let last = FEEL_LAST.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < 500_000_000 {
+        return;
+    }
+    FEEL_LAST.store(now, Ordering::Relaxed);
+    let span = now.saturating_sub(last).max(1);
+    let busy: [u64; 4] =
+        core::array::from_fn(|i| 100u64.saturating_sub(FEEL_HALT[i].swap(0, Ordering::Relaxed) * 100 / span));
+    crate::kprintln!("feel-cpu: us={} busy={busy:?}", now / 1000);
 }
 
 /// Perform the switch the scheduler decided on for this CPU. Interrupts

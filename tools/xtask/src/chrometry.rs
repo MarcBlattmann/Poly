@@ -193,7 +193,7 @@ pub fn parts(fresh_disk: bool) -> Result<Parts> {
 const TRY_STEPS: &str = concat!(
     "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
     "chord:ctrl+l,sleep:2,shot:address-focused,type:data:text/html,<body bgcolor=blue>,",
-    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff"
+    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff,chord:alt+f,sleep:8,shot:menu"
 );
 
 /// The window check of what the menu boots: the same disk and entry as `desktop --chrome-win`
