@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoRevertToSelf.yaml
+id: windows/api/ole32.dll/CoRevertToSelf
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token; where noted, tests also start a de-elevated child process holding the session shell's filtered standard token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Convenience wrapper over CoGetCallContext(IID_IServerSecurity) + IServerSecurity::RevertToSelf. Ends COM client impersonation on the calling server thread. Outside a served COM call it returns RPC_E_CALL_COMPLETE and leaves any non-COM thread impersonation token untouched.
+interface:
+  signature: "HRESULT CoRevertToSelf(void)"
+  forward: "ole32.dll!CoRevertToSelf forwards to combase.dll!CoRevertToSelf"
+installer: "Companion to CoImpersonateClient and IServerSecurity::ImpersonateClient."
+rules:
+  in_call_reverts: "inside a served cross-process call (activation or direct call at any impersonation level), returns S_OK and removes the thread token attached by either CoImpersonateClient or IServerSecurity::ImpersonateClient (OpenThreadToken fails with ERROR_NO_TOKEN 1008, and IServerSecurity::IsImpersonating becomes 0). Calling it inside a call when not impersonating also returns S_OK"
+  outside_call_preserves_other_impersonation: "when the calling thread is not serving a COM call (no COM, STA, MTA, or another thread of a server process), returns RPC_E_CALL_COMPLETE 0x80010117. If the thread is impersonating outside COM (for example via advapi32!ImpersonateSelf), CoRevertToSelf returns 0x80010117 and does NOT remove that thread token (only advapi32!RevertToSelf removes it)"
+errors:
+  call_complete: "RPC_E_CALL_COMPLETE 0x80010117 (no incoming COM call active on the calling thread)"
+side_effects: "removes the calling thread's COM impersonation token when inside a served call; no side effects outside a call"
+threading: "per thread: affects only the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, each image acting as client and COM server (and where needed a child process running scenarios in isolation). Classes are registered under HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} for elevated runs and HKCU\Software\Classes\CLSID\{B2A0xxxx-...} for standard-token runs (with a process-unique CLSID per run) and removed afterwards. Observations are HRESULTs, Win32 codes, blanket integers, booleans and domain/user comparisons, never raw process ids, thread ids, pointers or times.
+not_covered: >
+  interaction with nested non-COM ImpersonateLoggedOnUser during an active COM call.
