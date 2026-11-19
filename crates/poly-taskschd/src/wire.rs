@@ -6,6 +6,7 @@
 //! looks them up again on every request.
 
 use crate::def::*;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -79,15 +80,19 @@ pub struct Dec<'a> {
     at: usize,
 }
 
-pub type D<T> = Result<T, ()>;
+/// A truncated or invalid wire message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WireError;
+
+pub type D<T> = Result<T, WireError>;
 
 impl<'a> Dec<'a> {
     pub fn new(b: &'a [u8]) -> Dec<'a> {
         Dec { b, at: 0 }
     }
     fn take(&mut self, n: usize) -> D<&'a [u8]> {
-        let end = self.at.checked_add(n).ok_or(())?;
-        let s = self.b.get(self.at..end).ok_or(())?;
+        let end = self.at.checked_add(n).ok_or(WireError)?;
+        let s = self.b.get(self.at..end).ok_or(WireError)?;
         self.at = end;
         Ok(s)
     }
@@ -95,19 +100,19 @@ impl<'a> Dec<'a> {
         Ok(self.take(1)?[0])
     }
     pub fn i16(&mut self) -> D<i16> {
-        Ok(i16::from_le_bytes(self.take(2)?.try_into().map_err(|_| ())?))
+        Ok(i16::from_le_bytes(self.take(2)?.try_into().map_err(|_| WireError)?))
     }
     pub fn i32(&mut self) -> D<i32> {
-        Ok(i32::from_le_bytes(self.take(4)?.try_into().map_err(|_| ())?))
+        Ok(i32::from_le_bytes(self.take(4)?.try_into().map_err(|_| WireError)?))
     }
     pub fn u32(&mut self) -> D<u32> {
-        Ok(u32::from_le_bytes(self.take(4)?.try_into().map_err(|_| ())?))
+        Ok(u32::from_le_bytes(self.take(4)?.try_into().map_err(|_| WireError)?))
     }
     pub fn i64(&mut self) -> D<i64> {
-        Ok(i64::from_le_bytes(self.take(8)?.try_into().map_err(|_| ())?))
+        Ok(i64::from_le_bytes(self.take(8)?.try_into().map_err(|_| WireError)?))
     }
     pub fn f64(&mut self) -> D<f64> {
-        Ok(f64::from_bits(u64::from_le_bytes(self.take(8)?.try_into().map_err(|_| ())?)))
+        Ok(f64::from_bits(u64::from_le_bytes(self.take(8)?.try_into().map_err(|_| WireError)?)))
     }
     pub fn bool(&mut self) -> D<bool> {
         Ok(self.u8()? != 0)
@@ -115,7 +120,7 @@ impl<'a> Dec<'a> {
     pub fn str(&mut self) -> D<String> {
         let n = self.u32()? as usize;
         let s = self.take(n)?;
-        Ok(String::from(core::str::from_utf8(s).map_err(|_| ())?))
+        Ok(String::from(core::str::from_utf8(s).map_err(|_| WireError)?))
     }
     pub fn opt(&mut self) -> D<Option<String>> {
         Ok(if self.u8()? != 0 { Some(self.str()?) } else { None })
@@ -364,7 +369,7 @@ pub enum Request {
     },
     Register {
         folder: String,
-        def: Definition,
+        def: Box<Definition>,
         path: Option<String>,
         flags: i32,
         user: Option<String>,
@@ -533,7 +538,7 @@ impl Request {
             8 => Request::DeleteTask { folder: x.str()?, rel: x.opt()?, flags: x.i32()? },
             9 => Request::Register {
                 folder: x.str()?,
-                def: get_definition(&mut x)?,
+                def: Box::new(get_definition(&mut x)?),
                 path: x.opt()?,
                 flags: x.i32()?,
                 user: x.opt()?,
@@ -553,7 +558,7 @@ impl Request {
             17 => Request::Running { flags: x.i32()? },
             18 => Request::StopInstance { guid: x.str()? },
             19 => Request::SecurityDescriptor { path: x.str()? },
-            _ => return Err(()),
+            _ => return Err(WireError),
         })
     }
 }

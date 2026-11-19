@@ -233,10 +233,9 @@ pub fn unescape(s: &str) -> Option<String> {
             _ => {
                 let n = if let Some(h) = ent.strip_prefix("#x").or_else(|| ent.strip_prefix("#X")) {
                     u32::from_str_radix(h, 16).ok()?
-                } else if let Some(d) = ent.strip_prefix('#') {
-                    d.parse::<u32>().ok()?
                 } else {
-                    return None;
+                    let d = ent.strip_prefix('#')?;
+                    d.parse::<u32>().ok()?
                 };
                 out.push(char::from_u32(n)?);
             }

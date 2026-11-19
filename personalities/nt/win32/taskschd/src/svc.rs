@@ -172,7 +172,13 @@ fn local(s: &str) -> bool {
     s.is_empty() || same(s, "localhost") || s == "127.0.0.1" || same(s, &name)
 }
 
-unsafe extern "system" fn sv_connect(this: *mut c_void, server: Variant, _user: Variant, _domain: Variant, _pw: Variant) -> HRESULT {
+unsafe extern "system" fn sv_connect(
+    this: *mut c_void,
+    server: Variant,
+    _user: Variant,
+    _domain: Variant,
+    _pw: Variant,
+) -> HRESULT {
     // SAFETY: a service object.
     let o = unsafe { data::<ServiceObj>(this) };
     let target = if server.is_empty() {
@@ -316,7 +322,12 @@ unsafe extern "system" fn fo_get_folders(this: *mut c_void, flags: i32, out: *mu
     S_OK
 }
 
-unsafe extern "system" fn fo_create_folder(this: *mut c_void, rel: Bstr, sddl: Variant, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn fo_create_folder(
+    this: *mut c_void,
+    rel: Bstr,
+    sddl: Variant,
+    out: *mut *mut c_void,
+) -> HRESULT {
     // SAFETY: the caller's out parameter.
     unsafe { clear(out) };
     let f = folder(this);
@@ -393,7 +404,7 @@ unsafe fn register(
     let typed = from_bstr(path);
     let r = call(&Request::Register {
         folder: f.path.clone(),
-        def,
+        def: alloc::boxed::Box::new(def),
         path: typed.clone(),
         flags,
         user: user.opt_text(),
@@ -504,7 +515,11 @@ unsafe extern "system" fn nc_count(this: *mut c_void, out: *mut i32) -> HRESULT 
 /// item gets the name as asked).
 fn pick(c: &NameColl, v: &Variant) -> Result<String, HRESULT> {
     if let Some(i) = v.int() {
-        return if i >= 1 && (i as usize) <= c.names.len() { Ok(c.names[i as usize - 1].clone()) } else { Err(E_INVALIDARG) };
+        return if i >= 1 && (i as usize) <= c.names.len() {
+            Ok(c.names[i as usize - 1].clone())
+        } else {
+            Err(E_INVALIDARG)
+        };
     }
     match v.text() {
         Some(t) => {
@@ -770,7 +785,13 @@ unsafe extern "system" fn rt_stop(this: *mut c_void, flags: i32) -> HRESULT {
     call(&Request::Stop { path: task(this).path.clone(), flags }).hr
 }
 
-unsafe extern "system" fn rt_run_times(_this: *mut c_void, _a: *mut c_void, _b: *mut c_void, _n: *mut u32, _out: *mut c_void) -> HRESULT {
+unsafe extern "system" fn rt_run_times(
+    _this: *mut c_void,
+    _a: *mut c_void,
+    _b: *mut c_void,
+    _n: *mut u32,
+    _out: *mut c_void,
+) -> HRESULT {
     E_NOTIMPL
 }
 

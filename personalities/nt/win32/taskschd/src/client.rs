@@ -23,7 +23,15 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const c_void, disp: u32, flags: u32, tmpl: Handle) -> Handle;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const c_void,
+        disp: u32,
+        flags: u32,
+        tmpl: Handle,
+    ) -> Handle;
     fn ReadFile(file: Handle, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut c_void) -> i32;
     fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
     fn CloseHandle(h: Handle) -> i32;
@@ -93,7 +101,8 @@ fn read_exact(h: Handle, buf: &mut [u8]) -> bool {
     while at < buf.len() {
         let mut n = 0u32;
         // SAFETY: a pipe handle; writes into the free part of `buf`.
-        let ok = unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
+        let ok =
+            unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
         if ok == 0 || n == 0 {
             return false;
         }
@@ -110,7 +119,9 @@ enum Failure {
 fn open(name: &[u16]) -> Result<Handle, Failure> {
     for _ in 0..400 {
         // SAFETY: a NUL-terminated name.
-        let h = unsafe { CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), OPEN_EXISTING, 0, 0) };
+        let h = unsafe {
+            CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), OPEN_EXISTING, 0, 0)
+        };
         if h != INVALID_HANDLE {
             return Ok(h);
         }
@@ -179,7 +190,8 @@ const START_MUTEX: &str = "PolyTaskSchedulerStart";
 fn running() -> bool {
     let name = wide(PIPE);
     // SAFETY: a NUL-terminated name.
-    let h = unsafe { CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), OPEN_EXISTING, 0, 0) };
+    let h =
+        unsafe { CreateFileW(name.as_ptr(), GENERIC_READ | GENERIC_WRITE, 0, core::ptr::null(), OPEN_EXISTING, 0, 0) };
     if h != INVALID_HANDLE {
         // A connection with no request: the scheduler reads nothing and lets it go.
         // SAFETY: our own handle.
@@ -216,7 +228,8 @@ fn start_service() -> bool {
             return false;
         }
         let svc = OpenServiceW(scm, name.as_ptr(), SERVICE_START);
-        let ok = svc != 0 && (StartServiceW(svc, 0, core::ptr::null()) != 0 || GetLastError() == ERROR_SERVICE_ALREADY_RUNNING);
+        let ok = svc != 0
+            && (StartServiceW(svc, 0, core::ptr::null()) != 0 || GetLastError() == ERROR_SERVICE_ALREADY_RUNNING);
         if svc != 0 {
             CloseServiceHandle(svc);
         }

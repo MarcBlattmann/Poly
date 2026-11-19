@@ -260,7 +260,13 @@ pub fn make<T>(vtbl: *const c_void, iids: &'static [Guid], d: T) -> *mut c_void 
 }
 
 /// A new object with a second interface pointer (`vtbl2`, answering `iids2`).
-pub fn make2<T>(vtbl: *const c_void, iids: &'static [Guid], vtbl2: *const c_void, iids2: &'static [Guid], d: T) -> *mut c_void {
+pub fn make2<T>(
+    vtbl: *const c_void,
+    iids: &'static [Guid],
+    vtbl2: *const c_void,
+    iids2: &'static [Guid],
+    d: T,
+) -> *mut c_void {
     let o = Obj { h: Head { vtbl, vtbl2, refs: AtomicU32::new(1), iids, iids2, drop: drop_obj::<T> }, d };
     Box::into_raw(Box::new(o)) as *mut c_void
 }
@@ -389,7 +395,8 @@ macro_rules! dual2 {
 pub unsafe fn com_add_ref(p: *mut c_void) {
     // SAFETY: a live COM object: AddRef is entry 1.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(1));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(1));
         f(p);
     }
 }
@@ -400,7 +407,8 @@ pub unsafe fn com_release(p: *mut c_void) {
     }
     // SAFETY: a live COM object: Release is entry 2.
     unsafe {
-        let f: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*(*(p as *const *const usize)).add(2));
+        let f: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*(*(p as *const *const usize)).add(2));
         f(p);
     }
 }
@@ -552,7 +560,12 @@ pub unsafe fn new_enum(items: Vec<*mut c_void>, out: *mut *mut c_void) -> HRESUL
 
 // ------------------------------------------------------------------------------- the class
 
-unsafe extern "system" fn factory_create(_this: *mut c_void, outer: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+unsafe extern "system" fn factory_create(
+    _this: *mut c_void,
+    outer: *mut c_void,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if out.is_null() {
         return E_POINTER;
     }
@@ -611,7 +624,11 @@ static FACTORY: Factory = Factory { vtbl: &FACTORY_VTBL as *const Vt<5> as *cons
 
 /// `DllGetClassObject`: the factory of `CLSID_TaskScheduler`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DllGetClassObject(clsid: *const Guid, iid: *const Guid, out: *mut *mut c_void) -> HRESULT {
+pub unsafe extern "system" fn DllGetClassObject(
+    clsid: *const Guid,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> HRESULT {
     if out.is_null() {
         return E_POINTER;
     }

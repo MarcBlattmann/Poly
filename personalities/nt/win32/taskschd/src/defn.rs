@@ -591,20 +591,47 @@ macro_rules! trigger_vtbl {
     };
 }
 
-trigger_vtbl!(EVENT_VTBL, 26, [tr_get_subscription, tr_put_subscription, tr_get_delay, tr_put_delay, tr_value_queries, tr_value_queries]);
+trigger_vtbl!(
+    EVENT_VTBL,
+    26,
+    [tr_get_subscription, tr_put_subscription, tr_get_delay, tr_put_delay, tr_value_queries, tr_value_queries]
+);
 trigger_vtbl!(TIME_VTBL, 22, [tr_get_random, tr_put_random]);
 trigger_vtbl!(DAILY_VTBL, 24, [tr_get_days, tr_put_days, tr_get_random, tr_put_random]);
-trigger_vtbl!(WEEKLY_VTBL, 26, [tr_get_dow, tr_put_dow, tr_get_weeks_interval, tr_put_weeks_interval, tr_get_random, tr_put_random]);
-trigger_vtbl!(MONTHLY_VTBL, 28, [tr_get_dom, tr_put_dom, tr_get_moy, tr_put_moy, tr_get_last_day, tr_put_last_day, tr_get_random, tr_put_random]);
+trigger_vtbl!(
+    WEEKLY_VTBL,
+    26,
+    [tr_get_dow, tr_put_dow, tr_get_weeks_interval, tr_put_weeks_interval, tr_get_random, tr_put_random]
+);
+trigger_vtbl!(
+    MONTHLY_VTBL,
+    28,
+    [tr_get_dom, tr_put_dom, tr_get_moy, tr_put_moy, tr_get_last_day, tr_put_last_day, tr_get_random, tr_put_random]
+);
 trigger_vtbl!(
     MONTHLYDOW_VTBL,
     30,
-    [tr_get_dow, tr_put_dow, tr_get_wom, tr_put_wom, tr_get_moy, tr_put_moy, tr_get_last_week, tr_put_last_week, tr_get_random, tr_put_random]
+    [
+        tr_get_dow,
+        tr_put_dow,
+        tr_get_wom,
+        tr_put_wom,
+        tr_get_moy,
+        tr_put_moy,
+        tr_get_last_week,
+        tr_put_last_week,
+        tr_get_random,
+        tr_put_random
+    ]
 );
 trigger_vtbl!(PLAIN_VTBL, 20, []);
 trigger_vtbl!(DELAY_VTBL, 22, [tr_get_delay, tr_put_delay]);
 trigger_vtbl!(LOGON_VTBL, 24, [tr_get_delay, tr_put_delay, tr_get_user, tr_put_user]);
-trigger_vtbl!(SESSION_VTBL, 26, [tr_get_delay, tr_put_delay, tr_get_user, tr_put_user, tr_get_state_change, tr_put_state_change]);
+trigger_vtbl!(
+    SESSION_VTBL,
+    26,
+    [tr_get_delay, tr_put_delay, tr_get_user, tr_put_user, tr_get_state_change, tr_put_state_change]
+);
 
 static EVENT_IIDS: &[Guid] = &[IID_ITRIGGER, IID_IEVENTTRIGGER];
 static TIME_IIDS: &[Guid] = &[IID_ITRIGGER, IID_ITIMETRIGGER];
@@ -646,7 +673,8 @@ text!(RepObj, rep_get_interval, rep_put_interval, |x| x.repetition.interval);
 text!(RepObj, rep_get_duration, rep_put_duration, |x| x.repetition.duration);
 boolean!(RepObj, rep_get_stop, rep_put_stop, |x| x.repetition.stop_at_duration_end);
 
-static REP_VTBL: Vt<13> = dual![rep_get_interval, rep_put_interval, rep_get_duration, rep_put_duration, rep_get_stop, rep_put_stop];
+static REP_VTBL: Vt<13> =
+    dual![rep_get_interval, rep_put_interval, rep_get_duration, rep_put_duration, rep_get_stop, rep_put_stop];
 static REP_IIDS: &[Guid] = &[IID_IREPETITIONPATTERN];
 
 // ------------------------------------------------------------------------------- the collections
@@ -783,9 +811,21 @@ text!(ActObj, em_get_body, em_put_body, |x| x.body);
 text!(ActObj, msg_get_title, msg_put_title, |x| x.title);
 text!(ActObj, msg_get_body, msg_put_body, |x| x.message_body);
 
-static EXEC_VTBL: Vt<18> =
-    dual![ac_get_id, ac_put_id, ac_type, ex_get_path, ex_put_path, ex_get_args, ex_put_args, ex_get_dir, ex_put_dir, ex_get_hide, ex_put_hide];
-static COM_VTBL: Vt<14> = dual![ac_get_id, ac_put_id, ac_type, com_get_class, com_put_class, com_get_data, com_put_data];
+static EXEC_VTBL: Vt<18> = dual![
+    ac_get_id,
+    ac_put_id,
+    ac_type,
+    ex_get_path,
+    ex_put_path,
+    ex_get_args,
+    ex_put_args,
+    ex_get_dir,
+    ex_put_dir,
+    ex_get_hide,
+    ex_put_hide
+];
+static COM_VTBL: Vt<14> =
+    dual![ac_get_id, ac_put_id, ac_type, com_get_class, com_put_class, com_get_data, com_put_data];
 static EMAIL_VTBL: Vt<30> = dual![
     ac_get_id,
     ac_put_id,
@@ -811,7 +851,8 @@ static EMAIL_VTBL: Vt<30> = dual![
     xml_not_impl,
     xml_not_impl,
 ];
-static MSG_VTBL: Vt<14> = dual![ac_get_id, ac_put_id, ac_type, msg_get_title, msg_put_title, msg_get_body, msg_put_body];
+static MSG_VTBL: Vt<14> =
+    dual![ac_get_id, ac_put_id, ac_type, msg_get_title, msg_put_title, msg_get_body, msg_put_body];
 static EXEC_IIDS: &[Guid] = &[IID_IACTION, IID_IEXECACTION, IID_IEXECACTION2];
 static COM_IIDS: &[Guid] = &[IID_IACTION, IID_ICOMHANDLERACTION];
 static EMAIL_IIDS: &[Guid] = &[IID_IACTION, IID_IEMAILACTION];
@@ -909,8 +950,18 @@ unsafe extern "system" fn acc_clear(this: *mut c_void) -> HRESULT {
 
 text!(ActColl, acc_get_context, acc_put_context, |x| x.context);
 
-static ACTCOLL_VTBL: Vt<17> =
-    dual![acc_count, acc_item, acc_enum, xml_not_impl, xml_not_impl, acc_create, acc_remove, acc_clear, acc_get_context, acc_put_context];
+static ACTCOLL_VTBL: Vt<17> = dual![
+    acc_count,
+    acc_item,
+    acc_enum,
+    xml_not_impl,
+    xml_not_impl,
+    acc_create,
+    acc_remove,
+    acc_clear,
+    acc_get_context,
+    acc_put_context
+];
 static ACTCOLL_IIDS: &[Guid] = &[IID_IACTIONCOLLECTION];
 
 // ------------------------------------------------------------------------------- the definition
@@ -947,7 +998,9 @@ fn part(o: &DefObj, k: usize, out: *mut *mut c_void) -> HRESULT {
                     SET2_IIDS,
                     SetObj { c: s.settings.clone(), idle: Lock::new(0), net: Lock::new(0) },
                 ),
-                3 => make2(PRIN_VTBL.ptr(), PRIN_IIDS, PRIN2_VTBL.ptr(), PRIN2_IIDS, PrinObj { c: s.principal.clone() }),
+                3 => {
+                    make2(PRIN_VTBL.ptr(), PRIN_IIDS, PRIN2_VTBL.ptr(), PRIN2_IIDS, PrinObj { c: s.principal.clone() })
+                }
                 _ => make(ACTCOLL_VTBL.ptr(), ACTCOLL_IIDS, ActColl { c: s.actions.clone() }),
             } as usize;
         }

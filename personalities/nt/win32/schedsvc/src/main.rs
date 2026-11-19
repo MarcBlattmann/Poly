@@ -52,7 +52,15 @@ unsafe extern "system" {
     fn ConnectNamedPipe(pipe: Handle, overlapped: *mut c_void) -> i32;
     fn ReadFile(file: Handle, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut c_void) -> i32;
     fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const c_void, disp: u32, flags: u32, tmpl: Handle) -> Handle;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const c_void,
+        disp: u32,
+        flags: u32,
+        tmpl: Handle,
+    ) -> Handle;
     fn DeleteFileW(name: *const u16) -> i32;
     fn CreateDirectoryW(name: *const u16, sa: *const c_void) -> i32;
     fn RemoveDirectoryW(name: *const u16) -> i32;
@@ -240,7 +248,8 @@ fn expand(s: &str) -> String {
 fn write_file(path: &str, bytes: &[u8]) -> bool {
     let p = wide(path);
     // SAFETY: a NUL-terminated path; the handle is closed below.
-    let h = unsafe { CreateFileW(p.as_ptr(), GENERIC_WRITE, FILE_SHARE_READ, core::ptr::null(), CREATE_ALWAYS, 0x80, 0) };
+    let h =
+        unsafe { CreateFileW(p.as_ptr(), GENERIC_WRITE, FILE_SHARE_READ, core::ptr::null(), CREATE_ALWAYS, 0x80, 0) };
     if h == INVALID_HANDLE {
         return false;
     }
@@ -249,7 +258,9 @@ fn write_file(path: &str, bytes: &[u8]) -> bool {
     while at < bytes.len() {
         let mut n = 0u32;
         // SAFETY: our file handle; reads the rest of `bytes`.
-        if unsafe { WriteFile(h, bytes[at..].as_ptr(), (bytes.len() - at) as u32, &mut n, core::ptr::null_mut()) } == 0 || n == 0 {
+        if unsafe { WriteFile(h, bytes[at..].as_ptr(), (bytes.len() - at) as u32, &mut n, core::ptr::null_mut()) } == 0
+            || n == 0
+        {
             ok = false;
             break;
         }
@@ -263,7 +274,8 @@ fn write_file(path: &str, bytes: &[u8]) -> bool {
 fn read_file(path: &str) -> Option<Vec<u8>> {
     let p = wide(path);
     // SAFETY: a NUL-terminated path; the handle is closed below.
-    let h = unsafe { CreateFileW(p.as_ptr(), GENERIC_READ, FILE_SHARE_READ, core::ptr::null(), OPEN_EXISTING, 0x80, 0) };
+    let h =
+        unsafe { CreateFileW(p.as_ptr(), GENERIC_READ, FILE_SHARE_READ, core::ptr::null(), OPEN_EXISTING, 0x80, 0) };
     if h == INVALID_HANDLE {
         return None;
     }
@@ -334,7 +346,7 @@ impl Host for Sys {
             std: [0; 3],
         };
         let mut pi = ProcessInformation { process: 0, thread: 0, pid: 0, tid: 0 };
-        let mut start = |dir: *const u16, cmd: &mut Vec<u16>, pi: &mut ProcessInformation| {
+        let start = |dir: *const u16, cmd: &mut Vec<u16>, pi: &mut ProcessInformation| {
             // SAFETY: a mutable NUL-terminated command line, live structures.
             unsafe {
                 CreateProcessW(
@@ -499,7 +511,15 @@ fn with<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 /// The files of `dir` (the store's folder `path`) into the service, recursively.
 fn load(svc: &mut Service, dir: &str, path: &str, now: i64, boot: i64) {
     let pattern = wide(&alloc::format!("{dir}\\*"));
-    let mut fd = FindData { attributes: 0, times: [0; 6], size_high: 0, size_low: 0, reserved: [0; 2], name: [0; 260], alternate: [0; 14] };
+    let mut fd = FindData {
+        attributes: 0,
+        times: [0; 6],
+        size_high: 0,
+        size_low: 0,
+        reserved: [0; 2],
+        name: [0; 260],
+        alternate: [0; 14],
+    };
     // SAFETY: a NUL-terminated pattern and a live structure; closed below.
     let h = unsafe { FindFirstFileW(pattern.as_ptr(), &mut fd) };
     if h == INVALID_HANDLE {
@@ -567,7 +587,8 @@ fn read_exact(h: Handle, buf: &mut [u8]) -> bool {
     while at < buf.len() {
         let mut n = 0u32;
         // SAFETY: a pipe handle; writes into the free part of `buf`.
-        let ok = unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
+        let ok =
+            unsafe { ReadFile(h, buf.as_mut_ptr().add(at), (buf.len() - at) as u32, &mut n, core::ptr::null_mut()) };
         if ok == 0 || n == 0 {
             return false;
         }
@@ -598,7 +619,7 @@ unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     if let Some(p) = payload {
         let reply = match Request::decode(&p) {
             Ok(req) => with(|st| st.svc.handle(req, &mut st.sys)).unwrap_or(Reply::hr(E_UNEXPECTED)),
-            Err(()) => Reply::hr(E_UNEXPECTED),
+            Err(_) => Reply::hr(E_UNEXPECTED),
         };
         if write_all(h, &frame(&reply.encode())) {
             // Wait for the client to read the reply and close its end.
@@ -676,7 +697,16 @@ fn scheduler() -> ! {
     let mut pending = {
         // SAFETY: a NUL-terminated name; byte mode, blocking.
         let h = unsafe {
-            CreateNamedPipeW(name.as_ptr(), PIPE_ACCESS_DUPLEX | first, 0, PIPE_UNLIMITED_INSTANCES, 65536, 65536, 0, core::ptr::null())
+            CreateNamedPipeW(
+                name.as_ptr(),
+                PIPE_ACCESS_DUPLEX | first,
+                0,
+                PIPE_UNLIMITED_INSTANCES,
+                65536,
+                65536,
+                0,
+                core::ptr::null(),
+            )
         };
         if h == INVALID_HANDLE {
             // SAFETY: no arguments.
@@ -721,7 +751,16 @@ fn scheduler() -> ! {
         } else {
             // SAFETY: a NUL-terminated name; byte mode, blocking.
             unsafe {
-                CreateNamedPipeW(name.as_ptr(), PIPE_ACCESS_DUPLEX | first, 0, PIPE_UNLIMITED_INSTANCES, 65536, 65536, 0, core::ptr::null())
+                CreateNamedPipeW(
+                    name.as_ptr(),
+                    PIPE_ACCESS_DUPLEX | first,
+                    0,
+                    PIPE_UNLIMITED_INSTANCES,
+                    65536,
+                    65536,
+                    0,
+                    core::ptr::null(),
+                )
             }
         };
         if h == INVALID_HANDLE {

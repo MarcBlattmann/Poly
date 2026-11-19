@@ -539,7 +539,7 @@ fn wire_round_trips() {
     assert_eq!(get_definition(&mut Dec::new(&e.0)).unwrap(), d);
     let req = Request::Register {
         folder: "\\".into(),
-        def: d,
+        def: alloc::boxed::Box::new(d),
         path: None,
         flags: 6,
         user: Some("SYSTEM".into()),
@@ -599,7 +599,7 @@ impl Host for Fake {
 fn register_req(path: &str, def: Definition) -> Request {
     Request::Register {
         folder: "\\".into(),
-        def,
+        def: alloc::boxed::Box::new(def),
         path: Some(path.into()),
         flags: 6,
         user: None,

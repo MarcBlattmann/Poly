@@ -228,7 +228,8 @@ pub type Changed = Vec<String>;
 fn apply(reg: &mut Registry, e: &Entry, now: u64) -> Result<bool, NtStatus> {
     let start = master(reg, e.under);
     let key = make_key(reg, start, &e.key, e.volatile, now)?;
-    let data = if e.kind == REG_DWORD { e.data.parse::<u32>().unwrap_or(0).to_le_bytes().to_vec() } else { sz(&e.data) };
+    let data =
+        if e.kind == REG_DWORD { e.data.parse::<u32>().unwrap_or(0).to_le_bytes().to_vec() } else { sz(&e.data) };
     let name = wide(&e.name);
     match reg.value(key, &name) {
         Ok(v) if v.kind == e.kind && v.data == data => return Ok(false),
