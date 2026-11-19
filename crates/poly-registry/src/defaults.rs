@@ -302,52 +302,11 @@ pub fn install(
             // Redirector").
             let root = reg.hive(id).root;
             make_path(reg, root, WOW6432_NODE, false, now)?;
-            system_classes(reg, root, now)?;
         }
         out.push(outcome);
     }
     volatile_keys(reg, now)?;
     Ok(out)
-}
-
-/// A COM class one of Poly's own DLLs serves in-process (ADR 0227): its
-/// `HKLM\SOFTWARE\Classes\CLSID\{clsid}` key, whose `InprocServer32` names the DLL that
-/// `ole32`'s activation loads (`DllGetClassObject`, ADR 0220). Learn: "InprocServer32"
-/// (the default value is the server's path, `ThreadingModel` its apartment model).
-#[derive(Clone, Copy, Debug)]
-pub struct SystemClass {
-    /// `{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`, as the SDK header that defines it spells it.
-    pub clsid: &'static str,
-    /// The key's default value (the class's name).
-    pub name: &'static str,
-    /// The server DLL's full path.
-    pub server: &'static str,
-    /// `Apartment`, `Both`, `Free` or `Neutral`.
-    pub threading: &'static str,
-}
-
-/// The classes of [`SystemClass`]. Made (or refreshed) at every boot, so a machine whose hive
-/// file is older than a class still gets it.
-pub const SYSTEM_CLASSES: &[SystemClass] = &[
-    // CLSID_ShellLink (`shobjidl_core.h`): the `.lnk` object (sheet `ShellLink`, apartment-threaded).
-    SystemClass {
-        clsid: "{00021401-0000-0000-C000-000000000046}",
-        name: "Shortcut",
-        server: "C:\\Windows\\System32\\shell32.dll",
-        threading: "Apartment",
-    },
-];
-
-/// Write the keys of [`SYSTEM_CLASSES`] below the software hive's root.
-pub fn system_classes(reg: &mut Registry, software: KeyId, now: u64) -> Result<(), NtStatus> {
-    for c in SYSTEM_CLASSES {
-        let path = alloc::format!("Classes\\CLSID\\{}", c.clsid);
-        let key = make_path(reg, software, &path, false, now)?;
-        set(reg, key, &[("", Data::Sz(c.name))], now)?;
-        let inproc = make_path(reg, key, "InprocServer32", false, now)?;
-        set(reg, inproc, &[("", Data::Sz(c.server)), ("ThreadingModel", Data::Sz(c.threading))], now)?;
-    }
-    Ok(())
 }
 
 /// The keys made at every boot and never saved:
