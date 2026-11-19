@@ -35,6 +35,7 @@ rules:
   orientation: "top-down and bottom-up DIB sections (negative or positive biHeight) as source and destination give the same picture: row 0 as seen from the top stays row 0."
   same_dc: "the same DC as source and destination works when the rectangles do not overlap (the blend of (2,0) 2x2 onto (0,0) at 128: red over blue gives 0080007f); when they overlap, or are identical, the call fails (FALSE, ERROR_INVALID_PARAMETER) and nothing is drawn."
   zero_sizes: "a zero width or height of either rectangle: TRUE, nothing drawn, the last error is left alone."
+  x86: "the same programs built for 32-bit (i686, run under WOW64 on the same machine, in the SSH session) printed exactly the lines the 64-bit ones did, line for line (verified outside the recorded tests: the pipeline's test build is 64-bit only), so the rules hold for the 32-bit DLL as they are (every grid hash, stretch table, error and rectangle line; BLENDFUNCTION passed by value)."
 errors:
   blendfunction: "BlendOp other than 0, AlphaFormat other than 0 or 1, BlendFlags other than 0, 1, 128 and 129 (the only values of the 256 that are accepted): FALSE (0), last error ERROR_INVALID_PARAMETER (87), nothing drawn; AlphaFormat 1 with a source that is not 32 bits per pixel: FALSE, 87"
   device_contexts: "NULL or a made-up destination DC: FALSE, ERROR_INVALID_HANDLE (6); a made-up source DC or a brush handle as the source DC: FALSE, 87; a NULL source DC: FALSE with the last error not set"

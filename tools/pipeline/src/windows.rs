@@ -51,7 +51,7 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
 /// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
 /// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
-/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`; and `msimg32` (`AlphaBlend`, spec-win-updater-gap).
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -1487,6 +1487,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // AlphaBlend's tests import msimg32 (spec-win-updater-gap).
+        let blend = image(&[("MSIMG32.dll", &["AlphaBlend"])], 3);
+        assert_eq!(check_image(&blend).unwrap()["msimg32.dll"], ["AlphaBlend"]);
         // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
         let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
         assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
