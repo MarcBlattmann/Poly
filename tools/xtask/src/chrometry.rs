@@ -268,6 +268,77 @@ pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sym
     Ok(())
 }
 
+/// The steps of the maximized-close check: Chrome's page, a double click on its caption maximizes the
+/// window (the page then reaches the screen's right part), Ctrl+Shift+W closes it, so Chrome saves
+/// the placement as maximized; started again, its window must come back, maximized. Before ADR
+/// 0234 the second start crashed (DefWindowProc's SC_MAXIMIZE showed and activated the window
+/// Chrome was still building) and exited without a window, at every start after.
+const MAX_STEPS: &str = concat!(
+    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
+    "dclick:600|52,sleep:8,shot:maximized,pixel:1200|600|008000,",
+    "chord:ctrl+shift+w,wait:exited with status,sleep:5,shot:closed,",
+    "launch,waitn:2|launch-to-window,sleep:25,shot:again,pixel:200|400|008000,pixel:1200|600|008000"
+);
+
+/// The boot test group `chrome-try-max` (ADR 0234): the menu's Chrome, maximized, closed and started
+/// again ([`MAX_STEPS`]), on a disk of its own written afresh for each run (Chrome as on the menu's
+/// disk, an empty profile), so the menu's profile is not touched and every run starts from a
+/// window that is not maximized. Skipped as
+/// [`group_boot_test`] is; a slow first start (the page still white) is inconclusive after three runs.
+pub fn group_boot_test_maximized(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {
+    eprintln!("==> boot test: Chrome for Windows closed maximized starts again (ADR 0234)");
+    if !crate::chromewin::fetched() {
+        eprintln!("==> skipped: Chrome is not in the cache; `cargo xtask chrome-win fetch` downloads it");
+        return Ok(());
+    }
+    if !cfg!(unix) {
+        eprintln!("==> skipped: a desktop run needs a Unix host (QMP over a Unix socket)");
+        return Ok(());
+    }
+    let stubs = crate::chromewin::polystub()?;
+    let dir = crate::root().join("target/win-app/try-max");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let image = dir.join("disk.img");
+    let log = dir.join("chrome-try-max.serial.log");
+    // No --window-position / --window-size: those win over the saved maximized state, and the
+    // second start would not restore a maximized window at all.
+    let more = [crate::chromewin::S3_PAGE];
+    for attempt in 1..=3 {
+        crate::rootdisk::write_image_poly_ext2(&crate::chromewin::app_tree(&stubs, None)?, &image)?;
+        let (text, stopped) = crate::winapps::desktop_entry_check(
+            kernel,
+            &image,
+            entry_files(&more),
+            &mounts(false),
+            ENTRY_NAME,
+            MAX_STEPS,
+            &log,
+        )?;
+        let exceptions: Vec<&str> = text.lines().filter(|l| l.contains("nt-exc:")).take(3).collect();
+        match crate::chromewin::s3_verdict(stopped.as_deref(), &exceptions) {
+            crate::chromewin::S3Verdict::Pass => {
+                let _ = std::fs::remove_file(&image);
+                println!("CHROME TRY MAXIMIZED PASSED");
+                return Ok(());
+            }
+            crate::chromewin::S3Verdict::Inconclusive => {
+                eprintln!("==> attempt {attempt}: the page was still loading (slow start); log {}", log.display());
+            }
+            crate::chromewin::S3Verdict::Fail => {
+                let _ = std::fs::remove_file(&image);
+                return Err(format!(
+                    "Chrome closed maximized did not come back: {}; exceptions: {exceptions:?} (see {})",
+                    stopped.unwrap_or_else(|| "the steps ran".into()),
+                    log.display()
+                ));
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&image);
+    println!("CHROME TRY MAXIMIZED INCONCLUSIVE: the page never finished loading in 3 runs (slow start)");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,6 +412,15 @@ mod tests {
     fn the_try_steps_parse_and_end_with_the_menu_check() {
         assert!(crate::winapps::steps_parse(TRY_STEPS));
         assert!(TRY_STEPS.ends_with("chord:alt+f,sleep:8,shot:menu,near:496|300|0000ff|64"));
+    }
+
+    #[test]
+    fn the_maximized_check_closes_a_maximized_window_and_waits_for_the_second_one() {
+        assert!(crate::winapps::steps_parse(MAX_STEPS));
+        let close = MAX_STEPS.find("ctrl+shift+w").unwrap();
+        assert!(MAX_STEPS.find("pixel:1200|600").unwrap() < close);
+        assert!(MAX_STEPS[close..].contains("launch,waitn:2|launch-to-window"));
+        assert!(MAX_STEPS.ends_with("pixel:1200|600|008000"));
     }
 
     #[test]

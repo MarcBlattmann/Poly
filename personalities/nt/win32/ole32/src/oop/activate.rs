@@ -184,6 +184,9 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     if ctx & CLSCTX_LOCAL_SERVER == 0 {
         return Err(REGDB_E_CLASSNOTREG);
     }
+    // The first attempt to reach a local server fixes the process's security (sheet
+    // `CoInitializeSecurity`, rule `once_per_process`).
+    security::lock();
     // The classes of Windows' desktop process (`ShellWindows`): Poly's desktop is no Windows
     // process, so the shell serves them in the caller (`poly_com::inproc::desktop_server_of`).
     // The shell link answers a local-server request too (ShellLink.yaml); Poly's DLL serves it here.
@@ -235,10 +238,12 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     Err(REGDB_E_CLASSNOTREG)
 }
 
-/// Make one object with the class factory `f` (one reference, given back), asking for `iid`.
+/// Make one object with the class factory `f` (one reference, given back), asking for `iid`. The
+/// factory of a server process is asked as an activation's would be (B2c).
 pub(crate) fn create_with(f: *mut c_void, outer: *mut c_void, iid: &Guid) -> Result<*mut c_void, Hresult> {
     // SAFETY: an IClassFactory pointer with one reference, given back below.
-    let (hr, o) = unsafe { factory_create(f, outer, iid) };
+    let (hr, o) =
+        proxy::create_for_activation(f, outer, iid).unwrap_or_else(|| unsafe { factory_create(f, outer, iid) });
     // SAFETY: as above.
     unsafe { release_unknown(f) };
     if o.is_null() { Err(if hr < 0 { hr } else { E_NOINTERFACE }) } else { Ok(o) }

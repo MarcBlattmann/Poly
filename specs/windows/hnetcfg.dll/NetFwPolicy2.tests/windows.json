@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "fw_add",
-      "exe_sha256": "a5e9a64861aac3e8a9c0024b2580e10eacb5880bc03d856d74835e862c46864e",
+      "exe_sha256": "5eefa4fbc7b6525bee897ec7f889cab5827d4c0f1546789cc1994864f8df5917",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "fw_policy",
-      "exe_sha256": "cb4d2a6385e473cec863155292c601b45c5c1a67e0630ad8b619b17c2355b4d8",
+      "exe_sha256": "0edfbb5c1bf7a3f55e79dfb8a775b2ac36ac8cb59e3bcca8e1f03cc50018f43b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -40,7 +40,7 @@
     },
     {
       "name": "fw_values",
-      "exe_sha256": "19ba80412364f7b080533f4131c88cb8b60ccc08e8e86044b0f7be852c79e3cf",
+      "exe_sha256": "8cbd482502b411efaf531dc2875125ccdb41abb9a06f6e257fcadd8d3f077465",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

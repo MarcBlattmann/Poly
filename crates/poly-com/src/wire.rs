@@ -52,6 +52,21 @@ pub enum Op {
     AddRef { n: u32, token: u64 },
 }
 
+/// How a call reaches the server (B2c): the impersonation level its proxy asks for
+/// (`SECURITY_IMPERSONATION_LEVEL`, 1 identification to 3 delegation) and whether it is the
+/// `CreateInstance` an activation (`CoCreateInstance`) makes, which the server sees as coming from
+/// the activation process. The caller's process is not in the message: the server asks the pipe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Caller {
+    pub level: u8,
+    pub activation: bool,
+}
+
+impl Caller {
+    /// A direct call at the default blanket (`RPC_C_IMP_LEVEL_IDENTIFY`).
+    pub const DIRECT: Caller = Caller { level: 1, activation: false };
+}
+
 /// A request.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Request {
@@ -62,7 +77,7 @@ pub enum Request {
     /// A client wants the class object of `clsid` (and how to start a server for it, if it knows).
     Activate { clsid: Guid, plan: Option<Plan> },
     /// A call on an exported object.
-    Call { oid: u64, op: Op },
+    Call { oid: u64, op: Op, caller: Caller },
 }
 
 /// A reply: a result and possibly an object reference (the class object of an activation, the
@@ -201,9 +216,11 @@ impl Request {
                     }
                 }
             }
-            Request::Call { oid, op } => {
+            Request::Call { oid, op, caller } => {
                 w.u8(4);
                 w.u64(*oid);
+                w.u8(caller.level);
+                w.u8(u8::from(caller.activation));
                 match op {
                     Op::QueryInterface(iid) => {
                         w.u8(1);
@@ -272,6 +289,7 @@ impl Request {
             }
             4 => {
                 let oid = r.u64()?;
+                let caller = Caller { level: r.u8()?, activation: r.u8()? != 0 };
                 let op = match r.u8()? {
                     1 => Op::QueryInterface(r.guid()?),
                     2 => Op::Release(r.u32()?),
@@ -281,7 +299,7 @@ impl Request {
                     6 => Op::AddRef { n: r.u32()?, token: r.u64()? },
                     _ => return Err(Malformed),
                 };
-                Request::Call { oid, op }
+                Request::Call { oid, op, caller }
             }
             _ => return Err(Malformed),
         };
@@ -368,7 +386,8 @@ mod tests {
             Op::Invoke { iid: G, method: 7, data: vec![1, 2, 3] },
             Op::AddRef { n: 1, token: 9 },
         ] {
-            round(Request::Call { oid: 9, op });
+            round(Request::Call { oid: 9, op: op.clone(), caller: Caller::DIRECT });
+            round(Request::Call { oid: 9, op, caller: Caller { level: 2, activation: true } });
         }
         let rep = Reply { hr: -2_147_221_164, obj: Some(o), data: vec![9, 8] };
         assert_eq!(Reply::decode(&rep.encode()), Ok(rep));

@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wh_callback_handles",
-      "exe_sha256": "aede28140cb6f858b7313ec599331e7b9ce35d8fded9d95dfdcec4a93717f6b1",
+      "exe_sha256": "626c88244d5fd790dc08fe6a3a3bf8d80bcb02c182a63e4d69ee0e0448e7043c",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

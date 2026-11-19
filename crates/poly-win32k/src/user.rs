@@ -657,6 +657,8 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let hwnd = c.hwnd;
     let h = u64::from(hwnd);
     let (mut x, mut y, mut cx, mut cy) = (c.x, c.y, c.cx, c.cy);
+    // The maximized size and position the window's procedure answered, for one created maximized.
+    let mut asked_max = None;
     if c.minmax {
         let [ms, mp, mt, xt] = metrics::minmax(style, c.ex_style, &screen(env));
         let mut mmi = MinMaxInfo {
@@ -667,6 +669,7 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
             max_track: CPoint { x: xt.0, y: xt.1 },
         };
         send(env, h, WM_GETMINMAXINFO, 0, ptr(&mut mmi));
+        asked_max = Some(((mmi.max_size.x, mmi.max_size.y), (mmi.max_position.x, mmi.max_position.y)));
         if metrics::track_limited(style) {
             cx = cx.max(mmi.min_track.x).min(mmi.max_track.x.max(mmi.min_track.x));
             cy = cy.max(mmi.min_track.y).min(mmi.max_track.y.max(mmi.min_track.y));
@@ -687,6 +690,23 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
         x = parent.client.width() - x - cx;
     }
     let win_rel = Rect::new(x, y, x + cx, y + cy);
+    // The rectangle asked for is the one the window is restored to. A top-level window made
+    // hidden with WS_MAXIMIZE ("initially maximized", Learn: Window Styles) is made at its
+    // maximized rectangle, so that showing it later (SW_SHOWMAXIMIZED, SC_MAXIMIZE: "a hidden
+    // maximized window shown again" in `maximize`) shows it at that size; Chrome restoring a
+    // window that was closed maximized makes its window this way, and failed when it was shown
+    // at its restored size (ADR 0234). A visible one is maximized by `maximize` below.
+    let normal_rel = win_rel;
+    let win_rel = if style & WS_MAXIMIZE != 0 && style & (WS_VISIBLE | WS_MINIMIZE | WS_CHILD) == 0 {
+        let display = screen(env);
+        let (ms, mp) = asked_max.unwrap_or_else(|| {
+            let [ms, mp, _, _] = metrics::minmax(style, c.ex_style, &display);
+            (ms, mp)
+        });
+        metrics::maximized_rect(style, c.ex_style, &display, ms, mp)
+    } else {
+        win_rel
+    };
     env.call(Request::SetRects { hwnd, window_rel: Some(win_rel), client_rel: None });
     let Some(i) = info(env, h) else { return 0 };
     let (ox, oy) = origin_of(&i);
@@ -771,7 +791,7 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
                 visible: None,
                 minimized: Some(min),
                 maximized: Some(!min),
-                normal: Some(i.window_rel),
+                normal: Some(normal_rel),
                 size_move_pending: None,
             });
         }
@@ -2015,7 +2035,17 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 }
                 // The window commands act as the matching ShowWindow command (IsZoomed.yaml `chrome`).
                 SC_MAXIMIZE => {
-                    show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    // A window that is maximized already, also a hidden one (made with
+                    // WS_MAXIMIZE), is in the state asked for: nothing is shown or activated
+                    // (as ShowWindow's `same_state`). Chrome restoring a window closed
+                    // maximized makes it hidden with WS_MAXIMIZE, sends SC_MAXIMIZE while it
+                    // is still building it and shows it later; activating it here reached
+                    // Chrome before its window was ready, and it crashed (ADR 0234).
+                    let maximized_hidden =
+                        info(env, hwnd).is_some_and(|i| i.maximized && !i.minimized && i.style & WS_VISIBLE == 0);
+                    if !maximized_hidden {
+                        show_window(env, hwnd, SW_SHOWMAXIMIZED);
+                    }
                     // The window has no minimized position any more (GetWindowPlacement.yaml `chrome`).
                     env.call(Request::SetMinPos { hwnd: hwnd as u32, x: -1, y: -1 });
                 }

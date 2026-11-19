@@ -186,7 +186,7 @@ pub(crate) fn disconnect(identity: usize) {
 /// Send `op` to the exporter of process `pid` with `oxid`.
 fn to_origin(pid: u32, oxid: u64, oid: u64, op: Op) -> Hresult {
     let ep = endpoint_for(pid, oxid);
-    match pipe::transact(&ep, &Request::Call { oid, op }) {
+    match pipe::transact(&ep, &Request::Call { oid, op, caller: poly_com::wire::Caller::DIRECT }) {
         Ok(r) => r.hr,
         Err(f) => f.hr(),
     }

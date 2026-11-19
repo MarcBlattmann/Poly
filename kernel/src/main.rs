@@ -54,6 +54,7 @@ mod vdso;
 mod virtio_blk;
 mod virtio_gpu;
 mod virtio_input;
+mod xnu;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;

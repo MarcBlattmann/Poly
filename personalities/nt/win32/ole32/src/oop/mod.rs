@@ -9,6 +9,8 @@
 //! - [`exporter`]: this process's named pipe serving calls on the objects it handed out.
 //! - [`apt`]: running a call in an apartment (an STA's message-only window, an MTA thread).
 //! - [`pipe`]: one request and one reply over a named pipe; starting `comlaunch.exe`.
+//! - [`security`]: `CoInitializeSecurity`, the access check of incoming calls, the call context
+//!   (`CoGetCallContext`, `IServerSecurity`, impersonation) and `I_RpcOpenClientProcess` (B2c).
 //!
 //! The decisions are `poly_com::{classtable, activation, spy, wire}`'s (host-tested).
 
@@ -20,6 +22,7 @@ pub(crate) mod exporter;
 pub(crate) mod marshal;
 pub(crate) mod pipe;
 pub(crate) mod proxy;
+pub(crate) mod security;
 
 use crate::Locked;
 use core::ffi::c_void;

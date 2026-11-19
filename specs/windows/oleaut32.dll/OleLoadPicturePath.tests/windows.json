@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "pic_errors",
-      "exe_sha256": "fc8b32aea91054f6998a7bff58b3eacd816926afead15d57118f7e3a047e4e7f",
+      "exe_sha256": "d6166293b30bfbea8678b6886d0712d57b37d94c1f12b4af44a50715277992b0",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "pic_gif",
-      "exe_sha256": "824b378556ebb675ba18a27753fa7df4273a00bc78ab65ab07211719b159d2f1",
+      "exe_sha256": "965c7dd7dca26a07aa51e3c1261aab40d993316c85a821c1a35f4a66e4d46976",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
