@@ -70,6 +70,7 @@ extern crate alloc;
 
 pub mod advapi;
 pub mod apps;
+pub mod assoc;
 pub mod atoms;
 pub mod cpu;
 pub mod env;

@@ -184,6 +184,13 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     if ctx & CLSCTX_LOCAL_SERVER == 0 {
         return Err(REGDB_E_CLASSNOTREG);
     }
+    // The classes of Windows' desktop process (`ShellWindows`): Poly's desktop is no Windows
+    // process, so the shell serves them in the caller (`poly_com::inproc::desktop_server_of`).
+    if entry.is_none()
+        && let Some(dll) = poly_com::inproc::desktop_server_of(clsid)
+    {
+        return inproc_class_object(dll.trim_end_matches(char::from(0)), clsid, iid, ctx);
+    }
     let plan = entry.as_ref().and_then(local_plan);
     if let Some(p) = &plan {
         if !bitness_ok(ctx, p) {
