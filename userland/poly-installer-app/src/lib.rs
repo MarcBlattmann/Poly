@@ -329,6 +329,9 @@ struct WindowsRun {
     told: Option<usize>,
     /// Waiting was stopped.
     stop: bool,
+    /// Started through `polyopen.exe`, which waits for everything the program started
+    /// itself (a job object) and says so: the window waits for it alone.
+    opener: bool,
 }
 
 /// Make the file at `path` executable if it is not: Poly's exec wants the
@@ -347,16 +350,16 @@ fn make_executable(path: &str) -> Result<(), String> {
 /// the consent prompt asked first (ADR 0222). `argv[0]` is the program (a
 /// path of Poly's file system: the kernel hands it on as its DOS path). On a
 /// disk without `polyopen.exe` the program is started itself.
-fn opened(argv: &[String]) -> Result<Vec<String>, String> {
+fn opened(argv: &[String]) -> Result<(Vec<String>, bool), String> {
     let program = argv.first().ok_or("nothing to run")?;
     match winapps::vfs_path(winapps::POLYOPEN, &VfsFiles).filter(|p| poly_rt::fs::exists(p)) {
         Some(opener) => {
             make_executable(&opener)?;
-            Ok(core::iter::once(opener).chain(argv.iter().cloned()).collect())
+            Ok((core::iter::once(opener).chain(argv.iter().cloned()).collect(), true))
         }
         None => {
             make_executable(program)?;
-            Ok(argv.to_vec())
+            Ok((argv.to_vec(), false))
         }
     }
 }
@@ -522,6 +525,24 @@ impl Native {
                 Ok(None) => {}
                 Err(_) => w.ended = Some(false),
             }
+        }
+        if w.opener {
+            // polyopen.exe counts what the program started, exactly (its job).
+            if let Some(n) = pumped.output.iter().rev().find_map(|l| poly_pkg::installer::open_waiting(l))
+                && w.told != Some(n)
+            {
+                w.told = Some(n);
+                pumped.waiting = Some(n);
+            }
+            if w.ended.is_none() && !w.stop {
+                return pumped;
+            }
+            if !w.pending.is_empty() {
+                pumped.output.push(String::from_utf8_lossy(&w.pending).into_owned());
+            }
+            pumped.ended = Some(w.ended.unwrap_or(true));
+            self.windows = None;
+            return pumped;
         }
         let main = w.child.id();
         let others = grow(&mut w.tree, main, &processes());
@@ -724,7 +745,7 @@ impl view::Host for Native {
     }
 
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
-        let argv = opened(argv)?;
+        let (argv, opener) = opened(argv)?;
         self.before = (scan_links(), uninstall_keys());
         let [read, write] = poly_rt::sys::pipe().map_err(|e| alloc::format!("a pipe: {e}"))?;
         let (read, write) = (File::from_handle(read), File::from_handle(write));
@@ -746,8 +767,16 @@ impl view::Host for Native {
         let mut tree = BTreeSet::new();
         tree.insert(poly_rt::process::id());
         tree.insert(child.id());
-        self.windows =
-            Some(WindowsRun { child, output: read, pending: Vec::new(), tree, ended: None, told: None, stop: false });
+        self.windows = Some(WindowsRun {
+            child,
+            output: read,
+            pending: Vec::new(),
+            tree,
+            ended: None,
+            told: None,
+            stop: false,
+            opener,
+        });
         Ok(())
     }
 
@@ -826,7 +855,7 @@ impl view::Host for Native {
     }
 
     fn run_program(&mut self, path: &str) -> Result<(), String> {
-        let argv = opened(&[path.to_string()])?;
+        let (argv, _) = opened(&[path.to_string()])?;
         // The desktop shows a busy pointer until the program has a window.
         let mut startup = poly_app::startup::Startup::begin(path);
         let mut cmd = Command::new(&argv[0]);

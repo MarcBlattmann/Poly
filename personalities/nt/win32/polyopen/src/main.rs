@@ -12,6 +12,15 @@
 //! and cannot call `ShellExecuteExW`; it starts this program instead, which calls it with the
 //! default verb, waits for the program, and ends with its exit code.
 //!
+//! It waits for **everything the program started** too, exactly: before it opens the program it
+//! puts itself into a new job object, which every process it and its descendants create joins
+//! (ADR 0169; Learn, "Job Objects": a child process is associated with its parent's job). When
+//! the program has ended it waits until it is the job's only process left
+//! (`JobObjectBasicAccountingInformation.ActiveProcesses`), and says how many it waits for on
+//! its standard output each time that changes: `polyopen: the program has ended; waiting for N
+//! it started`. An installer that starts a helper, or an elevated copy of itself, is waited for
+//! whole, however briefly a process in between lives.
+//!
 //! If `ShellExecuteExW` fails, it writes one line to its standard output,
 //! `polyopen: ShellExecuteExW failed: <error>` (1223, `ERROR_CANCELLED`, when the user said no),
 //! and ends with 1. No installer detection by name is done: Windows' rule for that (32-bit images
@@ -19,7 +28,8 @@
 //!
 //! Every call is on Microsoft Learn (`GetCommandLineW`, `ShellExecuteExW`, `WaitForSingleObject`,
 //! `GetExitCodeProcess`, `CloseHandle`, `GetStdHandle`, `WriteFile`, `GetLastError`,
-//! `ExitProcess`); `SHELLEXECUTEINFOW` and the constants are `shellapi.h`'s, `winbase.h`'s and
+//! `ExitProcess`, `CreateJobObjectW`, `AssignProcessToJobObject`, `QueryInformationJobObject`,
+//! `GetCurrentProcess`, `Sleep`); `SHELLEXECUTEINFOW` and the constants are `shellapi.h`'s, `winbase.h`'s and
 //! `winuser.h`'s.
 
 #![no_std]
@@ -68,6 +78,26 @@ unsafe extern "system" {
     fn WriteFile(file: Handle, buffer: *const u8, to_write: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
     fn GetLastError() -> u32;
     fn ExitProcess(code: u32) -> !;
+    fn CreateJobObjectW(security: *const c_void, name: *const u16) -> Handle;
+    fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
+    fn QueryInformationJobObject(job: Handle, class: u32, info: *mut u8, length: u32, returned: *mut u32) -> i32;
+    fn GetCurrentProcess() -> Handle;
+    fn Sleep(milliseconds: u32);
+}
+
+/// `JobObjectBasicAccountingInformation` (`winnt.h`) and where its `ActiveProcesses` is in the
+/// 48-byte `JOBOBJECT_BASIC_ACCOUNTING_INFORMATION`.
+const JOB_BASIC_ACCOUNTING: u32 = 1;
+const ACTIVE_PROCESSES_AT: usize = 40;
+
+/// The processes in `job`, `None` if it cannot be asked.
+fn active_processes(job: Handle) -> Option<u32> {
+    let mut info = [0u8; 48];
+    // SAFETY: a 48-byte buffer for the 48-byte structure.
+    let ok =
+        unsafe { QueryInformationJobObject(job, JOB_BASIC_ACCOUNTING, info.as_mut_ptr(), 48, core::ptr::null_mut()) };
+    let b = &info[ACTIVE_PROCESSES_AT..ACTIVE_PROCESSES_AT + 4];
+    (ok != 0).then(|| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "shell32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -166,6 +196,11 @@ pub extern "system" fn polyopen_main() -> ! {
     let len = rest.len().min(MAX - 1);
     parameters[..len].copy_from_slice(&rest[..len]);
     parameters[len] = 0;
+    // A job of its own, before anything is started: what the program starts joins it.
+    // SAFETY: no security attributes, no name.
+    let job = unsafe { CreateJobObjectW(core::ptr::null(), core::ptr::null()) };
+    // SAFETY: the job just made and this process's pseudo-handle.
+    let in_job = !job.is_null() && unsafe { AssignProcessToJobObject(job, GetCurrentProcess()) } != 0;
     let mut info = ShellExecuteInfoW {
         size: core::mem::size_of::<ShellExecuteInfoW>() as u32,
         // No message box of the shell's own on failure: the caller says why.
@@ -202,6 +237,21 @@ pub extern "system" fn polyopen_main() -> ! {
             GetExitCodeProcess(info.process, &mut code);
             CloseHandle(info.process);
         }
+    }
+    // Then what it started, until this program is the job's last process.
+    let mut told = 0;
+    while in_job {
+        let others = active_processes(job).map_or(0, |n| n.saturating_sub(1));
+        if others == 0 {
+            break;
+        }
+        if others != told {
+            told = others;
+            let mut buf = [0u8; 10];
+            say(&[b"polyopen: the program has ended; waiting for ", decimal(others, &mut buf), b" it started"]);
+        }
+        // SAFETY: no preconditions.
+        unsafe { Sleep(100) };
     }
     // SAFETY: ends the process.
     unsafe { ExitProcess(code) }

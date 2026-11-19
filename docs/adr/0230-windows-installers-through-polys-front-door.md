@@ -86,7 +86,13 @@ the rights. Now the window (**Install**, **Run**, an app's **Uninstall**) starts
 **`polyopen.exe`**, Poly's own small program in `C:\Windows\System32` (`personalities/nt/win32/polyopen`): it calls
 `ShellExecuteExW` with the default verb, which is ADR 0222's path (`CreateProcessW` refuses with
 `ERROR_ELEVATION_REQUIRED`, `ShellExecuteExW` then asks the consent broker and starts the program with the full
-token), waits for the program and ends with its exit code. The program is still a child of the window's process
+token), waits for the program and for everything it started, and ends with the program's exit code. That wait
+is exact: `polyopen.exe` puts itself into a job object before it opens the program, every process of the tree joins
+it (ADR 0169), and it waits until it is the job's only process, saying `polyopen: the program has ended; waiting
+for N it started` while it does. The window then waits for `polyopen.exe` alone; the `/proc` tree of decision 3
+remains for a disk without it. (Watching `/proc` lost short-lived processes in between, such as an elevated copy
+that starts a helper and ends within one look; the kernel now also hands an ending NT process's children to its
+parent.) The program is still a child of the window's process
 tree, so the wait of decision 3 holds. If the shell does not start it, `polyopen.exe` writes `polyopen:
 ShellExecuteExW failed: <error>` and the window says so: for `ERROR_CANCELLED` (1223, the prompt answered No) "...
 did not run: it asks for administrator rights, and they were not given." On a disk without `polyopen.exe` the

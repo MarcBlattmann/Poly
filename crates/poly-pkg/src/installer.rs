@@ -31,6 +31,15 @@ use alloc::vec::Vec;
 /// through `ShellExecuteExW`) writes when the shell would not start it; the
 /// Win32 error follows.
 pub const OPEN_FAILED: &str = "polyopen: ShellExecuteExW failed: ";
+/// What `polyopen.exe` writes while it waits for what the program started; the
+/// number follows, then ` it started`.
+pub const OPEN_WAITING: &str = "polyopen: the program has ended; waiting for ";
+
+/// The number of programs a line of `polyopen.exe` says it waits for.
+pub fn open_waiting(line: &str) -> Option<usize> {
+    line.trim().strip_prefix(OPEN_WAITING)?.split_whitespace().next()?.parse().ok()
+}
+
 /// `ERROR_CANCELLED` (`winerror.h`): the user said no to the consent prompt.
 pub const ERROR_CANCELLED: u32 = 1223;
 
@@ -1316,5 +1325,13 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
         it.output("setup: something went wrong");
         it.finished(false, |_| Vec::new());
         assert!(matches!(&it.phase, Phase::Failed(why) if why.contains("installed no app")));
+    }
+
+    #[test]
+    fn polyopen_says_how_many_it_waits_for() {
+        assert_eq!(open_waiting("polyopen: the program has ended; waiting for 2 it started"), Some(2));
+        assert_eq!(open_waiting("  polyopen: the program has ended; waiting for 1 it started\r"), Some(1));
+        assert_eq!(open_waiting("polyopen: ShellExecuteExW failed: 1223"), None);
+        assert_eq!(open_waiting("setup: waiting for 3"), None);
     }
 }
