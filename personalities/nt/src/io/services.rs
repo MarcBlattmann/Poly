@@ -328,7 +328,7 @@ pub fn check_create(desired: u32, share: u32, disposition: u32, options: u32, at
     if bad {
         return Err(STATUS_INVALID_PARAMETER);
     }
-    Ok(CreateParams { access, share, disposition, options, attributes, allocation: 0 })
+    Ok(CreateParams { access, share, disposition, options, attributes, allocation: 0, qos: None })
 }
 
 /// Open or create through the object manager with the file system's parse
@@ -394,10 +394,11 @@ fn create_common<K: NtKernel>(
 /// CreateDisposition, CreateOptions, EaBuffer, EaLength)`. Extended
 /// attributes (`EaBuffer`) are `STATUS_EAS_NOT_SUPPORTED`.
 pub fn create_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [out, desired, attrs, iosb, alloc_ptr, attributes, share, disposition, options, ea, ea_len] =
+    let [out, desired, attrs_ptr, iosb, alloc_ptr, attributes, share, disposition, options, ea, ea_len] =
         abi::args::<K, 11>(k, regs)?;
-    let attrs = abi::read_attributes(k, attrs)?;
+    let attrs = abi::read_attributes(k, attrs_ptr)?;
     let mut params = check_create(desired as u32, share as u32, disposition as u32, options as u32, attributes as u32)?;
+    params.qos = abi::read_qos(k, attrs_ptr)?;
     if ea != 0 && ea_len as u32 != 0 {
         return Err(STATUS_EAS_NOT_SUPPORTED);
     }
@@ -411,9 +412,10 @@ pub fn create_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 /// IoStatusBlock*, ShareAccess, OpenOptions)`: `NtCreateFile` with
 /// `FILE_OPEN` and no attributes.
 pub fn open_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
-    let [out, desired, attrs, iosb, share, options] = abi::args::<K, 6>(k, regs)?;
-    let attrs = abi::read_attributes(k, attrs)?;
-    let params = check_create(desired as u32, share as u32, FILE_OPEN, options as u32, 0)?;
+    let [out, desired, attrs_ptr, iosb, share, options] = abi::args::<K, 6>(k, regs)?;
+    let attrs = abi::read_attributes(k, attrs_ptr)?;
+    let mut params = check_create(desired as u32, share as u32, FILE_OPEN, options as u32, 0)?;
+    params.qos = abi::read_qos(k, attrs_ptr)?;
     create_common(k, out, desired as u32, &attrs, iosb, params)
 }
 

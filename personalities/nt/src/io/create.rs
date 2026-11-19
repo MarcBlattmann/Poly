@@ -59,6 +59,9 @@ pub struct CreateParams {
     pub attributes: u32,
     /// `AllocationSize` (only a hint: ignored).
     pub allocation: u64,
+    /// The `SECURITY_QUALITY_OF_SERVICE` the caller gave: how the server of a named pipe this
+    /// opens may impersonate the caller.
+    pub qos: Option<crate::abi::Qos>,
 }
 
 /// The parse procedure of volume devices, the pipe device and directory
@@ -250,7 +253,11 @@ impl CreateHook<'_> {
                 let (id, info) = self.io.np_server_create(&key, remaining, &c, pid)?;
                 (id, true, info)
             }
-            None => (self.io.np_client_connect(&key, self.params.access, pid)?, false, FILE_OPENED),
+            None => {
+                // The client's identity, for `ImpersonateNamedPipeClient`.
+                let token = r.caller.as_ref().and_then(|c| super::npfs::ClientSecurity::of(om, c, self.params.qos));
+                (self.io.np_client_connect(&key, self.params.access, pid, token)?, false, FILE_OPENED)
+            }
         };
         let object = match new_file_object(om, cookie, self.thread) {
             Ok(o) => o,

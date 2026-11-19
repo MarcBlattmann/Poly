@@ -147,6 +147,11 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                 }
                 Ok(Out::Wait { key: super::names::fold(&name), timeout: specified.then_some(timeout) })
             }
+            // `ImpersonateNamedPipeClient` on an anonymous pipe: nobody to impersonate on its read
+            // end, no such request on its write end (the sheet's errors).
+            Target::Pipe(_) if code == FSCTL_PIPE_IMPERSONATE => {
+                Err(if granted & FILE_READ_DATA != 0 { STATUS_CANNOT_IMPERSONATE } else { STATUS_ILLEGAL_FUNCTION })
+            }
             // An anonymous pipe (`CreatePipe`, a `\Device\PolyPipe` stream)
             // answers `FSCTL_PIPE_PEEK` (`PeekNamedPipe`) like a byte-mode
             // named pipe: the header, then what is there.
@@ -167,6 +172,21 @@ pub fn fs_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtS
                 data.extend(pipe.data.iter().take(max).copied());
                 let status = if available > max { STATUS_BUFFER_OVERFLOW } else { STATUS_SUCCESS };
                 Ok(Out::Done { status, data })
+            }
+            Target::NamedPipe(_) if code == FSCTL_PIPE_IMPERSONATE => {
+                // `ImpersonateNamedPipeClient`: the calling thread takes an impersonation token
+                // made from the client's, at the level the client allowed.
+                let client = sys.io.np_client_token(file.1)?;
+                let token = client.current(&sys.objects.security);
+                let id = sys.objects.security.new_luid();
+                let copy = token.duplicate(poly_security::token::TOKEN_IMPERSONATION, client.level, id);
+                let (own, obj) = sys.objects.new_token(copy, caller.thread)?;
+                sys.objects.assign_security(obj, poly_ntobj::ObjectType::Token, Some(own), None);
+                let r = sys.objects.set_thread_token(caller.thread, Some(own));
+                // The thread's reference replaces the creation one.
+                let _ = sys.objects.dereference(obj);
+                r?;
+                Ok(Out::Done { status: STATUS_SUCCESS, data: Vec::new() })
             }
             Target::NamedPipe(_) => {
                 // The access bits of the code (`CTL_CODE`): bit 14 read, 15 write.

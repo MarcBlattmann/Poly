@@ -77,7 +77,6 @@ poly_win32_rt::fail_exports!(
         EnumServicesStatusA,
         GetServiceDisplayNameW,
         I_QueryTagInformation,
-        ImpersonateNamedPipeClient,
         InitiateSystemShutdownA,
         InitiateSystemShutdownExW,
         IsTextUnicode,

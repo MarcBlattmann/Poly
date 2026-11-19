@@ -27,7 +27,8 @@
 //!   `ERROR_INSUFFICIENT_BUFFER`) and `msimg32.dll`'s `AlphaBlend` (bound, and a call with no
 //!   device contexts returns FALSE with the stack as it was: eleven 4-byte arguments), and gdi32's
 //!   `FrameRgn`, `RoundRect` and `OffsetWindowOrgEx` on a memory device context, and
-//!   comctl32's subclass functions by their ordinals 410 to 413.
+//!   comctl32's subclass functions by their ordinals 410 to 413, and advapi32's
+//!   `ImpersonateNamedPipeClient` on the ends of an anonymous pipe.
 //!
 //! Not part of the x64 test corpus (the oracle pipeline builds `tests/windows/*.rs` for x64 only).
 
@@ -48,6 +49,8 @@ unsafe extern "system" {
     fn GetModuleFileNameW(module: Handle, buffer: *mut u16, size: u32) -> u32;
     fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
     fn GetLastError() -> u32;
+    fn CreatePipe(read: *mut Handle, write: *mut Handle, security: *const u8, size: u32) -> i32;
+    fn CloseHandle(handle: Handle) -> i32;
 }
 
 #[link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -108,6 +111,7 @@ unsafe extern "system" {
     fn GetTokenInformation(token: Handle, class: u32, info: *mut u8, length: u32, needed: *mut u32) -> i32;
     fn ConvertSidToStringSidW(sid: *const u8, string: *mut *mut u16) -> i32;
     fn GetUserNameW(buffer: *mut u16, size: *mut u32) -> i32;
+    fn ImpersonateNamedPipeClient(pipe: Handle) -> i32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -654,6 +658,30 @@ fn updater() -> bool {
             && RemoveWindowSubclass(0, 0x1234, 1) == 0
             && DefSubclassProc(0, 0x400, 1, 2) == 0
             && core::hint::black_box(probe) == 0x5EED
+            && impersonate_errors()
+    }
+}
+
+/// advapi32's `ImpersonateNamedPipeClient` through the 32-bit `NtFsControlFile`: NULL is
+/// `ERROR_INVALID_HANDLE`, an anonymous pipe's read end `ERROR_CANNOT_IMPERSONATE` (1368), its
+/// write end `ERROR_INVALID_FUNCTION`.
+fn impersonate_errors() -> bool {
+    at(8);
+    let (mut r, mut w) = (0 as Handle, 0 as Handle);
+    // SAFETY: documented calls; the pipe's handles are closed at the end.
+    unsafe {
+        if CreatePipe(&mut r, &mut w, core::ptr::null(), 0) == 0 {
+            return false;
+        }
+        let ok = ImpersonateNamedPipeClient(0) == 0
+            && GetLastError() == 6
+            && ImpersonateNamedPipeClient(r) == 0
+            && GetLastError() == 1368
+            && ImpersonateNamedPipeClient(w) == 0
+            && GetLastError() == 1;
+        CloseHandle(r);
+        CloseHandle(w);
+        ok
     }
 }
 
