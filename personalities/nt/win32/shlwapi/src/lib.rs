@@ -122,6 +122,39 @@ pub extern "system" fn IsOS(os: u32) -> i32 {
     i32::from(logic::is_os(os))
 }
 
+/// `UrlCanonicalizeW(pszUrl, pszCanonicalized, pcchCanonicalized, dwFlags)`: the canonical
+/// form is `logic::url::canonicalize`'s; the buffer rules are the sheet's
+/// (`UrlCanonicalizeW.yaml`): a null pointer or a capacity of 0 is `E_INVALIDARG` (the count
+/// unchanged), too little room is `E_POINTER` with the count needed including the NUL (nothing
+/// written), else the text and its NUL are written and the count is its length. The output may
+/// be the input buffer: the input is read whole first.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn UrlCanonicalizeW(url: *const u16, out: *mut u16, count: *mut u32, flags: u32) -> u32 {
+    if url.is_null() || out.is_null() || count.is_null() {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's count.
+    let capacity = unsafe { count.read() };
+    if capacity == 0 {
+        return E_INVALIDARG;
+    }
+    // SAFETY: the caller's NUL-terminated URL.
+    let text = logic::url::canonicalize(unsafe { wide(url) }, flags);
+    let n = text.len() as u32;
+    if n + 1 > capacity {
+        // SAFETY: the caller's count.
+        unsafe { count.write(n + 1) };
+        return E_POINTER;
+    }
+    // SAFETY: the caller's buffer holds `capacity` units, at least n + 1.
+    unsafe {
+        core::ptr::copy(text.as_ptr(), out, text.len());
+        out.add(text.len()).write(0);
+        count.write(n);
+    }
+    S_OK
+}
+
 /// `QITAB` (`shlwapi.h`): `const IID *piid; DWORD dwOffset;`, 16 bytes on x64.
 #[repr(C)]
 pub struct QiTab {
