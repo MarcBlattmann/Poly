@@ -2,8 +2,8 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64",
     "session": "interactive",
     "token": "elevated"
@@ -14,17 +14,17 @@
   "tests": [
     {
       "name": "cpy_dead",
-      "exe_sha256": "13ca0e466539d9cddff73c55ccb15e23e949d8621a7b711382a3baaa8c4d11ba",
+      "exe_sha256": "358395b9012cb979923e3665bc5495e9389f2801b69dc7b498a4dd993a3249e6",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
-      "output_b64": "Y29weSB0YWtlbiB3aGlsZSB0aGUgc2VydmVyIHJ1bnM6IDB4MDAwMDAwMDAKc2VydmVyIGVuZGVkOiAxCkNvQ29weVByb3h5IG9mIHRoZSBjbGFzcyBvYmplY3QgYWZ0ZXIgdGhlIHNlcnZlciBsZWZ0ID0gMHgwMDAwMDAwMCBjb3B5IHBvaW50ZXIgMQpDb1F1ZXJ5UHJveHlCbGFua2V0IG9mIHRoZSBjbGFzcyBvYmplY3Q6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPVdJTkRJXHNlcnZlciBhdXRoaW5mbz1udWxsCkNvUXVlcnlQcm94eUJsYW5rZXQgb2YgdGhlIG9iamVjdDogMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKQ29TZXRQcm94eUJsYW5rZXQgb2YgdGhlIGNsYXNzIG9iamVjdCA9IDB4MDAwMDAwMDAKQ29TZXRQcm94eUJsYW5rZXQgb2YgdGhlIG9iamVjdCA9IDB4MDAwMDAwMDAKdGhlIGNvcHkgdGFrZW4gZWFybGllcjogMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKYSBjYWxsIHRocm91Z2ggdGhlIGNsYXNzIG9iamVjdCBwcm94eSA9IDB4ODAwNzA2YmEgcG9pbnRlciAwCmEgY2FsbCB0aHJvdWdoIHRoZSBlYXJseSBjb3B5ID0gMHg4MDA3MDZiYSBwb2ludGVyIDAKUXVlcnlJbnRlcmZhY2UoSUNsaWVudFNlY3VyaXR5KSBvbiB0aGUgb2JqZWN0IHByb3h5ID0gMHgwMDAwMDAwMApzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogcmV2b2tlIC0+IDB4MDAwMDAwMDAKc3J2OiBleGl0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "output_b64": "Y29weSB0YWtlbiB3aGlsZSB0aGUgc2VydmVyIHJ1bnM6IDB4MDAwMDAwMDAKc2VydmVyIGVuZGVkOiAxCkNvQ29weVByb3h5IG9mIHRoZSBjbGFzcyBvYmplY3QgYWZ0ZXIgdGhlIHNlcnZlciBsZWZ0ID0gMHgwMDAwMDAwMCBjb3B5IHBvaW50ZXIgMQpDb1F1ZXJ5UHJveHlCbGFua2V0IG9mIHRoZSBjbGFzcyBvYmplY3Q6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPWFjY291bnQgb2YgdGhpcyB1c2VyIGF1dGhpbmZvPW51bGwKQ29RdWVyeVByb3h5QmxhbmtldCBvZiB0aGUgb2JqZWN0OiAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MiBjYXBzPTB4MSBwcmluYz1hY2NvdW50IG9mIHRoaXMgdXNlciBhdXRoaW5mbz1udWxsCkNvU2V0UHJveHlCbGFua2V0IG9mIHRoZSBjbGFzcyBvYmplY3QgPSAweDAwMDAwMDAwCkNvU2V0UHJveHlCbGFua2V0IG9mIHRoZSBvYmplY3QgPSAweDAwMDAwMDAwCnRoZSBjb3B5IHRha2VuIGVhcmxpZXI6IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgxIHByaW5jPWFjY291bnQgb2YgdGhpcyB1c2VyIGF1dGhpbmZvPW51bGwKYSBjYWxsIHRocm91Z2ggdGhlIGNsYXNzIG9iamVjdCBwcm94eSA9IDB4ODAwNzA2YmEgcG9pbnRlciAwCmEgY2FsbCB0aHJvdWdoIHRoZSBlYXJseSBjb3B5ID0gMHg4MDA3MDZiYSBwb2ludGVyIDAKUXVlcnlJbnRlcmZhY2UoSUNsaWVudFNlY3VyaXR5KSBvbiB0aGUgb2JqZWN0IHByb3h5ID0gMHgwMDAwMDAwMApzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogcmV2b2tlIC0+IDB4MDAwMDAwMDAKc3J2OiBleGl0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
       "stdout_b64": "",
       "stderr_b64": "",
-      "output": "copy taken while the server runs: 0x00000000\nserver ended: 1\nCoCopyProxy of the class object after the server left = 0x00000000 copy pointer 1\nCoQueryProxyBlanket of the class object: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nCoQueryProxyBlanket of the object: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nCoSetProxyBlanket of the class object = 0x00000000\nCoSetProxyBlanket of the object = 0x00000000\nthe copy taken earlier: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\na call through the class object proxy = 0x800706ba pointer 0\na call through the early copy = 0x800706ba pointer 0\nQueryInterface(IClientSecurity) on the object proxy = 0x00000000\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
+      "output": "copy taken while the server runs: 0x00000000\nserver ended: 1\nCoCopyProxy of the class object after the server left = 0x00000000 copy pointer 1\nCoQueryProxyBlanket of the class object: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=account of this user authinfo=null\nCoQueryProxyBlanket of the object: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=account of this user authinfo=null\nCoSetProxyBlanket of the class object = 0x00000000\nCoSetProxyBlanket of the object = 0x00000000\nthe copy taken earlier: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=account of this user authinfo=null\na call through the class object proxy = 0x800706ba pointer 0\na call through the early copy = 0x800706ba pointer 0\nQueryInterface(IClientSecurity) on the object proxy = 0x00000000\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 183
+      "ms": 180
     }
   ]
 }

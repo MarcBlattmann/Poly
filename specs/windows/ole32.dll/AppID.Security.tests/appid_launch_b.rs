@@ -1951,8 +1951,7 @@ fn ss_blanket_text(ss: *mut c_void) -> Buf<400> {
         cap
     );
     if hr == 0 {
-        let name = take_wstr(pr);
-        let _ = write!(b, " princ={} privs={}", name.as_str(), pc_text(pv).as_str());
+        let _ = write!(b, " princ={} privs={}", account_text(pr).as_str(), pc_text(pv).as_str());
     }
     b
 }
@@ -2963,7 +2962,8 @@ fn proxy_blanket_line(p: *mut c_void) -> Buf<260> {
         if cap == 0xAAAA_AAAA { 0 } else { cap }
     );
     if hr == 0 {
-        let _ = write!(b, " princ={} authinfo={}", take_wstr(pr).as_str(), if info.is_null() { "null" } else { "set" });
+        let _ =
+            write!(b, " princ={} authinfo={}", account_text(pr).as_str(), if info.is_null() { "null" } else { "set" });
     }
     b
 }
@@ -3064,6 +3064,30 @@ fn appid_sub(e: &Env) -> Buf<120> {
     let mut ka = Buf::<120>::new();
     let _ = write!(ka, r"AppID\{}", e.appid.as_ref().map_or("", |a| a.as_str()));
     ka
+}
+
+/// A principal name COM returned, as text without the name itself: `<null>`, `account of this user` when it is
+/// computer name, a backslash and user name of the user running this process (case ignored), else `other name`. The string is freed.
+fn account_text(p: *mut u16) -> Buf<40> {
+    let mut b = Buf::<40>::new();
+    if p.is_null() {
+        let _ = write!(b, "<null>");
+        return b;
+    }
+    let mut got = Buf::<160>::new();
+    for &u in wstr_at(p, 150) {
+        let _ = write!(got, "{}", u as u8 as char);
+    }
+    let mut want = Buf::<160>::new();
+    let _ = write!(want, "{}{}{}", computer_name().as_str(), char::from(92), my_user().as_str());
+    // SAFETY: allocated by COM with CoTaskMemAlloc.
+    unsafe { CoTaskMemFree(p.cast()) };
+    let _ = write!(
+        b,
+        "{}",
+        if eq_ascii_nocase(got.as_str(), want.as_str()) { "account of this user" } else { "other name" }
+    );
+    b
 }
 
 // ---------------------------------------------------------------- a client with the filtered token, started by the elevated test
