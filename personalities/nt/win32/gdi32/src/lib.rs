@@ -1029,8 +1029,14 @@ dc_get_set! {
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
     let shown = display();
+    // HORZSIZE, VERTSIZE, DESKTOPVERTRES and DESKTOPHORZRES are the physical screen's for every
+    // caller; the rest is in the caller's units (GetDeviceCaps.yaml `at_200_values`, ADR 0231).
+    let physical = matches!(index, 4 | 6 | 117 | 118);
+    let phys = if physical { physical_size() } else { None };
     let caps = gdi(|g| {
-        if let Some((width, height, _)) = shown {
+        if let Some((width, height)) = phys {
+            g.screen = poly_gdi::gdi::Screen { width, height };
+        } else if let Some((width, height, _)) = shown {
             g.screen = poly_gdi::gdi::Screen { width, height };
         }
         g.device_caps(hdc as u64, index)
@@ -1053,6 +1059,23 @@ pub extern "system" fn GetDeviceCaps(hdc: H, index: i32) -> i32 {
 /// The screen's size in pixels, from win32k (`None`: it did not answer).
 fn display_size() -> Option<(i32, i32)> {
     display().map(|(w, h, _)| (w, h))
+}
+
+/// The screen's physical size, from win32k.
+fn physical_size() -> Option<(i32, i32)> {
+    use poly_win32k::proto::{Reply, Request};
+    let req = poly_win32k::wire::encode(&Request::Desktop {});
+    let mut out = [0u8; 256];
+    let mut len = 0usize;
+    // SAFETY: the buffers are ours and sized as passed.
+    let s = unsafe { PolyUserCall(req.as_ptr(), req.len(), out.as_mut_ptr(), out.len(), &mut len) };
+    if s != 0 {
+        return None;
+    }
+    match poly_win32k::wire::decode(out.get(..len as usize)?)? {
+        Reply::Desktop { phys_width, phys_height, .. } => Some((phys_width, phys_height)),
+        _ => None,
+    }
 }
 
 /// The screen's size in pixels and the system DPI, from win32k (`None`: it did not answer).

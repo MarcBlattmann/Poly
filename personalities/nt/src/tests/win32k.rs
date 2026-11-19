@@ -261,7 +261,8 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
 
 /// ADR 0219: a compositor whose Windows apps live in output pixels greets with the output in those
 /// pixels and `Units`: the system DPI is 96 times the units, and the work area is below the
-/// desktop's ridge in those pixels too. Without `Units` it stays 96.
+/// desktop's ridge in those pixels too. Without `Units` it stays 96. ADR 0231: a DPI-unaware
+/// thread sees all of it in units of 96 DPI.
 #[test]
 fn the_desktop_links_units_set_the_system_dpi() {
     use poly_win32k::frame::FrameMetrics;
@@ -283,6 +284,16 @@ fn the_desktop_links_units_set_the_system_dpi() {
             let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
             win32k.link_receive(objects, &encode_all(&records));
         });
+        // A DPI-unaware thread sees the screen in units of 96 DPI (ADR 0231)...
+        let Reply::Desktop { width, height, work, dpi: got, phys_width, process_dpi, .. } =
+            user_call(&mut f, &Request::Desktop {}, 4096).1.expect("a reply")
+        else {
+            panic!("not the desktop")
+        };
+        assert_eq!((width, height, got, work.top), (1280, 800, 96, 24));
+        assert_eq!((phys_width, process_dpi), ((1280 * units) as i32, dpi));
+        // ...and a per-monitor aware one in output pixels.
+        user_call(&mut f, &Request::Dpi { set: true, process: true, awareness: 3 }, 4096);
         let Reply::Desktop { width, height, work, dpi: got, .. } =
             user_call(&mut f, &Request::Desktop {}, 4096).1.expect("a reply")
         else {
