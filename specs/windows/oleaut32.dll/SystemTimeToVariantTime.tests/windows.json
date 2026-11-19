@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "vt_invalid",
-      "exe_sha256": "946fc0c764cbfb2522692672a69e6f1c6f5188a0c735da650d4eed17d77b6ce0",
+      "exe_sha256": "6b090ba8a018bb964b5fed31cbdb09dfcc29085578716cd1472c19f3c4674f7d",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "vt_ranges",
-      "exe_sha256": "8572e106a191b08280768169afeea1ecef491ba3c607fccfef9eeb8a8742031b",
+      "exe_sha256": "c68ca47bf3c763f119a5d9afdf553834984b8bfbf72e9af9bf76659457ac0a77",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

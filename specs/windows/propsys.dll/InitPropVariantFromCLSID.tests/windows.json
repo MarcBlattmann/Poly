@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "pv_clsid_link",
-      "exe_sha256": "ab0f3b14d639e52d87dc65f037d3a3d63b7944dc781449fe8db28b64b637060b",
+      "exe_sha256": "48546eb8eb86adb881246ffd21fccfed0d3f545e5b8902a70e1a08f392b9adc4",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

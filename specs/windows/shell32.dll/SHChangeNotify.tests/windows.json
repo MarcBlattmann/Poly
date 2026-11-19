@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "scn_calls",
-      "exe_sha256": "58a279e332e6b9827c156d02b90676f0cbdb73a4048bbf47d9ea0ddb97cb757a",
+      "exe_sha256": "05b93977962633b45e0f2ce5e1d4a7e3bf097ce211a8bf5e20193beff00c915a",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
