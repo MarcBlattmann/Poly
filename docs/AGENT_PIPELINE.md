@@ -508,6 +508,8 @@ same result on every run, and writes the visible tests' results to
 the tests (`win diff --reference <symbol>.tests/windows.json` compares Poly
 with them without the PC). The hand-off works as for Linux entries.
 
+**Test names are unique** (`coverage check`, run by `ci coverage` and `ci lint`): `win build` builds the tests of every entry it is given, and the corpus, as one Cargo package with one binary per file, and results are looked up by name, so two files with the same name (`uc_basic` of two entries ended a CI run once) cannot live together. The check lists every name used by two entries among the visible tests and the corpus (an error); where the held-out store is present it also warns about held-out names shared with another entry (`--strict-heldout` makes those errors), reading only the manifests. Prefix a test's name with something of its entry.
+
 **Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
 `cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds
 the visible tests of every green Windows entry that has a `windows.json`,

@@ -1,0 +1,17 @@
+[package]
+name = "msimg32"
+description = "Our msimg32.dll: AlphaBlend over gdi32's GdiAlphaBlend, for 64-bit and 32-bit (WOW64) programs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "msimg32"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

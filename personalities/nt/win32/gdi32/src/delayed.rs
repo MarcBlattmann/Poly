@@ -35,7 +35,6 @@ poly_win32_rt::fail_exports!(
         PolyBezierTo,
         SelectClipPath,
         SetArcDirection,
-        SetBrushOrgEx,
         SetEnhMetaFileBits,
         SetMiterLimit,
         SetPixelFormat,

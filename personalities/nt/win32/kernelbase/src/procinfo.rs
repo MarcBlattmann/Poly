@@ -371,3 +371,111 @@ pub unsafe extern "system" fn K32GetModuleInformation(process: Handle, module: u
         Err(e) => fail(e, FALSE),
     }
 }
+
+/// `ProcessImageFileName` (`ntddk.h`'s `PROCESSINFOCLASS`): the image's device-form name as a
+/// `UNICODE_STRING` and its characters.
+const PROCESS_IMAGE_FILE_NAME: u32 = 27;
+
+/// The device-form name of `process`'s image (`\Device\HarddiskVolumeN\...`), from the kernel;
+/// it checks the handle and its rights (a query right).
+fn image_device_name(process: Handle) -> Result<Vec<u16>, poly_ntobj::NtStatus> {
+    // A UNICODE_STRING (Length at 0) and its characters: 16 bytes in a 64-bit process, 8 in a
+    // 32-bit one (the kernel lays the answer out in the caller's width).
+    const HEADER: usize = 2 * core::mem::size_of::<usize>();
+    let mut buf = alloc::vec![0u8; HEADER + 2 * 32768];
+    let mut ret = 0u32;
+    // SAFETY: a buffer of the stated length.
+    let st = unsafe {
+        nt::NtQueryInformationProcess(process, PROCESS_IMAGE_FILE_NAME, buf.as_mut_ptr(), buf.len() as u32, &mut ret)
+    };
+    if !st.is_success() {
+        return Err(st);
+    }
+    let len = usize::from(u16::from_le_bytes([buf[0], buf[1]])).min(buf.len() - HEADER);
+    Ok(buf[HEADER..HEADER + len].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect())
+}
+
+/// The Win32 form (`C:\...`) of a device-form path: the file opened by that name and asked for
+/// its final path with the drive letter.
+fn win32_name_of_device_path(device: &[u16]) -> Result<Vec<u16>, u32> {
+    let us = nt::UnicodeString::new(device);
+    let oa = nt::ObjectAttributes::new(Some(&us), nt::OBJ_CASE_INSENSITIVE);
+    let mut h: Handle = 0;
+    let mut iosb = nt::IoStatusBlock::default();
+    // FILE_READ_ATTRIBUTES | SYNCHRONIZE, every share mode, FILE_SYNCHRONOUS_IO_NONALERT.
+    // SAFETY: valid pointers.
+    let st = unsafe { nt::NtOpenFile(&mut h, 0x80 | 0x0010_0000, &oa, &mut iosb, 7, 0x20) };
+    if !st.is_success() {
+        return Err(from_status(st));
+    }
+    let mut path = alloc::vec![0u16; 32768];
+    // VOLUME_NAME_DOS | FILE_NAME_NORMALIZED (0).
+    // SAFETY: a buffer of the stated length; the handle opened above.
+    let n = unsafe { crate::fileex::GetFinalPathNameByHandleW(h, path.as_mut_ptr(), path.len() as u32, 0) };
+    let e = last_error();
+    close(h);
+    if n == 0 || n as usize >= path.len() {
+        return Err(if n == 0 { e } else { ERROR_INSUFFICIENT_BUFFER });
+    }
+    Ok(procinfo::without_long_prefix(&path[..n as usize]))
+}
+
+/// `QueryFullProcessImageNameW(hProcess, dwFlags, lpExeName, lpdwSize)`: the path of `hProcess`'s
+/// executable, the Win32 form (flags 0; for this process the text of `GetModuleFileNameW(NULL)`)
+/// or the device form (`PROCESS_NAME_NATIVE`). `*lpdwSize` is the buffer's size in characters on
+/// the way in and the name's length without the NUL on the way out; a buffer without room for
+/// the NUL is `ERROR_INSUFFICIENT_BUFFER` and leaves it as it was
+/// (`specs/windows/kernel32.dll/QueryFullProcessImageNameW.yaml`).
+///
+/// # Safety
+/// `size` points to a `DWORD`; `name` holds `*size` writable characters.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn QueryFullProcessImageNameW(
+    process: Handle,
+    flags: u32,
+    name: *mut u16,
+    size: *mut u32,
+) -> i32 {
+    let native = match procinfo::image_name_native(flags) {
+        Ok(n) => n,
+        Err(e) => return fail(e, FALSE),
+    };
+    if size.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // The kernel's answer checks the handle (NULL, a thread: ERROR_INVALID_HANDLE) and its rights
+    // (SYNCHRONIZE alone: ERROR_ACCESS_DENIED) for both forms.
+    let device = match image_device_name(process) {
+        Ok(d) => d,
+        Err(st) => return fail_status(st, FALSE),
+    };
+    let text = if native {
+        device
+    } else if is_self(process) == Some(true) {
+        let mut own = alloc::vec![0u16; 32768];
+        // SAFETY: a buffer of the stated length; NULL is the executable.
+        let n = unsafe { crate::process::GetModuleFileNameW(core::ptr::null_mut(), own.as_mut_ptr(), 32768) };
+        own.truncate(n as usize);
+        own
+    } else {
+        match win32_name_of_device_path(&device) {
+            Ok(t) => t,
+            Err(e) => return fail(e, FALSE),
+        }
+    };
+    // SAFETY: the caller's DWORD.
+    let capacity = unsafe { size.read_unaligned() };
+    if let Err(e) = procinfo::image_name_fits(text.len(), capacity) {
+        return fail(e, FALSE);
+    }
+    if name.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's buffer holds `capacity` > `text.len()` characters; its DWORD.
+    unsafe {
+        core::ptr::copy_nonoverlapping(text.as_ptr(), name, text.len());
+        name.add(text.len()).write(0);
+        size.write_unaligned(text.len() as u32);
+    }
+    TRUE
+}

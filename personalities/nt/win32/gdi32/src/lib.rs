@@ -346,15 +346,14 @@ pub extern "system" fn UnrealizeObject(h: H) -> i32 {
     i32::from(kind == poly_gdi::gdi::OBJ_BRUSH || kind == poly_gdi::gdi::OBJ_PAL)
 }
 
-/// `GetMapMode`: no `SetMapMode` yet, so every DC is MM_TEXT (1).
+/// `GetMapMode`: the DC's mapping mode (`SetMapMode`, `mapping.rs`).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetMapMode(hdc: H) -> i32 {
-    if gdi(|g| g.is_dc(hdc as u64)) {
-        1
-    } else {
+    let mode = gdi(|g| g.map_mode(hdc as u64));
+    if mode == 0 {
         set_last_error(ERROR_INVALID_HANDLE);
-        0
     }
+    mode
 }
 
 /// The DCs `GetICMProfileW` has answered and whether any call was the first of the process
@@ -2303,6 +2302,7 @@ pub extern "system" fn gdi32_main(_module: *mut u8, _reason: u32, _reserved: *mu
 }
 
 mod delayed;
+mod mapping;
 mod world;
 
 #[cfg(target_arch = "x86_64")]
