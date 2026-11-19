@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/comctl32.dll/RemoveWindowSubclass
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop): windows and messages work there without being visible; every test runs twice with identical output; the programs have no manifest (comctl32 version 5.82 is what they load); the probes that led to the rules below were made with Python ctypes on the same machine"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of
+  SetWindowSubclass, GetWindowSubclass, RemoveWindowSubclass, DefSubclassProc, SUBCLASSPROC and
+  "Subclassing Controls", DefWindowProc, SendMessage, DestroyWindow; commctrl.h, winuser.h and
+  winerror.h for constants and layouts. The ordinals 410..413 are the exports the programs bind
+  to (Google's updater.exe imports comctl32.dll ordinals 410, 412 and 413; the tests import them
+  by ordinal and print nothing that depends on the number). Wine's code and tests were not used,
+  no Microsoft binary was decompiled or disassembled.
+summary: >
+  Ordinal 412. Removes the subclass named by (procedure, uIdSubclass) from a window and returns TRUE,
+  or returns FALSE when there is no such subclass. It can be called from inside a subclass procedure
+  (also to remove the caller itself) and takes effect at once for the message in flight: a removed
+  subclass that was still to be called is skipped. It works from any thread.
+interface:
+  signature: "BOOL RemoveWindowSubclass(HWND hWnd, SUBCLASSPROC pfnSubclass, UINT_PTR uIdSubclass)"
+  ordinal: "412"
+rules:
+  pair: "only the exact pair is removed: (B,1) when B was set with id 2 is FALSE, (A,2) when A was set with id 1 is FALSE, (A,0) and (B,0xFFFFFFFFFFFFFFFF) are FALSE; removing again after a success is FALSE."
+  self: "a subclass may remove itself (TRUE) and still pass the message on with DefSubclassProc: S2 removed itself and the message went on to the window procedure; the next message no longer visits it. It may remove itself and return without passing the message on (W1 removed itself and answered 55; the next message reached the window procedure directly: 777)."
+  later_in_chain: "removing a subclass that is still to be called in this message (older than the caller, closer to the window procedure) returns TRUE and that subclass is not called for this message: S3 removed S1 and S1 never ran; S2 (between them) ran."
+  earlier_in_chain: "removing one that was already called (newer than the caller) returns TRUE; the message continues down the chain; the next message no longer visits it (T3 removed T4)."
+  answer_and_remove: "V2 removed V1 and answered 99 without passing on: SendMessage returned 99, V1 was never called; the second time V1 was already gone (FALSE)."
+  destroy_removal: "a subclass may remove itself and others inside WM_NCDESTROY (TRUE for both; the others are not called afterwards). After the window is destroyed every RemoveWindowSubclass returns FALSE."
+  other_thread: "a thread other than the window's can remove a subclass: TRUE when it existed, FALSE when it did not; the window's next message no longer visits it."
+  last_removed: "after the last subclass is removed the window procedure is the original again (see SetWindowSubclass window_procedure)."
+errors:
+  failure: "FALSE (0) when the pair is not set, and for a NULL window, a made-up handle, the desktop window and a destroyed window; the last error is not set (0x5A5A stays)"
+  success: "TRUE (1); the last error is left alone"
+side_effects: "removes an entry from the window's subclass chain"
+threading: "a window's subclass chain belongs to the thread that created the window; SetWindowSubclass from another thread fails, GetWindowSubclass and RemoveWindowSubclass from another thread work on the chain; the subclass procedures run on the window's thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing user32.dll, kernel32.dll and comctl32.dll, the last by
+  ordinal 410, 411, 412 and 413 (raw-dylib), each carrying its own declarations (Learn prototypes,
+  header constants). A test registers a window class whose window procedure logs the watched
+  messages, makes plain unshown windows, puts subclass procedures on them and sends messages with
+  SendMessageW; every procedure appends a line to a log (tag, message, window as w1, w2, ..., never a
+  handle, uIdSubclass, dwRefData, wParam, lParam) and the test prints the log after each step.
+not_covered: >
+  ANSI windows (CreateWindowExA), windows of other processes, real controls (buttons, edit
+  controls) and the version 6 comctl32 that a manifest selects, windows created by another thread
+  than the one that subclasses them other than the cases listed, hundreds of subclasses on one window.

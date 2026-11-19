@@ -718,6 +718,8 @@ fn run(args: &[String]) -> Result<u8, String> {
     // The busy pointer ends when a window of the launched app (or of a
     // process it started) shows (ADR 0167).
     server.set_pid_parent(os::parent_pid);
+    // Or when the processes of a launch that Files started are gone (ADR 0234).
+    server.set_pid_alive(os::alive);
     println!("poly-compositor: listening on {path} ({width}x{height}, scale {scale})");
 
     let mut desk = if o.desktop {
@@ -1061,7 +1063,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         if server.wants_frame() && due {
             let frame_start = if o.stats { os::monotonic_ns() } else { 0 };
             let mut present_ns = 0;
-            let copied_bytes = screen.kms().map_or(0, |k| k.begin_frame());
+            // What the scene draws again need not be brought up to date first (ADR 0232).
+            let redrawn = server.scene().damage().to_vec();
+            let copied_bytes = screen.kms().map_or(0, |k| k.begin_frame(&redrawn));
             let drawn = if o.stats {
                 let fb = screen.fb();
                 let mut timed = TimedFramebuffer { inner: fb, present_ns: &mut present_ns };

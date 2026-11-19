@@ -276,5 +276,4 @@ pub extern "system" fn uxtheme_main(_module: *mut u8, _reason: u32, _reserved: *
     1
 }
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

@@ -94,6 +94,9 @@ pub struct SwapChain {
     matrix: [f32; 6],
     /// The sections the frames are handed over in (ADR 0224), once a present made them.
     shared: Option<Shared>,
+    /// The back buffer's last frame is shown in `hwnd`: a DirectComposition commit that binds the
+    /// swap chain to the same window again need not show it again (ADR 0232).
+    shown: bool,
 }
 
 /// `DXGI_FORMAT_B8G8R8A8_UNORM` (dxgiformat.h): the pixels a section is handed over in.
@@ -240,6 +243,12 @@ fn deliver(s: &mut SwapChain, rects: &[[i32; 4]]) {
     if s.hwnd == 0 {
         return;
     }
+    deliver_inner(s, t, rects);
+    s.shown = true;
+}
+
+/// [`deliver`]'s work: the section handed over, or the GDI copy.
+fn deliver_inner(s: &mut SwapChain, t: &mut Tex, rects: &[[i32; 4]]) {
     let handover = poly_d3d::swap::is_flip(s.desc[9]) && t.format() == FORMAT_BGRA;
     if handover {
         let fits = s
@@ -328,6 +337,7 @@ pub unsafe fn create(device: *mut c_void, hwnd: usize, desc1: *const u8, out: *m
         latency: 1,
         matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
         shared: None,
+        shown: false,
     });
     // SAFETY: the caller's output.
     unsafe { *out = p };
@@ -366,8 +376,15 @@ pub unsafe fn bind(p: *mut c_void, hwnd: usize) -> bool {
     if s.hwnd != hwnd && hwnd != 0 {
         tell_alpha(hwnd, s.desc[10] == DXGI_ALPHA_MODE_PREMULTIPLIED);
     }
+    if s.hwnd != hwnd {
+        s.shown = false;
+    }
     s.hwnd = hwnd;
-    deliver(s, &[]);
+    // Every commit binds every swap chain of the device's visual trees again; the frame is shown
+    // only where it was not yet (ADR 0232). Presents show their own frames.
+    if !s.shown {
+        deliver(s, &[]);
+    }
     true
 }
 
@@ -783,6 +800,7 @@ unsafe extern "system" fn resize_buffers(
     }
     s.desc[11] = flags;
     end_shared(s);
+    s.shown = false;
     let old = core::mem::replace(&mut s.back, new_back_buffer(s.device, &s.desc));
     // SAFETY: the old back buffer's reference.
     unsafe { release(old) };
