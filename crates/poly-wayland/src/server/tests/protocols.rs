@@ -940,7 +940,7 @@ fn cursor_surfaces_replace_the_arrow_while_the_pointer_is_over_their_client() {
 }
 
 #[test]
-fn cursor_shapes_show_the_arrow() {
+fn cursor_shapes_show_polys_picture_of_the_name() {
     let (mut srv, shared) = server();
     let (mut p, registry, g, pointer) = pointer_client(&mut srv, &shared);
     let manager = p.bind(&mut srv, registry, &wp_cursor_shape_manager_v1::INTERFACE, 1);
@@ -951,7 +951,19 @@ fn cursor_shapes_show_the_arrow() {
     p.send(&mut srv, manager, wp_cursor_shape_manager_v1::Request::GetPointer { cursor_shape_device: device, pointer });
     p.send(&mut srv, device, wp_cursor_shape_device_v1::Request::SetShape { serial: 1, shape: 2 });
     assert_eq!(srv.cursor_request(), Some(super::super::cursor::CursorRequest::Shape(2)));
+    // The context menu arrow is the arrow; a link's hand, text's I-beam, progress the busy arrow
+    // (ADR 0234).
     assert_eq!(*srv.scene().cursor_look(), CursorLook::Arrow);
+    for (shape, look) in [
+        (4, CursorLook::Named(crate::compose::NamedCursor::Hand)),
+        (9, CursorLook::Named(crate::compose::NamedCursor::Text)),
+        (0x1a, CursorLook::Named(crate::compose::NamedCursor::ResizeEW)),
+    ] {
+        p.send(&mut srv, device, wp_cursor_shape_device_v1::Request::SetShape { serial: 1, shape });
+        assert_eq!(*srv.scene().cursor_look(), look, "shape {shape}");
+    }
+    p.send(&mut srv, device, wp_cursor_shape_device_v1::Request::SetShape { serial: 1, shape: 5 });
+    assert!(matches!(srv.scene().cursor_look(), CursorLook::Busy(_)));
     // Version 1 has 34 shapes.
     p.send(&mut srv, device, wp_cursor_shape_device_v1::Request::SetShape { serial: 1, shape: 35 });
     assert_eq!(p.code(), Some((device, wp_cursor_shape_device_v1::Error::INVALID_SHAPE.0)));
