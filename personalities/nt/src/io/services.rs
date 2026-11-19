@@ -685,6 +685,18 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
 /// but not `FILE_WRITE_DATA`, or a `ByteOffset` of
 /// `FILE_WRITE_TO_END_OF_FILE`, writes at the end of the file.
 pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
+    let r = write_file_whole(k, regs);
+    // A write refused for its size breaks what the program sends through it (Chrome's IPC pipes):
+    // the log says so, so that what follows (a hung tab, a process that ends) can be traced.
+    if r == Err(STATUS_INSUFFICIENT_RESOURCES) {
+        let len = abi::arg(k, regs, 6).unwrap_or(0) as u32;
+        let text = alloc::format!("NtWriteFile: a write of {len} bytes is more than the kernel can take at once");
+        k.debug_print(text.as_bytes());
+    }
+    r
+}
+
+fn write_file_whole<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [h, event, apc_routine, apc_context, iosb, buf, len, off_ptr, key_ptr] = abi::args::<K, 9>(k, regs)?;
     let len = len as u32 as usize;
     let offset = read_offset(k, off_ptr)?;
