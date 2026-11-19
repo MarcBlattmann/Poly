@@ -436,14 +436,20 @@ impl<D: Drm> Kms<D> {
     }
 
     /// Bring the back buffer up to date before a frame is drawn into it:
-    /// copy what it missed from the front buffer.
-    pub fn begin_frame(&mut self) -> u64 {
+    /// copy what it missed from the front buffer, except what the frame draws
+    /// again anyway (`redrawn`: a stale rectangle inside one of them is left to
+    /// the frame). A window that changes as a whole every frame was copied
+    /// across and then drawn over every time (ADR 0232).
+    pub fn begin_frame(&mut self, redrawn: &[Rect]) -> u64 {
         let (back, front) = (self.back(), self.front);
         let (w, h) = self.output.size();
         let screen = Rect::new(0, 0, w as i32, h as i32);
         let mut copied_bytes = 0u64;
         for r in core::mem::take(&mut self.stale[back]) {
             let r = r.intersect(&screen);
+            if redrawn.iter().any(|d| d.intersect(&r) == r) {
+                continue;
+            }
             if !r.is_empty() {
                 self.copied.push(r);
             }
@@ -838,7 +844,7 @@ mod tests {
         assert!(dev.borrow_mut().hardware().taken, "the console yielded");
         let frame_ns = 1_000_000_000_000 / u64::from(refresh);
         // Frame 1: a red square.
-        assert_eq!(kms.begin_frame(), 0);
+        assert_eq!(kms.begin_frame(&[]), 0);
         for y in 10..20 {
             kms.row_mut(y)[10..20].fill(0x00ff_0000);
         }
@@ -851,7 +857,7 @@ mod tests {
         assert!(!kms.is_pending());
         assert_eq!(kms.front_view().row_mut(15)[15], 0x00ff_0000, "shown");
         // Frame 2 draws elsewhere; the back buffer first gets the square.
-        assert_eq!(kms.begin_frame(), 10 * 10 * 4);
+        assert_eq!(kms.begin_frame(&[]), 10 * 10 * 4);
         assert_eq!(kms.row_mut(15)[15], 0x00ff_0000, "brought up to date");
         kms.row_mut(100)[100] = 0x0000_ff00;
         kms.present(&[Rect::new(100, 100, 1, 1)]);
@@ -864,6 +870,9 @@ mod tests {
         let view = &mut kms.front_view();
         assert_eq!((view.row_mut(15)[15], view.row_mut(100)[100]), (0x00ff_0000, 0x0000_ff00));
         assert_eq!(kms.flips, 2);
+        // Frame 3 draws the square again: what the back buffer missed there is not copied first.
+        *now.borrow_mut() += frame_ns + 1;
+        assert_eq!(kms.begin_frame(&[Rect::new(0, 0, 50, 50)]), 4, "only the pixel at 100,100");
         drop(kms);
         dev.borrow_mut().close(file, *now.borrow());
         assert!(!dev.borrow_mut().hardware().taken, "the console is back");
@@ -882,7 +891,7 @@ mod tests {
         let screen = HwRect::new(0, 0, 1280, 800);
         uploads(&dev);
         // Frame 1 goes to a buffer never shown: all of it, whatever was told.
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.present(&[Rect::new(10, 10, 10, 10)]);
         let first = uploads(&dev);
         assert_eq!(first.len(), 1);
@@ -891,21 +900,21 @@ mod tests {
         kms.dispatch().unwrap();
         // Frame 2 goes to the first buffer: what frame 1 drew (copied over)
         // and what frame 2 draws, not the screen.
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.present(&[Rect::new(100, 100, 5, 5)]);
         let second: Vec<HwRect> = uploads(&dev).into_iter().map(|(_, r)| r).collect();
         assert_eq!(second, [HwRect::new(10, 10, 10, 10), HwRect::new(100, 100, 5, 5)]);
         *now.borrow_mut() += frame_ns + 1;
         kms.dispatch().unwrap();
         // A frame with nothing drawn copies what the buffer missed.
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.present(&[]);
         let third: Vec<HwRect> = uploads(&dev).into_iter().map(|(_, r)| r).collect();
         assert_eq!(third, [HwRect::new(100, 100, 5, 5)]);
         *now.borrow_mut() += frame_ns + 1;
         kms.dispatch().unwrap();
         // Nothing at all: a flip that only paces copies nothing.
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.flip(&[]).unwrap();
         let none = uploads(&dev);
         assert!(none.len() <= 1, "{none:?}");
@@ -945,7 +954,7 @@ mod tests {
         // Frames draw the whole new size and flip at the vblank (of the new
         // mode's refresh rate).
         let frame_ns = 1_000_000_000_000 / u64::from(kms.output().refresh_mhz());
-        assert_eq!(kms.begin_frame(), 0, "nothing stale carried over");
+        assert_eq!(kms.begin_frame(&[]), 0, "nothing stale carried over");
         let last = kms.height() - 1;
         kms.row_mut(last)[1312] = 0x00ab_cdef;
         kms.present(&[Rect::new(0, 0, 1313, 877)]);
@@ -1002,7 +1011,7 @@ mod tests {
         let drm = InProcess { dev: Rc::clone(&dev), file, now: Rc::clone(&now) };
         let mut kms = Kms::open(drm).expect("KMS");
         let frame_ns = 1_000_000_000_000 / u64::from(kms.output().refresh_mhz());
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.present(&[Rect::new(0, 0, 10, 10)]);
         assert!(kms.is_pending());
         dev.borrow_mut().hardware().size = Some((1000, 700));
@@ -1015,7 +1024,7 @@ mod tests {
         assert!(kms.follow_display().is_err());
         assert_eq!(kms.output().size(), (1280, 800));
         assert_eq!(dev.borrow().object_counts(), (2, 2));
-        kms.begin_frame();
+        kms.begin_frame(&[]);
         kms.present(&[Rect::new(0, 0, 10, 10)]);
         *now.borrow_mut() += frame_ns + 1;
         assert!(kms.dispatch().unwrap().is_some(), "still flipping");

@@ -304,6 +304,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "msimg32"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "msvcp140"
 version = "0.0.1"
 dependencies = [
@@ -621,6 +628,13 @@ name = "poly-x509"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+]
+
+[[package]]
+name = "polyopen"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
 ]
 
 [[package]]

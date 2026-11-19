@@ -156,17 +156,6 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
         forwards: &[],
     },
     SystemDll {
-        file: "msimg32.dll",
-        exports: &[
-            ("AlphaBlend", Fail::Win32),
-            ("DllInitialize", Fail::Win32),
-            ("GradientFill", Fail::Win32),
-            ("TransparentBlt", Fail::Win32),
-            ("vSetDdrawflag", Fail::Win32),
-        ],
-        forwards: &[],
-    },
-    SystemDll {
         file: "winspool.drv",
         exports: &[
             ("#203", Fail::Win32),

@@ -122,8 +122,12 @@ fn embed_win32() {
         "explorer.exe",
         // ADR 0240.
         "cmd.exe",
+        // ADR 0230.
+        "polyopen.exe",
         // The Windows Firewall's COM objects.
         "hnetcfg.dll",
+        // AlphaBlend (it was a generated stub DLL).
+        "msimg32.dll",
     ] {
         match &dir {
             Some(d) => {

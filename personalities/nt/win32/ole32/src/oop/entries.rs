@@ -217,10 +217,10 @@ pub unsafe extern "system" fn CoRegisterInitializeSpy(spy: *mut c_void, cookie: 
     if spy.is_null() || cookie.is_null() {
         return E_INVALIDARG;
     }
-    // Only `S_OK` with a pointer counts as having the interface. A refusal writes 0 to the cookie:
-    // the sheet's prose says "not written", but Poly left it untouched and failed the recorded
-    // held-out run 5 of 5, the same pattern as `CoRegisterClassObject`, whose recorded run writes 0
-    // for bad arguments against its sheet's prose (ADR 0220 §8). A NULL spy, above, leaves it alone.
+    // Only `S_OK` with a pointer counts as having the interface. A refusal returns the query's own
+    // error, writes all ones (a 64-bit -1) to the cookie and keeps no reference; a NULL spy, above,
+    // leaves the cookie alone (sheet `CoRegisterInitializeSpy`, `bad_arguments`, observed in
+    // `spy_cookie`).
     let mut p: *mut c_void = core::ptr::null_mut();
     // SAFETY: the caller's object; slot 0 is QueryInterface; the reference is the registration's.
     let hr = unsafe {
@@ -234,8 +234,8 @@ pub unsafe extern "system" fn CoRegisterInitializeSpy(spy: *mut c_void, cookie: 
             unsafe { release_unknown(p) };
         }
         // SAFETY: the caller's out parameter (`ULARGE_INTEGER`), checked above.
-        unsafe { cookie.write_unaligned(0) };
-        return E_NOINTERFACE;
+        unsafe { cookie.write_unaligned(u64::MAX) };
+        return if hr < 0 { hr } else { E_NOINTERFACE };
     }
     let me = thread_id();
     let c = SPIES.with(|s| s.register(me, p as usize));

@@ -799,7 +799,7 @@
 {"symbol":"UrlApplySchemeA","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlApplyScheme"]},
 {"symbol":"UrlApplySchemeW","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlApplyScheme"]},
 {"symbol":"UrlCanonicalizeA","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlCanonicalizeA","wine:shlwapi/tests/url.c:check_url_canonicalize"]},
-{"symbol":"UrlCanonicalizeW","status":"claimed","claimed_by":"impl-chrome-installer","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlCanonicalizeW","wine:shlwapi/tests/url.c:check_url_canonicalize"]},
+{"symbol":"UrlCanonicalizeW","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlCanonicalizeW","wine:shlwapi/tests/url.c:check_url_canonicalize"]},
 {"symbol":"UrlCombineA","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlCombine","wine:shlwapi/tests/url.c:check_url_combine"]},
 {"symbol":"UrlCombineW","src":["wine-spec"],"seeds":["wine:shlwapi/tests/url.c:test_UrlCombine","wine:shlwapi/tests/url.c:check_url_combine"]},
 {"symbol":"UrlCompareA","src":["wine-spec"]},

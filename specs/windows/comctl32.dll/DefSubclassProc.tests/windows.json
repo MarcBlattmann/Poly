@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "sub_def_outside",
+      "exe_sha256": "5f89203810d9ea592f98a02d910aa13bbba33b338efcce6e7cc68a8a0d84200d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RGVmU3ViY2xhc3NQcm9jIG91dHNpZGUsIG5vIHN1YmNsYXNzOiByZXN1bHQgMApEZWZTdWJjbGFzc1Byb2Mgb3V0c2lkZSwgb25lIHN1YmNsYXNzOiByZXN1bHQgMApvdXRzaWRlfCAobm90aGluZyBsb2dnZWQpCkRlZlN1YmNsYXNzUHJvYyhOVUxMIHdpbmRvdyk6IHJlc3VsdCAwCmRlc3Ryb3l8IEEgV01fREVTVFJPWSB3MSBpZD0xIHJlZj0xMCB3PTAgbD0wCmRlc3Ryb3l8IGJhc2UgV01fREVTVFJPWSB3MSB3PTAgbD0wCmRlc3Ryb3l8IEEgV01fTkNERVNUUk9ZIHcxIGlkPTEgcmVmPTEwIHc9MCBsPTAKZGVzdHJveXwgYmFzZSBXTV9OQ0RFU1RST1kgdzEgdz0wIGw9MApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "DefSubclassProc outside, no subclass: result 0\nDefSubclassProc outside, one subclass: result 0\noutside| (nothing logged)\nDefSubclassProc(NULL window): result 0\ndestroy| A WM_DESTROY w1 id=1 ref=10 w=0 l=0\ndestroy| base WM_DESTROY w1 w=0 l=0\ndestroy| A WM_NCDESTROY w1 id=1 ref=10 w=0 l=0\ndestroy| base WM_NCDESTROY w1 w=0 l=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "sub_def_values",
+      "exe_sha256": "f639105270bd9e02b78c14c4d751fc6c2f6a2cc2495a3c8b25ab0dcb83165171",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2VuZCBVKzE6IDE1NTQKVSsxfCBDIFUrMSB3MSBpZD0zIHJlZj0zIHc9NSBsPTYKVSsxfCBCIFUrMSB3MSBpZD0yIHJlZj0yIHc9NSBsPTYKVSsxfCBBIFUrMSB3MSBpZD0xIHJlZj0xIHc9NSBsPTYKVSsxfCBiYXNlIFUrMSB3MSB3PTUgbD02CnNlbmQgVSsyOiAzNTUyClUrMnwgQyBVKzIgdzEgaWQ9MyByZWY9MyB3PTUgbD02ClUrMnwgQiBVKzIgdzEgaWQ9MiByZWY9MiB3PTUgbD02ClUrMnwgQSBVKzIgdzEgaWQ9MSByZWY9MSB3PTUgbD02ClUrMnwgYmFzZSBVKzIgdzEgdz01IGw9NgpVKzJ8IEIgVSsyIHcxIGlkPTIgcmVmPTIgdz02IGw9NgpVKzJ8IEEgVSsyIHcxIGlkPTEgcmVmPTEgdz02IGw9NgpVKzJ8IGJhc2UgVSsyIHcxIHc9NiBsPTYKVSsyfCAgIEMgZ290IDE3NzYgYW5kIDE3NzYKc2VuZCBVKzMgKEEgdHVybnMgaXQgaW50byBVKzEgd2l0aCB3KzEwMCwgbC0xMDApOiA3NzgKVSszfCBDIFUrMyB3MSBpZD0zIHJlZj0zIHc9NSBsPTYKVSszfCBCIFUrMyB3MSBpZD0yIHJlZj0yIHc9NSBsPTYKVSszfCBBIFUrMyB3MSBpZD0xIHJlZj0xIHc9NSBsPTYKVSszfCBiYXNlIFUrMSB3MSB3PTEwNSBsPS05NApkZXN0cm95fCBDIFdNX0RFU1RST1kgdzEgaWQ9MyByZWY9MyB3PTAgbD0wCmRlc3Ryb3l8IEIgV01fREVTVFJPWSB3MSBpZD0yIHJlZj0yIHc9MCBsPTAKZGVzdHJveXwgQSBXTV9ERVNUUk9ZIHcxIGlkPTEgcmVmPTEgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX0RFU1RST1kgdzEgdz0wIGw9MApkZXN0cm95fCBDIFdNX05DREVTVFJPWSB3MSBpZD0zIHJlZj0zIHc9MCBsPTAKZGVzdHJveXwgQiBXTV9OQ0RFU1RST1kgdzEgaWQ9MiByZWY9MiB3PTAgbD0wCmRlc3Ryb3l8IEEgV01fTkNERVNUUk9ZIHcxIGlkPTEgcmVmPTEgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX05DREVTVFJPWSB3MSB3PTAgbD0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "send U+1: 1554\nU+1| C U+1 w1 id=3 ref=3 w=5 l=6\nU+1| B U+1 w1 id=2 ref=2 w=5 l=6\nU+1| A U+1 w1 id=1 ref=1 w=5 l=6\nU+1| base U+1 w1 w=5 l=6\nsend U+2: 3552\nU+2| C U+2 w1 id=3 ref=3 w=5 l=6\nU+2| B U+2 w1 id=2 ref=2 w=5 l=6\nU+2| A U+2 w1 id=1 ref=1 w=5 l=6\nU+2| base U+2 w1 w=5 l=6\nU+2| B U+2 w1 id=2 ref=2 w=6 l=6\nU+2| A U+2 w1 id=1 ref=1 w=6 l=6\nU+2| base U+2 w1 w=6 l=6\nU+2|   C got 1776 and 1776\nsend U+3 (A turns it into U+1 with w+100, l-100): 778\nU+3| C U+3 w1 id=3 ref=3 w=5 l=6\nU+3| B U+3 w1 id=2 ref=2 w=5 l=6\nU+3| A U+3 w1 id=1 ref=1 w=5 l=6\nU+3| base U+1 w1 w=105 l=-94\ndestroy| C WM_DESTROY w1 id=3 ref=3 w=0 l=0\ndestroy| B WM_DESTROY w1 id=2 ref=2 w=0 l=0\ndestroy| A WM_DESTROY w1 id=1 ref=1 w=0 l=0\ndestroy| base WM_DESTROY w1 w=0 l=0\ndestroy| C WM_NCDESTROY w1 id=3 ref=3 w=0 l=0\ndestroy| B WM_NCDESTROY w1 id=2 ref=2 w=0 l=0\ndestroy| A WM_NCDESTROY w1 id=1 ref=1 w=0 l=0\ndestroy| base WM_NCDESTROY w1 w=0 l=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

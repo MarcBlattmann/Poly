@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_draw",
+      "exe_sha256": "c7203dee589d3630413c0e9db11c45849bdcf43a3dcdeb32c95f57b1b3b20c65",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RmlsbFJnbiByZWN0KDIwLDEwLDMwLDE4KSBhZnRlciBvZmZzZXQgKDAsMCk6IHJldCAxCiAgYmx1ZSBiYm94ICgyMCwxMCktKDI5LDE3KSBjb3VudCA4MApGaWxsUmduIHJlY3QoMjAsMTAsMzAsMTgpIGFmdGVyIG9mZnNldCAoNSwzKTogcmV0IDEKICBibHVlIGJib3ggKDE1LDcpLSgyNCwxNCkgY291bnQgODAKRmlsbFJnbiByZWN0KDIwLDEwLDMwLDE4KSBhZnRlciBvZmZzZXQgKC01LC0zKTogcmV0IDEKICBibHVlIGJib3ggKDI1LDEzKS0oMzQsMjApIGNvdW50IDgwCkZpbGxSZ24gcmVjdCgyMCwxMCwzMCwxOCkgYWZ0ZXIgb2Zmc2V0ICgtMzAsMCk6IHJldCAxCiAgYmx1ZSBiYm94IG5vbmUKRmlsbFJnbiByZWN0KDIwLDEwLDMwLDE4KSBhZnRlciBvZmZzZXQgKDAsNDApOiByZXQgMQogIGJsdWUgYmJveCBub25lCkZpbGxSZ24gcmVjdCgyMCwxMCwzMCwxOCkgYWZ0ZXIgb2Zmc2V0ICgxMDAsMTAwKTogcmV0IDEKICBibHVlIGJib3ggbm9uZQpGaWxsUmduIHJlY3QoMjAsMTAsMzAsMTgpIGFmdGVyIG9mZnNldCAoMTMsLTcpOiByZXQgMQogIGJsdWUgYmJveCAoNywxNyktKDE2LDI0KSBjb3VudCA4MApSb3VuZFJlY3QoMjAsMTAsMzYsMjIpIG51bGwgcGVuIGFmdGVyIG9mZnNldCAoMCwwKTogcmV0IDEKICBibHVlIGJib3ggKDIwLDEwKS0oMzQsMjApIGNvdW50IDE1MwpSb3VuZFJlY3QoMjAsMTAsMzYsMjIpIG51bGwgcGVuIGFmdGVyIG9mZnNldCAoNSwzKTogcmV0IDEKICBibHVlIGJib3ggKDE1LDcpLSgyOSwxNykgY291bnQgMTUzClJvdW5kUmVjdCgyMCwxMCwzNiwyMikgbnVsbCBwZW4gYWZ0ZXIgb2Zmc2V0ICgtNiwtNCk6IHJldCAxCiAgYmx1ZSBiYm94ICgyNiwxNCktKDQwLDI0KSBjb3VudCAxNTMKdHdvIG9mZnNldHMgZXF1YWwgb25lIG9mZnNldCBvZiB0aGUgc3VtOiB0cnVlCmNsaXAgKDEwLDUsMjUsMTQpIHRoZW4gb2Zmc2V0ICgtNiwtMiksIGZpbGwgKDAsMCw0MCwzMCkgYmJveCAoMTAsNSktKDI0LDEzKSBjb3VudCAxMzUKb2Zmc2V0ICgtNiwtMikgdGhlbiBjbGlwICgxMCw1LDI1LDE0KSwgZmlsbCAoMCwwLDQwLDMwKSBiYm94ICgxMCw1KS0oMjQsMTMpIGNvdW50IDEzNQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FillRgn rect(20,10,30,18) after offset (0,0): ret 1\n  blue bbox (20,10)-(29,17) count 80\nFillRgn rect(20,10,30,18) after offset (5,3): ret 1\n  blue bbox (15,7)-(24,14) count 80\nFillRgn rect(20,10,30,18) after offset (-5,-3): ret 1\n  blue bbox (25,13)-(34,20) count 80\nFillRgn rect(20,10,30,18) after offset (-30,0): ret 1\n  blue bbox none\nFillRgn rect(20,10,30,18) after offset (0,40): ret 1\n  blue bbox none\nFillRgn rect(20,10,30,18) after offset (100,100): ret 1\n  blue bbox none\nFillRgn rect(20,10,30,18) after offset (13,-7): ret 1\n  blue bbox (7,17)-(16,24) count 80\nRoundRect(20,10,36,22) null pen after offset (0,0): ret 1\n  blue bbox (20,10)-(34,20) count 153\nRoundRect(20,10,36,22) null pen after offset (5,3): ret 1\n  blue bbox (15,7)-(29,17) count 153\nRoundRect(20,10,36,22) null pen after offset (-6,-4): ret 1\n  blue bbox (26,14)-(40,24) count 153\ntwo offsets equal one offset of the sum: true\nclip (10,5,25,14) then offset (-6,-2), fill (0,0,40,30) bbox (10,5)-(24,13) count 135\noffset (-6,-2) then clip (10,5,25,14), fill (0,0,40,30) bbox (10,5)-(24,13) count 135\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "wo_handles",
+      "exe_sha256": "c8c821c358494a105f33778ac16d3d5f03eef7b0ac79433d5e17dd8f135d830a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVsZXRlZCBkYzogcmV0IDAgZXJyIDAgYnVmZmVyICg0MSw0MikKYnJ1c2ggYXMgZGM6IHJldCAwIGVyciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "deleted dc: ret 0 err 0 buffer (41,42)\nbrush as dc: ret 0 err 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    },
+    {
+      "name": "wo_maps",
+      "exe_sha256": "d6087319164d133fc5e7929313900dd0cc97388f9f2ae2ec9ee59671d4e6f4d4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFwIG1vZGUgMTogcmV0IDEgYmVmb3JlICgoMCwgMCksICgxMCwgMTApKSBhZnRlciAoKC0xMCwgLTIwKSwgKDAsIC0xMCksICg5MCwgODApKSBEUHRvTFAoMCwwKSAoMTAsIDIwKQptYXAgbW9kZSAyOiByZXQgMSBiZWZvcmUgKCgwLCAwKSwgKDQsIC00KSkgYWZ0ZXIgKCgtNCwgOCksICgwLCA0KSwgKDM0LCAtMzApKSBEUHRvTFAoMCwwKSAoMTAsIDIwKQptYXAgbW9kZSAzOiByZXQgMSBiZWZvcmUgKCgwLCAwKSwgKDAsIDApKSBhZnRlciAoKDAsIDEpLCAoMCwgMCksICgzLCAtMykpIERQdG9MUCgwLDApICgxMCwgMjApCm1hcCBtb2RlIDQ6IHJldCAxIGJlZm9yZSAoKDAsIDApLCAoMTAsIC0xMCkpIGFmdGVyICgoLTEwLCAxOSksICgwLCAxMCksICg4NiwgLTc3KSkgRFB0b0xQKDAsMCkgKDEwLCAyMCkKbWFwIG1vZGUgNTogcmV0IDEgYmVmb3JlICgoMCwgMCksICgxLCAtMSkpIGFmdGVyICgoLTEsIDIpLCAoMCwgMSksICg5LCAtOCkpIERQdG9MUCgwLDApICgxMCwgMjApCm1hcCBtb2RlIDY6IHJldCAxIGJlZm9yZSAoKDAsIDApLCAoMSwgLTEpKSBhZnRlciAoKC0xLCAxKSwgKDAsIDEpLCAoNiwgLTUpKSBEUHRvTFAoMCwwKSAoMTAsIDIwKQptYXAgbW9kZSA3OiByZXQgMSBiZWZvcmUgKCgwLCAwKSwgKDQsIC00KSkgYWZ0ZXIgKCgtNCwgOCksICgwLCA0KSwgKDM0LCAtMzApKSBEUHRvTFAoMCwwKSAoMTAsIDIwKQptYXAgbW9kZSA4OiByZXQgMSBiZWZvcmUgKCgwLCAwKSwgKDEwLCAxMCkpIGFmdGVyICgoLTEwLCAtMjApLCAoMCwgLTEwKSwgKDkwLCA4MCkpIERQdG9MUCgwLDApICgxMCwgMjApCnZpZXdwb3J0ICgxMDAsMjAwKSArIHdpbmRvdyBvZmZzZXQgKDEwLDIwKTogTFB0b0RQKDAsMCkgKDkwLCAxODApCiAgdmlld3BvcnQgb3JpZ2luIHN0aWxsICgxMDAsMjAwKQppc290cm9waWMgMTAwLT4yMDAgb2Zmc2V0ICgxMCwxMCk6IExQdG9EUCgxMCwxMCkgKDAsIDApICgyMCwyMCkgKDIwLCAyMCkgRFB0b0xQKDAsMCkgKDEwLCAxMCkKYW5pc290cm9waWMgMTAweDUwLT4zMDB4NTAgb2Zmc2V0ICgtNSw1KTogTFB0b0RQKDAsMCkgKDE1LCAtNSkgKDEwLDEwKSAoNDUsIDUpCmFkdmFuY2VkIHNjYWxlIDIsIG9mZnNldCAoNSw1KTogTFB0b0RQKDEwLDEwKSAoMTUsIDE1KSAoMCwwKSAoLTUsIC01KQphZHZhbmNlZCB0cmFuc2xhdGUgKDcsMyksIG9mZnNldCAoNSw1KTogTFB0b0RQKDAsMCkgKDIsIC0yKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "map mode 1: ret 1 before ((0, 0), (10, 10)) after ((-10, -20), (0, -10), (90, 80)) DPtoLP(0,0) (10, 20)\nmap mode 2: ret 1 before ((0, 0), (4, -4)) after ((-4, 8), (0, 4), (34, -30)) DPtoLP(0,0) (10, 20)\nmap mode 3: ret 1 before ((0, 0), (0, 0)) after ((0, 1), (0, 0), (3, -3)) DPtoLP(0,0) (10, 20)\nmap mode 4: ret 1 before ((0, 0), (10, -10)) after ((-10, 19), (0, 10), (86, -77)) DPtoLP(0,0) (10, 20)\nmap mode 5: ret 1 before ((0, 0), (1, -1)) after ((-1, 2), (0, 1), (9, -8)) DPtoLP(0,0) (10, 20)\nmap mode 6: ret 1 before ((0, 0), (1, -1)) after ((-1, 1), (0, 1), (6, -5)) DPtoLP(0,0) (10, 20)\nmap mode 7: ret 1 before ((0, 0), (4, -4)) after ((-4, 8), (0, 4), (34, -30)) DPtoLP(0,0) (10, 20)\nmap mode 8: ret 1 before ((0, 0), (10, 10)) after ((-10, -20), (0, -10), (90, 80)) DPtoLP(0,0) (10, 20)\nviewport (100,200) + window offset (10,20): LPtoDP(0,0) (90, 180)\n  viewport origin still (100,200)\nisotropic 100->200 offset (10,10): LPtoDP(10,10) (0, 0) (20,20) (20, 20) DPtoLP(0,0) (10, 10)\nanisotropic 100x50->300x50 offset (-5,5): LPtoDP(0,0) (15, -5) (10,10) (45, 5)\nadvanced scale 2, offset (5,5): LPtoDP(10,10) (15, 15) (0,0) (-5, -5)\nadvanced translate (7,3), offset (5,5): LPtoDP(0,0) (2, -2)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}

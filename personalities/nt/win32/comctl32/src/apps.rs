@@ -11,7 +11,6 @@ poly_win32_rt::fail_exports!(
     win32,
     [
         CreatePropertySheetPageW,
-        DefSubclassProc,
         FlatSB_GetScrollInfo,
         FlatSB_GetScrollPos,
         FlatSB_SetScrollInfo,
@@ -27,14 +26,9 @@ poly_win32_rt::fail_exports!(
         ImageList_Read,
         ImageList_Write,
         InitializeFlatSB,
-        SetWindowSubclass,
         _TrackMouseEvent,
         ord_17,
         ord_345,
         ord_381,
-        ord_410,
-        ord_411,
-        ord_412,
-        ord_413,
     ]
 );

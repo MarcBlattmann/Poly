@@ -119,7 +119,7 @@ itself as on Windows; see
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 113 of 171 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 1.6%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 1.7%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -145,7 +145,7 @@ itself as on Windows; see
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 1.6% | n/a | 0 / 0 |
+| Windows | 1.7% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -153,7 +153,7 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,581 | 1,016 | 3,504 | 3,769 | 52,996 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,581 | 1,044 | 3,498 | 3,749 | 52,994 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 75 | 442 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 

@@ -465,6 +465,10 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
     if stats && !chromium {
         extra.push("poly.init.arg=--stats".to_string());
     }
+    // And the kernel what showing the frames costs (ADR 0243).
+    if stats {
+        extra.push("poly.drm.stats".to_string());
+    }
     let state = root().join("target").join(STATE_FILE);
     // What the compositor is asked on Chromium's disk, where its first
     // program is not its own (`poly-desktop` reads them from a file).

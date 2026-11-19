@@ -36,6 +36,12 @@ impl Server {
         self.launches.set_parent_lookup(f);
     }
 
+    /// How to tell whether a process still exists: a launch whose processes are all gone ends
+    /// like one whose process ended well, also when the desktop did not start them.
+    pub fn set_pid_alive(&mut self, f: fn(u32) -> bool) {
+        self.launches.set_alive_lookup(f);
+    }
+
     /// The process on the other end of client `c`'s socket.
     pub fn set_client_pid(&mut self, c: ClientId, pid: u32) {
         if pid != 0 {
