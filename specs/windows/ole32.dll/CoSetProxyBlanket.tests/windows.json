@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "spb_args",
+      "exe_sha256": "9d206719ccae1e106b529d1eb8126431ca6fe2549c6d922b93580111e0a724c6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2xhc3Mgb2JqZWN0ID0gMHgwMDAwMDAwMApzdGFydDogMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDEgcHJpbmM9V0lORElcc2VydmVyIGF1dGhpbmZvPW51bGwKYWxsIGRlZmF1bHRzOiAweDAwMDAwMDAwOyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0yIGNhcHM9MHgwIHByaW5jPTxudWxsPiBhdXRoaW5mbz1udWxsCk5UTE1TU1AgKDEwKSBleHBsaWNpdGx5OiAweDAwMDAwMDAwOyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0zIGNhcHM9MHgwIHByaW5jPTxudWxsPiBhdXRoaW5mbz1udWxsCk5lZ290aWF0ZSAoOSk6IDB4ODAwNzA2ZDM7IHByb3h5IGJsYW5rZXQgMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKbm8gYXV0aGVudGljYXRpb24gKDApOiAweDAwMDAwMDAwOyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0zIGNhcHM9MHgwIHByaW5jPTxudWxsPiBhdXRoaW5mbz1udWxsCnVua25vd24gYXV0aGVudGljYXRpb24gc2VydmljZSA5OTk5OiAweDgwMDcwNmQzOyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9MCBsZXZlbD02IGltcD0zIGNhcHM9MHgwIHByaW5jPTxudWxsPiBhdXRoaW5mbz1udWxsCnVua25vd24gYXV0aG9yaXphdGlvbiBzZXJ2aWNlIDc3OiAweDAwMDAwMDAwOyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9NzcgbGV2ZWw9NiBpbXA9MyBjYXBzPTB4MCBwcmluYz08bnVsbD4gYXV0aGluZm89bnVsbApsZXZlbCA3OiAweDgwMDcwNmQ0OyBwcm94eSBibGFua2V0IDB4MDAwMDAwMDAgYXV0aG49MTAgYXV0aHo9NzcgbGV2ZWw9NiBpbXA9MyBjYXBzPTB4MCBwcmluYz08bnVsbD4gYXV0aGluZm89bnVsbAppbXBlcnNvbmF0aW9uIGxldmVsIDU6IDB4ODAwNzAwNTc7IHByb3h5IGJsYW5rZXQgMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej03NyBsZXZlbD02IGltcD0zIGNhcHM9MHgwIHByaW5jPTxudWxsPiBhdXRoaW5mbz1udWxsCmNhcGFiaWxpdHkgMHgxMDAwMDogMHg4MDA3MDA1NzsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTc3IGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKY2FwYWJpbGl0eSBBQ0NFU1NfQ09OVFJPTDogMHg4MDA3MDA1NzsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTc3IGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKY2FwYWJpbGl0eSBBUFBJRDogMHg4MDA3MDA1NzsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTc3IGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKY2FwYWJpbGl0eSBTRUNVUkVfUkVGUzogMHg4MDA3MDA1NzsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTc3IGxldmVsPTYgaW1wPTMgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKY2FwYWJpbGl0eSBNVVRVQUxfQVVUSCB3aXRob3V0IGEgbmFtZTogMHgwMDAwMDAwMDsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MyBjYXBzPTB4MCBwcmluYz08bnVsbD4gYXV0aGluZm89bnVsbAphIHNlcnZlciBwcmluY2lwYWwgbmFtZTogMHg4MDA3MDUzNDsgcHJveHkgYmxhbmtldCAweDAwMDAwMDAwIGF1dGhuPTEwIGF1dGh6PTAgbGV2ZWw9NiBpbXA9MyBjYXBzPTB4MCBwcmluYz08bnVsbD4gYXV0aGluZm89bnVsbAphIGNhbGwgYWZ0ZXIgdGhlIG9kZCBzZXR0aW5nczogQ3JlYXRlSW5zdGFuY2UgPSAweDAwMDAwMDAwCmJhY2sgdG8gZGVmYXVsdHM6IDB4MDAwMDAwMDA7IHByb3h5IGJsYW5rZXQgMHgwMDAwMDAwMCBhdXRobj0xMCBhdXRoej0wIGxldmVsPTYgaW1wPTIgY2Fwcz0weDAgcHJpbmM9PG51bGw+IGF1dGhpbmZvPW51bGwKcGxhaW4gb2JqZWN0OiBTZXRCbGFua2V0ID0gMHg4MDAwNDAwMgpOVUxMIHBvaW50ZXI6IFNldEJsYW5rZXQgPSAweDgwMDcwMDU3CnNydjogc3RhcnQKc3J2OiBpbml0IG10YSAweDAwMDAwMDAwCnNydjogY3JlYXRlIG91dGVyPW51bGwgaWlkPUlVbmtub3duCnNydjogY3JlYXRlIC0+IDB4MDAwMDAwMDAKc3J2OiByZXZva2UgLT4gMHgwMDAwMDAwMApzcnY6IGV4aXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "class object = 0x00000000\nstart: 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x1 princ=WINDI\\server authinfo=null\nall defaults: 0x00000000; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x0 princ=<null> authinfo=null\nNTLMSSP (10) explicitly: 0x00000000; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nNegotiate (9): 0x800706d3; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nno authentication (0): 0x00000000; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nunknown authentication service 9999: 0x800706d3; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nunknown authorization service 77: 0x00000000; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nlevel 7: 0x800706d4; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\nimpersonation level 5: 0x80070057; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\ncapability 0x10000: 0x80070057; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\ncapability ACCESS_CONTROL: 0x80070057; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\ncapability APPID: 0x80070057; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\ncapability SECURE_REFS: 0x80070057; proxy blanket 0x00000000 authn=10 authz=77 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\ncapability MUTUAL_AUTH without a name: 0x00000000; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\na server principal name: 0x80070534; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=3 caps=0x0 princ=<null> authinfo=null\na call after the odd settings: CreateInstance = 0x00000000\nback to defaults: 0x00000000; proxy blanket 0x00000000 authn=10 authz=0 level=6 imp=2 caps=0x0 princ=<null> authinfo=null\nplain object: SetBlanket = 0x80004002\nNULL pointer: SetBlanket = 0x80070057\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 191
+    },
+    {
+      "name": "spb_scope",
+      "exe_sha256": "886c4a9514c5f46160735380e8faa6fc9134355c7f40b44d123b1bb8d55e5162",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVmYXVsdCBpbXBlcnNvbmF0aW9uIGxldmVsczogZmFjdG9yeSAyIGl0cyBJVW5rbm93biAyIHNlY29uZCBjbGFzcyBvYmplY3QgMiBvYmplY3QgMiBzZWNvbmQgb2JqZWN0IDIgY29weSAyCmFmdGVyIElNUEVSU09OQVRFIG9uIHRoZSBmYWN0b3J5IHBvaW50ZXI6IGZhY3RvcnkgMyBpdHMgSVVua25vd24gMiBzZWNvbmQgY2xhc3Mgb2JqZWN0IDMgb2JqZWN0IDIgc2Vjb25kIG9iamVjdCAyIGNvcHkgMgphZnRlciBERUxFR0FURSBvbiB0aGUgSVVua25vd24gb2YgdGhlIGZhY3Rvcnk6IGZhY3RvcnkgMyBpdHMgSVVua25vd24gNCBzZWNvbmQgY2xhc3Mgb2JqZWN0IDMgb2JqZWN0IDIgc2Vjb25kIG9iamVjdCAyIGNvcHkgMgphZnRlciBJTVBFUlNPTkFURSBvbiB0aGUgZmlyc3Qgb2JqZWN0OiBmYWN0b3J5IDMgaXRzIElVbmtub3duIDQgc2Vjb25kIGNsYXNzIG9iamVjdCAzIG9iamVjdCAzIHNlY29uZCBvYmplY3QgMiBjb3B5IDIKYWZ0ZXIgQU5PTllNT1VTIG9uIHRoZSBjb3B5OiBmYWN0b3J5IDMgaXRzIElVbmtub3duIDQgc2Vjb25kIGNsYXNzIG9iamVjdCAzIG9iamVjdCAzIHNlY29uZCBvYmplY3QgMiBjb3B5IDEKaW50ZXJmYWNlcyBxdWVyaWVkIGFmdGVyd2FyZHM6IElDbGFzc0ZhY3RvcnkgMyBJVW5rbm93biA0CmEgY29weSBtYWRlIG5vdzogMgpzcnY6IHN0YXJ0CnNydjogaW5pdCBtdGEgMHgwMDAwMDAwMApzcnY6IGNyZWF0ZSBvdXRlcj1udWxsIGlpZD1JVW5rbm93bgpzcnY6IGNyZWF0ZSAtPiAweDAwMDAwMDAwCnNydjogY3JlYXRlIG91dGVyPW51bGwgaWlkPUlVbmtub3duCnNydjogY3JlYXRlIC0+IDB4MDAwMDAwMDAKc3J2OiByZXZva2UgLT4gMHgwMDAwMDAwMApzcnY6IGV4aXQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "default impersonation levels: factory 2 its IUnknown 2 second class object 2 object 2 second object 2 copy 2\nafter IMPERSONATE on the factory pointer: factory 3 its IUnknown 2 second class object 3 object 2 second object 2 copy 2\nafter DELEGATE on the IUnknown of the factory: factory 3 its IUnknown 4 second class object 3 object 2 second object 2 copy 2\nafter IMPERSONATE on the first object: factory 3 its IUnknown 4 second class object 3 object 3 second object 2 copy 2\nafter ANONYMOUS on the copy: factory 3 its IUnknown 4 second class object 3 object 3 second object 2 copy 1\ninterfaces queried afterwards: IClassFactory 3 IUnknown 4\na copy made now: 2\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 192
+    }
+  ]
+}

@@ -58,7 +58,7 @@
 {"symbol":"I_RpcNsBindingSetEntryNameW","src":["wine-spec"]},
 {"symbol":"I_RpcNsInterfaceExported","src":["wine-spec"]},
 {"symbol":"I_RpcNsInterfaceUnexported","src":["wine-spec"]},
-{"symbol":"I_RpcOpenClientProcess","src":["windows-com-state"]},
+{"symbol":"I_RpcOpenClientProcess","status":"claimed","claimed_by":"spec-win-com-sec","src":["windows-com-state"]},
 {"symbol":"I_RpcParseSecurity","src":["wine-spec"]},
 {"symbol":"I_RpcPauseExecution","src":["wine-spec"]},
 {"symbol":"I_RpcProxyNewConnection","src":["wine-spec"]},

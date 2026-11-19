@@ -104,13 +104,13 @@ B2a is implemented by [ADR 0220](../adr/0220-com-across-processes-an-activation-
 visible tests pass on Poly; the two LocalService tests wait for B1's service functions. The ADR's section 6 says
 where B2b's marshalling and B2c's security plug in.
 
-## 6. B2c (security and caller identity): status PAUSED, findings so far
+## 6. B2c (security and caller identity): spec DONE
 
-Track `spec-win-com-sec` (spec agent). Observed on the oracle with ~40 test programs (kit outside the repository); no sheets or
-recorded tests are committed yet. The planned entries: `CoInitializeSecurity`, `CoSetProxyBlanket`, `CoQueryProxyBlanket`,
-`CoCopyProxy`, `CoQueryClientBlanket`, `CoImpersonateClient`, `CoRevertToSelf`, `CoGetCallContext` (the in-call part, new entry
-`CoGetCallContext.InCall`), `IServerSecurity`, `IClientSecurity`, `rpcrt4!I_RpcOpenClientProcess` and the AppID permission values
-(`AppID.Security`).
+Track `spec-win-com-sec` (spec agent). Observed on the oracle with 40 test programs (35 elevated, 5 standard token; all stable across
+repeated recordings); all 12 spec sheets, visible tests with recorded Windows results, held-out splits, and hand-off records to
+`impl-chrome-installer-com` are committed. The 12 entries: `CoInitializeSecurity`, `CoSetProxyBlanket`, `CoQueryProxyBlanket`,
+`CoCopyProxy`, `CoQueryClientBlanket`, `CoImpersonateClient`, `CoRevertToSelf`, `CoGetCallContext.InCall`, `IServerSecurity`,
+`IClientSecurity`, `AppID.Security` (all under `ole32.dll`), and `rpcrt4!I_RpcOpenClientProcess`.
 
 **How the updater finds the client PID.** Its import table has no PID API for COM (no `I_RpcOpenClientProcess`, no
 `CoImpersonateClient`, no `CoQueryClientBlanket`); the only caller-identity import is `CoGetCallContext` (plus `OpenThreadToken`,
