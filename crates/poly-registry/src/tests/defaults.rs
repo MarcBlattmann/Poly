@@ -112,3 +112,27 @@ fn every_default_string_is_terminated() {
     }
     assert_eq!(Data::MultiSz(&["a", "b"]).bytes(), [b'a', 0, 0, 0, b'b', 0, 0, 0, 0, 0]);
 }
+
+#[test]
+fn system_classes_are_made_at_every_boot() {
+    let mut r = Registry::new();
+    install(&mut r, T0, &mut no_files).unwrap();
+    let m = r.machine();
+    for c in SYSTEM_CLASSES {
+        let key = r.find(m, &alloc::format!("SOFTWARE\Classes\CLSID\{}", c.clsid)).unwrap();
+        assert_eq!(sz_value(&r, key, ""), c.name);
+        let inproc = r.child(key, &wide("InprocServer32")).unwrap();
+        assert_eq!(sz_value(&r, inproc, ""), c.server);
+        assert_eq!(sz_value(&r, inproc, "ThreadingModel"), c.threading);
+    }
+    // A software hive saved before a class existed gets it at the next boot.
+    let soft = r.find(m, "SOFTWARE").unwrap();
+    let clsid = r.find(soft, "Classes\CLSID").unwrap();
+    let first = SYSTEM_CLASSES[0].clsid;
+    let k = r.child(clsid, &wide(first)).unwrap();
+    let inproc = r.child(k, &wide("InprocServer32")).unwrap();
+    r.delete_key(inproc, T0).unwrap();
+    r.delete_key(k, T0).unwrap();
+    system_classes(&mut r, soft, T0).unwrap();
+    assert!(r.find(clsid, &alloc::format!("{first}\InprocServer32")).is_some());
+}
