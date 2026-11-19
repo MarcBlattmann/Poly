@@ -602,6 +602,23 @@ pub const OLEAUT32_EXPORTS: &[(&str, u16)] = &[
     ("LoadRegTypeLib", 162),
     ("VarBstrCmp", 314),
     ("SafeArrayCreateVector", 411),
+    // ADR 0220 (B2b): type libraries, error information, the automation marshaller.
+    ("DllGetClassObject", 1),
+    ("VariantCopyInd", 11),
+    ("VariantChangeType", 12),
+    ("SafeArrayCreate", 15),
+    ("SafeArrayCopy", 27),
+    ("DispCallFunc", 146),
+    ("VariantChangeTypeEx", 147),
+    ("LoadTypeLib", 161),
+    ("RegisterTypeLib", 163),
+    ("QueryPathOfRegTypeLib", 164),
+    ("CreateTypeLib2", 180),
+    ("LoadTypeLibEx", 183),
+    ("UnRegisterTypeLib", 186),
+    ("GetErrorInfo", 200),
+    ("SetErrorInfo", 201),
+    ("CreateErrorInfo", 202),
 ];
 
 /// The exports of our `user32.dll` (ADR 0087): two string functions until

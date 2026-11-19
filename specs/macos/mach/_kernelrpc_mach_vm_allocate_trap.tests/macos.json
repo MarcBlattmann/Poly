@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "vm_allocate_anywhere",
+      "source_sha256": "095396ea901025efee8e4d0cbdbdb9b35f32a141c634ce6ed79f511f3b83d0cf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b25ee5debe9308b22e29b0395aa24af6006ba0341bd6fdb420113e150668102e",
+          "exit_code": 0,
+          "stdout": "ok KERN_SUCCESS\nok page aligned and not 0\nok zero filled\nok readable and writable\nok a size of 1\nok covers a whole page\nok mprotect works on it\nok munmap works on it\nok then it is gone: mprotect ENOMEM\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "vm_allocate_errors",
+      "source_sha256": "0f91cf4f184cf9dddbb18a25ebb4c8f90b29c0104ce621edf8b8b6666845cd3d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "192a71bb10f76025f8a8e3211b9424490d7704dc60f4a608393fbe8215898707",
+          "exit_code": 0,
+          "stdout": "ok a size of 1 << 60: KERN_NO_SPACE\nok flags 0x7fffffff: KERN_INVALID_ARGUMENT\nok an address pointer at 8: KERN_MEMORY_ERROR\nok an invalid task: MACH_SEND_INVALID_DEST\nvalue a size of 0: kern_return 0\nvalue the address after a size of 0 0\nok a good call afterwards\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

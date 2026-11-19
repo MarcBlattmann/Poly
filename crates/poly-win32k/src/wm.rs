@@ -2206,6 +2206,7 @@ impl Wm {
             Request::CursorShape { .. }
             | Request::ScreenPixel { .. }
             | Request::LayeredContent { .. }
+            | Request::SurfaceAlpha { .. }
             | Request::MoveSize { .. } => Reply::Ok {},
             // The NT personality answers it (it owns the file handles); without it, no desktop.
             Request::ShellOpen { .. } => Reply::Error { code: 50 },

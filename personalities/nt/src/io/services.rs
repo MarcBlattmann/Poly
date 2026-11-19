@@ -58,6 +58,17 @@ const WRITTEN: u32 = super::notify::CHANGE_LAST_WRITE | super::notify::CHANGE_SI
 /// The most an asynchronous or pipe write copies in at once.
 pub const MAX_CAPTURED_WRITE: usize = 16 << 20;
 
+/// A zeroed buffer of `len` bytes for data a request copies in whole, or
+/// `STATUS_INSUFFICIENT_RESOURCES` when the kernel cannot allocate it (Learn, "NtWriteFile":
+/// the system lacks the resources for the request). An allocation larger than the kernel heap
+/// gives in one piece (4 MiB) fails here instead of ending the kernel.
+pub fn capture_buffer(len: usize) -> Result<Vec<u8>> {
+    let mut data = Vec::new();
+    data.try_reserve_exact(len).map_err(|_| STATUS_INSUFFICIENT_RESOURCES)?;
+    data.resize(len, 0);
+    Ok(data)
+}
+
 // ----- shared helpers
 
 /// A file handle: its object and the object's cookie. The handle must have
@@ -603,7 +614,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         if len > MAX_CAPTURED_WRITE {
             return Err(STATUS_INSUFFICIENT_RESOURCES);
         }
-        let mut data = alloc::vec![0u8; len];
+        let mut data = capture_buffer(len)?;
         abi::read(k, buf, &mut data).or_else(|e| if len == 0 { Ok(()) } else { Err(e) })?;
         Some(data)
     } else {
@@ -1047,4 +1058,18 @@ pub fn cancel_io_file_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
     }
     write_iosb(k, iosb, STATUS_SUCCESS, 0)?;
     Ok(STATUS_SUCCESS)
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+
+    /// A write the kernel cannot buffer fails with STATUS_INSUFFICIENT_RESOURCES instead of
+    /// ending the kernel (Chrome's 7 MB overlapped write, chrome-feel).
+    #[test]
+    fn a_buffer_the_kernel_cannot_allocate_is_a_failed_request() {
+        assert_eq!(capture_buffer(16).unwrap(), alloc::vec![0u8; 16]);
+        assert_eq!(capture_buffer(0).unwrap(), Vec::<u8>::new());
+        assert_eq!(capture_buffer(usize::MAX / 2), Err(STATUS_INSUFFICIENT_RESOURCES));
+    }
 }

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 19:58:57",
+  "tests": [
+    {
+      "name": "mprotect_change",
+      "source_sha256": "066994acb631bb95dbb333b1bbe94aa377239242a8529e3f5186d9c45176d478",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ae7d20ca3493473ce7494136d140dc6fef4584cefa9607f21231f58257412c63",
+          "exit_code": 0,
+          "stdout": "ok RW to RO returns 0\nok the page still reads back\nok RO to RW again\nok and it can be written\nok a page to PROT_NONE\nok PROT_NONE back to RW\nok the content of the page survived\nok a length of 1 covers the page\nok a range of all four pages\nok a length of 0\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mprotect_errors",
+      "source_sha256": "860ffabaf37beac18cd9091fc870194bcedf33a73310a879a03b3fe0a30fe1c7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "48f655e9bc6f7c1438604caeb1873f12297911f1fb78f3cebe9c378b15a96fe9",
+          "exit_code": 0,
+          "stdout": "ok an unaligned address: EINVAL\nok a negative length: EINVAL\nok pages that are not mapped: ENOMEM\nok a range that leaves the mapping: ENOMEM\nok an unmapped mapping: ENOMEM\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

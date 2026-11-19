@@ -203,6 +203,16 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
         }
     }
+    // Poly's own copy of the standard type library `stdole` 2.0 (ADR 0220, B2b), in Poly's
+    // type-library format: every library's interfaces refer to it for `IUnknown` and `IDispatch`.
+    if !super::OLEAUT32.is_empty() {
+        let bytes = poly_com::typelib::stdole::file_bytes();
+        match create::install_file(&vr, &root, "Windows\\System32", "stdole2.tlb", &bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: stdole2.tlb written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
+        }
+    }
     // Poly's own Visual C++ runtime (ADR 0199). A user who installs
     // Microsoft's (`vc_redist`) keeps it: a file there without Poly's marker
     // is not rewritten (owner decision 5).

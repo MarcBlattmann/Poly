@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_port_insert_right_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_port_insert_right_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_port_insert_right_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 21;
+  arm64 `svc #0x80` with x16 = -21. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  port_insert_right(task, name, port, message type) adds a right to the
+  task under name. MACH_MSG_TYPE_MAKE_SEND (20) with name = port = a
+  receive right adds a send right to it: the type goes from 0x20000 to
+  0x30000, and each call adds a reference. An invalid task is
+  MACH_SEND_INVALID_DEST. Values: a port name that is not in the task is
+  KERN_INVALID_NAME (15); a message type that does not exist (99) and
+  MAKE_SEND of a port set are KERN_INVALID_RIGHT (17); making a send right
+  of one port under the name of another port's receive right is
+  KERN_RIGHT_EXISTS (21) and leaves the first port with its receive right
+  only.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+  right_exists: "KERN_RIGHT_EXISTS (21): the name is a receive right of another port"
+  bad_right: "KERN_INVALID_RIGHT (17): message type 99, a port set"
+  no_such_name: "KERN_INVALID_NAME (15): port name not in the task"
+side_effects: "a send right (or a reference) is added"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

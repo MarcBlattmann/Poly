@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/mach_reply_port.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mach_reply_port.tests/macos.json.
+id: macos/syscall/mach/mach_reply_port
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 26;
+  arm64 `svc #0x80` with x16 = -26. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  mach_reply_port() returns the name of a new receive right on every call:
+  not MACH_PORT_NULL, 32 bits, never the task's own name, a hundred calls
+  give a hundred different names, each a receive right (0x20000). The
+  right is destroyed with mod_refs (-1 on the receive right; the name is
+  invalid afterwards). A forked child gets receive rights of its own task
+  from it, and the parent's stay.
+returns:
+  success: "the name of a new receive right"
+errors: {}
+side_effects: "a port is created"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

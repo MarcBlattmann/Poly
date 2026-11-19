@@ -46,6 +46,7 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RegDeleteKeyExA", REGISTRY),
     ("RegDeleteValueW", REGISTRY),
     ("RegDeleteValueA", REGISTRY),
+    ("RegDeleteTreeW", REGISTRY),
     ("RegCloseKey", REGISTRY),
     ("RegFlushKey", REGISTRY),
     ("RegQueryInfoKeyW", REGISTRY),

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "vm_deallocate_errors",
+      "source_sha256": "9889d8975f7d1bc4e648ad7c61df33a275e2a461baddfee917a15f2239843907",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6030536e4bd0286310d6adcd6138dff9484408860139e4310638fe87c9fa9e73",
+          "exit_code": 0,
+          "stdout": "ok an invalid task: MACH_SEND_INVALID_DEST\nvalue a size of 0 on mapped memory: kern_return 0\nok the memory is still mapped\nvalue an address one byte in, one page: kern_return 0\nvalue memory after that: mprotect of the first page errno 12\nvalue memory after that: mprotect of the second page errno 12\nvalue a range that was never mapped: kern_return 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "vm_deallocate_part",
+      "source_sha256": "b60229b36eb3bbc420831246aefa03a94767d7e9d280eb126d636e7d6cfb3f02",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a142bef6d8fb7e44037ed7ff1fcec29dfc60d93cad3e58d3a7b5636379b0cb94",
+          "exit_code": 0,
+          "stdout": "ok free the middle page\nok the first page keeps its content\nok the third page keeps its content\nok the middle page is gone: mprotect ENOMEM\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

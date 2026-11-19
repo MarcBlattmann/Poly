@@ -565,6 +565,89 @@ pub unsafe extern "system" fn RegDeleteValueW(hkey: HKey, name: *const u16) -> u
     }))
 }
 
+/// `RegDeleteTreeW(hKey, lpSubKey)` (Learn: "RegDeleteTreeW": "Deletes the subkeys and values of
+/// the specified key recursively"; with `lpSubKey` the key of that name below `hKey` is deleted as
+/// well, with `NULL` the subkeys and values of `hKey` itself). Subkeys first, then the values, then
+/// the key; the first error that is not "already gone" is returned.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegDeleteTreeW(hkey: HKey, sub: *const u16) -> u32 {
+    const KEY_ALL_ACCESS: u32 = 0xF_003F;
+    let mut key: HKey = hkey;
+    if !sub.is_null() {
+        // SAFETY: the caller's string; a live out pointer.
+        let r = unsafe { RegOpenKeyExW(hkey, sub, 0, KEY_ALL_ACCESS, &mut key) };
+        if r != ERROR_SUCCESS {
+            return r;
+        }
+    }
+    let mut r = ERROR_SUCCESS;
+    // Subkeys: always the first one, since each is deleted before the next lookup.
+    loop {
+        let mut name = [0u16; 256];
+        let mut n = name.len() as u32;
+        // SAFETY: a buffer of `n` characters.
+        let e = unsafe {
+            RegEnumKeyExW(
+                key,
+                0,
+                name.as_mut_ptr(),
+                &mut n,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+            )
+        };
+        if e != ERROR_SUCCESS {
+            break;
+        }
+        name[(n as usize).min(255)] = 0;
+        // SAFETY: a NUL-terminated name of a subkey of `key`.
+        let d = unsafe { RegDeleteTreeW(key, name.as_ptr()) };
+        if d != ERROR_SUCCESS {
+            r = d;
+            break;
+        }
+    }
+    if r == ERROR_SUCCESS {
+        if sub.is_null() {
+            // The key stays: its values go.
+            loop {
+                let mut name = [0u16; 16384];
+                let mut n = name.len() as u32;
+                // SAFETY: a buffer of `n` characters; no data wanted.
+                let e = unsafe {
+                    RegEnumValueW(
+                        key,
+                        0,
+                        name.as_mut_ptr(),
+                        &mut n,
+                        core::ptr::null_mut(),
+                        core::ptr::null_mut(),
+                        core::ptr::null_mut(),
+                        core::ptr::null_mut(),
+                    )
+                };
+                if e != ERROR_SUCCESS {
+                    break;
+                }
+                name[(n as usize).min(16383)] = 0;
+                // SAFETY: the value's NUL-terminated name.
+                if unsafe { RegDeleteValueW(key, name.as_ptr()) } != ERROR_SUCCESS {
+                    break;
+                }
+            }
+        } else {
+            // SAFETY: the subkey's own name below `hkey`.
+            r = unsafe { RegDeleteKeyExW(hkey, sub, 0, 0) };
+        }
+    }
+    if !sub.is_null() {
+        RegCloseKey(key);
+    }
+    r
+}
+
 /// `RegDeleteValueA`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RegDeleteValueA(hkey: HKey, name: *const u8) -> u32 {

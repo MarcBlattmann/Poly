@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 16:25:09",
   "tests": [
     {
       "name": "sysctl_hw",
@@ -28,6 +28,21 @@
       }
     },
     {
+      "name": "sysctl_hw_numbers",
+      "source_sha256": "739ccc58098c8740d7229460f9bf0adf144c359dd7e14483d6c8fdebe20c35f0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f2fea9428ad93693c99b2bc4e4a9ac3e4ac9f0e5fc0bebfc9836eaa835f0e4ea",
+          "exit_code": 0,
+          "stdout": "ok hw.memsize succeeds with 8 bytes\nok more than 1 GiB\nok hw.byteorder is 1234\nok kern.osrev is 199506\nok kern.argmax is at least 262144\nvalue kern.argmax 1048576\nok kern.maxproc is positive\nok kern.maxfiles is positive\nok hw.machine is a string\nvalue hw.machine arm64\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
       "name": "sysctl_kern",
       "source_sha256": "f1b13c81c1d0c16a5a899a80fc7eba97179e494ff942895c2031a586ddf3a7c6",
       "results": {
@@ -36,6 +51,21 @@
           "executable_sha256": "d3d646e37308a379d27f8d0c4ee9f4c3c9f83064df4fc97fa07ecc5bfbfc240e",
           "exit_code": 0,
           "stdout": "ok kern.ostype succeeds\nok it is \"Darwin\"\nok length 7 with the NUL\nok a NULL buffer reports length 7\nok a 3-byte buffer: ENOMEM\nok the length becomes 0\nok nothing is copied\nok kern.osrelease is digits and dots\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sysctl_kern_strings",
+      "source_sha256": "18ab9d975e842a6d69e1f8c36914d7db162d7725dbcc34127adaf5ab1875164f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "474b900d3ff0a121302e7611f5ea20691ebdbcaef28daa9fa5cfd7f9b8bf9944",
+          "exit_code": 0,
+          "stdout": "ok kern.version succeeds\nok it starts with \"Darwin Kernel Version \"\nok kern.hostname is not empty\nok kern.osversion is a short string\nvalue kern.osversion 26A428\nok kern.boottime is 16 bytes\nok seconds after 2023, microseconds below a million\nok a buffer of 8 bytes: ENOMEM\nsummary 7 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true

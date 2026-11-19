@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 16:25:09",
   "tests": [
     {
       "name": "byname_basic",
@@ -36,6 +36,36 @@
           "executable_sha256": "8c0ca436d422675cf1baa3f9cd7613007523fe3fa1b66f6c572f6acc26ca4787",
           "exit_code": 0,
           "stdout": "ok kern.nosuchthing: ENOENT\nok the empty name: ENOENT\nok the node kern: ENOENT\nok length 5 of kern.ostype: ENOENT\nok a 1999-byte name: ENAMETOOLONG\nok the name at address 8: EFAULT\nok setting kern.ostype: EPERM\nok a 2-byte buffer: ENOMEM\nok the length becomes 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "byname_numbers",
+      "source_sha256": "9b5a02ac663427ddc4fa674877b1493967026695d58fee005f88c79827723eab",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8d95b24f7cb18f36d03a0a5fe117bfb176998251007afce5d3da062c1c173f69",
+          "exit_code": 0,
+          "stdout": "ok hw.memsize: 8 bytes\nok the same as by number\nok hw.logicalcpu equals hw.ncpu\nok hw.physicalcpu is positive\nok hw.byteorder is 1234\nok hw.pagesize32 equals hw.pagesize\nok kern.maxfilesperproc is positive\nok vm.loadavg: 24 bytes\nok vm.loadavg into 4 bytes: ENOMEM\nvalue hw.tbfrequency 24000000\nvalue hw.cachelinesize 128\nvalue kern.argmax 1048576\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "byname_strings",
+      "source_sha256": "1961c6a678a513fdb13fbaf16f3450cf31b2d981d1a76d90d191e537b8da29e8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "de3cf4be123712616d587acf2fb9b2a029d9b209c9a1474133652be608cecddf",
+          "exit_code": 0,
+          "stdout": "ok kern.version starts with \"Darwin Kernel Version \"\nok kern.hostname is not empty\nok kern.osversion equals the number's\nok hw.machine equals the number's\nvalue hw.machine arm64\nok kern.osproductversion is a string\nvalue kern.osproductversion 27.0\nok kern.boottime: 16 bytes, after 2023\nsummary 6 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true
