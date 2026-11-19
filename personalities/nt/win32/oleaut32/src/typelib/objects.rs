@@ -226,7 +226,11 @@ unsafe extern "system" fn tl_get_type_info_type(this: *mut c_void, index: u32, k
         None => TYPE_E_ELEMENTNOTFOUND,
     }
 }
-unsafe extern "system" fn tl_get_type_info_of_guid(this: *mut c_void, g: *const Guid, out: *mut *mut c_void) -> Hresult {
+unsafe extern "system" fn tl_get_type_info_of_guid(
+    this: *mut c_void,
+    g: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if g.is_null() || out.is_null() {
         return E_INVALIDARG;
     }
@@ -709,7 +713,12 @@ pub(crate) fn ids_of_names(v: &poly_com::typelib::view::TypeView, names: &[Strin
     hr
 }
 
-unsafe extern "system" fn ti_get_ids_of_names(this: *mut c_void, names: *const *const u16, n: u32, ids: *mut i32) -> Hresult {
+unsafe extern "system" fn ti_get_ids_of_names(
+    this: *mut c_void,
+    names: *const *const u16,
+    n: u32,
+    ids: *mut i32,
+) -> Hresult {
     if names.is_null() || ids.is_null() {
         return E_INVALIDARG;
     }
@@ -800,7 +809,11 @@ pub(crate) fn resolve_import(imp: &Import) -> Result<*mut c_void, Hresult> {
     r
 }
 
-unsafe extern "system" fn ti_get_containing_type_lib(this: *mut c_void, out: *mut *mut c_void, index: *mut u32) -> Hresult {
+unsafe extern "system" fn ti_get_containing_type_lib(
+    this: *mut c_void,
+    out: *mut *mut c_void,
+    index: *mut u32,
+) -> Hresult {
     let t = ti_of(this);
     // SAFETY: a live block.
     let (lib, i) = unsafe { ((*t).lib, (*t).index) };
@@ -1021,7 +1034,8 @@ unsafe extern "system" fn cti_add_var_desc(this: *mut c_void, index: u32, vd: *c
         return E_INVALIDARG;
     }
     // SAFETY: the caller's VARDESC.
-    let (td, memid, flags, varkind, u) = unsafe { (read_td(&(*vd).elem.td, 0), (*vd).memid, (*vd).flags, (*vd).varkind, (*vd).u) };
+    let (td, memid, flags, varkind, u) =
+        unsafe { (read_td(&(*vd).elem.td, 0), (*vd).memid, (*vd).flags, (*vd).varkind, (*vd).u) };
     let Some(td) = td else { return E_INVALIDARG };
     let value = if varkind == 2 && u != 0 {
         // SAFETY: a constant's VARIANT; its value (an integer) at offset 8.
@@ -1208,6 +1222,7 @@ static CM_VTBL: Vtbl<9> = Vtbl([
     not_impl as *const (),
 ]);
 
+#[allow(dead_code)] // read through the object's address by callers
 struct CopyMarshal(*const Vtbl<9>);
 // SAFETY: an immutable pointer to a static table.
 unsafe impl Sync for CopyMarshal {}

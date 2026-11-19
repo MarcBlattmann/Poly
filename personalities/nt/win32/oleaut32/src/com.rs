@@ -14,11 +14,9 @@ pub(crate) const S_FALSE: Hresult = 1;
 pub(crate) const E_NOTIMPL: Hresult = 0x8000_4001_u32 as i32;
 pub(crate) const E_NOINTERFACE: Hresult = 0x8000_4002_u32 as i32;
 pub(crate) const E_POINTER: Hresult = 0x8000_4003_u32 as i32;
-pub(crate) const E_FAIL: Hresult = 0x8000_4005_u32 as i32;
 pub(crate) const E_UNEXPECTED: Hresult = 0x8000_FFFF_u32 as i32;
 pub(crate) const E_INVALIDARG: Hresult = 0x8007_0057_u32 as i32;
 pub(crate) const E_OUTOFMEMORY: Hresult = 0x8007_000E_u32 as i32;
-pub(crate) const CLASS_E_NOAGGREGATION: Hresult = 0x8004_0110_u32 as i32;
 pub(crate) const CLASS_E_CLASSNOTAVAILABLE: Hresult = 0x8004_0111_u32 as i32;
 pub(crate) const REGDB_E_IIDNOTREG: Hresult = 0x8004_0155_u32 as i32;
 
@@ -31,11 +29,8 @@ pub(crate) const IID_IMARSHAL: Guid = std_guid(3);
 pub(crate) const IID_IDISPATCH: Guid = std_guid(0x0002_0400);
 pub(crate) const IID_ITYPEINFO: Guid = std_guid(0x0002_0401);
 pub(crate) const IID_ITYPELIB: Guid = std_guid(0x0002_0402);
-pub(crate) const IID_ITYPECOMP: Guid = std_guid(0x0002_0403);
 pub(crate) const IID_ICREATETYPEINFO: Guid = std_guid(0x0002_0405);
 pub(crate) const IID_ICREATETYPELIB: Guid = std_guid(0x0002_0406);
-pub(crate) const IID_ICREATETYPEINFO2: Guid =
-    Guid { data1: 0x0002_040E, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 pub(crate) const IID_ICREATETYPELIB2: Guid =
     Guid { data1: 0x0002_040F, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 pub(crate) const IID_NULL: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0; 8] };
@@ -79,11 +74,13 @@ macro_rules! vcall {
     ($p:expr, $i:expr, ($($at:ty),*) -> $r:ty $(, $a:expr)*) => {{
         let p: *mut core::ffi::c_void = $p as *mut core::ffi::c_void;
         // SAFETY: the caller's COM pointer; the slot has the stated signature.
-        unsafe {
+        #[allow(unused_unsafe)]
+        let r = unsafe {
             let slot = *(*(p as *mut *const usize)).add($i);
             let f: unsafe extern "system" fn(*mut core::ffi::c_void $(, $at)*) -> $r = core::mem::transmute(slot);
             f(p $(, $a)*)
-        }
+        };
+        r
     }};
 }
 
@@ -192,8 +189,6 @@ unsafe extern "system" {
     pub(crate) fn TlsAlloc() -> u32;
     pub(crate) fn TlsGetValue(i: u32) -> *mut c_void;
     pub(crate) fn TlsSetValue(i: u32, v: *mut c_void) -> i32;
-    pub(crate) fn GetCurrentProcessId() -> u32;
-    pub(crate) fn Sleep(ms: u32);
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -212,8 +207,14 @@ unsafe extern "system" {
         disp: *mut u32,
     ) -> i32;
     fn RegSetValueExW(key: isize, name: *const u16, reserved: u32, kind: u32, data: *const u8, n: u32) -> i32;
-    fn RegQueryValueExW(key: isize, name: *const u16, reserved: *mut u32, kind: *mut u32, data: *mut u8, n: *mut u32)
-    -> i32;
+    fn RegQueryValueExW(
+        key: isize,
+        name: *const u16,
+        reserved: *mut u32,
+        kind: *mut u32,
+        data: *mut u8,
+        n: *mut u32,
+    ) -> i32;
     fn RegEnumKeyExW(
         key: isize,
         index: u32,
@@ -260,7 +261,17 @@ impl Key {
         let mut k = 0isize;
         // SAFETY: as above.
         let r = unsafe {
-            RegCreateKeyExW(root, p.as_ptr(), 0, core::ptr::null(), 0, KEY_ALL, core::ptr::null(), &mut k, core::ptr::null_mut())
+            RegCreateKeyExW(
+                root,
+                p.as_ptr(),
+                0,
+                core::ptr::null(),
+                0,
+                KEY_ALL,
+                core::ptr::null(),
+                &mut k,
+                core::ptr::null_mut(),
+            )
         };
         (r == 0).then_some(Key(k))
     }
@@ -427,7 +438,6 @@ pub(crate) const CO_TASK_MEM_ALLOC: usize = 0;
 pub(crate) const CO_TASK_MEM_FREE: usize = 1;
 pub(crate) const CO_MARSHAL_INTERFACE: usize = 2;
 pub(crate) const CO_UNMARSHAL_INTERFACE: usize = 3;
-pub(crate) const CO_RELEASE_MARSHAL_DATA: usize = 4;
 pub(crate) const CREATE_STREAM_ON_HGLOBAL: usize = 5;
 
 /// The address of an `ole32` function (0 when it cannot be found).

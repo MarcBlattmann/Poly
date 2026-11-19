@@ -190,12 +190,7 @@ unsafe extern "system" fn stm_release(this: *mut HGlobalStream) -> u32 {
     n
 }
 
-unsafe extern "system" fn stm_read(
-    this: *mut HGlobalStream,
-    pv: *mut c_void,
-    cb: u32,
-    pcb_read: *mut u32,
-) -> Hresult {
+unsafe extern "system" fn stm_read(this: *mut HGlobalStream, pv: *mut c_void, cb: u32, pcb_read: *mut u32) -> Hresult {
     if pv.is_null() {
         return STG_E_INVALIDPOINTER;
     }

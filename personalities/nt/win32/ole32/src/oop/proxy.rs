@@ -64,33 +64,12 @@ struct MarVtbl {
     qi: Qi,
     add_ref: Ref,
     release: Ref,
-    get_unmarshal_class: unsafe extern "system" fn(
-        *mut c_void,
-        *const Guid,
-        *mut c_void,
-        u32,
-        *mut c_void,
-        u32,
-        *mut Guid,
-    ) -> Hresult,
-    get_marshal_size_max: unsafe extern "system" fn(
-        *mut c_void,
-        *const Guid,
-        *mut c_void,
-        u32,
-        *mut c_void,
-        u32,
-        *mut u32,
-    ) -> Hresult,
-    marshal_interface: unsafe extern "system" fn(
-        *mut c_void,
-        *mut c_void,
-        *const Guid,
-        *mut c_void,
-        u32,
-        *mut c_void,
-        u32,
-    ) -> Hresult,
+    get_unmarshal_class:
+        unsafe extern "system" fn(*mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32, *mut Guid) -> Hresult,
+    get_marshal_size_max:
+        unsafe extern "system" fn(*mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32, *mut u32) -> Hresult,
+    marshal_interface:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32) -> Hresult,
     unmarshal_interface: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
     release_marshal_data: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult,
     disconnect_object: unsafe extern "system" fn(*mut c_void, u32) -> Hresult,
@@ -365,8 +344,13 @@ unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresu
     // SAFETY: IPSFactoryBuffer::CreateProxy (slot 3) with this block's IUnknown as the outer object.
     let hr = unsafe {
         let v = *(f as *const *const usize);
-        let create: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void, *mut *mut c_void) -> Hresult =
-            core::mem::transmute(*v.add(3));
+        let create: unsafe extern "system" fn(
+            *mut c_void,
+            *mut c_void,
+            *const Guid,
+            *mut *mut c_void,
+            *mut *mut c_void,
+        ) -> Hresult = core::mem::transmute(*v.add(3));
         let hr = create(f, p.cast(), iid, &mut buf, &mut pv);
         release_unknown(f);
         hr
@@ -384,7 +368,9 @@ unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresu
     }
     let target = match &proxy.target {
         Target::Local { owner, object } => super::channel::Target::Local { owner: *owner, object: *object },
-        Target::Remote { endpoint, oid, .. } => super::channel::Target::Remote { endpoint: endpoint.clone(), oid: *oid },
+        Target::Remote { endpoint, oid, .. } => {
+            super::channel::Target::Remote { endpoint: endpoint.clone(), oid: *oid }
+        }
     };
     let chan = super::channel::new_channel(*iid, target);
     // SAFETY: IRpcProxyBuffer::Connect (slot 3); the channel keeps its own reference.

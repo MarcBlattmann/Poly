@@ -26,7 +26,6 @@ pub(crate) struct Param {
 #[derive(Clone, Debug)]
 pub(crate) struct Method {
     pub slot: u32,
-    pub name: String,
     pub params: Vec<Param>,
 }
 
@@ -132,7 +131,7 @@ fn describe(t: *mut objects::TypeLib, lib: &Library, iid: &Guid) -> Result<Info,
                 Param { ty: ty_of(t, lib, &p.td, 0), input, output }
             })
             .collect();
-        methods.push(Method { slot, name: f.name.clone(), params });
+        methods.push(Method { slot, params });
     }
     Ok(Info { iid: *iid, dispatch, methods, last_slot: last })
 }

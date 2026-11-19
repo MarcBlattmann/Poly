@@ -331,10 +331,8 @@ pub(crate) fn blocking<R: Send>(f: impl FnOnce() -> R + Send) -> R {
         return out.unwrap_or_else(|| unreachable!());
     }
     // SAFETY: the job lives on this stack frame until `done` is set: `wait` returns only then.
-    let mut job = Job {
-        call: unsafe { core::mem::transmute::<&mut dyn FnMut(), &'static mut dyn FnMut()>(&mut call) },
-        done,
-    };
+    let mut job =
+        Job { call: unsafe { core::mem::transmute::<&mut dyn FnMut(), &'static mut dyn FnMut()>(&mut call) }, done };
     let jp = (&raw mut job) as *mut c_void;
     let mut tid = 0u32;
     // SAFETY: the worker runs the job and sets `done`.

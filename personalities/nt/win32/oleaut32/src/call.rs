@@ -71,12 +71,6 @@ unsafe extern "system" fn call_x64(f: usize, args: *const u64, n: usize, fp: *mu
     )
 }
 
-/// What a proxy's vtable entry hands on: the slot, the arguments as they were passed (`args[0]` is
-/// `this`, then every argument's 8-byte slot in order) and the bits of XMM1..XMM3 (where the
-/// second to fourth arguments are when they are floating point).
-#[cfg(target_arch = "x86_64")]
-pub(crate) type Dispatch = unsafe extern "system" fn(args: *const u64, slot: u32, xmm: *const u64) -> u64;
-
 /// The common part of every proxy vtable entry: spill the register arguments next to the stack
 /// ones and call [`crate::marshal::proxy::dispatch`].
 #[cfg(target_arch = "x86_64")]

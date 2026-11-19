@@ -10,7 +10,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ffi::c_void;
-use poly_com::typelib::reg::{self, guid_text, lcid_key, parse_lcid, parse_version, pick_lcid, pick_version, version_key};
+use poly_com::typelib::reg::{
+    self, guid_text, lcid_key, parse_lcid, parse_version, pick_lcid, pick_version, version_key,
+};
 use poly_com::typelib::*;
 
 const REGKIND_DEFAULT: i32 = 0;
@@ -216,7 +218,13 @@ pub unsafe extern "system" fn LoadTypeLib(file: *const u16, out: *mut *mut c_voi
 
 /// `LoadRegTypeLib(rguid, wVerMajor, wVerMinor, lcid, pptlib)`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn LoadRegTypeLib(guid: *const Guid, major: u16, minor: u16, lcid: u32, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn LoadRegTypeLib(
+    guid: *const Guid,
+    major: u16,
+    minor: u16,
+    lcid: u32,
+    out: *mut *mut c_void,
+) -> Hresult {
     if guid.is_null() || out.is_null() {
         return E_INVALIDARG;
     }
@@ -248,7 +256,13 @@ pub unsafe extern "system" fn RegisterTypeLib(tlib: *mut c_void, path: *const u1
 /// `QueryPathOfRegTypeLib(guid, wMaj, wMin, lcid, lpbstrPathName)`: the registered value, the file
 /// not opened.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn QueryPathOfRegTypeLib(guid: *const Guid, major: u16, minor: u16, lcid: u32, out: *mut *mut u16) -> Hresult {
+pub unsafe extern "system" fn QueryPathOfRegTypeLib(
+    guid: *const Guid,
+    major: u16,
+    minor: u16,
+    lcid: u32,
+    out: *mut *mut u16,
+) -> Hresult {
     if guid.is_null() || out.is_null() {
         return E_INVALIDARG;
     }
@@ -270,7 +284,13 @@ pub unsafe extern "system" fn QueryPathOfRegTypeLib(guid: *const Guid, major: u1
 /// keys go when they point to this version; the version key goes when only `FLAGS` and `HELPDIR`
 /// are left, the library key when it is empty.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn UnRegisterTypeLib(guid: *const Guid, major: u16, minor: u16, lcid: u32, syskind: i32) -> Hresult {
+pub unsafe extern "system" fn UnRegisterTypeLib(
+    guid: *const Guid,
+    major: u16,
+    minor: u16,
+    lcid: u32,
+    syskind: i32,
+) -> Hresult {
     if guid.is_null() {
         return E_INVALIDARG;
     }

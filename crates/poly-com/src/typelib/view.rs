@@ -139,11 +139,7 @@ pub fn view(lib: &Library, t: usize, form: Form) -> Option<TypeView> {
 
 /// The size of a record whose fields are `vars` (their offsets and sizes).
 fn record_size(vars: &[Var], ptr: usize) -> u32 {
-    vars.iter()
-        .filter(|v| v.varkind == 0)
-        .map(|v| v.value as u32 + size_of_td(&v.td, ptr))
-        .max()
-        .unwrap_or(0)
+    vars.iter().filter(|v| v.varkind == 0).map(|v| v.value as u32 + size_of_td(&v.td, ptr)).max().unwrap_or(0)
 }
 
 /// The size of a value of `td` (pointers and references count as a pointer).

@@ -172,9 +172,9 @@ pub(crate) unsafe extern "system" fn create_proxy(
     };
     let slots = (info.last_slot as usize + 1).min(crate::call::MAX_SLOTS);
     let mut table: Vec<usize> = Vec::with_capacity(slots);
-    table.push(itf_qi as usize);
-    table.push(itf_add_ref as usize);
-    table.push(itf_release as usize);
+    table.push(itf_qi as *const () as usize);
+    table.push(itf_add_ref as *const () as usize);
+    table.push(itf_release as *const () as usize);
     #[cfg(target_arch = "x86_64")]
     for k in 3..slots {
         table.push(crate::call::ENTRIES[k] as usize);

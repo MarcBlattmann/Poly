@@ -3,7 +3,8 @@ use super::*;
 use alloc::string::ToString;
 use alloc::vec;
 
-const G: Guid = Guid { data1: 0xB2B0_A001, data2: 0x1234, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
+const G: Guid =
+    Guid { data1: 0xB2B0_A001, data2: 0x1234, data3: 0x4000, data4: [0x80, 0, 0x70, 0x6F, 0x6C, 0x79, 0x77, 0x73] };
 
 fn func(memid: i32, name: &str, params: Vec<Param>) -> Func {
     Func {
@@ -104,10 +105,16 @@ fn dual_reads_back_as_dispatch_with_folded_results() {
         assert_eq!((v.kind, v.flags, v.cb_size_vft), (TKIND_DISPATCH, 0x10c0, 56));
         assert_eq!(v.funcs.len(), 9);
         let ids: Vec<i32> = v.funcs.iter().map(|f| f.memid).collect();
-        assert_eq!(&ids[..7], &[0x6000_0000, 0x6000_0001, 0x6000_0002, 0x6001_0000, 0x6001_0001, 0x6001_0002, 0x6001_0003]);
+        assert_eq!(
+            &ids[..7],
+            &[0x6000_0000, 0x6000_0001, 0x6000_0002, 0x6001_0000, 0x6001_0001, 0x6001_0002, 0x6001_0003]
+        );
         assert_eq!(v.funcs[2].ovft, 16);
         let add = &v.funcs[7];
-        assert_eq!((add.funckind, add.params.len(), add.ret.clone(), add.ovft), (FUNC_DISPATCH, 2, TypeDesc::Base(VT_I4), 56));
+        assert_eq!(
+            (add.funckind, add.params.len(), add.ret.clone(), add.ovft),
+            (FUNC_DISPATCH, 2, TypeDesc::Base(VT_I4), 56)
+        );
         assert_eq!(v.funcs[8].ret, TypeDesc::Base(VT_VOID));
         let i = view(&lib, 1, Form::DualInterface).unwrap();
         assert_eq!((i.kind, i.cb_size_vft, i.funcs.len()), (TKIND_INTERFACE, 72, 2));
@@ -163,7 +170,10 @@ fn registration_writes() {
     let lib = sample(TKIND_DISPATCH);
     let w = reg::register_writes(&lib, r"C:\polyws\x.tlb", None);
     let id = reg::guid_text(&G);
-    assert_eq!(w[0], reg::Write { key: alloc::format!("TypeLib\\{id}\\1.0"), name: None, value: "Poly test library".to_string() });
+    assert_eq!(
+        w[0],
+        reg::Write { key: alloc::format!("TypeLib\\{id}\\1.0"), name: None, value: "Poly test library".to_string() }
+    );
     assert_eq!(w[1].key, alloc::format!("TypeLib\\{id}\\1.0\\0\\win64"));
     assert_eq!(w[2].value, "0");
     assert_eq!(w[3].value, r"C:\polyws");

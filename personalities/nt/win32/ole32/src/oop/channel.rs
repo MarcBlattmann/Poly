@@ -21,7 +21,8 @@ const IID_IRPC_CHANNEL_BUFFER: Guid =
 /// `IID_IPSFactoryBuffer` (`objidl.h`).
 pub(crate) const IID_IPS_FACTORY_BUFFER: Guid =
     Guid { data1: 0xD5F5_69D0, data2: 0x593B, data3: 0x101A, data4: [0xB5, 0x69, 0x08, 0x00, 0x2B, 0x2D, 0xBF, 0x7A] };
-const CLSID_PSOA_INTERFACE: Guid = Guid { data1: 0x0002_0424, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+const CLSID_PSOA_INTERFACE: Guid =
+    Guid { data1: 0x0002_0424, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 const CLSID_PS_DISPATCH: Guid = Guid { data1: 0x0002_0420, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 /// `CLSCTX_INPROC_SERVER`.
 const CLSCTX_INPROC_SERVER: u32 = 1;
@@ -248,7 +249,13 @@ pub(crate) fn ps_factory(iid: &Guid) -> Result<*mut c_void, Hresult> {
     } else {
         // SAFETY: as above, through ole32's own CoGetClassObject.
         unsafe {
-            crate::CoGetClassObject(&clsid, CLSCTX_INPROC_SERVER, core::ptr::null_mut(), &IID_IPS_FACTORY_BUFFER, &mut f)
+            crate::CoGetClassObject(
+                &clsid,
+                CLSCTX_INPROC_SERVER,
+                core::ptr::null_mut(),
+                &IID_IPS_FACTORY_BUFFER,
+                &mut f,
+            )
         }
     };
     if hr < 0 || f.is_null() { Err(if hr < 0 { hr } else { E_NOINTERFACE }) } else { Ok(f) }

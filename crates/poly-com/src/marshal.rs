@@ -39,8 +39,7 @@ pub const MSHLFLAGS_TABLEWEAK: u32 = 2;
 pub const MSHLFLAGS_NOPING: u32 = 4;
 
 /// `CLSID_StdMarshal` (`objbase.h`): `{00000017-0000-0000-C000-000000000046}`.
-pub const CLSID_STD_MARSHAL: Guid =
-    Guid { data1: 0x17, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
+pub const CLSID_STD_MARSHAL: Guid = Guid { data1: 0x17, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 
 /// Size of the fixed `OBJREF` prefix (`signature`, `flags`, `iid`).
 pub const OBJREF_HEADER_LEN: usize = 24;
@@ -152,11 +151,8 @@ fn le64(b: &[u8]) -> u64 {
 impl ObjRefData {
     /// Encode as an `OBJREF_STANDARD` (68 bytes) or `OBJREF_CUSTOM` (72 bytes).
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(if self.flags == OBJREF_CUSTOM {
-            OBJREF_CUSTOM_LEN
-        } else {
-            OBJREF_STANDARD_LEN
-        });
+        let mut out =
+            Vec::with_capacity(if self.flags == OBJREF_CUSTOM { OBJREF_CUSTOM_LEN } else { OBJREF_STANDARD_LEN });
         out.extend_from_slice(&OBJREF_SIGNATURE.to_le_bytes());
         out.extend_from_slice(&self.flags.to_le_bytes());
         push_guid(&mut out, &self.iid);
@@ -268,14 +264,7 @@ impl MarshalTable {
     }
 
     /// Record a new marshal entry and return its unique non-zero token.
-    pub fn insert(
-        &mut self,
-        oid: u64,
-        object: usize,
-        owner: Owner,
-        kind: MarshalKind,
-        is_remote_proxy: bool,
-    ) -> u64 {
+    pub fn insert(&mut self, oid: u64, object: usize, owner: Owner, kind: MarshalKind, is_remote_proxy: bool) -> u64 {
         let token = self.next_token;
         self.next_token = self.next_token.wrapping_add(1).max(1);
         self.entries.push(MarshalEntry { token, oid, object, owner, kind, is_remote_proxy });

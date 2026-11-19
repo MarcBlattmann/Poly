@@ -4,12 +4,15 @@
 //! Learn: "SafeArrayCreate", "SafeArrayCopy", "VariantCopyInd", "VariantChangeType".
 
 use crate::com::*;
-use crate::{GetProcessHeap, HeapAlloc, HeapFree, SysAllocStringLen, SysFreeString, SysStringLen, VariantClear, VariantCopy, VariantInit};
+use crate::{
+    GetProcessHeap, HeapAlloc, HeapFree, SysAllocStringLen, SysFreeString, SysStringLen, VariantClear, VariantCopy,
+    VariantInit,
+};
 use alloc::string::String;
 use alloc::vec::Vec;
+use poly_com::typelib::*;
 use poly_kernelbase::oleaut::{VARIANT_SIZE, VARIANT_VALUE, VT_ARRAY, VT_BYREF};
 use poly_kernelbase::safearray::{self as sa, Element};
-use poly_com::typelib::*;
 
 pub(crate) const DISP_E_TYPEMISMATCH: Hresult = 0x8002_0005_u32 as i32;
 pub(crate) const DISP_E_OVERFLOW: Hresult = 0x8002_000A_u32 as i32;
@@ -47,7 +50,12 @@ pub unsafe extern "system" fn SafeArrayCreate(vt: u16, dims: u32, bounds: *const
         return core::ptr::null_mut();
     }
     // SAFETY: the caller's `dims` bounds.
-    let b: Vec<(u32, i32)> = (0..dims as usize).map(|i| unsafe { let x = *bounds.add(i); (x[0], x[1] as i32) }).collect();
+    let b: Vec<(u32, i32)> = (0..dims as usize)
+        .map(|i| unsafe {
+            let x = *bounds.add(i);
+            (x[0], x[1] as i32)
+        })
+        .collect();
     create(vt, &b)
 }
 
@@ -308,7 +316,10 @@ fn parse_number(s: &str) -> Option<f64> {
         None => (false, t.strip_prefix('+').unwrap_or(t)),
     };
     let (ip, fp) = digits.split_once('.').unwrap_or((digits, ""));
-    if (ip.is_empty() && fp.is_empty()) || !ip.bytes().all(|c| c.is_ascii_digit()) || !fp.bytes().all(|c| c.is_ascii_digit()) {
+    if (ip.is_empty() && fp.is_empty())
+        || !ip.bytes().all(|c| c.is_ascii_digit())
+        || !fp.bytes().all(|c| c.is_ascii_digit())
+    {
         return None;
     }
     let mut v = 0f64;
@@ -448,7 +459,13 @@ pub unsafe extern "system" fn VariantChangeType(dest: *mut u8, src: *const u8, _
 
 /// `VariantChangeTypeEx(dest, src, lcid, flags, vt)`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn VariantChangeTypeEx(dest: *mut u8, src: *const u8, _lcid: u32, flags: u16, vt: u16) -> Hresult {
+pub unsafe extern "system" fn VariantChangeTypeEx(
+    dest: *mut u8,
+    src: *const u8,
+    _lcid: u32,
+    flags: u16,
+    vt: u16,
+) -> Hresult {
     // SAFETY: as above.
     unsafe { VariantChangeType(dest, src, flags, vt) }
 }

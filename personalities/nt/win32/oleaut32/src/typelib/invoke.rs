@@ -20,7 +20,6 @@ pub(crate) const DISP_E_MEMBERNOTFOUND: Hresult = 0x8002_0003_u32 as i32;
 pub(crate) const DISP_E_BADPARAMCOUNT: Hresult = 0x8002_000E_u32 as i32;
 pub(crate) const DISP_E_EXCEPTION: Hresult = 0x8002_0009_u32 as i32;
 pub(crate) const DISP_E_NONAMEDARGS: Hresult = 0x8002_0007_u32 as i32;
-pub(crate) const DISP_E_PARAMNOTOPTIONAL: Hresult = 0x8002_000F_u32 as i32;
 const DISPID_PROPERTYPUT: i32 = -3;
 
 /// `DISPPARAMS`.
@@ -99,10 +98,13 @@ pub(crate) unsafe extern "system" fn ti_invoke(
     let Some(f) = raw else { return DISP_E_MEMBERNOTFOUND };
     // SAFETY: the caller's DISPPARAMS.
     let dp = unsafe { &*params };
-    if dp.c_named > 0 && !(dp.c_named == 1 && flags & 0xC != 0 && !dp.named.is_null() && unsafe { *dp.named } == DISPID_PROPERTYPUT) {
+    if dp.c_named > 0
+        && !(dp.c_named == 1 && flags & 0xC != 0 && !dp.named.is_null() && unsafe { *dp.named } == DISPID_PROPERTYPUT)
+    {
         return DISP_E_NONAMEDARGS;
     }
-    let retval = f.params.last().is_some_and(|p| p.flags & PARAMFLAG_FRETVAL != 0) && f.ret == TypeDesc::Base(VT_HRESULT);
+    let retval =
+        f.params.last().is_some_and(|p| p.flags & PARAMFLAG_FRETVAL != 0) && f.ret == TypeDesc::Base(VT_HRESULT);
     let n_in = f.params.len() - usize::from(retval);
     let given = dp.c_args as usize;
     let required = n_in - f.params[..n_in].iter().filter(|p| p.flags & PARAMFLAG_FOPT != 0).count();

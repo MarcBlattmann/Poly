@@ -115,6 +115,7 @@ static FACTORY_VTBL: Vtbl<5> = Vtbl([
 ]);
 
 /// The one factory object (a vtable pointer; its references are not counted).
+#[allow(dead_code)] // read through the object's address by callers
 struct Factory(*const Vtbl<5>);
 // SAFETY: an immutable pointer to a static table.
 unsafe impl Sync for Factory {}
@@ -123,7 +124,11 @@ static FACTORY: Factory = Factory(&FACTORY_VTBL);
 /// `DllGetClassObject(rclsid, riid, ppv)`: the marshaller's factory for `{00020424-...}` and
 /// `{00020420-...}`, answering `IUnknown` and `IPSFactoryBuffer`.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DllGetClassObject(clsid: *const Guid, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+pub unsafe extern "system" fn DllGetClassObject(
+    clsid: *const Guid,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }

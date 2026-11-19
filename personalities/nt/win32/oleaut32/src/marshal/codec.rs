@@ -99,9 +99,6 @@ impl W {
     pub(crate) fn u32(&mut self, v: u32) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
-    pub(crate) fn u64(&mut self, v: u64) {
-        self.0.extend_from_slice(&v.to_le_bytes());
-    }
     pub(crate) fn bytes(&mut self, b: &[u8]) {
         self.u32(b.len() as u32);
         self.0.extend_from_slice(b);
@@ -142,9 +139,6 @@ impl R<'_> {
     pub(crate) fn u32(&mut self) -> Result<u32, Hresult> {
         let b = self.take(4)?;
         Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-    }
-    pub(crate) fn u64(&mut self) -> Result<u64, Hresult> {
-        Ok(u64::from(self.u32()?) | (u64::from(self.u32()?) << 32))
     }
     pub(crate) fn bytes(&mut self) -> Result<Vec<u8>, Hresult> {
         let n = self.u32()? as usize;

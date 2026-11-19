@@ -311,7 +311,7 @@ impl Href {
 /// Case-insensitive comparison of names (ASCII letters fold; Learn: names in a library are not
 /// case sensitive).
 pub fn same_name(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.chars().zip(b.chars()).all(|(x, y)| x.to_ascii_lowercase() == y.to_ascii_lowercase())
+    a.eq_ignore_ascii_case(b)
 }
 
 impl Library {
@@ -488,9 +488,9 @@ impl Library {
     /// Whether type `t` is a dual interface (stored with the dual flag, made as an interface or as
     /// a dispatch type).
     pub fn is_dual(&self, t: usize) -> bool {
-        self.types.get(t).is_some_and(|ty| {
-            ty.flags & TYPEFLAG_FDUAL != 0 && matches!(ty.kind, TKIND_INTERFACE | TKIND_DISPATCH)
-        })
+        self.types
+            .get(t)
+            .is_some_and(|ty| ty.flags & TYPEFLAG_FDUAL != 0 && matches!(ty.kind, TKIND_INTERFACE | TKIND_DISPATCH))
     }
 }
 

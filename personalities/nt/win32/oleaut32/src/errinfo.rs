@@ -37,8 +37,13 @@ const PTR: usize = core::mem::size_of::<usize>();
 
 /// A new error object (as its `IErrorInfo`, one reference).
 pub(crate) fn new_error(data: ErrorData) -> *mut c_void {
-    Box::into_raw(Box::new(ErrorObject { ei: &EI_VTBL, cei: &CEI_VTBL, refs: AtomicU32::new(1), data: Locked::new(data) }))
-        .cast()
+    Box::into_raw(Box::new(ErrorObject {
+        ei: &EI_VTBL,
+        cei: &CEI_VTBL,
+        refs: AtomicU32::new(1),
+        data: Locked::new(data),
+    }))
+    .cast()
 }
 
 /// What an `IErrorInfo` (ours or another's) says.

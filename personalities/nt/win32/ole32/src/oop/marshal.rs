@@ -15,8 +15,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::git::Owner;
 use poly_com::guid::Guid;
 use poly_com::hresult::{
-    CO_E_CLASSSTRING, CO_E_NOTINITIALIZED, CO_E_OBJNOTCONNECTED, CO_E_OBJNOTREG, E_INVALIDARG, E_UNEXPECTED, E_NOINTERFACE, E_POINTER, Hresult,
-    REGDB_E_IIDNOTREG, RPC_E_INVALID_OBJREF, S_OK,
+    CO_E_CLASSSTRING, CO_E_NOTINITIALIZED, CO_E_OBJNOTCONNECTED, CO_E_OBJNOTREG, E_INVALIDARG, E_NOINTERFACE,
+    E_POINTER, E_UNEXPECTED, Hresult, REGDB_E_IIDNOTREG, RPC_E_INVALID_OBJREF, S_OK,
 };
 use poly_com::marshal::{
     CLSID_STD_MARSHAL, MSHCTX_INPROC, MarshalEntry, MarshalKind, MarshalTable, OBJREF_CUSTOM, OBJREF_HEADER_LEN,
@@ -539,7 +539,8 @@ struct StdMarshalVtbl {
         *mut c_void,
         u32,
     ) -> Hresult,
-    unmarshal_interface: unsafe extern "system" fn(*mut StdMarshal, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
+    unmarshal_interface:
+        unsafe extern "system" fn(*mut StdMarshal, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
     release_marshal_data: unsafe extern "system" fn(*mut StdMarshal, *mut c_void) -> Hresult,
     disconnect_object: unsafe extern "system" fn(*mut StdMarshal, u32) -> Hresult,
 }

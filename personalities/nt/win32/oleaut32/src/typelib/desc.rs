@@ -162,7 +162,12 @@ pub(crate) unsafe fn read_td(t: &CTypeDesc, depth: u32) -> Option<TypeDesc> {
                 let after = core::mem::size_of::<CTypeDesc>();
                 let n = base.add(after).cast::<u16>().read() as usize;
                 let dims = (0..n)
-                    .map(|k| (base.add(after + 4 + 8 * k).cast::<u32>().read(), base.add(after + 8 + 8 * k).cast::<i32>().read()))
+                    .map(|k| {
+                        (
+                            base.add(after + 4 + 8 * k).cast::<u32>().read(),
+                            base.add(after + 8 + 8 * k).cast::<i32>().read(),
+                        )
+                    })
                     .collect();
                 TypeDesc::CArray(Box::new(elem), dims)
             }
@@ -182,11 +187,8 @@ struct FuncBlock {
 /// A new `FUNCDESC` for `f` (freed by [`free_func`]).
 pub(crate) fn make_func(f: &Func) -> *mut CFuncDesc {
     let mut arena = Arena::default();
-    let mut elems: Vec<CElemDesc> = f
-        .params
-        .iter()
-        .map(|p| CElemDesc { td: arena.td(&p.td), pd: CParamDesc { ex: 0, flags: p.flags } })
-        .collect();
+    let mut elems: Vec<CElemDesc> =
+        f.params.iter().map(|p| CElemDesc { td: arena.td(&p.td), pd: CParamDesc { ex: 0, flags: p.flags } }).collect();
     let ret = CElemDesc { td: arena.td(&f.ret), pd: CParamDesc { ex: 0, flags: f.ret_flags } };
     let params = if elems.is_empty() { core::ptr::null_mut() } else { elems.as_mut_ptr() };
     let b = Box::new(FuncBlock {
