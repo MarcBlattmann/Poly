@@ -1,4 +1,4 @@
-// This program is imp_levels, recorded with the standard (filtered) token.
+// This program is inpc_levels, recorded with the standard (filtered) token.
 //! ImpersonateNamedPipeClient and the impersonation level the client allows: no quality of service
 //! flags, SECURITY_ANONYMOUS, SECURITY_IDENTIFICATION, SECURITY_IMPERSONATION,
 //! SECURITY_DELEGATION, and with SECURITY_EFFECTIVE_ONLY and SECURITY_CONTEXT_TRACKING; the thread
