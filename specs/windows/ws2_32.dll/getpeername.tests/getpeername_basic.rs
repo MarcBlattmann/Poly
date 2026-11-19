@@ -1002,7 +1002,14 @@ fn gpn(t: &mut Test, what: &str, s: SOCKET, lenarg: Option<i32>) {
         WSASetLastError(0);
         let r = getpeername(s, buf.as_mut_ptr() as *mut c_void, np);
         let e = WSAGetLastError();
-        let touched = buf.iter().filter(|&&b| b != 0xAA).count();
+        // `touched` counts the bytes the call changed. A written byte can equal the fill by chance (a port number
+        // is random: 0xAA in it gave 15 instead of 16), so the call is made a second time with another fill and a
+        // byte counts as written when it differs from its fill in either run.
+        let mut buf2 = [0x55u8; 64];
+        let mut n2 = lenarg.unwrap_or(0);
+        let np2: *mut i32 = if lenarg.is_some() { &mut n2 } else { core::ptr::null_mut() };
+        getpeername(s, buf2.as_mut_ptr() as *mut c_void, np2);
+        let touched = (0..64).filter(|&i| buf[i] != 0xAA || buf2[i] != 0x55).count();
         say!(t, "{what}: {} length now {n} bytes written {touched}", rr(r, e).as_str());
     }
 }
