@@ -114,7 +114,11 @@ pub fn inherit_token(
     if given.is_some() {
         copy.clamp_privileges_to_integrity();
     }
-    let creator_token = creator.and_then(|c| sys.objects.security.process_token(c));
+    // A given token's copy is described by its own defaults, as the process is (ADR 0235): a
+    // server that the SYSTEM activation process starts with its client's token can read its own
+    // token. A copy of the creator's is described by the creator's.
+    let creator_token =
+        if given.is_some() { None } else { creator.and_then(|c| sys.objects.security.process_token(c)) };
     install_process_token(sys, child, copy, thread, creator_token).map(|_| ())
 }
 
