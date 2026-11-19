@@ -219,6 +219,6 @@ of the token of the session's shell (`explorer.exe`, found through the process l
   de-elevated will want it there too.
 - **The session's object namespace.** Learn ("Kernel object namespaces") puts a session's named
   objects under `\Sessions\<n>\BaseNamedObjects`. Git for Windows' MSYS2 runtime, in session 1,
-  creates its directory under `\Sessions\BNOLINKS` (its own error message on Poly: the path was
+  creates its directory under `\Sessions\BNOLINKS\1` (its own error message on Poly: the path was
   not found). Both names are now links to `\BaseNamedObjects` (`poly_ntobj::WELL_KNOWN_LINKS`):
   Poly keeps one namespace for named objects, as it already does for `Local\`.
