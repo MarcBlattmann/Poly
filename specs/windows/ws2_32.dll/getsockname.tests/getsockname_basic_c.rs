@@ -1004,7 +1004,15 @@ fn gsn(t: &mut Test, what: &str, s: SOCKET, buflen: usize, lenarg: Option<i32>) 
         let r = getsockname(s, bp, np);
         let e = WSAGetLastError();
         let fam = u16::from_le_bytes([buf[0], buf[1]]);
-        let touched = buf.iter().filter(|&&b| b != 0xAA).count();
+        // `touched` counts the bytes the call changed. A written byte can equal the fill by chance (a port number
+        // is random: 0xAA in it gave 15 instead of 16), so the call is made a second time with another fill and a
+        // byte counts as written when it differs from its fill in either run.
+        let mut buf2 = [0x55u8; 64];
+        let mut n2 = lenarg.unwrap_or(0);
+        let np2: *mut i32 = if lenarg.is_some() { &mut n2 } else { core::ptr::null_mut() };
+        let bp2: *mut c_void = if buflen == 0 { core::ptr::null_mut() } else { buf2.as_mut_ptr() as *mut c_void };
+        getsockname(s, bp2, np2);
+        let touched = (0..64).filter(|&i| buf[i] != 0xAA || buf2[i] != 0x55).count();
         say!(
             t,
             "{what}: {} length now {n} family {} bytes written {touched}",
