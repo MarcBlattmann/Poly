@@ -682,11 +682,20 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
             };
             reply(k, buf, length, ret, &value.to_le_bytes())
         }
-        // ImageFileName: a UNICODE_STRING and its text, the NT name of the image.
+        // ImageFileName: a UNICODE_STRING and its text, the NT name of the image (of the caller or,
+        // with a handle that has a query right, of another process: `QueryFullProcessImageNameW`).
         27 => {
             let us = abi::caller_unicode_size(k);
-            let (device, path) =
-                k.with_state(|sys, proc, _| crate::memory::mapped_file_of(sys, proc, proc.image_base))?;
+            let image = |sys: &mut crate::system::NtSystem,
+                         proc: &mut crate::system::NtProcess,
+                         _: &mut dyn crate::backend::Backend| {
+                crate::memory::mapped_file_of(sys, proc, proc.image_base)
+            };
+            let (device, path) = if pid == k.caller().process {
+                k.with_state(image)?
+            } else {
+                k.with_process(pid, image).ok_or(STATUS_PROCESS_IS_TERMINATING)??
+            };
             // The name as the kernel was given the image's path may end in a NUL.
             let path = path.map(|mut p| {
                 while p.last() == Some(&0) {

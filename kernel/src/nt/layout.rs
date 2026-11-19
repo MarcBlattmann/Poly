@@ -193,6 +193,7 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0221.
         ("services.exe", super::SERVICES_EXE),
         ("hnetcfg.dll", super::HNETCFG),
+        ("msimg32.dll", super::MSIMG32),
     ] {
         if bytes.is_empty() {
             continue;

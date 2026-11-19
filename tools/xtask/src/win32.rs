@@ -126,6 +126,8 @@ pub const OUTPUTS: &[&str] = &[
     "explorer.exe",
     // The Windows Firewall's COM objects.
     "hnetcfg.dll",
+    // AlphaBlend, for 64-bit and 32-bit programs (it was a generated stub DLL).
+    "msimg32.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -361,6 +363,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/vcruntime140_1",
             "personalities/nt/win32/msvcp140",
             "personalities/nt/win32/hnetcfg",
+            "personalities/nt/win32/msimg32",
             // ADR 0221, 0222.
             "personalities/nt/win32/services",
             "personalities/nt/win32/explorer",

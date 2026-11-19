@@ -122,6 +122,8 @@ fn embed_win32() {
         "explorer.exe",
         // The Windows Firewall's COM objects.
         "hnetcfg.dll",
+        // AlphaBlend (it was a generated stub DLL).
+        "msimg32.dll",
     ] {
         match &dir {
             Some(d) => {

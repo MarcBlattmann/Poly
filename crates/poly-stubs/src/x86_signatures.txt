@@ -79,6 +79,9 @@ gdi32!Ellipse 5
 gdi32!EnumFontsW 4
 gdi32!ExtFloodFill 5
 gdi32!FrameRgn 5
+# `GdiAlphaBlend` is `AlphaBlend`'s gdi32 export (msimg32 passes it on): eleven arguments, the
+# `BLENDFUNCTION` by value in one slot.
+gdi32!GdiAlphaBlend 11
 gdi32!GetBitmapBits 3
 gdi32!GetBrushOrgEx 2
 gdi32!GetDIBColorTable 4
