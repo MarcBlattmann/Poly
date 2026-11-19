@@ -1679,6 +1679,8 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The same window from what `cargo xtask start` boots as "Desktop with Chrome for Windows": its
     // disk and launcher entry (chrometry.rs, ADR 0216).
     ("chrome-try", chrometry::group_boot_test),
+    // Chrome closed maximized starts again, maximized (chrometry.rs, ADR 0234).
+    ("chrome-try-max", chrometry::group_boot_test_maximized),
     // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
     // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
     // ADR 0194).
@@ -1827,7 +1829,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     // (the `chrome` job of the workflow fetches the package; ADR 0214).
     ("chrome-win", &["chrome-win"]),
     ("chrome-win-sandbox", &["chrome-win-sandbox", "chrome-win-defaults"]),
-    ("chrome-win-window", &["chrome-win-window", "chrome-try"]),
+    ("chrome-win-window", &["chrome-win-window", "chrome-try", "chrome-try-max"]),
     ("chrome-win-gpu", &["chrome-win-gpu"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),

@@ -721,8 +721,8 @@ pub fn desktop_check(
 /// (`type:data:text/html,<b>x</b>`).
 fn split_steps(s: &str) -> Vec<String> {
     const KINDS: &[&str] = &[
-        "launch", "sleep", "wait", "shot", "pixel", "near", "type", "wtype", "key", "chord", "click", "dclick",
-        "rclick", "drag", "wheel", "move",
+        "launch", "sleep", "wait", "waitn", "shot", "pixel", "near", "type", "wtype", "key", "chord", "click",
+        "dclick", "rclick", "drag", "wheel", "move",
     ];
     let mut out: Vec<String> = Vec::new();
     for piece in s.split(',') {
@@ -753,6 +753,9 @@ enum Step {
     Launch,
     Sleep(u64),
     Wait(String),
+    /// Wait until the log has TEXT at least N times (`waitn:N|TEXT`): the second window of a
+    /// program started twice, where `wait` would see the first one's line.
+    WaitN(usize, String),
     Shot(String),
     /// The screen's pixel at X|Y must be this colour (RRGGBB): the step fails otherwise.
     Pixel(i32, i32, [u8; 3]),
@@ -791,6 +794,10 @@ impl Step {
             "launch" => Step::Launch,
             "sleep" => Step::Sleep(arg.parse().map_err(|_| format!("step {s:?}: seconds"))?),
             "wait" => Step::Wait(arg.into()),
+            "waitn" => {
+                let (n, text) = arg.split_once('|').ok_or(format!("step {s:?}: N|TEXT"))?;
+                Step::WaitN(n.trim().parse().map_err(|_| format!("step {s:?}: bad N"))?, text.into())
+            }
             "shot" => Step::Shot(arg.into()),
             "near" => {
                 let v: Vec<&str> = arg.split('|').collect();
@@ -1012,6 +1019,15 @@ impl Driver {
             }
             Step::Sleep(s) => std::thread::sleep(Duration::from_secs(*s)),
             Step::Wait(t) => self.wait(t, 60)?,
+            Step::WaitN(n, t) => {
+                let end = Instant::now() + Duration::from_secs(60);
+                while self.text().matches(t.as_str()).count() < *n {
+                    if Instant::now() >= end {
+                        return Err(format!("{t:?} not {n} times in the log within 60 s"));
+                    }
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+            }
             Step::Shot(n) => {
                 self.shots += 1;
                 let png = self.out.join(format!("{}-{:02}-{n}.png", self.name, self.shots));
@@ -1123,6 +1139,8 @@ mod tests {
     fn steps_parse() {
         assert_eq!(Step::parse("launch"), Ok(Step::Launch));
         assert_eq!(Step::parse("sleep:5"), Ok(Step::Sleep(5)));
+        assert_eq!(Step::parse("waitn:2|launch-to-window"), Ok(Step::WaitN(2, "launch-to-window".into())));
+        assert!(Step::parse("waitn:launch-to-window").is_err());
         assert_eq!(Step::parse("click:10|20"), Ok(Step::Click(10, 20)));
         assert_eq!(Step::parse("drag:1|2|30|40"), Ok(Step::Drag(1, 2, 30, 40)));
         assert!(Step::parse("drag:1|2|3").is_err());
