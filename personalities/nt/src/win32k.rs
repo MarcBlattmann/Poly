@@ -14,8 +14,10 @@
 //! The desktop link (ADR 0131): after every call (and when a thread or
 //! process ends) the surfaces of top-level windows are brought in line
 //! with the window manager (`poly_win32k::surfaces`); `PolyUserCommitSurface`
-//! copies a window's pixels from the app into its surface buffer. The
-//! kernel's `/dev/win32k` device reaches [`Win32k`]'s link methods.
+//! copies a window's pixels from the app into its surface buffer, and
+//! `PolyUserPresentBuffer` hands the compositor a section the app drew a
+//! frame in (ADR 0224). The kernel's `/dev/win32k` device reaches
+//! [`Win32k`]'s link methods.
 //!
 //! [`NtProcess::win32k_disabled`]: crate::system::NtProcess::win32k_disabled
 
@@ -28,6 +30,7 @@ use poly_ntobj::status::{STATUS_BUFFER_TOO_SMALL, STATUS_INVALID_PARAMETER, STAT
 use poly_ntobj::{Handle, NtStatus, ObjectId, ObjectType};
 use poly_win32k::desktop::Desktop;
 use poly_win32k::frame::Rect;
+use poly_win32k::layers::{Layers, Presented};
 use poly_win32k::link::{FromCompositor, Request as DesktopRequest};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
@@ -54,6 +57,9 @@ pub struct Win32k {
     pub desktop: Desktop,
     /// The surfaces' windows and buffers.
     pub surfaces: Surfaces,
+    /// Pictures presented as sections (ADR 0224); each adopted section object holds a
+    /// reference of ours.
+    pub layers: Layers,
     /// Each thread's queue event (registered by `user32`) and the handle
     /// value it registered.
     events: BTreeMap<Key, (ObjectId, u64)>,
@@ -80,6 +86,9 @@ impl Win32k {
     pub fn process_exited(&mut self, objects: &mut poly_ntobj::ObjectManager, pid: u32) {
         let mut fx = Effects::default();
         self.wm.process_exited(pid, &mut fx);
+        for object in self.layers.remove_process(&mut self.desktop, pid) {
+            let _ = objects.dereference(ObjectId::from_raw(object));
+        }
         let gone: alloc::vec::Vec<Key> = self.events.keys().filter(|k| k.0 == pid).copied().collect();
         for k in gone {
             if let Some((id, _)) = self.events.remove(&k) {
@@ -194,6 +203,12 @@ impl Win32k {
         self.sync();
     }
 
+    /// The kernel's backing id of a layer buffer's pages, for the compositor's mapping of the
+    /// device (ADR 0224).
+    pub fn link_layer_backing(&self, buffer: u32) -> Option<u64> {
+        self.layers.backing(buffer)
+    }
+
     /// The device's `READ_BUFFER`: rows of a buffer.
     pub fn link_rows(&self, buffer: u32, row: u32, rows: u32) -> Option<alloc::vec::Vec<u8>> {
         self.surfaces.rows(buffer, row, rows)
@@ -239,6 +254,7 @@ pub fn dispatch<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome {
         Some(Win32kService::Call) => call(k, regs).unwrap_or_else(|e| e),
         Some(Win32kService::CommitSurface) => commit(k, regs).unwrap_or_else(|e| e),
         Some(Win32kService::CommitSurfaceArea) => commit_area(k, regs).unwrap_or_else(|e| e),
+        Some(Win32kService::PresentBuffer) => present_buffer(k, regs).unwrap_or_else(|e| e),
         None => {
             regs.rax = u64::from(STATUS_NOT_IMPLEMENTED);
             return Outcome::Unimplemented { table: Table::Win32k.name(), number: u64::from(index) };
@@ -453,6 +469,74 @@ fn commit_area<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, N
         w.surfaces.committed_area(&mut w.desktop, hwnd, (left, top, right - left, bottom - top))
     });
     Ok(if ok { STATUS_SUCCESS } else { STATUS_INVALID_PARAMETER })
+}
+
+/// The most dirty rectangles one present names (more: the whole buffer).
+const MAX_PRESENT_RECTS: u32 = 64;
+
+/// `SECTION_MAP_READ` (winnt.h): the access the caller's section handle must allow.
+const SECTION_MAP_READ: u32 = 0x0004;
+
+/// `PolyUserPresentBuffer(hwnd, section, width, height, stride, rects, count)` (ADR 0224): the
+/// frame in the caller's section is window `hwnd`'s picture from the caller now. The section
+/// becomes a buffer of the window's layer (a reference of win32k's keeps it while the layer has
+/// it) that the compositor maps, and the rectangles are damage: no pixel is copied. Section 0
+/// removes the caller's layer of the window. `STATUS_INVALID_PARAMETER` for a picture larger than
+/// the section or a surface may be; success without a record when the window shows nowhere.
+fn present_buffer<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus> {
+    let [hwnd, section, width, height, stride, rects, count] = abi::args::<K, 7>(k, regs)?;
+    let (hwnd, width, height) = (hwnd as u32, width as u32, height as u32);
+    let caller = k.caller();
+    let pid = caller.process.0;
+    if section == 0 {
+        return Ok(k.with_state(|sys, _, b| {
+            let w = &mut sys.win32k;
+            for object in w.layers.remove(&mut w.desktop, hwnd, pid) {
+                let _ = sys.objects.dereference(ObjectId::from_raw(object));
+            }
+            sys.reap(b);
+            STATUS_SUCCESS
+        }));
+    }
+    if width == 0
+        || height == 0
+        || width > MAX_SIDE
+        || height > MAX_SIDE
+        || stride < u64::from(width) * 4
+        || stride > u64::from(MAX_SIDE) * 4
+        || count > u64::from(MAX_PRESENT_RECTS)
+    {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let mut list = alloc::vec::Vec::new();
+    if count > 0 && rects != 0 {
+        let mut raw = vec![0u8; count as usize * 16];
+        abi::read(k, rects, &mut raw)?;
+        let edge = |r: &[u8], i: usize| i32::from_le_bytes([r[i * 4], r[i * 4 + 1], r[i * 4 + 2], r[i * 4 + 3]]);
+        list.extend(raw.chunks_exact(16).map(|r| (edge(r, 0), edge(r, 1), edge(r, 2), edge(r, 3))));
+    }
+    k.with_state(|sys, _, b| {
+        let object =
+            sys.objects.object_by_handle(&caller, Handle(section), SECTION_MAP_READ, Some(ObjectType::Section))?;
+        let key = sys.objects.cookie(object).ok_or(STATUS_INVALID_PARAMETER)?;
+        let s = sys.section(key).ok_or(STATUS_INVALID_PARAMETER)?;
+        if s.image().is_some() || s.size < stride * u64::from(height) {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        let presented = Presented { object: object.raw(), backing: s.backing, width, height, stride: stride as u32 };
+        let w = &mut sys.win32k;
+        let Some(outcome) = w.layers.present(&w.surfaces, &w.wm, &mut w.desktop, hwnd, pid, presented, &list) else {
+            return Ok(STATUS_SUCCESS);
+        };
+        if outcome.adopted {
+            let _ = sys.objects.reference(object);
+        }
+        for o in outcome.dropped {
+            let _ = sys.objects.dereference(ObjectId::from_raw(o));
+        }
+        sys.reap(b);
+        Ok(STATUS_SUCCESS)
+    })
 }
 
 /// A commit of a child window: its picture into its top-level window's surface where the child

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "60f950d81b55",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:05:29Z",
+  "tests": [
+    {
+      "name": "ntreg_open",
+      "exe_sha256": "448479698556739f7ca930f185b53dd0fde2dc70dce6ca1b2e8770312f670911",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SEtMTVxTT0ZUV0FSRVxNaWNyb3NvZnQsIEtFWV9SRUFELCBjYXNlLWluc2Vuc2l0aXZlOiBzdGF0dXMgMHgwMDAwMDAwMCBoYW5kbGUgc2V0CnNhbWUgcGF0aCBpbiBvdGhlciBjYXNlLCBjYXNlLWluc2Vuc2l0aXZlOiBzdGF0dXMgMHgwMDAwMDAwMCBoYW5kbGUgc2V0CnNhbWUgcGF0aCBpbiBvdGhlciBjYXNlLCBubyBPQkpfQ0FTRV9JTlNFTlNJVElWRTogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldApleGFjdCBjYXNlLCBubyBPQkpfQ0FTRV9JTlNFTlNJVElWRTogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldAphIGtleSB0aGF0IGRvZXMgbm90IGV4aXN0OiBzdGF0dXMgMHhjMDAwMDAzNCBoYW5kbGUgTlVMTAphIHBhcmVudCB0aGF0IGRvZXMgbm90IGV4aXN0OiBzdGF0dXMgMHhjMDAwMDAzNCBoYW5kbGUgTlVMTAplbXB0eSBuYW1lOiBzdGF0dXMgMHhjMDAwMDAzYiBoYW5kbGUgTlVMTApcUmVnaXN0cnkgaXRzZWxmOiBzdGF0dXMgMHgwMDAwMDAwMCBoYW5kbGUgc2V0ClxSZWdpc3RyeVxNYWNoaW5lOiBzdGF0dXMgMHgwMDAwMDAwMCBoYW5kbGUgc2V0Cm5vIGxlYWRpbmcgYmFja3NsYXNoOiBzdGF0dXMgMHhjMDAwMDAzYiBoYW5kbGUgTlVMTAphIHRyYWlsaW5nIGJhY2tzbGFzaDogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldAphIFdpbjMyIHBhdGggZm9ybSAoSEtFWV9MT0NBTF9NQUNISU5FXFNPRlRXQVJFKTogc3RhdHVzIDB4YzAwMDAwM2IgaGFuZGxlIE5VTEwKYWNjZXNzIE1BWElNVU1fQUxMT1dFRDogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldAphY2Nlc3MgMDogc3RhdHVzIDB4YzAwMDAwMjIgaGFuZGxlIE5VTEwKS0VZX0FMTF9BQ0NFU1Mgb24gSEtMTVxTT0ZUV0FSRVxNaWNyb3NvZnQgKGVsZXZhdGVkOiBhbGxvd2VkKTogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldApSdGxGb3JtYXRDdXJyZW50VXNlcktleVBhdGggZ2F2ZSBhIHBhdGg6IHRydWUKdGhlIGN1cnJlbnQgdXNlcidzIGtleTogc3RhdHVzIDB4MDAwMDAwMDAgaGFuZGxlIHNldApyZWxhdGl2ZSBvcGVuIG9mIFNvZnR3YXJlIGJlbG93IHRoZSB1c2VyJ3Mga2V5IChSb290RGlyZWN0b3J5KTogc3RhdHVzIDB4MDAwMDAwMDAKTnRPcGVuS2V5IG9mIHRoZSBzYW1lIGtleTogc3RhdHVzIDB4MDAwMDAwMDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "HKLM\\SOFTWARE\\Microsoft, KEY_READ, case-insensitive: status 0x00000000 handle set\nsame path in other case, case-insensitive: status 0x00000000 handle set\nsame path in other case, no OBJ_CASE_INSENSITIVE: status 0x00000000 handle set\nexact case, no OBJ_CASE_INSENSITIVE: status 0x00000000 handle set\na key that does not exist: status 0xc0000034 handle NULL\na parent that does not exist: status 0xc0000034 handle NULL\nempty name: status 0xc000003b handle NULL\n\\Registry itself: status 0x00000000 handle set\n\\Registry\\Machine: status 0x00000000 handle set\nno leading backslash: status 0xc000003b handle NULL\na trailing backslash: status 0x00000000 handle set\na Win32 path form (HKEY_LOCAL_MACHINE\\SOFTWARE): status 0xc000003b handle NULL\naccess MAXIMUM_ALLOWED: status 0x00000000 handle set\naccess 0: status 0xc0000022 handle NULL\nKEY_ALL_ACCESS on HKLM\\SOFTWARE\\Microsoft (elevated: allowed): status 0x00000000 handle set\nRtlFormatCurrentUserKeyPath gave a path: true\nthe current user's key: status 0x00000000 handle set\nrelative open of Software below the user's key (RootDirectory): status 0x00000000\nNtOpenKey of the same key: status 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

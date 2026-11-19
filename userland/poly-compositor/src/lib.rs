@@ -355,6 +355,15 @@ struct FrameStats {
     damaged_pixels: u64,
     copied_bytes: u64,
     copied_max_bytes: u64,
+    /// Time spent taking clients' pixels into the scene: Wayland commits (their buffer copies)
+    /// and the desktop link's records (ADR 0224).
+    take_ns: u64,
+    /// A key press waiting for the next drawn frame (when it was read), and the times from key
+    /// presses to the frames that followed them: what a typist waits for a glyph (ADR 0224).
+    key_at: Option<u64>,
+    keys: u64,
+    key_ns: u64,
+    key_max_ns: u64,
 }
 
 impl FrameStats {
@@ -371,6 +380,14 @@ impl FrameStats {
             self.started_ns = now_ns;
         }
         self.frames += 1;
+        if damaged_pixels > 0
+            && let Some(at) = self.key_at.take()
+        {
+            let ns = now_ns.saturating_sub(at);
+            self.keys += 1;
+            self.key_ns = self.key_ns.saturating_add(ns);
+            self.key_max_ns = self.key_max_ns.max(ns);
+        }
         self.compose_ns = self.compose_ns.saturating_add(compose_ns);
         self.compose_max_ns = self.compose_max_ns.max(compose_ns);
         self.present_ns = self.present_ns.saturating_add(present_ns);
@@ -390,10 +407,12 @@ impl FrameStats {
         let damage_avg = self.damaged_pixels / frames;
         let damage_avg_bytes = damage_avg.saturating_mul(core::mem::size_of::<u32>() as u64);
         let copied_avg_bytes = self.copied_bytes / frames;
+        let take_avg_us = self.take_ns / frames / 1_000;
+        let key_avg_us = self.key_ns.checked_div(self.keys).unwrap_or(0) / 1_000;
         let damage_pct_milli =
             self.damaged_pixels.saturating_mul(100_000) / frames.saturating_mul(output_pixels.max(1));
         println!(
-            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%)",
+            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%) take_avg_ms={}.{:03} take_window_ms={} keys={} key_to_frame_avg_ms={}.{:03} key_to_frame_max_ms={}",
             elapsed_ns / 1_000_000,
             fps_milli / 1_000,
             fps_milli % 1_000,
@@ -408,8 +427,15 @@ impl FrameStats {
             self.copied_max_bytes,
             damage_pct_milli / 1_000,
             damage_pct_milli % 1_000,
+            take_avg_us / 1_000,
+            take_avg_us % 1_000,
+            self.take_ns / 1_000_000,
+            self.keys,
+            key_avg_us / 1_000,
+            key_avg_us % 1_000,
+            self.key_max_ns / 1_000_000,
         );
-        *self = FrameStats { started_ns: now_ns, ..FrameStats::default() };
+        *self = FrameStats { started_ns: now_ns, key_at: self.key_at, ..FrameStats::default() };
     }
 }
 
@@ -848,6 +874,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
         let mut gone = Vec::new();
+        let take_start = if o.stats { os::monotonic_ns() } else { 0 };
         for (pfd, id) in fds[1..input_at].iter().zip(&ids) {
             if pfd.revents == 0 {
                 continue;
@@ -859,6 +886,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => gone.push(*id),
             }
+        }
+        if o.stats {
+            stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(take_start));
         }
 
         // A flip completed: the frame it showed is on the screen since its
@@ -918,6 +948,12 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
             d.polled(&fds[desk_at..desk_end]);
             while let Some(ev) = d.input.next_event() {
+                if o.stats
+                    && stats.key_at.is_none()
+                    && matches!(ev, poly_wayland::seat::InputEvent::Key { pressed: true, .. })
+                {
+                    stats.key_at = Some(os::monotonic_ns());
+                }
                 if let Some(app) = d.route(ev, &mut server) {
                     start_app(d, &mut server, &env, &app);
                 }
@@ -978,7 +1014,11 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(l) = &mut winlink
             && fds[win_fds].iter().any(|p| p.revents != 0)
         {
+            let start = if o.stats { os::monotonic_ns() } else { 0 };
             l.pump_server(&mut server);
+            if o.stats {
+                stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
+            }
         }
         // A Windows program's "open" with no program of its own, or its "show in folder":
         // Files does it (ADR 0223).

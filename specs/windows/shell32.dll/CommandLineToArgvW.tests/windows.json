@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "cla_rules",
+      "exe_sha256": "57f0e1f1a1bc8e7c5fdd00408611259de3faa905b94df1a3d9f1bff64abd7663",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGxhaW46IGFyZ2MgNCBbPHA+PGE+PGI+PGM+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKcXVvdGVkOiBhcmdjIDMgWzxwPjxhIGI+PGM+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKcXVvdGUgaW4gd29yZDogYXJnYyAzIFs8cD48YWIgY2Q+PGU+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKMiBiYWNrc2xhc2hlczogYXJnYyAyIFs8cD48YVxcYj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQpiYWNrc2xhc2ggcXVvdGU6IGFyZ2MgMiBbPHA+PGEiYj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQoyIGJhY2tzbGFzaGVzIHF1b3RlOiBhcmdjIDMgWzxwPjxhXGIgYz48ZD5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQozIGJhY2tzbGFzaGVzIHF1b3RlOiBhcmdjIDMgWzxwPjxhXCJiPjxjPl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCjQgYmFja3NsYXNoZXMgcXVvdGU6IGFyZ2MgMyBbPHA+PGFcXD48Yj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQpiYWNrc2xhc2hlcyBhdCBlbmQgb2YgcXVvdGVkOiBhcmdjIDIgWzxwPjxDOlxhIGIiIGM+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKYmFja3NsYXNoZXMgbm8gcXVvdGU6IGFyZ2MgMyBbPHA+PFxcXGE+PFxiPl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCmVtcHR5IHF1b3RlZDogYXJnYyAzIFs8cD48PjxhPl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCnR3byBlbXB0eTogYXJnYyAzIFs8cD48Pjw+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKZG91YmxlIHF1b3RlIGluIHF1b3RlZDogYXJnYyAyIFs8cD48YSJiIGM+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKdHJpcGxlIHF1b3RlOiBhcmdjIDIgWzxwPjwiYSBjPl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCnF1b3RlIHBhaXIgYWZ0ZXIgd29yZDogYXJnYyAzIFs8cD48YT48Yj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQp1bnRlcm1pbmF0ZWQ6IGFyZ2MgMiBbPHA+PGFiYyBkZWY+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKdW50ZXJtaW5hdGVkIGJhY2tzbGFzaDogYXJnYyAyIFs8cD48YWJjXD5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQp1bmMgcGF0aDogYXJnYyAzIFs8cD48XFxzZXJ2ZXJcc2hhcmVcPjx4Pl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCmZsYWcgd2l0aCBlcXVhbHM6IGFyZ2MgMyBbPHA+PC0taW5zdGFsbGVyZGF0YT1DOlxXaW5kb3dzXFN5c3RlbVRlbXBcYSBiXHgudG1wPjwtLXg+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKdGFiczogYXJnYyA0IFs8cD48YT48Yj48Yz5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQptYW55IHNwYWNlczogYXJnYyAzIFs8cD48YT48Yj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQp0YWIgaW4gcXVvdGVzOiBhcmdjIDMgWzxwPjxhPDAwMDk+Yj48Yz5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQp0cmFpbGluZyBzcGFjZTogYXJnYyAyIFs8cD48YT5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQpsb25nIGFyZzogYXJnYyAzIFs8cD48YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE+PGI+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKYXJndjAgcGxhaW46IGFyZ2MgMiBbPEM6XGFcYi5leGU+PHg+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKYXJndjAgcXVvdGVkOiBhcmdjIDIgWzxDOlxQcm9ncmFtIEZpbGVzXGEgYi5leGU+PHg+XSBlbmRzIHdpdGggTlVMTCBwb2ludGVyIHRydWUKYXJndjAgYmFja3NsYXNoIHF1b3RlOiBhcmdjIDIgWzxDOlxhXD48YiB4Pl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCmFyZ3YwIHVucXVvdGVkIGJhY2tzbGFzaCBxdW90ZTogYXJnYyAzIFs8QzpcYVwiYj48Yz48ZD5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQphcmd2MCBxdW90ZSBpbiBtaWRkbGU6IGFyZ2MgMiBbPEM6XGEiYj48Yy5leGUgeD5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQphcmd2MCBvbmx5OiBhcmdjIDEgWzxDOlxhXGIuZXhlPl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCmFyZ3YwIHF1b3RlZCBubyBzcGFjZSBhZnRlcjogYXJnYyAzIFs8YSBiPjx4Pjx5Pl0gZW5kcyB3aXRoIE5VTEwgcG9pbnRlciB0cnVlCmFyZ3YwIHRhYjogYXJnYyAyIFs8YT48Yj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQphcmd2MCB1bnRlcm1pbmF0ZWQ6IGFyZ2MgMSBbPGEgYj5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQphcmd2MCBlbXB0eSBxdW90ZWQ6IGFyZ2MgMiBbPD48eD5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQphcmd2MCB0d28gcXVvdGVzIHRoZW4gYXJnOiBhcmdjIDIgWzw+PHggeT5dIGVuZHMgd2l0aCBOVUxMIHBvaW50ZXIgdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "plain: argc 4 [<p><a><b><c>] ends with NULL pointer true\nquoted: argc 3 [<p><a b><c>] ends with NULL pointer true\nquote in word: argc 3 [<p><ab cd><e>] ends with NULL pointer true\n2 backslashes: argc 2 [<p><a\\\\b>] ends with NULL pointer true\nbackslash quote: argc 2 [<p><a\"b>] ends with NULL pointer true\n2 backslashes quote: argc 3 [<p><a\\b c><d>] ends with NULL pointer true\n3 backslashes quote: argc 3 [<p><a\\\"b><c>] ends with NULL pointer true\n4 backslashes quote: argc 3 [<p><a\\\\><b>] ends with NULL pointer true\nbackslashes at end of quoted: argc 2 [<p><C:\\a b\" c>] ends with NULL pointer true\nbackslashes no quote: argc 3 [<p><\\\\\\a><\\b>] ends with NULL pointer true\nempty quoted: argc 3 [<p><><a>] ends with NULL pointer true\ntwo empty: argc 3 [<p><><>] ends with NULL pointer true\ndouble quote in quoted: argc 2 [<p><a\"b c>] ends with NULL pointer true\ntriple quote: argc 2 [<p><\"a c>] ends with NULL pointer true\nquote pair after word: argc 3 [<p><a><b>] ends with NULL pointer true\nunterminated: argc 2 [<p><abc def>] ends with NULL pointer true\nunterminated backslash: argc 2 [<p><abc\\>] ends with NULL pointer true\nunc path: argc 3 [<p><\\\\server\\share\\><x>] ends with NULL pointer true\nflag with equals: argc 3 [<p><--installerdata=C:\\Windows\\SystemTemp\\a b\\x.tmp><--x>] ends with NULL pointer true\ntabs: argc 4 [<p><a><b><c>] ends with NULL pointer true\nmany spaces: argc 3 [<p><a><b>] ends with NULL pointer true\ntab in quotes: argc 3 [<p><a<0009>b><c>] ends with NULL pointer true\ntrailing space: argc 2 [<p><a>] ends with NULL pointer true\nlong arg: argc 3 [<p><aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa><b>] ends with NULL pointer true\nargv0 plain: argc 2 [<C:\\a\\b.exe><x>] ends with NULL pointer true\nargv0 quoted: argc 2 [<C:\\Program Files\\a b.exe><x>] ends with NULL pointer true\nargv0 backslash quote: argc 2 [<C:\\a\\><b x>] ends with NULL pointer true\nargv0 unquoted backslash quote: argc 3 [<C:\\a\\\"b><c><d>] ends with NULL pointer true\nargv0 quote in middle: argc 2 [<C:\\a\"b><c.exe x>] ends with NULL pointer true\nargv0 only: argc 1 [<C:\\a\\b.exe>] ends with NULL pointer true\nargv0 quoted no space after: argc 3 [<a b><x><y>] ends with NULL pointer true\nargv0 tab: argc 2 [<a><b>] ends with NULL pointer true\nargv0 unterminated: argc 1 [<a b>] ends with NULL pointer true\nargv0 empty quoted: argc 2 [<><x>] ends with NULL pointer true\nargv0 two quotes then arg: argc 2 [<><x y>] ends with NULL pointer true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    },
+    {
+      "name": "cla_special",
+      "exe_sha256": "5c9aec6058577ab1706dd3c00319c54446d393ae4e886d3e649e60c0188a3210",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZW1wdHkgc3RyaW5nOiBhcmdjIDE7IGFyZ3ZbMF0gaXMgdGhlIG1vZHVsZSBwYXRoOiB0cnVlCmVtcHR5IHN0cmluZzogYXJndlthcmdjXSBpcyBOVUxMOiB0cnVlCnNpbmdsZSBzcGFjZTogYXJnYyAxIFs8Pl0Kc3BhY2VzIHRoZW4gYXJnOiBhcmdjIDMgWzw+PGE+PGI+XQp0YWIgb25seTogYXJnYyAxIFs8Pl0Kc3BhY2VzIHRoZW4gcXVvdGVkOiBhcmdjIDMgWzw+PGEgYj48Yz5dCmJsb2NrOiBhcmdjIDQ7IGV2ZXJ5IHN0cmluZyBsaWVzIGluc2lkZSB0aGUgb25lIExvY2FsQWxsb2MgYmxvY2s6IHRydWU7IGFmdGVyIHRoZSBwb2ludGVyIGFycmF5OiB0cnVlCmJsb2NrOiBMb2NhbEZyZWUgcmV0dXJucyBOVUxMOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "empty string: argc 1; argv[0] is the module path: true\nempty string: argv[argc] is NULL: true\nsingle space: argc 1 [<>]\nspaces then arg: argc 3 [<><a><b>]\ntab only: argc 1 [<>]\nspaces then quoted: argc 3 [<><a b><c>]\nblock: argc 4; every string lies inside the one LocalAlloc block: true; after the pointer array: true\nblock: LocalFree returns NULL: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

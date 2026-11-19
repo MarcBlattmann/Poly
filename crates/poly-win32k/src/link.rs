@@ -72,6 +72,22 @@ impl ReadBuffer {
     }
 }
 
+/// A layer's buffer (ADR 0224): memory the compositor maps through [`DEVICE`] itself
+/// (`map_handle` of the device's handle) at this offset, read-only and shared. The pages are the
+/// app's own: a section its process draws in.
+pub fn layer_buffer_offset(buffer: BufferId) -> u64 {
+    u64::from(buffer) << 32
+}
+
+/// The buffer a mapping offset of [`DEVICE`] names ([`layer_buffer_offset`]), if it is one.
+pub fn layer_buffer_at(offset: u64) -> Option<BufferId> {
+    (offset & 0xFFFF_FFFF == 0 && offset >> 32 != 0).then_some((offset >> 32) as BufferId)
+}
+
+/// A layer of a surface: a picture another part of the app shows over the surface's own buffer
+/// (a DXGI swap chain presenting into the window or into one of its child windows, ADR 0224).
+pub type LayerId = u32;
+
 /// The longest record (the length field is 16 bits).
 pub const MAX_RECORD: usize = u16::MAX as usize;
 
@@ -193,6 +209,22 @@ pub enum ToCompositor {
     /// `HTLEFT` and the others (ADR 0155 addendum "browsing"). All 0 for
     /// none. A compositor that does not know the record skips it.
     Margins { surface: SurfaceId, left: u16, top: u16, right: u16, bottom: u16 },
+    /// A buffer of a layer of the surface (ADR 0224): `width` x `height` pixels `B, G, R, x`
+    /// (`Xrgb8888`), rows `stride` bytes apart. The compositor maps it from the device at
+    /// [`layer_buffer_offset`]; it stays the layer's until [`ToCompositor::LayerDrop`] or
+    /// [`ToCompositor::LayerGone`].
+    LayerBuffer { surface: SurfaceId, layer: LayerId, buffer: BufferId, width: u32, height: u32, stride: u32 },
+    /// Where the layer is: its buffer's pixel (0, 0) is at (`x`, `y`) of the surface's buffer, and
+    /// it is shown only inside the surface rectangle `clip` (x, y, width, height). Sent before the
+    /// layer's first damage and whenever it changes.
+    LayerPlace { surface: SurfaceId, layer: LayerId, x: i32, y: i32, clip: (u32, u32, u32, u32) },
+    /// The layer shows `buffer` now, which changed in this rectangle (buffer pixels): the
+    /// compositor takes it from there. The rest of the layer is as it was.
+    LayerDamage { surface: SurfaceId, layer: LayerId, buffer: BufferId, x: u32, y: u32, width: u32, height: u32 },
+    /// The layer's buffer `buffer` goes (the compositor unmaps it).
+    LayerDrop { surface: SurfaceId, layer: LayerId, buffer: BufferId },
+    /// The layer goes with its buffers; the surface's own picture shows where it was.
+    LayerGone { surface: SurfaceId, layer: LayerId },
     /// A Windows program asks the desktop to open a file or folder with the program Poly's
     /// Files would use (`show` false: `ShellExecuteExW` with no association, ADR 0223), or to
     /// show it in Files, selected in its folder (`show` true: `SHOpenFolderAndSelectItems`).
@@ -383,7 +415,12 @@ mod kind {
     pub const PROCESS: u16 = 0x000E;
     pub const MARGINS: u16 = 0x000F;
     pub const SHELL: u16 = 0x0010;
-    pub const CONSENT: u16 = 0x0011;
+    pub const LAYER_BUFFER: u16 = 0x0011;
+    pub const LAYER_PLACE: u16 = 0x0012;
+    pub const LAYER_DAMAGE: u16 = 0x0013;
+    pub const LAYER_DROP: u16 = 0x0014;
+    pub const LAYER_GONE: u16 = 0x0015;
+    pub const CONSENT: u16 = 0x0016;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -472,6 +509,37 @@ impl Record for ToCompositor {
             Margins { surface, left, top, right, bottom } => {
                 Out::new(out, kind::MARGINS).u32(*surface).u16(*left).u16(*top).u16(*right).u16(*bottom).done()
             }
+            LayerBuffer { surface, layer, buffer, width, height, stride } => Out::new(out, kind::LAYER_BUFFER)
+                .u32(*surface)
+                .u32(*layer)
+                .u32(*buffer)
+                .u32(*width)
+                .u32(*height)
+                .u32(*stride)
+                .done(),
+            LayerPlace { surface, layer, x, y, clip } => Out::new(out, kind::LAYER_PLACE)
+                .u32(*surface)
+                .u32(*layer)
+                .i32(*x)
+                .i32(*y)
+                .u32(clip.0)
+                .u32(clip.1)
+                .u32(clip.2)
+                .u32(clip.3)
+                .done(),
+            LayerDamage { surface, layer, buffer, x, y, width, height } => Out::new(out, kind::LAYER_DAMAGE)
+                .u32(*surface)
+                .u32(*layer)
+                .u32(*buffer)
+                .u32(*x)
+                .u32(*y)
+                .u32(*width)
+                .u32(*height)
+                .done(),
+            LayerDrop { surface, layer, buffer } => {
+                Out::new(out, kind::LAYER_DROP).u32(*surface).u32(*layer).u32(*buffer).done()
+            }
+            LayerGone { surface, layer } => Out::new(out, kind::LAYER_GONE).u32(*surface).u32(*layer).done(),
             Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
             Consent { request, pid, program, path, file } => Out::new(out, kind::CONSENT)
                 .u32(*request)
@@ -541,6 +609,32 @@ impl Record for ToCompositor {
             kind::MARGINS => {
                 Margins { surface: b.u32()?, left: b.u16()?, top: b.u16()?, right: b.u16()?, bottom: b.u16()? }
             }
+            kind::LAYER_BUFFER => LayerBuffer {
+                surface: b.u32()?,
+                layer: b.u32()?,
+                buffer: b.u32()?,
+                width: b.u32()?,
+                height: b.u32()?,
+                stride: b.u32()?,
+            },
+            kind::LAYER_PLACE => LayerPlace {
+                surface: b.u32()?,
+                layer: b.u32()?,
+                x: b.i32()?,
+                y: b.i32()?,
+                clip: (b.u32()?, b.u32()?, b.u32()?, b.u32()?),
+            },
+            kind::LAYER_DAMAGE => LayerDamage {
+                surface: b.u32()?,
+                layer: b.u32()?,
+                buffer: b.u32()?,
+                x: b.u32()?,
+                y: b.u32()?,
+                width: b.u32()?,
+                height: b.u32()?,
+            },
+            kind::LAYER_DROP => LayerDrop { surface: b.u32()?, layer: b.u32()?, buffer: b.u32()? },
+            kind::LAYER_GONE => LayerGone { surface: b.u32()?, layer: b.u32()? },
             kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
             kind::CONSENT => Consent {
                 request: b.u32()?,
@@ -727,6 +821,11 @@ mod tests {
             Destroy { surface: 2 },
             Process { surface: 1, pid: 4242 },
             Margins { surface: 1, left: 8, top: 0, right: 8, bottom: 8 },
+            LayerBuffer { surface: 1, layer: 3, buffer: 11, width: 640, height: 400, stride: 2560 },
+            LayerPlace { surface: 1, layer: 3, x: -2, y: 30, clip: (0, 30, 638, 400) },
+            LayerDamage { surface: 1, layer: 3, buffer: 11, x: 5, y: 6, width: 7, height: 8 },
+            LayerDrop { surface: 1, layer: 3, buffer: 11 },
+            LayerGone { surface: 1, layer: 3 },
             Consent {
                 request: 7,
                 pid: 4242,
@@ -735,6 +834,14 @@ mod tests {
                 file: String::from("/win/c/Users/poly/Downloads/ChromeSetup.exe"),
             },
         ]
+    }
+
+    #[test]
+    fn a_layer_buffer_is_mapped_at_its_own_offset() {
+        assert_eq!(layer_buffer_offset(7), 7 << 32);
+        assert_eq!(layer_buffer_at(layer_buffer_offset(7)), Some(7));
+        assert_eq!(layer_buffer_at(0), None);
+        assert_eq!(layer_buffer_at((7 << 32) | 4096), None);
     }
 
     fn from_samples() -> Vec<FromCompositor> {

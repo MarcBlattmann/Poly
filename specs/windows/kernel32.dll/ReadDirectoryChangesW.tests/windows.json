@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "26cab58696f7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:07:00Z",
+  "tests": [
+    {
+      "name": "rd_edge",
+      "exe_sha256": "4ac166f262eb5b7354a518657df10646646cc4e396858854d9d108e7e13c4618",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFrZSB0aGUgZGlyZWN0b3J5OiB0cnVlCmEgaGFuZGxlIG9mIGEgZmlsZTogcmVzdWx0IGZhbHNlLCBsYXN0IGVycm9yIDg3Cm9wZW4gYSBkaXJlY3Rvcnkgd2l0aG91dCBGSUxFX0ZMQUdfQkFDS1VQX1NFTUFOVElDUzogZmFsc2UsIGxhc3QgZXJyb3IgNQphIGRpcmVjdG9yeSBoYW5kbGUgd2l0aG91dCB0aGUgbGlzdCByaWdodDogcmVzdWx0IGZhbHNlLCBsYXN0IGVycm9yIDUKaGFuZGxlIE5VTEw6IHJlc3VsdCBmYWxzZSwgbGFzdCBlcnJvciA2CmhhbmRsZSAtMTogcmVzdWx0IGZhbHNlLCBsYXN0IGVycm9yIDYKZmlsdGVyIDA6IGFjY2VwdGVkIGZhbHNlLCBsYXN0IGVycm9yIDg3CmFuIHVuZGVmaW5lZCBmaWx0ZXIgYml0IG9ubHk6IGFjY2VwdGVkIGZhbHNlLCBsYXN0IGVycm9yIDg3CmJ1ZmZlciBsZW5ndGggMDogYWNjZXB0ZWQgdHJ1ZSwgbGFzdCBlcnJvciAtMgogIGEgY2hhbmdlIHdob3NlIHJlY29yZCBpcyAxMiArIDIgKiAyOCA9IDY4IGJ5dGVzOiBjb21wbGV0ZWQsIGJ5dGVzIDAsIHJlc3VsdCBlcnJvciAtMgpidWZmZXIgbGVuZ3RoIDM6IGFjY2VwdGVkIHRydWUsIGxhc3QgZXJyb3IgLTIKICBhIGNoYW5nZSB3aG9zZSByZWNvcmQgaXMgMTIgKyAyICogMjggPSA2OCBieXRlczogY29tcGxldGVkLCBieXRlcyAwLCByZXN1bHQgZXJyb3IgLTIKYnVmZmVyIGxlbmd0aCAxNjogYWNjZXB0ZWQgdHJ1ZSwgbGFzdCBlcnJvciAtMgogIGEgY2hhbmdlIHdob3NlIHJlY29yZCBpcyAxMiArIDIgKiAyOCA9IDY4IGJ5dGVzOiBjb21wbGV0ZWQsIGJ5dGVzIDAsIHJlc3VsdCBlcnJvciAtMgpidWZmZXIgbGVuZ3RoIDQwOiBhY2NlcHRlZCB0cnVlLCBsYXN0IGVycm9yIC0yCiAgYSBjaGFuZ2Ugd2hvc2UgcmVjb3JkIGlzIDEyICsgMiAqIDI4ID0gNjggYnl0ZXM6IGNvbXBsZXRlZCwgYnl0ZXMgMCwgcmVzdWx0IGVycm9yIC0yCmFsbCBmaWx0ZXIgYml0czogYXJtZWQgdHJ1ZSwgY29tcGxldGVkIHRydWUsIHJlc3VsdCBlcnJvciAtMiwgYnl0ZXMgPiAwIHRydWUKYWxsOiByZWNvcmQgMDogYWN0aW9uIDEsIG5hbWUgJ3JkX3QudHh0JwpzeW5jaHJvbm91cyBjYWxsOiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMiwgYnl0ZXMgYXQgbGVhc3Qgb25lIHJlY29yZAppdHMgZmlyc3QgcmVjb3JkOiBhY3Rpb24gMSwgbmFtZSAncmRfdC50eHQnCmNsZWFuOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "make the directory: true\na handle of a file: result false, last error 87\nopen a directory without FILE_FLAG_BACKUP_SEMANTICS: false, last error 5\na directory handle without the list right: result false, last error 5\nhandle NULL: result false, last error 6\nhandle -1: result false, last error 6\nfilter 0: accepted false, last error 87\nan undefined filter bit only: accepted false, last error 87\nbuffer length 0: accepted true, last error -2\n  a change whose record is 12 + 2 * 28 = 68 bytes: completed, bytes 0, result error -2\nbuffer length 3: accepted true, last error -2\n  a change whose record is 12 + 2 * 28 = 68 bytes: completed, bytes 0, result error -2\nbuffer length 16: accepted true, last error -2\n  a change whose record is 12 + 2 * 28 = 68 bytes: completed, bytes 0, result error -2\nbuffer length 40: accepted true, last error -2\n  a change whose record is 12 + 2 * 28 = 68 bytes: completed, bytes 0, result error -2\nall filter bits: armed true, completed true, result error -2, bytes > 0 true\nall: record 0: action 1, name 'rd_t.txt'\nsynchronous call: result true, last error -2, bytes at least one record\nits first record: action 1, name 'rd_t.txt'\nclean: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 473
+    }
+  ]
+}

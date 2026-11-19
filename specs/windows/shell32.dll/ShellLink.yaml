@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellLink.yaml
+id: windows/api/shell32.dll/ShellLink
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators, the SSH logon''s elevated token); every test ran twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output). Microsoft Learn: IShellLinkW, IShellLinkA, IPersistFile, IPropertyStore, CoCreateInstance, CoInitializeEx; the public SDK headers shobjidl_core.h (CLSID_ShellLink {00021401-0000-0000-C000-000000000046}, IID_IShellLinkW {000214F9-...}, IID_IShellLinkA {000214EE-...}, the order of the methods), objidl.h (IPersistFile {0000010B-...}, IPersistStream {00000109-...}, IPersist {0000010C-...}, IMarshal {00000003-...}), propsys.h (IPropertyStore {886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99}), shobjidl_core.h (IShellLinkDataList {45E2B4AE-B1C3-11D0-B92F-00A0C90312E1}, IShellExtInit {000214E8-...}, IContextMenu {000214E4-...}, IContextMenu2 {000214F4-...}, IContextMenu3 {BCFCE0A0-EC17-11D0-8D10-00A0C90F2719}, IExtractIconA {000214EB-...}, IExtractIconW {000214FA-...}, IQueryInfo {00021500-...}, IDropTarget {00000122-...}, IObjectWithSite {FC4801A3-2BA9-11CF-A229-00AA003D7352}, IServiceProvider {6D5140C1-7436-11CE-8034-00AA006009FA}). What Chrome's setup.exe does (SetPath, SetArguments, SetDescription, SetIconLocation, SetWorkingDirectory, a property store value, IPersistFile::Save for the all-users Desktop, all-users Start menu and per-user Quick Launch shortcuts) is from its own verbose log (docs/windows/chrome-installer-plan.md, spec-win-chrome-setup). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The shell link object, CLSID_ShellLink, which Chrome's setup.exe (and every installer) creates with CoCreateInstance to write the .lnk shortcut files of the Desktop, the Start menu and Quick Launch. It lives in shell32.dll and is created in the process (CLSCTX_INPROC_SERVER, an apartment-threaded class). One object answers to IShellLinkW, IShellLinkA, IPersistFile (read and write the .lnk), IPersistStream and IPropertyStore, among others; all of them see the same data. A new link is empty: no path, no text, show command 1 (SW_SHOWNORMAL), hot key 0, icon index 0, not dirty. The methods of the interfaces have their own entries (IShellLinkW, ShellLink.IPersistFile, ShellLink.PropertyStore).
+interface:
+  create: 'CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLinkW) (any of the interfaces below can be asked for first)'
+  apartment: 'the class is registered apartment-threaded: created from an STA it is used directly; created in an MTA thread it is created and used without error (the calls of the tests all succeed, Save too); each thread with its own STA creates its own object'
+  iunknown_slots: 'QueryInterface 0, AddRef 1, Release 2'
+rules:
+  not_initialized: 'CoCreateInstance on a thread where CoInitializeEx was not called: 0x800401F0 (CO_E_NOTINITIALIZED), no object'
+  create_any_interface: 'S_OK with IShellLinkW, IShellLinkA, IPersistFile and IPropertyStore as the first interface; a made-up IID gives 0x80004002 (E_NOINTERFACE) and no pointer; CLSCTX_LOCAL_SERVER alone also gives an object (S_OK)'
+  interfaces_answered: 'QueryInterface returns S_OK with a non-null pointer for IUnknown, IShellLinkA, IShellLinkW, IPersist, IPersistFile, IPersistStream, IPropertyStore, IShellLinkDataList, IShellExtInit, IContextMenu, IContextMenu2, IContextMenu3, IExtractIconA, IExtractIconW, IQueryInfo, IDropTarget, IObjectWithSite, IServiceProvider and IMarshal; E_NOINTERFACE (0x80004002, null) for IPropertySetStorage, IDispatch, IInternetSecurityManager and for an unknown IID. Chrome needs IShellLinkW, IPersistFile and IPropertyStore only.'
+  identity: 'QueryInterface for IUnknown on any of the interfaces gives the same pointer; it is not the IShellLinkW pointer'
+  reference_counts: 'with a single reference held: AddRef returns 2, then Release returns 1; two AddRefs return 2 and 3, the two Releases 2 and 1 (the plain COM counts); the object is destroyed by the last Release'
+  classid: 'IPersistFile::GetClassID returns S_OK and {00021401-0000-0000-C000-000000000046}'
+  fresh_link: 'GetPath (any flags, with or without the find data): S_FALSE (1), empty string, the find data untouched when asked for; GetDescription, GetWorkingDirectory, GetArguments: S_OK, empty; GetIconLocation: S_OK, empty text, index 0; GetHotkey: S_OK, 0; GetShowCmd: S_OK, 1; GetIDList: S_FALSE (1) with a null list; IPersistFile::IsDirty: S_FALSE (1); IPersistFile::GetCurFile: S_FALSE (1) with a null pointer'
+  ansi_and_wide_share: 'a value set through IShellLinkA is read back through IShellLinkW and the other way round (ASCII text); IShellLinkA::GetPath fills a WIN32_FIND_DATAA whose attributes and name are those of the target; a link saved from the IShellLinkA view is written in Unicode (IsUnicode set)'
+  ansi_buffers: 'the A getters (GetDescription, GetArguments) truncate to the buffer: cch 0 and 1 give an empty string, cch n gives at most n-1 characters, S_OK in every case'
+errors:
+  not_initialized: '0x800401F0'
+  no_interface: '0x80004002'
+side_effects: 'none (nothing is written until IPersistFile::Save)'
+threading: 'apartment-threaded; the test objects were used from the thread that created them (an STA thread of the test, and an MTA thread)'
+ordering: []
+timing:
+  typical: 'about a millisecond to create the first object in a process, well under that afterwards'
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test (sl_create: creation, the interface list, a fresh link's getters, reference counts; sl_ansi: IShellLinkA and IShellLinkW on one object; sl_mta: creation from a multithreaded apartment and from a second thread). Each declares what it calls from Learn's prototypes and calls COM through the vtables. Observations are HRESULTs, booleans and short text; no handle or pointer value is printed.
+not_covered: >
+  Aggregation (a non-null outer object), a link used from a thread other than its creator's, IMarshal use, the shell extension interfaces beyond answering QueryInterface (IContextMenu, IDropTarget, IExtractIcon, IQueryInfo behave as for any .lnk), IShellLinkDataList (the data blocks it exposes), non-ASCII text through IShellLinkA (depends on the ANSI code page), 32-bit callers (WOW64).

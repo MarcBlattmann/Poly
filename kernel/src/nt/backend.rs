@@ -49,6 +49,12 @@ impl Sections {
     fn source(&self, id: u64) -> Arc<dyn PageSource> {
         Arc::clone(self.map.get(&id).expect("live section backing"))
     }
+
+    /// A section's pages, if it is still there (the compositor's mapping of a layer buffer,
+    /// ADR 0224).
+    pub fn pages(&self, id: u64) -> Option<Arc<dyn PageSource>> {
+        self.map.get(&id).cloned()
+    }
 }
 
 fn prot(p: HwProt) -> Prot {

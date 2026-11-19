@@ -4,7 +4,8 @@
 //! (`poly_win32k::link`); win32k's end is the NT personality's
 //! [`Win32k`](poly_personality_nt::win32k::Win32k) in the NT state. The
 //! device request `READ_BUFFER` copies rows of a surface buffer into the
-//! compositor's memory.
+//! compositor's memory; a layer buffer (a section an app presented, ADR
+//! 0224) is mapped from the device itself at its offset ([`mapping`]).
 //!
 //! Reads never block (the compositor polls): with nothing to hand out a
 //! read fails with `EAGAIN`. What win32k produces while an app makes a
@@ -25,7 +26,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_vfs::device::CharDevice;
 use poly_vfs::{At, Cred, DeviceId, Errno, FileType, FsContext, OpenFlags, PollEvents, Vfs, WaitQueue};
-use poly_win32k::link::{DEVICE_MAJOR, DEVICE_MINOR, READ_BUFFER, ReadBuffer};
+use poly_win32k::link::{DEVICE_MAJOR, DEVICE_MINOR, READ_BUFFER, ReadBuffer, layer_buffer_at};
 
 /// `/dev/win32k`'s number.
 pub const WIN32K: DeviceId = DeviceId::new(DEVICE_MAJOR, DEVICE_MINOR);
@@ -164,6 +165,23 @@ impl CharDevice for LinkFile {
     fn wait_queue(&self) -> Option<&Arc<WaitQueue>> {
         Some(&self.0.queue)
     }
+}
+
+/// A mapping of `/dev/win32k` (`map_handle` of the compositor's handle, ADR 0224): the pages of
+/// the layer buffer the offset names (`poly_win32k::link::layer_buffer_offset`), which are the
+/// section the app presented. `None` for every other file; an error for an offset that names no
+/// buffer (any more).
+pub fn mapping(
+    file: &poly_vfs::OpenFile,
+    offset: u64,
+) -> Option<poly_vfs::Result<Arc<dyn crate::user::memory::PageSource>>> {
+    let st = file.stat().ok()?;
+    if file.kind() != FileType::CharDevice || st.rdev != WIN32K {
+        return None;
+    }
+    let Some(buffer) = layer_buffer_at(offset) else { return Some(Err(Errno::EINVAL)) };
+    let pages = with_existing(|s| s.sys.win32k.link_layer_backing(buffer).and_then(|b| s.sections.pages(b))).flatten();
+    Some(pages.ok_or(Errno::EINVAL))
 }
 
 /// After an NT system call: what win32k produced for the compositor wakes
