@@ -21,7 +21,9 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use poly_com::hresult::{CO_E_NOTINITIALIZED, E_INVALIDARG, E_NOINTERFACE, E_POINTER, RPC_E_TOO_LATE, S_OK, from_win32};
+use poly_com::hresult::{
+    CO_E_NOTINITIALIZED, E_INVALIDARG, E_NOINTERFACE, E_POINTER, RPC_E_TOO_LATE, S_OK, from_win32,
+};
 use poly_com::security::*;
 use poly_com::wire::Caller;
 
@@ -447,8 +449,15 @@ pub(crate) fn names_account(name: &str) -> bool {
     let (mut cb, mut cd, mut kind) = (68u32, 256u32, 0u32);
     // SAFETY: a NUL-terminated name and buffers of the sizes given.
     unsafe {
-        LookupAccountNameW(core::ptr::null(), n.as_ptr(), sid.as_mut_ptr(), &mut cb, domain.as_mut_ptr(), &mut cd, &mut kind)
-            != 0
+        LookupAccountNameW(
+            core::ptr::null(),
+            n.as_ptr(),
+            sid.as_mut_ptr(),
+            &mut cb,
+            domain.as_mut_ptr(),
+            &mut cd,
+            &mut kind,
+        ) != 0
     }
 }
 
@@ -506,14 +515,7 @@ fn current() -> Option<*mut Call> {
 /// `IServerSecurity` goes stale.
 pub(crate) fn serve<R>(pid: u32, caller: Caller, f: impl FnOnce() -> R) -> R {
     let Some(slot) = call_slot() else { return f() };
-    let call = Box::into_raw(Box::new(Call {
-        pid,
-        caller,
-        token: 0,
-        impersonating: false,
-        privs: Vec::new(),
-        iss: 0,
-    }));
+    let call = Box::into_raw(Box::new(Call { pid, caller, token: 0, impersonating: false, privs: Vec::new(), iss: 0 }));
     // SAFETY: our TLS slot; a call made by an outer call is put back afterwards.
     let outer = unsafe { TlsGetValue(slot) };
     // SAFETY: as above.

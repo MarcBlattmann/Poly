@@ -435,6 +435,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("EnumResourceNamesW", "api-ms-win-core-libraryloader-l1-1-0"),
     ("EnumResourceTypesW", "api-ms-win-core-libraryloader-l1-1-0"),
     ("CopyFileW", "api-ms-win-core-file-l2-1-0"),
+    ("ReadDirectoryChangesW", "api-ms-win-core-file-l2-1-0"),
     ("GetSystemDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),
     ("GetSystemWindowsDirectoryW", "api-ms-win-core-sysinfo-l1-1-0"),

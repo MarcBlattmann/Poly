@@ -121,8 +121,17 @@ struct CsVtbl {
         *mut *mut c_void,
         *mut u32,
     ) -> Hresult,
-    set_blanket:
-        unsafe extern "system" fn(*mut c_void, *mut c_void, u32, u32, *const u16, u32, u32, *mut c_void, u32) -> Hresult,
+    set_blanket: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        *const u16,
+        u32,
+        u32,
+        *mut c_void,
+        u32,
+    ) -> Hresult,
     copy_proxy: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> Hresult,
 }
 
@@ -671,7 +680,8 @@ unsafe fn lock(p: *mut Proxy, l: i32) -> Hresult {
         }
         // The sheet saw S_OK also through the proxy of a factory its server had revoked.
         Target::Remote { .. } => {
-            match caller_for(proxy, &IID_ICLASS_FACTORY, false).and_then(|c| call_as(proxy, Op::LockServer(l != 0), c)) {
+            match caller_for(proxy, &IID_ICLASS_FACTORY, false).and_then(|c| call_as(proxy, Op::LockServer(l != 0), c))
+            {
                 Err(E_ACCESSDENIED) => E_ACCESSDENIED,
                 Ok(r) if r.hr != RPC_E_DISCONNECTED => r.hr,
                 _ => S_OK,

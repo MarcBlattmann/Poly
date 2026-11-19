@@ -98,6 +98,11 @@ pub(crate) struct Arena {
 }
 
 impl Arena {
+    /// Keep a block alive as long as the arena (a `PARAMDESCEX`).
+    pub(crate) fn keep(&mut self, v: Vec<u64>) {
+        self.arrays.push(v);
+    }
+
     /// The C form of `t`; nested parts live in the arena.
     pub(crate) fn td(&mut self, t: &TypeDesc) -> CTypeDesc {
         match t {
@@ -187,8 +192,26 @@ struct FuncBlock {
 /// A new `FUNCDESC` for `f` (freed by [`free_func`]).
 pub(crate) fn make_func(f: &Func) -> *mut CFuncDesc {
     let mut arena = Arena::default();
-    let mut elems: Vec<CElemDesc> =
-        f.params.iter().map(|p| CElemDesc { td: arena.td(&p.td), pd: CParamDesc { ex: 0, flags: p.flags } }).collect();
+    let mut elems: Vec<CElemDesc> = f
+        .params
+        .iter()
+        .map(|p| {
+            // A default value: PARAMDESCEX (its size, then the VARIANT) and PARAMFLAG_FHASDEFAULT.
+            let ex = match &p.default {
+                Some(d) => {
+                    let mut v = alloc::vec![0u64; 4];
+                    v[0] = 32;
+                    super::ext::put_value(v[1..].as_mut_ptr().cast(), d);
+                    let at = v.as_ptr() as usize;
+                    arena.keep(v);
+                    at
+                }
+                None => 0,
+            };
+            let flags = if p.default.is_some() { p.flags | 0x20 } else { p.flags };
+            CElemDesc { td: arena.td(&p.td), pd: CParamDesc { ex, flags } }
+        })
+        .collect();
     let ret = CElemDesc { td: arena.td(&f.ret), pd: CParamDesc { ex: 0, flags: f.ret_flags } };
     let params = if elems.is_empty() { core::ptr::null_mut() } else { elems.as_mut_ptr() };
     let b = Box::new(FuncBlock {
@@ -233,7 +256,12 @@ pub(crate) unsafe fn read_func(fd: &CFuncDesc) -> Option<Func> {
         // SAFETY: the caller's array of `cParams` ELEMDESCs.
         let e = unsafe { &*fd.params.add(i) };
         // SAFETY: as above.
-        params.push(Param { td: unsafe { read_td(&e.td, 0)? }, flags: e.pd.flags, name: alloc::string::String::new() });
+        params.push(Param {
+            td: unsafe { read_td(&e.td, 0)? },
+            flags: e.pd.flags,
+            name: alloc::string::String::new(),
+            ..Param::default()
+        });
     }
     Some(Func {
         memid: fd.memid,
@@ -251,6 +279,7 @@ pub(crate) unsafe fn read_func(fd: &CFuncDesc) -> Option<Func> {
         doc: alloc::string::String::new(),
         help_context: 0,
         named: false,
+        ..Func::default()
     })
 }
 
@@ -278,9 +307,14 @@ pub(crate) fn make_var(v: &Var) -> *mut CVarDesc {
         value: [0; 3],
     });
     if v.varkind == 2 {
-        // VAR_CONST: lpvarValue points to a VARIANT holding the value (VT_I4).
-        b.value[0] = 3;
-        b.value[1] = v.value as u64;
+        // VAR_CONST: lpvarValue points to a VARIANT holding the value (VT_I4 unless stated).
+        match &v.const_value {
+            Some(c) => super::ext::put_value(b.value.as_mut_ptr().cast(), c),
+            None => {
+                b.value[0] = 3;
+                b.value[1] = v.value as u64;
+            }
+        }
         b.vd.u = b.value.as_ptr() as usize;
     }
     Box::into_raw(b).cast()

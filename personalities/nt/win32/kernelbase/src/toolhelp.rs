@@ -1,143 +1,148 @@
-//! The tool help library's process snapshot (`tlhelp32.h`, Learn: "CreateToolhelp32Snapshot",
-//! "Process32FirstW", "Process32NextW"). A program that wants to know whether another copy of
-//! itself runs walks it; Poly's snapshot holds the calling process only (the processes of an
-//! NT session are not listed to each other), so a program sees itself, with its image name, its
-//! thread count (1: the threads are not counted) and its parent. The snapshot is a handle
-//! (an event object) that `CloseHandle` closes; the position of its walk is kept in a table of
-//! this module.
-//!
-//! `PROCESSENTRY32W` is 568 bytes in a 64-bit process and 556 in a 32-bit one (the heap
-//! identifier is pointer sized): `dwSize`, `cntUsage`, `th32ProcessID`, `th32DefaultHeapID`,
-//! `th32ModuleID`, `cntThreads`, `th32ParentProcessID`, `pcPriClassBase`, `dwFlags`, `szExeFile[260]`.
+//! The tool help library's process snapshot (`tlhelp32.h`; sheets `kernel32.dll/CreateToolhelp32Snapshot`,
+//! `Process32FirstW`, `Process32NextW`). Chrome's setup walks it to find running copies of the
+//! browser. The snapshot is a section holding a copy of the system's process list
+//! (`ntdll!PolyProcessList`) and the walk position; the rules are `poly_kernelbase::toolhelp`'s.
 
 use crate::base::*;
-use crate::nt::Handle;
-use crate::process::{GetCurrentProcessId, GetModuleFileNameW};
-use crate::sync::CreateEventW;
+use crate::mapping::{CreateFileMappingW, MapViewOfFile, UnmapViewOfFile};
+use crate::nt::{self, Handle};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, Ordering};
 use poly_kernelbase::error::*;
+use poly_kernelbase::toolhelp::{self, EntryLayout, HEADER_SIZE, Step};
 
-/// `TH32CS_SNAPPROCESS` (`tlhelp32.h`).
-const TH32CS_SNAPPROCESS: u32 = 0x2;
-/// `TH32CS_SNAPALL`: the process part is all that Poly lists.
-const TH32CS_ALL_KINDS: u32 = 0x1 | 0x2 | 0x4 | 0x8;
-/// `TH32CS_INHERIT`.
-const TH32CS_INHERIT: u32 = 0x8000_0000;
+/// `PAGE_READWRITE`, `FILE_MAP_WRITE` (`winnt.h`, `memoryapi.h`).
+const PAGE_READWRITE: u32 = 0x04;
+const FILE_MAP_WRITE: u32 = 0x02;
 
-const POINTER: usize = core::mem::size_of::<usize>();
-/// `sizeof(PROCESSENTRY32W)`.
-const ENTRY_SIZE: usize = 4 * 3 + POINTER + 4 * 5 + 520 + if POINTER == 8 { 4 } else { 0 };
-const OFF_ID: usize = 8;
-const OFF_THREADS: usize = 12 + POINTER + 4;
-const OFF_PARENT: usize = OFF_THREADS + 4;
-const OFF_PRIORITY: usize = OFF_PARENT + 4;
-const OFF_FLAGS: usize = OFF_PRIORITY + 4;
-const OFF_NAME: usize = OFF_FLAGS + 4;
-
-struct Walks {
-    locked: AtomicBool,
-    /// The snapshots: handle, and whether `Process32FirstW` has been answered.
-    list: core::cell::UnsafeCell<Vec<(Handle, bool)>>,
+/// The system's process list as `PolyProcessList` records.
+fn process_records() -> Result<Vec<u8>, u32> {
+    let mut buf: Vec<u8> = alloc::vec![0; 64 * toolhelp::RECORD_SIZE];
+    loop {
+        let mut need = 0u32;
+        // SAFETY: a buffer of the stated length and a u32 out-value.
+        let st = unsafe { nt::PolyProcessList(buf.as_mut_ptr(), buf.len() as u32, &mut need) };
+        if st.is_success() {
+            buf.truncate(need as usize);
+            return Ok(buf);
+        }
+        if (need as usize) <= buf.len() {
+            return Err(poly_kernelbase::error::from_status(st));
+        }
+        // The list grew between the calls: ask again with room for a few more.
+        buf.resize(need as usize + 8 * toolhelp::RECORD_SIZE, 0);
+    }
 }
 
-// SAFETY: access to `list` is serialised by `locked`.
-unsafe impl Sync for Walks {}
-
-static WALKS: Walks = Walks { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) };
-
-fn with_walks<R>(f: impl FnOnce(&mut Vec<(Handle, bool)>) -> R) -> R {
-    while WALKS.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
+/// `CreateToolhelp32Snapshot(dwFlags, th32ProcessID)`: a snapshot of the process list for
+/// `TH32CS_SNAPPROCESS` (the process id does not narrow it); any other flags give a snapshot that
+/// holds no process. A module snapshot of a process that does not exist is `ERROR_INVALID_PARAMETER`.
+/// The handle is inheritable with `TH32CS_INHERIT` only.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateToolhelp32Snapshot(flags: u32, process: u32) -> Handle {
+    let wants_modules = flags & (toolhelp::TH32CS_SNAPMODULE | toolhelp::TH32CS_SNAPMODULE32) != 0;
+    let records = if flags & toolhelp::TH32CS_SNAPPROCESS != 0 || (wants_modules && process != 0) {
+        match process_records() {
+            Ok(r) => r,
+            Err(e) => return fail(e, INVALID_HANDLE_VALUE),
+        }
+    } else {
+        Vec::new()
+    };
+    if wants_modules && process != 0 && !toolhelp::lists(&records, process) {
+        return fail(ERROR_INVALID_PARAMETER, INVALID_HANDLE_VALUE);
     }
-    // SAFETY: the lock is held.
-    let r = f(unsafe { &mut *WALKS.list.get() });
-    WALKS.locked.store(false, Ordering::Release);
+    let listed: &[u8] = if flags & toolhelp::TH32CS_SNAPPROCESS != 0 { &records } else { &[] };
+    let image = toolhelp::snapshot_image(listed);
+    let sa = SecurityAttributesRaw {
+        length: core::mem::size_of::<SecurityAttributesRaw>() as u32,
+        descriptor: core::ptr::null(),
+        inherit: i32::from(flags & toolhelp::TH32CS_INHERIT != 0),
+    };
+    // SAFETY: a paging-file section of the image's size; the attributes live across the call.
+    let section = unsafe {
+        CreateFileMappingW(
+            INVALID_HANDLE_VALUE,
+            (&sa as *const SecurityAttributesRaw).cast(),
+            PAGE_READWRITE,
+            0,
+            image.len() as u32,
+            core::ptr::null(),
+        )
+    };
+    if section == 0 {
+        return INVALID_HANDLE_VALUE;
+    }
+    // SAFETY: a view of the whole new section.
+    let view = unsafe { MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, image.len()) };
+    if view.is_null() {
+        let e = last_error();
+        close(section);
+        return fail(e, INVALID_HANDLE_VALUE);
+    }
+    // SAFETY: the view holds `image.len()` bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(image.as_ptr(), view, image.len());
+        UnmapViewOfFile(view);
+    }
+    section
+}
+
+/// One step of a walk: check `dwSize`, map the snapshot, copy the entry and move the position.
+///
+/// # Safety
+/// `entry` is null or the caller's `PROCESSENTRY32W`.
+unsafe fn walk(snapshot: Handle, entry: *mut u8, which: Step) -> i32 {
+    let layout = EntryLayout::NATIVE;
+    if entry.is_null() {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's PROCESSENTRY32W starts with dwSize.
+    if unsafe { entry.cast::<u32>().read_unaligned() } as usize != layout.size {
+        return fail(ERROR_BAD_LENGTH, FALSE);
+    }
+    if snapshot == 0 || snapshot == INVALID_HANDLE_VALUE {
+        return fail(ERROR_INVALID_HANDLE, FALSE);
+    }
+    // SAFETY: a view of the whole section (0 bytes: to its end).
+    let view = unsafe { MapViewOfFile(snapshot, FILE_MAP_WRITE, 0, 0, 0) };
+    if view.is_null() {
+        return fail(ERROR_INVALID_HANDLE, FALSE);
+    }
+    // The section's size: the header says how many records follow.
+    let mut size = HEADER_SIZE;
+    if let Some(info) = query_memory(view as usize) {
+        size = size.max(info.region_size);
+    }
+    // SAFETY: the view is at least `size` bytes (a mapped region of that size).
+    let section = unsafe { core::slice::from_raw_parts_mut(view, size) };
+    let r = match toolhelp::step(section, which) {
+        Ok((at, next)) => {
+            // SAFETY: the caller's entry of `layout.size` bytes (checked through dwSize).
+            let out = unsafe { core::slice::from_raw_parts_mut(entry, layout.size) };
+            layout.fill(out, &section[at..at + toolhelp::RECORD_SIZE]);
+            section[4..8].copy_from_slice(&next.to_le_bytes());
+            TRUE
+        }
+        Err(e) => fail(e, FALSE),
+    };
+    // SAFETY: the view mapped above.
+    unsafe { UnmapViewOfFile(view) };
     r
 }
 
-/// `CreateToolhelp32Snapshot(dwFlags, th32ProcessID)`: a snapshot handle of the processes, or `INVALID_HANDLE_VALUE`
-/// for flags that name nothing (`ERROR_INVALID_PARAMETER`). Only the process list exists; the other kinds are
-/// accepted and hold nothing.
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn CreateToolhelp32Snapshot(flags: u32, _process: u32) -> Handle {
-    if flags & !(TH32CS_ALL_KINDS | TH32CS_INHERIT) != 0 || flags & TH32CS_ALL_KINDS == 0 {
-        return fail(ERROR_INVALID_PARAMETER, -1);
-    }
-    // SAFETY: an unnamed manual-reset event is the snapshot's handle.
-    let h = unsafe { CreateEventW(core::ptr::null(), 1, 0, core::ptr::null()) };
-    if h == 0 {
-        return -1;
-    }
-    let walks_processes = flags & TH32CS_SNAPPROCESS != 0;
-    with_walks(|w| w.push((h, !walks_processes)));
-    h
-}
-
-/// The entry of the calling process, in `entry` (of `ENTRY_SIZE` bytes).
-unsafe fn fill(entry: *mut u8) {
-    let mut path = [0u16; 520];
-    // SAFETY: a buffer of 520 units; the entry holds `ENTRY_SIZE` bytes.
-    unsafe {
-        let n = GetModuleFileNameW(core::ptr::null_mut(), path.as_mut_ptr(), 520) as usize;
-        let name_start = path[..n.min(520)].iter().rposition(|&c| c == u16::from(b'\\')).map_or(0, |i| i + 1);
-        let name = &path[name_start..n.min(520)];
-        core::ptr::write_bytes(entry.add(4), 0, ENTRY_SIZE - 4);
-        entry.add(OFF_ID).cast::<u32>().write_unaligned(GetCurrentProcessId());
-        entry.add(OFF_THREADS).cast::<u32>().write_unaligned(1);
-        // The base priority of the normal class.
-        entry.add(OFF_PRIORITY).cast::<i32>().write_unaligned(8);
-        for (i, &c) in name.iter().take(259).enumerate() {
-            entry.add(OFF_NAME + 2 * i).cast::<u16>().write_unaligned(c);
-        }
-    }
-}
-
-/// `Process32FirstW(hSnapshot, lppe)`: the first entry, `FALSE` with `ERROR_NO_MORE_FILES` when the snapshot holds none;
-/// `ERROR_BAD_LENGTH` for an entry whose `dwSize` is not the structure's, `ERROR_INVALID_HANDLE` for a handle that
-/// is no snapshot.
+/// `Process32FirstW(hSnapshot, lppe)`: the first entry, and the walk starts over there.
+/// `ERROR_BAD_LENGTH` for a `dwSize` that is not the structure's, `ERROR_INVALID_HANDLE` for a
+/// handle that is no snapshot, `ERROR_NO_MORE_FILES` for a snapshot without processes.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn Process32FirstW(snapshot: Handle, entry: *mut u8) -> i32 {
-    if entry.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: the caller's PROCESSENTRY32W.
-    if unsafe { entry.cast::<u32>().read_unaligned() } as usize != ENTRY_SIZE {
-        return fail(ERROR_BAD_LENGTH, FALSE);
-    }
-    // 1: a snapshot to walk; 2: a snapshot of other kinds, which holds no process; 0: no such snapshot.
-    let state = with_walks(|w| match w.iter_mut().find(|(h, _)| *h == snapshot) {
-        Some((_, skip)) => {
-            let walkable = !*skip;
-            *skip = true;
-            if walkable { 1 } else { 2 }
-        }
-        None => 0,
-    });
-    match state {
-        0 => fail(ERROR_INVALID_HANDLE, FALSE),
-        1 => {
-            // SAFETY: the entry holds ENTRY_SIZE bytes (checked through `dwSize`).
-            unsafe { fill(entry) };
-            TRUE
-        }
-        _ => fail(ERROR_NO_MORE_FILES, FALSE),
-    }
+    // SAFETY: the caller's entry.
+    unsafe { walk(snapshot, entry, Step::First) }
 }
 
-/// `Process32NextW(hSnapshot, lppe)`: nothing is left after the one entry: `FALSE` with `ERROR_NO_MORE_FILES`.
+/// `Process32NextW(hSnapshot, lppe)`: the entry after the last one given (the first on a fresh
+/// snapshot), `ERROR_NO_MORE_FILES` past the end.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn Process32NextW(snapshot: Handle, entry: *mut u8) -> i32 {
-    if entry.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
-    }
-    // SAFETY: the caller's PROCESSENTRY32W.
-    if unsafe { entry.cast::<u32>().read_unaligned() } as usize != ENTRY_SIZE {
-        return fail(ERROR_BAD_LENGTH, FALSE);
-    }
-    if with_walks(|w| w.iter().any(|(h, _)| *h == snapshot)) {
-        fail(ERROR_NO_MORE_FILES, FALSE)
-    } else {
-        fail(ERROR_INVALID_HANDLE, FALSE)
-    }
+    // SAFETY: the caller's entry.
+    unsafe { walk(snapshot, entry, Step::Next) }
 }

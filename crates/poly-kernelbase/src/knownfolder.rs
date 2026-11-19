@@ -220,7 +220,8 @@ pub const KNOWN_FOLDERS: &[KnownFolder] = &[
     (
         "CommonStartup",
         [0x35, 0xEA, 0xA5, 0x82, 0xCD, 0xD9, 0xC5, 0x47, 0x96, 0x29, 0xE1, 0x5D, 0x2F, 0x71, 0x4E, 0x6E],
-        "%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp",
+        // `Startup`, as the sheet `KnownFolders.Common.yaml` saw it (Learn spells it `StartUp`).
+        "%ALLUSERSPROFILE%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
     ),
     // FOLDERID_CommonTemplates {B94237E7-57AC-4347-9151-B08C6C32D1F7}
     (
@@ -746,7 +747,8 @@ pub const KNOWN_FOLDERS: &[KnownFolder] = &[
     (
         "Startup",
         [0xBB, 0x20, 0x7D, 0xB9, 0x6A, 0xF4, 0x97, 0x4C, 0xBA, 0x10, 0x5E, 0x36, 0x08, 0x43, 0x08, 0x54],
-        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp",
+        // `Startup`, as the sheet `KnownFolders.Common.yaml` saw it (Learn spells it `StartUp`).
+        "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
     ),
     // FOLDERID_SyncManagerFolder {43668BF8-C14E-49B2-97C9-747784D784B7}
     (

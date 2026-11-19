@@ -495,11 +495,78 @@ pub unsafe extern "system" fn CreateDirectoryA(name: *const u8, security: *const
     unsafe { CreateDirectoryW(w.as_ptr(), security) }
 }
 
+/// `MOVEFILE_DELAY_UNTIL_REBOOT` (sheet `kernel32.dll/MoveFileExW.DelayUntilReboot`): the files are
+/// not touched and nothing is checked; the request is appended to the `REG_MULTI_SZ` value
+/// `PendingFileRenameOperations` of `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager`
+/// (Learn, "MoveFileExW"; `poly_kernelbase::file::pending_rename_strings`). A caller that cannot
+/// write the key gets the registry's error (`ERROR_ACCESS_DENIED`). Poly does not carry the list
+/// out at its next start yet: the value only records the request.
+fn delay_until_reboot(from: &[u16], to: Option<&[u16]>, replace: bool) -> Result<(), u32> {
+    use crate::registry::{RegCloseKey, RegCreateKeyExW, RegQueryValueExW, RegSetValueExW};
+    /// `HKEY_LOCAL_MACHINE`, `KEY_QUERY_VALUE | KEY_SET_VALUE`, `REG_MULTI_SZ` (`winreg.h`, `winnt.h`).
+    const HKLM: isize = 0x8000_0002u32 as i32 as isize;
+    const KEY_QUERY_SET: u32 = 0x1 | 0x2;
+    const REG_MULTI_SZ: u32 = 7;
+    let old = nt_path(from)?;
+    let new = match to {
+        Some(t) => Some(nt_path(t)?),
+        None => None,
+    };
+    let strings = file::pending_rename_strings(&old, new.as_deref(), replace);
+    let key = with_nul(&"SYSTEM\\CurrentControlSet\\Control\\Session Manager".encode_utf16().collect::<Vec<u16>>());
+    let value = with_nul(&"PendingFileRenameOperations".encode_utf16().collect::<Vec<u16>>());
+    let mut h: isize = 0;
+    // SAFETY: NUL-terminated names and an out-handle.
+    let e = unsafe {
+        RegCreateKeyExW(
+            HKLM,
+            key.as_ptr(),
+            0,
+            core::ptr::null(),
+            0,
+            KEY_QUERY_SET,
+            core::ptr::null(),
+            &mut h,
+            core::ptr::null_mut(),
+        )
+    };
+    if e != ERROR_SUCCESS {
+        return Err(e);
+    }
+    let mut existing: Vec<u8> = Vec::new();
+    let mut size = 0u32;
+    let mut kind = 0u32;
+    // SAFETY: an open key, the value's name and out-values; then a buffer of `size` bytes.
+    let mut r = unsafe {
+        RegQueryValueExW(h, value.as_ptr(), core::ptr::null_mut(), &mut kind, core::ptr::null_mut(), &mut size)
+    };
+    if r == ERROR_SUCCESS && size > 0 {
+        existing.resize(size as usize, 0);
+        // SAFETY: as above.
+        r = unsafe {
+            RegQueryValueExW(h, value.as_ptr(), core::ptr::null_mut(), &mut kind, existing.as_mut_ptr(), &mut size)
+        };
+        existing.truncate(size as usize);
+    }
+    if r != ERROR_SUCCESS && r != ERROR_FILE_NOT_FOUND {
+        RegCloseKey(h);
+        return Err(r);
+    }
+    if r != ERROR_SUCCESS {
+        existing.clear();
+    }
+    let data = file::multi_sz_append(&existing, &strings);
+    // SAFETY: an open key, the value's name and `data`.
+    let r = unsafe { RegSetValueExW(h, value.as_ptr(), 0, REG_MULTI_SZ, data.as_ptr(), data.len() as u32) };
+    RegCloseKey(h);
+    if r == ERROR_SUCCESS { Ok(()) } else { Err(r) }
+}
+
 /// `MoveFileExW`: a rename (`FileRenameInformation`) on the same volume.
 /// `MOVEFILE_REPLACE_EXISTING` replaces a file (Learn: not a directory);
 /// without it an existing target is `ERROR_ALREADY_EXISTS`. Moving to
-/// another volume (`MOVEFILE_COPY_ALLOWED`) and `MOVEFILE_DELAY_UNTIL_REBOOT`
-/// are not supported yet: `ERROR_NOT_SAME_DEVICE` / `ERROR_NOT_SUPPORTED`.
+/// another volume (`MOVEFILE_COPY_ALLOWED`) is not supported yet:
+/// `ERROR_NOT_SAME_DEVICE`. `MOVEFILE_DELAY_UNTIL_REBOOT`: [`delay_until_reboot`].
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32 {
     // SAFETY: the caller's strings.
@@ -507,7 +574,10 @@ pub unsafe extern "system" fn MoveFileExW(from: *const u16, to: *const u16, flag
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     };
     if flags & MOVEFILE_DELAY_UNTIL_REBOOT != 0 {
-        return fail(ERROR_NOT_SUPPORTED, FALSE);
+        return match delay_until_reboot(from, to, flags & MOVEFILE_REPLACE_EXISTING != 0) {
+            Ok(()) => TRUE,
+            Err(e) => fail(e, FALSE),
+        };
     }
     let Some(to) = to else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
     let target = match nt_path(to) {

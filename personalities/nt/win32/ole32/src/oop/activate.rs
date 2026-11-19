@@ -187,6 +187,17 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     // The first attempt to reach a local server fixes the process's security (sheet
     // `CoInitializeSecurity`, rule `once_per_process`).
     security::lock();
+    // The classes of Windows' desktop process (`ShellWindows`): Poly's desktop is no Windows
+    // process, so the shell serves them in the caller (`poly_com::inproc::desktop_server_of`).
+    // The shell link answers a local-server request too (ShellLink.yaml); Poly's DLL serves it here.
+    let local = poly_com::inproc::desktop_server_of(clsid).or_else(|| {
+        if poly_com::inproc::served_for_local_server(clsid) { poly_com::inproc::server_of(clsid) } else { None }
+    });
+    if entry.is_none()
+        && let Some(dll) = local
+    {
+        return inproc_class_object(dll.trim_end_matches(char::from(0)), clsid, iid, ctx);
+    }
     let plan = entry.as_ref().and_then(local_plan);
     if let Some(p) = &plan {
         if !bitness_ok(ctx, p) {
@@ -231,7 +242,8 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
 /// factory of a server process is asked as an activation's would be (B2c).
 pub(crate) fn create_with(f: *mut c_void, outer: *mut c_void, iid: &Guid) -> Result<*mut c_void, Hresult> {
     // SAFETY: an IClassFactory pointer with one reference, given back below.
-    let (hr, o) = proxy::create_for_activation(f, outer, iid).unwrap_or_else(|| unsafe { factory_create(f, outer, iid) });
+    let (hr, o) =
+        proxy::create_for_activation(f, outer, iid).unwrap_or_else(|| unsafe { factory_create(f, outer, iid) });
     // SAFETY: as above.
     unsafe { release_unknown(f) };
     if o.is_null() { Err(if hr < 0 { hr } else { E_NOINTERFACE }) } else { Ok(o) }

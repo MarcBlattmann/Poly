@@ -432,50 +432,88 @@ pub unsafe extern "system" fn GetFinalPathNameByHandleW(handle: Handle, buf: *mu
     unsafe { return_sized(&path, buf, size) }
 }
 
-// ----- GetLongPathNameW ---------------------------------------------------------------------------------
+// ----- GetLongPathNameW, GetShortPathNameW ---------------------------------------------------------------
 
-/// The name `dir` (as given, with its trailing separator) holds for the
-/// component `name`: a `FindFirstFileW` for exactly that name.
-fn find_name(dir: &[u16], name: &[u16]) -> Result<Option<Vec<u16>>, u32> {
-    let mut pattern = dir.to_vec();
-    pattern.extend_from_slice(name);
-    pattern.push(0);
-    let mut data = [0u8; find_data::SIZE];
-    // SAFETY: a NUL-terminated pattern; a WIN32_FIND_DATAW.
-    let h = unsafe { crate::file::FindFirstFileW(pattern.as_ptr(), data.as_mut_ptr()) };
-    if h == INVALID_HANDLE_VALUE {
-        let e = last_error();
-        return if e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND { Ok(None) } else { Err(e) };
-    }
-    // SAFETY: the handle FindFirstFileW returned.
-    unsafe { crate::file::FindClose(h) };
+/// The units of a `WIN32_FIND_DATAW`'s file name.
+fn found_name(data: &[u8; find_data::SIZE]) -> Vec<u16> {
     let raw = &data[find_data::FILE_NAME..find_data::FILE_NAME + 2 * find_data::MAX_PATH];
-    let units: Vec<u16> =
-        raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect();
-    Ok(Some(units))
+    raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect()
 }
 
-/// `GetLongPathNameW`.
+/// The directories as `FindFirstFileW` sees them (`poly_kernelbase::shortname::DirLookup`).
+struct FindLookup;
+
+impl poly_kernelbase::shortname::DirLookup for FindLookup {
+    /// The name `dir` holds for `name`: a `FindFirstFileW` for exactly that name.
+    fn find(&mut self, dir: &[u16], name: &[u16]) -> Result<Option<Vec<u16>>, u32> {
+        let mut pattern = dir.to_vec();
+        pattern.extend_from_slice(name);
+        pattern.push(0);
+        let mut data = [0u8; find_data::SIZE];
+        // SAFETY: a NUL-terminated pattern; a WIN32_FIND_DATAW.
+        let h = unsafe { crate::file::FindFirstFileW(pattern.as_ptr(), data.as_mut_ptr()) };
+        if h == INVALID_HANDLE_VALUE {
+            let e = last_error();
+            return if e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND { Ok(None) } else { Err(e) };
+        }
+        // SAFETY: the handle FindFirstFileW returned.
+        unsafe { crate::file::FindClose(h) };
+        Ok(Some(found_name(&data)))
+    }
+
+    /// Every entry of `dir` with its creation time.
+    fn list(&mut self, dir: &[u16]) -> Result<Vec<(Vec<u16>, u64)>, u32> {
+        let mut pattern = dir.to_vec();
+        pattern.push(u16::from(b'*'));
+        pattern.push(0);
+        let mut data = [0u8; find_data::SIZE];
+        let mut out = Vec::new();
+        // SAFETY: a NUL-terminated pattern; a WIN32_FIND_DATAW.
+        let h = unsafe { crate::file::FindFirstFileW(pattern.as_ptr(), data.as_mut_ptr()) };
+        if h == INVALID_HANDLE_VALUE {
+            let e = last_error();
+            return if e == ERROR_FILE_NOT_FOUND { Ok(out) } else { Err(e) };
+        }
+        loop {
+            let name = found_name(&data);
+            let dots = name.iter().all(|&c| c == u16::from(b'.')) && name.len() <= 2;
+            if !dots {
+                let at = find_data::CREATION_TIME;
+                out.push((name, u64::from_le_bytes(data[at..at + 8].try_into().unwrap())));
+            }
+            // SAFETY: the handle FindFirstFileW returned; a WIN32_FIND_DATAW.
+            if unsafe { crate::file::FindNextFileW(h, data.as_mut_ptr()) } == 0 {
+                break;
+            }
+        }
+        // SAFETY: as above.
+        unsafe { crate::file::FindClose(h) };
+        Ok(out)
+    }
+}
+
+/// `GetLongPathNameW` (sheet `kernel32.dll/GetLongPathNameW`): every short component becomes the
+/// name stored on disk ([`poly_kernelbase::shortname::convert_path`]); the length without the NUL,
+/// or the size needed with it.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetLongPathNameW(short: *const u16, long: *mut u16, size: u32) -> u32 {
     // SAFETY: the caller's string.
     let Some(short) = (unsafe { wide_arg(short) }) else { return fail(ERROR_INVALID_PARAMETER, 0) };
-    match fileex::long_path(short, &mut find_name) {
+    match poly_kernelbase::shortname::convert_path(short, &mut FindLookup, false) {
         // SAFETY: the caller's buffer.
         Ok(p) => unsafe { return_sized(&p, long, size) },
         Err(e) => fail(e, 0),
     }
 }
 
-/// `GetShortPathNameW(lpszLongPath, lpszShortPath, cchBuffer)`: Poly's volumes have no 8.3 names, so the short
-/// path is the long path (Learn: "If the volume has no short name for the file ... the function returns the long
-/// path"; and 0 with the error of the lookup for a file that does not exist, as `GetLongPathNameW`). Sized like
-/// it: the length without the NUL, or the size needed with it.
+/// `GetShortPathNameW(lpszLongPath, lpszShortPath, cchBuffer)` (sheet `kernel32.dll/GetShortPathNameW`):
+/// every component becomes its 8.3 name, generated from the directory's entries
+/// ([`poly_kernelbase::shortname`]; Poly's volumes store none). Sized like `GetLongPathNameW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetShortPathNameW(long: *const u16, short: *mut u16, size: u32) -> u32 {
     // SAFETY: the caller's string.
     let Some(long) = (unsafe { wide_arg(long) }) else { return fail(ERROR_INVALID_PARAMETER, 0) };
-    match fileex::long_path(long, &mut find_name) {
+    match poly_kernelbase::shortname::convert_path(long, &mut FindLookup, true) {
         // SAFETY: the caller's buffer.
         Ok(p) => unsafe { return_sized(&p, short, size) },
         Err(e) => fail(e, 0),
