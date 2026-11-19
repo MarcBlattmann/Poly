@@ -211,6 +211,8 @@ fn dispatch(oid: u64, op: Op) -> Reply {
     let Some(e) = find(oid) else { return Reply::hr(RPC_E_DISCONNECTED) };
     let object = e.object as *mut c_void;
     match op {
+        // B2b, WIP: calls through type-library stubs and references for marshalled proxies.
+        Op::Invoke { .. } | Op::AddRef { .. } => Reply::hr(poly_com::hresult::E_NOTIMPL),
         Op::Release(n) => {
             release_refs(oid, n);
             Reply::hr(S_OK)
@@ -266,7 +268,7 @@ fn dispatch(oid: u64, op: Op) -> Reply {
             if identity.is_null() {
                 return Reply::hr(if hr >= 0 { E_UNEXPECTED } else { hr });
             }
-            Reply { hr, obj: Some(export_object(identity as usize, e.owner)) }
+            Reply { hr, obj: Some(export_object(identity as usize, e.owner)), data: Vec::new() }
         }
     }
 }
