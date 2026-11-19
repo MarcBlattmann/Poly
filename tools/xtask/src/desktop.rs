@@ -2101,6 +2101,12 @@ fn qcode(c: char) -> Option<(String, bool)> {
         '|' => shifted("backslash"),
         '_' => shifted("minus"),
         '$' => shifted("4"),
+        ',' => plain("comma"),
+        '"' => shifted("apostrophe"),
+        '(' => shifted("9"),
+        ')' => shifted("0"),
+        '&' => shifted("7"),
+        ':' => shifted("semicolon"),
         _ => None,
     }
 }

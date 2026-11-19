@@ -14,6 +14,10 @@
 //! 3. The elevated copy unpacks Google's updater, which installs its services (B1), serves COM
 //!    (B2) and registers its task (B3), downloads Chrome and runs Chrome's `setup.exe` (B4).
 //! 4. Chrome's shortcut becomes a launcher entry; the launcher starts Chrome and it browses.
+//! 5. What Google's installer left: Chrome's files, the updater's services (keys in the `SYSTEM`
+//!    hive) and its scheduled task (a file in `C:\Windows\System32\Tasks`), counted in the guest.
+//! 6. **Uninstall** (ADR 0230; asked on the compositor's control pipe, as Files' Applications
+//!    asks): the installer window runs Chrome's `UninstallString`; then the same counts are all zero.
 //!
 //! Every milestone is waited for with a long timeout, with a screenshot every half minute while
 //! nothing happens, so a run that stops shows where.
@@ -40,6 +44,32 @@ const APP: &str = "Google Chrome";
 const YES: (i32, i32) = (719, 457);
 /// Guest memory: the installer, the updater's processes, then Chrome.
 const MEMORY: &str = "4G";
+
+/// Where `C:` and the registry's hive files are in the guest (the disk on `/mnt`, ADR 0066).
+const C: &str = "/mnt/poly/nt/c";
+const HIVES: &str = "/mnt/poly/nt/registry";
+
+/// The Terminal prints what is left of Chrome's install on the serial line:
+/// `b7-state: <what> chrome=N services=N tasks=N`.
+fn report_state(d: &mut Driver, what: &str) -> std::result::Result<(usize, usize, usize), String> {
+    let marker = format!("b7-state: {what} ");
+    let cmd = format!(
+        "echo \"{marker}chrome=$(ls '{C}/Program Files/Google/Chrome/Application/chrome.exe' 2>/dev/null | wc -l) \
+         services=$(tr -d '\\000' < {HIVES}/SYSTEM.hive | grep -o 'GoogleUpdater[A-Za-z]*Service' | sort -u | wc -l) \
+         tasks=$(ls {C}/Windows/System32/Tasks 2>/dev/null | grep -ci google)\" > /dev/console\n"
+    );
+    let n = super::count(&d.lines, &marker) + 1;
+    type_str(d, &cmd)?;
+    let line = super::wait_nth_line(&d.lines, &marker, n, 60)?;
+    let num = |key: &str| -> usize {
+        line.split(&format!("{key}="))
+            .nth(1)
+            .and_then(|r| r.split_whitespace().next())
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0)
+    };
+    Ok((num("chrome"), num("services"), num("tasks")))
+}
 
 /// The cached installer on the host (downloaded once; `POLY_CHROME_SETUP` overrides).
 fn installer() -> std::result::Result<PathBuf, String> {
@@ -96,6 +126,9 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     super::shown(d, "Terminal", 90)?;
     d.wait("poly-terminal: ", 30)?;
     thread::sleep(Duration::from_secs(3));
+    // Nothing of Chrome's is there yet (this also checks the counting the end relies on).
+    let before = report_state(d, "before")?;
+    expect(&format!("a clean machine (chrome, services, tasks: {before:?})"), before == (0, 0, 0))?;
     type_str(d, &format!("poly-installer {DOWNLOAD}\n"))?;
     let said = d.wait(&format!("poly-installer: {DOWNLOAD}: Windows"), 90)?;
     expect(&format!("the front door knows Google's installer ({said:?})"), said.contains("Windows"))?;
@@ -121,6 +154,13 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     // 3. Google's updater installs Chrome: its shortcut becomes a launcher entry.
     let entry = wait_watching(d, "poly-installer: launcher entry ", 1800, "chrome-installer-installing")?;
     expect(&format!("Chrome's shortcut became a launcher entry ({entry:?})"), entry.contains("chrome.exe"))?;
+    // `poly-installer: launcher entry <ID> for ...`
+    let id = entry
+        .split("launcher entry ")
+        .nth(1)
+        .and_then(|r| r.split_whitespace().next())
+        .ok_or_else(|| format!("no entry id in {entry:?}"))?
+        .to_string();
     d.wait("app(s) in the launcher (read again)", 120)?;
     thread::sleep(Duration::from_secs(2));
     d.shot("chrome-installer-done")?;
@@ -137,6 +177,60 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     wait_watching(d, "window \"New Tab", 600, "chrome-installer-chrome-starting")?;
     thread::sleep(Duration::from_secs(5));
     d.shot("chrome-installer-chrome")?;
+
+    // 5. What the install left, from a new Terminal (Chrome is closed first: Ctrl+Shift+W).
+    chord(d, &["ctrl", "shift", "w"])?;
+    thread::sleep(Duration::from_secs(5));
+    chord(d, &["ctrl", "spc"])?;
+    d.wait(super::LAUNCHER_SHOWN, 30)?;
+    type_str(d, "terminal")?;
+    thread::sleep(Duration::from_millis(800));
+    d.type_text(&["ret"])?;
+    thread::sleep(Duration::from_secs(3));
+    let (chrome, services, tasks) = report_state(d, "installed")?;
+    expect(
+        &format!(
+            "Chrome, the updater's services and its task are there (chrome={chrome} services={services} tasks={tasks})"
+        ),
+        chrome == 1 && services >= 2 && tasks >= 1,
+    )?;
+
+    // 6. Uninstall, as Files' Applications asks the compositor (ADR 0180, 0230).
+    type_str(d, &format!("echo 'uninstall {id}' > $POLY_COMPOSITOR_CONTROL\n"))?;
+    d.wait(&format!("poly-compositor: asked to uninstall {id}"), 60)?;
+    let line = d.wait(&format!("window \"Uninstall {APP}"), 90)?;
+    let place = super::window_place(&line).ok_or_else(|| format!("unreadable window line {line:?}"))?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("chrome-installer-uninstall-asks")?;
+    let (x, y) = crate::installer::main_button(place);
+    click(d, x, y)?;
+    // Chrome's uninstaller is elevated: Poly's consent prompt again.
+    let asked = wait_watching(d, "poly-compositor: consent prompt 2", 300, "chrome-installer-uninstalling")?;
+    expect(&format!("the uninstaller asks for consent ({asked:?})"), asked.contains("setup.exe"))?;
+    thread::sleep(Duration::from_secs(2));
+    click(d, YES.0, YES.1)?;
+    d.wait("poly-compositor: consent 2: yes", 30)?;
+    let done = wait_watching(d, &format!("poly-installer: uninstalled {APP}: "), 900, "chrome-installer-uninstalling")?;
+    expect(&format!("the installer names the entry that went ({done:?})"), done.contains(&id))?;
+    d.wait("app(s) in the launcher (read again)", 120)?;
+    thread::sleep(Duration::from_secs(2));
+    d.shot("chrome-installer-uninstalled")?;
+    // Google's updater removes itself once no app is left (it runs `--uninstall-if-unused`); its
+    // services and task go with it.
+    let deadline = Instant::now() + Duration::from_secs(600);
+    loop {
+        let (chrome, services, tasks) = report_state(d, "uninstalled")?;
+        if chrome == 0 && services == 0 && tasks == 0 {
+            break;
+        }
+        if Instant::now() > deadline {
+            return Err(format!(
+                "after the uninstall, left: chrome={chrome} services={services} tasks={tasks} (all should be 0)"
+            ));
+        }
+        thread::sleep(Duration::from_secs(30));
+    }
+    d.shot("chrome-installer-all-gone")?;
     Ok(())
 }
 
