@@ -20,8 +20,8 @@
 //!   is registered) and the `HSTRING` functions ([`poly_com::hstring`]).
 //! - Drag and drop: `RegisterDragDrop`/`RevokeDragDrop` keep the target as the window's
 //!   `OleDropTargetInterface` property while the thread has OLE.
-//! - Small stand-ins that succeed without effect: `CoInitializeSecurity`,
-//!   `CoCreateFreeThreadedMarshaler` (an object that is only `IUnknown`).
+//! - A small stand-in that succeeds without effect: `CoCreateFreeThreadedMarshaler` (an object
+//!   that is only `IUnknown`).
 //!
 //! Sources: Microsoft Learn's page for each function, `combaseapi.h`,
 //! `objbase.h`, `roapi.h`, `winstring.h`, `propidl.h`, `wtypes.h`.
@@ -1488,37 +1488,6 @@ unsafe fn new_unknown(out: *mut *mut c_void) -> Hresult {
         *out = p.cast();
     }
     S_OK
-}
-
-/// `CoInitializeSecurity`: accepted, nothing enforced.
-#[unsafe(no_mangle)]
-pub extern "system" fn CoInitializeSecurity(
-    _sd: *mut c_void,
-    _count: i32,
-    _services: *mut c_void,
-    _reserved1: *mut c_void,
-    _authn_level: u32,
-    _imp_level: u32,
-    _auth_list: *mut c_void,
-    _capabilities: u32,
-    _reserved3: *mut c_void,
-) -> Hresult {
-    S_OK
-}
-
-/// `CoSetProxyBlanket`: there are no proxies here, so the object has none.
-#[unsafe(no_mangle)]
-pub extern "system" fn CoSetProxyBlanket(
-    proxy: *mut c_void,
-    _authn_svc: u32,
-    _authz_svc: u32,
-    _server_princ: *mut u16,
-    _authn_level: u32,
-    _imp_level: u32,
-    _auth_info: *mut c_void,
-    _capabilities: u32,
-) -> Hresult {
-    if proxy.is_null() { E_INVALIDARG } else { E_NOINTERFACE }
 }
 
 /// `CoRegisterMessageFilter`: only a single-threaded apartment has a message filter

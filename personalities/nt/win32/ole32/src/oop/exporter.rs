@@ -3,6 +3,9 @@
 //! is published) and the objects their `CreateInstance` made.
 //!
 //! Each connection carries one call; it runs in the object's apartment ([`super::apt::run_in`]).
+//! The client's process comes from the pipe; a call the process's security does not admit is
+//! refused with `E_ACCESSDENIED`, and an admitted one runs with its call context (B2c,
+//! [`super::security`]).
 
 use super::*;
 use crate::{IID_IUNKNOWN, release_unknown};
@@ -11,7 +14,8 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use poly_com::git::Owner;
 use poly_com::hresult::{E_UNEXPECTED, S_OK};
-use poly_com::wire::{ObjRef, Op, Reply, Request, frame};
+use poly_com::security::E_ACCESSDENIED;
+use poly_com::wire::{Caller, ObjRef, Op, Reply, Request, frame};
 
 /// The object ids of registered factories: this bit and the registration's cookie.
 const FACTORY_OID: u64 = 1 << 63;
@@ -121,7 +125,7 @@ unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     let h = arg as Handle;
     if let Some(payload) = pipe::read_frame(h) {
         let reply = match Request::decode(&payload) {
-            Ok(Request::Call { oid, op }) => dispatch(oid, op),
+            Ok(Request::Call { oid, op, caller }) => dispatch(oid, op, super::security::pipe_client(h), caller),
             _ => Reply::hr(E_UNEXPECTED),
         };
         if pipe::write_all(h, &frame(&reply.encode())) {
@@ -233,15 +237,22 @@ pub(crate) fn disconnect(identity: usize) {
     }
 }
 
-/// Run one call.
-fn dispatch(oid: u64, op: Op) -> Reply {
+/// Run one call from process `client`.
+fn dispatch(oid: u64, op: Op, client: u32, caller: Caller) -> Reply {
     let Some(e) = find(oid) else { return Reply::hr(RPC_E_DISCONNECTED) };
     let object = e.object as *mut c_void;
+    // Reference counts are the proxies' own business; everything else is a call the process's
+    // security decides on (sheet `CoInitializeSecurity`, rule `access_check`).
+    if !matches!(op, Op::Release(_) | Op::AddRef { .. }) && !super::security::admits(client) {
+        return Reply::hr(E_ACCESSDENIED);
+    }
     match op {
         // A method of an interface marshalled through its proxy/stub class (B2b).
         Op::Invoke { iid, method, data } => {
             COUNT.with(|c| c.enter_call());
-            let r = apt::run_in(e.owner, || super::channel::invoke_stub(e.object, &iid, method, &data));
+            let r = apt::run_in(e.owner, || {
+                super::security::serve(client, caller, || super::channel::invoke_stub(e.object, &iid, method, &data))
+            });
             COUNT.with(|c| c.leave_call());
             match r {
                 Ok(data) => Reply { hr: S_OK, obj: None, data },
@@ -274,16 +285,18 @@ fn dispatch(oid: u64, op: Op) -> Reply {
         }
         Op::LockServer(lock) => {
             let hr = apt::run_in(e.owner, || {
-                // SAFETY: an exported factory; the reference the query added is given back.
-                unsafe {
-                    let (hr, f) = query(object, &IID_ICLASS_FACTORY);
-                    if f.is_null() {
-                        return hr;
+                super::security::serve(client, caller, || {
+                    // SAFETY: an exported factory; the reference the query added is given back.
+                    unsafe {
+                        let (hr, f) = query(object, &IID_ICLASS_FACTORY);
+                        if f.is_null() {
+                            return hr;
+                        }
+                        let r = factory_lock(f, lock);
+                        release_unknown(f);
+                        r
                     }
-                    let r = factory_lock(f, lock);
-                    release_unknown(f);
-                    r
-                }
+                })
             });
             Reply::hr(hr)
         }
@@ -291,6 +304,7 @@ fn dispatch(oid: u64, op: Op) -> Reply {
             // The server count is raised while an activation from another process runs.
             COUNT.with(|c| c.enter_call());
             let (hr, identity) = apt::run_in(e.owner, || {
+                super::security::serve(client, caller, || {
                 // SAFETY: an exported factory; the made object's references are counted below.
                 unsafe {
                     let (hr, f) = query(object, &IID_ICLASS_FACTORY);
@@ -306,6 +320,7 @@ fn dispatch(oid: u64, op: Op) -> Reply {
                     release_unknown(o);
                     (hr, id)
                 }
+                })
             });
             COUNT.with(|c| c.leave_call());
             if identity.is_null() {

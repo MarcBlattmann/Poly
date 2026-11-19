@@ -37,7 +37,8 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
             ("UuidToStringA", Fail::Value(120)),
             ("UuidToStringW", Fail::Value(120)),
         ],
-        forwards: &[],
+        // B2c: the call context lives in ole32 (ADR 0220).
+        forwards: &[("I_RpcOpenClientProcess", "ole32.I_RpcOpenClientProcess")],
     },
     SystemDll {
         file: "mpr.dll",
