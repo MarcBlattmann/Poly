@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "qws_args",
-      "exe_sha256": "f89899ee0936a43205f79d4e4fe1436ab086f0ba43e4c266baf9bc6e77b5d126",
+      "exe_sha256": "fd3079ed68ed3a94fc323c0f31d8e70fa34d474ea23154c1a7a607e94e9cf7cb",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
       "name": "qws_rights_adm",
       "session": "interactive",
       "token": "elevated",
-      "exe_sha256": "ddba4e0f86a1108430f9adeed6aff5aae3e7d64624cb2a1ca0497b0b7f4dabe0",
+      "exe_sha256": "83ee6a12b54c6885306f407ae1c5084e251244a8112ee31f2381eaaa0359aaf2",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -44,7 +44,7 @@
       "name": "qws_rights_std",
       "session": "interactive",
       "token": "standard",
-      "exe_sha256": "ddba4e0f86a1108430f9adeed6aff5aae3e7d64624cb2a1ca0497b0b7f4dabe0",
+      "exe_sha256": "83ee6a12b54c6885306f407ae1c5084e251244a8112ee31f2381eaaa0359aaf2",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

@@ -14,7 +14,7 @@
       "name": "wtsc_child_std",
       "session": "interactive",
       "token": "standard",
-      "exe_sha256": "0d77ceed77c6a2977c1a3eeaf42bef2fb958c76314169d5f00b31732df61bab9",
+      "exe_sha256": "102bc81dcfa7df9cd1c68241f07b8776b077961185a254744a40f0787002f823",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

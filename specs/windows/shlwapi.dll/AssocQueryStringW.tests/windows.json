@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "aq_hkcu",
-      "exe_sha256": "9828a812fb7726f9c65d279f146c8bd6f3c86a1320416125facee26a1e30c5eb",
+      "exe_sha256": "e7d54405f68360abefa7362aae122be2dff6290dd89d548b6eb7cf525b66ffbb",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "aq_progid",
-      "exe_sha256": "50cb3573cadc3fc32e554661c65b4b6c6a2bc9e42e3e23c456daf99e772ba81d",
+      "exe_sha256": "50a7b321c8a14e1360441f514415d7a1dd56058a8f6d69b33bce19038aa1bd19",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
