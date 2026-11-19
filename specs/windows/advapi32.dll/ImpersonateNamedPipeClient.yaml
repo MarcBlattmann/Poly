@@ -1,0 +1,65 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/advapi32.dll/ImpersonateNamedPipeClient
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 through its token mode (-Token elevated and -Token standard: a one-time scheduled task of the logged-on account, run level Highest or Limited, in the interactive session; ADR 0171): elevated token = integrity 0x3000, TokenElevationType 2 (full), 24 privileges of which 4 enabled; standard token = integrity 0x2000, TokenElevationType 3 (limited), Administrators and one more group deny-only, 5 privileges of which 1 enabled; every test runs twice with identical output; the probes that led to the rules below were made with Python ctypes in the SSH logon session; the pipes and the clients are in the test's own process (client threads), no other process or account was involved"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn reference pages of
+  ImpersonateNamedPipeClient, RevertToSelf, CreateNamedPipe, CreateFile (security quality of service
+  flags), ConnectNamedPipe, DisconnectNamedPipe, OpenThreadToken, SetThreadToken,
+  GetTokenInformation, CreateRestrictedToken, CheckTokenMembership, "Impersonation Levels",
+  "Impersonating a Named Pipe Client", "Named Pipe Security and Access Rights"; winbase.h, winnt.h,
+  securitybaseapi.h and winerror.h for constants and layouts. Wine's code and tests were not
+  used, no Microsoft binary was decompiled or disassembled.
+summary: >
+  Called by the thread of a named pipe server on the server end of a connected pipe from which it
+  has already read at least once: gives the calling thread an impersonation token (OpenThreadToken
+  shows TokenType 2, TokenImpersonation) of the client that opened the pipe, so the thread acts as
+  the client (user, groups, integrity level, elevation, privileges, session) until RevertToSelf. The
+  level of the token (anonymous, identification, impersonation, delegation) is what the client asked
+  for when it opened the pipe. The updater's pipe IPC uses it.
+interface:
+  signature: "BOOL ImpersonateNamedPipeClient(HANDLE hNamedPipe)"
+  clients_in_the_tests: "a client is a thread that opens the pipe with CreateFileW (generic read and write, OPEN_EXISTING) and writes one byte; 'default quality of service' means no SECURITY_SQOS_PRESENT flag; 'SQOS x' means SECURITY_SQOS_PRESENT | x"
+rules:
+  when_it_works: "the server end of a pipe, a client connected (the client's CreateFile done; the server's ConnectNamedPipe returned or failed with ERROR_PIPE_CONNECTED) and the server has read data from the pipe after the client connected: TRUE (the last error is left alone). It works from any thread of the server (not only the one that read), also for a byte another thread read, also after the client closed its end (the server read the byte first), also repeatedly (calling it again while impersonating is TRUE with the same token), and again after RevertToSelf. It stops working at DisconnectNamedPipe (then ERROR_CANNOT_IMPERSONATE) and a client that connects later must be read from again."
+  token_after: "OpenThreadToken(thread, OpenAsSelf TRUE) then gives TokenType 2 (impersonation), the user of the client token, its group list with the same attributes, its integrity level, TokenElevationType, TokenElevation and session; before the call and after RevertToSelf the thread has no token (ERROR_NO_TOKEN 1008). The process token is unchanged."
+  standard_and_elevated_clients: "client with the elevated token (full, high integrity): thread token user = the process user, groups the same (Administrators enabled), integrity 0x3000, elevation type 2, TokenElevation 1, CheckTokenMembership(NULL, Administrators) TRUE; client with the standard token (limited, medium integrity): groups the same with 2 deny-only groups (Administrators among them), integrity 0x2000, elevation type 3, TokenElevation 0, Administrators membership FALSE. In each case the token the thread gets is the client's, whatever token the server has."
+  which_token_of_the_client: "no SQOS flags: a copy of the client PROCESS's token with fewer privileges (elevated client: 4 instead of 24; standard client: 1 instead of 5; groups, integrity and elevation are the process token's), even when the client thread was impersonating something else when it connected; with SECURITY_SQOS_PRESENT: the client thread's token as it was when it opened the pipe if it was impersonating (a low integrity copy gives integrity 0x1000; a restricted copy with Administrators deny-only and DISABLE_MAX_PRIVILEGE gives 1 privilege, Administrators deny-only (membership FALSE) and a different group list), else the process token, all privileges (24 / 5). With SECURITY_CONTEXT_TRACKING the client's token at the time of the call is used (the client had already reverted: the process token with all privileges, Administrators member)."
+  levels: "the impersonation level is the client's: no SQOS flags or SQOS impersonation: SecurityImpersonation 2 (the SECURITY_IMPERSONATION bit without SECURITY_SQOS_PRESENT is ignored: the default); SQOS identification: level 1 (the call is TRUE; the token can be queried but not used: opening a file as that thread fails with ERROR_BAD_IMPERSONATION_LEVEL 1346, OpenThreadToken with OpenAsSelf FALSE fails with 1346, CheckTokenMembership(NULL, ...) fails); SQOS anonymous: the call is TRUE but OpenThreadToken fails with ERROR_CANT_OPEN_ANONYMOUS_TOKEN 1347 and opening a file fails with 1346; SQOS delegation: level 3 is granted (the client is local); SECURITY_EFFECTIVE_ONLY and SECURITY_CONTEXT_TRACKING do not change the level. At levels 0 and 1 an open of a file the client may read fails; at levels 2 and 3 CreateFile of a file everyone may read works."
+  per_thread: "only the calling thread gets the token: another thread of the server has no thread token while one impersonates; a second thread may impersonate the same client at the same time (each has its own token); SetThreadToken(NULL, NULL) removes the impersonation as RevertToSelf does (TRUE)."
+  failed_call: "a failed call leaves the thread's existing impersonation alone: ImpersonateSelf(identification) then a failing ImpersonateNamedPipeClient: the thread still has its identification token."
+errors:
+  cannot_impersonate: "ERROR_CANNOT_IMPERSONATE (1368): the server end with no client connected; a client connected but nothing read yet (also a byte written by the client but not yet read by the server); after DisconnectNamedPipe; the read end of an anonymous pipe. FALSE (0), no thread token is set."
+  invalid_function: "ERROR_INVALID_FUNCTION (1): the client's end of a named pipe, a file handle, the write end of an anonymous pipe."
+  invalid_handle: "ERROR_INVALID_HANDLE (6): NULL, INVALID_HANDLE_VALUE, a made-up handle, a closed handle, an event handle, the pseudo handle of the current thread (-2)."
+  success: "TRUE (1); the last error is left alone."
+side_effects: "sets the calling thread's impersonation token; uses nothing else"
+threading: "per thread: the token belongs to the calling thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 7  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing kernel32.dll and advapi32.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants). A test creates a one-instance duplex byte pipe
+  (security descriptor D:(A;;GA;;;WD)S:(ML;;NW;;;LW), so every client can connect), starts a
+  client thread that opens it with chosen CreateFile flags, optionally while impersonating a copy of
+  its own token, and writes one byte; the main thread reads it and calls the function. The state of
+  the thread token is printed as type, level, comparisons with the process token (user, groups, session
+  as true/false), the number of deny-only groups, integrity RID, elevation type, TokenElevation,
+  Administrators membership, restricted flag and privilege count. Never printed: SIDs (the one
+  string comparison is with S-1-5-7), handles, names of the machine or account. Each test exists twice
+  with the same code: one is recorded with the elevated token and the other with the standard token
+  (-Token elevated / standard, recorded as separate tests of the same entry).
+not_covered: >
+  Clients in other processes and of other accounts (the pipe, the server and the clients are in one
+  process; SYSTEM services, remote clients, SECURITY_DELEGATION across machines), overlapped and
+  message-mode pipes, PIPE_REJECT_REMOTE_CLIENTS, the 32-bit form (the updater is a 32-bit program;
+  only the 64-bit programs were recorded), RevertToSelf's own sheet is separate.
