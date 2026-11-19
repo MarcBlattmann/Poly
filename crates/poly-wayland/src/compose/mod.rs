@@ -28,7 +28,7 @@ pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, TITLE_HEIGHT, The
 pub use scale::{Scale, UNIT as SCALE_UNIT};
 pub use scene::{
     BUSY_PHASES, BUSY_SIZE, Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId,
-    buffer_point,
+    buffer_point, surface_point,
 };
 pub use text::{BitmapFont, TextRenderer};
 

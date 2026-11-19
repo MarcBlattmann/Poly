@@ -19,13 +19,29 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 
 /// A region: rectangles added and subtracted, in order. Kept for the input
-/// and opaque regions; composing does not use them yet.
+/// and opaque regions; composing uses the opaque one when it covers the
+/// whole surface ([`Region::covers`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Region {
     pub ops: Vec<(bool, Rect)>,
 }
 
 impl Region {
+    /// Whether all of `r` is in the region, as far as whole rectangles tell: an added
+    /// rectangle holding it, and no later subtraction touching it (a region built up from
+    /// pieces is not looked at closer: it then does not cover).
+    pub fn covers(&self, r: Rect) -> bool {
+        let mut covered = false;
+        for (add, op) in &self.ops {
+            if *add && op.intersect(&r) == r {
+                covered = true;
+            } else if !*add && !op.intersect(&r).is_empty() {
+                covered = false;
+            }
+        }
+        covered && !r.is_empty()
+    }
+
     /// Whether the point is in the region (the last operation covering it
     /// decides).
     pub fn contains(&self, x: i32, y: i32) -> bool {
@@ -574,6 +590,18 @@ impl Server {
                 for r in rects {
                     self.scene.damage_content(win, r);
                 }
+                // Opaque content hides what is below it, which is then not drawn (ADR 0232): a
+                // buffer without alpha, or an opaque region over all of the surface (wayland.xml,
+                // `set_opaque_region`: the compositor may take its pixels as opaque).
+                let logical = self.scene.window(win).map(|w| w.content().logical_size()).unwrap_or((0, 0));
+                let region_covers = self.surface(c, surface).is_some_and(|s| {
+                    s.opaque.as_ref().is_some_and(|r| r.covers(Rect::new(0, 0, logical.0, logical.1)))
+                });
+                let no_alpha = matches!(
+                    buffer.format,
+                    crate::protocol::wl_shm::Format::XRGB8888 | crate::protocol::wl_shm::Format::XBGR8888
+                );
+                self.scene.set_opaque(win, no_alpha || region_covers);
             }
             None => {
                 let Some(s) = self.surface(c, surface) else { return };
@@ -626,5 +654,28 @@ impl Server {
         if let Some(s) = self.surface(c, id) {
             s.stash = content;
         }
+    }
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+
+    #[test]
+    fn a_region_covers_a_rectangle_only_when_a_whole_added_rectangle_holds_it() {
+        let whole = Rect::new(0, 0, 100, 50);
+        let mut r = Region::default();
+        assert!(!r.covers(whole));
+        r.ops.push((true, Rect::new(0, 0, i32::MAX / 2, i32::MAX / 2)));
+        assert!(r.covers(whole));
+        // A later hole: not covered; added back whole: covered again.
+        r.ops.push((false, Rect::new(10, 10, 1, 1)));
+        assert!(!r.covers(whole));
+        r.ops.push((true, whole));
+        assert!(r.covers(whole));
+        // Pieces are not looked at closer.
+        let halves = Region { ops: alloc::vec![(true, Rect::new(0, 0, 50, 50)), (true, Rect::new(50, 0, 50, 50))] };
+        assert!(!halves.covers(whole));
+        assert!(!r.covers(Rect::default()));
     }
 }
