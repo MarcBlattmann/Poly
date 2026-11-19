@@ -757,7 +757,9 @@ crate::kernel_test! {
         }
         result
     }
+}
 
+crate::kernel_test! {
     /// `/proc/<pid>/stat` shows `S` only while every thread is blocked: a
     /// thread that is runnable but not on a CPU (just woken, or on its way
     /// back from a system call) runs (`threads_running`).

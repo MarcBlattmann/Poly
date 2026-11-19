@@ -1146,38 +1146,12 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
                 poly_personality_nt::trace::begin(&mut k, regs)
             }
         });
-    let feel_t0 = crate::time::now_ns(); // TEMP-FEEL
-    let feel_svc = regs.rax;
     // A 32-bit thread's call comes in the 32-bit convention and is converted (ADR 0186).
     let outcome = if crate::arch::user::compat() {
         poly_personality_nt::wow64::dispatch32(&mut k, regs, |k, regs| poly_personality_nt::dispatch_with(k, regs))
     } else {
         poly_personality_nt::dispatch_with(&mut k, regs)
     };
-    // TEMP-FEEL: calls that took long, to see what a thread waited in.
-    let feel_t1 = crate::time::now_ns();
-    if feel_t1 - feel_t0 > 20_000_000 {
-        let h = regs.r10;
-        let kind = with(|s| {
-            let c = poly_ntobj::Caller::user(ProcessId(process.pid), ThreadRef(u64::from(tid)));
-            let id = s.sys.objects.object_by_handle(&c, poly_ntobj::Handle(h), 0, None).ok()?;
-            s.sys.objects.object_type(id)
-        });
-        let mut to = [0u8; 8];
-        let timeout = if regs.r8 != 0 && user::copy_from_user(&mut to, regs.r8).is_ok() {
-            Some(i64::from_le_bytes(to))
-        } else {
-            None
-        };
-        crate::kprintln!(
-            "feel-slow: pid {} tid {tid} svc {feel_svc:#x} from {} to {} ({} ms) arg0 {h:#x} {kind:?} timeout {timeout:?} status {:#x}",
-            process.pid,
-            feel_t0 / 1000,
-            feel_t1 / 1000,
-            (feel_t1 - feel_t0) / 1_000_000,
-            regs.rax as u32
-        );
-    }
     if let Some(call) = traced {
         let status = regs.rax as u32;
         if crate::arch::user::compat() && apitrace::wanted() {
