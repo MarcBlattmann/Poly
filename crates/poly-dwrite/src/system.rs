@@ -191,13 +191,40 @@ pub fn fallback_families(cp: u32) -> &'static [&'static str] {
     match cp {
         0x1F000..=0x1FAFF | 0x2600..=0x27BF => &["Segoe UI Emoji", "Segoe UI Symbol", "Segoe UI"],
         0x2190..=0x2BFF => &["Segoe UI Symbol", "Segoe UI"],
-        _ => &["Segoe UI", "Segoe UI Symbol", "Arial", "DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"],
+        // Chinese, Japanese and Korean (ADR 0234): the CJK font of the disk when there is one
+        // (DejaVu, which Poly's Windows CJK family names stand for, has none of these glyphs).
+        0x1100..=0x11FF
+        | 0x2E80..=0x2FDF
+        | 0x3000..=0x303F
+        | 0x3040..=0x31FF
+        | 0x3200..=0x9FFF
+        | 0xA960..=0xA97F
+        | 0xAC00..=0xD7FF
+        | 0xF900..=0xFAFF
+        | 0xFE30..=0xFE4F
+        | 0xFF00..=0xFFEF
+        | 0x20000..=0x3134F => &[CJK_FAMILY, "Segoe UI", "DejaVu Sans"],
+        _ => &["Segoe UI", "Segoe UI Symbol", "Arial", "DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono", CJK_FAMILY],
     }
 }
+
+/// The family of Poly's CJK font (Droid Sans Fallback, `tools/xtask/src/fonts.rs`), on the disks that
+/// carry it.
+pub const CJK_FAMILY: &str = "Droid Sans Fallback";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cjk_text_falls_back_to_the_cjk_font_first() {
+        // example.com's Chinese line: 该域名仅用于文档示例 (ADR 0234).
+        for cp in [0x8BE5, 0x57DF, 0x3002, 0xFF0C, 0x3042, 0xAC00] {
+            assert_eq!(fallback_families(cp)[0], CJK_FAMILY, "{cp:#x}");
+        }
+        assert_eq!(fallback_families(0x41)[0], "Segoe UI");
+        assert!(fallback_families(0x41).contains(&CJK_FAMILY));
+    }
 
     #[test]
     fn standard_names() {
