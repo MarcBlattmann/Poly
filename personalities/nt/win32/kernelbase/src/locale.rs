@@ -31,19 +31,32 @@ pub extern "system" fn GetSystemDefaultLangID() -> u16 {
     locale::LCID_EN_US as u16
 }
 
-/// `GetThreadLocale`: the locale of the calling thread. Poly has one locale, so every thread has
-/// it (ADR 0155's locale policy): `SetThreadLocale` accepts the locales Poly has and changes
-/// nothing.
-#[unsafe(no_mangle)]
-pub extern "system" fn GetThreadLocale() -> u32 {
-    locale::LCID_EN_US
+/// The calling thread's locale slot in its TEB (`poly_rtl::layout::TEB_THREAD_LOCALE`; 0: the
+/// default).
+fn thread_locale_slot() -> *mut u32 {
+    (teb() + poly_rtl::layout::TEB_THREAD_LOCALE) as *mut u32
 }
 
-/// `SetThreadLocale`: TRUE for a locale Poly has (`IsValidLocale`), else FALSE with
-/// `ERROR_INVALID_PARAMETER`.
+/// `GetThreadLocale`: the locale of the calling thread (sheet `kernel32.dll/GetThreadLocale`):
+/// what `SetThreadLocale` set on this thread, else the default, English (United States). The
+/// locale functions themselves answer for English (United States) whatever it is (ADR 0155's
+/// locale policy).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetThreadLocale() -> u32 {
+    // SAFETY: the slot lies in the calling thread's TEB, which lives as long as the thread.
+    let set = unsafe { thread_locale_slot().read_volatile() };
+    if set == 0 { locale::LCID_EN_US } else { set }
+}
+
+/// `SetThreadLocale`: the calling thread's locale (`poly_kernelbase::locale::thread_locale_to_set`):
+/// 0 is the default again; a value that is no LCID is FALSE with `ERROR_INVALID_PARAMETER`, the
+/// locale unchanged. Other threads keep theirs.
 #[unsafe(no_mangle)]
 pub extern "system" fn SetThreadLocale(lcid: u32) -> i32 {
-    if locale::is_valid_lcid(lcid, 0) { TRUE } else { fail(ERROR_INVALID_PARAMETER, FALSE) }
+    let Some(value) = locale::thread_locale_to_set(lcid) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
+    // SAFETY: as in `GetThreadLocale`; only the calling thread writes its slot.
+    unsafe { thread_locale_slot().write_volatile(value) };
+    TRUE
 }
 
 /// `GetUserDefaultUILanguage`, `GetSystemDefaultUILanguage`: the language of the one UI language.

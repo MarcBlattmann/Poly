@@ -464,6 +464,79 @@ pub unsafe extern "system" fn WriteFileEx(
     unsafe { read_write_ex(file, buffer as *mut u8, len, ov, routine, true) }
 }
 
+// ----- ReadDirectoryChangesW
+
+/// `ReadDirectoryChangesW` (sheet `kernel32.dll/ReadDirectoryChangesW`): `NtNotifyChangeDirectoryFile`
+/// on the directory handle. With an `OVERLAPPED` the call returns TRUE while the request waits (the
+/// event, the completion routine as an APC, or the handle's completion port tells of the end);
+/// without one it waits and returns the record bytes in `lpBytesReturned` (0 when the changes did
+/// not fit: the caller rescans the directory). A filter that is 0 or has undefined bits is
+/// `ERROR_INVALID_PARAMETER`, as is a handle that is not a directory's.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ReadDirectoryChangesW(
+    dir: Handle,
+    buffer: *mut u8,
+    len: u32,
+    subtree: i32,
+    filter: u32,
+    returned: *mut u32,
+    ov: *mut Overlapped,
+    routine: Option<unsafe extern "system" fn(u32, u32, *mut Overlapped)>,
+) -> i32 {
+    let mut local = IoStatusBlock::default();
+    let (iosb, event, apc, context): (*mut IoStatusBlock, Handle, *const u8, *const u8) = if ov.is_null() {
+        (&mut local, 0, core::ptr::null(), core::ptr::null())
+    } else {
+        // SAFETY: the caller's OVERLAPPED; its first two fields are the status block.
+        let e = unsafe {
+            (*ov).internal = nt::STATUS_PENDING.0 as usize;
+            (*ov).event
+        };
+        match routine {
+            Some(routine) => {
+                let record = Box::into_raw(Box::new(ApcRecord { routine, overlapped: ov }));
+                let apc = io_apc as unsafe extern "system" fn(usize, *mut IoStatusBlock, usize) as *const u8;
+                (ov as *mut IoStatusBlock, 0, apc, record as *const u8)
+            }
+            // Learn: an event with its low bit set queues no completion packet.
+            None => (
+                ov as *mut IoStatusBlock,
+                e & !1,
+                core::ptr::null(),
+                if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 },
+            ),
+        }
+    };
+    // SAFETY: the caller's buffer of `len` bytes; valid pointers.
+    let mut st = unsafe {
+        nt::NtNotifyChangeDirectoryFile(dir, event, apc, context, iosb, buffer, len, filter, u8::from(subtree != 0))
+    };
+    if !ov.is_null() {
+        if st.is_success() || st == nt::STATUS_PENDING {
+            return TRUE;
+        }
+        if !apc.is_null() {
+            // SAFETY: the request did not start: nobody else has the record.
+            drop(unsafe { Box::from_raw(context as *mut ApcRecord) });
+        }
+        return fail_status(st, FALSE);
+    }
+    if st == nt::STATUS_PENDING {
+        // A handle opened for overlapped I/O, called without an OVERLAPPED: wait.
+        // SAFETY: a handle value.
+        unsafe { nt::NtWaitForSingleObject(dir, 0, core::ptr::null()) };
+        st = NtStatus(local.status as u32);
+    }
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    if !returned.is_null() {
+        // SAFETY: the caller's out-pointer; the status block is complete.
+        unsafe { returned.write(local.information as u32) };
+    }
+    TRUE
+}
+
 // ----- processes and threads by id
 
 /// `OpenProcess`.

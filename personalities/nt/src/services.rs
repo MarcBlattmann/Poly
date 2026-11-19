@@ -322,6 +322,13 @@ pub enum Service {
     /// the service control manager and its reply (ADR 0221, [`crate::scm`]); `advapi32`'s service
     /// functions and `services.exe` are its callers.
     PolyServiceCall,
+    /// `PolyProcessList(Buffer, Length, ReturnLength*)`: the system's process list as records for
+    /// `kernelbase`'s tool help snapshot ([`crate::proclist`]).
+    PolyProcessList,
+    /// `NtNotifyChangeDirectoryFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock*,
+    /// Buffer, Length, CompletionFilter, WatchTree)` (Learn: "ZwNotifyChangeDirectoryFile";
+    /// [`crate::io::notify`]).
+    NotifyChangeDirectoryFile,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -676,6 +683,13 @@ pub const PROCESS_SUSPEND_SERVICES: [(Service, u32, &str); 2] =
 pub const PROCESSOR_SERVICES: [(Service, u32, &str); 1] =
     [(Service::GetCurrentProcessorNumber, 0x09A, "NtGetCurrentProcessorNumber")];
 
+/// The process list for the tool help snapshot and the change notification of directories
+/// (`ReadDirectoryChangesW`), in the Poly and file I/O groups.
+pub const FILES_AND_PROCESSES_SERVICES: [(Service, u32, &str); 2] = [
+    (Service::PolyProcessList, (TABLE_POLY << 12) | 0x10, "PolyProcessList"),
+    (Service::NotifyChangeDirectoryFile, 0x0E0, "NtNotifyChangeDirectoryFile"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -693,6 +707,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(PROCESS_MEMORY_SERVICES.iter())
         .chain(PROCESS_SUSPEND_SERVICES.iter())
         .chain(PROCESSOR_SERVICES.iter())
+        .chain(FILES_AND_PROCESSES_SERVICES.iter())
 }
 
 impl Service {

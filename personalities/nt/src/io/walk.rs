@@ -57,6 +57,34 @@ pub struct Resolved {
 /// directory has one, so that making thousands of files in one directory
 /// (each a lookup that finds nothing first) is not quadratic (ADR 0091).
 pub fn find_child(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Option<Vec<u8>>, NtStatus> {
+    let found = find_named(vr, dir, component)?;
+    if found.is_none() && component.contains(&u16::from(b'~')) {
+        return find_alias(vr, dir, component);
+    }
+    Ok(found)
+}
+
+/// The entry of `dir` whose generated short name is `component` (`poly_kernelbase::shortname`:
+/// Poly's file systems keep no short names, so `GetShortPathNameW` makes them from the
+/// directory's entries, and a path made of them opens the same files).
+fn find_alias(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Option<Vec<u8>>, NtStatus> {
+    let names: Vec<Vec<u8>> = list(vr, dir)?.into_iter().filter(|n| n != b"." && n != b"..").collect();
+    let wide: Vec<Vec<u16>> = names.iter().map(|n| vfs_to_wide(n)).collect();
+    // The creation time as directory queries report it: the stored one, else the last write.
+    let creation = |i: usize| -> u64 {
+        let Ok(node) = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(dir), &names[i], false) else { return 0 };
+        let stored = node.getxattr(&vr.cred, super::info::NT_XATTR).map(|v| super::info::Stored::parse(&v));
+        match stored.ok().and_then(|s| s.creation) {
+            Some(c) => c as u64,
+            None => node.attr().map_or(0, |a| super::info::nt_time(a.mtime) as u64),
+        }
+    };
+    let at = poly_kernelbase::shortname::alias_target(&wide, component, creation);
+    Ok(at.map(|i| names[i].clone()))
+}
+
+/// [`find_child`] without the short names.
+fn find_named(vr: &VfsRoot, dir: &NodeRef, component: &[u16]) -> Result<Option<Vec<u8>>, NtStatus> {
     let exact = component_to_vfs(component)?;
     if exists(vr, dir, &exact)? {
         return Ok(Some(exact));

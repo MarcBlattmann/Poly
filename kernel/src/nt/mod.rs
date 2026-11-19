@@ -1072,10 +1072,26 @@ impl NtKernel for Kernel {
         Some([created, seen[0], seen[1]])
     }
 
+    fn processes(&mut self) -> Vec<poly_personality_nt::proclist::ProcessSummary> {
+        // A process whose exit status is set is ending: no longer listed.
+        with(|s| {
+            s.processes
+                .values()
+                .filter(|p| p.exit_status.is_none())
+                .map(poly_personality_nt::proclist::ProcessSummary::of)
+                .collect()
+        })
+    }
+
     fn memory_counters(&self, pid: ProcessId) -> Option<poly_personality_nt::threads::VmCounters> {
         let memory = io::memory_of(pid.0)?;
         let (resident, cached, shared) = memory.page_counts();
-        let private = resident.saturating_sub(cached + shared);
+        // Private usage is the commit charge of the process's private memory (sheet of
+        // `K32GetProcessMemoryInfo`: committing 16 MiB raises it before a page is touched), or
+        // its private resident pages where the NT state does not know it.
+        let resident_private = resident.saturating_sub(cached + shared);
+        let committed = with(|s| s.processes.get(&pid).map(|p| p.vm.private_committed_bytes() / 4096));
+        let private = committed.unwrap_or(resident_private);
         let (faults, peak_resident) = crate::process::find(pid.0).map_or((0, 0), |p| p.cpu.memory_counts());
         let peak_private = with(|s| {
             let p = s.private_peak.entry(pid).or_insert(0);
