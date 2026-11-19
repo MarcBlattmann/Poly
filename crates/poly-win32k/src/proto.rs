@@ -401,13 +401,17 @@ crate::wire_enum! {
         /// personality finds its path and sends a `link::ToCompositor::Shell` (ADR 0223). An
         /// `Ok`, or an `Error`: 6 for a handle that is no file of a disk, 50 without a desktop.
         117 => ShellOpen { handle: u64, show: bool },
+        /// What window `hwnd` shows comes with premultiplied alpha (a DirectComposition swap chain
+        /// of `DXGI_ALPHA_MODE_PREMULTIPLIED` bound to it, ADR 0225) or not: its surface is
+        /// composed with that alpha. An `Ok`, an `Error` for a window that does not exist.
+        118 => SurfaceAlpha { hwnd: u32, premultiplied: bool },
         /// `DisplayConfigSetDeviceInfo`'s DPI-scale packet (ADR 0231): the monitor's scale
         /// becomes step `step` of `dpiscale::STEPS`; the windows get what a scale change brings
         /// them. An `Ok`, or an `Error` for a step the display does not offer.
-        118 => SetScale { step: i32 },
+        121 => SetScale { step: i32 },
         /// The frame of window `hwnd` is measured at its DPI again (`DefWindowProc`'s
         /// `WM_DPICHANGED`): an `Ok`.
-        119 => DpiFrame { hwnd: u32 },
+        122 => DpiFrame { hwnd: u32 },
     }
 }
 
@@ -515,6 +519,7 @@ mod tests {
             Request::Layered { hwnd: 1, op: 0, key: 2, alpha: 3, flags: 3 },
             Request::WindowRgn { hwnd: 1, set: true, rects: vec![1, 2, 3, 4] },
             Request::LayeredContent { hwnd: 1, width: 1, height: 1, pixels: vec![1, 2, 3, 4] },
+            Request::SurfaceAlpha { hwnd: 0x10018, premultiplied: true },
         ] {
             assert_eq!(decode::<Request>(&encode(&r)), Some(r));
         }

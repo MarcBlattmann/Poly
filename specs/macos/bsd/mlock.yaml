@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/mlock.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mlock.tests/macos.json.
+id: macos/syscall/bsd/mlock
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 203,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 203, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. mlock(address, length) locks the pages in memory and
+  returns 0 for a small range (locking again, two pages and a length of 1
+  or 0 work); munlock (BSD 204, covered here) returns 0, also for pages
+  that are not locked. The content is unchanged. A locked page is copied
+  to a forked child like any other, the child can munlock it, and its
+  writes do not reach the parent. A length of 1 << 40 is ENOMEM (12).
+  Pages that are not mapped were accepted (value 0) and a range that runs
+  one byte past a one-page mapping was ENOMEM (value 12).
+returns:
+  success: "0"
+errors:
+  too_long: "ENOMEM (12): a length of 1 << 40"
+side_effects: "the pages are locked (munlock: unlocked)"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

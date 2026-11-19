@@ -73,7 +73,7 @@
 </g>
 <g><title>435 smaller libraries: 0 / 19,315 done (0.0%)</title>
 <rect x="334.3" y="168.8" width="73.9" height="81.0" fill="#21262d"/>
-<rect x="334.3" y="168.8" width="0.0" height="81.0" fill="#388bfd"/>
+<rect x="334.3" y="168.8" width="0.1" height="81.0" fill="#388bfd"/>
 <rect x="333.3" y="167.8" width="75.9" height="83.0" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="339.3" y="182.8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">435 smalle…</text>
 <text x="339.3" y="196.8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
@@ -890,7 +890,7 @@
 </g>
 <g><title>BSD syscalls: 0 / 455 done (0.0%)</title>
 <rect x="873.4" y="311.1" width="10.6" height="9.8" fill="#21262d"/>
-<rect x="873.4" y="311.1" width="0.9" height="9.8" fill="#388bfd"/>
+<rect x="873.4" y="311.1" width="1.2" height="9.8" fill="#388bfd"/>
 <rect x="872.4" y="310.1" width="12.6" height="11.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>Translation: 0 / 449 done (0.0%)</title>
@@ -1287,7 +1287,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">1.3%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">791 / 63,096 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">797 / 63,096 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 44 / 20,419 done (0.2%)</title>
 <rect x="16.0" y="469.0" width="182.5" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.4" height="218.0" fill="#2ea043"/>
@@ -1476,11 +1476,11 @@
 <rect x="458.3" y="496.9" width="24.8" height="21.9" fill="#21262d"/>
 <rect x="457.3" y="495.9" width="26.8" height="23.9" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
-<g><title>ole32: 14 / 313 done (4.5%)</title>
+<g><title>ole32: 20 / 313 done (6.4%)</title>
 <rect x="485.1" y="496.9" width="24.0" height="21.9" fill="#21262d"/>
-<rect x="485.1" y="496.9" width="1.1" height="21.9" fill="#2ea043"/>
-<rect x="486.2" y="496.9" width="5.2" height="21.9" fill="#bb8009"/>
-<rect x="491.4" y="496.9" width="3.2" height="21.9" fill="#388bfd"/>
+<rect x="485.1" y="496.9" width="1.5" height="21.9" fill="#2ea043"/>
+<rect x="486.7" y="496.9" width="5.2" height="21.9" fill="#bb8009"/>
+<rect x="491.9" y="496.9" width="2.8" height="21.9" fill="#388bfd"/>
 <rect x="484.1" y="495.9" width="26.0" height="23.9" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>msvcm80: 0 / 306 done (0.0%)</title>

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "mutexwait_blocks",
+      "source_sha256": "0de637a4a851af4a0cf54ba0abfe83f8e5bf1a257dfd6ccdffdf1475bc2a22a6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ef652ddde6be9ba71d5c3622ebab5771fabdb466058453b9b6b205f220f07263",
+          "exit_code": 0,
+          "stdout": "ok a wait that nobody ends has not returned after 150 ms\nok it ends with the signal\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mutexwait_null_blocks",
+      "source_sha256": "0beb6c68f6306742d9ba675c8993c6310c0e9d00c9857bdf347d653ad732b25c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c6da049f01564e66f920f078e8359d23cf56bd34a0a77d24c44093321f3c39e6",
+          "exit_code": 0,
+          "stdout": "ok a wait that nobody ends has not returned after 150 ms\nok it ends with the signal\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

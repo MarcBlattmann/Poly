@@ -1,0 +1,61 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:01:55",
+  "tests": [
+    {
+      "name": "ulock_wait_errors",
+      "source_sha256": "94937cbf91c846b63a3d2659ef03c609bd61e22d7240b2ac027c3e61b5d3115d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "91b9e612efcf868a508fdd5a16acac1c2b3cb3ebf4e6c607f22ee3618f402bf7",
+          "exit_code": 0,
+          "stdout": "ok operation 0: EINVAL\nok operation 99: EINVAL\nok an unaligned address: EINVAL\nok a NULL address: EINVAL\nok the address 8: EFAULT\nvalue UL_UNFAIR_LOCK with an owner that is not a thread: errno 105\nok a good wait afterwards\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ulock_wait_nonresident_page",
+      "source_sha256": "855cd24e7db13b8671f664b5252c150dd5a466eab7b11026d2c1ac5c0018574c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d89bd97d87aa3579e3fa8ca1db1e3f8b5f8b0715c9184fd49b16f047c08ef813",
+          "exit_code": 0,
+          "stdout": "value child: first wait, page not touched: errno 14\nvalue child: wait after reading the word: errno 60\nok the untouched page: EFAULT; after a read: ETIMEDOUT\nok the parent, which touched the page: ETIMEDOUT\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ulock_wait_woken",
+      "source_sha256": "669fcec4d43ebc12cbc67f03b845eedd9f975863d400a983e7ecca9eaf106596",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "275c99cab1b123c6b26316c7b352d4b9d94fcb4f89eecf228cd9239e9829d590",
+          "exit_code": 0,
+          "stdout": "ok the wake found the waiter and returned 0\nok the waiter's wait ended without an error\nok with nobody waiting: the next wake is ENOENT\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

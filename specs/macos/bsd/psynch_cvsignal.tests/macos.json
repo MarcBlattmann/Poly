@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "cvsignal_no_waiters",
+      "source_sha256": "0d38d84a8b1836eeeba7dcdf659fc0e1fd33d229128514b420719834daba8596",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8dc2ef0b4f1f3b582e08951b37e0fdebe8fc0a2f0b566ad661f1b9b13922808d",
+          "exit_code": 0,
+          "stdout": "ok returns without an error\nok again\nok on another word\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cvsignal_then_wait",
+      "source_sha256": "b198d2a3452afed0759c1b3eb6d5bbbbf6823887e17346c253476f476189e7fe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "81a4d8fb046f85bd70fd1de50f958cf2caa18b1d260da7861b3789e3366b59a5",
+          "exit_code": 0,
+          "stdout": "ok signal\nok the wait afterwards returns without an error\nok and at once (well under the 100 ms timeout)\nvalue the wait's result 257\nok the next wait times out\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

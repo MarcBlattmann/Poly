@@ -177,3 +177,82 @@ with their thread (`DLL_THREAD_DETACH`).
 - A new system file, `comlaunch.exe`, in `System32`, built with the Win32 modules and embedded in the kernel.
 - Calls cost a pipe connection each (tens of microseconds on Poly); fine for activation and the updater's call
   rate, and the place to optimise when a program needs more.
+
+## Addendum (B2b, 2026-11-19): type libraries and standard marshalling
+
+Batch B2b (track `impl-chrome-installer-com-b2b`). Inputs:
+- the 14 B2b sheets and their 19 visible tests (`specs/windows/oleaut32.dll/{CreateTypeLib2, LoadTypeLibEx, LoadRegTypeLib, RegisterTypeLib, UnRegisterTypeLib, QueryPathOfRegTypeLib, DllGetClassObject}`, `specs/windows/ole32.dll/{CoGetPSClsid, CoRegisterPSClsid, CoMarshalInterface, CoUnmarshalInterface, CoReleaseMarshalData, CoGetMarshalSizeMax, CoGetStandardMarshal}`, track `spec-win-com-typelib`);
+- [com-typelib-plan.md](../windows/com-typelib-plan.md);
+- Microsoft Learn (the pages of these functions, "IPSFactoryBuffer", "IRpcProxyBuffer", "IRpcStubBuffer", "IRpcChannelBuffer", "RPCOLEMESSAGE", "ITypeLib", "ITypeInfo", "ICreateTypeLib2", "ICreateTypeInfo", "Type Library Registration", "RegDeleteTreeW");
+- `[MS-DCOM]` 2.2.18 for the `OBJREF` layout, `[MS-OAUT]` for the automation types;
+- the SDK headers named in the code.
+
+No third-party source.
+
+### A. Type libraries (`poly_com::typelib`, `oleaut32/src/typelib/`)
+
+- **Model and views.** A library is a host-tested model: types, functions, parameters, `TYPEDESC` trees, and imports for references to other libraries.
+  - Its `HREFTYPE`s are Poly's own encoding: internal type, import, or the interface form of a dual interface.
+  - A dual interface is stored once and read in two forms. The library hands out the dispatch form: `IUnknown`'s and `IDispatch`'s methods first, results folded, vtable size 56. `GetRefTypeOfImplType(-1)` gives the interface form. The marshaller uses the interface form.
+- **Files.** `CreateTypeLib2` writes **Poly's own format** (`PolyTLB\0` and the model). Programs never read the bytes, and the sheet allows any form that reads back.
+  - `file::read` is the single entry for loading. It routes by the first bytes.
+  - The `MSFT` format of MIDL-built libraries (Google's updater) has its slot in `typelib::msft`. Until the format sheet exists (B2b-2), it answers `Unsupported`, which the loader reports as `TYPE_E_CANTLOADLIBRARY`. No layout is guessed.
+  - `file\N` resource paths are read through `LoadLibraryExW(LOAD_LIBRARY_AS_DATAFILE)` and `FindResourceW("TYPELIB")`.
+- **Registration.** The sheets' rules are host-tested in `typelib::reg`: decimal version keys, version pick (same major, lowest minor at least the one asked for), LCID pick (exact, then neutral), `win64` then `win32`, and which interfaces get `Interface` keys.
+  - Registration writes `HKLM\SOFTWARE\Classes`. Lookups read the user's classes first, then the machine's.
+- **`stdole`.** Poly's own `stdole` 2.0 is built in code. The kernel installs it as `System32\stdole2.tlb`, and the default hive registers it, together with the `Interface` keys of IDispatch, IClassFactory, IStream and IErrorInfo, and `CLSID\{00020424}` and `{00020420}` (`oleaut32.dll`).
+- **`ITypeInfo::Invoke` and `DispCallFunc`.** They call vtable methods through an x64 call trampoline (`oleaut32/src/call.rs`), converting arguments with `VariantChangeType`. On other architectures the generic call and the marshaller are not available.
+- **Error information.** It lives in `oleaut32`, one object per thread. `ole32`'s `CreateErrorInfo`, `SetErrorInfo` and `GetErrorInfo` are `oleaut32`'s.
+
+### B. Standard marshalling (`ole32/src/oop/{marshal, channel, proxy, exporter}.rs`, `poly_com::marshal`)
+
+- **`OBJREF`.** `CoMarshalInterface` writes an `OBJREF` with the signature `MEOW`.
+  - `OBJREF_STANDARD` is 68 bytes: the header, a `STDOBJREF` and an empty string-binding array. Its OXID, OID and IPID carry Poly's exporter (pid and random part of the pipe name), the object's export id and a marshal-table token.
+  - `MSHCTX_INPROC` writes `OBJREF_CUSTOM` with `CLSID_StdMarshal`.
+- **References.**
+  - A LOCAL marshal entry holds one reference of the object's export; an INPROC entry holds one of the object.
+  - `NORMAL` data is used up by its first unmarshal. Table data lives until `CoReleaseMarshalData`, and an unmarshal in another process first asks for a reference of its own (`Op::AddRef` with the token; `CO_E_OBJNOTREG` once released).
+  - Marshalling a proxy (recognised by its identity, so also an interface proxy) asks the object's process for one more reference (`Op::AddRef`, token 0); whoever unmarshals takes it over. Data that comes back to the object's own process yields the object itself.
+- **Proxy/stub classes.** `CoGetPSClsid` reads `Interface\{iid}\ProxyStubClsid32`. Successful answers are cached per process, `CoRegisterPSClsid` overrides them, and the cache is cleared after the last apartment ends.
+  - For `{00020424}` and `{00020420}`, `ole32` calls `oleaut32!DllGetClassObject` directly; other classes go through `CoGetClassObject`.
+- **Proxies.** A remote `QueryInterface` for any other interface now gives an interface proxy:
+  - `IPSFactoryBuffer::CreateProxy` is called with the proxy manager as the outer object. As the sheet observed, `*ppv` stays NULL, so the interface is obtained from the proxy buffer.
+  - The proxy is connected to a client `IRpcChannelBuffer` whose `SendReceive` sends `Op::Invoke` (interface, method, data). For another apartment of the same process, it runs the stub there.
+  - Interface proxies are cached per IID in the manager and disconnected with it.
+- **Exporter.** The exporter answers `Op::Invoke` by making the interface's stub (`CreateStub`) and calling `IRpcStubBuffer::Invoke` with a server channel. It answers `Op::AddRef` too.
+  - Replies carry data (`Reply.data`). `MAX_FRAME` is now 16 MiB.
+- **Callbacks into an STA.** A caller on an STA thread runs its pipe transaction on a helper thread and pumps its COM window meanwhile (`apt::blocking`), so callbacks into it run on that thread. Handing out an object from an STA makes the window.
+- **Pipes.** The exporter's listener now creates the next listening instance before it hands a connection on. A client that finds no instance retries for about 100 ms before it reports the server gone (`0x800706BA`). One connection per call made this window visible as spurious failures.
+- **Activation.** The server is asked for `IUnknown`, and the interface comes from a query (the recorded servers log `create IUnknown`). The client re-asks the activation process for up to a second while a served class object is gone.
+
+### C. The automation marshaller (`oleaut32/src/marshal/`)
+
+- **`info`.** An interface's methods come from `Interface\{iid}\TypeLib` and the registered library, with each parameter's direction and wire type.
+- **`codec`.** Poly's own encoding (nothing of it is visible to programs):
+  - integers and floats by size; `BSTR`s by byte length (an odd length is kept);
+  - `LPWSTR`s by character count (NULL is `RPC_X_NULL_REF_POINTER` in the client);
+  - `VARIANT`s by type and value (`DISP_E_BADVARTYPE` for types a variant cannot have; a NULL `BSTR` inside one arrives empty; `VT_BYREF` arrives by reference to the server's copy);
+  - `SAFEARRAY`s with their bounds; interface pointers as the `OBJREF`s that `CoMarshalInterface` writes.
+- **`proxy`.** The vtable entries are naked thunks (one per slot) that spill the register arguments and call a dispatcher, which encodes `[in]` values, sends them and decodes the results.
+  - A call that fails before it is sent leaves its pure `[out]` values empty. A failure of the channel leaves them alone.
+  - Error information travels in the reply and becomes the calling thread's (or none).
+- **`stub`.** Decodes, calls the method through the call trampoline, and encodes the `HRESULT`, the `[out]` values and the error information.
+- **`disp`.** `IDispatch`'s four methods.
+  - `GetTypeInfo` sends the type information by value: the library's bytes and the index. The client's copy answers `IMarshal` as a proxy does.
+  - `GetIDsOfNames` returns the ids also on failure.
+  - `Invoke` refuses a non-NULL IID in the client (`DISP_E_UNKNOWNINTERFACE`), and returns the result, the `EXCEPINFO` of `DISP_E_EXCEPTION` and the argument-error index.
+
+### D. Also
+
+- `kernelbase` gained `RegDeleteTreeW`, forwarded from `advapi32`. It was a fail stub, so the tests' own cleanup did nothing.
+- `CoRegisterInitializeSpy` writes its cookie only after a `QueryInterface` that returned `S_OK` with a pointer.
+
+### Results
+
+- **B2b:** all 19 visible tests (and `LoadTypeLib`'s test in the same run) pass on Poly.
+- **B2a:** 23 of its 24 visible tests pass; before, 22 passed and the two service tests could not load. The one left, `createex_localservice`, is the creation after a STOP control: the stopped service's class object stays disconnected at the activation process for more than a second. It belongs to the B1/B2a service stop path and is not changed here.
+
+### Left for B2b-2 and later
+
+- **The `MSFT` reader** (format sheet), which loading `updater.exe\N` needs.
+- **Not done here:** `RegisterTypeLibForUser`, records (`VT_RECORD`, `IRecordInfo`), `CreateStdDispatch`/`DispInvoke`, 32-bit proxies (B2d), and reclaiming the references of a client process that ended (held-out rule `other_process`: references back within 5 s).

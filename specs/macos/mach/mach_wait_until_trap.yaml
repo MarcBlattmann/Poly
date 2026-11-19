@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/mach_wait_until_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# mach_wait_until_trap.tests/macos.json.
+id: macos/syscall/mach/mach_wait_until_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 90;
+  arm64 `svc #0x80` with x16 = -90. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  mach_wait_until(deadline) sleeps until the deadline, in
+  mach_absolute_time units, and returns KERN_SUCCESS. On arm64
+  mach_absolute_time is the virtual counter (cntvct_el0, 24 MHz:
+  mach_timebase_info 125/3), which tests read directly. A deadline that
+  has passed (1, or a second ago) returns at once; a deadline 50 ms ahead
+  returns after it, within 100 ms; three waits of 10 ms back to back take
+  at least 30 ms; an old deadline after that returns at once. The x86_64
+  clock is not read yet, so the tests check nothing there.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors: {}
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
