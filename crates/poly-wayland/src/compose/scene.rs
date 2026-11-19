@@ -123,6 +123,9 @@ pub struct Content {
     /// Enlarged to a larger output scale with a bilinear filter rather than
     /// nearest neighbour (a Windows app's window that draws at 100 %, ADR 0219).
     pub smooth: bool,
+    /// Every pixel is opaque, as the content's owner knows (false when it does not): shown pixel
+    /// for pixel, it hides what is below it, which is then not drawn (ADR 0232).
+    pub opaque: bool,
 }
 
 impl Content {
@@ -947,8 +950,16 @@ impl Scene {
                 pixels: vec![0; width as usize * height as usize],
                 view,
                 smooth,
+                opaque: false,
             };
         });
+    }
+
+    /// Whether every pixel of window `id`'s content is opaque ([`Content::opaque`]).
+    pub fn set_opaque(&mut self, id: WindowId, opaque: bool) {
+        if let Some(c) = self.content_mut(id) {
+            c.opaque = opaque;
+        }
     }
 
     /// Enlarge window `id`'s content smoothly (bilinear) when the output's

@@ -759,3 +759,29 @@ fn a_smooth_buffer_at_two_hundred_percent_is_bilinear() {
     // Not blocks: two output pixels of one buffer pixel differ where the picture changes.
     assert_ne!(fb.pixel(6 + 4, 4 + 4), fb.pixel(6 + 5, 4 + 4));
 }
+
+/// ADR 0232: where a window whose content is known to be opaque covers the damage, nothing below
+/// it is drawn. Shown here with a content that claims to be opaque but is not: its transparent
+/// pixels then show what the framebuffer held, not the background or the window below.
+#[test]
+fn an_opaque_window_hides_what_is_below_it() {
+    let mut scene = Scene::new(20, 10, 1);
+    window(&mut scene, 0, 0, 20, 10, 1, 0xffff_0000, false);
+    let top = window(&mut scene, 2, 2, 6, 6, 1, 0x0000_0000, false);
+    let mut fb = MemoryFramebuffer::new(20, 10);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(4, 4), Some(0xff0000), "not opaque: the window below shows through");
+    // Paint a mark under the top window, then damage only inside it.
+    for y in 2..8 {
+        fb.row_mut(y)[2..8].fill(0x00_1234);
+    }
+    scene.set_opaque(top, true);
+    scene.damage_physical(Rect::new(3, 3, 2, 2));
+    scene.render(&mut fb);
+    let p = fb.pixel(3, 3).unwrap() & 0xff_ffff;
+    assert_eq!(p, 0x00_1234, "below was not drawn");
+    // Damage reaching past it draws below as usual.
+    scene.damage_physical(Rect::new(0, 0, 20, 10));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(3, 3).unwrap() & 0xff_ffff, 0xff0000);
+}

@@ -1038,7 +1038,9 @@ fn run(args: &[String]) -> Result<u8, String> {
         if server.wants_frame() && due {
             let frame_start = if o.stats { os::monotonic_ns() } else { 0 };
             let mut present_ns = 0;
-            let copied_bytes = screen.kms().map_or(0, |k| k.begin_frame());
+            // What the scene draws again need not be brought up to date first (ADR 0232).
+            let redrawn = server.scene().damage().to_vec();
+            let copied_bytes = screen.kms().map_or(0, |k| k.begin_frame(&redrawn));
             let drawn = if o.stats {
                 let fb = screen.fb();
                 let mut timed = TimedFramebuffer { inner: fb, present_ns: &mut present_ns };
