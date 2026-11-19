@@ -332,7 +332,7 @@ pub fn exit(trace: Trace, ret: Option<u64>) {
         line.pop();
         let _ = writeln!(line, " [{} ms, until {} ms]", took / 1_000_000, crate::time::now_ns() / 1_000_000);
     }
-    log::write_console(&line);
+    log::write_lines(&line);
 }
 
 /// ` timeout=+S.mmms` for a `FUTEX_WAIT` / `FUTEX_WAIT_BITSET` with a

@@ -97,8 +97,10 @@ fn arch_reset(out: &mut dyn Write) -> ! {
     arch::reset::triple_fault()
 }
 
-/// Let the message just written leave the UART before the machine resets.
+/// Let the message just written leave the UART before the machine resets
+/// (also what the log held back for a program's terminal row, ADR 0228).
 fn settle() {
+    crate::log::flush();
     wait(10 * time::NANOS_PER_MILLI);
 }
 
