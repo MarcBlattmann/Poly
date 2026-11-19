@@ -40,6 +40,12 @@ pub(crate) const IID_ICREATETYPELIB2: Guid =
     Guid { data1: 0x0002_040F, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 pub(crate) const IID_NULL: Guid = Guid { data1: 0, data2: 0, data3: 0, data4: [0; 8] };
 
+/// A vtable: function pointers as untyped pointers.
+#[repr(transparent)]
+pub(crate) struct Vtbl<const N: usize>(pub [*const (); N]);
+// SAFETY: tables of function pointers.
+unsafe impl<const N: usize> Sync for Vtbl<N> {}
+
 /// A spin lock around a value (no `std` here).
 pub(crate) struct Locked<T> {
     flag: AtomicBool,

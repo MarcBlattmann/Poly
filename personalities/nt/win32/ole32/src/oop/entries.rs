@@ -194,9 +194,20 @@ pub unsafe extern "system" fn CoRegisterInitializeSpy(spy: *mut c_void, cookie: 
     if spy.is_null() || cookie.is_null() {
         return E_INVALIDARG;
     }
-    // SAFETY: the caller's object; the interface's reference is the registration's.
-    let (_, p) = unsafe { query(spy, &IID_IINITIALIZE_SPY) };
-    if p.is_null() {
+    // Ask for the interface before anything is written: a refusal leaves the cookie as it was
+    // (sheet, rule `bad_arguments`). Only `S_OK` with a pointer counts as having it.
+    let mut p: *mut c_void = core::ptr::null_mut();
+    // SAFETY: the caller's object; slot 0 is QueryInterface; the reference is the registration's.
+    let hr = unsafe {
+        let vtbl =
+            *(spy as *const *const unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> Hresult);
+        (*vtbl)(spy, &IID_IINITIALIZE_SPY, &mut p)
+    };
+    if hr != S_OK || p.is_null() {
+        if hr >= 0 && !p.is_null() {
+            // SAFETY: a reference the query handed out.
+            unsafe { release_unknown(p) };
+        }
         return E_NOINTERFACE;
     }
     let me = thread_id();
