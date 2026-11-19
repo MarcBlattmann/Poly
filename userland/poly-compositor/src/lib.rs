@@ -146,9 +146,12 @@ struct Options {
     windows_hidpi: bool,
     xwayland: Option<xwayland::Start>,
     exec: Vec<String>,
+    /// `--app-user PROGRAM`: the apps of the system's desktop files start
+    /// through PROGRAM, which runs them as the desktop's user (ADR 0218).
+    app_user: Option<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--app-user PROGRAM] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `auto`, a factor (`2`, `1.5`) or a percentage (`150`,
 /// `150%`; [`Scale::parse`]).
@@ -183,6 +186,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         windows_hidpi: false,
         xwayland: None,
         exec: Vec::new(),
+        app_user: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -214,6 +218,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--settings" => o.settings = Some(value()?),
             "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
             "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
+            "--app-user" => o.app_user = Some(value()?),
             "--exec" => {
                 o.exec = it.by_ref().cloned().collect();
                 if o.exec.is_empty() {
@@ -607,7 +612,12 @@ fn start_app(d: &mut desk::Desktop, server: &mut Server, env: &[String], app: &p
     app_env.retain(|v| !v.starts_with("XDG_ACTIVATION_TOKEN=") && !v.starts_with("DESKTOP_STARTUP_ID="));
     app_env.push(format!("XDG_ACTIVATION_TOKEN={token}"));
     app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
-    match os::spawn(&app.argv, &app_env) {
+    // An app of the system runs as the desktop's user (ADR 0218).
+    let argv = match &d.app_user {
+        Some(wrapper) if desktop::runs_as_user(app) => poly_shell::apps::through(wrapper, &app.argv),
+        _ => app.argv.clone(),
+    };
+    match os::spawn(&argv, &app_env) {
         Ok(pid) => {
             let at = d.now_ms();
             println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
@@ -693,7 +703,9 @@ fn run(args: &[String]) -> Result<u8, String> {
             scale: o.scale,
             settings: o.settings.clone(),
         };
-        Some(desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts()))
+        let mut d = desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts());
+        d.app_user = o.app_user.clone();
+        Some(d)
     } else {
         None
     };

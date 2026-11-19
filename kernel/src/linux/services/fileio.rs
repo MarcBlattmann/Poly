@@ -260,7 +260,8 @@ impl FileIo for Thread<'_> {
     fn pipe(&mut self, new: NewFd, direct: bool) -> Result<[i32; 2], Errno> {
         let (r, w) = Pipe::pair(direct);
         let files = &self.process.files;
-        let node = fs::vfs().anon_node(FileType::Fifo, 0o600, &files.cred()).map_err(vfs_errno)?;
+        // The pipe's inode opens as the pipe (`/proc/self/fd/<n>`).
+        let node = fs::vfs().pipe_node(r.pipe(), 0o600, &files.cred()).map_err(vfs_errno)?;
         let mut flags = if new.nonblock { OpenFlags::NONBLOCK } else { OpenFlags::RDONLY };
         if direct {
             flags = flags | OpenFlags::DIRECT;

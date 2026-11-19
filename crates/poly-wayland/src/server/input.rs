@@ -205,15 +205,17 @@ impl Server {
         client.objects.iter().filter(|(_, o)| o.interface.name == interface).map(|(id, _)| ObjectId(*id)).collect()
     }
 
-    /// Whether client `c` still has object `id`.
-    fn exists(&self, c: ClientId, id: ObjectId) -> bool {
-        self.clients.get(&c).is_some_and(|cl| cl.get(id).is_some())
+    /// Whether `id` of client `c` is still a `wl_surface`: a client reuses
+    /// the ID of a destroyed object at once (after `wl_display.delete_id`),
+    /// so a live object of another interface is not the surface it was.
+    fn surface_alive(&self, c: ClientId, id: ObjectId) -> bool {
+        self.clients.get(&c).is_some_and(|cl| cl.get(id).is_some_and(|o| o.interface.name == wl_surface::NAME))
     }
 
     /// The client surface in window `w`.
     pub(super) fn focus_of(&self, w: WindowId) -> Option<Focus> {
         let (client, surface) = owner_of(self.scene.window(w)?.owner());
-        self.exists(client, surface).then_some(Focus { client, surface, window: w })
+        self.surface_alive(client, surface).then_some(Focus { client, surface, window: w })
     }
 
     /// The pointer's position relative to window `w`'s surface.
@@ -350,7 +352,7 @@ impl Server {
             self.reset_cursor();
         }
         if let Some(old) = self.seat.input.pointer_focus.take()
-            && self.exists(old.client, old.surface)
+            && self.surface_alive(old.client, old.surface)
         {
             let serial = self.next_serial();
             for p in self.devices(old.client, wl_pointer::NAME) {
@@ -781,7 +783,7 @@ impl Server {
             return;
         }
         let Some((c, surface)) = input.keyboard_focus else { return };
-        if !self.exists(c, surface) {
+        if !self.surface_alive(c, surface) {
             return;
         }
         let serial = self.next_serial();
@@ -865,7 +867,7 @@ impl Server {
         }
         let before = self.seat.input.keyboard_focus.map(|(c, _)| c);
         if let Some((c, surface)) = self.seat.input.keyboard_focus.take()
-            && self.exists(c, surface)
+            && self.surface_alive(c, surface)
         {
             let serial = self.next_serial();
             for k in self.devices(c, wl_keyboard::NAME) {
