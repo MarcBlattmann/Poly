@@ -208,6 +208,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("msimg32.dll", super::MSIMG32),
         // ADR 0240.
         ("cmd.exe", super::CMD_EXE),
+        // ADR 0230.
+        ("polyopen.exe", super::POLYOPEN_EXE),
     ] {
         if bytes.is_empty() {
             continue;
