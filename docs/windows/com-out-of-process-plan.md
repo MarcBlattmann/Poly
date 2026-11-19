@@ -112,18 +112,19 @@ repeated recordings); all 12 spec sheets, visible tests with recorded Windows re
 `CoCopyProxy`, `CoQueryClientBlanket`, `CoImpersonateClient`, `CoRevertToSelf`, `CoGetCallContext.InCall`, `IServerSecurity`,
 `IClientSecurity`, `AppID.Security` (all under `ole32.dll`), and `rpcrt4!I_RpcOpenClientProcess`.
 
-**How the updater finds the client PID.** Its import table has no PID API for COM (no `I_RpcOpenClientProcess`, no
-`CoImpersonateClient`, no `CoQueryClientBlanket`); the only caller-identity import is `CoGetCallContext` (plus `OpenThreadToken`,
-`GetTokenInformation`, `OpenProcess`, `QueryFullProcessImageNameW`). The call context gives an interface only for `IServerSecurity` and
-`IUnknown` (of all 26126 registered interface ids none other), and `IServerSecurity` has no process id. What the oracle shows is the PID of the
-**immediate caller of the call being served** (`rpcrt4!I_RpcOpenClientProcess(NULL, ...)` returns that process): for the factory's
-`CreateInstance` run by `CoCreateInstance` it is the process of the RPC/activation service (`svchost -k RPCSS`, the same PID 1272 the
-updater logs for `UpdaterImpl` and `UpdaterInternalImpl`), for a call the client makes directly (`AppBundleWebImpl`, a method call, the
-logged PID is chrome.exe) it is the client. So Poly's "who called" must report the activator for activation-time calls and the real
-client for direct calls; the updater only logs the value.
+**Client PID: what was observed (a note for the implementer, not a statement of how the updater works).** The updater's import table has
+no PID API for COM (no `I_RpcOpenClientProcess`, no `CoImpersonateClient`, no `CoQueryClientBlanket`); the only caller-identity import is
+`CoGetCallContext` (plus `OpenThreadToken`, `GetTokenInformation`, `OpenProcess`, `QueryFullProcessImageNameW`). Which API it uses to
+get the PID it logs was **not determined**. On the oracle, inside a served call the call context gives an interface only for
+`IServerSecurity` and `IUnknown` (of all 26126 registered interface ids none other), and `IServerSecurity` has no process id.
+`rpcrt4!I_RpcOpenClientProcess(NULL, ...)` opens the **immediate caller of the call being served**: for the factory's `CreateInstance`
+run by `CoCreateInstance` that is the process of the RPC/activation service (`svchost -k RPCSS`; the PID the updater's log shows for its
+`UpdaterImpl` and `UpdaterInternalImpl` objects, 1272 on the oracle, is that process), for a call the client makes directly on a proxy
+it is the client (the updater's log shows chrome.exe's PID for its `AppBundleWebImpl` objects). So Poly's "who called" should report the
+activator for activation-time calls and the real client for direct calls; the updater logs the value.
 
-**Other findings** (details in the hand-back): `CoInitializeSecurity` needs COM initialised (`CO_E_NOTINITIALIZED` otherwise), works once
-per process (`RPC_E_TOO_LATE` 0x80010119, also after any out-of-process activation attempt), takes only an **absolute** descriptor
-(self-relative: 0x80070551), `EXECUTE` (1) is the bit the access check needs. A standard (filtered) token is refused by a descriptor that only
-grants Administrators (`E_ACCESSDENIED`), and by a SYSTEM service that does not admit it (what the updater's descriptor is for).
-Impersonation: direct calls at impersonation level IDENTIFY give an identification-level thread token, which cannot open files.
+**Other findings** (details in the sheets and the hand-back): `CoInitializeSecurity` needs COM initialised (`CO_E_NOTINITIALIZED`
+otherwise), works once per process (`RPC_E_TOO_LATE` 0x80010119, also after any out-of-process activation attempt), takes only an
+**absolute** descriptor (self-relative: 0x80070551), and its DACL entries need the `EXECUTE` (1) bit. A standard (filtered) token is
+refused by a descriptor that only grants Administrators (`E_ACCESSDENIED`), and by a SYSTEM service whose `CoInitializeSecurity` does not
+admit it. Impersonation: direct calls at impersonation level IDENTIFY give an identification-level thread token, which cannot open files.

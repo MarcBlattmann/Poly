@@ -13,7 +13,7 @@ summary: >
 interface:
   signature: "HRESULT CoGetCallContext(REFIID riid, void **ppInterface)"
   forward: "ole32.dll!CoGetCallContext forwards to combase.dll!CoGetCallContext"
-installer: "Both Google's updater (updater.exe 157/159) and Chrome's elevation service import CoGetCallContext to query caller security context inside served COM calls."
+installer: "Google's updater (157 and 159) and Chrome's elevation service import CoGetCallContext (PE import names). What they ask the context for was not observed; the interface ids it answers are listed below."
 rules:
   supported_interfaces: "inside an incoming cross-process call (activation-time IClassFactory::CreateInstance and direct proxy calls at any proxy blanket level), CoGetCallContext returns S_OK and a non-NULL pointer ONLY for IID_IServerSecurity ({0000013E-0000-0000-C000-000000000046}) and IID_IUnknown ({00000000-0000-0000-C000-000000000046}). All other queried interfaces — IClientSecurity, IMarshal, IDispatch, IContextCallback, IObjContext, ISecurityCallContext, and GUID_NULL (and in exploration, every other registered interface id on the system) — fail with E_NOINTERFACE 0x80004002 and write NULL to *ppInterface"
   identity_and_refcount: "two calls to CoGetCallContext(IID_IServerSecurity) during the same incoming call both return S_OK with the same pointer; QueryInterface on that pointer succeeds for IID_IUnknown and IID_IServerSecurity returning the same pointer and fails with E_NOINTERFACE 0x80004002 for IID_IMarshal and IID_IClientSecurity; AddRef returns 1 more than the immediately following Release"

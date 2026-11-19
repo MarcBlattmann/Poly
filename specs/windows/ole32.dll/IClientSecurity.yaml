@@ -16,14 +16,14 @@ interface:
 installer: "Underlying interface invoked by CoSetProxyBlanket, CoQueryProxyBlanket and CoCopyProxy."
 rules:
   query_interface: "QueryInterface(IID_IClientSecurity) succeeds (S_OK) on any local cross-process proxy (class object proxy, its IUnknown, created object proxy, and proxies whose server has exited), returning a non-NULL pointer distinct from the interface proxy pointer itself; fails with E_NOINTERFACE 0x80004002 on an in-process object"
-  reference_counting: "AddRef and Release maintain the interface reference count normally (AddRef returned 2, subsequent Releases returned 1 then 0)"
+  reference_counting: "AddRef returns one more than the Release that follows it returns (the absolute counts were not recorded)"
   methods_match_functions: "QueryBlanket, SetBlanket and CopyProxy accept a proxy pointer of the owning proxy manager as their first argument after this and exhibit the same behaviour as CoQueryProxyBlanket, CoSetProxyBlanket and CoCopyProxy: QueryBlanket returns the same defaults (authn=10, authz=0, level=6, imp=2, caps=0x1, princ=<DOMAIN>\\<user>); SetBlanket updates the proxy blanket visible to CoQueryProxyBlanket and controls the impersonation level received by the server (IDENTIFY -> 1, IMPERSONATE -> 2, DELEGATE -> 3); CopyProxy returns a distinct pointer starting with the default blanket"
   foreign_proxy_rejected: "calling SetBlanket with a proxy pointer belonging to a different proxy manager (such as an object proxy passed to the class object proxy's IClientSecurity), a plain in-process object, or NULL returns E_NOINTERFACE 0x80004002 and leaves the target proxy's blanket unchanged (note: CoSetProxyBlanket(NULL, ...) returns E_INVALIDARG because it rejects NULL before QueryInterface, whereas IClientSecurity::SetBlanket(NULL, ...) returns E_NOINTERFACE)"
 errors:
   no_interface: "E_NOINTERFACE 0x80004002 (non-proxy, NULL target, or proxy from another proxy manager)"
   set_blanket_errors: "same argument validation errors as CoSetProxyBlanket"
 side_effects: "same as CoQueryProxyBlanket, CoSetProxyBlanket and CoCopyProxy"
-threading: "bound to the apartment of the proxy manager"
+threading: "not observed beyond one thread"
 ordering: []
 timing:
   typical: "well under a millisecond per call on the oracle"
