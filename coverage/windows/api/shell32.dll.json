@@ -441,7 +441,7 @@
 {"symbol":"ShellExecuteA","status":"claimed","claimed_by":"spec-win-elevation","src":["wine-spec"]},
 {"symbol":"ShellExecuteEx","src":["wine-spec"]},
 {"symbol":"ShellExecuteExA","src":["wine-spec"]},
-{"symbol":"ShellExecuteExW","status":"claimed","claimed_by":"impl-chrome-dl","src":["wine-spec"]},
+{"symbol":"ShellExecuteExW","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"ShellExecuteExW.Elevation","status":"claimed","claimed_by":"spec-win-elevation","src":["ms-learn-uac"]},
 {"symbol":"ShellExecuteW","status":"claimed","claimed_by":"spec-win-elevation","src":["wine-spec"]},
 {"symbol":"ShellHookProc","src":["wine-spec"]},
