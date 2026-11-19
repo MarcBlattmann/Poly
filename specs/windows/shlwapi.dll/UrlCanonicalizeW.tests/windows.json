@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "uc_basic",
-      "exe_sha256": "345f3e7e09b2e3aaeaef40ae18bdfa36c634fab2a43fad4e2ae1d4eec60b2cf0",
+      "exe_sha256": "5a8308c09303104abf0e0d0a3f5989eb4ab27fd186d386dd7cd426d3f23a9a47",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "uc_buffers",
-      "exe_sha256": "e13bfd4fd5d455462f17faff2959c20a74bc888604d3925979f7d5cc31c0e590",
+      "exe_sha256": "469d89c3e652f83a6b2d1f7317d6bc38ea83bb5c21bbfbcca2e545a8f2401ca1",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

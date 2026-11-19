@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "sar_query",
-      "exe_sha256": "0032f50eedc1ddbe0ba1d9822167009db35b97b07d76224e285cc43701b8469c",
+      "exe_sha256": "f4aea4e0778f3322fabc6c8c977a3b18f15bbafd11a086d6ceded5e508429057",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "ntreg_delete_err",
-      "exe_sha256": "e15bf22b80376b12911a7ecff2e0e341be465752319b3122023cab18a9b3333f",
+      "exe_sha256": "48ce7e3138e87a67825e355f59a76102ecce2a0ecf6e6ec926906fda9a468db2",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
