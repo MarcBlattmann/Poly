@@ -91,14 +91,22 @@ pub struct NpEnd {
     pub nowait: bool,
 }
 
-/// One write's data in a queue.
+/// The most bytes one queue entry, or one read of a byte pipe, holds. A larger write to a byte
+/// pipe is queued as consecutive pieces of this size: the kernel heap gives at most 4 MiB in one
+/// allocation, and Chrome writes several megabytes at once to its IPC pipes.
+pub const PIECE: usize = 1 << 20;
+
+/// One write's data in a queue (or a piece of it).
 #[derive(Debug)]
 struct Entry {
     data: Vec<u8>,
     pos: usize,
-    /// The pending write holding this entry (it completes when the entry
-    /// is read in full); `None` for data that fitted the quota.
+    /// The pending write holding this entry (it completes when its last
+    /// piece is read in full); `None` for data that fitted the quota.
     writer: Option<u64>,
+    /// The write's last piece: when it is read in full the write is done, all `total` bytes of it.
+    last: bool,
+    total: usize,
 }
 
 impl Entry {
@@ -165,13 +173,15 @@ impl Chan {
             }
             if e.remaining() == 0 {
                 let e = self.entries.pop_front().expect("there");
-                if let Some(w) = e.writer {
-                    done.push((w, e.data.len()));
+                if let Some(w) = e.writer.filter(|_| e.last) {
+                    done.push((w, e.total));
                 }
             } else {
                 overflow = true;
             }
         } else {
+            // A byte read takes at most one piece's worth at a time (the rest stays queued).
+            let len = len.min(PIECE);
             while data.len() < len {
                 let Some(e) = self.entries.front_mut() else { break };
                 let n = e.remaining().min(len - data.len());
@@ -182,8 +192,8 @@ impl Chan {
                 }
                 if e.remaining() == 0 {
                     let e = self.entries.pop_front().expect("there");
-                    if let Some(w) = e.writer {
-                        done.push((w, e.data.len()));
+                    if let Some(w) = e.writer.filter(|_| e.last) {
+                        done.push((w, e.total));
                     }
                 }
             }
@@ -549,22 +559,31 @@ impl IoState {
     /// Queue `data` for the other end and serve the reads waiting for it.
     /// `writer` is the pending write that owns the data, if it does not
     /// fit the quota.
-    fn np_push(&mut self, instance: u64, from_server: bool, data: Vec<u8>, writer: Option<u64>) {
+    fn np_push(&mut self, instance: u64, from_server: bool, pieces: Vec<Vec<u8>>, writer: Option<u64>) {
         let Some(inst) = self.np.instances.get_mut(&instance) else { return };
         let chan = if from_server { &mut inst.to_client } else { &mut inst.to_server };
-        chan.push(Entry { data, pos: 0, writer });
+        let total = pieces.iter().map(Vec::len).sum();
+        let n = pieces.len();
+        for (i, data) in pieces.into_iter().enumerate() {
+            chan.push(Entry { data, pos: 0, writer, last: i + 1 == n, total });
+        }
         self.np_serve(instance, !from_server);
     }
 
-    /// A write on `file` (`NtWriteFile`); it waits for the reader when the
-    /// data does not fit the quota.
-    pub fn np_write(&mut self, file: u64, mut irp: Irp, data: Vec<u8>) -> NpResult<NpDone> {
+    /// A write on `file` (`NtWriteFile`) of `pieces` (one write's data in pieces of at most
+    /// [`PIECE`] bytes); it waits for the reader when the data does not fit the quota. A message
+    /// is one entry, so a message write must come in one piece.
+    pub fn np_write(&mut self, file: u64, mut irp: Irp, pieces: Vec<Vec<u8>>) -> NpResult<NpDone> {
         let Some(end) = self.np_end(file) else { return Err((STATUS_INVALID_HANDLE, irp)) };
         let Some(inst) = self.np.instances.get_mut(&end.instance) else { return Err((STATUS_PIPE_CLOSING, irp)) };
         if let Some(s) = end_error(inst, &end, file, true, false) {
             return Err((s, irp));
         }
-        let len = data.len();
+        if inst.message && pieces.len() > 1 {
+            return Err((STATUS_INSUFFICIENT_RESOURCES, irp));
+        }
+        let data = pieces;
+        let len: usize = data.iter().map(Vec::len).sum();
         if len == 0 && !inst.message {
             irp.sync = false;
             self.complete_now(irp, STATUS_SUCCESS, 0, None);
@@ -619,7 +638,7 @@ impl IoState {
                 return Err((STATUS_PIPE_BUSY, irp));
             }
         }
-        self.np_push(end.instance, end.server, input, None);
+        self.np_push(end.instance, end.server, alloc::vec![input], None);
         self.np_read(file, irp)
     }
 
@@ -724,7 +743,7 @@ impl IoState {
         let mut ids: Vec<u64> = inst.listeners.drain(..).collect();
         for chan in [&mut inst.to_server, &mut inst.to_client] {
             ids.extend(chan.readers.drain(..));
-            ids.extend(chan.entries.drain(..).filter_map(|e| e.writer));
+            ids.extend(chan.entries.drain(..).filter(|e| e.last).filter_map(|e| e.writer));
             chan.used = 0;
         }
         ids
@@ -770,8 +789,14 @@ impl IoState {
             if inst.client_file.is_some() {
                 // The client's reads end when its data is gone, its writes fail.
                 failed.extend(inst.to_client.readers.drain(..).map(|i| (i, STATUS_PIPE_BROKEN)));
-                failed
-                    .extend(inst.to_server.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
+                failed.extend(
+                    inst.to_server
+                        .entries
+                        .drain(..)
+                        .filter(|e| e.last)
+                        .filter_map(|e| e.writer)
+                        .map(|i| (i, STATUS_PIPE_BROKEN)),
+                );
                 inst.to_server.used = 0;
                 failed.extend(inst.listeners.drain(..).map(|i| (i, STATUS_CANCELLED)));
             } else {
@@ -795,8 +820,14 @@ impl IoState {
             } else {
                 inst.state = PipeState::Closing;
                 failed.extend(inst.to_server.readers.drain(..).map(|i| (i, STATUS_PIPE_BROKEN)));
-                failed
-                    .extend(inst.to_client.entries.drain(..).filter_map(|e| e.writer).map(|i| (i, STATUS_PIPE_BROKEN)));
+                failed.extend(
+                    inst.to_client
+                        .entries
+                        .drain(..)
+                        .filter(|e| e.last)
+                        .filter_map(|e| e.writer)
+                        .map(|i| (i, STATUS_PIPE_BROKEN)),
+                );
                 inst.to_client.used = 0;
                 // What the server wrote and the client did not read is gone.
                 inst.to_client.entries.clear();
@@ -906,5 +937,39 @@ impl IoState {
 
     pub fn np_instance_count(&self, key: &[u16]) -> usize {
         self.np.pipes.get(key).map_or(0, |p| p.instances.len())
+    }
+}
+
+#[cfg(test)]
+mod piece_tests {
+    use super::*;
+
+    /// A write larger than the kernel heap's largest allocation is queued in pieces: byte reads
+    /// take at most a piece's worth, cross from piece to piece in order, and the write is done
+    /// once, with all its bytes, when its last piece is read (ADR 0225).
+    #[test]
+    fn a_write_in_pieces_is_read_in_order_and_done_once_at_its_end() {
+        let mut chan = Chan::with_quota(4096);
+        let total = 2 * PIECE + 10;
+        let pieces: Vec<Vec<u8>> = (0..3).map(|i| alloc::vec![i as u8; if i < 2 { PIECE } else { 10 }]).collect();
+        let n = pieces.len();
+        for (i, data) in pieces.into_iter().enumerate() {
+            chan.push(Entry { data, pos: 0, writer: Some(7), last: i + 1 == n, total });
+        }
+        assert_eq!(chan.used, 0, "a pending write's data is not in the quota");
+        let mut read = Vec::new();
+        let mut done = Vec::new();
+        while let Some(t) = chan.take(usize::MAX, false) {
+            assert!(t.data.len() <= PIECE);
+            read.extend_from_slice(&t.data);
+            done.extend(t.done);
+            if chan.entries.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(read.len(), total);
+        assert!(read[..PIECE].iter().all(|&b| b == 0) && read[PIECE..2 * PIECE].iter().all(|&b| b == 1));
+        assert_eq!(&read[2 * PIECE..], &[2; 10]);
+        assert_eq!(done, alloc::vec![(7, total)]);
     }
 }

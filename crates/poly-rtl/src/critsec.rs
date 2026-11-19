@@ -268,6 +268,118 @@ impl CriticalSection {
     }
 }
 
+/// The lock of a heap (`RtlLockHeap`, and every call without `HEAP_NO_SERIALIZE`): not a
+/// critical section, which hands itself to a waiter on leave, so that a thread that runs takes a
+/// free lock at once rather than waiting behind threads that still have to be woken. With a
+/// strict hand-off the busy threads of a process formed a convoy on the process heap: every
+/// allocation of every thread waited for a full wake-up of the next waiter (Chrome's browser,
+/// ~60 ms per allocation while a tab opened). It spins a while before it blocks, as the heap
+/// manager does (Learn, "InitializeCriticalSectionAndSpinCount": the heap manager uses a spin
+/// count of roughly 4,000 for its per-heap critical sections). Its owner may take it again.
+#[derive(Debug)]
+pub struct HeapLock {
+    /// [`UNLOCKED`], [`LOCKED`], or [`CONTENDED`] (locked, and someone may be blocked).
+    state: AtomicI32,
+    recursion: AtomicI32,
+    owner: AtomicUsize,
+    /// The auto-reset event blocked threads wait on; made when first needed.
+    event: AtomicUsize,
+}
+
+const UNLOCKED: i32 = 0;
+const LOCKED: i32 = 1;
+const CONTENDED: i32 = 2;
+/// Tries before a thread blocks on a heap lock.
+pub const HEAP_SPINS: usize = 4000;
+
+impl Default for HeapLock {
+    fn default() -> HeapLock {
+        HeapLock::new()
+    }
+}
+
+impl HeapLock {
+    pub const fn new() -> HeapLock {
+        HeapLock {
+            state: AtomicI32::new(UNLOCKED),
+            recursion: AtomicI32::new(0),
+            owner: AtomicUsize::new(0),
+            event: AtomicUsize::new(0),
+        }
+    }
+
+    fn event(&self, w: &dyn Waiter) -> u64 {
+        loop {
+            let e = self.event.load(Ordering::Acquire);
+            if e != 0 {
+                return e as u64;
+            }
+            let new = w.create_event();
+            if new == 0 {
+                w.yield_now();
+                continue;
+            }
+            match self.event.compare_exchange(0, new as usize, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return new,
+                Err(theirs) => {
+                    w.close(new);
+                    return theirs as u64;
+                }
+            }
+        }
+    }
+
+    fn own(&self, me: usize) {
+        self.owner.store(me, Ordering::Relaxed);
+        self.recursion.store(1, Ordering::Relaxed);
+    }
+
+    /// Take the lock (again, for its owner).
+    pub fn enter(&self, w: &dyn Waiter) {
+        let me = w.current_thread() as usize;
+        if self.owner.load(Ordering::Relaxed) == me {
+            self.recursion.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        for _ in 0..HEAP_SPINS {
+            if self.state.load(Ordering::Relaxed) == UNLOCKED
+                && self.state.compare_exchange(UNLOCKED, LOCKED, Ordering::Acquire, Ordering::Relaxed).is_ok()
+            {
+                self.own(me);
+                return;
+            }
+            core::hint::spin_loop();
+        }
+        // Mark it contended; whoever leaves wakes one blocked thread, which tries again.
+        while self.state.swap(CONTENDED, Ordering::Acquire) != UNLOCKED {
+            w.wait(self.event(w));
+        }
+        self.own(me);
+    }
+
+    /// Give the lock back (once, for a nested enter); a caller that does not own it changes nothing.
+    pub fn leave(&self, w: &dyn Waiter) {
+        if self.owner.load(Ordering::Relaxed) != w.current_thread() as usize {
+            return;
+        }
+        if self.recursion.fetch_sub(1, Ordering::Relaxed) > 1 {
+            return;
+        }
+        self.owner.store(0, Ordering::Relaxed);
+        if self.state.swap(UNLOCKED, Ordering::Release) == CONTENDED {
+            w.set(self.event(w));
+        }
+    }
+
+    /// The lock goes with its heap: close its event, if one was made.
+    pub fn delete(&self, w: &dyn Waiter) {
+        let e = self.event.swap(0, Ordering::AcqRel);
+        if e != 0 {
+            w.close(e as u64);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -436,6 +548,53 @@ mod tests {
             .join()
             .unwrap()
         );
+    }
+
+    /// The heap's lock: one owner at a time under contention, nested enters by the owner, every
+    /// blocked thread gets it in the end, and one event at most is kept.
+    #[test]
+    fn a_heap_lock_excludes_and_nests_and_lets_running_threads_in() {
+        let h = Arc::new(Host::default());
+        let l = Arc::new(HeapLock::new());
+        let inside = Arc::new(AtomicUsize::new(0));
+        let total = Arc::new(AtomicUsize::new(0));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let (h, l, inside, total) = (h.clone(), l.clone(), inside.clone(), total.clone());
+                std::thread::spawn(move || {
+                    for i in 0..3000 {
+                        l.enter(&*h);
+                        if i % 4 == 0 {
+                            l.enter(&*h);
+                        }
+                        assert_eq!(inside.fetch_add(1, Ordering::SeqCst), 0, "two owners at once");
+                        total.fetch_add(1, Ordering::Relaxed);
+                        if i % 50 == 0 {
+                            std::thread::yield_now();
+                        }
+                        inside.fetch_sub(1, Ordering::SeqCst);
+                        if i % 4 == 0 {
+                            l.leave(&*h);
+                        }
+                        l.leave(&*h);
+                    }
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().unwrap();
+        }
+        assert_eq!(total.load(Ordering::Relaxed), 24000);
+        assert_eq!(l.state.load(Ordering::Relaxed), UNLOCKED);
+        assert!(h.made.load(Ordering::Relaxed) <= 8, "at most one event kept, losers closed");
+        // A thread that does not own it leaves nothing.
+        l.enter(&*h);
+        let (l2, h2) = (l.clone(), h.clone());
+        std::thread::spawn(move || l2.leave(&*h2)).join().unwrap();
+        assert_eq!(l.state.load(Ordering::Relaxed), LOCKED);
+        l.leave(&*h);
+        l.delete(&*h);
+        assert!(h.events.lock().unwrap().is_empty());
     }
 
     #[test]
