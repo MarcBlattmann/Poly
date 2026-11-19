@@ -15,7 +15,8 @@ interface:
 installer: "Both the updater (157 and 159) and the elevation service import CoRegisterInitializeSpy and CoRevokeInitializeSpy."
 rules:
   registration: "S_OK and a non-zero 64-bit cookie, before COM is initialised on the thread or while it is; the registration adds one reference to the spy (released by the revoke)"
-  bad_arguments: "a NULL spy: E_INVALIDARG 0x80070057; an object whose QueryInterface refuses IInitializeSpy: E_NOINTERFACE 0x80004002; the cookie is not written in either case"
+  bad_arguments: "a NULL spy: E_INVALIDARG 0x80070057 and the cookie output is left as it was (presets 0, 0x1234 and 0xcafecafecafecafe all came back unchanged, with COM initialised on the thread or not). An object whose QueryInterface refuses IInitializeSpy: the call returns the error the QueryInterface returned (E_NOINTERFACE 0x80004002, E_FAIL 0x80004005 and E_OUTOFMEMORY 0x8007000E each came back as they were) and WRITES the cookie output: it becomes all ones, 0xffffffffffffffff (a 64-bit -1, not 0), whatever it was preset to; no reference is left on the refusing object (its AddRefs and Releases balance); nothing is registered"
+  good_cookie: "a successful registration writes a cookie that is neither 0 nor all ones (its value is not stable between runs and is not to be compared); CoRevokeInitializeSpy accepts it"
   calls_initialize: "CoInitializeEx calls PreInitialize(mode, the thread's apartment reference count before) and then PostInitialize(the result, mode, the count after): the first STA initialisation: Pre(2, 0), Post(S_OK, 2, 1); the same again: Pre(2, 1), Post(S_FALSE 1, 2, 2); a request for MTA on an STA thread: Pre(0, 2), Post(RPC_E_CHANGED_MODE 0x80010106, 0, 2) (the count does not change); the mode is 0 for MTA and 2 for STA"
   calls_uninitialize: "CoUninitialize calls PreUninitialize(the count before) then PostUninitialize(the count after): counts 3 to 2, 2 to 1, 1 to 0; one more on a thread without COM: Pre(0), Post(0)"
   ole: "OleInitialize is seen as a CoInitializeEx(STA) (mode 2) and OleUninitialize as a CoUninitialize"
@@ -33,7 +34,7 @@ timing:
   typical: "well under a millisecond"
   guarantees: none
 tests:
-  visible: 2
+  visible: 3
   held_out: 1
 building_tests: >
   Rust tests (ADR 0075), one file each: a spy object written in the test (a vtable of seven methods) records the calls into a log that the test prints as one line per call; the spies' return values are set by the test; separate threads where the per-thread rule is observed.

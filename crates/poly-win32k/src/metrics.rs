@@ -70,6 +70,15 @@ impl Display {
     pub const INTERACTIVE_BOTTOM: Display =
         Display { width: 1920, height: 1080, work: Rect::new(0, 0, 1920, 1032), interactive: true };
 
+    /// The interactive session at `width` x `height` physical pixels and a scale of `percent`
+    /// (ADR 0231): the taskbar is 48 pixels at 100 percent, scaled, at the bottom (`bottom`) or
+    /// 24 at the top (SetProcessDpiAwarenessContext.yaml `oracle_200`: 96 high at 200 percent).
+    pub fn interactive_at(width: i32, height: i32, percent: u32, bottom: bool) -> Display {
+        let s = |v: i32| (v * percent as i32 + 50) / 100;
+        let work = if bottom { Rect::new(0, 0, width, height - s(48)) } else { Rect::new(0, s(24), width, height) };
+        Display { width, height, work, interactive: true }
+    }
+
     /// An interactive desktop of `width` x `height` with a top bar of `bar`.
     pub const fn desktop(width: i32, height: i32, bar: i32) -> Display {
         Display { width, height, work: Rect::new(0, bar, width, height), interactive: true }
@@ -430,27 +439,34 @@ pub fn frame_insets_dpi(style: u32, menu: bool, ex: u32, dpi: u32) -> Insets {
 /// caption 23 high, and 2 more each way inside a WS_EX_CLIENTEDGE); a
 /// child's is `AdjustWindowRectEx`'s.
 pub fn client_insets(style: u32, ex: u32, menu: bool) -> Insets {
+    client_insets_dpi(style, ex, menu, 96)
+}
+
+/// [`client_insets`] of a window whose frame is measured at `dpi` (ADR 0231: a window's frame
+/// follows its DPI; `EnableNonClientDpiScaling.yaml` `at_200_sizes`: 26 wide and 71 high at 192).
+pub fn client_insets_dpi(style: u32, ex: u32, menu: bool, dpi: u32) -> Insets {
     let mut i = if style & WS_CHILD == 0 {
         // A sizing border says the style was chosen: the implicit caption is not added to a window that
         // had its caption taken away (SetWindowLongW.yaml `chrome`: WS_THICKFRAME alone is 7 pixels).
         let (style, ex) = if style & WS_THICKFRAME != 0 { (style, ex) } else { had_styles(style, ex) };
-        let s = hidden_frame(style, ex) + if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
+        let s = hidden_frame_dpi(style, ex, dpi) + if ex & WS_EX_CLIENTEDGE != 0 { 2 } else { 0 };
         let mut top = s;
         if has_caption(style) {
-            top += caption_for_dpi(96);
+            top += caption_for_dpi(dpi);
         }
         if menu {
-            top += menu_for_dpi(96);
+            top += menu_for_dpi(dpi);
         }
         Insets { left: s, top, right: s, bottom: s }
     } else {
-        frame_insets(style, menu, ex)
+        frame_insets_dpi(style, menu, ex, dpi)
     };
+    let bar = if dpi == 96 { SCROLLBAR } else { scale(17, dpi).max(8) };
     if style & WS_VSCROLL != 0 {
-        i.right += SCROLLBAR;
+        i.right += bar;
     }
     if style & WS_HSCROLL != 0 {
-        i.bottom += SCROLLBAR;
+        i.bottom += bar;
     }
     i
 }
@@ -477,7 +493,12 @@ pub fn adjust_window_rect(r: Rect, style: u32, menu: bool, ex: u32) -> Rect {
 /// rectangle `w`; a window smaller than its frame has an empty client area
 /// at its top-left inside corner.
 pub fn default_client(w: Rect, style: u32, ex: u32, menu: bool) -> Rect {
-    let i = client_insets(style, ex, menu);
+    default_client_dpi(w, style, ex, menu, 96)
+}
+
+/// [`default_client`] with the frame measured at `dpi`.
+pub fn default_client_dpi(w: Rect, style: u32, ex: u32, menu: bool, dpi: u32) -> Rect {
+    let i = client_insets_dpi(style, ex, menu, dpi);
     let left = w.left + i.left;
     let top = w.top + i.top;
     // Smaller than its frame: each side is empty on its own (observed: a
@@ -548,6 +569,12 @@ pub fn popup_window_edge(style: u32, ex: u32) -> bool {
 /// (SM_CXFRAME + SM_CXPADDEDBORDER - SM_CXDLGFRAME) with WS_THICKFRAME or a
 /// full caption. WS_EX_CLIENTEDGE and WS_EX_TOOLWINDOW do not change it.
 pub fn hidden_frame(style: u32, ex: u32) -> i32 {
+    hidden_frame_dpi(style, ex, 96)
+}
+
+/// [`hidden_frame`] at `dpi`: the sizing part is SM_CXFRAME + SM_CXPADDEDBORDER - 3 at that DPI
+/// (5 at 96, 10 at 192, 9 at 168: an overlapped window's frame is 8, 13 and 12).
+pub fn hidden_frame_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
     // (A sizing border says the style was chosen: no implicit caption, see `client_insets`.)
     let (style, ex) = if style & WS_THICKFRAME != 0 && style & (WS_POPUP | WS_CHILD) == 0 {
         (style, ex | WS_EX_WINDOWEDGE)
@@ -562,7 +589,8 @@ pub fn hidden_frame(style: u32, ex: u32) -> i32 {
         0
     };
     let line = i32::from(style & (WS_BORDER | WS_DLGFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0);
-    let sizing = if style & WS_THICKFRAME != 0 || has_caption(style) { 5 } else { 0 };
+    let sizing =
+        if style & WS_THICKFRAME != 0 || has_caption(style) { frame_for_dpi(dpi) + padded_for_dpi(dpi) - 3 } else { 0 };
     edge + line + sizing
 }
 

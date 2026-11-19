@@ -356,6 +356,17 @@ impl IoState {
             .map_err(status_of)?;
         let rec = self.files.get_mut(&cookie).expect("checked");
         let directory = rec.kind == FileType::Directory;
+        // A renamed file is marked for archiving: `FILE_ATTRIBUTE_ARCHIVE` is set, the other
+        // attributes stay (the sheet `MoveFileExW`, plain_rename: a read-only file reads 0x21).
+        if !directory {
+            let node = rec.disk().expect("disk").node.clone();
+            let mut stored = self.stored(&node);
+            if stored.attributes & FILE_ATTRIBUTE_ARCHIVE == 0 {
+                stored.attributes |= FILE_ATTRIBUTE_ARCHIVE;
+                self.set_stored(&node, stored);
+            }
+        }
+        let rec = self.files.get_mut(&cookie).expect("checked");
         let d = rec.disk_mut().expect("disk");
         d.parent = Some(dst_parent.clone());
         d.name = new_bytes.clone();
@@ -651,6 +662,7 @@ impl IoState {
                     | FILE_UNICODE_ON_DISK
                     | FILE_PERSISTENT_ACLS
                     | FILE_SUPPORTS_REPARSE_POINTS
+                    | FILE_SUPPORTS_SPARSE_FILES
                     | FILE_SUPPORTS_HARD_LINKS;
                 if self.has_streams(d.volume) {
                     attrs |= FILE_NAMED_STREAMS;

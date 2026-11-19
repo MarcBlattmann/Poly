@@ -179,6 +179,12 @@ crate::wire_struct! {
         /// The height of the menu bar that is drawn above the client area
         /// (it is part of the window's surface; 0: none).
         pub menu_bar: i32,
+        /// `GetDpiForWindow` (ADR 0231): 96 for an unaware window and the desktop, the system
+        /// DPI for a system aware one, the monitor's for a per-monitor aware one.
+        pub dpi_value: u32,
+        /// The DPI its frame is measured at (its own units): its DPI, or the one before a scale
+        /// change until `DefWindowProc` handles `WM_DPICHANGED`.
+        pub frame_dpi: u32,
     }
 }
 
@@ -219,6 +225,9 @@ crate::wire_struct! {
         pub w: u64,
         pub l: u64,
         pub wndproc: u64,
+        /// `WM_COPYDATA`'s bytes, copied from the sender (`Request::SendCopy`): the receiver
+        /// makes its own `COPYDATASTRUCT` of them, `l` being its `dwData`.
+        pub data: Option<Vec<u8>>,
     }
 }
 
@@ -255,6 +264,9 @@ crate::wire_enum! {
         28 => PostQuit { code: u32 },
         29 => Peek { filter: u64, min: u32, max: u32, flags: u32 },
         30 => SendStart { hwnd: u64, msg: u32, w: u64, l: u64 },
+        /// `SendStart` of `WM_COPYDATA` (Learn: the system copies the data to the receiving
+        /// process): `dw_data` and the bytes of the sender's `COPYDATASTRUCT` (ADR 0234).
+        123 => SendCopy { hwnd: u64, w: u64, dw_data: u64, data: Vec<u8> },
         31 => SendWait { id: u64 },
         32 => SendDone { id: u64, result: u64 },
         33 => Reply { result: u64 },
@@ -399,6 +411,13 @@ crate::wire_enum! {
         /// of `DXGI_ALPHA_MODE_PREMULTIPLIED` bound to it, ADR 0225) or not: its surface is
         /// composed with that alpha. An `Ok`, an `Error` for a window that does not exist.
         118 => SurfaceAlpha { hwnd: u32, premultiplied: bool },
+        /// `DisplayConfigSetDeviceInfo`'s DPI-scale packet (ADR 0231): the monitor's scale
+        /// becomes step `step` of `dpiscale::STEPS`; the windows get what a scale change brings
+        /// them. An `Ok`, or an `Error` for a step the display does not offer.
+        121 => SetScale { step: i32 },
+        /// The frame of window `hwnd` is measured at its DPI again (`DefWindowProc`'s
+        /// `WM_DPICHANGED`): an `Ok`.
+        122 => DpiFrame { hwnd: u32 },
     }
 }
 
@@ -409,7 +428,24 @@ crate::wire_enum! {
         /// A Win32 error for the caller's last error.
         2 => Error { code: u32 },
         3 => Value { value: u64 },
-        4 => Desktop { desktop: u32, message: u32, width: i32, height: i32, work: Rect, interactive: bool, dpi: u32 },
+        /// The desktop as the caller sees it: the screen and work area in its units, `dpi` its
+        /// system DPI (`GetDpiForSystem`), `monitor_dpi` the monitor's effective DPI for it;
+        /// `phys_*` the physical screen, `process_dpi` the session's system DPI
+        /// (`GetSystemDpiForProcess`), `scale` the monitor's scale in percent (ADR 0231).
+        4 => Desktop {
+            desktop: u32,
+            message: u32,
+            width: i32,
+            height: i32,
+            work: Rect,
+            interactive: bool,
+            dpi: u32,
+            monitor_dpi: u32,
+            phys_width: i32,
+            phys_height: i32,
+            process_dpi: u32,
+            scale: u32,
+        },
         5 => Atom { atom: u16 },
         6 => Class { info: ClassInfo },
         7 => Created { created: Created },

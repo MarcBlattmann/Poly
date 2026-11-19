@@ -195,6 +195,9 @@ pub const FILE_PERSISTENT_ACLS: u32 = 0x0000_0008;
 /// `FILE_NAMED_STREAMS` (`winnt.h`): the volume keeps named streams (ADR 0223).
 pub const FILE_NAMED_STREAMS: u32 = 0x0004_0000;
 pub const FILE_SUPPORTS_REPARSE_POINTS: u32 = 0x0000_0080;
+/// `FILE_SUPPORTS_SPARSE_FILES` (`winnt.h`): the sheet `GetVolumeInformationW` (outputs) has it on
+/// the NTFS volume. Poly's files read their unwritten ranges as zeros, as a sparse file does.
+pub const FILE_SUPPORTS_SPARSE_FILES: u32 = 0x0000_0040;
 pub const FILE_SUPPORTS_HARD_LINKS: u32 = 0x0040_0000;
 pub const FILE_READ_ONLY_VOLUME: u32 = 0x0008_0000;
 

@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "dcb_basic",
-      "exe_sha256": "e697c295970ce0297e18cfc46ef318088f42d2a4efe4d94f3931b2bbc12fb58b",
+      "exe_sha256": "ff1520eb61af95cad2eca9d8371476739cf489a298edc9298d25cbe0ee8ccb85",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
       "name": "dcb_basic_std",
       "session": "interactive",
       "token": "standard",
-      "exe_sha256": "e697c295970ce0297e18cfc46ef318088f42d2a4efe4d94f3931b2bbc12fb58b",
+      "exe_sha256": "ff1520eb61af95cad2eca9d8371476739cf489a298edc9298d25cbe0ee8ccb85",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

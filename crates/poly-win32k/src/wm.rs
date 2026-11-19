@@ -16,6 +16,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod dpi;
 pub mod input;
 pub mod paint;
 pub mod raw;
@@ -196,6 +197,13 @@ struct Window {
     helper: bool,
     /// The menu bar's height above the client area, inside the surface.
     menu_bar: i32,
+    /// Its rectangles in its own units while they map to the physical ones (`dpi`, ADR 0231).
+    own: Option<dpi::Own>,
+    /// The DPI its frame stays measured at after a scale change until `DefWindowProc` handles
+    /// `WM_DPICHANGED` (0: its DPI).
+    frame_pin: u32,
+    /// What `WM_DPICHANGED` suggested last (`dpiscale::suggest`).
+    suggest: Option<crate::dpiscale::SuggestBase>,
 }
 
 #[derive(Debug, Default)]
@@ -349,8 +357,11 @@ pub struct Wm {
     /// (`Request::LayeredChildren`): they may create layered child windows.
     layered_children: alloc::collections::BTreeSet<u32>,
     thread_dpi: BTreeMap<Key, u8>,
-    /// The system DPI: 96 times the desktop link's units (ADR 0219).
+    /// The system DPI: 96 times the desktop link's units (ADR 0219), or the session's scale
+    /// (ADR 0231).
     system_dpi: u32,
+    /// The monitor's DPI now: the system DPI until the scale changes (ADR 0231).
+    monitor_dpi: u32,
 }
 
 impl Default for Wm {
@@ -418,6 +429,7 @@ impl Wm {
             layered_children: alloc::collections::BTreeSet::new(),
             thread_dpi: BTreeMap::new(),
             system_dpi: 96,
+            monitor_dpi: 96,
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -481,6 +493,7 @@ impl Wm {
     /// pixels (ADR 0219).
     pub fn set_system_dpi(&mut self, dpi: u32) {
         self.system_dpi = dpi.max(1);
+        self.monitor_dpi = self.system_dpi;
     }
 
     pub fn system_dpi(&self) -> u32 {
@@ -680,6 +693,8 @@ impl Wm {
             desktop: h == self.desktop,
             message_only: w.parent == self.message,
             dpi: if h == self.desktop { guic::AWARE_PER_MONITOR } else { w.dpi },
+            dpi_value: self.window_dpi(h),
+            frame_dpi: if w.frame_pin != 0 { w.frame_pin } else { self.window_dpi(h) },
             creating: w.state == State::Creating,
             ime: w.ime,
             lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
@@ -1531,7 +1546,9 @@ impl Wm {
     fn dpi_op(&mut self, ctx: Ctx, set: bool, process: bool, awareness: u8) -> Reply {
         let prev = self.thread_awareness(ctx.key());
         if !set {
-            return Reply::Value { value: u64::from(prev) };
+            // The process's own (`GetDpiAwarenessContextForProcess`, `GetProcessDpiAwareness`).
+            let a = if process { self.proc_dpi.get(&ctx.pid).copied().unwrap_or(guic::AWARE_UNAWARE) } else { prev };
+            return Reply::Value { value: u64::from(a) };
         }
         if process && self.proc_dpi.contains_key(&ctx.pid) {
             return err(ERROR_ACCESS_DENIED);
@@ -1696,7 +1713,7 @@ impl Wm {
         }
         let id = self.next_send;
         self.next_send += 1;
-        let incoming = Incoming { id, hwnd, msg: DESKTOP_SET_POS, w, l, wndproc: 0 };
+        let incoming = Incoming { id, hwnd, msg: DESKTOP_SET_POS, w, l, wndproc: 0, data: None };
         self.sends.insert(id, Send { from: DESKTOP_SENDER, to, incoming, result: None, collected: false });
         let q = self.queue(to);
         q.sent.push_back(id);
@@ -1842,7 +1859,17 @@ impl Wm {
         Reply::Empty { next_timer_ms: next }
     }
 
-    fn send_start(&mut self, ctx: Ctx, hwnd: u64, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
+    #[allow(clippy::too_many_arguments)]
+    fn send_start(
+        &mut self,
+        ctx: Ctx,
+        hwnd: u64,
+        msg: u32,
+        w: u64,
+        l: u64,
+        data: Option<Vec<u8>>,
+        fx: &mut Effects,
+    ) -> Reply {
         let Some(win) = self.get(hwnd) else { return err(ERROR_INVALID_WINDOW_HANDLE) };
         let to = win.thread;
         let (wndproc, unicode) = (win.wndproc, win.unicode);
@@ -1853,7 +1880,7 @@ impl Wm {
         }
         let id = self.next_send;
         self.next_send += 1;
-        let incoming = Incoming { id, hwnd: hwnd as u32, msg, w, l, wndproc };
+        let incoming = Incoming { id, hwnd: hwnd as u32, msg, w, l, wndproc, data };
         self.sends.insert(id, Send { from: ctx.key(), to, incoming, result: None, collected: false });
         let q = self.queue(to);
         q.sent.push_back(id);
@@ -2049,20 +2076,12 @@ impl Wm {
 
     // ----- the request dispatcher
 
-    /// Run one request of thread `ctx`.
-    pub fn handle(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
+    /// Run one request of thread `ctx`, in physical pixels (`dpi::handle` converts).
+    fn handle_raw(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
         self.queue(ctx.key());
         self.now = self.now.max(ctx.now);
         match req {
-            Request::Desktop {} => Reply::Desktop {
-                desktop: self.desktop,
-                message: self.message,
-                width: self.screen.0,
-                height: self.screen.1,
-                work: self.display.work,
-                interactive: self.display.interactive,
-                dpi: self.system_dpi,
-            },
+            Request::Desktop {} => self.desktop_reply(ctx.key()),
             Request::RegisterEvent { .. } | Request::Queue {} => Reply::Ok {},
             Request::RegisterClass { spec } => self.register_class(ctx, spec),
             Request::UnregisterClass { class, .. } => self.unregister_class(ctx, class),
@@ -2229,6 +2248,8 @@ impl Wm {
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
             Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),
+            Request::SetScale { step } => self.set_scale(step, fx),
+            Request::DpiFrame { hwnd } => self.dpi_frame(hwnd),
             Request::Post { hwnd, msg, w, l } => {
                 if hwnd == 0 {
                     return self.post(ctx, ctx.key(), 0, msg, w, l, fx);
@@ -2372,7 +2393,10 @@ impl Wm {
                 let (t, x, y) = self.queue(ctx.key()).last;
                 Reply::Value { value: u64::from(t) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48) }
             }
-            Request::SendStart { hwnd, msg, w, l } => self.send_start(ctx, hwnd, msg, w, l, fx),
+            Request::SendStart { hwnd, msg, w, l } => self.send_start(ctx, hwnd, msg, w, l, None, fx),
+            Request::SendCopy { hwnd, w, dw_data, data } => {
+                self.send_start(ctx, hwnd, crate::user::WM_COPYDATA, w, dw_data, Some(data), fx)
+            }
             Request::SendWait { id } => self.send_wait(ctx, id),
             Request::SendDone { id, result } => {
                 self.send_done(ctx, id, result, fx);
@@ -2446,6 +2470,9 @@ impl Window {
             min_pos: (-1, -1),
             helper: false,
             menu_bar: 0,
+            own: None,
+            frame_pin: 0,
+            suggest: None,
         }
     }
 }
@@ -2808,6 +2835,27 @@ mod tests {
     fn set_pos_rectangles_round_trip() {
         let (w, l) = pack_set_pos(Rect::new(-8, -3, 1000, 600));
         assert_eq!(unpack_set_pos(w, l), (-8, -3, 1008, 603));
+    }
+
+    /// WM_COPYDATA to another process carries its bytes: the receiver gets them and `dwData`
+    /// (ADR 0234: Chrome hands a second start's command line to the running one this way).
+    #[test]
+    fn copy_data_sent_to_another_thread_carries_its_bytes() {
+        let mut wm = Wm::new();
+        reg(&mut wm, "C");
+        let h = create(&mut wm, A, "C", WS_POPUP, 0, 0);
+        let mut fx = Effects::default();
+        let send = Request::SendCopy { hwnd: u64::from(h), w: 9, dw_data: 0xC0DE, data: b"open a.txt".to_vec() };
+        let Reply::Started { .. } = wm.handle(B, send, &mut fx) else { panic!() };
+        let Reply::Incoming { incoming } = wm.handle(A, Request::Peek { filter: 0, min: 0, max: 0, flags: 0 }, &mut fx)
+        else {
+            panic!()
+        };
+        assert_eq!((incoming.msg, incoming.w, incoming.l), (crate::user::WM_COPYDATA, 9, 0xC0DE));
+        assert_eq!(incoming.data.as_deref(), Some(&b"open a.txt"[..]));
+        // Within the thread the sender's own structure is used.
+        let send = Request::SendCopy { hwnd: u64::from(h), w: 0, dw_data: 1, data: Vec::new() };
+        assert!(matches!(wm.handle(A, send, &mut fx), Reply::SameThread { .. }));
     }
 
     #[test]

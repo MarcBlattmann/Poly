@@ -372,8 +372,13 @@ impl WindowsSurfaces {
                         actions.push(Action::Send(FromCompositor::Released { buffer: old }));
                     }
                     // A buffer in Windows pixels: `units` of them a logical pixel. One the
-                    // output enlarges is enlarged smoothly, not in blocks (ADR 0219).
-                    scene.resize_content(s.window, width, height, self.units as u32);
+                    // output enlarges is enlarged smoothly, not in blocks (ADR 0219). A window
+                    // Windows scales for its app (DPI unaware) has a buffer in its own units, as
+                    // many pixels as the surface has logical ones: buffer scale 1 (ADR 0231).
+                    let u = self.units.max(1) as u32;
+                    let logical = s.geometry.2;
+                    let scale = if logical > 0 { width.div_ceil(logical).clamp(1, u) } else { u };
+                    scene.resize_content(s.window, width, height, scale);
                     scene.set_smooth(s.window, true);
                     actions.push(Action::TakeBuffer(buffer));
                 }
@@ -607,6 +612,8 @@ pub struct Link {
     moves: Vec<WindowId>,
     /// Interactive resizes (`SC_SIZE` by a border), likewise.
     resizes: Vec<(WindowId, Edges)>,
+    /// Cursors win32k set over windows (`SetCursor`), shown by the server (ADR 0234).
+    cursors: Vec<(WindowId, poly_win32k::link::CursorShape)>,
     /// The keyboard layout win32k was told (`poly-input`'s name).
     layout: alloc::string::String,
     /// What Windows programs asked the desktop to open (`false`) or show in Files (`true`),
@@ -684,6 +691,7 @@ impl Link {
             incoming: Stream::new(),
             moves: Vec::new(),
             resizes: Vec::new(),
+            cursors: Vec::new(),
             layout: alloc::string::String::new(),
             shell: Vec::new(),
             consents: Vec::new(),
@@ -797,6 +805,15 @@ impl Link {
                 server.release_internal_window(w);
             }
         }
+        // The cursor a Windows program set over its window (ADR 0234): a standard one by its
+        // name; a picture of its own is not shown yet (the arrow).
+        for (w, shape) in core::mem::take(&mut self.cursors) {
+            let named = match shape {
+                poly_win32k::link::CursorShape::Standard(idc) => poly_wayland::compose::NamedCursor::of_windows(idc),
+                poly_win32k::link::CursorShape::Image { .. } => poly_wayland::compose::NamedCursor::Arrow,
+            };
+            server.set_internal_cursor(w, Some(named));
+        }
         for &(w, _) in &after {
             // Its own sizing borders take the pointer too.
             server.set_internal_margins(w, self.surfaces.margins_of(w));
@@ -897,7 +914,8 @@ impl Link {
                     a @ Action::Consent { .. } => self.consents.push(a),
                     // The copy was made with the buffer record; cursors
                     // come with a later slice.
-                    Action::TakeBuffer(_) | Action::Cursor(..) => {}
+                    Action::Cursor(w, shape) => self.cursors.push((w, shape)),
+                    Action::TakeBuffer(_) => {}
                 }
             }
         }
@@ -1033,6 +1051,26 @@ mod tests {
         assert_eq!(fb.pixel(40, 80), Some(0x40_4040));
         assert_eq!(fb.pixel(47, 85), Some(0x40_4040));
         assert_ne!(fb.pixel(48, 80), Some(0x40_4040), "8 output pixels wide, not 16");
+
+        // ADR 0231: a DPI-unaware window's buffer is in its own units, half the surface's
+        // Windows pixels: shown at buffer scale 1, enlarged to the surface.
+        let s2 = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s2, 200, 200, 8, 6);
+        let b2 = d.attach_buffer(s2, 4, 3, 16, PixelFormat::Xrgb8888).unwrap();
+        mem.0.insert(b2, vec![0x60; 4 * 3 * 4]);
+        d.damage(s2, 0, 0, 4, 3);
+        d.set_visible(s2, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w2 = ws.window(s2).unwrap();
+        let c = content_of(&scene, w2).unwrap();
+        assert_eq!((c.width, c.height, c.scale), (4, 3, 1));
+        assert_eq!(c.logical_size(), (4, 3), "as large as the aware window's");
+        // Drawn over 8x6 output pixels, enlarged.
+        let mut fb = poly_wayland::compose::MemoryFramebuffer::new(2560, 1600);
+        scene.render(&mut fb);
+        assert_eq!(fb.pixel(200, 200), Some(0x60_6060));
+        assert_eq!(fb.pixel(207, 205), Some(0x60_6060));
+        assert_ne!(fb.pixel(208, 200), Some(0x60_6060), "8 output pixels wide");
     }
 
     #[test]

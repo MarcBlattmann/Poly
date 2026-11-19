@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "cgcc_mta",
-      "exe_sha256": "1c912b385f637f6f87d9ef61515ea53dd28ba0ff5ddf46a25ecd6cbcef32ad80",
+      "exe_sha256": "0788551ce667833d4a7104af8dbc284e122b96c4a8628a9e75d4ecd6a0fed45b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "cgcc_noinit",
-      "exe_sha256": "b7bdfd2f77ea05e826d3c167cae22ab6ae93a828d8ae7e4a22ff59bc9fdbcdf8",
+      "exe_sha256": "74a24589587ad5e88226d38e1b90f6548d0ff8694b0386e14f5b09a3cfd1db90",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

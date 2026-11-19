@@ -111,6 +111,9 @@ fn open(name: &[u16]) -> Result<Handle, Failure> {
 pub(crate) fn transact(endpoint: &str, req: &Request) -> Result<Reply, Failure> {
     let name = wide(endpoint);
     let h = open(&name)?;
+    if endpoint == ACTIVATION_PIPE {
+        super::security::note_activator(h);
+    }
     let ok = write_all(h, &frame(&req.encode()));
     let reply = if ok { read_frame(h) } else { None };
     close(h);

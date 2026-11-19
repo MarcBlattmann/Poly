@@ -328,6 +328,14 @@ impl Env for Sys {
 
     fn set_cursor(&self, cursor: u64) {
         with_cursor(|c| *c = cursor as usize);
+        show_cursor_shape(cursor as usize);
+    }
+
+    fn set_system_cursor(&self, idc: u16) {
+        if let Some(i) = CURSORS.iter().position(|c| c.0 == idc) {
+            with_cursor(|c| *c = CURSOR_BASE + i);
+            show_cursor_shape(CURSOR_BASE + i);
+        }
     }
 
     fn region_rects(&self, rgn: u64) -> Option<Vec<Rect>> {
@@ -1855,15 +1863,17 @@ pub extern "system" fn GetDpiForSystem() -> u32 {
     u::system_dpi(&SYS)
 }
 
-/// 96 for any window of a DPI-unaware process, the desktop and message
-/// windows included; 0 with ERROR_INVALID_PARAMETER otherwise.
+/// The DPI of the window's awareness context: 96 for an unaware one and the desktop, the system
+/// DPI for a system aware one, the monitor's for a per-monitor aware one, whoever asks
+/// (GetDpiForWindow.yaml `at_200_kinds`); 0 with ERROR_INVALID_PARAMETER for no window.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForWindow(hwnd: H) -> u32 {
-    if hwnd != 0 && info(hwnd).is_some() {
-        u::system_dpi(&SYS)
-    } else {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        0
+    match (hwnd != 0).then(|| info(hwnd)).flatten() {
+        Some(i) => i.dpi_value,
+        None => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
     }
 }
 
@@ -1997,7 +2007,14 @@ pub unsafe extern "system" fn AdjustWindowRectEx(rect: *mut i32, style: u32, men
     // SAFETY: the caller's RECT.
     unsafe {
         let r = Rect::new(*rect, *rect.add(1), *rect.add(2), *rect.add(3));
-        put_rect(rect, metrics::adjust_window_rect(r, style, menu != 0, ex));
+        // At the caller's system DPI (AdjustWindowRectEx.yaml `at_200_units`, ADR 0231).
+        let dpi = u::system_dpi(&SYS);
+        let out = if dpi == 96 {
+            metrics::adjust_window_rect(r, style, menu != 0, ex)
+        } else {
+            metrics::adjust_window_rect_dpi(r, style, menu != 0, ex, dpi)
+        };
+        put_rect(rect, out);
     }
     1
 }
@@ -3046,6 +3063,10 @@ pub extern "system" fn SetCursor(cursor: H) -> H {
     prev
 }
 
+/// The window and cursor the compositor was told last ([`show_cursor_shape`]): a program that
+/// sets the same cursor at every mouse move tells it once.
+static CURSOR_SHOWN: SpinLock<(u32, u16)> = SpinLock::new((0, 0));
+
 /// Tell the compositor which system cursor to show over the window under
 /// the pointer (created cursors and NULL keep the previous look).
 fn show_cursor_shape(shape: H) {
@@ -3056,7 +3077,11 @@ fn show_cursor_shape(shape: H) {
         && let Reply::Handle { hwnd: root } = call(Request::Ancestor { hwnd: u64::from(hwnd), flags: 2 })
         && root != 0
     {
-        call(Request::CursorShape { hwnd: root, idc: CURSORS[i].0 });
+        let idc = CURSORS[i].0;
+        if CURSOR_SHOWN.with(|s| core::mem::replace(s, (root, idc)) == (root, idc)) {
+            return;
+        }
+        call(Request::CursorShape { hwnd: root, idc });
     }
 }
 
@@ -3288,6 +3313,15 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
                 wire::decode::<Reply>(&out[..(len as usize).min(out.len())])
         {
             return 0;
+        }
+        // The DPI awareness the executable's manifest declares (ADR 0231).
+        if s == 0 {
+            // SAFETY: NULL names the executable, mapped in this process.
+            let base = unsafe { GetModuleHandleW(core::ptr::null()) } as u64;
+            // SAFETY: the executable's base.
+            if let Some(m) = unsafe { poly_kernelbase::version::image_manifest(base) } {
+                display::manifest_awareness(&m);
+            }
         }
     }
     1

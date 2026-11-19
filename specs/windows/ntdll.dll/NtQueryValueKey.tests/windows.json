@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "ntreg_query_buf",
-      "exe_sha256": "3bdccc4ad8195d0aae433051f56f5caff6af3477cf3aec561b2541e1765680b2",
+      "exe_sha256": "9feed6a3e41ef06ec8a72f174135e7a8a216067a35f82b801902d91011bc92ed",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

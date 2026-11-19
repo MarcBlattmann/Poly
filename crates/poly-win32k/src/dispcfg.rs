@@ -70,6 +70,11 @@ fn put64(b: &mut [u8], at: usize, v: u64) {
     b[at..at + 8].copy_from_slice(&v.to_le_bytes());
 }
 
+/// A little-endian `u32` of a packet.
+pub fn get32_at(b: &[u8], at: usize) -> u32 {
+    get32(b, at)
+}
+
 fn get32(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
 }
@@ -235,6 +240,40 @@ pub fn source_device_name(source: u32) -> alloc::string::String {
     alloc::format!("\\\\.\\DISPLAY{}", source + 1)
 }
 
+/// The DPI-scale packets (not on Learn; DisplayConfigGetDeviceInfo.yaml `at_200_dpi_scale`,
+/// DisplayConfigSetDeviceInfo.yaml `packets`): get (-3, 32 bytes: minimum, current and maximum
+/// step after the header) and set (-4, 24 bytes: the step), for the source of the one path.
+pub const GET_DPI_SCALE: u32 = (-3i32) as u32;
+pub const SET_DPI_SCALE: u32 = (-4i32) as u32;
+
+fn dpi_scale_header_ok(packet: &[u8], kind: u32, size: usize) -> bool {
+    packet.len() == size
+        && get32(packet, 0) == kind
+        && get32(packet, 8) == ADAPTER_LOW
+        && get32(packet, 12) == ADAPTER_HIGH as u32
+        && get32(packet, 16) == SOURCE_ID
+}
+
+/// The get packet: the steps relative to the recommended scale (step 0), the current `step` and
+/// the largest one `max`.
+pub fn dpi_scale_get(packet: &mut [u8], step: u32, max: u32) -> i32 {
+    if !dpi_scale_header_ok(packet, GET_DPI_SCALE, 32) {
+        return ERROR_INVALID_PARAMETER;
+    }
+    put32(packet, 20, 0);
+    put32(packet, 24, step);
+    put32(packet, 28, max);
+    0
+}
+
+/// The step a set packet asks for.
+pub fn dpi_scale_set(packet: &[u8]) -> Result<i32, i32> {
+    if !dpi_scale_header_ok(packet, SET_DPI_SCALE, 24) {
+        return Err(ERROR_INVALID_PARAMETER);
+    }
+    Ok(get32(packet, 20) as i32)
+}
+
 /// `DisplayConfigGetDeviceInfo` on `packet` (the caller's whole packet, `packet.len()` the header's
 /// size field; `packet` holds at least the 20-byte header). The return value; fills `packet`.
 /// A size below the header is the caller's business (31 and the last error 87).
@@ -324,6 +363,19 @@ mod tests {
         put32(&mut p, 12, 0);
         put32(&mut p, 16, id);
         p
+    }
+
+    #[test]
+    fn the_dpi_scale_packets() {
+        let mut g = header(GET_DPI_SCALE, 32, SOURCE_ID);
+        assert_eq!(dpi_scale_get(&mut g, 4, 6), 0);
+        assert_eq!((get32(&g, 20), get32(&g, 24), get32(&g, 28)), (0, 4, 6));
+        assert_eq!(dpi_scale_get(&mut header(GET_DPI_SCALE, 28, SOURCE_ID), 4, 6), 87);
+        assert_eq!(dpi_scale_get(&mut header(GET_DPI_SCALE, 32, TARGET_ID), 4, 6), 87);
+        let mut set = header(SET_DPI_SCALE, 24, SOURCE_ID);
+        put32(&mut set, 20, 3);
+        assert_eq!(dpi_scale_set(&set), Ok(3));
+        assert_eq!(dpi_scale_set(&header(SET_DPI_SCALE, 32, SOURCE_ID)), Err(87));
     }
 
     /// GetDisplayConfigBufferSizes.yaml: one base flag with the optional ones; two modes per path,

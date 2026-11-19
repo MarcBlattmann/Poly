@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "swsx_errors",
-      "exe_sha256": "0fce0036ab96bd9941126f664ed3e89e6c1184e77b8908d44f40ce3b0f984560",
+      "exe_sha256": "5b44c9e710cf3d67f599eeb43c1e3cf91e8e389aceef76f0784b934b4f6651f9",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "swsx_flags",
-      "exe_sha256": "84936379234c092c62593a77e6dd8ee0031fd4aee356b78ad7a0ba42ae8d501d",
+      "exe_sha256": "534d469857f195519f3cb2f4b384811269832cd220dee45ff25a11b6c9905bd8",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
