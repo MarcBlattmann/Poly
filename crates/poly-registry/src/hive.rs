@@ -40,6 +40,28 @@
 //! its siblings; value names are unique ignoring case within a key; the
 //! tree is at most [`MAX_DEPTH`] deep. Anything else is
 //! `STATUS_REGISTRY_CORRUPT`.
+//!
+//! # Hive files of programs (`RegSaveKeyW`, `RegLoadKeyW`)
+//!
+//! The files programs save keys to and load hives from (`NtSaveKey`,
+//! `NtLoadKey`) wrap a Poly hive file in a container whose outside matches
+//! what the spec sheets observe of such files (`RegSaveKeyW.yaml` `file`,
+//! `RegUnLoadKeyW.yaml` `persist`): they start with the signature `regf`,
+//! their size is a multiple of 4096 and at least 8 KiB. The rest is Poly's
+//! own ([`encode_regf`]):
+//!
+//! ```text
+//! block 0 (4096 bytes)
+//!   0  [u8; 4]  "regf"
+//!   4  [u8; 8]  "POLYHIVE"
+//!  12  u32      size of the Poly hive file that follows
+//!  16  ...      zero
+//! from 4096: the Poly hive file ([`encode`]), then zeros up to a multiple of
+//! 4096 (and to at least 8192 bytes in all)
+//! ```
+//!
+//! A file that is not such a container (Windows' own hive files included,
+//! whose format is not public) is not a hive for Poly ([`decode_regf`]).
 
 use crate::consts::*;
 use crate::tree::{Value, fold};
@@ -227,4 +249,40 @@ pub fn decode(bytes: &[u8]) -> Result<HiveFile, NtStatus> {
     }
     let root = Reader { data: payload, pos: 0 }.key(0)?;
     Ok(HiveFile { sequence, root })
+}
+
+/// The signature a program's hive file starts with (`RegSaveKeyW.yaml` `file`).
+pub const REGF_SIGNATURE: [u8; 4] = *b"regf";
+/// The container's block size: its header block and the unit of its size.
+pub const REGF_BLOCK: usize = 4096;
+/// The smallest container: the header block and one block of content.
+pub const REGF_MIN_SIZE: usize = 2 * REGF_BLOCK;
+
+/// A program's hive file (see the module documentation): `file` in the
+/// `regf` container.
+pub fn encode_regf(file: &HiveFile) -> Vec<u8> {
+    wrap_regf(&encode(file))
+}
+
+/// A Poly hive file ([`encode`]'s bytes) in the `regf` container.
+pub fn wrap_regf(inner: &[u8]) -> Vec<u8> {
+    let mut out = alloc::vec![0u8; REGF_BLOCK];
+    out[..4].copy_from_slice(&REGF_SIGNATURE);
+    out[4..12].copy_from_slice(&MAGIC);
+    out[12..16].copy_from_slice(&(inner.len() as u32).to_le_bytes());
+    out.extend_from_slice(inner);
+    let size = out.len().div_ceil(REGF_BLOCK).max(REGF_MIN_SIZE / REGF_BLOCK) * REGF_BLOCK;
+    out.resize(size, 0);
+    out
+}
+
+/// Read a program's hive file: `STATUS_REGISTRY_CORRUPT` for anything that
+/// is not a well-formed container of a Poly hive file.
+pub fn decode_regf(bytes: &[u8]) -> Result<HiveFile, NtStatus> {
+    if bytes.len() < REGF_BLOCK || bytes[..4] != REGF_SIGNATURE || bytes[4..12] != MAGIC {
+        return Err(CORRUPT);
+    }
+    let size = u32::from_le_bytes(bytes[12..16].try_into().expect("4 bytes")) as usize;
+    let inner = REGF_BLOCK.checked_add(size).and_then(|end| bytes.get(REGF_BLOCK..end)).ok_or(CORRUPT)?;
+    decode(inner)
 }

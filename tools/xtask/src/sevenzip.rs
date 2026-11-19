@@ -939,7 +939,8 @@ fn boot_test_part(kernel: &Path, syms: &Arc<Symbols>, part: usize, parts: usize)
         if only.as_ref().is_some_and(|o| !o.iter().any(|n| n == step.name)) || index % parts != part {
             continue;
         }
-        let mut append = format!("poly.qemu_exit poly.init=/{DIR}/7za.exe");
+        // 7-Zip's outputs were recorded as the elevated administrator (ADR 0222: `admin`).
+        let mut append = format!("poly.qemu_exit poly.win.token=admin poly.init=/{DIR}/7za.exe");
         for a in step.args {
             append.push_str(" poly.init.arg=");
             append.push_str(a);

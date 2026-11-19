@@ -38,6 +38,7 @@ unsafe extern "system" {
     fn CloseHandle(h: isize) -> i32;
     fn GetLastError() -> u32;
     fn GetSystemDirectoryW(buf: *mut u16, size: u32) -> u32;
+    fn GetFileAttributesW(name: *const u16) -> u32;
 }
 
 /// The process heap (16-byte aligned) for `alloc`.
@@ -67,6 +68,8 @@ const SHARE_ALL: u32 = 7;
 const OPEN_EXISTING: u32 = 3;
 const INVALID_HANDLE_VALUE: isize = -1;
 const FILE_BEGIN: u32 = 0;
+/// `FILE_ATTRIBUTE_DIRECTORY` (`winnt.h`).
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 
 fn set_error(e: u32) {
     // SAFETY: a plain call.
@@ -79,12 +82,12 @@ fn set_error(e: u32) {
 /// would).
 unsafe fn version_of(name: *const u16) -> Result<Vec<u8>, u32> {
     if name.is_null() {
-        return Err(ERROR_INVALID_PARAMETER);
+        return Err(verinfo::ERROR_NOT_AN_IMAGE);
     }
     // SAFETY: the caller's string.
     let name = unsafe { poly_kernelbase::text::wide_at(name) };
     if name.is_empty() {
-        return Err(ERROR_INVALID_PARAMETER);
+        return Err(verinfo::ERROR_NOT_AN_IMAGE);
     }
     let mut path: Vec<u16> = name.to_vec();
     path.push(0);
@@ -106,8 +109,10 @@ unsafe fn version_of(name: *const u16) -> Result<Vec<u8>, u32> {
         }
     }
     if h == INVALID_HANDLE_VALUE {
-        // SAFETY: a plain call.
-        return Err(unsafe { GetLastError() });
+        // SAFETY: a plain call; `path` is NUL-terminated.
+        let (error, attributes) = unsafe { (GetLastError(), GetFileAttributesW(path.as_ptr())) };
+        let is_dir = attributes != u32::MAX && attributes & FILE_ATTRIBUTE_DIRECTORY != 0;
+        return Err(verinfo::open_error(error, is_dir));
     }
     let mut read = |at: u64, buf: &mut [u8]| -> Result<usize, u32> {
         let mut n = 0u32;

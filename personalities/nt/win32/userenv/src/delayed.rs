@@ -4,8 +4,4 @@
 //! failing call it copes with (the fault-injection table of the gap map). An implementation
 //! replaces a name here by defining it elsewhere in the crate and deleting it from the list.
 
-poly_win32_rt::fail_exports!(
-    "userenv",
-    win32,
-    [EnterCriticalPolicySection, LeaveCriticalPolicySection, CreateEnvironmentBlock, DestroyEnvironmentBlock]
-);
+poly_win32_rt::fail_exports!("userenv", win32, [EnterCriticalPolicySection, LeaveCriticalPolicySection]);

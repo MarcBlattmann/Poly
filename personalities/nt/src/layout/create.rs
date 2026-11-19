@@ -22,7 +22,7 @@
 //! [`OWN_COPY_MARKER`]) is left as it is.
 
 use super::{FOLDERS, User};
-use crate::io::consts::{FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
+use crate::io::consts::{FILE_ATTRIBUTE_ARCHIVE, FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
 use crate::io::info::{NT_XATTR, Stored};
 use crate::io::names::vfs_to_wide;
 use crate::io::walk::find_child;
@@ -125,6 +125,19 @@ fn set_hidden(vr: &VfsRoot, node: &NodeRef) {
     let _ = node.setxattr(&vr.cred, NT_XATTR, &stored.encode(), 0);
 }
 
+/// Give an installed system file `FILE_ATTRIBUTE_ARCHIVE`, as Windows' own system files have it
+/// (the sheets of spec-win-chrome-setup read `C:\Windows\System32\kernel32.dll` as 0x20, ADR
+/// 0227), unless NT attributes are stored already (a program may have changed them).
+fn mark_archive(vr: &VfsRoot, folder: &NodeRef, on_disk: &[u8]) {
+    let Ok(node) = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(folder), on_disk, true) else { return };
+    if node.getxattr(&vr.cred, NT_XATTR).is_ok() {
+        return;
+    }
+    let stored = Stored { attributes: FILE_ATTRIBUTE_ARCHIVE, creation: None };
+    // Best effort, as for `set_hidden`.
+    let _ = node.setxattr(&vr.cred, NT_XATTR, &stored.encode(), 0);
+}
+
 /// What [`install_file`] did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Installed {
@@ -157,6 +170,7 @@ pub fn install_file(vr: &VfsRoot, root: &NodeRef, dir: &str, name: &str, bytes: 
         match node.kind().map_err(status_of)? {
             FileType::Regular => {
                 if same_contents(vr, &folder, &on_disk, bytes)? {
+                    mark_archive(vr, &folder, &on_disk);
                     return Ok(Installed::Unchanged);
                 }
             }
@@ -174,6 +188,8 @@ pub fn install_file(vr: &VfsRoot, root: &NodeRef, dir: &str, name: &str, bytes: 
             n => done += n,
         }
     }
+    drop(file);
+    mark_archive(vr, &folder, &on_disk);
     Ok(Installed::Written)
 }
 

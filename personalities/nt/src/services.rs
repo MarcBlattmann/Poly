@@ -291,6 +291,15 @@ pub enum Service {
     /// `NtSetInformationKey(KeyHandle, KeySetInformationClass,
     /// KeySetInformation, Length)`.
     SetInformationKey,
+    /// `NtSaveKey(KeyHandle, FileHandle)` (Learn: "ZwSaveKey"; ADR 0227).
+    SaveKey,
+    /// `NtLoadKey(TargetKey*, SourceFile*)`: two `OBJECT_ATTRIBUTES`, the
+    /// key to make and the hive file (the documented `RegLoadKeyW`'s
+    /// arguments as native names; ADR 0227).
+    LoadKey,
+    /// `NtUnloadKey(TargetKey*)`: the `OBJECT_ATTRIBUTES` of a loaded hive's
+    /// root (`RegUnLoadKeyW`'s; ADR 0227).
+    UnloadKey,
 
     // ----- Poly
     /// `PolyTrace(a, b, c)`: logs three values on the kernel log (a test
@@ -322,6 +331,18 @@ pub enum Service {
     /// the service control manager and its reply (ADR 0221, [`crate::scm`]); `advapi32`'s service
     /// functions and `services.exe` are its callers.
     PolyServiceCall,
+    /// `PolyProcessList(Buffer, Length, ReturnLength*)`: the system's process list as records for
+    /// `kernelbase`'s tool help snapshot ([`crate::proclist`]).
+    PolyProcessList,
+    /// `NtNotifyChangeDirectoryFile(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock*,
+    /// Buffer, Length, CompletionFilter, WatchTree)` (Learn: "ZwNotifyChangeDirectoryFile";
+    /// [`crate::io::notify`]).
+    NotifyChangeDirectoryFile,
+    /// `PolyRequestElevation(Path, PathLength, Token*)`: the consent broker of User Account
+    /// Control (ADR 0222, [`crate::consent`]): asks the user whether the program at `Path` may run
+    /// elevated and waits; `STATUS_SUCCESS` with a full primary token for a yes, `STATUS_CANCELLED`
+    /// for a no.
+    PolyRequestElevation,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -485,7 +506,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 80] = [
+pub const SERVICES: [(Service, u32, &str); 81] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -566,11 +587,12 @@ pub const SERVICES: [(Service, u32, &str); 80] = [
     (Service::PolyRandomBytes, (TABLE_POLY << 12) | 3, "PolyRandomBytes"),
     (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
     (Service::PolyServiceCall, (TABLE_POLY << 12) | 5, "PolyServiceCall"),
+    (Service::PolyRequestElevation, (TABLE_POLY << 12) | 6, "PolyRequestElevation"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the
 /// groups grow independently; [`all`] chains every table.
-pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
+pub const REGISTRY_SERVICES: [(Service, u32, &str); 16] = [
     (Service::CreateKey, 0x100, "NtCreateKey"),
     (Service::OpenKey, 0x101, "NtOpenKey"),
     (Service::OpenKeyEx, 0x102, "NtOpenKeyEx"),
@@ -584,6 +606,9 @@ pub const REGISTRY_SERVICES: [(Service, u32, &str); 13] = [
     (Service::FlushKey, 0x10A, "NtFlushKey"),
     (Service::NotifyChangeKey, 0x10B, "NtNotifyChangeKey"),
     (Service::SetInformationKey, 0x10C, "NtSetInformationKey"),
+    (Service::SaveKey, 0x10D, "NtSaveKey"),
+    (Service::LoadKey, 0x10E, "NtLoadKey"),
+    (Service::UnloadKey, 0x10F, "NtUnloadKey"),
 ];
 
 /// The exception services (ADR 0068), in the processes and threads group.
@@ -676,6 +701,13 @@ pub const PROCESS_SUSPEND_SERVICES: [(Service, u32, &str); 2] =
 pub const PROCESSOR_SERVICES: [(Service, u32, &str); 1] =
     [(Service::GetCurrentProcessorNumber, 0x09A, "NtGetCurrentProcessorNumber")];
 
+/// The process list for the tool help snapshot and the change notification of directories
+/// (`ReadDirectoryChangesW`), in the Poly and file I/O groups.
+pub const FILES_AND_PROCESSES_SERVICES: [(Service, u32, &str); 2] = [
+    (Service::PolyProcessList, (TABLE_POLY << 12) | 0x10, "PolyProcessList"),
+    (Service::NotifyChangeDirectoryFile, 0x0E0, "NtNotifyChangeDirectoryFile"),
+];
+
 /// Every service Poly implements, from every table.
 pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
     SERVICES
@@ -693,6 +725,7 @@ pub fn all() -> impl Iterator<Item = &'static (Service, u32, &'static str)> {
         .chain(PROCESS_MEMORY_SERVICES.iter())
         .chain(PROCESS_SUSPEND_SERVICES.iter())
         .chain(PROCESSOR_SERVICES.iter())
+        .chain(FILES_AND_PROCESSES_SERVICES.iter())
 }
 
 impl Service {

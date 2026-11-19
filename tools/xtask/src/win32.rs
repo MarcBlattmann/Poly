@@ -122,6 +122,8 @@ pub const OUTPUTS: &[&str] = &[
     "msvcp140.dll",
     // ADR 0221.
     "services.exe",
+    // The Windows Firewall's COM objects.
+    "hnetcfg.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -356,6 +358,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/vcruntime140",
             "personalities/nt/win32/vcruntime140_1",
             "personalities/nt/win32/msvcp140",
+            "personalities/nt/win32/hnetcfg",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",
@@ -363,6 +366,10 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/src/services.rs",
             // win32u's stubs come from win32k's table (ADR 0128).
             "crates/poly-win32k/src/services.rs",
+            // The 32-bit fail stubs' argument sizes, compiled into the Win32 runtime by path
+            // (ADR 0222), not through a Cargo dependency.
+            "crates/poly-stubs/src/x86slots.rs",
+            "crates/poly-stubs/src/x86_signatures.txt",
             "rust-toolchain.toml",
         ],
     )?;

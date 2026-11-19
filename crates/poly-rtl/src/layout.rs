@@ -97,6 +97,9 @@ pub const TEB_POLY: u64 = 0x1840;
 /// TEB, far above [`TEB_POLY`]'s data. `kernelbase` writes it (`Wow64DisableWow64FsRedirection`),
 /// the NT personality reads it before it redirects a file name (ADR 0186, stage 2).
 pub const TEB_FS_REDIRECTION_OFF: u64 = 0x1FF0;
+/// Where a thread's locale (`SetThreadLocale`) lives in its TEB: a `u32`, zero in a new thread
+/// (the default locale, English (United States)). `kernelbase` reads and writes it.
+pub const TEB_THREAD_LOCALE: u64 = 0x1FE8;
 /// Bytes kept for `RTL_USER_PROCESS_PARAMETERS` before its strings.
 pub const PARAMETERS_SIZE: u64 = 0x400;
 /// Bytes of the `STARTUPINFO` fields copied into the parameters (`cb` .. `cbReserved2`).

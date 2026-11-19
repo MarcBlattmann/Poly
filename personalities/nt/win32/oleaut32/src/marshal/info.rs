@@ -189,9 +189,15 @@ fn user_kind(_t: *mut objects::TypeLib, lib: &Library, href: u32) -> UserKind {
             Some(ty) if ty.kind == TKIND_ALIAS => ty.alias.clone().map_or(UserKind::Other, UserKind::Alias),
             _ => UserKind::Other,
         },
+        Some(Href::Stdole(i)) => match i {
+            poly_com::typelib::stdole::T_IUNKNOWN => UserKind::Interface(IID_IUNKNOWN),
+            poly_com::typelib::stdole::T_IDISPATCH => UserKind::Interface(IID_IDISPATCH),
+            _ => UserKind::Other,
+        },
         Some(Href::Import(_)) => match lib.import_of(href) {
-            // Types of other libraries a method refers to are interfaces (stdole's IUnknown and
-            // IDispatch, or another library's interface).
+            // Types of other libraries a method refers to by GUID are interfaces (stdole's
+            // IUnknown and IDispatch, or another library's interface); by index, stdole's records.
+            Some(imp) if imp.type_index.is_some() => UserKind::Other,
             Some(imp) => UserKind::Interface(imp.type_guid),
             None => UserKind::Other,
         },

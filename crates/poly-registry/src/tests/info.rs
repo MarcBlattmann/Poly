@@ -96,8 +96,9 @@ fn value_classes() {
     assert_eq!(f.fixed, 20);
     let (kind, offset, len, name_len) =
         (u32_at(&f.bytes, 4), u32_at(&f.bytes, 8), u32_at(&f.bytes, 12), u32_at(&f.bytes, 16));
-    assert_eq!((kind, offset, len, name_len), (REG_BINARY, 26, 5, 6));
-    assert_eq!(&f.bytes[26..], &[1, 2, 3, 4, 5]);
+    // The data starts at the next multiple of 8 after the name (NtQueryValueKey.yaml `full`).
+    assert_eq!((kind, offset, len, name_len), (REG_BINARY, 32, 5, 6));
+    assert_eq!(&f.bytes[32..], &[1, 2, 3, 4, 5]);
 
     let fa = value_information(&v, KEY_VALUE_FULL_INFORMATION_ALIGN64).unwrap();
     assert_eq!(u32_at(&fa.bytes, 8), 32);
@@ -112,12 +113,32 @@ fn value_classes() {
     assert_eq!((pa.fixed, pa.bytes.len()), (8, 13));
     assert_eq!([u32_at(&pa.bytes, 0), u32_at(&pa.bytes, 4)], [REG_BINARY, 5]);
 
-    let l = value_information(&v, KEY_VALUE_LAYER_INFORMATION).unwrap();
-    assert_eq!(l.bytes, [0, 0, 0, 0]);
+    // KeyValueLayerInformation is refused (NtQueryValueKey.yaml `classes`).
+    assert_eq!(value_information(&v, KEY_VALUE_LAYER_INFORMATION).map(|_| ()), Err(STATUS_INVALID_PARAMETER));
 
     assert_eq!(value_information(&v, 6).map(|_| ()), Err(STATUS_INVALID_PARAMETER));
     assert!(value_class_needs_align64(KEY_VALUE_PARTIAL_INFORMATION_ALIGN64));
     assert!(!value_class_needs_align64(KEY_VALUE_PARTIAL_INFORMATION));
+}
+
+#[test]
+fn value_buffers_get_what_fits() {
+    // NtQueryValueKey.yaml `buffers`: REG_SZ 'abc' (8 bytes) as partial information needs 20;
+    // 15 bytes get the header and 3 data bytes, 12 the header only, 11 nothing.
+    let v = Value { name: wide("Text"), kind: REG_SZ, data: alloc::vec![b'a', 0, b'b', 0, b'c', 0, 0, 0] };
+    let p = value_information(&v, KEY_VALUE_PARTIAL_INFORMATION).unwrap();
+    let f = fit_value(&p, 15);
+    assert_eq!((f.status, f.write, f.result_length), (STATUS_BUFFER_OVERFLOW, &p.bytes[..15], 20));
+    assert_eq!(&f.write[12..], &[b'a', 0, b'b']);
+    assert_eq!(fit_value(&p, 12).write, &p.bytes[..12]);
+    assert_eq!((fit_value(&p, 11).status, fit_value(&p, 11).write.len()), (STATUS_BUFFER_TOO_SMALL, 0));
+    assert_eq!(fit_value(&p, 20).status, STATUS_SUCCESS);
+    // Basic information with 14 bytes: 2 bytes of the name.
+    let b = value_information(&v, KEY_VALUE_BASIC_INFORMATION).unwrap();
+    assert_eq!(fit_value(&b, 14).write, &b.bytes[..14]);
+    // Full information for 'Text': 40 bytes, the data at 32.
+    let full = value_information(&v, KEY_VALUE_FULL_INFORMATION).unwrap();
+    assert_eq!((full.bytes.len(), u32_at(&full.bytes, 8)), (40, 32));
 }
 
 #[test]

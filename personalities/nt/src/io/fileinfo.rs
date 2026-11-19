@@ -11,7 +11,7 @@
 use super::consts::*;
 use super::info::{self, HandleFacts, Stored};
 use super::names::{self, split_path};
-use super::{IoState, NodeKey, Target, status_of, walk};
+use super::{IoState, NodeKey, Target, notify, status_of, walk};
 use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::NtStatus;
@@ -134,6 +134,7 @@ impl IoState {
             Target::PipeDevice => Some((pipe_device(), Some(Vec::new()))),
             Target::Pipe(_) => Some((pipe_device(), None)),
             Target::Null => Some((wide(super::NULL_DEVICE), Some(Vec::new()))),
+            Target::Volume(v) => Some((self.volume_device_path(*v), Some(Vec::new()))),
             Target::Console(_) | Target::Host(_) | Target::Socket(_) => None,
         }
     }
@@ -144,6 +145,22 @@ impl IoState {
         let rec = self.files.get(&cookie).ok_or(STATUS_INVALID_HANDLE)?;
         let facts = match &rec.target {
             Target::Disk(d) => self.facts(&d.node)?,
+            // A volume device has a position and its handle's facts, no file information (the
+            // sheet: `GetFileSizeEx` fails with `ERROR_INVALID_FUNCTION`).
+            Target::Volume(_) => {
+                let handle =
+                    HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
+                let fixed = |bytes: Vec<u8>| {
+                    let n = bytes.len();
+                    InfoBytes { bytes, fixed: n }
+                };
+                return match class {
+                    FILE_ACCESS_INFORMATION => Ok(fixed(granted.to_le_bytes().to_vec())),
+                    FILE_POSITION_INFORMATION => Ok(fixed(rec.position.to_le_bytes().to_vec())),
+                    FILE_MODE_INFORMATION => Ok(fixed(handle.mode.to_le_bytes().to_vec())),
+                    _ => Err(STATUS_INVALID_DEVICE_REQUEST),
+                };
+            }
             Target::Pipe(key) => info::Facts {
                 size: self.pipe_buffered(key).unwrap_or(0) as u64,
                 links: 1,
@@ -241,6 +258,23 @@ impl IoState {
         if changed {
             self.set_stored(&node, stored);
         }
+        // Change notification (`super::notify`): what was set.
+        let mut mask = 0;
+        if b.attributes != 0 {
+            mask |= notify::CHANGE_ATTRIBUTES;
+        }
+        if mtime.is_some() {
+            mask |= notify::CHANGE_LAST_WRITE;
+        }
+        if atime.is_some() {
+            mask |= notify::CHANGE_LAST_ACCESS;
+        }
+        if b.creation != 0 && b.creation != -1 {
+            mask |= notify::CHANGE_CREATION;
+        }
+        if mask != 0 {
+            self.note_file_change(cookie, notify::Change::Modified { mask });
+        }
         Ok(())
     }
 
@@ -257,7 +291,12 @@ impl IoState {
         if allocation && size >= now {
             return Ok(());
         }
-        open.truncate(size).map_err(status_of)
+        open.truncate(size).map_err(status_of)?;
+        if size != now {
+            let mask = notify::CHANGE_SIZE | notify::CHANGE_LAST_WRITE;
+            self.note_file_change(cookie, notify::Change::Modified { mask });
+        }
+        Ok(())
     }
 
     /// `FileDispositionInformation`: mark the file to be deleted when its
@@ -316,13 +355,18 @@ impl IoState {
             .rename(&vr.ctx, &vr.cred, At::Node(&src_parent), &src_name, At::Node(&dst_parent), &new_bytes, flags)
             .map_err(status_of)?;
         let rec = self.files.get_mut(&cookie).expect("checked");
+        let directory = rec.kind == FileType::Directory;
         let d = rec.disk_mut().expect("disk");
         d.parent = Some(dst_parent.clone());
         d.name = new_bytes.clone();
-        d.path = new_path;
+        let (volume, old_path) = (d.volume, core::mem::replace(&mut d.path, new_path.clone()));
         if let Some(n) = self.nodes.get_mut(&key) {
             n.link = Some((dst_parent, new_bytes));
         }
+        // Change notification (`super::notify`): the old name, then the new one.
+        let old = notify::Change::Name { action: notify::FILE_ACTION_RENAMED_OLD_NAME, directory };
+        let new = notify::Change::Name { action: notify::FILE_ACTION_RENAMED_NEW_NAME, directory };
+        self.note_changes(volume, &[(&old_path, old), (&new_path, new)]);
         Ok(())
     }
 
@@ -536,8 +580,13 @@ impl IoState {
         if class == FILE_FS_DEVICE_INFORMATION {
             // A console is FILE_DEVICE_CONSOLE (GetFileType: FILE_TYPE_CHAR);
             // an inherited file is what its node is (ADR 0080).
+            if let Target::Volume(_) = rec.target {
+                let mut b = FILE_DEVICE_DISK.to_le_bytes().to_vec();
+                b.extend_from_slice(&super::volume::VOLUME_CHARACTERISTICS.to_le_bytes());
+                return Ok(fixed(b, 8));
+            }
             let kind = match &rec.target {
-                Target::Disk(_) => FILE_DEVICE_DISK,
+                Target::Disk(_) | Target::Volume(_) => FILE_DEVICE_DISK,
                 Target::Pipe(_) | Target::NamedPipe(_) | Target::PipeRoot | Target::PipeDevice => {
                     FILE_DEVICE_NAMED_PIPE
                 }

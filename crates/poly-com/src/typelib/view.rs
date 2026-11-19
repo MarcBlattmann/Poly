@@ -49,9 +49,63 @@ fn dispatch_base_funcs(ptr: usize) -> Vec<Func> {
     let mut out = Vec::new();
     for (i, f) in stdole::iunknown_funcs().into_iter().chain(stdole::idispatch_funcs()).enumerate() {
         let memid = if i < 3 { MEMID_IUNKNOWN + i as i32 } else { MEMID_IDISPATCH + (i as i32 - 3) };
-        out.push(Func { memid, funckind: FUNC_DISPATCH, ovft: (i * ptr) as i16, ..f });
+        // Folded like the type's own: `QueryInterface` returns void (format sheet section 9).
+        out.push(Func { memid, ovft: (i * ptr) as i16, ..fold(&f) });
     }
     out
+}
+
+/// The local dual interfaces type `t` derives from, the furthest first.
+fn dual_ancestors(lib: &Library, t: usize) -> Vec<usize> {
+    let mut chain = Vec::new();
+    let mut i = t;
+    for _ in 0..32 {
+        let Some(base) = lib.types.get(i).and_then(|ty| ty.impl_types.first()) else { break };
+        match Href::decode(base.href) {
+            Some(Href::Internal(j)) | Some(Href::DualInterface(j)) if j != i && lib.is_dual(j) => {
+                chain.push(j);
+                i = j;
+            }
+            _ => break,
+        }
+    }
+    chain.reverse();
+    chain
+}
+
+/// A type's own functions with vtable offsets: as laid out, or after `first` slots.
+fn own_funcs(ty: &TypeEntry, first: usize, ptr: usize) -> Vec<Func> {
+    let stored = ty.laid_out || ty.funcs.iter().any(|f| f.ovft != 0);
+    ty.funcs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let mut g = f.clone();
+            if !stored {
+                g.ovft = ((first + i) * ptr) as i16;
+            }
+            g
+        })
+        .collect()
+}
+
+/// The `cbSizeInstance` of a type (format sheet, type record word 20).
+fn size_instance(lib: &Library, ty: &TypeEntry, ptr: usize) -> u32 {
+    if ty.size_instance != 0 {
+        return ty.size_instance;
+    }
+    match ty.kind {
+        TKIND_INTERFACE | TKIND_DISPATCH | TKIND_COCLASS => ptr as u32,
+        TKIND_ENUM => 4,
+        TKIND_MODULE => 2,
+        TKIND_RECORD => record_size(&ty.vars, ptr),
+        TKIND_UNION => ty.vars.iter().map(|v| size_of_td(&v.td, ptr)).max().unwrap_or(0),
+        TKIND_ALIAS => ty.alias.as_ref().map_or(0, |a| size_of_td(a, ptr)),
+        _ => {
+            let _ = lib;
+            0
+        }
+    }
 }
 
 /// A function's dispatch form: `FUNC_DISPATCH`, and an `HRESULT` result with an `[out, retval]`
@@ -81,6 +135,7 @@ pub fn view(lib: &Library, t: usize, form: Form) -> Option<TypeView> {
     let ty = lib.types.get(t)?;
     let ptr = lib.ptr_size();
     let dual = lib.is_dual(t);
+    let idispatch = ImplType { href: Href::Stdole(stdole::T_IDISPATCH).encode(), flags: 0 };
     let mut v = TypeView {
         guid: ty.guid,
         kind: ty.kind,
@@ -88,7 +143,7 @@ pub fn view(lib: &Library, t: usize, form: Form) -> Option<TypeView> {
         major: ty.major,
         minor: ty.minor,
         cb_size_vft: 0,
-        cb_size_instance: 0,
+        cb_size_instance: size_instance(lib, ty, ptr),
         align: ty.align,
         funcs: ty.funcs.clone(),
         vars: ty.vars.clone(),
@@ -100,22 +155,36 @@ pub fn view(lib: &Library, t: usize, form: Form) -> Option<TypeView> {
         (Form::DualInterface, true) => {
             v.kind = TKIND_INTERFACE;
             v.flags = ty.flags | TYPEFLAG_FOLEAUTOMATION;
-            for (i, f) in v.funcs.iter_mut().enumerate() {
+            let inherited: usize = 7 + dual_ancestors(lib, t).iter().map(|&j| lib.types[j].funcs.len()).sum::<usize>();
+            v.funcs = own_funcs(ty, inherited, ptr);
+            for f in &mut v.funcs {
                 f.funckind = FUNC_PUREVIRTUAL;
-                f.ovft = ((7 + i) * ptr) as i16;
             }
-            v.cb_size_vft = ((7 + ty.funcs.len()) * ptr) as u16;
+            // A local dual base is reached in its interface form too.
+            for it in &mut v.impl_types {
+                if let Some(Href::Internal(j)) = Href::decode(it.href)
+                    && lib.is_dual(j)
+                {
+                    it.href = Href::DualInterface(j).encode();
+                }
+            }
+            v.cb_size_vft = ((inherited + ty.funcs.len()) * ptr) as u16;
         }
         (Form::Stored, true) => {
+            // Format sheet section 9: IUnknown's and IDispatch's methods, then the functions of
+            // every local dual base (the furthest first), then the type's own, all as dispatch
+            // functions; the implemented type reported is IDispatch.
             v.kind = TKIND_DISPATCH;
             v.flags = ty.flags & !TYPEFLAG_FOLEAUTOMATION;
             let mut funcs = dispatch_base_funcs(ptr);
-            for (i, f) in ty.funcs.iter().enumerate() {
-                let mut g = fold(f);
-                g.ovft = ((7 + i) * ptr) as i16;
-                funcs.push(g);
+            let mut first = 7;
+            for j in dual_ancestors(lib, t).into_iter().chain(core::iter::once(t)) {
+                let base = &lib.types[j];
+                funcs.extend(own_funcs(base, first, ptr).iter().map(fold));
+                first += base.funcs.len();
             }
             v.funcs = funcs;
+            v.impl_types = alloc::vec![idispatch];
             v.cb_size_vft = (7 * ptr) as u16;
         }
         (Form::Stored, false) => {
@@ -129,8 +198,15 @@ pub fn view(lib: &Library, t: usize, form: Form) -> Option<TypeView> {
                 TKIND_DISPATCH => (7 * ptr) as u16,
                 _ => 0,
             };
-            if ty.kind == TKIND_RECORD {
-                v.cb_size_instance = record_size(&ty.vars, ptr);
+            if ty.kind == TKIND_DISPATCH {
+                // A dispinterface's functions have no vtable (sheet `typeinfo_kinds`: offset 0).
+                for f in &mut v.funcs {
+                    f.ovft = 0;
+                }
+            }
+            if ty.kind == TKIND_DISPATCH && v.impl_types.is_empty() {
+                // A dispinterface reports IDispatch (format sheet, type record word 21).
+                v.impl_types = alloc::vec![idispatch];
             }
         }
     }
@@ -180,6 +256,7 @@ pub fn vtable_funcs(lib: &Library, t: usize) -> Option<Vec<Func>> {
 /// The names `ITypeInfo::GetNames` returns for a function: its name, then its parameters'.
 pub fn names_of(f: &Func) -> Vec<String> {
     let mut v = vec![f.name.clone()];
-    v.extend(f.params.iter().map(|p| p.name.clone()));
+    // Parameters without names report none (sheet `TypeLibFile.Functions`, rule `names`).
+    v.extend(f.params.iter().take_while(|p| !p.name.is_empty()).map(|p| p.name.clone()));
     v
 }

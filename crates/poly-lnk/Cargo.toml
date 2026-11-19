@@ -1,0 +1,17 @@
+[package]
+name = "poly-lnk"
+description = "Windows shell links (.lnk, MS-SHLLINK): the link data model of shell32's ShellLink object, SetPath's rules, writing what Save writes and reading any .lnk (the target in reading_a_link's order, the strings, the icon, the AppUserModel properties of MS-PROPSTORE); no_std with alloc, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-com = { path = "../poly-com" }
+
+[dev-dependencies]
+poly-kernelbase = { path = "../poly-kernelbase" }
+
+[lints]
+workspace = true

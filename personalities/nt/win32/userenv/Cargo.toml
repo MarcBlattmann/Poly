@@ -1,6 +1,6 @@
 [package]
 name = "userenv"
-description = "Our userenv.dll (ADR 0171, 0196): AppContainer profiles: the SID of a name, create and delete a profile, its folder"
+description = "Our userenv.dll (ADR 0171, 0196): AppContainer profiles (the SID of a name, create and delete a profile, its folder) and environment blocks"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,7 @@ poly-win32-cryptrt = { path = "../cryptrt" }
 poly-win32-rt = { path = "../rt" }
 poly-crypto = { path = "../../../../crates/poly-crypto" }
 poly-security = { path = "../../../../crates/poly-security" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 
 [lints]
 workspace = true

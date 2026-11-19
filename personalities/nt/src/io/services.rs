@@ -52,6 +52,9 @@ pub type Result<T> = core::result::Result<T, NtStatus>;
 
 /// A synchronous transfer moves through the kernel in pieces this big.
 const CHUNK: usize = 64 * 1024;
+/// The change-notification filter bits a write to a file covers ([`super::notify`]).
+const WRITTEN: u32 = super::notify::CHANGE_LAST_WRITE | super::notify::CHANGE_SIZE;
+
 /// The most an asynchronous or pipe write copies in at once.
 pub const MAX_CAPTURED_WRITE: usize = 16 << 20;
 
@@ -273,6 +276,10 @@ pub fn check_create(desired: u32, share: u32, disposition: u32, options: u32, at
         access = (access & !MAXIMUM_ALLOWED) | FILE_ALL_ACCESS;
     }
     let sync = options & (FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT);
+    // A synchronous open asks for `SYNCHRONIZE` itself: `MAXIMUM_ALLOWED` does not stand in for it
+    // (the sheet of `OpenVolume`: `\??\C:` with `MAXIMUM_ALLOWED` alone is
+    // `STATUS_INVALID_PARAMETER`).
+    let asked_sync = ObjectType::File.generic_mapping().map(desired & !MAXIMUM_ALLOWED) & SYNCHRONIZE != 0;
     let bad = disposition > FILE_MAXIMUM_DISPOSITION
         || options & !FILE_VALID_OPTION_FLAGS != 0
         || share & !FILE_SHARE_VALID_FLAGS != 0
@@ -280,7 +287,7 @@ pub fn check_create(desired: u32, share: u32, disposition: u32, options: u32, at
         || options & FILE_DIRECTORY_FILE != 0 && options & FILE_NON_DIRECTORY_FILE != 0
         || options & FILE_DIRECTORY_FILE != 0 && !matches!(disposition, FILE_CREATE | FILE_OPEN | FILE_OPEN_IF)
         || sync == FILE_SYNCHRONOUS_IO_ALERT | FILE_SYNCHRONOUS_IO_NONALERT
-        || sync != 0 && access & SYNCHRONIZE == 0
+        || sync != 0 && !asked_sync
         || options & FILE_DELETE_ON_CLOSE != 0 && access & DELETE == 0
         || options & FILE_OPEN_BY_FILE_ID != 0;
     if bad {
@@ -385,6 +392,32 @@ pub(crate) fn with_named<K: NtKernel, R>(
     f: impl FnOnce(&mut NtSystem, u64) -> Result<R>,
 ) -> Result<R> {
     let caller = k.caller();
+    with_named_as(k, caller, attrs, desired, options, f)
+}
+
+/// [`with_named`] for the attribute queries (`NtQueryAttributesFile`,
+/// `NtQueryFullAttributesFile`): the file's own descriptor is not asked. Windows answers them from
+/// the directory (Learn, "File Security and Access Rights": what lists a directory reads its
+/// files' attributes); the sheet of `SystemTemp` saw `GetFileAttributesW` answer for a directory
+/// the filtered token cannot open.
+fn with_named_attributes<K: NtKernel, R>(
+    k: &mut K,
+    attrs: &Attributes,
+    f: impl FnOnce(&mut NtSystem, u64) -> Result<R>,
+) -> Result<R> {
+    let mut caller = k.caller();
+    caller.mode = poly_ntobj::Mode::Kernel;
+    with_named_as(k, caller, attrs, FILE_READ_ATTRIBUTES, 0, f)
+}
+
+fn with_named_as<K: NtKernel, R>(
+    k: &mut K,
+    caller: Caller,
+    attrs: &Attributes,
+    desired: u32,
+    options: u32,
+    f: impl FnOnce(&mut NtSystem, u64) -> Result<R>,
+) -> Result<R> {
     let all = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
     let params = check_create(desired, all, FILE_OPEN, options, 0)?;
     k.with_state(|sys, _, b| {
@@ -410,7 +443,7 @@ pub fn delete_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
 pub fn query_attributes_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [attrs, out] = abi::args::<K, 2>(k, regs)?;
     let attrs = abi::read_attributes(k, attrs)?;
-    let bytes = with_named(k, &attrs, FILE_READ_ATTRIBUTES, 0, |sys, cookie| {
+    let bytes = with_named_attributes(k, &attrs, |sys, cookie| {
         sys.io.query_info(cookie, FILE_BASIC_INFORMATION, FILE_READ_ATTRIBUTES)
     })?;
     abi::write(k, out, &bytes.bytes)?;
@@ -422,7 +455,7 @@ pub fn query_attributes_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
 pub fn query_full_attributes_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [attrs, out] = abi::args::<K, 2>(k, regs)?;
     let attrs = abi::read_attributes(k, attrs)?;
-    let bytes = with_named(k, &attrs, FILE_READ_ATTRIBUTES, 0, |sys, cookie| {
+    let bytes = with_named_attributes(k, &attrs, |sys, cookie| {
         sys.io.query_info(cookie, FILE_NETWORK_OPEN_INFORMATION, FILE_READ_ATTRIBUTES)
     })?;
     abi::write(k, out, &bytes.bytes)?;
@@ -433,6 +466,8 @@ pub fn query_full_attributes_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) ->
 
 /// What a read or write turned into.
 enum Plan {
+    /// The bytes of a read of a volume device, and the position after them.
+    Volume { data: Vec<u8>, file: (ObjectId, u64), end: u64 },
     /// A synchronous transfer on a volume, done by the caller now.
     Inline { open: Arc<OpenFile>, offset: u64, file: (ObjectId, u64), append: bool },
     /// A request that has completed (its completion is queued).
@@ -490,6 +525,17 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             // Sockets are read before this (`afd::services::read_file`).
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // A volume device ([`super::volume`]): whole sectors at the offset or the position.
+            Target::Volume(v) => {
+                let at = match offset {
+                    Some(o) if o >= 0 => o as u64,
+                    Some(FILE_USE_FILE_POINTER_POSITION) | None if sync => rec.position,
+                    _ => return Err(STATUS_INVALID_PARAMETER),
+                };
+                let data = super::volume::read(&sys.io.volume_facts(*v), at, len)?;
+                let end = at + data.len() as u64;
+                Ok(Plan::Volume { data, file, end })
+            }
             // The null device: always at the end of the file.
             Target::Null => {
                 let status = if len == 0 { STATUS_SUCCESS } else { STATUS_END_OF_FILE };
@@ -575,6 +621,20 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             write_iosb(k, iosb, status, total as u64)?;
             Ok(status)
         }
+        Plan::Volume { data, file, end } => {
+            if !data.is_empty() {
+                abi::write(k, buf, &data)?;
+            }
+            let status = if data.is_empty() && len > 0 { STATUS_END_OF_FILE } else { STATUS_SUCCESS };
+            k.with_state(|sys, _, _| {
+                if let Some(rec) = sys.io.file_mut(file.1) {
+                    rec.position = end;
+                }
+                n.signal_done(sys, &caller, file, status, data.len() as u64);
+            });
+            write_iosb(k, iosb, status, data.len() as u64)?;
+            Ok(status)
+        }
         Plan::Done(status) => Ok(status),
         Plan::Answered(status, info) => {
             write_iosb(k, iosb, status, info)?;
@@ -624,6 +684,8 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         let rec = sys.io.file(file.1).expect("checked");
         let sync = rec.is_sync();
         match &rec.target {
+            // Poly never writes to the volume device (the sheet did not either).
+            Target::Volume(_) => Err(STATUS_ACCESS_DENIED),
             Target::Pipe(name) => {
                 let name = name.clone();
                 let data = captured.unwrap_or_default();
@@ -695,6 +757,9 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                     return Ok(Plan::Inline { open, offset: start, file, append: at.is_none() });
                 }
                 let data = captured.unwrap_or_default();
+                if !data.is_empty() {
+                    sys.io.note_file_change(file.1, super::notify::Change::Modified { mask: WRITTEN });
+                }
                 let irp = n.irp(sys, &caller, file, false, IrpOp::Write { offset: at, data, key })?;
                 let id = sys.io.queue(irp, volume);
                 Ok(Plan::Pending { irp: id, file: file.0, sync: false })
@@ -702,6 +767,7 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
         }
     })?;
     match plan {
+        Plan::Volume { .. } => Ok(STATUS_ACCESS_DENIED),
         Plan::Inline { open, offset, file, append } => {
             let mut chunk = alloc::vec![0u8; len.min(CHUNK)];
             let mut total = 0usize;
@@ -719,6 +785,9 @@ pub fn write_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             k.with_state(|sys, _, _| {
                 if let Some(rec) = sys.io.file_mut(file.1) {
                     rec.position = end;
+                }
+                if total > 0 {
+                    sys.io.note_file_change(file.1, super::notify::Change::Modified { mask: WRITTEN });
                 }
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, total as u64);
             });
