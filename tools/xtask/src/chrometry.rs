@@ -189,11 +189,14 @@ pub fn parts(fresh_disk: bool) -> Result<Parts> {
 // ---- the boot check -------------------------------------------------------------
 
 /// The steps of stage 3 (`chromewin::S3_STEPS`) with a screenshot after each key step, so a failed
-/// check shows where the typed address went.
+/// check shows where the typed address went. Then Chrome's app menu (Alt+F): the blue page left of
+/// the menu, seen through the menu window's soft shadow, must still be blue (a popup composed
+/// without its alpha showed a black frame there, ADR 0225).
 const TRY_STEPS: &str = concat!(
     "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
     "chord:ctrl+l,sleep:2,shot:address-focused,type:data:text/html,<body bgcolor=blue>,",
-    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff"
+    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff,",
+    "chord:alt+f,sleep:8,shot:menu,near:496|300|0000ff|64"
 );
 
 /// The window check of what the menu boots: the same disk and entry as `desktop --chrome-win`
@@ -317,6 +320,12 @@ mod tests {
         // The window check's page is one argument too.
         let app = entry(&[crate::chromewin::S3_PAGE]);
         assert_eq!(app.argv.last().unwrap(), crate::chromewin::S3_PAGE);
+    }
+
+    #[test]
+    fn the_try_steps_parse_and_end_with_the_menu_check() {
+        assert!(crate::winapps::steps_parse(TRY_STEPS));
+        assert!(TRY_STEPS.ends_with("chord:alt+f,sleep:8,shot:menu,near:496|300|0000ff|64"));
     }
 
     #[test]

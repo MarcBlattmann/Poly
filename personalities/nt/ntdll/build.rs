@@ -87,6 +87,8 @@ fn main() {
     println!("cargo:rustc-link-arg=/EXPORT:PolyPhysicalMemory");
     // And the service control manager's message call, for advapi32 and services.exe (ADR 0221).
     println!("cargo:rustc-link-arg=/EXPORT:PolyServiceCall");
+    // And the process list, for kernelbase's tool help snapshot.
+    println!("cargo:rustc-link-arg=/EXPORT:PolyProcessList");
     println!("cargo:rustc-link-arg=/EXPORT:PolyRequestElevation");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.

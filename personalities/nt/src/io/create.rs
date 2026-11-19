@@ -484,6 +484,21 @@ impl CreateHook<'_> {
         if let Some(parent) = &found.parent {
             state.link = Some((parent.clone(), found.name.clone()));
         }
+        // Change notification (`super::notify`): a new name, or new data for an old one.
+        let change = match info {
+            _ if stream.is_some() => None,
+            FILE_CREATED => Some(super::notify::Change::Name {
+                action: super::notify::FILE_ACTION_ADDED,
+                directory: kind == FileType::Directory,
+            }),
+            FILE_SUPERSEDED | FILE_OVERWRITTEN => Some(super::notify::Change::Modified {
+                mask: super::notify::CHANGE_LAST_WRITE | super::notify::CHANGE_SIZE,
+            }),
+            _ => None,
+        };
+        if let Some(change) = change {
+            self.io.note_change(volume, &found.path, change);
+        }
         let disk =
             DiskFile { volume, node, key, open, path: found.path, parent: found.parent, name: found.name, stream };
         let rec = self.record(object, Target::Disk(disk), kind);

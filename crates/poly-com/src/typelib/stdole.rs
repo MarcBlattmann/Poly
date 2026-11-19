@@ -37,7 +37,7 @@ fn udt(t: usize) -> TypeDesc {
 }
 
 fn p(name: &str, td: TypeDesc, flags: u16) -> Param {
-    Param { td, flags, name: String::from(name) }
+    Param { td, flags, name: String::from(name), ..Param::default() }
 }
 
 fn f(memid: i32, name: &str, params: Vec<Param>, ret: TypeDesc) -> Func {
@@ -56,6 +56,7 @@ fn f(memid: i32, name: &str, params: Vec<Param>, ret: TypeDesc) -> Func {
         doc: String::new(),
         help_context: 0,
         named: true,
+        ..Func::default()
     }
 }
 
@@ -116,19 +117,23 @@ fn idispatch_raw(guid_ref: TypeDesc, dp_ref: TypeDesc, ei_ref: TypeDesc) -> Vec<
     ]
 }
 
-/// `IUnknown`'s methods as another library's dual interface lists them (no references into
-/// `stdole`: its `GUID` reads as `void`).
-pub fn iunknown_funcs() -> Vec<Func> {
-    iunknown_raw(b(VT_VOID))
+fn sref(t: usize) -> TypeDesc {
+    TypeDesc::UserDefined(Href::Stdole(t).encode())
 }
 
-/// `IDispatch`'s methods likewise.
+/// `IUnknown`'s methods as another library's dual interface lists them (`GUID` referred to in
+/// `stdole`; format sheet section 9).
+pub fn iunknown_funcs() -> Vec<Func> {
+    iunknown_raw(sref(T_GUID))
+}
+
+/// `IDispatch`'s methods likewise (`GUID`, `DISPPARAMS`, `EXCEPINFO` in `stdole`).
 pub fn idispatch_funcs() -> Vec<Func> {
-    idispatch_raw(b(VT_VOID), b(VT_VOID), b(VT_VOID))
+    idispatch_raw(sref(T_GUID), sref(T_DISPPARAMS), sref(T_EXCEPINFO))
 }
 
 fn var(name: &str, td: TypeDesc, offset: i64) -> Var {
-    Var { memid: MEMBERID_NIL, name: String::from(name), td, flags: 0, varkind: 0, value: offset }
+    Var { memid: MEMBERID_NIL, name: String::from(name), td, flags: 0, varkind: 0, value: offset, ..Var::default() }
 }
 
 fn record(lib: &mut Library, name: &str, vars: Vec<Var>) {

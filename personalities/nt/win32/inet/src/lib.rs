@@ -20,6 +20,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_http::consts::*;
+use poly_http::options::Options;
 use poly_http::query::{self, Answer};
 use poly_http::request;
 use poly_http::response::{Head, Parser};
@@ -89,15 +90,29 @@ pub struct Session {
     pub agent: Option<String>,
     /// Receive timeout in milliseconds (0: none).
     pub timeout_ms: u32,
+    /// The WinHTTP options and status callback (`poly_http::options`); a
+    /// connection and a request start with a copy.
+    pub options: Options,
 }
 
 /// A connection to a server (`WinHttpConnect`, `InternetConnectW`): only
 /// its name; the socket belongs to each request.
 #[derive(Debug, Clone)]
 pub struct Connect {
+    /// The session as it was when the connection was made: its requests
+    /// start from it.
     pub session: Session,
     pub host: String,
     pub port: u16,
+    /// The connection's own options (its callback, its context value).
+    pub own: Options,
+}
+
+impl Connect {
+    pub fn new(session: Session, host: String, port: u16) -> Connect {
+        let own = session.options.clone();
+        Connect { session, host, port, own }
+    }
 }
 
 /// A request.

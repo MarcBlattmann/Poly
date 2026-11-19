@@ -11,7 +11,7 @@
 use super::consts::*;
 use super::info::{self, HandleFacts, Stored};
 use super::names::{self, split_path};
-use super::{IoState, NodeKey, Target, status_of, walk};
+use super::{IoState, NodeKey, Target, notify, status_of, walk};
 use alloc::vec::Vec;
 use core::result::Result;
 use poly_ntobj::NtStatus;
@@ -258,6 +258,23 @@ impl IoState {
         if changed {
             self.set_stored(&node, stored);
         }
+        // Change notification (`super::notify`): what was set.
+        let mut mask = 0;
+        if b.attributes != 0 {
+            mask |= notify::CHANGE_ATTRIBUTES;
+        }
+        if mtime.is_some() {
+            mask |= notify::CHANGE_LAST_WRITE;
+        }
+        if atime.is_some() {
+            mask |= notify::CHANGE_LAST_ACCESS;
+        }
+        if b.creation != 0 && b.creation != -1 {
+            mask |= notify::CHANGE_CREATION;
+        }
+        if mask != 0 {
+            self.note_file_change(cookie, notify::Change::Modified { mask });
+        }
         Ok(())
     }
 
@@ -274,7 +291,12 @@ impl IoState {
         if allocation && size >= now {
             return Ok(());
         }
-        open.truncate(size).map_err(status_of)
+        open.truncate(size).map_err(status_of)?;
+        if size != now {
+            let mask = notify::CHANGE_SIZE | notify::CHANGE_LAST_WRITE;
+            self.note_file_change(cookie, notify::Change::Modified { mask });
+        }
+        Ok(())
     }
 
     /// `FileDispositionInformation`: mark the file to be deleted when its
@@ -333,13 +355,18 @@ impl IoState {
             .rename(&vr.ctx, &vr.cred, At::Node(&src_parent), &src_name, At::Node(&dst_parent), &new_bytes, flags)
             .map_err(status_of)?;
         let rec = self.files.get_mut(&cookie).expect("checked");
+        let directory = rec.kind == FileType::Directory;
         let d = rec.disk_mut().expect("disk");
         d.parent = Some(dst_parent.clone());
         d.name = new_bytes.clone();
-        d.path = new_path;
+        let (volume, old_path) = (d.volume, core::mem::replace(&mut d.path, new_path.clone()));
         if let Some(n) = self.nodes.get_mut(&key) {
             n.link = Some((dst_parent, new_bytes));
         }
+        // Change notification (`super::notify`): the old name, then the new one.
+        let old = notify::Change::Name { action: notify::FILE_ACTION_RENAMED_OLD_NAME, directory };
+        let new = notify::Change::Name { action: notify::FILE_ACTION_RENAMED_NEW_NAME, directory };
+        self.note_changes(volume, &[(&old_path, old), (&new_path, new)]);
         Ok(())
     }
 

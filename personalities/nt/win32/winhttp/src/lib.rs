@@ -15,6 +15,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use poly_http::consts::*;
 use poly_http::date::{self, DateTime};
+use poly_http::options::{self, Kind, Options};
 use poly_http::request;
 use poly_win32_inet::{self as inet, Connect, Handle, Object, Request, Session, fail};
 use poly_win32_rt as _;
@@ -50,7 +51,7 @@ pub unsafe extern "system" fn WinHttpOpen(
     }
     // SAFETY: the caller's string.
     let agent = unsafe { inet::wstr(agent) };
-    inet::new_handle(Object::Session(Session { agent, timeout_ms: 0 }))
+    inet::new_handle(Object::Session(Session { agent, ..Session::default() }))
 }
 
 /// `WinHttpConnect`: the server's name and port (`INTERNET_DEFAULT_PORT`:
@@ -65,7 +66,7 @@ pub unsafe extern "system" fn WinHttpConnect(session: Handle, server: *const u16
     let port = if port == INTERNET_DEFAULT_PORT { INTERNET_DEFAULT_HTTP_PORT } else { port };
     ret_handle(inet::with_object(session, |o| {
         let s = inet::session_of(o)?.clone();
-        Ok(inet::new_handle(Object::Connect(Connect { session: s, host, port })))
+        Ok(inet::new_handle(Object::Connect(Connect::new(s, host, port))))
     }))
 }
 
@@ -244,13 +245,135 @@ pub extern "system" fn WinHttpSetTimeouts(h: Handle, resolve: i32, connect: i32,
     }
     let ms = if receive <= 0 { 0 } else { receive as u32 };
     ret(inet::with_object(h, |o| {
-        match o {
-            Object::Session(s) => s.timeout_ms = ms,
-            Object::Request(r) => r.session.timeout_ms = ms,
+        let s = match o {
+            Object::Session(s) => s,
+            Object::Request(r) => &mut r.session,
             Object::Connect(_) => return Err(ERROR_INCORRECT_HANDLE_TYPE),
+        };
+        s.timeout_ms = ms;
+        for (option, t) in [
+            (options::OPTION_RESOLVE_TIMEOUT, resolve),
+            (options::OPTION_CONNECT_TIMEOUT, connect),
+            (options::OPTION_SEND_TIMEOUT, send),
+            (options::OPTION_RECEIVE_TIMEOUT, receive),
+        ] {
+            let _ = s.options.set(Kind::Session, option, Some(&(t as u32).to_le_bytes()), 4);
         }
         Ok(())
     }))
+}
+
+/// The kind of a handle's object and the options it reads and writes: a
+/// session's and a request's own, a connection's own (its requests start
+/// from the session's).
+fn options_of(o: &mut Object) -> (Kind, &mut Session, Option<&mut Options>) {
+    match o {
+        Object::Session(s) => (Kind::Session, s, None),
+        Object::Connect(c) => (Kind::Connect, &mut c.session, Some(&mut c.own)),
+        Object::Request(r) => (Kind::Request, &mut r.session, None),
+    }
+}
+
+/// Run `f` on the handle's kind, options and (for a request) URL. A NULL
+/// handle is `ERROR_WINHTTP_INCORRECT_HANDLE_TYPE` (the sheets of
+/// `WinHttpSetOption` and `WinHttpSetStatusCallback`).
+fn with_options<R>(
+    h: Handle,
+    f: impl FnOnce(Kind, &mut Session, &mut Options, Option<String>) -> Result<R, u32>,
+) -> Result<R, u32> {
+    if h == 0 {
+        return Err(ERROR_INCORRECT_HANDLE_TYPE);
+    }
+    inet::with_object(h, |o| {
+        let url = match o {
+            Object::Request(r) => Some(request_url(r)),
+            _ => None,
+        };
+        let (kind, session, own) = options_of(o);
+        match own {
+            Some(own) => f(kind, session, own, url),
+            None => {
+                let mut opts = core::mem::take(&mut session.options);
+                let r = f(kind, session, &mut opts, url);
+                session.options = opts;
+                r
+            }
+        }
+    })
+}
+
+/// A request's URL as `WINHTTP_OPTION_URL` reads it: the scheme, the
+/// server, the port when it is not the scheme's, the object.
+fn request_url(r: &inet::Request) -> String {
+    let (scheme, default) =
+        if r.secure { ("https", INTERNET_DEFAULT_HTTPS_PORT) } else { ("http", INTERNET_DEFAULT_HTTP_PORT) };
+    if r.port == default {
+        alloc::format!("{scheme}://{}{}", r.host, r.path)
+    } else {
+        alloc::format!("{scheme}://{}:{}{}", r.host, r.port, r.path)
+    }
+}
+
+/// `WinHttpSetOption` (`poly_http::options`): the option's value from the
+/// caller's `len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpSetOption(h: Handle, option: u32, buf: *const u8, len: u32) -> i32 {
+    // Every option Poly keeps is at most 8 bytes; the length is checked
+    // against the option's size before the value is used.
+    let bytes = if buf.is_null() {
+        None
+    } else {
+        // SAFETY: the caller's buffer of `len` bytes; at most 8 are read.
+        Some(unsafe { core::slice::from_raw_parts(buf, (len as usize).min(8)) })
+    };
+    ret(with_options(h, |kind, session, opts, _| {
+        opts.set(kind, option, bytes, len)?;
+        if option == options::OPTION_RECEIVE_TIMEOUT {
+            session.timeout_ms = opts.get(option).unwrap_or(0) as u32;
+        }
+        Ok(())
+    }))
+}
+
+/// `WinHttpQueryOption`: the value into the caller's buffer; a buffer too
+/// small (or none) is `ERROR_INSUFFICIENT_BUFFER` with the size needed in
+/// `*len`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn WinHttpQueryOption(h: Handle, option: u32, buf: *mut u8, len: *mut u32) -> i32 {
+    if len.is_null() {
+        return fail(ERROR_INVALID_PARAMETER);
+    }
+    ret(with_options(h, |kind, _, opts, url| {
+        let answer = opts.query(kind, option, url.as_deref())?;
+        // SAFETY: the caller's length.
+        let room = unsafe { len.read_unaligned() } as usize;
+        if buf.is_null() || room < answer.bytes.len() {
+            // SAFETY: as above.
+            unsafe { len.write_unaligned(answer.bytes.len() as u32) };
+            return Err(ERROR_INSUFFICIENT_BUFFER);
+        }
+        // SAFETY: the caller's buffer of `room >= answer.bytes.len()` bytes and its length.
+        unsafe {
+            core::ptr::copy_nonoverlapping(answer.bytes.as_ptr(), buf, answer.bytes.len());
+            len.write_unaligned(answer.length);
+        }
+        Ok(())
+    }))
+}
+
+/// `WinHttpSetStatusCallback`: the previous callback, or
+/// `WINHTTP_INVALID_STATUS_CALLBACK` with the error. Poly's handles are
+/// synchronous and report no notifications yet; the callback is kept so
+/// that it reads back (`WINHTTP_OPTION_CALLBACK`) and children inherit it.
+#[unsafe(no_mangle)]
+pub extern "system" fn WinHttpSetStatusCallback(h: Handle, callback: usize, flags: u32, reserved: usize) -> usize {
+    match with_options(h, |_, _, opts, _| opts.set_callback(callback as u64, flags, reserved as u64)) {
+        Ok(previous) => previous as usize,
+        Err(e) => {
+            fail(e);
+            options::INVALID_STATUS_CALLBACK as usize
+        }
+    }
 }
 
 /// `WinHttpCloseHandle`.

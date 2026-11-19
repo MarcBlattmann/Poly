@@ -701,12 +701,15 @@ pub extern "system" fn shell32_main(_module: *mut u8, _reason: u32, _reserved: *
     1
 }
 
+mod assoc;
 mod com;
 mod delayed;
+mod dispatch;
 mod exec;
 mod fileop;
 mod folder;
 mod item;
+mod link;
 mod taskbar;
 
 #[cfg(target_arch = "x86_64")]

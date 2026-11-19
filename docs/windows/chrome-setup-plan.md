@@ -173,3 +173,19 @@ SeImpersonatePrivilege (1314 without) and does **not** inherit environment, curr
 - **Default browser**: `SHCreateAssociationRegistration` sheets show Windows' API reads `Capabilities`/`RegisteredApplications`
   only for queries; `SetAppAsDefault` fails (`E_FAIL`) and `QueryAppIsDefault` answers TRUE, so Poly's Settings must keep
   its own default-browser state and read the `ChromeHTML`/`URLAssociations` registrations to offer "Google Chrome".
+
+## 6. What B4 gives B5 (impl-chrome-installer, ADR 0227)
+
+- **Reading links:** the host-tested crate `poly-lnk` is the `.lnk` format of both sides (shell32's
+  `IPersistFile::Save` writes with it). `poly_lnk::parse(&bytes)` gives a `Link` with `target()` (LinkInfo base
+  path, else the ID list, else the environment block, which may hold `%VAR%`), `arguments()`, `working_dir()`,
+  `description`, `icon()` (path and index; the IconEnvironmentDataBlock wins), `show_command()` (1, 3 or 7),
+  `app_user_model_id()` and `toast_activator_clsid()`; strings are UTF-16 without a NUL, and
+  `poly_lnk::text::expand_env` expands `%VAR%`. An empty file is an empty link; a bad header is `Error::NotALink`.
+- **Where the links are:** the known folders of `KnownFolders.Common` exist as real directories in Poly's layout;
+  Chrome's links land in `C:\ProgramData\Microsoft\Windows\Start Menu\Programs` and `C:\Users\Public\Desktop`.
+- **Uninstall entries** are plain registry keys (nothing new in B4); the hive functions Chrome's uninstall needs
+  (`RegLoadKeyW`, `RegUnLoadKeyW`, `RegSaveKeyW`) are Poly's own hive container (ADR 0227, part 4).
+- **Not done in B4:** Poly does not carry out `PendingFileRenameOperations` at the next boot (the request is
+  recorded); `ShellWindows`' `ShellExecute` starts the program as the caller's child, not with the desktop user's
+  token; Active Setup has no runner yet.

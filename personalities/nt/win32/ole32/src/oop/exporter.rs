@@ -35,7 +35,8 @@ static STATE: AtomicU32 = AtomicU32::new(0);
 static OXID: AtomicU64 = AtomicU64::new(0);
 static ENDPOINT: Locked<Option<String>> = Locked::new(None);
 
-/// The pipe name of this process's exporter; the listener starts on first use.
+/// The pipe name of this process's exporter; the listener starts on first use, and the pipe exists
+/// when this returns.
 pub(crate) fn endpoint() -> String {
     loop {
         match STATE.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire) {
@@ -47,9 +48,12 @@ pub(crate) fn endpoint() -> String {
                 OXID.store(oxid, Ordering::Release);
                 let name = poly_com::marshal::endpoint_for(pid(), oxid);
                 ENDPOINT.with(|e| *e = Some(name.clone()));
+                // The first instance exists before the name is handed out: whoever is told the
+                // endpoint (the activation process checking a registration's factory) finds it.
+                let first = new_instance(&wide(&name));
                 let mut tid = 0u32;
-                // SAFETY: the listener runs for the life of the process.
-                let t = unsafe { CreateThread(core::ptr::null(), 0, listener, core::ptr::null_mut(), 0, &mut tid) };
+                // SAFETY: the listener runs for the life of the process and owns `first`.
+                let t = unsafe { CreateThread(core::ptr::null(), 0, listener, first as *mut c_void, 0, &mut tid) };
                 close(t);
                 STATE.store(2, Ordering::Release);
                 return name;
@@ -83,9 +87,9 @@ fn new_instance(name: &[u16]) -> Handle {
     }
 }
 
-unsafe extern "system" fn listener(_: *mut c_void) -> u32 {
+unsafe extern "system" fn listener(first: *mut c_void) -> u32 {
     let name = wide(&ENDPOINT.with(|e| e.clone()).unwrap_or_default());
-    let mut h = new_instance(&name);
+    let mut h = first as Handle;
     loop {
         if h == INVALID_HANDLE {
             // SAFETY: a plain sleep.

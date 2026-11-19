@@ -515,7 +515,7 @@ const STATUS_PORT_NOT_SET: NtStatus = NtStatus(0xC000_0353);
 
 /// The NT base priority of a process priority class (`ProcessPriorityClass` 1 idle, 2 normal, 3 high,
 /// 4 real-time, 5 below normal, 6 above normal): `PROCESS_BASIC_INFORMATION.BasePriority`.
-fn class_base_priority(class: u8) -> i32 {
+pub(crate) fn class_base_priority(class: u8) -> i32 {
     match class {
         1 => 4,
         3 => 13,

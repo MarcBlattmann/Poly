@@ -47,12 +47,18 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RegDeleteKeyExA", REGISTRY),
     ("RegDeleteValueW", REGISTRY),
     ("RegDeleteValueA", REGISTRY),
-    ("RegDeleteTreeW", REGISTRY),
     ("RegCloseKey", REGISTRY),
     ("RegFlushKey", REGISTRY),
     ("RegQueryInfoKeyW", REGISTRY),
     // ADR 0155: Chrome watches keys in every process.
     ("RegNotifyChangeKeyValue", REGISTRY),
+    // Chrome's installer (ADR 0227): other users' hives, value enumeration, removal.
+    ("RegEnumValueA", REGISTRY),
+    ("RegDeleteTreeW", REGISTRY),
+    ("RegDeleteTreeA", REGISTRY),
+    ("RegSaveKeyW", REGISTRY),
+    ("RegLoadKeyW", REGISTRY),
+    ("RegUnLoadKeyW", REGISTRY),
     // Tokens (processthreadsapi.h, securitybaseapi.h).
     ("OpenProcessToken", PROCESS_THREADS),
     ("OpenThreadToken", PROCESS_THREADS),
@@ -131,6 +137,8 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
 
 /// The functions `advapi32.dll` implements itself.
 pub const ADVAPI32_OWN: &[&str] = &[
+    // Learn names only `Advapi32.dll` (`winbase.h`); its checks are `crate::withtoken`.
+    "CreateProcessWithTokenW",
     "RegDeleteKeyW",
     "RegDeleteKeyA",
     // Poly caches no predefined key handle (sheet `RegDisablePredefinedCache`).

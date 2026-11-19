@@ -197,7 +197,7 @@ pub const FOLDERS: &[Folder] = &[
         "Common Programs",
     ),
     with_shell(
-        drive("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp", Some("FOLDERID_CommonStartup")),
+        drive("ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", Some("FOLDERID_CommonStartup")),
         "Common Startup",
     ),
     with_shell(
@@ -239,10 +239,15 @@ pub const FOLDERS: &[Folder] = &[
         "Programs",
     ),
     with_shell(
-        profile("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp", Some("FOLDERID_Startup")),
+        profile("AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", Some("FOLDERID_Startup")),
         "Startup",
     ),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\SendTo", Some("FOLDERID_SendTo")), "SendTo"),
+    // Where installers put the user's taskbar shortcuts: both exist on a clean Windows 11 (the
+    // sheet `shell32.dll/KnownFolders.Common.yaml`), and Chrome's setup writes into the first.
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer", None),
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch", Some("FOLDERID_QuickLaunch")),
+    profile("AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned", Some("FOLDERID_UserPinned")),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Templates", Some("FOLDERID_Templates")), "Templates"),
     with_shell(profile("AppData\\Roaming\\Microsoft\\Windows\\Recent", Some("FOLDERID_Recent")), "Recent"),
 ];

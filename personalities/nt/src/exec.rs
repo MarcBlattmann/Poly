@@ -347,7 +347,7 @@ pub fn start_process_listed(
     );
     let ntdll_path = if proc.wow64 { crate::wow64::NTDLL_PATH } else { "C:\\Windows\\System32\\ntdll.dll" };
     let ntdll_name = sys.io.dos_file_name(&ntdll_path.encode_utf16().collect::<Vec<u16>>());
-    let image_name = proc.image_name.take();
+    let image_name = proc.image_name.clone();
     let (image_base, preferred) = map_image(sys, proc, b, image, file_object, thread, image_name)?;
     let (ntdll_base, _) = map_image(sys, proc, b, ntdll, None, thread, ntdll_name)?;
     proc.thread_start = ntdll_base + u64::from(entries.thread_start);

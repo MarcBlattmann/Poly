@@ -188,6 +188,13 @@ fn effective(sys: &mut NtSystem, caller: &Caller) -> Result<(u64, Token)> {
     Ok((id, sys.objects.security.token(id).ok_or(STATUS_INVALID_HANDLE)?.clone()))
 }
 
+/// Whether the token a request by `caller` is checked with holds privilege
+/// `luid` (the low part of its LUID, `winnt.h`'s `SE_*_PRIVILEGE`) enabled.
+pub fn privilege_enabled(sys: &mut NtSystem, caller: &Caller, luid: u32) -> Result<bool> {
+    let (_, t) = effective(sys, caller)?;
+    Ok(t.privileges.iter().any(|&(l, a)| l == luid && a & token::SE_PRIVILEGE_ENABLED != 0))
+}
+
 /// The id of the token named by `h` (a handle or one of the
 /// pseudo-handles), checked for `access`.
 fn token_of_in(sys: &mut NtSystem, caller: &Caller, h: u64, access: u32) -> Result<u64> {
