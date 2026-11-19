@@ -342,14 +342,10 @@ impl Surfaces {
     ///
     /// Every other window is opaque: GDI leaves the alpha byte of its pixels undefined.
     pub fn pixel_format(&self, wm: &Wm, hwnd: u32) -> PixelFormat {
-        let layered_alpha = wm.layered(hwnd).is_some_and(|l| {
-            l.update && !l.attrs && l.ulw_flags & crate::guic::ULW_ALPHA != 0 && l.ulw_src_alpha
-        });
-        if layered_alpha || self.premultiplied.contains(&hwnd) {
-            PixelFormat::Argb8888
-        } else {
-            PixelFormat::Xrgb8888
-        }
+        let layered_alpha = wm
+            .layered(hwnd)
+            .is_some_and(|l| l.update && !l.attrs && l.ulw_flags & crate::guic::ULW_ALPHA != 0 && l.ulw_src_alpha);
+        if layered_alpha || self.premultiplied.contains(&hwnd) { PixelFormat::Argb8888 } else { PixelFormat::Xrgb8888 }
     }
 
     /// What window `hwnd` shows comes with premultiplied alpha, or no longer does (a swap chain
@@ -1009,7 +1005,8 @@ mod tests {
         connect(&mut d);
         let plain = popup(&mut wm, &mut d, &mut s, 10, 10, 0, BLUE);
         let top = popup(&mut wm, &mut d, &mut s, 100, 100, LAYERED, RED);
-        let format = |s: &Surfaces, d: &Desktop, h: u32| d.surface(s.surface(h).unwrap()).unwrap().buffer.unwrap().format;
+        let format =
+            |s: &Surfaces, d: &Desktop, h: u32| d.surface(s.surface(h).unwrap()).unwrap().buffer.unwrap().format;
         assert_eq!(format(&s, &d, plain), PixelFormat::Xrgb8888);
         // Not yet given content: opaque, as before.
         assert_eq!(format(&s, &d, top), PixelFormat::Xrgb8888);
@@ -1083,10 +1080,12 @@ mod tests {
         let mut stream = Stream::<ToCompositor>::new();
         stream.push(&d.take_output());
         let records: Vec<ToCompositor> = stream.map(Result::unwrap).collect();
-        assert!(records.iter().any(|r| matches!(
-            r,
-            ToCompositor::Buffer { format: PixelFormat::Argb8888, width: 40, height: 30, .. }
-        )));
+        assert!(
+            records.iter().any(|r| matches!(
+                r,
+                ToCompositor::Buffer { format: PixelFormat::Argb8888, width: 40, height: 30, .. }
+            ))
+        );
         assert!(s.set_premultiplied(&wm, menu, false));
         s.sync(&wm, &mut d);
         assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
