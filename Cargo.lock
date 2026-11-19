@@ -343,6 +343,14 @@ name = "poly-line"
 version = "0.0.1"
 
 [[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-kernelbase",
+]
+
+[[package]]
 name = "poly-loop"
 version = "0.0.1"
 dependencies = [

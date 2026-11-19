@@ -40,6 +40,7 @@ members = [
     "crates/poly-http",
     "crates/poly-comctl",
     "crates/poly-imagelist",
+    "crates/poly-lnk",
     "crates/poly-input",
     "crates/poly-iphlp",
     "crates/poly-irq",

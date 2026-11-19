@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 poly-win32-rt = { path = "../rt" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 poly-com = { path = "../../../../crates/poly-com" }
+poly-lnk = { path = "../../../../crates/poly-lnk" }
 poly-win32k = { path = "../../../../crates/poly-win32k" }
 
 [lints]
