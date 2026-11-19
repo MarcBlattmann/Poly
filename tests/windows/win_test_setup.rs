@@ -23,6 +23,10 @@
 //! `HKCU` (where `Program Files` or `HKLM` refuse it). With `--app` (the
 //! installed app) it writes `poly-test-app.txt` next to itself and ends.
 //!
+//! A copy whose file name holds `admin` installs another app, "Poly Admin App" (its folder, program,
+//! shortcut and key named after it), so one boot can install both (the boot test gives that copy a
+//! `requireAdministrator` manifest: it is elevated before it runs and never asks itself).
+//!
 //! Every call is on Microsoft Learn (`GetModuleFileNameW`,
 //! `GetCommandLineW`, `CreateDirectoryW`, `CopyFileW`, `CreateFileW`,
 //! `WriteFile`, `CloseHandle`, `CreateProcessW`, `Sleep`,
@@ -372,23 +376,45 @@ fn set(key: HKEY, name: &[u16], value: &[u16]) {
     unsafe { RegSetValueExW(key, n.ptr(), 0, REG_SZ, v.ptr().cast(), 2 * (v.len as u32 + 1)) };
 }
 
+/// The names of what is installed: the app's (folder, shortcut, `DisplayName`), its program's
+/// and its `Uninstall` key's.
+struct Names {
+    app: &'static [u16],
+    program: &'static [u16],
+    key: &'static [u16],
+}
+
+/// The names this copy installs under: "Poly Admin App" when its file name holds `admin`.
+fn names() -> Names {
+    let me = own_path();
+    let file = &me.units()[me.units().iter().rposition(|&c| c == u16::from(b'\\')).map_or(0, |i| i + 1)..];
+    let admin = file.windows(5).any(|w| w.iter().zip(b"admin").all(|(&c, &a)| c == u16::from(a) || c == u16::from(a.to_ascii_uppercase())));
+    if admin {
+        Names { app: utf16!("Poly Admin App"), program: utf16!("poly-admin-app.exe"), key: utf16!("PolyAdminApp") }
+    } else {
+        Names { app: utf16!("Poly Test App"), program: utf16!("poly-test-app.exe"), key: utf16!("PolyTestApp") }
+    }
+}
+
 /// Install; whether everything was written.
 fn install() -> bool {
     let me = own_path();
+    let n = names();
     // Machine-wide first; for the user if that is refused.
     let mut machine = true;
-    let mut dir = Wide::of(utf16!("C:\\Program Files\\Poly Test App"));
+    let mut dir = Wide::of(utf16!("C:\\Program Files\\"));
+    dir.push(n.app);
     make_dirs(dir.units());
     let mut program = Wide::of(dir.units());
-    program.push(utf16!("\\poly-test-app.exe"));
+    program.push(utf16!("\\")).push(n.program);
     // SAFETY: valid NUL-terminated paths.
     if unsafe { CopyFileW(me.ptr(), program.ptr(), 0) } == 0 {
         machine = false;
         dir = env(utf16!("LOCALAPPDATA"));
-        dir.push(utf16!("\\Programs\\Poly Test App"));
+        dir.push(utf16!("\\Programs\\")).push(n.app);
         make_dirs(dir.units());
         program = Wide::of(dir.units());
-        program.push(utf16!("\\poly-test-app.exe"));
+        program.push(utf16!("\\")).push(n.program);
         // SAFETY: as above.
         if unsafe { CopyFileW(me.ptr(), program.ptr(), 0) } == 0 {
             // SAFETY: no preconditions.
@@ -407,7 +433,7 @@ fn install() -> bool {
         m
     };
     make_dirs(menu.units());
-    menu.push(utf16!("\\Poly Test App.lnk"));
+    menu.push(utf16!("\\")).push(n.app).push(utf16!(".lnk"));
     let link = shortcut(program.units(), utf16!("--app"), utf16!("A test app of Poly's installer"));
     if !write_file(&menu, &link.buf[..link.len]) {
         say(b"poly-test-setup: the shortcut could not be written");
@@ -415,7 +441,8 @@ fn install() -> bool {
     }
     say(b"poly-test-setup: shortcut written");
     let mut key: HKEY = core::ptr::null_mut();
-    let sub = Wide::of(utf16!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PolyTestApp"));
+    let mut sub = Wide::of(utf16!("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"));
+    sub.push(n.key);
     let root = if machine { HKEY_LOCAL_MACHINE } else { HKEY_CURRENT_USER };
     // SAFETY: valid strings; `key` is writable.
     let made = unsafe {
@@ -427,7 +454,7 @@ fn install() -> bool {
     }
     let mut uninstall = Wide::of(utf16!("\""));
     uninstall.push(program.units()).push(utf16!("\" --uninstall"));
-    set(key, utf16!("DisplayName"), utf16!("Poly Test App"));
+    set(key, utf16!("DisplayName"), n.app);
     set(key, utf16!("DisplayVersion"), utf16!("1.0"));
     set(key, utf16!("Publisher"), utf16!("Poly"));
     set(key, utf16!("UninstallString"), uninstall.units());

@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "ba4dd99e3069",
+  "bundle": "75bb2bbc6532",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T00:07:52Z",
+  "started": "2026-11-19T21:45:04Z",
   "tests": [
     {
       "name": "getsockname_basic_b",
-      "exe_sha256": "d1e11b4b59036baffc1c29714a458f0daf4b2efaf9677c6678b1c254987c35f9",
+      "exe_sha256": "68c53d0dc73c23357e5ca98b0fef3805af1856517b8fd845d1e920ac6b5731bf",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "length 64: -1/WSAEINVAL length now 64 family -1 bytes written 0\nlength 0: -1/WSAEINVAL length now 0 family -1 bytes written 0\nNULL buffer, length 16: -1/WSAEINVAL length now 16 family -1 bytes written 0\n  port assigned 1 address [127, 0, 0, 1]\nbound, length 15: -1/WSAEFAULT length now 15 family -1 bytes written 0\nbound, length -1: -1/WSAEFAULT length now -1 family -1 bytes written 0\nbound to 0.0.0.0:0: port assigned 1 address [0, 0, 0, 0]\nclient after the peer closed: 0 length now 16 family 2 bytes written 16\nUDP connect to a loopback port 0\nIPv6 socket with length 16: -1/WSAEINVAL length now 16 family -1 bytes written 0\ndual-stack client connected to ::ffff:127.0.0.1: 0 len 28 family 23 local is v4-mapped loopback 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 167
+      "ms": 164
     },
     {
       "name": "getsockname_basic_c",
-      "exe_sha256": "826a3d19f8eff64120e872f5cb78963e7d8cc3a0ad5c8827974974393eeb9309",
+      "exe_sha256": "21bb9cb585650f9512bd2b4be1db553c1747039794cb9fb9d1b1dae177697904",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "length 8: -1/WSAEINVAL length now 8 family -1 bytes written 0\nlength -1: -1/WSAEFAULT length now -1 family -1 bytes written 0\nnot a socket: -1/WSAENOTSOCK length now 16 family -1 bytes written 0\n  sin_zero [0, 0, 0, 0, 0, 0, 0, 0]\nbound, length 8: -1/WSAEFAULT length now 8 family -1 bytes written 0\nbound, NULL length pointer: -1/WSAEFAULT length now 0 family -1 bytes written 0\nconnected client: 0 address [127, 0, 0, 1] port nonzero 1\nafter closesocket: -1/WSAENOTSOCK length now 16 family -1 bytes written 0\nconnected UDP socket: 0 address [127, 0, 0, 1] port nonzero 1\nIPv6 socket with length 27: -1/WSAEINVAL length now 27 family -1 bytes written 0\n  peer: 0 len 28 family 23 v4-mapped loopback 1 port is the listener's 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 164
+      "ms": 165
     }
   ]
 }

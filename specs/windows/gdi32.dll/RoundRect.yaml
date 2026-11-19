@@ -1,0 +1,63 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/RoundRect
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop): memory device contexts with 32-bit DIB sections need no desktop; every test runs twice with identical output; the probes that led to the rules below were made with Python ctypes on the same machine"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above (pixels read back from a 32-bit
+  top-down DIB section selected into a memory device context). Microsoft Learn reference pages
+  of RoundRect, CreatePen, CreateSolidBrush, SelectObject, SetWindowOrgEx, SelectClipRgn,
+  CreateRoundRectRgn and "Device Contexts", "Coordinate Spaces and Transformations", "Pens",
+  "Brushes"; wingdi.h, windef.h and winerror.h for constants and layouts. The rules reuse the
+  region rule written in CreateRoundRectRgn.yaml (observed by spec-win-gdi-rgn). Wine's code and
+  tests were not used, no Microsoft binary was decompiled or disassembled.
+summary: >
+  Draws a rectangle with rounded corners into a device context: the inside is filled with the
+  current brush, the outline is drawn with the current pen, and the call returns TRUE. The box is
+  l..r-1 by t..b-1 (the right and bottom edges are not part of it). With the null pen the filled
+  pixels are exactly the region CreateRoundRectRgn(l, t, r, b, w, h) makes (so that one rule
+  gives the shape). With a 1 pixel pen the outline and the fill together cover the pixels of
+  CreateRoundRectRgn(l, t, r+1, b+1, w, h), plus a few pixels where the curved parts end; the
+  outline's own corner pixels are listed by the tests, not derived by a rule here (see
+  not_covered).
+interface:
+  signature: "BOOL RoundRect(HDC hdc, int left, int top, int right, int bottom, int width, int height)"
+  corner: "width and height are the diameters of the ellipse that rounds the corners, in logical units; a corner as wide as the box is a full semi-ellipse"
+rules:
+  box: "the corners are normalised first (reversed left/right or top/bottom give the same drawing as the ordered box). With the 1 pixel pen the outline lies on x = l..r-1 and y = t..b-1: box (5,5,25,20) puts pen pixels exactly in x 5..24, y 5..19 and brush pixels in x 6..23, y 6..18. A box with l == r or t == b draws nothing (TRUE); a 1x1 box draws nothing; a 2x2 box draws two pen pixels (5,5) and (5,6) and no brush pixel; 3x3 draws four pen pixels and one brush pixel (6,6); 4x4 draws eight pen and four brush pixels."
+  fill_null_pen: "with the null pen (GetStockObject NULL_PEN) the painted pixels are exactly those of FillRgn with CreateRoundRectRgn(l, t, r, b, w, h): for a box W x H the region has the rows and columns of CreateRoundRectRgn.yaml (so a plain rectangle (w or h 0) paints (W-1) x (H-1) pixels: 10x8 corner 0 paints x 0..8, y 0..6 of the box; 33x17 corner 0x6 paints 32x16). Checked for 63 recorded shapes: 14 + 49 from 8x8 to 60x25 with corners from 0 to 90."
+  fill_with_pen: "with a 1 pixel solid pen pen and brush together are about the region CreateRoundRectRgn(l, t, r+1, b+1, w, h) (the same box W x H = r+1-l by b+1-t as for the null pen, one pixel wider and taller), and the pen pixels lie along that region's border; the curved parts are not pixel-exact against it. In 300 random shapes (boxes of 4 to 53 pixels, corners 0 to 40; the probes made with Python ctypes) pen and brush covered the whole region in 285; in the other 15 a few region pixels were left white; pixels outside the region numbered 0 to 28 (always at the ends of the curved parts: for a 25x25 circle the eight pixels (3,13) (3,17) (13,3) (13,27) (17,3) (17,27) (27,13) (27,17) of the box at (3,3)); the pen pixels equalled the region's 4-neighbour border (every region pixel with a 4-neighbour outside it) exactly in 27 shapes and differed from it by 2 to 56 pixels in the rest, mostly one pixel moved sideways along an arc. The brush never overlaps a pen pixel. Plain rectangles (corner 0) are exact: pen = the border of the box, brush = the inside."
+  corner_size: "the corner sizes are used by absolute value (-6 gives the same drawing as 6). A corner size of 0 on either axis, or 1 on both, draws a plain rectangle (20x15 box: 66 pen pixels, 234 brush pixels, the same for 0x6, 6x0 and 1x1). Corner sizes at least as large as the box (1000, 200, 0x7FFFFFFF, -2147483648) give the full ellipse of the box (20x15: 46 pen pixels, 182 brush pixels). Corner sizes never produce an error."
+  pen_width: "a solid pen of width n centred on the outline path grows the drawing outward: for box (10,8,40,30) corner 8x8 the pen pixels lie in x 9..39 and y 7..29 for width 2, 9..40 and 7..30 for width 3, 8..41 and 6..31 for width 5; the brush's box shrinks the same way: 11..37 x 9..27 (2), 12..37 x 10..27 (3), 13..36 x 11..26 (5). PS_INSIDEFRAME pens stay inside the 1 pixel box (x 10..39, y 8..29) whatever the width: brush 13..36 x 11..26 for width 3, 15..34 x 13..24 for width 5. The counts of the tests give the exact pixel numbers."
+  null_objects: "the null pen draws no outline (the brush covers the region of fill_null_pen), the null brush draws only the outline, both null draw nothing; all return TRUE. A brush of the background colour draws like any other colour."
+  drawing_order: "the brush is painted first, then the outline over it: a second, smaller RoundRect drawn over a first paints its own outline and fill over the earlier pixels."
+  coordinates: "all coordinates are logical: the window origin and the viewport origin move the drawing (window origin (-10,-5): pen box (12,7)-(29,16), the unmoved one is (2,2)-(19,11)), mapping modes and the world transform scale the box and the corners (MM_ANISOTROPIC window 1:1, viewport 2:2: box 2..10,2..8 corner 3x3 gives pen pixels (3,3)-(19,15)); a negative viewport extent flips it. The result is clipped by the device context's clip region (clip (8,4,18,10) leaves only brush pixels, 60 of them) and by the bitmap."
+  device_state: "the current position is unchanged by the call (MoveToEx(7,9) then RoundRect: position still (7,9)); the pen and brush stay selected."
+  hatch_brush: "a hatch brush paints its pattern pixels only (null pen, horizontal hatch in green on white, box (2,2,20,12): the 15 green pixels are in the one row y = 3, x 3..17)"
+errors:
+  invalid_dc: "NULL or a made-up handle: FALSE (0), last error ERROR_INVALID_HANDLE (6)"
+  success: "TRUE (1), also when nothing is drawn (empty box, null pen and brush, wholly outside the bitmap); the last error is left alone"
+side_effects: "paints pixels of the DC's bitmap; the current position is not changed"
+threading: "a device context belongs to one thread at a time"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 6  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll and kernel32.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants). Each draws on a white 32-bit top-down DIB
+  section in a memory DC and prints what was painted as rows of characters (R pen, B brush, . background),
+  as bands `top+rows:left-right` relative to the box origin (right exclusive), or as bounding box
+  and pixel count of one colour. The program never prints handles or addresses.
+not_covered: >
+  The exact outline pixels at the ends of the curved parts (see fill_with_pen: the tests record them
+  for the sizes they use, a rule is not derived), dashed or dotted pens, geometric pens with end
+  caps and joins other than the default, patterns brushes and DIB patterns, ROP2 other than R2_COPYPEN,
+  metafile and printer device contexts, GM_COMPATIBLE arc directions, arbitrary world transforms
+  (rotation, shear).

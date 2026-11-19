@@ -179,8 +179,14 @@ pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explo
 /// Poly's `cmd.exe`, the command processor (ADR 0240), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static CMD_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cmd.exe"));
+/// Poly's `polyopen.exe` (ADR 0230): starts a program as the shell opens it (`ShellExecuteExW`,
+/// so its manifest is honoured), for Poly's installer window; installed in `C:\Windows\System32`
+/// by [`layout`]; empty without `xtask`.
+pub static POLYOPEN_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polyopen.exe"));
 /// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
 pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
+/// Our `msimg32.dll`: `AlphaBlend` over `gdi32!GdiAlphaBlend`.
+pub static MSIMG32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msimg32.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -1729,6 +1735,9 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if host_needed {
         start_service_host();
     }
+    // Its children go to its own parent (ADR 0230), so `/proc` links every
+    // process to a living ancestor.
+    adopt_children(pid);
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
@@ -1739,6 +1748,18 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
+}
+
+/// The processes whose parent is `pid`, which is ending, get `pid`'s parent (ADR 0230): an
+/// installer's helper started by a short-lived elevated copy stays in the installer's tree.
+fn adopt_children(pid: u32) {
+    let Some(me) = crate::process::find(pid) else { return };
+    let parent = crate::linux::task::parent_of(&me);
+    for p in crate::process::all() {
+        if p.pid != pid && crate::linux::task::parent_of(&p) == pid {
+            p.adopted.store(parent, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// `services.exe` is being started (ADR 0221): one start at a time.

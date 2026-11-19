@@ -1,0 +1,19 @@
+[package]
+name = "polyopen"
+description = "polyopen.exe (ADR 0230): starts a program as the Windows shell opens it, through ShellExecuteExW, so its manifest's requestedExecutionLevel is read and the consent prompt asked first (ADR 0222); waits for it and ends with its exit code. What Poly's installer window starts Windows programs with."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "polyopen"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

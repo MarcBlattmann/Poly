@@ -494,6 +494,98 @@ fn modeset_draw_and_flush_damage() {
 }
 
 #[test]
+fn update_rects_sends_each_rectangle_once() {
+    let sim = one_monitor();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    let (_, fb, mut mem) = bring_up(&mut gpu, &REQ);
+    let fbm = mem.bytes();
+    for y in 0..480 {
+        for x in 0..640 {
+            px(fbm, 640, x, y, pattern(x, y));
+        }
+    }
+    // Two rectangles far apart: only they reach the screen, not their bounding box.
+    let (a, b) = (Rect::new(10, 10, 5, 5), Rect::new(600, 400, 8, 8));
+    let notifies = gpu.stats().notifies;
+    let before = sim.types().len();
+    gpu.update_rects(&fb, &[a, Rect::new(700, 0, 5, 5), b]).unwrap();
+    assert_eq!(gpu.stats().notifies, notifies + 1, "one notification");
+    let types = sim.types();
+    assert_eq!(
+        &types[before..],
+        [ctrl::TRANSFER_TO_HOST_2D, ctrl::RESOURCE_FLUSH, ctrl::TRANSFER_TO_HOST_2D, ctrl::RESOURCE_FLUSH]
+    );
+    assert_eq!(sim.screen_pixel(0, 12, 12), pattern(12, 12));
+    assert_eq!(sim.screen_pixel(0, 605, 405), pattern(605, 405));
+    assert_eq!(sim.screen_pixel(0, 300, 200), [0; 4], "between them: not sent");
+    // More rectangles than one notification carries: several notifications, all sent.
+    let many: Vec<Rect> = (0..20).map(|i| Rect::new(i * 30, 300, 4, 4)).collect();
+    let before = sim.types().len();
+    gpu.update_rects(&fb, &many).unwrap();
+    assert_eq!(sim.types().len(), before + 40);
+    for i in 0..20 {
+        assert_eq!(sim.screen_pixel(0, i * 30 + 1, 301), pattern(i * 30 + 1, 301), "rectangle {i}");
+    }
+    // Nothing to send: nothing sent.
+    let sent = sim.types().len();
+    gpu.update_rects(&fb, &[Rect::new(640, 480, 4, 4)]).unwrap();
+    assert_eq!(sim.types().len(), sent);
+    assert_eq!(gpu.stats().errors, 0);
+}
+
+#[test]
+fn posted_updates_reach_the_screen_and_can_be_waited_for() {
+    let sim = one_monitor();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    let (_, fb, mut mem) = bring_up(&mut gpu, &REQ);
+    let fbm = mem.bytes();
+    for y in 0..480 {
+        for x in 0..640 {
+            px(fbm, 640, x, y, pattern(x, y));
+        }
+    }
+    let rects: Vec<Rect> = (0..12).map(|i| Rect::new(i * 40, 100, 6, 6)).collect();
+    gpu.post_update_rects(&fb, &rects).unwrap();
+    gpu.wait_posted().unwrap();
+    for i in 0..12 {
+        assert_eq!(sim.screen_pixel(0, i * 40 + 2, 102), pattern(i * 40 + 2, 102), "rectangle {i}");
+    }
+    // The slots came back: a waited-for command still goes through.
+    gpu.update_rects(&fb, &[Rect::new(0, 0, 4, 4)]).unwrap();
+    assert_eq!(sim.screen_pixel(0, 1, 1), pattern(1, 1));
+    // Nothing posted: nothing to wait for.
+    gpu.wait_posted().unwrap();
+    assert_eq!(gpu.stats().errors, 0);
+}
+
+#[test]
+fn replace_backing_swaps_the_memory_in_one_notification() {
+    let sim = one_monitor();
+    let mut h = Harness::new(&sim);
+    let mut gpu = h.init();
+    let (_, fb, _mem) = bring_up(&mut gpu, &REQ);
+    let mut other = DmaMemory::new(640 * 480 * 4);
+    let fbm = other.bytes();
+    for y in 0..480 {
+        for x in 0..640 {
+            px(fbm, 640, x, y, pattern(x, y));
+        }
+    }
+    let notifies = gpu.stats().notifies;
+    let entries = [MemEntry { addr: other.ptr.as_ptr() as u64, length: 640 * 480 * 4 }];
+    gpu.replace_backing(fb.resource_id, &entries).unwrap();
+    assert_eq!(gpu.stats().notifies, notifies + 1);
+    assert_eq!(sim.dev().resources[&1].backing, [(other.ptr.as_ptr() as u64, 640 * 480 * 4)]);
+    // The screen keeps what it had until a transfer brings the new memory's pixels.
+    assert_eq!(sim.screen_pixel(0, 5, 5), [0; 4]);
+    gpu.update_rects(&fb, &[Rect::new(0, 0, 10, 10)]).unwrap();
+    assert_eq!(sim.screen_pixel(0, 5, 5), pattern(5, 5));
+    assert_eq!(gpu.replace_backing(fb.resource_id, &[]), Err(Error::BadBacking));
+}
+
+#[test]
 fn backing_may_be_a_scatter_list() {
     let sim = one_monitor();
     let mut h = Harness::new(&sim);

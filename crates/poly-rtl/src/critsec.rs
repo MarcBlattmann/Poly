@@ -23,11 +23,18 @@
 //! | 0x18 | `LockSemaphore` | the auto-reset event waiters block on, created when first needed |
 //! | 0x20 | `SpinCount` | spin iterations before blocking (low 24 bits); the top byte holds the `RTL_CRITICAL_SECTION_FLAG_*` bits |
 //!
-//! `LockCount` counts downwards from -1: each would-be owner decrements
-//! it; the one that moved it from -1 to -2 owns the section; a leave that
-//! finds others counted hands ownership to exactly one waiter by setting
-//! the event. The two values programs can observe (free = -1, held once
-//! = -2) are those of a Windows 11 process (spec-chrome-elf-null); the
+//! `OwningThread` is the lock: a thread owns the section when it moved that
+//! field from 0 to its id. `LockCount` counts downwards from -1: each
+//! enter by the owner and each waiter lowers it by one, each leave raises
+//! it. The last leave frees the section and, when others are counted, sets
+//! the event, which wakes one waiter that then tries to take the section
+//! like any running thread (ADR 0242): a thread that is running takes a free
+//! section at once instead of waiting until a sleeping one has been
+//! scheduled, so busy threads do not form a convoy behind it. A woken
+//! waiter that loses sleeps again; the winner's leave wakes it. Before it
+//! counts itself as a waiter an enter spins (the spin count, at least
+//! [`MIN_SPINS`]). The two values programs can observe (free = -1, held
+//! once = -2) are those of a Windows 11 process (spec-chrome-elf-null); the
 //! values with waiters are Poly's own continuation of the scheme.
 
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
@@ -44,6 +51,9 @@ pub const FLAG_STATIC_INIT: usize = 0x0400_0000;
 pub const FREE: i32 = -1;
 /// `LockCount` of a section its owner holds once, with no waiter.
 pub const HELD: i32 = -2;
+/// Tries an enter makes before it waits, whatever the spin count (a section's spin count is 0
+/// unless its program set one).
+pub const MIN_SPINS: usize = 128;
 
 /// What a critical section needs from the system: the thread id, and an
 /// auto-reset event to block on (in `ntdll`: `NtCreateEvent`
@@ -158,13 +168,15 @@ impl CriticalSection {
         self.spin_count.fetch_or(FLAG_STATIC_INIT, Ordering::Release);
     }
 
+    /// The section's spin count (an enter spins at least [`MIN_SPINS`] times before it blocks).
     fn spins(&self) -> usize {
         self.spin_count.load(Ordering::Relaxed) & 0x00FF_FFFF
     }
 
-    fn own(&self, me: usize) {
-        self.owning_thread.store(me, Ordering::Relaxed);
-        self.recursion_count.store(1, Ordering::Relaxed);
+    /// Take a free section: `OwningThread` goes from 0 to the caller.
+    fn grab(&self, me: usize) -> bool {
+        self.owning_thread.load(Ordering::Relaxed) == 0
+            && self.owning_thread.compare_exchange(0, me, Ordering::SeqCst, Ordering::Relaxed).is_ok()
     }
 
     /// The event, made now if no thread has made it yet.
@@ -192,40 +204,39 @@ impl CriticalSection {
     /// `RtlEnterCriticalSection`.
     pub fn enter(&self, w: &dyn Waiter) {
         let me = w.current_thread() as usize;
-        for _ in 0..self.spins() {
-            if self.lock_count.compare_exchange(FREE, HELD, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                self.own(me);
-                return;
-            }
-            if self.owning_thread.load(Ordering::Relaxed) == me {
-                break;
-            }
-            core::hint::spin_loop();
-        }
-        if self.lock_count.fetch_sub(1, Ordering::Acquire) == FREE {
-            self.own(me);
-            return;
-        }
         if self.owning_thread.load(Ordering::Relaxed) == me {
+            self.lock_count.fetch_sub(1, Ordering::Relaxed);
             self.recursion_count.fetch_add(1, Ordering::Relaxed);
             return;
         }
-        // Someone else owns it: wait for the hand-off.
-        let e = self.event(w);
-        w.wait(e);
-        self.own(me);
+        for _ in 0..=self.spins().max(MIN_SPINS) {
+            if self.grab(me) {
+                self.lock_count.fetch_sub(1, Ordering::Acquire);
+                self.recursion_count.store(1, Ordering::Relaxed);
+                return;
+            }
+            core::hint::spin_loop();
+        }
+        // Count ourselves, so that a leave wakes somebody, then take the section or sleep until
+        // a leave sets the event, and try again.
+        self.lock_count.fetch_sub(1, Ordering::SeqCst);
+        while !self.grab(me) {
+            w.wait(self.event(w));
+        }
+        self.recursion_count.store(1, Ordering::Relaxed);
     }
 
     /// `RtlTryEnterCriticalSection`.
     pub fn try_enter(&self, w: &dyn Waiter) -> bool {
         let me = w.current_thread() as usize;
-        if self.lock_count.compare_exchange(FREE, HELD, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-            self.own(me);
-            return true;
-        }
         if self.owning_thread.load(Ordering::Relaxed) == me {
             self.lock_count.fetch_sub(1, Ordering::Relaxed);
             self.recursion_count.fetch_add(1, Ordering::Relaxed);
+            return true;
+        }
+        if self.grab(me) {
+            self.lock_count.fetch_sub(1, Ordering::Acquire);
+            self.recursion_count.store(1, Ordering::Relaxed);
             return true;
         }
         false
@@ -241,9 +252,10 @@ impl CriticalSection {
             self.lock_count.fetch_add(1, Ordering::Release);
             return;
         }
-        self.owning_thread.store(0, Ordering::Relaxed);
-        if self.lock_count.fetch_add(1, Ordering::Release) < HELD {
-            // Waiters are counted: hand the section to one of them.
+        // Free it first, then look whether others are counted: one of them is woken and takes it
+        // (unless a running thread is faster), so nobody waits for a sleeper to be scheduled.
+        self.owning_thread.store(0, Ordering::SeqCst);
+        if self.lock_count.fetch_add(1, Ordering::SeqCst) < HELD {
             let e = self.event(w);
             w.set(e);
         }
@@ -634,6 +646,80 @@ mod tests {
             cs.delete(&*h);
             assert!(h.events.lock().unwrap().is_empty());
         }
+    }
+
+    /// A host whose `set` can be held back, so that a test acts between a leave and the run of
+    /// the waiter it woke.
+    #[derive(Default)]
+    struct Gated {
+        host: Host,
+        hold: std::sync::atomic::AtomicBool,
+        pending: Mutex<Vec<u64>>,
+    }
+
+    impl Gated {
+        fn open(&self) {
+            self.hold.store(false, Ordering::SeqCst);
+            for e in self.pending.lock().unwrap().drain(..) {
+                self.host.set(e);
+            }
+        }
+    }
+
+    impl Waiter for Gated {
+        fn current_thread(&self) -> u64 {
+            self.host.current_thread()
+        }
+        fn create_event(&self) -> u64 {
+            self.host.create_event()
+        }
+        fn wait(&self, e: u64) {
+            self.host.wait(e)
+        }
+        fn set(&self, e: u64) {
+            if self.hold.load(Ordering::SeqCst) {
+                self.pending.lock().unwrap().push(e);
+            } else {
+                self.host.set(e);
+            }
+        }
+        fn close(&self, e: u64) {
+            self.host.close(e)
+        }
+    }
+
+    /// ADR 0242: a leave frees the section and wakes a waiter, which competes for it: a running
+    /// thread may take it first, and the waiter gets it at the next leave. The counts stay right.
+    #[test]
+    fn a_running_thread_takes_a_left_section_and_the_waiter_gets_it_later() {
+        let h = Arc::new(Gated::default());
+        let cs = Arc::new(CriticalSection::new());
+        let got = Arc::new(AtomicU64::new(0));
+        cs.enter(&*h);
+        let t = {
+            let (h, cs, got) = (h.clone(), cs.clone(), got.clone());
+            std::thread::spawn(move || {
+                cs.enter(&*h);
+                got.store(1, Ordering::SeqCst);
+                assert_eq!(cs.recursion_count.load(Ordering::Relaxed), 1);
+                cs.leave(&*h);
+            })
+        };
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert_eq!(cs.lock_count.load(Ordering::Relaxed), -3, "owner and one waiter counted");
+        h.hold.store(true, Ordering::SeqCst);
+        cs.leave(&*h);
+        assert_eq!(cs.owning_thread.load(Ordering::Relaxed), 0, "free, not handed over");
+        assert!(cs.try_enter(&*h), "a running thread takes it");
+        assert_eq!(cs.lock_count.load(Ordering::Relaxed), -3);
+        h.open();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert_eq!(got.load(Ordering::SeqCst), 0, "the waiter sleeps again");
+        cs.leave(&*h);
+        t.join().unwrap();
+        assert_eq!(got.load(Ordering::SeqCst), 1);
+        assert_eq!(cs.lock_count.load(Ordering::Relaxed), FREE);
+        assert_eq!(cs.owning_thread.load(Ordering::Relaxed), 0);
     }
 
     #[test]

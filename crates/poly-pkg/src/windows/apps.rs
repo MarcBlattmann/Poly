@@ -30,6 +30,9 @@ pub const C_ROOT: &str = "/nt/c";
 /// The registry's hive files, next to `C:` on the disk that keeps them
 /// (`<disk>/poly/nt/registry`, ADR 0066): `C:`'s parent, through the link.
 pub const HIVE_DIR: &str = "/nt/c/../registry";
+/// Poly's `polyopen.exe` (ADR 0230), which starts a program as the shell
+/// opens it (`ShellExecuteExW`: its manifest is honoured).
+pub const POLYOPEN: &str = "C:\\Windows\\System32\\polyopen.exe";
 /// The hive files of `HKLM\SOFTWARE` and of Poly's user.
 pub const SOFTWARE_HIVE: &str = "SOFTWARE.hive";
 pub const USER_HIVE: &str = "USER.hive";

@@ -538,6 +538,9 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("SetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("GetProcessShutdownParameters", "api-ms-win-core-processthreads-l1-1-1"),
     ("K32GetMappedFileNameW", "api-ms-win-core-psapi-l1-1-0"),
+    // impl-updater-gap: the first call Google's ChromeSetup.exe makes that Poly lacked (the contract is
+    // psapi's, as Poly reads Learn; to be confirmed).
+    ("QueryFullProcessImageNameW", "api-ms-win-core-psapi-l1-1-0"),
     ("ProcessIdToSessionId", "api-ms-win-core-processthreads-l1-1-0"),
     // Chrome stage 2 (impl-chrome-s2; contracts from Learn's "API set" rows).
     ("SetErrorMode", "api-ms-win-core-errorhandling-l1-1-0"),

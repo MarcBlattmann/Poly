@@ -1,0 +1,61 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/<os>/<component>/<symbol>.yaml
+id: windows/api/gdi32.dll/FrameRgn
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop): memory device contexts with 32-bit DIB sections need no desktop; every test runs twice with identical output; the probes that led to the rules below were made with Python ctypes on the same machine"
+  observed_by: spec-win-updater-gap
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs on the machine above (pixels read back from a 32-bit
+  top-down DIB section selected into a memory device context). Microsoft Learn reference pages of
+  FrameRgn, FillRgn, CreateRectRgn, CreateEllipticRgn, CreateRoundRectRgn, CombineRgn, SelectClipRgn,
+  SetROP2, SetWindowOrgEx and "Regions", "Device Contexts", "Coordinate Spaces and Transformations";
+  wingdi.h, windef.h and winerror.h for constants and layouts. Wine's code and tests were not used,
+  no Microsoft binary was decompiled or disassembled.
+summary: >
+  Paints a border inside the edge of a region with a brush. A pixel of the region is painted when
+  a pixel outside the region lies within w pixels left or right and h pixels up or down of it,
+  that is, when the (2|w|+1) x (2|h|+1) box centred on the pixel is not wholly inside the region.
+  The painted pixels are thus always inside the region; the middle of a region wider than 2|w|
+  and taller than 2|h| is left alone. Returns TRUE when it ran, FALSE when w or h is 0.
+interface:
+  signature: "BOOL FrameRgn(HDC hdc, HRGN hrgn, HBRUSH hbr, int w, int h)"
+  units: "w is a width and h a height in logical units; the region is in logical units too"
+rules:
+  painted_pixels: "pixel p (device coordinates, after the DC's mapping) is painted iff p is in the region and some pixel q with |q.x - p.x| <= W and |q.y - p.y| <= H is not in the region, where W and H are the device widths of |w| and |h|. Checked against the recorded pixels of rectangles, ellipses, round rectangles, rings, L shapes, rectangles with a hole, two rectangles with a 2 pixel gap, and a one pixel high line with a gap, with widths from 1 to 5, and against 150 random regions made of up to four rectangles combined with OR, AND, XOR and DIFF with random widths 1..4 (150 of 150). The test is the full box, not only the eight neighbours at distance (w,h): a hole narrower than w still frames both sides of it."
+  rect_example: "region (10,6,30,20), w=h=1 paints row 6 (x 10..29), then x 10 and x 29 of rows 7..18, then row 19; w=2,h=2 paints rows 6,7 and 18,19 whole and x 10,11 and 28,29 of the rows in between; w=3,h=1 paints rows 6 and 19 whole and x 10..12 and 27..29 of the rows between; a region of one pixel is painted whatever the width (the one pixel)."
+  zero_width: "w == 0 or h == 0 (the other any value, also negative): nothing is painted and the call returns FALSE (0); the last error is left alone."
+  negative: "negative w and h act as their absolute values (-1x-1 paints as 1x1; -2x3 as 2x3; 3x-2 as 3x2)."
+  large: "a border wider than half the region paints the whole region (30x2 or 2x30 on a 20x12 region: all 240 pixels; 1000x1000, 16384x16384 and 65536x65536 too). 2147483647 and -2147483647 on one axis paint like 1 on that axis (60 pixels, the 1x1 count, for the 20x12 rectangle) and -2147483648 returns FALSE with nothing painted."
+  mapping: "the region and the border widths are logical and go through the same mapping as other drawing: a window origin of (-10,-5) moves the frame by +10,+5, (3,2) plus OffsetWindowOrgEx (4,1) moves it by -7,-3, a viewport origin of (9,4) by +9,+4 (the pixel count stays 112 for the 20x12 region with 2x2); with MM_ANISOTROPIC 1:1 window to 2:2 viewport the region (8,6,28,18) covers (16,12,56,36) and a border of 1x1 is two pixels wide (176 pixels visible in a 50x36 bitmap); with window extent 2:1 to viewport extent 1:1 a border of 4x3 is 2x3 pixels (84 pixels for region x 4..13, y 6..17); a GM_ADVANCED world transform of 2x acts the same way as the 2:2 viewport."
+  clip: "the DC's clip region (device coordinates) clips the painted pixels (clip (12,4,24,14) on the 20x12 region with 2x2 leaves 24 pixels, the two rows 6 and 7 inside x 12..23)."
+  brush: "the brush argument is used, not the one selected into the DC (a green brush selected, a blue one passed: blue is painted, no green); the brush selected may even be the null brush. The brush origin and the pattern of a hatch brush are applied as for FillRgn: a cross hatch (HS_CROSS) in red on white paints 40 of the 112 border pixels of the 20x12 rectangle with w=h=3."
+  rop2: "the DC's raster operation applies: with R2_BLACK or R2_NOT on a white bitmap the painted pixels turn black (112 pixels), not blue."
+  not_consumed: "the region and the brush are not changed or consumed: painting the same region twice gives the same pixels."
+errors:
+  invalid_dc: "NULL or a made-up handle as the DC: FALSE (0), last error ERROR_INVALID_HANDLE (6)"
+  invalid_region_or_brush: "NULL or a made-up handle as the region or the brush: FALSE (0), nothing painted, the last error is not set (stays 0)"
+  pen_as_brush: "a pen handle passed as the brush: TRUE (1) and nothing painted, no error"
+  success: "TRUE (1), also for an empty region, for a region wholly outside the bitmap or clipped away, and for regions only partly inside the bitmap (the part inside is painted)"
+side_effects: "paints pixels of the DC's bitmap"
+threading: "a device context belongs to one thread at a time"
+ordering: []
+timing:
+  typical: "well under a millisecond for regions of a few hundred pixels"
+  guarantees: none
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075) importing gdi32.dll and kernel32.dll by name, each carrying its own
+  declarations (Learn prototypes, header constants). Each paints a region with a blue brush on a
+  white 32-bit top-down DIB section in a memory DC and prints the painted pixels as bands
+  `top+rows:left-right` (right exclusive), or the return value, last error, bounding box and
+  count of the painted pixels, or rows of characters (R red, B blue, . background). The programs
+  never print handles or addresses.
+not_covered: >
+  Pattern and DIB-pattern brushes, regions with more than a few hundred rectangles, rotated and
+  sheared world transforms (the painted pixels follow the box rule in device space, which these
+  were not tried for), printer and metafile device contexts, the exact threshold between a
+  border that paints like 1 and one that paints everything for widths near 2^30.

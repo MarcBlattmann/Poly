@@ -712,7 +712,6 @@ mod item;
 mod link;
 mod taskbar;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
 
 /// `SHGetMalloc(ppMalloc)`: the shell's allocator is the task allocator (Learn: "Retrieves a pointer to

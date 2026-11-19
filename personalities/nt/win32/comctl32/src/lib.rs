@@ -11,6 +11,7 @@ extern crate alloc;
 
 mod controls;
 mod imagelist;
+mod subclass;
 
 use poly_win32_gui as _;
 use poly_win32_rt as _;
@@ -85,5 +86,4 @@ pub extern "system" fn comctl32_main(_module: *mut u8, _reason: u32, _reserved: 
     1
 }
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
