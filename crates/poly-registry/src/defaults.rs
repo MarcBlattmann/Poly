@@ -148,6 +148,47 @@ pub const SYSTEM_KEYS: &[DefaultKey] = &[
 
 pub const SOFTWARE_KEYS: &[DefaultKey] = &[
     k("Classes", &[]),
+    // COM marshalling through type libraries (ADR 0220, B2b; Learn: "Type Library Registration",
+    // "Interface Key"; sheets `CoGetPSClsid`, `LoadRegTypeLib`, `QueryPathOfRegTypeLib`): the standard
+    // library `stdole` 2.0 (Poly's own `stdole2.tlb`), the proxy/stub classes of the system
+    // interfaces, and the automation marshaller's class in `oleaut32.dll`.
+    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0", &[("", Sz("OLE Automation"))]),
+    k(
+        "Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\0\\win32",
+        &[("", Sz("C:\\Windows\\System32\\stdole2.tlb"))],
+    ),
+    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\FLAGS", &[("", Sz("0"))]),
+    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\HELPDIR", &[("", Sz("C:\\Windows\\System32"))]),
+    k("Classes\\Interface\\{00020400-0000-0000-C000-000000000046}", &[("", Sz("IDispatch"))]),
+    k(
+        "Classes\\Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+        &[("", Sz("{00020420-0000-0000-C000-000000000046}"))],
+    ),
+    k("Classes\\Interface\\{00000001-0000-0000-C000-000000000046}", &[("", Sz("IClassFactory"))]),
+    k(
+        "Classes\\Interface\\{00000001-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+        &[("", Sz("{00000320-0000-0000-C000-000000000046}"))],
+    ),
+    k("Classes\\Interface\\{0000000C-0000-0000-C000-000000000046}", &[("", Sz("IStream"))]),
+    k(
+        "Classes\\Interface\\{0000000C-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+        &[("", Sz("{00000320-0000-0000-C000-000000000046}"))],
+    ),
+    k("Classes\\Interface\\{1CF2B120-547D-101B-8E65-08002B2BD119}", &[("", Sz("IErrorInfo"))]),
+    k(
+        "Classes\\Interface\\{1CF2B120-547D-101B-8E65-08002B2BD119}\\ProxyStubClsid32",
+        &[("", Sz("{B196B286-BAB4-101A-B69C-00AA00341D07}"))],
+    ),
+    k("Classes\\CLSID\\{00020424-0000-0000-C000-000000000046}", &[("", Sz("PSOAInterface"))]),
+    k(
+        "Classes\\CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
+        &[("", Sz("oleaut32.dll")), ("ThreadingModel", Sz("Both"))],
+    ),
+    k("Classes\\CLSID\\{00020420-0000-0000-C000-000000000046}", &[("", Sz("PSDispatch"))]),
+    k(
+        "Classes\\CLSID\\{00020420-0000-0000-C000-000000000046}\\InprocServer32",
+        &[("", Sz("oleaut32.dll")), ("ThreadingModel", Sz("Both"))],
+    ),
     k(
         "Microsoft\\Windows NT\\CurrentVersion",
         &[
