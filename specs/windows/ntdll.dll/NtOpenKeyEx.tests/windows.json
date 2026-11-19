@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "ntreg_open",
-      "exe_sha256": "448479698556739f7ca930f185b53dd0fde2dc70dce6ca1b2e8770312f670911",
+      "exe_sha256": "d9190cfac9b7a17bf749a0fcaa1f7aa93d3dd8c61cfe6ca08a7c5763a6d10588",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

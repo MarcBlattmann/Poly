@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "resa_basic",
-      "exe_sha256": "0dc7fc8d42989770a43efd065e9fa0ab2b3cba545cffd59b59c502a7b784155a",
+      "exe_sha256": "e1edc88f2048c0000d382cb29bf1e8bb7c6a71adad38cc7d976506472893abfa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

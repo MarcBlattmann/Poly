@@ -68,6 +68,13 @@ name = "poly-drm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-dyld"
+version = "0.0.1"
+dependencies = [
+ "poly-macho",
+]
+
+[[package]]
 name = "poly-elf"
 version = "0.0.1"
 
@@ -134,6 +141,7 @@ dependencies = [
  "poly-com",
  "poly-cpio",
  "poly-drm",
+ "poly-dyld",
  "poly-elf",
  "poly-ext2",
  "poly-fbdev",
@@ -214,6 +222,10 @@ version = "0.0.1"
 dependencies = [
  "poly-vfs",
 ]
+
+[[package]]
+name = "poly-macho"
+version = "0.0.1"
 
 [[package]]
 name = "poly-mem"

@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "ver_size_b",
-      "exe_sha256": "90c1a14c1f04add03480b05d76814f7fb45e95f118d7a5f9f3b2f0f5e2624c93",
+      "exe_sha256": "93895284aaec3c76426b3c6035105cabec2c25b248be9a61fd32510678a98265",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
